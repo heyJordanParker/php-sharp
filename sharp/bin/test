@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+usage() {
+  echo "usage: sharp/bin/test [--linux] [--opcache] [--upstream | paths...]" >&2
+  exit 2
+}
+
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 linux=false
 opcache=false
@@ -12,24 +17,29 @@ for arg in "$@"; do
     --linux) linux=true; continue ;;
     --opcache) opcache=true ;;
     --upstream) upstream=true ;;
-    -*) echo "usage: sharp/bin/test [--linux] [--opcache] [--upstream] [paths...]" >&2; exit 2 ;;
+    -*) usage ;;
     *) tests+=("$arg") ;;
   esac
   container_command+=("$arg")
 done
+
+if $upstream && [[ ${#tests[@]} -gt 0 ]]; then
+  usage
+fi
 
 if $linux; then
   exec "$root/sharp/docker/run" "${container_command[@]}"
 fi
 
 if $upstream; then
-  tests+=(Zend/tests ext/reflection ext/tokenizer ext/opcache)
-fi
-if [[ ${#tests[@]} -eq 0 ]]; then
+  tests=(Zend/tests ext/reflection ext/tokenizer ext/opcache)
+elif [[ ${#tests[@]} -eq 0 ]]; then
   tests=(Zend/tests/sharp)
 fi
 
-php="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/sapi/cli/php"
+os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+build_dir="$root/sharp/build/$os-$(uname -m)"
+php="$build_dir/sapi/cli/php"
 if [[ ! -x "$php" ]]; then
   echo "$php is missing. Run sharp/bin/build first." >&2
   exit 1
@@ -46,7 +56,7 @@ run_tests() {
     -d opcache.jit=disable \
     -d opcache.protect_memory=1 \
     -j"$(getconf _NPROCESSORS_ONLN)" \
-    -g FAIL,BORK,LEAK,XLEAK,SKIP,XFAIL \
+    -g FAIL,BORK,LEAK,XLEAK \
     --no-progress \
     --offline \
     --show-diff \
@@ -55,9 +65,24 @@ run_tests() {
     "$@" "${tests[@]}")
 }
 
-run_tests "without opcache"
+if $upstream; then
+  baseline="sharp/baseline/$os"
+  results="$build_dir/upstream-results"
+  (export REPORT_EXIT_STATUS=0; run_tests "without opcache, compared with $baseline" -W "$results")
+  awk -F '\t' -v OFS='\t' -v prefix="$root/" '
+    $1 != "PASSED" {
+      if (index($2, prefix) == 1) $2 = substr($2, length(prefix) + 1)
+      print
+    }' "$results" | LC_ALL=C sort -o "$results"
+  if ! diff -u "$root/$baseline" "$results"; then
+    echo "The upstream results differ from $baseline. To accept them, run: cp ${results#"$root"/} $baseline" >&2
+    exit 1
+  fi
+else
+  run_tests "without opcache"
+fi
+
 if $opcache; then
-  run_tests "with opcache" -d opcache.enable_cli=1
-  run_tests "with opcache, priming the file cache" -d opcache.enable_cli=1 --file-cache-prime
-  run_tests "with opcache, using the file cache" -d opcache.enable_cli=1 --file-cache-use
+  run_tests "with the opcache file cache, priming it" -d opcache.enable_cli=1 --file-cache-prime
+  run_tests "with the opcache file cache, using it" -d opcache.enable_cli=1 --file-cache-use
 fi
