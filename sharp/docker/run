@@ -6,6 +6,8 @@ docker build --quiet --tag php-sharp-linux "$root/sharp/docker" >/dev/null
 exec docker run --rm --init \
   --user "$(id -u):$(id -g)" \
   --ulimit stack=8388608:-1 \
+  --env CARGO_HOME=/src/sharp/build/cargo \
+  --env RUSTUP_HOME=/src/sharp/build/rustup \
   --volume "$root:/src" \
   --workdir /src \
   php-sharp-linux "$@"

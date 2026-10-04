@@ -31,6 +31,13 @@ jobs:
     steps:
       - name: git checkout
         uses: actions/checkout@v6
+      - name: Rust cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            sharp/build/cargo
+            sharp/build/rustup
+          key: SHARP_LINUX_RUST-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock') }}
       - name: Build
         run: sharp/bin/build --linux
       - name: Test PHP#
