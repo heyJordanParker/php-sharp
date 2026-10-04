@@ -1,0 +1,74 @@
+name: PHP#
+on:
+  push:
+    branches:
+      - sharp
+  pull_request:
+    branches:
+      - sharp
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
+  cancel-in-progress: true
+jobs:
+  LINUX:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: git checkout
+        uses: actions/checkout@v6
+      - name: apt
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            autoconf \
+            bison \
+            re2c \
+            pkg-config \
+            libicu-dev \
+            libonig-dev \
+            libpq-dev \
+            libsodium-dev \
+            libsqlite3-dev \
+            libxml2-dev \
+            libzip-dev
+      - name: ccache
+        uses: ./.github/actions/ccache
+        with:
+          name: SHARP_LINUX
+      - name: Build
+        run: sharp/bin/build
+      - name: Test PHP#
+        run: sharp/bin/test --opcache
+      - name: Test upstream
+        run: sharp/bin/test --upstream
+  MACOS:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: git checkout
+        uses: actions/checkout@v6
+      - name: brew
+        run: |
+          brew install \
+            autoconf \
+            bison \
+            re2c \
+            pkgconf \
+            icu4c \
+            libiconv \
+            libpq \
+            libsodium \
+            libzip \
+            oniguruma
+      - name: ccache
+        uses: ./.github/actions/ccache
+        with:
+          name: SHARP_MACOS
+      - name: Build
+        run: sharp/bin/build
+      - name: Test PHP#
+        run: sharp/bin/test --opcache
+      - name: Test upstream
+        run: sharp/bin/test --upstream
