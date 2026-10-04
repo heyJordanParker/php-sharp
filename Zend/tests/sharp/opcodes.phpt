@@ -24,5 +24,5 @@ foreach (['Calc', 'Nulls', 'ControlFlow'] as $fixture) {
 ?>
 --EXPECT--
 Calc: same opcodes and lines in 4 op arrays
-Nulls: same opcodes and lines in 10 op arrays
+Nulls: same opcodes and lines in 11 op arrays
 ControlFlow: same opcodes and lines in 6 op arrays

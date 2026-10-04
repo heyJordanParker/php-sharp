@@ -54,4 +54,13 @@ class Nulls
         total += found ?? 1;
         return total;
     }
+
+    public int countTo(int limit)
+    {
+        int total = 0;
+        for (int step = 1; step <= limit; step++) {
+            total += step;
+        }
+        return total;
+    }
 }
