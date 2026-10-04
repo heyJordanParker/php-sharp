@@ -98,7 +98,7 @@ void zend_optimizer_pass1(zend_op_array *op_array, zend_optimizer_ctx *ctx)
 		case ZEND_CASE:
 		case ZEND_CASE_STRICT:
 			if (opline->op1_type == IS_CONST && opline->op2_type == IS_CONST &&
-					zend_optimizer_eval_binary_op(&result, opline->opcode, &ZEND_OP1_LITERAL(opline), &ZEND_OP2_LITERAL(opline)) == SUCCESS) {
+					zend_optimizer_eval_binary_op(&result, zend_optimizer_binary_opcode(opline), &ZEND_OP1_LITERAL(opline), &ZEND_OP2_LITERAL(opline)) == SUCCESS) {
 				replace_by_const_or_qm_assign(op_array, opline, &result);
 			}
 			break;

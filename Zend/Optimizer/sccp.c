@@ -315,7 +315,7 @@ static bool try_replace_op2(
 	return 0;
 }
 
-static inline zend_result ct_eval_binary_op(zval *result, uint8_t binop, zval *op1, zval *op2) {
+static inline zend_result ct_eval_binary_op(zval *result, uint32_t binop, zval *op1, zval *op2) {
 	/* TODO: We could implement support for evaluation of + on partial arrays. */
 	if (IS_PARTIAL_ARRAY(op1) || IS_PARTIAL_ARRAY(op2)) {
 		return FAILURE;
@@ -666,7 +666,13 @@ static inline zend_result ct_eval_assign_obj(zval *result, zval *value, const zv
 	}
 }
 
-static inline zend_result ct_eval_incdec(zval *result, uint8_t opcode, zval *op1) {
+static inline zend_result ct_eval_incdec(zval *result, const zend_op *opline, zval *op1) {
+	uint8_t opcode = opline->opcode;
+	bool increment = opcode == ZEND_PRE_INC
+		|| opcode == ZEND_POST_INC
+		|| opcode == ZEND_PRE_INC_OBJ
+		|| opcode == ZEND_POST_INC_OBJ;
+
 	/* As of PHP 8.3 with the warning/deprecation notices any type other than int/double/null will emit a diagnostic
 	if (Z_TYPE_P(op1) == IS_ARRAY || IS_PARTIAL_ARRAY(op1)) {
 		return FAILURE;
@@ -676,11 +682,14 @@ static inline zend_result ct_eval_incdec(zval *result, uint8_t opcode, zval *op1
 		return FAILURE;
 	}
 
+	/* A checked increment or decrement throws when it overflows. */
+	if ((opline->extended_value & ZEND_CHECKED_INCDEC) && Z_TYPE_P(op1) == IS_LONG
+			&& Z_LVAL_P(op1) == (increment ? ZEND_LONG_MAX : ZEND_LONG_MIN)) {
+		return FAILURE;
+	}
+
 	ZVAL_COPY(result, op1);
-	if (opcode == ZEND_PRE_INC
-			|| opcode == ZEND_POST_INC
-			|| opcode == ZEND_PRE_INC_OBJ
-			|| opcode == ZEND_POST_INC_OBJ) {
+	if (increment) {
 		increment_function(result);
 	} else {
 		/* Decrement on null emits a deprecation notice */
@@ -1271,7 +1280,7 @@ static void sccp_visit_instr(scdf_ctx *scdf, zend_op *opline, zend_ssa_op *ssa_o
 			SKIP_IF_TOP(op1);
 			SKIP_IF_TOP(op2);
 
-			if (ct_eval_binary_op(&zv, opline->opcode, op1, op2) == SUCCESS) {
+			if (ct_eval_binary_op(&zv, zend_optimizer_binary_opcode(opline), op1, op2) == SUCCESS) {
 				SET_RESULT(result, &zv);
 				zval_ptr_dtor_nogc(&zv);
 				break;
@@ -1397,7 +1406,7 @@ static void sccp_visit_instr(scdf_ctx *scdf, zend_op *opline, zend_ssa_op *ssa_o
 					zval tmp1, tmp2;
 
 					if (ct_eval_fetch_obj(&tmp1, op1, op2) == SUCCESS) {
-						if (ct_eval_incdec(&tmp2, opline->opcode, &tmp1) == SUCCESS) {
+						if (ct_eval_incdec(&tmp2, opline, &tmp1) == SUCCESS) {
 							dup_partial_object(&zv, op1);
 							ct_eval_assign_obj(&zv, &tmp2, op2);
 							if (opline->opcode == ZEND_PRE_INC_OBJ || opline->opcode == ZEND_PRE_DEC_OBJ) {
@@ -1421,7 +1430,7 @@ static void sccp_visit_instr(scdf_ctx *scdf, zend_op *opline, zend_ssa_op *ssa_o
 		case ZEND_PRE_INC:
 		case ZEND_PRE_DEC:
 			SKIP_IF_TOP(op1);
-			if (ct_eval_incdec(&zv, opline->opcode, op1) == SUCCESS) {
+			if (ct_eval_incdec(&zv, opline, op1) == SUCCESS) {
 				SET_RESULT(op1, &zv);
 				SET_RESULT(result, &zv);
 				zval_ptr_dtor_nogc(&zv);
@@ -1434,7 +1443,7 @@ static void sccp_visit_instr(scdf_ctx *scdf, zend_op *opline, zend_ssa_op *ssa_o
 		case ZEND_POST_DEC:
 			SKIP_IF_TOP(op1);
 			SET_RESULT(result, op1);
-			if (ct_eval_incdec(&zv, opline->opcode, op1) == SUCCESS) {
+			if (ct_eval_incdec(&zv, opline, op1) == SUCCESS) {
 				SET_RESULT(op1, &zv);
 				zval_ptr_dtor_nogc(&zv);
 				break;

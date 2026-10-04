@@ -1,0 +1,125 @@
+namespace Demo;
+
+class Overflow
+{
+    public static int add(int a, int b)
+    {
+        return a + b;
+    }
+
+    public static int sub(int a, int b)
+    {
+        return a - b;
+    }
+
+    public static int mul(int a, int b)
+    {
+        return a * b;
+    }
+
+    public static int negate(int a)
+    {
+        return -a;
+    }
+
+    public static int maxPlusOne()
+    {
+        return PHP_INT_MAX + 1;
+    }
+
+    public static int minMinusOne()
+    {
+        return PHP_INT_MIN - 1;
+    }
+
+    public static int maxTimesTwo()
+    {
+        return PHP_INT_MAX * 2;
+    }
+
+    public static int literalPlusOne()
+    {
+        return 9223372036854775807 + 1;
+    }
+
+    public static int addAssign(int a, int b)
+    {
+        let x = a;
+        x += b;
+        return x;
+    }
+
+    public static int subAssign(int a, int b)
+    {
+        let x = a;
+        x -= b;
+        return x;
+    }
+
+    public static int mulAssign(int a, int b)
+    {
+        let x = a;
+        x *= b;
+        return x;
+    }
+
+    public static int preInc(int a)
+    {
+        let x = a;
+        return ++x;
+    }
+
+    public static int postInc(int a)
+    {
+        let x = a;
+        x++;
+        return x;
+    }
+
+    public static int postIncValue(int a)
+    {
+        let x = a;
+        return x++;
+    }
+
+    public static int preDec(int a)
+    {
+        let x = a;
+        return --x;
+    }
+
+    public static int postDec(int a)
+    {
+        let x = a;
+        x--;
+        return x;
+    }
+
+    public static int postDecValue(int a)
+    {
+        let x = a;
+        return x--;
+    }
+
+    public static int incProperty(Counter counter)
+    {
+        counter.value++;
+        return counter.value;
+    }
+
+    public static int decProperty(Counter counter)
+    {
+        return --counter.value;
+    }
+
+    public static int addProperty(Counter counter, int b)
+    {
+        counter.value += b;
+        return counter.value;
+    }
+
+    public static int withDefault(int a = PHP_INT_MAX + 1)
+    {
+        return a;
+    }
+}

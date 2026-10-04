@@ -1100,6 +1100,14 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
 
 #define ZEND_ISEMPTY			(1<<0)
 
+/* Integer overflow throws ArithmeticError instead of producing a float. ZEND_CHECKED_ARITHMETIC
+ * is set in the attr of ZEND_AST_BINARY_OP, ZEND_AST_ASSIGN_OP, ZEND_AST_UNARY_MINUS and the
+ * increment kinds, and next to the opcode in the extended_value of ZEND_ADD, ZEND_SUB, ZEND_MUL
+ * and the ZEND_ASSIGN_*_OP opcodes. ZEND_CHECKED_INCDEC is set above the cache slot in the
+ * extended_value of the increment and decrement opcodes. */
+#define ZEND_CHECKED_ARITHMETIC	(1<<15)
+#define ZEND_CHECKED_INCDEC		(1<<30)
+
 #define ZEND_LAST_CATCH			(1<<0)
 
 #define ZEND_FREE_ON_RETURN     (1<<0)

@@ -13,11 +13,11 @@ echo 'run ', $run->getStartLine(), '-', $run->getEndLine(), "\n";
 
 try {
     Demo\Calc::make(PHP_INT_MAX);
-} catch (TypeError $e) {
+} catch (ArithmeticError $e) {
     echo $e->getMessage(), ' on line ', $e->getLine(), "\n";
 }
 ?>
 --EXPECT--
 class 3-21
 run 15-20
-Demo\Calc::make(): Return value must be of type int, float returned on line 7
+Integer overflow on line 7

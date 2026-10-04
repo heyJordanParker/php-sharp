@@ -1362,6 +1362,7 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 					 && !(ssa->var_info[ssa->ops[op_2].op1_use].type & (MAY_BE_FALSE|MAY_BE_TRUE|MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE|MAY_BE_REF))) {
 
 						op_array->opcodes[op_2].opcode = ZEND_PRE_DEC;
+						op_array->opcodes[op_2].extended_value = zend_optimizer_incdec_mark(&op_array->opcodes[op_2]);
 						SET_UNUSED(op_array->opcodes[op_2].op2);
 						SET_UNUSED(op_array->opcodes[op_2].result);
 
@@ -1378,6 +1379,7 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 					 && !(ssa->var_info[ssa->ops[op_2].op1_use].type & (MAY_BE_FALSE|MAY_BE_TRUE|MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE|MAY_BE_REF))) {
 
 						op_array->opcodes[op_2].opcode = ZEND_PRE_INC;
+						op_array->opcodes[op_2].extended_value = zend_optimizer_incdec_mark(&op_array->opcodes[op_2]);
 						SET_UNUSED(op_array->opcodes[op_2].op2);
 						SET_UNUSED(op_array->opcodes[op_2].result);
 
@@ -1394,6 +1396,7 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 					 && !(ssa->var_info[ssa->ops[op_2].op2_use].type & (MAY_BE_FALSE|MAY_BE_TRUE|MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE|MAY_BE_REF))) {
 
 						op_array->opcodes[op_2].opcode = ZEND_PRE_INC;
+						op_array->opcodes[op_2].extended_value = zend_optimizer_incdec_mark(&op_array->opcodes[op_2]);
 						op_array->opcodes[op_2].op1_type = op_array->opcodes[op_2].op2_type;
 						op_array->opcodes[op_2].op1.var = op_array->opcodes[op_2].op2.var;
 						SET_UNUSED(op_array->opcodes[op_2].op2);
@@ -1516,6 +1519,7 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 						 && !(ssa->var_info[ssa->ops[op_2].op1_use].type & (MAY_BE_FALSE|MAY_BE_TRUE|MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE|MAY_BE_REF))) {
 
 							op_array->opcodes[op_2].opcode = ZEND_PRE_DEC;
+							op_array->opcodes[op_2].extended_value = zend_optimizer_incdec_mark(&op_array->opcodes[op_2]);
 							SET_UNUSED(op_array->opcodes[op_2].op2);
 							SET_UNUSED(op_array->opcodes[op_2].result);
 
@@ -1532,6 +1536,7 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 						 && !(ssa->var_info[ssa->ops[op_2].op1_use].type & (MAY_BE_FALSE|MAY_BE_TRUE|MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE|MAY_BE_REF))) {
 
 							op_array->opcodes[op_2].opcode = ZEND_PRE_INC;
+							op_array->opcodes[op_2].extended_value = zend_optimizer_incdec_mark(&op_array->opcodes[op_2]);
 							SET_UNUSED(op_array->opcodes[op_2].op2);
 							SET_UNUSED(op_array->opcodes[op_2].result);
 
@@ -1548,6 +1553,7 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 						 && !(ssa->var_info[ssa->ops[op_2].op2_use].type & (MAY_BE_FALSE|MAY_BE_TRUE|MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE|MAY_BE_REF))) {
 
 							op_array->opcodes[op_2].opcode = ZEND_PRE_INC;
+							op_array->opcodes[op_2].extended_value = zend_optimizer_incdec_mark(&op_array->opcodes[op_2]);
 							op_array->opcodes[op_2].op1_type = op_array->opcodes[op_2].op2_type;
 							op_array->opcodes[op_2].op1.var = op_array->opcodes[op_2].op2.var;
 							SET_UNUSED(op_array->opcodes[op_2].op2);
@@ -1594,7 +1600,7 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 				}
 
 			} else if (opline->opcode == ZEND_ASSIGN_OP
-			 && opline->extended_value == ZEND_ADD
+			 && (opline->extended_value & ~ZEND_CHECKED_ARITHMETIC) == ZEND_ADD
 			 && ssa->ops[op_1].op1_def == v
 			 && opline->op2_type == IS_CONST
 			 && Z_TYPE_P(CT_CONSTANT_EX(op_array, opline->op2.constant)) == IS_LONG
@@ -1605,11 +1611,11 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 // op_1: ASSIGN_ADD #?.CV [undef,null,int,foat] ->#v.CV, int(1) => PRE_INC #?.CV ->#v.CV
 
 				opline->opcode = ZEND_PRE_INC;
-				opline->extended_value = 0;
+				opline->extended_value = zend_optimizer_incdec_mark(opline);
 				SET_UNUSED(opline->op2);
 
 			} else if (opline->opcode == ZEND_ASSIGN_OP
-			 && opline->extended_value == ZEND_SUB
+			 && (opline->extended_value & ~ZEND_CHECKED_ARITHMETIC) == ZEND_SUB
 			 && ssa->ops[op_1].op1_def == v
 			 && opline->op2_type == IS_CONST
 			 && Z_TYPE_P(CT_CONSTANT_EX(op_array, opline->op2.constant)) == IS_LONG
@@ -1620,7 +1626,7 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 // op_1: ASSIGN_SUB #?.CV [undef,null,int,foat] -> #v.CV, int(1) => PRE_DEC #?.CV ->#v.CV
 
 				opline->opcode = ZEND_PRE_DEC;
-				opline->extended_value = 0;
+				opline->extended_value = zend_optimizer_incdec_mark(opline);
 				SET_UNUSED(opline->op2);
 
 			} else if (ssa->ops[op_1].op1_def == v
@@ -1637,8 +1643,8 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 				ssa->ops[op_1].op1_def = -1;
 
 				/* Update opcode */
-				opline->opcode = opline->extended_value;
-				opline->extended_value = 0;
+				opline->opcode = opline->extended_value & ~ZEND_CHECKED_ARITHMETIC;
+				opline->extended_value &= ZEND_CHECKED_ARITHMETIC;
 				opline->result_type = opline->op1_type;
 				opline->result.var = opline->op1.var;
 
