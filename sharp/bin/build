@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+linux=false
+clean=false
+container_command=(sharp/bin/build)
+for arg in "$@"; do
+  case "$arg" in
+    --linux) linux=true ;;
+    --clean) clean=true; container_command+=("$arg") ;;
+    *) echo "usage: sharp/bin/build [--clean] [--linux]" >&2; exit 2 ;;
+  esac
+done
+
+if $linux; then
+  exec "$root/sharp/docker/run" "${container_command[@]}"
+fi
+
+build_dir="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
+
+flags=(
+  --enable-option-checking=fatal
+  --enable-debug
+  --disable-cgi
+  --without-pear
+  --enable-zend-test
+  --enable-mbstring
+  --enable-intl
+  --enable-bcmath
+  --enable-pcntl
+  --with-sodium
+  --with-zip
+)
+
+if [[ "$(uname -s)" == Darwin ]]; then
+  brew_opt="$(brew --prefix)/opt"
+  export PATH="$brew_opt/bison/bin:$PATH"
+  export PKG_CONFIG_PATH="$brew_opt/icu4c/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+  flags+=(
+    --with-pgsql="$brew_opt/libpq"
+    --with-pdo-pgsql="$brew_opt/libpq"
+    --with-iconv="$brew_opt/libiconv"
+  )
+else
+  flags+=(--with-pgsql --with-pdo-pgsql)
+fi
+
+if $clean; then
+  rm -rf "$build_dir"
+fi
+
+status="$build_dir/config.status"
+if [[ ! -f "$status" || "$0" -nt "$status" || -n "$(find "$root" \( -path "$root/.git" -o -path "$root/sharp" \) -prune -o \( -name configure.ac -o -name '*.m4' \) -newer "$status" -print -quit)" ]]; then
+  (cd "$root" && ./buildconf --force)
+  mkdir -p "$build_dir"
+  (cd "$build_dir" && "$root/configure" "${flags[@]}")
+fi
+
+make -C "$build_dir" -j"$(getconf _NPROCESSORS_ONLN)" >/dev/null
+"$build_dir/sapi/cli/php" -v

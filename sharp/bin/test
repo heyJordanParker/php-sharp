@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+linux=false
+opcache=false
+upstream=false
+tests=()
+container_command=(sharp/bin/test)
+for arg in "$@"; do
+  case "$arg" in
+    --linux) linux=true; continue ;;
+    --opcache) opcache=true ;;
+    --upstream) upstream=true ;;
+    -*) echo "usage: sharp/bin/test [--linux] [--opcache] [--upstream] [paths...]" >&2; exit 2 ;;
+    *) tests+=("$arg") ;;
+  esac
+  container_command+=("$arg")
+done
+
+if $linux; then
+  exec "$root/sharp/docker/run" "${container_command[@]}"
+fi
+
+if $upstream; then
+  tests+=(Zend/tests ext/reflection ext/tokenizer ext/opcache)
+fi
+if [[ ${#tests[@]} -eq 0 ]]; then
+  tests=(Zend/tests/sharp)
+fi
+
+php="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/sapi/cli/php"
+if [[ ! -x "$php" ]]; then
+  echo "$php is missing. Run sharp/bin/build first." >&2
+  exit 1
+fi
+
+export SKIP_IO_CAPTURE_TESTS=1
+export STACK_LIMIT_DEFAULTS_CHECK=1
+export RUN_RESOURCE_HEAVY_TESTS=1
+
+run_tests() {
+  echo "== $1"
+  shift
+  (cd "$root" && "$php" run-tests.php -P -q \
+    -d opcache.jit=disable \
+    -d opcache.protect_memory=1 \
+    -j"$(getconf _NPROCESSORS_ONLN)" \
+    -g FAIL,BORK,LEAK,XLEAK,SKIP,XFAIL \
+    --no-progress \
+    --offline \
+    --show-diff \
+    --show-slow 1000 \
+    --set-timeout 120 \
+    "$@" "${tests[@]}")
+}
+
+run_tests "without opcache"
+if $opcache; then
+  run_tests "with opcache" -d opcache.enable_cli=1
+  run_tests "with opcache, priming the file cache" -d opcache.enable_cli=1 --file-cache-prime
+  run_tests "with opcache, using the file cache" -d opcache.enable_cli=1 --file-cache-use
+fi

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+docker build --quiet --tag php-sharp-linux "$root/sharp/docker" >/dev/null
+exec docker run --rm --init \
+  --user "$(id -u):$(id -g)" \
+  --volume "$root:/src" \
+  --workdir /src \
+  php-sharp-linux "$@"
