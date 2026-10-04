@@ -12,42 +12,47 @@
 
 #define SHARP_FILE_EXTENSION ".sharp"
 
-#define SHARP_KIND(kind) [SHARP_AST_##kind] = ZEND_AST_##kind
+#define SHARP_KIND(kind) case SHARP_AST_##kind: return ZEND_AST_##kind
 
-static const zend_ast_kind sharp_zend_kinds[] = {
-	SHARP_KIND(ZVAL),
-	SHARP_KIND(METHOD),
-	SHARP_KIND(CLASS),
-	SHARP_KIND(ARG_LIST),
-	SHARP_KIND(STMT_LIST),
-	SHARP_KIND(PARAM_LIST),
-	SHARP_KIND(CONST_DECL),
-	SHARP_KIND(VAR),
-	SHARP_KIND(CONST),
-	SHARP_KIND(UNARY_PLUS),
-	SHARP_KIND(UNARY_MINUS),
-	SHARP_KIND(UNARY_OP),
-	SHARP_KIND(PRE_INC),
-	SHARP_KIND(PRE_DEC),
-	SHARP_KIND(POST_INC),
-	SHARP_KIND(POST_DEC),
-	SHARP_KIND(RETURN),
-	SHARP_KIND(PROP),
-	SHARP_KIND(ASSIGN),
-	SHARP_KIND(ASSIGN_OP),
-	SHARP_KIND(BINARY_OP),
-	SHARP_KIND(GREATER),
-	SHARP_KIND(GREATER_EQUAL),
-	SHARP_KIND(AND),
-	SHARP_KIND(OR),
-	SHARP_KIND(DECLARE),
-	SHARP_KIND(NAMESPACE),
-	SHARP_KIND(NAMED_ARG),
-	SHARP_KIND(METHOD_CALL),
-	SHARP_KIND(STATIC_CALL),
-	SHARP_KIND(CONST_ELEM),
-	SHARP_KIND(PARAM),
-};
+static zend_ast_kind sharp_zend_kind(enum sharp_kind kind)
+{
+	switch (kind) {
+		SHARP_KIND(ZVAL);
+		SHARP_KIND(METHOD);
+		SHARP_KIND(CLASS);
+		SHARP_KIND(ARG_LIST);
+		SHARP_KIND(STMT_LIST);
+		SHARP_KIND(PARAM_LIST);
+		SHARP_KIND(CONST_DECL);
+		SHARP_KIND(VAR);
+		SHARP_KIND(CONST);
+		SHARP_KIND(UNARY_PLUS);
+		SHARP_KIND(UNARY_MINUS);
+		SHARP_KIND(UNARY_OP);
+		SHARP_KIND(PRE_INC);
+		SHARP_KIND(PRE_DEC);
+		SHARP_KIND(POST_INC);
+		SHARP_KIND(POST_DEC);
+		SHARP_KIND(RETURN);
+		SHARP_KIND(PROP);
+		SHARP_KIND(ASSIGN);
+		SHARP_KIND(ASSIGN_OP);
+		SHARP_KIND(BINARY_OP);
+		SHARP_KIND(GREATER);
+		SHARP_KIND(GREATER_EQUAL);
+		SHARP_KIND(AND);
+		SHARP_KIND(OR);
+		SHARP_KIND(DECLARE);
+		SHARP_KIND(NAMESPACE);
+		SHARP_KIND(NAMED_ARG);
+		SHARP_KIND(METHOD_CALL);
+		SHARP_KIND(STATIC_CALL);
+		SHARP_KIND(CONST_ELEM);
+		SHARP_KIND(PARAM);
+	}
+
+	ZEND_UNREACHABLE();
+}
 
 static zend_op_array *(*sharp_next_compile_file)(zend_file_handle *file_handle, int type);
 
@@ -140,8 +145,7 @@ static zend_ast *sharp_translate(const sharp_unit *unit, uint32_t index)
 	}
 
 	node = &unit->nodes[index];
-	ZEND_ASSERT(node->kind < sizeof(sharp_zend_kinds) / sizeof(sharp_zend_kinds[0]));
-	kind = sharp_zend_kinds[node->kind];
+	kind = sharp_zend_kind(node->kind);
 
 	if (kind == ZEND_AST_ZVAL) {
 		CG(zend_lineno) = node->line;
