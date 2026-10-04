@@ -1002,7 +1002,7 @@ static int zend_may_overflow(const zend_op *opline, const zend_ssa_op *ssa_op, c
 				ssa->var_info[res].range.underflow ||
 				ssa->var_info[res].range.overflow);
 		case ZEND_ASSIGN_OP:
-			if (opline->extended_value == ZEND_ADD) {
+			if ((opline->extended_value & ~ZEND_CHECKED_ARITHMETIC) == ZEND_ADD) {
 				res = ssa_op->op1_def;
 				if (res < 0
 				 || !ssa->var_info[res].has_range
@@ -1029,7 +1029,7 @@ static int zend_may_overflow(const zend_op *opline, const zend_ssa_op *ssa_op, c
 					}
 				}
 				return 0;
-			} else if (opline->extended_value == ZEND_SUB) {
+			} else if ((opline->extended_value & ~ZEND_CHECKED_ARITHMETIC) == ZEND_SUB) {
 				res = ssa_op->op1_def;
 				if (res < 0
 				 || !ssa->var_info[res].has_range
@@ -1056,7 +1056,7 @@ static int zend_may_overflow(const zend_op *opline, const zend_ssa_op *ssa_op, c
 					}
 				}
 				return 0;
-			} else if (opline->extended_value == ZEND_MUL) {
+			} else if ((opline->extended_value & ~ZEND_CHECKED_ARITHMETIC) == ZEND_MUL) {
 				res = ssa_op->op1_def;
 				return (res < 0 ||
 					!ssa->var_info[res].has_range ||
@@ -1392,11 +1392,7 @@ static bool zend_jit_supported_binary_op(uint32_t op, uint32_t op1_info, uint32_
 	if ((op1_info & MAY_BE_UNDEF) || (op2_info & MAY_BE_UNDEF)) {
 		return false;
 	}
-	if (op & ZEND_CHECKED_ARITHMETIC) {
-		/* The VM handler throws when a checked assignment overflows. */
-		return false;
-	}
-	switch (op) {
+	switch (op & ~ZEND_CHECKED_ARITHMETIC) {
 		case ZEND_POW:
 		case ZEND_DIV:
 			// TODO: check for division by zero ???
@@ -1628,10 +1624,6 @@ static int zend_jit(const zend_op_array *op_array, zend_ssa *ssa, const zend_op 
 						}
 						op1_info = OP1_INFO();
 						if (!(op1_info & MAY_BE_LONG)) {
-							break;
-						}
-						if ((opline->extended_value & ZEND_CHECKED_INCDEC) && (op1_info & MAY_BE_REF)) {
-							/* The VM handler checks a reference for overflow */
 							break;
 						}
 						if (opline->result_type != IS_UNUSED) {
@@ -1885,10 +1877,6 @@ static int zend_jit(const zend_op_array *op_array, zend_ssa *ssa, const zend_op 
 						if (opline->op2_type != IS_CONST
 						 || Z_TYPE_P(RT_CONSTANT(opline, opline->op2)) != IS_STRING
 						 || Z_STRVAL_P(RT_CONSTANT(opline, opline->op2))[0] == '\0') {
-							break;
-						}
-						if (opline->extended_value & ZEND_CHECKED_INCDEC) {
-							/* The VM handler throws when a checked increment overflows */
 							break;
 						}
 						if (PROFITABILITY_CHECKS && (!ssa->ops || !ssa->var_info)) {

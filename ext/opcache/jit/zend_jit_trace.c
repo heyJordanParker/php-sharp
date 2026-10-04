@@ -1206,9 +1206,9 @@ static int is_checked_guard(const zend_ssa *tssa, const zend_op **ssa_opcodes, u
 					}
 					return 1;
 				} else if (opline->opcode == ZEND_ASSIGN_OP
-				 && (opline->extended_value == ZEND_ADD
-				  || opline->extended_value == ZEND_SUB
-				  || opline->extended_value == ZEND_MUL)) {
+				 && ((opline->extended_value & ~ZEND_CHECKED_ARITHMETIC) == ZEND_ADD
+				  || (opline->extended_value & ~ZEND_CHECKED_ARITHMETIC) == ZEND_SUB
+				  || (opline->extended_value & ~ZEND_CHECKED_ARITHMETIC) == ZEND_MUL)) {
 					if ((opline->op2_type & (IS_VAR|IS_CV))
 					  && tssa->ops[idx].op2_use >= 0
 					  && (tssa->var_info[tssa->ops[idx].op2_use].type & MAY_BE_REF)) {
@@ -4075,6 +4075,7 @@ static bool zend_jit_trace_may_throw(const zend_op       *opline,
     switch (opline->opcode) {
 		case ZEND_ASSIGN_DIM_OP:
 			if (opline->extended_value != ZEND_CONCAT
+			 && !(opline->extended_value & ZEND_CHECKED_ARITHMETIC)
 			 && val_type == IS_LONG
 			 && (t1 & (MAY_BE_ANY|MAY_BE_UNDEF|MAY_BE_REF)) == MAY_BE_ARRAY
 			 && MAY_BE_PACKED_ONLY(t1)
@@ -4453,10 +4454,6 @@ static zend_vm_opcode_handler_t zend_jit_trace(zend_jit_trace_rec *trace_buffer,
 						if (!(op1_info & MAY_BE_LONG)) {
 							break;
 						}
-						if ((opline->extended_value & ZEND_CHECKED_INCDEC) && (op1_info & MAY_BE_REF)) {
-							/* The VM handler checks a reference for overflow */
-							break;
-						}
 						if (opline->result_type != IS_UNUSED) {
 							res_use_info = zend_jit_trace_type_to_info(
 								STACK_MEM_TYPE(stack, EX_VAR_TO_NUM(opline->result.var)));
@@ -4794,10 +4791,6 @@ static zend_vm_opcode_handler_t zend_jit_trace(zend_jit_trace_rec *trace_buffer,
 						if (opline->op2_type != IS_CONST
 						 || Z_TYPE_P(RT_CONSTANT(opline, opline->op2)) != IS_STRING
 						 || Z_STRVAL_P(RT_CONSTANT(opline, opline->op2))[0] == '\0') {
-							break;
-						}
-						if (opline->extended_value & ZEND_CHECKED_INCDEC) {
-							/* The VM handler throws when a checked increment overflows */
 							break;
 						}
 						ce = NULL;

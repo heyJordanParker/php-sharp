@@ -41,9 +41,19 @@ postDecValue 1
 ArithmeticError: Integer overflow in Overflow.sharp on line 101
 ArithmeticError: Integer overflow in Overflow.sharp on line 106
 ArithmeticError: Integer overflow in Overflow.sharp on line 117
+ArithmeticError: Integer overflow in Overflow.sharp on line 128
+ArithmeticError: Integer overflow in Overflow.sharp on line 134
+ArithmeticError: Integer overflow in Overflow.sharp on line 142
+ArithmeticError: Integer overflow in Overflow.sharp on line 149
 add loop stopped at 4611686018427387904 on line 7
 mul loop stopped at 4052555153018976267 on line 17
 preInc loop stopped at 9223372036854775807 on line 69
 postDec loop stopped at -9223372036854775808 on line 94
+incAfterCall loop stopped at 9223372036854775807 on line 142
+addAfterCall loop stopped at 9223372036854775807 on line 149
+incProperty loop stopped at 9223372036854775807 on line 106
+addProperty loop stopped at 9223372036854775807 on line 117
+incLoose loop stopped at 9223372036854775807 on line 128
+addLoose loop stopped at 9223372036854775807 on line 134
 float(9.223372036854776E+18)
 float(9.223372036854776E+18)

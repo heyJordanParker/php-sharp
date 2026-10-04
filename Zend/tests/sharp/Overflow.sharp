@@ -122,4 +122,31 @@ class Overflow
     {
         return a;
     }
+
+    public static int incLoose(LooseCounter counter)
+    {
+        counter.value++;
+        return counter.value;
+    }
+
+    public static int addLoose(LooseCounter counter, int b)
+    {
+        counter.value += b;
+        return counter.value;
+    }
+
+    public static int incAfterCall(int a)
+    {
+        let x = a;
+        Probe.touch(x);
+        return ++x;
+    }
+
+    public static int addAfterCall(int a, int b)
+    {
+        let x = a;
+        Probe.touch(x);
+        x += b;
+        return x;
+    }
 }

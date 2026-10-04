@@ -7,6 +7,21 @@ final class Counter
     public function __construct(public int $value) {}
 }
 
+final class LooseCounter
+{
+    public $value;
+
+    public function __construct($value)
+    {
+        $this->value = $value;
+    }
+}
+
+final class Probe
+{
+    public static function touch(int &$x): void {}
+}
+
 final class PhpOverflow
 {
     public static function add(int $a, int $b) { return $a + $b; }
@@ -43,15 +58,25 @@ foreach ([
 for ($i = 0; $i < 100; $i++) {
     Overflow::incProperty(new Counter(1));
     Overflow::addProperty(new Counter(1), 2);
+    Overflow::incLoose(new LooseCounter(1));
+    Overflow::addLoose(new LooseCounter(1), 2);
+    Overflow::incAfterCall(1);
+    Overflow::addAfterCall(1, 2);
 }
 attempt(fn () => Overflow::incProperty(new Counter(PHP_INT_MAX)));
 attempt(fn () => Overflow::addProperty(new Counter(PHP_INT_MAX), 1));
+attempt(fn () => Overflow::incLoose(new LooseCounter(PHP_INT_MAX)));
+attempt(fn () => Overflow::addLoose(new LooseCounter(PHP_INT_MAX), 1));
+attempt(fn () => Overflow::incAfterCall(PHP_INT_MAX));
+attempt(fn () => Overflow::addAfterCall(PHP_INT_MAX, 1));
 
 foreach ([
     'add' => [1, fn ($x) => Overflow::add($x, $x)],
     'mul' => [1, fn ($x) => Overflow::mul($x, 3)],
     'preInc' => [PHP_INT_MAX - 300, fn ($x) => Overflow::preInc($x)],
     'postDec' => [PHP_INT_MIN + 300, fn ($x) => Overflow::postDec($x)],
+    'incAfterCall' => [PHP_INT_MAX - 300, fn ($x) => Overflow::incAfterCall($x)],
+    'addAfterCall' => [PHP_INT_MAX - 300, fn ($x) => Overflow::addAfterCall($x, 1)],
 ] as $method => [$x, $step]) {
     try {
         while (true) {
@@ -59,6 +84,21 @@ foreach ([
         }
     } catch (\ArithmeticError $e) {
         echo $method, ' loop stopped at ', $x, ' on line ', $e->getLine(), "\n";
+    }
+}
+
+foreach ([
+    'incProperty' => [new Counter(PHP_INT_MAX - 300), fn ($counter) => Overflow::incProperty($counter)],
+    'addProperty' => [new Counter(PHP_INT_MAX - 300), fn ($counter) => Overflow::addProperty($counter, 1)],
+    'incLoose' => [new LooseCounter(PHP_INT_MAX - 300), fn ($counter) => Overflow::incLoose($counter)],
+    'addLoose' => [new LooseCounter(PHP_INT_MAX - 300), fn ($counter) => Overflow::addLoose($counter, 1)],
+] as $method => [$counter, $step]) {
+    try {
+        while (true) {
+            $step($counter);
+        }
+    } catch (\ArithmeticError $e) {
+        echo $method, ' loop stopped at ', $counter->value, ' on line ', $e->getLine(), "\n";
     }
 }
 
