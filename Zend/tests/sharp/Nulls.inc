@@ -44,4 +44,14 @@ class Nulls
     {
         return $box?->size;
     }
+
+    public function typed(?int $value): int
+    {
+        $found = null;
+        $found ??= $value;
+        $base = 10;
+        $total = $base;
+        $total += $found ?? 1;
+        return $total;
+    }
 }

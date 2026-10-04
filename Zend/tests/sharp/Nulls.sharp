@@ -44,4 +44,14 @@ class Nulls
     {
         return box?.size;
     }
+
+    public int typed(int? value)
+    {
+        int? found = null;
+        found ??= value;
+        const int base = 10;
+        int total = base;
+        total += found ?? 1;
+        return total;
+    }
 }
