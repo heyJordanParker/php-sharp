@@ -4453,6 +4453,10 @@ static zend_vm_opcode_handler_t zend_jit_trace(zend_jit_trace_rec *trace_buffer,
 						if (!(op1_info & MAY_BE_LONG)) {
 							break;
 						}
+						if ((opline->extended_value & ZEND_CHECKED_INCDEC) && (op1_info & MAY_BE_REF)) {
+							/* The VM handler checks a reference for overflow */
+							break;
+						}
 						if (opline->result_type != IS_UNUSED) {
 							res_use_info = zend_jit_trace_type_to_info(
 								STACK_MEM_TYPE(stack, EX_VAR_TO_NUM(opline->result.var)));
@@ -4790,6 +4794,10 @@ static zend_vm_opcode_handler_t zend_jit_trace(zend_jit_trace_rec *trace_buffer,
 						if (opline->op2_type != IS_CONST
 						 || Z_TYPE_P(RT_CONSTANT(opline, opline->op2)) != IS_STRING
 						 || Z_STRVAL_P(RT_CONSTANT(opline, opline->op2))[0] == '\0') {
+							break;
+						}
+						if (opline->extended_value & ZEND_CHECKED_INCDEC) {
+							/* The VM handler throws when a checked increment overflows */
 							break;
 						}
 						ce = NULL;

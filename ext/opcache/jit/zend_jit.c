@@ -113,7 +113,7 @@ static void zend_jit_trace_add_code(const void *start, uint32_t size);
 static zend_string *zend_jit_func_name(const zend_op_array *op_array);
 
 static bool zend_jit_needs_arg_dtor(const zend_function *func, uint32_t arg_num, zend_call_info *call_info);
-static bool zend_jit_supported_binary_op(uint8_t op, uint32_t op1_info, uint32_t op2_info);
+static bool zend_jit_supported_binary_op(uint32_t op, uint32_t op1_info, uint32_t op2_info);
 
 static bool dominates(const zend_basic_block *blocks, int a, int b) {
 	while (blocks[b].level > blocks[a].level) {
@@ -1387,9 +1387,13 @@ static bool zend_jit_next_is_send_result(const zend_op *opline)
 	return 0;
 }
 
-static bool zend_jit_supported_binary_op(uint8_t op, uint32_t op1_info, uint32_t op2_info)
+static bool zend_jit_supported_binary_op(uint32_t op, uint32_t op1_info, uint32_t op2_info)
 {
 	if ((op1_info & MAY_BE_UNDEF) || (op2_info & MAY_BE_UNDEF)) {
+		return false;
+	}
+	if (op & ZEND_CHECKED_ARITHMETIC) {
+		/* The VM handler throws when a checked assignment overflows. */
 		return false;
 	}
 	switch (op) {
@@ -1624,6 +1628,10 @@ static int zend_jit(const zend_op_array *op_array, zend_ssa *ssa, const zend_op 
 						}
 						op1_info = OP1_INFO();
 						if (!(op1_info & MAY_BE_LONG)) {
+							break;
+						}
+						if ((opline->extended_value & ZEND_CHECKED_INCDEC) && (op1_info & MAY_BE_REF)) {
+							/* The VM handler checks a reference for overflow */
 							break;
 						}
 						if (opline->result_type != IS_UNUSED) {
@@ -1877,6 +1885,10 @@ static int zend_jit(const zend_op_array *op_array, zend_ssa *ssa, const zend_op 
 						if (opline->op2_type != IS_CONST
 						 || Z_TYPE_P(RT_CONSTANT(opline, opline->op2)) != IS_STRING
 						 || Z_STRVAL_P(RT_CONSTANT(opline, opline->op2))[0] == '\0') {
+							break;
+						}
+						if (opline->extended_value & ZEND_CHECKED_INCDEC) {
+							/* The VM handler throws when a checked increment overflows */
 							break;
 						}
 						if (PROFITABILITY_CHECKS && (!ssa->ops || !ssa->var_info)) {
