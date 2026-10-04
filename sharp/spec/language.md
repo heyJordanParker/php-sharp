@@ -32,6 +32,15 @@ const currency = this.tenant.currency;
 let total = 0;
 ```
 
+**A local can also be declared with its type written,** as in C#, when the right side cannot say it, such as `null`. A typed local can be reassigned like `let`, and `const` can carry a type too.
+
+```csharp
+let total = 0;              // type inferred, can be reassigned
+Money? total = null;        // type written, can be reassigned
+const plan = this.plan();   // type inferred, cannot be reassigned
+const Plan plan = …;        // type written, cannot be reassigned
+```
+
 - In a class, `const` declares a constant. It is never reassigned, and its value is known before the code runs.
 - These are removed:
   - `$$name` variable variables
@@ -98,6 +107,16 @@ public int views { get; private set; }                          // auto-property
 public string name { get; internal set => field = value.trim(); }
 public string slug => Str.slug(name);                           // computed
 ```
+
+**A field or an auto-property can have an initial value,** written after its declaration as in C#:
+
+```csharp
+Map<string, Plan> cache = [];                                   // field
+public int views { get; private set; } = 0;                     // auto-property
+public List<Tag> tags { get; set; } = new List();
+```
+
+A constant initial value is stored as the member's default. Any other value is set at the start of the constructor, in the order the members are declared.
 
 ### 6.1 Property features
 
