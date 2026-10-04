@@ -7,7 +7,7 @@ $(builddir)/target/release/libsharp.a: sharp-always
 
 $(builddir)/sharp_build_id.h: sharp-always
 	@id=`git -C $(srcdir) rev-parse HEAD`; \
-	if test -z "$$id" || test -n "`git -C $(srcdir) status --porcelain`"; then id="$$id+`date -u +%Y%m%dT%H%M%SZ`"; fi; \
+	if test -z "$$id" || test -n "`git -C $(srcdir) status --porcelain --untracked-files=no`"; then id="$$id+`date -u +%Y%m%dT%H%M%SZ`"; fi; \
 	echo "#define SHARP_BUILD_ID \"$$id\"" > $@.tmp; \
 	if cmp -s $@.tmp $@; then rm $@.tmp; else mv $@.tmp $@; fi
 
