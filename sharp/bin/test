@@ -68,14 +68,14 @@ run_tests() {
 if $upstream; then
   baseline="sharp/baseline/$os"
   results="$build_dir/upstream-results"
-  (export REPORT_EXIT_STATUS=0; run_tests "without opcache, compared with $baseline" -W "$results")
+  run_tests "without opcache, compared with $baseline" -W "$results"
   awk -F '\t' -v OFS='\t' -v prefix="$root/" '
     $1 != "PASSED" {
       if (index($2, prefix) == 1) $2 = substr($2, length(prefix) + 1)
       print
     }' "$results" | LC_ALL=C sort -o "$results"
   if ! diff -u "$root/$baseline" "$results"; then
-    echo "The upstream results differ from $baseline. To accept them, run: cp ${results#"$root"/} $baseline" >&2
+    echo "The upstream results differ from $baseline. Only the Architect accepts a new baseline, with: cp ${results#"$root"/} $baseline" >&2
     exit 1
   fi
 else
