@@ -1,0 +1,15 @@
+namespace Demo;
+
+class Badge
+{
+    public string label { get; } = "new";
+
+    public Badge(public int id { get; })
+    {
+    }
+
+    public void rename(string label)
+    {
+        this.label = label;
+    }
+}

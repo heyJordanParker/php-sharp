@@ -5,9 +5,9 @@ class Order
     private int $count = 0;
     protected float $rate = 1.5 * 2;
     public private(set) int $total = 0;
-    public private(set) string $code;
+    public readonly string $code;
 
-    public function __construct(public private(set) int $id, private int $base, string $code)
+    public function __construct(public readonly int $id, private int $base, string $code)
     {
         $this->code = $code;
         $this->count = $base;

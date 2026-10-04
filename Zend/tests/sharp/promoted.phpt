@@ -8,6 +8,7 @@ require __DIR__ . '/Ticket.sharp';
 foreach ((new ReflectionClass(Demo\Ticket::class))->getProperties() as $property) {
     $set = match (true) {
         $property->isPrivate() => '',
+        $property->isReadOnly() => ' readonly',
         $property->isPrivateSet() => ' private(set)',
         $property->isProtectedSet() => ' protected(set)',
         default => '',
@@ -27,7 +28,7 @@ try {
 ?>
 --EXPECT--
 private int price promoted
-public private(set) string code promoted
+public readonly string code promoted
 public protected(set) int seats promoted
 A1 3 24
-Cannot modify private(set) property Demo\Ticket::$code from global scope
+Cannot modify readonly property Demo\Ticket::$code
