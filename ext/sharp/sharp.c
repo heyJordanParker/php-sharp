@@ -121,10 +121,11 @@ static zend_ast *sharp_translate_decl(const sharp_unit *unit, const sharp_node *
 static zend_ast *sharp_translate_fixed(const sharp_unit *unit, const sharp_node *node, zend_ast_kind kind)
 {
 	zend_ast *child[6] = {0};
+	uint32_t child_count = kind >> ZEND_AST_NUM_CHILDREN_SHIFT;
 	zend_ast *ast;
 
-	ZEND_ASSERT(node->child_count == (uint32_t) (kind >> ZEND_AST_NUM_CHILDREN_SHIFT));
-	for (uint32_t i = 0; i < node->child_count; i++) {
+	ZEND_ASSERT(node->child_count == child_count);
+	for (uint32_t i = 0; i < child_count; i++) {
 		child[i] = sharp_translate(unit, unit->children[node->first_child + i]);
 	}
 
