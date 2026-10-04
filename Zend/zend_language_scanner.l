@@ -589,7 +589,7 @@ ZEND_API zend_result open_file_for_scanning(zend_file_handle *file_handle)
 	return SUCCESS;
 }
 
-static zend_op_array *zend_compile(int type)
+static zend_op_array *zend_compile(int type, int (*parse)(void))
 {
 	zend_op_array *op_array = NULL;
 	bool original_in_compilation = CG(in_compilation);
@@ -598,7 +598,7 @@ static zend_op_array *zend_compile(int type)
 	CG(ast) = NULL;
 	CG(ast_arena) = zend_arena_create(1024 * 32);
 
-	if (!zendparse()) {
+	if (!parse()) {
 		int last_lineno = CG(zend_lineno);
 		zend_file_context original_file_context;
 		zend_oparray_context original_oparray_context;
@@ -639,6 +639,11 @@ static zend_op_array *zend_compile(int type)
 
 ZEND_API zend_op_array *compile_file(zend_file_handle *file_handle, int type)
 {
+	return zend_compile_file_with(file_handle, type, zendparse);
+}
+
+ZEND_API zend_op_array *zend_compile_file_with(zend_file_handle *file_handle, int type, int (*parse)(void))
+{
 	zend_lex_state original_lex_state;
 	zend_op_array *op_array = NULL;
 	zend_save_lexical_state(&original_lex_state);
@@ -657,7 +662,7 @@ ZEND_API zend_op_array *compile_file(zend_file_handle *file_handle, int type)
 			zend_begin_record_errors();
 		}
 
-		op_array = zend_compile(ZEND_USER_FUNCTION);
+		op_array = zend_compile(ZEND_USER_FUNCTION, parse);
 
 		if (!orig_record_errors) {
 			zend_emit_recorded_errors();
@@ -825,7 +830,7 @@ zend_op_array *compile_string(zend_string *source_string, const char *filename, 
 			break;
 	}
 
-	op_array = zend_compile(ZEND_EVAL_CODE);
+	op_array = zend_compile(ZEND_EVAL_CODE, zendparse);
 
 	zend_restore_lexical_state(&original_lex_state);
 	zval_ptr_dtor(&tmp);

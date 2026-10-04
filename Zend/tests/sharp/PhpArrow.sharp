@@ -1,0 +1,10 @@
+namespace Demo;
+
+class PhpArrow
+{
+    public int run()
+    {
+        let value = 1;
+        return this->twice(value);
+    }
+}

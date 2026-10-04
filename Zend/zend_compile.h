@@ -936,6 +936,7 @@ zend_string *zval_make_interned_string(zval *zv);
 struct _zend_arena;
 
 ZEND_API zend_op_array *compile_file(zend_file_handle *file_handle, int type);
+ZEND_API zend_op_array *zend_compile_file_with(zend_file_handle *file_handle, int type, int (*parse)(void));
 ZEND_API zend_op_array *compile_string(zend_string *source_string, const char *filename, zend_compile_position position);
 ZEND_API zend_op_array *compile_filename(int type, zend_string *filename);
 ZEND_API zend_ast *zend_compile_string_to_ast(

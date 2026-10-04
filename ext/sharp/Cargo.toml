@@ -1,0 +1,17 @@
+[package]
+name = "sharp"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+mago-sharp-bridge = { git = "https://github.com/heyJordanParker/mago", rev = "e2871ee0600d89cb4f8fd541b53d07904d9e354e" }
+
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"

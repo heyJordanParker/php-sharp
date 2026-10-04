@@ -7,9 +7,11 @@ RUN apt-get update \
       build-essential \
       ca-certificates \
       curl \
+      git \
       php-cli \
       pkg-config \
       re2c \
+      rustup \
       libicu-dev \
       libonig-dev \
       libpq-dev \

@@ -1,0 +1,21 @@
+namespace Demo;
+
+class Calc
+{
+    public static int make(int start)
+    {
+        return start * 10;
+    }
+
+    public int twice(int value)
+    {
+        return value * 2;
+    }
+
+    public int run(int value)
+    {
+        let total = this.twice(value);
+        total += Calc.make(2);
+        return total;
+    }
+}
