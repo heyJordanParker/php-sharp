@@ -54,4 +54,17 @@ class ControlFlow
         }
         return $total;
     }
+
+    public static function weigh(int $factor): int
+    {
+        $total = 0;
+        foreach (Prices::all() as $price) {
+            $total += $price * $factor;
+        }
+        foreach (Prices::all() as $slot => $price) {
+            $total += $slot;
+            $price = 0;
+        }
+        return $total;
+    }
 }

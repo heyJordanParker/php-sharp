@@ -54,4 +54,17 @@ class ControlFlow
         }
         return total;
     }
+
+    public static int weigh(int factor)
+    {
+        let total = 0;
+        for (const price of Prices.all()) {
+            total += price * factor;
+        }
+        for (let [slot, price] of Prices.all()) {
+            total += slot;
+            price = 0;
+        }
+        return total;
+    }
 }

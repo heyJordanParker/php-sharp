@@ -57,6 +57,7 @@ static zend_ast_kind sharp_zend_kind(enum sharp_kind kind)
 		SHARP_KIND(CONTINUE);
 		SHARP_KIND(FOR);
 		SHARP_KIND(EXPR_LIST);
+		SHARP_KIND(FOREACH);
 	}
 
 	ZEND_UNREACHABLE();
