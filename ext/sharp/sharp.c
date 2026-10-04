@@ -179,28 +179,32 @@ static int sharp_parse(void)
 	const char *source = (const char *) LANG_SCNG(yy_start);
 	size_t length = LANG_SCNG(yy_limit) - LANG_SCNG(yy_start);
 	sharp_unit *unit = sharp_lower(ZSTR_VAL(path), ZSTR_LEN(path), source, length);
-
-	if (unit->diagnostic_count) {
-		const sharp_diagnostic *diagnostic = &unit->diagnostics[0];
-
-		CG(zend_lineno) = diagnostic->line;
-		zend_throw_exception_ex(
-			diagnostic->severity == SHARP_PARSE_ERROR ? zend_ce_parse_error : zend_ce_compile_error,
-			0, "%.*s", (int) diagnostic->message.len, diagnostic->message.ptr);
-		sharp_unit_free(unit);
-		return FAILURE;
-	}
+	bool diagnosed = unit->diagnostic_count != 0;
+	bool failed = false;
 
 	zend_try {
-		CG(ast) = sharp_translate(unit, unit->root);
-		CG(zend_lineno) = sharp_last_line(source, length);
+		if (diagnosed) {
+			const sharp_diagnostic *diagnostic = &unit->diagnostics[0];
+
+			CG(zend_lineno) = diagnostic->line;
+			zend_throw_exception_ex(
+				diagnostic->severity == SHARP_PARSE_ERROR ? zend_ce_parse_error : zend_ce_compile_error,
+				0, "%.*s", (int) diagnostic->message.len, diagnostic->message.ptr);
+		} else {
+			CG(ast) = sharp_translate(unit, unit->root);
+			CG(zend_lineno) = sharp_last_line(source, length);
+		}
 	} zend_catch {
-		sharp_unit_free(unit);
-		zend_bailout();
+		failed = true;
 	} zend_end_try();
 
 	sharp_unit_free(unit);
-	return SUCCESS;
+
+	if (failed) {
+		zend_bailout();
+	}
+
+	return diagnosed ? FAILURE : SUCCESS;
 }
 
 static bool sharp_is_sharp_file(const zend_string *filename)
