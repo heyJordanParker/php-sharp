@@ -149,4 +149,11 @@ class Overflow
         x += b;
         return x;
     }
+
+    public static int sumAfterCall(int a, int b)
+    {
+        let x = a;
+        Probe.touch(x);
+        return x + b;
+    }
 }

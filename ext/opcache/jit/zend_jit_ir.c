@@ -5635,17 +5635,8 @@ static int zend_jit_math_helper(zend_jit_ctx   *jit,
 		arg2 = jit_ZVAL_ADDR(jit, op1_addr);
 		arg3 = jit_ZVAL_ADDR(jit, op2_addr);
 		jit_SET_EX_OPLINE(jit, opline);
-		if (opcode == ZEND_ADD) {
-			func = ir_CONST_FC_FUNC((opline->extended_value & ZEND_THROW_ON_OVERFLOW) ? checked_add_function : add_function);
-		} else if (opcode == ZEND_SUB) {
-			func = ir_CONST_FC_FUNC((opline->extended_value & ZEND_THROW_ON_OVERFLOW) ? checked_sub_function : sub_function);
-		} else if (opcode == ZEND_MUL) {
-			func = ir_CONST_FC_FUNC((opline->extended_value & ZEND_THROW_ON_OVERFLOW) ? checked_mul_function : mul_function);
-		} else if (opcode == ZEND_DIV) {
-			func = ir_CONST_FC_FUNC(div_function);
-		} else {
-			ZEND_UNREACHABLE();
-		}
+		ZEND_ASSERT(opcode == ZEND_ADD || opcode == ZEND_SUB || opcode == ZEND_MUL || opcode == ZEND_DIV);
+		func = ir_CONST_FC_FUNC(get_binary_op(opcode | (opline->extended_value & ZEND_THROW_ON_OVERFLOW)));
 		ir_CALL_3(IR_VOID, func, arg1, arg2, arg3);
 
 		jit_FREE_OP(jit, op1_type, op1, op1_info, NULL);

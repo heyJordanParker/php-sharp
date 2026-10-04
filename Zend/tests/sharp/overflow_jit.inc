@@ -62,6 +62,7 @@ for ($i = 0; $i < 100; $i++) {
     Overflow::addLoose(new LooseCounter(1), 2);
     Overflow::incAfterCall(1);
     Overflow::addAfterCall(1, 2);
+    Overflow::sumAfterCall(1, 2);
 }
 attempt(fn () => Overflow::incProperty(new Counter(PHP_INT_MAX)));
 attempt(fn () => Overflow::addProperty(new Counter(PHP_INT_MAX), 1));
@@ -69,6 +70,7 @@ attempt(fn () => Overflow::incLoose(new LooseCounter(PHP_INT_MAX)));
 attempt(fn () => Overflow::addLoose(new LooseCounter(PHP_INT_MAX), 1));
 attempt(fn () => Overflow::incAfterCall(PHP_INT_MAX));
 attempt(fn () => Overflow::addAfterCall(PHP_INT_MAX, 1));
+attempt(fn () => Overflow::sumAfterCall(PHP_INT_MAX, 1));
 
 foreach ([
     'add' => [1, fn ($x) => Overflow::add($x, $x)],
@@ -77,6 +79,7 @@ foreach ([
     'postDec' => [PHP_INT_MIN + 300, fn ($x) => Overflow::postDec($x)],
     'incAfterCall' => [PHP_INT_MAX - 300, fn ($x) => Overflow::incAfterCall($x)],
     'addAfterCall' => [PHP_INT_MAX - 300, fn ($x) => Overflow::addAfterCall($x, 1)],
+    'sumAfterCall' => [PHP_INT_MAX - 300, fn ($x) => Overflow::sumAfterCall($x, 1)],
 ] as $method => [$x, $step]) {
     try {
         while (true) {

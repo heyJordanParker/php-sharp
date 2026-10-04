@@ -1357,7 +1357,7 @@ static ZEND_COLD zend_never_inline zend_result ZEND_FASTCALL checked_overflow(zv
 }
 /* }}} */
 
-ZEND_API zend_result ZEND_FASTCALL checked_add_function(zval *result, zval *op1, zval *op2) /* {{{ */
+zend_result ZEND_FASTCALL checked_add_function(zval *result, zval *op1, zval *op2) /* {{{ */
 {
 	zval *value1 = op1, *value2 = op2;
 
@@ -1373,7 +1373,7 @@ ZEND_API zend_result ZEND_FASTCALL checked_add_function(zval *result, zval *op1,
 }
 /* }}} */
 
-ZEND_API zend_result ZEND_FASTCALL checked_sub_function(zval *result, zval *op1, zval *op2) /* {{{ */
+zend_result ZEND_FASTCALL checked_sub_function(zval *result, zval *op1, zval *op2) /* {{{ */
 {
 	zval *value1 = op1, *value2 = op2;
 
@@ -1389,7 +1389,7 @@ ZEND_API zend_result ZEND_FASTCALL checked_sub_function(zval *result, zval *op1,
 }
 /* }}} */
 
-ZEND_API zend_result ZEND_FASTCALL checked_mul_function(zval *result, zval *op1, zval *op2) /* {{{ */
+zend_result ZEND_FASTCALL checked_mul_function(zval *result, zval *op1, zval *op2) /* {{{ */
 {
 	zval *value1 = op1, *value2 = op2;
 
@@ -2971,7 +2971,7 @@ try_again:
 }
 /* }}} */
 
-ZEND_API zend_result ZEND_FASTCALL checked_increment_function(zval *op1) /* {{{ */
+zend_result ZEND_FASTCALL checked_increment_function(zval *op1) /* {{{ */
 {
 	zval *value = op1;
 
@@ -2984,7 +2984,7 @@ ZEND_API zend_result ZEND_FASTCALL checked_increment_function(zval *op1) /* {{{ 
 }
 /* }}} */
 
-ZEND_API zend_result ZEND_FASTCALL checked_decrement_function(zval *op1) /* {{{ */
+zend_result ZEND_FASTCALL checked_decrement_function(zval *op1) /* {{{ */
 {
 	zval *value = op1;
 
