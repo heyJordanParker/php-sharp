@@ -12,7 +12,6 @@ on:
 
 jobs:
   publish:
-    if: github.repository == 'php/php-src'
     runs-on: ubuntu-latest
     name: Build
     steps:
