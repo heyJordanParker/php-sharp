@@ -49,10 +49,14 @@ export SKIP_IO_CAPTURE_TESTS=1
 export STACK_LIMIT_DEFAULTS_CHECK=1
 export RUN_RESOURCE_HEAVY_TESTS=1
 
+# Every mode runs, and the script fails at the end if any mode failed.
+failed=()
+
 run_tests() {
-  echo "== $1"
+  local mode="$1"
   shift
-  (cd "$root" && "$php" run-tests.php -P -q \
+  echo "== $mode"
+  if ! (cd "$root" && "$php" run-tests.php -P -q \
     -d opcache.jit=disable \
     -d opcache.protect_memory=1 \
     -j"$(getconf _NPROCESSORS_ONLN)" \
@@ -62,7 +66,9 @@ run_tests() {
     --show-diff \
     --show-slow 1000 \
     --set-timeout 120 \
-    "$@" "${tests[@]}")
+    "$@" "${tests[@]}"); then
+    failed+=("$mode")
+  fi
 }
 
 if $upstream; then
@@ -76,7 +82,7 @@ if $upstream; then
     }' "$results" | LC_ALL=C sort -o "$results"
   if ! diff -u "$root/$baseline" "$results"; then
     echo "The upstream results differ from $baseline. Only the Architect accepts a new baseline, with: cp ${results#"$root"/} $baseline" >&2
-    exit 1
+    failed+=("the comparison with $baseline")
   fi
 else
   run_tests "without opcache"
@@ -85,4 +91,9 @@ fi
 if $opcache; then
   run_tests "with the opcache file cache, priming it" -d opcache.enable_cli=1 --file-cache-prime
   run_tests "with the opcache file cache, using it" -d opcache.enable_cli=1 --file-cache-use
+fi
+
+if [[ ${#failed[@]} -gt 0 ]]; then
+  printf 'Failed: %s\n' "${failed[@]}" >&2
+  exit 1
 fi
