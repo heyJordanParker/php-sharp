@@ -6,9 +6,9 @@ The approved language rules live in [spec/language.md](spec/language.md).
 
 ## Branches
 
-- `sharp` is the development branch and the default branch of `heyJordanParker/php-sharp`. It starts at the upstream tag `php-8.5.11`.
-- Upstream branches such as `master` and `PHP-8.5` stay untouched.
-- Moving to a newer 8.5.x release means rebasing `sharp` onto that release's tag.
+- `master` is PHP#'s only line and the default branch of `heyJordanParker/php-sharp`. It starts at the upstream tag `php-8.5.11`, and all work lands on it directly.
+- Upstream's other branches, such as `PHP-8.5`, are read-only mirrors. Upstream's own `master` is reached through the `upstream` remote.
+- Moving to a newer 8.5.x release means rebasing `master` onto that release's tag.
 - PHP# owns `sharp/`, `Zend/tests/sharp/` and `.github/workflows/sharp.yml`. Everything else is an engine file, and a rebase only meets conflicts in engine files a feature had to change.
 
 ## Commands
@@ -44,6 +44,6 @@ brew install autoconf bison re2c pkgconf icu4c libiconv libpq libsodium libzip o
 
 ## CI
 
-`.github/workflows/sharp.yml` builds and tests on Linux in the `sharp/docker/` image and on `macos-latest`, for every push and pull request to `sharp` that changes more than documentation. The Linux job also fails when a generated file differs from the committed one. That step copies `.github/actions/verify-generated-files/action.yml`, so compare the two on every rebase.
+`.github/workflows/sharp.yml` builds and tests on Linux in the `sharp/docker/` image and on `macos-latest`, for every push and pull request to `master` that changes more than documentation. The Linux job also fails when a generated file differs from the committed one. That step copies `.github/actions/verify-generated-files/action.yml`, so compare the two on every rebase.
 
 Upstream's `Test` and `Windows builds` workflows are disabled on the fork with `gh workflow disable`.

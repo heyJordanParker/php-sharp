@@ -14,11 +14,11 @@ on:
       - UPGRADING
       - UPGRADING.INTERNALS
     branches:
-      - sharp
+      - master
   pull_request:
     paths-ignore: *ignore_paths
     branches:
-      - sharp
+      - master
 permissions:
   contents: read
 concurrency:
