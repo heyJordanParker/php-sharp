@@ -162,17 +162,6 @@ static zend_ast *sharp_translate(const sharp_unit *unit, uint32_t index)
 	return sharp_translate_fixed(unit, node, kind);
 }
 
-static uint32_t sharp_last_line(const char *source, size_t length)
-{
-	uint32_t line = 1;
-
-	for (size_t i = 0; i < length; i++) {
-		line += source[i] == '\n';
-	}
-
-	return line;
-}
-
 static int sharp_parse(void)
 {
 	zend_string *path = zend_get_compiled_filename();
@@ -192,7 +181,7 @@ static int sharp_parse(void)
 				0, "%.*s", (int) diagnostic->message.len, diagnostic->message.ptr);
 		} else {
 			CG(ast) = sharp_translate(unit, unit->root);
-			CG(zend_lineno) = sharp_last_line(source, length);
+			CG(zend_lineno) = unit->nodes[unit->root].end_line;
 		}
 	} zend_catch {
 		failed = true;
