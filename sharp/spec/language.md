@@ -58,6 +58,16 @@ Str.slug(name)
 
 A class cannot declare a static member and an instance member with the same name, so `Link.name` always has exactly one meaning. C# has the same rule.
 
+**A member of the same object is always written with `this.`**, as in TypeScript, Python and Swift. That holds for fields, properties and methods alike. A bare name is always a local, a parameter, a class or a constant, so any line read on its own shows whether it touches the object. Static members are written with the class name.
+
+```csharp
+this.count += 1;
+const plan = this.planner.plan(id);
+Checkout.maximum;
+```
+
+**`Class.y` without a call reads whichever member `y` is:** a static property, a constant or an enum case. The engine compiles one file at a time, so it looks up the member's kind when the code runs. The same applies to members used as values (sections 6.3 and 14.3).
+
 ## 5. Access modifiers
 
 | Modifier | Who can reach it |
@@ -136,7 +146,7 @@ public string name { get; set; } via Trimmed, Tracked;
 `lazy` is a modifier, not a behavior. A lazy property computes its value on the first read, then keeps it and never recomputes it. `static lazy` computes once per process.
 
 ```csharp
-public lazy Plan plan => planner.plan(this.id);
+public lazy Plan plan => this.planner.plan(this.id);
 ```
 
 A `lazy` body may read anything, including properties that can change later. The value is computed once and kept, even if those inputs change, as in Swift and Kotlin. A value that must follow its inputs is a plain computed property (`=> expr`).
@@ -147,8 +157,8 @@ The return type comes first, and there is no keyword. Every declaration has the 
 
 ```csharp
 public Plan plan(Order order) { … }
-public int total() => a + b;
-public T first<T>(list<T> items) { … }
+public int total() => this.a + this.b;
+public T first<T>(List<T> items) { … }
 ```
 
 ## 8. Functions
@@ -214,7 +224,7 @@ public struct Point
 {
     public int x { get; set; }
     public int y { get; set; }
-    public Point moved(int dx) => this with { x: x + dx };
+    public Point moved(int dx) => this with { x: this.x + dx };
 }
 
 let b = a;
@@ -287,6 +297,13 @@ Set<string> tags = ["vip"];                    // the declared type makes it a S
 ```
 
 PHP's `["key" => value]` is not used, because `=>` is the lambda arrow.
+
+**A list passed where a `Set` or a tuple is expected becomes one.** The receiving parameter converts it on arrival, as PHP already converts arguments to a parameter's type:
+
+```csharp
+public static void apply(Set<string> tags) { … }
+Tags.apply(["vip", "new"]);                      // arrives as a Set
+```
 
 **Methods** follow Kotlin's names. These are TypeScript's names plus the helpers TypeScript lacks:
 
@@ -486,6 +503,8 @@ PHP's `foreach` is removed.
 
 **Joining:** `+` joins strings. Joining a string with a number is a compile error, so `"1" + 1` cannot produce `"11"`. `+` in plain PHP files keeps its PHP meaning.
 
+`+` decides what to do when it runs, as in JavaScript. Two strings join, two numbers add, and an object with `operator +` (section 19) calls it. The engine compiles one file at a time and cannot see other files' types, so the choice cannot be made earlier.
+
 ```csharp
 const label = "Order " + order.number;
 ```
@@ -517,7 +536,7 @@ PHP's backtick shell execution is removed. `shell_exec()` stays.
 public abstract class DatabaseEntity
 {
     public static bool operator ==(DatabaseEntity a, DatabaseEntity b) => a.id === b.id;
-    public int hash() => id;
+    public int hash() => this.id;
 }
 
 public class Money
@@ -729,6 +748,8 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 
 Built-in types are lowercase: `int`, `float`, `bool`, `string`, `void`, `null`. Every other type is capitalized: `List`, `Money`, `Any`.
 
+**Integer overflow throws `ArithmeticError`** at the operation that overflows, as in Swift and C#'s `checked`. PHP's silent change to `float` does not happen in PHP# code.
+
 **`Any` holds a value of any type except null. `Any?` also allows null.** A value of type `Any` must be checked with `is`, `as` or `match` before it can be used:
 
 ```csharp
@@ -784,7 +805,8 @@ title.isBlank;
 ```
 
 - **An extension applies only in files that import its class.**
-- **An extension cannot hide a real member.** If the type already has a member with that name, the extension is a compile error.
+- **An extension cannot hide a real member.** If the type, or any class derived from it, has a member with that name, the extension is a compile error.
+- **When the code runs, a real member wins,** and otherwise the extension imported in that file is called. The checker's rule above guarantees the two never compete.
 - **Extensions can only reach the type's public members,** so access rules still hold.
 
 ## 27. PHP# files
