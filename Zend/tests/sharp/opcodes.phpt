@@ -14,7 +14,7 @@ function opcodes(string $file): string
     return str_replace($file, '<file>', shell_exec($command));
 }
 
-foreach (['Calc'] as $fixture) {
+foreach (['Calc', 'Order'] as $fixture) {
     $sharp = opcodes(__DIR__ . "/$fixture.sharp");
     $php = opcodes(__DIR__ . "/$fixture.inc");
     echo $fixture, ': ', $sharp === $php
@@ -24,3 +24,4 @@ foreach (['Calc'] as $fixture) {
 ?>
 --EXPECT--
 Calc: same opcodes and lines in 4 op arrays
+Order: same opcodes and lines in 4 op arrays

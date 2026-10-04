@@ -1,0 +1,11 @@
+namespace Demo;
+
+class Shop
+{
+    public static float run(int amount)
+    {
+        const counter = new Counter();
+        counter.add(amount);
+        return counter.scaled();
+    }
+}

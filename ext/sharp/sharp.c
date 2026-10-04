@@ -49,6 +49,10 @@ static zend_ast_kind sharp_zend_kind(enum sharp_kind kind)
 		SHARP_KIND(STATIC_CALL);
 		SHARP_KIND(CONST_ELEM);
 		SHARP_KIND(PARAM);
+		SHARP_KIND(PROP_GROUP);
+		SHARP_KIND(PROP_DECL);
+		SHARP_KIND(PROP_ELEM);
+		SHARP_KIND(NEW);
 	}
 
 	ZEND_UNREACHABLE();
