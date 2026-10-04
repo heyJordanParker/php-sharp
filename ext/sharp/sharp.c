@@ -224,15 +224,6 @@ static PHP_MINIT_FUNCTION(sharp)
 	return SUCCESS;
 }
 
-static PHP_MSHUTDOWN_FUNCTION(sharp)
-{
-	if (zend_compile_file == sharp_compile_file) {
-		zend_compile_file = sharp_next_compile_file;
-	}
-
-	return SUCCESS;
-}
-
 static PHP_MINFO_FUNCTION(sharp)
 {
 	sharp_str commit = sharp_mago_commit();
@@ -250,7 +241,7 @@ zend_module_entry sharp_module_entry = {
 	"sharp",
 	NULL,
 	PHP_MINIT(sharp),
-	PHP_MSHUTDOWN(sharp),
+	NULL,
 	NULL,
 	NULL,
 	PHP_MINFO(sharp),
