@@ -1,0 +1,66 @@
+namespace Demo;
+
+class Nulls
+{
+    public static Nulls? none()
+    {
+        return null;
+    }
+
+    public int? same(int? value)
+    {
+        return value;
+    }
+
+    public int must(int? value)
+    {
+        return value;
+    }
+
+    public int either(int? first, int? second)
+    {
+        return first ?? second ?? 0;
+    }
+
+    public int fill(int? value)
+    {
+        let filled = value;
+        filled ??= this.must(7);
+        value ??= 8;
+        return filled + value;
+    }
+
+    public Nulls itself()
+    {
+        return this;
+    }
+
+    public int? through(Nulls? other, int? value)
+    {
+        return other?.same(value) ?? other?.itself()?.must(7);
+    }
+
+    public int? size(Box? box)
+    {
+        return box?.size;
+    }
+
+    public int typed(int? value)
+    {
+        int? found = null;
+        found ??= value;
+        const int base = 10;
+        int total = base;
+        total += found ?? 1;
+        return total;
+    }
+
+    public int countTo(int limit)
+    {
+        int total = 0;
+        for (int step = 1; step <= limit; step++) {
+            total += step;
+        }
+        return total;
+    }
+}

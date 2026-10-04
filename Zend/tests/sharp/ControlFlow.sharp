@@ -1,0 +1,70 @@
+namespace Demo;
+
+class ControlFlow
+{
+    public static string sign(int value)
+    {
+        if (value > 0) {
+            return "positive";
+        } else if (value < 0) {
+            return "negative";
+        } else {
+            return "zero";
+        }
+    }
+
+    public static int countdown(int start)
+    {
+        let steps = 0;
+        while (start > 0) {
+            start -= 1;
+            steps++;
+        }
+        do {
+            steps += 10;
+        } while (steps < 5);
+        return steps;
+    }
+
+    public static int sumOdd(int limit)
+    {
+        let total = 0;
+        let n = 0;
+        while (true) {
+            n++;
+            if (n > limit) {
+                break;
+            }
+            if (n % 2 == 0) {
+                continue;
+            }
+            total += n;
+        }
+        return total;
+    }
+
+    public static int sumTo(int limit)
+    {
+        let total = 0;
+        for (let i = 1; i <= limit; i++) {
+            total += i;
+        }
+        let rounds = 0;
+        for (rounds = 0; rounds < 2; rounds++, total++) {
+        }
+        return total;
+    }
+
+    public static int weigh(int factor)
+    {
+        let total = 0;
+        for (const price of Prices.all()) {
+            total += price * factor;
+        }
+        for (let [slot, price] of Prices.all()) {
+            total += slot;
+            price = 0;
+        }
+        return total;
+    }
+}
