@@ -838,7 +838,7 @@ Both kinds are written in Lean 4 and checked by Lean. A `.sharp` file holds only
 
 **Laws hold only over pure code** (section 29). The checker translates pure PHP# code to Lean, and Lean's kernel checks the proofs. Bend's `--verdict` mode and Aeneas, which translates Rust to Lean, work the same way.
 
-**Structure rules are checks that Lean runs.** The checker loads the code's structure, meaning its namespaces, imports and references, as data, and Lean runs each rule over it like a function. A broken rule reports every offending line. Kernel proofs are kept for laws, which cover every possible value. A structure rule only scans a finite list of facts, where a kernel replay gives the same answer far more slowly: on Laravel, a cycle rule never finished as a kernel proof and runs in seconds as a check. Structure rules replace architecture linters such as Dent's Mago `Module` rule, the way CodeQL queries and Mathlib's `#lint` checks do.
+**Structure is Lean data.** The checker emits the code's structure, meaning its namespaces, imports and references, as a Lean module. Architecture rules are theorems over that data, usually settled `by decide`. They replace architecture linters such as Dent's Mago `Module` rule.
 
 ### 28.1 Rules files
 
@@ -854,8 +854,7 @@ app/Tenant/
 
 ```lean
 -- app/Tenant/Store.lean
-@[rule] def requires : Rule :=
-  Sharp.importsOf "App.Tenant.Store" ⊆ ["App.Tenant.Community", "App.Shared.Schema"]
+theorem requires : Sharp.importsOf "App.Tenant.Store" ⊆ ["App.Tenant.Community", "App.Shared.Schema"] := by decide
 
 theorem refundNeverExceedsPaid (paid refunded amount : Int)
     (h1 : refunded ≤ paid) (h2 : amount ≤ App.Tenant.Store.Refunds.remaining paid refunded) :
