@@ -248,6 +248,8 @@ b.x = 5;   // b is copied here, and a is unchanged
 - **`new` always names them:** `new PaginatedList<Order>(…)`.
 - **A generic method call infers them** from the arguments it receives.
 
+**Written type arguments are carried at runtime, and inferred ones are known to the checker only.** "Written" covers `new`, an explicit call such as `Json.decode<WebhookPayload>(body)`, and a declared type such as a property, a parameter or `List<Line> lines = …`. Every type, inferred or written, is known while code is checked, as in TypeScript. The engine compiles one file at a time, so it cannot see an inferred argument. A value created from an inferred argument, such as `const lines = [lineA, lineB]`, has no element type at runtime, and passes any runtime check for its collection type, because the checker has already proven it.
+
 **Declaring type parameters:**
 
 - **Names start with `T`:** `TItem`, `TKey`.
