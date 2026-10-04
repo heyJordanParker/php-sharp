@@ -351,7 +351,7 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 [[package]]
 name = "mago-allocator"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#8a53607427b3b7b357b15805e4fbc7fa6a8aba78"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#66b9d1150449bed413660bed9e4a4ec778f60f09"
 dependencies = [
  "allocator-api2",
  "blink-alloc",
@@ -361,12 +361,12 @@ dependencies = [
 [[package]]
 name = "mago-bytes"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#8a53607427b3b7b357b15805e4fbc7fa6a8aba78"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#66b9d1150449bed413660bed9e4a4ec778f60f09"
 
 [[package]]
 name = "mago-database"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#8a53607427b3b7b357b15805e4fbc7fa6a8aba78"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#66b9d1150449bed413660bed9e4a4ec778f60f09"
 dependencies = [
  "foldhash",
  "glob",
@@ -381,7 +381,7 @@ dependencies = [
 [[package]]
 name = "mago-names"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#8a53607427b3b7b357b15805e4fbc7fa6a8aba78"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#66b9d1150449bed413660bed9e4a4ec778f60f09"
 dependencies = [
  "foldhash",
  "mago-allocator",
@@ -395,7 +395,7 @@ dependencies = [
 [[package]]
 name = "mago-php-version"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#8a53607427b3b7b357b15805e4fbc7fa6a8aba78"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#66b9d1150449bed413660bed9e4a4ec778f60f09"
 dependencies = [
  "schemars",
 ]
@@ -403,7 +403,7 @@ dependencies = [
 [[package]]
 name = "mago-reporting"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#8a53607427b3b7b357b15805e4fbc7fa6a8aba78"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#66b9d1150449bed413660bed9e4a4ec778f60f09"
 dependencies = [
  "ariadne",
  "blake3",
@@ -422,7 +422,7 @@ dependencies = [
 [[package]]
 name = "mago-semantics"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#8a53607427b3b7b357b15805e4fbc7fa6a8aba78"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#66b9d1150449bed413660bed9e4a4ec778f60f09"
 dependencies = [
  "mago-bytes",
  "mago-database",
@@ -436,7 +436,7 @@ dependencies = [
 [[package]]
 name = "mago-sharp-bridge"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#8a53607427b3b7b357b15805e4fbc7fa6a8aba78"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#66b9d1150449bed413660bed9e4a4ec778f60f09"
 dependencies = [
  "cbindgen",
  "mago-allocator",
@@ -453,7 +453,7 @@ dependencies = [
 [[package]]
 name = "mago-span"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#8a53607427b3b7b357b15805e4fbc7fa6a8aba78"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#66b9d1150449bed413660bed9e4a4ec778f60f09"
 dependencies = [
  "mago-database",
 ]
@@ -461,7 +461,7 @@ dependencies = [
 [[package]]
 name = "mago-syntax"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#8a53607427b3b7b357b15805e4fbc7fa6a8aba78"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#66b9d1150449bed413660bed9e4a4ec778f60f09"
 dependencies = [
  "mago-allocator",
  "mago-database",
@@ -478,7 +478,7 @@ dependencies = [
 [[package]]
 name = "mago-syntax-core"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#8a53607427b3b7b357b15805e4fbc7fa6a8aba78"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#66b9d1150449bed413660bed9e4a4ec778f60f09"
 dependencies = [
  "mago-allocator",
  "mago-database",
@@ -489,12 +489,12 @@ dependencies = [
 [[package]]
 name = "mago-text-edit"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#8a53607427b3b7b357b15805e4fbc7fa6a8aba78"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#66b9d1150449bed413660bed9e4a4ec778f60f09"
 
 [[package]]
 name = "mago-word"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#8a53607427b3b7b357b15805e4fbc7fa6a8aba78"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fsharp-bridge#66b9d1150449bed413660bed9e4a4ec778f60f09"
 dependencies = [
  "foldhash",
  "itoa",
