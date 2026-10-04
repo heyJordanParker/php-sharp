@@ -5059,7 +5059,7 @@ ZEND_API bool zend_may_throw_ex(const zend_op *opline, const zend_ssa_op *ssa_op
 			 && (t2 & MAY_BE_ANY) == MAY_BE_ARRAY) {
 				return 0;
 			}
-			if ((opline->extended_value & ZEND_CHECKED_ARITHMETIC) && (t1 & MAY_BE_LONG) && (t2 & MAY_BE_LONG)) {
+			if ((opline->extended_value & ZEND_THROW_ON_OVERFLOW) && (t1 & MAY_BE_LONG) && (t2 & MAY_BE_LONG)) {
 				/* Integer overflow */
 				return 1;
 			}
@@ -5075,8 +5075,7 @@ ZEND_API bool zend_may_throw_ex(const zend_op *opline, const zend_ssa_op *ssa_op
 		case ZEND_SUB:
 		case ZEND_MUL:
 		case ZEND_POW:
-			if ((opline->opcode == ZEND_SUB || opline->opcode == ZEND_MUL)
-			 && (opline->extended_value & ZEND_CHECKED_ARITHMETIC) && (t1 & MAY_BE_LONG) && (t2 & MAY_BE_LONG)) {
+			if ((opline->extended_value & ZEND_THROW_ON_OVERFLOW) && (t1 & MAY_BE_LONG) && (t2 & MAY_BE_LONG)) {
 				/* Integer overflow */
 				return 1;
 			}
@@ -5113,7 +5112,7 @@ ZEND_API bool zend_may_throw_ex(const zend_op *opline, const zend_ssa_op *ssa_op
 			return (t1 & (MAY_BE_NULL|MAY_BE_FALSE|MAY_BE_TRUE|MAY_BE_DOUBLE|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE));
 		case ZEND_PRE_INC:
 		case ZEND_POST_INC:
-			if ((opline->extended_value & ZEND_CHECKED_INCDEC) && (t1 & MAY_BE_LONG)) {
+			if ((opline->extended_value & ZEND_THROW_ON_OVERFLOW) && (t1 & MAY_BE_LONG)) {
 				/* Integer overflow */
 				return 1;
 			}
@@ -5121,7 +5120,7 @@ ZEND_API bool zend_may_throw_ex(const zend_op *opline, const zend_ssa_op *ssa_op
 		/* null emits a warning as it has no effect compared to ++ which converts the value to 1 */
 		case ZEND_PRE_DEC:
 		case ZEND_POST_DEC:
-			if ((opline->extended_value & ZEND_CHECKED_INCDEC) && (t1 & MAY_BE_LONG)) {
+			if ((opline->extended_value & ZEND_THROW_ON_OVERFLOW) && (t1 & MAY_BE_LONG)) {
 				/* Integer overflow */
 				return 1;
 			}

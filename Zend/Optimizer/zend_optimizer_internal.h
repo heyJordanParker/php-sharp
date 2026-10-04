@@ -81,14 +81,9 @@ static inline bool zend_optimizer_is_loop_var_free(const zend_op *opline) {
 /* The opcode get_binary_op() takes for a binary opline, marked when its overflow throws. */
 static inline uint32_t zend_optimizer_binary_opcode(const zend_op *opline) {
 	if (opline->opcode == ZEND_ADD || opline->opcode == ZEND_SUB || opline->opcode == ZEND_MUL) {
-		return opline->opcode | (opline->extended_value & ZEND_CHECKED_ARITHMETIC);
+		return opline->opcode | (opline->extended_value & ZEND_THROW_ON_OVERFLOW);
 	}
 	return opline->opcode;
-}
-
-/* The extended_value of the increment or decrement that replaces an ADD, SUB or ASSIGN_OP. */
-static inline uint32_t zend_optimizer_incdec_mark(const zend_op *opline) {
-	return (opline->extended_value & ZEND_CHECKED_ARITHMETIC) ? ZEND_CHECKED_INCDEC : 0;
 }
 
 void zend_optimizer_convert_to_free_op1(zend_op_array *op_array, zend_op *opline);

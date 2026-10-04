@@ -609,7 +609,7 @@ ZEND_API zend_result ZEND_FASTCALL zend_ast_evaluate_inner(
 				zval_ptr_dtor_nogc(&op1);
 				ret = FAILURE;
 			} else {
-				binary_op_type op = get_binary_op(ast->attr);
+				binary_op_type op = get_binary_op((ast->attr & ~ZEND_CHECKED_ARITHMETIC) | zend_ast_overflow_mark(ast));
 				op(result, &op1, &op2);
 				zval_ptr_dtor_nogc(&op1);
 				zval_ptr_dtor_nogc(&op2);
@@ -812,7 +812,7 @@ ZEND_API zend_result ZEND_FASTCALL zend_ast_evaluate_inner(
 				ret = FAILURE;
 			} else {
 				ZVAL_LONG(&op1, -1);
-				ret = get_binary_op(ZEND_MUL | (ast->attr & ZEND_CHECKED_ARITHMETIC))(result, &op1, &op2);
+				ret = get_binary_op(ZEND_MUL | zend_ast_overflow_mark(ast))(result, &op1, &op2);
 				zval_ptr_dtor_nogc(&op2);
 			}
 			break;

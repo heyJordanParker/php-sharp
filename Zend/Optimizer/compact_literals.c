@@ -516,12 +516,12 @@ void zend_optimizer_compact_literals(zend_op_array *op_array, zend_optimizer_ctx
 						// op2 property
 						if (opline->op1_type == IS_UNUSED &&
 						    property_slot[opline->op2.constant] >= 0) {
-							opline->extended_value = property_slot[opline->op2.constant] | (opline->extended_value & (ZEND_FETCH_OBJ_FLAGS|ZEND_CHECKED_INCDEC));
+							opline->extended_value = property_slot[opline->op2.constant] | (opline->extended_value & (ZEND_FETCH_OBJ_FLAGS|ZEND_THROW_ON_OVERFLOW));
 						} else {
-							opline->extended_value = cache_size | (opline->extended_value & (ZEND_FETCH_OBJ_FLAGS|ZEND_CHECKED_INCDEC));
+							opline->extended_value = cache_size | (opline->extended_value & (ZEND_FETCH_OBJ_FLAGS|ZEND_THROW_ON_OVERFLOW));
 							cache_size += 3 * sizeof(void *);
 							if (opline->op1_type == IS_UNUSED) {
-								property_slot[opline->op2.constant] = opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_CHECKED_INCDEC);
+								property_slot[opline->op2.constant] = opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_THROW_ON_OVERFLOW);
 							}
 						}
 					}
@@ -648,17 +648,17 @@ void zend_optimizer_compact_literals(zend_op_array *op_array, zend_optimizer_ctx
 								opline->op2.constant,
 								opline->op1.constant,
 								LITERAL_STATIC_PROPERTY,
-								&cache_size) | (opline->extended_value & (ZEND_FETCH_OBJ_FLAGS|ZEND_CHECKED_INCDEC));
+								&cache_size) | (opline->extended_value & (ZEND_FETCH_OBJ_FLAGS|ZEND_THROW_ON_OVERFLOW));
 						} else {
-							opline->extended_value = cache_size | (opline->extended_value & (ZEND_FETCH_OBJ_FLAGS|ZEND_CHECKED_INCDEC));
+							opline->extended_value = cache_size | (opline->extended_value & (ZEND_FETCH_OBJ_FLAGS|ZEND_THROW_ON_OVERFLOW));
 							cache_size += 3 * sizeof(void *);
 						}
 					} else if (opline->op2_type == IS_CONST) {
 						// op2 class
 						if (class_slot[opline->op2.constant] >= 0) {
-							opline->extended_value = class_slot[opline->op2.constant] | (opline->extended_value & (ZEND_FETCH_OBJ_FLAGS|ZEND_CHECKED_INCDEC));
+							opline->extended_value = class_slot[opline->op2.constant] | (opline->extended_value & (ZEND_FETCH_OBJ_FLAGS|ZEND_THROW_ON_OVERFLOW));
 						} else {
-							opline->extended_value = cache_size | (opline->extended_value & (ZEND_FETCH_OBJ_FLAGS|ZEND_CHECKED_INCDEC));
+							opline->extended_value = cache_size | (opline->extended_value & (ZEND_FETCH_OBJ_FLAGS|ZEND_THROW_ON_OVERFLOW));
 							class_slot[opline->op2.constant] = cache_size;
 							cache_size += sizeof(void *);
 						}

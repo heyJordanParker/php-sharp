@@ -1002,7 +1002,7 @@ static int zend_may_overflow(const zend_op *opline, const zend_ssa_op *ssa_op, c
 				ssa->var_info[res].range.underflow ||
 				ssa->var_info[res].range.overflow);
 		case ZEND_ASSIGN_OP:
-			if ((opline->extended_value & ~ZEND_CHECKED_ARITHMETIC) == ZEND_ADD) {
+			if ((opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) == ZEND_ADD) {
 				res = ssa_op->op1_def;
 				if (res < 0
 				 || !ssa->var_info[res].has_range
@@ -1029,7 +1029,7 @@ static int zend_may_overflow(const zend_op *opline, const zend_ssa_op *ssa_op, c
 					}
 				}
 				return 0;
-			} else if ((opline->extended_value & ~ZEND_CHECKED_ARITHMETIC) == ZEND_SUB) {
+			} else if ((opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) == ZEND_SUB) {
 				res = ssa_op->op1_def;
 				if (res < 0
 				 || !ssa->var_info[res].has_range
@@ -1056,7 +1056,7 @@ static int zend_may_overflow(const zend_op *opline, const zend_ssa_op *ssa_op, c
 					}
 				}
 				return 0;
-			} else if ((opline->extended_value & ~ZEND_CHECKED_ARITHMETIC) == ZEND_MUL) {
+			} else if ((opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) == ZEND_MUL) {
 				res = ssa_op->op1_def;
 				return (res < 0 ||
 					!ssa->var_info[res].has_range ||
@@ -1392,7 +1392,7 @@ static bool zend_jit_supported_binary_op(uint32_t op, uint32_t op1_info, uint32_
 	if ((op1_info & MAY_BE_UNDEF) || (op2_info & MAY_BE_UNDEF)) {
 		return false;
 	}
-	switch (op & ~ZEND_CHECKED_ARITHMETIC) {
+	switch (op & ~ZEND_THROW_ON_OVERFLOW) {
 		case ZEND_POW:
 		case ZEND_DIV:
 			// TODO: check for division by zero ???

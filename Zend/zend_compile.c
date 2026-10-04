@@ -3622,7 +3622,7 @@ static void zend_compile_compound_assign(znode *result, zend_ast *ast) /* {{{ */
 {
 	zend_ast *var_ast = ast->child[0];
 	zend_ast *expr_ast = ast->child[1];
-	uint32_t opcode = ast->attr;
+	uint32_t opcode = (ast->attr & ~ZEND_CHECKED_ARITHMETIC) | zend_ast_overflow_mark(ast);
 
 	znode var_node, expr_node;
 	zend_op *opline;
@@ -9951,15 +9951,13 @@ ZEND_API bool zend_is_op_long_compatible(const zval *op)
 
 ZEND_API bool zend_binary_op_produces_error(uint32_t opcode, const zval *op1, const zval *op2) /* {{{ */
 {
-	if (opcode & ZEND_CHECKED_ARITHMETIC) {
-		opcode &= ~ZEND_CHECKED_ARITHMETIC;
+	if (opcode & ZEND_THROW_ON_OVERFLOW) {
+		opcode &= ~ZEND_THROW_ON_OVERFLOW;
 		if (Z_TYPE_P(op1) == IS_LONG && Z_TYPE_P(op2) == IS_LONG) {
-			zval left, right, result;
+			zval result;
 
 			/* Checked arithmetic throws where PHP's overflows into a float. */
-			ZVAL_LONG(&left, Z_LVAL_P(op1));
-			ZVAL_LONG(&right, Z_LVAL_P(op2));
-			get_binary_op(opcode)(&result, &left, &right);
+			get_binary_op(opcode)(&result, (zval *) op1, (zval *) op2);
 			return Z_TYPE(result) == IS_DOUBLE;
 		}
 	}
@@ -10083,7 +10081,7 @@ static inline bool zend_try_ct_eval_unary_pm(zval *result, const zend_ast *ast, 
 {
 	zval right;
 	ZVAL_LONG(&right, (ast->kind == ZEND_AST_UNARY_PLUS) ? 1 : -1);
-	return zend_try_ct_eval_binary_op(result, ZEND_MUL | (ast->attr & ZEND_CHECKED_ARITHMETIC), op, &right);
+	return zend_try_ct_eval_binary_op(result, ZEND_MUL | zend_ast_overflow_mark(ast), op, &right);
 }
 /* }}} */
 
@@ -10234,7 +10232,7 @@ static void zend_compile_binary_op(znode *result, zend_ast *ast) /* {{{ */
 	zend_compile_expr(&right_node, right_ast);
 
 	if (left_node.op_type == IS_CONST && right_node.op_type == IS_CONST) {
-		if (zend_try_ct_eval_binary_op(&result->u.constant, ast->attr,
+		if (zend_try_ct_eval_binary_op(&result->u.constant, opcode | zend_ast_overflow_mark(ast),
 				&left_node.u.constant, &right_node.u.constant)
 		) {
 			result->op_type = IS_CONST;
@@ -10287,7 +10285,7 @@ static void zend_compile_binary_op(znode *result, zend_ast *ast) /* {{{ */
 			}
 		}
 		zend_emit_op_tmp(result, opcode, &left_node, &right_node)->extended_value =
-			ast->attr & ZEND_CHECKED_ARITHMETIC;
+			zend_ast_overflow_mark(ast);
 	} while (0);
 }
 /* }}} */
@@ -10358,7 +10356,7 @@ static void zend_compile_unary_pm(znode *result, zend_ast *ast) /* {{{ */
 	right_node.op_type = IS_CONST;
 	ZVAL_LONG(&right_node.u.constant, (ast->kind == ZEND_AST_UNARY_PLUS) ? 1 : -1);
 	zend_emit_op_tmp(result, ZEND_MUL, &expr_node, &right_node)->extended_value =
-		ast->attr & ZEND_CHECKED_ARITHMETIC;
+		zend_ast_overflow_mark(ast);
 }
 /* }}} */
 
@@ -10420,7 +10418,6 @@ static void zend_compile_short_circuiting(znode *result, zend_ast *ast) /* {{{ *
 static void zend_compile_post_incdec(znode *result, zend_ast *ast) /* {{{ */
 {
 	zend_ast *var_ast = ast->child[0];
-	uint32_t checked = (ast->attr & ZEND_CHECKED_ARITHMETIC) ? ZEND_CHECKED_INCDEC : 0;
 	ZEND_ASSERT(ast->kind == ZEND_AST_POST_INC || ast->kind == ZEND_AST_POST_DEC);
 
 	zend_ensure_writable_variable(var_ast);
@@ -10428,12 +10425,12 @@ static void zend_compile_post_incdec(znode *result, zend_ast *ast) /* {{{ */
 	if (var_ast->kind == ZEND_AST_PROP || var_ast->kind == ZEND_AST_NULLSAFE_PROP) {
 		zend_op *opline = zend_compile_prop(NULL, var_ast, BP_VAR_RW, 0);
 		opline->opcode = ast->kind == ZEND_AST_POST_INC ? ZEND_POST_INC_OBJ : ZEND_POST_DEC_OBJ;
-		opline->extended_value |= checked;
+		opline->extended_value |= zend_ast_overflow_mark(ast);
 		zend_make_tmp_result(result, opline);
 	} else if (var_ast->kind == ZEND_AST_STATIC_PROP) {
 		zend_op *opline = zend_compile_static_prop(NULL, var_ast, BP_VAR_RW, 0, 0);
 		opline->opcode = ast->kind == ZEND_AST_POST_INC ? ZEND_POST_INC_STATIC_PROP : ZEND_POST_DEC_STATIC_PROP;
-		opline->extended_value |= checked;
+		opline->extended_value |= zend_ast_overflow_mark(ast);
 		zend_make_tmp_result(result, opline);
 	} else {
 		znode var_node;
@@ -10442,7 +10439,7 @@ static void zend_compile_post_incdec(znode *result, zend_ast *ast) /* {{{ */
 			opline->extended_value = ZEND_FETCH_DIM_INCDEC;
 		}
 		zend_emit_op_tmp(result, ast->kind == ZEND_AST_POST_INC ? ZEND_POST_INC : ZEND_POST_DEC,
-			&var_node, NULL)->extended_value = checked;
+			&var_node, NULL)->extended_value = zend_ast_overflow_mark(ast);
 	}
 }
 /* }}} */
@@ -10450,7 +10447,6 @@ static void zend_compile_post_incdec(znode *result, zend_ast *ast) /* {{{ */
 static void zend_compile_pre_incdec(znode *result, zend_ast *ast) /* {{{ */
 {
 	zend_ast *var_ast = ast->child[0];
-	uint32_t checked = (ast->attr & ZEND_CHECKED_ARITHMETIC) ? ZEND_CHECKED_INCDEC : 0;
 	ZEND_ASSERT(ast->kind == ZEND_AST_PRE_INC || ast->kind == ZEND_AST_PRE_DEC);
 
 	zend_ensure_writable_variable(var_ast);
@@ -10458,13 +10454,13 @@ static void zend_compile_pre_incdec(znode *result, zend_ast *ast) /* {{{ */
 	if (var_ast->kind == ZEND_AST_PROP || var_ast->kind == ZEND_AST_NULLSAFE_PROP) {
 		zend_op *opline = zend_compile_prop(result, var_ast, BP_VAR_RW, 0);
 		opline->opcode = ast->kind == ZEND_AST_PRE_INC ? ZEND_PRE_INC_OBJ : ZEND_PRE_DEC_OBJ;
-		opline->extended_value |= checked;
+		opline->extended_value |= zend_ast_overflow_mark(ast);
 		opline->result_type = IS_TMP_VAR;
 		result->op_type = IS_TMP_VAR;
 	} else if (var_ast->kind == ZEND_AST_STATIC_PROP) {
 		zend_op *opline = zend_compile_static_prop(result, var_ast, BP_VAR_RW, 0, 0);
 		opline->opcode = ast->kind == ZEND_AST_PRE_INC ? ZEND_PRE_INC_STATIC_PROP : ZEND_PRE_DEC_STATIC_PROP;
-		opline->extended_value |= checked;
+		opline->extended_value |= zend_ast_overflow_mark(ast);
 		opline->result_type = IS_TMP_VAR;
 		result->op_type = IS_TMP_VAR;
 	} else {
@@ -10474,7 +10470,7 @@ static void zend_compile_pre_incdec(znode *result, zend_ast *ast) /* {{{ */
 			opline->extended_value = ZEND_FETCH_DIM_INCDEC;
 		}
 		zend_emit_op_tmp(result, ast->kind == ZEND_AST_PRE_INC ? ZEND_PRE_INC : ZEND_PRE_DEC,
-			&var_node, NULL)->extended_value = checked;
+			&var_node, NULL)->extended_value = zend_ast_overflow_mark(ast);
 	}
 }
 /* }}} */

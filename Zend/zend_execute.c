@@ -1632,7 +1632,7 @@ static zend_always_inline int zend_binary_op(zval *ret, zval *op1, zval *op2 OPL
 	/* size_t cast makes GCC to better optimize 64-bit PIC code */
 	size_t opcode = (size_t)opline->extended_value;
 
-	if (UNEXPECTED(opcode & ZEND_CHECKED_ARITHMETIC)) {
+	if (UNEXPECTED(opcode & ZEND_THROW_ON_OVERFLOW)) {
 		return get_binary_op(opcode)(ret, op1, op2);
 	}
 	return zend_binary_ops[opcode - ZEND_ADD](ret, op1, op2);
@@ -1640,7 +1640,7 @@ static zend_always_inline int zend_binary_op(zval *ret, zval *op1, zval *op2 OPL
 
 static zend_always_inline zend_result zend_incdec_op(zval *var_ptr OPLINE_DC)
 {
-	if (UNEXPECTED(opline->extended_value & ZEND_CHECKED_INCDEC)) {
+	if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
 		return ZEND_IS_INCREMENT(opline->opcode)
 			? checked_increment_function(var_ptr) : checked_decrement_function(var_ptr);
 	}
@@ -2308,7 +2308,7 @@ static void zend_pre_incdec_property_zval(zval *prop, zend_property_info *prop_i
 			fast_long_decrement_function(prop);
 		}
 		if (UNEXPECTED(Z_TYPE_P(prop) != IS_LONG)) {
-			if (UNEXPECTED(opline->extended_value & ZEND_CHECKED_INCDEC)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
 				ZVAL_LONG(prop, zend_incdec_overflow_error(OPLINE_C));
 			} else if (prop_info && !(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
 				zend_long val = zend_throw_incdec_prop_error(prop_info OPLINE_CC);
@@ -2348,7 +2348,7 @@ static void zend_post_incdec_property_zval(zval *prop, zend_property_info *prop_
 			fast_long_decrement_function(prop);
 		}
 		if (UNEXPECTED(Z_TYPE_P(prop) != IS_LONG)) {
-			if (UNEXPECTED(opline->extended_value & ZEND_CHECKED_INCDEC)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
 				ZVAL_LONG(prop, zend_incdec_overflow_error(OPLINE_C));
 			} else if (prop_info && !(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
 				zend_long val = zend_throw_incdec_prop_error(prop_info OPLINE_CC);
