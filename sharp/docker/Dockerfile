@@ -5,6 +5,9 @@ RUN apt-get update \
       autoconf \
       bison \
       build-essential \
+      ca-certificates \
+      curl \
+      php-cli \
       pkg-config \
       re2c \
       libicu-dev \
