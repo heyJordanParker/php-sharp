@@ -72,6 +72,12 @@ attempt(fn () => Overflow::incAfterCall(PHP_INT_MAX));
 attempt(fn () => Overflow::addAfterCall(PHP_INT_MAX, 1));
 attempt(fn () => Overflow::sumAfterCall(PHP_INT_MAX, 1));
 
+$held = new Counter(PHP_INT_MAX);
+$reference = &$held->value;
+attempt(fn () => Overflow::addProperty($held, 1));
+attempt(fn () => Overflow::incProperty($held));
+var_dump($held->value);
+
 foreach ([
     'add' => [1, fn ($x) => Overflow::add($x, $x)],
     'mul' => [1, fn ($x) => Overflow::mul($x, 3)],

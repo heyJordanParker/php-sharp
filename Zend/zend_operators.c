@@ -1347,11 +1347,13 @@ ZEND_API ZEND_COLD void zend_integer_overflow_error(void) /* {{{ */
 }
 /* }}} */
 
-static ZEND_COLD zend_never_inline zend_result ZEND_FASTCALL checked_overflow(zval *result, zval *op1) /* {{{ */
+/* The result keeps the left operand's long, so a typed property or reference that receives it
+ * still holds its old int. */
+static ZEND_COLD zend_never_inline zend_result ZEND_FASTCALL checked_overflow(zval *result, zval *op1, zval *value1) /* {{{ */
 {
 	zend_integer_overflow_error();
 	if (result != op1) {
-		ZVAL_UNDEF(result);
+		ZVAL_LONG(result, Z_LVAL_P(value1));
 	}
 	return FAILURE;
 }
@@ -1365,7 +1367,7 @@ zend_result ZEND_FASTCALL checked_add_function(zval *result, zval *op1, zval *op
 	ZVAL_DEREF(value2);
 	if (Z_TYPE_P(value1) == IS_LONG && Z_TYPE_P(value2) == IS_LONG) {
 		if (UNEXPECTED(!fast_long_try_add(result, value1, value2))) {
-			return checked_overflow(result, op1);
+			return checked_overflow(result, op1, value1);
 		}
 		return SUCCESS;
 	}
@@ -1381,7 +1383,7 @@ zend_result ZEND_FASTCALL checked_sub_function(zval *result, zval *op1, zval *op
 	ZVAL_DEREF(value2);
 	if (Z_TYPE_P(value1) == IS_LONG && Z_TYPE_P(value2) == IS_LONG) {
 		if (UNEXPECTED(!fast_long_try_sub(result, value1, value2))) {
-			return checked_overflow(result, op1);
+			return checked_overflow(result, op1, value1);
 		}
 		return SUCCESS;
 	}
@@ -1401,7 +1403,7 @@ zend_result ZEND_FASTCALL checked_mul_function(zval *result, zval *op1, zval *op
 
 		ZEND_SIGNED_MULTIPLY_LONG(Z_LVAL_P(value1), Z_LVAL_P(value2), Z_LVAL(product), Z_DVAL(product), overflow);
 		if (UNEXPECTED(overflow)) {
-			return checked_overflow(result, op1);
+			return checked_overflow(result, op1, value1);
 		}
 		ZVAL_LONG(result, Z_LVAL(product));
 		return SUCCESS;
