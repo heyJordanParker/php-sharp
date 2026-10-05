@@ -85,7 +85,7 @@ zend_result zend_optimizer_eval_unary_op(zval *result, uint8_t opcode, zval *op1
 
 zend_result zend_optimizer_eval_cast(zval *result, uint32_t type, zval *op1) /* {{{ */
 {
-	if (zend_try_ct_eval_cast(result, type, op1)) {
+	if (zend_try_ct_eval_cast(result, type & ~ZEND_SHARP_OPERATOR, op1)) {
 		return SUCCESS;
 	}
 	return FAILURE;

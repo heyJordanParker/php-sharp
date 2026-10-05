@@ -2341,7 +2341,7 @@ simple_list:
 		case ZEND_AST_UNARY_PLUS:  PREFIX_OP("+", 240, 241);
 		case ZEND_AST_UNARY_MINUS: PREFIX_OP("-", 240, 241);
 		case ZEND_AST_CAST:
-			switch (ast->attr) {
+			switch (ast->attr & ~ZEND_SHARP_OPERATOR_SYNTAX) {
 				case IS_NULL:      PREFIX_OP("(unset)",  240, 241);
 				case _IS_BOOL:     PREFIX_OP("(bool)",   240, 241);
 				case IS_LONG:      PREFIX_OP("(int)",    240, 241);
