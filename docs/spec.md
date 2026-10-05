@@ -808,7 +808,7 @@ The class header lists the base class and interfaces after `:`. The checker know
 public class Page : DatabaseEntity, Linkable, Shareable { … }
 ```
 
-**Methods are closed unless the base class opens them** with `virtual`, or by declaring them `abstract`. A subclass replaces a method only with a required `override`:
+**Methods of a PHP# class are closed unless the class opens them** with `virtual`, or by declaring them `abstract`. A subclass replaces a method only with a required `override`:
 
 ```csharp
 public abstract class DatabaseEntity
@@ -823,11 +823,33 @@ public class Page : DatabaseEntity
 }
 ```
 
-These are compile errors:
+**Methods of a plain PHP class are open unless PHP marks them `final`.** PHP has no `virtual`, so PHP's own rule decides. Replacing one still needs `override`:
+
+```php
+abstract class Report
+{
+    abstract protected function render(): string;
+    public function title(): string { return 'Report'; }
+    final public function id(): string { … }
+}
+```
+
+```csharp
+public class SalesReport : Report
+{
+    protected override string render() { … }          // compiles
+    public override string title() => "Sales";         // compiles: title is not final in PHP
+    public string title() => "Sales";                  // compile error: replaces Report.title, write override
+    public override string id() { … }                  // compile error: id is final in Report
+}
+```
+
+These are compile errors, whether the parent is PHP# or plain PHP:
 
 - a missing `override`
 - `override` when the parent has no such method
-- overriding a method that is not `virtual` or `abstract`
+- overriding a PHP# method that is not `virtual` or `abstract`
+- overriding a plain PHP method marked `final`
 - an override that renames a parameter of the method it overrides. The error names both names.
 
 ```csharp
