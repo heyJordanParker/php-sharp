@@ -2,13 +2,15 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: sharp/bin/test [--linux] [--opcache] [--upstream | paths...]" >&2
+  echo "usage: sharp/bin/test [--linux] [--opcache] [--repeat] [--differential] [--upstream | paths...]" >&2
   exit 2
 }
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 linux=false
 opcache=false
+repeat=false
+differential=false
 upstream=false
 tests=()
 container_command=(sharp/bin/test)
@@ -16,6 +18,8 @@ for arg in "$@"; do
   case "$arg" in
     --linux) linux=true; continue ;;
     --opcache) opcache=true ;;
+    --repeat) repeat=true ;;
+    --differential) differential=true ;;
     --upstream) upstream=true ;;
     -*) usage ;;
     *) tests+=("$arg") ;;
@@ -91,6 +95,43 @@ fi
 if $opcache; then
   run_tests "with the opcache file cache, priming it" -d opcache.enable_cli=1 --file-cache-prime
   run_tests "with the opcache file cache, using it" -d opcache.enable_cli=1 --file-cache-use
+fi
+
+if $repeat; then
+  run_tests "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
+fi
+
+check_differential() {
+  echo "== the checker at the bridge's pinned Mago commit against php -l"
+  local url rev cargo mago file name checked linted mismatch=false
+  read -r url rev < <(sed -n 's/^mago-sharp-bridge = { git = "\(.*\)", rev = "\(.*\)" }$/\1 \2/p' "$root/ext/sharp/Cargo.toml") || {
+    echo "ext/sharp/Cargo.toml does not pin mago-sharp-bridge as { git = \"...\", rev = \"...\" }." >&2
+    exit 1
+  }
+  cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
+  PATH="$(dirname "$cargo"):$PATH" "$cargo" install --quiet --locked --git "$url" --rev "$rev" --root "$build_dir/mago" mago
+  mago="$build_dir/mago/bin/mago"
+  for file in "$root"/Zend/tests/sharp/*.sharp; do
+    name="${file#"$root"/}"
+    if ! checked="$("$mago" --colors never --workspace "$root/Zend/tests/sharp" analyze --minimum-fail-level error "$file" 2>&1)"; then
+      echo "REFUSED BY THE CHECKER $name"
+      continue
+    fi
+    linted="$("$php" -l "$file" 2>&1)" || true
+    if [[ "$linted" == "No syntax errors detected in $file" ]]; then
+      echo "COMPILES $name"
+    else
+      printf 'FAIL %s: the checker accepts it and php -l does not.\n-- mago analyze:\n%s\n-- php -l:\n%s\n' "$name" "$checked" "$linted"
+      mismatch=true
+    fi
+  done
+  if $mismatch; then
+    failed+=("the checker at the bridge's pinned Mago commit against php -l")
+  fi
+}
+
+if $differential; then
+  check_differential
 fi
 
 if [[ ${#failed[@]} -gt 0 ]]; then
