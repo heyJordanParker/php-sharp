@@ -15,6 +15,8 @@ on:
       - UPGRADING.INTERNALS
     branches:
       - master
+    tags:
+      - v*
   pull_request:
     paths-ignore: *ignore_paths
     branches:
@@ -83,3 +85,23 @@ jobs:
         run: sharp/bin/test --opcache
       - name: Test upstream
         run: sharp/bin/test --upstream --opcache
+  IMAGE:
+    if: github.ref_type == 'tag'
+    needs: [LINUX, MACOS]
+    uses: docker/github-builder/.github/workflows/build.yml@v1
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    with:
+      output: image
+      push: true
+      file: sharp/docker/runtime/Dockerfile
+      platforms: linux/amd64,linux/arm64
+      meta-images: ghcr.io/heyjordanparker/php-sharp
+      meta-tags: type=semver,pattern={{version}}
+    secrets:
+      registry-auths: |
+        - registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
