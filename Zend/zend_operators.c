@@ -1371,6 +1371,10 @@ zend_result ZEND_FASTCALL checked_add_function(zval *result, zval *op1, zval *op
 		}
 		return SUCCESS;
 	}
+	/* PHP#'s + joins two strings, numeric or not. */
+	if (Z_TYPE_P(value1) == IS_STRING && Z_TYPE_P(value2) == IS_STRING) {
+		return concat_function(result, op1, op2);
+	}
 	return add_function(result, op1, op2);
 }
 /* }}} */
@@ -1513,6 +1517,27 @@ ZEND_API zend_result ZEND_FASTCALL pow_function(zval *result, zval *op1, zval *o
 
 	ZEND_ASSERT(0 && "Operation must succeed");
 	return FAILURE;
+}
+/* }}} */
+
+/* A negative exponent keeps PHP's float, which is no overflow. */
+zend_result ZEND_FASTCALL checked_pow_function(zval *result, zval *op1, zval *op2) /* {{{ */
+{
+	zval *value1 = op1, *value2 = op2;
+
+	ZVAL_DEREF(value1);
+	ZVAL_DEREF(value2);
+	if (Z_TYPE_P(value1) == IS_LONG && Z_TYPE_P(value2) == IS_LONG && Z_LVAL_P(value2) >= 0) {
+		zval power;
+
+		pow_function_base(&power, value1, value2);
+		if (UNEXPECTED(Z_TYPE(power) == IS_DOUBLE)) {
+			return checked_overflow(result, op1, value1);
+		}
+		ZVAL_LONG(result, Z_LVAL(power));
+		return SUCCESS;
+	}
+	return pow_function(result, op1, op2);
 }
 /* }}} */
 

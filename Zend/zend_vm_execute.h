@@ -6474,7 +6474,11 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_
 	SAVE_OPLINE();
 	op1 = RT_CONSTANT(opline, opline->op1);
 	op2 = RT_CONSTANT(opline, opline->op2);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 
 
 
@@ -9444,7 +9448,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_POW_SPEC_CONS
 	SAVE_OPLINE();
 	op1 = RT_CONSTANT(opline, opline->op1);
 	op2 = _get_zval_ptr_var(opline->op2.var EXECUTE_DATA_CC);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 
 
 	zval_ptr_dtor_nogc(EX_VAR(opline->op2.var));
@@ -12012,7 +12020,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_POW_SPEC_CONS
 	SAVE_OPLINE();
 	op1 = RT_CONSTANT(opline, opline->op1);
 	op2 = _get_zval_ptr_cv_BP_VAR_R(opline->op2.var EXECUTE_DATA_CC);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 
 
 
@@ -16304,7 +16316,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_POW_SPEC_TMPV
 	SAVE_OPLINE();
 	op1 = _get_zval_ptr_var(opline->op1.var EXECUTE_DATA_CC);
 	op2 = RT_CONSTANT(opline, opline->op2);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 	zval_ptr_dtor_nogc(EX_VAR(opline->op1.var));
 
 
@@ -17818,7 +17834,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_POW_SPEC_TMPV
 	SAVE_OPLINE();
 	op1 = _get_zval_ptr_var(opline->op1.var EXECUTE_DATA_CC);
 	op2 = _get_zval_ptr_var(opline->op2.var EXECUTE_DATA_CC);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 	zval_ptr_dtor_nogc(EX_VAR(opline->op1.var));
 	zval_ptr_dtor_nogc(EX_VAR(opline->op2.var));
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
@@ -19592,7 +19612,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_POW_SPEC_TMPV
 	SAVE_OPLINE();
 	op1 = _get_zval_ptr_var(opline->op1.var EXECUTE_DATA_CC);
 	op2 = _get_zval_ptr_cv_BP_VAR_R(opline->op2.var EXECUTE_DATA_CC);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 	zval_ptr_dtor_nogc(EX_VAR(opline->op1.var));
 
 
@@ -43269,7 +43293,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_POW_SPEC_CV_C
 	SAVE_OPLINE();
 	op1 = _get_zval_ptr_cv_BP_VAR_R(opline->op1.var EXECUTE_DATA_CC);
 	op2 = RT_CONSTANT(opline, opline->op2);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 
 
 
@@ -47401,7 +47429,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_POW_SPEC_CV_T
 	SAVE_OPLINE();
 	op1 = _get_zval_ptr_cv_BP_VAR_R(opline->op1.var EXECUTE_DATA_CC);
 	op2 = _get_zval_ptr_var(opline->op2.var EXECUTE_DATA_CC);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 
 
 	zval_ptr_dtor_nogc(EX_VAR(opline->op2.var));
@@ -53029,7 +53061,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_POW_SPEC_CV_C
 	SAVE_OPLINE();
 	op1 = _get_zval_ptr_cv_BP_VAR_R(opline->op1.var EXECUTE_DATA_CC);
 	op2 = _get_zval_ptr_cv_BP_VAR_R(opline->op2.var EXECUTE_DATA_CC);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 
 
 
@@ -62347,7 +62383,11 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_POW_S
 	SAVE_OPLINE();
 	op1 = RT_CONSTANT(opline, opline->op1);
 	op2 = RT_CONSTANT(opline, opline->op2);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 
 
 
@@ -65317,7 +65357,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_POW_SPEC_CONST_TMP
 	SAVE_OPLINE();
 	op1 = RT_CONSTANT(opline, opline->op1);
 	op2 = _get_zval_ptr_var(opline->op2.var EXECUTE_DATA_CC);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 
 
 	zval_ptr_dtor_nogc(EX_VAR(opline->op2.var));
@@ -67783,7 +67827,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_POW_SPEC_CONST_CV_
 	SAVE_OPLINE();
 	op1 = RT_CONSTANT(opline, opline->op1);
 	op2 = _get_zval_ptr_cv_BP_VAR_R(opline->op2.var EXECUTE_DATA_CC);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 
 
 
@@ -72075,7 +72123,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_POW_SPEC_TMPVAR_CO
 	SAVE_OPLINE();
 	op1 = _get_zval_ptr_var(opline->op1.var EXECUTE_DATA_CC);
 	op2 = RT_CONSTANT(opline, opline->op2);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 	zval_ptr_dtor_nogc(EX_VAR(opline->op1.var));
 
 
@@ -73589,7 +73641,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_POW_SPEC_TMPVAR_TM
 	SAVE_OPLINE();
 	op1 = _get_zval_ptr_var(opline->op1.var EXECUTE_DATA_CC);
 	op2 = _get_zval_ptr_var(opline->op2.var EXECUTE_DATA_CC);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 	zval_ptr_dtor_nogc(EX_VAR(opline->op1.var));
 	zval_ptr_dtor_nogc(EX_VAR(opline->op2.var));
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
@@ -75263,7 +75319,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_POW_SPEC_TMPVAR_CV
 	SAVE_OPLINE();
 	op1 = _get_zval_ptr_var(opline->op1.var EXECUTE_DATA_CC);
 	op2 = _get_zval_ptr_cv_BP_VAR_R(opline->op2.var EXECUTE_DATA_CC);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 	zval_ptr_dtor_nogc(EX_VAR(opline->op1.var));
 
 
@@ -98940,7 +99000,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_POW_SPEC_CV_CONST_
 	SAVE_OPLINE();
 	op1 = _get_zval_ptr_cv_BP_VAR_R(opline->op1.var EXECUTE_DATA_CC);
 	op2 = RT_CONSTANT(opline, opline->op2);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 
 
 
@@ -103072,7 +103136,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_POW_SPEC_CV_TMPVAR
 	SAVE_OPLINE();
 	op1 = _get_zval_ptr_cv_BP_VAR_R(opline->op1.var EXECUTE_DATA_CC);
 	op2 = _get_zval_ptr_var(opline->op2.var EXECUTE_DATA_CC);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 
 
 	zval_ptr_dtor_nogc(EX_VAR(opline->op2.var));
@@ -108598,7 +108666,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_POW_SPEC_CV_CV_TAI
 	SAVE_OPLINE();
 	op1 = _get_zval_ptr_cv_BP_VAR_R(opline->op1.var EXECUTE_DATA_CC);
 	op2 = _get_zval_ptr_cv_BP_VAR_R(opline->op2.var EXECUTE_DATA_CC);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 
 
 

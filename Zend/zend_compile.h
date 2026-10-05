@@ -1101,11 +1101,11 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
 #define ZEND_ISEMPTY			(1<<0)
 
 /* The operator follows PHP#'s rules: integer overflow throws ArithmeticError instead of
- * producing a float. ZEND_SHARP_OPERATOR_SYNTAX is set in the attr of ZEND_AST_BINARY_OP,
- * ZEND_AST_ASSIGN_OP, ZEND_AST_UNARY_MINUS and the increment kinds. The compiler turns it into
- * ZEND_SHARP_OPERATOR in the extended_value of ZEND_ADD, ZEND_SUB, ZEND_MUL, the
- * ZEND_ASSIGN_*_OP opcodes, where it sits next to the opcode, and the increment and decrement
- * opcodes, where it sits above the cache slot. */
+ * producing a float, and + joins two strings. ZEND_SHARP_OPERATOR_SYNTAX is set in the attr of
+ * ZEND_AST_BINARY_OP, ZEND_AST_ASSIGN_OP, ZEND_AST_UNARY_MINUS and the increment kinds. The
+ * compiler turns it into ZEND_SHARP_OPERATOR in the extended_value of ZEND_ADD, ZEND_SUB,
+ * ZEND_MUL, ZEND_POW, the ZEND_ASSIGN_*_OP opcodes, where it sits next to the opcode, and the
+ * increment and decrement opcodes, where it sits above the cache slot. */
 #define ZEND_SHARP_OPERATOR_SYNTAX	(1<<15)
 #define ZEND_SHARP_OPERATOR	(1<<30)
 

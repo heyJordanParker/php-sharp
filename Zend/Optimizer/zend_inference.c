@@ -1477,7 +1477,7 @@ ZEND_API bool zend_inference_propagate_range(const zend_op_array *op_array, cons
 			break;
 		case ZEND_ASSIGN_OP:
 			if (opline->extended_value != ZEND_CONCAT
-			 && opline->extended_value != ZEND_POW) {
+			 && (opline->extended_value & ~ZEND_SHARP_OPERATOR) != ZEND_POW) {
 				if (ssa_op->op1_def == var || ssa_op->result_def == var) {
 					return zend_inference_calc_binary_op_range(
 						op_array, ssa, opline, ssa_op,
@@ -2255,9 +2255,10 @@ static uint32_t assign_dim_result_type(
 	return tmp;
 }
 
-/* For binary ops that have compound assignment operators */
+/* For binary ops that have compound assignment operators. The opcode carries ZEND_SHARP_OPERATOR
+ * when the operator follows PHP#'s rules. */
 static uint32_t binary_op_result_type(
-		zend_ssa *ssa, uint8_t opcode, uint32_t t1, uint32_t t2, int result_var,
+		zend_ssa *ssa, uint32_t opcode, uint32_t t1, uint32_t t2, int result_var,
 		zend_long optimization_level) {
 	uint32_t tmp = 0;
 	uint32_t t1_type = (t1 & MAY_BE_ANY) | (t1 & MAY_BE_UNDEF ? MAY_BE_NULL : 0);
@@ -2272,8 +2273,15 @@ static uint32_t binary_op_result_type(
 		}
 	}
 
-	switch (opcode) {
+	switch (opcode & ~ZEND_SHARP_OPERATOR) {
 		case ZEND_ADD:
+			/* PHP#'s + joins two strings. */
+			if ((opcode & ZEND_SHARP_OPERATOR) && (t1_type & MAY_BE_STRING) && (t2_type & MAY_BE_STRING)) {
+				tmp |= MAY_BE_STRING | MAY_BE_RC1 | MAY_BE_RCN;
+				if (t1_type == MAY_BE_STRING && t2_type == MAY_BE_STRING) {
+					break;
+				}
+			}
 			if (t1_type == MAY_BE_LONG && t2_type == MAY_BE_LONG) {
 				if (result_var < 0 ||
 					!ssa->var_info[result_var].has_range ||
@@ -2434,7 +2442,7 @@ static const zend_property_info *lookup_prop_info(const zend_class_entry *ce, ze
 	return NULL;
 }
 
-static const zend_property_info *zend_fetch_prop_info(const zend_op_array *op_array, zend_ssa *ssa, const zend_op *opline, const zend_ssa_op *ssa_op)
+const zend_property_info *zend_fetch_prop_info(const zend_op_array *op_array, zend_ssa *ssa, const zend_op *opline, const zend_ssa_op *ssa_op)
 {
 	const zend_property_info *prop_info = NULL;
 	if (opline->op2_type == IS_CONST) {
@@ -2597,7 +2605,8 @@ static zend_always_inline zend_result _zend_update_type_info(
 		case ZEND_SL:
 		case ZEND_SR:
 		case ZEND_CONCAT:
-			tmp = binary_op_result_type(ssa, opline->opcode, t1, t2, ssa_op->result_def, optimization_level);
+			tmp = binary_op_result_type(
+				ssa, zend_optimizer_binary_opcode(opline), t1, t2, ssa_op->result_def, optimization_level);
 			UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
 			break;
 		case ZEND_BW_NOT:
@@ -5151,7 +5160,11 @@ ZEND_API bool zend_may_throw_ex(const zend_op *opline, const zend_ssa_op *ssa_op
 			}
 			return (t1 & (MAY_BE_OBJECT|MAY_BE_ARRAY_OF_ARRAY|MAY_BE_ARRAY_OF_OBJECT)) || (t2 & (MAY_BE_OBJECT|MAY_BE_ARRAY_OF_ARRAY|MAY_BE_ARRAY_OF_OBJECT));
 		case ZEND_ASSIGN_OP:
-			if (opline->extended_value == ZEND_ADD) {
+			if ((opline->extended_value & ZEND_SHARP_OPERATOR) && (t1 & MAY_BE_LONG) && (t2 & MAY_BE_LONG)) {
+				/* Integer overflow */
+				return 1;
+			}
+			if ((opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_ADD) {
 				if ((t1 & MAY_BE_ANY) == MAY_BE_ARRAY
 				 && (t2 & MAY_BE_ANY) == MAY_BE_ARRAY) {
 					return 0;
@@ -5167,9 +5180,9 @@ ZEND_API bool zend_may_throw_ex(const zend_op *opline, const zend_ssa_op *ssa_op
 				}
 				return (t1 & (MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE)) ||
 					(t2 & (MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE));
-			} else if (opline->extended_value == ZEND_SUB ||
-				opline->extended_value == ZEND_MUL ||
-				opline->extended_value == ZEND_POW) {
+			} else if ((opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_SUB ||
+				(opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_MUL ||
+				(opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_POW) {
 				return (t1 & (MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE)) ||
 					(t2 & (MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE));
 			} else if (opline->extended_value == ZEND_SL ||

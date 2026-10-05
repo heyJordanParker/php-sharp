@@ -251,5 +251,78 @@ class Overflow
         return a;
     }
 
+    public static int power(int a, int b)
+    {
+        return a ** b;
+    }
+
+    public static int maxSquared()
+    {
+        return PHP_INT_MAX ** 2;
+    }
+
+    public static int powAssign(int a)
+    {
+        let x = a;
+        x **= 2;
+        return x;
+    }
+
+    public static float inverse(int a, int b)
+    {
+        return a ** b;
+    }
+
+    public static float half()
+    {
+        return 2 ** -1;
+    }
+
     private int big = 9223372036854775807 + 1;
+
+    public static int deadAddAssign(int a, int b)
+    {
+        let x = a;
+        x += b;
+        return a;
+    }
+
+    public static int deadSubAssign(int a, int b)
+    {
+        let x = a;
+        x -= b;
+        return a;
+    }
+
+    public static int deadMulAssign(int a, int b)
+    {
+        let x = a;
+        x *= b;
+        return a;
+    }
+
+    public static int deadPowAssign(int a, int b)
+    {
+        let x = a;
+        x **= b;
+        return a;
+    }
+
+    public static int powProperty(Counter counter, int b)
+    {
+        counter.value **= b;
+        return counter.value;
+    }
+
+    public static int powLoose(LooseCounter counter, int b)
+    {
+        counter.value **= b;
+        return counter.value;
+    }
+
+    public static int deadPower(int a, int b)
+    {
+        let p = a ** b;
+        return a;
+    }
 }
