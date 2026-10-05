@@ -251,5 +251,32 @@ class Overflow
         return a;
     }
 
+    public static int power(int a, int b)
+    {
+        return a ** b;
+    }
+
+    public static int maxSquared()
+    {
+        return PHP_INT_MAX ** 2;
+    }
+
+    public static int powAssign(int a)
+    {
+        let x = a;
+        x **= 2;
+        return x;
+    }
+
+    public static float inverse(int a, int b)
+    {
+        return a ** b;
+    }
+
+    public static float half()
+    {
+        return 2 ** -1;
+    }
+
     private int big = 9223372036854775807 + 1;
 }

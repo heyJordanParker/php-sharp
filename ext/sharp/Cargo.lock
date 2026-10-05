@@ -275,7 +275,7 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 [[package]]
 name = "mago-allocator"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#649ea6714099eba9180313c07c51825186c62dec"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#bcd817e345fe61467952703cb1cacdc80288721b"
 dependencies = [
  "allocator-api2",
  "blink-alloc",
@@ -285,12 +285,12 @@ dependencies = [
 [[package]]
 name = "mago-bytes"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#649ea6714099eba9180313c07c51825186c62dec"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#bcd817e345fe61467952703cb1cacdc80288721b"
 
 [[package]]
 name = "mago-database"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#649ea6714099eba9180313c07c51825186c62dec"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#bcd817e345fe61467952703cb1cacdc80288721b"
 dependencies = [
  "foldhash",
  "globset",
@@ -302,7 +302,7 @@ dependencies = [
 [[package]]
 name = "mago-names"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#649ea6714099eba9180313c07c51825186c62dec"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#bcd817e345fe61467952703cb1cacdc80288721b"
 dependencies = [
  "foldhash",
  "mago-allocator",
@@ -316,7 +316,7 @@ dependencies = [
 [[package]]
 name = "mago-php-version"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#649ea6714099eba9180313c07c51825186c62dec"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#bcd817e345fe61467952703cb1cacdc80288721b"
 dependencies = [
  "schemars",
 ]
@@ -324,7 +324,7 @@ dependencies = [
 [[package]]
 name = "mago-reporting"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#649ea6714099eba9180313c07c51825186c62dec"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#bcd817e345fe61467952703cb1cacdc80288721b"
 dependencies = [
  "blake3",
  "foldhash",
@@ -340,7 +340,7 @@ dependencies = [
 [[package]]
 name = "mago-semantics"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#649ea6714099eba9180313c07c51825186c62dec"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#bcd817e345fe61467952703cb1cacdc80288721b"
 dependencies = [
  "mago-bytes",
  "mago-database",
@@ -354,7 +354,7 @@ dependencies = [
 [[package]]
 name = "mago-sharp-bridge"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#649ea6714099eba9180313c07c51825186c62dec"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#bcd817e345fe61467952703cb1cacdc80288721b"
 dependencies = [
  "cbindgen",
  "mago-allocator",
@@ -371,7 +371,7 @@ dependencies = [
 [[package]]
 name = "mago-span"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#649ea6714099eba9180313c07c51825186c62dec"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#bcd817e345fe61467952703cb1cacdc80288721b"
 dependencies = [
  "mago-database",
 ]
@@ -379,7 +379,7 @@ dependencies = [
 [[package]]
 name = "mago-syntax"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#649ea6714099eba9180313c07c51825186c62dec"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#bcd817e345fe61467952703cb1cacdc80288721b"
 dependencies = [
  "mago-allocator",
  "mago-database",
@@ -396,7 +396,7 @@ dependencies = [
 [[package]]
 name = "mago-syntax-core"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#649ea6714099eba9180313c07c51825186c62dec"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#bcd817e345fe61467952703cb1cacdc80288721b"
 dependencies = [
  "mago-allocator",
  "mago-database",
@@ -407,12 +407,12 @@ dependencies = [
 [[package]]
 name = "mago-text-edit"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#649ea6714099eba9180313c07c51825186c62dec"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#bcd817e345fe61467952703cb1cacdc80288721b"
 
 [[package]]
 name = "mago-word"
 version = "1.53.0"
-source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#649ea6714099eba9180313c07c51825186c62dec"
+source = "git+file:///Users/jordan/Developer/mago?branch=feat%2Fslice-expressions#bcd817e345fe61467952703cb1cacdc80288721b"
 dependencies = [
  "foldhash",
  "itoa",

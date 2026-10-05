@@ -1,0 +1,53 @@
+namespace Demo;
+
+class Plus
+{
+    private string log = "log:";
+
+    public static string join(string first, string last)
+    {
+        return first + " " + last;
+    }
+
+    public static string digits(string first, string last)
+    {
+        return first + last;
+    }
+
+    public static string folded()
+    {
+        return "1" + "2" + "con" + "stant";
+    }
+
+    public static string append(string text)
+    {
+        let line = text;
+        line += "!";
+        return line;
+    }
+
+    public string record(string entry)
+    {
+        this.log += " " + entry;
+        return this.log;
+    }
+
+    public static int length(string first, string last)
+    {
+        return strlen(first + last);
+    }
+
+    public static string repeat(string text, int times)
+    {
+        let line = "";
+        for (let step = 0; step < times; step++) {
+            line += text;
+        }
+        return line;
+    }
+
+    public static int add(int a, int b)
+    {
+        return a + b;
+    }
+}

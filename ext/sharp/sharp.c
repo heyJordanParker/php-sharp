@@ -150,7 +150,8 @@ static zend_ast_attr sharp_operator_attr(zend_ast_kind kind, uint32_t attr)
 	switch (kind) {
 		case ZEND_AST_BINARY_OP:
 		case ZEND_AST_ASSIGN_OP:
-			return attr == ZEND_ADD || attr == ZEND_SUB || attr == ZEND_MUL ? attr | ZEND_SHARP_OPERATOR_SYNTAX : attr;
+			return attr == ZEND_ADD || attr == ZEND_SUB || attr == ZEND_MUL || attr == ZEND_POW
+				? attr | ZEND_SHARP_OPERATOR_SYNTAX : attr;
 		case ZEND_AST_UNARY_MINUS:
 		case ZEND_AST_PRE_INC:
 		case ZEND_AST_PRE_DEC:

@@ -1282,6 +1282,8 @@ ZEND_API binary_op_type get_binary_op(int opcode)
 			return (binary_op_type) checked_mul_function;
 		case ZEND_POW:
 			return (binary_op_type) pow_function;
+		case ZEND_POW | ZEND_SHARP_OPERATOR:
+			return (binary_op_type) checked_pow_function;
 		case ZEND_DIV:
 			return (binary_op_type) div_function;
 		case ZEND_MOD:

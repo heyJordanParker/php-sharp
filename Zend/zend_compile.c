@@ -9953,7 +9953,12 @@ ZEND_API bool zend_binary_op_produces_error(uint32_t opcode, const zval *op1, co
 {
 	if (opcode & ZEND_SHARP_OPERATOR) {
 		opcode &= ~ZEND_SHARP_OPERATOR;
-		if (Z_TYPE_P(op1) == IS_LONG && Z_TYPE_P(op2) == IS_LONG) {
+		if (opcode == ZEND_ADD && Z_TYPE_P(op1) == IS_STRING && Z_TYPE_P(op2) == IS_STRING) {
+			/* PHP#'s + joins two strings. */
+			return 0;
+		}
+		/* A negative exponent gives PHP's float, and PHP's own checks below cover it. */
+		if (Z_TYPE_P(op1) == IS_LONG && Z_TYPE_P(op2) == IS_LONG && !(opcode == ZEND_POW && Z_LVAL_P(op2) < 0)) {
 			zval result;
 
 			/* Checked arithmetic throws where PHP's overflows into a float. */
