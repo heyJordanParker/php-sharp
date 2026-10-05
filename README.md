@@ -1,172 +1,77 @@
-<div align="center">
-    <a href="https://www.php.net">
-        <img
-            alt="PHP"
-            src="https://www.php.net/images/logos/new-php-logo.svg"
-            width="150">
-    </a>
-</div>
+# PHP#
 
-# The PHP Interpreter
+PHP# is a typed dialect of PHP with C#-shaped syntax. A `.sharp` file compiles to the same engine as a `.php` file, so the two call each other freely, and an app moves to PHP# one file at a time.
 
-PHP is a popular general-purpose scripting language that is especially suited to
-web development. Fast, flexible and pragmatic, PHP powers everything from your
-blog to the most popular websites in the world. PHP is distributed under the
-[PHP License v3.01](LICENSE).
+The checker, a fork of [Mago](https://github.com/heyJordanParker/mago-sharp), type-checks PHP and PHP# files together. The engine runs the same Mago front end, so both read every `.sharp` file the same way.
 
-[![Push](https://github.com/php/php-src/actions/workflows/push.yml/badge.svg)](https://github.com/php/php-src/actions/workflows/push.yml)
-[![Fuzzing Status](https://oss-fuzz-build-logs.storage.googleapis.com/badges/php.svg)](https://issues.oss-fuzz.com/issues?q=project:php)
+## Principles
 
-## Documentation
+**If it compiles, it's proven.**
+An Agent knows it's wrong the instant it writes the mistake.
+Precedent: Elm, Rust and Lean.
 
-The PHP manual is available at [php.net/docs](https://www.php.net/docs).
+**Signatures tell the whole truth.**
+Read the signature and you know everything the code does.
+Precedent: Haskell and Rust.
 
-## Installation
+**Everything is instant.**
+Every tool answers instantly to any number of parallel Agents.
+Precedent: Go and esbuild.
 
-### Prebuilt packages and binaries
+## Example
 
-Prebuilt packages and binaries can be used to get up and running fast with PHP.
+```csharp
+// app/Store/Cart.sharp
+namespace App.Store;
 
-For Windows, the PHP binaries can be obtained from
-[windows.php.net](https://windows.php.net). After extracting the archive the
-`*.exe` files are ready to use.
+public class Cart
+{
+    public List<Line> lines { get; private set; } = [];
 
-For other systems, see the [installation chapter](https://www.php.net/install).
+    public void add(Line line) { this.lines.add(line); }
 
-### Building PHP source code
+    public int total() => this.lines.filter(l => !l.refunded).sumOf(l => l.amount);
 
-*For Windows, see [Build your own PHP on Windows](https://wiki.php.net/internals/windows/stepbystepbuild_sdk_2).*
-
-For a minimal PHP build from Git, you will need autoconf, bison, and re2c. For
-a default build, you will additionally need libxml2 and libsqlite3.
-
-On Ubuntu, you can install these using:
-
-```shell
-sudo apt install -y pkg-config build-essential autoconf bison re2c libxml2-dev libsqlite3-dev
+    public string status() => match (this.lines.count()) {
+        0 => "empty",
+        default => "open",
+    };
+}
 ```
 
-On Fedora, you can install these using:
+Plain PHP uses it like any other class:
 
-```shell
-sudo dnf install re2c bison autoconf make libtool ccache libxml2-devel sqlite-devel
+```php
+$cart = new App\Store\Cart();
+$cart->add($line);
+echo $cart->total();
 ```
 
-On MacOS, you can install these using `brew`:
+## Language
 
-```shell
-brew install autoconf bison re2c libiconv libxml2 sqlite
+- [docs/spec.md](docs/spec.md) states every rule of the language.
+- [docs/decisions/](docs/decisions/) records why each language decision was made, with the options considered and the languages behind them.
+
+## Build and test
+
+Run these from the repository root:
+
+```sh
+sharp/bin/build             # build sharp/build/<os>-<arch>/sapi/cli/php
+sharp/bin/test              # run the PHP# suite, Zend/tests/sharp/
+sharp/bin/test --upstream   # run php-src's own suites against the upstream baseline
 ```
 
-or with `MacPorts`:
+[sharp/README.md](sharp/README.md) lists every option, the macOS dependencies, the Linux image and CI.
 
-```shell
-sudo port install autoconf bison re2c libiconv libxml2 sqlite3
-```
+## Runtime image
 
-Generate configure:
+`sharp/docker/runtime/` builds docker-library's `php:8.5-fpm-trixie` image from this repository, with PHP# built in. An app switches to PHP# by changing only its `FROM` line. Each version tag, such as `v0.1.0`, publishes it as `ghcr.io/heyjordanparker/php-sharp:<version>`.
 
-```shell
-./buildconf
-```
+## Composer plugin
 
-Configure your build. `--enable-debug` is recommended for development, see
-`./configure --help` for a full list of options.
+`sharp/composer/` is the Composer plugin `heyjordanparker/php-sharp-composer`. With it, Composer's autoloader finds `.sharp` files by the same PSR-4 rules as `.php` files.
 
-```shell
-# For development
-./configure --enable-debug
-# For production
-./configure
-```
+## A fork of php-src
 
-Build PHP. To speed up the build, specify the maximum number of jobs using the
-`-j` argument:
-
-```shell
-make -j4
-```
-
-The number of jobs should usually match the number of available cores, which
-can be determined using `nproc`.
-
-## Testing PHP source code
-
-PHP ships with an extensive test suite, the command `make test` is used after
-successful compilation of the sources to run this test suite.
-
-It is possible to run tests using multiple cores by setting `-jN` in
-`TEST_PHP_ARGS` or `TESTS`:
-
-```shell
-make TEST_PHP_ARGS=-j4 test
-```
-
-Shall run `make test` with a maximum of 4 concurrent jobs: Generally the maximum
-number of jobs should not exceed the number of cores available.
-
-Use the `TEST_PHP_ARGS` or `TESTS` variable to test only specific directories:
-
-```shell
-make TESTS=tests/lang/ test
-```
-
-The [qa.php.net](https://qa.php.net) site provides more detailed info about
-testing and quality assurance.
-
-## Installing PHP built from source
-
-After a successful build (and test), PHP may be installed with:
-
-```shell
-make install
-```
-
-Depending on your permissions and prefix, `make install` may need superuser
-permissions.
-
-## PHP extensions
-
-Extensions provide additional functionality on top of PHP. PHP consists of many
-essential bundled extensions. Additional extensions can be found in the PHP
-Extension Community Library - [PECL](https://pecl.php.net).
-
-## Contributing
-
-The PHP source code is located in the Git repository at
-[github.com/php/php-src](https://github.com/php/php-src). Contributions are most
-welcome by forking the repository and sending a pull request.
-
-Discussions are done on GitHub, but depending on the topic can also be relayed
-to the official PHP developer mailing list internals@lists.php.net.
-
-New features require an RFC and must be accepted by the developers. See
-[Request for comments - RFC](https://wiki.php.net/rfc) and
-[Voting on PHP features](https://wiki.php.net/rfc/voting) for more information
-on the process.
-
-Bug fixes don't require an RFC. If the bug has a GitHub issue, reference it in
-the commit message using `GH-NNNNNN`. Use `#NNNNNN` for tickets in the old
-[bugs.php.net](https://bugs.php.net) bug tracker.
-
-    Fix GH-7815: php_uname doesn't recognise latest Windows versions
-    Fix #55371: get_magic_quotes_gpc() throws deprecation warning
-
-See [Git workflow](https://wiki.php.net/vcs/gitworkflow) for details on how pull
-requests are merged.
-
-### Guidelines for contributors
-
-See further documents in the repository for more information on how to
-contribute:
-
-- [Contributing to PHP](/CONTRIBUTING.md)
-- [PHP coding standards](/CODING_STANDARDS.md)
-- [Internal documentation](https://php.github.io/php-src/)
-- [Mailing list rules](/docs/mailinglist-rules.md)
-- [PHP release process](/docs/release-process.md)
-
-## Credits
-
-For the list of people who've put work into PHP, please see the
-[PHP credits page](https://www.php.net/credits.php).
+This repository is a fork of [php-src](https://github.com/php/php-src) and tracks upstream. `.php` files compile exactly as upstream compiles them. php-src's own README is kept in [docs/php-src.md](docs/php-src.md), and the repository keeps php-src's [LICENSE](LICENSE).

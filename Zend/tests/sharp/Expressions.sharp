@@ -1,0 +1,51 @@
+namespace Demo;
+
+import Countable;
+import InvalidArgumentException;
+import LogicException;
+import RuntimeException;
+import Throwable;
+
+class Expressions
+{
+    public static int positive(int value)
+    {
+        if (value < 0) {
+            throw new InvalidArgumentException("negative");
+        }
+        return value;
+    }
+
+    public static int known(int? value)
+    {
+        return value ?? throw new InvalidArgumentException("unknown");
+    }
+
+    public static int recover(int value, Box steps)
+    {
+        try {
+            steps.size += 1;
+            return Expressions.positive(value);
+        } catch (InvalidArgumentException | LogicException failure) {
+            steps.size += 10;
+            throw new RuntimeException("recovered", 0, failure);
+        } catch (Throwable) {
+            return -1;
+        } finally {
+            steps.size += 100;
+        }
+    }
+
+    public static string describe(string label, Countable items)
+    {
+        const token = random_bytes(count(items));
+        return sprintf("%s has %d items and a %d-byte token", label, count(items), strlen(token));
+    }
+
+    public static string label(string name, Countable items)
+    {
+        const plain = "${name} {$name} $name";
+        return `${name}: ${items.count()} items\x21 \u{2713} \`${plain}\`
+total`;
+    }
+}

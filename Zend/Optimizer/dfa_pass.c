@@ -1034,6 +1034,43 @@ static bool zend_dfa_try_to_replace_result(zend_op_array *op_array, zend_ssa *ss
 	return 0;
 }
 
+/* PHP#'s += on two strings appends, so it becomes PHP's .=, which the JIT compiles. */
+static void zend_dfa_optimize_sharp_appends(zend_op_array *op_array, zend_ssa *ssa)
+{
+	for (uint32_t i = 0; i < op_array->last; i++) {
+		zend_op *opline = op_array->opcodes + i;
+		zend_ssa_op *ssa_op = ssa->ops + i;
+		uint32_t target_info;
+		uint32_t value_info;
+
+		if (opline->opcode == ZEND_ASSIGN_OP
+		 && opline->extended_value == (ZEND_ADD|ZEND_SHARP_OPERATOR)) {
+			target_info = OP1_INFO();
+			value_info = OP2_INFO();
+		} else if (opline->opcode == ZEND_ASSIGN_OBJ_OP
+		 && opline->extended_value == (ZEND_ADD|ZEND_SHARP_OPERATOR)) {
+			const zend_property_info *prop_info = zend_fetch_prop_info(op_array, ssa, opline, ssa_op);
+
+			if (!prop_info || ZEND_TYPE_IS_COMPLEX(prop_info->type)) {
+				continue;
+			}
+			target_info = ZEND_TYPE_PURE_MASK(prop_info->type);
+			value_info = OP1_DATA_INFO();
+		} else {
+			continue;
+		}
+
+		if ((target_info & (MAY_BE_ANY|MAY_BE_UNDEF|MAY_BE_REF)) == MAY_BE_STRING
+		 && (value_info & (MAY_BE_ANY|MAY_BE_UNDEF|MAY_BE_REF)) == MAY_BE_STRING) {
+
+// op_1: ASSIGN_OP (ADD) #x.CV [string], #y.? [string] (PHP#) => ASSIGN_OP (CONCAT) #x.CV, #y.?
+// op_1: ASSIGN_OBJ_OP (ADD) #x.? -> string prop, OP_DATA #y.? [string] (PHP#) => ASSIGN_OBJ_OP (CONCAT) #x.?, OP_DATA #y.?
+
+			opline->extended_value = ZEND_CONCAT;
+		}
+	}
+}
+
 void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx, zend_ssa *ssa, zend_call_info **call_map)
 {
 	if (ctx->debug_level & ZEND_DUMP_BEFORE_DFA_PASS) {
@@ -1092,6 +1129,8 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 #endif
 		}
 
+		zend_dfa_optimize_sharp_appends(op_array, ssa);
+
 		for (v = op_array->last_var; v < ssa->vars_count; v++) {
 
 			op_1 = ssa->vars[v].definition;
@@ -1132,6 +1171,15 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 
 			} else {
 				if (opline->opcode == ZEND_ADD
+				 && (opline->extended_value & ZEND_SHARP_OPERATOR)
+				 && (OP1_INFO() & (MAY_BE_ANY|MAY_BE_UNDEF|MAY_BE_REF)) == MAY_BE_STRING
+				 && (OP2_INFO() & (MAY_BE_ANY|MAY_BE_UNDEF|MAY_BE_REF)) == MAY_BE_STRING) {
+
+// op_1: #v.? = ADD #x.? [string], #y.? [string] (PHP#) => #v.? = FAST_CONCAT #x.?, #y.?
+
+					opline->opcode = ZEND_FAST_CONCAT;
+					opline->extended_value = 0;
+				} else if (opline->opcode == ZEND_ADD
 				 || opline->opcode == ZEND_SUB
 				 || opline->opcode == ZEND_MUL
 				 || opline->opcode == ZEND_IS_EQUAL
@@ -1361,7 +1409,8 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 					 && ssa->ops[op_2].op1_use >= 0
 					 && !(ssa->var_info[ssa->ops[op_2].op1_use].type & (MAY_BE_FALSE|MAY_BE_TRUE|MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE|MAY_BE_REF))) {
 
-						op_array->opcodes[op_2].opcode = ZEND_PRE_DEC;						SET_UNUSED(op_array->opcodes[op_2].op2);
+						op_array->opcodes[op_2].opcode = ZEND_PRE_DEC;
+						SET_UNUSED(op_array->opcodes[op_2].op2);
 						SET_UNUSED(op_array->opcodes[op_2].result);
 
 						ssa->ops[op_2].result_def = -1;
@@ -1376,7 +1425,8 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 					 && ssa->ops[op_2].op1_use >= 0
 					 && !(ssa->var_info[ssa->ops[op_2].op1_use].type & (MAY_BE_FALSE|MAY_BE_TRUE|MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE|MAY_BE_REF))) {
 
-						op_array->opcodes[op_2].opcode = ZEND_PRE_INC;						SET_UNUSED(op_array->opcodes[op_2].op2);
+						op_array->opcodes[op_2].opcode = ZEND_PRE_INC;
+						SET_UNUSED(op_array->opcodes[op_2].op2);
 						SET_UNUSED(op_array->opcodes[op_2].result);
 
 						ssa->ops[op_2].result_def = -1;
@@ -1391,7 +1441,8 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 					 && ssa->ops[op_2].op2_use >= 0
 					 && !(ssa->var_info[ssa->ops[op_2].op2_use].type & (MAY_BE_FALSE|MAY_BE_TRUE|MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE|MAY_BE_REF))) {
 
-						op_array->opcodes[op_2].opcode = ZEND_PRE_INC;						op_array->opcodes[op_2].op1_type = op_array->opcodes[op_2].op2_type;
+						op_array->opcodes[op_2].opcode = ZEND_PRE_INC;
+						op_array->opcodes[op_2].op1_type = op_array->opcodes[op_2].op2_type;
 						op_array->opcodes[op_2].op1.var = op_array->opcodes[op_2].op2.var;
 						SET_UNUSED(op_array->opcodes[op_2].op2);
 						SET_UNUSED(op_array->opcodes[op_2].result);
@@ -1512,7 +1563,8 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 						 && ssa->ops[op_2].op1_use >= 0
 						 && !(ssa->var_info[ssa->ops[op_2].op1_use].type & (MAY_BE_FALSE|MAY_BE_TRUE|MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE|MAY_BE_REF))) {
 
-							op_array->opcodes[op_2].opcode = ZEND_PRE_DEC;							SET_UNUSED(op_array->opcodes[op_2].op2);
+							op_array->opcodes[op_2].opcode = ZEND_PRE_DEC;
+							SET_UNUSED(op_array->opcodes[op_2].op2);
 							SET_UNUSED(op_array->opcodes[op_2].result);
 
 							ssa->ops[op_2].result_def = -1;
@@ -1527,7 +1579,8 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 						 && ssa->ops[op_2].op1_use >= 0
 						 && !(ssa->var_info[ssa->ops[op_2].op1_use].type & (MAY_BE_FALSE|MAY_BE_TRUE|MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE|MAY_BE_REF))) {
 
-							op_array->opcodes[op_2].opcode = ZEND_PRE_INC;							SET_UNUSED(op_array->opcodes[op_2].op2);
+							op_array->opcodes[op_2].opcode = ZEND_PRE_INC;
+							SET_UNUSED(op_array->opcodes[op_2].op2);
 							SET_UNUSED(op_array->opcodes[op_2].result);
 
 							ssa->ops[op_2].result_def = -1;
@@ -1542,7 +1595,8 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 						 && ssa->ops[op_2].op2_use >= 0
 						 && !(ssa->var_info[ssa->ops[op_2].op2_use].type & (MAY_BE_FALSE|MAY_BE_TRUE|MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE|MAY_BE_REF))) {
 
-							op_array->opcodes[op_2].opcode = ZEND_PRE_INC;							op_array->opcodes[op_2].op1_type = op_array->opcodes[op_2].op2_type;
+							op_array->opcodes[op_2].opcode = ZEND_PRE_INC;
+							op_array->opcodes[op_2].op1_type = op_array->opcodes[op_2].op2_type;
 							op_array->opcodes[op_2].op1.var = op_array->opcodes[op_2].op2.var;
 							SET_UNUSED(op_array->opcodes[op_2].op2);
 							SET_UNUSED(op_array->opcodes[op_2].result);

@@ -2,14 +2,14 @@
 
 PHP# is Dent's own PHP. It is a fork of php-src that keeps running plain PHP and adds a second dialect, PHP#, with C#-shaped syntax and compile-time type safety. A PHP# file compiles to the same engine as plain PHP, so the two call each other freely.
 
-The approved language rules live in [spec/language.md](spec/language.md).
+The approved language rules live in [docs/spec.md](../docs/spec.md), and the reason behind each language decision lives in [docs/decisions/](../docs/decisions/).
 
 ## Branches
 
 - `master` is PHP#'s only line and the default branch of `heyJordanParker/php-sharp`. It starts at the upstream tag `php-8.5.11`, and all work lands on it directly.
 - Upstream's other branches, such as `PHP-8.5`, are read-only mirrors. Upstream's own `master` is reached through the `upstream` remote.
 - Moving to a newer 8.5.x release means rebasing `master` onto that release's tag.
-- PHP# owns `sharp/`, `Zend/tests/sharp/` and `.github/workflows/sharp.yml`. Everything else is an engine file, and a rebase only meets conflicts in engine files a feature had to change.
+- PHP# owns `sharp/`, `Zend/tests/sharp/`, `.github/workflows/sharp.yml`, `README.md`, `docs/spec.md`, `docs/decisions/` and `docs/php-src.md`. Everything else is an engine file, and a rebase only meets conflicts in engine files a feature had to change.
 
 ## Commands
 
