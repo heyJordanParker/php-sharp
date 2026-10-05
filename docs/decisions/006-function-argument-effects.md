@@ -34,7 +34,7 @@ Every loop with an effect is written out by hand instead of with the collection 
 
 ```csharp
 public List<TResult> map<TResult>(Function<TResult(T)> f);
-public List<TResult> mapWithHttp<TResult>(Function<TResult(T) uses Http> f) uses Http;
+public List<TResult> mapWithHttp<TResult>(Function<TResult(T)> uses Http f) uses Http;
 
 carts.map(c => this.gateway.charge(c));          // compile error: map takes a pure function
 carts.mapWithHttp(c => this.gateway.charge(c));  // compiles; has Http

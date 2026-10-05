@@ -1264,10 +1264,8 @@ public interface PaymentGateway
 }
 
 Function<Money(Offer)> priceOf                       // a pure function value
-Function<Charge(Cart) uses Http> charge              // may reach Http
+Function<Charge(Cart)> uses Http charge              // may reach Http
 ```
-
-**`uses` is always the last clause of a declaration,** so its effects are easy to spot. It follows the parameters of a method, the parameter types inside a function type and the name in an `extern`. Only a method's body comes after it. An `import` never carries `uses`, because a library's effect lives in its one `extern` declaration.
 
 An implementation that calls plain PHP fits the declaration only through an `extern`:
 
