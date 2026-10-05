@@ -308,7 +308,7 @@ class Overflow
         return a;
     }
 
-    public static int powProperty(Counter counter, int b)
+    public static int powProperty(Cell counter, int b)
     {
         counter.value **= b;
         return counter.value;
