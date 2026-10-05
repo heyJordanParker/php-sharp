@@ -25,8 +25,8 @@ foreach (['Calc', 'Nulls', 'ControlFlow', 'Order', 'Product', 'Expressions'] as 
 ?>
 --EXPECT--
 Calc: same opcodes and lines in 4 op arrays, same signatures in 1 classes
-Nulls: same opcodes and lines in 11 op arrays, same signatures in 1 classes
+Nulls: same opcodes and lines in 14 op arrays, same signatures in 1 classes
 ControlFlow: same opcodes and lines in 6 op arrays, same signatures in 1 classes
 Order: same opcodes and lines in 4 op arrays, same signatures in 2 classes
 Product: same opcodes and lines in 3 op arrays, same signatures in 1 classes
-Expressions: same opcodes and lines in 6 op arrays, same signatures in 1 classes
+Expressions: same opcodes and lines in 7 op arrays, same signatures in 1 classes
