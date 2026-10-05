@@ -102,7 +102,8 @@ jobs:
       - name: Test upstream
         run: sharp/bin/test --upstream --opcache
   COMPOSER:
-    if: github.event_name == 'push'
+    needs: [LINUX, MACOS]
+    if: ${{ !failure() && !cancelled() && github.event_name == 'push' }}
     runs-on: ubuntu-24.04
     concurrency: composer-${{ github.ref }}
     steps:
