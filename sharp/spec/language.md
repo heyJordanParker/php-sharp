@@ -113,7 +113,7 @@ public string slug => Str.slug(name);                           // computed
 ```csharp
 Map<string, Plan> cache = [];                                   // field
 public int views { get; private set; } = 0;                     // auto-property
-public List<Tag> tags { get; set; } = new List();
+public List<Tag> tags { get; set; } = new List<Tag>();
 ```
 
 A constant initial value is stored as the member's default. Any other value is set at the start of the constructor, in the order the members are declared.
