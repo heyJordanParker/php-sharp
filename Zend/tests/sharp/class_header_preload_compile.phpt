@@ -1,10 +1,10 @@
 --TEST--
-Preloading links a PHP# class header
+Preloading links a PHP# class header that opcache_compile_file compiled
 --INI--
 opcache.enable=1
 opcache.enable_cli=1
 opcache.optimization_level=-1
-opcache.preload={PWD}/class_header_preload.inc
+opcache.preload={PWD}/class_header_preload_compile.inc
 --EXTENSIONS--
 opcache
 --SKIPIF--

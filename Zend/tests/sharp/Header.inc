@@ -19,6 +19,20 @@ class Other
 {
 }
 
+abstract class Shelf
+{
+    abstract public function copy(): Named;
+}
+
+final class Sealed
+{
+}
+
+enum Suit
+{
+    case Hearts;
+}
+
 trait Mixin
 {
 }

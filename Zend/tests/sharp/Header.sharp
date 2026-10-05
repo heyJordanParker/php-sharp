@@ -2,6 +2,7 @@ namespace Demo;
 
 import Lib.Entity;
 import Lib.Named;
+import Lib.Shelf;
 
 public interface Linkable : Named
 {
@@ -35,6 +36,24 @@ public class Tag : Named
     public string name()
     {
         return "tag";
+    }
+}
+
+public class Card : Named, Shelf, Linkable
+{
+    public override Card copy()
+    {
+        return new Card();
+    }
+
+    public string name()
+    {
+        return "card";
+    }
+
+    public string link()
+    {
+        return "/card";
     }
 }
 

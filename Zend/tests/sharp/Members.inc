@@ -62,4 +62,20 @@ class Members
     {
         return Registry::$hidden;
     }
+
+    public static function late(): int
+    {
+        return Registry::$late;
+    }
+
+    public static function ones(): int
+    {
+        $count = 0;
+        foreach (Registry::$items as $item) {
+            if ($item === 1) {
+                $count++;
+            }
+        }
+        return $count;
+    }
 }

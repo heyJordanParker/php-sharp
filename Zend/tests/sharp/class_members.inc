@@ -21,7 +21,14 @@ var_dump(Members::NEXT, Members::$sorted, Members::pick());
 Registry::$label = 'changed';
 var_dump(Members::label());
 
-foreach (['missing', 'hidden'] as $method) {
+// A loop over a static property array reads each element's value, even one a reference shares.
+$kept = &Registry::$items[0];
+for ($i = 0; $i < 50; $i++) {
+    $ones = Members::ones();
+}
+var_dump($ones);
+
+foreach (['missing', 'hidden', 'late'] as $method) {
     try {
         Members::$method();
     } catch (\Error $e) {

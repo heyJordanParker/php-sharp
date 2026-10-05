@@ -1096,8 +1096,11 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
 #define ZEND_FETCH_OBJ_FLAGS	3
 
 /* A PHP# `Class.y` read: a class constant fetch that reads the static property of the same name when the class
- * has no such constant, because PHP# looks up the member's kind when it runs. It is set in the attr of
- * ZEND_AST_CLASS_CONST and in the extended_value of ZEND_FETCH_CLASS_CONSTANT, below its cache slot. */
+ * has no such constant, because PHP# looks up the member's kind when it runs. ZEND_FETCH_CLASS_MEMBER_SYNTAX is
+ * set in the attr of ZEND_AST_CLASS_CONST, above the fetch flags a constant expression passes there. The
+ * compiler turns it into ZEND_FETCH_CLASS_MEMBER in the extended_value of ZEND_FETCH_CLASS_CONSTANT, below its
+ * cache slot. */
+#define ZEND_FETCH_CLASS_MEMBER_SYNTAX	(1<<15)
 #define ZEND_FETCH_CLASS_MEMBER	(1<<0)
 
 /* Used to mark what kind of operation a writing FETCH_DIM is used in,

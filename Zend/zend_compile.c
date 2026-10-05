@@ -7135,10 +7135,9 @@ static zend_type zend_compile_single_typename(zend_ast *ast)
 					}
 				} else {
 					ZEND_ASSERT(fetch_type == ZEND_FETCH_CLASS_PARENT);
-					/* Scope might be unknown for unbound closures and traits */
-					if (substitute_self_parent) {
+					/* Scope might be unknown for unbound closures and traits, and a PHP# parent until it links */
+					if (substitute_self_parent && CG(active_class_entry)->parent_name) {
 						class_name = CG(active_class_entry)->parent_name;
-						ZEND_ASSERT(class_name && "must know class name when resolving parent type at compile time");
 					}
 				}
 				zend_string_addref(class_name);
@@ -11120,10 +11119,12 @@ static void zend_compile_class_const(znode *result, zend_ast *ast) /* {{{ */
 
 	zend_set_class_name_op1(opline, &class_node);
 
-	if (opline->op1_type == IS_CONST || opline->op2_type == IS_CONST) {
+	if (ast->attr & ZEND_FETCH_CLASS_MEMBER_SYNTAX) {
+		/* The static property it falls back to caches its class, address and info, as FETCH_STATIC_PROP_R does. */
+		opline->extended_value = zend_alloc_cache_slots(3) | ZEND_FETCH_CLASS_MEMBER;
+	} else if (opline->op1_type == IS_CONST || opline->op2_type == IS_CONST) {
 		opline->extended_value = zend_alloc_cache_slots(2);
 	}
-	opline->extended_value |= ast->attr & ZEND_FETCH_CLASS_MEMBER;
 }
 /* }}} */
 

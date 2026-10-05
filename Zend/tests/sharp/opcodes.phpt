@@ -55,15 +55,19 @@ Order: same opcodes and lines in 4 op arrays, same signatures in 2 classes
 Product: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Expressions: same opcodes and lines in 6 op arrays, same signatures in 1 classes
 Shapes: same opcodes and lines in 5 op arrays, same signatures in 2 classes
-Members: different opcodes and lines in 10 op arrays, same signatures in 1 classes
+Members: different opcodes and lines in 12 op arrays, same signatures in 1 classes
   .sharp L0042 0000 T0 = FETCH_CLASS_CONSTANT string("Lib\\Registry") string("label")
   .sharp L0053 0002 T1 = FETCH_CLASS_CONSTANT string("Demo\\Members") string("count")
   .sharp L0058 0000 T0 = FETCH_CLASS_CONSTANT string("Lib\\Registry") string("missing")
   .sharp L0063 0000 T0 = FETCH_CLASS_CONSTANT string("Lib\\Registry") string("hidden")
+  .sharp L0068 0000 T0 = FETCH_CLASS_CONSTANT string("Lib\\Registry") string("late")
+  .sharp L0074 0001 T3 = FETCH_CLASS_CONSTANT string("Lib\\Registry") string("items")
   .php   L0042 0000 T0 = FETCH_STATIC_PROP_R string("label") string("Lib\\Registry")
   .php   L0053 0002 T1 = FETCH_STATIC_PROP_R string("count") string("Demo\\Members")
   .php   L0058 0000 T0 = FETCH_STATIC_PROP_R string("missing") string("Lib\\Registry")
   .php   L0063 0000 T0 = FETCH_STATIC_PROP_R string("hidden") string("Lib\\Registry")
+  .php   L0068 0000 T0 = FETCH_STATIC_PROP_R string("late") string("Lib\\Registry")
+  .php   L0074 0001 T3 = FETCH_STATIC_PROP_R string("items") string("Lib\\Registry")
 Site: different opcodes and lines in 13 op arrays, same signatures in 3 classes
   .sharp L0010 0000 DECLARE_CLASS string("site\\page")
   .sharp L0068 0001 DECLARE_CLASS string("site\\square")

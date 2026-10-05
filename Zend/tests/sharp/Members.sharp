@@ -62,4 +62,20 @@ public class Members
     {
         return Registry.hidden;
     }
+
+    public static int late()
+    {
+        return Registry.late;
+    }
+
+    public static int ones()
+    {
+        let count = 0;
+        for (let item of Registry.items) {
+            if (item === 1) {
+                count++;
+            }
+        }
+        return count;
+    }
 }

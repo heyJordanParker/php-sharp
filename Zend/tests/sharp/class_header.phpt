@@ -18,6 +18,7 @@ $page = new Demo\Page();
 var_dump($page->link(), $page->name(), $page->number(), $page instanceof Lib\Entity);
 var_dump(inheritance(Demo\Page::class), inheritance(Demo\Post::class), inheritance(Demo\Tag::class));
 var_dump(class_implements(Demo\Linkable::class));
+var_dump(inheritance(Demo\Card::class), (new Demo\Card())->copy()->link());
 
 $size = new ReflectionMethod(Demo\Thumbnail::class, 'size');
 var_dump((new Demo\Thumbnail())->size(), count($size->getAttributes(Override::class)), $size->isFinal());
@@ -58,6 +59,18 @@ array(1) {
   ["Lib\Named"]=>
   string(9) "Lib\Named"
 }
+array(2) {
+  [0]=>
+  string(9) "Lib\Shelf"
+  [1]=>
+  array(2) {
+    [0]=>
+    string(13) "Demo\Linkable"
+    [1]=>
+    string(9) "Lib\Named"
+  }
+}
+string(5) "/card"
 int(11)
 int(1)
 bool(false)

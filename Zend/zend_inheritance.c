@@ -3498,6 +3498,13 @@ static zend_class_entry *zend_lazy_class_load(const zend_class_entry *pce)
 		} while (0)
 #endif
 
+/* A PHP# class header names a trait, or a name that does not exist. */
+static ZEND_COLD void zend_sharp_throw_not_inheritable(const zend_class_entry *ce, const zend_string *name)
+{
+	zend_throw_error(NULL, "Class %s cannot inherit from %s, which is neither a class nor an interface",
+		ZSTR_VAL(ce->name), ZSTR_VAL(name));
+}
+
 /* A PHP# class header lowers into the interface list, so the class's parent, if any, is the one entry of
  * `interfaces` that is not an interface. Moves it to the end, the order the inheritance cache then keys on,
  * and sets `parent_index` to its place in the header, or to the interface count when the header names no
@@ -3511,8 +3518,7 @@ static bool zend_sharp_find_parent(const zend_class_entry *ce, zend_class_entry 
 			continue;
 		}
 		if (iface->ce_flags & ZEND_ACC_TRAIT) {
-			zend_throw_error(NULL, "Class %s cannot inherit from %s, which is neither a class nor an interface",
-				ZSTR_VAL(ce->name), ZSTR_VAL(iface->name));
+			zend_sharp_throw_not_inheritable(ce, iface->name);
 			return false;
 		}
 		if (*parent_index != ce->num_interfaces) {
@@ -3637,8 +3643,7 @@ ZEND_API zend_class_entry *zend_do_link_class(zend_class_entry *ce, zend_string 
 				ZEND_FETCH_CLASS_ALLOW_NEARLY_LINKED | ZEND_FETCH_CLASS_EXCEPTION);
 			if (!iface) {
 				if ((ce->ce_flags & ZEND_ACC_PARENT_IN_INTERFACES) && !EG(exception)) {
-					zend_throw_error(NULL, "Class %s cannot inherit from %s, which is neither a class nor an interface",
-						ZSTR_VAL(ce->name), ZSTR_VAL(ce->interface_names[i].name));
+					zend_sharp_throw_not_inheritable(ce, ce->interface_names[i].name);
 				}
 				check_unrecoverable_load_failure(ce);
 				free_alloca(traits_and_interfaces, use_heap);
