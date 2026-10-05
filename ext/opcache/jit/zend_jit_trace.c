@@ -1839,7 +1839,7 @@ static zend_ssa *zend_jit_trace_build_tssa(zend_jit_trace_rec *trace_buffer, uin
 
 			switch (opline->opcode) {
 				case ZEND_ASSIGN_OP:
-					if (opline->extended_value == ZEND_POW
+					if ((opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_POW
 					 || opline->extended_value == ZEND_DIV) {
 						// TODO: check for division by zero ???
 						break;
@@ -1901,7 +1901,7 @@ static zend_ssa *zend_jit_trace_build_tssa(zend_jit_trace_rec *trace_buffer, uin
 					}
 					break;
 				case ZEND_ASSIGN_OBJ_OP:
-					if (opline->extended_value == ZEND_POW
+					if ((opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_POW
 					 || opline->extended_value == ZEND_DIV) {
 						// TODO: check for division by zero ???
 						break;

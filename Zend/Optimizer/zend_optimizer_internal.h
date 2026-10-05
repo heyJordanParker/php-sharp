@@ -80,7 +80,8 @@ static inline bool zend_optimizer_is_loop_var_free(const zend_op *opline) {
 
 /* The opcode get_binary_op() takes for a binary opline, marked when it follows PHP#'s rules. */
 static inline uint32_t zend_optimizer_binary_opcode(const zend_op *opline) {
-	if (opline->opcode == ZEND_ADD || opline->opcode == ZEND_SUB || opline->opcode == ZEND_MUL) {
+	if (opline->opcode == ZEND_ADD || opline->opcode == ZEND_SUB || opline->opcode == ZEND_MUL
+			|| opline->opcode == ZEND_POW) {
 		return opline->opcode | (opline->extended_value & ZEND_SHARP_OPERATOR);
 	}
 	return opline->opcode;
@@ -115,6 +116,8 @@ zend_class_entry *zend_optimizer_get_class_entry_from_op1(
 		const zend_script *script, const zend_op_array *op_array, const zend_op *opline);
 const zend_class_constant *zend_fetch_class_const_info(
 		const zend_script *script, const zend_op_array *op_array, const zend_op *opline, bool *is_prototype);
+const zend_property_info *zend_fetch_prop_info(
+		const zend_op_array *op_array, zend_ssa *ssa, const zend_op *opline, const zend_ssa_op *ssa_op);
 
 void zend_optimizer_pass1(zend_op_array *op_array, zend_optimizer_ctx *ctx);
 void zend_optimizer_pass3(zend_op_array *op_array, zend_optimizer_ctx *ctx);

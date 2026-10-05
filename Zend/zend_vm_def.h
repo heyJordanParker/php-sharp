@@ -399,7 +399,11 @@ ZEND_VM_COLD_CONSTCONST_HANDLER(12, ZEND_POW, CONST|TMPVAR|CV, CONST|TMPVAR|CV)
 	SAVE_OPLINE();
 	op1 = GET_OP1_ZVAL_PTR(BP_VAR_R);
 	op2 = GET_OP2_ZVAL_PTR(BP_VAR_R);
-	pow_function(EX_VAR(opline->result.var), op1, op2);
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		checked_pow_function(EX_VAR(opline->result.var), op1, op2);
+	} else {
+		pow_function(EX_VAR(opline->result.var), op1, op2);
+	}
 	FREE_OP1();
 	FREE_OP2();
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();

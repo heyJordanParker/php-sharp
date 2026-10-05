@@ -4139,12 +4139,17 @@ static void zend_jit_count_sharp_operator_vm_call(const zend_op *opline)
 {
 #if ZEND_DEBUG
 	switch (opline->opcode) {
-		case ZEND_ADD:
-		case ZEND_SUB:
-		case ZEND_MUL:
 		case ZEND_ASSIGN_OP:
 		case ZEND_ASSIGN_DIM_OP:
 		case ZEND_ASSIGN_OBJ_OP:
+			/* The JIT never compiles ** or **=, in PHP or PHP#, as ZEND_POW is not listed below. */
+			if ((opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_POW) {
+				break;
+			}
+			ZEND_FALLTHROUGH;
+		case ZEND_ADD:
+		case ZEND_SUB:
+		case ZEND_MUL:
 		case ZEND_PRE_INC:
 		case ZEND_PRE_DEC:
 		case ZEND_POST_INC:

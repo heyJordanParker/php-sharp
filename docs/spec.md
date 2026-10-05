@@ -113,7 +113,7 @@ public string slug => Str.slug(name);                           // computed
 ```csharp
 Map<string, Plan> cache = [];                                   // field
 public int views { get; private set; } = 0;                     // auto-property
-public List<Tag> tags { get; set; } = new List();
+public List<Tag> tags { get; set; } = new List<Tag>();
 ```
 
 A constant initial value is stored as the member's default. Any other value is set at the start of the constructor, in the order the members are declared.
@@ -180,9 +180,23 @@ public int total() => this.a + this.b;
 public T first<T>(List<T> items) { … }
 ```
 
+**A method can take any number of arguments** with PHP's `...`. The parameter is written `int ...values`, and `values` arrives as a `List<int>`. A call spreads an existing list with `...list`.
+
+```csharp
+public static int sum(int ...values) { … }
+
+Money.sum(1, 2, 3);
+Money.sum(...prices);    // spreads an existing list
+max(...prices);          // into plain PHP too
+```
+
+- `...` is allowed only on the last parameter.
+- A spread works the same into PHP# methods and into plain PHP.
+- An override of a plain PHP method declared with `...` declares that parameter with `...` too.
+
 ## 8. Functions
 
-There are no top-level functions. Shared code lives in static methods on a class. PHP's built-in functions, such as `strlen`, can still be called.
+There are no top-level functions. Shared code lives in static methods on a class. PHP's built-in functions, such as `strlen`, and plain PHP functions, such as Laravel's `now()`, can still be called. Section 29 covers their effects.
 
 ## 9. Constructors
 
@@ -210,6 +224,8 @@ A member declared on a parameter supports everything the same declaration suppor
 
 `lazy`, computed properties and `static` are not allowed on a parameter, because each of those has no incoming value to receive.
 
+**A constructor marked `required`** is one that `new Self(…)` can call on the class and on every subclass. Section 25 gives its rules.
+
 ### 9.1 Named constructors
 
 A class has one unnamed main constructor. Any other constructor has a name and passes control to the main one with `: this(…)`. Every creation is written `new Class…`.
@@ -221,6 +237,7 @@ public Artifact.fromJson(string json) : this(Manifest.parse(json)) { }
 let artifact = new Artifact.fromJson(json);
 ```
 
+- A constructor calls its base class's constructor with `: super(…)`, as in `public Order(Row row) : super(row) { }`.
 - A named constructor runs on the new object, so it can set get-only properties and `init` properties.
 - The dependency container always uses the main constructor.
 - There is no overloading by argument types.
@@ -232,9 +249,10 @@ A `struct` is a value type.
 
 - **Assigning or passing a struct shares it until someone writes to it.** The first write copies it if anything else still holds it, the same copy-on-write PHP uses for arrays.
 - **A struct changes only through its properties,** as in `point.x = 5`.
+- **A struct held in a property changes through that property's `set`,** as a collection does (section 12). `this.origin.x = 5` reads `origin`, changes the copy and writes it back.
 - **A method cannot change `this`.** A method that "changes" a struct returns a new one, usually built with `with`.
 - **A `readonly struct` cannot change at all.**
-- **`==` compares values, and `===` compares identity.**
+- **`==` compares values.** `===` works on classes only (section 19).
 - **A struct cannot inherit or be inherited,** but it can implement interfaces.
 - **A struct has no default value.** Every `required` property must be set when one is created.
 
@@ -260,14 +278,14 @@ b.x = 5;   // b is copied here, and a is unchanged
 
 - Reflection shows `PaginatedList<Order>`.
 - `page is PaginatedList<Order>` is checked while the code runs.
-- A call from plain PHP that passes the wrong type throws a `TypeError`.
+- A value of the wrong type throws a `TypeError` where it enters PHP# from plain PHP. Section 12 lists where a value enters.
 
 **Writing type arguments:**
 
 - **`new` always names them:** `new PaginatedList<Order>(…)`.
 - **A generic method call infers them** from the arguments it receives.
 
-**Written type arguments are carried at runtime, and inferred ones are known to the checker only.** "Written" covers `new`, an explicit call such as `Json.decode<WebhookPayload>(body)`, and a declared type such as a property, a parameter or `List<Line> lines = …`. Every type, inferred or written, is known while code is checked, as in TypeScript. The engine compiles one file at a time, so it cannot see an inferred argument. A value created from an inferred argument, such as `const lines = [lineA, lineB]`, has no element type at runtime, and passes any runtime check for its collection type, because the checker has already proven it.
+**Written type arguments are carried at runtime, and inferred ones are known to the checker only.** "Written" covers `new`, an explicit call such as `Json.decode<WebhookPayload>(body)`, and a declared type such as a property, a parameter or `List<Line> lines = …`. Every type, inferred or written, is known while code is checked, as in TypeScript. The engine compiles one file at a time, so it cannot see an inferred argument. A value created from an inferred argument has no type argument at runtime, and passes any runtime check for its generic type, because the checker has already proven it. A collection's elements are checked where it enters from plain PHP instead (section 12).
 
 **Declaring type parameters:**
 
@@ -303,10 +321,54 @@ There is no variance at the point of use, such as Java's `? extends T`.
 
 PHP# has three collection types: `List<T>`, `Map<TKey, TValue>` and `Set<T>`.
 
-- Their element types are reified, so a wrong element throws a `TypeError`.
-- They are shared references, as in C#, Java and TypeScript. Assigning or passing a collection shares it, and it is never copied implicitly.
-  - Structs stay copy on write, because a struct is small. A list can hold hundreds of items, so copying one by accident is expensive.
-- A class protects a collection it exposes with `readonly`, described in section 13.
+- They are values, as structs (section 10) and PHP's own arrays are. Assigning or passing a collection copies it only when one side later writes to it.
+- A `Map`'s keys are `int` or `string`, as a PHP array's keys are.
+
+```csharp
+let b = a;
+b.add(line);   // b is copied here, and a is unchanged
+```
+
+**A method that changes a collection it was given changes its own copy.** It returns the collection when the caller should see the change:
+
+```csharp
+public static List<Line> withShipping(List<Line> lines, Line shipping)
+{
+    lines.add(shipping);
+    return lines;
+}
+
+lines = Cart.withShipping(lines, shipping);   // the caller keeps the change
+```
+
+**A collection held in a property changes through the property's `set`.** `this.lines.add(line)` reads `lines`, changes the copy and writes it back through `set`. Code that cannot reach the `set` cannot change the collection, and a copy in a local changes only the local:
+
+```csharp
+public class Order
+{
+    public List<Line> lines { get; private set; } = [];
+    public void add(Line line) { this.lines.add(line); }   // writes lines back through its private set
+}
+
+order.lines.add(line);    // compile error outside Order: lines has a private set
+let copy = order.lines;
+copy.add(line);           // changes only copy
+```
+
+**Element types are checked where a collection enters PHP# from plain PHP,** not on every write. Plain PHP can change only its own copy, so a wrong element reaches PHP# code only by crossing in:
+
+- a plain PHP caller passes a collection to a PHP# method
+- a typed assignment takes a value that plain PHP returned
+- plain PHP writes a PHP# property
+
+At each crossing, the runtime checks every element once and throws a `TypeError` that names the element. A call from PHP# to PHP# checks nothing at runtime, because the checker proved it.
+
+`as` to a collection type checks every element too, wherever the value came from, and gives null if any element is wrong (section 21).
+
+```csharp
+List<Line> lines = legacy.lines();            // plain PHP returned it: every element is checked here
+lines = Cart.withShipping(lines, shipping);   // PHP# to PHP#: nothing is checked
+```
 
 **Literals:**
 
@@ -334,12 +396,13 @@ lines.map(l => l.name);
 lines.first(l => l.free);
 lines.any(l => l.free);
 lines.contains(line);
-lines.groupBy(l => l.product);
+lines.groupBy(l => l.product.id);
 lines.associateBy(l => l.id);
 lines.sortedBy(l => l.amount);
 ```
 
 - Methods that read return a new collection.
+- A method that takes a function has that function's effects (section 29), so `lines.map(l => l.name)` is pure.
 - Methods that change a collection change it in place:
 
 ```csharp
@@ -352,6 +415,8 @@ plans["pro"] = pro;
 plans.remove("pro");
 ```
 
+`contains`, `remove`, `indexOf` and `Set<T>` need `==` on the element type (section 19). Without it, they are a compile error.
+
 The complete method list is specified with the standard library.
 
 ## 13. `readonly`
@@ -363,9 +428,9 @@ The complete method list is specified with the standard library.
 
 ```csharp
 public void render(readonly Order order)          // the parameter
-public readonly List<Line> lines => items;        // the returned value
+public readonly Customer customer => this.owner;  // the returned value
 public Money totalIn(string currency) readonly    // this, inside the method
-public readonly List<Line> active() readonly      // both
+public readonly Customer buyer() readonly         // both
 ```
 
 **Through a `readonly` value, only reading is allowed:**
@@ -376,6 +441,10 @@ public readonly List<Line> active() readonly      // both
 Setters and unmarked methods are compile errors.
 
 **Readonly reaches everything read through it.** A property read through a `readonly` value is also `readonly`, so `order.lines` is readonly when `order` is.
+
+- `order.lines.add(line)` writes `lines` back through its `set` (section 12), so through a `readonly` `order` it is a compile error.
+- A copy in a local belongs to the local. After `let copy = order.lines`, `copy.add(line)` is allowed and leaves `order` unchanged.
+- The objects inside that copy stay readonly.
 
 **A `readonly` method is checked as if `this` were a `readonly` value.** Inside it, `this` cannot be written, and only other `readonly` methods can be called on it.
 
@@ -498,6 +567,17 @@ const currency = tenant.currency;
 new Money { amount: 500, currency }      // short for currency: currency
 ```
 
+**Any parameter can be named at a call,** including a call into plain PHP. An override keeps every parameter name of the method it overrides (section 22), so a name means the same parameter on every class.
+
+A named argument that matches no parameter is a compile error, also on a method that takes any number of arguments (section 7).
+
+```csharp
+import Illuminate.Support.Facades.Http;
+
+image.resize(width: 800, height: 600);
+Http.post(url, data: payload);           // plain PHP: Laravel's post(string $url, $data = [])
+```
+
 An object initializer runs after the constructor. It sets properties through their `set` or `init` accessors, so validation in those accessors runs. The checker requires every `required` property to be set.
 
 ## 17. Loops
@@ -545,18 +625,20 @@ PHP's backtick shell execution is removed. `shell_exec()` stays.
 
 ## 19. Equality, comparison and operators
 
-**Defaults, with no code:**
+**`==` exists only where the type declares it:**
 
-- **`==`** compares two objects property by property, as PHP does today.
-- **`===`** is true only for the same object. It cannot be overridden.
-- **`Set` and `Map`** hash keys from the same properties that `==` compares.
+- **Structs, enums, strings, numbers and collections** compare by value with `==`, with no code.
+- **A class** compares with `==` only if it or a parent declares `operator ==`. Otherwise `==` on it is a compile error.
+- **`Any?`** compared with `==` against a struct, enum, string, number or collection compares by value, and is false when the types differ.
+- **`===`** is true only for the same object. It works on classes only, and cannot be overridden.
+- **`Set`** hashes a struct, enum, string, number or collection by its value, and an object by its class's `hash()`.
 
-**Overrides,** declared once on a type and inherited by its subclasses:
+**Operators** are declared once on a type and inherited by its subclasses:
 
 ```csharp
 public abstract class DatabaseEntity
 {
-    public static bool operator ==(DatabaseEntity a, DatabaseEntity b) => a.id === b.id;
+    public static bool operator ==(DatabaseEntity a, DatabaseEntity b) => a.id == b.id;
     public int hash() => this.id;
 }
 
@@ -565,12 +647,16 @@ public class Money
     public static int operator <=>(Money a, Money b) { … }
     public static Money operator +(Money a, Money b) { … }
 }
+
+order == sameOrderLoadedAgain;   // Order inherits DatabaseEntity's ==, so this compares ids
+cart == otherCart;               // compile error: Cart declares no ==
+cart === cart;                   // true: the same object
 ```
 
 - **Overloadable operators:** `+ - * / % **`, unary `-`, `==` and `<=>`. No other operator can be overloaded.
 - **`!=`** is derived from `==`.
 - **`< > <= >=` and sorting** are derived from `<=>`.
-- **`==` and `hash()` go together:** overriding `==` without `hash()` is a compile error.
+- **`==` and `hash()` go together:** declaring `==` without `hash()` is a compile error, because `Set` needs both.
 
 **Interface names** have no `I` prefix and no `Interface` suffix: `Comparable`, `Linkable`.
 
@@ -696,8 +782,21 @@ if (entity is HasDesign) {
 }
 ```
 - **`as`** converts a value to a type, or gives null.
+- **`as` to a collection type checks every element,** wherever the value came from, and gives null if any element is wrong. So `as List<string> ?? throw …` throws on a wrong element.
 
 **Boolean operators:** `&&`, `||` and `!` exist only in expressions. PHP's `and`, `or` and `xor` operators are removed, so `=` can no longer bind before `and`.
+
+**Conditions are `bool`.** `if`, `while`, `do … while`, `for`, `? :`, `&&`, `||`, `!` and `match`'s `when` take a `bool`. Any other type is a compile error, so PHP's truthiness never applies:
+
+```csharp
+if (items.count()) { … }        // compile error: int is not bool
+if (items.count() > 0) { … }
+```
+
+**The ternary** `c ? a : b` gives `a` when `c` is true, and `b` otherwise.
+
+- PHP's two-operand `a ?: b` does not exist. `??` covers null (section 14.4).
+- `a ? b : c ? d : e` is a compile error, as in PHP 8. Parentheses say which nesting is meant: `a ? b : (c ? d : e)`.
 
 ## 22. Inheritance
 
@@ -727,6 +826,19 @@ These are compile errors:
 - a missing `override`
 - `override` when the parent has no such method
 - overriding a method that is not `virtual` or `abstract`
+- an override that renames a parameter of the method it overrides. The error names both names.
+
+```csharp
+public class Image
+{
+    public virtual void resize(int width, int height) { … }
+}
+
+public class Thumbnail : Image
+{
+    public override void resize(int w, int h) { … }   // compile error: w renames width, h renames height
+}
+```
 
 **Classes are open** unless marked `final`. `final override` stops an override chain at that class.
 
@@ -761,7 +873,7 @@ namespace App.Tenant.Store;
 import App.Shared.Schema.Entities.DatabaseEntity;
 ```
 
-**Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always the class. A full name inside code is a compile error that names the import to add.
+**Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always a class, or a plain PHP function that an `extern` declares (section 29). A full name inside code is a compile error that names the import to add.
 
 **A class cannot share its full name with a namespace.** `Store.sharp` beside a `Store/` folder is a compile error, because both would be `App.Tenant.Store`. Java's language specification has the same rule. `Store/Store.sharp` is allowed, because it is `App.Tenant.Store.Store`. The rule also covers plain PHP classes the checker sees.
 
@@ -769,7 +881,51 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 
 Built-in types are lowercase: `int`, `float`, `bool`, `string`, `void`, `null`. Every other type is capitalized: `List`, `Money`, `Any`.
 
+**A union type is written inline,** such as `int|string`, anywhere a type goes. It compiles to PHP's own union type.
+
+```csharp
+public User find(int|string id)
+{
+    if (id is int) { return User.byNumber(id); }
+    return User.bySlug(id);   // id is a string here
+}
+```
+
+- `is` narrows a union (section 21). After a branch that tested one type and returned, the code below it sees the types left.
+- Alternatives that belong to the domain stay enums (section 20) and sealed interfaces (section 20.1).
+
 **Integer overflow throws `ArithmeticError`** at the operation that overflows, as in Swift and C#'s `checked`. PHP's silent change to `float` does not happen in PHP# code.
+
+**`/` on two integers truncates toward zero,** as in C#. `/` with a `float` operand stays float division.
+
+```csharp
+7 / 2          // 3
+-7 / 2         // -3
+7 / 2.0        // 3.5
+```
+
+- Division by zero throws `DivisionByZeroError`.
+- `PHP_INT_MIN / -1` throws `ArithmeticError`, because the result overflows.
+- `/=` follows the same rules.
+- Like `+` (section 18), `/` chooses when it runs, from the types of its operands.
+
+**Converting values:**
+
+```csharp
+const qty = Int.parse(request.input("qty"));         // int, throws on "abc" and on "12abc"
+const maybe = Int.tryParse(request.input("qty"));    // int?, null on "abc"
+const cents = (int)(price * 100);                    // truncates toward zero
+const admin = user as Admin;                         // Admin?, null if user is not one
+const flag = request.input("flag") == "1";           // replaces (bool)
+```
+
+- `(int)` and `(float)` convert between `int` and `float`. `(string)` converts a number to a `string`.
+- `(int)` truncates a `float` toward zero. A `float` too large for an `int`, or NaN, throws `ArithmeticError`.
+- A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take `Any?`, and throw on anything that is not a string holding only a number, such as `"abc"`, `"12abc"` or `null`.
+- `Int.tryParse(s)` and `Float.tryParse(s)` take `Any?` too, and give null where `parse` throws.
+- A class or an interface narrows only with `as`, which gives null, or with `as … ?? throw` (section 21).
+- `(bool)`, `(array)` and `(object)` do not exist. Conditions are `bool` (section 21), so a comparison such as `request.input("flag") == "1"` replaces `(bool)`.
+- PHP's cast aliases `(integer)`, `(double)`, `(boolean)` and `(binary)` do not exist.
 
 **`Any` holds a value of any type except null. `Any?` also allows null.** A value of type `Any` must be checked with `is`, `as` or `match` before it can be used:
 
@@ -798,13 +954,33 @@ typeof(TItem);
 ```csharp
 public abstract class DatabaseEntity
 {
-    public static Self fromSchema(Any value, VerifiedUser caller) { return new Self(…); }
+    public required DatabaseEntity(Row row) { … }
+    public static Self fromSchema(Any value, VerifiedUser caller) { … return new Self(row); }
 }
 
 const order = Order.fromSchema(value, caller);   // typed as Order
 ```
 
 `Self` replaces the C# workaround of passing a class to itself, as in `class Order : Entity<Order>`.
+
+**`new Self(…)` compiles only when the class's constructor is marked `required`.** `Self` can be any subclass, so every class below it keeps a constructor that `new Self(…)` can call:
+
+- its leading parameters match the parameters of the `required` constructor
+- every parameter it adds has a default
+
+```csharp
+public class Order : DatabaseEntity
+{
+    public Order(Row row, Clock? clock = null) : super(row) { … }   // compiles: new Self(row) can call it
+}
+
+public class Invoice : DatabaseEntity
+{
+    public Invoice(Row row, Clock clock) : super(row) { … }         // compile error: new Self(row) cannot supply clock
+}
+```
+
+`required` is optional. A class that never writes `new Self(…)` never writes it.
 
 ## 26. Extension methods
 
@@ -816,7 +992,7 @@ public static class TextExtensions
     extension(string value)
     {
         public string slug() => Str.slug(value);
-        public bool isBlank => value.trim() === "";
+        public bool isBlank => value.trim() == "";
     }
 }
 
@@ -853,7 +1029,7 @@ The checker verifies two kinds of facts before code runs:
 - **Structure:** what code may depend on and do. Visibility and effects belong to the language. Code-shape and style rules stay plugins in the checker.
 - **Values:** facts the code guarantees, written as laws with hand-written proofs, as in Bend, Lean and Agda.
 
-Both kinds are written in Lean 4 and checked by Lean. A `.sharp` file holds only code.
+Both kinds are written in Lean 4 and checked by Lean. Laws and rules never sit in a `.sharp` file.
 
 **Laws hold only over pure code** (section 29). The checker translates pure PHP# code to Lean, and Lean's kernel checks the proofs. Bend's `--verdict` mode and Aeneas, which translates Rust to Lean, work the same way.
 
@@ -893,33 +1069,65 @@ theorem refundNeverExceedsPaid (paid refunded amount : Int)
 
 ## 29. Effects
 
-An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities, which Scala 3, Effekt and Pony also use.
+An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities, which Scala 3, Effekt and Pony also use. It also records every call into plain PHP, whose effect an `extern` declaration states.
 
-**Effects start only in `foreign` classes.** A `foreign` class is the only kind of class that may call PHP's built-in effect functions, such as PDO, curl, `file_put_contents`, `time()` and `random_int`, or call into plain PHP. The engine's stubs mark the built-in effect functions. A stub file can mark a plain PHP function pure, which makes it callable from anywhere.
+**Any PHP# code may call plain PHP,** including PHP's built-in functions and Laravel's facades, helpers and model methods. Most libraries are plain PHP, so this is how PHP# code uses them.
 
 ```csharp
-public foreign class Redis
+import Illuminate.Support.Facades.DB;
+
+public class OrderReport
 {
-    public string? get(string key) => Illuminate.Redis.get(key);
+    public int openCount() => DB.table("orders").where("status", "open").count();
 }
 ```
 
-The standard library ships `Database`, `Http`, `Files`, `Clock` and `Random`. A project declares its own `foreign` classes the same way.
+**The effect of plain PHP is declared once, with `extern`.** A `.sharp` declaration file names a plain PHP class, one of its methods or a function, and the effect after `uses`. A declaration holds no code.
 
-**Effects reach other code only through constructors:**
+```csharp
+// app/Stubs/Stripe.sharp
+namespace App.Stubs;
+
+import Stripe.StripeClient;
+
+extern StripeClient uses Http;
+```
+
+- **A declaration file is an ordinary `.sharp` file.** Its `namespace` line matches its path, as section 5 requires.
+- **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, or `extern Carbon.now uses Clock;` and `extern now uses Clock;` as PHP#'s package ships them.
+- **An `extern` that names no effect declares the class, method or function pure,** as in `extern BigDecimal;`.
+- **Each class, method or function has at most one `extern` declaration in the whole project.** A second one is a compile error, as declaring a class twice is.
+- **A call to plain PHP with an `extern` declaration has that effect,** so it fits a `uses` that names it: `StripeClient.charges().create(…)` fits `uses Http`.
+- **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
+- **PHP#'s Composer package ships the declarations for PHP's built-in functions and for Laravel.** Among PHP's built-ins, PDO is `Database`, curl is `Http`, `file_put_contents` and the other file functions are `Files`, `time()` is `Clock`, and `random_int` is `Random`. Every other built-in function is pure. In Laravel, Eloquent and `DB` are `Database`, the `Http` facade is `Http`, `Cache` is `Cache`, `Mail` is `Mail`, and `now()` and Carbon's clock reads are `Clock`.
+- **A project declares its own libraries,** conventionally in `app/Stubs`.
+
+**A `foreign` class turns an effect into an object** that code holds and passes on, such as a fake in tests. It is optional. Its methods call plain PHP, like any other code. Code that holds a `foreign` object has that effect by name, which `uses` can declare.
+
+```csharp
+import Illuminate.Support.Facades.Redis;
+
+public foreign class RedisStore
+{
+    public string? get(string key) => Redis.get(key);
+}
+```
+
+The standard library ships `Database`, `Http`, `Files`, `Clock`, `Random`, `Cache` and `Mail`. A project declares its own `foreign` classes the same way.
+
+**A `foreign` object reaches other code only through constructors:**
 
 ```csharp
 public class TenantCache
 {
-    public TenantCache(private Redis redis) { }
+    public TenantCache(private RedisStore store) { }
 }
 ```
 
-- **A class's effects** are the `foreign` classes it holds, directly or through its fields. The checker works them out from field and constructor types. Nothing is written down.
+- **A class's effects** are the `foreign` classes it holds, directly or through its fields, and the effects of the plain PHP its methods call. The checker works them out from field and constructor types and from method bodies. Nothing is written down.
 - **A `foreign` object** is created once, where the app starts, and handed down through constructors. Creating one anywhere else, or storing one in a static, is a compile error.
-- **No static path reaches an effect.** `DB::table()`, `Order::query()` and `Http::get()` do not exist in PHP# code.
 
-**Pure code** reaches no `foreign` object and changes nothing it was given (section 13). Getters must be pure. Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes.
+**Pure code** reaches no `foreign` object, calls no plain PHP unless an `extern` declares it pure, and changes nothing it was given (section 13). Getters must be pure. Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
 
 **Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types. Every implementation is held to what the declaration allows:
 
@@ -934,7 +1142,47 @@ Function<Money(Offer)> priceOf                       // a pure function value
 Function<Charge(Cart)> uses Http charge              // may reach Http
 ```
 
-**Code with a body never writes `uses`.** Its effects enter through the constructor, and its body shows what it uses. The checker works out each method's effects, and the editor displays them.
+An implementation that calls plain PHP fits the declaration only through an `extern`:
+
+```csharp
+public interface AudienceSync
+{
+    void sync(Contact contact) uses Http;
+}
+
+public class StripeGateway : PaymentGateway
+{
+    public Money quote(Cart cart) { … }
+    public Charge charge(Cart cart) => StripeClient.charges().create(…);   // fits: StripeClient is declared Http
+}
+
+public class MailchimpSync : AudienceSync
+{
+    public void sync(Contact contact) { Mailchimp.lists().addListMember(…); }   // compile error
+}
+```
+
+```text
+MailchimpSync.sync calls Mailchimp, which has no extern declaration, so `uses Http` cannot accept it.
+Declare its effect in a .sharp file, such as `extern Mailchimp uses Http;`.
+```
+
+**A method that takes a function can have that function's effects.** Its declaration writes `uses f`, where `f` is one of its function-typed parameters, with or without a body. At each call, the method has its body's own effects plus the effects of the function passed as `f`. Code that calls it writes nothing.
+
+```csharp
+// in the standard library's List<T>
+public List<TResult> map<TResult>(Function<TResult(T)> f) uses f;
+
+carts.map(c => c.total);                             // pure
+carts.map(c => this.gateway.charge(c));              // has Http
+
+// a method with a body: Http from this.gateway, plus the effects of prepare
+public Charge charge(Cart cart, Function<Cart(Cart)> prepare) uses prepare => this.gateway.charge(prepare(cart));
+```
+
+The standard library's collection methods (section 12) are declared this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
+
+**Code with a body writes no `uses` except `uses f`.** Its effects enter through the constructor, through the plain PHP it calls and through each function its `uses f` names, and its body and declaration show all three. The checker works out each method's effects, and the editor displays them.
 
 ## 30. Tuples
 

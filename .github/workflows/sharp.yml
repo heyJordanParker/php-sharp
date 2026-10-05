@@ -40,10 +40,18 @@ jobs:
             sharp/build/cargo
             sharp/build/rustup
           key: SHARP_LINUX_RUST-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock') }}
+      - name: Pinned Mago commit
+        id: mago
+        run: sed -n 's/^mago-sharp-bridge = { git = ".*", rev = "\(.*\)" }$/rev=\1/p' ext/sharp/Cargo.toml >> "$GITHUB_OUTPUT"
+      - name: Mago cache
+        uses: actions/cache@v5
+        with:
+          path: sharp/build/*/mago
+          key: SHARP_LINUX_MAGO-${{ steps.mago.outputs.rev }}
       - name: Build
         run: sharp/bin/build --linux
       - name: Test PHP#
-        run: sharp/bin/test --linux --opcache
+        run: sharp/bin/test --linux --opcache --repeat --differential
       - name: Test upstream
         run: sharp/bin/test --linux --upstream --opcache
       - name: Verify generated files are up to date
@@ -79,10 +87,18 @@ jobs:
         uses: ./.github/actions/ccache
         with:
           name: SHARP_MACOS
+      - name: Pinned Mago commit
+        id: mago
+        run: sed -n 's/^mago-sharp-bridge = { git = ".*", rev = "\(.*\)" }$/rev=\1/p' ext/sharp/Cargo.toml >> "$GITHUB_OUTPUT"
+      - name: Mago cache
+        uses: actions/cache@v5
+        with:
+          path: sharp/build/*/mago
+          key: SHARP_MACOS_MAGO-${{ steps.mago.outputs.rev }}
       - name: Build
         run: sharp/bin/build
       - name: Test PHP#
-        run: sharp/bin/test --opcache
+        run: sharp/bin/test --opcache --repeat --differential
       - name: Test upstream
         run: sharp/bin/test --upstream --opcache
   IMAGE:

@@ -21,6 +21,7 @@ $fixtures = [
     'ControlFlow' => null,
     'Order' => null,
     'Product' => null,
+    'Expressions' => null,
     'Shapes' => null,
     'Members' => 'Registry.inc',
     'Site' => 'SiteLib.inc',
@@ -52,6 +53,7 @@ Nulls: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 ControlFlow: same opcodes and lines in 6 op arrays, same signatures in 1 classes
 Order: same opcodes and lines in 4 op arrays, same signatures in 2 classes
 Product: same opcodes and lines in 3 op arrays, same signatures in 1 classes
+Expressions: same opcodes and lines in 6 op arrays, same signatures in 1 classes
 Shapes: same opcodes and lines in 5 op arrays, same signatures in 2 classes
 Members: different opcodes and lines in 10 op arrays, same signatures in 1 classes
   .sharp L0042 0000 T0 = FETCH_CLASS_CONSTANT string("Lib\\Registry") string("label")
