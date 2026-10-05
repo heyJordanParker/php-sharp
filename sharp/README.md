@@ -60,6 +60,6 @@ brew install autoconf bison re2c pkgconf icu4c libiconv libpq libsodium libzip o
 
 `.github/workflows/sharp.yml` builds and tests on Linux in the `sharp/docker/` image and on `macos-latest`, for every push and pull request to `master` that changes more than documentation. The Linux job also fails when a generated file differs from the committed one. That step copies `.github/actions/verify-generated-files/action.yml`, so compare the two on every rebase.
 
-Pushing a `v*` tag runs both jobs, and when they pass, the `IMAGE` job publishes the runtime image as `ghcr.io/heyjordanparker/php-sharp:<version>` for `linux/amd64` and `linux/arm64`. Each platform builds on its own native runner through `docker/github-builder`.
+Pushing a full version tag, such as `v0.1.0`, runs both jobs, and when they pass, the `IMAGE` job publishes the runtime image as `ghcr.io/heyjordanparker/php-sharp:<version>`, never as `latest`, for `linux/amd64` and `linux/arm64`. Each platform builds on its own native runner through `docker/github-builder`.
 
 Upstream's `Test` and `Windows builds` workflows are disabled on the fork with `gh workflow disable`.
