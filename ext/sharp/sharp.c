@@ -76,6 +76,10 @@ static zend_ast_kind sharp_zend_kind(enum sharp_kind kind)
 		SHARP_KIND(NAME_LIST);
 		SHARP_KIND(CALL);
 		SHARP_KIND(ENCAPS_LIST);
+		SHARP_KIND(ARRAY);
+		SHARP_KIND(ARRAY_ELEM);
+		SHARP_KIND(DIM);
+		SHARP_KIND(TYPE);
 	}
 
 	ZEND_UNREACHABLE();
