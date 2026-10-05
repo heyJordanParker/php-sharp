@@ -182,7 +182,7 @@ public T first<T>(List<T> items) { … }
 
 ## 8. Functions
 
-There are no top-level functions. Shared code lives in static methods on a class. PHP's built-in functions, such as `strlen`, can still be called.
+There are no top-level functions. Shared code lives in static methods on a class. PHP's built-in functions, such as `strlen`, and plain PHP functions, such as Laravel's `now()`, can still be called. Section 29 covers their effects.
 
 ## 9. Constructors
 
@@ -699,6 +699,18 @@ if (entity is HasDesign) {
 
 **Boolean operators:** `&&`, `||` and `!` exist only in expressions. PHP's `and`, `or` and `xor` operators are removed, so `=` can no longer bind before `and`.
 
+**Conditions are `bool`.** `if`, `while`, `do … while`, `for`, `? :`, `&&`, `||`, `!` and `match`'s `when` take a `bool`. Any other type is a compile error, so PHP's truthiness never applies:
+
+```csharp
+if (items.count()) { … }        // compile error: int is not bool
+if (items.count() > 0) { … }
+```
+
+**The ternary** `c ? a : b` gives `a` when `c` is true, and `b` otherwise.
+
+- PHP's two-operand `a ?: b` does not exist. `??` covers null (section 14.4).
+- `a ? b : c ? d : e` is a compile error, as in PHP 8. Parentheses say which nesting is meant: `a ? b : (c ? d : e)`.
+
 ## 22. Inheritance
 
 The class header lists the base class and interfaces after `:`. The checker knows which name is the class.
@@ -770,6 +782,19 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 Built-in types are lowercase: `int`, `float`, `bool`, `string`, `void`, `null`. Every other type is capitalized: `List`, `Money`, `Any`.
 
 **Integer overflow throws `ArithmeticError`** at the operation that overflows, as in Swift and C#'s `checked`. PHP's silent change to `float` does not happen in PHP# code.
+
+**`/` on two integers truncates toward zero,** as in C#. `/` with a `float` operand stays float division.
+
+```csharp
+7 / 2          // 3
+-7 / 2         // -3
+7 / 2.0        // 3.5
+```
+
+- Division by zero throws `DivisionByZeroError`.
+- `PHP_INT_MIN / -1` throws `ArithmeticError`, because the result overflows.
+- `/=` follows the same rules.
+- Like `+` (section 18), `/` chooses when it runs, from the types of its operands.
 
 **`Any` holds a value of any type except null. `Any?` also allows null.** A value of type `Any` must be checked with `is`, `as` or `match` before it can be used:
 
@@ -893,33 +918,48 @@ theorem refundNeverExceedsPaid (paid refunded amount : Int)
 
 ## 29. Effects
 
-An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities, which Scala 3, Effekt and Pony also use.
+An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities, which Scala 3, Effekt and Pony also use. It also records every call into plain PHP.
 
-**Effects start only in `foreign` classes.** A `foreign` class is the only kind of class that may call PHP's built-in effect functions, such as PDO, curl, `file_put_contents`, `time()` and `random_int`, or call into plain PHP. The engine's stubs mark the built-in effect functions. A stub file can mark a plain PHP function pure, which makes it callable from anywhere.
+**Any PHP# code may call plain PHP,** including PHP's built-in functions and Laravel's facades, helpers and model methods. Most libraries are plain PHP, so this is how PHP# code uses them.
 
 ```csharp
-public foreign class Redis
+import Illuminate.Support.Facades.DB;
+
+public class OrderReport
 {
-    public string? get(string key) => Illuminate.Redis.get(key);
+    public int openCount() => DB.table("orders").where("status", "open").count();
+}
+```
+
+- **The checker records a call into plain PHP as an effect,** so the method that makes it is never pure and never takes part in laws (section 28).
+- **Stubs mark what is pure.** The engine's stubs mark PHP's built-in effect functions, such as PDO, curl, `file_put_contents`, `time()` and `random_int`. Every other built-in function is pure. A plain PHP function or method is an effect unless a stub file marks it pure. A call to something pure is not an effect, so pure code can make it.
+
+**A `foreign` class turns an effect into an object** that code holds and passes on. Its methods call plain PHP, like any other code. Code that holds a `foreign` object has that effect by name, which `uses` can declare.
+
+```csharp
+import Illuminate.Support.Facades.Redis;
+
+public foreign class Cache
+{
+    public string? get(string key) => Redis.get(key);
 }
 ```
 
 The standard library ships `Database`, `Http`, `Files`, `Clock` and `Random`. A project declares its own `foreign` classes the same way.
 
-**Effects reach other code only through constructors:**
+**A `foreign` object reaches other code only through constructors:**
 
 ```csharp
 public class TenantCache
 {
-    public TenantCache(private Redis redis) { }
+    public TenantCache(private Cache cache) { }
 }
 ```
 
-- **A class's effects** are the `foreign` classes it holds, directly or through its fields. The checker works them out from field and constructor types. Nothing is written down.
+- **A class's effects** are the `foreign` classes it holds, directly or through its fields, and the plain PHP its methods call. The checker works them out from field and constructor types and from method bodies. Nothing is written down.
 - **A `foreign` object** is created once, where the app starts, and handed down through constructors. Creating one anywhere else, or storing one in a static, is a compile error.
-- **No static path reaches an effect.** `DB::table()`, `Order::query()` and `Http::get()` do not exist in PHP# code.
 
-**Pure code** reaches no `foreign` object and changes nothing it was given (section 13). Getters must be pure. Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes.
+**Pure code** reaches no `foreign` object, calls no plain PHP that is not marked pure, and changes nothing it was given (section 13). Getters must be pure. Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
 
 **Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types. Every implementation is held to what the declaration allows:
 
@@ -934,7 +974,7 @@ Function<Money(Offer)> priceOf                       // a pure function value
 Function<Charge(Cart)> uses Http charge              // may reach Http
 ```
 
-**Code with a body never writes `uses`.** Its effects enter through the constructor, and its body shows what it uses. The checker works out each method's effects, and the editor displays them.
+**Code with a body never writes `uses`.** Its effects enter through the constructor and through the plain PHP it calls, and its body shows both. The checker works out each method's effects, and the editor displays them.
 
 ## 30. Tuples
 
