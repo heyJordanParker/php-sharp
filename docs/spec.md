@@ -616,7 +616,7 @@ public Customer? current() { return this.customer; } // compile error: current n
 
 ## 15. Events
 
-The language wires events. An app adds attributes, such as Dent's `[Retry]`, for its own policy.
+The language wires events. An app adds its own attributes, such as `[Retry]`, for its policy.
 
 ```csharp
 public class Order
@@ -647,7 +647,7 @@ public void deliver(OrderPaid e) on Order.paid { … }    // subscribes this met
 **The dispatcher:**
 
 - **By default,** it calls each handler immediately, in the same request.
-- **An app can replace it** with its own, registered once at boot. Dent registers its durable bus, which builds listeners through Laravel's container, queues them and applies `[Retry]`.
+- **An app can replace it** with its own, registered once at boot. An app's durable event bus, for example, builds listeners through its framework's container, queues them and applies `[Retry]`.
 
 **Open:** the API for registering a dispatcher. It is specified with the standard library.
 
@@ -1195,7 +1195,7 @@ Both kinds are written in Lean 4 and checked by Lean. Laws and rules never sit i
 
 **Laws hold only over pure code** (section 29). The checker translates pure PHP# code to Lean, and Lean's kernel checks the proofs. Bend's `--verdict` mode and Aeneas, which translates Rust to Lean, work the same way.
 
-**Structure rules are checks that Lean runs.** The checker loads the code's structure, meaning its namespaces, imports and references, as data, and Lean runs each rule over it like a function. A broken rule reports every offending line. Laws, which cover every possible value, stay theorems proved by Lean's kernel. A structure rule only scans the facts that exist, where a kernel proof gives the same answer far more slowly. Structure rules replace architecture linters such as Dent's Mago `Module` rule, the way CodeQL queries and Mathlib's `#lint` checks do.
+**Structure rules are checks that Lean runs.** The checker loads the code's structure, meaning its namespaces, imports and references, as data, and Lean runs each rule over it like a function. A broken rule reports every offending line. Laws, which cover every possible value, stay theorems proved by Lean's kernel. A structure rule only scans the facts that exist, where a kernel proof gives the same answer far more slowly. Structure rules replace architecture linters such as a Mago module-boundary rule, the way CodeQL queries and Mathlib's `#lint` checks do.
 
 ### 28.1 Rules files
 
