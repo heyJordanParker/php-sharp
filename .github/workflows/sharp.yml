@@ -1,24 +1,11 @@
 name: PHP#
 on:
   push:
-    paths-ignore: &ignore_paths
-      - .circleci/**
-      - .github/CODEOWNERS
-      - .github/ISSUE_TEMPLATE/**
-      - '**/*.md'
-      - '**/*.rst'
-      - docs/**
-      - EXTENSIONS
-      - LICENSE
-      - NEWS
-      - UPGRADING
-      - UPGRADING.INTERNALS
     branches:
       - master
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+*'
   pull_request:
-    paths-ignore: *ignore_paths
     branches:
       - master
 permissions:
@@ -27,12 +14,45 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
   cancel-in-progress: true
 jobs:
+  # LINUX and MACOS are required checks, so the workflow always runs and they skip a change
+  # to documentation alone. GitHub counts a job skipped by its `if` as passing.
+  CHANGES:
+    runs-on: ubuntu-24.04
+    outputs:
+      code: ${{ github.ref_type == 'tag' || steps.diff.outputs.code }}
+    steps:
+      - name: git checkout
+        if: github.ref_type != 'tag'
+        uses: actions/checkout@v6
+      - name: Find changes outside documentation
+        id: diff
+        if: github.ref_type != 'tag'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          git fetch --depth=1 origin "$BASE"
+          git diff --name-only --no-renames "$BASE" HEAD > "$RUNNER_TEMP/changed"
+          while read -r file; do
+            case "$file" in
+              .circleci/*|.github/CODEOWNERS|.github/ISSUE_TEMPLATE/*|*.md|*.rst|docs/*) ;;
+              EXTENSIONS|LICENSE|NEWS|UPGRADING|UPGRADING.INTERNALS) ;;
+              *) echo code=true >> "$GITHUB_OUTPUT"; break ;;
+            esac
+          done < "$RUNNER_TEMP/changed"
   LINUX:
+    needs: CHANGES
+    if: needs.CHANGES.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - name: git checkout
         uses: actions/checkout@v6
+      - name: Keep local sources out of Cargo.lock
+        run: |
+          if git grep -nE '(path|git)\+file://' -- '*Cargo.lock'; then
+            echo "::error::A committed Cargo.lock names a local source. Keep the [patch] in the untracked ext/sharp/.cargo/config.toml."
+            exit 1
+          fi
       - name: Rust cache
         uses: actions/cache@v5
         with:
@@ -65,6 +85,8 @@ jobs:
           # Use the -a flag for a bug in git 2.46.0, which doesn't consider changed -diff files.
           git add . -N && git diff -a --exit-code
   MACOS:
+    needs: CHANGES
+    if: needs.CHANGES.outputs.code == 'true'
     runs-on: macos-latest
     timeout-minutes: 60
     steps:
