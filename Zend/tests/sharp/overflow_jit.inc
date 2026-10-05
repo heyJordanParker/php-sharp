@@ -118,5 +118,51 @@ for ($i = 0; $i < 100; $i++) {
 attempt(fn () => PhpOverflow::add(PHP_INT_MAX, 1));
 attempt(fn () => PhpOverflow::preInc(PHP_INT_MAX));
 
+final class Kept
+{
+    public function __destruct()
+    {
+        echo "Kept destroyed\n";
+    }
+}
+
+function leaveInSecondSlot($a, $value) { return $value; }
+function leaveInThirdSlot($a, $b, $value) { return $value; }
+
+$kept = new Kept();
+
+leaveInThirdSlot(1, 2, $kept);
+try {
+    Overflow::add(PHP_INT_MAX, 1);
+} catch (\ArithmeticError $e) {
+    echo 'add: ', $e->getMessage(), "\n";
+}
+
+leaveInThirdSlot(1, 2, $kept);
+try {
+    Overflow::mul(PHP_INT_MAX, 2);
+} catch (\ArithmeticError $e) {
+    echo 'mul: ', $e->getMessage(), "\n";
+}
+
+leaveInThirdSlot(1, 2, $kept);
+try {
+    Overflow::preInc(PHP_INT_MAX);
+} catch (\ArithmeticError $e) {
+    echo 'preInc: ', $e->getMessage(), "\n";
+}
+
+Overflow::decLoose(new LooseCounter(1));
+$loose = new LooseCounter(PHP_INT_MIN);
+leaveInSecondSlot(1, $kept);
+try {
+    Overflow::decLoose($loose);
+} catch (\ArithmeticError $e) {
+    echo 'decLoose: ', $e->getMessage(), "\n";
+}
+
+echo "Kept alive\n";
+unset($kept);
+
 // The JIT compiled every PHP# operator itself, with no call to a VM handler.
 var_dump(opcache_get_status()['jit']['sharp_operator_vm_calls']);
