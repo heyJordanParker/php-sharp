@@ -4,4 +4,10 @@
 extern zend_module_entry sharp_module_entry;
 #define phpext_sharp_ptr &sharp_module_entry
 
+/* The VM makes the Sharp\Collection receiver of a PHP# method call on an array with these, see
+ * ZEND_SHARP_OPERATOR in Zend/zend_compile.h. */
+void sharp_collection_of_local(zval *result, zval *local);
+void sharp_collection_of_value(zval *result, zval *value);
+void sharp_collection_of_property(zval *result, zend_object *object, zend_string *name, void **cache_slot);
+
 #endif

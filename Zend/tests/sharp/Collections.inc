@@ -9,11 +9,11 @@ class Cart
 
     public function fill(array $extra): int
     {
-        $all = [new \Demo\Item("tea", 3), $extra[0]];
-        $this->items = $all;
+        $this->items = [new \Demo\Item("tea", 3)];
+        $this->items->add($extra[0]); // PHP# makes the array a Sharp\Collection
         $this->counts["items"] = \count($this->items);
         $this->counts["extra"] = \count($extra);
-        $total = $all[0]->cents;
+        $total = $this->items[0]->cents;
         foreach ($this->items as $item) {
             $total += $item->cents;
         }
@@ -22,12 +22,16 @@ class Cart
                 $total += $size * 10;
             }
         }
-        return $total + \SplFixedArray::fromArray($this->prices())->getSize();
+        return $total + ((object) \SplFixedArray::fromArray($this->prices()))->getSize();
     }
 
     public function prices(): array
     {
-        return \array_column($this->items, "cents");
+        $prices = [];
+        foreach ($this->items as $item) {
+            ((object) $prices)->add($item->cents); // PHP# makes the array a Sharp\Collection
+        }
+        return $prices;
     }
 
     public function bump(string $name): int

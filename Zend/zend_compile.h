@@ -1108,7 +1108,11 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  * increment and decrement opcodes, where it sits above the cache slot. ZEND_SHARP_OPERATOR also
  * marks a PHP# index read, which ZEND_DIM_SHARP sets on ZEND_AST_DIM, in the extended_value of
  * ZEND_FETCH_DIM_R and ZEND_FETCH_DIM_FUNC_ARG, next to the ZEND_FETCH_DIM_* flags: a missing key
- * throws OutOfRangeException instead of PHP's warning. */
+ * throws OutOfRangeException instead of PHP's warning. It also marks the receiver of a PHP#
+ * method call, which ZEND_METHOD_CALL_SHARP sets on ZEND_AST_METHOD_CALL: a ZEND_FETCH_OBJ_R of a
+ * property, where it sits above the cache slot, or a ZEND_CAST to IS_OBJECT of anything else,
+ * where it sits next to the type. Either one turns an array into a Sharp\Collection that changes
+ * the array where it lives, and leaves any other value as it is. */
 #define ZEND_SHARP_OPERATOR_SYNTAX	(1<<15)
 #define ZEND_SHARP_OPERATOR	(1<<30)
 
@@ -1147,6 +1151,7 @@ static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 
 #define ZEND_DIM_IS					(1 << 0) /* isset fetch needed for null coalesce. Set in zend_compile.c for ZEND_AST_DIM nested within ZEND_AST_COALESCE. */
 #define ZEND_DIM_SHARP				(1 << 1) /* PHP# index read, see ZEND_SHARP_OPERATOR. Set in ext/sharp for every ZEND_AST_DIM. */
+#define ZEND_METHOD_CALL_SHARP		(1 << 0) /* PHP# method call, see ZEND_SHARP_OPERATOR. Set in ext/sharp for every ZEND_AST_METHOD_CALL and ZEND_AST_NULLSAFE_METHOD_CALL. */
 #define ZEND_ALT_CASE_SYNTAX		(1 << 1) /* deprecated switch case terminated by semicolon */
 
 /* Attributes for ${} encaps var in strings (ZEND_AST_DIM or ZEND_AST_VAR node) */

@@ -2653,6 +2653,38 @@ static zend_always_inline zend_result _zend_update_type_info(
 			UPDATE_SSA_TYPE(MAY_BE_FALSE|MAY_BE_TRUE, ssa_op->result_def);
 			break;
 		case ZEND_CAST:
+			if (opline->extended_value == (IS_OBJECT | ZEND_SHARP_OPERATOR)) {
+				/* The receiver of a PHP# method call: an array becomes a Sharp\Collection, whose
+				 * method may change the array in the variable, and any other value passes through. */
+				if (ssa_op->op1_def >= 0) {
+					tmp = t1;
+					if (t1 & MAY_BE_ARRAY) {
+						tmp |= MAY_BE_RC1 | MAY_BE_RCN | MAY_BE_ARRAY_EMPTY | MAY_BE_ARRAY_KEY_ANY | MAY_BE_ARRAY_OF_ANY;
+					}
+					if (t1 & MAY_BE_OBJECT) {
+						tmp |= MAY_BE_RCN;
+					}
+					UPDATE_SSA_TYPE(tmp, ssa_op->op1_def);
+					COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->op1_def);
+				}
+				tmp = t1 & (MAY_BE_ANY - MAY_BE_ARRAY);
+				if (t1 & MAY_BE_UNDEF) {
+					tmp |= MAY_BE_NULL;
+				}
+				if (t1 & MAY_BE_ARRAY) {
+					tmp |= MAY_BE_OBJECT;
+				}
+				if (tmp & (MAY_BE_STRING|MAY_BE_OBJECT|MAY_BE_RESOURCE)) {
+					tmp |= MAY_BE_RC1 | MAY_BE_RCN;
+				}
+				UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
+				if (t1 & MAY_BE_ARRAY) {
+					UPDATE_SSA_OBJ_TYPE(NULL, 0, ssa_op->result_def);
+				} else {
+					COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->result_def);
+				}
+				break;
+			}
 			if (ssa_op->op1_def >= 0) {
 				tmp = t1;
 				if ((t1 & (MAY_BE_ARRAY|MAY_BE_OBJECT)) &&
@@ -3821,6 +3853,13 @@ static zend_always_inline zend_result _zend_update_type_info(
 							tmp |= MAY_BE_NULL;
 						}
 					}
+				}
+				if (opline->opcode == ZEND_FETCH_OBJ_R
+						&& (opline->extended_value & ZEND_SHARP_OPERATOR)
+						&& (tmp & MAY_BE_ARRAY)) {
+					/* The receiver of a PHP# method call: an array becomes a Sharp\Collection. */
+					tmp |= MAY_BE_OBJECT | MAY_BE_RC1 | MAY_BE_RCN;
+					ce = NULL;
 				}
 				UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
 				if (ce) {
@@ -5314,7 +5353,7 @@ ZEND_API bool zend_may_throw_ex(const zend_op *opline, const zend_ssa_op *ssa_op
 		case ZEND_FETCH_DIM_IS:
 			return (t1 & MAY_BE_OBJECT) || (t2 & (MAY_BE_DOUBLE|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE));
 		case ZEND_CAST:
-			switch (opline->extended_value) {
+			switch (opline->extended_value & ~ZEND_SHARP_OPERATOR) {
 				case IS_LONG:
 					return (t1 & (MAY_BE_DOUBLE|MAY_BE_STRING|MAY_BE_OBJECT));
 				case IS_DOUBLE:

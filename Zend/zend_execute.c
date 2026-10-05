@@ -46,6 +46,7 @@
 #include "zend_attributes.h"
 #include "Optimizer/zend_func_info.h"
 #include "ext/spl/spl_exceptions.h"
+#include "ext/sharp/php_sharp.h"
 
 /* Virtual current working directory support */
 #include "zend_virtual_cwd.h"

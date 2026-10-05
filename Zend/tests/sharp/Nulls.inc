@@ -37,7 +37,7 @@ class Nulls
 
     public function through(?\Demo\Nulls $other, ?int $value): ?int
     {
-        return $other?->same($value) ?? $other?->itself()?->must(7);
+        return ((object) $other)?->same($value) ?? ((object) $other)?->must(7);
     }
 
     public function size(?\Demo\Box $box): ?int

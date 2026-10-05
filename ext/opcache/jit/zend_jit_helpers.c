@@ -2005,7 +2005,7 @@ static void ZEND_FASTCALL zend_jit_fetch_obj_r_slow(zend_object *zobj)
 	const zend_op *opline = EX(opline);
 	zend_string *name = Z_STR_P(RT_CONSTANT(opline, opline->op2));
 	zval *result = EX_VAR(opline->result.var);
-	void **cache_slot = CACHE_ADDR(opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS);
+	void **cache_slot = CACHE_ADDR(opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR));
 
 	retval = zobj->handlers->read_property(zobj, name, BP_VAR_R, cache_slot, result);
 	if (retval != result) {
@@ -2023,7 +2023,7 @@ static void ZEND_FASTCALL zend_jit_fetch_obj_r_dynamic(zend_object *zobj, intptr
 		const zend_op *opline = EX(opline);
 		zend_string *name = Z_STR_P(RT_CONSTANT(opline, opline->op2));
 		zval *result = EX_VAR(opline->result.var);
-		void **cache_slot = CACHE_ADDR(opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS);
+		void **cache_slot = CACHE_ADDR(opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR));
 
 		if (!IS_UNKNOWN_DYNAMIC_PROPERTY_OFFSET(prop_offset)) {
 			intptr_t idx = ZEND_DECODE_DYN_PROP_OFFSET(prop_offset);
@@ -2117,7 +2117,7 @@ static zval* ZEND_FASTCALL zend_jit_fetch_obj_r_slow_ex(zend_object *zobj)
 	const zend_op *opline = EX(opline);
 	zend_string *name = Z_STR_P(RT_CONSTANT(opline, opline->op2));
 	zval *result = EX_VAR(opline->result.var);
-	void **cache_slot = CACHE_ADDR(opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS);
+	void **cache_slot = CACHE_ADDR(opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR));
 
 	retval = zobj->handlers->read_property(zobj, name, BP_VAR_R, cache_slot, result);
 	if (UNEXPECTED(Z_ISREF_P(retval))) {
@@ -2138,7 +2138,7 @@ static zval* ZEND_FASTCALL zend_jit_fetch_obj_r_dynamic_ex(zend_object *zobj, in
 		zend_execute_data *execute_data = EG(current_execute_data);
 		const zend_op *opline = EX(opline);
 		zend_string *name = Z_STR_P(RT_CONSTANT(opline, opline->op2));
-		void **cache_slot = CACHE_ADDR(opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS);
+		void **cache_slot = CACHE_ADDR(opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR));
 
 		if (!IS_UNKNOWN_DYNAMIC_PROPERTY_OFFSET(prop_offset)) {
 			intptr_t idx = ZEND_DECODE_DYN_PROP_OFFSET(prop_offset);

@@ -9,11 +9,11 @@ class Cart
 
     public int fill(List<Item> extra)
     {
-        List<Item> all = [new Item("tea", 3), extra[0]];
-        this.items = all;
+        this.items = [new Item("tea", 3)];
+        this.items.add(extra[0]);
         this.counts["items"] = count(this.items);
         this.counts["extra"] = count(extra);
-        let total = all[0].cents;
+        let total = this.items[0].cents;
         for (const item of this.items) {
             total += item.cents;
         }
@@ -27,7 +27,11 @@ class Cart
 
     public List<int> prices()
     {
-        return array_column(this.items, "cents");
+        List<int> prices = [];
+        for (const item of this.items) {
+            prices.add(item.cents);
+        }
+        return prices;
     }
 
     public int bump(string name)

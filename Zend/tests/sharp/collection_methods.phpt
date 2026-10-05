@@ -1,0 +1,90 @@
+--TEST--
+PHP# collection methods change a List or Map where it lives, and leave objects to their own methods
+--FILE--
+<?php
+require __DIR__ . '/collection_methods.inc';
+?>
+--EXPECT--
+array(3) {
+  [0]=>
+  int(9)
+  [1]=>
+  int(2)
+  [2]=>
+  int(4)
+}
+array(1) {
+  [5]=>
+  int(7)
+}
+int(2)
+NULL
+int(7)
+NULL
+array(2) {
+  [0]=>
+  int(5)
+  [1]=>
+  int(6)
+}
+array(2) {
+  [0]=>
+  int(1)
+  [1]=>
+  int(2)
+}
+array(1) {
+  [0]=>
+  array(2) {
+    [0]=>
+    int(1)
+    [1]=>
+    int(2)
+  }
+}
+OutOfRangeException: Undefined array key 2 in CollectionMethods.sharp on line 54
+array(1) {
+  ["pie"]=>
+  int(7)
+}
+array(1) {
+  ["pie"]=>
+  int(7)
+}
+array(3) {
+  [0]=>
+  int(0)
+  [1]=>
+  int(1)
+  [2]=>
+  int(8)
+}
+array(1) {
+  [0]=>
+  int(3)
+}
+array(2) {
+  [0]=>
+  int(3)
+  [1]=>
+  int(4)
+}
+int(2)
+int(7)
+int(2)
+int(2)
+array(2) {
+  [0]=>
+  int(1)
+  [1]=>
+  int(2)
+}
+array(2) {
+  [0]=>
+  int(5)
+  [1]=>
+  int(6)
+}
+NULL
+Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 71
+ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 72

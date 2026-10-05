@@ -983,7 +983,7 @@ zend_jit_trace_stop ZEND_FASTCALL zend_jit_trace_execute(zend_execute_data  *ex,
 			case ZEND_FETCH_OBJ_R: {
 				if (opline->op2_type == IS_CONST) {
 					/* Remove the SIMPLE_GET flag to avoid inlining hooks. */
-					void **cache_slot = CACHE_ADDR(opline->extended_value & ~ZEND_FETCH_REF);
+					void **cache_slot = CACHE_ADDR(opline->extended_value & ~(ZEND_FETCH_REF|ZEND_SHARP_OPERATOR));
 					uintptr_t prop_offset = (uintptr_t)CACHED_PTR_EX(cache_slot + 1);
 					if (IS_HOOKED_PROPERTY_OFFSET(prop_offset)) {
 						CACHE_PTR_EX(cache_slot + 1, (void*)((uintptr_t)CACHED_PTR_EX(cache_slot + 1) & ~ZEND_PROPERTY_HOOK_SIMPLE_GET_BIT)); \

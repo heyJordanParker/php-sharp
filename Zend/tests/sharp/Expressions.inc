@@ -45,7 +45,8 @@ class Expressions
     public static function label(string $name, Countable $items): string
     {
         $plain = '${name} {$name} $name';
-        return "{$name}: {$items->count()} items\x21 \u{2713} `{$plain}`
+        $size = ((object) $items)->count();
+        return "{$name}: {$size} items\x21 \u{2713} `{$plain}`
 total";
     }
 }

@@ -37,7 +37,7 @@ class Nulls
 
     public int? through(Nulls? other, int? value)
     {
-        return other?.same(value) ?? other?.itself()?.must(7);
+        return other?.same(value) ?? other?.must(7);
     }
 
     public int? size(Box? box)
