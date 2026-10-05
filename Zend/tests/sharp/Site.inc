@@ -1,15 +1,27 @@
 <?php declare(strict_types=1); namespace Site;
 
+use Lib\Access;
 use Lib\Entity;
 use Lib\Linkable;
 use Lib\Registry;
 use Lib\Status;
 
+#[Access(Page::class)]
 class Page extends Entity implements Linkable
 {
     public const int LIMIT = 3;
     public static private(set) int $views = 0;
     private Status $status = Status::Live;
+
+    #[\Override] protected function render(): string
+    {
+        return "page";
+    }
+
+    #[\Override] public function id(): int
+    {
+        return parent::id() + 1;
+    }
 
     public function link(): string
     {
