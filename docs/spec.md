@@ -57,6 +57,7 @@ A name lives from its declaration to the `}` that closes its block.
 - Each loop pass gets a fresh binding.
 - A closure captures the variable itself, not a copy.
 - An inner block cannot redeclare a name an outer block declares. This is C#'s rule CS0136, and the checker rejects it before the code runs.
+- A variable that `is not` creates stays in scope after an `if` whose block always exits (section 21).
 
 ## 4. Member access
 
@@ -383,6 +384,20 @@ Set<string> tags = ["vip"];                    // the declared type makes it a S
 
 PHP's `["key" => value]` is not used, because `=>` is the lambda arrow.
 
+**A `Map` read gives `TValue?`.** `map[key]` has the type `TValue?`, so code handles a missing key at the read:
+
+```csharp
+Map<string, int> prices = ["basic": 900, "pro": 2900];
+int price = prices["pro"];                                  // compile error: prices["pro"] is int?, not int
+int price = prices["pro"] ?? 0;                             // compiles: 0 when "pro" is missing
+int price = prices[plan] ?? throw new UnknownPlan(plan);    // compiles: throws when plan is missing
+if (prices[plan] is int price) { charge(price); }           // compiles: runs only when plan is present
+```
+
+Data with fixed keys is a class, so a `Map` holds keys that come from outside, where a missing key is normal.
+
+**A `List` read past the end throws `OutOfRangeException`,** and so does a write past the end. Appending is `add`.
+
 **A list passed where a `Set` or a tuple is expected becomes one.** The receiving parameter converts it on arrival, as PHP already converts arguments to a parameter's type:
 
 ```csharp
@@ -508,6 +523,43 @@ names.map(Str.slug);
 - **`a ??= b`:** assigns `b` only when `a` is null.
 - **`a?.b`:** reads `b`, or gives null when `a` is null. PHP writes this as `?->`.
 - **`f?.(x)`:** calls `f` only when it is not null.
+- **`a ?? throw …`, `a ?? return`, `a ?? continue` and `a ?? break`:** leave when `a` is null. `return` takes a value when the method returns one.
+
+```csharp
+public void renewAll(List<int> customerIds, string plan)
+{
+    int price = prices[plan] ?? return;                     // no such plan: nothing to renew
+    for (const id of customerIds) {
+        Customer customer = customers[id] ?? continue;      // skip ids with no customer
+        charge(customer, price);
+    }
+}
+```
+
+### 14.5 Null at the edge
+
+**Null is checked once, where outside data enters,** such as a controller. The code behind it takes non-null types:
+
+- A business method takes the value it works on, such as `Customer`, not an id it looks up.
+- A fixed set of keys, such as the plans and the data each one carries, is an enum (section 20), not a `Map`.
+- The edge resolves each value with `?? throw`.
+
+```csharp
+public class Billing
+{
+    public Receipt renew(Customer customer, Plan plan) { … }   // no null checks: both are known
+}
+
+public class RenewalController
+{
+    public Receipt renew(int customerId, string planCode)
+    {
+        Customer customer = Customer.find(customerId) ?? throw new NotFound("customer");
+        Plan plan = Plan.tryFrom(planCode) ?? throw new NotFound("plan");
+        return this.billing.renew(customer, plan);
+    }
+}
+```
 
 ## 15. Events
 
@@ -781,6 +833,16 @@ const paid = result as PaymentResult.Paid ?? throw new NotPaid(result);
 ```csharp
 if (entity is HasDesign) {
     render(entity.design);       // entity counts as HasDesign here
+}
+```
+- **A variable created by `is not` stays in scope after an `if` whose block always exits,** as in C#. A block always exits when every path through it ends in `return`, `throw`, `break` or `continue`.
+
+```csharp
+public Receipt checkout(Map<string, Any?> payload, string plan)
+{
+    if (payload["orderId"] is not int orderId) { throw new BadPayload("orderId"); }
+    if (prices[plan] is not int price) { return Receipt.unknownPlan(plan); }
+    return charge(orderId, price);                          // orderId and price are both known here
 }
 ```
 - **`as`** converts a value to a type, or gives null.
