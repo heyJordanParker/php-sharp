@@ -8,10 +8,7 @@ publish = false
 crate-type = ["staticlib"]
 
 [dependencies]
-mago-sharp-bridge = { git = "https://github.com/heyJordanParker/mago", rev = "3c3b3dc751230c2fcb3bd9a120dc79bafff221c0" }
-
-[patch."https://github.com/heyJordanParker/mago"]
-mago-sharp-bridge = { path = "../../../mago-speed/crates/sharp-bridge" }
+mago-sharp-bridge = { git = "https://github.com/heyJordanParker/mago", rev = "55b34233fb826251f2bf5050302a027f35d197de" }
 
 [profile.dev]
 panic = "unwind"
