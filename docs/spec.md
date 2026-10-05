@@ -396,6 +396,8 @@ if (prices[plan] is int price) { charge(price); }           // compiles: runs on
 
 Data with fixed keys is a class, so a `Map` holds keys that come from outside, where a missing key is normal.
 
+**A `Map` with nullable values reads as Kotlin's does:** a read from `Map<string, int?>` gives `int?`, so a missing key and a stored null look the same until the standard library's methods tell them apart.
+
 **A `List` read past the end throws `OutOfRangeException`,** and so does a write past the end. Appending is `add`.
 
 **A list passed where a `Set` or a tuple is expected becomes one.** The receiving parameter converts it on arrival, as PHP already converts arguments to a parameter's type:
@@ -532,31 +534,6 @@ public void renewAll(List<int> customerIds, string plan)
     for (const id of customerIds) {
         Customer customer = customers[id] ?? continue;      // skip ids with no customer
         charge(customer, price);
-    }
-}
-```
-
-### 14.5 Null at the edge
-
-**Null is checked once, where outside data enters,** such as a controller. The code behind it takes non-null types:
-
-- A business method takes the value it works on, such as `Customer`, not an id it looks up.
-- A fixed set of keys, such as the plans and the data each one carries, is an enum (section 20), not a `Map`.
-- The edge resolves each value with `?? throw`.
-
-```csharp
-public class Billing
-{
-    public Receipt renew(Customer customer, Plan plan) { … }   // no null checks: both are known
-}
-
-public class RenewalController
-{
-    public Receipt renew(int customerId, string planCode)
-    {
-        Customer customer = Customer.find(customerId) ?? throw new NotFound("customer");
-        Plan plan = Plan.tryFrom(planCode) ?? throw new NotFound("plan");
-        return this.billing.renew(customer, plan);
     }
 }
 ```
