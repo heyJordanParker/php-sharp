@@ -2,7 +2,7 @@
 
 ## Decision
 
-`map[key]` has the type `TValue?`, so code handles a missing key at the read. A `List` read past the end throws `OutOfRangeException`, and so does a write past the end. Appending is `add`.
+A `Map` read is handled where it is read, with `??`, `?.`, `is`, `as`, `match` or `get`, so code handles a missing key at the read. A bare `map[key]` is a compile error that names `??` and `get`, and `get` gives `TValue?`. A bare `x[i]` throws `OutOfRangeException` on a missing index or key, and `set` throws it past the end of a `List`. Appending is `add`. Decision 26 gives every collection operation one meaning on `List` and `Map`.
 
 ## Options
 
@@ -10,7 +10,7 @@
 
 ```csharp
 Map<string, int> prices = ["basic": 900, "pro": 2900];
-int price = prices["pro"];                                  // compile error: prices["pro"] is int?, not int
+int price = prices["pro"];                                  // compile error: handle a missing "pro" with ??, or read it with get
 int price = prices["pro"] ?? 0;                             // compiles: 0 when "pro" is missing
 int price = prices[plan] ?? throw new UnknownPlan(plan);    // compiles: throws when plan is missing
 if (prices[plan] is int price) { charge(price); }           // compiles: runs only when plan is present

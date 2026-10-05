@@ -349,6 +349,7 @@ PHP# has three collection types: `List<T>`, `Map<TKey, TValue>` and `Set<T>`.
 
 - They are values, as structs (section 10) and PHP's own arrays are. Assigning or passing a collection copies it only when one side later writes to it.
 - A `Map`'s keys are `int` or `string`, as a PHP array's keys are.
+- `List` and `Map` both run as plain PHP arrays, so the engine cannot tell them apart when the code runs. Every collection operation therefore has one meaning on both, decided by how the code is written.
 
 ```csharp
 let b = a;
@@ -407,21 +408,43 @@ Set<string> tags = ["vip"];                    // the declared type makes it a S
 
 PHP's `["key" => value]` is not used, because `=>` is the lambda arrow.
 
-**A `Map` read gives `TValue?`.** `map[key]` has the type `TValue?`, so code handles a missing key at the read:
+**Indexing has one meaning on every collection:**
+
+- A bare read, `x[i]`, throws `OutOfRangeException` when the index or key is missing.
+- `x[k] = v` inserts or replaces a key. It is `Map`-only, so `lines[0] = line` is a compile error that names `set`.
+- `set(i, v)` replaces a `List` element, and throws `OutOfRangeException` past the end. Appending is `add`.
+
+```csharp
+const first = lines[0];       // throws OutOfRangeException when lines is empty
+lines.set(0, line);           // throws OutOfRangeException when lines is empty
+lines[0] = line;              // compile error: write lines.set(0, line)
+plans["pro"] = pro;           // inserts or replaces
+```
+
+**A `Map` read is handled where it is read,** with `??`, `?.`, `is`, `as`, `match` or `get`. A bare `Map` read is a compile error that names `??` and `get`:
 
 ```csharp
 Map<string, int> prices = ["basic": 900, "pro": 2900];
-int price = prices["pro"];                                  // compile error: prices["pro"] is int?, not int
+int price = prices["pro"];                                  // compile error: handle a missing "pro" with ??, or read it with get
 int price = prices["pro"] ?? 0;                             // compiles: 0 when "pro" is missing
 int price = prices[plan] ?? throw new UnknownPlan(plan);    // compiles: throws when plan is missing
 if (prices[plan] is int price) { charge(price); }           // compiles: runs only when plan is present
+int? maybe = prices.get(plan);                              // compiles: null when plan is missing
 ```
 
 Data with fixed keys is a class, so a `Map` holds keys that come from outside, where a missing key is normal.
 
 **A `Map` with nullable values reads as Kotlin's does:** a read from `Map<string, int?>` gives `int?`, so a missing key and a stored null look the same until the standard library's methods tell them apart.
 
-**A `List` read past the end throws `OutOfRangeException`,** and so does a write past the end. Appending is `add`.
+**A key read back out of a `Map<string, TValue>` is typed `int|string`,** because PHP stores an all-digit string key, such as `"5"`, as the int `5`. This covers the key of `for (const [key, value] of map)` and of `keys()`. Passing it where a `string` is expected needs `(string)key`. Reads by key and every value keep their types.
+
+```csharp
+void reserve(string sku, int count) { … }
+
+for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is int|string
+    this.reserve((string)sku, count);
+}
+```
 
 **A list passed where a `Set` or a tuple is expected becomes one.** The receiving parameter converts it on arrival, as PHP already converts arguments to a parameter's type:
 
@@ -449,12 +472,23 @@ lines.sortedBy(l => l.amount);
 
 ```csharp
 lines.add(line);
-lines.remove(line);
 lines.insert(0, line);
+lines.set(0, line);
+lines.remove(line);           // by value
 lines.clear();
-plans.set("pro", pro);
 plans["pro"] = pro;
-plans.remove("pro");
+plans.delete("pro");          // by key
+```
+
+**A method name means one thing on every collection:**
+
+- `remove` removes by value, and `delete` removes a key.
+- `filter` renumbers what it keeps, and `filterValues` keeps the keys.
+- Two imported extensions (section 26) with one name, one on a `List` and one on a `Map`, are a compile error.
+
+```csharp
+plans.filter(p => p.active);          // List<Plan>
+plans.filterValues(p => p.active);    // Map<string, Plan>
 ```
 
 `contains`, `remove`, `indexOf` and `Set<T>` need `==` on the element type (section 19). Without it, they are a compile error.
@@ -659,6 +693,7 @@ An object initializer runs after the constructor. It sets properties through the
 
 ```csharp
 for (const line of lines) { … }
+for (const plan of plans) { … }                  // a Map's values
 for (const [key, plan] of plans) { … }
 for (const [i, line] of lines.entries()) { … }
 ```
@@ -1046,7 +1081,7 @@ const admin = user as Admin;                         // Admin?, null if user is 
 const flag = request.input("flag") == "1";           // replaces (bool)
 ```
 
-- `(int)` and `(float)` convert between `int` and `float`. `(string)` converts a number to a `string`.
+- `(int)` and `(float)` convert between `int` and `float`. `(string)` converts a number, or an `int|string` `Map` key (section 12), to a `string`.
 - `(int)` truncates a `float` toward zero. A `float` too large for an `int`, or NaN, throws `ArithmeticError`.
 - A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take `Any?`, and throw on anything that is not a string holding only a number, such as `"abc"`, `"12abc"` or `null`.
 - `Int.tryParse(s)` and `Float.tryParse(s)` take `Any?` too, and give null where `parse` throws.
