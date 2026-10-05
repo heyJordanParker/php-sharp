@@ -273,6 +273,29 @@ b.x = 5;   // b is copied here, and a is unchanged
 
 `with` copies an object or a struct and sets the listed properties through their `init` or `set` accessors. The original is unchanged.
 
+**Every struct has a static `parse(Map<string, Any?>)`,** which throws one error that lists every bad field, and a static `tryParse`, which gives null instead. The names follow `Int.parse` and `Int.tryParse` (section 24). Classes do not get them.
+
+```csharp
+public struct RenewRequest
+{
+    public RenewRequest(
+        public int customerId { get; },
+        [Key("plan_code")] public Plan plan { get; },
+        public string? coupon { get; },
+    ) { }
+}
+
+RenewRequest request = RenewRequest.parse(payload);     // throws: "customerId: expected int, got string 'abc'; plan_code: missing"
+RenewRequest? maybe = RenewRequest.tryParse(payload);   // null on any bad field
+```
+
+- The keys are the parameter names of the main constructor (section 9.1).
+- `[Key("plan_code")]` renames the key a parameter reads.
+- A nested struct parses the same way.
+- A `List` checks each element.
+- An enum parses from its value.
+- A missing key for a `T?` parameter reads as null.
+
 **Reference:** php-src PR #13800, "Implement structs", implements this copy-on-write mechanism. Its `mutating` methods with `!` call syntax are left out for now, and can be added later without breaking code.
 
 ## 11. Generics
@@ -536,6 +559,25 @@ public void renewAll(List<int> customerIds, string plan)
         charge(customer, price);
     }
 }
+```
+
+**A `?` or a null check that cannot matter is a compile error,** because it misstates the code. Section 24 gives the rule for `?`.
+
+- a null check, `?.` or `??` on a value whose type has no `?`
+- a nullable parameter that the method rejects on every path. The type drops the `?`, and the caller checks.
+- a nullable return type on a method that never returns null
+
+```csharp
+public void renew(Customer customer, Plan plan)
+{
+    if (customer != null) { … }                     // compile error: customer is Customer, so it can never be null
+    int price = plan.price ?? 0;                     // compile error: plan.price is int, so ?? never applies
+}
+public void notify(Customer? customer)
+{
+    Customer c = customer ?? throw new NotFound();   // compile error: notify rejects null on every path; declare it Customer and check at the caller
+}
+public Customer? current() { return this.customer; } // compile error: current never returns null, so its type is Customer
 ```
 
 ## 15. Events
@@ -943,6 +985,8 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 ## 24. Built-in types and `Any`
 
 Built-in types are lowercase: `int`, `float`, `bool`, `string`, `void`, `null`. Every other type is capitalized: `List`, `Money`, `Any`.
+
+**A type holds null only when it is written with `?`,** for parameters, return types, properties and locals alike: `Customer?` may hold null, and `Customer` never does. Section 14.4 lists the compile errors for a `?` or a null check that cannot matter.
 
 **A union type is written inline,** such as `int|string`, anywhere a type goes. It compiles to PHP's own union type.
 
