@@ -980,6 +980,24 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 
 **Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always a class, or a plain PHP function that an `extern` declares (section 29). A full name inside code is a compile error that names the import to add.
 
+**The standard library's names are imported by default,** as Kotlin imports `kotlin.*`. A bare `Int` is `Sharp.Int`, and a bare `Key` is the standard attribute. A class the file declares or imports under the same name shadows the default one.
+
+**`import X.Y as Z;` renames an import in this file only.** It compiles to PHP's `use X\Y as Z;`. Here the rename keeps the standard `Key`, which `import Cache.Key;` would shadow:
+
+```csharp
+import Cache.Key as CacheKey;                                    // renamed in this file only
+
+public struct Entry
+{
+    public Entry(
+        [Key("cache_key")] public CacheKey key { get; },         // Key stays the standard attribute, CacheKey is the library class
+    ) { }
+}
+```
+
+- **An imported name is used once per file.** Two `import` lines with the same name are a compile error, and so is an import named like a class the file declares. Renaming one of them fixes it.
+- **A rename changes the name, not what is imported.** Other files keep the original name, and an `extern` written with the new name declares the same function, so section 29's one-declaration rule still counts it once.
+
 **A class cannot share its full name with a namespace.** `Store.sharp` beside a `Store/` folder is a compile error, because both would be `App.Tenant.Store`. Java's language specification has the same rule. `Store/Store.sharp` is allowed, because it is `App.Tenant.Store.Store`. The rule also covers plain PHP classes the checker sees.
 
 ## 24. Built-in types and `Any`
@@ -1246,8 +1264,10 @@ public interface PaymentGateway
 }
 
 Function<Money(Offer)> priceOf                       // a pure function value
-Function<Charge(Cart)> uses Http charge              // may reach Http
+Function<Charge(Cart) uses Http> charge              // may reach Http
 ```
+
+**`uses` is always the last clause of a declaration,** so its effects are easy to spot. It follows the parameters of a method, the parameter types inside a function type and the name in an `extern`. Only a method's body comes after it. An `import` never carries `uses`, because a library's effect lives in its one `extern` declaration.
 
 An implementation that calls plain PHP fits the declaration only through an `extern`:
 

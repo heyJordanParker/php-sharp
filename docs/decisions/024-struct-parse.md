@@ -29,7 +29,7 @@ RenewRequest? maybe = RenewRequest.tryParse(payload);   // null on any bad field
 
 The names follow `Int.parse` and `Int.tryParse`, so one pair of names covers parsing everywhere. One error lists every bad field, so a caller fixes the whole payload at once.
 
-`Key` names what the attribute does: a struct reads a `Map`, and the attribute renames the key a parameter reads. A project with its own `Key` aliases one of them on import.
+`Key` names what the attribute does: a struct reads a `Map`, and the attribute renames the key a parameter reads. A project with its own `Key` renames one of them on import, as in `import Cache.Key as CacheKey;` (section 23).
 
 ### Rejected: opt in with an attribute
 
@@ -55,3 +55,4 @@ Every struct that receives outside data needs the marker first, and a struct wit
 ## Spec
 
 - [Section 10, Structs](../spec.md#10-structs)
+- [Section 23, Namespaces and imports](../spec.md#23-namespaces-and-imports)
