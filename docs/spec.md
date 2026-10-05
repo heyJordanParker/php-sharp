@@ -980,6 +980,8 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 
 **Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always a class, or a plain PHP function that an `extern` declares (section 29). A full name inside code is a compile error that names the import to add.
 
+**An import never carries `uses`,** because a library's effect lives in its one `extern` declaration (section 29).
+
 **The standard library's names are imported by default,** as Kotlin imports `kotlin.*`. A bare `Int` is `Sharp.Int`, and a bare `Key` is the standard attribute. A class the file declares or imports under the same name shadows the default one.
 
 **`import X.Y as Z;` renames an import in this file only.** It compiles to PHP's `use X\Y as Z;`. Here the rename keeps the standard `Key`, which `import Cache.Key;` would shadow:
