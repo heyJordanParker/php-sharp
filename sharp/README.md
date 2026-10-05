@@ -65,7 +65,9 @@ brew install autoconf bison re2c pkgconf icu4c libiconv libpq libsodium libzip o
 
 ## CI
 
-`.github/workflows/sharp.yml` builds and tests on Linux in the `sharp/docker/` image and on `macos-latest`, for every push and pull request to `master` that changes more than documentation. The Linux job also fails when a generated file differs from the committed one. That step copies `.github/actions/verify-generated-files/action.yml`, so compare the two on every merge from upstream.
+`.github/workflows/sharp.yml` builds and tests on Linux in the `sharp/docker/` image and on `macos-latest`, for every push and pull request to `master` that changes more than documentation. The Linux job also fails when a generated file differs from the committed one, or when `ext/sharp/Cargo.lock` names a local `path+file://` or `git+file://` source. The generated-file step copies `.github/actions/verify-generated-files/action.yml`, so compare the two on every merge from upstream.
+
+`master` takes changes only through a pull request whose `LINUX` and `MACOS` checks pass on a branch that is up to date with `master`. A repository ruleset enforces it for every account, admins included, and refuses force pushes and deletion. The `CHANGES` job skips both checks on a pull request that changes documentation alone, and GitHub counts a skipped job as passing, so that pull request can still merge.
 
 Pushing a full version tag, such as `v0.1.0`, runs both jobs, and when they pass, the `IMAGE` job publishes the runtime image as `ghcr.io/heyjordanparker/php-sharp:<version>`, never as `latest`, for `linux/amd64` and `linux/arm64`. Each platform builds on its own native runner through `docker/github-builder`.
 
