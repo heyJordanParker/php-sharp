@@ -1,0 +1,32 @@
+namespace Demo;
+
+class Order
+{
+    private int count = 0;
+    protected float rate = 1.5 * 2;
+    public int total { get; private set; } = 0;
+    public string code { get; }
+
+    public Order(public int id { get; }, private int base, string code)
+    {
+        this.code = code;
+        this.count = base;
+    }
+
+    public int add(int amount)
+    {
+        this.count += amount;
+        this.total = this.count * this.base;
+        return this.total;
+    }
+}
+
+class Till
+{
+    public int ring()
+    {
+        const order = new Order(1, 2, "A1");
+        order.add(3);
+        return order.total + order.id;
+    }
+}

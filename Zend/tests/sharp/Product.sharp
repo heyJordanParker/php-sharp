@@ -1,0 +1,26 @@
+namespace Demo;
+
+import Lib.Action;
+import Lib.Entity;
+import Lib.Field;
+
+[Entity(label: "Products", order: 2 * 3), Searchable]
+[Entity("Stock")]
+class Product
+{
+    [Field] private int stock = 0;
+    [Field(label: "Name", limit: PHP_INT_MAX)] public string name { get; set; } = "";
+
+    public Product([Field(label: null)] public int id { get; }, [Field] int start = 1)
+    {
+        this.stock = start;
+    }
+
+    [Action(true, -1.5)]
+    [Retry(3)]
+    public int restock([Field("amount")] int amount)
+    {
+        this.stock += amount;
+        return this.stock;
+    }
+}
