@@ -101,6 +101,33 @@ jobs:
         run: sharp/bin/test --opcache --repeat --differential
       - name: Test upstream
         run: sharp/bin/test --upstream --opcache
+  COMPOSER:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    concurrency: composer-${{ github.ref }}
+    steps:
+      - name: git checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Split sharp/composer
+        run: |
+          curl -fsSL https://github.com/splitsh/lite/releases/download/v1.0.1/lite_linux_amd64.tar.gz -o "$RUNNER_TEMP/splitsh-lite.tar.gz"
+          echo "2539301ce5e21d0ca44b689d0dd2c1b20d9f9e996c1fe6c462afb8af4e7141cc  $RUNNER_TEMP/splitsh-lite.tar.gz" | sha256sum -c
+          tar -xzf "$RUNNER_TEMP/splitsh-lite.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/splitsh-lite" --prefix=sharp/composer --target=refs/heads/composer
+      - name: git checkout heyJordanParker/php-sharp-composer
+        uses: actions/checkout@v6
+        with:
+          repository: heyJordanParker/php-sharp-composer
+          ssh-key: ${{ secrets.PHP_SHARP_COMPOSER_DEPLOY_KEY }}
+          path: sharp/build/php-sharp-composer
+          fetch-depth: 0
+      - name: Push the split
+        working-directory: sharp/build/php-sharp-composer
+        run: |
+          git fetch "$GITHUB_WORKSPACE" refs/heads/composer
+          git push origin "FETCH_HEAD:$GITHUB_REF"
   IMAGE:
     if: github.ref_type == 'tag'
     needs: [LINUX, MACOS]
