@@ -2278,6 +2278,9 @@ static uint32_t binary_op_result_type(
 			/* PHP#'s + joins two strings. */
 			if ((opcode & ZEND_SHARP_OPERATOR) && (t1_type & MAY_BE_STRING) && (t2_type & MAY_BE_STRING)) {
 				tmp |= MAY_BE_STRING | MAY_BE_RC1 | MAY_BE_RCN;
+				if (t1_type == MAY_BE_STRING && t2_type == MAY_BE_STRING) {
+					break;
+				}
 			}
 			if (t1_type == MAY_BE_LONG && t2_type == MAY_BE_LONG) {
 				if (result_var < 0 ||

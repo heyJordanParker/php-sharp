@@ -46,6 +46,11 @@ class Plus
         return line;
     }
 
+    public static string list(string a, string b, string c)
+    {
+        return a + ", " + b + ", " + c;
+    }
+
     public static int add(int a, int b)
     {
         return a + b;

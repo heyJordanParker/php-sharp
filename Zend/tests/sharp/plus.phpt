@@ -12,4 +12,5 @@ string(5) "done!"
 string(8) "log: a b"
 int(5)
 string(6) "ababab"
+string(7) "a, b, c"
 int(3)

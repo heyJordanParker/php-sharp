@@ -1132,6 +1132,15 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 
 			} else {
 				if (opline->opcode == ZEND_ADD
+				 && (opline->extended_value & ZEND_SHARP_OPERATOR)
+				 && (OP1_INFO() & (MAY_BE_ANY|MAY_BE_UNDEF|MAY_BE_REF)) == MAY_BE_STRING
+				 && (OP2_INFO() & (MAY_BE_ANY|MAY_BE_UNDEF|MAY_BE_REF)) == MAY_BE_STRING) {
+
+// op_1: #v.? = ADD #x.? [string], #y.? [string] (PHP#) => #v.? = FAST_CONCAT #x.?, #y.?
+
+					opline->opcode = ZEND_FAST_CONCAT;
+					opline->extended_value = 0;
+				} else if (opline->opcode == ZEND_ADD
 				 || opline->opcode == ZEND_SUB
 				 || opline->opcode == ZEND_MUL
 				 || opline->opcode == ZEND_IS_EQUAL
