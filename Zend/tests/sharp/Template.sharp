@@ -1,0 +1,13 @@
+namespace Demo;
+
+import Countable;
+
+class Template
+{
+    public static string summary(Countable items)
+    {
+        const first = `<${count(items) + 1}>`;
+        return `${first}${`[${strlen(first)}]`} \${x} \x41B\u{43} 😀 a\
+b`;
+    }
+}
