@@ -57,6 +57,7 @@ A name lives from its declaration to the `}` that closes its block.
 - Each loop pass gets a fresh binding.
 - A closure captures the variable itself, not a copy.
 - An inner block cannot redeclare a name an outer block declares. This is C#'s rule CS0136, and the checker rejects it before the code runs.
+- A variable that `is not` creates stays in scope after an `if` whose block always exits (section 21).
 
 ## 4. Member access
 
@@ -272,6 +273,29 @@ b.x = 5;   // b is copied here, and a is unchanged
 
 `with` copies an object or a struct and sets the listed properties through their `init` or `set` accessors. The original is unchanged.
 
+**Every struct has a static `parse(Map<string, Any?>)`,** which throws one error that lists every bad field, and a static `tryParse`, which gives null instead. The names follow `Int.parse` and `Int.tryParse` (section 24). Classes do not get them.
+
+```csharp
+public struct RenewRequest
+{
+    public RenewRequest(
+        public int customerId { get; },
+        [Key("plan_code")] public Plan plan { get; },
+        public string? coupon { get; },
+    ) { }
+}
+
+RenewRequest request = RenewRequest.parse(payload);     // throws: "customerId: expected int, got string 'abc'; plan_code: missing"
+RenewRequest? maybe = RenewRequest.tryParse(payload);   // null on any bad field
+```
+
+- The keys are the parameter names of the main constructor (section 9.1).
+- `[Key("plan_code")]` renames the key a parameter reads.
+- A nested struct parses the same way.
+- A `List` checks each element.
+- An enum parses from its value.
+- A missing key for a `T?` parameter reads as null.
+
 **Reference:** php-src PR #13800, "Implement structs", implements this copy-on-write mechanism. Its `mutating` methods with `!` call syntax are left out for now, and can be added later without breaking code.
 
 ## 11. Generics
@@ -325,6 +349,7 @@ PHP# has three collection types: `List<T>`, `Map<TKey, TValue>` and `Set<T>`.
 
 - They are values, as structs (section 10) and PHP's own arrays are. Assigning or passing a collection copies it only when one side later writes to it.
 - A `Map`'s keys are `int` or `string`, as a PHP array's keys are.
+- `List` and `Map` both run as plain PHP arrays, so the engine cannot tell them apart when the code runs. Every collection operation therefore has one meaning on both, decided by how the code is written.
 
 ```csharp
 let b = a;
@@ -383,6 +408,44 @@ Set<string> tags = ["vip"];                    // the declared type makes it a S
 
 PHP's `["key" => value]` is not used, because `=>` is the lambda arrow.
 
+**Indexing has one meaning on every collection:**
+
+- A bare read, `x[i]`, throws `OutOfRangeException` when the index or key is missing.
+- `x[k] = v` inserts or replaces a key. It is `Map`-only, so `lines[0] = line` is a compile error that names `set`.
+- `set(i, v)` replaces a `List` element, and throws `OutOfRangeException` past the end. Appending is `add`.
+
+```csharp
+const first = lines[0];       // throws OutOfRangeException when lines is empty
+lines.set(0, line);           // throws OutOfRangeException when lines is empty
+lines[0] = line;              // compile error: write lines.set(0, line)
+plans["pro"] = pro;           // inserts or replaces
+```
+
+**A `Map` read is handled where it is read,** with `??`, `?.`, `is`, `as`, `match` or `get`. A bare `Map` read is a compile error that names `??` and `get`:
+
+```csharp
+Map<string, int> prices = ["basic": 900, "pro": 2900];
+int price = prices["pro"];                                  // compile error: handle a missing "pro" with ??, or read it with get
+int price = prices["pro"] ?? 0;                             // compiles: 0 when "pro" is missing
+int price = prices[plan] ?? throw new UnknownPlan(plan);    // compiles: throws when plan is missing
+if (prices[plan] is int price) { charge(price); }           // compiles: runs only when plan is present
+int? maybe = prices.get(plan);                              // compiles: null when plan is missing
+```
+
+Data with fixed keys is a class, so a `Map` holds keys that come from outside, where a missing key is normal.
+
+**A `Map` with nullable values reads as Kotlin's does:** a read from `Map<string, int?>` gives `int?`, so a missing key and a stored null look the same until the standard library's methods tell them apart.
+
+**A key read back out of a `Map<string, TValue>` is typed `int|string`,** because PHP stores an all-digit string key, such as `"5"`, as the int `5`. This covers the key of `for (const [key, value] of map)` and of `keys()`. Passing it where a `string` is expected needs `(string)key`. Reads by key and every value keep their types.
+
+```csharp
+void reserve(string sku, int count) { … }
+
+for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is int|string
+    this.reserve((string)sku, count);
+}
+```
+
 **A list passed where a `Set` or a tuple is expected becomes one.** The receiving parameter converts it on arrival, as PHP already converts arguments to a parameter's type:
 
 ```csharp
@@ -409,12 +472,23 @@ lines.sortedBy(l => l.amount);
 
 ```csharp
 lines.add(line);
-lines.remove(line);
 lines.insert(0, line);
+lines.set(0, line);
+lines.remove(line);           // by value
 lines.clear();
-plans.set("pro", pro);
 plans["pro"] = pro;
-plans.remove("pro");
+plans.delete("pro");          // by key
+```
+
+**A method name means one thing on every collection:**
+
+- `remove` removes by value, and `delete` removes a key.
+- `filter` renumbers what it keeps, and `filterValues` keeps the keys.
+- Two imported extensions (section 26) with one name, one on a `List` and one on a `Map`, are a compile error.
+
+```csharp
+plans.filter(p => p.active);          // List<Plan>
+plans.filterValues(p => p.active);    // Map<string, Plan>
 ```
 
 `contains`, `remove`, `indexOf` and `Set<T>` need `==` on the element type (section 19). Without it, they are a compile error.
@@ -508,6 +582,37 @@ names.map(Str.slug);
 - **`a ??= b`:** assigns `b` only when `a` is null.
 - **`a?.b`:** reads `b`, or gives null when `a` is null. PHP writes this as `?->`.
 - **`f?.(x)`:** calls `f` only when it is not null.
+- **`a ?? throw …`, `a ?? return`, `a ?? continue` and `a ?? break`:** leave when `a` is null. `return` takes a value when the method returns one.
+
+```csharp
+public void renewAll(List<int> customerIds, string plan)
+{
+    int price = prices[plan] ?? return;                     // no such plan: nothing to renew
+    for (const id of customerIds) {
+        Customer customer = customers[id] ?? continue;      // skip ids with no customer
+        charge(customer, price);
+    }
+}
+```
+
+**A `?` or a null check that cannot matter is a compile error,** because it misstates the code. Section 24 gives the rule for `?`.
+
+- a null check, `?.` or `??` on a value whose type has no `?`
+- a nullable parameter that the method rejects on every path. The type drops the `?`, and the caller checks.
+- a nullable return type on a method that never returns null
+
+```csharp
+public void renew(Customer customer, Plan plan)
+{
+    if (customer != null) { … }                     // compile error: customer is Customer, so it can never be null
+    int price = plan.price ?? 0;                     // compile error: plan.price is int, so ?? never applies
+}
+public void notify(Customer? customer)
+{
+    Customer c = customer ?? throw new NotFound();   // compile error: notify rejects null on every path; declare it Customer and check at the caller
+}
+public Customer? current() { return this.customer; } // compile error: current never returns null, so its type is Customer
+```
 
 ## 15. Events
 
@@ -588,6 +693,7 @@ An object initializer runs after the constructor. It sets properties through the
 
 ```csharp
 for (const line of lines) { … }
+for (const plan of plans) { … }                  // a Map's values
 for (const [key, plan] of plans) { … }
 for (const [i, line] of lines.entries()) { … }
 ```
@@ -783,6 +889,16 @@ if (entity is HasDesign) {
     render(entity.design);       // entity counts as HasDesign here
 }
 ```
+- **A variable created by `is not` stays in scope after an `if` whose block always exits,** as in C#. A block always exits when every path through it ends in `return`, `throw`, `break` or `continue`.
+
+```csharp
+public Receipt checkout(Map<string, Any?> payload, string plan)
+{
+    if (payload["orderId"] is not int orderId) { throw new BadPayload("orderId"); }
+    if (prices[plan] is not int price) { return Receipt.unknownPlan(plan); }
+    return charge(orderId, price);                          // orderId and price are both known here
+}
+```
 - **`as`** converts a value to a type, or gives null.
 - **`as` to a collection type checks every element,** wherever the value came from, and gives null if any element is wrong. So `as List<string> ?? throw …` throws on a wrong element.
 
@@ -899,11 +1015,33 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 
 **Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always a class, or a plain PHP function that an `extern` declares (section 29). A full name inside code is a compile error that names the import to add.
 
+**An import never carries `uses`,** because a library's effect lives in its one `extern` declaration (section 29).
+
+**The standard library's names are imported by default,** as Kotlin imports `kotlin.*`. A bare `Int` is `Sharp.Int`, and a bare `Key` is the standard attribute. A class the file declares or imports under the same name shadows the default one.
+
+**`import X.Y as Z;` renames an import in this file only.** It compiles to PHP's `use X\Y as Z;`. Here the rename keeps the standard `Key`, which `import Cache.Key;` would shadow:
+
+```csharp
+import Cache.Key as CacheKey;                                    // renamed in this file only
+
+public struct Entry
+{
+    public Entry(
+        [Key("cache_key")] public CacheKey key { get; },         // Key stays the standard attribute, CacheKey is the library class
+    ) { }
+}
+```
+
+- **An imported name is used once per file.** Two `import` lines with the same name are a compile error, and so is an import named like a class the file declares. Renaming one of them fixes it.
+- **A rename changes the name, not what is imported.** Other files keep the original name, and an `extern` written with the new name declares the same function, so section 29's one-declaration rule still counts it once.
+
 **A class cannot share its full name with a namespace.** `Store.sharp` beside a `Store/` folder is a compile error, because both would be `App.Tenant.Store`. Java's language specification has the same rule. `Store/Store.sharp` is allowed, because it is `App.Tenant.Store.Store`. The rule also covers plain PHP classes the checker sees.
 
 ## 24. Built-in types and `Any`
 
 Built-in types are lowercase: `int`, `float`, `bool`, `string`, `void`, `null`. Every other type is capitalized: `List`, `Money`, `Any`.
+
+**A type holds null only when it is written with `?`,** for parameters, return types, properties and locals alike: `Customer?` may hold null, and `Customer` never does. Section 14.4 lists the compile errors for a `?` or a null check that cannot matter.
 
 **A union type is written inline,** such as `int|string`, anywhere a type goes. It compiles to PHP's own union type.
 
@@ -943,7 +1081,7 @@ const admin = user as Admin;                         // Admin?, null if user is 
 const flag = request.input("flag") == "1";           // replaces (bool)
 ```
 
-- `(int)` and `(float)` convert between `int` and `float`. `(string)` converts a number to a `string`.
+- `(int)` and `(float)` convert between `int` and `float`. `(string)` converts a number, or an `int|string` `Map` key (section 12), to a `string`.
 - `(int)` truncates a `float` toward zero. A `float` too large for an `int`, or NaN, throws `ArithmeticError`.
 - A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take `Any?`, and throw on anything that is not a string holding only a number, such as `"abc"`, `"12abc"` or `null`.
 - `Int.tryParse(s)` and `Float.tryParse(s)` take `Any?` too, and give null where `parse` throws.

@@ -2,22 +2,8 @@
 
 namespace Demo;
 
-class Counter
-{
-    public function __construct(public int $value) {}
-}
-
-final class LooseCounter
-{
-    public $value;
-
-    public function __construct($value)
-    {
-        $this->value = $value;
-    }
-}
-
 require __DIR__ . '/attempt.inc';
+require __DIR__ . '/harness/Overflow.inc';
 require __DIR__ . '/Overflow.sharp';
 
 function powCases(): void
@@ -32,8 +18,8 @@ function powCases(): void
     attempt(fn () => Overflow::inverse(2, -1));
     attempt(fn () => Overflow::half());
 
-    attempt(fn () => Overflow::powProperty(new Counter(3037000499), 2));
-    $counter = new Counter(3037000500);
+    attempt(fn () => Overflow::powProperty(new Cell(3037000499), 2));
+    $counter = new Cell(3037000500);
     attempt(fn () => Overflow::powProperty($counter, 2));
     var_dump($counter->value);
     attempt(fn () => Overflow::powLoose(new LooseCounter(3037000500), 2));

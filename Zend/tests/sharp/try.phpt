@@ -3,7 +3,7 @@ PHP# catches an exception by any of its classes, and runs finally on every way o
 --FILE--
 <?php
 
-require __DIR__ . '/Box.inc';
+require __DIR__ . '/harness/Box.inc';
 require __DIR__ . '/Expressions.sharp';
 
 $steps = new Demo\Box(0);
