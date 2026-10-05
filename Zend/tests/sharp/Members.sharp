@@ -1,0 +1,58 @@
+namespace Demo;
+
+import Lib.Order;
+import Lib.Registry;
+
+public class Members
+{
+    public const int START = 10;
+    protected const string? LABEL = "members";
+    private static int count = 0;
+    public static string last { get; private set; } = "none";
+
+    public static void touch()
+    {
+        Members.count = 5;
+        Members.count++;
+        --Members.count;
+        Members.count += 2;
+        Members.last ??= "never";
+        Members.last = "touched";
+    }
+
+    public static int start()
+    {
+        return Members.START;
+    }
+
+    public static Order order()
+    {
+        return Order.Descending;
+    }
+
+    public static string label()
+    {
+        return Registry.label;
+    }
+
+    public static int version()
+    {
+        return Registry.VERSION;
+    }
+
+    public static int bump()
+    {
+        Members.count += 1;
+        return Members.count;
+    }
+
+    public static int missing()
+    {
+        return Registry.missing;
+    }
+
+    public static int hidden()
+    {
+        return Registry.hidden;
+    }
+}

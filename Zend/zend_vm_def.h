@@ -6095,19 +6095,20 @@ ZEND_VM_HANDLER(181, ZEND_FETCH_CLASS_CONSTANT, VAR|CONST|UNUSED|CLASS_FETCH, CO
 	zval *value, *zv, *constant_zv;
 	zend_string *constant_name;
 	USE_OPLINE
+	uint32_t cache_slot = opline->extended_value & ~ZEND_FETCH_CLASS_MEMBER;
 
 	SAVE_OPLINE();
 
 	do {
 		if (OP1_TYPE == IS_CONST && OP2_TYPE == IS_CONST) {
-			if (EXPECTED(CACHED_PTR(opline->extended_value + sizeof(void*)))) {
-				value = CACHED_PTR(opline->extended_value + sizeof(void*));
+			if (EXPECTED(CACHED_PTR(cache_slot + sizeof(void*)))) {
+				value = CACHED_PTR(cache_slot + sizeof(void*));
 				break;
 			}
 		}
 		if (OP1_TYPE == IS_CONST) {
-			if (EXPECTED(CACHED_PTR(opline->extended_value))) {
-				ce = CACHED_PTR(opline->extended_value);
+			if (EXPECTED(CACHED_PTR(cache_slot))) {
+				ce = CACHED_PTR(cache_slot);
 			} else {
 				ce = zend_fetch_class_by_name(Z_STR_P(RT_CONSTANT(opline, opline->op1)), Z_STR_P(RT_CONSTANT(opline, opline->op1) + 1), ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
 				if (UNEXPECTED(ce == NULL)) {
@@ -6115,7 +6116,7 @@ ZEND_VM_HANDLER(181, ZEND_FETCH_CLASS_CONSTANT, VAR|CONST|UNUSED|CLASS_FETCH, CO
 					FREE_OP2();
 					HANDLE_EXCEPTION();
 				}
-				CACHE_PTR(opline->extended_value, ce);
+				CACHE_PTR(cache_slot, ce);
 			}
 		} else if (OP1_TYPE == IS_UNUSED) {
 			ce = zend_fetch_class(NULL, opline->op1.num);
@@ -6129,8 +6130,8 @@ ZEND_VM_HANDLER(181, ZEND_FETCH_CLASS_CONSTANT, VAR|CONST|UNUSED|CLASS_FETCH, CO
 		}
 		if (OP1_TYPE != IS_CONST
 			&& OP2_TYPE == IS_CONST
-			&& EXPECTED(CACHED_PTR(opline->extended_value) == ce)) {
-			value = CACHED_PTR(opline->extended_value + sizeof(void*));
+			&& EXPECTED(CACHED_PTR(cache_slot) == ce)) {
+			value = CACHED_PTR(cache_slot + sizeof(void*));
 			break;
 		}
 
@@ -6204,8 +6205,28 @@ ZEND_VM_HANDLER(181, ZEND_FETCH_CLASS_CONSTANT, VAR|CONST|UNUSED|CLASS_FETCH, CO
 				}
 			}
 			if (OP2_TYPE == IS_CONST && !is_constant_deprecated) {
-				CACHE_POLYMORPHIC_PTR(opline->extended_value, ce, value);
+				CACHE_POLYMORPHIC_PTR(cache_slot, ce, value);
 			}
+		} else if (opline->extended_value & ZEND_FETCH_CLASS_MEMBER) {
+			/* The static property's value changes, so it is never cached. */
+			zend_property_info *property_info = zend_hash_find_ptr(&ce->properties_info, constant_name);
+
+			if (UNEXPECTED(!property_info || !(property_info->flags & ZEND_ACC_STATIC))) {
+				zend_throw_error(NULL, "Undefined constant or static property %s::%s",
+					ZSTR_VAL(ce->name), ZSTR_VAL(constant_name));
+				ZVAL_UNDEF(EX_VAR(opline->result.var));
+				FREE_OP2();
+				HANDLE_EXCEPTION();
+			}
+			value = zend_std_get_static_property(ce, constant_name, BP_VAR_R);
+			if (UNEXPECTED(value == NULL)) {
+				ZVAL_UNDEF(EX_VAR(opline->result.var));
+				FREE_OP2();
+				HANDLE_EXCEPTION();
+			}
+			ZVAL_COPY_DEREF(EX_VAR(opline->result.var), value);
+			FREE_OP2();
+			ZEND_VM_NEXT_OPCODE();
 		} else {
 			zend_throw_error(NULL, "Undefined constant %s::%s",
 				ZSTR_VAL(ce->name), ZSTR_VAL(constant_name));

@@ -621,9 +621,9 @@ void zend_optimizer_compact_literals(zend_op_array *op_array, zend_optimizer_ctx
 							opline->op1.constant,
 							opline->op2.constant,
 							LITERAL_CLASS_CONST,
-							&cache_size);
+							&cache_size) | (opline->extended_value & ZEND_FETCH_CLASS_MEMBER);
 					} else {
-						opline->extended_value = cache_size;
+						opline->extended_value = cache_size | (opline->extended_value & ZEND_FETCH_CLASS_MEMBER);
 						cache_size += 2 * sizeof(void *);
 					}
 					break;

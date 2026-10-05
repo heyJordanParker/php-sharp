@@ -11099,6 +11099,7 @@ static void zend_compile_class_const(znode *result, zend_ast *ast) /* {{{ */
 	if (opline->op1_type == IS_CONST || opline->op2_type == IS_CONST) {
 		opline->extended_value = zend_alloc_cache_slots(2);
 	}
+	opline->extended_value |= ast->attr & ZEND_FETCH_CLASS_MEMBER;
 }
 /* }}} */
 
