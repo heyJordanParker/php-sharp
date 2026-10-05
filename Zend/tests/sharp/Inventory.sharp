@@ -1,0 +1,38 @@
+namespace Demo;
+
+class Stock
+{
+    public int count { get; private set; }
+
+    public Stock(int count)
+    {
+        this.count = count;
+    }
+
+    public static int start()
+    {
+        return 4;
+    }
+}
+
+class Inventory
+{
+    private Stock first = new Stock(Stock.start());
+    public int size { get; } = Stock.start() * 2;
+    private Stock second = new Stock(1);
+
+    public Inventory(int extra)
+    {
+        this.second = new Stock(this.first.count + extra);
+    }
+
+    public int total()
+    {
+        return this.first.count + this.second.count + this.size;
+    }
+}
+
+class Shelf
+{
+    public Stock stock { get; } = new Stock(7);
+}

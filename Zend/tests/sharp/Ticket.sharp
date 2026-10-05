@@ -1,0 +1,14 @@
+namespace Demo;
+
+class Ticket
+{
+    public Ticket(private int price, public string code { get; }, public int seats { get; protected set; }, int discount)
+    {
+        this.price -= discount;
+    }
+
+    public int total()
+    {
+        return this.price * this.seats;
+    }
+}

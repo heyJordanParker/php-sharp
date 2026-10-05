@@ -1,0 +1,22 @@
+namespace Demo;
+
+class Account
+{
+    private int balance;
+
+    public Account(int opening)
+    {
+        this.balance = opening;
+    }
+
+    public int deposit(int amount)
+    {
+        this.balance += amount;
+        return this.balance;
+    }
+
+    public static int open(int opening)
+    {
+        return new Account(opening: opening).deposit(1);
+    }
+}

@@ -1,0 +1,21 @@
+namespace Demo;
+
+class Profile
+{
+    public int views { get; private set; } = 0;
+    public string name { get; set; } = "guest";
+    public int id { get; }
+    public float score { get; protected set; }
+
+    public Profile(int id)
+    {
+        this.id = id;
+        this.score = 0.5;
+    }
+
+    public int visit()
+    {
+        this.views++;
+        return this.views;
+    }
+}

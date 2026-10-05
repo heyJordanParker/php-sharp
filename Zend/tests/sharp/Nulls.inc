@@ -54,4 +54,13 @@ class Nulls
         $total += $found ?? 1;
         return $total;
     }
+
+    public function countTo(int $limit): int
+    {
+        $total = 0;
+        for ($step = 1; $step <= $limit; $step++) {
+            $total += $step;
+        }
+        return $total;
+    }
 }
