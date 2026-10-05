@@ -21,6 +21,7 @@ sharp/bin/build --clean         # rebuild from scratch
 sharp/bin/test                  # run the PHP# suite, Zend/tests/sharp/
 sharp/bin/test Zend/tests/foo   # run these .phpt files or directories instead
 sharp/bin/test --opcache        # also run with the opcache file cache, priming it and then using it
+sharp/bin/test --repeat         # also run each test twice in one process, the second time from opcache shared memory
 sharp/bin/test --differential   # also check that php -l compiles every Zend/tests/sharp/*.sharp file the checker accepts
 sharp/bin/test --upstream       # run Zend/tests, ext/reflection, ext/tokenizer and ext/opcache
 ```
@@ -29,7 +30,7 @@ sharp/bin/test --upstream       # run Zend/tests, ext/reflection, ext/tokenizer 
 
 `--linux` runs either command inside the Debian trixie image from `sharp/docker/`, for example `sharp/bin/build --linux` and `sharp/bin/test --linux --opcache`.
 
-Every PHP# feature must pass `sharp/bin/test --opcache --differential`. `sharp/bin/test` disables the JIT.
+Every PHP# feature must pass `sharp/bin/test --opcache --repeat --differential`. `sharp/bin/test` disables the JIT.
 
 `sharp/bin/build` reruns `buildconf` and `configure` by itself when `configure.ac`, a `*.m4` file, a `Makefile.frag`, `build/Makefile.global`, `sharp/docker/Dockerfile` or `sharp/bin/build` changes.
 

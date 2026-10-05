@@ -2,13 +2,14 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: sharp/bin/test [--linux] [--opcache] [--differential] [--upstream | paths...]" >&2
+  echo "usage: sharp/bin/test [--linux] [--opcache] [--repeat] [--differential] [--upstream | paths...]" >&2
   exit 2
 }
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 linux=false
 opcache=false
+repeat=false
 differential=false
 upstream=false
 tests=()
@@ -17,6 +18,7 @@ for arg in "$@"; do
   case "$arg" in
     --linux) linux=true; continue ;;
     --opcache) opcache=true ;;
+    --repeat) repeat=true ;;
     --differential) differential=true ;;
     --upstream) upstream=true ;;
     -*) usage ;;
@@ -93,6 +95,10 @@ fi
 if $opcache; then
   run_tests "with the opcache file cache, priming it" -d opcache.enable_cli=1 --file-cache-prime
   run_tests "with the opcache file cache, using it" -d opcache.enable_cli=1 --file-cache-use
+fi
+
+if $repeat; then
+  run_tests "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
 fi
 
 check_differential() {
