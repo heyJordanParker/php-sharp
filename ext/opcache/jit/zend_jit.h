@@ -142,6 +142,11 @@ typedef struct _zend_jit_globals {
 	uint32_t bad_root_slot;
 
 	uint8_t  *exit_counters;
+
+#if ZEND_DEBUG
+	/* VM handler calls the JIT emitted for PHP# operators, by opcode, so a test sees a fallback */
+	uint32_t sharp_operator_vm_calls[256];
+#endif
 } zend_jit_globals;
 
 #ifdef ZTS

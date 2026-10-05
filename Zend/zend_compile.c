@@ -3622,7 +3622,7 @@ static void zend_compile_compound_assign(znode *result, zend_ast *ast) /* {{{ */
 {
 	zend_ast *var_ast = ast->child[0];
 	zend_ast *expr_ast = ast->child[1];
-	uint32_t opcode = ast->attr;
+	uint32_t opcode = (ast->attr & ~ZEND_SHARP_OPERATOR_SYNTAX) | zend_ast_sharp_operator(ast);
 
 	znode var_node, expr_node;
 	zend_op *opline;
@@ -9951,6 +9951,17 @@ ZEND_API bool zend_is_op_long_compatible(const zval *op)
 
 ZEND_API bool zend_binary_op_produces_error(uint32_t opcode, const zval *op1, const zval *op2) /* {{{ */
 {
+	if (opcode & ZEND_SHARP_OPERATOR) {
+		opcode &= ~ZEND_SHARP_OPERATOR;
+		if (Z_TYPE_P(op1) == IS_LONG && Z_TYPE_P(op2) == IS_LONG) {
+			zval result;
+
+			/* Checked arithmetic throws where PHP's overflows into a float. */
+			get_binary_op(opcode)(&result, (zval *) op1, (zval *) op2);
+			return Z_TYPE(result) == IS_DOUBLE;
+		}
+	}
+
 	if ((opcode == ZEND_CONCAT || opcode == ZEND_FAST_CONCAT)) {
 		/* Array to string warning. */
 		return Z_TYPE_P(op1) == IS_ARRAY || Z_TYPE_P(op2) == IS_ARRAY;
@@ -10066,11 +10077,11 @@ static inline bool zend_try_ct_eval_unary_op(zval *result, uint32_t opcode, zval
 }
 /* }}} */
 
-static inline bool zend_try_ct_eval_unary_pm(zval *result, zend_ast_kind kind, zval *op) /* {{{ */
+static inline bool zend_try_ct_eval_unary_pm(zval *result, const zend_ast *ast, zval *op) /* {{{ */
 {
 	zval right;
-	ZVAL_LONG(&right, (kind == ZEND_AST_UNARY_PLUS) ? 1 : -1);
-	return zend_try_ct_eval_binary_op(result, ZEND_MUL, op, &right);
+	ZVAL_LONG(&right, (ast->kind == ZEND_AST_UNARY_PLUS) ? 1 : -1);
+	return zend_try_ct_eval_binary_op(result, ZEND_MUL | zend_ast_sharp_operator(ast), op, &right);
 }
 /* }}} */
 
@@ -10213,7 +10224,7 @@ static void zend_compile_binary_op(znode *result, zend_ast *ast) /* {{{ */
 {
 	zend_ast *left_ast = ast->child[0];
 	zend_ast *right_ast = ast->child[1];
-	uint32_t opcode = ast->attr;
+	uint32_t opcode = ast->attr & ~ZEND_SHARP_OPERATOR_SYNTAX;
 
 	znode left_node, right_node;
 
@@ -10221,7 +10232,7 @@ static void zend_compile_binary_op(znode *result, zend_ast *ast) /* {{{ */
 	zend_compile_expr(&right_node, right_ast);
 
 	if (left_node.op_type == IS_CONST && right_node.op_type == IS_CONST) {
-		if (zend_try_ct_eval_binary_op(&result->u.constant, opcode,
+		if (zend_try_ct_eval_binary_op(&result->u.constant, opcode | zend_ast_sharp_operator(ast),
 				&left_node.u.constant, &right_node.u.constant)
 		) {
 			result->op_type = IS_CONST;
@@ -10273,7 +10284,8 @@ static void zend_compile_binary_op(znode *result, zend_ast *ast) /* {{{ */
 				opcode = ZEND_FAST_CONCAT;
 			}
 		}
-		zend_emit_op_tmp(result, opcode, &left_node, &right_node);
+		zend_emit_op_tmp(result, opcode, &left_node, &right_node)->extended_value =
+			zend_ast_sharp_operator(ast);
 	} while (0);
 }
 /* }}} */
@@ -10335,7 +10347,7 @@ static void zend_compile_unary_pm(znode *result, zend_ast *ast) /* {{{ */
 	zend_compile_expr(&expr_node, expr_ast);
 
 	if (expr_node.op_type == IS_CONST
-		&& zend_try_ct_eval_unary_pm(&result->u.constant, ast->kind, &expr_node.u.constant)) {
+		&& zend_try_ct_eval_unary_pm(&result->u.constant, ast, &expr_node.u.constant)) {
 		result->op_type = IS_CONST;
 		zval_ptr_dtor(&expr_node.u.constant);
 		return;
@@ -10343,7 +10355,8 @@ static void zend_compile_unary_pm(znode *result, zend_ast *ast) /* {{{ */
 
 	right_node.op_type = IS_CONST;
 	ZVAL_LONG(&right_node.u.constant, (ast->kind == ZEND_AST_UNARY_PLUS) ? 1 : -1);
-	zend_emit_op_tmp(result, ZEND_MUL, &expr_node, &right_node);
+	zend_emit_op_tmp(result, ZEND_MUL, &expr_node, &right_node)->extended_value =
+		zend_ast_sharp_operator(ast);
 }
 /* }}} */
 
@@ -10412,6 +10425,7 @@ static void zend_compile_post_incdec(znode *result, zend_ast *ast) /* {{{ */
 	if (var_ast->kind == ZEND_AST_PROP || var_ast->kind == ZEND_AST_NULLSAFE_PROP) {
 		zend_op *opline = zend_compile_prop(NULL, var_ast, BP_VAR_RW, 0);
 		opline->opcode = ast->kind == ZEND_AST_POST_INC ? ZEND_POST_INC_OBJ : ZEND_POST_DEC_OBJ;
+		opline->extended_value |= zend_ast_sharp_operator(ast);
 		zend_make_tmp_result(result, opline);
 	} else if (var_ast->kind == ZEND_AST_STATIC_PROP) {
 		zend_op *opline = zend_compile_static_prop(NULL, var_ast, BP_VAR_RW, 0, 0);
@@ -10424,7 +10438,7 @@ static void zend_compile_post_incdec(znode *result, zend_ast *ast) /* {{{ */
 			opline->extended_value = ZEND_FETCH_DIM_INCDEC;
 		}
 		zend_emit_op_tmp(result, ast->kind == ZEND_AST_POST_INC ? ZEND_POST_INC : ZEND_POST_DEC,
-			&var_node, NULL);
+			&var_node, NULL)->extended_value = zend_ast_sharp_operator(ast);
 	}
 }
 /* }}} */
@@ -10439,6 +10453,7 @@ static void zend_compile_pre_incdec(znode *result, zend_ast *ast) /* {{{ */
 	if (var_ast->kind == ZEND_AST_PROP || var_ast->kind == ZEND_AST_NULLSAFE_PROP) {
 		zend_op *opline = zend_compile_prop(result, var_ast, BP_VAR_RW, 0);
 		opline->opcode = ast->kind == ZEND_AST_PRE_INC ? ZEND_PRE_INC_OBJ : ZEND_PRE_DEC_OBJ;
+		opline->extended_value |= zend_ast_sharp_operator(ast);
 		opline->result_type = IS_TMP_VAR;
 		result->op_type = IS_TMP_VAR;
 	} else if (var_ast->kind == ZEND_AST_STATIC_PROP) {
@@ -10453,7 +10468,7 @@ static void zend_compile_pre_incdec(znode *result, zend_ast *ast) /* {{{ */
 			opline->extended_value = ZEND_FETCH_DIM_INCDEC;
 		}
 		zend_emit_op_tmp(result, ast->kind == ZEND_AST_PRE_INC ? ZEND_PRE_INC : ZEND_PRE_DEC,
-			&var_node, NULL);
+			&var_node, NULL)->extended_value = zend_ast_sharp_operator(ast);
 	}
 }
 /* }}} */
@@ -12095,7 +12110,8 @@ static void zend_eval_const_expr(zend_ast **ast_ptr) /* {{{ */
 				return;
 			}
 
-			if (!zend_try_ct_eval_binary_op(&result, ast->attr,
+			if (!zend_try_ct_eval_binary_op(&result,
+					(ast->attr & ~ZEND_SHARP_OPERATOR_SYNTAX) | zend_ast_sharp_operator(ast),
 					zend_ast_get_zval(ast->child[0]), zend_ast_get_zval(ast->child[1]))
 			) {
 				return;
@@ -12157,7 +12173,7 @@ static void zend_eval_const_expr(zend_ast **ast_ptr) /* {{{ */
 				return;
 			}
 
-			if (!zend_try_ct_eval_unary_pm(&result, ast->kind, zend_ast_get_zval(ast->child[0]))) {
+			if (!zend_try_ct_eval_unary_pm(&result, ast, zend_ast_get_zval(ast->child[0]))) {
 				return;
 			}
 			break;

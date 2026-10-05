@@ -2487,6 +2487,30 @@ static zend_property_info *zend_jit_get_prop_not_accepting_double(zend_reference
 	return NULL;
 }
 
+/* The JIT sets EX(opline) to the increment or decrement opline before it calls these helpers. */
+static zend_always_inline bool zend_jit_checked_incdec(void)
+{
+	return EG(current_execute_data)->opline->extended_value & ZEND_SHARP_OPERATOR;
+}
+
+static zend_always_inline void zend_jit_increment(zval *var_ptr)
+{
+	if (UNEXPECTED(zend_jit_checked_incdec())) {
+		checked_increment_function(var_ptr);
+	} else {
+		increment_function(var_ptr);
+	}
+}
+
+static zend_always_inline void zend_jit_decrement(zval *var_ptr)
+{
+	if (UNEXPECTED(zend_jit_checked_incdec())) {
+		checked_decrement_function(var_ptr);
+	} else {
+		decrement_function(var_ptr);
+	}
+}
+
 static ZEND_COLD void zend_jit_throw_inc_ref_error(zend_reference *ref, zend_property_info *error_prop)
 {
 	zend_string *type_str = zend_type_to_string(error_prop->type);
@@ -2518,7 +2542,7 @@ static void ZEND_FASTCALL zend_jit_pre_inc_typed_ref(zend_reference *ref, zval *
 
 	ZVAL_COPY(&tmp, var_ptr);
 
-	increment_function(var_ptr);
+	zend_jit_increment(var_ptr);
 
 	if (UNEXPECTED(Z_TYPE_P(var_ptr) == IS_DOUBLE) && Z_TYPE(tmp) == IS_LONG) {
 		zend_property_info *error_prop = zend_jit_get_prop_not_accepting_double(ref);
@@ -2544,7 +2568,7 @@ static void ZEND_FASTCALL zend_jit_pre_dec_typed_ref(zend_reference *ref, zval *
 
 	ZVAL_COPY(&tmp, var_ptr);
 
-	decrement_function(var_ptr);
+	zend_jit_decrement(var_ptr);
 
 	if (UNEXPECTED(Z_TYPE_P(var_ptr) == IS_DOUBLE) && Z_TYPE(tmp) == IS_LONG) {
 		zend_property_info *error_prop = zend_jit_get_prop_not_accepting_double(ref);
@@ -2568,7 +2592,7 @@ static void ZEND_FASTCALL zend_jit_post_inc_typed_ref(zend_reference *ref, zval 
 	zval *var_ptr = &ref->val;
 	ZVAL_COPY(ret, var_ptr);
 
-	increment_function(var_ptr);
+	zend_jit_increment(var_ptr);
 
 	if (UNEXPECTED(Z_TYPE_P(var_ptr) == IS_DOUBLE) && Z_TYPE_P(ret) == IS_LONG) {
 		zend_property_info *error_prop = zend_jit_get_prop_not_accepting_double(ref);
@@ -2587,7 +2611,7 @@ static void ZEND_FASTCALL zend_jit_post_dec_typed_ref(zend_reference *ref, zval 
 	zval *var_ptr = &ref->val;
 	ZVAL_COPY(ret, var_ptr);
 
-	decrement_function(var_ptr);
+	zend_jit_decrement(var_ptr);
 
 	if (UNEXPECTED(Z_TYPE_P(var_ptr) == IS_DOUBLE) && Z_TYPE_P(ret) == IS_LONG) {
 		zend_property_info *error_prop = zend_jit_get_prop_not_accepting_double(ref);
@@ -2997,7 +3021,7 @@ static void ZEND_FASTCALL zend_jit_inc_typed_prop(zval *var_ptr, zend_property_i
 	ZVAL_DEREF(var_ptr);
 	ZVAL_COPY(&tmp, var_ptr);
 
-	increment_function(var_ptr);
+	zend_jit_increment(var_ptr);
 
 	if (UNEXPECTED(Z_TYPE_P(var_ptr) == IS_DOUBLE) && Z_TYPE(tmp) == IS_LONG) {
 		if (!(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
@@ -3029,7 +3053,7 @@ static void ZEND_FASTCALL zend_jit_dec_typed_prop(zval *var_ptr, zend_property_i
 	ZVAL_DEREF(var_ptr);
 	ZVAL_COPY(&tmp, var_ptr);
 
-	decrement_function(var_ptr);
+	zend_jit_decrement(var_ptr);
 
 	if (UNEXPECTED(Z_TYPE_P(var_ptr) == IS_DOUBLE) && Z_TYPE(tmp) == IS_LONG) {
 		if (!(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
@@ -3077,7 +3101,7 @@ static void ZEND_FASTCALL zend_jit_post_inc_typed_prop(zval *var_ptr, zend_prope
 	ZVAL_DEREF(var_ptr);
 	ZVAL_COPY(result, var_ptr);
 
-	increment_function(var_ptr);
+	zend_jit_increment(var_ptr);
 
 	if (UNEXPECTED(Z_TYPE_P(var_ptr) == IS_DOUBLE) && Z_TYPE_P(result) == IS_LONG) {
 		if (!(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
@@ -3111,7 +3135,7 @@ static void ZEND_FASTCALL zend_jit_post_dec_typed_prop(zval *var_ptr, zend_prope
 	ZVAL_DEREF(var_ptr);
 	ZVAL_COPY(result, var_ptr);
 
-	decrement_function(var_ptr);
+	zend_jit_decrement(var_ptr);
 
 	if (UNEXPECTED(Z_TYPE_P(var_ptr) == IS_DOUBLE) && Z_TYPE_P(result) == IS_LONG) {
 		if (!(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
@@ -3146,10 +3170,14 @@ static void ZEND_FASTCALL zend_jit_pre_inc_obj_helper(zend_object *zobj, zend_st
 
 			if (EXPECTED(Z_TYPE_P(prop) == IS_LONG)) {
 				fast_long_increment_function(prop);
-				if (UNEXPECTED(Z_TYPE_P(prop) != IS_LONG) && prop_info
-						&& !(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
-					zend_long val = _zend_jit_throw_inc_prop_error(prop_info);
-					ZVAL_LONG(prop, val);
+				if (UNEXPECTED(Z_TYPE_P(prop) != IS_LONG)) {
+					if (UNEXPECTED(zend_jit_checked_incdec())) {
+						zend_integer_overflow_error();
+						ZVAL_LONG(prop, ZEND_LONG_MAX);
+					} else if (prop_info && !(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
+						zend_long val = _zend_jit_throw_inc_prop_error(prop_info);
+						ZVAL_LONG(prop, val);
+					}
 				}
 			} else {
 				do {
@@ -3165,7 +3193,7 @@ static void ZEND_FASTCALL zend_jit_pre_inc_obj_helper(zend_object *zobj, zend_st
 					if (prop_info) {
 						zend_jit_inc_typed_prop(prop, prop_info);
 					} else {
-						increment_function(prop);
+						zend_jit_increment(prop);
 					}
 				} while (0);
 			}
@@ -3189,7 +3217,7 @@ static void ZEND_FASTCALL zend_jit_pre_inc_obj_helper(zend_object *zobj, zend_st
 		}
 
 		ZVAL_COPY_DEREF(&z_copy, z);
-		increment_function(&z_copy);
+		zend_jit_increment(&z_copy);
 		if (UNEXPECTED(result)) {
 			ZVAL_COPY(result, &z_copy);
 		}
@@ -3219,10 +3247,14 @@ static void ZEND_FASTCALL zend_jit_pre_dec_obj_helper(zend_object *zobj, zend_st
 
 			if (EXPECTED(Z_TYPE_P(prop) == IS_LONG)) {
 				fast_long_decrement_function(prop);
-				if (UNEXPECTED(Z_TYPE_P(prop) != IS_LONG) && prop_info
-						&& !(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
-					zend_long val = _zend_jit_throw_dec_prop_error(prop_info);
-					ZVAL_LONG(prop, val);
+				if (UNEXPECTED(Z_TYPE_P(prop) != IS_LONG)) {
+					if (UNEXPECTED(zend_jit_checked_incdec())) {
+						zend_integer_overflow_error();
+						ZVAL_LONG(prop, ZEND_LONG_MIN);
+					} else if (prop_info && !(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
+						zend_long val = _zend_jit_throw_dec_prop_error(prop_info);
+						ZVAL_LONG(prop, val);
+					}
 				}
 			} else {
 				do {
@@ -3238,7 +3270,7 @@ static void ZEND_FASTCALL zend_jit_pre_dec_obj_helper(zend_object *zobj, zend_st
 					if (prop_info) {
 						zend_jit_dec_typed_prop(prop, prop_info);
 					} else {
-						decrement_function(prop);
+						zend_jit_decrement(prop);
 					}
 				} while (0);
 			}
@@ -3262,7 +3294,7 @@ static void ZEND_FASTCALL zend_jit_pre_dec_obj_helper(zend_object *zobj, zend_st
 		}
 
 		ZVAL_COPY_DEREF(&z_copy, z);
-		decrement_function(&z_copy);
+		zend_jit_decrement(&z_copy);
 		if (UNEXPECTED(result)) {
 			ZVAL_COPY(result, &z_copy);
 		}
@@ -3291,10 +3323,14 @@ static void ZEND_FASTCALL zend_jit_post_inc_obj_helper(zend_object *zobj, zend_s
 			if (EXPECTED(Z_TYPE_P(prop) == IS_LONG)) {
 				ZVAL_LONG(result, Z_LVAL_P(prop));
 				fast_long_increment_function(prop);
-				if (UNEXPECTED(Z_TYPE_P(prop) != IS_LONG) && prop_info
-						&& !(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
-					zend_long val = _zend_jit_throw_inc_prop_error(prop_info);
-					ZVAL_LONG(prop, val);
+				if (UNEXPECTED(Z_TYPE_P(prop) != IS_LONG)) {
+					if (UNEXPECTED(zend_jit_checked_incdec())) {
+						zend_integer_overflow_error();
+						ZVAL_LONG(prop, ZEND_LONG_MAX);
+					} else if (prop_info && !(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
+						zend_long val = _zend_jit_throw_inc_prop_error(prop_info);
+						ZVAL_LONG(prop, val);
+					}
 				}
 			} else {
 				if (Z_ISREF_P(prop)) {
@@ -3310,7 +3346,7 @@ static void ZEND_FASTCALL zend_jit_post_inc_obj_helper(zend_object *zobj, zend_s
 					zend_jit_post_inc_typed_prop(prop, prop_info, result);
 				} else {
 					ZVAL_COPY(result, prop);
-					increment_function(prop);
+					zend_jit_increment(prop);
 				}
 			}
 		}
@@ -3329,7 +3365,7 @@ static void ZEND_FASTCALL zend_jit_post_inc_obj_helper(zend_object *zobj, zend_s
 
 		ZVAL_COPY_DEREF(&z_copy, z);
 		ZVAL_COPY(result, &z_copy);
-		increment_function(&z_copy);
+		zend_jit_increment(&z_copy);
 		zobj->handlers->write_property(zobj, name, &z_copy, cache_slot);
 		OBJ_RELEASE(zobj);
 		zval_ptr_dtor(&z_copy);
@@ -3355,10 +3391,14 @@ static void ZEND_FASTCALL zend_jit_post_dec_obj_helper(zend_object *zobj, zend_s
 			if (EXPECTED(Z_TYPE_P(prop) == IS_LONG)) {
 				ZVAL_LONG(result, Z_LVAL_P(prop));
 				fast_long_decrement_function(prop);
-				if (UNEXPECTED(Z_TYPE_P(prop) != IS_LONG) && prop_info
-						&& !(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
-					zend_long val = _zend_jit_throw_dec_prop_error(prop_info);
-					ZVAL_LONG(prop, val);
+				if (UNEXPECTED(Z_TYPE_P(prop) != IS_LONG)) {
+					if (UNEXPECTED(zend_jit_checked_incdec())) {
+						zend_integer_overflow_error();
+						ZVAL_LONG(prop, ZEND_LONG_MIN);
+					} else if (prop_info && !(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
+						zend_long val = _zend_jit_throw_dec_prop_error(prop_info);
+						ZVAL_LONG(prop, val);
+					}
 				}
 			} else {
 				if (Z_ISREF_P(prop)) {
@@ -3374,7 +3414,7 @@ static void ZEND_FASTCALL zend_jit_post_dec_obj_helper(zend_object *zobj, zend_s
 					zend_jit_post_dec_typed_prop(prop, prop_info, result);
 				} else {
 					ZVAL_COPY(result, prop);
-					decrement_function(prop);
+					zend_jit_decrement(prop);
 				}
 			}
 		}
@@ -3393,7 +3433,7 @@ static void ZEND_FASTCALL zend_jit_post_dec_obj_helper(zend_object *zobj, zend_s
 
 		ZVAL_COPY_DEREF(&z_copy, z);
 		ZVAL_COPY(result, &z_copy);
-		decrement_function(&z_copy);
+		zend_jit_decrement(&z_copy);
 		zobj->handlers->write_property(zobj, name, &z_copy, cache_slot);
 		OBJ_RELEASE(zobj);
 		zval_ptr_dtor(&z_copy);

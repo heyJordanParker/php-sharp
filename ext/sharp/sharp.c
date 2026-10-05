@@ -145,6 +145,23 @@ static zend_ast *sharp_translate_decl(const sharp_unit *unit, const sharp_node *
 		child[0], child[1], child[2], child[3], child[4]);
 }
 
+static zend_ast_attr sharp_operator_attr(zend_ast_kind kind, uint32_t attr)
+{
+	switch (kind) {
+		case ZEND_AST_BINARY_OP:
+		case ZEND_AST_ASSIGN_OP:
+			return attr == ZEND_ADD || attr == ZEND_SUB || attr == ZEND_MUL ? attr | ZEND_SHARP_OPERATOR_SYNTAX : attr;
+		case ZEND_AST_UNARY_MINUS:
+		case ZEND_AST_PRE_INC:
+		case ZEND_AST_PRE_DEC:
+		case ZEND_AST_POST_INC:
+		case ZEND_AST_POST_DEC:
+			return attr | ZEND_SHARP_OPERATOR_SYNTAX;
+		default:
+			return attr;
+	}
+}
+
 static zend_ast *sharp_translate_fixed(const sharp_unit *unit, const sharp_node *node, zend_ast_kind kind)
 {
 	zend_ast *child[6] = {0};
@@ -156,7 +173,7 @@ static zend_ast *sharp_translate_fixed(const sharp_unit *unit, const sharp_node 
 		child[i] = sharp_translate(unit, unit->children[node->first_child + i]);
 	}
 
-	ast = zend_ast_create_ex(kind, node->attr, child[0], child[1], child[2], child[3], child[4], child[5]);
+	ast = zend_ast_create_ex(kind, sharp_operator_attr(kind, node->attr), child[0], child[1], child[2], child[3], child[4], child[5]);
 	ast->lineno = node->line;
 
 	return ast;
