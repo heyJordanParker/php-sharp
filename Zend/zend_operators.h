@@ -69,6 +69,7 @@ ZEND_API zend_result ZEND_FASTCALL shift_right_function(zval *result, zval *op1,
 ZEND_API zend_result ZEND_FASTCALL concat_function(zval *result, zval *op1, zval *op2);
 
 ZEND_API ZEND_COLD void zend_integer_overflow_error(void);
+ZEND_API ZEND_COLD void zend_float_to_int_error(double d);
 zend_result ZEND_FASTCALL checked_add_function(zval *result, zval *op1, zval *op2);
 zend_result ZEND_FASTCALL checked_sub_function(zval *result, zval *op1, zval *op2);
 zend_result ZEND_FASTCALL checked_mul_function(zval *result, zval *op1, zval *op2);

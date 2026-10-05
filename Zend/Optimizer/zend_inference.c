@@ -2666,7 +2666,7 @@ static zend_always_inline zend_result _zend_update_type_info(
 				UPDATE_SSA_TYPE(tmp, ssa_op->op1_def);
 				COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->op1_def);
 			}
-			tmp = 1 << opline->extended_value;
+			tmp = 1 << (opline->extended_value & ~ZEND_SHARP_OPERATOR);
 			if (tmp & (MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE)) {
 				if ((tmp & MAY_BE_ANY) == (t1 & MAY_BE_ANY)) {
 					tmp |= (t1 & MAY_BE_RC1) | MAY_BE_RCN;
@@ -5314,7 +5314,7 @@ ZEND_API bool zend_may_throw_ex(const zend_op *opline, const zend_ssa_op *ssa_op
 		case ZEND_FETCH_DIM_IS:
 			return (t1 & MAY_BE_OBJECT) || (t2 & (MAY_BE_DOUBLE|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE));
 		case ZEND_CAST:
-			switch (opline->extended_value) {
+			switch (opline->extended_value & ~ZEND_SHARP_OPERATOR) {
 				case IS_LONG:
 					return (t1 & (MAY_BE_DOUBLE|MAY_BE_STRING|MAY_BE_OBJECT));
 				case IS_DOUBLE:

@@ -76,6 +76,8 @@ static zend_ast_kind sharp_zend_kind(enum sharp_kind kind)
 		SHARP_KIND(NAME_LIST);
 		SHARP_KIND(CALL);
 		SHARP_KIND(ENCAPS_LIST);
+		SHARP_KIND(CONDITIONAL);
+		SHARP_KIND(CAST);
 	}
 
 	ZEND_UNREACHABLE();
@@ -152,6 +154,8 @@ static zend_ast_attr sharp_operator_attr(zend_ast_kind kind, uint32_t attr)
 		case ZEND_AST_ASSIGN_OP:
 			return attr == ZEND_ADD || attr == ZEND_SUB || attr == ZEND_MUL || attr == ZEND_POW
 				? attr | ZEND_SHARP_OPERATOR_SYNTAX : attr;
+		case ZEND_AST_CAST:
+			return attr == IS_LONG ? attr | ZEND_SHARP_OPERATOR_SYNTAX : attr;
 		case ZEND_AST_UNARY_MINUS:
 		case ZEND_AST_PRE_INC:
 		case ZEND_AST_PRE_DEC:

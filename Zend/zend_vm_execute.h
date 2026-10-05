@@ -5345,6 +5345,21 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_
 		case IS_LONG:
 			ZVAL_LONG(result, zval_get_long(expr));
 			break;
+		case IS_LONG | ZEND_SHARP_OPERATOR: {
+			zval *value = expr;
+
+			ZVAL_DEREF(value);
+			if (Z_TYPE_P(value) == IS_DOUBLE
+			 && UNEXPECTED(!zend_finite(Z_DVAL_P(value)) || !ZEND_DOUBLE_FITS_LONG(Z_DVAL_P(value)))) {
+				zend_float_to_int_error(Z_DVAL_P(value));
+
+
+				UNDEF_RESULT();
+				HANDLE_EXCEPTION();
+			}
+			ZVAL_LONG(result, zval_get_long(expr));
+			break;
+		}
 		case IS_DOUBLE:
 			ZVAL_DOUBLE(result, zval_get_double(expr));
 			break;
@@ -20792,6 +20807,20 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_CAST_SPEC_TMP
 		case IS_LONG:
 			ZVAL_LONG(result, zval_get_long(expr));
 			break;
+		case IS_LONG | ZEND_SHARP_OPERATOR: {
+			zval *value = expr;
+
+			ZVAL_DEREF(value);
+			if (Z_TYPE_P(value) == IS_DOUBLE
+			 && UNEXPECTED(!zend_finite(Z_DVAL_P(value)) || !ZEND_DOUBLE_FITS_LONG(Z_DVAL_P(value)))) {
+				zend_float_to_int_error(Z_DVAL_P(value));
+				zval_ptr_dtor_nogc(EX_VAR(opline->op1.var));
+				UNDEF_RESULT();
+				HANDLE_EXCEPTION();
+			}
+			ZVAL_LONG(result, zval_get_long(expr));
+			break;
+		}
 		case IS_DOUBLE:
 			ZVAL_DOUBLE(result, zval_get_double(expr));
 			break;
@@ -23544,6 +23573,20 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_CAST_SPEC_VAR
 		case IS_LONG:
 			ZVAL_LONG(result, zval_get_long(expr));
 			break;
+		case IS_LONG | ZEND_SHARP_OPERATOR: {
+			zval *value = expr;
+
+			ZVAL_DEREF(value);
+			if (Z_TYPE_P(value) == IS_DOUBLE
+			 && UNEXPECTED(!zend_finite(Z_DVAL_P(value)) || !ZEND_DOUBLE_FITS_LONG(Z_DVAL_P(value)))) {
+				zend_float_to_int_error(Z_DVAL_P(value));
+				zval_ptr_dtor_nogc(EX_VAR(opline->op1.var));
+				UNDEF_RESULT();
+				HANDLE_EXCEPTION();
+			}
+			ZVAL_LONG(result, zval_get_long(expr));
+			break;
+		}
 		case IS_DOUBLE:
 			ZVAL_DOUBLE(result, zval_get_double(expr));
 			break;
@@ -42242,6 +42285,21 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_CAST_SPEC_CV_
 		case IS_LONG:
 			ZVAL_LONG(result, zval_get_long(expr));
 			break;
+		case IS_LONG | ZEND_SHARP_OPERATOR: {
+			zval *value = expr;
+
+			ZVAL_DEREF(value);
+			if (Z_TYPE_P(value) == IS_DOUBLE
+			 && UNEXPECTED(!zend_finite(Z_DVAL_P(value)) || !ZEND_DOUBLE_FITS_LONG(Z_DVAL_P(value)))) {
+				zend_float_to_int_error(Z_DVAL_P(value));
+
+
+				UNDEF_RESULT();
+				HANDLE_EXCEPTION();
+			}
+			ZVAL_LONG(result, zval_get_long(expr));
+			break;
+		}
 		case IS_DOUBLE:
 			ZVAL_DOUBLE(result, zval_get_double(expr));
 			break;
@@ -61254,6 +61312,21 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_CAST_
 		case IS_LONG:
 			ZVAL_LONG(result, zval_get_long(expr));
 			break;
+		case IS_LONG | ZEND_SHARP_OPERATOR: {
+			zval *value = expr;
+
+			ZVAL_DEREF(value);
+			if (Z_TYPE_P(value) == IS_DOUBLE
+			 && UNEXPECTED(!zend_finite(Z_DVAL_P(value)) || !ZEND_DOUBLE_FITS_LONG(Z_DVAL_P(value)))) {
+				zend_float_to_int_error(Z_DVAL_P(value));
+
+
+				UNDEF_RESULT();
+				HANDLE_EXCEPTION();
+			}
+			ZVAL_LONG(result, zval_get_long(expr));
+			break;
+		}
 		case IS_DOUBLE:
 			ZVAL_DOUBLE(result, zval_get_double(expr));
 			break;
@@ -76499,6 +76572,20 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_CAST_SPEC_TMP_TAIL
 		case IS_LONG:
 			ZVAL_LONG(result, zval_get_long(expr));
 			break;
+		case IS_LONG | ZEND_SHARP_OPERATOR: {
+			zval *value = expr;
+
+			ZVAL_DEREF(value);
+			if (Z_TYPE_P(value) == IS_DOUBLE
+			 && UNEXPECTED(!zend_finite(Z_DVAL_P(value)) || !ZEND_DOUBLE_FITS_LONG(Z_DVAL_P(value)))) {
+				zend_float_to_int_error(Z_DVAL_P(value));
+				zval_ptr_dtor_nogc(EX_VAR(opline->op1.var));
+				UNDEF_RESULT();
+				HANDLE_EXCEPTION();
+			}
+			ZVAL_LONG(result, zval_get_long(expr));
+			break;
+		}
 		case IS_DOUBLE:
 			ZVAL_DOUBLE(result, zval_get_double(expr));
 			break;
@@ -79251,6 +79338,20 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_CAST_SPEC_VAR_TAIL
 		case IS_LONG:
 			ZVAL_LONG(result, zval_get_long(expr));
 			break;
+		case IS_LONG | ZEND_SHARP_OPERATOR: {
+			zval *value = expr;
+
+			ZVAL_DEREF(value);
+			if (Z_TYPE_P(value) == IS_DOUBLE
+			 && UNEXPECTED(!zend_finite(Z_DVAL_P(value)) || !ZEND_DOUBLE_FITS_LONG(Z_DVAL_P(value)))) {
+				zend_float_to_int_error(Z_DVAL_P(value));
+				zval_ptr_dtor_nogc(EX_VAR(opline->op1.var));
+				UNDEF_RESULT();
+				HANDLE_EXCEPTION();
+			}
+			ZVAL_LONG(result, zval_get_long(expr));
+			break;
+		}
 		case IS_DOUBLE:
 			ZVAL_DOUBLE(result, zval_get_double(expr));
 			break;
@@ -97949,6 +98050,21 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_CAST_SPEC_CV_TAILC
 		case IS_LONG:
 			ZVAL_LONG(result, zval_get_long(expr));
 			break;
+		case IS_LONG | ZEND_SHARP_OPERATOR: {
+			zval *value = expr;
+
+			ZVAL_DEREF(value);
+			if (Z_TYPE_P(value) == IS_DOUBLE
+			 && UNEXPECTED(!zend_finite(Z_DVAL_P(value)) || !ZEND_DOUBLE_FITS_LONG(Z_DVAL_P(value)))) {
+				zend_float_to_int_error(Z_DVAL_P(value));
+
+
+				UNDEF_RESULT();
+				HANDLE_EXCEPTION();
+			}
+			ZVAL_LONG(result, zval_get_long(expr));
+			break;
+		}
 		case IS_DOUBLE:
 			ZVAL_DOUBLE(result, zval_get_double(expr));
 			break;
