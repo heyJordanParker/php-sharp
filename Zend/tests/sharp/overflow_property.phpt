@@ -5,12 +5,9 @@ PHP# throws ArithmeticError when ++, -- or += overflows a property
 
 namespace Demo;
 
-class Counter
-{
-    public function __construct(public int $value) {}
-}
+require __DIR__ . '/harness/Overflow.inc';
 
-final class MagicCounter extends Counter
+final class MagicCounter extends Cell
 {
     private array $values = [];
 
@@ -34,14 +31,14 @@ final class MagicCounter extends Counter
 require __DIR__ . '/attempt.inc';
 require __DIR__ . '/Overflow.sharp';
 
-$counter = new Counter(PHP_INT_MAX);
+$counter = new Cell(PHP_INT_MAX);
 attempt(fn () => Overflow::incProperty($counter));
 var_dump($counter->value);
-attempt(fn () => Overflow::decProperty(new Counter(PHP_INT_MIN)));
-attempt(fn () => Overflow::addProperty(new Counter(PHP_INT_MAX), 1));
-attempt(fn () => Overflow::addProperty(new Counter(1), 2));
+attempt(fn () => Overflow::decProperty(new Cell(PHP_INT_MIN)));
+attempt(fn () => Overflow::addProperty(new Cell(PHP_INT_MAX), 1));
+attempt(fn () => Overflow::addProperty(new Cell(1), 2));
 
-$held = new Counter(PHP_INT_MAX);
+$held = new Cell(PHP_INT_MAX);
 $reference = &$held->value;
 attempt(fn () => Overflow::addProperty($held, 1));
 attempt(fn () => Overflow::incProperty($held));

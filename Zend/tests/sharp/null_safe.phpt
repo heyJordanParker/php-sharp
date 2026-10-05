@@ -3,7 +3,7 @@ PHP# `a?.b` and `a?.m()` give null when a is null, and skip the rest of the chai
 --FILE--
 <?php
 
-require __DIR__ . '/Box.inc';
+require __DIR__ . '/harness/Box.inc';
 require __DIR__ . '/Nulls.sharp';
 
 $nulls = new Demo\Nulls;
