@@ -510,7 +510,7 @@ static void ZEND_FASTCALL zend_jit_fetch_dim_r_helper(zend_array *ht, zval *dim,
 			}
 			zend_error(E_DEPRECATED, "Using null as an array offset is deprecated, use an empty string instead");
 			if (!retval) {
-				zend_error(E_WARNING, "Undefined array key \"\"");
+				zend_undefined_index(ZSTR_EMPTY_ALLOC());
 			}
 			return;
 		case IS_DOUBLE:
@@ -586,7 +586,7 @@ str_index:
 	}
 	retval = zend_hash_find(ht, offset_key);
 	if (!retval) {
-		zend_error(E_WARNING, "Undefined array key \"%s\"", ZSTR_VAL(offset_key));
+		zend_undefined_index(offset_key);
 		ZVAL_NULL(result);
 		return;
 	}
@@ -599,7 +599,7 @@ num_index:
 	return;
 
 num_undef:
-	zend_error(E_WARNING, "Undefined array key " ZEND_LONG_FMT, hval);
+	zend_undefined_offset(hval);
 	ZVAL_NULL(result);
 }
 

@@ -3080,7 +3080,7 @@ static zend_op *zend_delayed_compile_dim(znode *result, zend_ast *ast, uint32_t 
 					|| opline->opcode == ZEND_FETCH_DIM_RW
 					|| opline->opcode == ZEND_FETCH_DIM_FUNC_ARG
 					|| opline->opcode == ZEND_FETCH_DIM_UNSET) {
-				opline->extended_value = ZEND_FETCH_DIM_DIM;
+				opline->extended_value |= ZEND_FETCH_DIM_DIM;
 			}
 		}
 	}
@@ -3103,6 +3103,9 @@ static zend_op *zend_delayed_compile_dim(znode *result, zend_ast *ast, uint32_t 
 	zend_adjust_for_fetch_type(opline, result, type);
 	if (by_ref) {
 		opline->extended_value = ZEND_FETCH_DIM_REF;
+	}
+	if ((type == BP_VAR_R || type == BP_VAR_FUNC_ARG) && (ast->attr & ZEND_DIM_SHARP)) {
+		opline->extended_value |= ZEND_SHARP_OPERATOR;
 	}
 
 	if (dim_node.op_type == IS_CONST) {
@@ -3145,7 +3148,7 @@ static zend_op *zend_delayed_compile_prop(znode *result, zend_ast *ast, uint32_t
 				|| opline->opcode == ZEND_FETCH_DIM_RW
 				|| opline->opcode == ZEND_FETCH_DIM_FUNC_ARG
 				|| opline->opcode == ZEND_FETCH_DIM_UNSET)) {
-			opline->extended_value = ZEND_FETCH_DIM_OBJ;
+			opline->extended_value |= ZEND_FETCH_DIM_OBJ;
 		}
 
 		zend_separate_if_call_and_write(&obj_node, obj_ast, type);

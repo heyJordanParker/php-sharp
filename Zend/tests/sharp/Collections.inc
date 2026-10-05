@@ -9,34 +9,31 @@ class Cart
 
     public function fill(array $extra): int
     {
-        $all = [new \Demo\Item("tea", 3), new \Demo\Item("cake", 5)];
-        $all[1] = $extra[0];
+        $all = [new \Demo\Item("tea", 3), $extra[0]];
         $this->items = $all;
         $this->counts["items"] = \count($this->items);
         $this->counts["extra"] = \count($extra);
-        $total = 0;
+        $total = $all[0]->cents;
         foreach ($this->items as $item) {
             $total += $item->cents;
         }
         foreach ($this->counts as $name => $size) {
-            $total += \strlen($name) * $size;
+            if ($name == "items") {
+                $total += $size * 10;
+            }
         }
         return $total + \SplFixedArray::fromArray($this->prices())->getSize();
     }
 
     public function prices(): array
     {
-        $prices = [];
-        foreach ($this->items as $index => $item) {
-            $prices[$index] = $item->cents;
-        }
-        return $prices;
+        return \array_column($this->items, "cents");
     }
 
     public function bump(string $name): int
     {
-        $this->counts[$name] += 1;
-        return $this->counts[$name];
+        $this->counts[$name] = ($this->counts[$name] ?? 0) + 1;
+        return $this->counts[$name] ?? 0;
     }
 
     public function has(int $cents): bool

@@ -9,34 +9,31 @@ class Cart
 
     public int fill(List<Item> extra)
     {
-        List<Item> all = [new Item("tea", 3), new Item("cake", 5)];
-        all[1] = extra[0];
+        List<Item> all = [new Item("tea", 3), extra[0]];
         this.items = all;
         this.counts["items"] = count(this.items);
         this.counts["extra"] = count(extra);
-        let total = 0;
+        let total = all[0].cents;
         for (const item of this.items) {
             total += item.cents;
         }
         for (const [name, size] of this.counts) {
-            total += strlen(name) * size;
+            if (name == "items") {
+                total += size * 10;
+            }
         }
         return total + SplFixedArray.fromArray(this.prices()).getSize();
     }
 
     public List<int> prices()
     {
-        List<int> prices = [];
-        for (const [index, item] of this.items) {
-            prices[index] = item.cents;
-        }
-        return prices;
+        return array_column(this.items, "cents");
     }
 
     public int bump(string name)
     {
-        this.counts[name] += 1;
-        return this.counts[name];
+        this.counts[name] = (this.counts[name] ?? 0) + 1;
+        return this.counts[name] ?? 0;
     }
 
     public bool has(int cents)

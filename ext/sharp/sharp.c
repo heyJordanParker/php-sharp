@@ -162,6 +162,8 @@ static zend_ast_attr sharp_operator_attr(zend_ast_kind kind, uint32_t attr)
 		case ZEND_AST_POST_INC:
 		case ZEND_AST_POST_DEC:
 			return attr | ZEND_SHARP_OPERATOR_SYNTAX;
+		case ZEND_AST_DIM:
+			return attr | ZEND_DIM_SHARP;
 		default:
 			return attr;
 	}

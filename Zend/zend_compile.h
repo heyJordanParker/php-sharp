@@ -1105,7 +1105,10 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  * ZEND_AST_BINARY_OP, ZEND_AST_ASSIGN_OP, ZEND_AST_UNARY_MINUS and the increment kinds. The
  * compiler turns it into ZEND_SHARP_OPERATOR in the extended_value of ZEND_ADD, ZEND_SUB,
  * ZEND_MUL, ZEND_POW, the ZEND_ASSIGN_*_OP opcodes, where it sits next to the opcode, and the
- * increment and decrement opcodes, where it sits above the cache slot. */
+ * increment and decrement opcodes, where it sits above the cache slot. ZEND_SHARP_OPERATOR also
+ * marks a PHP# index read, which ZEND_DIM_SHARP sets on ZEND_AST_DIM, in the extended_value of
+ * ZEND_FETCH_DIM_R and ZEND_FETCH_DIM_FUNC_ARG, next to the ZEND_FETCH_DIM_* flags: a missing key
+ * throws OutOfRangeException instead of PHP's warning. */
 #define ZEND_SHARP_OPERATOR_SYNTAX	(1<<15)
 #define ZEND_SHARP_OPERATOR	(1<<30)
 
@@ -1143,6 +1146,7 @@ static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 	((ZEND_TYPE_FULL_MASK((arg_info)->type) & _ZEND_IS_TENTATIVE_BIT) != 0)
 
 #define ZEND_DIM_IS					(1 << 0) /* isset fetch needed for null coalesce. Set in zend_compile.c for ZEND_AST_DIM nested within ZEND_AST_COALESCE. */
+#define ZEND_DIM_SHARP				(1 << 1) /* PHP# index read, see ZEND_SHARP_OPERATOR. Set in ext/sharp for every ZEND_AST_DIM. */
 #define ZEND_ALT_CASE_SYNTAX		(1 << 1) /* deprecated switch case terminated by semicolon */
 
 /* Attributes for ${} encaps var in strings (ZEND_AST_DIM or ZEND_AST_VAR node) */
