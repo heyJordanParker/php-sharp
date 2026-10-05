@@ -307,4 +307,22 @@ class Overflow
         x **= b;
         return a;
     }
+
+    public static int powProperty(Counter counter, int b)
+    {
+        counter.value **= b;
+        return counter.value;
+    }
+
+    public static int powLoose(LooseCounter counter, int b)
+    {
+        counter.value **= b;
+        return counter.value;
+    }
+
+    public static int deadPower(int a, int b)
+    {
+        let p = a ** b;
+        return a;
+    }
 }

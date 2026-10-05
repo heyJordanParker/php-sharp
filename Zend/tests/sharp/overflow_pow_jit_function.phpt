@@ -1,11 +1,20 @@
 --TEST--
-PHP# throws ArithmeticError when ** or **= overflows, and keeps PHP's float for a negative exponent
+PHP# throws ArithmeticError when ** or **= overflows under the function JIT
+--EXTENSIONS--
+opcache
+--INI--
+opcache.enable=1
+opcache.enable_cli=1
+opcache.jit=function
+opcache.jit_buffer_size=32M
 --FILE--
 <?php
+echo 'jit ', opcache_get_status()['jit']['on'] ? 'on' : 'off', "\n";
 require __DIR__ . '/overflow_pow.inc';
 Demo\powCases();
 ?>
 --EXPECT--
+jit on
 int(4611686018427387904)
 ArithmeticError: Integer overflow in Overflow.sharp on line 256
 int(-9223372036854775808)
