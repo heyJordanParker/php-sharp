@@ -2,6 +2,8 @@
 
 PHP# is a per-file dialect of PHP. A PHP# file compiles to the same engine as plain PHP, so the two call each other freely. This file is the single source of truth for PHP# syntax and rules.
 
+[decisions/](decisions/) records why each rule was chosen.
+
 - Every rule here was approved by the Architect.
 - Only the Architect changes a rule.
 - Proposals still waiting for his decision are listed under **Open** in their section.
@@ -941,7 +943,7 @@ PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or
 
 ## 25. Referring to classes
 
-**`typeof(X)`** gives a typed class object, `Class<X>`, not a string. It works on type parameters, because generics are reified. PHP's `Order::class` string is removed.
+**`typeof(X)`** is typed `Class<X>`, and plain PHP receives the class-name string. It works on type parameters, because generics are reified. PHP's `Order::class` is removed.
 
 ```csharp
 Class<Order> type = typeof(Order);
@@ -1228,6 +1230,8 @@ public Result<Receipt, PaymentError> checkout(Cart cart)
 ```
 
 `try`/`catch` blocks remain for exceptions, which are now mostly limited to the edges, such as wrapping a plain PHP exception.
+
+Methods declare no thrown exceptions, and the checker never reports an undeclared one.
 
 **Every failure type implements `Error`,** a standard-library interface. One handler can then render any failure, such as an API turning it into an RFC 9457 response.
 

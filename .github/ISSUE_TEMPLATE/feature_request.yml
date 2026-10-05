@@ -1,10 +1,10 @@
 name: Feature request
-description: Create a feature request
-labels: ["Feature", "Status: Needs Triage"]
+description: Propose a change to the PHP# language or its tools
+labels: ["enhancement"]
 body:
   - type: textarea
     attributes:
       label: Description
-      description: "Please describe the requested feature and why it should be included in PHP."
+      description: "The code you want to write in PHP#, what it should do, and why PHP# needs it. Name the section of docs/spec.md it changes, if any."
     validations:
       required: true
