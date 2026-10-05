@@ -12,11 +12,6 @@ class Nulls
         return value;
     }
 
-    public int must(int? value)
-    {
-        return value;
-    }
-
     public int either(int? first, int? second)
     {
         return first ?? second ?? 0;
@@ -25,7 +20,7 @@ class Nulls
     public int fill(int? value)
     {
         let filled = value;
-        filled ??= this.must(7);
+        filled ??= this.either(7, null);
         value ??= 8;
         return filled + value;
     }
@@ -37,7 +32,7 @@ class Nulls
 
     public int? through(Nulls? other, int? value)
     {
-        return other?.same(value) ?? other?.must(7);
+        return other?.same(value) ?? other?.itself()?.either(7, null);
     }
 
     public int? size(Box? box)

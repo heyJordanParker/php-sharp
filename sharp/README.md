@@ -1,6 +1,6 @@
 # PHP#
 
-PHP# is Dent's own PHP. It is a fork of php-src that keeps running plain PHP and adds a second dialect, PHP#, with C#-shaped syntax and compile-time type safety. A PHP# file compiles to the same engine as plain PHP, so the two call each other freely.
+PHP# is a fork of php-src that keeps running plain PHP and adds a second dialect, PHP#, with C#-shaped syntax and compile-time type safety. A PHP# file compiles to the same engine as plain PHP, so the two call each other freely.
 
 The approved language rules live in [docs/spec.md](../docs/spec.md), and the reason behind each language decision lives in [docs/decisions/](../docs/decisions/).
 
@@ -27,7 +27,7 @@ sharp/bin/test --differential   # also check that php -l compiles every Zend/tes
 sharp/bin/test --upstream       # run Zend/tests, ext/reflection, ext/tokenizer and ext/opcache
 ```
 
-`--differential` runs `mago analyze` built from the Mago commit that `ext/sharp/Cargo.toml` pins for the bridge, installed under `sharp/build/<os>-<arch>/mago`. `Zend/tests/sharp/mago.toml` makes the `.sharp` fixtures one checker project. A file the checker refuses needs nothing from the engine. A file it accepts must make `php -l` print nothing but "No syntax errors detected", so a compile warning or deprecation also fails the run.
+`--differential` runs `mago analyze` built from the Mago commit that `ext/sharp/Cargo.toml` pins for the bridge, installed under `sharp/build/<os>-<arch>/mago`. `Zend/tests/sharp/mago.toml` makes the `.sharp` fixtures and the plain PHP classes they call, in `Zend/tests/sharp/harness/`, one checker project. A file the checker refuses needs nothing from the engine. A file it accepts must make `php -l` print nothing but "No syntax errors detected", so a compile warning or deprecation also fails the run.
 
 `--linux` runs either command inside the Debian trixie image from `sharp/docker/`, for example `sharp/bin/build --linux` and `sharp/bin/test --linux --opcache`.
 

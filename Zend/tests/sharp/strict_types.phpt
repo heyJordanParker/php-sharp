@@ -5,14 +5,7 @@ PHP# compiles a .sharp file with strict_types=1
 
 namespace Demo;
 
-class Helper
-{
-    public static function take(int $value): int
-    {
-        return $value;
-    }
-}
-
+require __DIR__ . '/harness/Helper.inc';
 require __DIR__ . '/Strict.sharp';
 
 try {

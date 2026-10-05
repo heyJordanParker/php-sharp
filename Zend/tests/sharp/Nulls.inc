@@ -12,11 +12,6 @@ class Nulls
         return $value;
     }
 
-    public function must(?int $value): int
-    {
-        return $value;
-    }
-
     public function either(?int $first, ?int $second): int
     {
         return $first ?? $second ?? 0;
@@ -25,7 +20,7 @@ class Nulls
     public function fill(?int $value): int
     {
         $filled = $value;
-        $filled ??= $this->must(7);
+        $filled ??= $this->either(7, null);
         $value ??= 8;
         return $filled + $value;
     }
@@ -37,7 +32,7 @@ class Nulls
 
     public function through(?\Demo\Nulls $other, ?int $value): ?int
     {
-        return ((object) $other)?->same($value) ?? ((object) $other)?->must(7);
+        return ((object) $other)?->same($value) ?? ((object) ((object) $other)?->itself())?->either(7, null);
     }
 
     public function size(?\Demo\Box $box): ?int

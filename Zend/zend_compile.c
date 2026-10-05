@@ -5242,8 +5242,10 @@ static void zend_compile_call(znode *result, zend_ast *ast, uint32_t type) /* {{
 
 /* A PHP# method call on a List or Map runs a Sharp\Collection method, so the receiver's fetch is
  * marked to make that object: the fetch of a property, so a changing method writes the property
- * back, or else a cast, which keeps a local's slot or a copy of any other value. */
-static void zend_compile_sharp_receiver(znode *result, zend_ast *ast)
+ * back, or else a cast, which keeps a local's slot or a copy of any other value. Before a `?.` call
+ * the receiver ends its own null-safe chain ahead of the cast, as PHP's ((object) $a?->b())?->c()
+ * does: the call's own JMP_NULL gives null for either. */
+static void zend_compile_sharp_receiver(znode *result, zend_ast *ast, bool nullsafe)
 {
 	zend_op *opline;
 
@@ -5254,6 +5256,9 @@ static void zend_compile_sharp_receiver(znode *result, zend_ast *ast)
 			return;
 		}
 	} else {
+		if (nullsafe) {
+			ast->attr &= ~ZEND_SHORT_CIRCUITING_INNER;
+		}
 		zend_compile_expr(result, ast);
 	}
 
@@ -5286,7 +5291,7 @@ static void zend_compile_method_call(znode *result, zend_ast *ast, uint32_t type
 	} else {
 		zend_short_circuiting_mark_inner(obj_ast);
 		if (ast->attr & ZEND_METHOD_CALL_SHARP) {
-			zend_compile_sharp_receiver(&obj_node, obj_ast);
+			zend_compile_sharp_receiver(&obj_node, obj_ast, nullsafe);
 		} else {
 			zend_compile_expr(&obj_node, obj_ast);
 		}
