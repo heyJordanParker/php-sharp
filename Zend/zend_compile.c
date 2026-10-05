@@ -12110,7 +12110,8 @@ static void zend_eval_const_expr(zend_ast **ast_ptr) /* {{{ */
 				return;
 			}
 
-			if (!zend_try_ct_eval_binary_op(&result, ast->attr,
+			if (!zend_try_ct_eval_binary_op(&result,
+					(ast->attr & ~ZEND_SHARP_OPERATOR_SYNTAX) | zend_ast_sharp_operator(ast),
 					zend_ast_get_zval(ast->child[0]), zend_ast_get_zval(ast->child[1]))
 			) {
 				return;

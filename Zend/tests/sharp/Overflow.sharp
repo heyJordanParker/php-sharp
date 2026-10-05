@@ -250,4 +250,6 @@ class Overflow
         let product = a * b;
         return a;
     }
+
+    private int big = 9223372036854775807 + 1;
 }
