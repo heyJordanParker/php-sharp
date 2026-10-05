@@ -1,5 +1,6 @@
 namespace Demo;
 
+import Countable;
 import Lib.Basket;
 
 class Shelf
@@ -106,5 +107,32 @@ class Tray
         tray.items = [5];
         tray.items.add(6);
         return tray.items;
+    }
+}
+
+class Link
+{
+    public Link(public int value { get; })
+    {
+    }
+
+    public Link plus(int step)
+    {
+        return new Link(this.value + step);
+    }
+
+    public static int? after(Link? link, int step)
+    {
+        return link?.plus(step).value;
+    }
+
+    public static Link? further(Link? link)
+    {
+        return link?.plus(1)?.plus(2);
+    }
+
+    public static string label(Link link, Countable items)
+    {
+        return `${link.plus(1).value} of ${items.count()}`;
     }
 }

@@ -51,7 +51,7 @@ array(1) {
     int(2)
   }
 }
-OutOfRangeException: Undefined array key 2 in CollectionMethods.sharp on line 54
+OutOfRangeException: Undefined array key 2 in CollectionMethods.sharp on line 55
 array(1) {
   ["pie"]=>
   int(7)
@@ -94,6 +94,11 @@ array(2) {
   [1]=>
   int(6)
 }
+int(3)
 NULL
-Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 71
-ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 72
+int(4)
+NULL
+string(6) "2 of 2"
+NULL
+Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 76
+ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 77
