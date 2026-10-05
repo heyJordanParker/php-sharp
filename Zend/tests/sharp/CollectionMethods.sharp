@@ -74,6 +74,11 @@ class Shelf
         return basket.lines;
     }
 
+    public static void share(Basket basket, int size, int parts)
+    {
+        basket.lines.add(size % parts);
+    }
+
     public static int? total(Basket basket)
     {
         return basket.totals.get(0);

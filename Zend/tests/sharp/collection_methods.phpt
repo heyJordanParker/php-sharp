@@ -91,5 +91,7 @@ int(4)
 NULL
 string(6) "2 of 2"
 NULL
-Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 76
-ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 77
+DivisionByZeroError: Modulo by zero in CollectionMethods.sharp on line 79
+NULL
+Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 83
+ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 84

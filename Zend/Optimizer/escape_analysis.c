@@ -288,7 +288,7 @@ static bool is_escape_use(zend_op_array *op_array, zend_ssa *ssa, int use, int v
 				break;
 			case ZEND_FETCH_OBJ_R:
 				if (opline->extended_value & ZEND_SHARP_OPERATOR) {
-					/* The receiver of a PHP# method call keeps the object to change its property. */
+					/* The Sharp\Collection of a PHP# method call holds the object whose property it changes, so the object escapes. */
 					return 1;
 				}
 				break;

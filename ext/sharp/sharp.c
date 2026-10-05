@@ -315,8 +315,8 @@ static zend_object *sharp_collection_create(zend_class_entry *ce)
 	return &collection->std;
 }
 
-/* Ends the one call a collection serves, as soon as it returns, so the owner's destructor runs on
- * time. A destructor may make another collection, so the fields are cleared before anything is released. */
+/* A destructor the owner or the copy runs may make another collection, so the fields are cleared
+ * before anything is released. */
 static void sharp_collection_clear(sharp_collection *collection)
 {
 	zend_object *owner = collection->owner;
@@ -341,22 +341,39 @@ static void sharp_collection_free(zend_object *object)
 }
 
 /* Making and freeing an object costs more than a collection method, so a request keeps a few
- * collections for reuse. One is free when the spares hold its only reference. A call that never ran,
- * because its arguments threw, left its fields set, so they are cleared here. */
+ * collections for reuse. dtor_obj runs when the last reference goes: after the call returns, or as an
+ * exception unwinds a call whose arguments threw. It lets go of the owner and the copy then, and keeps
+ * the collection alive as a spare, as a destructor may keep its $this. */
+static void sharp_collection_release(zend_object *object)
+{
+	zend_object **spares = SHARP_G(spare_collections);
+
+	sharp_collection_clear(sharp_collection_from(object));
+	for (uint32_t i = 0; i < SHARP_SPARE_COLLECTIONS; i++) {
+		if (spares[i] == object) {
+			return;
+		}
+	}
+	for (uint32_t i = 0; i < SHARP_SPARE_COLLECTIONS; i++) {
+		if (!spares[i]) {
+			spares[i] = object;
+			GC_ADDREF(object);
+			GC_DEL_FLAGS(object, IS_OBJ_DESTRUCTOR_CALLED);
+			return;
+		}
+	}
+}
+
 static sharp_collection *sharp_collection_new(zval *result)
 {
 	zend_object **spares = SHARP_G(spare_collections);
 
 	for (uint32_t i = 0; i < SHARP_SPARE_COLLECTIONS; i++) {
-		if (!spares[i]) {
-			spares[i] = sharp_collection_create(sharp_ce_collection);
-		}
-		if (GC_REFCOUNT(spares[i]) == 1) {
-			GC_ADDREF(spares[i]);
+		if (spares[i]) {
 			ZVAL_OBJ(result, spares[i]);
-			sharp_collection_clear(sharp_collection_from(spares[i]));
+			spares[i] = NULL;
 
-			return sharp_collection_from(spares[i]);
+			return sharp_collection_from(Z_OBJ_P(result));
 		}
 	}
 	ZVAL_OBJ(result, sharp_collection_create(sharp_ce_collection));
@@ -450,16 +467,16 @@ ZEND_METHOD(Sharp_Collection, add)
 
 	sharp_collection *collection = sharp_collection_from(Z_OBJ_P(ZEND_THIS));
 	HashTable *array = sharp_collection_change(collection);
-	if (array) {
-		Z_TRY_ADDREF_P(value);
-		if (zend_hash_next_index_insert(array, value)) {
-			sharp_collection_write_back(collection);
-		} else {
-			zval_ptr_dtor(value);
-			zend_cannot_add_element();
-		}
+	if (!array) {
+		RETURN_THROWS();
 	}
-	sharp_collection_clear(collection);
+	Z_TRY_ADDREF_P(value);
+	if (!zend_hash_next_index_insert(array, value)) {
+		zval_ptr_dtor(value);
+		zend_cannot_add_element();
+		RETURN_THROWS();
+	}
+	sharp_collection_write_back(collection);
 }
 
 ZEND_METHOD(Sharp_Collection, set)
@@ -474,18 +491,20 @@ ZEND_METHOD(Sharp_Collection, set)
 
 	sharp_collection *collection = sharp_collection_from(Z_OBJ_P(ZEND_THIS));
 	zval *array = sharp_collection_array(collection);
-	zval old;
-	ZVAL_UNDEF(&old);
-	if (array && !zend_hash_index_exists(Z_ARRVAL_P(array), index)) {
-		zend_throw_exception_ex(spl_ce_OutOfRangeException, 0, "Undefined array key " ZEND_LONG_FMT, index);
-	} else if (array) {
-		/* The old element is released last, so a destructor it runs sees the changed collection. */
-		zval *element = zend_hash_index_find(sharp_collection_change(collection), index);
-		ZVAL_COPY_VALUE(&old, element);
-		ZVAL_COPY(element, value);
-		sharp_collection_write_back(collection);
+	if (!array) {
+		RETURN_THROWS();
 	}
-	sharp_collection_clear(collection);
+	if (!zend_hash_index_exists(Z_ARRVAL_P(array), index)) {
+		zend_throw_exception_ex(spl_ce_OutOfRangeException, 0, "Undefined array key " ZEND_LONG_FMT, index);
+		RETURN_THROWS();
+	}
+
+	/* The old element is released last, so a destructor it runs sees the changed collection. */
+	zval *element = zend_hash_index_find(sharp_collection_change(collection), index);
+	zval old;
+	ZVAL_COPY_VALUE(&old, element);
+	ZVAL_COPY(element, value);
+	sharp_collection_write_back(collection);
 	zval_ptr_dtor(&old);
 }
 
@@ -498,30 +517,30 @@ ZEND_METHOD(Sharp_Collection, get)
 		Z_PARAM_STR_OR_LONG(string_key, long_key)
 	ZEND_PARSE_PARAMETERS_END();
 
-	sharp_collection *collection = sharp_collection_from(Z_OBJ_P(ZEND_THIS));
-	zval *array = sharp_collection_array(collection);
-	zval *element = NULL;
-	if (array) {
-		element = string_key
-			? zend_symtable_find(Z_ARRVAL_P(array), string_key)
-			: zend_hash_index_find(Z_ARRVAL_P(array), long_key);
+	zval *array = sharp_collection_array(sharp_collection_from(Z_OBJ_P(ZEND_THIS)));
+	if (!array) {
+		RETURN_THROWS();
 	}
-	if (element) {
-		ZVAL_COPY_DEREF(return_value, element);
+	zval *element = string_key
+		? zend_symtable_find(Z_ARRVAL_P(array), string_key)
+		: zend_hash_index_find(Z_ARRVAL_P(array), long_key);
+	if (!element) {
+		RETURN_NULL();
 	}
-	sharp_collection_clear(collection);
+
+	RETURN_COPY_DEREF(element);
 }
 
 ZEND_METHOD(Sharp_Collection, entries)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
 
-	sharp_collection *collection = sharp_collection_from(Z_OBJ_P(ZEND_THIS));
-	zval *array = sharp_collection_array(collection);
-	if (array) {
-		ZVAL_COPY(return_value, array);
+	zval *array = sharp_collection_array(sharp_collection_from(Z_OBJ_P(ZEND_THIS)));
+	if (!array) {
+		RETURN_THROWS();
 	}
-	sharp_collection_clear(collection);
+
+	RETURN_COPY(array);
 }
 
 ZEND_METHOD(Sharp_Collection, delete)
@@ -535,18 +554,22 @@ ZEND_METHOD(Sharp_Collection, delete)
 
 	sharp_collection *collection = sharp_collection_from(Z_OBJ_P(ZEND_THIS));
 	zval *array = sharp_collection_array(collection);
-	if (array && (string_key
-			? zend_symtable_exists(Z_ARRVAL_P(array), string_key)
-			: zend_hash_index_exists(Z_ARRVAL_P(array), long_key))) {
-		HashTable *changed = sharp_collection_change(collection);
-		if (string_key) {
-			zend_symtable_del(changed, string_key);
-		} else {
-			zend_hash_index_del(changed, long_key);
-		}
-		sharp_collection_write_back(collection);
+	if (!array) {
+		RETURN_THROWS();
 	}
-	sharp_collection_clear(collection);
+	if (string_key
+		? !zend_symtable_exists(Z_ARRVAL_P(array), string_key)
+		: !zend_hash_index_exists(Z_ARRVAL_P(array), long_key)) {
+		return;
+	}
+
+	HashTable *changed = sharp_collection_change(collection);
+	if (string_key) {
+		zend_symtable_del(changed, string_key);
+	} else {
+		zend_hash_index_del(changed, long_key);
+	}
+	sharp_collection_write_back(collection);
 }
 
 static PHP_MINIT_FUNCTION(sharp)
@@ -555,6 +578,7 @@ static PHP_MINIT_FUNCTION(sharp)
 	sharp_ce_collection->create_object = sharp_collection_create;
 	memcpy(&sharp_collection_handlers, &std_object_handlers, sizeof(zend_object_handlers));
 	sharp_collection_handlers.offset = XtOffsetOf(sharp_collection, std);
+	sharp_collection_handlers.dtor_obj = sharp_collection_release;
 	sharp_collection_handlers.free_obj = sharp_collection_free;
 	sharp_collection_handlers.clone_obj = NULL;
 	sharp_ce_collection->default_object_handlers = &sharp_collection_handlers;
@@ -573,14 +597,20 @@ static PHP_GINIT_FUNCTION(sharp)
 	memset(sharp_globals, 0, sizeof(*sharp_globals));
 }
 
-/* Runs after the request's destructors and before its objects are freed. */
+/* Runs after the request's destructors and before its objects are freed. A spare is freed without
+ * its dtor_obj, which would keep it. */
 static PHP_RSHUTDOWN_FUNCTION(sharp)
 {
 	zend_object **spares = SHARP_G(spare_collections);
 
-	for (uint32_t i = 0; i < SHARP_SPARE_COLLECTIONS && spares[i]; i++) {
-		OBJ_RELEASE(spares[i]);
-		spares[i] = NULL;
+	for (uint32_t i = 0; i < SHARP_SPARE_COLLECTIONS; i++) {
+		zend_object *spare = spares[i];
+
+		if (spare) {
+			spares[i] = NULL;
+			GC_ADD_FLAGS(spare, IS_OBJ_DESTRUCTOR_CALLED);
+			OBJ_RELEASE(spare);
+		}
 	}
 
 	return SUCCESS;

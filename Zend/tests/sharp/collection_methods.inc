@@ -72,6 +72,13 @@ namespace {
     unset($basket);
     var_dump($kept->get());
 
+    // So does one whose call never ran because an argument threw.
+    $basket = new Lib\Basket();
+    $kept = WeakReference::create($basket);
+    attempt(fn () => Demo\Shelf::share($basket, 5, 0));
+    unset($basket);
+    var_dump($kept->get());
+
     // The wrapper exists only as the receiver of one call: PHP code cannot make, copy or keep one.
     attempt(fn () => new Sharp\Collection());
     attempt(fn () => (new ReflectionClass(Sharp\Collection::class))->newInstanceWithoutConstructor());
