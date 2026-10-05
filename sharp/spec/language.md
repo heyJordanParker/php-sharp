@@ -237,6 +237,7 @@ public Artifact.fromJson(string json) : this(Manifest.parse(json)) { }
 let artifact = new Artifact.fromJson(json);
 ```
 
+- A constructor calls its base class's constructor with `: super(…)`, as in `public Order(Row row) : super(row) { }`.
 - A named constructor runs on the new object, so it can set get-only properties and `init` properties.
 - The dependency container always uses the main constructor.
 - There is no overloading by argument types.
@@ -413,6 +414,8 @@ plans.set("pro", pro);
 plans["pro"] = pro;
 plans.remove("pro");
 ```
+
+`contains`, `remove`, `indexOf` and `Set<T>` need `==` on the element type (section 19). Without it, they are a compile error.
 
 The complete method list is specified with the standard library.
 
@@ -626,6 +629,7 @@ PHP's backtick shell execution is removed. `shell_exec()` stays.
 
 - **Structs, enums, strings, numbers and collections** compare by value with `==`, with no code.
 - **A class** compares with `==` only if it or a parent declares `operator ==`. Otherwise `==` on it is a compile error.
+- **`Any?`** compared with `==` against a struct, enum, string, number or collection compares by value, and is false when the types differ.
 - **`===`** is true only for the same object. It works on classes only, and cannot be overridden.
 - **`Set`** hashes a struct, enum, string, number or collection by its value, and an object by its class's `hash()`.
 
@@ -869,7 +873,7 @@ namespace App.Tenant.Store;
 import App.Shared.Schema.Entities.DatabaseEntity;
 ```
 
-**Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always the class. A full name inside code is a compile error that names the import to add.
+**Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always a class, or a plain PHP function that an `extern` declares (section 29). A full name inside code is a compile error that names the import to add.
 
 **A class cannot share its full name with a namespace.** `Store.sharp` beside a `Store/` folder is a compile error, because both would be `App.Tenant.Store`. Java's language specification has the same rule. `Store/Store.sharp` is allowed, because it is `App.Tenant.Store.Store`. The rule also covers plain PHP classes the checker sees.
 
@@ -967,12 +971,12 @@ const order = Order.fromSchema(value, caller);   // typed as Order
 ```csharp
 public class Order : DatabaseEntity
 {
-    public Order(Row row, Clock? clock = null) { … }   // compiles: new Self(row) can call it
+    public Order(Row row, Clock? clock = null) : super(row) { … }   // compiles: new Self(row) can call it
 }
 
 public class Invoice : DatabaseEntity
 {
-    public Invoice(Row row, Clock clock) { … }         // compile error: new Self(row) cannot supply clock
+    public Invoice(Row row, Clock clock) : super(row) { … }         // compile error: new Self(row) cannot supply clock
 }
 ```
 
@@ -1078,21 +1082,24 @@ public class OrderReport
 }
 ```
 
-**The effect of plain PHP is declared once, with `extern`.** A `.sharp` declaration file names a plain PHP class or one of its methods, and the effect after `uses`. A declaration holds no code.
+**The effect of plain PHP is declared once, with `extern`.** A `.sharp` declaration file names a plain PHP class, one of its methods or a function, and the effect after `uses`. A declaration holds no code.
 
 ```csharp
 // app/Stubs/Stripe.sharp
+namespace App.Stubs;
+
 import Stripe.StripeClient;
 
 extern StripeClient uses Http;
 ```
 
-- **`extern` covers a whole class or one method:** `extern StripeClient uses Http;`, or `extern Carbon.now uses Clock;` as PHP#'s package ships it.
-- **An `extern` that names no effect declares the class or method pure,** as in `extern BigDecimal;`.
-- **Each class or method has at most one `extern` declaration in the whole project.** A second one is a compile error, as declaring a class twice is.
+- **A declaration file is an ordinary `.sharp` file.** Its `namespace` line matches its path, as section 5 requires.
+- **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, or `extern Carbon.now uses Clock;` and `extern now uses Clock;` as PHP#'s package ships them.
+- **An `extern` that names no effect declares the class, method or function pure,** as in `extern BigDecimal;`.
+- **Each class, method or function has at most one `extern` declaration in the whole project.** A second one is a compile error, as declaring a class twice is.
 - **A call to plain PHP with an `extern` declaration has that effect,** so it fits a `uses` that names it: `StripeClient.charges().create(…)` fits `uses Http`.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
-- **PHP#'s Composer package ships the declarations for PHP's built-in functions and for Laravel.** Among PHP's built-ins, PDO, curl, `file_put_contents`, `time()` and `random_int` have effects, and every other built-in function is pure. In Laravel, Eloquent and `DB` are `Database`, the `Http` facade is `Http`, `Cache` is `Cache`, `Mail` is `Mail`, and `now()` and Carbon's clock reads are `Clock`.
+- **PHP#'s Composer package ships the declarations for PHP's built-in functions and for Laravel.** Among PHP's built-ins, PDO is `Database`, curl is `Http`, `file_put_contents` and the other file functions are `Files`, `time()` is `Clock`, and `random_int` is `Random`. Every other built-in function is pure. In Laravel, Eloquent and `DB` are `Database`, the `Http` facade is `Http`, `Cache` is `Cache`, `Mail` is `Mail`, and `now()` and Carbon's clock reads are `Clock`.
 - **A project declares its own libraries,** conventionally in `app/Stubs`.
 
 **A `foreign` class turns an effect into an object** that code holds and passes on, such as a fake in tests. It is optional. Its methods call plain PHP, like any other code. Code that holds a `foreign` object has that effect by name, which `uses` can declare.
