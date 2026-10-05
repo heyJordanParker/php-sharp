@@ -113,7 +113,7 @@ public string slug => Str.slug(name);                           // computed
 ```csharp
 Map<string, Plan> cache = [];                                   // field
 public int views { get; private set; } = 0;                     // auto-property
-public List<Tag> tags { get; set; } = new List();
+public List<Tag> tags { get; set; } = new List<Tag>();
 ```
 
 A constant initial value is stored as the member's default. Any other value is set at the start of the constructor, in the order the members are declared.
@@ -182,7 +182,7 @@ public T first<T>(List<T> items) { … }
 
 ## 8. Functions
 
-There are no top-level functions. Shared code lives in static methods on a class. PHP's built-in functions, such as `strlen`, can still be called.
+There are no top-level functions. Shared code lives in static methods on a class. PHP's built-in functions, such as `strlen`, and plain PHP functions, such as Laravel's `now()`, can still be called. Section 29 covers their effects.
 
 ## 9. Constructors
 
@@ -260,14 +260,14 @@ b.x = 5;   // b is copied here, and a is unchanged
 
 - Reflection shows `PaginatedList<Order>`.
 - `page is PaginatedList<Order>` is checked while the code runs.
-- A call from plain PHP that passes the wrong type throws a `TypeError`.
+- A value of the wrong type throws a `TypeError` where it enters PHP# from plain PHP. Section 12 lists where a value enters.
 
 **Writing type arguments:**
 
 - **`new` always names them:** `new PaginatedList<Order>(…)`.
 - **A generic method call infers them** from the arguments it receives.
 
-**Written type arguments are carried at runtime, and inferred ones are known to the checker only.** "Written" covers `new`, an explicit call such as `Json.decode<WebhookPayload>(body)`, and a declared type such as a property, a parameter or `List<Line> lines = …`. Every type, inferred or written, is known while code is checked, as in TypeScript. The engine compiles one file at a time, so it cannot see an inferred argument. A value created from an inferred argument, such as `const lines = [lineA, lineB]`, has no element type at runtime, and passes any runtime check for its collection type, because the checker has already proven it.
+**Written type arguments are carried at runtime, and inferred ones are known to the checker only.** "Written" covers `new`, an explicit call such as `Json.decode<WebhookPayload>(body)`, and a declared type such as a property, a parameter or `List<Line> lines = …`. Every type, inferred or written, is known while code is checked, as in TypeScript. The engine compiles one file at a time, so it cannot see an inferred argument. A value created from an inferred argument has no type argument at runtime, and passes any runtime check for its generic type, because the checker has already proven it. A collection's elements are checked where it enters from plain PHP instead (section 12).
 
 **Declaring type parameters:**
 
@@ -303,10 +303,40 @@ There is no variance at the point of use, such as Java's `? extends T`.
 
 PHP# has three collection types: `List<T>`, `Map<TKey, TValue>` and `Set<T>`.
 
-- Their element types are reified, so a wrong element throws a `TypeError`.
-- They are shared references, as in C#, Java and TypeScript. Assigning or passing a collection shares it, and it is never copied implicitly.
-  - Structs stay copy on write, because a struct is small. A list can hold hundreds of items, so copying one by accident is expensive.
-- A class protects a collection it exposes with `readonly`, described in section 13.
+- They are values, as structs (section 10) and PHP's own arrays are. Assigning or passing a collection copies it only when one side later writes to it.
+- A `Map`'s keys are `int` or `string`, as a PHP array's keys are.
+
+```csharp
+let b = a;
+b.add(line);   // b is copied here, and a is unchanged
+```
+
+**A method that changes a collection it was given changes its own copy.** It returns the collection when the caller should see the change:
+
+```csharp
+public static List<Line> withShipping(List<Line> lines, Line shipping)
+{
+    lines.add(shipping);
+    return lines;
+}
+
+lines = Cart.withShipping(lines, shipping);   // the caller keeps the change
+```
+
+**Element types are checked where a collection enters PHP# from plain PHP,** not on every write. Plain PHP can change only its own copy, so a wrong element reaches PHP# code only by crossing in:
+
+- a plain PHP caller passes a collection to a PHP# method
+- a typed assignment takes a value that plain PHP returned
+- plain PHP writes a PHP# property
+
+At each crossing, the runtime checks every element once and throws a `TypeError` that names the element. A call from PHP# to PHP# checks nothing at runtime, because the checker proved it.
+
+`as` to a collection type checks every element too, wherever the value came from, and gives null if any element is wrong (section 21).
+
+```csharp
+List<Line> lines = legacy.lines();            // plain PHP returned it: every element is checked here
+lines = Cart.withShipping(lines, shipping);   // PHP# to PHP#: nothing is checked
+```
 
 **Literals:**
 
@@ -334,12 +364,13 @@ lines.map(l => l.name);
 lines.first(l => l.free);
 lines.any(l => l.free);
 lines.contains(line);
-lines.groupBy(l => l.product);
+lines.groupBy(l => l.product.id);
 lines.associateBy(l => l.id);
 lines.sortedBy(l => l.amount);
 ```
 
 - Methods that read return a new collection.
+- A method that takes a function has that function's effects (section 29), so `lines.map(l => l.name)` is pure.
 - Methods that change a collection change it in place:
 
 ```csharp
@@ -363,9 +394,9 @@ The complete method list is specified with the standard library.
 
 ```csharp
 public void render(readonly Order order)          // the parameter
-public readonly List<Line> lines => items;        // the returned value
+public readonly Customer customer => this.owner;  // the returned value
 public Money totalIn(string currency) readonly    // this, inside the method
-public readonly List<Line> active() readonly      // both
+public readonly Customer buyer() readonly         // both
 ```
 
 **Through a `readonly` value, only reading is allowed:**
@@ -549,7 +580,7 @@ PHP's backtick shell execution is removed. `shell_exec()` stays.
 
 - **`==`** compares two objects property by property, as PHP does today.
 - **`===`** is true only for the same object. It cannot be overridden.
-- **`Set` and `Map`** hash keys from the same properties that `==` compares.
+- **`Set`** hashes its elements from the same properties that `==` compares.
 
 **Overrides,** declared once on a type and inherited by its subclasses:
 
@@ -696,8 +727,21 @@ if (entity is HasDesign) {
 }
 ```
 - **`as`** converts a value to a type, or gives null.
+- **`as` to a collection type checks every element,** wherever the value came from, and gives null if any element is wrong. So `as List<string> ?? throw …` throws on a wrong element.
 
 **Boolean operators:** `&&`, `||` and `!` exist only in expressions. PHP's `and`, `or` and `xor` operators are removed, so `=` can no longer bind before `and`.
+
+**Conditions are `bool`.** `if`, `while`, `do … while`, `for`, `? :`, `&&`, `||`, `!` and `match`'s `when` take a `bool`. Any other type is a compile error, so PHP's truthiness never applies:
+
+```csharp
+if (items.count()) { … }        // compile error: int is not bool
+if (items.count() > 0) { … }
+```
+
+**The ternary** `c ? a : b` gives `a` when `c` is true, and `b` otherwise.
+
+- PHP's two-operand `a ?: b` does not exist. `??` covers null (section 14.4).
+- `a ? b : c ? d : e` is a compile error, as in PHP 8. Parentheses say which nesting is meant: `a ? b : (c ? d : e)`.
 
 ## 22. Inheritance
 
@@ -770,6 +814,19 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 Built-in types are lowercase: `int`, `float`, `bool`, `string`, `void`, `null`. Every other type is capitalized: `List`, `Money`, `Any`.
 
 **Integer overflow throws `ArithmeticError`** at the operation that overflows, as in Swift and C#'s `checked`. PHP's silent change to `float` does not happen in PHP# code.
+
+**`/` on two integers truncates toward zero,** as in C#. `/` with a `float` operand stays float division.
+
+```csharp
+7 / 2          // 3
+-7 / 2         // -3
+7 / 2.0        // 3.5
+```
+
+- Division by zero throws `DivisionByZeroError`.
+- `PHP_INT_MIN / -1` throws `ArithmeticError`, because the result overflows.
+- `/=` follows the same rules.
+- Like `+` (section 18), `/` chooses when it runs, from the types of its operands.
 
 **`Any` holds a value of any type except null. `Any?` also allows null.** A value of type `Any` must be checked with `is`, `as` or `match` before it can be used:
 
@@ -893,33 +950,48 @@ theorem refundNeverExceedsPaid (paid refunded amount : Int)
 
 ## 29. Effects
 
-An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities, which Scala 3, Effekt and Pony also use.
+An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities, which Scala 3, Effekt and Pony also use. It also records every call into plain PHP.
 
-**Effects start only in `foreign` classes.** A `foreign` class is the only kind of class that may call PHP's built-in effect functions, such as PDO, curl, `file_put_contents`, `time()` and `random_int`, or call into plain PHP. The engine's stubs mark the built-in effect functions. A stub file can mark a plain PHP function pure, which makes it callable from anywhere.
+**Any PHP# code may call plain PHP,** including PHP's built-in functions and Laravel's facades, helpers and model methods. Most libraries are plain PHP, so this is how PHP# code uses them.
 
 ```csharp
-public foreign class Redis
+import Illuminate.Support.Facades.DB;
+
+public class OrderReport
 {
-    public string? get(string key) => Illuminate.Redis.get(key);
+    public int openCount() => DB.table("orders").where("status", "open").count();
+}
+```
+
+- **The checker records a call into plain PHP as an effect,** so the method that makes it is never pure and never takes part in laws (section 28).
+- **Stubs mark what is pure.** The engine's stubs mark PHP's built-in effect functions, such as PDO, curl, `file_put_contents`, `time()` and `random_int`. Every other built-in function is pure. A plain PHP function or method is an effect unless a stub file marks it pure. A call to something pure is not an effect, so pure code can make it.
+
+**A `foreign` class turns an effect into an object** that code holds and passes on. Its methods call plain PHP, like any other code. Code that holds a `foreign` object has that effect by name, which `uses` can declare.
+
+```csharp
+import Illuminate.Support.Facades.Redis;
+
+public foreign class Cache
+{
+    public string? get(string key) => Redis.get(key);
 }
 ```
 
 The standard library ships `Database`, `Http`, `Files`, `Clock` and `Random`. A project declares its own `foreign` classes the same way.
 
-**Effects reach other code only through constructors:**
+**A `foreign` object reaches other code only through constructors:**
 
 ```csharp
 public class TenantCache
 {
-    public TenantCache(private Redis redis) { }
+    public TenantCache(private Cache cache) { }
 }
 ```
 
-- **A class's effects** are the `foreign` classes it holds, directly or through its fields. The checker works them out from field and constructor types. Nothing is written down.
+- **A class's effects** are the `foreign` classes it holds, directly or through its fields, and the plain PHP its methods call. The checker works them out from field and constructor types and from method bodies. Nothing is written down.
 - **A `foreign` object** is created once, where the app starts, and handed down through constructors. Creating one anywhere else, or storing one in a static, is a compile error.
-- **No static path reaches an effect.** `DB::table()`, `Order::query()` and `Http::get()` do not exist in PHP# code.
 
-**Pure code** reaches no `foreign` object and changes nothing it was given (section 13). Getters must be pure. Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes.
+**Pure code** reaches no `foreign` object, calls no plain PHP that is not marked pure, and changes nothing it was given (section 13). Getters must be pure. Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
 
 **Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types. Every implementation is held to what the declaration allows:
 
@@ -934,7 +1006,22 @@ Function<Money(Offer)> priceOf                       // a pure function value
 Function<Charge(Cart)> uses Http charge              // may reach Http
 ```
 
-**Code with a body never writes `uses`.** Its effects enter through the constructor, and its body shows what it uses. The checker works out each method's effects, and the editor displays them.
+**A method that takes a function can have that function's effects.** Its declaration writes `uses f`, where `f` is one of its function-typed parameters, with or without a body. At each call, the method has its body's own effects plus the effects of the function passed as `f`. Code that calls it writes nothing.
+
+```csharp
+// in the standard library's List<T>
+public List<TResult> map<TResult>(Function<TResult(T)> f) uses f;
+
+carts.map(c => c.total);                             // pure
+carts.map(c => this.gateway.charge(c));              // has Http
+
+// a method with a body: Http from this.gateway, plus the effects of prepare
+public Charge charge(Cart cart, Function<Cart(Cart)> prepare) uses prepare => this.gateway.charge(prepare(cart));
+```
+
+The standard library's collection methods (section 12) are declared this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
+
+**Code with a body writes no `uses` except `uses f`.** Its effects enter through the constructor, through the plain PHP it calls and through each function its `uses f` names, and its body and declaration show all three. The checker works out each method's effects, and the editor displays them.
 
 ## 30. Tuples
 
