@@ -10,4 +10,25 @@ class Template
         return `${first}${`[${strlen(first)}]`} \${x} \x41B\u{43} 😀 a\
 b`;
     }
+
+    public static string constant()
+    {
+        return `v${1}`;
+    }
+
+    public static string constantAfter(string name)
+    {
+        const label = `v${1}`;
+        return `${label} ${name}`;
+    }
+
+    public static string empty()
+    {
+        return `${""}`;
+    }
+
+    public static string nested()
+    {
+        return `${`x`}`;
+    }
 }
