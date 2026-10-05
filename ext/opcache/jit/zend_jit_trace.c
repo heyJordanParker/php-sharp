@@ -1206,9 +1206,9 @@ static int is_checked_guard(const zend_ssa *tssa, const zend_op **ssa_opcodes, u
 					}
 					return 1;
 				} else if (opline->opcode == ZEND_ASSIGN_OP
-				 && (opline->extended_value == ZEND_ADD
-				  || opline->extended_value == ZEND_SUB
-				  || opline->extended_value == ZEND_MUL)) {
+				 && ((opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_ADD
+				  || (opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_SUB
+				  || (opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_MUL)) {
 					if ((opline->op2_type & (IS_VAR|IS_CV))
 					  && tssa->ops[idx].op2_use >= 0
 					  && (tssa->var_info[tssa->ops[idx].op2_use].type & MAY_BE_REF)) {
@@ -4075,6 +4075,7 @@ static bool zend_jit_trace_may_throw(const zend_op       *opline,
     switch (opline->opcode) {
 		case ZEND_ASSIGN_DIM_OP:
 			if (opline->extended_value != ZEND_CONCAT
+			 && !(opline->extended_value & ZEND_SHARP_OPERATOR)
 			 && val_type == IS_LONG
 			 && (t1 & (MAY_BE_ANY|MAY_BE_UNDEF|MAY_BE_REF)) == MAY_BE_ARRAY
 			 && MAY_BE_PACKED_ONLY(t1)

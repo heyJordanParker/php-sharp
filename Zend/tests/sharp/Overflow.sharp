@@ -1,0 +1,255 @@
+namespace Demo;
+
+class Overflow
+{
+    public static int add(int a, int b)
+    {
+        return a + b;
+    }
+
+    public static int sub(int a, int b)
+    {
+        return a - b;
+    }
+
+    public static int mul(int a, int b)
+    {
+        return a * b;
+    }
+
+    public static int negate(int a)
+    {
+        return -a;
+    }
+
+    public static int maxPlusOne()
+    {
+        return PHP_INT_MAX + 1;
+    }
+
+    public static int minMinusOne()
+    {
+        return PHP_INT_MIN - 1;
+    }
+
+    public static int maxTimesTwo()
+    {
+        return PHP_INT_MAX * 2;
+    }
+
+    public static int literalPlusOne()
+    {
+        return 9223372036854775807 + 1;
+    }
+
+    public static int addAssign(int a, int b)
+    {
+        let x = a;
+        x += b;
+        return x;
+    }
+
+    public static int subAssign(int a, int b)
+    {
+        let x = a;
+        x -= b;
+        return x;
+    }
+
+    public static int mulAssign(int a, int b)
+    {
+        let x = a;
+        x *= b;
+        return x;
+    }
+
+    public static int preInc(int a)
+    {
+        let x = a;
+        return ++x;
+    }
+
+    public static int postInc(int a)
+    {
+        let x = a;
+        x++;
+        return x;
+    }
+
+    public static int postIncValue(int a)
+    {
+        let x = a;
+        return x++;
+    }
+
+    public static int preDec(int a)
+    {
+        let x = a;
+        return --x;
+    }
+
+    public static int postDec(int a)
+    {
+        let x = a;
+        x--;
+        return x;
+    }
+
+    public static int postDecValue(int a)
+    {
+        let x = a;
+        return x--;
+    }
+
+    public static int incProperty(Counter counter)
+    {
+        counter.value++;
+        return counter.value;
+    }
+
+    public static int decProperty(Counter counter)
+    {
+        return --counter.value;
+    }
+
+    public static int addProperty(Counter counter, int b)
+    {
+        counter.value += b;
+        return counter.value;
+    }
+
+    public static int withDefault(int a = PHP_INT_MAX + 1)
+    {
+        return a;
+    }
+
+    public static int incLoose(LooseCounter counter)
+    {
+        counter.value++;
+        return counter.value;
+    }
+
+    public static int addLoose(LooseCounter counter, int b)
+    {
+        counter.value += b;
+        return counter.value;
+    }
+
+    public static int incAfterCall(int a)
+    {
+        let x = a;
+        Probe.touch(x);
+        return ++x;
+    }
+
+    public static int addAfterCall(int a, int b)
+    {
+        let x = a;
+        Probe.touch(x);
+        x += b;
+        return x;
+    }
+
+    public static int sumAfterCall(int a, int b)
+    {
+        let x = a;
+        Probe.touch(x);
+        return x + b;
+    }
+
+    public static float narrowed(bool small, float half)
+    {
+        let x = 9223372036854775807;
+        if (small) {
+            x = 5;
+        }
+        return x + 1 + half;
+    }
+
+    public static int selfAddOne(int a)
+    {
+        let x = a;
+        x = x + 1;
+        return x;
+    }
+
+    public static int oneAddSelf(int a)
+    {
+        let x = a;
+        x = 1 + x;
+        return x;
+    }
+
+    public static int addAssignOne(int a)
+    {
+        let x = a;
+        x += 1;
+        return x;
+    }
+
+    public static int selfSubOne(int a)
+    {
+        let x = a;
+        x = x - 1;
+        return x;
+    }
+
+    public static int timesTwo(int a)
+    {
+        return a * 2;
+    }
+
+    public static int constInc()
+    {
+        let x = 9223372036854775807;
+        ++x;
+        return x;
+    }
+
+    public static int constantLocal()
+    {
+        let x = 9223372036854775807;
+        return x + 1;
+    }
+
+    public static int constantIncrement()
+    {
+        let x = 9223372036854775807;
+        return x++;
+    }
+
+    public static int constantAssign()
+    {
+        let x = 9223372036854775807;
+        x += 1;
+        return x;
+    }
+
+    public static int deadIncrement(int a)
+    {
+        let x = a;
+        x++;
+        return a;
+    }
+
+    public static int deadDecrement(int a)
+    {
+        let x = a;
+        x--;
+        return a;
+    }
+
+    public static int deadSum(int a, int b)
+    {
+        let sum = a + b;
+        return a;
+    }
+
+    public static int deadProduct(int a, int b)
+    {
+        let product = a * b;
+        return a;
+    }
+
+    private int big = 9223372036854775807 + 1;
+}

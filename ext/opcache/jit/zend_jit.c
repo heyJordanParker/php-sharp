@@ -113,7 +113,7 @@ static void zend_jit_trace_add_code(const void *start, uint32_t size);
 static zend_string *zend_jit_func_name(const zend_op_array *op_array);
 
 static bool zend_jit_needs_arg_dtor(const zend_function *func, uint32_t arg_num, zend_call_info *call_info);
-static bool zend_jit_supported_binary_op(uint8_t op, uint32_t op1_info, uint32_t op2_info);
+static bool zend_jit_supported_binary_op(uint32_t op, uint32_t op1_info, uint32_t op2_info);
 
 static bool dominates(const zend_basic_block *blocks, int a, int b) {
 	while (blocks[b].level > blocks[a].level) {
@@ -838,6 +838,16 @@ ZEND_EXT_API void zend_jit_status(zval *ret)
 		add_assoc_long(&stats, "buffer_size", 0);
 		add_assoc_long(&stats, "buffer_free", 0);
 	}
+#if ZEND_DEBUG
+	zval sharp_operator_vm_calls;
+	array_init(&sharp_operator_vm_calls);
+	for (uint32_t opcode = 0; opcode < 256; opcode++) {
+		if (JIT_G(sharp_operator_vm_calls)[opcode]) {
+			add_assoc_long(&sharp_operator_vm_calls, zend_get_opcode_name(opcode), JIT_G(sharp_operator_vm_calls)[opcode]);
+		}
+	}
+	add_assoc_zval(&stats, "sharp_operator_vm_calls", &sharp_operator_vm_calls);
+#endif
 	add_assoc_zval(ret, "jit", &stats);
 }
 
@@ -1002,7 +1012,7 @@ static int zend_may_overflow(const zend_op *opline, const zend_ssa_op *ssa_op, c
 				ssa->var_info[res].range.underflow ||
 				ssa->var_info[res].range.overflow);
 		case ZEND_ASSIGN_OP:
-			if (opline->extended_value == ZEND_ADD) {
+			if ((opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_ADD) {
 				res = ssa_op->op1_def;
 				if (res < 0
 				 || !ssa->var_info[res].has_range
@@ -1029,7 +1039,7 @@ static int zend_may_overflow(const zend_op *opline, const zend_ssa_op *ssa_op, c
 					}
 				}
 				return 0;
-			} else if (opline->extended_value == ZEND_SUB) {
+			} else if ((opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_SUB) {
 				res = ssa_op->op1_def;
 				if (res < 0
 				 || !ssa->var_info[res].has_range
@@ -1056,7 +1066,7 @@ static int zend_may_overflow(const zend_op *opline, const zend_ssa_op *ssa_op, c
 					}
 				}
 				return 0;
-			} else if (opline->extended_value == ZEND_MUL) {
+			} else if ((opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_MUL) {
 				res = ssa_op->op1_def;
 				return (res < 0 ||
 					!ssa->var_info[res].has_range ||
@@ -1387,12 +1397,12 @@ static bool zend_jit_next_is_send_result(const zend_op *opline)
 	return 0;
 }
 
-static bool zend_jit_supported_binary_op(uint8_t op, uint32_t op1_info, uint32_t op2_info)
+static bool zend_jit_supported_binary_op(uint32_t op, uint32_t op1_info, uint32_t op2_info)
 {
 	if ((op1_info & MAY_BE_UNDEF) || (op2_info & MAY_BE_UNDEF)) {
 		return false;
 	}
-	switch (op) {
+	switch (op & ~ZEND_SHARP_OPERATOR) {
 		case ZEND_POW:
 		case ZEND_DIV:
 			// TODO: check for division by zero ???

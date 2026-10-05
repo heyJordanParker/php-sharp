@@ -1341,6 +1341,77 @@ ZEND_API zend_result ZEND_FASTCALL mul_function(zval *result, zval *op1, zval *o
 }
 /* }}} */
 
+ZEND_API ZEND_COLD void zend_integer_overflow_error(void) /* {{{ */
+{
+	zend_throw_error(zend_ce_arithmetic_error, "Integer overflow");
+}
+/* }}} */
+
+/* The result keeps the left operand's long, so a typed property or reference that receives it
+ * still holds its old int. */
+static ZEND_COLD zend_never_inline zend_result ZEND_FASTCALL checked_overflow(zval *result, zval *op1, zval *value1) /* {{{ */
+{
+	zend_integer_overflow_error();
+	if (result != op1) {
+		ZVAL_LONG(result, Z_LVAL_P(value1));
+	}
+	return FAILURE;
+}
+/* }}} */
+
+zend_result ZEND_FASTCALL checked_add_function(zval *result, zval *op1, zval *op2) /* {{{ */
+{
+	zval *value1 = op1, *value2 = op2;
+
+	ZVAL_DEREF(value1);
+	ZVAL_DEREF(value2);
+	if (Z_TYPE_P(value1) == IS_LONG && Z_TYPE_P(value2) == IS_LONG) {
+		if (UNEXPECTED(!fast_long_try_add(result, value1, value2))) {
+			return checked_overflow(result, op1, value1);
+		}
+		return SUCCESS;
+	}
+	return add_function(result, op1, op2);
+}
+/* }}} */
+
+zend_result ZEND_FASTCALL checked_sub_function(zval *result, zval *op1, zval *op2) /* {{{ */
+{
+	zval *value1 = op1, *value2 = op2;
+
+	ZVAL_DEREF(value1);
+	ZVAL_DEREF(value2);
+	if (Z_TYPE_P(value1) == IS_LONG && Z_TYPE_P(value2) == IS_LONG) {
+		if (UNEXPECTED(!fast_long_try_sub(result, value1, value2))) {
+			return checked_overflow(result, op1, value1);
+		}
+		return SUCCESS;
+	}
+	return sub_function(result, op1, op2);
+}
+/* }}} */
+
+zend_result ZEND_FASTCALL checked_mul_function(zval *result, zval *op1, zval *op2) /* {{{ */
+{
+	zval *value1 = op1, *value2 = op2;
+
+	ZVAL_DEREF(value1);
+	ZVAL_DEREF(value2);
+	if (Z_TYPE_P(value1) == IS_LONG && Z_TYPE_P(value2) == IS_LONG) {
+		zval product;
+		zend_long overflow;
+
+		ZEND_SIGNED_MULTIPLY_LONG(Z_LVAL_P(value1), Z_LVAL_P(value2), Z_LVAL(product), Z_DVAL(product), overflow);
+		if (UNEXPECTED(overflow)) {
+			return checked_overflow(result, op1, value1);
+		}
+		ZVAL_LONG(result, Z_LVAL(product));
+		return SUCCESS;
+	}
+	return mul_function(result, op1, op2);
+}
+/* }}} */
+
 static void ZEND_COLD zend_power_base_0_exponent_lt_0_error(void)
 {
 	zend_error(E_DEPRECATED, "Power of base 0 and negative exponent is deprecated");
@@ -2899,6 +2970,32 @@ try_again:
 	}
 
 	return SUCCESS;
+}
+/* }}} */
+
+zend_result ZEND_FASTCALL checked_increment_function(zval *op1) /* {{{ */
+{
+	zval *value = op1;
+
+	ZVAL_DEREF(value);
+	if (UNEXPECTED(Z_TYPE_P(value) == IS_LONG && Z_LVAL_P(value) == ZEND_LONG_MAX)) {
+		zend_integer_overflow_error();
+		return FAILURE;
+	}
+	return increment_function(op1);
+}
+/* }}} */
+
+zend_result ZEND_FASTCALL checked_decrement_function(zval *op1) /* {{{ */
+{
+	zval *value = op1;
+
+	ZVAL_DEREF(value);
+	if (UNEXPECTED(Z_TYPE_P(value) == IS_LONG && Z_LVAL_P(value) == ZEND_LONG_MIN)) {
+		zend_integer_overflow_error();
+		return FAILURE;
+	}
+	return decrement_function(op1);
 }
 /* }}} */
 
