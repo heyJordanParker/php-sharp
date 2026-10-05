@@ -4133,8 +4133,39 @@ static ir_ref zend_jit_continue_entry(zend_jit_ctx *jit, ir_ref src, unsigned in
 	return ir_END();
 }
 
+/* Debug builds count the VM handler calls the JIT emits for PHP# operators, which
+ * opcache_get_status() reports, so a test fails when one of them falls back to the VM. */
+static void zend_jit_count_sharp_operator_vm_call(const zend_op *opline)
+{
+#if ZEND_DEBUG
+	switch (opline->opcode) {
+		case ZEND_ADD:
+		case ZEND_SUB:
+		case ZEND_MUL:
+		case ZEND_ASSIGN_OP:
+		case ZEND_ASSIGN_DIM_OP:
+		case ZEND_ASSIGN_OBJ_OP:
+		case ZEND_PRE_INC:
+		case ZEND_PRE_DEC:
+		case ZEND_POST_INC:
+		case ZEND_POST_DEC:
+		case ZEND_PRE_INC_OBJ:
+		case ZEND_PRE_DEC_OBJ:
+		case ZEND_POST_INC_OBJ:
+		case ZEND_POST_DEC_OBJ:
+			if (opline->extended_value & ZEND_SHARP_OPERATOR) {
+				JIT_G(sharp_operator_vm_calls)[opline->opcode]++;
+			}
+			break;
+	}
+#else
+	(void) opline;
+#endif
+}
+
 static int zend_jit_handler(zend_jit_ctx *jit, const zend_op *opline, int may_throw)
 {
+	zend_jit_count_sharp_operator_vm_call(opline);
 	zend_jit_set_ip(jit, opline);
 	if (GCC_GLOBAL_REGS) {
 		zend_vm_opcode_handler_func_t handler = (zend_vm_opcode_handler_func_t)zend_get_opcode_handler_func(opline);
@@ -4177,6 +4208,7 @@ static int zend_jit_tail_handler(zend_jit_ctx *jit, const zend_op *opline)
 	ir_ref ref;
 	zend_basic_block *bb;
 
+	zend_jit_count_sharp_operator_vm_call(opline);
 	zend_jit_set_ip(jit, opline);
 	if (ZEND_VM_KIND == ZEND_VM_KIND_HYBRID) {
 		if (opline->opcode == ZEND_DO_UCALL ||
@@ -17220,6 +17252,7 @@ static int zend_jit_trace_handler(zend_jit_ctx *jit, const zend_op_array *op_arr
 		ZEND_OP_TRACE_INFO(opline, offset)->call_handler;
 	ir_ref ref;
 
+	zend_jit_count_sharp_operator_vm_call(opline);
 	zend_jit_set_ip(jit, opline);
 	if (GCC_GLOBAL_REGS) {
 		ir_CALL(IR_VOID, ir_CONST_FUNC(handler));

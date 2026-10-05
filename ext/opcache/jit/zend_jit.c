@@ -838,6 +838,16 @@ ZEND_EXT_API void zend_jit_status(zval *ret)
 		add_assoc_long(&stats, "buffer_size", 0);
 		add_assoc_long(&stats, "buffer_free", 0);
 	}
+#if ZEND_DEBUG
+	zval sharp_operator_vm_calls;
+	array_init(&sharp_operator_vm_calls);
+	for (uint32_t opcode = 0; opcode < 256; opcode++) {
+		if (JIT_G(sharp_operator_vm_calls)[opcode]) {
+			add_assoc_long(&sharp_operator_vm_calls, zend_get_opcode_name(opcode), JIT_G(sharp_operator_vm_calls)[opcode]);
+		}
+	}
+	add_assoc_zval(&stats, "sharp_operator_vm_calls", &sharp_operator_vm_calls);
+#endif
 	add_assoc_zval(ret, "jit", &stats);
 }
 

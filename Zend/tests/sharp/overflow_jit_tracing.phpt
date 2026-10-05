@@ -66,3 +66,5 @@ incLoose loop stopped at 9223372036854775807 on line 128
 addLoose loop stopped at 9223372036854775807 on line 134
 float(9.223372036854776E+18)
 float(9.223372036854776E+18)
+array(0) {
+}

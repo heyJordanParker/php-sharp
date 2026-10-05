@@ -117,3 +117,6 @@ for ($i = 0; $i < 100; $i++) {
 }
 attempt(fn () => PhpOverflow::add(PHP_INT_MAX, 1));
 attempt(fn () => PhpOverflow::preInc(PHP_INT_MAX));
+
+// The JIT compiled every PHP# operator itself, with no call to a VM handler.
+var_dump(opcache_get_status()['jit']['sharp_operator_vm_calls']);
