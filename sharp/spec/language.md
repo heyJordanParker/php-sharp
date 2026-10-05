@@ -180,6 +180,20 @@ public int total() => this.a + this.b;
 public T first<T>(List<T> items) { … }
 ```
 
+**A method can take any number of arguments** with PHP's `...`. The parameter is written `int ...values`, and `values` arrives as a `List<int>`. A call spreads an existing list with `...list`.
+
+```csharp
+public static int sum(int ...values) { … }
+
+Money.sum(1, 2, 3);
+Money.sum(...prices);    // spreads an existing list
+max(...prices);          // into plain PHP too
+```
+
+- `...` is allowed only on the last parameter.
+- A spread works the same into PHP# methods and into plain PHP.
+- An override of a plain PHP method declared with `...` declares that parameter with `...` too.
+
 ## 8. Functions
 
 There are no top-level functions. Shared code lives in static methods on a class. PHP's built-in functions, such as `strlen`, and plain PHP functions, such as Laravel's `now()`, can still be called. Section 29 covers their effects.
@@ -529,6 +543,15 @@ const currency = tenant.currency;
 new Money { amount: 500, currency }      // short for currency: currency
 ```
 
+**Any parameter can be named at a call,** including a call into plain PHP. An override keeps every parameter name of the method it overrides (section 22), so a name means the same parameter on every class.
+
+```csharp
+import Illuminate.Support.Facades.Http;
+
+image.resize(width: 800, height: 600);
+Http.post(url, data: payload);           // plain PHP: Laravel's post(string $url, $data = [])
+```
+
 An object initializer runs after the constructor. It sets properties through their `set` or `init` accessors, so validation in those accessors runs. The checker requires every `required` property to be set.
 
 ## 17. Loops
@@ -771,6 +794,19 @@ These are compile errors:
 - a missing `override`
 - `override` when the parent has no such method
 - overriding a method that is not `virtual` or `abstract`
+- an override that renames a parameter of the method it overrides. The error names both names.
+
+```csharp
+public class Image
+{
+    public virtual void resize(int width, int height) { … }
+}
+
+public class Thumbnail : Image
+{
+    public override void resize(int w, int h) { … }   // compile error: w renames width, h renames height
+}
+```
 
 **Classes are open** unless marked `final`. `final override` stops an override chain at that class.
 
@@ -827,6 +863,23 @@ Built-in types are lowercase: `int`, `float`, `bool`, `string`, `void`, `null`. 
 - `PHP_INT_MIN / -1` throws `ArithmeticError`, because the result overflows.
 - `/=` follows the same rules.
 - Like `+` (section 18), `/` chooses when it runs, from the types of its operands.
+
+**Converting values:**
+
+```csharp
+const qty = Int.parse(request.input("qty"));         // int, throws on "abc" and on "12abc"
+const maybe = Int.tryParse(request.input("qty"));    // int?, null on "abc"
+const cents = (int)(price * 100);                    // truncates toward zero
+const admin = user as Admin;                         // Admin?, null if user is not one
+const flag = request.input("flag") == "1";           // replaces (bool)
+```
+
+- `(int)` and `(float)` convert between `int` and `float`. `(string)` converts a number to a `string`.
+- `(int)` truncates a `float` toward zero. A `float` too large for an `int` throws `ArithmeticError`.
+- A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` throw on a string that is not a number from start to end, such as `"abc"` or `"12abc"`.
+- `Int.tryParse(s)` and `Float.tryParse(s)` give null where `parse` throws.
+- A class or an interface narrows only with `as`, which gives null, or with `as … ?? throw` (section 21).
+- `(bool)`, `(array)` and `(object)` do not exist. Conditions are `bool` (section 21), so a comparison such as `request.input("flag") == "1"` replaces `(bool)`.
 
 **`Any` holds a value of any type except null. `Any?` also allows null.** A value of type `Any` must be checked with `is`, `as` or `match` before it can be used:
 
