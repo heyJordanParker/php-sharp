@@ -1,0 +1,49 @@
+namespace Demo;
+
+class Lambdas
+{
+    private int base = 10;
+
+    public int run(int extra)
+    {
+        let count = 0;
+        const twice = (int a) => a * extra;
+        const half = b => intdiv(b, 2);
+        const add = (int step) => {
+            count += step + this.base;
+        };
+        const bump = () => count += 1;
+        add(twice(half(4)));
+        bump();
+        return count;
+    }
+
+    public static List<int> doubled(List<int> numbers, int by)
+    {
+        return array_map(n => n * by, numbers);
+    }
+
+    public static string passes(int times)
+    {
+        let marks = [() => 0];
+        while (times > 0) {
+            let seen = times;
+            const mark = () => {
+                seen += 100;
+            };
+            mark();
+            marks.add(() => seen);
+            times -= 1;
+        }
+        return implode(",", array_map(read => read(), marks));
+    }
+
+    public int nested(int extra)
+    {
+        const outer = (int a) => {
+            const inner = b => a + b + extra + this.base;
+            return inner(1);
+        };
+        return outer(2);
+    }
+}

@@ -86,6 +86,11 @@ static zend_ast_kind sharp_zend_kind(enum sharp_kind kind)
 		SHARP_KIND(ARRAY_ELEM);
 		SHARP_KIND(DIM);
 		SHARP_KIND(TYPE);
+		SHARP_KIND(CLOSURE);
+		SHARP_KIND(ARROW_FUNC);
+		SHARP_KIND(CLOSURE_USES);
+		SHARP_KIND(CALLABLE_CONVERT);
+		SHARP_KIND(UNSET);
 	}
 
 	ZEND_UNREACHABLE();
@@ -150,8 +155,10 @@ static zend_ast *sharp_translate_decl(const sharp_unit *unit, const sharp_node *
 		child[i] = sharp_translate(unit, unit->children[node->first_child + i]);
 	}
 
+	/* php-src's grammar gives a closure and an arrow function no name. */
 	CG(zend_lineno) = node->end_line;
-	return zend_ast_create_decl(kind, node->attr, node->line, NULL, sharp_string(node->text),
+	return zend_ast_create_decl(kind, node->attr, node->line, NULL,
+		kind == ZEND_AST_CLOSURE || kind == ZEND_AST_ARROW_FUNC ? NULL : sharp_string(node->text),
 		child[0], child[1], child[2], child[3], child[4]);
 }
 
@@ -211,6 +218,10 @@ static zend_ast *sharp_translate(const sharp_unit *unit, uint32_t index)
 	if (kind == ZEND_AST_ZVAL) {
 		CG(zend_lineno) = node->line;
 		return sharp_translate_zval(node);
+	}
+	if (kind == ZEND_AST_CALLABLE_CONVERT) {
+		CG(zend_lineno) = node->line;
+		return zend_ast_create_fcc();
 	}
 	if ((kind >> ZEND_AST_IS_LIST_SHIFT) & 1) {
 		ast = sharp_translate_list(unit, node, kind);
