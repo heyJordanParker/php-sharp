@@ -35,19 +35,19 @@ origin.x = 5;
 this.origin = origin;     // compiles: three lines for one change
 ```
 
-### Rejected: change a discarded copy
+### Rejected: a runtime error (PHP's hooked properties)
 
 ```csharp
-public void add(Line line) { this.lines.add(line); }   // compiles; runs: changes the copy get returned, and lines stays empty
+public void add(Line line) { this.lines.add(line); }   // compiles; runs: throws Error "Indirect modification of Order::$lines is not allowed"
 ```
 
-The write disappears with no error.
+The checker accepts a change that always fails when it runs.
 
 ## Precedent
 
 - **Chosen:** Swift.
 - **Rejected, a compile error:** C#'s error CS1612.
-- **Rejected, a discarded copy:** PHP's hooked properties, where `get` returns a copy. For an array, PHP 8.5 refuses `$order->lines[] = $line` at runtime with `Error: Indirect modification of Order::$lines is not allowed`.
+- **Rejected, a runtime error:** PHP 8.5's hooked properties. `$order->lines[] = $line` on a hooked array property throws `Error: Indirect modification of Order::$lines is not allowed`.
 
 ## Spec
 

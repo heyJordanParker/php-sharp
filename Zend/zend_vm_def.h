@@ -29,6 +29,9 @@ ZEND_VM_COLD_HELPER(zend_integer_overflow_helper, ANY, ANY)
 
 	SAVE_OPLINE();
 	zend_integer_overflow_error();
+	if (RETURN_VALUE_USED(opline)) {
+		ZVAL_UNDEF(EX_VAR(opline->result.var));
+	}
 	HANDLE_EXCEPTION();
 }
 

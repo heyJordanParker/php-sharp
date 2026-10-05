@@ -325,4 +325,9 @@ class Overflow
         let p = a ** b;
         return a;
     }
+
+    public static int decLoose(LooseCounter counter)
+    {
+        return --counter.value;
+    }
 }
