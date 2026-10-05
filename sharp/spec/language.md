@@ -326,10 +326,12 @@ lines = Cart.withShipping(lines, shipping);   // the caller keeps the change
 **Element types are checked where a collection enters PHP# from plain PHP,** not on every write. Plain PHP can change only its own copy, so a wrong element reaches PHP# code only by crossing in:
 
 - a plain PHP caller passes a collection to a PHP# method
-- PHP# code takes a value that plain PHP returned, with `as` or a typed assignment
+- a typed assignment takes a value that plain PHP returned
 - plain PHP writes a PHP# property
 
 At each crossing, the runtime checks every element once and throws a `TypeError` that names the element. A call from PHP# to PHP# checks nothing at runtime, because the checker proved it.
+
+`as` to a collection type checks every element too, wherever the value came from, and gives null if any element is wrong (section 21).
 
 ```csharp
 List<Line> lines = legacy.lines();            // plain PHP returned it: every element is checked here
@@ -725,6 +727,7 @@ if (entity is HasDesign) {
 }
 ```
 - **`as`** converts a value to a type, or gives null.
+- **`as` to a collection type checks every element,** wherever the value came from, and gives null if any element is wrong. So `as List<string> ?? throw …` throws on a wrong element.
 
 **Boolean operators:** `&&`, `||` and `!` exist only in expressions. PHP's `and`, `or` and `xor` operators are removed, so `=` can no longer bind before `and`.
 
@@ -1003,7 +1006,7 @@ Function<Money(Offer)> priceOf                       // a pure function value
 Function<Charge(Cart)> uses Http charge              // may reach Http
 ```
 
-**A method that takes a function can have that function's effects.** Its declaration writes `uses f`, where `f` is one of its function-typed parameters. The method then has exactly the effects of the function passed as `f` at each call. Code that calls it writes nothing.
+**A method that takes a function can have that function's effects.** Its declaration writes `uses f`, where `f` is one of its function-typed parameters, with or without a body. At each call, the method has its body's own effects plus the effects of the function passed as `f`. Code that calls it writes nothing.
 
 ```csharp
 // in the standard library's List<T>
@@ -1011,11 +1014,14 @@ public List<TResult> map<TResult>(Function<TResult(T)> f) uses f;
 
 carts.map(c => c.total);                             // pure
 carts.map(c => this.gateway.charge(c));              // has Http
+
+// a method with a body: Http from this.gateway, plus the effects of prepare
+public Charge charge(Cart cart, Function<Cart(Cart)> prepare) uses prepare => this.gateway.charge(prepare(cart));
 ```
 
 The standard library's collection methods (section 12) are declared this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
 
-**Code with a body never writes `uses`.** Its effects enter through the constructor and through the plain PHP it calls, and its body shows both. The checker works out each method's effects, and the editor displays them.
+**Code with a body writes no `uses` except `uses f`.** Its effects enter through the constructor, through the plain PHP it calls and through each function its `uses f` names, and its body and declaration show all three. The checker works out each method's effects, and the editor displays them.
 
 ## 30. Tuples
 
