@@ -260,14 +260,14 @@ b.x = 5;   // b is copied here, and a is unchanged
 
 - Reflection shows `PaginatedList<Order>`.
 - `page is PaginatedList<Order>` is checked while the code runs.
-- A call from plain PHP that passes the wrong type throws a `TypeError`.
+- A value of the wrong type throws a `TypeError` where it enters PHP# from plain PHP. Section 12 lists where a value enters.
 
 **Writing type arguments:**
 
 - **`new` always names them:** `new PaginatedList<Order>(…)`.
 - **A generic method call infers them** from the arguments it receives.
 
-**Written type arguments are carried at runtime, and inferred ones are known to the checker only.** "Written" covers `new`, an explicit call such as `Json.decode<WebhookPayload>(body)`, and a declared type such as a property, a parameter or `List<Line> lines = …`. Every type, inferred or written, is known while code is checked, as in TypeScript. The engine compiles one file at a time, so it cannot see an inferred argument. A value created from an inferred argument, such as `const lines = [lineA, lineB]`, has no element type at runtime, and passes any runtime check for its collection type, because the checker has already proven it.
+**Written type arguments are carried at runtime, and inferred ones are known to the checker only.** "Written" covers `new`, an explicit call such as `Json.decode<WebhookPayload>(body)`, and a declared type such as a property, a parameter or `List<Line> lines = …`. Every type, inferred or written, is known while code is checked, as in TypeScript. The engine compiles one file at a time, so it cannot see an inferred argument. A value created from an inferred argument has no type argument at runtime, and passes any runtime check for its generic type, because the checker has already proven it. A collection's elements are checked where it enters from plain PHP instead (section 12).
 
 **Declaring type parameters:**
 
@@ -303,7 +303,6 @@ There is no variance at the point of use, such as Java's `? extends T`.
 
 PHP# has three collection types: `List<T>`, `Map<TKey, TValue>` and `Set<T>`.
 
-- Their element types are reified, so a wrong element throws a `TypeError`.
 - They are values, as structs (section 10) and PHP's own arrays are. Assigning or passing a collection copies it only when one side later writes to it.
 - A `Map`'s keys are `int` or `string`, as a PHP array's keys are.
 
@@ -322,6 +321,19 @@ public static List<Line> withShipping(List<Line> lines, Line shipping)
 }
 
 lines = Cart.withShipping(lines, shipping);   // the caller keeps the change
+```
+
+**Element types are checked where a collection enters PHP# from plain PHP,** not on every write. Plain PHP can change only its own copy, so a wrong element reaches PHP# code only by crossing in:
+
+- a plain PHP caller passes a collection to a PHP# method
+- PHP# code takes a value that plain PHP returned, with `as` or a typed assignment
+- plain PHP writes a PHP# property
+
+At each crossing, the runtime checks every element once and throws a `TypeError` that names the element. A call from PHP# to PHP# checks nothing at runtime, because the checker proved it.
+
+```csharp
+List<Line> lines = legacy.lines();            // plain PHP returned it: every element is checked here
+lines = Cart.withShipping(lines, shipping);   // PHP# to PHP#: nothing is checked
 ```
 
 **Literals:**
@@ -356,6 +368,7 @@ lines.sortedBy(l => l.amount);
 ```
 
 - Methods that read return a new collection.
+- A method that takes a function has that function's effects (section 29), so `lines.map(l => l.name)` is pure.
 - Methods that change a collection change it in place:
 
 ```csharp
@@ -989,6 +1002,18 @@ public interface PaymentGateway
 Function<Money(Offer)> priceOf                       // a pure function value
 Function<Charge(Cart)> uses Http charge              // may reach Http
 ```
+
+**A method that takes a function can have that function's effects.** Its declaration writes `uses f`, where `f` is one of its function-typed parameters. The method then has exactly the effects of the function passed as `f` at each call. Code that calls it writes nothing.
+
+```csharp
+// in the standard library's List<T>
+public List<TResult> map<TResult>(Function<TResult(T)> f) uses f;
+
+carts.map(c => c.total);                             // pure
+carts.map(c => this.gateway.charge(c));              // has Http
+```
+
+The standard library's collection methods (section 12) are declared this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
 
 **Code with a body never writes `uses`.** Its effects enter through the constructor and through the plain PHP it calls, and its body shows both. The checker works out each method's effects, and the editor displays them.
 
