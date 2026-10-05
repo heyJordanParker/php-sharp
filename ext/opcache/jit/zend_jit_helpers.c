@@ -2490,7 +2490,7 @@ static zend_property_info *zend_jit_get_prop_not_accepting_double(zend_reference
 /* The JIT sets EX(opline) to the increment or decrement opline before it calls these helpers. */
 static zend_always_inline bool zend_jit_checked_incdec(void)
 {
-	return EG(current_execute_data)->opline->extended_value & ZEND_THROW_ON_OVERFLOW;
+	return EG(current_execute_data)->opline->extended_value & ZEND_SHARP_OPERATOR;
 }
 
 static zend_always_inline void zend_jit_increment(zval *var_ptr)

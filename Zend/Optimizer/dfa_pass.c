@@ -1588,7 +1588,7 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 				}
 
 			} else if (opline->opcode == ZEND_ASSIGN_OP
-			 && (opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) == ZEND_ADD
+			 && (opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_ADD
 			 && ssa->ops[op_1].op1_def == v
 			 && opline->op2_type == IS_CONST
 			 && Z_TYPE_P(CT_CONSTANT_EX(op_array, opline->op2.constant)) == IS_LONG
@@ -1599,11 +1599,11 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 // op_1: ASSIGN_ADD #?.CV [undef,null,int,foat] ->#v.CV, int(1) => PRE_INC #?.CV ->#v.CV
 
 				opline->opcode = ZEND_PRE_INC;
-				opline->extended_value &= ZEND_THROW_ON_OVERFLOW;
+				opline->extended_value &= ZEND_SHARP_OPERATOR;
 				SET_UNUSED(opline->op2);
 
 			} else if (opline->opcode == ZEND_ASSIGN_OP
-			 && (opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) == ZEND_SUB
+			 && (opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_SUB
 			 && ssa->ops[op_1].op1_def == v
 			 && opline->op2_type == IS_CONST
 			 && Z_TYPE_P(CT_CONSTANT_EX(op_array, opline->op2.constant)) == IS_LONG
@@ -1614,7 +1614,7 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 // op_1: ASSIGN_SUB #?.CV [undef,null,int,foat] -> #v.CV, int(1) => PRE_DEC #?.CV ->#v.CV
 
 				opline->opcode = ZEND_PRE_DEC;
-				opline->extended_value &= ZEND_THROW_ON_OVERFLOW;
+				opline->extended_value &= ZEND_SHARP_OPERATOR;
 				SET_UNUSED(opline->op2);
 
 			} else if (ssa->ops[op_1].op1_def == v
@@ -1631,8 +1631,8 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 				ssa->ops[op_1].op1_def = -1;
 
 				/* Update opcode */
-				opline->opcode = opline->extended_value & ~ZEND_THROW_ON_OVERFLOW;
-				opline->extended_value &= ZEND_THROW_ON_OVERFLOW;
+				opline->opcode = opline->extended_value & ~ZEND_SHARP_OPERATOR;
+				opline->extended_value &= ZEND_SHARP_OPERATOR;
 				opline->result_type = opline->op1_type;
 				opline->result.var = opline->op1.var;
 

@@ -4766,7 +4766,7 @@ static int zend_jit_inc_dec(zend_jit_ctx *jit, const zend_op *opline, uint32_t o
 		op1_lval_ref = jit_Z_LVAL(jit, op1_addr);
 	}
 	ref = ir_BINARY_OP_L(op, op1_lval_ref, ir_CONST_LONG(1));
-	if (may_overflow && (opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+	if (may_overflow && (opline->extended_value & ZEND_SHARP_OPERATOR)) {
 		if ((op1_def_info & MAY_BE_GUARD)
 		 || (opline->result_type != IS_UNUSED && (res_info & MAY_BE_GUARD))) {
 			/* The VM runs the opline again and throws */
@@ -5026,7 +5026,7 @@ static int zend_jit_inc_dec(zend_jit_ctx *jit, const zend_op *opline, uint32_t o
 					res_use_info,
 					ZEND_ADDR_REF_ZVAL(ref), op1_info, 1);
 			}
-			if (opline->extended_value & ZEND_THROW_ON_OVERFLOW) {
+			if (opline->extended_value & ZEND_SHARP_OPERATOR) {
 				/* A reference can hold a long, so this path can overflow */
 				if (opline->opcode == ZEND_PRE_INC || opline->opcode == ZEND_POST_INC) {
 					ir_CALL_1(IR_VOID, ir_CONST_FC_FUNC(checked_increment_function), ref);
@@ -5120,7 +5120,7 @@ static int zend_jit_math_long_long(zend_jit_ctx   *jit,
 	op2 = (same_ops) ? op1 : jit_Z_LVAL(jit, op2_addr);
 	ref = ir_BINARY_OP_L(op, op1, op2);
 
-	if (may_overflow && (opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+	if (may_overflow && (opline->extended_value & ZEND_SHARP_OPERATOR)) {
 		if (res_info & MAY_BE_GUARD) {
 			/* The VM runs the opline again and throws */
 			int32_t exit_point = zend_jit_trace_get_exit_point(opline, 0);
@@ -5636,7 +5636,7 @@ static int zend_jit_math_helper(zend_jit_ctx   *jit,
 		arg3 = jit_ZVAL_ADDR(jit, op2_addr);
 		jit_SET_EX_OPLINE(jit, opline);
 		ZEND_ASSERT(opcode == ZEND_ADD || opcode == ZEND_SUB || opcode == ZEND_MUL || opcode == ZEND_DIV);
-		func = ir_CONST_FC_FUNC(get_binary_op(opcode | (opline->extended_value & ZEND_THROW_ON_OVERFLOW)));
+		func = ir_CONST_FC_FUNC(get_binary_op(opcode | (opline->extended_value & ZEND_SHARP_OPERATOR)));
 		ir_CALL_3(IR_VOID, func, arg1, arg2, arg3);
 
 		jit_FREE_OP(jit, op1_type, op1, op1_info, NULL);
@@ -6202,7 +6202,7 @@ static int zend_jit_assign_op(zend_jit_ctx   *jit,
 {
 	int result = 1;
 	ir_ref slow_path = IR_UNUSED;
-	uint8_t opcode = opline->extended_value & ~ZEND_THROW_ON_OVERFLOW;
+	uint8_t opcode = opline->extended_value & ~ZEND_SHARP_OPERATOR;
 
 	ZEND_ASSERT(opline->op1_type == IS_CV && opline->result_type == IS_UNUSED);
 	ZEND_ASSERT(!(op1_info & MAY_BE_UNDEF) && !(op2_info & MAY_BE_UNDEF));
@@ -13616,7 +13616,7 @@ static int zend_jit_assign_dim_op(zend_jit_ctx   *jit,
 	ir_ref if_type = IS_UNUSED;
 	ir_ref end_inputs = IR_UNUSED, ht_ref;
 	bool emit_fast_path = 1;
-	uint8_t opcode = opline->extended_value & ~ZEND_THROW_ON_OVERFLOW;
+	uint8_t opcode = opline->extended_value & ~ZEND_SHARP_OPERATOR;
 
 	ZEND_ASSERT(opline->result_type == IS_UNUSED);
 
@@ -15245,7 +15245,7 @@ static int zend_jit_assign_obj_op(zend_jit_ctx         *jit,
 	bool use_prop_guard = 0;
 	bool may_throw = 0;
 	binary_op_type binary_op = get_binary_op(opline->extended_value);
-	uint8_t opcode = opline->extended_value & ~ZEND_THROW_ON_OVERFLOW;
+	uint8_t opcode = opline->extended_value & ~ZEND_SHARP_OPERATOR;
 	ir_ref obj_ref = IR_UNUSED;
 	ir_ref prop_ref = IR_UNUSED;
 	ir_ref end_inputs = IR_UNUSED;
@@ -15678,7 +15678,7 @@ static int zend_jit_incdec_obj(zend_jit_ctx         *jit,
 	bool use_prop_guard = 0;
 	bool may_throw = 0;
 	uint32_t res_info = (opline->result_type != IS_UNDEF) ? RES_INFO() : 0;
-	uint32_t cache_slot = opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_THROW_ON_OVERFLOW);
+	uint32_t cache_slot = opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR);
 	ir_ref obj_ref = IR_UNUSED;
 	ir_ref prop_ref = IR_UNUSED;
 	ir_ref end_inputs = IR_UNUSED;
@@ -15973,7 +15973,7 @@ static int zend_jit_incdec_obj(zend_jit_ctx         *jit,
 				ref = ir_SUB_OV_L(ref, ir_CONST_LONG(1));
 			}
 
-			if (opline->extended_value & ZEND_THROW_ON_OVERFLOW) {
+			if (opline->extended_value & ZEND_SHARP_OPERATOR) {
 				/* The property keeps its value, and the exception check at the end throws */
 				ir_ref if_checked_overflow = ir_IF(ir_OVERFLOW(ref));
 

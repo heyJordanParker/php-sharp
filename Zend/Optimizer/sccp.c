@@ -683,7 +683,7 @@ static inline zend_result ct_eval_incdec(zval *result, const zend_op *opline, zv
 	}
 
 	/* A checked increment or decrement throws when it overflows. */
-	if ((opline->extended_value & ZEND_THROW_ON_OVERFLOW) && Z_TYPE_P(op1) == IS_LONG
+	if ((opline->extended_value & ZEND_SHARP_OPERATOR) && Z_TYPE_P(op1) == IS_LONG
 			&& Z_LVAL_P(op1) == (increment ? ZEND_LONG_MAX : ZEND_LONG_MIN)) {
 		return FAILURE;
 	}

@@ -476,7 +476,7 @@ static zend_never_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV_
 	if (UNEXPECTED(Z_TYPE_INFO_P(op_2) == IS_UNDEF)) {
 		op_2 = ZVAL_UNDEFINED_OP2();
 	}
-	if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 		checked_add_function(EX_VAR(opline->result.var), op_1, op_2);
 	} else {
 		add_function(EX_VAR(opline->result.var), op_1, op_2);
@@ -501,7 +501,7 @@ static zend_never_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV_
 	if (UNEXPECTED(Z_TYPE_INFO_P(op_2) == IS_UNDEF)) {
 		op_2 = ZVAL_UNDEFINED_OP2();
 	}
-	if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 		checked_sub_function(EX_VAR(opline->result.var), op_1, op_2);
 	} else {
 		sub_function(EX_VAR(opline->result.var), op_1, op_2);
@@ -526,7 +526,7 @@ static zend_never_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV_
 	if (UNEXPECTED(Z_TYPE_INFO_P(op_2) == IS_UNDEF)) {
 		op_2 = ZVAL_UNDEFINED_OP2();
 	}
-	if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 		checked_mul_function(EX_VAR(opline->result.var), op_1, op_2);
 	} else {
 		mul_function(EX_VAR(opline->result.var), op_1, op_2);
@@ -6267,7 +6267,7 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_
 		if (EXPECTED(Z_TYPE_INFO_P(op2) == IS_LONG)) {
 			result = EX_VAR(opline->result.var);
 			if (UNEXPECTED(!fast_long_try_add(result, op1, op2))) {
-				if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+				if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 					ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 				}
 				ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) + (double) Z_LVAL_P(op2));
@@ -6310,7 +6310,7 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_
 		if (EXPECTED(Z_TYPE_INFO_P(op2) == IS_LONG)) {
 			result = EX_VAR(opline->result.var);
 			if (UNEXPECTED(!fast_long_try_sub(result, op1, op2))) {
-				if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+				if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 					ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 				}
 				ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) - (double) Z_LVAL_P(op2));
@@ -6355,7 +6355,7 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_
 
 			result = EX_VAR(opline->result.var);
 			ZEND_SIGNED_MULTIPLY_LONG(Z_LVAL_P(op1), Z_LVAL_P(op2), Z_LVAL_P(result), Z_DVAL_P(result), overflow);
-			if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			Z_TYPE_INFO_P(result) = overflow ? IS_DOUBLE : IS_LONG;
@@ -8635,7 +8635,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_A
 		if (EXPECTED(Z_TYPE_INFO_P(op2) == IS_LONG)) {
 			result = EX_VAR(opline->result.var);
 			if (UNEXPECTED(!fast_long_try_add(result, op1, op2))) {
-				if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+				if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 					ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 				}
 				ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) + (double) Z_LVAL_P(op2));
@@ -8678,7 +8678,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_S
 		if (EXPECTED(Z_TYPE_INFO_P(op2) == IS_LONG)) {
 			result = EX_VAR(opline->result.var);
 			if (UNEXPECTED(!fast_long_try_sub(result, op1, op2))) {
-				if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+				if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 					ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 				}
 				ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) - (double) Z_LVAL_P(op2));
@@ -9198,7 +9198,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_S
 	op2 = EX_VAR(opline->op2.var);
 	result = EX_VAR(opline->result.var);
 	if (UNEXPECTED(!fast_long_try_sub(result, op1, op2))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) - (double) Z_LVAL_P(op2));
@@ -13495,7 +13495,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_A
 		if (EXPECTED(Z_TYPE_INFO_P(op2) == IS_LONG)) {
 			result = EX_VAR(opline->result.var);
 			if (UNEXPECTED(!fast_long_try_add(result, op1, op2))) {
-				if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+				if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 					ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 				}
 				ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) + (double) Z_LVAL_P(op2));
@@ -13538,7 +13538,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_S
 		if (EXPECTED(Z_TYPE_INFO_P(op2) == IS_LONG)) {
 			result = EX_VAR(opline->result.var);
 			if (UNEXPECTED(!fast_long_try_sub(result, op1, op2))) {
-				if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+				if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 					ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 				}
 				ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) - (double) Z_LVAL_P(op2));
@@ -13583,7 +13583,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_MUL_SPEC_TMPV
 
 			result = EX_VAR(opline->result.var);
 			ZEND_SIGNED_MULTIPLY_LONG(Z_LVAL_P(op1), Z_LVAL_P(op2), Z_LVAL_P(result), Z_DVAL_P(result), overflow);
-			if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			Z_TYPE_INFO_P(result) = overflow ? IS_DOUBLE : IS_LONG;
@@ -14138,7 +14138,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_A
 	op2 = RT_CONSTANT(opline, opline->op2);
 	result = EX_VAR(opline->result.var);
 	if (UNEXPECTED(!fast_long_try_add(result, op1, op2))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) + (double) Z_LVAL_P(op2));
@@ -14179,7 +14179,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_S
 	op2 = RT_CONSTANT(opline, opline->op2);
 	result = EX_VAR(opline->result.var);
 	if (UNEXPECTED(!fast_long_try_sub(result, op1, op2))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) - (double) Z_LVAL_P(op2));
@@ -14221,7 +14221,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_M
 	op2 = RT_CONSTANT(opline, opline->op2);
 	result = EX_VAR(opline->result.var);
 	ZEND_SIGNED_MULTIPLY_LONG(Z_LVAL_P(op1), Z_LVAL_P(op2), Z_LVAL_P(result), Z_DVAL_P(result), overflow);
-	if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+	if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 		ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 	}
 	Z_TYPE_INFO_P(result) = overflow ? IS_DOUBLE : IS_LONG;
@@ -14626,7 +14626,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_A
 		if (EXPECTED(Z_TYPE_INFO_P(op2) == IS_LONG)) {
 			result = EX_VAR(opline->result.var);
 			if (UNEXPECTED(!fast_long_try_add(result, op1, op2))) {
-				if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+				if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 					ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 				}
 				ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) + (double) Z_LVAL_P(op2));
@@ -14669,7 +14669,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_S
 		if (EXPECTED(Z_TYPE_INFO_P(op2) == IS_LONG)) {
 			result = EX_VAR(opline->result.var);
 			if (UNEXPECTED(!fast_long_try_sub(result, op1, op2))) {
-				if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+				if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 					ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 				}
 				ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) - (double) Z_LVAL_P(op2));
@@ -14714,7 +14714,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_MUL_SPEC_TMPV
 
 			result = EX_VAR(opline->result.var);
 			ZEND_SIGNED_MULTIPLY_LONG(Z_LVAL_P(op1), Z_LVAL_P(op2), Z_LVAL_P(result), Z_DVAL_P(result), overflow);
-			if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			Z_TYPE_INFO_P(result) = overflow ? IS_DOUBLE : IS_LONG;
@@ -15154,7 +15154,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_A
 	op2 = EX_VAR(opline->op2.var);
 	result = EX_VAR(opline->result.var);
 	if (UNEXPECTED(!fast_long_try_add(result, op1, op2))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) + (double) Z_LVAL_P(op2));
@@ -15195,7 +15195,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_S
 	op2 = EX_VAR(opline->op2.var);
 	result = EX_VAR(opline->result.var);
 	if (UNEXPECTED(!fast_long_try_sub(result, op1, op2))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) - (double) Z_LVAL_P(op2));
@@ -15237,7 +15237,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_M
 	op2 = EX_VAR(opline->op2.var);
 	result = EX_VAR(opline->result.var);
 	ZEND_SIGNED_MULTIPLY_LONG(Z_LVAL_P(op1), Z_LVAL_P(op2), Z_LVAL_P(result), Z_DVAL_P(result), overflow);
-	if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+	if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 		ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 	}
 	Z_TYPE_INFO_P(result) = overflow ? IS_DOUBLE : IS_LONG;
@@ -23067,7 +23067,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -23090,7 +23090,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -23147,7 +23147,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -23170,7 +23170,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -23226,7 +23226,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		ZVAL_LONG(EX_VAR(opline->result.var), Z_LVAL_P(var_ptr));
 		if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -23279,7 +23279,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		ZVAL_LONG(EX_VAR(opline->result.var), Z_LVAL_P(var_ptr));
 		if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -24517,7 +24517,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -24583,7 +24583,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -27600,7 +27600,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -27666,7 +27666,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -32043,7 +32043,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -32109,7 +32109,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -34662,7 +34662,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -34729,7 +34729,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -36914,7 +36914,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -36981,7 +36981,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -39604,7 +39604,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -39671,7 +39671,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -41460,7 +41460,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -41483,7 +41483,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -41540,7 +41540,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -41563,7 +41563,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -41619,7 +41619,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		ZVAL_LONG(EX_VAR(opline->result.var), Z_LVAL_P(var_ptr));
 		if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -41672,7 +41672,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		ZVAL_LONG(EX_VAR(opline->result.var), Z_LVAL_P(var_ptr));
 		if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -43083,7 +43083,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 
 	var_ptr = EX_VAR(opline->op1.var);
 	if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -43101,7 +43101,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 
 	var_ptr = EX_VAR(opline->op1.var);
 	if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -43145,7 +43145,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 
 	var_ptr = EX_VAR(opline->op1.var);
 	if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -43163,7 +43163,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 
 	var_ptr = EX_VAR(opline->op1.var);
 	if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -43193,7 +43193,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 	var_ptr = EX_VAR(opline->op1.var);
 	ZVAL_LONG(EX_VAR(opline->result.var), Z_LVAL_P(var_ptr));
 	if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -43220,7 +43220,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_P
 	var_ptr = EX_VAR(opline->op1.var);
 	ZVAL_LONG(EX_VAR(opline->result.var), Z_LVAL_P(var_ptr));
 	if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -44041,7 +44041,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -44108,7 +44108,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -48134,7 +48134,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -48201,7 +48201,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -53801,7 +53801,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -53868,7 +53868,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -62140,7 +62140,7 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_ADD_S
 		if (EXPECTED(Z_TYPE_INFO_P(op2) == IS_LONG)) {
 			result = EX_VAR(opline->result.var);
 			if (UNEXPECTED(!fast_long_try_add(result, op1, op2))) {
-				if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+				if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 					ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 				}
 				ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) + (double) Z_LVAL_P(op2));
@@ -62183,7 +62183,7 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SUB_S
 		if (EXPECTED(Z_TYPE_INFO_P(op2) == IS_LONG)) {
 			result = EX_VAR(opline->result.var);
 			if (UNEXPECTED(!fast_long_try_sub(result, op1, op2))) {
-				if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+				if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 					ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 				}
 				ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) - (double) Z_LVAL_P(op2));
@@ -62228,7 +62228,7 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_MUL_S
 
 			result = EX_VAR(opline->result.var);
 			ZEND_SIGNED_MULTIPLY_LONG(Z_LVAL_P(op1), Z_LVAL_P(op2), Z_LVAL_P(result), Z_DVAL_P(result), overflow);
-			if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			Z_TYPE_INFO_P(result) = overflow ? IS_DOUBLE : IS_LONG;
@@ -64508,7 +64508,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_ADD_SP
 		if (EXPECTED(Z_TYPE_INFO_P(op2) == IS_LONG)) {
 			result = EX_VAR(opline->result.var);
 			if (UNEXPECTED(!fast_long_try_add(result, op1, op2))) {
-				if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+				if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 					ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 				}
 				ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) + (double) Z_LVAL_P(op2));
@@ -64551,7 +64551,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SUB_SP
 		if (EXPECTED(Z_TYPE_INFO_P(op2) == IS_LONG)) {
 			result = EX_VAR(opline->result.var);
 			if (UNEXPECTED(!fast_long_try_sub(result, op1, op2))) {
-				if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+				if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 					ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 				}
 				ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) - (double) Z_LVAL_P(op2));
@@ -65071,7 +65071,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SUB_LO
 	op2 = EX_VAR(opline->op2.var);
 	result = EX_VAR(opline->result.var);
 	if (UNEXPECTED(!fast_long_try_sub(result, op1, op2))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) - (double) Z_LVAL_P(op2));
@@ -69266,7 +69266,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_ADD_SP
 		if (EXPECTED(Z_TYPE_INFO_P(op2) == IS_LONG)) {
 			result = EX_VAR(opline->result.var);
 			if (UNEXPECTED(!fast_long_try_add(result, op1, op2))) {
-				if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+				if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 					ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 				}
 				ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) + (double) Z_LVAL_P(op2));
@@ -69309,7 +69309,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SUB_SP
 		if (EXPECTED(Z_TYPE_INFO_P(op2) == IS_LONG)) {
 			result = EX_VAR(opline->result.var);
 			if (UNEXPECTED(!fast_long_try_sub(result, op1, op2))) {
-				if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+				if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 					ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 				}
 				ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) - (double) Z_LVAL_P(op2));
@@ -69354,7 +69354,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_MUL_SPEC_TMPVARCV_
 
 			result = EX_VAR(opline->result.var);
 			ZEND_SIGNED_MULTIPLY_LONG(Z_LVAL_P(op1), Z_LVAL_P(op2), Z_LVAL_P(result), Z_DVAL_P(result), overflow);
-			if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			Z_TYPE_INFO_P(result) = overflow ? IS_DOUBLE : IS_LONG;
@@ -69909,7 +69909,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_ADD_LO
 	op2 = RT_CONSTANT(opline, opline->op2);
 	result = EX_VAR(opline->result.var);
 	if (UNEXPECTED(!fast_long_try_add(result, op1, op2))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) + (double) Z_LVAL_P(op2));
@@ -69950,7 +69950,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SUB_LO
 	op2 = RT_CONSTANT(opline, opline->op2);
 	result = EX_VAR(opline->result.var);
 	if (UNEXPECTED(!fast_long_try_sub(result, op1, op2))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) - (double) Z_LVAL_P(op2));
@@ -69992,7 +69992,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_MUL_LO
 	op2 = RT_CONSTANT(opline, opline->op2);
 	result = EX_VAR(opline->result.var);
 	ZEND_SIGNED_MULTIPLY_LONG(Z_LVAL_P(op1), Z_LVAL_P(op2), Z_LVAL_P(result), Z_DVAL_P(result), overflow);
-	if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+	if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 		ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 	}
 	Z_TYPE_INFO_P(result) = overflow ? IS_DOUBLE : IS_LONG;
@@ -70397,7 +70397,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_ADD_SP
 		if (EXPECTED(Z_TYPE_INFO_P(op2) == IS_LONG)) {
 			result = EX_VAR(opline->result.var);
 			if (UNEXPECTED(!fast_long_try_add(result, op1, op2))) {
-				if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+				if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 					ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 				}
 				ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) + (double) Z_LVAL_P(op2));
@@ -70440,7 +70440,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SUB_SP
 		if (EXPECTED(Z_TYPE_INFO_P(op2) == IS_LONG)) {
 			result = EX_VAR(opline->result.var);
 			if (UNEXPECTED(!fast_long_try_sub(result, op1, op2))) {
-				if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+				if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 					ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 				}
 				ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) - (double) Z_LVAL_P(op2));
@@ -70485,7 +70485,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_MUL_SPEC_TMPVARCV_
 
 			result = EX_VAR(opline->result.var);
 			ZEND_SIGNED_MULTIPLY_LONG(Z_LVAL_P(op1), Z_LVAL_P(op2), Z_LVAL_P(result), Z_DVAL_P(result), overflow);
-			if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			Z_TYPE_INFO_P(result) = overflow ? IS_DOUBLE : IS_LONG;
@@ -70925,7 +70925,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_ADD_LO
 	op2 = EX_VAR(opline->op2.var);
 	result = EX_VAR(opline->result.var);
 	if (UNEXPECTED(!fast_long_try_add(result, op1, op2))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) + (double) Z_LVAL_P(op2));
@@ -70966,7 +70966,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SUB_LO
 	op2 = EX_VAR(opline->op2.var);
 	result = EX_VAR(opline->result.var);
 	if (UNEXPECTED(!fast_long_try_sub(result, op1, op2))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(result, (double) Z_LVAL_P(op1) - (double) Z_LVAL_P(op2));
@@ -71008,7 +71008,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_MUL_LO
 	op2 = EX_VAR(opline->op2.var);
 	result = EX_VAR(opline->result.var);
 	ZEND_SIGNED_MULTIPLY_LONG(Z_LVAL_P(op1), Z_LVAL_P(op2), Z_LVAL_P(result), Z_DVAL_P(result), overflow);
-	if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+	if (UNEXPECTED(overflow) && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 		ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 	}
 	Z_TYPE_INFO_P(result) = overflow ? IS_DOUBLE : IS_LONG;
@@ -78738,7 +78738,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_PRE_IN
 
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -78761,7 +78761,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_PRE_IN
 
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -78818,7 +78818,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_PRE_DE
 
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -78841,7 +78841,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_PRE_DE
 
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -78897,7 +78897,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_POST_I
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		ZVAL_LONG(EX_VAR(opline->result.var), Z_LVAL_P(var_ptr));
 		if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -78950,7 +78950,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_POST_D
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		ZVAL_LONG(EX_VAR(opline->result.var), Z_LVAL_P(var_ptr));
 		if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -80188,7 +80188,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -80254,7 +80254,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -83271,7 +83271,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -83337,7 +83337,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -87714,7 +87714,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -87780,7 +87780,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -90333,7 +90333,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -90400,7 +90400,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -92585,7 +92585,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -92652,7 +92652,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -95275,7 +95275,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -95342,7 +95342,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -97131,7 +97131,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_PRE_IN
 
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -97154,7 +97154,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_PRE_IN
 
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -97211,7 +97211,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_PRE_DE
 
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -97234,7 +97234,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_PRE_DE
 
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -97290,7 +97290,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_POST_I
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		ZVAL_LONG(EX_VAR(opline->result.var), Z_LVAL_P(var_ptr));
 		if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -97343,7 +97343,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_POST_D
 	if (EXPECTED(Z_TYPE_P(var_ptr) == IS_LONG)) {
 		ZVAL_LONG(EX_VAR(opline->result.var), Z_LVAL_P(var_ptr));
 		if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-			if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 				ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 			}
 			ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -98754,7 +98754,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_PRE_IN
 
 	var_ptr = EX_VAR(opline->op1.var);
 	if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -98772,7 +98772,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_PRE_IN
 
 	var_ptr = EX_VAR(opline->op1.var);
 	if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -98816,7 +98816,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_PRE_DE
 
 	var_ptr = EX_VAR(opline->op1.var);
 	if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -98834,7 +98834,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_PRE_DE
 
 	var_ptr = EX_VAR(opline->op1.var);
 	if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -98864,7 +98864,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_POST_I
 	var_ptr = EX_VAR(opline->op1.var);
 	ZVAL_LONG(EX_VAR(opline->result.var), Z_LVAL_P(var_ptr));
 	if (UNEXPECTED(!fast_long_try_increment(var_ptr))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MAX + 1.0);
@@ -98891,7 +98891,7 @@ static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_POST_D
 	var_ptr = EX_VAR(opline->op1.var);
 	ZVAL_LONG(EX_VAR(opline->result.var), Z_LVAL_P(var_ptr));
 	if (UNEXPECTED(!fast_long_try_decrement(var_ptr))) {
-		if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+		if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 			ZEND_VM_TAIL_CALL(zend_integer_overflow_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 		}
 		ZVAL_DOUBLE(var_ptr, (double)ZEND_LONG_MIN - 1.0);
@@ -99712,7 +99712,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -99779,7 +99779,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CONST == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -103805,7 +103805,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -103872,7 +103872,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = ((IS_TMP_VAR|IS_VAR) == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -109370,7 +109370,7 @@ pre_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
@@ -109437,7 +109437,7 @@ post_incdec_object:
 				break;
 			}
 		}
-		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_THROW_ON_OVERFLOW) : _cache_slot;
+		cache_slot = (IS_CV == IS_CONST) ? CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_OPERATOR) : _cache_slot;
 		if (EXPECTED((zptr = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 			if (UNEXPECTED(Z_ISERROR_P(zptr))) {
 				ZVAL_NULL(EX_VAR(opline->result.var));
@@ -112310,7 +112310,7 @@ static zend_never_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV_EX  z
 	if (UNEXPECTED(Z_TYPE_INFO_P(op_2) == IS_UNDEF)) {
 		op_2 = ZVAL_UNDEFINED_OP2();
 	}
-	if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 		checked_add_function(EX_VAR(opline->result.var), op_1, op_2);
 	} else {
 		add_function(EX_VAR(opline->result.var), op_1, op_2);
@@ -112335,7 +112335,7 @@ static zend_never_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV_EX  z
 	if (UNEXPECTED(Z_TYPE_INFO_P(op_2) == IS_UNDEF)) {
 		op_2 = ZVAL_UNDEFINED_OP2();
 	}
-	if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 		checked_sub_function(EX_VAR(opline->result.var), op_1, op_2);
 	} else {
 		sub_function(EX_VAR(opline->result.var), op_1, op_2);
@@ -112360,7 +112360,7 @@ static zend_never_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV_EX  z
 	if (UNEXPECTED(Z_TYPE_INFO_P(op_2) == IS_UNDEF)) {
 		op_2 = ZVAL_UNDEFINED_OP2();
 	}
-	if (UNEXPECTED(opline->extended_value & ZEND_THROW_ON_OVERFLOW)) {
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 		checked_mul_function(EX_VAR(opline->result.var), op_1, op_2);
 	} else {
 		mul_function(EX_VAR(opline->result.var), op_1, op_2);

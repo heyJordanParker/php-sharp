@@ -78,10 +78,10 @@ static inline bool zend_optimizer_is_loop_var_free(const zend_op *opline) {
 		|| (opline->opcode == ZEND_FREE && opline->extended_value == ZEND_FREE_SWITCH);
 }
 
-/* The opcode get_binary_op() takes for a binary opline, marked when its overflow throws. */
+/* The opcode get_binary_op() takes for a binary opline, marked when it follows PHP#'s rules. */
 static inline uint32_t zend_optimizer_binary_opcode(const zend_op *opline) {
 	if (opline->opcode == ZEND_ADD || opline->opcode == ZEND_SUB || opline->opcode == ZEND_MUL) {
-		return opline->opcode | (opline->extended_value & ZEND_THROW_ON_OVERFLOW);
+		return opline->opcode | (opline->extended_value & ZEND_SHARP_OPERATOR);
 	}
 	return opline->opcode;
 }

@@ -609,7 +609,7 @@ ZEND_API zend_result ZEND_FASTCALL zend_ast_evaluate_inner(
 				zval_ptr_dtor_nogc(&op1);
 				ret = FAILURE;
 			} else {
-				binary_op_type op = get_binary_op((ast->attr & ~ZEND_CHECKED_ARITHMETIC) | zend_ast_overflow_mark(ast));
+				binary_op_type op = get_binary_op((ast->attr & ~ZEND_SHARP_OPERATOR_SYNTAX) | zend_ast_sharp_operator(ast));
 				op(result, &op1, &op2);
 				zval_ptr_dtor_nogc(&op1);
 				zval_ptr_dtor_nogc(&op2);
@@ -812,7 +812,7 @@ ZEND_API zend_result ZEND_FASTCALL zend_ast_evaluate_inner(
 				ret = FAILURE;
 			} else {
 				ZVAL_LONG(&op1, -1);
-				ret = get_binary_op(ZEND_MUL | zend_ast_overflow_mark(ast))(result, &op1, &op2);
+				ret = get_binary_op(ZEND_MUL | zend_ast_sharp_operator(ast))(result, &op1, &op2);
 				zval_ptr_dtor_nogc(&op2);
 			}
 			break;
@@ -2499,7 +2499,7 @@ simple_list:
 		case ZEND_AST_ASSIGN:            BINARY_OP(" = ",   90, 91, 90);
 		case ZEND_AST_ASSIGN_REF:        BINARY_OP(" =& ",  90, 91, 90);
 		case ZEND_AST_ASSIGN_OP:
-			switch (ast->attr & ~ZEND_CHECKED_ARITHMETIC) {
+			switch (ast->attr & ~ZEND_SHARP_OPERATOR_SYNTAX) {
 				case ZEND_ADD:    BINARY_OP(" += ",  90, 91, 90);
 				case ZEND_SUB:    BINARY_OP(" -= ",  90, 91, 90);
 				case ZEND_MUL:    BINARY_OP(" *= ",  90, 91, 90);
@@ -2517,7 +2517,7 @@ simple_list:
 			break;
 		case ZEND_AST_ASSIGN_COALESCE: BINARY_OP(" \?\?= ", 90, 91, 90);
 		case ZEND_AST_BINARY_OP:
-			switch (ast->attr & ~ZEND_CHECKED_ARITHMETIC) {
+			switch (ast->attr & ~ZEND_SHARP_OPERATOR_SYNTAX) {
 				case ZEND_ADD:                 BINARY_OP(" + ",   200, 200, 201);
 				case ZEND_SUB:                 BINARY_OP(" - ",   200, 200, 201);
 				case ZEND_MUL:                 BINARY_OP(" * ",   210, 210, 211);

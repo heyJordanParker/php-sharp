@@ -1274,11 +1274,11 @@ ZEND_API binary_op_type get_binary_op(int opcode)
 			return (binary_op_type) sub_function;
 		case ZEND_MUL:
 			return (binary_op_type) mul_function;
-		case ZEND_ADD | ZEND_THROW_ON_OVERFLOW:
+		case ZEND_ADD | ZEND_SHARP_OPERATOR:
 			return (binary_op_type) checked_add_function;
-		case ZEND_SUB | ZEND_THROW_ON_OVERFLOW:
+		case ZEND_SUB | ZEND_SHARP_OPERATOR:
 			return (binary_op_type) checked_sub_function;
-		case ZEND_MUL | ZEND_THROW_ON_OVERFLOW:
+		case ZEND_MUL | ZEND_SHARP_OPERATOR:
 			return (binary_op_type) checked_mul_function;
 		case ZEND_POW:
 			return (binary_op_type) pow_function;

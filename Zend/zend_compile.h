@@ -1100,17 +1100,18 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
 
 #define ZEND_ISEMPTY			(1<<0)
 
-/* Integer overflow throws ArithmeticError instead of producing a float. ZEND_CHECKED_ARITHMETIC
- * is set in the attr of ZEND_AST_BINARY_OP, ZEND_AST_ASSIGN_OP, ZEND_AST_UNARY_MINUS and the
- * increment kinds. The compiler turns it into ZEND_THROW_ON_OVERFLOW in the extended_value of
- * ZEND_ADD, ZEND_SUB, ZEND_MUL, the ZEND_ASSIGN_*_OP opcodes, where it sits next to
- * the opcode, and the increment and decrement opcodes, where it sits above the cache slot. */
-#define ZEND_CHECKED_ARITHMETIC	(1<<15)
-#define ZEND_THROW_ON_OVERFLOW	(1<<30)
+/* The operator follows PHP#'s rules: integer overflow throws ArithmeticError instead of
+ * producing a float. ZEND_SHARP_OPERATOR_SYNTAX is set in the attr of ZEND_AST_BINARY_OP,
+ * ZEND_AST_ASSIGN_OP, ZEND_AST_UNARY_MINUS and the increment kinds. The compiler turns it into
+ * ZEND_SHARP_OPERATOR in the extended_value of ZEND_ADD, ZEND_SUB, ZEND_MUL, the
+ * ZEND_ASSIGN_*_OP opcodes, where it sits next to the opcode, and the increment and decrement
+ * opcodes, where it sits above the cache slot. */
+#define ZEND_SHARP_OPERATOR_SYNTAX	(1<<15)
+#define ZEND_SHARP_OPERATOR	(1<<30)
 
-static zend_always_inline uint32_t zend_ast_overflow_mark(const zend_ast *ast)
+static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 {
-	return (ast->attr & ZEND_CHECKED_ARITHMETIC) ? ZEND_THROW_ON_OVERFLOW : 0;
+	return (ast->attr & ZEND_SHARP_OPERATOR_SYNTAX) ? ZEND_SHARP_OPERATOR : 0;
 }
 
 #define ZEND_LAST_CATCH			(1<<0)

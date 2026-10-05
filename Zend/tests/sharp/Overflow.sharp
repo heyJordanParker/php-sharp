@@ -156,4 +156,98 @@ class Overflow
         Probe.touch(x);
         return x + b;
     }
+
+    public static float narrowed(bool small, float half)
+    {
+        let x = 9223372036854775807;
+        if (small) {
+            x = 5;
+        }
+        return x + 1 + half;
+    }
+
+    public static int selfAddOne(int a)
+    {
+        let x = a;
+        x = x + 1;
+        return x;
+    }
+
+    public static int oneAddSelf(int a)
+    {
+        let x = a;
+        x = 1 + x;
+        return x;
+    }
+
+    public static int addAssignOne(int a)
+    {
+        let x = a;
+        x += 1;
+        return x;
+    }
+
+    public static int selfSubOne(int a)
+    {
+        let x = a;
+        x = x - 1;
+        return x;
+    }
+
+    public static int timesTwo(int a)
+    {
+        return a * 2;
+    }
+
+    public static int constInc()
+    {
+        let x = 9223372036854775807;
+        ++x;
+        return x;
+    }
+
+    public static int constantLocal()
+    {
+        let x = 9223372036854775807;
+        return x + 1;
+    }
+
+    public static int constantIncrement()
+    {
+        let x = 9223372036854775807;
+        return x++;
+    }
+
+    public static int constantAssign()
+    {
+        let x = 9223372036854775807;
+        x += 1;
+        return x;
+    }
+
+    public static int deadIncrement(int a)
+    {
+        let x = a;
+        x++;
+        return a;
+    }
+
+    public static int deadDecrement(int a)
+    {
+        let x = a;
+        x--;
+        return a;
+    }
+
+    public static int deadSum(int a, int b)
+    {
+        let sum = a + b;
+        return a;
+    }
+
+    public static int deadProduct(int a, int b)
+    {
+        let product = a * b;
+        return a;
+    }
 }

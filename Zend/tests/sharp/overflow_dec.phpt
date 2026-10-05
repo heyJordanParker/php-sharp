@@ -12,6 +12,10 @@ attempt(fn () => Demo\Overflow::postDec(PHP_INT_MIN + 1));
 attempt(fn () => Demo\Overflow::postDec(PHP_INT_MIN));
 attempt(fn () => Demo\Overflow::postDecValue(PHP_INT_MIN + 1));
 attempt(fn () => Demo\Overflow::postDecValue(PHP_INT_MIN));
+attempt(fn () => Demo\Overflow::selfSubOne(PHP_INT_MIN + 1));
+attempt(fn () => Demo\Overflow::selfSubOne(PHP_INT_MIN));
+attempt(fn () => Demo\Overflow::deadDecrement(PHP_INT_MIN + 1));
+attempt(fn () => Demo\Overflow::deadDecrement(PHP_INT_MIN));
 ?>
 --EXPECT--
 int(-9223372036854775808)
@@ -20,3 +24,7 @@ int(-9223372036854775808)
 ArithmeticError: Integer overflow in Overflow.sharp on line 94
 int(-9223372036854775807)
 ArithmeticError: Integer overflow in Overflow.sharp on line 101
+int(-9223372036854775808)
+ArithmeticError: Integer overflow in Overflow.sharp on line 193
+int(-9223372036854775807)
+ArithmeticError: Integer overflow in Overflow.sharp on line 238
