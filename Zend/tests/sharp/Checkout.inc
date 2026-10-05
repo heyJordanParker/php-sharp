@@ -36,4 +36,19 @@ class Checkout
     {
         return (string)$count;
     }
+
+    public static function total(string $price, ?string $count): int
+    {
+        return (int)(\Sharp\Float::parse($price) * 100) * (\Sharp\Int::tryParse($count) ?? 1);
+    }
+
+    public static function page(string $value): int
+    {
+        return \Sharp\Int::parse($value);
+    }
+
+    public static function price(string $value): float
+    {
+        return \Sharp\Float::parse($value);
+    }
 }
