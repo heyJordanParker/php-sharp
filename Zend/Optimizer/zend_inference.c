@@ -5157,7 +5157,11 @@ ZEND_API bool zend_may_throw_ex(const zend_op *opline, const zend_ssa_op *ssa_op
 			}
 			return (t1 & (MAY_BE_OBJECT|MAY_BE_ARRAY_OF_ARRAY|MAY_BE_ARRAY_OF_OBJECT)) || (t2 & (MAY_BE_OBJECT|MAY_BE_ARRAY_OF_ARRAY|MAY_BE_ARRAY_OF_OBJECT));
 		case ZEND_ASSIGN_OP:
-			if (opline->extended_value == ZEND_ADD) {
+			if ((opline->extended_value & ZEND_SHARP_OPERATOR) && (t1 & MAY_BE_LONG) && (t2 & MAY_BE_LONG)) {
+				/* Integer overflow */
+				return 1;
+			}
+			if ((opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_ADD) {
 				if ((t1 & MAY_BE_ANY) == MAY_BE_ARRAY
 				 && (t2 & MAY_BE_ANY) == MAY_BE_ARRAY) {
 					return 0;
@@ -5173,9 +5177,9 @@ ZEND_API bool zend_may_throw_ex(const zend_op *opline, const zend_ssa_op *ssa_op
 				}
 				return (t1 & (MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE)) ||
 					(t2 & (MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE));
-			} else if (opline->extended_value == ZEND_SUB ||
-				opline->extended_value == ZEND_MUL ||
-				opline->extended_value == ZEND_POW) {
+			} else if ((opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_SUB ||
+				(opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_MUL ||
+				(opline->extended_value & ~ZEND_SHARP_OPERATOR) == ZEND_POW) {
 				return (t1 & (MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE)) ||
 					(t2 & (MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE));
 			} else if (opline->extended_value == ZEND_SL ||

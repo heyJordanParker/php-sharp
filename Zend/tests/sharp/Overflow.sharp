@@ -279,4 +279,32 @@ class Overflow
     }
 
     private int big = 9223372036854775807 + 1;
+
+    public static int deadAddAssign(int a, int b)
+    {
+        let x = a;
+        x += b;
+        return a;
+    }
+
+    public static int deadSubAssign(int a, int b)
+    {
+        let x = a;
+        x -= b;
+        return a;
+    }
+
+    public static int deadMulAssign(int a, int b)
+    {
+        let x = a;
+        x *= b;
+        return a;
+    }
+
+    public static int deadPowAssign(int a, int b)
+    {
+        let x = a;
+        x **= b;
+        return a;
+    }
 }
