@@ -304,9 +304,25 @@ There is no variance at the point of use, such as Java's `? extends T`.
 PHP# has three collection types: `List<T>`, `Map<TKey, TValue>` and `Set<T>`.
 
 - Their element types are reified, so a wrong element throws a `TypeError`.
-- They are shared references, as in C#, Java and TypeScript. Assigning or passing a collection shares it, and it is never copied implicitly.
-  - Structs stay copy on write, because a struct is small. A list can hold hundreds of items, so copying one by accident is expensive.
-- A class protects a collection it exposes with `readonly`, described in section 13.
+- They are values, as structs (section 10) and PHP's own arrays are. Assigning or passing a collection copies it only when one side later writes to it.
+- A `Map`'s keys are `int` or `string`, as a PHP array's keys are.
+
+```csharp
+let b = a;
+b.add(line);   // b is copied here, and a is unchanged
+```
+
+**A method that changes a collection it was given changes its own copy.** It returns the collection when the caller should see the change:
+
+```csharp
+public static List<Line> withShipping(List<Line> lines, Line shipping)
+{
+    lines.add(shipping);
+    return lines;
+}
+
+lines = Cart.withShipping(lines, shipping);   // the caller keeps the change
+```
 
 **Literals:**
 
@@ -334,7 +350,7 @@ lines.map(l => l.name);
 lines.first(l => l.free);
 lines.any(l => l.free);
 lines.contains(line);
-lines.groupBy(l => l.product);
+lines.groupBy(l => l.product.id);
 lines.associateBy(l => l.id);
 lines.sortedBy(l => l.amount);
 ```
@@ -363,9 +379,9 @@ The complete method list is specified with the standard library.
 
 ```csharp
 public void render(readonly Order order)          // the parameter
-public readonly List<Line> lines => items;        // the returned value
+public readonly Customer customer => this.owner;  // the returned value
 public Money totalIn(string currency) readonly    // this, inside the method
-public readonly List<Line> active() readonly      // both
+public readonly Customer buyer() readonly         // both
 ```
 
 **Through a `readonly` value, only reading is allowed:**
@@ -549,7 +565,7 @@ PHP's backtick shell execution is removed. `shell_exec()` stays.
 
 - **`==`** compares two objects property by property, as PHP does today.
 - **`===`** is true only for the same object. It cannot be overridden.
-- **`Set` and `Map`** hash keys from the same properties that `==` compares.
+- **`Set`** hashes its elements from the same properties that `==` compares.
 
 **Overrides,** declared once on a type and inherited by its subclasses:
 
