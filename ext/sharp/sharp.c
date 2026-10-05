@@ -80,6 +80,8 @@ static zend_ast_kind sharp_zend_kind(enum sharp_kind kind)
 		SHARP_KIND(ENCAPS_LIST);
 		SHARP_KIND(CONDITIONAL);
 		SHARP_KIND(CAST);
+		SHARP_KIND(PROPERTY_HOOK);
+		SHARP_KIND(PROPERTY_HOOK_SHORT_BODY);
 	}
 
 	ZEND_UNREACHABLE();
