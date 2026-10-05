@@ -510,7 +510,7 @@ static void ZEND_FASTCALL zend_jit_fetch_dim_r_helper(zend_array *ht, zval *dim,
 			}
 			zend_error(E_DEPRECATED, "Using null as an array offset is deprecated, use an empty string instead");
 			if (!retval) {
-				zend_error(E_WARNING, "Undefined array key \"\"");
+				zend_undefined_index(ZSTR_EMPTY_ALLOC());
 			}
 			return;
 		case IS_DOUBLE:
@@ -586,7 +586,7 @@ str_index:
 	}
 	retval = zend_hash_find(ht, offset_key);
 	if (!retval) {
-		zend_error(E_WARNING, "Undefined array key \"%s\"", ZSTR_VAL(offset_key));
+		zend_undefined_index(offset_key);
 		ZVAL_NULL(result);
 		return;
 	}
@@ -599,7 +599,7 @@ num_index:
 	return;
 
 num_undef:
-	zend_error(E_WARNING, "Undefined array key " ZEND_LONG_FMT, hval);
+	zend_undefined_offset(hval);
 	ZVAL_NULL(result);
 }
 
@@ -2005,7 +2005,7 @@ static void ZEND_FASTCALL zend_jit_fetch_obj_r_slow(zend_object *zobj)
 	const zend_op *opline = EX(opline);
 	zend_string *name = Z_STR_P(RT_CONSTANT(opline, opline->op2));
 	zval *result = EX_VAR(opline->result.var);
-	void **cache_slot = CACHE_ADDR(opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS);
+	void **cache_slot = CACHE_ADDR(opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR));
 
 	retval = zobj->handlers->read_property(zobj, name, BP_VAR_R, cache_slot, result);
 	if (retval != result) {
@@ -2023,7 +2023,7 @@ static void ZEND_FASTCALL zend_jit_fetch_obj_r_dynamic(zend_object *zobj, intptr
 		const zend_op *opline = EX(opline);
 		zend_string *name = Z_STR_P(RT_CONSTANT(opline, opline->op2));
 		zval *result = EX_VAR(opline->result.var);
-		void **cache_slot = CACHE_ADDR(opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS);
+		void **cache_slot = CACHE_ADDR(opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR));
 
 		if (!IS_UNKNOWN_DYNAMIC_PROPERTY_OFFSET(prop_offset)) {
 			intptr_t idx = ZEND_DECODE_DYN_PROP_OFFSET(prop_offset);
@@ -2117,7 +2117,7 @@ static zval* ZEND_FASTCALL zend_jit_fetch_obj_r_slow_ex(zend_object *zobj)
 	const zend_op *opline = EX(opline);
 	zend_string *name = Z_STR_P(RT_CONSTANT(opline, opline->op2));
 	zval *result = EX_VAR(opline->result.var);
-	void **cache_slot = CACHE_ADDR(opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS);
+	void **cache_slot = CACHE_ADDR(opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR));
 
 	retval = zobj->handlers->read_property(zobj, name, BP_VAR_R, cache_slot, result);
 	if (UNEXPECTED(Z_ISREF_P(retval))) {
@@ -2138,7 +2138,7 @@ static zval* ZEND_FASTCALL zend_jit_fetch_obj_r_dynamic_ex(zend_object *zobj, in
 		zend_execute_data *execute_data = EG(current_execute_data);
 		const zend_op *opline = EX(opline);
 		zend_string *name = Z_STR_P(RT_CONSTANT(opline, opline->op2));
-		void **cache_slot = CACHE_ADDR(opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS);
+		void **cache_slot = CACHE_ADDR(opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR));
 
 		if (!IS_UNKNOWN_DYNAMIC_PROPERTY_OFFSET(prop_offset)) {
 			intptr_t idx = ZEND_DECODE_DYN_PROP_OFFSET(prop_offset);

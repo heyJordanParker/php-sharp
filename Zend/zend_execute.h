@@ -83,6 +83,8 @@ ZEND_API bool ZEND_FASTCALL zend_verify_prop_assignable_by_ref(const zend_proper
 
 ZEND_API ZEND_COLD void zend_throw_ref_type_error_zval(const zend_property_info *prop, const zval *zv);
 ZEND_API ZEND_COLD void zend_throw_ref_type_error_type(const zend_property_info *prop1, const zend_property_info *prop2, const zval *zv);
+ZEND_API ZEND_COLD void ZEND_FASTCALL zend_undefined_offset(zend_long lval);
+ZEND_API ZEND_COLD void ZEND_FASTCALL zend_undefined_index(const zend_string *offset);
 ZEND_API ZEND_COLD zval* ZEND_FASTCALL zend_undefined_offset_write(HashTable *ht, zend_long lval);
 ZEND_API ZEND_COLD zval* ZEND_FASTCALL zend_undefined_index_write(HashTable *ht, zend_string *offset);
 ZEND_API ZEND_COLD void zend_wrong_string_offset_error(void);

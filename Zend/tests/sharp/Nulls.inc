@@ -32,7 +32,7 @@ class Nulls
 
     public function through(?\Demo\Nulls $other, ?int $value): ?int
     {
-        return $other?->same($value) ?? $other?->itself()?->either(7, null);
+        return ((object) $other)?->same($value) ?? ((object) $other)?->itself()?->either(7, null);
     }
 
     public function size(?\Demo\Box $box): ?int

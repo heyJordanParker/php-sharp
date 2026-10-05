@@ -263,6 +263,9 @@ static bool can_replace_op1(
 		case ZEND_VERIFY_RETURN_TYPE:
 			// TODO: This would require a non-local change ???
 			return 0;
+		case ZEND_CAST:
+			/* The receiver of a PHP# method call keeps the variable it may change. */
+			return !(opline->extended_value & ZEND_SHARP_OPERATOR);
 		case ZEND_OP_DATA:
 			return (opline - 1)->opcode != ZEND_ASSIGN_OBJ_REF &&
 				(opline - 1)->opcode != ZEND_ASSIGN_STATIC_PROP_REF;
@@ -1465,6 +1468,12 @@ static void sccp_visit_instr(scdf_ctx *scdf, zend_op *opline, zend_ssa_op *ssa_o
 			SET_RESULT_BOT(result);
 			break;
 		case ZEND_CAST:
+			if (opline->extended_value == (IS_OBJECT | ZEND_SHARP_OPERATOR)) {
+				/* The receiver of a PHP# method call, which may change the array in the variable. */
+				SET_RESULT_BOT(result);
+				SET_RESULT_BOT(op1);
+				break;
+			}
 			SKIP_IF_TOP(op1);
 			if (IS_PARTIAL_ARRAY(op1)) {
 				SET_RESULT_BOT(result);

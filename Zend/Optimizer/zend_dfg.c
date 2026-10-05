@@ -176,12 +176,19 @@ add_op1_def:
 			}
 			break;
 		case ZEND_SEND_VAR:
-		case ZEND_CAST:
 		case ZEND_QM_ASSIGN:
 		case ZEND_JMP_SET:
 		case ZEND_COALESCE:
 		case ZEND_FE_RESET_R:
 			if ((build_flags & ZEND_SSA_RC_INFERENCE) && opline->op1_type == IS_CV) {
+				goto add_op1_def;
+			}
+			break;
+		case ZEND_CAST:
+			/* A PHP# method call's receiver may change the array in the variable. */
+			if (((build_flags & ZEND_SSA_RC_INFERENCE)
+						|| (opline->extended_value & ZEND_SHARP_OPERATOR))
+					&& opline->op1_type == IS_CV) {
 				goto add_op1_def;
 			}
 			break;
