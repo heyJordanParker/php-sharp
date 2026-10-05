@@ -14,7 +14,7 @@ function compiled(string $file): string
     return str_replace($file, '<file>', $opcodes . $classes);
 }
 
-foreach (['Calc', 'Nulls', 'ControlFlow', 'Order', 'Shapes'] as $fixture) {
+foreach (['Calc', 'Nulls', 'ControlFlow', 'Order', 'Product', 'Shapes'] as $fixture) {
     $sharp = compiled(__DIR__ . "/$fixture.sharp");
     $php = compiled(__DIR__ . "/$fixture.inc");
     echo $fixture, ': ', $sharp === $php
@@ -28,4 +28,5 @@ Calc: same opcodes and lines in 4 op arrays, same signatures in 1 classes
 Nulls: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 ControlFlow: same opcodes and lines in 6 op arrays, same signatures in 1 classes
 Order: same opcodes and lines in 4 op arrays, same signatures in 2 classes
+Product: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Shapes: same opcodes and lines in 5 op arrays, same signatures in 2 classes

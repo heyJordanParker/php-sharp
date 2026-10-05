@@ -78,12 +78,20 @@ static inline bool zend_optimizer_is_loop_var_free(const zend_op *opline) {
 		|| (opline->opcode == ZEND_FREE && opline->extended_value == ZEND_FREE_SWITCH);
 }
 
+/* The opcode get_binary_op() takes for a binary opline, marked when it follows PHP#'s rules. */
+static inline uint32_t zend_optimizer_binary_opcode(const zend_op *opline) {
+	if (opline->opcode == ZEND_ADD || opline->opcode == ZEND_SUB || opline->opcode == ZEND_MUL) {
+		return opline->opcode | (opline->extended_value & ZEND_SHARP_OPERATOR);
+	}
+	return opline->opcode;
+}
+
 void zend_optimizer_convert_to_free_op1(zend_op_array *op_array, zend_op *opline);
 int  zend_optimizer_add_literal(zend_op_array *op_array, const zval *zv);
 bool zend_optimizer_get_persistent_constant(zend_string *name, zval *result, int copy);
 void zend_optimizer_collect_constant(zend_optimizer_ctx *ctx, zval *name, zval* value);
 bool zend_optimizer_get_collected_constant(HashTable *constants, zval *name, zval* value);
-zend_result zend_optimizer_eval_binary_op(zval *result, uint8_t opcode, zval *op1, zval *op2);
+zend_result zend_optimizer_eval_binary_op(zval *result, uint32_t opcode, zval *op1, zval *op2);
 zend_result zend_optimizer_eval_unary_op(zval *result, uint8_t opcode, zval *op1);
 zend_result zend_optimizer_eval_cast(zval *result, uint32_t type, zval *op1);
 zend_result zend_optimizer_eval_strlen(zval *result, const zval *op1);

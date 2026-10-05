@@ -1632,7 +1632,25 @@ static zend_always_inline int zend_binary_op(zval *ret, zval *op1, zval *op2 OPL
 	/* size_t cast makes GCC to better optimize 64-bit PIC code */
 	size_t opcode = (size_t)opline->extended_value;
 
+	if (UNEXPECTED(opcode & ZEND_SHARP_OPERATOR)) {
+		return get_binary_op(opcode)(ret, op1, op2);
+	}
 	return zend_binary_ops[opcode - ZEND_ADD](ret, op1, op2);
+}
+
+static zend_always_inline zend_result zend_incdec_op(zval *var_ptr OPLINE_DC)
+{
+	if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		return ZEND_IS_INCREMENT(opline->opcode)
+			? checked_increment_function(var_ptr) : checked_decrement_function(var_ptr);
+	}
+	return ZEND_IS_INCREMENT(opline->opcode) ? increment_function(var_ptr) : decrement_function(var_ptr);
+}
+
+static ZEND_COLD zend_long zend_incdec_overflow_error(OPLINE_D)
+{
+	zend_integer_overflow_error();
+	return ZEND_IS_INCREMENT(opline->opcode) ? ZEND_LONG_MAX : ZEND_LONG_MIN;
 }
 
 static zend_never_inline void zend_binary_assign_op_obj_dim(zend_object *obj, zval *property OPLINE_DC EXECUTE_DATA_DC)
@@ -2238,11 +2256,7 @@ static void zend_incdec_typed_ref(zend_reference *ref, zval *copy OPLINE_DC EXEC
 
 	ZVAL_COPY(copy, var_ptr);
 
-	if (ZEND_IS_INCREMENT(opline->opcode)) {
-		increment_function(var_ptr);
-	} else {
-		decrement_function(var_ptr);
-	}
+	zend_incdec_op(var_ptr OPLINE_CC);
 
 	if (UNEXPECTED(Z_TYPE_P(var_ptr) == IS_DOUBLE) && Z_TYPE_P(copy) == IS_LONG) {
 		zend_property_info *error_prop = zend_get_prop_not_accepting_double(ref);
@@ -2269,11 +2283,7 @@ static void zend_incdec_typed_prop(zend_property_info *prop_info, zval *var_ptr,
 
 	ZVAL_COPY(copy, var_ptr);
 
-	if (ZEND_IS_INCREMENT(opline->opcode)) {
-		increment_function(var_ptr);
-	} else {
-		decrement_function(var_ptr);
-	}
+	zend_incdec_op(var_ptr OPLINE_CC);
 
 	if (UNEXPECTED(Z_TYPE_P(var_ptr) == IS_DOUBLE) && Z_TYPE_P(copy) == IS_LONG) {
 		if (!(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
@@ -2297,10 +2307,13 @@ static void zend_pre_incdec_property_zval(zval *prop, zend_property_info *prop_i
 		} else {
 			fast_long_decrement_function(prop);
 		}
-		if (UNEXPECTED(Z_TYPE_P(prop) != IS_LONG) && prop_info
-				&& !(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
-			zend_long val = zend_throw_incdec_prop_error(prop_info OPLINE_CC);
-			ZVAL_LONG(prop, val);
+		if (UNEXPECTED(Z_TYPE_P(prop) != IS_LONG)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+				ZVAL_LONG(prop, zend_incdec_overflow_error(OPLINE_C));
+			} else if (prop_info && !(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
+				zend_long val = zend_throw_incdec_prop_error(prop_info OPLINE_CC);
+				ZVAL_LONG(prop, val);
+			}
 		}
 	} else {
 		do {
@@ -2315,10 +2328,8 @@ static void zend_pre_incdec_property_zval(zval *prop, zend_property_info *prop_i
 
 			if (prop_info) {
 				zend_incdec_typed_prop(prop_info, prop, NULL OPLINE_CC EXECUTE_DATA_CC);
-			} else if (ZEND_IS_INCREMENT(opline->opcode)) {
-				increment_function(prop);
 			} else {
-				decrement_function(prop);
+				zend_incdec_op(prop OPLINE_CC);
 			}
 		} while (0);
 	}
@@ -2336,10 +2347,13 @@ static void zend_post_incdec_property_zval(zval *prop, zend_property_info *prop_
 		} else {
 			fast_long_decrement_function(prop);
 		}
-		if (UNEXPECTED(Z_TYPE_P(prop) != IS_LONG) && prop_info
-				&& !(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
-			zend_long val = zend_throw_incdec_prop_error(prop_info OPLINE_CC);
-			ZVAL_LONG(prop, val);
+		if (UNEXPECTED(Z_TYPE_P(prop) != IS_LONG)) {
+			if (UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+				ZVAL_LONG(prop, zend_incdec_overflow_error(OPLINE_C));
+			} else if (prop_info && !(ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_DOUBLE)) {
+				zend_long val = zend_throw_incdec_prop_error(prop_info OPLINE_CC);
+				ZVAL_LONG(prop, val);
+			}
 		}
 	} else {
 		if (Z_ISREF_P(prop)) {
@@ -2355,11 +2369,7 @@ static void zend_post_incdec_property_zval(zval *prop, zend_property_info *prop_
 			zend_incdec_typed_prop(prop_info, prop, EX_VAR(opline->result.var) OPLINE_CC EXECUTE_DATA_CC);
 		} else {
 			ZVAL_COPY(EX_VAR(opline->result.var), prop);
-			if (ZEND_IS_INCREMENT(opline->opcode)) {
-				increment_function(prop);
-			} else {
-				decrement_function(prop);
-			}
+			zend_incdec_op(prop OPLINE_CC);
 		}
 	}
 }
@@ -2380,11 +2390,7 @@ static zend_never_inline void zend_post_incdec_overloaded_property(zend_object *
 
 	ZVAL_COPY_DEREF(&z_copy, z);
 	ZVAL_COPY(EX_VAR(opline->result.var), &z_copy);
-	if (ZEND_IS_INCREMENT(opline->opcode)) {
-		increment_function(&z_copy);
-	} else {
-		decrement_function(&z_copy);
-	}
+	zend_incdec_op(&z_copy OPLINE_CC);
 	object->handlers->write_property(object, name, &z_copy, cache_slot);
 	OBJ_RELEASE(object);
 	zval_ptr_dtor(&z_copy);
@@ -2410,11 +2416,7 @@ static zend_never_inline void zend_pre_incdec_overloaded_property(zend_object *o
 	}
 
 	ZVAL_COPY_DEREF(&z_copy, z);
-	if (ZEND_IS_INCREMENT(opline->opcode)) {
-		increment_function(&z_copy);
-	} else {
-		decrement_function(&z_copy);
-	}
+	zend_incdec_op(&z_copy OPLINE_CC);
 	if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
 		ZVAL_COPY(EX_VAR(opline->result.var), &z_copy);
 	}

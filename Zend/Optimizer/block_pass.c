@@ -890,7 +890,7 @@ optimize_type_check:
 					zval result;
 
 optimize_constant_binary_op:
-					if (zend_optimizer_eval_binary_op(&result, opline->opcode, &ZEND_OP1_LITERAL(opline), &ZEND_OP2_LITERAL(opline)) == SUCCESS) {
+					if (zend_optimizer_eval_binary_op(&result, zend_optimizer_binary_opcode(opline), &ZEND_OP1_LITERAL(opline), &ZEND_OP2_LITERAL(opline)) == SUCCESS) {
 						literal_dtor(&ZEND_OP1_LITERAL(opline));
 						literal_dtor(&ZEND_OP2_LITERAL(opline));
 						opline->opcode = ZEND_QM_ASSIGN;
