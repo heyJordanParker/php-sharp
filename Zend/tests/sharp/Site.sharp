@@ -1,0 +1,67 @@
+namespace Site;
+
+import Lib.Entity;
+import Lib.Linkable;
+import Lib.Registry;
+import Lib.Status;
+
+public class Page : Entity, Linkable
+{
+    public const int LIMIT = 3;
+    public static int views { get; private set; } = 0;
+    private Status status = Status.Live;
+
+    public string link()
+    {
+        return "/page";
+    }
+
+    public int limit()
+    {
+        return Page.LIMIT;
+    }
+
+    public int visit()
+    {
+        Page.views++;
+        return Page.views;
+    }
+
+    public bool live()
+    {
+        return this.status === Status.Live;
+    }
+
+    public Status draft()
+    {
+        return Status.Draft;
+    }
+
+    public string registered()
+    {
+        return Registry.register(typeof(Page));
+    }
+}
+
+public abstract class Shape
+{
+    public abstract float area();
+
+    public virtual int sides()
+    {
+        return 0;
+    }
+}
+
+public class Square : Shape
+{
+    public override float area()
+    {
+        return 4.0;
+    }
+
+    public override int sides()
+    {
+        return super.sides() + 4;
+    }
+}

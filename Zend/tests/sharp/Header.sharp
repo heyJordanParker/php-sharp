@@ -1,0 +1,55 @@
+namespace Demo;
+
+import Lib.Entity;
+import Lib.Named;
+
+public interface Linkable : Named
+{
+    string link();
+}
+
+public class Page : Linkable, Entity
+{
+    public string link()
+    {
+        return "/page";
+    }
+
+    public string name()
+    {
+        return "page";
+    }
+
+    public int number()
+    {
+        return this.id();
+    }
+}
+
+public class Post : Entity
+{
+}
+
+public class Tag : Named
+{
+    public string name()
+    {
+        return "tag";
+    }
+}
+
+public class Image
+{
+    public virtual int size()
+    {
+        return 10;
+    }
+}
+
+public class Thumbnail : Image
+{
+    public override int size()
+    {
+        return super.size() + 1;
+    }
+}

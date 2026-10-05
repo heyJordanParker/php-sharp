@@ -1468,7 +1468,7 @@ ZEND_VM_HANDLER(38, ZEND_PRE_INC_STATIC_PROP, ANY, ANY, CACHE_SLOT)
 
 	SAVE_OPLINE();
 
-	prop = zend_fetch_static_property_address(&prop_info, opline->extended_value, BP_VAR_RW, 0 OPLINE_CC EXECUTE_DATA_CC);
+	prop = zend_fetch_static_property_address(&prop_info, opline->extended_value & ~ZEND_SHARP_OPERATOR, BP_VAR_RW, 0 OPLINE_CC EXECUTE_DATA_CC);
 	if (UNEXPECTED(!prop)) {
 		UNDEF_RESULT();
 		HANDLE_EXCEPTION();
@@ -1502,7 +1502,7 @@ ZEND_VM_HANDLER(40, ZEND_POST_INC_STATIC_PROP, ANY, ANY, CACHE_SLOT)
 
 	SAVE_OPLINE();
 
-	prop = zend_fetch_static_property_address(&prop_info, opline->extended_value, BP_VAR_RW, 0 OPLINE_CC EXECUTE_DATA_CC);
+	prop = zend_fetch_static_property_address(&prop_info, opline->extended_value & ~ZEND_SHARP_OPERATOR, BP_VAR_RW, 0 OPLINE_CC EXECUTE_DATA_CC);
 	if (UNEXPECTED(!prop)) {
 		UNDEF_RESULT();
 		HANDLE_EXCEPTION();

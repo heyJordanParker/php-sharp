@@ -16,7 +16,7 @@ final class Unit
 {
 }
 
-interface Measured
+public interface Measured
 {
     float area();
 }

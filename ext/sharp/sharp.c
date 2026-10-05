@@ -74,6 +74,7 @@ static zend_ast_kind sharp_zend_kind(enum sharp_kind kind)
 		SHARP_KIND(CLASS_CONST_DECL);
 		SHARP_KIND(STATIC_PROP);
 		SHARP_KIND(CLASS_CONST);
+		SHARP_KIND(NAME_LIST);
 	}
 
 	ZEND_UNREACHABLE();

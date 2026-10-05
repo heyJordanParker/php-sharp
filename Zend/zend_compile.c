@@ -1773,7 +1773,9 @@ static void zend_ensure_valid_class_fetch_type(uint32_t fetch_type) /* {{{ */
 			zend_error_noreturn(E_COMPILE_ERROR, "Cannot use \"%s\" when no class scope is active",
 				fetch_type == ZEND_FETCH_CLASS_SELF ? "self" :
 				fetch_type == ZEND_FETCH_CLASS_PARENT ? "parent" : "static");
-		} else if (fetch_type == ZEND_FETCH_CLASS_PARENT && !ce->parent_name) {
+		} else if (fetch_type == ZEND_FETCH_CLASS_PARENT && !ce->parent_name
+				/* A PHP# class finds its parent in its interface list when it links. */
+				&& !(ce->ce_flags & ZEND_ACC_PARENT_IN_INTERFACES)) {
 			zend_error_noreturn(E_COMPILE_ERROR,
 				"Cannot use \"parent\" when current class scope has no parent");
 		}
@@ -10430,6 +10432,7 @@ static void zend_compile_post_incdec(znode *result, zend_ast *ast) /* {{{ */
 	} else if (var_ast->kind == ZEND_AST_STATIC_PROP) {
 		zend_op *opline = zend_compile_static_prop(NULL, var_ast, BP_VAR_RW, 0, 0);
 		opline->opcode = ast->kind == ZEND_AST_POST_INC ? ZEND_POST_INC_STATIC_PROP : ZEND_POST_DEC_STATIC_PROP;
+		opline->extended_value |= zend_ast_sharp_operator(ast);
 		zend_make_tmp_result(result, opline);
 	} else {
 		znode var_node;
@@ -10459,6 +10462,7 @@ static void zend_compile_pre_incdec(znode *result, zend_ast *ast) /* {{{ */
 	} else if (var_ast->kind == ZEND_AST_STATIC_PROP) {
 		zend_op *opline = zend_compile_static_prop(result, var_ast, BP_VAR_RW, 0, 0);
 		opline->opcode = ast->kind == ZEND_AST_PRE_INC ? ZEND_PRE_INC_STATIC_PROP : ZEND_PRE_DEC_STATIC_PROP;
+		opline->extended_value |= zend_ast_sharp_operator(ast);
 		opline->result_type = IS_TMP_VAR;
 		result->op_type = IS_TMP_VAR;
 	} else {
