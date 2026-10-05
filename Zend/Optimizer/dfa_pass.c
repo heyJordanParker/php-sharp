@@ -1140,6 +1140,15 @@ void zend_dfa_optimize_op_array(zend_op_array *op_array, zend_optimizer_ctx *ctx
 
 					opline->opcode = ZEND_FAST_CONCAT;
 					opline->extended_value = 0;
+				} else if (opline->opcode == ZEND_ASSIGN_OP
+				 && opline->extended_value == (ZEND_ADD|ZEND_SHARP_OPERATOR)
+				 && ssa->ops[op_1].op1_def == v
+				 && (OP1_INFO() & (MAY_BE_ANY|MAY_BE_UNDEF|MAY_BE_REF)) == MAY_BE_STRING
+				 && (OP2_INFO() & (MAY_BE_ANY|MAY_BE_UNDEF|MAY_BE_REF)) == MAY_BE_STRING) {
+
+// op_1: ASSIGN_OP (ADD) #x.CV [string] -> #v.CV, #y.? [string] (PHP#) => ASSIGN_OP (CONCAT) #x.CV -> #v.CV, #y.?
+
+					opline->extended_value = ZEND_CONCAT;
 				} else if (opline->opcode == ZEND_ADD
 				 || opline->opcode == ZEND_SUB
 				 || opline->opcode == ZEND_MUL

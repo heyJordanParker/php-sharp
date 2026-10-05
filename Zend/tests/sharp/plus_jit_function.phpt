@@ -12,6 +12,7 @@ opcache.jit_buffer_size=32M
 echo 'jit ', opcache_get_status()['jit']['on'] ? 'on' : 'off', "\n";
 require __DIR__ . '/plus.inc';
 echo 'ADD run by the VM: ', opcache_get_status()['jit']['sharp_operator_vm_calls']['ZEND_ADD'] ?? 0, "\n";
+echo 'ASSIGN_OP run by the VM: ', opcache_get_status()['jit']['sharp_operator_vm_calls']['ZEND_ASSIGN_OP'] ?? 0, "\n";
 ?>
 --EXPECT--
 jit on
@@ -25,3 +26,4 @@ string(6) "ababab"
 string(7) "a, b, c"
 int(3)
 ADD run by the VM: 0
+ASSIGN_OP run by the VM: 0
