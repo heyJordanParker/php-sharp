@@ -27,7 +27,7 @@ sharp/bin/test --differential   # also check that php -l compiles every Zend/tes
 sharp/bin/test --upstream       # run Zend/tests, ext/reflection, ext/tokenizer and ext/opcache
 ```
 
-`--differential` runs `mago analyze` built from the Mago commit that `ext/sharp/Cargo.toml` pins for the bridge, installed under `sharp/build/<os>-<arch>/mago`. `Zend/tests/sharp/mago.toml` makes the `.sharp` fixtures one checker project. A file the checker refuses needs nothing from the engine. A file it accepts must make `php -l` print nothing but "No syntax errors detected", so a compile warning or deprecation also fails the run.
+`--differential` runs `mago analyze` built from the Mago commit that `ext/sharp/Cargo.toml` pins for the bridge, installed under `sharp/build/<os>-<arch>/mago`. `Zend/tests/sharp/mago.toml` makes the `.sharp` fixtures and the plain PHP classes and functions they call, in `Zend/tests/sharp/harness/`, one checker project. A file the checker refuses needs nothing from the engine. A file it accepts must make `php -l` print nothing but "No syntax errors detected", so a compile warning or deprecation also fails the run.
 
 `--linux` runs either command inside the Debian trixie image from `sharp/docker/`, for example `sharp/bin/build --linux` and `sharp/bin/test --linux --opcache`.
 
