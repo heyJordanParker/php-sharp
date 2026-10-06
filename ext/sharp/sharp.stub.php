@@ -40,3 +40,36 @@ final class Collection
 
     public function sortedBy(\Closure $selector): array {}
 }
+
+/** @strict-properties */
+final class Position
+{
+    public readonly string $file;
+
+    public readonly string $directory;
+
+    public readonly int $line;
+
+    public readonly int $column;
+
+    public readonly string $function;
+
+    public function __construct(string $file, int $line, int $column, string $function) {}
+}
+
+/**
+ * @strict-properties
+ * @not-serializable
+ */
+final class Environment
+{
+    /** @virtual */
+    public array $arguments;
+
+    /** @virtual */
+    public string $currentDirectory;
+
+    public function __construct() {}
+
+    public function variable(string $name): ?string {}
+}
