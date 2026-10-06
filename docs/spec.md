@@ -229,7 +229,7 @@ public static int sum(int ...values) { … }
 
 Money.sum(1, 2, 3);
 Money.sum(...prices);    // spreads an existing list
-max(0, ...prices);       // into plain PHP too. The 0 gives max a value when prices is empty
+Math.max(0, ...prices);  // into the standard library too. The 0 gives max a value when prices is empty
 ```
 
 - `...` is allowed only on the last parameter.
@@ -239,7 +239,26 @@ max(0, ...prices);       // into plain PHP too. The 0 gives max a value when pri
 
 ## 8. Functions
 
-There are no top-level functions. Shared code lives in static methods on a class. PHP's built-in functions, such as `strlen`, and plain PHP functions, such as Laravel's `now()`, can still be called. Section 29 covers their effects.
+There are no top-level functions. Shared code lives in static methods on a class.
+
+**A PHP function is reached through the type it works on,** as a method the standard library declares with an extension (section 26), as in `name.trim()`. Otherwise it goes through a static class in its module (section 23), as in `Math.max(a, b)` and `Json.encode(body)`.
+
+```csharp
+import Sharp.Json.Json;
+import Sharp.Math.Math;
+
+public class Receipt
+{
+    public string label(string name) => name.trim();                        // compiles: runs as trim($name)
+    public int larger(int a, int b) => Math.max(a, b);                      // compiles
+    public string body(Map<string, Any> payload) => Json.encode(payload);   // compiles
+    public string raw(string name) => trim(name);                           // compile error: write name.trim()
+}
+```
+
+- **The compiler inlines a standard-library method whose body is one call,** as the .NET and JVM JITs and rustc inline small methods. So `name.trim()` runs as `trim($name)`, and no keyword marks the method.
+- **Once the standard library wraps a PHP function, calling that function from `.sharp` code outside the standard library is a compile error that names the method.**
+- **PHP functions the standard library does not wrap yet stay callable,** and so do plain PHP functions, such as Laravel's `now()`. Section 29 covers their effects.
 
 **Output and exit are function calls.** `echo` and `print` are removed, and output goes through `printf` or `fwrite`. `die` is removed, because `die("…")` prints its message and exits with status 0, which reports success. `exit(code)` stays, as PHP 8.4's built-in function.
 
@@ -262,7 +281,7 @@ die("Prune failed");                                     // compile error: write
 ```
 
 - `exit` skips every `finally` block, as Java's `System.exit` and C#'s `Environment.Exit` do.
-- `exit` is not pure. Its effect is tracked (section 29).
+- Printing and `exit` have the effect `Php` until the standard library wraps them (section 29).
 
 ## 9. Constructors
 
@@ -705,6 +724,41 @@ rows[0];                                    // compile error: an Iterable has no
 - **A lazy plain PHP source,** such as a generator or Laravel's `LazyCollection`, is checked element by element as it is read, so each element is checked where it enters PHP# (section 11).
 - **The lazy operations belong to `Iterable<T>`.** A value typed as a plain PHP class keeps that class's own methods until it is held as an `Iterable<T>`, as `orders` is above.
 
+**`yield` produces an `Iterable<T>` lazily,** as C#'s `yield return` does. A method that returns `Iterable<T>` produces its next value with `yield value;`, and every element of another `Iterable<T>` with `yield ...other;`:
+
+```csharp
+import Illuminate.Support.Facades.File;
+
+public class OrderImport
+{
+    public OrderImport(private List<Order> pending, private Order latest) { }
+
+    public Iterable<List<string>> rows(string path)
+    {
+        for (const string line of File.lines(path)) {
+            yield line.parseCsv();                   // compiles: each row is a List<string>
+        }
+    }
+
+    public Iterable<Order> all()
+    {
+        yield ...this.pending;                       // every pending order, in order
+        yield this.latest;                           // then the latest one
+    }
+
+    public List<List<string>> preview() => this.rows("orders.csv").take(100).toList();   // reads only the first 100 lines
+}
+
+importer.rows("missing.csv");                                    // runs nothing yet: the missing file throws when a loop reads the rows
+public Iterable<Order> numbers() { yield this.latest.number; }   // compile error: a string is not an Order
+public List<Order> recent() { yield this.latest; }               // compile error: yield needs a method that returns Iterable<T>
+```
+
+- **Each yielded value is checked against `T`.**
+- **`yield ...other;` replaces PHP's `yield from`,** with PHP#'s spread. `other` is an `Iterable<T>`.
+- **The body runs only when a loop or `toList()` reads the result,** so an error inside it surfaces at the loop, not at the call.
+- **A method with `yield` compiles to a PHP generator.** PHP's `send()` and two-way generators are not part of PHP#, so `yield` is a statement and gives no value back. Async is a separate future design.
+
 ## 13. `readonly`
 
 `readonly` has one rule throughout the language:
@@ -1004,23 +1058,25 @@ cart === cart;                   // true: the same object
 - **`< > <= >=` and sorting** are derived from `<=>`.
 - **`==` and `hash()` go together:** declaring `==` without `hash()` is a compile error, because `Set` needs both.
 
-**Bitwise operators** `|`, `&`, `^`, `~`, `<<` and `>>`, and their compound forms such as `|=`, take `int` only. PHP's flag APIs take ints joined with `|`:
+**Bitwise operators** `|`, `&`, `^`, `~`, `<<` and `>>`, and their compound forms such as `|=`, take `int` only. Flags are ints joined with `|`:
 
 ```csharp
-const json = json_encode(payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);   // compiles
-let flags = JSON_THROW_ON_ERROR;
-flags |= JSON_PRETTY_PRINT;                         // compiles
-if (flags & JSON_PRETTY_PRINT != 0) { … }           // compiles: means (flags & JSON_PRETTY_PRINT) != 0
-if ((flags & JSON_PRETTY_PRINT) != 0) { … }         // compiles: the same meaning
-if (flags & JSON_PRETTY_PRINT) { … }                // compile error: int is not bool
-const shown = isAdmin | isOwner;                    // compile error: | takes int; write ||
-const mask = 1 << count;                            // throws ArithmeticError when count is negative
+const READ = 1;
+const WRITE = 2;
+const DELETE = 4;
+let permissions = READ | WRITE;               // compiles
+permissions |= DELETE;                        // compiles
+if (permissions & WRITE != 0) { … }           // compiles: means (permissions & WRITE) != 0
+if ((permissions & WRITE) != 0) { … }         // compiles: the same meaning
+if (permissions & WRITE) { … }                // compile error: int is not bool
+const shown = isAdmin | isOwner;              // compile error: | takes int; write ||
+const mask = 1 << count;                      // throws ArithmeticError when count is negative
 ```
 
-- A condition is a `bool` (section 21), so `if (flags & X)` is a compile error.
+- A condition is a `bool` (section 21), so `if (permissions & WRITE)` is a compile error.
 - `|` between two `bool`s is a compile error that names `||`.
 - A shift by a negative count throws `ArithmeticError`.
-- The bitwise operators bind tighter than comparisons, as in Go, Rust and Swift. PHP and C# bind them looser, so there `flags & JSON_PRETTY_PRINT != 0` reads as `flags & (JSON_PRETTY_PRINT != 0)`.
+- The bitwise operators bind tighter than comparisons, as in Go, Rust and Swift. PHP and C# bind them looser, so there `permissions & WRITE != 0` reads as `permissions & (WRITE != 0)`.
 - In a type, `|` and `&` keep their meaning as unions and bounds (sections 11 and 24).
 
 **Precedence**, from the tightest to the loosest. Operators in one row bind equally.
@@ -1381,7 +1437,18 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 
 **An import never carries `uses`,** because a library's effect lives in its one `extern` declaration (section 29).
 
-**The standard library's names are imported by default,** as Kotlin imports `kotlin.*`. A bare `Int` is `Sharp.Int`, and a bare `Key` is the standard attribute. A class the file declares or imports under the same name shadows the default one.
+**The standard library lives under one root, `Sharp`,** with the topic modules `Sharp.Text`, `Sharp.Math`, `Sharp.Json`, `Sharp.IO`, `Sharp.Time`, `Sharp.Net` and `Sharp.Data`, as .NET has `System.*` and Rust has `std::*`.
+
+**Only `Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports under the same name shadows the default one.
+
+**A static class in a topic module needs one import line,** and the import's last part is the class, as for any import:
+
+```csharp
+import Sharp.Json.Json;
+
+Json.encode(payload);     // compiles
+Math.max(a, b);           // compile error: Math is not imported
+```
 
 **`import X.Y as Z;` renames an import in this file only.** It compiles to PHP's `use X\Y as Z;`. Here the rename keeps the standard `Key`, which `import Cache.Key;` would shadow:
 
@@ -1547,6 +1614,16 @@ Class<Order> type = typeof(Order);
 type.attributes<Listen>();
 typeof(TItem);
 ```
+
+**`typeof(value)` gives an object's class.** For a value of type `T`, it is typed `Class<T>` and holds the object's runtime class, which may be a subclass of `T`. Plain PHP receives the class-name string. It replaces PHP's `$order::class` and `get_class($order)`.
+
+```csharp
+Class<Order> type = typeof(order);              // compiles: order's runtime class, which may be a subclass of Order
+const fresh = new type(id);                     // compiles: a new object of that class
+Log.info("saved", ["class": typeof(order)]);    // compiles; runs: plain PHP receives the class-name string
+```
+
+- **A bare name inside `typeof` is a local's value when a local with that name is in scope, and a type otherwise,** the same rule pattern matching uses (section 21).
 
 **A class value works wherever a class name works.** `typeof` gives one, and a `Class<T>` field, parameter or local holds one:
 
@@ -1782,7 +1859,7 @@ theorem refundNeverExceedsPaid (paid refunded amount : Int)
 
 An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities, which Scala 3, Effekt and Pony also use. It also records every call into plain PHP, whose effect an `extern` declaration states.
 
-**Any PHP# code may call plain PHP,** including PHP's built-in functions and Laravel's facades, helpers and model methods. Most libraries are plain PHP, so this is how PHP# code uses them.
+**Any PHP# code may call plain PHP,** including Laravel's facades, helpers and model methods, and PHP's built-in functions the standard library does not wrap yet (section 8). Most libraries are plain PHP, so this is how PHP# code uses them.
 
 ```csharp
 import Illuminate.Support.Facades.DB;
@@ -1810,8 +1887,47 @@ extern StripeClient uses Http;
 - **Each class, method or function has at most one `extern` declaration in the whole project.** A second one is a compile error, as declaring a class twice is.
 - **A call to plain PHP with an `extern` declaration has that effect,** so it fits a `uses` that names it: `StripeClient.charges().create(…)` fits `uses Http`.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
-- **PHP#'s Composer package ships the declarations for PHP's built-in functions and for Laravel.** Among PHP's built-ins, PDO is `Database`, curl is `Http`, `file_put_contents` and the other file functions are `Files`, `time()` is `Clock`, `random_int` is `Random`, and `getenv()` and PHP's other environment built-ins are `Environment`. Every other built-in function is pure, except `exit` (section 8). In Laravel, Eloquent and `DB` are `Database`, the `Http` facade is `Http`, `Cache` is `Cache`, `Mail` is `Mail`, and `now()` and Carbon's clock reads are `Clock`.
+- **PHP#'s Composer package ships the declarations for PHP's built-in functions and for Laravel.** Among PHP's built-ins, PDO is `Database`, curl is `Http`, `file_put_contents` and the other file functions are `Files`, `time()` is `Clock`, `random_int` is `Random`, and `getenv()` and PHP's other environment built-ins are `Environment`. Every other built-in function has the effect `Php` (below). In Laravel, Eloquent and `DB` are `Database`, the `Http` facade is `Http`, `Cache` is `Cache`, `Mail` is `Mail`, and `now()` and Carbon's clock reads are `Clock`.
 - **A project declares its own libraries,** conventionally in `app/Stubs`.
+
+**A built-in function the standard library has not classified has the effect `Php`,** which means "calls PHP code the checker cannot see into". When the standard library wraps a function, its real effect replaces `Php`, as `Environment` does for `getenv()`. Other families get theirs as each is wrapped. Pure code cannot call a function with `Php`. Printing and `exit` have `Php` until the standard library wraps them.
+
+```csharp
+public interface Formatter
+{
+    string format(string name);                                     // implementations must be pure
+}
+
+public class Visitor
+{
+    public string greet(string name) => "Hello, " + name.trim();    // pure: trim is a standard-library method
+    public void remember(string token) { setcookie("t", token); }   // has Php: setcookie is not classified yet
+}
+
+public class CookieFormatter : Formatter
+{
+    public string format(string name)
+    {
+        setcookie("seen", name);                                    // compile error: format must be pure, and setcookie has the effect Php
+        return name;
+    }
+}
+```
+
+**`extern` means "implemented outside PHP#",** as C#'s `extern` does. An `extern` declaration names plain PHP, as above. An `extern` method in the standard library has a native body:
+
+```csharp
+// in the standard library's Sharp.Json
+public static class Json
+{
+    public static extern Map<string, Any?> decode(string json);   // compiles: the engine holds the body
+}
+```
+
+- **A native body is compiled into the PHP# engine,** as PHP's own built-in functions are. It is written in Rust, behind a C interface.
+- **Only the standard library declares native bodies.** In a project, `public static extern string slug(string title);` is a compile error.
+- **One generator writes the C header from the `.sharp` declarations,** so the declaration and the Rust code have one signature.
+- **The engine refuses to start if a declared native body is missing.**
 
 **A `foreign` class turns an effect into an object** that code holds and passes on, such as a fake in tests. It is optional. Its methods call plain PHP, like any other code. Code that holds a `foreign` object has that effect by name, which `uses` can declare.
 
@@ -1864,7 +1980,7 @@ public class TenantCache
 - **A class's effects** are the `foreign` classes it holds, directly or through its fields, and the effects of the plain PHP its methods call. The checker works them out from field and constructor types and from method bodies. Nothing is written down.
 - **A `foreign` object** is created once, where the app starts, and handed down through constructors. Creating one anywhere else, or storing one in a static, is a compile error.
 
-**Pure code** reaches no `foreign` object, calls no plain PHP unless an `extern` declares it pure, and changes nothing it was given (section 13). Getters must be pure. Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
+**Pure code** reaches no `foreign` object, calls no plain PHP unless an `extern` declares it pure, calls no built-in function with the effect `Php`, and changes nothing it was given (section 13). Getters must be pure. Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
 
 **Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types. Every implementation is held to what the declaration allows:
 
