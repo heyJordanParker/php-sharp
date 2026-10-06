@@ -233,6 +233,7 @@ max(0, ...prices);       // into plain PHP too. The 0 gives max a value when pri
 
 - `...` is allowed only on the last parameter.
 - A spread works the same into PHP# methods and into plain PHP.
+- Only a `List` spreads into a call. Spreading a `Map` into a call is a compile error (section 12).
 - An override of a plain PHP method declared with `...` declares that parameter with `...` too.
 
 ## 8. Functions
@@ -472,6 +473,33 @@ PHP's `["key" => value]` is not used, because `=>` is the lambda arrow.
 let messages = [];                             // compile error: an empty literal needs a type: write List<string> messages = []
 List<string> messages = [];                    // compiles
 ```
+
+**A spread copies a collection into a literal,** and the collection's type decides what it means:
+
+```csharp
+List<Line> lines = [...open, ...closed];                  // List: closed's lines follow open's
+List<string> command = [binary, "artisan", name, ...arguments];
+Map<string, string> options = [...config, "root": ""];    // Map: config's entries, then "root" set to ""
+Map<string, int> limits = [...defaults, ...overrides];    // Map: a key in both takes overrides' value
+const mixed = [...lines, ...options];                     // compile error: a literal cannot spread a List and a Map together
+image.resize(...options);                                 // compile error: only a List spreads into a call
+```
+
+- A `List` spread appends its elements in order.
+- A `Map` spread copies its entries. A later key replaces an earlier one, and no key is renumbered.
+- A literal cannot spread a `List` and a `Map` together.
+- Only a `List` spreads into a call (section 7).
+
+**PHP's spread renumbers int keys, and PHP# does not.** A `Map<string, TValue>` stores an all-digit key such as `"5"` as the int `5`, so PHP's spread renumbers it:
+
+```php
+$defaults = ["5" => 10, "pro" => 20];
+$overrides = ["5" => 30];
+[...$defaults, ...$overrides];             // [0 => 10, "pro" => 20, 1 => 30]: the "5" key is gone
+array_replace($defaults, $overrides);      // ["5" => 30, "pro" => 20]: what PHP# runs for a Map spread
+```
+
+A `Map` keeps its keys (decision 26), and the engine knows which collection a spread holds (section 27), so a `Map` spread runs as `array_replace` and every key survives.
 
 **Indexing has one meaning on every collection:**
 
