@@ -95,4 +95,8 @@ class Lambdas
         };
         return outer(2);
     }
+
+    public static List<int> scaled(List<int> numbers) => numbers.map(Lambdas.twice);
+
+    private static int twice(int n) => n * 2;
 }

@@ -13,4 +13,5 @@ for ($run = 0; $run < 2; $run++) {
     echo Demo\Lambdas::total([3, 1, 4]), "\n";
     echo implode(" / ", Demo\Lambdas::failures([3, 1, 4])), "\n";
     echo implode(",", Demo\Lambdas::captured([3, 1, 4])), "\n";
+    echo implode(",", Demo\Lambdas::scaled([3, 1, 4])), "\n";
 }

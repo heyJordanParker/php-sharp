@@ -26,6 +26,7 @@ jit on
 19
 No element matches the predicate / 3
 3,6,7
+6,2,8
 17
 2,4,6
 0,102,101
@@ -34,3 +35,4 @@ No element matches the predicate / 3
 19
 No element matches the predicate / 3
 3,6,7
+6,2,8

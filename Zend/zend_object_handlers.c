@@ -1009,7 +1009,7 @@ uninit_error:
 	if (type != BP_VAR_IS) {
 		if (prop_info) {
 			zend_typed_property_uninitialized_access(prop_info, name);
-		} else if ((retval = sharp_method_value(zobj, name, rv)) || EG(exception)) {
+		} else if ((retval = sharp_method_value(zobj->ce, zobj, name, rv)) || EG(exception)) {
 			return retval ? retval : &EG(uninitialized_zval);
 		} else {
 			zend_error(E_WARNING, "Undefined property: %s::$%s", ZSTR_VAL(zobj->ce->name), ZSTR_VAL(name));

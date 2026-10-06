@@ -82,5 +82,22 @@ Site: different opcodes and lines in 13 op arrays, same signatures in 3 classes
   .php   L0039 0001 T1 = FETCH_STATIC_PROP_R string("views") string("Site\\Page")
 Collections: same opcodes and lines in 6 op arrays, same signatures in 2 classes
 Interop: same opcodes and lines in 3 op arrays, same signatures in 1 classes
-Lambdas: same opcodes and lines in 34 op arrays, same signatures in 1 classes
+Lambdas: different opcodes and lines in 36 op arrays, same signatures in 1 classes
+  .sharp      ; (lines=10, args=1, vars=1, tmps=3)
+  .sharp L0099 0003 T2 = FETCH_CLASS_CONSTANT string("Demo\\Lambdas") string("twice")
+  .sharp L0099 0004 SEND_VAL_EX T2 1
+  .sharp L0099 0005 V3 = DO_FCALL
+  .sharp L0099 0006 VERIFY_RETURN_TYPE V3
+  .sharp L0099 0007 RETURN V3
+  .sharp L0099 0008 VERIFY_RETURN_TYPE
+  .sharp L0099 0009 RETURN null
+  .php        ; (lines=11, args=1, vars=1, tmps=3)
+  .php   L0099 0003 INIT_STATIC_METHOD_CALL 0 string("Demo\\Lambdas") string("twice")
+  .php   L0099 0004 T2 = CALLABLE_CONVERT
+  .php   L0099 0005 SEND_VAL_EX T2 1
+  .php   L0099 0006 V3 = DO_FCALL
+  .php   L0099 0007 VERIFY_RETURN_TYPE V3
+  .php   L0099 0008 RETURN V3
+  .php   L0099 0009 VERIFY_RETURN_TYPE
+  .php   L0099 0010 RETURN null
 Checkout: same opcodes and lines in 10 op arrays, same signatures in 1 classes

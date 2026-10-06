@@ -288,17 +288,20 @@ zend_function *sharp_property_call(zend_object *object, zend_string *name)
 	return func;
 }
 
-/* Spec section 14.3: a PHP# read x.name of a class with no property name gives
- * its method name as a Closure bound to x, as PHP's $x->name(...) does. Returns NULL for any other
- * read, and when finding the method threw, as for a private method. */
-zval *sharp_method_value(zend_object *object, zend_string *name, zval *result)
+/* Spec section 14.3: a PHP# read x.name of a class with no property name gives its method name as a
+ * Closure bound to x, as PHP's $x->name(...) does, and a read Class.name with no constant, enum case or
+ * static property name gives its static method name, as PHP's Class::name(...) does. object is NULL for
+ * Class.name. Returns NULL for any other read, and when finding the method threw, as for a private one. */
+zval *sharp_method_value(zend_class_entry *ce, zend_object *object, zend_string *name, zval *result)
 {
 	if (!sharp_is_sharp_caller()) {
 		return NULL;
 	}
 
 	zend_object *receiver = object;
-	zend_function *method = object->handlers->get_method(&receiver, name, NULL);
+	zend_function *method = object
+		? object->handlers->get_method(&receiver, name, NULL)
+		: zend_std_get_static_method(ce, name, NULL);
 	if (!method) {
 		return NULL;
 	}
@@ -307,10 +310,15 @@ zval *sharp_method_value(zend_object *object, zend_string *name, zval *result)
 		zend_free_trampoline(method);
 		return NULL;
 	}
+	if (!object && !(method->common.fn_flags & ZEND_ACC_STATIC)) {
+		return NULL;
+	}
 
 	zval this_value;
-	ZVAL_OBJ(&this_value, receiver);
-	zend_create_fake_closure(result, method, method->common.scope, receiver->ce,
+	if (object) {
+		ZVAL_OBJ(&this_value, receiver);
+	}
+	zend_create_fake_closure(result, method, method->common.scope, object ? receiver->ce : ce,
 		(method->common.fn_flags & ZEND_ACC_STATIC) ? NULL : &this_value);
 
 	return result;

@@ -95,4 +95,8 @@ class Lambdas
         };
         return $outer(2);
     }
+
+    public static function scaled(array $numbers): array { return ((object) $numbers)->map(Lambdas::twice(...)); }
+
+    private static function twice(int $n): int { return $n * 2; }
 }
