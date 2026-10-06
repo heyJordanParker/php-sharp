@@ -670,7 +670,7 @@ lines.sortedBy(l => l.amount);
 lines.add(line);
 lines.insert(0, line);
 lines.set(0, line);
-lines.remove(line);           // by value
+lines.remove(line);           // by value: the first equal element, and true when one was removed
 lines.clear();
 plans["pro"] = pro;
 plans.remove("pro");          // by key
@@ -679,9 +679,13 @@ plans.remove("pro");          // by key
 **Each collection does the natural thing with a method:**
 
 - `remove` removes a value from a `List` and a key from a `Map`.
+- On a `List`, `remove(value)` removes the first element equal to `value` by `==` (section 19), renumbers the list, and returns `bool`: true when it removed one.
 - `filter` renumbers what a `List` keeps, and keeps a `Map`'s keys.
 
 ```csharp
+List<string> tags = ["a", "b", "a"];
+tags.remove("a");                     // true, and tags is ["b", "a"]
+tags.remove("z");                     // false, and tags is unchanged
 lines.filter(l => l.free);            // List<Line>, renumbered
 plans.filter(p => p.active);          // Map<string, Plan>, keys kept
 ```
@@ -1589,13 +1593,18 @@ const point = (object)["x": 1];                   // compile error: write a Map 
 
 - **`List.wrap(T|List<T> value)`** gives a `List<T>`: the list itself, or a list holding the one value. The checker refuses `wrap` when `T` could itself be a list, and its error names the `is` form, `value is T one ? [one] : value`.
 - **A JSON object** is a `Map` literal for a one-off payload, and a declared struct for a shape that repeats.
-- **`Json.encode` encodes by the value's PHP# type,** so a `Map` is always a JSON object and a `List` is always a JSON array, even when empty, and even when a `Map`'s keys run from 0 to n. PHP's own `json_encode` sees a plain array, so it gives `[]` for an empty `Map`.
+- **`Json.encode` encodes by the value's PHP# type, as far as the type is written,** so there a `Map` is a JSON object and a `List` is a JSON array, even when empty, and even when a `Map`'s keys run from 0 to n. PHP's own `json_encode` sees a plain array, so it gives `[]` for an empty `Map`.
+- **Below an `Any`, a value encodes as PHP sees it,** because an array carries no mark that says `List` or `Map` (decision 26). Any list-shaped array there, such as an empty `Map` or a `Map<int, V>` with keys 0 to n, encodes as a JSON array. To keep a `Map` a JSON object, write its type or use a struct.
 
 ```csharp
 Map<string, int> none = [:];
 Json.encode(none);                                // {}
 List<int> empty = [];
 Json.encode(empty);                               // []
+Map<string, Any> loose = ["counts": none];
+Json.encode(loose);                               // {"counts":[]}: counts sits below Any
+Map<string, Map<string, int>> typed = ["counts": none];
+Json.encode(typed);                               // {"counts":{}}: the type is written
 ```
 
 **`Any` holds a value of any type except null. `Any?` also allows null.** A value of type `Any` must be checked with `is`, `as` or `match` before it can be used:

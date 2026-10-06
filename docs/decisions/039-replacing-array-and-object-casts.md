@@ -2,7 +2,7 @@
 
 ## Decision
 
-`(array)` and `(object)` are compile errors, each naming its replacement. A struct's `parse` and `tryParse` read an object's public properties as well as a `Map<string, Any?>`. The standard library's `List.wrap(T|List<T> value)` wraps a value in a list, and the checker refuses it when `T` could itself be a list. A JSON object is a `Map` literal for a one-off payload, or a declared struct for a shape that repeats. `Json.encode` encodes by the value's PHP# type, so a `Map` is always a JSON object and a `List` is always a JSON array, even when empty.
+`(array)` and `(object)` are compile errors, each naming its replacement. A struct's `parse` and `tryParse` read an object's public properties as well as a `Map<string, Any?>`. The standard library's `List.wrap(T|List<T> value)` wraps a value in a list, and the checker refuses it when `T` could itself be a list. A JSON object is a `Map` literal for a one-off payload, or a declared struct for a shape that repeats. `Json.encode` encodes by the value's PHP# type as far as the type is written, so there a `Map` is a JSON object and a `List` is a JSON array, even when empty. Below an `Any`, a value encodes as PHP sees it (decision 48).
 
 ## Options
 
