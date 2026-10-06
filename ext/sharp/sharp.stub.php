@@ -21,4 +21,22 @@ final class Collection
     public function entries(): array {}
 
     public function delete(int|string $key): void {}
+
+    public function filter(\Closure $predicate): array {}
+
+    public function filterValues(\Closure $predicate): array {}
+
+    public function map(\Closure $transform): array {}
+
+    public function sumOf(\Closure $selector): int|float {}
+
+    public function first(\Closure $predicate): mixed {}
+
+    public function any(\Closure $predicate): bool {}
+
+    public function groupBy(\Closure $key): array {}
+
+    public function associateBy(\Closure $key): array {}
+
+    public function sortedBy(\Closure $selector): array {}
 }

@@ -33,6 +33,7 @@
 #include "zend_hash.h"
 #include "zend_property_hooks.h"
 #include "zend_observer.h"
+#include "ext/sharp/php_sharp.h"
 
 #define DEBUG_OBJECT_HANDLERS 0
 
@@ -1008,6 +1009,8 @@ uninit_error:
 	if (type != BP_VAR_IS) {
 		if (prop_info) {
 			zend_typed_property_uninitialized_access(prop_info, name);
+		} else if ((retval = sharp_method_value(zobj, name, rv)) || EG(exception)) {
+			return retval ? retval : &EG(uninitialized_zval);
 		} else {
 			zend_error(E_WARNING, "Undefined property: %s::$%s", ZSTR_VAL(zobj->ce->name), ZSTR_VAL(name));
 		}
@@ -1962,7 +1965,7 @@ ZEND_API zend_function *zend_std_get_method(zend_object **obj_ptr, zend_string *
 		if (zobj->ce->__call) {
 			return zend_get_user_call_function(zobj->ce, method_name);
 		} else {
-			return NULL;
+			return sharp_property_call(zobj, method_name);
 		}
 	}
 

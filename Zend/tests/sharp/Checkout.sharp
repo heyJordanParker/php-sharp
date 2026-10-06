@@ -1,0 +1,33 @@
+namespace Demo;
+
+import Lib.Ledger;
+
+class Checkout
+{
+    private Function<int(int)> discount;
+
+    public Checkout(int percent)
+    {
+        this.discount = cents => cents - intdiv(cents * percent, 100);
+    }
+
+    public List<string> receipt(List<int> prices, Checkout other, Ledger ledger)
+    {
+        let count = 0;
+        const paid = prices.filter(price => price > 0).map(price => this.discount(price)).sortedBy(price => -price);
+        const total = array_reduce(paid, (int sum, int price) => {
+            count += 1;
+            return sum + price;
+        }, 0);
+        const recorded = ledger.record(paid, price => other.discount(price));
+        return [
+            implode(",", paid.map(this.format)),
+            (string) total,
+            (string) count,
+            implode(",", recorded),
+            (string) ledger.scale(total),
+        ];
+    }
+
+    private string format(int cents) => sprintf("%d.%02d", intdiv(cents, 100), cents % 100);
+}
