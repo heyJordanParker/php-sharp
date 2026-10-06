@@ -1295,6 +1295,13 @@ if (entity is not HasDesign) { … }       // compiles
 if (!entity is HasDesign) { … }          // compile error: write entity is not HasDesign
 ```
 
+- **In a pattern, `not` beside `or` or `and` needs parentheses,** in `is` and in `match` arms alike. C# reads `not Paid or Refunded` as `(not Paid) or Refunded`, which already matches a `Refunded` result, so the `or Refunded` does nothing.
+
+```csharp
+if (result is not Paid or Refunded) { … }      // compile error: write not (Paid or Refunded), or (not Paid) or Refunded
+if (result is not (Paid or Refunded)) { … }    // compiles: neither Paid nor Refunded
+```
+
 - **`as`** converts a value to a type, or gives null.
 - **`as` to a collection type checks every element,** wherever the value came from, and gives null if any element is wrong. So `as List<string> ?? throw …` throws on a wrong element.
 - **`x is int?` is a compile error,** because `int?` also matches null. Write `x is int`, or `x == null`.
