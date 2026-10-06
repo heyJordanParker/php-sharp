@@ -77,6 +77,6 @@ brew install autoconf bison re2c pkgconf icu4c libiconv libpq libsodium libzip o
 
 Pushing a full version tag, such as `v0.1.0`, runs both jobs, and when they pass, the `IMAGE` job publishes the runtime image as `ghcr.io/heyjordanparker/php-sharp:<version>`, never as `latest`, for `linux/amd64` and `linux/arm64`. Each platform builds on its own native runner through `docker/github-builder`.
 
-After both jobs pass on a push to `master` or a tag, the `COMPOSER` job splits `sharp/composer/` with `splitsh-lite` and pushes the result to the same branch or tag of `heyJordanParker/php-sharp-composer`. It pushes with the split repository's deploy key, kept in the `PHP_SHARP_COMPOSER_DEPLOY_KEY` Actions secret. The split repository's webhook tells Packagist to update `heyjordanparker/php-sharp-composer`, so a tag here becomes a plugin release of the same version.
+On a push to `master` or a tag, once both jobs pass or skip a change to documentation alone, the `COMPOSER` job splits `sharp/composer/` with `splitsh-lite` and pushes the result to the same branch or tag of `heyJordanParker/php-sharp-composer`. It pushes with the split repository's deploy key, kept in the `PHP_SHARP_COMPOSER_DEPLOY_KEY` Actions secret. The split repository's webhook tells Packagist to update `heyjordanparker/php-sharp-composer`, so a tag here becomes a plugin release of the same version.
 
 Upstream's `Test` and `Windows builds` workflows are disabled on the fork with `gh workflow disable`.
