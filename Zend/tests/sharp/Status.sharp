@@ -1,0 +1,21 @@
+namespace Demo;
+
+import Lib.Field;
+
+enum Status : string
+{
+    case Active = "a";
+    [Field("Paused by support")]
+    case Paused = "p";
+    case Closed = "c";
+
+    public string label()
+    {
+        return `${this.name} (${this.value})`;
+    }
+
+    public static Status parse(string value)
+    {
+        return Status.tryFrom(value) ?? Status.from("a");
+    }
+}

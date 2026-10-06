@@ -14,12 +14,12 @@ function compiled(string $file): string
     return str_replace($file, '<file>', $opcodes . $classes);
 }
 
-foreach (['Calc', 'Nulls', 'ControlFlow', 'Order', 'Product', 'Expressions'] as $fixture) {
+foreach (['Calc', 'Nulls', 'ControlFlow', 'Order', 'Product', 'Expressions', 'Status', 'Suit', 'Rank', 'Shipment', 'Task'] as $fixture) {
     $sharp = compiled(__DIR__ . "/$fixture.sharp");
     $php = compiled(__DIR__ . "/$fixture.inc");
     echo $fixture, ': ', $sharp === $php
         ? 'same opcodes and lines in ' . substr_count($sharp, '; (lines=') . ' op arrays,'
-            . ' same signatures in ' . substr_count($sharp, 'Class [ <user> ') . ' classes'
+            . ' same signatures in ' . preg_match_all('/(?:Class|Enum) \[ <user> /', $sharp) . ' classes'
         : "different\n.sharp:\n$sharp\n.php:\n$php", "\n";
 }
 ?>
@@ -30,3 +30,8 @@ ControlFlow: same opcodes and lines in 6 op arrays, same signatures in 1 classes
 Order: same opcodes and lines in 4 op arrays, same signatures in 2 classes
 Product: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Expressions: same opcodes and lines in 6 op arrays, same signatures in 1 classes
+Status: same opcodes and lines in 3 op arrays, same signatures in 1 classes
+Suit: same opcodes and lines in 3 op arrays, same signatures in 1 classes
+Rank: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+Shipment: same opcodes and lines in 8 op arrays, same signatures in 1 classes
+Task: same opcodes and lines in 4 op arrays, same signatures in 1 classes
