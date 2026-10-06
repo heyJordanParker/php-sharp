@@ -145,7 +145,7 @@ Lambdas: different opcodes and lines in 36 op arrays, opcodes in 0 property hook
   .php        3: 0007 - 0008 (tmp/var)
 Checkout: same opcodes and lines in 10 op arrays, opcodes in 0 property hooks, same signatures in 1 classes
 Exits: same opcodes and lines in 2 op arrays, opcodes in 0 property hooks, same signatures in 1 classes
-Positions: same opcodes and lines in 2 op arrays, opcodes in 1 property hooks, same signatures in 1 classes
+Positions: same opcodes and lines in 2 op arrays, opcodes in 3 property hooks, same signatures in 1 classes
 Deploy: same opcodes and lines in 7 op arrays, opcodes in 0 property hooks, same signatures in 1 classes
 Tags: same opcodes and lines in 2 op arrays, opcodes in 0 property hooks, same signatures in 1 classes
 PhpForms: same opcodes and lines in 14 op arrays, opcodes in 1 property hooks, same signatures in 1 classes

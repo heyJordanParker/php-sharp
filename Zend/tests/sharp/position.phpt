@@ -12,6 +12,12 @@ var_dump($here->directory === __DIR__);
 echo $here->line, ':', $here->column, ' ', $here->function, "\n";
 $folder = (new Demo\Positions())->folder;
 echo $folder->line, ':', $folder->column, ' ', $folder->function, "\n";
+$positions = new Demo\Positions();
+echo $positions->slug, "\n";
+$positions->title = null;
+echo $positions->title, "\n";
+$positions->title = 'given';
+echo $positions->title, "\n";
 
 $given = new Sharp\Position('/srv/app/Reports.sharp', 12, 9, 'App.Reports.run');
 echo $given->file, ' ', $given->directory, ' ', $given->line, ':', $given->column, ' ', $given->function, "\n";
@@ -36,6 +42,9 @@ bool(true)
 bool(true)
 7:16 Demo.Positions.here
 10:31 Demo.Positions.folder
+Demo.Positions.slug
+Demo.Positions.title
+given
 /srv/app/Reports.sharp /srv/app 12:9 App.Reports.run
 .
 Cannot modify readonly property Sharp\Position::$line
