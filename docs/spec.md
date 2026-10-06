@@ -408,7 +408,7 @@ PHP# has three collection types: `List<T>`, `Map<TKey, TValue>` and `Set<T>`.
 
 - They are values, as structs (section 10) and PHP's own arrays are. Assigning or passing a collection copies it only when one side later writes to it.
 - A `Map`'s key is an `int`, a `string`, or a type with an `int` or `string` backing value (see **Map keys** below).
-- `List` and `Map` both run as plain PHP arrays, so the engine cannot tell them apart when the code runs. Every collection operation therefore has one meaning on both, decided by how the code is written.
+- `List` and `Map` both run as plain PHP arrays. The engine knows which one it compiles from the checker's types (section 27), so each operation does what it naturally means on that kind of collection.
 
 ```csharp
 let b = a;
@@ -529,13 +529,13 @@ Data with fixed keys is a class, so a `Map` holds keys that come from outside, w
 
 **A `Map` with nullable values reads as Kotlin's does:** a read from `Map<string, int?>` gives `int?`, so a missing key and a stored null look the same until the standard library's methods tell them apart.
 
-**A key read back out of a `Map<string, TValue>` is typed `int|string`,** because PHP stores an all-digit string key, such as `"5"`, as the int `5`. This covers the key of `for (const [key, value] of map)` and of `keys()`. Passing it where a `string` is expected needs `(string)key`. Reads by key and every value keep their types.
+**A key read back out of a `Map<string, TValue>` is a `string`.** PHP stores an all-digit string key, such as `"5"`, as the int `5`. The engine knows the key type (section 27), so it hands the key back as `"5"`. Plain PHP reading the same array still sees `5`. This covers the key of `for (const [key, value] of map)` and of `keys()`.
 
 ```csharp
 void reserve(string sku, int count) { … }
 
-for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is int|string
-    this.reserve((string)sku, count);
+for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is a string, even for the key "5"
+    this.reserve(sku, count);
 }
 ```
 
@@ -619,21 +619,21 @@ lines.set(0, line);
 lines.remove(line);           // by value
 lines.clear();
 plans["pro"] = pro;
-plans.delete("pro");          // by key
+plans.remove("pro");          // by key
 ```
 
-**A method name means one thing on every collection:**
+**Each collection does the natural thing with a method:**
 
-- `remove` removes by value, and `delete` removes a key.
-- `filter` renumbers what it keeps, and `filterValues` keeps the keys.
+- `remove` removes a value from a `List` and a key from a `Map`.
+- `filter` renumbers what a `List` keeps, and keeps a `Map`'s keys.
 - Two imported extensions (section 26) with one name, one on a `List` and one on a `Map`, are a compile error.
 
 ```csharp
-plans.filter(p => p.active);          // List<Plan>
-plans.filterValues(p => p.active);    // Map<string, Plan>
+lines.filter(l => l.free);            // List<Line>, renumbered
+plans.filter(p => p.active);          // Map<string, Plan>, keys kept
 ```
 
-`contains`, `remove`, `indexOf` and `Set<T>` need `==` on the element type (section 19). Without it, they are a compile error.
+`contains`, a `List`'s `remove`, `indexOf` and `Set<T>` need `==` on the element type (section 19). Without it, they are a compile error.
 
 The complete method list is specified with the standard library.
 
@@ -710,7 +710,7 @@ const increment = () => { count += 1; };
 increment();   // count is now 1
 ```
 
-A lambda that calls `add`, `set` or `delete` on a captured variable changes the variable itself:
+A lambda that calls `add`, `set` or `remove` on a captured variable changes the variable itself:
 
 ```csharp
 List<int> seen = [];
@@ -927,6 +927,52 @@ cart === cart;                   // true: the same object
 - **`!=`** is derived from `==`.
 - **`< > <= >=` and sorting** are derived from `<=>`.
 - **`==` and `hash()` go together:** declaring `==` without `hash()` is a compile error, because `Set` needs both.
+
+**Bitwise operators** `|`, `&`, `^`, `~`, `<<` and `>>`, and their compound forms such as `|=`, take `int` only. PHP's flag APIs take ints joined with `|`:
+
+```csharp
+const json = json_encode(payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);   // compiles
+let flags = JSON_THROW_ON_ERROR;
+flags |= JSON_PRETTY_PRINT;                         // compiles
+if (flags & JSON_PRETTY_PRINT != 0) { … }           // compiles: means (flags & JSON_PRETTY_PRINT) != 0
+if ((flags & JSON_PRETTY_PRINT) != 0) { … }         // compiles: the same meaning
+if (flags & JSON_PRETTY_PRINT) { … }                // compile error: int is not bool
+const shown = isAdmin | isOwner;                    // compile error: | takes int; write ||
+const mask = 1 << count;                            // throws ArithmeticError when count is negative
+```
+
+- A condition is a `bool` (section 21), so `if (flags & X)` is a compile error.
+- `|` between two `bool`s is a compile error that names `||`.
+- A shift by a negative count throws `ArithmeticError`.
+- The bitwise operators bind tighter than comparisons, as in Go, Rust and Swift. PHP and C# bind them looser, so there `flags & JSON_PRETTY_PRINT != 0` reads as `flags & (JSON_PRETTY_PRINT != 0)`.
+- In a type, `|` and `&` keep their meaning as unions and bounds (sections 11 and 24).
+
+**Precedence**, from the tightest to the loosest. Operators in one row bind equally.
+
+| Operators | Grouping | Compared with PHP |
+|---|---|---|
+| `.`, `?.`, calls, indexing `[]`, `new`, `match` | left | PHP writes `->`, `?->` and `::` |
+| `**` | right | same |
+| unary `-`, `~`, `++`, `--`, casts `(int)`, `(float)`, `(string)` | right | same, with fewer casts (section 24) |
+| `with` | left | PHP# only, in C#'s place |
+| `is`, `as` | left | `is` takes PHP's `instanceof` place, and `as` is PHP# only |
+| `!` | right | same |
+| `*`, `/`, `%` | left | same |
+| `+`, `-` | left | `+` also joins strings. PHP's `.` binds looser, below `<<` and `>>` |
+| `<<`, `>>` | left | same |
+| `&` | left | **differs:** PHP binds `&` looser than every comparison |
+| `^` | left | **differs:** as `&` |
+| `\|` | left | **differs:** as `&` |
+| `<`, `<=`, `>`, `>=` | none | same |
+| `==`, `!=`, `===`, `<=>` | none | same |
+| `&&` | left | same |
+| `\|\|` | left | same |
+| `??` | right | same |
+| `? :` | none | same. Nesting without parentheses is a compile error (section 21) |
+| `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `**=`, `??=`, `&=`, `\|=`, `^=`, `<<=`, `>>=` | right | same, without `.=` |
+| lambda `=>`, `throw` | right | the lambda is PHP#'s. `throw` is as in PHP 8 |
+
+PHP's `and`, `xor` and `or` do not exist (section 21).
 
 **Interface names** have no `I` prefix and no `Interface` suffix: `Comparable`, `Linkable`.
 
@@ -1316,7 +1362,7 @@ const admin = user as Admin;                         // Admin?, null if user is 
 const flag = request.input("flag") == "1";           // replaces (bool)
 ```
 
-- `(int)` and `(float)` convert between `int` and `float`. `(string)` converts a number, or an `int|string` `Map` key (section 12), to a `string`.
+- `(int)` and `(float)` convert between `int` and `float`. `(string)` converts a number to a `string`.
 - `(int)` truncates a `float` toward zero. A `float` too large for an `int`, or NaN, throws `ArithmeticError`.
 - A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take `Any?`, and throw on anything that is not a string holding only a number, such as `"abc"`, `"12abc"` or `null`.
 - `Int.tryParse(s)` and `Float.tryParse(s)` take `Any?` too, and give null where `parse` throws.
