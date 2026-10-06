@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: sharp/bin/test [--linux] [--opcache] [--repeat] [--differential] [--upstream | paths...]" >&2
+  echo "usage: sharp/bin/test [--linux] [--opcache] [--repeat] [--passes] [--census] [--differential] [--upstream | paths...]" >&2
   exit 2
 }
 
@@ -10,6 +10,8 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 linux=false
 opcache=false
 repeat=false
+passes=false
+census=false
 differential=false
 upstream=false
 tests=()
@@ -19,6 +21,8 @@ for arg in "$@"; do
     --linux) linux=true; continue ;;
     --opcache) opcache=true ;;
     --repeat) repeat=true ;;
+    --passes) passes=true ;;
+    --census) census=true ;;
     --differential) differential=true ;;
     --upstream) upstream=true ;;
     -*) usage ;;
@@ -99,6 +103,25 @@ fi
 
 if $repeat; then
   run_tests "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
+fi
+
+# Every optimizer pass runs alone, and then each JIT, so a pass that drops a PHP# mark cannot hide
+# behind another pass. Each run expects the same output as the run without opcache.
+if $passes; then
+  for ((pass = 0; pass < 16; pass++)); do
+    run_tests "with optimizer pass $((pass + 1)) alone" -d opcache.enable_cli=1 -d "opcache.optimization_level=$((1 << pass))"
+  done
+  for jit in tracing function; do
+    run_tests "with the $jit JIT" -d opcache.enable_cli=1 -d opcache.jit="$jit" -d opcache.jit_buffer_size=32M \
+      -d opcache.jit_hot_func=1 -d opcache.jit_hot_loop=1 -d opcache.jit_hot_return=1 -d opcache.jit_hot_side_exit=1
+  done
+fi
+
+if $census; then
+  echo "== every write and comparison of a field that holds a PHP# mark"
+  if ! "$php" "$root/sharp/bin/census"; then
+    failed+=("the census of PHP# marks")
+  fi
 fi
 
 check_differential() {
