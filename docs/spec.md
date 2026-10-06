@@ -78,7 +78,7 @@ const plan = this.planner.plan(id);
 Checkout.maximum;
 ```
 
-**`Class.y` without a call reads whichever member `y` is:** a static property, a constant or an enum case. The engine compiles one file at a time, so it looks up the member's kind when the code runs. The same applies to members used as values (sections 6.3 and 14.3).
+**`Class.y` without a call reads whichever member `y` is:** a static property, a constant or an enum case. The same applies to members used as values (sections 6.3 and 14.3).
 
 ## 5. Access modifiers
 
@@ -358,7 +358,18 @@ RenewRequest? maybe = RenewRequest.tryParse(payload);   // null on any bad field
 - **`new` always names them:** `new PaginatedList<Order>(…)`.
 - **A generic method call infers them** from the arguments it receives.
 
-**Written type arguments are carried at runtime, and inferred ones are known to the checker only.** "Written" covers `new`, an explicit call such as `Json.decode<WebhookPayload>(body)`, and a declared type such as a property, a parameter or `List<Line> lines = …`. Every type, inferred or written, is known while code is checked, as in TypeScript. The engine compiles one file at a time, so it cannot see an inferred argument. A value created from an inferred argument has no type argument at runtime, and passes any runtime check for its generic type, because the checker has already proven it. A collection's elements are checked where it enters from plain PHP instead (section 12).
+**Every type argument is carried at runtime, written or inferred.** The checker's types reach the running program (section 27), so a generic method can use a type parameter that its call inferred:
+
+```csharp
+public class Inbox
+{
+    public bool holds<TItem>(List<TItem> items, Any value) => value is TItem;
+}
+
+inbox.holds(orders, message);   // compiles: TItem is inferred as Order, and value is TItem tests Order when the code runs
+```
+
+A collection's elements are still checked where it enters from plain PHP (section 12).
 
 **Declaring type parameters:**
 
@@ -503,7 +514,7 @@ for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is in
 **Map keys:** a key is `int`, `string`, or any type with an `int` or `string` backing value. A backed enum is one (section 20). `public struct Username : string` declares one, with the same header an enum uses (section 10).
 
 - `counts[status]` runs as `$counts[$status->value]`.
-- A loop over the `Map` names the key's type, as in `for (const [Status status, int n] of counts)`, and the key arrives as a `Status`. Leaving the type out is a compile error that names the fix. Each file compiles alone, and the stored key is only its value, so the type written in the loop is what rebuilds the key.
+- A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type, as in `const [Status status, int n]`, stays allowed. An inferred `Map`, such as a `groupBy` result, gives its keys back the same way, because the checker's types reach the running program (section 27).
 - Plain PHP receives the backing values.
 
 ```csharp
@@ -541,7 +552,8 @@ public class OrderStats
     }
 }
 
-for (const [status, n] of stats.countByStatus(orders)) { … }   // compile error: name the key's type: write const [Status status, int n]
+for (const [status, n] of stats.countByStatus(orders)) { … }   // compiles: status arrives as a Status, with no type written
+for (const [status, group] of orders.groupBy(o => o.status)) { … }   // compiles: an inferred Map's keys arrive as Status too
 Map<Username, Order> byUser = [:];                               // keyed by username.value
 ```
 
@@ -818,7 +830,7 @@ for (const [key, plan] of plans) { … }
 for (const [i, line] of lines.entries()) { … }
 ```
 
-A loop over a `Map` whose key has a backing value names the key's type, as in `for (const [Status status, int n] of counts)`. The key arrives as a `Status`, and leaving the type out is a compile error that names the fix (section 12).
+A loop over a `Map` whose key has a backing value gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type stays allowed (section 12).
 
 `for (x in y)` is a compile error that names `of`. It closes the TypeScript trap where `in` loops over keys.
 
@@ -834,7 +846,7 @@ PHP's `foreach` is removed.
 
 **Joining:** `+` joins strings. Joining a string with a number is a compile error, so `"1" + 1` cannot produce `"11"`. `+` in plain PHP files keeps its PHP meaning.
 
-`+` decides what to do when it runs, as in JavaScript. Two strings join, two numbers add, and an object with `operator +` (section 19) calls it. The engine compiles one file at a time and cannot see other files' types, so the choice cannot be made earlier.
+`+` decides what to do when it runs, as in JavaScript. Two strings join, two numbers add, and an object with `operator +` (section 19) calls it.
 
 ```csharp
 const label = "Order " + order.number;
@@ -1315,12 +1327,56 @@ PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or
 
 ## 25. Referring to classes
 
-**`typeof(X)`** is typed `Class<X>`, and plain PHP receives the class-name string. It works on type parameters, because generics are reified. PHP's `Order::class` is removed.
+**`typeof(X)`** is typed `Class<X>`, and plain PHP receives the class-name string. It works on every type parameter, a method's included, because every type argument reaches the running program (section 11). PHP's `Order::class` is removed.
 
 ```csharp
 Class<Order> type = typeof(Order);
 type.attributes<Listen>();
 typeof(TItem);
+```
+
+**A class value works wherever a class name works.** `typeof` gives one, and a `Class<T>` field, parameter or local holds one:
+
+```csharp
+import Illuminate.Database.Eloquent.Model;
+
+public abstract class Element
+{
+    public required Element(string key) { … }
+    public static string defaultTag() => "div";
+}
+
+public class FormBuilder
+{
+    Map<string, Class<Element>> elements = ["form": typeof(FormElement), "input": typeof(InputElement)];
+
+    public Element make(string kind, string key)
+    {
+        const type = this.elements[kind] ?? throw new UnknownElement(kind);   // Class<Element>, with no type written
+        return new type(key);                                                  // compiles: Element's constructor is required
+    }
+
+    public string tagFor(string kind)
+    {
+        const type = this.elements[kind] ?? throw new UnknownElement(kind);
+        return type.defaultTag();                                              // calls defaultTag on the class type holds
+    }
+
+    public Model? load(Class<Model> type, int id) => type.find(id);           // calls find on the class type holds
+}
+```
+
+- **`new type(…)`** needs a `required` constructor, as `new Self(…)` does. For a plain PHP class, such as `Class<Model>`, the checker checks the call against that class's own constructor.
+- **A static call through a class value,** such as `type.defaultTag()` or `type.find(id)`, calls the static on the class the value holds.
+- **`Class`'s own members win,** such as `attributes`. A class cannot declare a static named like one of them, as in TypeScript's error 2699.
+- **A class value's type need not be written.** `const type = …` holds a `Class<Element>`, because the checker's types reach the running program (section 27).
+- **A property named by a variable stays refused.** PHP's `$order->$column` has no PHP# form, and `order.getAttribute(column)` replaces it.
+
+```csharp
+type.attributes<Listen>();                       // Class's own method
+public static string attributes() => "";         // compile error: attributes is a member of Class
+new kind(key);                                   // compile error: kind is a string, not a Class
+order.getAttribute(column);                      // compiles: Eloquent's API replaces $order->$column
 ```
 
 **`Self`** means the class a static method was actually called on. It replaces PHP's `static`. PHP's `self` is removed: to mean the declaring class, write its name.
@@ -1401,6 +1457,8 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 The extension is **`.sharp`**, as in `StoreService.sharp`.
 
 Plain PHP files keep `.php` and `<?php`, and the two call each other freely. Composer's autoloader tries `.sharp` after `.php`, the same way it already tries `.hh` for Hack.
+
+**A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. The checker's types reach the running program, inferred ones too, so generic code (section 11), loops over enum-keyed maps (section 12) and class values (section 25) work without a written type.
 
 ## 28. Verification
 
