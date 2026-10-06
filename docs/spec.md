@@ -240,6 +240,29 @@ max(0, ...prices);       // into plain PHP too. The 0 gives max a value when pri
 
 There are no top-level functions. Shared code lives in static methods on a class. PHP's built-in functions, such as `strlen`, and plain PHP functions, such as Laravel's `now()`, can still be called. Section 29 covers their effects.
 
+**Output and exit are function calls.** `echo` and `print` are removed, and output goes through `printf` or `fwrite`. `die` is removed, because `die("…")` prints its message and exits with status 0, which reports success. `exit(code)` stays, as PHP 8.4's built-in function.
+
+```csharp
+public class Prune
+{
+    public static void run(int pruned, bool failed)
+    {
+        if (failed) {
+            fwrite(STDERR, "Prune failed" + PHP_EOL);    // compiles: the message goes to STDERR
+            exit(1);                                     // compiles: ends the process with status 1
+        }
+        printf("Pruned %d carts" + PHP_EOL, pruned);     // compiles
+    }
+}
+
+echo "Pruned";                                           // compile error: write printf or fwrite
+print "Pruned";                                          // compile error: write printf or fwrite
+die("Prune failed");                                     // compile error: write the message to STDERR, then exit(1)
+```
+
+- `exit` skips every `finally` block, as `System.exit` does in Java and `Environment.Exit` does in C#.
+- `exit` is not pure. Its effect is tracked (section 29).
+
 ## 9. Constructors
 
 A constructor is named after its class. A parameter with an access modifier declares a member, and the parameter spells out which kind:
@@ -637,6 +660,39 @@ plans.filter(p => p.active);          // Map<string, Plan>, keys kept
 
 The complete method list is specified with the standard library.
 
+**`Iterable<T>` is anything a loop can read,** and it compiles to PHP's `iterable`. `List<T>` and `Set<T>` are `Iterable<T>`, and a `Map<TKey, TValue>` is an `Iterable<TValue>` of its values (section 17):
+
+```csharp
+public class OrderReport
+{
+    public int tally(Iterable<Order> orders)
+    {
+        let n = 0;
+        for (const order of orders) { n += 1; }
+        return n;
+    }
+
+    public List<string> paidNumbers()
+    {
+        Iterable<Order> orders = Order.query().cursor();   // Laravel's LazyCollection, read as an Iterable<Order>
+        return orders
+            .filter(o => o.paid)
+            .map(o => o.number)
+            .take(100)
+            .toList();                                      // runs here, and reads rows only until it has 100
+    }
+}
+
+report.tally(cart.orders);                  // compiles: a List<Order> is an Iterable<Order>
+report.tally(Order.query().cursor());       // compiles: rows are read one at a time
+Iterable<Order> rows = Order.query().cursor();
+rows[0];                                    // compile error: an Iterable has no index
+```
+
+- **Lazy operations,** such as `filter`, `map` and `take`, return an `Iterable<T>`. They run only when `toList()` or a loop reads the result.
+- **A lazy plain PHP source,** such as a generator or Laravel's `LazyCollection`, is checked element by element as it is read, so each element is checked where it enters PHP# (section 11).
+- **The lazy operations belong to `Iterable<T>`.** A value typed as a plain PHP class keeps that class's own methods until it is held as an `Iterable<T>`, as `orders` is above.
+
 ## 13. `readonly`
 
 `readonly` has one rule throughout the language:
@@ -849,7 +905,7 @@ An object initializer runs after the constructor. It sets properties through the
 
 ## 17. Loops
 
-`for … of` loops over a collection, as in TypeScript. The loop variable is declared with `const` or `let`, and each pass gets a fresh variable (section 3).
+`for … of` loops over a collection or any `Iterable<T>` (section 12), as in TypeScript. The loop variable is declared with `const` or `let`, and each pass gets a fresh variable (section 3).
 
 ```csharp
 for (const line of lines) { … }
@@ -1399,6 +1455,24 @@ string a = `plan: ${raw}`;         // compile error: check raw with is, as or ma
 
 PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or untyped arrive as `Any?`. Decoding straight into a type, such as `Json.decode<WebhookPayload>(body)`, is the normal path. That decoding API is specified with the standard library.
 
+**`Object` holds any object, and nothing else.** It compiles to PHP's `object`, and `Object?` adds null. Like `Any`, it has no members until `is` narrows it. An `Object` passes where `Any` is expected, and a plain PHP value typed `object` arrives as `Object`.
+
+```csharp
+public class Ids
+{
+    public static int identity(Object value) => spl_object_id(value);   // compiles
+    public static int identityOf(Any value) => spl_object_id(value);    // compile error: Any may hold an int, and spl_object_id takes an object
+
+    public static void sync(Object source)
+    {
+        source.id;                              // compile error: check what source is first
+        if (source is Order order) { … }        // compiles
+    }
+}
+
+Ids.identity(5);                                // compile error: 5 is not an object
+```
+
 ## 25. Referring to classes
 
 **`typeof(X)`** is typed `Class<X>`, and plain PHP receives the class-name string. It works on every type parameter, a method's included, because every type argument reaches the running program (section 11). PHP's `Order::class` is removed.
@@ -1534,6 +1608,32 @@ Plain PHP files keep `.php` and `<?php`, and the two call each other freely. Com
 
 **A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. The checker's types reach the running program, inferred ones too, so generic code (section 11), loops over enum-keyed maps (section 12) and class values (section 25) work without a written type.
 
+**`vendor/bin/mago compile` compiles the project.** It checks every `.sharp` file, vendor packages included, and writes each accepted file as a `.sharpc` file into one `.sharp/` folder at the project root. The folder mirrors the source paths:
+
+```text
+project/
+├── app/Orders/Order.sharp
+├── app/Orders/LegacyExport.php             <- plain PHP: never compiled, runs as today
+├── vendor/acme/money/src/Money.sharp       <- vendor is never written to
+└── .sharp/                                 <- the only folder mago compile writes; add it to .gitignore
+    ├── app/Orders/Order.sharpc
+    └── vendor/acme/money/src/Money.sharpc
+```
+
+- **The engine finds `.sharp/`** by walking up from the source file, as git finds `.git`. Nothing needs configuring.
+- **The engine runs a `.sharp` file only from its current `.sharpc` file.** A missing, stale or mismatched one is refused, and the refusal names the fix:
+
+```text
+app/Orders/Order.sharp isn't compiled. Run vendor/bin/mago compile.
+app/Orders/Order.sharp is out of date (app/Shared/Money.sharp changed). Run vendor/bin/mago compile.
+app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mago-sharp release that matches this engine.
+```
+
+- **In development,** the `php.ini` setting `sharp.compile_command` lets the engine compile a stale file on demand before it runs, instead of refusing it.
+- **A deploy** runs `vendor/bin/mago compile` and ships `.sharp/` with the code.
+- **A type error, or a broken structure rule (section 28), stops the file from running.** A rules file that fails to prove stops every `.sharp` file in its namespace.
+- **A rule that reads the whole project's structure can lag in development** until the next full compile. At deploy, `mago compile` checks every rule exactly.
+
 ## 28. Verification
 
 The checker verifies two kinds of facts before code runs:
@@ -1542,6 +1642,8 @@ The checker verifies two kinds of facts before code runs:
 - **Values:** facts the code guarantees, written as laws with hand-written proofs, as in Bend, Lean and Agda.
 
 Both kinds are written in Lean 4 and checked by Lean. Laws and rules never sit in a `.sharp` file.
+
+**Rules gate running.** A broken structure rule stops the code that breaks it from running, as a type error does, and a rules file that fails to prove stops every `.sharp` file in its namespace (section 27).
 
 **Laws hold only over pure code** (section 29). The checker translates pure PHP# code to Lean, and Lean's kernel checks the proofs. Bend's `--verdict` mode and Aeneas, which translates Rust to Lean, work the same way.
 
@@ -1611,7 +1713,7 @@ extern StripeClient uses Http;
 - **Each class, method or function has at most one `extern` declaration in the whole project.** A second one is a compile error, as declaring a class twice is.
 - **A call to plain PHP with an `extern` declaration has that effect,** so it fits a `uses` that names it: `StripeClient.charges().create(…)` fits `uses Http`.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
-- **PHP#'s Composer package ships the declarations for PHP's built-in functions and for Laravel.** Among PHP's built-ins, PDO is `Database`, curl is `Http`, `file_put_contents` and the other file functions are `Files`, `time()` is `Clock`, and `random_int` is `Random`. Every other built-in function is pure. In Laravel, Eloquent and `DB` are `Database`, the `Http` facade is `Http`, `Cache` is `Cache`, `Mail` is `Mail`, and `now()` and Carbon's clock reads are `Clock`.
+- **PHP#'s Composer package ships the declarations for PHP's built-in functions and for Laravel.** Among PHP's built-ins, PDO is `Database`, curl is `Http`, `file_put_contents` and the other file functions are `Files`, `time()` is `Clock`, and `random_int` is `Random`. Every other built-in function is pure, except `exit` (section 8). In Laravel, Eloquent and `DB` are `Database`, the `Http` facade is `Http`, `Cache` is `Cache`, `Mail` is `Mail`, and `now()` and Carbon's clock reads are `Clock`.
 - **A project declares its own libraries,** conventionally in `app/Stubs`.
 
 **A `foreign` class turns an effect into an object** that code holds and passes on, such as a fake in tests. It is optional. Its methods call plain PHP, like any other code. Code that holds a `foreign` object has that effect by name, which `uses` can declare.
