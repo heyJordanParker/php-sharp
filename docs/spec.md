@@ -916,6 +916,14 @@ for (const [i, line] of lines.entries()) { … }
 
 A loop over a `Map` whose key has a backing value gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type stays allowed (section 12).
 
+**A `const` loop variable can have its type written,** as in `for (const [Status status, int n] of counts)`. `let` with a written type is a parse error, because a typed local is written without `let` (section 2). A written `string` key over a `Map<string, TValue>` reads back as a `string`.
+
+```csharp
+for (const [Status status, int n] of counts) { … }   // compiles: counts is Map<Status, int>
+for (const Line line of lines) { … }                 // compiles
+for (let [Status status, int n] of counts) { … }     // parse error: let takes no written type
+```
+
 `for (x in y)` is a compile error that names `of`. It closes the TypeScript trap where `in` loops over keys.
 
 These keep their C and PHP form:
