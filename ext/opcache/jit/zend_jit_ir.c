@@ -16018,6 +16018,9 @@ static int zend_jit_incdec_obj(zend_jit_ctx         *jit,
 				may_throw = 1;
 				jit_SET_EX_OPLINE(jit, opline);
 				ir_CALL(IR_VOID, ir_CONST_FUNC(zend_integer_overflow_error));
+				if (opline->result_type != IS_UNUSED) {
+					jit_set_Z_TYPE_INFO(jit, res_addr, IS_UNDEF);
+				}
 				ir_END_list(end_inputs);
 				ir_IF_FALSE(if_checked_overflow);
 				ir_STORE(addr, ref);

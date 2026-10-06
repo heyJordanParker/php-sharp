@@ -1,24 +1,11 @@
 name: PHP#
 on:
   push:
-    paths-ignore: &ignore_paths
-      - .circleci/**
-      - .github/CODEOWNERS
-      - .github/ISSUE_TEMPLATE/**
-      - '**/*.md'
-      - '**/*.rst'
-      - docs/**
-      - EXTENSIONS
-      - LICENSE
-      - NEWS
-      - UPGRADING
-      - UPGRADING.INTERNALS
     branches:
       - master
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+*'
   pull_request:
-    paths-ignore: *ignore_paths
     branches:
       - master
 permissions:
@@ -27,12 +14,45 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
   cancel-in-progress: true
 jobs:
+  # LINUX and MACOS are required checks, so the workflow always runs and they skip a change
+  # to documentation alone. GitHub counts a job skipped by its `if` as passing.
+  CHANGES:
+    runs-on: ubuntu-24.04
+    outputs:
+      code: ${{ github.ref_type == 'tag' || steps.diff.outputs.code }}
+    steps:
+      - name: git checkout
+        if: github.ref_type != 'tag'
+        uses: actions/checkout@v6
+      - name: Find changes outside documentation
+        id: diff
+        if: github.ref_type != 'tag'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          git fetch --depth=1 origin "$BASE"
+          git diff --name-only --no-renames "$BASE" HEAD > "$RUNNER_TEMP/changed"
+          while read -r file; do
+            case "$file" in
+              .circleci/*|.github/CODEOWNERS|.github/ISSUE_TEMPLATE/*|*.md|*.rst|docs/*) ;;
+              EXTENSIONS|LICENSE|NEWS|UPGRADING|UPGRADING.INTERNALS) ;;
+              *) echo code=true >> "$GITHUB_OUTPUT"; break ;;
+            esac
+          done < "$RUNNER_TEMP/changed"
   LINUX:
+    needs: CHANGES
+    if: needs.CHANGES.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - name: git checkout
         uses: actions/checkout@v6
+      - name: Keep local sources out of Cargo.lock
+        run: |
+          if git grep -nE '(path|git)\+file://' -- '*Cargo.lock'; then
+            echo "::error::A committed Cargo.lock names a local source. Keep the [patch] in the untracked ext/sharp/.cargo/config.toml."
+            exit 1
+          fi
       - name: Rust cache
         uses: actions/cache@v5
         with:
@@ -51,7 +71,7 @@ jobs:
       - name: Build
         run: sharp/bin/build --linux
       - name: Test PHP#
-        run: sharp/bin/test --linux --opcache --repeat --differential
+        run: sharp/bin/test --linux --opcache --repeat --passes --census --differential
       - name: Test upstream
         run: sharp/bin/test --linux --upstream --opcache
       - name: Verify generated files are up to date
@@ -65,6 +85,8 @@ jobs:
           # Use the -a flag for a bug in git 2.46.0, which doesn't consider changed -diff files.
           git add . -N && git diff -a --exit-code
   MACOS:
+    needs: CHANGES
+    if: needs.CHANGES.outputs.code == 'true'
     runs-on: macos-latest
     timeout-minutes: 60
     steps:
@@ -98,9 +120,37 @@ jobs:
       - name: Build
         run: sharp/bin/build
       - name: Test PHP#
-        run: sharp/bin/test --opcache --repeat --differential
+        run: sharp/bin/test --opcache --repeat --passes --census --differential
       - name: Test upstream
         run: sharp/bin/test --upstream --opcache
+  COMPOSER:
+    needs: [LINUX, MACOS]
+    if: ${{ !failure() && !cancelled() && github.event_name == 'push' }}
+    runs-on: ubuntu-24.04
+    concurrency: composer-${{ github.ref }}
+    steps:
+      - name: git checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Split sharp/composer
+        run: |
+          curl -fsSL https://github.com/splitsh/lite/releases/download/v1.0.1/lite_linux_amd64.tar.gz -o "$RUNNER_TEMP/splitsh-lite.tar.gz"
+          echo "2539301ce5e21d0ca44b689d0dd2c1b20d9f9e996c1fe6c462afb8af4e7141cc  $RUNNER_TEMP/splitsh-lite.tar.gz" | sha256sum -c
+          tar -xzf "$RUNNER_TEMP/splitsh-lite.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/splitsh-lite" --prefix=sharp/composer --target=refs/heads/composer
+      - name: git checkout heyJordanParker/php-sharp-composer
+        uses: actions/checkout@v6
+        with:
+          repository: heyJordanParker/php-sharp-composer
+          ssh-key: ${{ secrets.PHP_SHARP_COMPOSER_DEPLOY_KEY }}
+          path: sharp/build/php-sharp-composer
+          fetch-depth: 0
+      - name: Push the split
+        working-directory: sharp/build/php-sharp-composer
+        run: |
+          git fetch "$GITHUB_WORKSPACE" refs/heads/composer
+          git push origin "FETCH_HEAD:$GITHUB_REF"
   IMAGE:
     if: github.ref_type == 'tag'
     needs: [LINUX, MACOS]
