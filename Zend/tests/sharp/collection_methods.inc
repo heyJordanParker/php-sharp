@@ -1,32 +1,8 @@
 <?php
 
-namespace Lib {
-    final class Basket
-    {
-        public int $writes = 0;
-
-        /** @var list<int> */
-        public array $lines = [] {
-            set(array $value) {
-                $this->writes++;
-                $this->lines = $value;
-            }
-        }
-
-        /** @var list<int> */
-        public array $totals {
-            get => [array_sum($this->lines)];
-        }
-
-        public function size(): int
-        {
-            return count($this->lines);
-        }
-    }
-}
-
 namespace {
     require __DIR__ . '/attempt.inc';
+    require __DIR__ . '/harness/Basket.inc';
     require __DIR__ . '/CollectionMethods.sharp';
 
     for ($round = 0; $round < 100; $round++) {
@@ -59,6 +35,8 @@ namespace {
         attempt(fn () => Demo\Link::after(null, 2));
         attempt(fn () => Demo\Link::further(new Demo\Link(1))->value);
         attempt(fn () => Demo\Link::further(null));
+        attempt(fn () => Demo\Link::skipped(new Demo\Link(1))->value);
+        attempt(fn () => Demo\Link::skipped(null));
         attempt(fn () => Demo\Link::label(new Demo\Link(1), new ArrayObject([1, 2])));
         $output = ob_get_clean();
     }
