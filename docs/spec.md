@@ -1195,7 +1195,7 @@ const paid = result as PaymentResult.Paid ?? throw new NotPaid(result);
 
 ```csharp
 if (entity is HasDesign) {
-    render(entity.design);       // entity counts as HasDesign here
+    render(entity.designKey());  // entity counts as HasDesign here
 }
 ```
 
@@ -1318,18 +1318,40 @@ public class Thumbnail : Image
 public override string label() => super.label() + " (page)";
 ```
 
-**Traits are listed in the header** with the base class and interfaces:
+**An interface can give a method a default body.** PHP# declares no traits:
 
 ```csharp
-public class Page : DatabaseEntity, Linkable, HasDesign { … }
+public interface HasDesign
+{
+    List<string> claims { get; set; }                       // abstract: each class declares its storage
+    string designColumn { get; }                            // abstract
+    string designKey() => `design:${this.designColumn}`;    // compiles: a default body
+    string designId() => `design:${this.id}`;               // compile error: a default body sees only HasDesign's members, and id is not one
+}
+
+public class Page : DatabaseEntity, HasDesign
+{
+    public List<string> claims { get; set; } = [];          // the storage lives in the class that owns it
+    public string designColumn => "design";
+}
+
+page.designKey();                                           // "design:design", from the default body
 ```
 
-**A trait is also a type.** It works everywhere an interface does:
+- A default body sees only the interface's own members.
+- Every field is declared in the class that owns it. An interface holds no fields.
+- A PHP# interface with default bodies compiles to a PHP interface plus a PHP trait that holds the default bodies. A plain PHP class that implements it must also `use` that trait to get the defaults.
+
+**A plain PHP trait** is listed in the header with the base class and interfaces, and it is also a type. It works everywhere an interface does:
 
 ```csharp
-if (entity is HasDesign d) { … }
-public void render(HasDesign owner) { … }
-List<HasDesign> owners = [];
+import Illuminate.Database.Eloquent.Model;
+import Illuminate.Database.Eloquent.Factories.HasFactory;
+
+public class Order : Model, HasFactory { … }
+if (entity is HasFactory f) { … }
+public void seed(HasFactory owner) { … }
+List<HasFactory> owners = [];
 ```
 
 Reflection lists a class's traits, just as it lists the class's interfaces.
