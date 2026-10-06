@@ -101,7 +101,7 @@ Checkout.maximum;
 
 Fields and properties are separate concepts.
 
-- **A field is storage.** It can only be `private` or `protected`. There are no public fields.
+- **A field is storage.** It can only be `private` or `protected`. There are no public fields, except an override of a plain PHP parent's `public` property (section 6.1).
 - **A property is the API.** It has `get` and `set` accessors, and each accessor carries its own access level.
 
 ```csharp
@@ -143,6 +143,35 @@ PHP# has all of C#'s property features:
 - `required`, which the checker enforces wherever the object is created
 - properties in interfaces, abstract properties, and overrides
 - Reflection that tells fields from properties
+
+**A class can override a plain PHP parent's property** with `override`, and it writes the type like every PHP# field. Eloquent's `$table`, `$fillable` and `$timestamps` are overridden this way:
+
+```csharp
+namespace App.Store;
+
+import Illuminate.Database.Eloquent.Model;
+
+public class Order : Model
+{
+    protected override string? table = "orders";                   // compiles: fits Model's @var string|null
+    protected override List<string> fillable = ["number", "total"]; // compiles
+    protected override List<string> with = ["customer"];            // compiles
+    public override bool timestamps = false;                        // compiles
+
+    protected override table = "orders";                            // compile error: write the type
+    public override List<string> fillable = ["number"];             // compile error: fillable is protected in Model
+    protected override string? table = 5;                           // compile error: 5 is not string?
+    protected override int timestamps = 0;                          // compile error: Model's timestamps is bool
+    protected override List<string> fillable = this.columns();      // compile error: Model's constructor reads fillable
+                                                                    // before Order's code runs, so the value must be constant
+    protected string table = "orders";                              // compile error: Model declares table; write override
+}
+```
+
+- **The written type must fit the parent's.** When PHP declares the parent's property with no type, the written type must be assignable to the parent's `@var` type, or to anything when there is no `@var`. The engine drops the written type when the class links, because PHP refuses a typed redeclaration there. When PHP declares the parent's property with a type, the written type must equal it, because PHP checks property types for invariance when the class links. The engine keeps it.
+- **The access level is written and must match the parent's.** It is `public` when the parent's property is, as `timestamps` is in `Model`.
+- **The value must be constant.** Section 6 sets any other initial value at the start of the constructor, and the parent's constructor may already have read it, as Eloquent's does.
+- **This applies only to a plain PHP parent's property.** A PHP# parent's property is overridden as a property, as the list above says.
 
 ### 6.2 Change observers
 
