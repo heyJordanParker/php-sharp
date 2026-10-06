@@ -44,6 +44,11 @@ class Cart
     {
         return in_array(cents, this.prices(), true);
     }
+
+    public List<int> withPrices(List<int> before, List<int> after)
+    {
+        return [...before, ...this.prices(), 0, ...after];
+    }
 }
 
 class Item

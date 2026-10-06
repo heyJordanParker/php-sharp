@@ -21,6 +21,7 @@ echo implode(',', $cart->prices()), ' ', Summary::sum($cart->prices()), "\n";
 echo array_is_list($cart->items) ? 'list' : 'map', ' ', count($cart->items), "\n";
 echo $cart->bump('items'), ' ', $cart->bump('extra'), "\n";
 var_dump($cart->has(7), $cart->has(5));
+echo implode(',', $cart->withPrices([1, 2], [9])), "\n";
 
 try {
     $cart->items[] = new \Demo\Item('tart', 1);
@@ -35,4 +36,5 @@ list 2
 3 2
 bool(true)
 bool(false)
+1,2,3,7,0,9
 Cannot indirectly modify private(set) property Demo\Cart::$items from global scope

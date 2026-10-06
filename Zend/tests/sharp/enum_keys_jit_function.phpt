@@ -63,7 +63,20 @@ array(1) {
     int(1)
   }
 }
-TypeError: Cannot access offset of type Lib\Status on array in enum_keys.inc on line 38
-TypeError: Cannot access offset of type Lib\Status on array in enum_keys.inc on line 41
-TypeError: Cannot access offset of type Lib\Size on array in enum_keys.inc on line 42
+array(2) {
+  ["Active"]=>
+  int(3)
+  ["Closed"]=>
+  int(4)
+}
+ValueError: "missing" is not a valid backing value for enum Lib\Status in EnumKeys.sharp on line 74
+array(2) {
+  [0]=>
+  string(1) "5"
+  [1]=>
+  string(3) "tea"
+}
 TypeError: Cannot access offset of type Lib\Status on array in enum_keys.inc on line 43
+TypeError: Cannot access offset of type Lib\Status on array in enum_keys.inc on line 46
+TypeError: Cannot access offset of type Lib\Size on array in enum_keys.inc on line 47
+TypeError: Cannot access offset of type Lib\Status on array in enum_keys.inc on line 48

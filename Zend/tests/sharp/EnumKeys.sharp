@@ -9,7 +9,7 @@ class Tally
     private Map<Status, int> counts = [:];
     private Map<Status, int> seeded = [Status.Active: 0];
 
-    public Map<Status, int> seeded()
+    public Map<Status, int> seededCounts()
     {
         return this.seeded;
     }
@@ -66,5 +66,25 @@ class Tally
         nested[status] = [:];
         nested[status][size] = 1;
         return nested;
+    }
+
+    public static Map<string, int> byName(Map<Status, int> counts)
+    {
+        Map<string, int> named = [:];
+        for (const [Status status, int n] of counts) {
+            named[status.name] = n;
+        }
+        return named;
+    }
+
+    public static List<string> skus(Map<string, int> stock)
+    {
+        List<string> skus = [];
+        for (const [string sku, int n] of stock) {
+            if (n > 0) {
+                skus.add(sku);
+            }
+        }
+        return skus;
     }
 }

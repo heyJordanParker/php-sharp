@@ -30,5 +30,5 @@ ControlFlow: same opcodes and lines in 6 op arrays, same signatures in 1 classes
 Order: same opcodes and lines in 4 op arrays, same signatures in 2 classes
 Product: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Expressions: same opcodes and lines in 6 op arrays, same signatures in 1 classes
-Collections: same opcodes and lines in 6 op arrays, same signatures in 2 classes
-EnumKeys: same opcodes and lines in 11 op arrays, same signatures in 1 classes
+Collections: same opcodes and lines in 7 op arrays, same signatures in 2 classes
+EnumKeys: same opcodes and lines in 13 op arrays, same signatures in 1 classes
