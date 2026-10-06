@@ -474,15 +474,49 @@ for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is in
 **Map keys:** a key is `int`, `string`, or any type with an `int` or `string` backing value. A backed enum is one (section 20). `public struct Username : string` declares one, with the same header an enum uses (section 10).
 
 - `counts[status]` runs as `$counts[$status->value]`.
-- Keys read back as the key type.
+- A loop over the `Map` names the key's type, as in `for (const [Status status, int n] of counts)`, and the key arrives as a `Status`. Leaving the type out is a compile error that names the fix. Each file compiles alone, and the stored key is only its value, so the type written in the loop is what rebuilds the key.
 - Plain PHP receives the backing values.
 
 ```csharp
-Map<Status, int> counts = [:];
-counts[status] = 1;                        // runs as $counts[$status->value]
-for (const [status, n] of counts) { … }    // status reads back as a Status
-Map<Username, Order> byUser = [:];         // keyed by username.value
+public enum Status : string
+{
+    case Open = "open";
+    case Paid = "paid";
+    case Refunded = "refunded";
+
+    public string label() => match (this) {
+        Status.Open => "Awaiting payment",
+        Status.Paid => "Paid",
+        Status.Refunded => "Refunded",
+    };
+}
+
+public class OrderStats
+{
+    public Map<Status, int> countByStatus(List<Order> orders)
+    {
+        Map<Status, int> counts = [:];
+        for (const order of orders) {
+            counts[order.status] = (counts[order.status] ?? 0) + 1;   // runs as $counts[$order->status->value]
+        }
+        return counts;
+    }
+
+    public List<string> report(List<Order> orders)
+    {
+        List<string> lines = [];
+        for (const [Status status, int n] of this.countByStatus(orders)) {   // status arrives as a Status
+            lines.add(`${status.label()}: ${n}`);
+        }
+        return lines;
+    }
+}
+
+for (const [status, n] of stats.countByStatus(orders)) { … }   // compile error: name the key's type: write const [Status status, int n]
+Map<Username, Order> byUser = [:];                               // keyed by username.value
 ```
+
+**Open:** `keys()` and `entries()` on a `Map` whose key has a backing value.
 
 **A list passed where a `Set` or a tuple is expected becomes one.** The receiving parameter converts it on arrival, as PHP already converts arguments to a parameter's type:
 
@@ -754,6 +788,8 @@ for (const plan of plans) { … }                  // a Map's values
 for (const [key, plan] of plans) { … }
 for (const [i, line] of lines.entries()) { … }
 ```
+
+A loop over a `Map` whose key has a backing value names the key's type, as in `for (const [Status status, int n] of counts)`. The key arrives as a `Status`, and leaving the type out is a compile error that names the fix (section 12).
 
 `for (x in y)` is a compile error that names `of`. It closes the TypeScript trap where `in` loops over keys.
 

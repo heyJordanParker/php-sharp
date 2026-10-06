@@ -9,7 +9,7 @@
 - A method name means one thing on every collection. `remove` removes by value and `delete` removes a key. `filter` renumbers what it keeps and `filterValues` keeps the keys.
 - Two imported extensions with one name, one on a `List` and one on a `Map`, are a compile error.
 
-A key read back out of a `Map<string, TValue>` is typed `int|string`, because PHP stores an all-digit string key as an int. This covers the key of `for (const [key, value] of map)` and of `keys()`. Reads by key and every value keep their types. A key with an `int` or `string` backing value, such as a backed enum, reads back as its key type (decision 27).
+A key read back out of a `Map<string, TValue>` is typed `int|string`, because PHP stores an all-digit string key as an int. This covers the key of `for (const [key, value] of map)` and of `keys()`. Reads by key and every value keep their types. A key with an `int` or `string` backing value, such as a backed enum, arrives as its key type in a loop that names that type (decision 27).
 
 ## Options
 
