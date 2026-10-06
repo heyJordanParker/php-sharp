@@ -345,7 +345,7 @@ public struct Username : string
 }
 ```
 
-**Every struct has a static `parse(Map<string, Any?>)`,** which throws one error that lists every bad field, and a static `tryParse`, which gives null instead. The names follow `Int.parse` and `Int.tryParse` (section 24). Classes do not get them.
+**Every struct has a static `parse`,** which reads a `Map<string, Any?>` or an object's public properties and throws one error that lists every bad field, and a static `tryParse`, which gives null instead. The names follow `Int.parse` and `Int.tryParse` (section 24). Classes do not get them.
 
 ```csharp
 public struct RenewRequest
@@ -367,6 +367,17 @@ RenewRequest? maybe = RenewRequest.tryParse(payload);   // null on any bad field
 - A `List` checks each element.
 - An enum parses from its value.
 - A missing key for a `T?` parameter reads as null.
+
+An object's public properties parse the same way as a `Map`'s keys, so a row object from plain PHP becomes a checked struct:
+
+```csharp
+public struct OrderRow
+{
+    public OrderRow(public int id { get; }, public string number { get; }) { }
+}
+
+OrderRow order = OrderRow.parse(row);   // row is a plain PHP object from a database query; throws: "id: expected int, got string 'abc'"
+```
 
 **Reference:** php-src PR #13800, "Implement structs", implements this copy-on-write mechanism. Its `mutating` methods with `!` call syntax are left out for now, and can be added later without breaking code.
 
@@ -1455,8 +1466,31 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 - `Int.tryParse(s)` and `Float.tryParse(s)` take `Any?` too, and give null where `parse` throws.
 - A class or an interface narrows only with `as`, which gives null, or with `as … ?? throw` (section 21).
 - PHP# has no user-defined conversion operators, such as C#'s `implicit operator`. A type converts only through a property or method it declares, such as `username.value`.
-- `(bool)`, `(array)` and `(object)` do not exist. Conditions are `bool` (section 21), so a comparison such as `request.input("flag") == "1"` replaces `(bool)`.
+- `(bool)`, `(array)` and `(object)` do not exist. Conditions are `bool` (section 21), so a comparison such as `request.input("flag") == "1"` replaces `(bool)`. `(array)` and `(object)` are compile errors that name their replacements, shown below.
 - PHP's cast aliases `(integer)`, `(double)`, `(boolean)` and `(binary)` do not exist.
+
+**Replacing `(array)` and `(object)`:**
+
+```csharp
+OrderRow order = OrderRow.parse(row);             // replaces (array)row: a struct reads an object's public properties (section 10)
+List<string> tags = List.wrap(value);             // replaces (array)value, where value is string|List<string>
+List<List<int>> rows = List.wrap(numbers);        // compile error: T is List<int>, itself a list; write numbers is List<int> one ? [one] : numbers
+Map<string, Any> payload = ["id": 1, "email": email];
+string json = Json.encode(payload);               // {"id":1,"email":"…"}: replaces json_encode((object)[…])
+const data = (array)row;                          // compile error: write OrderRow.parse(row) for an object, or List.wrap(row) for a value
+const point = (object)["x": 1];                   // compile error: write a Map literal, or a struct
+```
+
+- **`List.wrap(T|List<T> value)`** gives a `List<T>`: the list itself, or a list holding the one value. The checker refuses `wrap` when `T` could itself be a list, and its error names the `is` form, `value is T one ? [one] : value`.
+- **A JSON object** is a `Map` literal for a one-off payload, and a declared struct for a shape that repeats.
+- **`Json.encode` encodes by the value's PHP# type,** so a `Map` is always a JSON object and a `List` is always a JSON array, even when empty, and even when a `Map`'s keys run from 0 to n. PHP's own `json_encode` sees a plain array, so it gives `[]` for an empty `Map`.
+
+```csharp
+Map<string, int> none = [:];
+Json.encode(none);                                // {}
+List<int> empty = [];
+Json.encode(empty);                               // []
+```
 
 **`Any` holds a value of any type except null. `Any?` also allows null.** A value of type `Any` must be checked with `is`, `as` or `match` before it can be used:
 
