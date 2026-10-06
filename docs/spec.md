@@ -49,6 +49,7 @@ const Plan plan = …;        // type written, cannot be reassigned
   - `compact()`
   - `extract()`
   - `global`
+  - superglobals such as `$_SERVER` and `$GLOBALS` (section 29)
 
 ## 3. Scope
 
@@ -260,7 +261,7 @@ print "Pruned";                                          // compile error: write
 die("Prune failed");                                     // compile error: write the message to STDERR, then exit(1)
 ```
 
-- `exit` skips every `finally` block, as `System.exit` does in Java and `Environment.Exit` does in C#.
+- `exit` skips every `finally` block, as Java's `System.exit` and C#'s `Environment.Exit` do.
 - `exit` is not pure. Its effect is tracked (section 29).
 
 ## 9. Constructors
@@ -1636,6 +1637,38 @@ The extension is **`.sharp`**, as in `StoreService.sharp`.
 
 Plain PHP files keep `.php` and `<?php`, and the two call each other freely. Composer's autoloader tries `.sharp` after `.php`, the same way it already tries `.hh` for Hack.
 
+**`Position` says where code sits in its source.** PHP's magic constants `__DIR__`, `__FILE__`, `__LINE__`, `__FUNCTION__`, `__METHOD__`, `__NAMESPACE__` and `__CLASS__` are removed, along with every other `__Something__` form. `Position` is a standard-library type, imported by default (section 23). It has `file`, `directory`, `line`, `column` and `function`, and `function` includes the class, as in `Order.charge`.
+
+```csharp
+import Illuminate.Support.Facades.Log;
+
+public class Reports
+{
+    public string stubsFolder()
+    {
+        const stubs = Position.current().directory + "/stubs";   // the folder that holds this .sharp file
+        return stubs;
+    }
+
+    public static void logSlow(string message, Position caller = Position.current())
+    {
+        Log.warning(message, ["file": caller.file, "line": caller.line, "function": caller.function]);
+    }
+
+    public void run()
+    {
+        Reports.logSlow("slow query");                           // logs this call's own file and line, and "Reports.run"
+    }
+}
+
+const here = __FILE__;                                           // compile error: write Position.current().file
+Log.info("charged", ["class": typeof(Order)]);                   // compiles: replaces __CLASS__, and plain PHP receives "App\Store\Order"
+```
+
+- `Position.current()` in a body gives the position where it is written.
+- As a parameter's default, `Position.current()` gives the caller's position, as C++20's `std::source_location::current()` and Swift's `#file` defaults do.
+- A plain PHP caller gets the position where the parameter is declared, because PHP# does not compile plain PHP's calls.
+
 **A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. The checker's types reach the running program, inferred ones too, so generic code (section 11), loops over enum-keyed maps (section 12) and class values (section 25) work without a written type.
 
 **`vendor/bin/mago compile` compiles the project.** It checks every `.sharp` file, vendor packages included, and writes each accepted file as a `.sharpc` file into one `.sharp/` folder at the project root. The folder mirrors the source paths:
@@ -1743,7 +1776,7 @@ extern StripeClient uses Http;
 - **Each class, method or function has at most one `extern` declaration in the whole project.** A second one is a compile error, as declaring a class twice is.
 - **A call to plain PHP with an `extern` declaration has that effect,** so it fits a `uses` that names it: `StripeClient.charges().create(…)` fits `uses Http`.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
-- **PHP#'s Composer package ships the declarations for PHP's built-in functions and for Laravel.** Among PHP's built-ins, PDO is `Database`, curl is `Http`, `file_put_contents` and the other file functions are `Files`, `time()` is `Clock`, and `random_int` is `Random`. Every other built-in function is pure, except `exit` (section 8). In Laravel, Eloquent and `DB` are `Database`, the `Http` facade is `Http`, `Cache` is `Cache`, `Mail` is `Mail`, and `now()` and Carbon's clock reads are `Clock`.
+- **PHP#'s Composer package ships the declarations for PHP's built-in functions and for Laravel.** Among PHP's built-ins, PDO is `Database`, curl is `Http`, `file_put_contents` and the other file functions are `Files`, `time()` is `Clock`, `random_int` is `Random`, and `getenv()` and PHP's other environment built-ins are `Environment`. Every other built-in function is pure, except `exit` (section 8). In Laravel, Eloquent and `DB` are `Database`, the `Http` facade is `Http`, `Cache` is `Cache`, `Mail` is `Mail`, and `now()` and Carbon's clock reads are `Clock`.
 - **A project declares its own libraries,** conventionally in `app/Stubs`.
 
 **A `foreign` class turns an effect into an object** that code holds and passes on, such as a fake in tests. It is optional. Its methods call plain PHP, like any other code. Code that holds a `foreign` object has that effect by name, which `uses` can declare.
@@ -1757,7 +1790,33 @@ public foreign class RedisStore
 }
 ```
 
-The standard library ships `Database`, `Http`, `Files`, `Clock`, `Random`, `Cache` and `Mail`. A project declares its own `foreign` classes the same way.
+The standard library ships `Database`, `Http`, `Files`, `Clock`, `Random`, `Cache`, `Mail` and `Environment`. A project declares its own `foreign` classes the same way.
+
+**PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS` are compile errors that read "PHP# has no superglobals; take a Request". Request data arrives as an object, such as a framework's `Request`. The process environment arrives as `Environment`, a standard `foreign` class like `Clock` and `Random`:
+
+- `string? variable(string name)` reads an environment variable, or gives null when it is not set.
+- `List<string> arguments { get; }` holds the command-line arguments, starting with the script's name.
+- `string currentDirectory { get; }` is the directory the process runs in.
+
+```csharp
+import Illuminate.Http.Request;
+
+public class Deploy
+{
+    public Deploy(private Environment environment) { }
+
+    public string region() => this.environment.variable("AWS_REGION") ?? "us-east-1";
+    public string target() => this.environment.arguments[1];   // throws OutOfRangeException when no argument was passed
+}
+
+public class CheckoutController
+{
+    public string host(Request request) => request.getHost();   // compiles: replaces $_SERVER["HTTP_HOST"]
+    public string origin() => _SERVER["HTTP_HOST"];             // compile error: PHP# has no superglobals; take a Request
+}
+```
+
+`Deploy` holds an `Environment`, so it has that effect (see the rule on a class's effects below).
 
 **A `foreign` object reaches other code only through constructors:**
 
