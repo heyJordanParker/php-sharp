@@ -9,7 +9,7 @@
 - A method name means one thing on every collection. `remove` removes by value and `delete` removes a key. `filter` renumbers what it keeps and `filterValues` keeps the keys.
 - Two imported extensions with one name, one on a `List` and one on a `Map`, are a compile error.
 
-A key read back out of a `Map<string, TValue>` is typed `int|string`, because PHP stores an all-digit string key as an int. This covers the key of `for (const [key, value] of map)` and of `keys()`. Reads by key and every value keep their types.
+A key read back out of a `Map<string, TValue>` is typed `int|string`, because PHP stores an all-digit string key as an int. This covers the key of `for (const [key, value] of map)` and of `keys()`. Reads by key and every value keep their types. A key with an `int` or `string` backing value, such as a backed enum, arrives as its key type in a loop, with the type written or not (decision 27).
 
 ## Options
 
@@ -56,6 +56,8 @@ plans.remove("pro");                          // compiles to a key removal only 
 ```
 
 The engine compiles one file at a time and cannot see the checker's types, as sections 4, 11 and 18 already require. Types never change the code the engine emits.
+
+**Superseded by decision 29.** A `.sharp` file now runs only after the checker accepts it, and the checker's types reach the running program.
 
 ### Chosen: a `Map<string, TValue>` key reads back as `int|string`
 

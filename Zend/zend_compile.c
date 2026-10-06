@@ -2534,6 +2534,11 @@ static void zend_assert_not_short_circuited(const zend_ast *ast)
 
 #define ZEND_SHORT_CIRCUITING_INNER 0x8000
 
+ZEND_STATIC_ASSERT(!(ZEND_DIM_SHARP & ZEND_SHORT_CIRCUITING_INNER),
+	"ZEND_DIM_SHARP overlaps ZEND_SHORT_CIRCUITING_INNER in the attr of ZEND_AST_DIM");
+ZEND_STATIC_ASSERT(!(ZEND_METHOD_CALL_SHARP & ZEND_SHORT_CIRCUITING_INNER),
+	"ZEND_METHOD_CALL_SHARP overlaps ZEND_SHORT_CIRCUITING_INNER in the attr of ZEND_AST_METHOD_CALL");
+
 static void zend_short_circuiting_mark_inner(zend_ast *ast) {
 	if (zend_ast_kind_is_short_circuited(ast->kind)) {
 		ast->attr |= ZEND_SHORT_CIRCUITING_INNER;
