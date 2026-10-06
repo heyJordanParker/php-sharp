@@ -1,0 +1,39 @@
+namespace Demo;
+
+public class Tally
+{
+    public static int count { get; private set; } = 0;
+
+    public static int postInc(int start)
+    {
+        Tally.count = start;
+        Tally.count++;
+        return Tally.count;
+    }
+
+    public static int preInc(int start)
+    {
+        Tally.count = start;
+        return ++Tally.count;
+    }
+
+    public static int postDec(int start)
+    {
+        Tally.count = start;
+        return Tally.count--;
+    }
+
+    public static int preDec(int start)
+    {
+        Tally.count = start;
+        --Tally.count;
+        return Tally.count;
+    }
+
+    public static int add(int start, int step)
+    {
+        Tally.count = start;
+        Tally.count += step;
+        return Tally.count;
+    }
+}
