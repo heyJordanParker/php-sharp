@@ -420,11 +420,18 @@ lines = Cart.withShipping(lines, shipping);   // PHP# to PHP#: nothing is checke
 ```csharp
 const lines = [lineA, lineB];                  // List<Line>
 const plans = ["pro": pro, "team": team];      // Map<string, Plan>, the same name: value rule as section 16
-const empty = [:];                             // an empty Map
+Map<string, Plan> empty = [:];                 // an empty Map
 Set<string> tags = ["vip"];                    // the declared type makes it a Set
 ```
 
 PHP's `["key" => value]` is not used, because `=>` is the lambda arrow.
+
+**An empty literal, `[]` or `[:]`, with no declared type is a compile error,** as in Swift, because nothing says what it holds:
+
+```csharp
+let messages = [];                             // compile error: an empty literal needs a type: write List<string> messages = []
+List<string> messages = [];                    // compiles
+```
 
 **Indexing has one meaning on every collection:**
 
