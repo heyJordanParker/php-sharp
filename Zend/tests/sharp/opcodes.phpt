@@ -6,6 +6,10 @@ PHP# compiles each .sharp fixture to the opcodes, lines and signatures of its PH
 function compiled(string $file, string $prelude): string
 {
     $opcodes = shell_exec(escapeshellarg(getenv('TEST_PHPDBG_EXECUTABLE')) . ' -n -q -p* ' . escapeshellarg($file) . ' 2>&1');
+    // phpdbg prints no property hook, so the optimizer's dump of each hook, taken before any pass runs, adds them.
+    $dump = shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n -d opcache.enable_cli=1 -d opcache.opt_debug_level=0x10000 -r '
+        . escapeshellarg($prelude . 'require ' . var_export($file, true) . ';') . ' 2>&1');
+    $opcodes .= implode("\n\n", preg_grep('/^\S+::\$\w+::[gs]et:\n/', explode("\n\n", $dump)));
     $classes = shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n -r ' . escapeshellarg(
         $prelude . '$declared = get_declared_classes(); require ' . var_export($file, true) . ';'
         . ' foreach (array_diff(get_declared_classes(), $declared) as $class) echo new ReflectionClass($class);'
@@ -29,6 +33,8 @@ $fixtures = [
     'Interop' => null,
     'Lambdas' => null,
     'Checkout' => null,
+    'Accessors' => null,
+    'Shipment' => 'harness/Model.inc',
 ];
 
 foreach ($fixtures as $fixture => $library) {
@@ -101,3 +107,7 @@ Lambdas: different opcodes and lines in 36 op arrays, same signatures in 1 class
   .php   L0099 0009 VERIFY_RETURN_TYPE
   .php   L0099 0010 RETURN null
 Checkout: same opcodes and lines in 10 op arrays, same signatures in 1 classes
+Accessors: same opcodes and lines in 15 op arrays, same signatures in 2 classes
+Shipment: different opcodes and lines in 3 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("store\\shipment")
+  .php   L0005 0000 DECLARE_CLASS string("store\\shipment") string("lib\\model")

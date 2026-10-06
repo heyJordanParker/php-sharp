@@ -1,0 +1,12 @@
+namespace Store;
+
+import Lib.Model;
+
+class Shipment : Model
+{
+    public Address destination
+    {
+        get => this.getAttribute("destination");
+        set => this.setAttribute("destination", value);
+    }
+}
