@@ -57,6 +57,8 @@ plans.remove("pro");                          // compiles to a key removal only 
 
 The engine compiles one file at a time and cannot see the checker's types, as sections 4, 11 and 18 already require. Types never change the code the engine emits.
 
+**Superseded by decision 29.** A `.sharp` file now runs only after the checker accepts it, and the checker's types reach the running program.
+
 ### Chosen: a `Map<string, TValue>` key reads back as `int|string`
 
 ```csharp
