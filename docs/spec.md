@@ -1043,6 +1043,8 @@ public abstract class DatabaseEntity
 
 public class Money
 {
+    public static bool operator ==(Money a, Money b) { … }   // a and b are never null
+    public int hash() { … }
     public static int operator <=>(Money a, Money b) { … }
     public static Money operator +(Money a, Money b) { … }
 }
@@ -1056,6 +1058,17 @@ cart === cart;                   // true: the same object
 - **`!=`** is derived from `==`.
 - **`< > <= >=` and sorting** are derived from `<=>`.
 - **`==` and `hash()` go together:** declaring `==` without `hash()` is a compile error, because `Set` needs both.
+
+**`==` and `!=` on a nullable type are lifted,** as C#'s operators on nullable values and Kotlin's `==` are. Null equals only null. Two non-null values use the type's own `==`, including a declared `operator ==`, so an `operator ==` takes two non-null values and never sees a null. `x != null` is the normal null check, and it never runs user code. `x is null` and `x is not null` stay valid as ordinary patterns (section 21).
+
+```csharp
+Money? price = null;
+price == null;                   // true, without running Money's ==
+price == Money.zero;             // false, without running Money's ==
+total == Money.zero;             // total is a Money, so this runs Money's ==
+if (price != null) { … }         // the normal null check
+if (price is not null) { … }     // compiles: an ordinary pattern
+```
 
 **Bitwise operators** `|`, `&`, `^`, `~`, `<<` and `>>`, and their compound forms such as `|=`, take `int` only. Flags are ints joined with `|`:
 
@@ -1295,11 +1308,12 @@ if (entity is not HasDesign) { … }       // compiles
 if (!entity is HasDesign) { … }          // compile error: write entity is not HasDesign
 ```
 
-- **In a pattern, `not` beside `or` or `and` needs parentheses,** in `is` and in `match` arms alike. C# reads `not Paid or Refunded` as `(not Paid) or Refunded`, which already matches a `Refunded` result, so the `or Refunded` does nothing.
+- **In a pattern, `not` beside `or` needs parentheses,** in `is` and in `match` arms alike. C# reads `not Paid or Refunded` as `(not Paid) or Refunded`, which already matches a `Refunded` result, so the `or Refunded` does nothing. `not` beside `and` reads the way it binds, so it needs none.
 
 ```csharp
 if (result is not Paid or Refunded) { … }      // compile error: write not (Paid or Refunded), or (not Paid) or Refunded
 if (result is not (Paid or Refunded)) { … }    // compiles: neither Paid nor Refunded
+if (code is not null and not "") { … }         // compiles: (not null) and (not "")
 ```
 
 - **`as`** converts a value to a type, or gives null.
