@@ -261,7 +261,7 @@ typedef struct _zend_oparray_context {
 /* has #[\Override] attribute                             |     |     |     */
 #define ZEND_ACC_OVERRIDE                (1 << 28) /*     |  X  |  X  |     */
 /*                                                        |     |     |     */
-/* Property Flags (unused: 13-27,29...)                   |     |     |     */
+/* Property Flags (unused: 14-27,29...)                   |     |     |     */
 /* ===========                                            |     |     |     */
 /*                                                        |     |     |     */
 /* Promoted property / parameter                          |     |     |     */
@@ -274,6 +274,11 @@ typedef struct _zend_oparray_context {
 #define ZEND_ACC_PUBLIC_SET              (1 << 10) /*     |     |  X  |     */
 #define ZEND_ACC_PROTECTED_SET           (1 << 11) /*     |     |  X  |     */
 #define ZEND_ACC_PRIVATE_SET             (1 << 12) /*     |     |  X  |     */
+/*                                                        |     |     |     */
+/* PHP# override of a plain PHP parent's property: the    |     |     |     */
+/* class drops its type when it links if the parent's     |     |     |     */
+/* property has none, as PHP refuses a type there         |     |     |     */
+#define ZEND_ACC_TYPE_FOLLOWS_PARENT     (1 << 13) /*     |     |  X  |     */
 /*                                                        |     |     |     */
 /* Class Flags (unused: none)                             |     |     |     */
 /* ===========                                            |     |     |     */
@@ -1161,6 +1166,11 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  *
  * ZEND_ACC_PARENT_IN_INTERFACES: a PHP# class whose header lowered into the interface list.
  *   ce_flags of a class                                       upstream: the class flags
+ *
+ * ZEND_ACC_TYPE_FOLLOWS_PARENT: a PHP# override of a plain PHP parent's property, which loses its
+ * type when its class links if the inherited property has none. zend_property_info.flags carries
+ * it until then.
+ *   attr of ZEND_AST_PROP_GROUP                               upstream: the property flags
  */
 #define ZEND_SHARP_OPERATOR_SYNTAX	(1<<15)
 #define ZEND_SHARP_OPERATOR	(1<<30)
@@ -1190,6 +1200,10 @@ ZEND_STATIC_ASSERT(!(ZEND_ACC_PARENT_IN_INTERFACES & (ZEND_ACC_FINAL|ZEND_ACC_EX
 		|ZEND_ACC_NEARLY_LINKED|ZEND_ACC_HAS_READONLY_PROPS|ZEND_ACC_CACHED|ZEND_ACC_CACHEABLE|ZEND_ACC_HAS_AST_CONSTANTS
 		|ZEND_ACC_HAS_AST_PROPERTIES|ZEND_ACC_HAS_AST_STATICS|ZEND_ACC_FILE_CACHED|ZEND_ACC_NOT_SERIALIZABLE)),
 	"ZEND_ACC_PARENT_IN_INTERFACES overlaps a class flag in the ce_flags of a class");
+ZEND_STATIC_ASSERT(!(ZEND_ACC_TYPE_FOLLOWS_PARENT & (ZEND_ACC_PPP_MASK|ZEND_ACC_PPP_SET_MASK|ZEND_ACC_CHANGED
+		|ZEND_ACC_STATIC|ZEND_ACC_FINAL|ZEND_ACC_ABSTRACT|ZEND_ACC_READONLY|ZEND_ACC_PROMOTED|ZEND_ACC_VIRTUAL
+		|ZEND_ACC_OVERRIDE)),
+	"ZEND_ACC_TYPE_FOLLOWS_PARENT overlaps a property flag in the attr of ZEND_AST_PROP_GROUP and zend_property_info.flags");
 
 static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 {

@@ -2431,11 +2431,12 @@ static const zend_property_info *lookup_prop_info(const zend_class_entry *ce, ze
 		return NULL;
 	}
 
-	/* Otherwise, handle only some safe cases */
+	/* Otherwise, handle only some safe cases. A PHP# override's type is decided when its class links. */
 	prop_info = zend_hash_find_ptr(&ce->properties_info, name);
 	if (prop_info &&
 		((prop_info->ce == scope) ||
-		 (!scope && (prop_info->flags & ZEND_ACC_PUBLIC)))
+		 (!scope && (prop_info->flags & ZEND_ACC_PUBLIC))) &&
+		!(prop_info->flags & ZEND_ACC_TYPE_FOLLOWS_PARENT)
 	) {
 		return prop_info;
 	}

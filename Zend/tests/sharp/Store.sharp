@@ -1,0 +1,22 @@
+namespace Store;
+
+import Lib.Model;
+
+public class Order : Model
+{
+    protected override string table = "orders";
+    protected override List<string> fillable = ["number", "total"];
+    protected override List<string> with = ["customer"];
+    public override bool timestamps = false;
+    protected override int perPage = 20;
+
+    public string tableName()
+    {
+        return this.table;
+    }
+
+    public int pageSize()
+    {
+        return this.perPage;
+    }
+}

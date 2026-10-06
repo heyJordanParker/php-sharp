@@ -29,6 +29,7 @@ $fixtures = [
     'Interop' => null,
     'Lambdas' => null,
     'Checkout' => null,
+    'Store' => 'harness/Model.inc',
 ];
 
 foreach ($fixtures as $fixture => $library) {
@@ -101,3 +102,6 @@ Lambdas: different opcodes and lines in 36 op arrays, same signatures in 1 class
   .php   L0099 0009 VERIFY_RETURN_TYPE
   .php   L0099 0010 RETURN null
 Checkout: same opcodes and lines in 10 op arrays, same signatures in 1 classes
+Store: different opcodes and lines in 3 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("store\\order")
+  .php   L0005 0000 DECLARE_CLASS string("store\\order") string("lib\\model")
