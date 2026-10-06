@@ -1,0 +1,12 @@
+namespace Demo;
+
+import Lib.Named;
+import Lib.Sealed;
+
+public class Bound : Named, Sealed
+{
+    public string name()
+    {
+        return "bound";
+    }
+}

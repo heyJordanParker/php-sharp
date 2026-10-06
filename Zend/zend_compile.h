@@ -275,7 +275,7 @@ typedef struct _zend_oparray_context {
 #define ZEND_ACC_PROTECTED_SET           (1 << 11) /*     |     |  X  |     */
 #define ZEND_ACC_PRIVATE_SET             (1 << 12) /*     |     |  X  |     */
 /*                                                        |     |     |     */
-/* Class Flags (unused: 31)                               |     |     |     */
+/* Class Flags (unused: none)                             |     |     |     */
 /* ===========                                            |     |     |     */
 /*                                                        |     |     |     */
 /* Special class types                                    |     |     |     */
@@ -340,6 +340,10 @@ typedef struct _zend_oparray_context {
 /*                                                        |     |     |     */
 /* Class cannot be serialized or unserialized             |     |     |     */
 #define ZEND_ACC_NOT_SERIALIZABLE        (1 << 29) /*  X  |     |     |     */
+/*                                                        |     |     |     */
+/* PHP# class whose header lowered into the interface     |     |     |     */
+/* list: linking takes the one class there as the parent  |     |     |     */
+#define ZEND_ACC_PARENT_IN_INTERFACES    (1U << 31) /* X  |     |     |     */
 /*                                                        |     |     |     */
 /* Function Flags (unused: 30)                            |     |     |     */
 /* ==============                                         |     |     |     */
@@ -1090,6 +1094,14 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
 #define ZEND_FETCH_REF			1
 #define ZEND_FETCH_DIM_WRITE	2
 #define ZEND_FETCH_OBJ_FLAGS	3
+
+/* A PHP# `Class.y` read: a class constant fetch that reads the static property of the same name when the class
+ * has no such constant, because PHP# looks up the member's kind when it runs. ZEND_FETCH_CLASS_MEMBER_SYNTAX is
+ * set in the attr of ZEND_AST_CLASS_CONST, above the fetch flags a constant expression passes there. The
+ * compiler turns it into ZEND_FETCH_CLASS_MEMBER in the extended_value of ZEND_FETCH_CLASS_CONSTANT, below its
+ * cache slot. */
+#define ZEND_FETCH_CLASS_MEMBER_SYNTAX	(1<<15)
+#define ZEND_FETCH_CLASS_MEMBER	(1<<0)
 
 /* Used to mark what kind of operation a writing FETCH_DIM is used in,
  * to produce a more precise error on incorrect string offset use. */
