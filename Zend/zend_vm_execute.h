@@ -462,6 +462,9 @@ static zend_never_inline ZEND_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_F
 
 	SAVE_OPLINE();
 	zend_integer_overflow_error();
+	if (RETURN_VALUE_USED(opline)) {
+		ZVAL_UNDEF(EX_VAR(opline->result.var));
+	}
 	HANDLE_EXCEPTION();
 }
 
@@ -56867,6 +56870,9 @@ static zend_never_inline ZEND_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_C
 
 	SAVE_OPLINE();
 	zend_integer_overflow_error();
+	if (RETURN_VALUE_USED(opline)) {
+		ZVAL_UNDEF(EX_VAR(opline->result.var));
+	}
 	HANDLE_EXCEPTION();
 }
 

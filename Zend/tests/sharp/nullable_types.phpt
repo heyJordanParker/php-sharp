@@ -4,14 +4,16 @@ PHP# nullable types take and return null, and refuse it where the type is not nu
 <?php
 
 require __DIR__ . '/Nulls.sharp';
+require __DIR__ . '/NullReturned.sharp';
 
 $nulls = new Demo\Nulls;
-var_dump(Demo\Nulls::none(), $nulls->same(null), $nulls->same(3), $nulls->must(4));
+$returned = new Demo\NullReturned;
+var_dump(Demo\Nulls::none(), $nulls->same(null), $nulls->same(3), $returned->must(4));
 echo (new ReflectionMethod(Demo\Nulls::class, 'same'))->getParameters()[0]->getType(), "\n";
 echo (new ReflectionMethod(Demo\Nulls::class, 'none'))->getReturnType(), "\n";
 
 try {
-    $nulls->must(null);
+    $returned->must(null);
 } catch (TypeError $e) {
     echo $e->getMessage(), ' on line ', $e->getLine(), "\n";
 }
@@ -29,5 +31,5 @@ int(3)
 int(4)
 ?int
 ?Demo\Nulls
-Demo\Nulls::must(): Return value must be of type int, null returned on line 17
+Demo\NullReturned::must(): Return value must be of type int, null returned on line 7
 Demo\Nulls::same(): Argument #1 ($value) must be of type ?int, array given, called in %s on line %d
