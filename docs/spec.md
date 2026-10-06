@@ -1796,10 +1796,13 @@ The extension is **`.sharp`**, as in `StoreService.sharp`.
 
 Plain PHP files keep `.php` and `<?php`, and the two call each other freely. Composer's autoloader tries `.sharp` after `.php`, the same way it already tries `.hh` for Hack.
 
-**`Position` says where code sits in its source.** PHP's magic constants `__DIR__`, `__FILE__`, `__LINE__`, `__FUNCTION__`, `__METHOD__`, `__NAMESPACE__` and `__CLASS__` are removed, along with every other `__Something__` form. `Position` is a standard-library type, imported by default (section 23). It has `file`, `directory`, `line`, `column` and `function`, and `function` includes the class, as in `Order.charge`.
+**`Position` says where code sits in its source.** PHP's magic constants `__DIR__`, `__FILE__`, `__LINE__`, `__FUNCTION__`, `__METHOD__`, `__NAMESPACE__` and `__CLASS__` are removed, along with every other `__Something__` form. `Position` is a standard-library type, imported by default (section 23). It has `file`, `directory`, `line`, `column` and `function`. `function` is the fully qualified dotted name, as in `App.Reports.logSlow`, because a short name is ambiguous across namespaces.
 
 ```csharp
+namespace App;
+
 import Illuminate.Support.Facades.Log;
+import App.Store.Order;
 
 public class Reports
 {
@@ -1816,7 +1819,7 @@ public class Reports
 
     public void run()
     {
-        Reports.logSlow("slow query");                           // logs this call's own file and line, and "Reports.run"
+        Reports.logSlow("slow query");                           // logs this call's own file and line, and "App.Reports.run"
     }
 }
 

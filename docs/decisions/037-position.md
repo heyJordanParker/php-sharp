@@ -2,7 +2,7 @@
 
 ## Decision
 
-PHP's magic constants `__DIR__`, `__FILE__`, `__LINE__`, `__FUNCTION__`, `__METHOD__`, `__NAMESPACE__` and `__CLASS__` are removed, along with every other `__Something__` form. `Position`, a standard-library type imported by default, has `file`, `directory`, `line`, `column` and `function`. `Position.current()` gives the current position in a body. As a parameter's default, it gives the caller's position, and a plain PHP caller gets the position where the parameter is declared.
+PHP's magic constants `__DIR__`, `__FILE__`, `__LINE__`, `__FUNCTION__`, `__METHOD__`, `__NAMESPACE__` and `__CLASS__` are removed, along with every other `__Something__` form. `Position`, a standard-library type imported by default, has `file`, `directory`, `line`, `column` and `function`. `function` is the fully qualified dotted name, such as `App.Reports.logSlow`, because a short name is ambiguous across namespaces. `Position.current()` gives the current position in a body. As a parameter's default, it gives the caller's position, and a plain PHP caller gets the position where the parameter is declared.
 
 ## Options
 
