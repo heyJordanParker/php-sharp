@@ -5,6 +5,7 @@
 #include "php.h"
 #include "ext/spl/spl_exceptions.h"
 #include "ext/standard/info.h"
+#include "zend_enum.h"
 #include "zend_exceptions.h"
 #include "zend_system_id.h"
 #include "php_sharp.h"
@@ -56,6 +57,31 @@ static zend_ast *sharp_translate_zval(const sharp_node *node)
 	return zend_ast_create_zval_ex(&value, node->attr);
 }
 
+static zend_ast_attr sharp_operator_attr(zend_ast_kind kind, uint32_t attr)
+{
+	switch (kind) {
+		case ZEND_AST_BINARY_OP:
+		case ZEND_AST_ASSIGN_OP:
+			return attr == ZEND_ADD || attr == ZEND_SUB || attr == ZEND_MUL || attr == ZEND_POW
+				? attr | ZEND_SHARP_OPERATOR_SYNTAX : attr;
+		case ZEND_AST_UNARY_MINUS:
+		case ZEND_AST_PRE_INC:
+		case ZEND_AST_PRE_DEC:
+		case ZEND_AST_POST_INC:
+		case ZEND_AST_POST_DEC:
+			return attr | ZEND_SHARP_OPERATOR_SYNTAX;
+		case ZEND_AST_DIM:
+			return attr | ZEND_DIM_SHARP;
+		case ZEND_AST_ARRAY:
+			return attr | ZEND_ARRAY_SHARP;
+		case ZEND_AST_METHOD_CALL:
+		case ZEND_AST_NULLSAFE_METHOD_CALL:
+			return attr | ZEND_METHOD_CALL_SHARP;
+		default:
+			return attr;
+	}
+}
+
 static zend_ast *sharp_translate_list(const sharp_unit *unit, const sharp_node *node, zend_ast_kind kind)
 {
 	zend_ast *list = zend_ast_create_list(0, kind);
@@ -63,7 +89,7 @@ static zend_ast *sharp_translate_list(const sharp_unit *unit, const sharp_node *
 	for (uint32_t i = 0; i < node->child_count; i++) {
 		list = zend_ast_list_add(list, sharp_translate(unit, unit->children[node->first_child + i]));
 	}
-	list->attr = node->attr;
+	list->attr = sharp_operator_attr(kind, node->attr);
 
 	return list;
 }
@@ -80,29 +106,6 @@ static zend_ast *sharp_translate_decl(const sharp_unit *unit, const sharp_node *
 	CG(zend_lineno) = node->end_line;
 	return zend_ast_create_decl(kind, node->attr, node->line, NULL, sharp_string(node->text),
 		child[0], child[1], child[2], child[3], child[4]);
-}
-
-static zend_ast_attr sharp_operator_attr(zend_ast_kind kind, uint32_t attr)
-{
-	switch (kind) {
-		case ZEND_AST_BINARY_OP:
-		case ZEND_AST_ASSIGN_OP:
-			return attr == ZEND_ADD || attr == ZEND_SUB || attr == ZEND_MUL || attr == ZEND_POW
-				? attr | ZEND_SHARP_OPERATOR_SYNTAX : attr;
-		case ZEND_AST_UNARY_MINUS:
-		case ZEND_AST_PRE_INC:
-		case ZEND_AST_PRE_DEC:
-		case ZEND_AST_POST_INC:
-		case ZEND_AST_POST_DEC:
-			return attr | ZEND_SHARP_OPERATOR_SYNTAX;
-		case ZEND_AST_DIM:
-			return attr | ZEND_DIM_SHARP;
-		case ZEND_AST_METHOD_CALL:
-		case ZEND_AST_NULLSAFE_METHOD_CALL:
-			return attr | ZEND_METHOD_CALL_SHARP;
-		default:
-			return attr;
-	}
 }
 
 static zend_ast *sharp_translate_fixed(const sharp_unit *unit, const sharp_node *node, zend_ast_kind kind)
@@ -435,14 +438,41 @@ ZEND_METHOD(Sharp_Collection, set)
 	zval_ptr_dtor(&old);
 }
 
+/* The key a Map method takes: an int, a string, or a backed enum case, which stands for its value. */
+static bool sharp_collection_key(zval *key, zend_string **string_key, zend_long *long_key)
+{
+	zval *value = zend_sharp_enum_key(key);
+
+	if (value) {
+		key = value;
+	}
+	if (Z_TYPE_P(key) == IS_LONG) {
+		*string_key = NULL;
+		*long_key = Z_LVAL_P(key);
+		return true;
+	}
+	if (Z_TYPE_P(key) == IS_STRING) {
+		*string_key = Z_STR_P(key);
+		return true;
+	}
+
+	zend_argument_type_error(1, "must be of type BackedEnum|string|int, %s given", zend_zval_value_name(key));
+	return false;
+}
+
 ZEND_METHOD(Sharp_Collection, get)
 {
+	zval *key;
 	zend_string *string_key;
 	zend_long long_key;
 
 	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_STR_OR_LONG(string_key, long_key)
+		Z_PARAM_ZVAL(key)
 	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_collection_key(key, &string_key, &long_key)) {
+		RETURN_THROWS();
+	}
 
 	zval *array = sharp_collection_array(sharp_collection_from(Z_OBJ_P(ZEND_THIS)));
 	if (!array) {
@@ -472,12 +502,17 @@ ZEND_METHOD(Sharp_Collection, entries)
 
 ZEND_METHOD(Sharp_Collection, delete)
 {
+	zval *key;
 	zend_string *string_key;
 	zend_long long_key;
 
 	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_STR_OR_LONG(string_key, long_key)
+		Z_PARAM_ZVAL(key)
 	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_collection_key(key, &string_key, &long_key)) {
+		RETURN_THROWS();
+	}
 
 	sharp_collection *collection = sharp_collection_from(Z_OBJ_P(ZEND_THIS));
 	zval *array = sharp_collection_array(collection);

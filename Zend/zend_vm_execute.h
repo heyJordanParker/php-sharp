@@ -8046,6 +8046,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -8069,7 +8079,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_CONST != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -10570,6 +10580,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -10592,7 +10612,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_CONST != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -11528,6 +11548,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -11551,7 +11581,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_CONST != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -13175,6 +13205,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -13198,7 +13238,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_CONST != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -21606,6 +21646,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -21629,7 +21679,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_TMP_VAR != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -22064,6 +22114,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -22086,7 +22146,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_TMP_VAR != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -22539,6 +22599,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -22562,7 +22632,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_TMP_VAR != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -22960,6 +23030,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -22983,7 +23063,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_TMP_VAR != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -26962,6 +27042,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -26985,7 +27075,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_VAR != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -29530,6 +29620,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -29552,7 +29652,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_VAR != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -31653,6 +31753,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -31676,7 +31786,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_VAR != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -34091,6 +34201,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -34114,7 +34234,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_VAR != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -36562,7 +36682,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_UNUSED != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -38608,7 +38728,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_UNUSED != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -39254,7 +39374,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_UNUSED != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -41332,7 +41452,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_UNUSED != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -46755,6 +46875,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -46778,7 +46908,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_CV != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -50627,6 +50757,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -50649,7 +50789,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_CV != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -52668,6 +52808,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -52691,7 +52841,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_CV != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -56436,6 +56586,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -56459,7 +56619,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SP
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_CV != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -64154,6 +64314,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -64177,7 +64347,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_CO
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_CONST != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -66678,6 +66848,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -66700,7 +66880,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_CO
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_CONST != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -67534,6 +67714,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -67557,7 +67747,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_CO
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_CONST != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -69181,6 +69371,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -69204,7 +69404,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_CO
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_CONST != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -77512,6 +77712,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -77535,7 +77745,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_TM
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_TMP_VAR != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -77970,6 +78180,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -77992,7 +78212,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_TM
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_TMP_VAR != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -78445,6 +78665,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -78468,7 +78698,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_TM
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_TMP_VAR != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -78866,6 +79096,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -78889,7 +79129,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_TM
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_TMP_VAR != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -82868,6 +83108,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -82891,7 +83141,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_VA
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_VAR != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -85436,6 +85686,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -85458,7 +85718,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_VA
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_VAR != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -87559,6 +87819,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -87582,7 +87852,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_VA
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_VAR != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -89997,6 +90267,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -90020,7 +90300,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_VA
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_VAR != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -92468,7 +92748,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_UN
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_UNUSED != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -94514,7 +94794,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_UN
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_UNUSED != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -95160,7 +95440,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_UN
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_UNUSED != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -97238,7 +97518,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_UN
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_UNUSED != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -102661,6 +102941,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -102684,7 +102974,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_CV
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_CV != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -106533,6 +106823,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -106555,7 +106855,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_CV
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_CV != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -108472,6 +108772,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -108495,7 +108805,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_CV
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_CV != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -112240,6 +112550,16 @@ num_index:
 			str = ZSTR_EMPTY_ALLOC();
 			goto str_index;
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				goto num_index;
+			} else if (type == IS_STRING) {
+				str = key.str;
+				goto str_index;
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -112263,7 +112583,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_CV
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (IS_CV != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {

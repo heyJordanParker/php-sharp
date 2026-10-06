@@ -6391,6 +6391,16 @@ ZEND_VM_C_LABEL(num_index):
 			str = ZSTR_EMPTY_ALLOC();
 			ZEND_VM_C_GOTO(str_index);
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				ZEND_VM_C_GOTO(num_index);
+			} else if (type == IS_STRING) {
+				str = key.str;
+				ZEND_VM_C_GOTO(str_index);
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -6552,7 +6562,7 @@ ZEND_VM_HANDLER(71, ZEND_INIT_ARRAY, CONST|TMP|VAR|CV|UNUSED, CONST|TMPVAR|UNUSE
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (OP1_TYPE != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
