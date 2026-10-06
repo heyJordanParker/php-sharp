@@ -680,7 +680,6 @@ plans.remove("pro");          // by key
 
 - `remove` removes a value from a `List` and a key from a `Map`.
 - `filter` renumbers what a `List` keeps, and keeps a `Map`'s keys.
-- Two imported extensions (section 26) with one name, one on a `List` and one on a `Map`, are a compile error.
 
 ```csharp
 lines.filter(l => l.free);            // List<Line>, renumbered
@@ -1087,7 +1086,6 @@ const mask = 1 << count;                      // throws ArithmeticError when cou
 | `**` | right | same |
 | unary `-`, `~`, `++`, `--`, casts `(int)`, `(float)`, `(string)` | right | same, with fewer casts (section 24) |
 | `with` | left | PHP# only, in C#'s place |
-| `is`, `as` | left | `is` takes PHP's `instanceof` place, and `as` is PHP# only |
 | `!` | right | same |
 | `*`, `/`, `%` | left | same |
 | `+`, `-` | left | `+` also joins strings. PHP's `.` binds looser, below `<<` and `>>` |
@@ -1095,7 +1093,7 @@ const mask = 1 << count;                      // throws ArithmeticError when cou
 | `&` | left | **differs:** PHP binds `&` looser than every comparison |
 | `^` | left | **differs:** as `&` |
 | `\|` | left | **differs:** as `&` |
-| `<`, `<=`, `>`, `>=` | none | same |
+| `<`, `<=`, `>`, `>=`, `is`, `as` | none | **differs:** `is` binds looser than PHP's `instanceof`, in C#'s place. `as` is PHP# only |
 | `==`, `!=`, `===`, `<=>` | none | same |
 | `&&` | left | same |
 | `\|\|` | left | same |
@@ -1289,6 +1287,14 @@ public Receipt checkout(Map<string, Any?> payload, string plan)
     return charge(orderId, price);                          // orderId and price are both known here
 }
 ```
+
+- **A negative test is written `is not`.** `is` binds with the comparisons, as in C# (section 19), so `!entity is HasDesign` reads as `(!entity) is HasDesign`. That is a compile error, because `!` takes a `bool`.
+
+```csharp
+if (entity is not HasDesign) { … }       // compiles
+if (!entity is HasDesign) { … }          // compile error: write entity is not HasDesign
+```
+
 - **`as`** converts a value to a type, or gives null.
 - **`as` to a collection type checks every element,** wherever the value came from, and gives null if any element is wrong. So `as List<string> ?? throw …` throws on a wrong element.
 - **`x is int?` is a compile error,** because `int?` also matches null. Write `x is int`, or `x == null`.
@@ -1408,7 +1414,19 @@ page.designKey();                                           // "design:design", 
 
 - A default body sees only the interface's own members.
 - Every field is declared in the class that owns it. An interface holds no fields.
-- A PHP# interface with default bodies compiles to a PHP interface plus a PHP trait that holds the default bodies. A plain PHP class that implements it must also `use` that trait to get the defaults.
+- A PHP# interface with default bodies compiles to a PHP interface plus a PHP trait named `<Interface>\Defaults` that holds the default bodies, as Kotlin nests `DefaultImpls` in an interface. A plain PHP class that implements it must also `use` that trait to get the defaults. PHP# code never names the trait, so section 23's rule that a class cannot share its full name with a namespace does not apply to it.
+
+```php
+use App\Design\HasDesign;
+
+class LegacyPage implements HasDesign
+{
+    use HasDesign\Defaults;                                 // gets designKey() from HasDesign's default body
+
+    public array $claims = [];
+    public string $designColumn = "design";
+}
+```
 
 **A plain PHP trait** is listed in the header with the base class and interfaces, and it is also a type. It works everywhere an interface does:
 
@@ -1731,6 +1749,15 @@ title.isBlank;
 - **An extension cannot hide a real member.** If the type, or any class derived from it, has a member with that name, the extension is a compile error.
 - **When the code runs, a real member wins,** and otherwise the extension imported in that file is called. The checker's rule above guarantees the two never compete.
 - **Extensions can only reach the type's public members,** so access rules still hold.
+- **The receiver's type picks among imported extensions with one name,** as in C# and Kotlin:
+
+```csharp
+import App.Billing.LineTotals;      // extension(List<Line> lines) { public Money total() => …; }
+import App.Billing.PriceTotals;     // extension(Map<string, Money> prices) { public Money total() => …; }
+
+lines.total();                      // compiles: lines is a List<Line>, so LineTotals runs
+prices.total();                     // compiles: prices is a Map<string, Money>, so PriceTotals runs
+```
 
 ## 27. PHP# files
 
