@@ -1337,7 +1337,7 @@ public (int|string)? find((int|string)? id)   // compiles: runs as PHP's int|str
 public int|string|null find2()                 // compile error: write (int|string)?
 ```
 
-**Integer overflow throws `ArithmeticError`** at the operation that overflows, as in Swift and C#'s `checked`. PHP's silent change to `float` does not happen in PHP# code.
+**Integer overflow throws `ArithmeticError`** at the operation that overflows, as in Swift and C#'s `checked`. PHP's silent change to `float` does not happen in PHP# code. A shift is not an overflow: `<<` drops the bits it shifts out, and a shift by a negative count throws `ArithmeticError` (section 19).
 
 **`/` on two integers truncates toward zero,** as in C#. `/` with a `float` operand stays float division.
 
