@@ -8,7 +8,7 @@ publish = false
 crate-type = ["staticlib"]
 
 [dependencies]
-mago-sharp-bridge = { git = "https://github.com/heyJordanParker/mago-sharp", rev = "81e94c90994d9dc12235813b0e417cc054967865" }
+mago-sharp-bridge = { git = "https://github.com/heyJordanParker/mago-sharp", rev = "6d6bdf2f61b02118f3bf441905213e5a0f7b7f69" }
 
 [profile.dev]
 panic = "unwind"
