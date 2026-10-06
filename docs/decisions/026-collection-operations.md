@@ -8,7 +8,7 @@ Each collection kind does the natural thing with an operation. The checker's typ
 - `lines.filter(…)` renumbers what it keeps, and `plans.filter(…)` gives a `Map` that keeps its keys.
 - A `Map` read is handled where it is read, with `??`, `?.`, `is`, `as`, `match` or `get`. A bare `x[i]` throws `OutOfRangeException` on a missing index or key, and a bare `Map` read is a compile error that names `??` and `get`.
 - `x[k] = v` inserts or replaces a key, and is `Map`-only. `set` replaces a `List` element and throws `OutOfRangeException` past the end.
-- Two imported extensions with one name, one on a `List` and one on a `Map`, are a compile error.
+- Two imported extensions with one name, one on a `List` and one on a `Map`, are allowed. The engine knows each collection's kind, so the receiver's type picks the extension, as in C# and Kotlin.
 
 A key read back out of a `Map<string, TValue>` is a `string`. PHP stores an all-digit string key such as `"5"` as the int `5`, and the engine hands it back as `"5"` because it knows the key type. Plain PHP reading the same array still sees `5`. This covers the key of `for (const [key, value] of map)` and of `keys()`. A key with an `int` or `string` backing value, such as a backed enum, arrives as its key type in a loop, with the type written or not (decision 27).
 

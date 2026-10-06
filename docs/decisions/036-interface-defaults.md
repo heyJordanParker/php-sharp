@@ -2,7 +2,7 @@
 
 ## Decision
 
-PHP# declares no traits. An interface can give a method a default body, and a default body sees only the interface's own members. Every field is declared in the class that owns it. A PHP# interface with default bodies compiles to a PHP interface plus a PHP trait that holds the default bodies, and a plain PHP class that implements it must also `use` that trait to get the defaults. Plain PHP traits stay usable: they are listed in the class header and work as a type.
+PHP# declares no traits. An interface can give a method a default body, and a default body sees only the interface's own members. Every field is declared in the class that owns it. A PHP# interface with default bodies compiles to a PHP interface plus a PHP trait that holds the default bodies. The trait is named `<Interface>\Defaults`, nested under the interface's name, so a plain PHP class that implements `HasDesign` writes `use HasDesign\Defaults;` to get the defaults. Plain PHP traits stay usable: they are listed in the class header and work as a type.
 
 ## Options
 
@@ -42,6 +42,7 @@ Each class that uses the trait gains state its own body never shows, and the tra
 ## Precedent
 
 - **Chosen:** C# 8's default interface methods, Java 8's default methods, Kotlin's interface bodies and Swift's protocol extensions.
+- **Chosen, the trait's name:** Kotlin's `DefaultImpls`, the class its compiler nests in an interface to hold the default bodies for Java.
 - **Rejected:** PHP's and Scala's traits, and Hack's `require extends`.
 
 ## Spec
