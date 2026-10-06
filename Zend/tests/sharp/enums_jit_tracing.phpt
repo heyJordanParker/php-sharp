@@ -30,6 +30,18 @@ array(3) {
 }
 enum(Demo\Status::Paused)
 enum(Demo\Status::Active)
+enum(Demo\Status::Active)
+bool(true)
+array(3) {
+  [0]=>
+  string(13) "Demo\HasLabel"
+  [1]=>
+  string(8) "UnitEnum"
+  [2]=>
+  string(10) "BackedEnum"
+}
+bool(true)
+bool(false)
 string(68) "ValueError: "nope" is not a valid backing value for enum Demo\Status"
 string(17) "Paused by support"
 string(1) "a"
@@ -37,6 +49,10 @@ string(6) "Active"
 string(10) "Active (a)"
 bool(true)
 enum(Demo\Status::Closed)
+string(6) "Active"
+enum(Demo\Status::Paused)
+string(10) "Active (a)"
+enum(Demo\Status::Active)
 bool(true)
 NULL
 int(3)

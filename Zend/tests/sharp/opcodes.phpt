@@ -22,7 +22,7 @@ $fixtures = [
     'Order' => null,
     'Product' => null,
     'Expressions' => null,
-    'Status' => null,
+    'Status' => 'harness/HasLabel.inc',
     'Suit' => null,
     'Rank' => null,
     'Shipment' => null,
@@ -60,10 +60,10 @@ ControlFlow: same opcodes and lines in 6 op arrays, same signatures in 1 classes
 Order: same opcodes and lines in 4 op arrays, same signatures in 2 classes
 Product: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Expressions: same opcodes and lines in 6 op arrays, same signatures in 1 classes
-Status: same opcodes and lines in 3 op arrays, same signatures in 1 classes
+Status: same opcodes and lines in 4 op arrays, same signatures in 1 classes
 Suit: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Rank: same opcodes and lines in 2 op arrays, same signatures in 1 classes
-Shipment: same opcodes and lines in 8 op arrays, same signatures in 1 classes
+Shipment: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Task: same opcodes and lines in 4 op arrays, same signatures in 1 classes
 Shapes: same opcodes and lines in 5 op arrays, same signatures in 2 classes
 Members: different opcodes and lines in 12 op arrays, same signatures in 1 classes

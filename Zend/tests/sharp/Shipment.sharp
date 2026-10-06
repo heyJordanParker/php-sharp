@@ -4,7 +4,7 @@ class Shipment
 {
     public Status status { get; private set; }
 
-    public Shipment(Status status)
+    public Shipment(Status status = Status.Active)
     {
         this.status = status;
     }
@@ -28,6 +28,22 @@ class Shipment
     {
         this.status = Status.from("c");
         return this.status;
+    }
+
+    public Status pause()
+    {
+        this.status = Status.Paused;
+        return this.status;
+    }
+
+    public static string activeLabel()
+    {
+        return Status.Active.label();
+    }
+
+    public static Status fallback()
+    {
+        return Status.Default;
     }
 
     public static Status? find(string code)

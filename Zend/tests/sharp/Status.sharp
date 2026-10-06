@@ -2,16 +2,23 @@ namespace Demo;
 
 import Lib.Field;
 
-enum Status : string
+public enum Status : string, HasLabel
 {
     case Active = "a";
     [Field("Paused by support")]
     case Paused = "p";
     case Closed = "c";
 
+    public const Status Default = Status.Active;
+
     public string label()
     {
         return `${this.name} (${this.value})`;
+    }
+
+    public bool isActive()
+    {
+        return this === Status.Active;
     }
 
     public static Status parse(string value)
