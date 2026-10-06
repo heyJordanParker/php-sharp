@@ -51,7 +51,7 @@ jobs:
       - name: Build
         run: sharp/bin/build --linux
       - name: Test PHP#
-        run: sharp/bin/test --linux --opcache --repeat --differential
+        run: sharp/bin/test --linux --opcache --repeat --passes --census --differential
       - name: Test upstream
         run: sharp/bin/test --linux --upstream --opcache
       - name: Verify generated files are up to date
@@ -98,7 +98,7 @@ jobs:
       - name: Build
         run: sharp/bin/build
       - name: Test PHP#
-        run: sharp/bin/test --opcache --repeat --differential
+        run: sharp/bin/test --opcache --repeat --passes --census --differential
       - name: Test upstream
         run: sharp/bin/test --upstream --opcache
   IMAGE:
