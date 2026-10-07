@@ -3813,6 +3813,8 @@ static zend_always_inline zend_result _zend_update_type_info(
 						 && !ce->create_object
 						 && ce->default_object_handlers->read_property == zend_std_read_property
 						 && !ce->__get
+						 && !ce->num_hooked_props
+						 && (opline->op1_type != IS_UNUSED || (ce->ce_flags & ZEND_ACC_FINAL))
 						 && !result_may_be_separated(ssa, ssa_op)) {
 							tmp &= ~MAY_BE_RC1;
 						}
