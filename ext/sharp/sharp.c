@@ -12,6 +12,7 @@
 #include "sharp_arginfo.h"
 #include "sharp_bridge.h"
 #include "sharp_build_id.h"
+#include "sharp_native.h"
 
 #define SHARP_FILE_EXTENSION ".sharp"
 
@@ -974,6 +975,23 @@ ZEND_METHOD(Sharp_Collection, sortedBy)
 	zval_ptr_dtor(&pairs);
 }
 
+/* The standard library's autoload.php passes the SHARP_NATIVE it was built with, as Composer's
+ * platform_check.php checks the platform before anything loads. */
+static ZEND_FUNCTION(Sharp_Internal_requireNative)
+{
+	zend_string *fingerprint;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STR(fingerprint)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!zend_string_equals_literal(fingerprint, SHARP_NATIVE)) {
+		zend_throw_error(NULL, "The PHP# standard library in vendor/ was built for other native bodies than this engine has"
+			" (library %s, engine " SHARP_NATIVE "). Install the heyjordanparker/php-sharp-composer version that matches this PHP# build.",
+			ZSTR_VAL(fingerprint));
+	}
+}
+
 static PHP_MINIT_FUNCTION(sharp)
 {
 	sharp_ce_collection = register_class_Sharp_Collection();
@@ -1033,7 +1051,7 @@ static PHP_MINFO_FUNCTION(sharp)
 zend_module_entry sharp_module_entry = {
 	STANDARD_MODULE_HEADER,
 	"sharp",
-	NULL,
+	sharp_native_functions,
 	PHP_MINIT(sharp),
 	NULL,
 	NULL,

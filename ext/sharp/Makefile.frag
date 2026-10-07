@@ -1,4 +1,4 @@
-$(builddir)/sharp.lo: $(builddir)/sharp_bridge.h $(builddir)/sharp_build_id.h $(builddir)/target/release/libsharp.a
+$(builddir)/sharp.lo: $(builddir)/sharp_bridge.h $(builddir)/sharp_build_id.h $(builddir)/target/release/libsharp.a $(srcdir)/sharp_native.h
 
 $(builddir)/sharp_bridge.h: $(builddir)/target/release/libsharp.a
 

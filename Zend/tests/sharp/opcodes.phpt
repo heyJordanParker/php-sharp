@@ -29,6 +29,7 @@ $fixtures = [
     'Interop' => null,
     'Lambdas' => null,
     'Checkout' => null,
+    'Permalink' => '../../../sharp/composer/library/Sharp/Text/Text.sharp',
 ];
 
 foreach ($fixtures as $fixture => $library) {
@@ -101,3 +102,4 @@ Lambdas: different opcodes and lines in 36 op arrays, same signatures in 1 class
   .php   L0099 0009 VERIFY_RETURN_TYPE
   .php   L0099 0010 RETURN null
 Checkout: same opcodes and lines in 10 op arrays, same signatures in 1 classes
+Permalink: same opcodes and lines in 2 op arrays, same signatures in 1 classes

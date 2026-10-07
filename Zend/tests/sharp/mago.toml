@@ -1,3 +1,4 @@
 [source]
 paths = ["*.sharp", "harness"]
+includes = ["../../../sharp/composer/library"]
 extensions = ["sharp", "inc"]
