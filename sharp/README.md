@@ -29,7 +29,7 @@ sharp/bin/test --differential   # also check that php -l compiles every Zend/tes
 sharp/bin/test --upstream       # run Zend/tests, ext/reflection, ext/tokenizer and ext/opcache
 ```
 
-`--differential` runs `mago analyze` built from the Mago commit that `ext/sharp/Cargo.toml` pins for the bridge, installed under `sharp/build/<os>-<arch>/mago`. `Zend/tests/sharp/mago.toml` makes the `.sharp` fixtures and the plain PHP classes they call, in `Zend/tests/sharp/harness/`, one checker project. A file the checker refuses needs nothing from the engine. A file it accepts must make `php -l` print nothing but "No syntax errors detected", so a compile warning or deprecation also fails the run.
+`--differential` runs `mago analyze` built from the Mago commit that `ext/sharp/Cargo.toml` pins for the bridge, installed under `sharp/build/<os>-<arch>/mago`. `Zend/tests/sharp/mago.toml` makes the `.sharp` fixtures and the plain PHP classes and functions they call, in `Zend/tests/sharp/harness/`, one checker project. A file the checker refuses needs nothing from the engine. A file it accepts must make `php -l` print nothing but "No syntax errors detected", so a compile warning or deprecation also fails the run.
 
 `--passes` runs the suite once per bit of `opcache.optimization_level` from pass 1 to pass 16, each pass alone, and then under `opcache.jit=tracing` and `opcache.jit=function`. Every run expects the output of the run without opcache, so a pass that drops a PHP# mark fails on its own run instead of hiding behind the other passes. A test whose output depends on the whole optimizer, such as a count of oplines the JIT left to the VM, sets `opcache.optimization_level=0x7FFEBFFF` in its `--INI--` section.
 

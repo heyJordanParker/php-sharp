@@ -2190,6 +2190,15 @@ ZEND_API uint32_t zend_array_element_type(uint32_t t1, uint8_t op_type, int writ
 	return tmp;
 }
 
+/* A PHP# index or list or map literal stores a backed enum key as its int or string value, see
+ * zend_sharp_index_key(). */
+static zend_always_inline uint32_t sharp_index_dim_type(const zend_op *opline, uint32_t dim_type) {
+	if ((dim_type & MAY_BE_OBJECT) && (opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		return dim_type | MAY_BE_LONG | MAY_BE_STRING;
+	}
+	return dim_type;
+}
+
 static uint32_t assign_dim_array_result_type(
 		uint32_t arr_type, uint32_t dim_type, uint32_t value_type, uint8_t dim_op_type) {
 	uint32_t tmp = 0;
@@ -2431,11 +2440,12 @@ static const zend_property_info *lookup_prop_info(const zend_class_entry *ce, ze
 		return NULL;
 	}
 
-	/* Otherwise, handle only some safe cases */
+	/* Otherwise, handle only some safe cases. A PHP# override's type is decided when its class links. */
 	prop_info = zend_hash_find_ptr(&ce->properties_info, name);
 	if (prop_info &&
 		((prop_info->ce == scope) ||
-		 (!scope && (prop_info->flags & ZEND_ACC_PUBLIC)))
+		 (!scope && (prop_info->flags & ZEND_ACC_PUBLIC))) &&
+		!(prop_info->flags & ZEND_ACC_TYPE_FOLLOWS_PARENT)
 	) {
 		return prop_info;
 	}
@@ -2653,6 +2663,38 @@ static zend_always_inline zend_result _zend_update_type_info(
 			UPDATE_SSA_TYPE(MAY_BE_FALSE|MAY_BE_TRUE, ssa_op->result_def);
 			break;
 		case ZEND_CAST:
+			if (opline->extended_value == (IS_OBJECT | ZEND_SHARP_OPERATOR)) {
+				/* The receiver of a PHP# method call: an array becomes a Sharp\Collection, whose
+				 * method may change the array in the variable, and any other value passes through. */
+				if (ssa_op->op1_def >= 0) {
+					tmp = t1;
+					if (t1 & MAY_BE_ARRAY) {
+						tmp |= MAY_BE_RC1 | MAY_BE_RCN | MAY_BE_ARRAY_EMPTY | MAY_BE_ARRAY_KEY_ANY | MAY_BE_ARRAY_OF_ANY;
+					}
+					if (t1 & MAY_BE_OBJECT) {
+						tmp |= MAY_BE_RCN;
+					}
+					UPDATE_SSA_TYPE(tmp, ssa_op->op1_def);
+					COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->op1_def);
+				}
+				tmp = t1 & (MAY_BE_ANY - MAY_BE_ARRAY);
+				if (t1 & MAY_BE_UNDEF) {
+					tmp |= MAY_BE_NULL;
+				}
+				if (t1 & MAY_BE_ARRAY) {
+					tmp |= MAY_BE_OBJECT;
+				}
+				if (tmp & (MAY_BE_STRING|MAY_BE_OBJECT|MAY_BE_RESOURCE)) {
+					tmp |= MAY_BE_RC1 | MAY_BE_RCN;
+				}
+				UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
+				if (t1 & MAY_BE_ARRAY) {
+					UPDATE_SSA_OBJ_TYPE(NULL, 0, ssa_op->result_def);
+				} else {
+					COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->result_def);
+				}
+				break;
+			}
 			if (ssa_op->op1_def >= 0) {
 				tmp = t1;
 				if ((t1 & (MAY_BE_ARRAY|MAY_BE_OBJECT)) &&
@@ -2992,7 +3034,7 @@ static zend_always_inline zend_result _zend_update_type_info(
 			break;
 		case ZEND_ASSIGN_DIM:
 			if (opline->op1_type == IS_CV) {
-				tmp = assign_dim_result_type(t1, t2, OP1_DATA_INFO(), opline->op2_type);
+				tmp = assign_dim_result_type(t1, sharp_index_dim_type(opline, t2), OP1_DATA_INFO(), opline->op2_type);
 				tmp |= ssa->var_info[ssa_op->op1_def].type & (MAY_BE_ARRAY_PACKED|MAY_BE_ARRAY_NUMERIC_HASH|MAY_BE_ARRAY_STRING_HASH);
 				UPDATE_SSA_TYPE(tmp, ssa_op->op1_def);
 				COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->op1_def);
@@ -3440,6 +3482,7 @@ static zend_always_inline zend_result _zend_update_type_info(
 			}
 			if (ssa_op->result_def >= 0) {
 				uint32_t arr_type;
+				t2 = sharp_index_dim_type(opline, t2);
 				if (opline->opcode == ZEND_INIT_ARRAY) {
 					arr_type = 0;
 				} else {
@@ -3570,6 +3613,7 @@ static zend_always_inline zend_result _zend_update_type_info(
 		case ZEND_FETCH_LIST_W:
 			if (ssa_op->op1_def >= 0) {
 				uint32_t key_type = 0;
+				t2 = sharp_index_dim_type(opline, t2);
 				tmp = t1 & ~(MAY_BE_RC1|MAY_BE_RCN);
 				if (opline->opcode == ZEND_FETCH_DIM_W ||
 				    opline->opcode == ZEND_FETCH_DIM_RW ||
@@ -3824,6 +3868,13 @@ static zend_always_inline zend_result _zend_update_type_info(
 						}
 					}
 				}
+				if (opline->opcode == ZEND_FETCH_OBJ_R
+						&& (opline->extended_value & ZEND_SHARP_OPERATOR)
+						&& (tmp & MAY_BE_ARRAY)) {
+					/* The receiver of a PHP# method call: an array becomes a Sharp\Collection. */
+					tmp |= MAY_BE_OBJECT | MAY_BE_RC1 | MAY_BE_RCN;
+					ce = NULL;
+				}
 				UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
 				if (ce) {
 					UPDATE_SSA_OBJ_TYPE(ce, 1, ssa_op->result_def);
@@ -3926,7 +3977,13 @@ static zend_always_inline zend_result _zend_update_type_info(
 			bool is_prototype;
 			const zend_class_constant *cc = zend_fetch_class_const_info(script, op_array, opline, &is_prototype);
 			if (!cc || !ZEND_TYPE_IS_SET(cc->type)) {
-				UPDATE_SSA_TYPE(MAY_BE_RC1|MAY_BE_RCN|MAY_BE_ANY|MAY_BE_ARRAY_KEY_ANY|MAY_BE_ARRAY_OF_ANY, ssa_op->result_def);
+				tmp = MAY_BE_RC1|MAY_BE_RCN|MAY_BE_ANY|MAY_BE_ARRAY_KEY_ANY|MAY_BE_ARRAY_OF_ANY;
+				/* A PHP# `Class.y` read without a known constant may read a static property, whose array
+				 * elements may be references. */
+				if (!cc && (opline->extended_value & ZEND_FETCH_CLASS_MEMBER)) {
+					tmp |= MAY_BE_ARRAY_OF_REF;
+				}
+				UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
 				break;
 			}
 			UPDATE_SSA_TYPE(zend_convert_type(script, cc->type, &ce), ssa_op->result_def);

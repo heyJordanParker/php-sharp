@@ -1,0 +1,148 @@
+namespace Demo;
+
+import Countable;
+import Lib.Basket;
+
+class Pantry
+{
+    public List<int> sizes { get; private set; } = [];
+    private Map<string, int> stock = ["tea": 3, "pie": 7];
+
+    public Pantry(public Basket basket { get; })
+    {
+    }
+
+    public static List<int> grow(List<int> sizes)
+    {
+        sizes.add(4);
+        sizes.set(0, 9);
+        return sizes;
+    }
+
+    public static Map<string, int> drop(Map<string, int> stock, string name)
+    {
+        stock.delete(name);
+        return stock;
+    }
+
+    public static int? at(List<int> sizes, int index)
+    {
+        return sizes.get(index);
+    }
+
+    public static int? price(Map<string, int> stock, string name)
+    {
+        return stock.get(name);
+    }
+
+    public static Map<int, int> entries(List<int> sizes)
+    {
+        return sizes.entries();
+    }
+
+    public static List<int>? first(List<List<int>> rows)
+    {
+        return rows.get(0);
+    }
+
+    public static Map<int, List<int>> rows(List<List<int>> rows)
+    {
+        return rows.entries();
+    }
+
+    public static void setPast(List<int> sizes)
+    {
+        sizes.set(2, 1);
+    }
+
+    public Map<string, int> restock(string name)
+    {
+        this.sizes.add(count(this.sizes));
+        this.stock.delete(name);
+        return this.stock;
+    }
+
+    public static List<int> stack(Pantry pantry, int size)
+    {
+        pantry.sizes.add(size);
+        return pantry.sizes;
+    }
+
+    public static List<int> fill(Basket basket, int size)
+    {
+        basket.lines.add(size);
+        return basket.lines;
+    }
+
+    public static void share(Basket basket, int size, int parts)
+    {
+        basket.lines.add(size % parts);
+    }
+
+    public static int? total(Basket basket)
+    {
+        return basket.totals.get(0);
+    }
+
+    public static int size(Pantry pantry)
+    {
+        return pantry.basket.size();
+    }
+
+    public static int lineCount(Basket basket)
+    {
+        return basket.size();
+    }
+
+    public static List<int> made()
+    {
+        List<int> sizes = [1];
+        sizes.add(2);
+        return sizes;
+    }
+}
+
+class Tray
+{
+    public List<int> items { get; private set; } = [];
+
+    public static List<int> filled()
+    {
+        const tray = new Tray();
+        tray.items = [5];
+        tray.items.add(6);
+        return tray.items;
+    }
+}
+
+class Link
+{
+    public Link(public int value { get; })
+    {
+    }
+
+    public Link plus(int step)
+    {
+        return new Link(this.value + step);
+    }
+
+    public static int? after(Link? link, int step)
+    {
+        return link?.plus(step).value;
+    }
+
+    public static Link? further(Link? link)
+    {
+        return link?.plus(1)?.plus(2);
+    }
+
+    public static Link? skipped(Link? link)
+    {
+        return link?.plus(1).plus(2);
+    }
+
+    public static string label(Link link, Countable items)
+    {
+        return `${link.plus(1).value} of ${items.count()}`;
+    }
+}

@@ -1,0 +1,7 @@
+namespace Demo;
+
+import Lib.Missing;
+
+public class Lost : Missing
+{
+}

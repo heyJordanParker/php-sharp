@@ -1,0 +1,9 @@
+namespace Demo;
+
+public class Stray
+{
+    public override int size()
+    {
+        return 1;
+    }
+}

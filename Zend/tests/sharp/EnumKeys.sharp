@@ -1,0 +1,90 @@
+namespace Demo;
+
+import Lib.Code;
+import Lib.Size;
+import Lib.Standing;
+
+class Headcount
+{
+    private Map<Standing, int> counts = [:];
+    private Map<Standing, int> seeded = [Standing.Active: 0];
+
+    public Map<Standing, int> seededCounts()
+    {
+        return this.seeded;
+    }
+
+    public Map<Standing, int> add(Standing status)
+    {
+        this.counts[status] = (this.counts[status] ?? 0) + 1;
+        return this.counts;
+    }
+
+    public static Map<Standing, int> count(Map<Standing, int> counts, Standing status)
+    {
+        counts[status] = (counts[status] ?? 0) + 1;
+        return counts;
+    }
+
+    public static Map<Standing, int> ensure(Map<Standing, int> counts, Standing status)
+    {
+        counts[status] ??= 0;
+        return counts;
+    }
+
+    public static Map<Size, string> sizes(Size small, Size large)
+    {
+        return [small: "small", large: "large"];
+    }
+
+    public static Map<Code, int> codes(Code code)
+    {
+        Map<Code, int> codes = [:];
+        codes[code] = 5;
+        return codes;
+    }
+
+    public static int read(Map<Standing, int> counts, Standing status)
+    {
+        return counts[status];
+    }
+
+    public static int? lookup(Map<Standing, int> counts, Standing status)
+    {
+        return counts.get(status);
+    }
+
+    public static Map<Standing, int> without(Map<Standing, int> counts, Standing status)
+    {
+        counts.delete(status);
+        return counts;
+    }
+
+    public static Map<Standing, Map<Size, int>> nest(Standing status, Size size)
+    {
+        Map<Standing, Map<Size, int>> nested = [:];
+        nested[status] = [:];
+        nested[status][size] = 1;
+        return nested;
+    }
+
+    public static Map<string, int> byName(Map<Standing, int> counts)
+    {
+        Map<string, int> named = [:];
+        for (const [Standing status, int n] of counts) {
+            named[status.name] = n;
+        }
+        return named;
+    }
+
+    public static List<string> skus(Map<string, int> stock)
+    {
+        List<string> skus = [];
+        for (const [string sku, int n] of stock) {
+            if (n > 0) {
+                skus.add(sku);
+            }
+        }
+        return skus;
+    }
+}

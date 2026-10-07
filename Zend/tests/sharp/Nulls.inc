@@ -32,7 +32,7 @@ class Nulls
 
     public function through(?\Demo\Nulls $other, ?int $value): ?int
     {
-        return $other?->same($value) ?? $other?->itself()?->either(7, null);
+        return ((object) $other)?->same($value) ?? ((object) ((object) $other)?->itself())?->either(7, null);
     }
 
     public function size(?\Demo\Box $box): ?int
@@ -57,5 +57,20 @@ class Nulls
             $total += $step;
         }
         return $total;
+    }
+
+    public function missing(?int $value): bool
+    {
+        return $value === null;
+    }
+
+    public function present(?string $value): bool
+    {
+        return $value !== null;
+    }
+
+    public function absent(?bool $value): bool
+    {
+        return null === $value;
     }
 }

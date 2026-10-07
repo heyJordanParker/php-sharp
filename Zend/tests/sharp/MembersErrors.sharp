@@ -1,0 +1,16 @@
+namespace Demo;
+
+import Lib.Registry;
+
+public class Misread
+{
+    public static int missing()
+    {
+        return Registry.missing;
+    }
+
+    public static int hidden()
+    {
+        return Registry.hidden;
+    }
+}

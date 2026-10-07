@@ -1,0 +1,59 @@
+namespace Demo;
+
+import SplFixedArray;
+
+class Cart
+{
+    public List<Item> items { get; private set; } = [];
+    private Map<string, int> counts = [:];
+
+    public int fill(List<Item> extra)
+    {
+        this.items = [new Item("tea", 3)];
+        this.items.add(extra[0]);
+        this.counts["items"] = count(this.items);
+        this.counts["extra"] = count(extra);
+        let total = this.items[0].cents;
+        for (const item of this.items) {
+            total += item.cents;
+        }
+        for (const [name, size] of this.counts) {
+            if (name == "items") {
+                total += size * 10;
+            }
+        }
+        return total + SplFixedArray.fromArray(this.prices()).getSize();
+    }
+
+    public List<int> prices()
+    {
+        List<int> prices = [];
+        for (const item of this.items) {
+            prices.add(item.cents);
+        }
+        return prices;
+    }
+
+    public int bump(string name)
+    {
+        this.counts[name] = (this.counts[name] ?? 0) + 1;
+        return this.counts[name] ?? 0;
+    }
+
+    public bool has(int cents)
+    {
+        return in_array(cents, this.prices(), true);
+    }
+
+    public List<int> withPrices(List<int> before, List<int> after)
+    {
+        return [...before, ...this.prices(), 0, ...after];
+    }
+}
+
+class Item
+{
+    public Item(public string name { get; }, public int cents { get; })
+    {
+    }
+}
