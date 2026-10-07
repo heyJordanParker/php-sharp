@@ -1,6 +1,5 @@
 namespace Demo;
 
-import Lib.Standing;
 import SplFixedArray;
 
 class IndexRead
@@ -40,10 +39,5 @@ class IndexRead
     public static int? size(Map<string, SplFixedArray> arrays, string key)
     {
         return arrays[key]?.getSize();
-    }
-
-    public static int standing(Map<Standing, int> counts, Standing status)
-    {
-        return counts[status];
     }
 }
