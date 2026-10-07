@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls every method of Sharp.Data.PhpSerializer, which allows no classes by default and gives null for text it cannot read, with no warning
+A PHP# class calls every method of Sharp.Data.PhpSerializer, which allows no classes by default and gives null for text it cannot read or with data after the value, with no warning
 --FILE--
 <?php
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Data/PhpSerializer.sharp';
@@ -13,6 +13,7 @@ var_dump(get_class(PhpSerializerCalls::unserialize('O:8:"stdClass":0:{}')));
 var_dump(get_class(PhpSerializerCalls::unserializeAllowing('O:8:"stdClass":0:{}', ['stdClass'])));
 var_dump(PhpSerializerCalls::export([1, 'a' => true]));
 var_dump(PhpSerializerCalls::unserialize('nope'));
+var_dump(PhpSerializerCalls::unserialize('i:1;junk'));
 ?>
 --EXPECT--
 string(18) "a:1:{s:1:"a";i:1;}"
@@ -28,4 +29,5 @@ string(34) "array (
   0 => 1,
   'a' => true,
 )"
+NULL
 NULL
