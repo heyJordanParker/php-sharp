@@ -6,7 +6,9 @@
 #include "ext/spl/spl_exceptions.h"
 #include "ext/standard/info.h"
 #include "zend_closures.h"
+#include "zend_enum.h"
 #include "zend_exceptions.h"
+#include "zend_smart_str.h"
 #include "zend_system_id.h"
 #include "php_sharp.h"
 #include "sharp_arginfo.h"
@@ -57,6 +59,33 @@ static zend_ast *sharp_translate_zval(const sharp_node *node)
 	return zend_ast_create_zval_ex(&value, node->attr);
 }
 
+static zend_ast_attr sharp_operator_attr(zend_ast_kind kind, uint32_t attr)
+{
+	switch (kind) {
+		case ZEND_AST_BINARY_OP:
+		case ZEND_AST_ASSIGN_OP:
+			return attr == ZEND_ADD || attr == ZEND_SUB || attr == ZEND_MUL || attr == ZEND_POW
+				? attr | ZEND_SHARP_OPERATOR_SYNTAX : attr;
+		case ZEND_AST_CAST:
+			return attr == IS_LONG ? attr | ZEND_SHARP_OPERATOR_SYNTAX : attr;
+		case ZEND_AST_UNARY_MINUS:
+		case ZEND_AST_PRE_INC:
+		case ZEND_AST_PRE_DEC:
+		case ZEND_AST_POST_INC:
+		case ZEND_AST_POST_DEC:
+			return attr | ZEND_SHARP_OPERATOR_SYNTAX;
+		case ZEND_AST_DIM:
+			return attr | ZEND_DIM_SHARP;
+		case ZEND_AST_ARRAY:
+			return attr | ZEND_ARRAY_SHARP;
+		case ZEND_AST_METHOD_CALL:
+		case ZEND_AST_NULLSAFE_METHOD_CALL:
+			return attr | ZEND_METHOD_CALL_SHARP;
+		default:
+			return attr;
+	}
+}
+
 static zend_ast *sharp_translate_list(const sharp_unit *unit, const sharp_node *node, zend_ast_kind kind)
 {
 	zend_ast *list = zend_ast_create_list(0, kind);
@@ -64,7 +93,7 @@ static zend_ast *sharp_translate_list(const sharp_unit *unit, const sharp_node *
 	for (uint32_t i = 0; i < node->child_count; i++) {
 		list = zend_ast_list_add(list, sharp_translate(unit, unit->children[node->first_child + i]));
 	}
-	list->attr = node->attr;
+	list->attr = sharp_operator_attr(kind, node->attr);
 
 	return list;
 }
@@ -83,29 +112,6 @@ static zend_ast *sharp_translate_decl(const sharp_unit *unit, const sharp_node *
 	return zend_ast_create_decl(kind, node->attr, node->line, NULL,
 		kind == ZEND_AST_CLOSURE || kind == ZEND_AST_ARROW_FUNC ? NULL : sharp_string(node->text),
 		child[0], child[1], child[2], child[3], child[4]);
-}
-
-static zend_ast_attr sharp_operator_attr(zend_ast_kind kind, uint32_t attr)
-{
-	switch (kind) {
-		case ZEND_AST_BINARY_OP:
-		case ZEND_AST_ASSIGN_OP:
-			return attr == ZEND_ADD || attr == ZEND_SUB || attr == ZEND_MUL || attr == ZEND_POW
-				? attr | ZEND_SHARP_OPERATOR_SYNTAX : attr;
-		case ZEND_AST_UNARY_MINUS:
-		case ZEND_AST_PRE_INC:
-		case ZEND_AST_PRE_DEC:
-		case ZEND_AST_POST_INC:
-		case ZEND_AST_POST_DEC:
-			return attr | ZEND_SHARP_OPERATOR_SYNTAX;
-		case ZEND_AST_DIM:
-			return attr | ZEND_DIM_SHARP;
-		case ZEND_AST_METHOD_CALL:
-		case ZEND_AST_NULLSAFE_METHOD_CALL:
-			return attr | ZEND_METHOD_CALL_SHARP;
-		default:
-			return attr;
-	}
 }
 
 static zend_ast *sharp_translate_fixed(const sharp_unit *unit, const sharp_node *node, zend_ast_kind kind)
@@ -334,7 +340,7 @@ ZEND_DECLARE_MODULE_GLOBALS(sharp)
 
 #define SHARP_G(v) ZEND_MODULE_GLOBALS_ACCESSOR(sharp, v)
 
-static zend_class_entry *sharp_ce_collection;
+zend_class_entry *sharp_ce_collection;
 static zend_object_handlers sharp_collection_handlers;
 
 /* The receiver of a PHP# method call on a List or Map, which PHP stores as an array. It changes the
@@ -502,6 +508,215 @@ static void sharp_collection_write_back(sharp_collection *collection)
 	EG(fake_scope) = scope;
 }
 
+typedef enum {
+	SHARP_PARSED,
+	SHARP_NOT_A_STRING,
+	SHARP_NOT_A_NUMBER,
+	SHARP_OUT_OF_RANGE,
+} sharp_parse_result;
+
+/* The white space C#'s int.Parse skips: U+0009 to U+000D and U+0020. */
+static bool sharp_is_space(char c)
+{
+	return c == ' ' || (c >= '\t' && c <= '\r');
+}
+
+static const char *sharp_skip_digits(const char *p)
+{
+	while (*p >= '0' && *p <= '9') {
+		p++;
+	}
+
+	return p;
+}
+
+/* Accepts what C#'s int.Parse accepts: [ws][sign]digits[ws], in ASCII digits only. */
+static sharp_parse_result sharp_parse_int(const zval *value, zend_long *result)
+{
+	if (Z_TYPE_P(value) != IS_STRING) {
+		return SHARP_NOT_A_STRING;
+	}
+
+	const char *p = Z_STRVAL_P(value);
+	const char *end = p + Z_STRLEN_P(value);
+	while (sharp_is_space(*p)) {
+		p++;
+	}
+	bool negative = *p == '-';
+	if (*p == '-' || *p == '+') {
+		p++;
+	}
+	const char *digits = p;
+	p = sharp_skip_digits(p);
+	if (p == digits) {
+		return SHARP_NOT_A_NUMBER;
+	}
+	const char *digits_end = p;
+	while (sharp_is_space(*p)) {
+		p++;
+	}
+	if (p != end) {
+		return SHARP_NOT_A_NUMBER;
+	}
+
+	zend_ulong limit = negative ? (zend_ulong) ZEND_LONG_MAX + 1 : (zend_ulong) ZEND_LONG_MAX;
+	zend_ulong magnitude = 0;
+	for (p = digits; p < digits_end; p++) {
+		zend_ulong digit = *p - '0';
+		if (magnitude > (limit - digit) / 10) {
+			return SHARP_OUT_OF_RANGE;
+		}
+		magnitude = magnitude * 10 + digit;
+	}
+	*result = negative ? (zend_long) (0 - magnitude) : (zend_long) magnitude;
+
+	return SHARP_PARSED;
+}
+
+/* Accepts [ws][sign](digits[.digits] | .digits)([eE][sign]digits)?[ws], so no thousands separator, NaN or Infinity. */
+static sharp_parse_result sharp_parse_float(const zval *value, double *result)
+{
+	if (Z_TYPE_P(value) != IS_STRING) {
+		return SHARP_NOT_A_STRING;
+	}
+
+	const char *p = Z_STRVAL_P(value);
+	const char *end = p + Z_STRLEN_P(value);
+	while (sharp_is_space(*p)) {
+		p++;
+	}
+	const char *number = p;
+	if (*p == '-' || *p == '+') {
+		p++;
+	}
+	const char *integer = p;
+	p = sharp_skip_digits(p);
+	if (*p == '.') {
+		const char *fraction = ++p;
+		p = sharp_skip_digits(p);
+		if (p == fraction) {
+			return SHARP_NOT_A_NUMBER;
+		}
+	} else if (p == integer) {
+		return SHARP_NOT_A_NUMBER;
+	}
+	if (*p == 'e' || *p == 'E') {
+		p++;
+		if (*p == '-' || *p == '+') {
+			p++;
+		}
+		const char *exponent = p;
+		p = sharp_skip_digits(p);
+		if (p == exponent) {
+			return SHARP_NOT_A_NUMBER;
+		}
+	}
+	while (sharp_is_space(*p)) {
+		p++;
+	}
+	if (p != end) {
+		return SHARP_NOT_A_NUMBER;
+	}
+
+	*result = zend_strtod(number, NULL);
+
+	return zend_finite(*result) ? SHARP_PARSED : SHARP_OUT_OF_RANGE;
+}
+
+/* Shows the string the way an unhandled match case does, so zend.exception_ignore_args hides request data. */
+static ZEND_COLD void sharp_throw_parse_error(sharp_parse_result parsed, const zval *value, const char *number, const char *range)
+{
+	if (parsed == SHARP_NOT_A_STRING) {
+		zend_argument_value_error(1, "must be a string, %s given", zend_zval_value_name(value));
+		return;
+	}
+
+	zend_long max_len = EG(exception_string_param_max_len);
+	smart_str shown = {0};
+	if (EG(exception_ignore_args) || max_len == 0) {
+		smart_str_appends(&shown, "string");
+	} else {
+		smart_str_append_scalar(&shown, value, max_len);
+	}
+	smart_str_0(&shown);
+
+	if (parsed == SHARP_OUT_OF_RANGE) {
+		zend_argument_error(zend_ce_arithmetic_error, 1, "must hold %s, %s given", range, ZSTR_VAL(shown.s));
+	} else {
+		zend_argument_value_error(1, "must hold %s, %s given", number, ZSTR_VAL(shown.s));
+	}
+
+	smart_str_free(&shown);
+}
+
+ZEND_METHOD(Sharp_Int, parse)
+{
+	zval *value;
+	zend_long result;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	sharp_parse_result parsed = sharp_parse_int(value, &result);
+	if (parsed != SHARP_PARSED) {
+		sharp_throw_parse_error(parsed, value, "an int", "an int from PHP_INT_MIN to PHP_INT_MAX");
+		RETURN_THROWS();
+	}
+
+	RETURN_LONG(result);
+}
+
+ZEND_METHOD(Sharp_Int, tryParse)
+{
+	zval *value;
+	zend_long result;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (sharp_parse_int(value, &result) != SHARP_PARSED) {
+		RETURN_NULL();
+	}
+
+	RETURN_LONG(result);
+}
+
+ZEND_METHOD(Sharp_Float, parse)
+{
+	zval *value;
+	double result;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	sharp_parse_result parsed = sharp_parse_float(value, &result);
+	if (parsed != SHARP_PARSED) {
+		sharp_throw_parse_error(parsed, value, "a float", "a float from -PHP_FLOAT_MAX to PHP_FLOAT_MAX");
+		RETURN_THROWS();
+	}
+
+	RETURN_DOUBLE(result);
+}
+
+ZEND_METHOD(Sharp_Float, tryParse)
+{
+	zval *value;
+	double result;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (sharp_parse_float(value, &result) != SHARP_PARSED) {
+		RETURN_NULL();
+	}
+
+	RETURN_DOUBLE(result);
+}
+
 ZEND_METHOD(Sharp_Collection, __construct)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
@@ -558,14 +773,41 @@ ZEND_METHOD(Sharp_Collection, set)
 	zval_ptr_dtor(&old);
 }
 
+/* The key a Map method takes: an int, a string, or a backed enum case, which stands for its value. */
+static bool sharp_collection_key(zval *key, zend_string **string_key, zend_long *long_key)
+{
+	zval *value = zend_sharp_enum_key(key);
+
+	if (value) {
+		key = value;
+	}
+	if (Z_TYPE_P(key) == IS_LONG) {
+		*string_key = NULL;
+		*long_key = Z_LVAL_P(key);
+		return true;
+	}
+	if (Z_TYPE_P(key) == IS_STRING) {
+		*string_key = Z_STR_P(key);
+		return true;
+	}
+
+	zend_argument_type_error(1, "must be of type BackedEnum|string|int, %s given", zend_zval_value_name(key));
+	return false;
+}
+
 ZEND_METHOD(Sharp_Collection, get)
 {
+	zval *key;
 	zend_string *string_key;
 	zend_long long_key;
 
 	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_STR_OR_LONG(string_key, long_key)
+		Z_PARAM_ZVAL(key)
 	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_collection_key(key, &string_key, &long_key)) {
+		RETURN_THROWS();
+	}
 
 	zval *array = sharp_collection_array(sharp_collection_from(Z_OBJ_P(ZEND_THIS)));
 	if (!array) {
@@ -595,12 +837,17 @@ ZEND_METHOD(Sharp_Collection, entries)
 
 ZEND_METHOD(Sharp_Collection, delete)
 {
+	zval *key;
 	zend_string *string_key;
 	zend_long long_key;
 
 	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_STR_OR_LONG(string_key, long_key)
+		Z_PARAM_ZVAL(key)
 	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_collection_key(key, &string_key, &long_key)) {
+		RETURN_THROWS();
+	}
 
 	sharp_collection *collection = sharp_collection_from(Z_OBJ_P(ZEND_THIS));
 	zval *array = sharp_collection_array(collection);
@@ -976,6 +1223,8 @@ ZEND_METHOD(Sharp_Collection, sortedBy)
 
 static PHP_MINIT_FUNCTION(sharp)
 {
+	register_class_Sharp_Int();
+	register_class_Sharp_Float();
 	sharp_ce_collection = register_class_Sharp_Collection();
 	sharp_ce_collection->create_object = sharp_collection_create;
 	memcpy(&sharp_collection_handlers, &std_object_handlers, sizeof(zend_object_handlers));

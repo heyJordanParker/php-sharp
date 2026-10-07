@@ -19,7 +19,7 @@ Indirect modification of Store\Product::$tags is not allowed
 Sofia Sofia, BG
 Cannot access protected property Store\Address::$region
 Plovdiv Plovdiv true
-Store\Shipment::$destination virtual: true
+Store\Parcel::$destination virtual: true
 Store\Product::$name virtual: false
 Store\Product::$price virtual: false
 Store\Product::$stock virtual: false

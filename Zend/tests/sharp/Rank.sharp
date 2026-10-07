@@ -1,0 +1,13 @@
+namespace Demo;
+
+enum Rank : int
+{
+    case Low = -1;
+    case Mid = 0;
+    case High = 2;
+
+    public bool above(Rank other)
+    {
+        return this.value > other.value;
+    }
+}

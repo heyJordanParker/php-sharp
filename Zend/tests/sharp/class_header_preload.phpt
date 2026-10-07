@@ -14,12 +14,12 @@ if (PHP_OS_FAMILY == 'Windows') die('skip Preloading is not supported on Windows
 --FILE--
 <?php
 
-foreach ([new Demo\Page(), new Demo\Card()] as $object) {
+foreach ([new Demo\Article(), new Demo\Card()] as $object) {
     $interfaces = class_implements($object);
     ksort($interfaces);
     echo get_parent_class($object), ' ', implode(',', $interfaces), ' ', $object->link(), "\n";
 }
 ?>
 --EXPECT--
-Lib\Entity Demo\Linkable,Lib\Named /page
+Lib\Record Demo\Linkable,Lib\Named /article
 Lib\Shelf Demo\Linkable,Lib\Named /card

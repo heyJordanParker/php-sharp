@@ -3,7 +3,7 @@ A PHP# class header names its parent class and its interfaces in any order
 --FILE--
 <?php
 
-require __DIR__ . '/Header.inc';
+require __DIR__ . '/harness/Header.inc';
 require __DIR__ . '/Header.sharp';
 
 function inheritance(string $class): array
@@ -14,9 +14,9 @@ function inheritance(string $class): array
     return [get_parent_class($class), array_keys($interfaces)];
 }
 
-$page = new Demo\Page();
-var_dump($page->link(), $page->name(), $page->number(), $page instanceof Lib\Entity);
-var_dump(inheritance(Demo\Page::class), inheritance(Demo\Post::class), inheritance(Demo\Tag::class));
+$article = new Demo\Article();
+var_dump($article->link(), $article->name(), $article->number(), $article instanceof Lib\Record);
+var_dump(inheritance(Demo\Article::class), inheritance(Demo\Post::class), inheritance(Demo\Tag::class));
 var_dump(class_implements(Demo\Linkable::class));
 var_dump(inheritance(Demo\Card::class), (new Demo\Card())->copy()->link());
 
@@ -24,13 +24,13 @@ $size = new ReflectionMethod(Demo\Thumbnail::class, 'size');
 var_dump((new Demo\Thumbnail())->size(), count($size->getAttributes(Override::class)), $size->isFinal());
 ?>
 --EXPECT--
-string(5) "/page"
-string(4) "page"
+string(8) "/article"
+string(7) "article"
 int(7)
 bool(true)
 array(2) {
   [0]=>
-  string(10) "Lib\Entity"
+  string(10) "Lib\Record"
   [1]=>
   array(2) {
     [0]=>
@@ -41,7 +41,7 @@ array(2) {
 }
 array(2) {
   [0]=>
-  string(10) "Lib\Entity"
+  string(10) "Lib\Record"
   [1]=>
   array(0) {
   }

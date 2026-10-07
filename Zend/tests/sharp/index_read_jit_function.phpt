@@ -28,5 +28,7 @@ bool(false)
 OutOfRangeException: Undefined array key 2 in IndexRead.sharp on line 36
 int(4)
 NULL
+int(3)
+OutOfRangeException: Undefined array key "closed" in MapRead.sharp on line 9
 NULL
 string(37) "Trying to access array offset on null"

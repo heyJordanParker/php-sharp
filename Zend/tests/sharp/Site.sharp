@@ -1,13 +1,13 @@
 namespace Site;
 
 import Lib.Access;
-import Lib.Entity;
+import Lib.Catalog;
 import Lib.Linkable;
-import Lib.Registry;
+import Lib.Resource;
 import Lib.Status;
 
 [Access(typeof(Page))]
-public class Page : Entity, Linkable
+public class Page : Resource, Linkable
 {
     public const int LIMIT = 3;
     public static int views { get; private set; } = 0;
@@ -51,7 +51,7 @@ public class Page : Entity, Linkable
 
     public string registered()
     {
-        return Registry.register(typeof(Page));
+        return Catalog.register(typeof(Page));
     }
 }
 

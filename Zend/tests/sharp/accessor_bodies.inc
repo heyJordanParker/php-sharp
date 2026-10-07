@@ -1,8 +1,8 @@
 <?php
 
-require __DIR__ . '/harness/Model.inc';
+require __DIR__ . '/harness/Row.inc';
 require __DIR__ . '/Accessors.sharp';
-require __DIR__ . '/Shipment.sharp';
+require __DIR__ . '/Parcel.sharp';
 
 // Each run repeats, so the JIT variants compile the accessors and methods before the second run.
 for ($run = 0; $run < 2; $run++) {
@@ -45,13 +45,13 @@ for ($run = 0; $run < 2; $run++) {
         echo $error->getMessage(), "\n";
     }
     $address->city = 'plovdiv ';
-    $shipment = new Store\Shipment();
-    $shipment->destination = $address;
-    echo $address->city, ' ', $shipment->destination->city, ' ', var_export($shipment->getAttribute('destination') === $address, true), "\n";
+    $parcel = new Store\Parcel();
+    $parcel->destination = $address;
+    echo $address->city, ' ', $parcel->destination->city, ' ', var_export($parcel->getAttribute('destination') === $address, true), "\n";
 }
 
 foreach ([
-    [Store\Shipment::class, 'destination'],
+    [Store\Parcel::class, 'destination'],
     [Store\Product::class, 'name'],
     [Store\Product::class, 'price'],
     [Store\Product::class, 'stock'],

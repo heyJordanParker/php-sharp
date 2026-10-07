@@ -1,7 +1,11 @@
 <?php
 
+use Lib\Standing;
+
 require __DIR__ . '/attempt.inc';
+require __DIR__ . '/harness/Standing.inc';
 require __DIR__ . '/IndexRead.sharp';
+require __DIR__ . '/MapRead.sharp';
 
 for ($round = 0; $round < 100; $round++) {
     ob_start();
@@ -19,6 +23,8 @@ for ($round = 0; $round < 100; $round++) {
     attempt(fn () => Demo\IndexRead::passed([1, 7], 2));
     attempt(fn () => Demo\IndexRead::size(['a' => new SplFixedArray(4)], 'a'));
     attempt(fn () => Demo\IndexRead::size(['a' => new SplFixedArray(4)], 'b'));
+    attempt(fn () => Demo\MapRead::standing(['active' => 3], Standing::Active));
+    attempt(fn () => Demo\MapRead::standing(['active' => 3], Standing::Closed));
     $output = ob_get_clean();
 }
 

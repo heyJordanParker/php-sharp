@@ -1,21 +1,45 @@
-<?php declare(strict_types=1);
+<?php
 
 namespace Lib;
 
-class Model
+trait HasTimestamps
 {
-    /** @var array<string, mixed> */
-    private array $attributes = [];
+    /** @var bool */
+    public $timestamps = true;
+}
 
-    public function getAttribute(string $key): mixed
+// A plain PHP base class with properties PHP declares untyped, typed only by `@var`, and one PHP types.
+abstract class Model
+{
+    use HasTimestamps;
+
+    /** @var string|null */
+    protected $table;
+
+    /** @var array<int, string> */
+    protected $fillable = [];
+
+    /** @var array */
+    protected $with = [];
+
+    protected int $perPage = 15;
+
+    /** @var string */
+    public $seen;
+
+    // It reads the subclass's defaults before the subclass's own code runs, as Eloquent's constructor does.
+    public function __construct()
     {
-        return $this->attributes[$key] ?? null;
+        $this->seen = $this->table . ' fills ' . implode(',', $this->fillable);
     }
 
-    public function setAttribute(string $key, mixed $value): static
+    public function setTable($table)
     {
-        $this->attributes[$key] = $value;
+        $this->table = $table;
+    }
 
-        return $this;
+    public function setPerPage($perPage)
+    {
+        $this->perPage = $perPage;
     }
 }
