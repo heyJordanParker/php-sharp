@@ -2,7 +2,7 @@
 
 namespace Lib;
 
-enum Status: string
+enum Standing: string
 {
     case Active = 'active';
     case Closed = 'closed';

@@ -3,30 +3,30 @@
 namespace {
     use Lib\Code;
     use Lib\Size;
-    use Lib\Status;
+    use Lib\Standing;
 
     require __DIR__ . '/attempt.inc';
-    require __DIR__ . '/harness/Status.inc';
+    require __DIR__ . '/harness/Standing.inc';
     require __DIR__ . '/EnumKeys.sharp';
 
     for ($round = 0; $round < 100; $round++) {
         ob_start();
         $headcount = new Demo\Headcount();
-        $headcount->add(Status::Active);
-        attempt(fn () => $headcount->add(Status::Active));
+        $headcount->add(Standing::Active);
+        attempt(fn () => $headcount->add(Standing::Active));
         attempt(fn () => $headcount->seededCounts());
-        attempt(fn () => Demo\Headcount::count(['closed' => 2], Status::Closed));
-        attempt(fn () => Demo\Headcount::count([], Status::Active));
-        attempt(fn () => Demo\Headcount::ensure(['closed' => 2], Status::Closed));
-        attempt(fn () => Demo\Headcount::ensure([], Status::Active));
+        attempt(fn () => Demo\Headcount::count(['closed' => 2], Standing::Closed));
+        attempt(fn () => Demo\Headcount::count([], Standing::Active));
+        attempt(fn () => Demo\Headcount::ensure(['closed' => 2], Standing::Closed));
+        attempt(fn () => Demo\Headcount::ensure([], Standing::Active));
         attempt(fn () => Demo\Headcount::sizes(Size::Small, Size::Large));
         attempt(fn () => Demo\Headcount::codes(Code::Five));
-        attempt(fn () => Demo\Headcount::read(['active' => 3], Status::Active));
-        attempt(fn () => Demo\Headcount::read(['active' => 3], Status::Closed));
-        attempt(fn () => Demo\Headcount::lookup(['active' => 3], Status::Active));
-        attempt(fn () => Demo\Headcount::lookup(['active' => 3], Status::Closed));
-        attempt(fn () => Demo\Headcount::without(['active' => 3, 'closed' => 4], Status::Active));
-        attempt(fn () => Demo\Headcount::nest(Status::Closed, Size::Large));
+        attempt(fn () => Demo\Headcount::read(['active' => 3], Standing::Active));
+        attempt(fn () => Demo\Headcount::read(['active' => 3], Standing::Closed));
+        attempt(fn () => Demo\Headcount::lookup(['active' => 3], Standing::Active));
+        attempt(fn () => Demo\Headcount::lookup(['active' => 3], Standing::Closed));
+        attempt(fn () => Demo\Headcount::without(['active' => 3, 'closed' => 4], Standing::Active));
+        attempt(fn () => Demo\Headcount::nest(Standing::Closed, Size::Large));
         attempt(fn () => Demo\Headcount::byName(['active' => 3, 'closed' => 4]));
         // Collections handed in from plain PHP are not element-checked yet, so a key that is no case fails here.
         attempt(fn () => Demo\Headcount::byName(['missing' => 1]));
@@ -40,10 +40,10 @@ namespace {
     // Plain PHP keeps refusing an enum as a key.
     attempt(function () {
         $counts = [];
-        $counts[Status::Active] = 1;
+        $counts[Standing::Active] = 1;
         return $counts;
     });
-    attempt(fn () => ['active' => 1][Status::Active] ?? 0);
+    attempt(fn () => ['active' => 1][Standing::Active] ?? 0);
     attempt(fn () => [Size::Small => 'small']);
-    attempt(fn () => (new class { public array $seeded = [Status::Active => 0]; })->seeded);
+    attempt(fn () => (new class { public array $seeded = [Standing::Active => 0]; })->seeded);
 }

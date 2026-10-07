@@ -2,31 +2,31 @@ namespace Demo;
 
 import Lib.Code;
 import Lib.Size;
-import Lib.Status;
+import Lib.Standing;
 
 class Headcount
 {
-    private Map<Status, int> counts = [:];
-    private Map<Status, int> seeded = [Status.Active: 0];
+    private Map<Standing, int> counts = [:];
+    private Map<Standing, int> seeded = [Standing.Active: 0];
 
-    public Map<Status, int> seededCounts()
+    public Map<Standing, int> seededCounts()
     {
         return this.seeded;
     }
 
-    public Map<Status, int> add(Status status)
+    public Map<Standing, int> add(Standing status)
     {
         this.counts[status] = (this.counts[status] ?? 0) + 1;
         return this.counts;
     }
 
-    public static Map<Status, int> count(Map<Status, int> counts, Status status)
+    public static Map<Standing, int> count(Map<Standing, int> counts, Standing status)
     {
         counts[status] = (counts[status] ?? 0) + 1;
         return counts;
     }
 
-    public static Map<Status, int> ensure(Map<Status, int> counts, Status status)
+    public static Map<Standing, int> ensure(Map<Standing, int> counts, Standing status)
     {
         counts[status] ??= 0;
         return counts;
@@ -44,34 +44,34 @@ class Headcount
         return codes;
     }
 
-    public static int read(Map<Status, int> counts, Status status)
+    public static int read(Map<Standing, int> counts, Standing status)
     {
         return counts[status];
     }
 
-    public static int? lookup(Map<Status, int> counts, Status status)
+    public static int? lookup(Map<Standing, int> counts, Standing status)
     {
         return counts.get(status);
     }
 
-    public static Map<Status, int> without(Map<Status, int> counts, Status status)
+    public static Map<Standing, int> without(Map<Standing, int> counts, Standing status)
     {
         counts.delete(status);
         return counts;
     }
 
-    public static Map<Status, Map<Size, int>> nest(Status status, Size size)
+    public static Map<Standing, Map<Size, int>> nest(Standing status, Size size)
     {
-        Map<Status, Map<Size, int>> nested = [:];
+        Map<Standing, Map<Size, int>> nested = [:];
         nested[status] = [:];
         nested[status][size] = 1;
         return nested;
     }
 
-    public static Map<string, int> byName(Map<Status, int> counts)
+    public static Map<string, int> byName(Map<Standing, int> counts)
     {
         Map<string, int> named = [:];
-        for (const [Status status, int n] of counts) {
+        for (const [Standing status, int n] of counts) {
             named[status.name] = n;
         }
         return named;

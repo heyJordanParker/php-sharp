@@ -2,31 +2,31 @@
 
 use Lib\Code;
 use Lib\Size;
-use Lib\Status;
+use Lib\Standing;
 
 class Headcount
 {
     private array $counts = [];
-    private array $seeded = [Status::Active => 0]; // PHP# stores the key as 'active'
+    private array $seeded = [Standing::Active => 0]; // PHP# stores the key as 'active'
 
     public function seededCounts(): array
     {
         return $this->seeded;
     }
 
-    public function add(Status $status): array
+    public function add(Standing $status): array
     {
         $this->counts[$status] = ($this->counts[$status] ?? 0) + 1;
         return $this->counts;
     }
 
-    public static function count(array $counts, Status $status): array
+    public static function count(array $counts, Standing $status): array
     {
         $counts[$status] = ($counts[$status] ?? 0) + 1;
         return $counts;
     }
 
-    public static function ensure(array $counts, Status $status): array
+    public static function ensure(array $counts, Standing $status): array
     {
         $counts[$status] ??= 0;
         return $counts;
@@ -44,23 +44,23 @@ class Headcount
         return $codes;
     }
 
-    public static function read(array $counts, Status $status): int
+    public static function read(array $counts, Standing $status): int
     {
         return $counts[$status];
     }
 
-    public static function lookup(array $counts, Status $status): ?int
+    public static function lookup(array $counts, Standing $status): ?int
     {
         return ((object) $counts)->get($status); // PHP# makes the array a Sharp\Collection
     }
 
-    public static function without(array $counts, Status $status): array
+    public static function without(array $counts, Standing $status): array
     {
         ((object) $counts)->delete($status); // PHP# makes the array a Sharp\Collection
         return $counts;
     }
 
-    public static function nest(Status $status, Size $size): array
+    public static function nest(Standing $status, Size $size): array
     {
         $nested = [];
         $nested[$status] = [];
@@ -71,7 +71,7 @@ class Headcount
     public static function byName(array $counts): array
     {
         $named = [];
-        foreach ($counts as $status => $n) { $status = Status::from($status); // PHP# reads the key back as the case
+        foreach ($counts as $status => $n) { $status = Standing::from($status); // PHP# reads the key back as the case
             $named[$status->name] = $n;
         }
         return $named;
