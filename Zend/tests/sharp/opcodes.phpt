@@ -40,6 +40,7 @@ $fixtures = [
     'Roster' => null,
     'Store' => 'harness/Model.inc',
     'Inbox' => null,
+    'Patterns' => null,
 ];
 
 foreach ($fixtures as $fixture => $library) {
@@ -159,3 +160,4 @@ Store: different opcodes and lines in 3 op arrays, same signatures in 1 classes
   .php   L0005 0000 DECLARE_CLASS string("store\\order") string("lib\\model")
   .php   0000 DECLARE_CLASS_DELAYED string("store\\order") string("lib\\model")
 Inbox: same opcodes and lines in 9 op arrays, same signatures in 1 classes
+Patterns: same opcodes and lines in 11 op arrays, same signatures in 1 classes

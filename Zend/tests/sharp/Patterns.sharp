@@ -1,0 +1,88 @@
+namespace Demo;
+
+class Patterns
+{
+    public float area(Figure shape)
+    {
+        if (shape is Circle circle) {
+            return 3.0 * circle.radius * circle.radius;
+        }
+        if (shape is not Square square) {
+            return 0.0;
+        }
+        return square.side * square.side;
+    }
+
+    public float side(Figure shape)
+    {
+        if (shape is Square) {
+            return shape.side;
+        }
+        return 0.0;
+    }
+
+    public float radius(Figure shape)
+    {
+        const circle = shape as Circle;
+        return circle?.radius ?? 0.0;
+    }
+
+    public string describe(Figure? shape)
+    {
+        return match (shape) {
+            null => "nothing",
+            Circle c when c.radius > 10.0 => "big circle",
+            Circle => "circle",
+            default => "square",
+        };
+    }
+
+    public string grade(int score)
+    {
+        return match (score) {
+            < 0 => "invalid",
+            >= 90 => "top",
+            >= 50 and < 70 => "pass",
+            default => "fail",
+        };
+    }
+
+    public int count(Figure? shape)
+    {
+        let total = 0;
+        match (shape) {
+            Circle => {
+                total = 1;
+            },
+            Square s when s.side > 1.0 => total = 2,
+            default => {},
+        }
+        return total;
+    }
+
+    public bool wide(Circle circle) => circle is { radius: >= 2.0 };
+
+    public string first(Patterns patterns) => match (patterns.grade(95)) {
+        "top" => "first",
+        default => "other",
+    };
+
+    public string state(Status status)
+    {
+        return match (status) {
+            Status.Open => "open",
+            Status.Closed or Status.Archived => "done",
+        };
+    }
+
+    public int closed(Status? status)
+    {
+        let total = 0;
+        match (status) {
+            Status.Open => total = 1,
+            Status.Closed or Status.Archived => total = 2,
+            null => {},
+        }
+        return total;
+    }
+}
