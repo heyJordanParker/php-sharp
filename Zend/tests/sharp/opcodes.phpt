@@ -38,6 +38,7 @@ $fixtures = [
     'Lambdas' => null,
     'Cashier' => null,
     'Roster' => null,
+    'Store' => 'harness/Model.inc',
 ];
 
 foreach ($fixtures as $fixture => $library) {
@@ -151,3 +152,8 @@ Lambdas: different opcodes and lines in 35 op arrays, same signatures in 1 class
   .php        3: 0007 - 0008 (tmp/var)
 Cashier: same opcodes and lines in 8 op arrays, same signatures in 1 classes
 Roster: same opcodes and lines in 6 op arrays, same signatures in 1 classes
+Store: different opcodes and lines in 3 op arrays, same signatures in 1 classes
+  .sharp L0005 0000 DECLARE_CLASS string("store\\order")
+  .sharp 0000 DECLARE_CLASS string("store\\order")
+  .php   L0005 0000 DECLARE_CLASS string("store\\order") string("lib\\model")
+  .php   0000 DECLARE_CLASS_DELAYED string("store\\order") string("lib\\model")
