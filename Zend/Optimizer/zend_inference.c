@@ -3926,7 +3926,13 @@ static zend_always_inline zend_result _zend_update_type_info(
 			bool is_prototype;
 			const zend_class_constant *cc = zend_fetch_class_const_info(script, op_array, opline, &is_prototype);
 			if (!cc || !ZEND_TYPE_IS_SET(cc->type)) {
-				UPDATE_SSA_TYPE(MAY_BE_RC1|MAY_BE_RCN|MAY_BE_ANY|MAY_BE_ARRAY_KEY_ANY|MAY_BE_ARRAY_OF_ANY, ssa_op->result_def);
+				tmp = MAY_BE_RC1|MAY_BE_RCN|MAY_BE_ANY|MAY_BE_ARRAY_KEY_ANY|MAY_BE_ARRAY_OF_ANY;
+				/* A PHP# `Class.y` read without a known constant may read a static property, whose array
+				 * elements may be references. */
+				if (!cc && (opline->extended_value & ZEND_FETCH_CLASS_MEMBER)) {
+					tmp |= MAY_BE_ARRAY_OF_REF;
+				}
+				UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
 				break;
 			}
 			UPDATE_SSA_TYPE(zend_convert_type(script, cc->type, &ce), ssa_op->result_def);
