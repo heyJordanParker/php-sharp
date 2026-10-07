@@ -7,6 +7,7 @@
 #include "ext/standard/info.h"
 #include "zend_closures.h"
 #include "zend_exceptions.h"
+#include "zend_interfaces.h"
 #include "zend_system_id.h"
 #include "php_sharp.h"
 #include "sharp_arginfo.h"
@@ -974,6 +975,371 @@ ZEND_METHOD(Sharp_Collection, sortedBy)
 	zval_ptr_dtor(&pairs);
 }
 
+static zend_class_entry *sharp_ce_sequence;
+static zend_object_handlers sharp_sequence_handlers;
+
+/* Spec section 12: what one Sequence does to each value of the one it reads. */
+typedef enum {
+	SHARP_SEQUENCE_FROM,
+	SHARP_SEQUENCE_FILTER,
+	SHARP_SEQUENCE_MAP,
+	SHARP_SEQUENCE_TAKE,
+} sharp_sequence_stage;
+
+/* One stage of a lazy chain: source is the iterable for from and the Sequence before it for every other stage. */
+typedef struct {
+	sharp_sequence_stage stage;
+	zend_long count;
+	zval source;
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+	zend_object std;
+} sharp_sequence;
+
+/* One reading of a stage: it.data holds the Sequence, and source reads the stage before it, or is NULL for an array. */
+typedef struct {
+	zend_object_iterator it;
+	zend_object_iterator *source;
+	HashPosition position;
+	zend_long index;
+	zval value;
+} sharp_sequence_iterator;
+
+static sharp_sequence *sharp_sequence_from(zend_object *object)
+{
+	return (sharp_sequence *) ((char *) object - XtOffsetOf(sharp_sequence, std));
+}
+
+static zend_object *sharp_sequence_create(zend_class_entry *ce)
+{
+	sharp_sequence *sequence = zend_object_alloc(sizeof(sharp_sequence), ce);
+
+	memset(sequence, 0, XtOffsetOf(sharp_sequence, std));
+	zend_object_std_init(&sequence->std, ce);
+
+	return &sequence->std;
+}
+
+static void sharp_sequence_free(zend_object *object)
+{
+	sharp_sequence *sequence = sharp_sequence_from(object);
+
+	zval_ptr_dtor(&sequence->source);
+	zval_ptr_dtor(&sequence->fci.function_name);
+	zend_object_std_dtor(object);
+}
+
+static HashTable *sharp_sequence_get_gc(zend_object *object, zval **table, int *n)
+{
+	sharp_sequence *sequence = sharp_sequence_from(object);
+	zend_get_gc_buffer *buffer = zend_get_gc_buffer_create();
+
+	zend_get_gc_buffer_add_zval(buffer, &sequence->source);
+	zend_get_gc_buffer_add_zval(buffer, &sequence->fci.function_name);
+	zend_get_gc_buffer_use(buffer, table, n);
+
+	return NULL;
+}
+
+/* Calls a stage's closure through a copy of its fci, since a closure that reads the stage again rewrites fci.retval. */
+static bool sharp_sequence_call(sharp_sequence *sequence, zval *element, zval *result)
+{
+	zend_fcall_info fci = sequence->fci;
+
+	return sharp_collection_call(&fci, &sequence->fcc, element, result);
+}
+
+/* Moves the source to its first element or its next, and copies that element. Returns false at the end and when reading threw. */
+static bool sharp_sequence_iterator_read(sharp_sequence_iterator *iterator, bool rewind, zval *element)
+{
+	zend_object_iterator *source = iterator->source;
+	zval *current;
+
+	if (!source) {
+		HashTable *array = Z_ARRVAL(sharp_sequence_from(Z_OBJ(iterator->it.data))->source);
+
+		if (rewind) {
+			zend_hash_internal_pointer_reset_ex(array, &iterator->position);
+		} else {
+			zend_hash_move_forward_ex(array, &iterator->position);
+		}
+		current = zend_hash_get_current_data_ex(array, &iterator->position);
+	} else {
+		if (!rewind) {
+			source->funcs->move_forward(source);
+		} else if (source->funcs->rewind) {
+			source->funcs->rewind(source);
+		}
+		if (EG(exception) || source->funcs->valid(source) == FAILURE) {
+			return false;
+		}
+		current = source->funcs->get_current_data(source);
+	}
+	if (!current || EG(exception)) {
+		return false;
+	}
+	ZVAL_COPY_DEREF(element, current);
+
+	return true;
+}
+
+/* Reads the stage's next value into value, which stays undefined at the end. take stops before it reads its source again. */
+static void sharp_sequence_iterator_fetch(sharp_sequence_iterator *iterator, bool rewind, zval *value)
+{
+	sharp_sequence *sequence = sharp_sequence_from(Z_OBJ(iterator->it.data));
+	zval element, result;
+
+	if (sequence->stage == SHARP_SEQUENCE_TAKE && iterator->index >= sequence->count) {
+		return;
+	}
+	while (sharp_sequence_iterator_read(iterator, rewind, &element)) {
+		rewind = false;
+		switch (sequence->stage) {
+			case SHARP_SEQUENCE_FROM:
+			case SHARP_SEQUENCE_TAKE:
+				ZVAL_COPY_VALUE(value, &element);
+				return;
+			case SHARP_SEQUENCE_MAP:
+				sharp_sequence_call(sequence, &element, value);
+				zval_ptr_dtor(&element);
+				return;
+			case SHARP_SEQUENCE_FILTER: {
+				bool kept = sharp_sequence_call(sequence, &element, &result) && zend_is_true(&result);
+
+				zval_ptr_dtor(&result);
+				if (kept) {
+					ZVAL_COPY_VALUE(value, &element);
+					return;
+				}
+				zval_ptr_dtor(&element);
+				if (EG(exception)) {
+					return;
+				}
+				break;
+			}
+		}
+	}
+}
+
+/* The old value is released last, so a destructor it runs sees the iterator on its new value. */
+static void sharp_sequence_iterator_next(sharp_sequence_iterator *iterator, bool rewind)
+{
+	zval value, old;
+
+	iterator->index = rewind ? 0 : iterator->index + 1;
+	ZVAL_UNDEF(&value);
+	sharp_sequence_iterator_fetch(iterator, rewind, &value);
+	ZVAL_COPY_VALUE(&old, &iterator->value);
+	ZVAL_COPY_VALUE(&iterator->value, &value);
+	zval_ptr_dtor(&old);
+}
+
+static void sharp_sequence_iterator_dtor(zend_object_iterator *object)
+{
+	sharp_sequence_iterator *iterator = (sharp_sequence_iterator *) object;
+
+	if (iterator->source) {
+		zend_iterator_dtor(iterator->source);
+	}
+	zval_ptr_dtor(&iterator->value);
+	zval_ptr_dtor(&iterator->it.data);
+}
+
+static zend_result sharp_sequence_iterator_valid(zend_object_iterator *object)
+{
+	return Z_ISUNDEF(((sharp_sequence_iterator *) object)->value) ? FAILURE : SUCCESS;
+}
+
+static zval *sharp_sequence_iterator_get_current_data(zend_object_iterator *object)
+{
+	sharp_sequence_iterator *iterator = (sharp_sequence_iterator *) object;
+
+	return Z_ISUNDEF(iterator->value) ? NULL : &iterator->value;
+}
+
+/* Keys count the values this stage gave, from 0, whatever keys its source had. */
+static void sharp_sequence_iterator_get_current_key(zend_object_iterator *object, zval *key)
+{
+	sharp_sequence_iterator *iterator = (sharp_sequence_iterator *) object;
+
+	if (Z_ISUNDEF(iterator->value)) {
+		ZVAL_NULL(key);
+	} else {
+		ZVAL_LONG(key, iterator->index);
+	}
+}
+
+static void sharp_sequence_iterator_move_forward(zend_object_iterator *object)
+{
+	sharp_sequence_iterator_next((sharp_sequence_iterator *) object, false);
+}
+
+static void sharp_sequence_iterator_rewind(zend_object_iterator *object)
+{
+	sharp_sequence_iterator_next((sharp_sequence_iterator *) object, true);
+}
+
+static HashTable *sharp_sequence_iterator_get_gc(zend_object_iterator *object, zval **table, int *n)
+{
+	sharp_sequence_iterator *iterator = (sharp_sequence_iterator *) object;
+	zend_get_gc_buffer *buffer = zend_get_gc_buffer_create();
+
+	zend_get_gc_buffer_add_zval(buffer, &iterator->it.data);
+	zend_get_gc_buffer_add_zval(buffer, &iterator->value);
+	if (iterator->source) {
+		zend_get_gc_buffer_add_obj(buffer, &iterator->source->std);
+	}
+	zend_get_gc_buffer_use(buffer, table, n);
+
+	return NULL;
+}
+
+static const zend_object_iterator_funcs sharp_sequence_iterator_funcs = {
+	sharp_sequence_iterator_dtor,
+	sharp_sequence_iterator_valid,
+	sharp_sequence_iterator_get_current_data,
+	sharp_sequence_iterator_get_current_key,
+	sharp_sequence_iterator_move_forward,
+	sharp_sequence_iterator_rewind,
+	NULL,
+	sharp_sequence_iterator_get_gc,
+};
+
+/* Reads the chain for foreach, yield from, getIterator and toList, each through its own iterator of every stage. */
+static zend_object_iterator *sharp_sequence_get_iterator(zend_class_entry *ce, zval *object, int by_ref)
+{
+	sharp_sequence *sequence = sharp_sequence_from(Z_OBJ_P(object));
+	zend_object_iterator *source = NULL;
+
+	if (by_ref) {
+		zend_throw_error(NULL, "An iterator cannot be used with foreach by reference");
+		return NULL;
+	}
+	if (Z_TYPE(sequence->source) == IS_OBJECT) {
+		zend_class_entry *source_ce = Z_OBJCE(sequence->source);
+
+		source = source_ce->get_iterator(source_ce, &sequence->source, 0);
+		if (!source) {
+			return NULL;
+		}
+	}
+
+	sharp_sequence_iterator *iterator = emalloc(sizeof(sharp_sequence_iterator));
+	zend_iterator_init(&iterator->it);
+	iterator->it.funcs = &sharp_sequence_iterator_funcs;
+	ZVAL_OBJ_COPY(&iterator->it.data, Z_OBJ_P(object));
+	iterator->source = source;
+	iterator->position = 0;
+	iterator->index = 0;
+	ZVAL_UNDEF(&iterator->value);
+
+	return &iterator->it;
+}
+
+static sharp_sequence *sharp_sequence_new(zval *result, sharp_sequence_stage stage, zval *source)
+{
+	object_init_ex(result, sharp_ce_sequence);
+	sharp_sequence *sequence = sharp_sequence_from(Z_OBJ_P(result));
+	sequence->stage = stage;
+	ZVAL_COPY(&sequence->source, source);
+
+	return sequence;
+}
+
+/* A stored callable must outlive the call that passed it, so a stage takes only a Closure, which is never a trampoline. */
+static void sharp_sequence_closure_stage(INTERNAL_FUNCTION_PARAMETERS, sharp_sequence_stage stage)
+{
+	zval *closure;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJECT_OF_CLASS(closure, zend_ce_closure)
+	ZEND_PARSE_PARAMETERS_END();
+
+	sharp_sequence *sequence = sharp_sequence_new(return_value, stage, ZEND_THIS);
+	zend_fcall_info_init(closure, 0, &sequence->fci, &sequence->fcc, NULL, NULL);
+	Z_ADDREF(sequence->fci.function_name);
+}
+
+ZEND_METHOD(Sharp_Sequence, __construct)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+}
+
+/* A Sequence is already one, so a local that holds a chain's result chains on without a second stage. */
+ZEND_METHOD(Sharp_Sequence, from)
+{
+	zval *source;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ITERABLE(source)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (Z_TYPE_P(source) == IS_OBJECT && Z_OBJCE_P(source) == sharp_ce_sequence) {
+		RETURN_COPY(source);
+	}
+
+	sharp_sequence_new(return_value, SHARP_SEQUENCE_FROM, source);
+}
+
+ZEND_METHOD(Sharp_Sequence, filter)
+{
+	sharp_sequence_closure_stage(INTERNAL_FUNCTION_PARAM_PASSTHRU, SHARP_SEQUENCE_FILTER);
+}
+
+ZEND_METHOD(Sharp_Sequence, map)
+{
+	sharp_sequence_closure_stage(INTERNAL_FUNCTION_PARAM_PASSTHRU, SHARP_SEQUENCE_MAP);
+}
+
+ZEND_METHOD(Sharp_Sequence, take)
+{
+	zend_long count;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_LONG(count)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (count < 0) {
+		zend_argument_value_error(1, "must be greater than or equal to 0");
+		RETURN_THROWS();
+	}
+
+	sharp_sequence_new(return_value, SHARP_SEQUENCE_TAKE, ZEND_THIS)->count = count;
+}
+
+ZEND_METHOD(Sharp_Sequence, toList)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	sharp_sequence_iterator *iterator = (sharp_sequence_iterator *) sharp_sequence_get_iterator(sharp_ce_sequence, ZEND_THIS, 0);
+	if (!iterator) {
+		RETURN_THROWS();
+	}
+
+	zval list;
+	array_init(&list);
+	sharp_sequence_iterator_next(iterator, true);
+	while (!EG(exception) && !Z_ISUNDEF(iterator->value)) {
+		Z_TRY_ADDREF(iterator->value);
+		zend_hash_next_index_insert_new(Z_ARRVAL(list), &iterator->value);
+		sharp_sequence_iterator_next(iterator, false);
+	}
+	zend_iterator_dtor(&iterator->it);
+
+	if (EG(exception)) {
+		zval_ptr_dtor(&list);
+		RETURN_THROWS();
+	}
+	RETURN_COPY_VALUE(&list);
+}
+
+ZEND_METHOD(Sharp_Sequence, getIterator)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	zend_create_internal_iterator_zval(return_value, ZEND_THIS);
+}
+
 static PHP_MINIT_FUNCTION(sharp)
 {
 	sharp_ce_collection = register_class_Sharp_Collection();
@@ -984,6 +1350,16 @@ static PHP_MINIT_FUNCTION(sharp)
 	sharp_collection_handlers.free_obj = sharp_collection_free;
 	sharp_collection_handlers.clone_obj = NULL;
 	sharp_ce_collection->default_object_handlers = &sharp_collection_handlers;
+
+	sharp_ce_sequence = register_class_Sharp_Sequence(zend_ce_aggregate);
+	sharp_ce_sequence->create_object = sharp_sequence_create;
+	sharp_ce_sequence->get_iterator = sharp_sequence_get_iterator;
+	memcpy(&sharp_sequence_handlers, &std_object_handlers, sizeof(zend_object_handlers));
+	sharp_sequence_handlers.offset = XtOffsetOf(sharp_sequence, std);
+	sharp_sequence_handlers.free_obj = sharp_sequence_free;
+	sharp_sequence_handlers.get_gc = sharp_sequence_get_gc;
+	sharp_sequence_handlers.clone_obj = NULL;
+	sharp_ce_sequence->default_object_handlers = &sharp_sequence_handlers;
 
 	sharp_init();
 	zend_add_system_entropy("sharp", "SHARP_BUILD_ID", SHARP_BUILD_ID, sizeof(SHARP_BUILD_ID) - 1);
