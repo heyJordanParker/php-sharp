@@ -1,0 +1,7 @@
+namespace Demo;
+
+import Lib.Mixin;
+
+public class Blend : Mixin
+{
+}

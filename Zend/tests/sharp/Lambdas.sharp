@@ -1,0 +1,102 @@
+namespace Demo;
+
+import OutOfRangeException;
+
+class Lambdas
+{
+    private int base = 10;
+
+    public int run(int extra)
+    {
+        let count = 0;
+        const twice = (int a) => a * extra;
+        const Function<int(int)> half = b => intdiv(b, 2);
+        const add = (int step) => {
+            count += step + this.base;
+        };
+        const bump = () => count += 1;
+        add(twice(half(4)));
+        bump();
+        return count;
+    }
+
+    public static List<int> doubled(List<int> numbers, int by)
+    {
+        return array_map(n => n * by, numbers);
+    }
+
+    public static string passes(int times)
+    {
+        List<Function<int()>> marks = [() => 0];
+        while (times > 0) {
+            let seen = times;
+            const mark = () => {
+                seen += 100;
+            };
+            mark();
+            marks.add(() => seen);
+            times -= 1;
+        }
+        return implode(",", array_map(read => read(), marks));
+    }
+
+    public static List<string> pipeline(List<int> numbers, Map<string, int> prices)
+    {
+        const odd = numbers.filter(n => n % 2 == 1);
+        const labels = odd.map(n => (string) (n * 10));
+        const groups = numbers.groupBy(n => n % 2 == 0 ? "even" : "odd");
+        return [
+            implode(",", labels),
+            implode(",", numbers.sortedBy(n => -n)),
+            implode(",", groups["odd"] ?? []),
+            implode(",", array_keys(labels.associateBy(label => label))),
+            implode(",", array_keys(prices.filterValues(price => price < 100))),
+            implode(",", prices.filter(price => price < 100)),
+            implode(",", prices.map(price => price * 2)),
+        ];
+    }
+
+    public static int total(List<int> numbers) => numbers.sumOf(n => n * 2) + numbers.first(n => n > 2) + (numbers.any(n => n > 9) ? 1 : 0);
+
+    public static List<string> failures(List<int> numbers)
+    {
+        List<string> messages = [];
+        try {
+            numbers.first(n => n > 100);
+        } catch (OutOfRangeException missing) {
+            messages.add(missing.getMessage());
+        }
+        try {
+            numbers.map(n => n > 2 ? throw new OutOfRangeException((string) n) : n);
+        } catch (OutOfRangeException stopped) {
+            messages.add(stopped.getMessage());
+        }
+        return messages;
+    }
+
+    public static List<int> captured(List<int> numbers)
+    {
+        let seen = numbers;
+        const kept = seen.filter(n => {
+            seen.add(n);
+            return true;
+        });
+        const grown = count(seen);
+        const size = () => count(seen);
+        seen.add(0);
+        return [count(kept), grown, size()];
+    }
+
+    public int nested(int extra)
+    {
+        const outer = (int a) => {
+            const Function<int(int)> inner = b => a + b + extra + this.base;
+            return inner(1);
+        };
+        return outer(2);
+    }
+
+    public static List<int> scaled(List<int> numbers) => numbers.map(Lambdas.twice);
+
+    private static int twice(int n) => n * 2;
+}

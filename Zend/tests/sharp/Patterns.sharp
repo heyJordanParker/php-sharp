@@ -2,7 +2,7 @@ namespace Demo;
 
 class Patterns
 {
-    public float area(Shape shape)
+    public float area(Figure shape)
     {
         if (shape is Circle circle) {
             return 3.0 * circle.radius * circle.radius;
@@ -13,7 +13,7 @@ class Patterns
         return square.side * square.side;
     }
 
-    public float side(Shape shape)
+    public float side(Figure shape)
     {
         if (shape is Square) {
             return shape.side;
@@ -21,13 +21,13 @@ class Patterns
         return 0.0;
     }
 
-    public float radius(Shape shape)
+    public float radius(Figure shape)
     {
         const circle = shape as Circle;
         return circle?.radius ?? 0.0;
     }
 
-    public string describe(Shape? shape)
+    public string describe(Figure? shape)
     {
         return match (shape) {
             null => "nothing",
@@ -47,7 +47,7 @@ class Patterns
         };
     }
 
-    public int count(Shape? shape)
+    public int count(Figure? shape)
     {
         let total = 0;
         match (shape) {

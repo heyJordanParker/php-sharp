@@ -26,7 +26,7 @@ class Till
     public function ring(): int
     {
         $order = new \Demo\Order(1, 2, "A1");
-        $order->add(3);
+        ((object) $order)->add(3);
         return $order->total + $order->id;
     }
 }

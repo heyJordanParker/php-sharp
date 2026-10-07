@@ -14446,7 +14446,7 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 
 	if (!prop_info) {
 		ir_ref run_time_cache = ir_LOAD_A(jit_EX(run_time_cache));
-		ir_ref ref = ir_LOAD_A(ir_ADD_OFFSET(run_time_cache, opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS));
+		ir_ref ref = ir_LOAD_A(ir_ADD_OFFSET(run_time_cache, opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR)));
 		ir_ref if_same = ir_IF(ir_EQ(ref,
 			ir_LOAD_A(ir_ADD_OFFSET(obj_ref, offsetof(zend_object, ce)))));
 
@@ -14455,7 +14455,7 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 
 		ir_IF_TRUE(if_same);
 		ir_ref offset_ref = ir_LOAD_A(
-			ir_ADD_OFFSET(run_time_cache, (opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS) + sizeof(void*)));
+			ir_ADD_OFFSET(run_time_cache, (opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR)) + sizeof(void*)));
 
 		may_be_dynamic = zend_may_be_dynamic_property(ce, Z_STR_P(member), opline->op1_type == IS_UNUSED, op_array);
 		if (may_be_dynamic) {

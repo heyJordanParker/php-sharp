@@ -2,7 +2,7 @@
 
 class Patterns
 {
-    public function area(\Demo\Shape $shape): float
+    public function area(\Demo\Figure $shape): float
     {
         if (($circle = $shape) instanceof \Demo\Circle) {
             return 3.0 * $circle->radius * $circle->radius;
@@ -13,7 +13,7 @@ class Patterns
         return $square->side * $square->side;
     }
 
-    public function side(\Demo\Shape $shape): float
+    public function side(\Demo\Figure $shape): float
     {
         if ($shape instanceof \Demo\Square) {
             return $shape->side;
@@ -21,13 +21,13 @@ class Patterns
         return 0.0;
     }
 
-    public function radius(\Demo\Shape $shape): float
+    public function radius(\Demo\Figure $shape): float
     {
         $circle = $shape instanceof \Demo\Circle ? $shape : null;
         return $circle?->radius ?? 0.0;
     }
 
-    public function describe(?\Demo\Shape $shape): string
+    public function describe(?\Demo\Figure $shape): string
     {
         return match (true) {
             null === $shape => "nothing",
@@ -47,7 +47,7 @@ class Patterns
         };
     }
 
-    public function count(?\Demo\Shape $shape): int
+    public function count(?\Demo\Figure $shape): int
     {
         $total = 0;
 
@@ -62,7 +62,7 @@ class Patterns
 
     public function wide(\Demo\Circle $circle): bool { return \is_object($circle) && (${'match#1'} = $circle->radius) >= 2.0; }
 
-    public function first(\Demo\Patterns $patterns): string { return match (true) { (${'match#1'} = $patterns->grade(95))
+    public function first(\Demo\Patterns $patterns): string { return match (true) { (${'match#1'} = ((object) $patterns)->grade(95))
         === "top" => "first",
         default => "other",
     }; }
