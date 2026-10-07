@@ -521,6 +521,8 @@ static bool zend_jit_may_avoid_refcounting(const zend_op *opline, uint32_t op1_i
 		case ZEND_FETCH_OBJ_R:
 		case ZEND_FETCH_OBJ_IS:
 			if ((op1_info & MAY_BE_OBJECT)
+			 /* The VM runs the fetch of a PHP# method call's receiver, which releases its operand. */
+			 && !(opline->extended_value & ZEND_SHARP_OPERATOR)
 			 && opline->op2_type == IS_CONST
 			 && Z_TYPE_P(RT_CONSTANT(opline, opline->op2)) == IS_STRING
 			 && Z_STRVAL_P(RT_CONSTANT(opline, opline->op2))[0] != '\0') {
@@ -665,6 +667,28 @@ static zend_property_info* zend_get_known_property_info(const zend_op_array *op_
 	}
 
 	return NULL;
+}
+
+/* The receiver of a PHP# method call on an array becomes a Sharp\Collection, which only the VM makes,
+ * see ZEND_SHARP_OPERATOR. The fetch stays inline when the declared type of the property rules out an
+ * array, found as zend_jit_fetch_obj() finds the property. */
+static bool zend_jit_sharp_receiver_may_be_array(const zend_op_array *op_array, const zend_op *opline,
+	zend_class_entry *ce, bool on_this, zend_class_entry *trace_ce)
+{
+	zend_string *member = Z_STR_P(RT_CONSTANT(opline, opline->op2));
+	zend_property_info *prop_info;
+
+	if (!(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		return 0;
+	}
+	prop_info = zend_get_known_property_info(op_array, ce, member, on_this, op_array->filename);
+	if (!prop_info && trace_ce && (trace_ce->ce_flags & ZEND_ACC_IMMUTABLE)) {
+		prop_info = zend_get_known_property_info(op_array, trace_ce, member, on_this, op_array->filename);
+	}
+
+	return !prop_info
+		|| !ZEND_TYPE_IS_SET(prop_info->type)
+		|| (ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_ARRAY);
 }
 
 static bool zend_may_be_dynamic_property(zend_class_entry *ce, zend_string *member, bool on_this, const zend_op_array *op_array)
@@ -2070,6 +2094,14 @@ static int zend_jit(const zend_op_array *op_array, zend_ssa *ssa, const zend_op 
 							goto jit_failure;
 						}
 						goto done;
+					case ZEND_CAST:
+						/* The receiver of a PHP# method call passes through as ZEND_QM_ASSIGN copies it,
+						 * unless it may be an array. */
+						if (opline->extended_value != (IS_OBJECT | ZEND_SHARP_OPERATOR)
+						 || (OP1_INFO() & MAY_BE_ARRAY)) {
+							break;
+						}
+						ZEND_FALLTHROUGH;
 					case ZEND_QM_ASSIGN:
 						op1_addr = OP1_REG_ADDR();
 						if (ra
@@ -2492,6 +2524,10 @@ static int zend_jit(const zend_op_array *op_array, zend_ssa *ssa, const zend_op 
 						if (opline->op2_type != IS_CONST
 						 || Z_TYPE_P(RT_CONSTANT(opline, opline->op2)) != IS_STRING
 						 || Z_STRVAL_P(RT_CONSTANT(opline, opline->op2))[0] == '\0') {
+							break;
+						}
+						if (opline->opcode == ZEND_FETCH_OBJ_R
+						 && zend_jit_sharp_receiver_may_be_array(op_array, opline, ce, on_this, NULL)) {
 							break;
 						}
 						if (opline->opcode == ZEND_FETCH_OBJ_FUNC_ARG) {

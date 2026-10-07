@@ -286,10 +286,15 @@ static bool is_escape_use(zend_op_array *op_array, zend_ssa *ssa, int use, int v
 					}
 				}
 				break;
+			case ZEND_FETCH_OBJ_R:
+				if (opline->extended_value & ZEND_SHARP_OPERATOR) {
+					/* The Sharp\Collection of a PHP# method call holds the object whose property it changes, so the object escapes. */
+					return 1;
+				}
+				break;
 			case ZEND_ISSET_ISEMPTY_DIM_OBJ:
 			case ZEND_ISSET_ISEMPTY_PROP_OBJ:
 			case ZEND_FETCH_DIM_R:
-			case ZEND_FETCH_OBJ_R:
 			case ZEND_FETCH_DIM_IS:
 			case ZEND_FETCH_OBJ_IS:
 				break;

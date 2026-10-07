@@ -2,7 +2,7 @@
 
 ## Decision
 
-A `Map` read is handled where it is read, with `??`, `?.`, `is`, `as`, `match` or `get`, so code handles a missing key at the read. A bare `map[key]` is a compile error that names `??` and `get`, and `get` gives `TValue?`. A bare `x[i]` throws `OutOfRangeException` on a missing index or key, and `set` throws it past the end of a `List`. Appending is `add`. Decision 26 gives every collection operation one meaning on `List` and `Map`.
+A `Map` read is handled where it is read, with `??`, `?.`, `is`, `as`, `match` or `get`, so code handles a missing key at the read. A bare `map[key]` is a compile error that names `??` and `get`, and `get` gives `TValue?`. A bare `x[i]` throws `OutOfRangeException` on a missing index or key, and `set` throws it past the end of a `List`. Appending is `add`. Decision 26 decides what each collection operation does on a `List` and a `Map`.
 
 ## Options
 

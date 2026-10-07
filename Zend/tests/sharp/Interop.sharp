@@ -1,0 +1,14 @@
+namespace Demo;
+
+class Interop
+{
+    public static string shipping(int cents)
+    {
+        return shipping_label(cents);
+    }
+
+    public static string shippingIn(string currency, int cents)
+    {
+        return shipping_label(cents * 2, currency: currency);
+    }
+}

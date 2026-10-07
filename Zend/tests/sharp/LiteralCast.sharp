@@ -1,0 +1,19 @@
+namespace Demo;
+
+class LiteralCast
+{
+    public static int half()
+    {
+        return (int)2.5;
+    }
+
+    public static int huge()
+    {
+        return (int)1.0e300;
+    }
+
+    public static int below()
+    {
+        return (int)-1.0e19;
+    }
+}
