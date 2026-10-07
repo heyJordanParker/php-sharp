@@ -4,8 +4,10 @@ namespace Lib;
 
 require __DIR__ . '/harness/Registry.inc';
 require __DIR__ . '/Members.sharp';
+require __DIR__ . '/MembersErrors.sharp';
 
 use Demo\Members;
+use Demo\Misread;
 
 for ($i = 0; $i < 100; $i++) {
     $start = Members::start();
@@ -28,9 +30,9 @@ for ($i = 0; $i < 50; $i++) {
 }
 var_dump($ones);
 
-foreach (['missing', 'hidden', 'late'] as $method) {
+foreach ([[Misread::class, 'missing'], [Misread::class, 'hidden'], [Members::class, 'late']] as [$class, $method]) {
     try {
-        Members::$method();
+        $class::$method();
     } catch (\Error $e) {
         echo $e->getMessage(), "\n";
     }

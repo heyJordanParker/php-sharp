@@ -53,16 +53,6 @@ class Members
         return Members::$count;
     }
 
-    public static function missing(): int
-    {
-        return Registry::$missing;
-    }
-
-    public static function hidden(): int
-    {
-        return Registry::$hidden;
-    }
-
     public static function late(): int
     {
         return Registry::$late;

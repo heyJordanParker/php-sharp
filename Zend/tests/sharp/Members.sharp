@@ -53,16 +53,6 @@ public class Members
         return Members.count;
     }
 
-    public static int missing()
-    {
-        return Registry.missing;
-    }
-
-    public static int hidden()
-    {
-        return Registry.hidden;
-    }
-
     public static int late()
     {
         return Registry.late;
