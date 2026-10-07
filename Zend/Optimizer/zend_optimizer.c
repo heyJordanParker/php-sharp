@@ -322,7 +322,7 @@ bool zend_optimizer_update_op1_const(zend_op_array *op_array,
 			drop_leading_backslash(val);
 			opline->op1.constant = zend_optimizer_add_literal(op_array, val);
 			if (opline->op2_type != IS_CONST) {
-				opline->extended_value = alloc_cache_slots(op_array, 1) | (opline->extended_value & ZEND_FETCH_CLASS_MEMBER);
+				opline->extended_value = alloc_cache_slots(op_array, 1);
 			}
 			zend_optimizer_add_literal_string(op_array, zend_string_tolower(Z_STR_P(val)));
 			break;

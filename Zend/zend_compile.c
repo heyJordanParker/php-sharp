@@ -1774,9 +1774,7 @@ static void zend_ensure_valid_class_fetch_type(uint32_t fetch_type) /* {{{ */
 			zend_error_noreturn(E_COMPILE_ERROR, "Cannot use \"%s\" when no class scope is active",
 				fetch_type == ZEND_FETCH_CLASS_SELF ? "self" :
 				fetch_type == ZEND_FETCH_CLASS_PARENT ? "parent" : "static");
-		} else if (fetch_type == ZEND_FETCH_CLASS_PARENT && !ce->parent_name
-				/* A PHP# class finds its parent in its interface list when it links. */
-				&& !(ce->ce_flags & ZEND_ACC_PARENT_IN_INTERFACES)) {
+		} else if (fetch_type == ZEND_FETCH_CLASS_PARENT && !ce->parent_name) {
 			zend_error_noreturn(E_COMPILE_ERROR,
 				"Cannot use \"parent\" when current class scope has no parent");
 		}
@@ -7174,9 +7172,10 @@ static zend_type zend_compile_single_typename(zend_ast *ast)
 					}
 				} else {
 					ZEND_ASSERT(fetch_type == ZEND_FETCH_CLASS_PARENT);
-					/* Scope might be unknown for unbound closures and traits, and a PHP# parent until it links */
-					if (substitute_self_parent && CG(active_class_entry)->parent_name) {
+					/* Scope might be unknown for unbound closures and traits */
+					if (substitute_self_parent) {
 						class_name = CG(active_class_entry)->parent_name;
+						ZEND_ASSERT(class_name && "must know class name when resolving parent type at compile time");
 					}
 				}
 				zend_string_addref(class_name);
@@ -9993,10 +9992,6 @@ ZEND_API bool zend_binary_op_produces_error(uint32_t opcode, const zval *op1, co
 {
 	if (opcode & ZEND_SHARP_OPERATOR) {
 		opcode &= ~ZEND_SHARP_OPERATOR;
-		if (opcode == ZEND_ADD && Z_TYPE_P(op1) == IS_STRING && Z_TYPE_P(op2) == IS_STRING) {
-			/* PHP#'s + joins two strings. */
-			return 0;
-		}
 		/* A negative exponent gives PHP's float, and PHP's own checks below cover it. */
 		if (Z_TYPE_P(op1) == IS_LONG && Z_TYPE_P(op2) == IS_LONG && !(opcode == ZEND_POW && Z_LVAL_P(op2) < 0)) {
 			zval result;
@@ -11162,10 +11157,7 @@ static void zend_compile_class_const(znode *result, zend_ast *ast) /* {{{ */
 
 	zend_set_class_name_op1(opline, &class_node);
 
-	if (ast->attr & ZEND_FETCH_CLASS_MEMBER_SYNTAX) {
-		/* The static property it falls back to caches its class, address and info, as FETCH_STATIC_PROP_R does. */
-		opline->extended_value = zend_alloc_cache_slots(3) | ZEND_FETCH_CLASS_MEMBER;
-	} else if (opline->op1_type == IS_CONST || opline->op2_type == IS_CONST) {
+	if (opline->op1_type == IS_CONST || opline->op2_type == IS_CONST) {
 		opline->extended_value = zend_alloc_cache_slots(2);
 	}
 }

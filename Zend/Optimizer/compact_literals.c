@@ -34,8 +34,6 @@
 #define LITERAL_CLASS_CONST 1
 #define LITERAL_STATIC_METHOD 2
 #define LITERAL_STATIC_PROPERTY 3
-/* A PHP# `Class.y` read, which caches a class constant's value or a static property's address and info. */
-#define LITERAL_CLASS_MEMBER 4
 
 typedef struct _literal_info {
 	uint8_t num_related;
@@ -66,7 +64,7 @@ static uint32_t add_static_slot(HashTable     *hash,
 		ret = Z_LVAL_P(pos);
 	} else {
 		ret = *cache_size;
-		*cache_size += (kind == LITERAL_STATIC_PROPERTY || kind == LITERAL_CLASS_MEMBER ? 3 : 2) * sizeof(void *);
+		*cache_size += (kind == LITERAL_STATIC_PROPERTY ? 3 : 2) * sizeof(void *);
 		ZVAL_LONG(&tmp, ret);
 		zend_hash_add(hash, key, &tmp);
 	}
@@ -614,8 +612,7 @@ void zend_optimizer_compact_literals(zend_op_array *op_array, zend_optimizer_ctx
 						const_slot[opline->op2.constant] = opline->extended_value;
 					}
 					break;
-				case ZEND_FETCH_CLASS_CONSTANT: {
-					uint32_t member = opline->extended_value & ZEND_FETCH_CLASS_MEMBER;
+				case ZEND_FETCH_CLASS_CONSTANT:
 					if (opline->op1_type == IS_CONST
 						&& opline->op2_type == IS_CONST
 						&& Z_TYPE(op_array->literals[opline->op2.constant]) == IS_STRING) {
@@ -623,14 +620,13 @@ void zend_optimizer_compact_literals(zend_op_array *op_array, zend_optimizer_ctx
 						opline->extended_value = add_static_slot(&hash, op_array,
 							opline->op1.constant,
 							opline->op2.constant,
-							member ? LITERAL_CLASS_MEMBER : LITERAL_CLASS_CONST,
-							&cache_size) | (opline->extended_value & ZEND_FETCH_CLASS_MEMBER);
+							LITERAL_CLASS_CONST,
+							&cache_size);
 					} else {
-						opline->extended_value = cache_size | (opline->extended_value & ZEND_FETCH_CLASS_MEMBER);
-						cache_size += (member ? 3 : 2) * sizeof(void *);
+						opline->extended_value = cache_size;
+						cache_size += 2 * sizeof(void *);
 					}
 					break;
-				}
 				case ZEND_ASSIGN_STATIC_PROP:
 				case ZEND_ASSIGN_STATIC_PROP_REF:
 				case ZEND_FETCH_STATIC_PROP_R:

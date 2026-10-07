@@ -38,6 +38,8 @@ $fixtures = [
     'Cashier' => null,
     'Roster' => null,
     'Store' => 'harness/Model.inc',
+    'RushOrders' => 'harness/Model.inc',
+    'TypedOrders' => 'harness/TypedModel.inc',
 ];
 
 foreach ($fixtures as $fixture => $library) {
@@ -68,7 +70,7 @@ Nulls: same opcodes and lines in 13 op arrays, same signatures in 1 classes
 ControlFlow: same opcodes and lines in 6 op arrays, same signatures in 1 classes
 Order: same opcodes and lines in 4 op arrays, same signatures in 2 classes
 Product: same opcodes and lines in 3 op arrays, same signatures in 1 classes
-Expressions: same opcodes and lines in 7 op arrays, same signatures in 1 classes
+Expressions: same opcodes and lines in 8 op arrays, same signatures in 1 classes
 Checkout: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Page: same opcodes and lines in 10 op arrays, same signatures in 1 classes
 Shapes: same opcodes and lines in 5 op arrays, same signatures in 2 classes
@@ -81,3 +83,5 @@ Lambdas: same opcodes and lines in 35 op arrays, same signatures in 1 classes
 Cashier: same opcodes and lines in 8 op arrays, same signatures in 1 classes
 Roster: same opcodes and lines in 6 op arrays, same signatures in 1 classes
 Store: same opcodes and lines in 3 op arrays, same signatures in 1 classes
+RushOrders: same opcodes and lines in 2 op arrays, same signatures in 2 classes
+TypedOrders: same opcodes and lines in 2 op arrays, same signatures in 2 classes

@@ -2440,19 +2440,18 @@ static const zend_property_info *lookup_prop_info(const zend_class_entry *ce, ze
 		return NULL;
 	}
 
-	/* Otherwise, handle only some safe cases. A PHP# override's type is decided when its class links. */
+	/* Otherwise, handle only some safe cases */
 	prop_info = zend_hash_find_ptr(&ce->properties_info, name);
 	if (prop_info &&
 		((prop_info->ce == scope) ||
-		 (!scope && (prop_info->flags & ZEND_ACC_PUBLIC))) &&
-		!(prop_info->flags & ZEND_ACC_TYPE_FOLLOWS_PARENT)
+		 (!scope && (prop_info->flags & ZEND_ACC_PUBLIC)))
 	) {
 		return prop_info;
 	}
 	return NULL;
 }
 
-const zend_property_info *zend_fetch_prop_info(const zend_op_array *op_array, zend_ssa *ssa, const zend_op *opline, const zend_ssa_op *ssa_op)
+static const zend_property_info *zend_fetch_prop_info(const zend_op_array *op_array, zend_ssa *ssa, const zend_op *opline, const zend_ssa_op *ssa_op)
 {
 	const zend_property_info *prop_info = NULL;
 	if (opline->op2_type == IS_CONST) {
@@ -3977,13 +3976,7 @@ static zend_always_inline zend_result _zend_update_type_info(
 			bool is_prototype;
 			const zend_class_constant *cc = zend_fetch_class_const_info(script, op_array, opline, &is_prototype);
 			if (!cc || !ZEND_TYPE_IS_SET(cc->type)) {
-				tmp = MAY_BE_RC1|MAY_BE_RCN|MAY_BE_ANY|MAY_BE_ARRAY_KEY_ANY|MAY_BE_ARRAY_OF_ANY;
-				/* A PHP# `Class.y` read without a known constant may read a static property, whose array
-				 * elements may be references. */
-				if (!cc && (opline->extended_value & ZEND_FETCH_CLASS_MEMBER)) {
-					tmp |= MAY_BE_ARRAY_OF_REF;
-				}
-				UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
+				UPDATE_SSA_TYPE(MAY_BE_RC1|MAY_BE_RCN|MAY_BE_ANY|MAY_BE_ARRAY_KEY_ANY|MAY_BE_ARRAY_OF_ANY, ssa_op->result_def);
 				break;
 			}
 			UPDATE_SSA_TYPE(zend_convert_type(script, cc->type, &ce), ssa_op->result_def);

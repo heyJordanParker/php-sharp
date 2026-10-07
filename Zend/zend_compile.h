@@ -261,7 +261,7 @@ typedef struct _zend_oparray_context {
 /* has #[\Override] attribute                             |     |     |     */
 #define ZEND_ACC_OVERRIDE                (1 << 28) /*     |  X  |  X  |     */
 /*                                                        |     |     |     */
-/* Property Flags (unused: 14-27,29...)                   |     |     |     */
+/* Property Flags (unused: 13-27,29...)                   |     |     |     */
 /* ===========                                            |     |     |     */
 /*                                                        |     |     |     */
 /* Promoted property / parameter                          |     |     |     */
@@ -275,12 +275,7 @@ typedef struct _zend_oparray_context {
 #define ZEND_ACC_PROTECTED_SET           (1 << 11) /*     |     |  X  |     */
 #define ZEND_ACC_PRIVATE_SET             (1 << 12) /*     |     |  X  |     */
 /*                                                        |     |     |     */
-/* PHP# override of a plain PHP parent's property: the    |     |     |     */
-/* class drops its type when it links if the parent's     |     |     |     */
-/* property has none, as PHP refuses a type there         |     |     |     */
-#define ZEND_ACC_TYPE_FOLLOWS_PARENT     (1 << 13) /*     |     |  X  |     */
-/*                                                        |     |     |     */
-/* Class Flags (unused: none)                             |     |     |     */
+/* Class Flags (unused: 31)                               |     |     |     */
 /* ===========                                            |     |     |     */
 /*                                                        |     |     |     */
 /* Special class types                                    |     |     |     */
@@ -345,10 +340,6 @@ typedef struct _zend_oparray_context {
 /*                                                        |     |     |     */
 /* Class cannot be serialized or unserialized             |     |     |     */
 #define ZEND_ACC_NOT_SERIALIZABLE        (1 << 29) /*  X  |     |     |     */
-/*                                                        |     |     |     */
-/* PHP# class whose header lowered into the interface     |     |     |     */
-/* list: linking takes the one class there as the parent  |     |     |     */
-#define ZEND_ACC_PARENT_IN_INTERFACES    (1U << 31) /* X  |     |     |     */
 /*                                                        |     |     |     */
 /* Function Flags (unused: 30)                            |     |     |     */
 /* ==============                                         |     |     |     */
@@ -1169,29 +1160,9 @@ ZEND_STATIC_ASSERT(!(ZEND_ARRAY_SHARP & (ZEND_ARRAY_SYNTAX_LIST|ZEND_ARRAY_SYNTA
  *
  * ZEND_ARRAY_SHARP: a PHP# list or map literal, set in ext/sharp for every ZEND_AST_ARRAY.
  *   attr of ZEND_AST_ARRAY                                    upstream: ZEND_ARRAY_SYNTAX_*
- *
- * ZEND_FETCH_CLASS_MEMBER_SYNTAX: a PHP# `Class.y` read. The class constant fetch reads the static
- * property of the same name when the class has no such constant, because PHP# looks up the member's
- * kind when it runs.
- *   attr of ZEND_AST_CLASS_CONST                              upstream: the ZEND_FETCH_CLASS_* flags
- *
- * ZEND_FETCH_CLASS_MEMBER: the compiler turns ZEND_FETCH_CLASS_MEMBER_SYNTAX into it, below the cache slot.
- *   extended_value of ZEND_FETCH_CLASS_CONSTANT               upstream: the cache slot
- *
- * ZEND_ACC_PARENT_IN_INTERFACES: a PHP# class whose header lowered into the interface list. Linking
- * takes the one class there as the parent. It is defined with the other class flags, and the bridge
- * sets it in the flags of ZEND_AST_CLASS.
- *   ce_flags of a class                                       upstream: every class flag
- *
- * ZEND_ACC_TYPE_FOLLOWS_PARENT: a PHP# override of a plain PHP parent's property, which loses its
- * type when its class links if the inherited property has none. zend_property_info.flags carries
- * it until then.
- *   attr of ZEND_AST_PROP_GROUP                               upstream: the property flags
  */
 #define ZEND_SHARP_OPERATOR_SYNTAX	(1<<15)
 #define ZEND_SHARP_OPERATOR	(1<<30)
-#define ZEND_FETCH_CLASS_MEMBER_SYNTAX	(1<<15)
-#define ZEND_FETCH_CLASS_MEMBER	(1<<0)
 
 ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR_SYNTAX & UINT8_MAX),
 	"ZEND_SHARP_OPERATOR_SYNTAX overlaps the opcode in the attr of ZEND_AST_BINARY_OP");
@@ -1209,26 +1180,6 @@ ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & UINT8_MAX),
 	"ZEND_SHARP_OPERATOR overlaps the type in the extended_value of ZEND_CAST");
 ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & (ZEND_FETCH_DIM_REF|ZEND_FETCH_DIM_DIM|ZEND_FETCH_DIM_OBJ|ZEND_FETCH_DIM_INCDEC)),
 	"ZEND_SHARP_OPERATOR overlaps the ZEND_FETCH_DIM_* flags in the extended_value of ZEND_FETCH_DIM_R and ZEND_FETCH_DIM_FUNC_ARG");
-ZEND_STATIC_ASSERT(!(ZEND_FETCH_CLASS_MEMBER_SYNTAX & (ZEND_FETCH_CLASS_MASK | ZEND_FETCH_CLASS_NO_AUTOLOAD
-		| ZEND_FETCH_CLASS_SILENT | ZEND_FETCH_CLASS_EXCEPTION | ZEND_FETCH_CLASS_ALLOW_UNLINKED
-		| ZEND_FETCH_CLASS_ALLOW_NEARLY_LINKED)),
-	"ZEND_FETCH_CLASS_MEMBER_SYNTAX overlaps a ZEND_FETCH_CLASS_* flag in the attr of ZEND_AST_CLASS_CONST");
-ZEND_STATIC_ASSERT(ZEND_FETCH_CLASS_MEMBER < sizeof(void *),
-	"ZEND_FETCH_CLASS_MEMBER overlaps the cache slot in the extended_value of ZEND_FETCH_CLASS_CONSTANT");
-ZEND_STATIC_ASSERT(!(ZEND_ACC_PARENT_IN_INTERFACES & (ZEND_ACC_INTERFACE | ZEND_ACC_TRAIT | ZEND_ACC_ANON_CLASS
-		| ZEND_ACC_LINKED | ZEND_ACC_IMPLICIT_ABSTRACT_CLASS | ZEND_ACC_FINAL | ZEND_ACC_EXPLICIT_ABSTRACT_CLASS
-		| ZEND_ACC_IMMUTABLE | ZEND_ACC_HAS_TYPE_HINTS | ZEND_ACC_TOP_LEVEL | ZEND_ACC_PRELOADED
-		| ZEND_ACC_DEPRECATED | ZEND_ACC_CONSTANTS_UPDATED | ZEND_ACC_NO_DYNAMIC_PROPERTIES
-		| ZEND_HAS_STATIC_IN_METHODS | ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES | ZEND_ACC_READONLY_CLASS
-		| ZEND_ACC_RESOLVED_PARENT | ZEND_ACC_RESOLVED_INTERFACES | ZEND_ACC_UNRESOLVED_VARIANCE
-		| ZEND_ACC_NEARLY_LINKED | ZEND_ACC_HAS_READONLY_PROPS | ZEND_ACC_CACHED | ZEND_ACC_CACHEABLE
-		| ZEND_ACC_HAS_AST_CONSTANTS | ZEND_ACC_HAS_AST_PROPERTIES | ZEND_ACC_HAS_AST_STATICS
-		| ZEND_ACC_FILE_CACHED | ZEND_ACC_ENUM | ZEND_ACC_NOT_SERIALIZABLE | ZEND_ACC_USE_GUARDS)),
-	"ZEND_ACC_PARENT_IN_INTERFACES overlaps a class flag in ce_flags");
-ZEND_STATIC_ASSERT(!(ZEND_ACC_TYPE_FOLLOWS_PARENT & (ZEND_ACC_PPP_MASK|ZEND_ACC_PPP_SET_MASK|ZEND_ACC_CHANGED
-		|ZEND_ACC_STATIC|ZEND_ACC_FINAL|ZEND_ACC_ABSTRACT|ZEND_ACC_READONLY|ZEND_ACC_PROMOTED|ZEND_ACC_VIRTUAL
-		|ZEND_ACC_OVERRIDE)),
-	"ZEND_ACC_TYPE_FOLLOWS_PARENT overlaps a property flag in the attr of ZEND_AST_PROP_GROUP and zend_property_info.flags");
 
 static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 {
