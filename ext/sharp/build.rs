@@ -2,18 +2,15 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
+// php-sharp commits the pinned bridge's header as ext/sharp/sharp_unit.h. Every build writes it again,
+// so sharp.c always compiles against the bridge it links, and CI's generated-files check fails on a difference.
 fn main() {
-    println!("cargo:rerun-if-env-changed=SHARP_HEADER_DIR");
+    println!("cargo:rerun-if-changed=build.rs");
 
     let include = PathBuf::from(env::var("DEP_SHARP_BRIDGE_INCLUDE").expect("the bridge exports its header folder"));
-    let destination = PathBuf::from(env::var("SHARP_HEADER_DIR").expect("Makefile.frag sets SHARP_HEADER_DIR"));
-
-    for entry in fs::read_dir(&include).expect("the bridge header folder exists") {
-        let header = entry.expect("the bridge header folder is readable").path();
-        let target = destination.join(header.file_name().expect("a header has a file name"));
-        let content = fs::read(&header).expect("the bridge header is readable");
-        if fs::read(&target).ok().as_ref() != Some(&content) {
-            fs::write(&target, content).expect("the build folder is writable");
-        }
+    let target = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR")).join("sharp_unit.h");
+    let content = fs::read(include.join("sharp_unit.h")).expect("the bridge writes sharp_unit.h");
+    if fs::read(&target).ok().as_ref() != Some(&content) {
+        fs::write(&target, content).expect("ext/sharp is writable");
     }
 }
