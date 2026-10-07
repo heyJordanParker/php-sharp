@@ -30,7 +30,7 @@ function native_generator_fingerprint(string $copy): string
     return $returned[1];
 }
 
-function native_generator_lock(string $copy, string $deunicode, string $rev, string $syntax): void
+function native_generator_lock(string $copy, string $deunicode, string $tables, string $rev, string $syntax): void
 {
     $checksum = hash('sha256', "deunicode $deunicode");
     file_put_contents("$copy/ext/sharp/Cargo.lock", <<<LOCK
@@ -63,7 +63,13 @@ function native_generator_lock(string $copy, string $deunicode, string $rev, str
         dependencies = [
          "deunicode",
          "mago-sharp-bridge",
+         "unicode-tables",
         ]
+
+        [[package]]
+        name = "unicode-tables"
+        version = "0.1.0"
+        source = "git+https://github.com/heyJordanParker/unicode-tables?rev=$tables#$tables"
 
         LOCK);
 }

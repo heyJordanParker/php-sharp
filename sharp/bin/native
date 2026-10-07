@@ -1,8 +1,8 @@
 #!/usr/bin/env php
 <?php
 // Writes ext/sharp/sharp_native.h and sharp/composer/native.php from the extern declarations in
-// sharp/composer/library. SHARP_NATIVE hashes those declarations, the packages ext/sharp/Cargo.lock resolves for the
-// native crate apart from the bridge, and the Rust sources in ext/sharp/src.
+// sharp/composer/library. SHARP_NATIVE hashes those declarations, the name, version, source and checksum of each
+// package ext/sharp/Cargo.lock resolves for the native crate apart from the bridge, and the Rust sources in ext/sharp/src.
 
 declare(strict_types=1);
 
@@ -97,7 +97,7 @@ function dependencies(string $root, string $path): array
             }
         } elseif ($text === '[[package]]') {
             $current = count($packages);
-            $packages[] = ['name' => null, 'version' => null, 'checksum' => '', 'dependencies' => []];
+            $packages[] = ['name' => null, 'version' => null, 'source' => '', 'checksum' => '', 'dependencies' => []];
         } elseif (str_starts_with($text, '[')) {
             $current = null;
         } elseif ($current !== null && preg_match('/^(name|version|source|checksum) = "([^"]*)"$/', $text, $match)) {
@@ -126,7 +126,7 @@ function dependencies(string $root, string $path): array
             $package = $find($dependency);
             $key = "$package[name] $package[version]";
             if ($package['name'] !== 'mago-sharp-bridge' && !isset($resolved[$key])) {
-                $resolved[$key] = "$key $package[checksum]";
+                $resolved[$key] = "$key $package[source] $package[checksum]";
                 $pending[] = $package;
             }
         }

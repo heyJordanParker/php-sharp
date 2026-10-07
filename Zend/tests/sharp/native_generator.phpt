@@ -1,5 +1,5 @@
 --TEST--
-sharp/bin/native writes the same native interface on every run, and an edited Rust source or a native dependency's version changes SHARP_NATIVE while a Mago pin move does not
+sharp/bin/native writes the same native interface on every run, and an edited Rust source, a native dependency's version or a native git dependency's rev changes SHARP_NATIVE while a Mago pin move does not
 --FILE--
 <?php
 require __DIR__ . '/native_generator.inc';
@@ -28,12 +28,13 @@ echo native_generator_fingerprint($copy) === $returned[1] ? 'same' : 'new', " SH
 
 $fingerprints = [];
 foreach ([
-    'the fixture lock' => ['1.6.2', '0f7dc46623c29f03770d5805e51b76836281bd22', '1.53.0'],
-    'the mago-sharp-bridge rev moved' => ['1.6.2', 'cbdadc778de7dc92c7c08be8064d476647ddcd09', '1.53.0'],
-    'a package only the bridge uses changed' => ['1.6.2', '0f7dc46623c29f03770d5805e51b76836281bd22', '1.54.0'],
-    'deunicode moved to 1.6.1' => ['1.6.1', '0f7dc46623c29f03770d5805e51b76836281bd22', '1.53.0'],
-] as $lock => [$deunicode, $rev, $syntax]) {
-    native_generator_lock($copy, $deunicode, $rev, $syntax);
+    'the fixture lock' => ['1.6.2', '5e2a71c0d84b9f3a6c18e0f27d93b4a85c6e1d07', '0f7dc46623c29f03770d5805e51b76836281bd22', '1.53.0'],
+    'the mago-sharp-bridge rev moved' => ['1.6.2', '5e2a71c0d84b9f3a6c18e0f27d93b4a85c6e1d07', 'cbdadc778de7dc92c7c08be8064d476647ddcd09', '1.53.0'],
+    'a package only the bridge uses changed' => ['1.6.2', '5e2a71c0d84b9f3a6c18e0f27d93b4a85c6e1d07', '0f7dc46623c29f03770d5805e51b76836281bd22', '1.54.0'],
+    'deunicode moved to 1.6.1' => ['1.6.1', '5e2a71c0d84b9f3a6c18e0f27d93b4a85c6e1d07', '0f7dc46623c29f03770d5805e51b76836281bd22', '1.53.0'],
+    'the unicode-tables git rev moved' => ['1.6.2', 'a93f0d6e2b7c41858e0d3f6a1c2b9e74d05f8c63', '0f7dc46623c29f03770d5805e51b76836281bd22', '1.53.0'],
+] as $lock => [$deunicode, $tables, $rev, $syntax]) {
+    native_generator_lock($copy, $deunicode, $tables, $rev, $syntax);
     $status = native_generator_run($copy);
     $fingerprints[$lock] = native_generator_fingerprint($copy);
     echo $status === 0 ? '' : "exits with $status: ", $fingerprints[$lock] === reset($fingerprints) ? 'same' : 'new', " SHARP_NATIVE with $lock\n";
@@ -51,3 +52,4 @@ same SHARP_NATIVE with the fixture lock
 same SHARP_NATIVE with the mago-sharp-bridge rev moved
 same SHARP_NATIVE with a package only the bridge uses changed
 new SHARP_NATIVE with deunicode moved to 1.6.1
+new SHARP_NATIVE with the unicode-tables git rev moved
