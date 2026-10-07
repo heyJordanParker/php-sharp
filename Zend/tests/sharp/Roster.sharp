@@ -1,0 +1,24 @@
+namespace Demo;
+
+import Lib.Standing;
+
+class Roster
+{
+    public static List<string> report(Map<Standing, int> members)
+    {
+        const ranked = members.sortedBy(n => -n);
+        const tens = members.map(n => n * 10);
+        const busy = members.filterValues(n => n > 1);
+        const kept = members.filter(n => n >= (members.get(Standing.Active) ?? 0));
+        members.delete(Standing.Closed);
+        return [
+            implode(",", ranked),
+            implode(",", tens),
+            implode(",", kept),
+            (string) (busy.get(Standing.Active) ?? 0),
+            (string) (busy.get(Standing.Closed) ?? 0),
+            (string) (members.get(Standing.Active) ?? 0),
+            (string) (members.get(Standing.Closed) ?? 0),
+        ];
+    }
+}

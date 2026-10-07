@@ -44,6 +44,11 @@ class Cart
     {
         return \in_array($cents, $this->prices(), true);
     }
+
+    public function withPrices(array $before, array $after): array
+    {
+        return [...$before, ...$this->prices(), 0, ...$after];
+    }
 }
 
 class Item

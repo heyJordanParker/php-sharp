@@ -19,7 +19,7 @@ final class Access
     public function __construct(public string $class) {}
 }
 
-abstract class Entity
+abstract class Resource
 {
     abstract protected function render(): string;
 
@@ -34,7 +34,7 @@ abstract class Entity
     }
 }
 
-final class Registry
+final class Catalog
 {
     public static function register(string $class): string
     {

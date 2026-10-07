@@ -10,4 +10,4 @@ try {
 }
 ?>
 --EXPECT--
-CompileError: A `Map`'s keys are `int` or `string`, as a PHP array's keys are. in MapKey.sharp on line 5
+CompileError: A `Map`'s keys are `int`, `string` or a type with an `int` or `string` backing value. in MapKey.sharp on line 5

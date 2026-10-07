@@ -3,12 +3,12 @@ namespace Demo;
 import Countable;
 import Lib.Basket;
 
-class Shelf
+class Pantry
 {
     public List<int> sizes { get; private set; } = [];
     private Map<string, int> stock = ["tea": 3, "pie": 7];
 
-    public Shelf(public Basket basket { get; })
+    public Pantry(public Basket basket { get; })
     {
     }
 
@@ -62,10 +62,10 @@ class Shelf
         return this.stock;
     }
 
-    public static List<int> stack(Shelf shelf, int size)
+    public static List<int> stack(Pantry pantry, int size)
     {
-        shelf.sizes.add(size);
-        return shelf.sizes;
+        pantry.sizes.add(size);
+        return pantry.sizes;
     }
 
     public static List<int> fill(Basket basket, int size)
@@ -84,9 +84,9 @@ class Shelf
         return basket.totals.get(0);
     }
 
-    public static int size(Shelf shelf)
+    public static int size(Pantry pantry)
     {
-        return shelf.basket.size();
+        return pantry.basket.size();
     }
 
     public static int lineCount(Basket basket)

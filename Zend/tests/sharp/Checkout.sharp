@@ -1,33 +1,54 @@
 namespace Demo;
 
-import Lib.Ledger;
-
 class Checkout
 {
-    private Function<int(int)> discount;
-
-    public Checkout(int percent)
+    public static string? host(string host)
     {
-        this.discount = cents => cents - intdiv(cents * percent, 100);
+        return host != "" ? host : null;
     }
 
-    public List<string> receipt(List<int> prices, Checkout other, Ledger ledger)
+    public static string sign(int value)
     {
-        let count = 0;
-        const paid = prices.filter(price => price > 0).map(price => this.discount(price)).sortedBy(price => -price);
-        const total = array_reduce(paid, (int sum, int price) => {
-            count += 1;
-            return sum + price;
-        }, 0);
-        const recorded = ledger.record(paid, price => other.discount(price));
-        return [
-            implode(",", paid.map(this.format)),
-            (string) total,
-            (string) count,
-            implode(",", recorded),
-            (string) ledger.scale(total),
-        ];
+        return value > 0 ? "positive" : (value < 0 ? "negative" : "zero");
     }
 
-    private string format(int cents) => sprintf("%d.%02d", intdiv(cents, 100), cents % 100);
+    public static string size(int count, bool wholesale)
+    {
+        return (wholesale ? count > 100 : count > 10) ? "large" : "small";
+    }
+
+    public static int cents(float price)
+    {
+        return (int)(price * 100);
+    }
+
+    public static int whole(float ratio)
+    {
+        return (int)ratio;
+    }
+
+    public static float share(int part, int total)
+    {
+        return (float)part / total;
+    }
+
+    public static string quantity(int count)
+    {
+        return (string)count;
+    }
+
+    public static int total(string price, string? count)
+    {
+        return (int)(Float.parse(price) * 100) * (Int.tryParse(count) ?? 1);
+    }
+
+    public static int page(string value)
+    {
+        return Int.parse(value);
+    }
+
+    public static float price(string value)
+    {
+        return Float.parse(value);
+    }
 }

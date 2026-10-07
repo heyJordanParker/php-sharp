@@ -1,0 +1,19 @@
+namespace Demo;
+
+class Page
+{
+    private string name = "";
+    private int views = 0;
+
+    public Page(string name) => this.name = name;
+
+    public string slug => strtolower(this.name);
+    protected int doubled => this.views * 2;
+    private string title => ucfirst(this.name);
+
+    public string link() => sprintf("/page/%s", this.slug);
+    public void visit() => this.views++;
+    public int seen() => this.doubled;
+    public static string home() => "/";
+    public string heading() => sprintf("%s (%d)", this.title, this.views);
+}

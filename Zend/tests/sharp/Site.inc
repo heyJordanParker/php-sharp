@@ -1,13 +1,13 @@
 <?php declare(strict_types=1); namespace Site;
 
 use Lib\Access;
-use Lib\Entity;
+use Lib\Catalog;
 use Lib\Linkable;
-use Lib\Registry;
+use Lib\Resource;
 use Lib\Status;
 
 #[Access(Page::class)]
-class Page extends Entity implements Linkable
+class Page extends Resource implements Linkable
 {
     public const int LIMIT = 3;
     public static private(set) int $views = 0;
@@ -51,7 +51,7 @@ class Page extends Entity implements Linkable
 
     public function registered(): string
     {
-        return Registry::register(Page::class);
+        return Catalog::register(Page::class);
     }
 }
 

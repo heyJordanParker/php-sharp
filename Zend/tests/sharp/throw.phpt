@@ -5,7 +5,7 @@ PHP# throws an exception from a statement and from an expression
 
 require __DIR__ . '/Expressions.sharp';
 
-foreach ([fn() => Demo\Expressions::positive(-1), fn() => Demo\Expressions::known(null)] as $call) {
+foreach ([fn() => Demo\Expressions::positive(-1), fn() => Demo\Expressions::known(-1)] as $call) {
     try {
         $call();
     } catch (InvalidArgumentException $e) {
