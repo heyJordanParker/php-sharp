@@ -6,9 +6,9 @@ class RegexCalls
 {
     public static bool matches(string pattern, string text) => Regex.matches(pattern, text);
 
-    public static List<string>? match(string pattern, string text) => Regex.match(pattern, text);
+    public static Map<int|string, string>? match(string pattern, string text) => Regex.match(pattern, text);
 
-    public static List<List<string>> matchAll(string pattern, string text) => Regex.matchAll(pattern, text);
+    public static List<Map<int|string, string>> matchAll(string pattern, string text) => Regex.matchAll(pattern, text);
 
     public static string replace(string pattern, string replacement, string text) => Regex.replace(pattern, replacement, text);
 

@@ -72,6 +72,8 @@ jobs:
         run: sharp/bin/build --linux
       - name: Test PHP#
         run: sharp/bin/test --linux --opcache --repeat --passes --census --differential
+      - name: Check the standard library with the checker the differential built
+        run: sharp/docker/run sh -c '"sharp/build/linux-$(uname -m)/mago/bin/mago" --colors never --workspace sharp/composer analyze --minimum-fail-level note'
       - name: Test upstream
         run: sharp/bin/test --linux --upstream --opcache
       - name: Verify generated files are up to date

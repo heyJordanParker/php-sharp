@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls every method of Sharp.Data.Binary, and Binary.unpack throws ValueError on data too short for its format, after unpack's warning
+A PHP# class calls every method of Sharp.Data.Binary, and Binary.unpack throws ValueError on data too short for its format, with no warning
 --FILE--
 <?php
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Data/Binary.sharp';
@@ -17,7 +17,7 @@ try {
     echo get_class($error), ': ', $error->getMessage(), "\n";
 }
 ?>
---EXPECTF--
+--EXPECT--
 string(12) "123478564142"
 array(2) {
   ["first"]=>
@@ -29,6 +29,4 @@ array(1) {
   [1]=>
   int(256)
 }
-
-Warning: unpack(): Type N: not enough input values, need 4 values but only 1 was provided in %sBinary.sharp on line %d
 ValueError: Binary.unpack: the data does not fit the format

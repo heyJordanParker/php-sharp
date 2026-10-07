@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls every method of Sharp.Data.Compression, and Compression.uncompress throws ValueError on data that is not zlib-compressed, after gzuncompress's warning
+A PHP# class calls every method of Sharp.Data.Compression, and Compression.uncompress throws ValueError on data that is not zlib-compressed, with no warning
 --EXTENSIONS--
 zlib
 --FILE--
@@ -18,9 +18,7 @@ try {
     echo get_class($error), ': ', $error->getMessage(), "\n";
 }
 ?>
---EXPECTF--
+--EXPECT--
 string(4) "789c"
 string(17) "hello hello hello"
-
-Warning: gzuncompress(): data error in %sCompression.sharp on line %d
 ValueError: Compression.uncompress: the data is not zlib-compressed
