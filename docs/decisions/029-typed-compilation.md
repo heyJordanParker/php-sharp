@@ -2,7 +2,7 @@
 
 ## Decision
 
-A `.sharp` file runs only after the checker accepts it, and a type error stops it from running, as in C# and Java. The checker's types reach the running program, inferred ones too. A generic method can test a type parameter its call inferred, `typeof(TItem)` works on every type parameter, and a loop over a `Map` keyed by a backed enum gives its keys back as the enum with no type written. This reverses the earlier model, where each file compiled alone from its own text. `vendor/bin/mago compile` compiles each accepted `.sharp` file into a `.sharpc` file in one `.sharp/` folder at the project root, and the engine runs only current compiled files. A type error, a broken structure rule, or a rules file that fails to prove stops a file from running.
+A `.sharp` file runs only after the checker accepts it, and a type error stops it from running, as in C# and Java. The checker's types reach the running program, inferred ones too. A generic method can test a type parameter its call inferred, `typeof(TItem)` works on every type parameter, and a loop over a `Map` keyed by a backed enum gives its keys back as the enum with no type written. This reverses the earlier model, where each file compiled alone from its own text. `vendor/bin/mago compile` compiles each accepted `.sharp` file into a `.sharpc` file in one `.sharp/` folder at the project root, and the engine runs only current compiled files. A type error, a broken structure rule, or a rules file that fails to prove stops a file from running. Pragmas, `ignore` and the baseline hide warnings, never an error.
 
 ## Options
 
