@@ -46,6 +46,7 @@ $fixtures = [
     'Store' => 'harness/Model.inc',
     'Inbox' => null,
     'Patterns' => null,
+    'Signatures' => null,
     'Accessors' => null,
     'Parcel' => 'harness/Row.inc',
 ];
@@ -174,6 +175,7 @@ Store: different opcodes and lines in 3 op arrays, same signatures in 1 classes
   .php   0000 DECLARE_CLASS_DELAYED string("store\\order") string("lib\\model")
 Inbox: same opcodes and lines in 9 op arrays, same signatures in 1 classes
 Patterns: same opcodes and lines in 11 op arrays, same signatures in 1 classes
+Signatures: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Accessors: same opcodes and lines in 15 op arrays, same signatures in 2 classes
 Parcel: different opcodes and lines in 3 op arrays, same signatures in 1 classes
   .sharp L0005 0000 DECLARE_CLASS string("store\\parcel")
