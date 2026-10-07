@@ -2161,7 +2161,8 @@ ZEND_VM_HOT_OBJ_HANDLER(82, ZEND_FETCH_OBJ_R, CONST|TMPVAR|UNUSED|THIS|CV, CONST
 		zval *retval;
 
 		if (OP2_TYPE == IS_CONST) {
-			cache_slot = CACHE_ADDR(opline->extended_value & ~ZEND_FETCH_REF /* FUNC_ARG fetch may contain it */);
+			/* FUNC_ARG fetch may contain ZEND_FETCH_REF, and a PHP# receiver ZEND_SHARP_OPERATOR */
+			cache_slot = CACHE_ADDR(opline->extended_value & ~(ZEND_FETCH_REF|ZEND_SHARP_OPERATOR));
 
 			if (EXPECTED(zobj->ce == CACHED_PTR_EX(cache_slot))) {
 				uintptr_t prop_offset = (uintptr_t)CACHED_PTR_EX(cache_slot + 1);
@@ -2175,6 +2176,9 @@ ZEND_VM_C_LABEL(fetch_obj_r_simple):
 						} else {
 ZEND_VM_C_LABEL(fetch_obj_r_fast_copy):
 							ZVAL_COPY_DEREF(EX_VAR(opline->result.var), retval);
+							if (OP2_TYPE == IS_CONST && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+								ZEND_VM_C_GOTO(fetch_obj_r_sharp);
+							}
 							ZEND_VM_NEXT_OPCODE();
 						}
 					}
@@ -2183,7 +2187,9 @@ ZEND_VM_C_LABEL(fetch_obj_r_fast_copy):
 					if (ZEND_IS_PROPERTY_HOOK_SIMPLE_READ(prop_offset)) {
 						prop_offset = prop_info->offset;
 						ZEND_VM_C_GOTO(fetch_obj_r_simple);
-					} else if (EXPECTED(ZEND_IS_PROPERTY_HOOK_SIMPLE_GET(prop_offset))) {
+					} else if (EXPECTED(ZEND_IS_PROPERTY_HOOK_SIMPLE_GET(prop_offset))
+							/* A PHP# receiver reads the hook's result before the call runs. */
+							&& EXPECTED(!(opline->extended_value & ZEND_SHARP_OPERATOR))) {
 						zend_function *hook = prop_info->hooks[ZEND_PROPERTY_HOOK_GET];
 						ZEND_ASSERT(hook->type == ZEND_USER_FUNCTION);
 						ZEND_ASSERT(RUN_TIME_CACHE(&hook->op_array));
@@ -2287,6 +2293,12 @@ ZEND_VM_C_LABEL(fetch_obj_r_copy):
 			ZVAL_COPY_DEREF(EX_VAR(opline->result.var), retval);
 		} else if (UNEXPECTED(Z_ISREF_P(retval))) {
 			zend_unwrap_reference(retval);
+		}
+		if (OP2_TYPE == IS_CONST && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
+ZEND_VM_C_LABEL(fetch_obj_r_sharp):
+			if (Z_TYPE_P(EX_VAR(opline->result.var)) == IS_ARRAY) {
+				sharp_collection_of_property(EX_VAR(opline->result.var), zobj, Z_STR_P(GET_OP2_ZVAL_PTR(BP_VAR_R)), cache_slot);
+			}
 		}
 	} while (0);
 
@@ -6427,6 +6439,16 @@ ZEND_VM_C_LABEL(num_index):
 			str = ZSTR_EMPTY_ALLOC();
 			ZEND_VM_C_GOTO(str_index);
 		} else {
+			zend_value key;
+			uint8_t type = zend_sharp_index_key(offset, &key);
+
+			if (type == IS_LONG) {
+				hval = key.lval;
+				ZEND_VM_C_GOTO(num_index);
+			} else if (type == IS_STRING) {
+				str = key.str;
+				ZEND_VM_C_GOTO(str_index);
+			}
 			zend_illegal_array_offset_access(offset);
 			zval_ptr_dtor_nogc(expr_ptr);
 		}
@@ -6588,7 +6610,7 @@ ZEND_VM_HANDLER(71, ZEND_INIT_ARRAY, CONST|TMP|VAR|CV|UNUSED, CONST|TMPVAR|UNUSE
 	SAVE_OPLINE();
 	array = EX_VAR(opline->result.var);
 	if (OP1_TYPE != IS_UNUSED) {
-		size = opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT;
+		size = (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT;
 		ZVAL_ARR(array, zend_new_array(size));
 		/* Explicitly initialize array as not-packed if flag is set */
 		if (opline->extended_value & ZEND_ARRAY_NOT_PACKED) {
@@ -6634,6 +6656,19 @@ ZEND_VM_COLD_CONST_HANDLER(51, ZEND_CAST, CONST|TMP|VAR|CV, ANY, TYPE)
 		case IS_STRING:
 			ZVAL_STR(result, zval_get_string(expr));
 			break;
+		case IS_OBJECT | ZEND_SHARP_OPERATOR: {
+			zval *value = expr;
+
+			ZVAL_DEREF(value);
+			if (Z_TYPE_P(value) != IS_ARRAY) {
+				ZVAL_COPY(result, value);
+			} else if (OP1_TYPE == IS_CV) {
+				sharp_collection_of_local(result, expr);
+			} else {
+				sharp_collection_of_value(result, value);
+			}
+			break;
+		}
 		default:
 			ZEND_ASSERT(opline->extended_value != _IS_BOOL && "Must use ZEND_BOOL instead");
 			if (OP1_TYPE & (IS_VAR|IS_CV)) {

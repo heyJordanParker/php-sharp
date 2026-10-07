@@ -45,7 +45,8 @@ class Expressions
     public static string label(string name, Countable items)
     {
         const plain = "${name} {$name} $name";
-        return `${name}: ${items.count()} items\x21 \u{2713} \`${plain}\`
+        const size = items.count();
+        return `${name}: ${size} items\x21 \u{2713} \`${plain}\`
 total`;
     }
 
