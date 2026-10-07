@@ -1,5 +1,5 @@
 --TEST--
-Opcache keeps a .sharp file's op array while its compiled file stays current, new stamps included, and drops it when the compiled file goes out of date
+Opcache keeps a .sharp file's op array while its compiled file stays current, new stamps included, and drops it when an input or the file's own source makes the compiled file out of date
 --EXTENSIONS--
 opcache
 --CONFLICTS--
@@ -50,6 +50,12 @@ request('an input changed');
 
 run_mago($root);
 request('compiled again');
+
+file_put_contents("$root/Shop.sharp", str_replace('return counter.add(amount);', 'return counter.add(amount + 1);', SHOP));
+request('its own source changed');
+
+run_mago($root);
+request('compiled once more');
 ?>
 --CLEAN--
 <?php
@@ -63,3 +69,5 @@ an input with a new stamp: ran, cached with 2 hits
 an input with a new comment, compiled again: ran, cached with 3 hits
 an input changed: Shop.sharp is out of date (Counter.sharp changed). Run vendor/bin/mago compile., not cached
 compiled again: ran, cached with 0 hits
+its own source changed: Shop.sharp is out of date (Shop.sharp changed). Run vendor/bin/mago compile., not cached
+compiled once more: ran, cached with 0 hits
