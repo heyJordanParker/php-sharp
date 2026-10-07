@@ -2,7 +2,9 @@
 # include <config.h>
 #endif
 
+#include <errno.h>
 #include <fcntl.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "php.h"
@@ -38,11 +40,17 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	zend_object *spare_collections[SHARP_SPARE_COLLECTIONS];
 	HashTable folder_roots;
 	HashTable request_stamps;
+	char *compile_command;
+	bool compile_command_ran;
 ZEND_END_MODULE_GLOBALS(sharp)
 
 ZEND_DECLARE_MODULE_GLOBALS(sharp)
 
 #define SHARP_G(v) ZEND_MODULE_GLOBALS_ACCESSOR(sharp, v)
+
+PHP_INI_BEGIN()
+	STD_PHP_INI_ENTRY("sharp.compile_command", "", PHP_INI_SYSTEM, OnUpdateString, compile_command, zend_sharp_globals, sharp_globals)
+PHP_INI_END()
 
 static zend_op_array *(*sharp_next_compile_file)(zend_file_handle *file_handle, int type);
 
@@ -498,16 +506,50 @@ static ZEND_COLD void sharp_refuse(const sharp_compiled *compiled, sharp_state s
 	}
 }
 
+/* Runs sharp.compile_command through /bin/sh in the project root, and waits for it however long it takes. Its
+ * output goes nowhere. */
+static void sharp_run_compile_command(const sharp_compiled *compiled)
+{
+	char *root = estrndup(ZSTR_VAL(compiled->source), compiled->root_length ? compiled->root_length : 1);
+	int status;
+	pid_t child = fork();
+
+	if (child == 0) {
+		int nowhere = open("/dev/null", O_RDWR);
+
+		if (chdir(root) != 0 || nowhere < 0
+				|| dup2(nowhere, STDIN_FILENO) < 0 || dup2(nowhere, STDOUT_FILENO) < 0 || dup2(nowhere, STDERR_FILENO) < 0) {
+			_exit(127);
+		}
+		execl("/bin/sh", "sh", "-c", SHARP_G(compile_command), (char *) NULL);
+		_exit(127);
+	}
+	if (child > 0) {
+		while (waitpid(child, &status, 0) < 0 && errno == EINTR);
+	}
+	efree(root);
+}
+
 static int sharp_parse(void)
 {
 	const char *source = (const char *) LANG_SCNG(yy_start);
 	size_t source_length = LANG_SCNG(yy_limit) - LANG_SCNG(yy_start);
+	const char *filename = ZSTR_VAL(zend_get_compiled_filename());
 	sharp_compiled compiled;
 	sharp_state state;
 	bool failed = false;
 
-	sharp_locate(&compiled, ZSTR_VAL(zend_get_compiled_filename()));
+	sharp_locate(&compiled, filename);
 	state = sharp_check(&compiled, source, source_length);
+	/* A file with no root has no project to compile, and the current folder is no guess for one. */
+	if (state != SHARP_CURRENT && compiled.rooted
+			&& SHARP_G(compile_command) && *SHARP_G(compile_command) && !SHARP_G(compile_command_ran)) {
+		SHARP_G(compile_command_ran) = true;
+		sharp_run_compile_command(&compiled);
+		sharp_release(&compiled);
+		sharp_locate(&compiled, filename);
+		state = sharp_check(&compiled, source, source_length);
+	}
 	if (state != SHARP_CURRENT) {
 		sharp_refuse(&compiled, state);
 		sharp_release(&compiled);
@@ -1580,6 +1622,7 @@ ZEND_METHOD(Sharp_Collection, sortedBy)
 
 static PHP_MINIT_FUNCTION(sharp)
 {
+	REGISTER_INI_ENTRIES();
 	register_class_Sharp_Int();
 	register_class_Sharp_Float();
 	sharp_ce_collection = register_class_Sharp_Collection();
@@ -1600,6 +1643,13 @@ static PHP_MINIT_FUNCTION(sharp)
 	return SUCCESS;
 }
 
+static PHP_MSHUTDOWN_FUNCTION(sharp)
+{
+	UNREGISTER_INI_ENTRIES();
+
+	return SUCCESS;
+}
+
 static PHP_GINIT_FUNCTION(sharp)
 {
 	memset(sharp_globals, 0, sizeof(*sharp_globals));
@@ -1614,6 +1664,7 @@ static PHP_GSHUTDOWN_FUNCTION(sharp)
 static PHP_RINIT_FUNCTION(sharp)
 {
 	zend_hash_init(&SHARP_G(request_stamps), 8, NULL, sharp_free_stamp, false);
+	SHARP_G(compile_command_ran) = false;
 
 	return SUCCESS;
 }
@@ -1643,6 +1694,8 @@ static PHP_MINFO_FUNCTION(sharp)
 	php_info_print_table_start();
 	php_info_print_table_row(2, "Mago commit", SHARP_MAGO_COMMIT);
 	php_info_print_table_end();
+
+	DISPLAY_INI_ENTRIES();
 }
 
 zend_module_entry sharp_module_entry = {
@@ -1650,7 +1703,7 @@ zend_module_entry sharp_module_entry = {
 	"sharp",
 	NULL,
 	PHP_MINIT(sharp),
-	NULL,
+	PHP_MSHUTDOWN(sharp),
 	PHP_RINIT(sharp),
 	PHP_RSHUTDOWN(sharp),
 	PHP_MINFO(sharp),

@@ -40,12 +40,20 @@ function overwrite(string $file, int $offset, string $bytes): void
     file_put_contents($file, substr_replace(file_get_contents($file), $bytes, $offset, strlen($bytes)));
 }
 
-// Each load runs in its own process, without opcache, so a class an earlier load declared or cached is not in the way.
-function refusal(string $path): void
+// The paths load in one process of their own, without opcache, so a class an earlier load declared or cached is not
+// in the way.
+function refusal(array|string $paths, array $settings = []): void
 {
-    $code = 'try { require ' . var_export($path, true) . '; echo "ran\n"; }'
-        . ' catch (CompileError $e) { echo get_class($e), ": ", $e->getMessage(), "\n"; }';
-    echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n -r ' . escapeshellarg($code));
+    $code = '';
+    foreach ((array) $paths as $path) {
+        $code .= 'try { require ' . var_export($path, true) . '; echo "ran\n"; }'
+            . ' catch (CompileError $e) { echo get_class($e), ": ", $e->getMessage(), "\n"; }';
+    }
+    $options = '';
+    foreach ($settings as $name => $value) {
+        $options .= ' -d ' . escapeshellarg("$name=\"$value\"");
+    }
+    echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . " -n$options -r " . escapeshellarg($code));
 }
 
 const SHOP = <<<'SHARP'

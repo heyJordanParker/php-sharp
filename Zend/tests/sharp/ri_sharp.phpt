@@ -12,3 +12,6 @@ echo str_replace($match[1], '<the Mago commit in sharp_unit.h>', $info);
 sharp
 
 Mago commit => <the Mago commit in sharp_unit.h>
+
+Directive => Local Value => Master Value
+sharp.compile_command => no value => no value
