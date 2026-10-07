@@ -2,7 +2,7 @@
 
 namespace Lib;
 
-require __DIR__ . '/Registry.inc';
+require __DIR__ . '/harness/Registry.inc';
 require __DIR__ . '/Members.sharp';
 
 use Demo\Members;

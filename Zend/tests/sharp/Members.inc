@@ -10,7 +10,7 @@ class Members
     public const int NEXT = Registry::VERSION + 1;
     public static private(set) Order $sorted = Order::Ascending;
     private static int $count = 0;
-    public static private(set) string $last = "none";
+    public static private(set) ?string $last = "none";
 
     public static function touch(): void
     {

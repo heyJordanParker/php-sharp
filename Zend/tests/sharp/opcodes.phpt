@@ -29,8 +29,8 @@ $fixtures = [
     'Checkout' => null,
     'Page' => null,
     'Shapes' => null,
-    'Members' => 'Registry.inc',
-    'Site' => 'SiteLib.inc',
+    'Members' => 'harness/Registry.inc',
+    'Site' => 'harness/SiteLib.inc',
 ];
 
 foreach ($fixtures as $fixture => $library) {
@@ -99,9 +99,9 @@ Site: different opcodes and lines in 13 op arrays, same signatures in 3 classes
   .sharp 0001 DECLARE_CLASS string("site\\square")
   .sharp 0002 RETURN int(1)
   .sharp 0001 T1 = FETCH_CLASS_CONSTANT string("Site\\Page") string("views")
-  .php   L0010 0000 DECLARE_CLASS string("site\\page") string("lib\\entity")
+  .php   L0010 0000 DECLARE_CLASS string("site\\page") string("lib\\resource")
   .php   L0080 0001 RETURN int(1)
   .php   L0039 0001 T1 = FETCH_STATIC_PROP_R string("views") string("Site\\Page")
-  .php   0000 DECLARE_CLASS string("site\\page") string("lib\\entity")
+  .php   0000 DECLARE_CLASS string("site\\page") string("lib\\resource")
   .php   0001 RETURN int(1)
   .php   0001 T1 = FETCH_STATIC_PROP_R string("views") string("Site\\Page")
