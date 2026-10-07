@@ -1118,8 +1118,8 @@ ZEND_STATIC_ASSERT(!(ZEND_ARRAY_SHARP & (ZEND_ARRAY_SYNTAX_LIST|ZEND_ARRAY_SYNTA
  * sharp/bin/census reads the lines below, so each keeps the shape `field of KINDS  upstream: FLAGS`.
  *
  * ZEND_SHARP_OPERATOR_SYNTAX: the operator follows PHP#'s rules. Integer overflow throws
- * ArithmeticError instead of producing a float, + joins two strings, and (int) throws
- * ArithmeticError on a float that is NaN, infinite or out of int range instead of inventing an int.
+ * ArithmeticError instead of producing a float, and (int) throws ArithmeticError on a float that is
+ * NaN, infinite or out of int range instead of inventing an int.
  *   attr of ZEND_AST_BINARY_OP, ZEND_AST_ASSIGN_OP          upstream: the opcode
  *   attr of ZEND_AST_UNARY_MINUS, ZEND_AST_PRE_INC,
  *     ZEND_AST_PRE_DEC, ZEND_AST_POST_INC, ZEND_AST_POST_DEC  upstream: none

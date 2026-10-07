@@ -1,5 +1,5 @@
 --TEST--
-PHP# + joins two strings, and still adds two numbers
+PHP# + joins two strings, a string and a class name included, and still adds two numbers
 --FILE--
 <?php
 require __DIR__ . '/plus.inc';
@@ -14,3 +14,5 @@ int(5)
 string(6) "ababab"
 string(7) "a, b, c"
 int(3)
+string(16) "Class: Demo\Plus"
+string(16) "Class: Demo\Plus"

@@ -2264,10 +2264,9 @@ static uint32_t assign_dim_result_type(
 	return tmp;
 }
 
-/* For binary ops that have compound assignment operators. The opcode carries ZEND_SHARP_OPERATOR
- * when the operator follows PHP#'s rules. */
+/* For binary ops that have compound assignment operators */
 static uint32_t binary_op_result_type(
-		zend_ssa *ssa, uint32_t opcode, uint32_t t1, uint32_t t2, int result_var,
+		zend_ssa *ssa, uint8_t opcode, uint32_t t1, uint32_t t2, int result_var,
 		zend_long optimization_level) {
 	uint32_t tmp = 0;
 	uint32_t t1_type = (t1 & MAY_BE_ANY) | (t1 & MAY_BE_UNDEF ? MAY_BE_NULL : 0);
@@ -2282,15 +2281,8 @@ static uint32_t binary_op_result_type(
 		}
 	}
 
-	switch (opcode & ~ZEND_SHARP_OPERATOR) {
+	switch (opcode) {
 		case ZEND_ADD:
-			/* PHP#'s + joins two strings. */
-			if ((opcode & ZEND_SHARP_OPERATOR) && (t1_type & MAY_BE_STRING) && (t2_type & MAY_BE_STRING)) {
-				tmp |= MAY_BE_STRING | MAY_BE_RC1 | MAY_BE_RCN;
-				if (t1_type == MAY_BE_STRING && t2_type == MAY_BE_STRING) {
-					break;
-				}
-			}
 			if (t1_type == MAY_BE_LONG && t2_type == MAY_BE_LONG) {
 				if (result_var < 0 ||
 					!ssa->var_info[result_var].has_range ||
@@ -2614,8 +2606,7 @@ static zend_always_inline zend_result _zend_update_type_info(
 		case ZEND_SL:
 		case ZEND_SR:
 		case ZEND_CONCAT:
-			tmp = binary_op_result_type(
-				ssa, zend_optimizer_binary_opcode(opline), t1, t2, ssa_op->result_def, optimization_level);
+			tmp = binary_op_result_type(ssa, opline->opcode, t1, t2, ssa_op->result_def, optimization_level);
 			UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
 			break;
 		case ZEND_BW_NOT:
@@ -2822,7 +2813,7 @@ static zend_always_inline zend_result _zend_update_type_info(
 			}
 
 			tmp |= binary_op_result_type(
-				ssa, opline->extended_value, t1, t2,
+				ssa, opline->extended_value & ~ZEND_SHARP_OPERATOR, t1, t2,
 				opline->opcode == ZEND_ASSIGN_OP ? ssa_op->op1_def : -1, optimization_level);
 			if (tmp & (MAY_BE_STRING|MAY_BE_ARRAY)) {
 				tmp |= MAY_BE_RC1 | MAY_BE_RCN;
