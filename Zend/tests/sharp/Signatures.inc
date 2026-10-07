@@ -69,6 +69,6 @@ class Signatures
 
     public static function made(int ...$values): int|string
     {
-        return new Signatures("none", ...$values)->label("");
+        return ((object) new Signatures("none", ...$values))->label("");
     }
 }
