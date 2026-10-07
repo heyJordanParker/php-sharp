@@ -1,0 +1,217 @@
+#!/usr/bin/env php
+<?php
+// Fails on every write or exact comparison in Zend/ and ext/opcache/ that can lose a PHP# mark.
+// The marks come from the register in Zend/zend_compile.h. Code belongs to the opcodes or AST
+// kinds of the `case` labels around it in a switch on an opcode or kind, or to the handler around
+// it in Zend/zend_vm_def.h. A statement there that names the mark handles it. A comparison or
+// switch that names it, such as `extended_value == (IS_OBJECT | ZEND_SHARP_OPERATOR)`, also handles
+// every later statement of the same case or block, and so does a statement that gives the opline
+// another opcode. Any other statement is flagged when it:
+// - writes the marked field with `=` or `&=`, unless it keeps the field with `field = x->field | ...`
+// - compares the whole field, unless it compares with a value that never carries the mark, such
+//   as ZEND_CONCAT in the extended_value of ZEND_ASSIGN_OP
+// - switches on the whole field, unless a case of the switch names the mark
+// Code that picks the opcode with an `if`, or passes the field to another function, is not seen.
+
+$root = dirname(__DIR__, 2);
+
+[$register, $marked_values] = read_register("$root/Zend/zend_compile.h");
+
+$files = array_merge(
+    glob("$root/Zend/*.[ch]"),
+    glob("$root/Zend/Optimizer/*.[ch]"),
+    glob("$root/ext/opcache/*.[ch]"),
+    glob("$root/ext/opcache/jit/*.[ch]"),
+);
+$generated = '~/zend_vm_(execute|opcodes)\.[ch]$|/zend_(language|ini)_(parser|scanner)(_defs)?\.[ch]$~';
+$findings = [];
+foreach ($files as $file) {
+    if (!preg_match($generated, $file)) {
+        array_push($findings, ...scan_file($file, substr($file, strlen($root) + 1), $register, $marked_values));
+    }
+}
+
+$count = 0;
+foreach ($register as $kinds) {
+    $count += count($kinds);
+}
+echo 'Checked ', count($files), " files against the PHP# marks on $count opcodes and AST kinds.\n";
+foreach ($findings as $finding) {
+    echo $finding, "\n";
+}
+exit($findings ? 1 : 0);
+
+/**
+ * Reads the register's lines such as ` *   extended_value of ZEND_ADD, ZEND_SUB  upstream: none`
+ * under ` * ZEND_SHARP_OPERATOR: ...`. An IS_* name before `upstream:` is the one value of the
+ * field that carries the mark on the opcodes or kinds of its line, as in
+ * `extended_value of ZEND_CAST to IS_OBJECT`.
+ *
+ * @return array{array<string, array<string, array<string, true>>>, array<string, array<string, array<string, true>>>}
+ *     field => opcode or kind => mark => true, and field => opcode or kind => value that carries a mark => true
+ */
+function read_register(string $header): array
+{
+    $register = [];
+    $marked_values = [];
+    $mark = null;
+    $entry = null;
+    foreach (file($header) as $line) {
+        if (preg_match('~^ \* (ZEND_\w+): ~', $line, $m)) {
+            $mark = $m[1];
+            continue;
+        }
+        if ($mark === null) {
+            continue;
+        }
+        if (!str_starts_with($line, ' *')) {
+            break;
+        }
+        if (preg_match('~^ \*   (attr|extended_value|ce_flags)\b(.*)$~', $line, $m)) {
+            $entry = [$m[1], $m[2]];
+        } elseif ($entry !== null && preg_match('~^ \*     (.*)$~', $line, $m)) {
+            $entry[1] .= ' ' . $m[1];
+        } else {
+            $entry = null;
+            continue;
+        }
+        if (str_contains($entry[1], 'upstream:')) {
+            preg_match_all('~\b(ZEND_|IS_)\w+~', strstr($entry[1], 'upstream:', true), $m);
+            $values = array_fill_keys(preg_grep('~^IS_~', $m[0]), true);
+            foreach (preg_grep('~^IS_~', $m[0], PREG_GREP_INVERT) as $name) {
+                $register[$entry[0]][$name][$mark] = true;
+                $marked_values[$entry[0]][$name] = ($marked_values[$entry[0]][$name] ?? []) + $values;
+            }
+            $entry = null;
+        }
+    }
+    if (!isset($register['attr'], $register['extended_value'])) {
+        fwrite(STDERR, "No register of PHP# marks found in $header.\n");
+        exit(2);
+    }
+    // A field that holds an opcode, as ZEND_ASSIGN_OP's does, carries the mark only beside a marked opcode.
+    $opcodes = array_fill_keys(array_keys($register['extended_value']), true);
+    foreach ($marked_values as $field => $kinds) {
+        foreach ($kinds as $kind => $values) {
+            $marked_values[$field][$kind] = $values + $opcodes;
+        }
+    }
+    return [$register, $marked_values];
+}
+
+/** @return list<string> */
+function scan_file(string $file, string $name, array $register, array $marked_values): array
+{
+    // Comments, strings and characters become spaces, so offsets and line numbers stay.
+    $code = preg_replace_callback(
+        '~//[^\n]*|/\*.*?\*/|"(?:\\\\.|[^"\\\\\n])*"|\'(?:\\\\.|[^\'\\\\\n])*\'~s',
+        fn(array $m): string => preg_replace('~[^\n]~', ' ', $m[0]),
+        file_get_contents($file),
+    );
+    $vm = str_ends_with($file, '/zend_vm_def.h');
+
+    // A frame per open brace. A switch on an opcode or kind keeps its current group of case labels.
+    // `handled` holds the marks a statement of the frame, or of its current case, named.
+    $frames = [['switch' => false, 'labels' => [], 'closed' => false, 'handled' => []]];
+    $next_frame = ['switch' => false, 'handled' => []];
+    $handler = [];
+    $findings = [];
+    $line = 1;
+    $length = strlen($code);
+
+    $statement = function (int $at) use ($code, $length): string {
+        $before = $at - $length - 1;
+        $start = max((int) strrpos($code, ';', $before), (int) strrpos($code, '{', $before), (int) strrpos($code, '}', $before));
+        $end = strcspn($code, ';{', $at);
+        return substr($code, $start + 1, $at - $start - 1 + $end);
+    };
+    // $value is what a comparison compares the field with, '' for a switch, and null for a write.
+    $check = function (string $field, string $statement, string $what, ?string $value) use (&$frames, &$handler, &$findings, &$line, $name, $register, $marked_values): void {
+        $constant = $value !== null && preg_match('~^_?(ZEND|IS)_\w+$~', $value);
+        $labels = $handler;
+        $handled = [];
+        foreach ($frames as $frame) {
+            if ($frame['switch']) {
+                array_push($labels, ...$frame['labels']);
+            }
+            $handled += $frame['handled'];
+        }
+        $top = array_key_last($frames);
+        foreach ($labels as $label) {
+            if ($constant && !isset($marked_values[$field][$label][$value])) {
+                continue;
+            }
+            foreach ($register[$field][$label] ?? [] as $mark => $_) {
+                if (str_contains($statement, $mark) || ($field === 'attr' && str_contains($statement, 'zend_ast_sharp_operator'))) {
+                    if ($value !== null) {
+                        $frames[$top]['handled'][$mark] = true;
+                    }
+                } elseif (!isset($handled[$mark]) && !isset($handled['opcode'])) {
+                    $findings[] = "$name:$line: $what can lose $mark on $label: " . trim(preg_replace('~\s+~', ' ', $statement));
+                    $handled[$mark] = true;
+                }
+            }
+        }
+    };
+
+    for ($i = 0; $i < $length; $i++) {
+        $c = $code[$i];
+        if ($c === "\n") {
+            $line++;
+        } elseif ($c === '{') {
+            $frames[] = $next_frame + ['labels' => [], 'closed' => false];
+            $next_frame = ['switch' => false, 'handled' => []];
+        } elseif ($c === '}' || $c === ';') {
+            if ($c === '}') {
+                array_pop($frames);
+            }
+            $top = array_key_last($frames);
+            if ($frames[$top]['switch']) {
+                $frames[$top]['closed'] = true;
+            }
+        } elseif ((ctype_alpha($c) || $c === '_') && ($i === 0 || !(ctype_alnum($code[$i - 1]) || $code[$i - 1] === '_'))) {
+            $rest = substr($code, $i, 400);
+            if ($vm && preg_match('~^ZEND_VM_(?:\w+_)?HANDLER\(\s*\d+\s*,\s*(ZEND_\w+)~', $rest, $m)) {
+                $handler = [$m[1]];
+                $frames[0]['handled'] = [];
+            } elseif (preg_match('~^switch\s*\(([^{]*)\)\s*\{~s', $rest, $m)) {
+                $next_frame['switch'] = (bool) preg_match('~\b(opcode|kind)\s*\)?\s*$~', $m[1]);
+                if (preg_match('~(extended_value|attr)\s*$~', $m[1], $f) && !str_contains($m[1], '&')) {
+                    // The switch handles the mark when one of its cases names it.
+                    $body = $i + strlen($m[0]);
+                    for ($depth = 1, $j = $body; $depth > 0 && $j < $length; $j++) {
+                        $depth += ['{' => 1, '}' => -1][$code[$j]] ?? 0;
+                    }
+                    preg_match_all('~\bcase\b[^:]*:~', substr($code, $body, $j - $body), $cases);
+                    $check($f[1], $m[0] . implode(' ', $cases[0]), "a switch on the whole $f[1]", '');
+                    $next_frame['handled'] = $frames[array_key_last($frames)]['handled'];
+                }
+            } elseif (preg_match('~^case\s+(ZEND_\w+)\s*:~', $rest, $m)) {
+                $top = array_key_last($frames);
+                if ($frames[$top]['switch']) {
+                    if ($frames[$top]['closed']) {
+                        $frames[$top]['labels'] = [];
+                        $frames[$top]['closed'] = false;
+                        $frames[$top]['handled'] = [];
+                    }
+                    $frames[$top]['labels'][] = $m[1];
+                }
+            } elseif (preg_match('~^opcode\s*=[^=]~', $rest) && preg_match('~->\s*$~', substr($code, max(0, $i - 4), min(4, $i)))) {
+                // An opline that becomes another opcode leaves the old opcode's marks behind.
+                $frames[array_key_last($frames)]['handled']['opcode'] = true;
+            } elseif (preg_match('~^(extended_value|attr)\b~', $rest, $m)
+                    && preg_match('~[\w\]]\s*->\s*$~', substr($code, max(0, $i - 40), min(40, $i)))) {
+                $field = $m[1];
+                $after = substr($rest, strlen($field));
+                if (preg_match('~^\s*(=|&=)(?!=)([^;]*);~', $after, $a)) {
+                    if (!($a[1] === '=' && preg_match('~^\s*\w+\s*->\s*' . $field . '\b(?!\s*&)~', $a[2]))) {
+                        $check($field, $statement($i), $a[1] === '=' ? "a write of $field" : "a mask of $field", null);
+                    }
+                } elseif (preg_match('~^\s*[!=]=\s*(\w+)?~', $after, $a)) {
+                    $check($field, $statement($i), "an exact comparison of $field", $a[1] ?? '');
+                }
+            }
+        }
+    }
+    return $findings;
+}

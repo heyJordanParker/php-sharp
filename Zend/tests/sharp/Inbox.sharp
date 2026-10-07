@@ -1,0 +1,34 @@
+namespace Demo;
+
+class Inbox
+{
+    private Any first = "none";
+    private Map<string, Any?> saved = [:];
+
+    public Any? read(string key) => Settings.get(key);
+
+    public Any? raw(string key)
+    {
+        Any? value = Settings.raw(key);
+        return value;
+    }
+
+    public Any keep(Any value)
+    {
+        this.first = value;
+        return this.first;
+    }
+
+    public string show(string key) => Settings.describe(this.read(key));
+
+    public bool isPlan(string plan) => this.read("plan") == plan;
+
+    public void save(string key)
+    {
+        this.saved[key] = Settings.get(key);
+    }
+
+    public Any? load(string key) => this.saved[key] ?? null;
+
+    public string showSaved(string key) => Settings.describe(this.saved[key] ?? null);
+}

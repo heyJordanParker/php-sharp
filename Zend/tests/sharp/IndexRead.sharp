@@ -1,0 +1,43 @@
+namespace Demo;
+
+import SplFixedArray;
+
+class IndexRead
+{
+    public static int at(List<int> values, int index)
+    {
+        return values[index];
+    }
+
+    public static int nested(List<List<int>> rows, int row, int column)
+    {
+        return rows[row][column];
+    }
+
+    public static int orZero(List<int> values, int index)
+    {
+        return values[index] ?? 0;
+    }
+
+    public static int price(Map<string, int> prices, string plan)
+    {
+        return prices[plan] ?? 0;
+    }
+
+    public static int literal(int index)
+    {
+        const values = [10, 20];
+        return values[index];
+    }
+
+    public static bool passed(List<int> values, int index)
+    {
+        const fixed = new SplFixedArray(3);
+        return fixed.offsetExists(values[index]);
+    }
+
+    public static int? size(Map<string, SplFixedArray> arrays, string key)
+    {
+        return arrays[key]?.getSize();
+    }
+}

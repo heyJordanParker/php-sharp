@@ -5,6 +5,7 @@ opcache
 --INI--
 opcache.enable=1
 opcache.enable_cli=1
+opcache.optimization_level=0x7FFEBFFF
 opcache.jit=tracing
 opcache.jit_buffer_size=32M
 opcache.jit_hot_func=1
