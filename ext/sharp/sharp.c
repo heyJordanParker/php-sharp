@@ -11,6 +11,7 @@
 #include "php_ini.h"
 #include "ext/hash/php_hash.h"
 #include "ext/hash/php_hash_xxhash.h"
+#include "ext/json/php_json_parser.h"
 #include "ext/spl/spl_exceptions.h"
 #include "ext/standard/info.h"
 #include "zend_closures.h"
@@ -41,7 +42,8 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	HashTable folder_roots;
 	HashTable request_stamps;
 	char *compile_command;
-	bool compile_command_ran;
+	/* Undefined until the request runs its compile command, then the checker report the command printed, or null. */
+	zval compile_command_report;
 ZEND_END_MODULE_GLOBALS(sharp)
 
 ZEND_DECLARE_MODULE_GLOBALS(sharp)
@@ -485,10 +487,82 @@ static void sharp_release(sharp_compiled *compiled)
 	}
 }
 
+/* Returns the member of a decoded JSON object when it has the given type, or NULL. */
+static zval *sharp_member(const zval *object, const char *key, uint8_t type)
+{
+	zval *member = object && Z_TYPE_P(object) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(object), key, strlen(key)) : NULL;
+
+	return member && Z_TYPE_P(member) == type ? member : NULL;
+}
+
+/* Refuses a file with the errors the compile command's checker reported for it: the first in the file, its line, and
+ * how many there are. The report lists errors by checking pass rather than by line, and counts lines from 0. Returns
+ * false when the report holds no error for the file. */
+static ZEND_COLD bool sharp_refuse_checked(const sharp_compiled *compiled, const char *name)
+{
+	zval *issues = sharp_member(&SHARP_G(compile_command_report), "issues", IS_ARRAY), *issue;
+	zend_string *message = NULL;
+	zend_long first_offset = 0, line = 0;
+	uint32_t count = 0;
+	size_t length;
+
+	if (!issues) {
+		return false;
+	}
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(issues), issue) {
+		zval *level = sharp_member(issue, "level", IS_STRING), *text = sharp_member(issue, "message", IS_STRING);
+		zval *annotations = sharp_member(issue, "annotations", IS_ARRAY), *annotation, *span = NULL, *path, *start, *offset, *start_line;
+
+		if (!level || !zend_string_equals_literal(Z_STR_P(level), "Error") || !text || !annotations) {
+			continue;
+		}
+		ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(annotations), annotation) {
+			zval *kind = sharp_member(annotation, "kind", IS_STRING);
+
+			if (kind && zend_string_equals_literal(Z_STR_P(kind), "Primary")) {
+				span = sharp_member(annotation, "span", IS_ARRAY);
+				break;
+			}
+		} ZEND_HASH_FOREACH_END();
+		path = sharp_member(sharp_member(span, "file_id", IS_ARRAY), "path", IS_STRING);
+		start = sharp_member(span, "start", IS_ARRAY);
+		offset = sharp_member(start, "offset", IS_LONG);
+		start_line = sharp_member(start, "line", IS_LONG);
+		if (!path || !zend_string_equals(Z_STR_P(path), compiled->source) || !offset || !start_line) {
+			continue;
+		}
+		count++;
+		if (!message || Z_LVAL_P(offset) < first_offset) {
+			message = Z_STR_P(text);
+			first_offset = Z_LVAL_P(offset);
+			line = Z_LVAL_P(start_line) + 1;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	if (!message) {
+		return false;
+	}
+	length = ZSTR_LEN(message) - (ZSTR_LEN(message) > 0 && ZSTR_VAL(message)[ZSTR_LEN(message) - 1] == '.');
+	if (count == 1) {
+		zend_throw_exception_ex(zend_ce_compile_error, 0,
+			"%s has an error on line " ZEND_LONG_FMT ": %.*s. Run vendor/bin/mago compile to see it.",
+			name, line, (int) length, ZSTR_VAL(message));
+	} else {
+		zend_throw_exception_ex(zend_ce_compile_error, 0,
+			"%s has %u errors. The first is on line " ZEND_LONG_FMT ": %.*s. Run vendor/bin/mago compile to see them all.",
+			name, count, line, (int) length, ZSTR_VAL(message));
+	}
+
+	return true;
+}
+
 static ZEND_COLD void sharp_refuse(const sharp_compiled *compiled, sharp_state state)
 {
 	const char *name = ZSTR_VAL(compiled->source) + (compiled->rooted ? compiled->root_length + 1 : 0);
 
+	if (sharp_refuse_checked(compiled, name)) {
+		return;
+	}
 	switch (state) {
 		case SHARP_NOT_COMPILED:
 			zend_throw_exception_ex(zend_ce_compile_error, 0,
@@ -506,28 +580,51 @@ static ZEND_COLD void sharp_refuse(const sharp_compiled *compiled, sharp_state s
 	}
 }
 
-/* Runs sharp.compile_command through /bin/sh in the project root, and waits for it however long it takes. Its
- * output goes nowhere. */
+/* Runs sharp.compile_command through /bin/sh in the project root, and waits for it however long it takes. The command
+ * runs with MAGO_REPORTING_FORMAT=json, and the checker report it prints is decoded for the request's refusals. What it
+ * prints goes to a temporary file, read once it exits: a pipe would also wait on every process it leaves running. */
 static void sharp_run_compile_command(const sharp_compiled *compiled)
 {
 	char *root = estrndup(ZSTR_VAL(compiled->source), compiled->root_length ? compiled->root_length : 1);
+	php_stream *output = php_stream_fopen_tmpfile();
+	int output_fd = -1;
 	int status;
-	pid_t child = fork();
+	pid_t child;
 
+	ZVAL_NULL(&SHARP_G(compile_command_report));
+	if (output && php_stream_cast(output, PHP_STREAM_AS_FD, (void **) &output_fd, false) != SUCCESS) {
+		output_fd = -1;
+	}
+	child = fork();
 	if (child == 0) {
 		int nowhere = open("/dev/null", O_RDWR);
 
-		if (chdir(root) != 0 || nowhere < 0
-				|| dup2(nowhere, STDIN_FILENO) < 0 || dup2(nowhere, STDOUT_FILENO) < 0 || dup2(nowhere, STDERR_FILENO) < 0) {
+		if (chdir(root) != 0 || nowhere < 0 || dup2(nowhere, STDIN_FILENO) < 0
+				|| dup2(output_fd >= 0 ? output_fd : nowhere, STDOUT_FILENO) < 0 || dup2(nowhere, STDERR_FILENO) < 0) {
 			_exit(127);
 		}
-		execl("/bin/sh", "sh", "-c", SHARP_G(compile_command), (char *) NULL);
+		execl("/usr/bin/env", "env", "MAGO_REPORTING_FORMAT=json", "/bin/sh", "-c", SHARP_G(compile_command), (char *) NULL);
 		_exit(127);
 	}
 	if (child > 0) {
 		while (waitpid(child, &status, 0) < 0 && errno == EINTR);
 	}
 	efree(root);
+	if (output) {
+		zend_string *printed;
+
+		php_stream_rewind(output);
+		printed = php_stream_copy_to_mem(output, PHP_STREAM_COPY_ALL, false);
+		php_stream_close(output);
+		if (printed) {
+			php_json_parser parser;
+
+			php_json_parser_init(&parser, &SHARP_G(compile_command_report), ZSTR_VAL(printed), ZSTR_LEN(printed),
+				PHP_JSON_OBJECT_AS_ARRAY, PHP_JSON_PARSER_DEFAULT_DEPTH);
+			php_json_parse(&parser);
+			zend_string_release(printed);
+		}
+	}
 }
 
 static int sharp_parse(void)
@@ -543,8 +640,7 @@ static int sharp_parse(void)
 	state = sharp_check(&compiled, source, source_length);
 	/* A file with no root has no project to compile, and the current folder is no guess for one. */
 	if (state != SHARP_CURRENT && compiled.rooted
-			&& SHARP_G(compile_command) && *SHARP_G(compile_command) && !SHARP_G(compile_command_ran)) {
-		SHARP_G(compile_command_ran) = true;
+			&& SHARP_G(compile_command) && *SHARP_G(compile_command) && Z_ISUNDEF(SHARP_G(compile_command_report))) {
 		sharp_run_compile_command(&compiled);
 		sharp_release(&compiled);
 		sharp_locate(&compiled, filename);
@@ -1544,7 +1640,7 @@ static PHP_GSHUTDOWN_FUNCTION(sharp)
 static PHP_RINIT_FUNCTION(sharp)
 {
 	zend_hash_init(&SHARP_G(request_stamps), 8, NULL, sharp_free_stamp, false);
-	SHARP_G(compile_command_ran) = false;
+	ZVAL_UNDEF(&SHARP_G(compile_command_report));
 
 	return SUCCESS;
 }
@@ -1565,6 +1661,7 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 		}
 	}
 	zend_hash_destroy(&SHARP_G(request_stamps));
+	zval_ptr_dtor(&SHARP_G(compile_command_report));
 
 	return SUCCESS;
 }
