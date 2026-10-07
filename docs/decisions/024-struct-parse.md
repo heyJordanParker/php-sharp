@@ -2,7 +2,7 @@
 
 ## Decision
 
-Every struct has a static `parse(Map<string, Any?>)`, which throws one error that lists every bad field, and a static `tryParse`, which gives null. Classes do not get them. The keys are the main constructor's parameter names, and `[Key("…")]` renames one.
+Every struct has a static `parse`, which reads a `Map<string, Any?>` or an object's public properties (decision 39) and throws one error that lists every bad field, and a static `tryParse`, which gives null. Classes do not get them. The keys are the main constructor's parameter names, and `[Key("…")]` renames one.
 
 ## Options
 
@@ -29,7 +29,7 @@ RenewRequest? maybe = RenewRequest.tryParse(payload);   // null on any bad field
 
 The names follow `Int.parse` and `Int.tryParse`, so one pair of names covers parsing everywhere. One error lists every bad field, so a caller fixes the whole payload at once.
 
-`Key` names what the attribute does: a struct reads a `Map`, and the attribute renames the key a parameter reads. A project with its own `Key` aliases one of them on import.
+`Key` names what the attribute does: a struct reads a `Map`, and the attribute renames the key a parameter reads. A project with its own `Key` renames one of them on import, as in `import Cache.Key as CacheKey;` (section 23).
 
 ### Rejected: opt in with an attribute
 
@@ -55,3 +55,4 @@ Every struct that receives outside data needs the marker first, and a struct wit
 ## Spec
 
 - [Section 10, Structs](../spec.md#10-structs)
+- [Section 23, Namespaces and imports](../spec.md#23-namespaces-and-imports)

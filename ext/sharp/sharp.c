@@ -5,81 +5,18 @@
 #include "php.h"
 #include "ext/standard/info.h"
 #include "zend_exceptions.h"
+#include "zend_smart_str.h"
 #include "zend_system_id.h"
 #include "php_sharp.h"
+#include "sharp_arginfo.h"
 #include "sharp_bridge.h"
 #include "sharp_build_id.h"
 
 #define SHARP_FILE_EXTENSION ".sharp"
 
-#define SHARP_KIND(kind) case SHARP_AST_##kind: return ZEND_AST_##kind
-
-static zend_ast_kind sharp_zend_kind(enum sharp_kind kind)
-{
-	switch (kind) {
-		SHARP_KIND(ZVAL);
-		SHARP_KIND(METHOD);
-		SHARP_KIND(CLASS);
-		SHARP_KIND(ARG_LIST);
-		SHARP_KIND(STMT_LIST);
-		SHARP_KIND(PARAM_LIST);
-		SHARP_KIND(CONST_DECL);
-		SHARP_KIND(VAR);
-		SHARP_KIND(CONST);
-		SHARP_KIND(UNARY_PLUS);
-		SHARP_KIND(UNARY_MINUS);
-		SHARP_KIND(UNARY_OP);
-		SHARP_KIND(PRE_INC);
-		SHARP_KIND(PRE_DEC);
-		SHARP_KIND(POST_INC);
-		SHARP_KIND(POST_DEC);
-		SHARP_KIND(RETURN);
-		SHARP_KIND(PROP);
-		SHARP_KIND(ASSIGN);
-		SHARP_KIND(ASSIGN_OP);
-		SHARP_KIND(BINARY_OP);
-		SHARP_KIND(GREATER);
-		SHARP_KIND(GREATER_EQUAL);
-		SHARP_KIND(AND);
-		SHARP_KIND(OR);
-		SHARP_KIND(DECLARE);
-		SHARP_KIND(NAMESPACE);
-		SHARP_KIND(NAMED_ARG);
-		SHARP_KIND(METHOD_CALL);
-		SHARP_KIND(STATIC_CALL);
-		SHARP_KIND(CONST_ELEM);
-		SHARP_KIND(PARAM);
-		SHARP_KIND(COALESCE);
-		SHARP_KIND(ASSIGN_COALESCE);
-		SHARP_KIND(NULLSAFE_PROP);
-		SHARP_KIND(NULLSAFE_METHOD_CALL);
-		SHARP_KIND(IF);
-		SHARP_KIND(IF_ELEM);
-		SHARP_KIND(WHILE);
-		SHARP_KIND(DO_WHILE);
-		SHARP_KIND(BREAK);
-		SHARP_KIND(CONTINUE);
-		SHARP_KIND(FOR);
-		SHARP_KIND(EXPR_LIST);
-		SHARP_KIND(FOREACH);
-		SHARP_KIND(PROP_GROUP);
-		SHARP_KIND(PROP_DECL);
-		SHARP_KIND(PROP_ELEM);
-		SHARP_KIND(NEW);
-		SHARP_KIND(ATTRIBUTE_LIST);
-		SHARP_KIND(ATTRIBUTE_GROUP);
-		SHARP_KIND(ATTRIBUTE);
-		SHARP_KIND(THROW);
-		SHARP_KIND(TRY);
-		SHARP_KIND(CATCH_LIST);
-		SHARP_KIND(CATCH);
-		SHARP_KIND(NAME_LIST);
-		SHARP_KIND(CALL);
-		SHARP_KIND(ENCAPS_LIST);
-	}
-
-	ZEND_UNREACHABLE();
-}
+#define SHARP_KIND_IS_ZEND_KIND(kind) \
+	ZEND_STATIC_ASSERT((zend_ast_kind) SHARP_AST_##kind == ZEND_AST_##kind, "SHARP_AST_" #kind " differs from ZEND_AST_" #kind);
+SHARP_KINDS(SHARP_KIND_IS_ZEND_KIND)
 
 static zend_op_array *(*sharp_next_compile_file)(zend_file_handle *file_handle, int type);
 
@@ -152,6 +89,8 @@ static zend_ast_attr sharp_operator_attr(zend_ast_kind kind, uint32_t attr)
 		case ZEND_AST_ASSIGN_OP:
 			return attr == ZEND_ADD || attr == ZEND_SUB || attr == ZEND_MUL || attr == ZEND_POW
 				? attr | ZEND_SHARP_OPERATOR_SYNTAX : attr;
+		case ZEND_AST_CAST:
+			return attr == IS_LONG ? attr | ZEND_SHARP_OPERATOR_SYNTAX : attr;
 		case ZEND_AST_UNARY_MINUS:
 		case ZEND_AST_PRE_INC:
 		case ZEND_AST_PRE_DEC:
@@ -191,7 +130,7 @@ static zend_ast *sharp_translate(const sharp_unit *unit, uint32_t index)
 	}
 
 	node = &unit->nodes[index];
-	kind = sharp_zend_kind(node->kind);
+	kind = (zend_ast_kind) node->kind;
 
 	if (kind == ZEND_AST_ZVAL) {
 		CG(zend_lineno) = node->line;
@@ -259,8 +198,219 @@ static zend_op_array *sharp_compile_file(zend_file_handle *file_handle, int type
 	return zend_compile_file_with(file_handle, type, sharp_parse);
 }
 
+typedef enum {
+	SHARP_PARSED,
+	SHARP_NOT_A_STRING,
+	SHARP_NOT_A_NUMBER,
+	SHARP_OUT_OF_RANGE,
+} sharp_parse_result;
+
+/* The white space C#'s int.Parse skips: U+0009 to U+000D and U+0020. */
+static bool sharp_is_space(char c)
+{
+	return c == ' ' || (c >= '\t' && c <= '\r');
+}
+
+static const char *sharp_skip_digits(const char *p)
+{
+	while (*p >= '0' && *p <= '9') {
+		p++;
+	}
+
+	return p;
+}
+
+/* Accepts what C#'s int.Parse accepts: [ws][sign]digits[ws], in ASCII digits only. */
+static sharp_parse_result sharp_parse_int(const zval *value, zend_long *result)
+{
+	if (Z_TYPE_P(value) != IS_STRING) {
+		return SHARP_NOT_A_STRING;
+	}
+
+	const char *p = Z_STRVAL_P(value);
+	const char *end = p + Z_STRLEN_P(value);
+	while (sharp_is_space(*p)) {
+		p++;
+	}
+	bool negative = *p == '-';
+	if (*p == '-' || *p == '+') {
+		p++;
+	}
+	const char *digits = p;
+	p = sharp_skip_digits(p);
+	if (p == digits) {
+		return SHARP_NOT_A_NUMBER;
+	}
+	const char *digits_end = p;
+	while (sharp_is_space(*p)) {
+		p++;
+	}
+	if (p != end) {
+		return SHARP_NOT_A_NUMBER;
+	}
+
+	zend_ulong limit = negative ? (zend_ulong) ZEND_LONG_MAX + 1 : (zend_ulong) ZEND_LONG_MAX;
+	zend_ulong magnitude = 0;
+	for (p = digits; p < digits_end; p++) {
+		zend_ulong digit = *p - '0';
+		if (magnitude > (limit - digit) / 10) {
+			return SHARP_OUT_OF_RANGE;
+		}
+		magnitude = magnitude * 10 + digit;
+	}
+	*result = negative ? (zend_long) (0 - magnitude) : (zend_long) magnitude;
+
+	return SHARP_PARSED;
+}
+
+/* Accepts [ws][sign](digits[.digits] | .digits)([eE][sign]digits)?[ws], so no thousands separator, NaN or Infinity. */
+static sharp_parse_result sharp_parse_float(const zval *value, double *result)
+{
+	if (Z_TYPE_P(value) != IS_STRING) {
+		return SHARP_NOT_A_STRING;
+	}
+
+	const char *p = Z_STRVAL_P(value);
+	const char *end = p + Z_STRLEN_P(value);
+	while (sharp_is_space(*p)) {
+		p++;
+	}
+	const char *number = p;
+	if (*p == '-' || *p == '+') {
+		p++;
+	}
+	const char *integer = p;
+	p = sharp_skip_digits(p);
+	if (*p == '.') {
+		const char *fraction = ++p;
+		p = sharp_skip_digits(p);
+		if (p == fraction) {
+			return SHARP_NOT_A_NUMBER;
+		}
+	} else if (p == integer) {
+		return SHARP_NOT_A_NUMBER;
+	}
+	if (*p == 'e' || *p == 'E') {
+		p++;
+		if (*p == '-' || *p == '+') {
+			p++;
+		}
+		const char *exponent = p;
+		p = sharp_skip_digits(p);
+		if (p == exponent) {
+			return SHARP_NOT_A_NUMBER;
+		}
+	}
+	while (sharp_is_space(*p)) {
+		p++;
+	}
+	if (p != end) {
+		return SHARP_NOT_A_NUMBER;
+	}
+
+	*result = zend_strtod(number, NULL);
+
+	return zend_finite(*result) ? SHARP_PARSED : SHARP_OUT_OF_RANGE;
+}
+
+/* Shows the string the way an unhandled match case does, so zend.exception_ignore_args hides request data. */
+static ZEND_COLD void sharp_throw_parse_error(sharp_parse_result parsed, const zval *value, const char *number, const char *range)
+{
+	if (parsed == SHARP_NOT_A_STRING) {
+		zend_argument_value_error(1, "must be a string, %s given", zend_zval_value_name(value));
+		return;
+	}
+
+	zend_long max_len = EG(exception_string_param_max_len);
+	smart_str shown = {0};
+	if (EG(exception_ignore_args) || max_len == 0) {
+		smart_str_appends(&shown, "string");
+	} else {
+		smart_str_append_scalar(&shown, value, max_len);
+	}
+	smart_str_0(&shown);
+
+	if (parsed == SHARP_OUT_OF_RANGE) {
+		zend_argument_error(zend_ce_arithmetic_error, 1, "must hold %s, %s given", range, ZSTR_VAL(shown.s));
+	} else {
+		zend_argument_value_error(1, "must hold %s, %s given", number, ZSTR_VAL(shown.s));
+	}
+
+	smart_str_free(&shown);
+}
+
+ZEND_METHOD(Sharp_Int, parse)
+{
+	zval *value;
+	zend_long result;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	sharp_parse_result parsed = sharp_parse_int(value, &result);
+	if (parsed != SHARP_PARSED) {
+		sharp_throw_parse_error(parsed, value, "an int", "an int from PHP_INT_MIN to PHP_INT_MAX");
+		RETURN_THROWS();
+	}
+
+	RETURN_LONG(result);
+}
+
+ZEND_METHOD(Sharp_Int, tryParse)
+{
+	zval *value;
+	zend_long result;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (sharp_parse_int(value, &result) != SHARP_PARSED) {
+		RETURN_NULL();
+	}
+
+	RETURN_LONG(result);
+}
+
+ZEND_METHOD(Sharp_Float, parse)
+{
+	zval *value;
+	double result;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	sharp_parse_result parsed = sharp_parse_float(value, &result);
+	if (parsed != SHARP_PARSED) {
+		sharp_throw_parse_error(parsed, value, "a float", "a float from -PHP_FLOAT_MAX to PHP_FLOAT_MAX");
+		RETURN_THROWS();
+	}
+
+	RETURN_DOUBLE(result);
+}
+
+ZEND_METHOD(Sharp_Float, tryParse)
+{
+	zval *value;
+	double result;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (sharp_parse_float(value, &result) != SHARP_PARSED) {
+		RETURN_NULL();
+	}
+
+	RETURN_DOUBLE(result);
+}
+
 static PHP_MINIT_FUNCTION(sharp)
 {
+	register_class_Sharp_Int();
+	register_class_Sharp_Float();
 	sharp_init();
 	zend_add_system_entropy("sharp", "SHARP_BUILD_ID", SHARP_BUILD_ID, sizeof(SHARP_BUILD_ID) - 1);
 

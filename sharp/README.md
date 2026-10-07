@@ -1,6 +1,6 @@
 # PHP#
 
-PHP# is Dent's own PHP. It is a fork of php-src that keeps running plain PHP and adds a second dialect, PHP#, with C#-shaped syntax and compile-time type safety. A PHP# file compiles to the same engine as plain PHP, so the two call each other freely.
+PHP# is a fork of php-src that keeps running plain PHP and adds a second dialect, PHP#, with C#-shaped syntax and compile-time type safety. A PHP# file compiles to the same engine as plain PHP, so the two call each other freely.
 
 The approved language rules live in [docs/spec.md](../docs/spec.md), and the reason behind each language decision lives in [docs/decisions/](../docs/decisions/).
 
@@ -23,15 +23,21 @@ sharp/bin/test                  # run the PHP# suite, Zend/tests/sharp/
 sharp/bin/test Zend/tests/foo   # run these .phpt files or directories instead
 sharp/bin/test --opcache        # also run with the opcache file cache, priming it and then using it
 sharp/bin/test --repeat         # also run each test twice in one process, the second time from opcache shared memory
+sharp/bin/test --passes         # also run with each optimizer pass alone, then under the tracing and the function JIT
+sharp/bin/test --census         # also check every write and comparison of a field that holds a PHP# mark
 sharp/bin/test --differential   # also check that php -l compiles every Zend/tests/sharp/*.sharp file the checker accepts
 sharp/bin/test --upstream       # run Zend/tests, ext/reflection, ext/tokenizer and ext/opcache
 ```
 
-`--differential` runs `mago analyze` built from the Mago commit that `ext/sharp/Cargo.toml` pins for the bridge, installed under `sharp/build/<os>-<arch>/mago`. `Zend/tests/sharp/mago.toml` makes the `.sharp` fixtures one checker project. A file the checker refuses needs nothing from the engine. A file it accepts must make `php -l` print nothing but "No syntax errors detected", so a compile warning or deprecation also fails the run.
+`--differential` runs `mago analyze` built from the Mago commit that `ext/sharp/Cargo.toml` pins for the bridge, installed under `sharp/build/<os>-<arch>/mago`. `Zend/tests/sharp/mago.toml` makes the `.sharp` fixtures and the plain PHP classes they call, in `Zend/tests/sharp/harness/`, one checker project. A file the checker refuses needs nothing from the engine. A file it accepts must make `php -l` print nothing but "No syntax errors detected", so a compile warning or deprecation also fails the run.
+
+`--passes` runs the suite once per bit of `opcache.optimization_level` from pass 1 to pass 16, each pass alone, and then under `opcache.jit=tracing` and `opcache.jit=function`. Every run expects the output of the run without opcache, so a pass that drops a PHP# mark fails on its own run instead of hiding behind the other passes. A test whose output depends on the whole optimizer, such as a count of oplines the JIT left to the VM, sets `opcache.optimization_level=0x7FFEBFFF` in its `--INI--` section.
+
+`--census` runs `sharp/bin/census`. It reads the register of PHP# marks in `Zend/zend_compile.h` and fails on each line in `Zend/` and `ext/opcache/` that writes or compares a marked field of a marked opcode or AST kind without naming the mark, as the header of `sharp/bin/census` describes. A new mark goes in the register, beside the upstream flags of the same field and kind, with a `ZEND_STATIC_ASSERT` that fails the build when they overlap.
 
 `--linux` runs either command inside the Debian trixie image from `sharp/docker/`, for example `sharp/bin/build --linux` and `sharp/bin/test --linux --opcache`.
 
-Every PHP# feature must pass `sharp/bin/test --opcache --repeat --differential`. `sharp/bin/test` disables the JIT.
+Every PHP# feature must pass `sharp/bin/test --opcache --repeat --passes --census --differential`. `sharp/bin/test` disables the JIT outside `--passes`.
 
 `sharp/bin/build` reruns `buildconf` and `configure` by itself when `configure.ac`, a `*.m4` file, a `Makefile.frag`, `build/Makefile.global`, `sharp/docker/Dockerfile` or `sharp/bin/build` changes.
 
@@ -55,6 +61,8 @@ git archive HEAD | docker build -f sharp/docker/runtime/Dockerfile -t php-sharp 
 
 `sharp/composer/` is the Composer plugin `heyjordanparker/php-sharp-composer`. Composer's autoloader then tries `.sharp` after `.php` by the PSR-4 rules, the way it tries `.hh` on HHVM. Composer's class map scanner reads only `<?php` files, so on `composer dump-autoload --optimize` the plugin writes every `.sharp` file under a PSR-4 folder to `vendor/composer/autoload_sharp.php`, and the autoloader adds it to the class map.
 
+`sharp/composer/` is the plugin's source of truth. Composer installs it from `heyJordanParker/php-sharp-composer`, a read-only split that CI rewrites from this folder's history, the way Symfony splits its components. Change the plugin here, never in the split.
+
 ## macOS dependencies
 
 ```sh
@@ -63,8 +71,12 @@ brew install autoconf bison re2c pkgconf icu4c libiconv libpq libsodium libzip o
 
 ## CI
 
-`.github/workflows/sharp.yml` builds and tests on Linux in the `sharp/docker/` image and on `macos-latest`, for every push and pull request to `master` that changes more than documentation. The Linux job also fails when a generated file differs from the committed one. That step copies `.github/actions/verify-generated-files/action.yml`, so compare the two on every merge from upstream.
+`.github/workflows/sharp.yml` builds and tests on Linux in the `sharp/docker/` image and on `macos-latest`, for every push and pull request to `master` that changes more than documentation. The Linux job also fails when a generated file differs from the committed one, or when `ext/sharp/Cargo.lock` names a local `path+file://` or `git+file://` source. The generated-file step copies `.github/actions/verify-generated-files/action.yml`, so compare the two on every merge from upstream.
+
+`master` takes changes only through a pull request whose `LINUX` and `MACOS` checks pass on a branch that is up to date with `master`. A repository ruleset enforces it for every account, admins included, and refuses force pushes and deletion. The `CHANGES` job skips both checks on a pull request that changes documentation alone, and GitHub counts a skipped job as passing, so that pull request can still merge.
 
 Pushing a full version tag, such as `v0.1.0`, runs both jobs, and when they pass, the `IMAGE` job publishes the runtime image as `ghcr.io/heyjordanparker/php-sharp:<version>`, never as `latest`, for `linux/amd64` and `linux/arm64`. Each platform builds on its own native runner through `docker/github-builder`.
+
+On a push to `master` or a tag, once both jobs pass or skip a change to documentation alone, the `COMPOSER` job splits `sharp/composer/` with `splitsh-lite` and pushes the result to the same branch or tag of `heyJordanParker/php-sharp-composer`. It pushes with the split repository's deploy key, kept in the `PHP_SHARP_COMPOSER_DEPLOY_KEY` Actions secret. The split repository's webhook tells Packagist to update `heyjordanparker/php-sharp-composer`, so a tag here becomes a plugin release of the same version.
 
 Upstream's `Test` and `Windows builds` workflows are disabled on the fork with `gh workflow disable`.
