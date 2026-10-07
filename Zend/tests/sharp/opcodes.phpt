@@ -14,7 +14,7 @@ function compiled(string $file, string $prelude): string
     return str_replace($file, '<file>', $opcodes . $classes);
 }
 
-// Each fixture names the PHP library its classes link against.
+// Each fixture names the libraries its classes link against.
 $fixtures = [
     'Calc' => null,
     'Nulls' => null,
@@ -30,10 +30,30 @@ $fixtures = [
     'Lambdas' => null,
     'Checkout' => null,
     'Permalink' => '../../../sharp/composer/library/Sharp/Text/Text.sharp',
+    'Library' => [
+        '../../../sharp/composer/library/Sharp/Data/Base64.sharp',
+        '../../../sharp/composer/library/Sharp/Data/Binary.sharp',
+        '../../../sharp/composer/library/Sharp/Data/Compression.sharp',
+        '../../../sharp/composer/library/Sharp/Data/Hash.sharp',
+        '../../../sharp/composer/library/Sharp/Data/Hex.sharp',
+        '../../../sharp/composer/library/Sharp/Data/Password.sharp',
+        '../../../sharp/composer/library/Sharp/Data/PhpSerializer.sharp',
+        '../../../sharp/composer/library/Sharp/IO/Path.sharp',
+        '../../../sharp/composer/library/Sharp/Json/Json.sharp',
+        '../../../sharp/composer/library/Sharp/Math/Math.sharp',
+        '../../../sharp/composer/library/Sharp/Net/Email.sharp',
+        '../../../sharp/composer/library/Sharp/Net/Ip.sharp',
+        '../../../sharp/composer/library/Sharp/Net/Url.sharp',
+        '../../../sharp/composer/library/Sharp/Text/Html.sharp',
+        '../../../sharp/composer/library/Sharp/Text/Regex.sharp',
+        '../../../sharp/composer/library/Sharp/Text/Text.sharp',
+        '../../../sharp/composer/library/Sharp/Time/Date.sharp',
+        '../../../sharp/composer/library/Sharp/Time/TimeZone.sharp',
+    ],
 ];
 
 foreach ($fixtures as $fixture => $library) {
-    $prelude = $library === null ? '' : 'require ' . var_export(__DIR__ . "/$library", true) . ';';
+    $prelude = implode('', array_map(static fn (string $file): string => 'require ' . var_export(__DIR__ . "/$file", true) . ';', (array) $library));
     $sharp = compiled(__DIR__ . "/$fixture.sharp", $prelude);
     $php = compiled(__DIR__ . "/$fixture.inc", $prelude);
     echo $fixture, ': ', $sharp === $php ? 'same' : 'different', ' opcodes and lines in ',
@@ -103,3 +123,4 @@ Lambdas: different opcodes and lines in 36 op arrays, same signatures in 1 class
   .php   L0099 0010 RETURN null
 Checkout: same opcodes and lines in 10 op arrays, same signatures in 1 classes
 Permalink: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+Library: same opcodes and lines in 19 op arrays, same signatures in 1 classes

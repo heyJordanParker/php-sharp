@@ -1,0 +1,10 @@
+namespace Demo;
+
+import Sharp.Data.Binary;
+
+class BinaryCalls
+{
+    public static string pack(string format, Any? ...values) => Binary.pack(format, ...values);
+
+    public static Map<string, Any?> unpack(string format, string data) => Binary.unpack(format, data);
+}

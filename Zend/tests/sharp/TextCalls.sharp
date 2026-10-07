@@ -1,0 +1,10 @@
+namespace Demo;
+
+import Sharp.Text.Text;
+
+class TextCalls
+{
+    public static string slug(string title) => Text.slug(title);
+
+    public static string fromByte(int byte) => Text.fromByte(byte);
+}

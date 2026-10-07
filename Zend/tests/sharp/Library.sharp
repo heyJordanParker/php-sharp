@@ -1,0 +1,59 @@
+namespace Demo;
+
+import Sharp.Data.Base64;
+import Sharp.Data.Binary;
+import Sharp.Data.Compression;
+import Sharp.Data.Hash;
+import Sharp.Data.Hex;
+import Sharp.Data.Password;
+import Sharp.Data.PhpSerializer;
+import Sharp.IO.Path;
+import Sharp.Json.Json;
+import Sharp.Math.Math;
+import Sharp.Net.Email;
+import Sharp.Net.Ip;
+import Sharp.Net.Url;
+import Sharp.Text.Html;
+import Sharp.Text.Regex;
+import Sharp.Text.Text;
+import Sharp.Time.Date;
+import Sharp.Time.TimeZone;
+
+class Library
+{
+    public static string initial(int code) => Text.fromByte(code);
+
+    public static bool isNumber(string text) => Regex.matches("/^[0-9]+$/", text);
+
+    public static string escape(string html) => Html.escape(html);
+
+    public static float square(float side) => Math.pow(side, 2.0);
+
+    public static Any? decode(string json) => Json.decode(json);
+
+    public static string digest(string data) => Hash.sha1(data);
+
+    public static string base64(string data) => Base64.encode(data);
+
+    public static string hexadecimal(string data) => Hex.encode(data);
+
+    public static bool checks(string password, string hash) => Password.verify(password, hash);
+
+    public static string serialize(Any? value) => PhpSerializer.serialize(value);
+
+    public static string bigEndian(int value) => Binary.pack("N", value);
+
+    public static string compress(string data) => Compression.compress(data);
+
+    public static string extension(string path) => Path.extension(path);
+
+    public static string day(int timestamp) => Date.format(timestamp, "Y-m-d");
+
+    public static int zones() => count(TimeZone.names());
+
+    public static string query(Map<string, Any?> values) => Url.buildQuery(values);
+
+    public static bool isEmail(string address) => Email.isValid(address);
+
+    public static bool isIp(string address) => Ip.isValid(address);
+}

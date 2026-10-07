@@ -31,6 +31,7 @@ flags=(
   --enable-pcntl
   --with-sodium
   --with-zip
+  --with-zlib
 )
 
 if [[ "$(uname -s)" == Darwin ]]; then

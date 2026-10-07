@@ -1,0 +1,20 @@
+namespace Demo;
+
+import Sharp.Text.Regex;
+
+class RegexCalls
+{
+    public static bool matches(string pattern, string text) => Regex.matches(pattern, text);
+
+    public static List<string>? match(string pattern, string text) => Regex.match(pattern, text);
+
+    public static List<List<string>> matchAll(string pattern, string text) => Regex.matchAll(pattern, text);
+
+    public static string replace(string pattern, string replacement, string text) => Regex.replace(pattern, replacement, text);
+
+    public static List<string> split(string pattern, string text) => Regex.split(pattern, text);
+
+    public static List<string> filter(string pattern, List<string> texts) => Regex.filter(pattern, texts);
+
+    public static string escape(string text) => Regex.escape(text);
+}
