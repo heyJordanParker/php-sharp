@@ -5,6 +5,7 @@
 #include "php.h"
 #include "ext/spl/spl_exceptions.h"
 #include "ext/standard/info.h"
+#include "zend_closures.h"
 #include "zend_enum.h"
 #include "zend_exceptions.h"
 #include "zend_smart_str.h"
@@ -106,8 +107,10 @@ static zend_ast *sharp_translate_decl(const sharp_unit *unit, const sharp_node *
 		child[i] = sharp_translate(unit, unit->children[node->first_child + i]);
 	}
 
+	/* php-src's grammar gives a closure and an arrow function no name. */
 	CG(zend_lineno) = node->end_line;
-	return zend_ast_create_decl(kind, node->attr, node->line, NULL, sharp_string(node->text),
+	return zend_ast_create_decl(kind, node->attr, node->line, NULL,
+		kind == ZEND_AST_CLOSURE || kind == ZEND_AST_ARROW_FUNC ? NULL : sharp_string(node->text),
 		child[0], child[1], child[2], child[3], child[4]);
 }
 
@@ -207,6 +210,126 @@ static zend_op_array *sharp_compile_file(zend_file_handle *file_handle, int type
 	return zend_compile_file_with(file_handle, type, sharp_parse);
 }
 
+/* Whether the running code was compiled from a .sharp file. The file name decides the dialect in
+ * sharp_compile_file, and only the cold paths of a missing member ask again. */
+static bool sharp_is_sharp_caller(void)
+{
+	const zend_execute_data *ex = EG(current_execute_data);
+
+	return ex && ex->func && ZEND_USER_CODE(ex->func->type) && sharp_is_sharp_file(ex->func->op_array.filename);
+}
+
+/* Runs a call of a missing method: reads the property of the method's name, in the caller's scope,
+ * and calls the Closure it holds with the call's arguments, as PHP's ($object->name)(...) does. The
+ * property is read after the arguments, which C# reads before them. */
+static ZEND_FUNCTION(sharp_property_call_trampoline)
+{
+	zval *arguments = NULL;
+	uint32_t argument_count = 0;
+	HashTable *named_arguments = NULL;
+
+	ZEND_PARSE_PARAMETERS_START(0, -1)
+		Z_PARAM_VARIADIC_WITH_NAMED(arguments, argument_count, named_arguments)
+	ZEND_PARSE_PARAMETERS_END_EX(goto clean);
+
+	zend_object *object = Z_OBJ_P(ZEND_THIS);
+	zval rv, function;
+	zval *value = object->handlers->read_property(object, EX(func)->common.function_name, BP_VAR_R, NULL, &rv);
+	ZVAL_COPY_DEREF(&function, value);
+	if (value == &rv) {
+		zval_ptr_dtor(&rv);
+	}
+
+	if (EG(exception)) {
+		/* read_property threw, and its value is null. */
+	} else if (Z_TYPE(function) == IS_OBJECT && Z_OBJCE(function) == zend_ce_closure) {
+		call_user_function_named(NULL, NULL, &function, return_value, argument_count, arguments, named_arguments);
+	} else {
+		zend_throw_error(NULL, "Value not callable");
+	}
+	zval_ptr_dtor(&function);
+
+clean:
+	zend_string_release(EX(func)->common.function_name);
+	zend_free_trampoline(EX(func));
+	EX(func) = NULL;
+}
+
+/* Spec section 14: a PHP# call x.name(...) of a class with no method name and no __call
+ * calls the function its instance property name holds. Returns NULL for any other call. */
+zend_function *sharp_property_call(zend_object *object, zend_string *name)
+{
+	static const zend_internal_arg_info arg_info[1] = {
+		{ .name = "arguments", .type = ZEND_TYPE_INIT_NONE(_ZEND_IS_VARIADIC_BIT) }
+	};
+	const zend_property_info *property = zend_hash_find_ptr(&object->ce->properties_info, name);
+
+	if (!property || (property->flags & ZEND_ACC_STATIC) || !sharp_is_sharp_caller()) {
+		return NULL;
+	}
+
+	zend_function *func = EXPECTED(EG(trampoline).common.function_name == NULL)
+		? &EG(trampoline)
+		: (zend_function *) ecalloc(1, sizeof(zend_internal_function));
+	func->type = ZEND_INTERNAL_FUNCTION;
+	/* The trampoline runs in its own frame, so it reserves no temporary for observers. */
+	func->common.T = 0;
+	func->common.arg_flags[0] = 0;
+	func->common.arg_flags[1] = 0;
+	func->common.arg_flags[2] = 0;
+	func->common.fn_flags = ZEND_ACC_CALL_VIA_TRAMPOLINE | ZEND_ACC_PUBLIC | ZEND_ACC_VARIADIC;
+	func->common.function_name = zend_string_copy(name);
+	func->common.num_args = 0;
+	func->common.required_num_args = 0;
+	/* The caller's scope, which reads the property where the caller may read it. */
+	func->common.scope = zend_get_executed_scope();
+	func->common.prototype = NULL;
+	func->common.prop_info = NULL;
+	func->common.arg_info = (zend_arg_info *) arg_info;
+	func->internal_function.handler = ZEND_FN(sharp_property_call_trampoline);
+	func->internal_function.module = NULL;
+	func->internal_function.reserved[0] = NULL;
+	func->internal_function.reserved[1] = NULL;
+
+	return func;
+}
+
+/* Spec section 14.3: a PHP# read x.name of a class with no property name gives its method name as a
+ * Closure bound to x, as PHP's $x->name(...) does, and a read Class.name with no constant, enum case or
+ * static property name gives its static method name, as PHP's Class::name(...) does. object is NULL for
+ * Class.name. Returns NULL for any other read, and when finding the method threw, as for a private one. */
+zval *sharp_method_value(zend_class_entry *ce, zend_object *object, zend_string *name, zval *result)
+{
+	if (!sharp_is_sharp_caller()) {
+		return NULL;
+	}
+
+	zend_object *receiver = object;
+	zend_function *method = object
+		? object->handlers->get_method(&receiver, name, NULL)
+		: zend_std_get_static_method(ce, name, NULL);
+	if (!method) {
+		return NULL;
+	}
+	if (method->common.fn_flags & ZEND_ACC_CALL_VIA_TRAMPOLINE) {
+		zend_string_release(method->common.function_name);
+		zend_free_trampoline(method);
+		return NULL;
+	}
+	if (!object && !(method->common.fn_flags & ZEND_ACC_STATIC)) {
+		return NULL;
+	}
+
+	zval this_value;
+	if (object) {
+		ZVAL_OBJ(&this_value, receiver);
+	}
+	zend_create_fake_closure(result, method, method->common.scope, object ? receiver->ce : ce,
+		(method->common.fn_flags & ZEND_ACC_STATIC) ? NULL : &this_value);
+
+	return result;
+}
+
 #define SHARP_SPARE_COLLECTIONS 4
 
 ZEND_BEGIN_MODULE_GLOBALS(sharp)
@@ -217,7 +340,7 @@ ZEND_DECLARE_MODULE_GLOBALS(sharp)
 
 #define SHARP_G(v) ZEND_MODULE_GLOBALS_ACCESSOR(sharp, v)
 
-static zend_class_entry *sharp_ce_collection;
+zend_class_entry *sharp_ce_collection;
 static zend_object_handlers sharp_collection_handlers;
 
 /* The receiver of a PHP# method call on a List or Map, which PHP stores as an array. It changes the
@@ -744,6 +867,358 @@ ZEND_METHOD(Sharp_Collection, delete)
 		zend_hash_index_del(changed, long_key);
 	}
 	sharp_collection_write_back(collection);
+}
+
+/* The array a method that takes a function reads, held while the function runs, since the function
+ * may change the collection: a change then separates the collection from this array. */
+static zend_array *sharp_collection_read(zval *this_ptr)
+{
+	zval *array = sharp_collection_array(sharp_collection_from(Z_OBJ_P(this_ptr)));
+
+	if (!array) {
+		return NULL;
+	}
+	GC_TRY_ADDREF(Z_ARRVAL_P(array));
+
+	return Z_ARRVAL_P(array);
+}
+
+/* Calls a collection method's function with one element. Returns false when the function threw. */
+static bool sharp_collection_call(zend_fcall_info *fci, zend_fcall_info_cache *fcc, zval *element, zval *result)
+{
+	fci->retval = result;
+	fci->params = element;
+	fci->param_count = 1;
+	zend_call_function(fci, fcc);
+
+	return !EG(exception);
+}
+
+/* Calls the function with each element, and keeps an element the function returns true for. */
+static void sharp_collection_filter(INTERNAL_FUNCTION_PARAMETERS, bool keep_keys)
+{
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_array *elements = sharp_collection_read(ZEND_THIS);
+	if (!elements) {
+		RETURN_THROWS();
+	}
+
+	zval kept, keep;
+	zend_string *string_key;
+	zend_ulong long_key;
+	zval *element;
+	array_init(&kept);
+	ZEND_HASH_FOREACH_KEY_VAL(elements, long_key, string_key, element) {
+		if (!sharp_collection_call(&fci, &fcc, element, &keep)) {
+			break;
+		}
+		if (zend_is_true(&keep)) {
+			Z_TRY_ADDREF_P(element);
+			if (!keep_keys) {
+				zend_hash_next_index_insert_new(Z_ARRVAL(kept), element);
+			} else if (string_key) {
+				zend_hash_add_new(Z_ARRVAL(kept), string_key, element);
+			} else {
+				zend_hash_index_add_new(Z_ARRVAL(kept), long_key, element);
+			}
+		}
+		zval_ptr_dtor(&keep);
+	} ZEND_HASH_FOREACH_END();
+	zend_array_release(elements);
+
+	if (EG(exception)) {
+		zval_ptr_dtor(&kept);
+		RETURN_THROWS();
+	}
+	RETURN_COPY_VALUE(&kept);
+}
+
+/* Spec section 12: filter renumbers what it keeps. */
+ZEND_METHOD(Sharp_Collection, filter)
+{
+	sharp_collection_filter(INTERNAL_FUNCTION_PARAM_PASSTHRU, false);
+}
+
+/* Spec section 12: filterValues keeps the keys. */
+ZEND_METHOD(Sharp_Collection, filterValues)
+{
+	sharp_collection_filter(INTERNAL_FUNCTION_PARAM_PASSTHRU, true);
+}
+
+ZEND_METHOD(Sharp_Collection, map)
+{
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_array *elements = sharp_collection_read(ZEND_THIS);
+	if (!elements) {
+		RETURN_THROWS();
+	}
+
+	zval mapped, value;
+	zval *element;
+	array_init_size(&mapped, zend_hash_num_elements(elements));
+	ZEND_HASH_FOREACH_VAL(elements, element) {
+		if (!sharp_collection_call(&fci, &fcc, element, &value)) {
+			break;
+		}
+		zend_hash_next_index_insert_new(Z_ARRVAL(mapped), &value);
+	} ZEND_HASH_FOREACH_END();
+	zend_array_release(elements);
+
+	if (EG(exception)) {
+		zval_ptr_dtor(&mapped);
+		RETURN_THROWS();
+	}
+	RETURN_COPY_VALUE(&mapped);
+}
+
+/* Adds as PHP#'s + does, which throws where an int sum overflows. */
+ZEND_METHOD(Sharp_Collection, sumOf)
+{
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_array *elements = sharp_collection_read(ZEND_THIS);
+	if (!elements) {
+		RETURN_THROWS();
+	}
+
+	zval sum, value;
+	zval *element;
+	ZVAL_LONG(&sum, 0);
+	ZEND_HASH_FOREACH_VAL(elements, element) {
+		if (!sharp_collection_call(&fci, &fcc, element, &value)) {
+			break;
+		}
+		checked_add_function(&sum, &sum, &value);
+		zval_ptr_dtor(&value);
+		if (EG(exception)) {
+			break;
+		}
+	} ZEND_HASH_FOREACH_END();
+	zend_array_release(elements);
+
+	if (EG(exception)) {
+		zval_ptr_dtor(&sum);
+		RETURN_THROWS();
+	}
+	RETURN_COPY_VALUE(&sum);
+}
+
+/* Finds the first element the function returns true for, and returns NULL when none is found or the
+ * function threw. */
+static zval *sharp_collection_find(INTERNAL_FUNCTION_PARAMETERS, zend_array **elements)
+{
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END_EX(return NULL);
+
+	*elements = sharp_collection_read(ZEND_THIS);
+	if (!*elements) {
+		return NULL;
+	}
+
+	zval found;
+	zval *element;
+	ZEND_HASH_FOREACH_VAL(*elements, element) {
+		if (!sharp_collection_call(&fci, &fcc, element, &found)) {
+			return NULL;
+		}
+		bool is_found = zend_is_true(&found);
+		zval_ptr_dtor(&found);
+		if (is_found) {
+			return element;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return NULL;
+}
+
+/* Kotlin's first: the first element the function returns true for, and an exception when there is
+ * none, as a bare index read throws for a missing index. */
+ZEND_METHOD(Sharp_Collection, first)
+{
+	zend_array *elements = NULL;
+	zval *element = sharp_collection_find(INTERNAL_FUNCTION_PARAM_PASSTHRU, &elements);
+
+	if (element) {
+		ZVAL_COPY_DEREF(return_value, element);
+	} else if (!EG(exception)) {
+		zend_throw_exception(spl_ce_OutOfRangeException, "No element matches the predicate", 0);
+	}
+	if (elements) {
+		zend_array_release(elements);
+	}
+}
+
+ZEND_METHOD(Sharp_Collection, any)
+{
+	zend_array *elements = NULL;
+	zval *element = sharp_collection_find(INTERNAL_FUNCTION_PARAM_PASSTHRU, &elements);
+
+	if (elements) {
+		zend_array_release(elements);
+	}
+	if (EG(exception)) {
+		RETURN_THROWS();
+	}
+	RETURN_BOOL(element != NULL);
+}
+
+/* The slot of a map under the key a function gave, which spec section 12 makes an int or a string. A
+ * string of digits is the int key, as in any PHP array. */
+static zval *sharp_collection_key_slot(HashTable *map, zval *key)
+{
+	zend_ulong index;
+
+	switch (Z_TYPE_P(key)) {
+		case IS_LONG:
+			return zend_hash_index_lookup(map, Z_LVAL_P(key));
+		case IS_STRING:
+			if (ZEND_HANDLE_NUMERIC_STR(Z_STRVAL_P(key), Z_STRLEN_P(key), index)) {
+				return zend_hash_index_lookup(map, index);
+			}
+			return zend_hash_lookup(map, Z_STR_P(key));
+		default:
+			zend_type_error("A map key must be of type int|string, %s given", zend_zval_value_name(key));
+			return NULL;
+	}
+}
+
+/* Puts each element under the key the function gives it: in a list of the elements under that key,
+ * or alone, where the last element with a key replaces the ones before it. */
+static void sharp_collection_key_by(INTERNAL_FUNCTION_PARAMETERS, bool group)
+{
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_array *elements = sharp_collection_read(ZEND_THIS);
+	if (!elements) {
+		RETURN_THROWS();
+	}
+
+	zval map, key;
+	zval *element;
+	array_init(&map);
+	ZEND_HASH_FOREACH_VAL(elements, element) {
+		if (!sharp_collection_call(&fci, &fcc, element, &key)) {
+			break;
+		}
+		zval *slot = sharp_collection_key_slot(Z_ARRVAL(map), &key);
+		zval_ptr_dtor(&key);
+		if (!slot) {
+			break;
+		}
+		Z_TRY_ADDREF_P(element);
+		if (!group) {
+			zval_ptr_dtor(slot);
+			ZVAL_COPY_VALUE(slot, element);
+			continue;
+		}
+		if (Z_TYPE_P(slot) == IS_NULL) {
+			array_init(slot);
+		}
+		zend_hash_next_index_insert_new(Z_ARRVAL_P(slot), element);
+	} ZEND_HASH_FOREACH_END();
+	zend_array_release(elements);
+
+	if (EG(exception)) {
+		zval_ptr_dtor(&map);
+		RETURN_THROWS();
+	}
+	RETURN_COPY_VALUE(&map);
+}
+
+ZEND_METHOD(Sharp_Collection, groupBy)
+{
+	sharp_collection_key_by(INTERNAL_FUNCTION_PARAM_PASSTHRU, true);
+}
+
+ZEND_METHOD(Sharp_Collection, associateBy)
+{
+	sharp_collection_key_by(INTERNAL_FUNCTION_PARAM_PASSTHRU, false);
+}
+
+/* Orders two [key, element] pairs by key, as PHP's <=> does, and equal keys by their original order,
+ * which zend_hash_sort keeps in each bucket's extra space, so the sort is stable as Kotlin's is. */
+static int sharp_collection_compare_keys(Bucket *a, Bucket *b)
+{
+	int result = zend_compare(zend_hash_index_find(Z_ARRVAL(a->val), 0), zend_hash_index_find(Z_ARRVAL(b->val), 0));
+
+	if (result) {
+		return result;
+	}
+
+	return Z_EXTRA(a->val) < Z_EXTRA(b->val) ? -1 : Z_EXTRA(a->val) > Z_EXTRA(b->val);
+}
+
+ZEND_METHOD(Sharp_Collection, sortedBy)
+{
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_array *elements = sharp_collection_read(ZEND_THIS);
+	if (!elements) {
+		RETURN_THROWS();
+	}
+
+	zval pairs, pair, key;
+	zval *element;
+	array_init_size(&pairs, zend_hash_num_elements(elements));
+	ZEND_HASH_FOREACH_VAL(elements, element) {
+		if (!sharp_collection_call(&fci, &fcc, element, &key)) {
+			break;
+		}
+		array_init_size(&pair, 2);
+		zend_hash_next_index_insert_new(Z_ARRVAL(pair), &key);
+		Z_TRY_ADDREF_P(element);
+		zend_hash_next_index_insert_new(Z_ARRVAL(pair), element);
+		zend_hash_next_index_insert_new(Z_ARRVAL(pairs), &pair);
+	} ZEND_HASH_FOREACH_END();
+	zend_array_release(elements);
+
+	if (!EG(exception)) {
+		zend_hash_sort(Z_ARRVAL(pairs), sharp_collection_compare_keys, true);
+	}
+	if (EG(exception)) {
+		zval_ptr_dtor(&pairs);
+		RETURN_THROWS();
+	}
+
+	zval *sorted_pair;
+	array_init_size(return_value, zend_hash_num_elements(Z_ARRVAL(pairs)));
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL(pairs), sorted_pair) {
+		element = zend_hash_index_find(Z_ARRVAL_P(sorted_pair), 1);
+		Z_TRY_ADDREF_P(element);
+		zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), element);
+	} ZEND_HASH_FOREACH_END();
+	zval_ptr_dtor(&pairs);
 }
 
 static PHP_MINIT_FUNCTION(sharp)

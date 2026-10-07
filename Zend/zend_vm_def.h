@@ -6295,6 +6295,17 @@ ZEND_VM_HANDLER(181, ZEND_FETCH_CLASS_CONSTANT, VAR|CONST|UNUSED|CLASS_FETCH, CO
 		} else if (opline->extended_value & ZEND_FETCH_CLASS_MEMBER) {
 			prop_info = zend_hash_find_ptr(&ce->properties_info, constant_name);
 			if (UNEXPECTED(!prop_info || !(prop_info->flags & ZEND_ACC_STATIC))) {
+				/* Spec section 14.3: with no constant, enum case or static property, Class.name is the
+				 * static method as a Closure. */
+				if (sharp_method_value(ce, NULL, constant_name, EX_VAR(opline->result.var))) {
+					FREE_OP2();
+					ZEND_VM_NEXT_OPCODE();
+				}
+				if (EG(exception)) {
+					ZVAL_UNDEF(EX_VAR(opline->result.var));
+					FREE_OP2();
+					HANDLE_EXCEPTION();
+				}
 				zend_throw_error(NULL, "Undefined constant or static property %s::%s",
 					ZSTR_VAL(ce->name), ZSTR_VAL(constant_name));
 				ZVAL_UNDEF(EX_VAR(opline->result.var));
