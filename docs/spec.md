@@ -431,6 +431,7 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 - **Names start with `T`:** `TItem`, `TKey`.
 - **The bound is written inline:** `<TItem : DatabaseEntity>`.
 - **Several bounds use `&`:** `<TItem : DatabaseEntity & Shareable>`.
+- **A type parameter with no bound may hold `null`,** so it is bounded by `Any?`.
 
 ```csharp
 public class PaginatedList<TItem : DatabaseEntity> { … }
