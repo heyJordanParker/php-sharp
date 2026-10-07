@@ -58,5 +58,9 @@ if [[ ! -f "$status" || "$0" -nt "$status" || "$root/sharp/docker/Dockerfile" -n
   (cd "$build_dir" && "$root/configure" "${flags[@]}")
 fi
 
-make -C "$build_dir" -j"$(getconf _NPROCESSORS_ONLN)" >/dev/null
+jobs="${CARGO_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN)}"
+if [[ " ${MAKEFLAGS:-}" =~ [[:space:]](-j[[:space:]]*|--jobs=)([0-9]+) ]]; then
+  jobs="${BASH_REMATCH[2]}"
+fi
+make -C "$build_dir" -j"$jobs" >/dev/null
 "$build_dir/sapi/cli/php" -v
