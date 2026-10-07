@@ -1,0 +1,148 @@
+namespace Paging;
+
+public abstract class DatabaseEntity
+{
+    public DatabaseEntity(public int id { get; })
+    {
+    }
+}
+
+public interface Shareable
+{
+    string link();
+}
+
+public class Order : DatabaseEntity, Shareable
+{
+    public string link() => sprintf("/orders/%d", this.id);
+}
+
+public interface Query<TItem>
+{
+
+    List<TItem> rows();
+}
+
+public class OrderQuery : Query<Order>
+{
+
+    public OrderQuery(private List<Order> orders)
+    {
+    }
+
+    public List<Order> rows() => this.orders;
+}
+
+public class PaginatedList<TItem : DatabaseEntity>
+{
+
+    public PaginatedList(private List<TItem> rows)
+    {
+    }
+
+    public TItem first() => this.rows[0];
+}
+
+public class OrderPage : PaginatedList<Order>
+{
+}
+
+public class Repository
+{
+
+
+
+    public PaginatedList<TItem> list<TItem : DatabaseEntity>(Query<TItem> query) => new PaginatedList<TItem>(query.rows());
+}
+
+public class Feed<out TItem : DatabaseEntity>
+{
+
+    public Feed(private List<TItem> items)
+    {
+    }
+
+    public TItem next() => this.items[0];
+}
+
+public interface Validator<in TItem : DatabaseEntity>
+{
+
+    bool validate(TItem item);
+}
+
+public class EntityValidator : Validator<DatabaseEntity>
+{
+    public bool validate(DatabaseEntity item) => item.id > 0;
+}
+
+public class Store
+{
+
+    private Map<string, DatabaseEntity> saved = [:];
+
+    private Map<string, Class<DatabaseEntity>> kinds = ["order": typeof(Order)];
+
+
+
+
+    public static TItem? pick<TItem : DatabaseEntity>(List<TItem> items, int id)
+    {
+        for (const item of items) {
+            if (item.id == id) {
+                return item;
+            }
+        }
+        return null;
+    }
+
+
+
+
+    public T first<T>(List<T> items) => items[0];
+
+
+
+    public string share<TItem : DatabaseEntity & Shareable>(TItem item) => item.link();
+
+    public void save(Class<DatabaseEntity> type, DatabaseEntity entity) => this.saved[sprintf("%s#%d", type, entity.id)] = entity;
+
+    public DatabaseEntity? load(Class<DatabaseEntity> type, int id) => this.saved[sprintf("%s#%d", type, id)] ?? null;
+
+    public Class<DatabaseEntity> kind(string name) => this.kinds[name] ?? typeof(Order);
+}
+
+public class Catalog
+{
+
+    public static List<Order> orders() => [new Order(1), new Order(2)];
+
+    public static int paged() => new PaginatedList<Order>(Catalog.orders()).first().id;
+
+    public static int listed() => new Repository().list(new OrderQuery(Catalog.orders())).first().id;
+
+    public static int written() => Store.pick<Order>(Catalog.orders(), 2)?.id ?? 0;
+
+    public static int inferred() => Store.pick(Catalog.orders(), 2)?.id ?? 0;
+
+    public static int headed() => new OrderPage(Catalog.orders()).first().id;
+
+    public static int newest(Feed<DatabaseEntity> feed) => feed.next().id;
+
+    public static int fed() => Catalog.newest(new Feed<Order>(Catalog.orders()));
+
+    public static bool check(Validator<Order> validator, Order order) => validator.validate(order);
+
+    public static bool checked() => Catalog.check(new EntityValidator(), new Order(3));
+
+    public static int firstId() => new Store().first(Catalog.orders()).id;
+
+    public static string shared() => new Store().share(new Order(4));
+
+    public static int loaded()
+    {
+        const store = new Store();
+        store.save(typeof(Order), new Order(5));
+        return store.load(store.kind("order"), 5)?.id ?? 0;
+    }
+}

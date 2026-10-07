@@ -32,6 +32,7 @@ $fixtures = [
     'Members' => 'harness/Registry.inc',
     'MembersErrors' => 'harness/Registry.inc',
     'Site' => 'harness/SiteLib.inc',
+    'Generics' => null,
 ];
 
 foreach ($fixtures as $fixture => $library) {
@@ -107,3 +108,54 @@ Site: different opcodes and lines in 13 op arrays, same signatures in 3 classes
   .php   0000 DECLARE_CLASS string("site\\page") string("lib\\resource")
   .php   0001 RETURN int(1)
   .php   0001 T1 = FETCH_STATIC_PROP_R string("views") string("Site\\Page")
+Generics: different opcodes and lines in 33 op arrays, same signatures in 10 classes
+  .sharp      ; (lines=5, args=0, vars=0, tmps=0)
+  .sharp L0015 0000 DECLARE_CLASS string("paging\\order")
+  .sharp L0046 0002 DECLARE_CLASS string("paging\\orderpage")
+  .sharp L0074 0003 DECLARE_CLASS string("paging\\entityvalidator")
+  .sharp L0149 0004 RETURN int(1)
+  .sharp 0 methods: -
+  .sharp      ; (lines=5, args=0, vars=0, tmps=0)
+  .sharp 0000 DECLARE_CLASS string("paging\\order")
+  .sharp 0002 DECLARE_CLASS string("paging\\orderpage")
+  .sharp 0003 DECLARE_CLASS string("paging\\entityvalidator")
+  .sharp 0004 RETURN int(1)
+  .php        ; (lines=4, args=0, vars=0, tmps=0)
+  .php   L0015 0000 DECLARE_CLASS string("paging\\order") string("paging\\databaseentity")
+  .php   L0074 0002 DECLARE_CLASS string("paging\\entityvalidator")
+  .php   L0149 0003 RETURN int(1)
+  .php        ; (lines=4, args=0, vars=0, tmps=0)
+  .php   0000 DECLARE_CLASS string("paging\\order") string("paging\\databaseentity")
+  .php   0002 DECLARE_CLASS string("paging\\entityvalidator")
+  .php   0003 RETURN int(1)
+  .php   /** @implements Query<Order> */
+  .php       /** @param list<Order> $orders */
+  .php   /** @template TItem of DatabaseEntity */
+  .php       /** @param list<TItem> $rows */
+  .php       /** @return TItem */
+  .php   /** @extends PaginatedList<Order> */
+  .php       /** @param list<TItem> $rows */
+  .php       /** @return TItem */
+  .php       /** @template TItem of DatabaseEntity
+  .php        *  @param Query<TItem> $query
+  .php        *  @return PaginatedList<TItem> */
+  .php   /** @template-covariant TItem of DatabaseEntity */
+  .php       /** @param list<TItem> $items */
+  .php       /** @return TItem */
+  .php   /** @implements Validator<DatabaseEntity> */
+  .php       /** @template TItem of DatabaseEntity
+  .php        *  @param list<TItem> $items
+  .php        *  @return TItem|null */
+  .php       /** @var array<string, DatabaseEntity> */
+  .php       /** @var array<string, class-string<DatabaseEntity>> */
+  .php       /** @template T
+  .php        *  @param list<T> $items
+  .php        *  @return T */
+  .php       /** @template TItem of DatabaseEntity&Shareable
+  .php        *  @param TItem $item */
+  .php       /** @param class-string<DatabaseEntity> $type */
+  .php       /** @param class-string<DatabaseEntity> $type */
+  .php       /** @return class-string<DatabaseEntity> */
+  .php       /** @return list<Order> */
+  .php       /** @param Feed<DatabaseEntity> $feed */
+  .php       /** @param Validator<Order> $validator */
