@@ -1,0 +1,9 @@
+namespace Demo;
+
+class MapKey
+{
+    public Map<float, int> run()
+    {
+        return [:];
+    }
+}

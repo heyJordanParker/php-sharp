@@ -1,0 +1,10 @@
+namespace Demo;
+
+class ElementType
+{
+    public int run()
+    {
+        List<int> sizes = ["one"];
+        return count(sizes);
+    }
+}

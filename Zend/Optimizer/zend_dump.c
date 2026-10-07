@@ -491,7 +491,7 @@ ZEND_API void zend_dump_op(const zend_op_array *op_array, const zend_basic_block
 	} else if (ZEND_VM_EXT_OP == (flags & ZEND_VM_EXT_MASK)) {
 		fprintf(stderr, " (%s)", zend_get_opcode_name(opline->extended_value) + 5);
 	} else if (ZEND_VM_EXT_TYPE == (flags & ZEND_VM_EXT_MASK)) {
-		switch (opline->extended_value) {
+		switch (opline->extended_value & ~ZEND_SHARP_OPERATOR) {
 			case IS_NULL:
 				fprintf(stderr, " (null)");
 				break;
@@ -617,7 +617,7 @@ ZEND_API void zend_dump_op(const zend_op_array *op_array, const zend_basic_block
 			}
 		}
 		if (ZEND_VM_EXT_ARRAY_INIT & flags) {
-			fprintf(stderr, " %u", opline->extended_value >> ZEND_ARRAY_SIZE_SHIFT);
+			fprintf(stderr, " %u", (opline->extended_value & ~ZEND_SHARP_OPERATOR) >> ZEND_ARRAY_SIZE_SHIFT);
 			if (!(opline->extended_value & ZEND_ARRAY_NOT_PACKED)) {
 				fprintf(stderr, " (packed)");
 			}

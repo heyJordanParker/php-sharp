@@ -2,7 +2,7 @@
 
 ## Decision
 
-Every struct has a static `parse(Map<string, Any?>)`, which throws one error that lists every bad field, and a static `tryParse`, which gives null. Classes do not get them. The keys are the main constructor's parameter names, and `[Key("…")]` renames one.
+Every struct has a static `parse`, which reads a `Map<string, Any?>` or an object's public properties (decision 39) and throws one error that lists every bad field, and a static `tryParse`, which gives null. Classes do not get them. The keys are the main constructor's parameter names, and `[Key("…")]` renames one.
 
 ## Options
 

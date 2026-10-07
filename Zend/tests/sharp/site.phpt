@@ -3,11 +3,11 @@ A PHP# class extends a PHP class, replaces its methods, implements a PHP interfa
 --FILE--
 <?php
 
-require __DIR__ . '/SiteLib.inc';
+require __DIR__ . '/harness/SiteLib.inc';
 require __DIR__ . '/Site.sharp';
 
 $page = new Site\Page();
-var_dump($page instanceof Lib\Entity, $page instanceof Lib\Linkable, $page->id(), $page->link());
+var_dump($page instanceof Lib\Resource, $page instanceof Lib\Linkable, $page->id(), $page->link());
 var_dump($page->show(), (new ReflectionClass($page))->getAttributes()[0]->newInstance()->class);
 foreach (['render', 'id'] as $method) {
     var_dump(count((new ReflectionMethod($page, $method))->getAttributes(Override::class)));

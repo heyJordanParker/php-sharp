@@ -1,7 +1,7 @@
 namespace Demo;
 
-import Lib.Entity;
 import Lib.Named;
+import Lib.Record;
 import Lib.Shelf;
 
 public interface Linkable : Named
@@ -9,16 +9,16 @@ public interface Linkable : Named
     string link();
 }
 
-public class Page : Linkable, Entity
+public class Article : Linkable, Record
 {
     public string link()
     {
-        return "/page";
+        return "/article";
     }
 
     public string name()
     {
-        return "page";
+        return "article";
     }
 
     public int number()
@@ -27,7 +27,7 @@ public class Page : Linkable, Entity
     }
 }
 
-public class Post : Entity
+public class Post : Record
 {
 }
 

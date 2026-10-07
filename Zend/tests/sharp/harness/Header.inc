@@ -7,7 +7,7 @@ interface Named
     public function name(): string;
 }
 
-class Entity
+class Record
 {
     public function id(): int
     {
