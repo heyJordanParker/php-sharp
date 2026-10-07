@@ -3111,7 +3111,7 @@ static zend_op *zend_delayed_compile_dim(znode *result, zend_ast *ast, uint32_t 
 	if (by_ref) {
 		opline->extended_value = ZEND_FETCH_DIM_REF;
 	}
-	if ((type == BP_VAR_R || type == BP_VAR_FUNC_ARG) && (ast->attr & ZEND_DIM_SHARP)) {
+	if (ast->attr & ZEND_DIM_SHARP) {
 		opline->extended_value |= ZEND_SHARP_OPERATOR;
 	}
 
@@ -10522,18 +10522,19 @@ static void zend_compile_pre_incdec(znode *result, zend_ast *ast) /* {{{ */
 static void zend_compile_cast(znode *result, zend_ast *ast) /* {{{ */
 {
 	zend_ast *expr_ast = ast->child[0];
+	uint32_t type = ast->attr & ~ZEND_SHARP_OPERATOR_SYNTAX;
 	znode expr_node;
 	zend_op *opline;
 
 	zend_compile_expr(&expr_node, expr_ast);
 
-	if (ast->attr == _IS_BOOL) {
+	if (type == _IS_BOOL) {
 		opline = zend_emit_op_tmp(result, ZEND_BOOL, &expr_node, NULL);
-	} else if (ast->attr == IS_NULL) {
+	} else if (type == IS_NULL) {
 		zend_error(E_COMPILE_ERROR, "The (unset) cast is no longer supported");
 	} else {
 		opline = zend_emit_op_tmp(result, ZEND_CAST, &expr_node, NULL);
-		opline->extended_value = ast->attr;
+		opline->extended_value = type | zend_ast_sharp_operator(ast);
 	}
 }
 /* }}} */
@@ -11057,6 +11058,9 @@ static void zend_compile_array(znode *result, zend_ast *ast) /* {{{ */
 			SET_NODE(opline->result, result);
 		}
 		opline->extended_value |= by_ref;
+		if (ast->attr & ZEND_ARRAY_SHARP) {
+			opline->extended_value |= ZEND_SHARP_OPERATOR;
+		}
 
 		if (key_ast && key_node.op_type == IS_CONST && Z_TYPE(key_node.u.constant) == IS_STRING) {
 			packed = 0;
@@ -12433,7 +12437,7 @@ static void zend_eval_const_expr(zend_ast **ast_ptr) /* {{{ */
 			}
 			zend_eval_const_expr(&ast->child[0]);
 			if (ast->child[0]->kind == ZEND_AST_ZVAL
-			 && zend_try_ct_eval_cast(&result, ast->attr, zend_ast_get_zval(ast->child[0]))) {
+			 && zend_try_ct_eval_cast(&result, ast->attr & ~ZEND_SHARP_OPERATOR_SYNTAX, zend_ast_get_zval(ast->child[0]))) {
 				break;
 			}
 			return;

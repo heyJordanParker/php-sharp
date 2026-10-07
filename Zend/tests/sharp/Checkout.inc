@@ -1,33 +1,54 @@
 <?php declare(strict_types=1); namespace Demo;
 
-use Lib\Ledger;
-
 class Checkout
 {
-    private \Closure $discount;
-
-    public function __construct(int $percent)
+    public static function host(string $host): ?string
     {
-        $this->discount = fn ($cents) => $cents - \intdiv($cents * $percent, 100);
+        return $host != "" ? $host : null;
     }
 
-    public function receipt(array $prices, Checkout $other, Ledger $ledger): array
+    public static function sign(int $value): string
     {
-        $count = 0;
-        $paid = ((object) ((object) ((object) $prices)->filter(fn ($price) => $price > 0))->map(fn ($price) => $this->discount($price)))->sortedBy(fn ($price) => -$price);
-        $total = \array_reduce($paid, function (int $sum, int $price) use (&$count) {
-            $count += 1;
-            return $sum + $price;
-        }, 0);
-        $recorded = ((object) $ledger)->record($paid, fn ($price) => ((object) $other)->discount($price));
-        return [
-            \implode(",", ((object) $paid)->map($this->format)),
-            (string) $total,
-            (string) $count,
-            \implode(",", $recorded),
-            (string) ((object) $ledger)->scale($total),
-        ];
+        return $value > 0 ? "positive" : ($value < 0 ? "negative" : "zero");
     }
 
-    private function format(int $cents): string { return \sprintf("%d.%02d", \intdiv($cents, 100), $cents % 100); }
+    public static function size(int $count, bool $wholesale): string
+    {
+        return ($wholesale ? $count > 100 : $count > 10) ? "large" : "small";
+    }
+
+    public static function cents(float $price): int
+    {
+        return (int)($price * 100);
+    }
+
+    public static function whole(float $ratio): int
+    {
+        return (int)$ratio;
+    }
+
+    public static function share(int $part, int $total): float
+    {
+        return (float)$part / $total;
+    }
+
+    public static function quantity(int $count): string
+    {
+        return (string)$count;
+    }
+
+    public static function total(string $price, ?string $count): int
+    {
+        return (int)(\Sharp\Float::parse($price) * 100) * (\Sharp\Int::tryParse($count) ?? 1);
+    }
+
+    public static function page(string $value): int
+    {
+        return \Sharp\Int::parse($value);
+    }
+
+    public static function price(string $value): float
+    {
+        return \Sharp\Float::parse($value);
+    }
 }

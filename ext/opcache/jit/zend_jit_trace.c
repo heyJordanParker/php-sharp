@@ -2033,8 +2033,9 @@ static zend_ssa *zend_jit_trace_build_tssa(zend_jit_trace_rec *trace_buffer, uin
 					}
 					break;
 				case ZEND_CAST:
-					/* The receiver of a PHP# method call passes an object through. */
+					/* PHP#'s (int) passes an int through, and the receiver of a PHP# method call an object. */
 					if (opline->extended_value != op1_type
+					 && (opline->extended_value != (IS_LONG | ZEND_SHARP_OPERATOR) || op1_type != IS_LONG)
 					 && (opline->extended_value != (IS_OBJECT | ZEND_SHARP_OPERATOR) || op1_type != IS_OBJECT)) {
 						break;
 					}
@@ -5231,8 +5232,9 @@ static zend_vm_opcode_handler_t zend_jit_trace(zend_jit_trace_rec *trace_buffer,
 						}
 						goto done;
 					case ZEND_CAST:
-						/* The receiver of a PHP# method call passes an object through. */
+						/* PHP#'s (int) passes an int through, and the receiver of a PHP# method call an object. */
 						if (opline->extended_value != op1_type
+						 && (opline->extended_value != (IS_LONG | ZEND_SHARP_OPERATOR) || op1_type != IS_LONG)
 						 && (opline->extended_value != (IS_OBJECT | ZEND_SHARP_OPERATOR) || op1_type != IS_OBJECT)) {
 							break;
 						}

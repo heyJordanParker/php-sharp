@@ -11,12 +11,12 @@ include __DIR__ . '/../../../sapi/cli/tests/php_cli_server.inc';
 
 $dir = var_export(__DIR__, true);
 php_cli_server_start(<<<PHP
-    require $dir . '/Header.inc';
+    require $dir . '/harness/Header.inc';
     require $dir . '/Header.sharp';
-    \$page = new Demo\Page();
-    \$interfaces = class_implements(\$page);
+    \$article = new Demo\Article();
+    \$interfaces = class_implements(\$article);
     ksort(\$interfaces);
-    echo get_parent_class(\$page), ' ', implode(',', \$interfaces), ' ', \$page->number(), "\n";
+    echo get_parent_class(\$article), ' ', implode(',', \$interfaces), ' ', \$article->number(), "\n";
     \$card = new Demo\Card();
     \$interfaces = class_implements(\$card);
     ksort(\$interfaces);
@@ -28,9 +28,9 @@ for ($i = 0; $i < 3; $i++) {
 }
 ?>
 --EXPECT--
-Lib\Entity Demo\Linkable,Lib\Named 7
+Lib\Record Demo\Linkable,Lib\Named 7
 Lib\Shelf Demo\Linkable,Lib\Named /card
-Lib\Entity Demo\Linkable,Lib\Named 7
+Lib\Record Demo\Linkable,Lib\Named 7
 Lib\Shelf Demo\Linkable,Lib\Named /card
-Lib\Entity Demo\Linkable,Lib\Named 7
+Lib\Record Demo\Linkable,Lib\Named 7
 Lib\Shelf Demo\Linkable,Lib\Named /card
