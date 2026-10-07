@@ -340,7 +340,7 @@ ZEND_DECLARE_MODULE_GLOBALS(sharp)
 
 #define SHARP_G(v) ZEND_MODULE_GLOBALS_ACCESSOR(sharp, v)
 
-static zend_class_entry *sharp_ce_collection;
+zend_class_entry *sharp_ce_collection;
 static zend_object_handlers sharp_collection_handlers;
 
 /* The receiver of a PHP# method call on a List or Map, which PHP stores as an array. It changes the
