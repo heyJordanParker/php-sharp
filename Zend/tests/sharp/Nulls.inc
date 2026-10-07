@@ -58,4 +58,19 @@ class Nulls
         }
         return $total;
     }
+
+    public function missing(?int $value): bool
+    {
+        return $value === null;
+    }
+
+    public function present(?string $value): bool
+    {
+        return $value !== null;
+    }
+
+    public function absent(?bool $value): bool
+    {
+        return null === $value;
+    }
 }

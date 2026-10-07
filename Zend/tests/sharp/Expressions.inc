@@ -16,9 +16,9 @@ class Expressions
         return $value;
     }
 
-    public static function known(?int $value): int
+    public static function known(int $value): int
     {
-        return $value ?? throw new InvalidArgumentException("unknown");
+        return Expressions::lookup($value) ?? throw new InvalidArgumentException("unknown");
     }
 
     public static function recover(int $value, \Demo\Box $steps): int
@@ -48,5 +48,13 @@ class Expressions
         $size = ((object) $items)->count();
         return "{$name}: {$size} items\x21 \u{2713} `{$plain}`
 total";
+    }
+
+    private static function lookup(int $value): ?int
+    {
+        if ($value < 0) {
+            return null;
+        }
+        return $value;
     }
 }

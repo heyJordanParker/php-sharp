@@ -24,7 +24,7 @@ import Cache.Key;
 import Search.Key;                                               // compile error: Key is already imported
 ```
 
-One line imports the class and names it. The standard library's names are imported by default, and `import Cache.Key;` would shadow the standard `Key`. The struct `[Key]` attribute (decision 24) relies on the rename, because a project with its own `Key` keeps the attribute by renaming its class.
+One line imports the class and names it. The names in `Sharp` are imported by default (decision 40), and `import Cache.Key;` would shadow the standard `Key`. The struct `[Key]` attribute (decision 24) relies on the rename, because a project with its own `Key` keeps the attribute by renaming its class.
 
 ### Rejected: a separate alias declaration
 

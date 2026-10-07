@@ -7,29 +7,29 @@ namespace {
 
     for ($round = 0; $round < 100; $round++) {
         ob_start();
-        attempt(fn () => Demo\Shelf::grow([1, 2]));
-        attempt(fn () => Demo\Shelf::drop(['tea' => 3, '5' => 7], 'tea'));
-        attempt(fn () => Demo\Shelf::at([1, 2], 1));
-        attempt(fn () => Demo\Shelf::at([1, 2], 2));
-        attempt(fn () => Demo\Shelf::price(['tea' => 3, '5' => 7], '5'));
-        attempt(fn () => Demo\Shelf::price(['tea' => 3], 'pie'));
-        attempt(fn () => Demo\Shelf::entries([5, 6]));
-        attempt(fn () => Demo\Shelf::first([[1, 2]]));
-        attempt(fn () => Demo\Shelf::rows([[1, 2]]));
-        attempt(fn () => Demo\Shelf::setPast([1, 2]));
+        attempt(fn () => Demo\Pantry::grow([1, 2]));
+        attempt(fn () => Demo\Pantry::drop(['tea' => 3, '5' => 7], 'tea'));
+        attempt(fn () => Demo\Pantry::at([1, 2], 1));
+        attempt(fn () => Demo\Pantry::at([1, 2], 2));
+        attempt(fn () => Demo\Pantry::price(['tea' => 3, '5' => 7], '5'));
+        attempt(fn () => Demo\Pantry::price(['tea' => 3], 'pie'));
+        attempt(fn () => Demo\Pantry::entries([5, 6]));
+        attempt(fn () => Demo\Pantry::first([[1, 2]]));
+        attempt(fn () => Demo\Pantry::rows([[1, 2]]));
+        attempt(fn () => Demo\Pantry::setPast([1, 2]));
 
         $basket = new Lib\Basket();
-        $shelf = new Demo\Shelf($basket);
-        attempt(fn () => $shelf->restock('tea'));
-        attempt(fn () => $shelf->restock('none'));
-        attempt(fn () => Demo\Shelf::stack($shelf, 8));
-        attempt(fn () => Demo\Shelf::fill($basket, 3));
-        attempt(fn () => Demo\Shelf::fill($basket, 4));
+        $pantry = new Demo\Pantry($basket);
+        attempt(fn () => $pantry->restock('tea'));
+        attempt(fn () => $pantry->restock('none'));
+        attempt(fn () => Demo\Pantry::stack($pantry, 8));
+        attempt(fn () => Demo\Pantry::fill($basket, 3));
+        attempt(fn () => Demo\Pantry::fill($basket, 4));
         attempt(fn () => $basket->writes);
-        attempt(fn () => Demo\Shelf::total($basket));
-        attempt(fn () => Demo\Shelf::size($shelf));
-        attempt(fn () => Demo\Shelf::lineCount($basket));
-        attempt(fn () => Demo\Shelf::made());
+        attempt(fn () => Demo\Pantry::total($basket));
+        attempt(fn () => Demo\Pantry::size($pantry));
+        attempt(fn () => Demo\Pantry::lineCount($basket));
+        attempt(fn () => Demo\Pantry::made());
         attempt(fn () => Demo\Tray::filled());
         attempt(fn () => Demo\Link::after(new Demo\Link(1), 2));
         attempt(fn () => Demo\Link::after(null, 2));
@@ -45,7 +45,7 @@ namespace {
 
     // A collection kept for reuse lets go of the object whose property it changed when its call returns.
     $basket = new Lib\Basket();
-    Demo\Shelf::fill($basket, 5);
+    Demo\Pantry::fill($basket, 5);
     $kept = WeakReference::create($basket);
     unset($basket);
     var_dump($kept->get());
@@ -53,7 +53,7 @@ namespace {
     // So does one whose call never ran because an argument threw.
     $basket = new Lib\Basket();
     $kept = WeakReference::create($basket);
-    attempt(fn () => Demo\Shelf::share($basket, 5, 0));
+    attempt(fn () => Demo\Pantry::share($basket, 5, 0));
     unset($basket);
     var_dump($kept->get());
 

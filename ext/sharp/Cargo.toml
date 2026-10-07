@@ -9,7 +9,7 @@ crate-type = ["staticlib"]
 
 [dependencies]
 deunicode = "=1.6.2"
-mago-sharp-bridge = { git = "https://github.com/heyJordanParker/mago-sharp", rev = "0f7dc46623c29f03770d5805e51b76836281bd22" }
+mago-sharp-bridge = { git = "https://github.com/heyJordanParker/mago-sharp", rev = "6d6bdf2f61b02118f3bf441905213e5a0f7b7f69" }
 
 [profile.dev]
 panic = "unwind"

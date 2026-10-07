@@ -3,7 +3,7 @@ A PHP# class header with two classes, or with a name that is neither a class nor
 --FILE--
 <?php
 
-require __DIR__ . '/Header.inc';
+require __DIR__ . '/harness/Header.inc';
 
 foreach (['HeaderTwoClasses', 'HeaderNeither', 'HeaderMissing'] as $file) {
     try {
@@ -14,6 +14,6 @@ foreach (['HeaderTwoClasses', 'HeaderNeither', 'HeaderMissing'] as $file) {
 }
 ?>
 --EXPECT--
-Class Demo\Twice cannot extend both Lib\Entity and Lib\Other
+Class Demo\Twice cannot extend both Lib\Record and Lib\Other
 Class Demo\Blend cannot inherit from Lib\Mixin, which is neither a class nor an interface
 Class Demo\Lost cannot inherit from Lib\Missing, which is neither a class nor an interface

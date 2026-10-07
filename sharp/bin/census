@@ -44,10 +44,11 @@ exit($findings ? 1 : 0);
 /**
  * Reads the register's lines such as ` *   extended_value of ZEND_ADD, ZEND_SUB  upstream: none`
  * under ` * ZEND_SHARP_OPERATOR: ...`. An IS_* name before `upstream:` is the one value of the
- * field that carries the mark, as in `extended_value of ZEND_CAST to IS_OBJECT`.
+ * field that carries the mark on the opcodes or kinds of its line, as in
+ * `extended_value of ZEND_CAST to IS_OBJECT`.
  *
- * @return array{array<string, array<string, array<string, true>>>, array<string, true>}
- *     field => opcode or kind => mark => true, and the values that carry a mark
+ * @return array{array<string, array<string, array<string, true>>>, array<string, array<string, array<string, true>>>}
+ *     field => opcode or kind => mark => true, and field => opcode or kind => value that carries a mark => true
  */
 function read_register(string $header): array
 {
@@ -76,12 +77,10 @@ function read_register(string $header): array
         }
         if (str_contains($entry[1], 'upstream:')) {
             preg_match_all('~\b(ZEND_|IS_)\w+~', strstr($entry[1], 'upstream:', true), $m);
-            foreach ($m[0] as $name) {
-                if (str_starts_with($name, 'IS_')) {
-                    $marked_values[$name] = true;
-                } else {
-                    $register[$entry[0]][$name][$mark] = true;
-                }
+            $values = array_fill_keys(preg_grep('~^IS_~', $m[0]), true);
+            foreach (preg_grep('~^IS_~', $m[0], PREG_GREP_INVERT) as $name) {
+                $register[$entry[0]][$name][$mark] = true;
+                $marked_values[$entry[0]][$name] = ($marked_values[$entry[0]][$name] ?? []) + $values;
             }
             $entry = null;
         }
@@ -91,7 +90,12 @@ function read_register(string $header): array
         exit(2);
     }
     // A field that holds an opcode, as ZEND_ASSIGN_OP's does, carries the mark only beside a marked opcode.
-    $marked_values += array_fill_keys(array_keys($register['extended_value']), true);
+    $opcodes = array_fill_keys(array_keys($register['extended_value']), true);
+    foreach ($marked_values as $field => $kinds) {
+        foreach ($kinds as $kind => $values) {
+            $marked_values[$field][$kind] = $values + $opcodes;
+        }
+    }
     return [$register, $marked_values];
 }
 
@@ -123,9 +127,7 @@ function scan_file(string $file, string $name, array $register, array $marked_va
     };
     // $value is what a comparison compares the field with, '' for a switch, and null for a write.
     $check = function (string $field, string $statement, string $what, ?string $value) use (&$frames, &$handler, &$findings, &$line, $name, $register, $marked_values): void {
-        if ($value !== null && preg_match('~^_?(ZEND|IS)_\w+$~', $value) && !isset($marked_values[$value])) {
-            return;
-        }
+        $constant = $value !== null && preg_match('~^_?(ZEND|IS)_\w+$~', $value);
         $labels = $handler;
         $handled = [];
         foreach ($frames as $frame) {
@@ -136,6 +138,9 @@ function scan_file(string $file, string $name, array $register, array $marked_va
         }
         $top = array_key_last($frames);
         foreach ($labels as $label) {
+            if ($constant && !isset($marked_values[$field][$label][$value])) {
+                continue;
+            }
             foreach ($register[$field][$label] ?? [] as $mark => $_) {
                 if (str_contains($statement, $mark) || ($field === 'attr' && str_contains($statement, 'zend_ast_sharp_operator'))) {
                     if ($value !== null) {
