@@ -1,0 +1,21 @@
+namespace Demo;
+
+class Task
+{
+    public Priority priority { get; }
+
+    public Task(int level)
+    {
+        this.priority = Priority.from(level);
+    }
+
+    public int rank()
+    {
+        return this.priority.value;
+    }
+
+    public static Priority? parse(int level)
+    {
+        return Priority.tryFrom(level);
+    }
+}

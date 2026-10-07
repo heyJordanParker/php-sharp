@@ -1,0 +1,17 @@
+namespace Demo;
+
+enum Suit
+{
+    case Hearts;
+    case Spades;
+
+    public string label()
+    {
+        return strtolower(this.name);
+    }
+
+    public static int size()
+    {
+        return count(Suit.cases());
+    }
+}

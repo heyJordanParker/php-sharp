@@ -1,0 +1,58 @@
+namespace Demo;
+
+class Shipment
+{
+    public Stage status { get; private set; }
+
+    public Shipment(Stage status = Stage.Active)
+    {
+        this.status = status;
+    }
+
+    public string code()
+    {
+        return this.status.value;
+    }
+
+    public string state()
+    {
+        return this.status.name;
+    }
+
+    public string describe()
+    {
+        return this.status.label();
+    }
+
+    public Stage close()
+    {
+        this.status = Stage.from("c");
+        return this.status;
+    }
+
+    public Stage pause()
+    {
+        this.status = Stage.Paused;
+        return this.status;
+    }
+
+    public static string activeLabel()
+    {
+        return Stage.Active.label();
+    }
+
+    public static Stage fallback()
+    {
+        return Stage.Default;
+    }
+
+    public static Stage? find(string code)
+    {
+        return Stage.tryFrom(code);
+    }
+
+    public static int kinds()
+    {
+        return count(Stage.cases());
+    }
+}
