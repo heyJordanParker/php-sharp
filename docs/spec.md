@@ -1865,7 +1865,7 @@ app/Orders/Order.sharp has an error on line 12: Invalid return type for method `
 app/Orders/Order.sharp has 3 errors. The first is on line 12: Invalid return type for method `Order.total`: expected `int`, but found `string`. Run vendor/bin/mago compile to see them all.
 ```
 
-- **In development,** the `php.ini` setting `sharp.compile_command` lets the engine compile a stale file on demand before it runs, instead of refusing it. When the checker refuses the file it just compiled, the refusal names the checker's first error, its line and how many errors the file has.
+- **In development,** the `php.ini` setting `sharp.compile_command` lets the engine compile a stale file on demand before it runs, instead of refusing it. When the checker refuses the file it just compiled, the refusal names the first error in the file, its line and how many errors the file has.
 - **A deploy** runs `vendor/bin/mago compile` and ships `.sharp/` with the code.
 - **A type error, or a broken structure rule (section 28), stops the file from running.** A rules file that fails to prove stops every `.sharp` file in its namespace.
 - **A rule that reads the whole project's structure can lag in development** until the next full compile. At deploy, `mago compile` checks every rule exactly.
