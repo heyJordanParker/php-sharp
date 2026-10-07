@@ -38,7 +38,7 @@ class Shipment
 
     public static function activeLabel(): string
     {
-        return \Demo\Status::Active->label();
+        return ((object) \Demo\Status::Active)->label();
     }
 
     public static function fallback(): \Demo\Status
