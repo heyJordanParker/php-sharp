@@ -44,11 +44,6 @@ class Headcount
         return $codes;
     }
 
-    public static function read(array $counts, Standing $status): int
-    {
-        return $counts[$status];
-    }
-
     public static function lookup(array $counts, Standing $status): ?int
     {
         return ((object) $counts)->get($status); // PHP# makes the array a Sharp\Collection

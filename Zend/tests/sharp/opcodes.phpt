@@ -117,7 +117,7 @@ Site: different opcodes and lines in 13 op arrays, same signatures in 3 classes
   .php   0001 RETURN int(1)
   .php   0001 T1 = FETCH_STATIC_PROP_R string("views") string("Site\\Page")
 Collections: same opcodes and lines in 7 op arrays, same signatures in 2 classes
-EnumKeys: same opcodes and lines in 13 op arrays, same signatures in 1 classes
+EnumKeys: same opcodes and lines in 12 op arrays, same signatures in 1 classes
 Interop: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Lambdas: different opcodes and lines in 35 op arrays, same signatures in 1 classes
   .sharp      ; (lines=10, args=1, vars=1, tmps=3)

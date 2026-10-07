@@ -53,8 +53,6 @@ array(1) {
   int(5)
 }
 int(3)
-OutOfRangeException: Undefined array key "closed" in EnumKeys.sharp on line 49
-int(3)
 NULL
 array(1) {
   ["closed"]=>
@@ -73,14 +71,14 @@ array(2) {
   ["Closed"]=>
   int(4)
 }
-ValueError: "missing" is not a valid backing value for enum Lib\Standing in EnumKeys.sharp on line 74
+ValueError: "missing" is not a valid backing value for enum Lib\Standing in EnumKeys.sharp on line 69
 array(2) {
   [0]=>
   string(1) "5"
   [1]=>
   string(3) "tea"
 }
-TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 43
+TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 41
+TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 44
+TypeError: Cannot access offset of type Lib\Size on array in enum_keys.inc on line 45
 TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 46
-TypeError: Cannot access offset of type Lib\Size on array in enum_keys.inc on line 47
-TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 48
