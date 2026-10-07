@@ -1299,7 +1299,7 @@ ZEND_API bool zend_inference_propagate_range(const zend_op_array *op_array, cons
 					}
 				}
 			} else if (ssa_op->result_def == var) {
-				if (opline->extended_value == IS_LONG) {
+				if ((opline->extended_value & ~ZEND_SHARP_OPERATOR) == IS_LONG) {
 					if (OP1_HAS_RANGE()) {
 						tmp->min = OP1_MIN_RANGE();
 						tmp->max = OP1_MAX_RANGE();
@@ -2707,7 +2707,7 @@ static zend_always_inline zend_result _zend_update_type_info(
 				UPDATE_SSA_TYPE(tmp, ssa_op->op1_def);
 				COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->op1_def);
 			}
-			tmp = 1 << opline->extended_value;
+			tmp = 1 << (opline->extended_value & ~ZEND_SHARP_OPERATOR);
 			if (tmp & (MAY_BE_STRING|MAY_BE_ARRAY|MAY_BE_OBJECT|MAY_BE_RESOURCE)) {
 				if ((tmp & MAY_BE_ANY) == (t1 & MAY_BE_ANY)) {
 					tmp |= (t1 & MAY_BE_RC1) | MAY_BE_RCN;
@@ -3856,6 +3856,8 @@ static zend_always_inline zend_result _zend_update_type_info(
 						 && !ce->create_object
 						 && ce->default_object_handlers->read_property == zend_std_read_property
 						 && !ce->__get
+						 && !ce->num_hooked_props
+						 && (opline->op1_type != IS_UNUSED || (ce->ce_flags & ZEND_ACC_FINAL))
 						 && !result_may_be_separated(ssa, ssa_op)) {
 							tmp &= ~MAY_BE_RC1;
 						}
@@ -3974,7 +3976,13 @@ static zend_always_inline zend_result _zend_update_type_info(
 			bool is_prototype;
 			const zend_class_constant *cc = zend_fetch_class_const_info(script, op_array, opline, &is_prototype);
 			if (!cc || !ZEND_TYPE_IS_SET(cc->type)) {
-				UPDATE_SSA_TYPE(MAY_BE_RC1|MAY_BE_RCN|MAY_BE_ANY|MAY_BE_ARRAY_KEY_ANY|MAY_BE_ARRAY_OF_ANY, ssa_op->result_def);
+				tmp = MAY_BE_RC1|MAY_BE_RCN|MAY_BE_ANY|MAY_BE_ARRAY_KEY_ANY|MAY_BE_ARRAY_OF_ANY;
+				/* A PHP# `Class.y` read without a known constant may read a static property, whose array
+				 * elements may be references. */
+				if (!cc && (opline->extended_value & ZEND_FETCH_CLASS_MEMBER)) {
+					tmp |= MAY_BE_ARRAY_OF_REF;
+				}
+				UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
 				break;
 			}
 			UPDATE_SSA_TYPE(zend_convert_type(script, cc->type, &ce), ssa_op->result_def);

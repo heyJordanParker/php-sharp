@@ -85,7 +85,7 @@ zend_result zend_optimizer_eval_unary_op(zval *result, uint8_t opcode, zval *op1
 
 zend_result zend_optimizer_eval_cast(zval *result, uint32_t type, zval *op1) /* {{{ */
 {
-	if (zend_try_ct_eval_cast(result, type, op1)) {
+	if (zend_try_ct_eval_cast(result, type & ~ZEND_SHARP_OPERATOR, op1)) {
 		return SUCCESS;
 	}
 	return FAILURE;
@@ -322,7 +322,7 @@ bool zend_optimizer_update_op1_const(zend_op_array *op_array,
 			drop_leading_backslash(val);
 			opline->op1.constant = zend_optimizer_add_literal(op_array, val);
 			if (opline->op2_type != IS_CONST) {
-				opline->extended_value = alloc_cache_slots(op_array, 1);
+				opline->extended_value = alloc_cache_slots(op_array, 1) | (opline->extended_value & ZEND_FETCH_CLASS_MEMBER);
 			}
 			zend_optimizer_add_literal_string(op_array, zend_string_tolower(Z_STR_P(val)));
 			break;

@@ -11,27 +11,27 @@ namespace {
 
     for ($round = 0; $round < 100; $round++) {
         ob_start();
-        $tally = new Demo\Tally();
-        $tally->add(Status::Active);
-        attempt(fn () => $tally->add(Status::Active));
-        attempt(fn () => $tally->seededCounts());
-        attempt(fn () => Demo\Tally::count(['closed' => 2], Status::Closed));
-        attempt(fn () => Demo\Tally::count([], Status::Active));
-        attempt(fn () => Demo\Tally::ensure(['closed' => 2], Status::Closed));
-        attempt(fn () => Demo\Tally::ensure([], Status::Active));
-        attempt(fn () => Demo\Tally::sizes(Size::Small, Size::Large));
-        attempt(fn () => Demo\Tally::codes(Code::Five));
-        attempt(fn () => Demo\Tally::read(['active' => 3], Status::Active));
-        attempt(fn () => Demo\Tally::read(['active' => 3], Status::Closed));
-        attempt(fn () => Demo\Tally::lookup(['active' => 3], Status::Active));
-        attempt(fn () => Demo\Tally::lookup(['active' => 3], Status::Closed));
-        attempt(fn () => Demo\Tally::without(['active' => 3, 'closed' => 4], Status::Active));
-        attempt(fn () => Demo\Tally::nest(Status::Closed, Size::Large));
-        attempt(fn () => Demo\Tally::byName(['active' => 3, 'closed' => 4]));
+        $headcount = new Demo\Headcount();
+        $headcount->add(Status::Active);
+        attempt(fn () => $headcount->add(Status::Active));
+        attempt(fn () => $headcount->seededCounts());
+        attempt(fn () => Demo\Headcount::count(['closed' => 2], Status::Closed));
+        attempt(fn () => Demo\Headcount::count([], Status::Active));
+        attempt(fn () => Demo\Headcount::ensure(['closed' => 2], Status::Closed));
+        attempt(fn () => Demo\Headcount::ensure([], Status::Active));
+        attempt(fn () => Demo\Headcount::sizes(Size::Small, Size::Large));
+        attempt(fn () => Demo\Headcount::codes(Code::Five));
+        attempt(fn () => Demo\Headcount::read(['active' => 3], Status::Active));
+        attempt(fn () => Demo\Headcount::read(['active' => 3], Status::Closed));
+        attempt(fn () => Demo\Headcount::lookup(['active' => 3], Status::Active));
+        attempt(fn () => Demo\Headcount::lookup(['active' => 3], Status::Closed));
+        attempt(fn () => Demo\Headcount::without(['active' => 3, 'closed' => 4], Status::Active));
+        attempt(fn () => Demo\Headcount::nest(Status::Closed, Size::Large));
+        attempt(fn () => Demo\Headcount::byName(['active' => 3, 'closed' => 4]));
         // Collections handed in from plain PHP are not element-checked yet, so a key that is no case fails here.
-        attempt(fn () => Demo\Tally::byName(['missing' => 1]));
+        attempt(fn () => Demo\Headcount::byName(['missing' => 1]));
         // PHP stores the key "5" as the int 5, and PHP# reads it back as the string "5".
-        attempt(fn () => Demo\Tally::skus(['5' => 1, 'tea' => 2, 'pie' => 0]));
+        attempt(fn () => Demo\Headcount::skus(['5' => 1, 'tea' => 2, 'pie' => 0]));
         $output = ob_get_clean();
     }
 

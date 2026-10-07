@@ -4,7 +4,7 @@ use Lib\Code;
 use Lib\Size;
 use Lib\Status;
 
-class Tally
+class Headcount
 {
     private array $counts = [];
     private array $seeded = [Status::Active => 0]; // PHP# stores the key as 'active'

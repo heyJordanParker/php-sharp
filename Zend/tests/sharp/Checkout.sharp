@@ -1,0 +1,54 @@
+namespace Demo;
+
+class Checkout
+{
+    public static string? host(string host)
+    {
+        return host != "" ? host : null;
+    }
+
+    public static string sign(int value)
+    {
+        return value > 0 ? "positive" : (value < 0 ? "negative" : "zero");
+    }
+
+    public static string size(int count, bool wholesale)
+    {
+        return (wholesale ? count > 100 : count > 10) ? "large" : "small";
+    }
+
+    public static int cents(float price)
+    {
+        return (int)(price * 100);
+    }
+
+    public static int whole(float ratio)
+    {
+        return (int)ratio;
+    }
+
+    public static float share(int part, int total)
+    {
+        return (float)part / total;
+    }
+
+    public static string quantity(int count)
+    {
+        return (string)count;
+    }
+
+    public static int total(string price, string? count)
+    {
+        return (int)(Float.parse(price) * 100) * (Int.tryParse(count) ?? 1);
+    }
+
+    public static int page(string value)
+    {
+        return Int.parse(value);
+    }
+
+    public static float price(string value)
+    {
+        return Float.parse(value);
+    }
+}

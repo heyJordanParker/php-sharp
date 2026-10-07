@@ -1773,7 +1773,9 @@ static void zend_ensure_valid_class_fetch_type(uint32_t fetch_type) /* {{{ */
 			zend_error_noreturn(E_COMPILE_ERROR, "Cannot use \"%s\" when no class scope is active",
 				fetch_type == ZEND_FETCH_CLASS_SELF ? "self" :
 				fetch_type == ZEND_FETCH_CLASS_PARENT ? "parent" : "static");
-		} else if (fetch_type == ZEND_FETCH_CLASS_PARENT && !ce->parent_name) {
+		} else if (fetch_type == ZEND_FETCH_CLASS_PARENT && !ce->parent_name
+				/* A PHP# class finds its parent in its interface list when it links. */
+				&& !(ce->ce_flags & ZEND_ACC_PARENT_IN_INTERFACES)) {
 			zend_error_noreturn(E_COMPILE_ERROR,
 				"Cannot use \"parent\" when current class scope has no parent");
 		}
@@ -7171,10 +7173,9 @@ static zend_type zend_compile_single_typename(zend_ast *ast)
 					}
 				} else {
 					ZEND_ASSERT(fetch_type == ZEND_FETCH_CLASS_PARENT);
-					/* Scope might be unknown for unbound closures and traits */
-					if (substitute_self_parent) {
+					/* Scope might be unknown for unbound closures and traits, and a PHP# parent until it links */
+					if (substitute_self_parent && CG(active_class_entry)->parent_name) {
 						class_name = CG(active_class_entry)->parent_name;
-						ZEND_ASSERT(class_name && "must know class name when resolving parent type at compile time");
 					}
 				}
 				zend_string_addref(class_name);
@@ -10473,6 +10474,7 @@ static void zend_compile_post_incdec(znode *result, zend_ast *ast) /* {{{ */
 	} else if (var_ast->kind == ZEND_AST_STATIC_PROP) {
 		zend_op *opline = zend_compile_static_prop(NULL, var_ast, BP_VAR_RW, 0, 0);
 		opline->opcode = ast->kind == ZEND_AST_POST_INC ? ZEND_POST_INC_STATIC_PROP : ZEND_POST_DEC_STATIC_PROP;
+		opline->extended_value |= zend_ast_sharp_operator(ast);
 		zend_make_tmp_result(result, opline);
 	} else {
 		znode var_node;
@@ -10502,6 +10504,7 @@ static void zend_compile_pre_incdec(znode *result, zend_ast *ast) /* {{{ */
 	} else if (var_ast->kind == ZEND_AST_STATIC_PROP) {
 		zend_op *opline = zend_compile_static_prop(result, var_ast, BP_VAR_RW, 0, 0);
 		opline->opcode = ast->kind == ZEND_AST_PRE_INC ? ZEND_PRE_INC_STATIC_PROP : ZEND_PRE_DEC_STATIC_PROP;
+		opline->extended_value |= zend_ast_sharp_operator(ast);
 		opline->result_type = IS_TMP_VAR;
 		result->op_type = IS_TMP_VAR;
 	} else {
@@ -10519,18 +10522,19 @@ static void zend_compile_pre_incdec(znode *result, zend_ast *ast) /* {{{ */
 static void zend_compile_cast(znode *result, zend_ast *ast) /* {{{ */
 {
 	zend_ast *expr_ast = ast->child[0];
+	uint32_t type = ast->attr & ~ZEND_SHARP_OPERATOR_SYNTAX;
 	znode expr_node;
 	zend_op *opline;
 
 	zend_compile_expr(&expr_node, expr_ast);
 
-	if (ast->attr == _IS_BOOL) {
+	if (type == _IS_BOOL) {
 		opline = zend_emit_op_tmp(result, ZEND_BOOL, &expr_node, NULL);
-	} else if (ast->attr == IS_NULL) {
+	} else if (type == IS_NULL) {
 		zend_error(E_COMPILE_ERROR, "The (unset) cast is no longer supported");
 	} else {
 		opline = zend_emit_op_tmp(result, ZEND_CAST, &expr_node, NULL);
-		opline->extended_value = ast->attr;
+		opline->extended_value = type | zend_ast_sharp_operator(ast);
 	}
 }
 /* }}} */
@@ -11157,7 +11161,10 @@ static void zend_compile_class_const(znode *result, zend_ast *ast) /* {{{ */
 
 	zend_set_class_name_op1(opline, &class_node);
 
-	if (opline->op1_type == IS_CONST || opline->op2_type == IS_CONST) {
+	if (ast->attr & ZEND_FETCH_CLASS_MEMBER_SYNTAX) {
+		/* The static property it falls back to caches its class, address and info, as FETCH_STATIC_PROP_R does. */
+		opline->extended_value = zend_alloc_cache_slots(3) | ZEND_FETCH_CLASS_MEMBER;
+	} else if (opline->op1_type == IS_CONST || opline->op2_type == IS_CONST) {
 		opline->extended_value = zend_alloc_cache_slots(2);
 	}
 }
@@ -12430,7 +12437,7 @@ static void zend_eval_const_expr(zend_ast **ast_ptr) /* {{{ */
 			}
 			zend_eval_const_expr(&ast->child[0]);
 			if (ast->child[0]->kind == ZEND_AST_ZVAL
-			 && zend_try_ct_eval_cast(&result, ast->attr, zend_ast_get_zval(ast->child[0]))) {
+			 && zend_try_ct_eval_cast(&result, ast->attr & ~ZEND_SHARP_OPERATOR_SYNTAX, zend_ast_get_zval(ast->child[0]))) {
 				break;
 			}
 			return;

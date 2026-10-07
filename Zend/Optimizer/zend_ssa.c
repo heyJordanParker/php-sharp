@@ -716,7 +716,7 @@ add_op1_def:
 		case ZEND_CAST:
 			/* A PHP# method call's receiver may change the array in the variable. */
 			if (((build_flags & ZEND_SSA_RC_INFERENCE)
-						|| (opline->extended_value & ZEND_SHARP_OPERATOR))
+						|| opline->extended_value == (IS_OBJECT | ZEND_SHARP_OPERATOR))
 					&& opline->op1_type == IS_CV) {
 				goto add_op1_def;
 			}
