@@ -1,0 +1,15 @@
+namespace Demo;
+
+class UncheckedAny
+{
+    public int use(Any? value)
+    {
+        const name = value.name;
+        const size = value.count();
+        const next = value + 1;
+        const shown = `got ${value}`;
+        if (value) {
+        }
+        return value;
+    }
+}
