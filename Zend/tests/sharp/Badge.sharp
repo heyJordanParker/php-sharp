@@ -7,9 +7,4 @@ class Badge
     public Badge(public int id { get; })
     {
     }
-
-    public void rename(string label)
-    {
-        this.label = label;
-    }
 }

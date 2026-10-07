@@ -8,4 +8,14 @@ class Helper
     {
         return $value;
     }
+
+    /**
+     * Gives back any value, typed for the checker as an int, as a library with a wrong docblock does.
+     *
+     * @return int
+     */
+    public static function trusted(mixed $value): mixed
+    {
+        return $value;
+    }
 }

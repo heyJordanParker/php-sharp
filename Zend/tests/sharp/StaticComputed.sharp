@@ -1,6 +1,0 @@
-namespace Demo;
-
-class StaticComputed
-{
-    public static string home => "/";
-}

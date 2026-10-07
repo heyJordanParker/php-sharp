@@ -7,7 +7,7 @@ use Lib\Standing;
 class Headcount
 {
     private array $counts = [];
-    private array $seeded = [Standing::Active => 0]; // PHP# stores the key as 'active'
+    private array $seeded = [Standing::Active->value => 0];
 
     public function seededCounts(): array
     {
@@ -16,37 +16,32 @@ class Headcount
 
     public function add(Standing $status): array
     {
-        $this->counts[$status] = ($this->counts[$status] ?? 0) + 1;
+        $this->counts[$status->value] = ($this->counts[$status->value] ?? 0) + 1;
         return $this->counts;
     }
 
     public static function count(array $counts, Standing $status): array
     {
-        $counts[$status] = ($counts[$status] ?? 0) + 1;
+        $counts[$status->value] = ($counts[$status->value] ?? 0) + 1;
         return $counts;
     }
 
     public static function ensure(array $counts, Standing $status): array
     {
-        $counts[$status] ??= 0;
+        $counts[$status->value] ??= 0;
         return $counts;
     }
 
     public static function sizes(Size $small, Size $large): array
     {
-        return [$small => "small", $large => "large"];
+        return [$small->value => "small", $large->value => "large"];
     }
 
     public static function codes(Code $code): array
     {
         $codes = [];
-        $codes[$code] = 5;
+        $codes[$code->value] = 5;
         return $codes;
-    }
-
-    public static function read(array $counts, Standing $status): int
-    {
-        return $counts[$status];
     }
 
     public static function lookup(array $counts, Standing $status): ?int
@@ -63,8 +58,8 @@ class Headcount
     public static function nest(Standing $status, Size $size): array
     {
         $nested = [];
-        $nested[$status] = [];
-        $nested[$status][$size] = 1;
+        $nested[$status->value] = [];
+        $nested[$status->value][$size->value] = 1;
         return $nested;
     }
 

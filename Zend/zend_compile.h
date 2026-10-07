@@ -882,6 +882,10 @@ void zend_file_context_end(zend_file_context *prev_context);
 
 extern ZEND_API zend_op_array *(*zend_compile_file)(zend_file_handle *file_handle, int type);
 extern ZEND_API zend_op_array *(*zend_compile_string)(zend_string *source_string, const char *filename, zend_compile_position position);
+/* PHP#: an op cache asks it first for a file's revision in place of the file's mtime. It returns false for a file
+ * zend_compile_file compiles from its own source. For a file compiled ahead of time it returns true, with a
+ * revision that changes whenever the compiled code may change, or 0 when the file must compile without caching. */
+extern ZEND_API bool (*zend_compiled_revision)(zend_file_handle *file_handle, zend_long *revision);
 
 ZEND_API int ZEND_FASTCALL lex_scan(zval *zendlval, zend_parser_stack_elem *elem);
 void startup_scanner(void);

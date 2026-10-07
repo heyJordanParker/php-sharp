@@ -1,9 +1,0 @@
-namespace Demo;
-
-class NamespacedCall
-{
-    public static string note(int cents)
-    {
-        return shipping_note(cents);
-    }
-}

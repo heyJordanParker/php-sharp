@@ -2,7 +2,13 @@
 # include <config.h>
 #endif
 
+#include <fcntl.h>
+#include <unistd.h>
+
 #include "php.h"
+#include "php_ini.h"
+#include "ext/hash/php_hash.h"
+#include "ext/hash/php_hash_xxhash.h"
 #include "ext/spl/spl_exceptions.h"
 #include "ext/standard/info.h"
 #include "zend_closures.h"
@@ -16,12 +22,36 @@
 #include "sharp_build_id.h"
 
 #define SHARP_FILE_EXTENSION ".sharp"
+#define SHARP_COMPILED_FOLDER ".sharp"
 
 #define SHARP_KIND_IS_ZEND_KIND(kind) \
 	ZEND_STATIC_ASSERT((zend_ast_kind) SHARP_AST_##kind == ZEND_AST_##kind, "SHARP_AST_" #kind " differs from ZEND_AST_" #kind);
 SHARP_KINDS(SHARP_KIND_IS_ZEND_KIND)
 
+ZEND_STATIC_ASSERT(sizeof(sharp_unit_header) == 104, "a .sharpc header is 104 bytes");
+ZEND_STATIC_ASSERT(sizeof(sharp_input) == 40, "a .sharpc input is 40 bytes");
+ZEND_STATIC_ASSERT(sizeof(sharp_node) == 56, "a .sharpc node is 56 bytes");
+
+#define SHARP_SPARE_COLLECTIONS 4
+
+ZEND_BEGIN_MODULE_GLOBALS(sharp)
+	zend_object *spare_collections[SHARP_SPARE_COLLECTIONS];
+	HashTable folder_roots;
+	HashTable request_stamps;
+ZEND_END_MODULE_GLOBALS(sharp)
+
+ZEND_DECLARE_MODULE_GLOBALS(sharp)
+
+#define SHARP_G(v) ZEND_MODULE_GLOBALS_ACCESSOR(sharp, v)
+
 static zend_op_array *(*sharp_next_compile_file)(zend_file_handle *file_handle, int type);
+
+typedef struct {
+	const sharp_node *nodes;
+	const uint32_t *children;
+	const char *texts;
+	uint32_t root;
+} sharp_unit;
 
 static zend_ast *sharp_translate(const sharp_unit *unit, uint32_t index);
 
@@ -159,38 +189,345 @@ static zend_ast *sharp_translate(const sharp_unit *unit, uint32_t index)
 	return sharp_translate_fixed(unit, node, kind);
 }
 
+typedef enum {
+	SHARP_CURRENT,
+	SHARP_NOT_COMPILED,
+	SHARP_OTHER_ENGINE,
+	SHARP_OUT_OF_DATE,
+} sharp_state;
+
+typedef struct {
+	bool exists;
+	bool hashed;
+	uint64_t size;
+	int64_t mtime_ns;
+	uint8_t hash[16];
+} sharp_stamp;
+
+typedef struct {
+	zend_string *source;
+	bool rooted;
+	size_t root_length;
+	zend_string *bytes;
+	const char *changed;
+	size_t changed_length;
+	sharp_unit unit;
+} sharp_compiled;
+
+static int64_t sharp_mtime_ns(const zend_stat_t *status)
+{
+#ifdef __APPLE__
+	return (int64_t) status->st_mtimespec.tv_sec * 1000000000 + status->st_mtimespec.tv_nsec;
+#else
+	return (int64_t) status->st_mtim.tv_sec * 1000000000 + status->st_mtim.tv_nsec;
+#endif
+}
+
+static bool sharp_hash_file(const char *path, uint8_t hash[16])
+{
+	PHP_XXH3_128_CTX context = {0};
+	unsigned char buffer[65536];
+	ssize_t read_length;
+	int file = VCWD_OPEN(path, O_RDONLY);
+
+	if (file < 0) {
+		return false;
+	}
+	PHP_XXH3_128_Init(&context, NULL);
+	while ((read_length = read(file, buffer, sizeof(buffer))) > 0) {
+		PHP_XXH3_128_Update(&context, buffer, read_length);
+	}
+	close(file);
+	if (read_length < 0) {
+		return false;
+	}
+	PHP_XXH3_128_Final(hash, &context);
+
+	return true;
+}
+
+static void sharp_free_stamp(zval *stamp)
+{
+	efree(Z_PTR_P(stamp));
+}
+
+static sharp_stamp *sharp_stamp_of(zend_string *path)
+{
+	sharp_stamp *stamp = zend_hash_find_ptr(&SHARP_G(request_stamps), path);
+	sharp_stamp fresh = {0};
+	zend_stat_t status;
+
+	if (stamp) {
+		return stamp;
+	}
+	if (VCWD_STAT(ZSTR_VAL(path), &status) == 0 && S_ISREG(status.st_mode)) {
+		fresh.exists = true;
+		fresh.size = (uint64_t) status.st_size;
+		fresh.mtime_ns = sharp_mtime_ns(&status);
+	}
+
+	return zend_hash_add_mem(&SHARP_G(request_stamps), path, &fresh, sizeof(fresh));
+}
+
+static size_t sharp_parent(const char *path, size_t length)
+{
+	while (length > 0 && path[length - 1] != '/') {
+		length--;
+	}
+
+	return length > 0 ? length - 1 : 0;
+}
+
+static bool sharp_holds_compiled_folder(const char *folder, size_t length)
+{
+	zend_stat_t status;
+	zend_string *compiled = zend_string_concat3(folder, length, "/", 1, SHARP_COMPILED_FOLDER, sizeof(SHARP_COMPILED_FOLDER) - 1);
+	bool holds = VCWD_STAT(ZSTR_VAL(compiled), &status) == 0 && S_ISDIR(status.st_mode);
+
+	zend_string_release(compiled);
+
+	return holds;
+}
+
+static bool sharp_find_root(const zend_string *source, size_t *root_length)
+{
+	const char *path = ZSTR_VAL(source);
+	size_t folder = ZSTR_LEN(source);
+	zval root;
+
+	do {
+		zval *known;
+
+		folder = sharp_parent(path, folder);
+		known = zend_hash_str_find(&SHARP_G(folder_roots), path, folder);
+		if (known) {
+			*root_length = Z_LVAL_P(known);
+			break;
+		}
+		if (sharp_holds_compiled_folder(path, folder)) {
+			*root_length = folder;
+			break;
+		}
+		if (folder == 0) {
+			return false;
+		}
+	} while (true);
+
+	ZVAL_LONG(&root, *root_length);
+	for (folder = sharp_parent(path, ZSTR_LEN(source)); folder > *root_length; folder = sharp_parent(path, folder)) {
+		zend_hash_str_update(&SHARP_G(folder_roots), path, folder, &root);
+	}
+	zend_hash_str_update(&SHARP_G(folder_roots), path, *root_length, &root);
+
+	return true;
+}
+
+static zend_string *sharp_read_compiled(const sharp_compiled *compiled)
+{
+	const char *source = ZSTR_VAL(compiled->source);
+	zend_string *path = zend_strpprintf(0, "%.*s/" SHARP_COMPILED_FOLDER "%.*sc",
+		(int) compiled->root_length, source,
+		(int) (ZSTR_LEN(compiled->source) - compiled->root_length), source + compiled->root_length);
+	php_stream *stream;
+	zend_string *bytes;
+
+	stream = php_stream_open_wrapper(ZSTR_VAL(path), "rb", STREAM_DISABLE_OPEN_BASEDIR, NULL);
+	zend_string_release(path);
+	if (!stream) {
+		return NULL;
+	}
+	bytes = php_stream_copy_to_mem(stream, PHP_STREAM_COPY_ALL, 0);
+	php_stream_close(stream);
+
+	return bytes ? bytes : ZSTR_EMPTY_ALLOC();
+}
+
+static bool sharp_text_fits(const sharp_unit_header *header, sharp_str text)
+{
+	return (uint64_t) text.offset + text.len <= header->texts_size;
+}
+
+static bool sharp_input_current(const sharp_compiled *compiled, const sharp_input *input)
+{
+	static const uint8_t absent[16] = {0};
+	zend_string *path = zend_string_concat3(
+		ZSTR_VAL(compiled->source), compiled->root_length,
+		"/", 1,
+		compiled->unit.texts + input->path.offset, input->path.len);
+	sharp_stamp *stamp = sharp_stamp_of(path);
+	bool current;
+
+	if (input->size == 0 && memcmp(input->hash, absent, sizeof(absent)) == 0) {
+		current = !stamp->exists;
+	} else if (!stamp->exists) {
+		current = false;
+	} else if (stamp->size == input->size && stamp->mtime_ns == input->mtime_ns) {
+		current = true;
+	} else {
+		if (!stamp->hashed) {
+			stamp->hashed = sharp_hash_file(ZSTR_VAL(path), stamp->hash);
+		}
+		current = stamp->hashed && memcmp(stamp->hash, input->hash, sizeof(stamp->hash)) == 0;
+	}
+	zend_string_release(path);
+
+	return current;
+}
+
+static bool sharp_offsets_fit(const sharp_unit_header *header, const sharp_unit *unit)
+{
+	if (header->root >= header->node_count) {
+		return false;
+	}
+	for (uint32_t i = 0; i < header->node_count; i++) {
+		const sharp_node *node = &unit->nodes[i];
+
+		if (!sharp_text_fits(header, node->text)
+				|| (uint64_t) node->first_child + node->child_count > header->children_count) {
+			return false;
+		}
+	}
+	for (uint32_t i = 0; i < header->children_count; i++) {
+		if (unit->children[i] != UINT32_MAX && unit->children[i] >= header->node_count) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+static sharp_state sharp_check(sharp_compiled *compiled, const char *source, size_t source_length)
+{
+	const char *bytes;
+	const sharp_unit_header *header;
+	const sharp_input *inputs;
+
+	if (!compiled->rooted || !compiled->bytes || ZSTR_LEN(compiled->bytes) < sizeof(sharp_unit_header)) {
+		return SHARP_NOT_COMPILED;
+	}
+	bytes = ZSTR_VAL(compiled->bytes);
+	header = (const sharp_unit_header *) bytes;
+	if (memcmp(header->magic, SHARP_UNIT_MAGIC, sizeof(header->magic)) != 0
+			|| memcmp(header->abi, SHARP_UNIT_ABI, sizeof(header->abi)) != 0) {
+		return SHARP_OTHER_ENGINE;
+	}
+	if (sizeof(sharp_unit_header)
+			+ sizeof(sharp_input) * (uint64_t) header->input_count
+			+ sizeof(sharp_node) * (uint64_t) header->node_count
+			+ sizeof(uint32_t) * (uint64_t) header->children_count
+			+ (uint64_t) header->texts_size + header->facts_size != ZSTR_LEN(compiled->bytes)) {
+		return SHARP_NOT_COMPILED;
+	}
+
+	inputs = (const sharp_input *) (bytes + sizeof(sharp_unit_header));
+	compiled->unit.nodes = (const sharp_node *) (inputs + header->input_count);
+	compiled->unit.children = (const uint32_t *) (compiled->unit.nodes + header->node_count);
+	compiled->unit.texts = (const char *) (compiled->unit.children + header->children_count);
+	compiled->unit.root = header->root;
+
+	if (source) {
+		uint8_t hash[16];
+		PHP_XXH3_128_CTX context = {0};
+
+		PHP_XXH3_128_Init(&context, NULL);
+		PHP_XXH3_128_Update(&context, (const unsigned char *) source, source_length);
+		PHP_XXH3_128_Final(hash, &context);
+		if (header->source_size != source_length || memcmp(header->source_hash, hash, sizeof(hash)) != 0) {
+			compiled->changed = ZSTR_VAL(compiled->source) + compiled->root_length + 1;
+			compiled->changed_length = ZSTR_LEN(compiled->source) - compiled->root_length - 1;
+			return SHARP_OUT_OF_DATE;
+		}
+	}
+	for (uint32_t i = 0; i < header->input_count; i++) {
+		if (!sharp_text_fits(header, inputs[i].path)) {
+			return SHARP_NOT_COMPILED;
+		}
+		if (!sharp_input_current(compiled, &inputs[i])) {
+			compiled->changed = compiled->unit.texts + inputs[i].path.offset;
+			compiled->changed_length = inputs[i].path.len;
+			return SHARP_OUT_OF_DATE;
+		}
+	}
+	if (source && !sharp_offsets_fit(header, &compiled->unit)) {
+		return SHARP_NOT_COMPILED;
+	}
+
+	return SHARP_CURRENT;
+}
+
+static void sharp_locate(sharp_compiled *compiled, const char *filename)
+{
+	char real[MAXPATHLEN];
+
+	memset(compiled, 0, sizeof(*compiled));
+	compiled->source = VCWD_REALPATH(filename, real)
+		? zend_string_init(real, strlen(real), 0)
+		: zend_string_init(filename, strlen(filename), 0);
+	compiled->rooted = sharp_find_root(compiled->source, &compiled->root_length);
+	if (compiled->rooted) {
+		compiled->bytes = sharp_read_compiled(compiled);
+	}
+}
+
+static void sharp_release(sharp_compiled *compiled)
+{
+	zend_string_release(compiled->source);
+	if (compiled->bytes) {
+		zend_string_release(compiled->bytes);
+	}
+}
+
+static ZEND_COLD void sharp_refuse(const sharp_compiled *compiled, sharp_state state)
+{
+	const char *name = ZSTR_VAL(compiled->source) + (compiled->rooted ? compiled->root_length + 1 : 0);
+
+	switch (state) {
+		case SHARP_NOT_COMPILED:
+			zend_throw_exception_ex(zend_ce_compile_error, 0,
+				"%s isn't compiled. Run vendor/bin/mago compile.", name);
+			break;
+		case SHARP_OTHER_ENGINE:
+			zend_throw_exception_ex(zend_ce_compile_error, 0,
+				"%s was compiled for a different PHP# engine. Install the mago-sharp release that matches this engine.", name);
+			break;
+		case SHARP_OUT_OF_DATE:
+			zend_throw_exception_ex(zend_ce_compile_error, 0,
+				"%s is out of date (%.*s changed). Run vendor/bin/mago compile.", name, (int) compiled->changed_length, compiled->changed);
+			break;
+		EMPTY_SWITCH_DEFAULT_CASE();
+	}
+}
+
 static int sharp_parse(void)
 {
-	zend_string *path = zend_get_compiled_filename();
 	const char *source = (const char *) LANG_SCNG(yy_start);
-	size_t length = LANG_SCNG(yy_limit) - LANG_SCNG(yy_start);
-	sharp_unit *unit = sharp_lower(ZSTR_VAL(path), ZSTR_LEN(path), source, length);
-	bool diagnosed = unit->diagnostic_count != 0;
+	size_t source_length = LANG_SCNG(yy_limit) - LANG_SCNG(yy_start);
+	sharp_compiled compiled;
+	sharp_state state;
 	bool failed = false;
 
-	zend_try {
-		if (diagnosed) {
-			const sharp_diagnostic *diagnostic = &unit->diagnostics[0];
+	sharp_locate(&compiled, ZSTR_VAL(zend_get_compiled_filename()));
+	state = sharp_check(&compiled, source, source_length);
+	if (state != SHARP_CURRENT) {
+		sharp_refuse(&compiled, state);
+		sharp_release(&compiled);
+		return FAILURE;
+	}
 
-			CG(zend_lineno) = diagnostic->line;
-			zend_throw_exception_ex(
-				diagnostic->severity == SHARP_PARSE_ERROR ? zend_ce_parse_error : zend_ce_compile_error,
-				0, "%.*s", (int) diagnostic->message.len, unit->texts + diagnostic->message.offset);
-		} else {
-			CG(ast) = sharp_translate(unit, unit->root);
-			CG(zend_lineno) = unit->nodes[unit->root].end_line;
-		}
+	zend_try {
+		CG(ast) = sharp_translate(&compiled.unit, compiled.unit.root);
+		CG(zend_lineno) = compiled.unit.nodes[compiled.unit.root].end_line;
 	} zend_catch {
 		failed = true;
 	} zend_end_try();
 
-	sharp_unit_free(unit);
+	sharp_release(&compiled);
 
 	if (failed) {
 		zend_bailout();
 	}
 
-	return diagnosed ? FAILURE : SUCCESS;
+	return SUCCESS;
 }
 
 static bool sharp_is_sharp_file(const zend_string *filename)
@@ -208,6 +545,36 @@ static zend_op_array *sharp_compile_file(zend_file_handle *file_handle, int type
 	}
 
 	return zend_compile_file_with(file_handle, type, sharp_parse);
+}
+
+/* The revision is the low 63 bits of the compiled file's key, which changes whenever its code may. It runs the
+ * checks that need no source, so a source edit reaches it only through the compiled file's inputs. */
+static bool sharp_compiled_revision(zend_file_handle *file_handle, zend_long *revision)
+{
+	zend_string *path = file_handle->opened_path ? file_handle->opened_path : file_handle->filename;
+	sharp_compiled compiled;
+
+	if (!path || !sharp_is_sharp_file(path)) {
+		return false;
+	}
+
+	sharp_locate(&compiled, ZSTR_VAL(path));
+	*revision = 0;
+	if (sharp_check(&compiled, NULL, 0) == SHARP_CURRENT) {
+		const uint8_t *key = ((const sharp_unit_header *) ZSTR_VAL(compiled.bytes))->key;
+		uint64_t low = 0;
+
+		for (int i = 8; i < 16; i++) {
+			low = (low << 8) | key[i];
+		}
+		*revision = (zend_long) (low & ZEND_LONG_MAX);
+		if (*revision == 0) {
+			*revision = 1;
+		}
+	}
+	sharp_release(&compiled);
+
+	return true;
 }
 
 /* Whether the running code was compiled from a .sharp file. The file name decides the dialect in
@@ -329,16 +696,6 @@ zval *sharp_method_value(zend_class_entry *ce, zend_object *object, zend_string 
 
 	return result;
 }
-
-#define SHARP_SPARE_COLLECTIONS 4
-
-ZEND_BEGIN_MODULE_GLOBALS(sharp)
-	zend_object *spare_collections[SHARP_SPARE_COLLECTIONS];
-ZEND_END_MODULE_GLOBALS(sharp)
-
-ZEND_DECLARE_MODULE_GLOBALS(sharp)
-
-#define SHARP_G(v) ZEND_MODULE_GLOBALS_ACCESSOR(sharp, v)
 
 zend_class_entry *sharp_ce_collection;
 static zend_object_handlers sharp_collection_handlers;
@@ -1234,11 +1591,11 @@ static PHP_MINIT_FUNCTION(sharp)
 	sharp_collection_handlers.clone_obj = NULL;
 	sharp_ce_collection->default_object_handlers = &sharp_collection_handlers;
 
-	sharp_init();
 	zend_add_system_entropy("sharp", "SHARP_BUILD_ID", SHARP_BUILD_ID, sizeof(SHARP_BUILD_ID) - 1);
 
 	sharp_next_compile_file = zend_compile_file;
 	zend_compile_file = sharp_compile_file;
+	zend_compiled_revision = sharp_compiled_revision;
 
 	return SUCCESS;
 }
@@ -1246,6 +1603,19 @@ static PHP_MINIT_FUNCTION(sharp)
 static PHP_GINIT_FUNCTION(sharp)
 {
 	memset(sharp_globals, 0, sizeof(*sharp_globals));
+	zend_hash_init(&sharp_globals->folder_roots, 8, NULL, NULL, true);
+}
+
+static PHP_GSHUTDOWN_FUNCTION(sharp)
+{
+	zend_hash_destroy(&sharp_globals->folder_roots);
+}
+
+static PHP_RINIT_FUNCTION(sharp)
+{
+	zend_hash_init(&SHARP_G(request_stamps), 8, NULL, sharp_free_stamp, false);
+
+	return SUCCESS;
 }
 
 /* Runs after the request's destructors and before its objects are freed. A spare is freed without
@@ -1263,6 +1633,7 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 			OBJ_RELEASE(spare);
 		}
 	}
+	zend_hash_destroy(&SHARP_G(request_stamps));
 
 	return SUCCESS;
 }
@@ -1280,13 +1651,13 @@ zend_module_entry sharp_module_entry = {
 	NULL,
 	PHP_MINIT(sharp),
 	NULL,
-	NULL,
+	PHP_RINIT(sharp),
 	PHP_RSHUTDOWN(sharp),
 	PHP_MINFO(sharp),
 	PHP_VERSION,
 	PHP_MODULE_GLOBALS(sharp),
 	PHP_GINIT(sharp),
-	NULL,
+	PHP_GSHUTDOWN(sharp),
 	NULL,
 	STANDARD_MODULE_PROPERTIES_EX
 };

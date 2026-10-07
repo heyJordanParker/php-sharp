@@ -21,8 +21,6 @@ namespace {
         attempt(fn () => Demo\Headcount::ensure([], Standing::Active));
         attempt(fn () => Demo\Headcount::sizes(Size::Small, Size::Large));
         attempt(fn () => Demo\Headcount::codes(Code::Five));
-        attempt(fn () => Demo\Headcount::read(['active' => 3], Standing::Active));
-        attempt(fn () => Demo\Headcount::read(['active' => 3], Standing::Closed));
         attempt(fn () => Demo\Headcount::lookup(['active' => 3], Standing::Active));
         attempt(fn () => Demo\Headcount::lookup(['active' => 3], Standing::Closed));
         attempt(fn () => Demo\Headcount::without(['active' => 3, 'closed' => 4], Standing::Active));

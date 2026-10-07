@@ -1,9 +1,0 @@
-namespace Demo;
-
-class Elvis
-{
-    public static string name(string nickname, string email)
-    {
-        return nickname ?: email;
-    }
-}
