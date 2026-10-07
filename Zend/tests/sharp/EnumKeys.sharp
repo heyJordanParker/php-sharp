@@ -44,11 +44,6 @@ class Headcount
         return codes;
     }
 
-    public static int read(Map<Standing, int> counts, Standing status)
-    {
-        return counts[status];
-    }
-
     public static int? lookup(Map<Standing, int> counts, Standing status)
     {
         return counts.get(status);
