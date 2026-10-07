@@ -20,8 +20,9 @@ file_put_contents("$root/Wrong.sharp", "namespace Demo;\n\nclass Wrong\n{\n    p
 refusal(["$root/Broken.sharp", "$root/Torn.sharp", "$root/Wrong.sharp"], $settings);
 echo file_get_contents("$root/runs.log");
 
-// A command that prints no checker report leaves the refusal as it was.
-refusal("$root/Broken.sharp", ['sharp.compile_command' => 'echo no report']);
+// A command that prints no checker report leaves the refusal as it was, and still runs once per request.
+refusal(["$root/Broken.sharp", "$root/Torn.sharp"], ['sharp.compile_command' => 'echo run >> unreported.log && echo no report']);
+echo file_get_contents("$root/unreported.log");
 
 // A file with no .sharp/ folder above it has no project to compile, so the command doesn't run.
 $unrooted = sys_get_temp_dir() . '/sharp-test-compile-command-unrooted';
@@ -47,5 +48,7 @@ CompileError: Wrong.sharp has 2 errors. The first is on line 5: Invalid return t
 run
 run
 CompileError: Broken.sharp isn't compiled. Run vendor/bin/mago compile.
+CompileError: Torn.sharp isn't compiled. Run vendor/bin/mago compile.
+run
 CompileError: /%s/sharp-test-compile-command-unrooted/Shop.sharp isn't compiled. Run vendor/bin/mago compile.
 bool(false)

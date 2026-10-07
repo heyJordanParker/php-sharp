@@ -621,7 +621,11 @@ static void sharp_run_compile_command(const sharp_compiled *compiled)
 
 			php_json_parser_init(&parser, &SHARP_G(compile_command_report), ZSTR_VAL(printed), ZSTR_LEN(printed),
 				PHP_JSON_OBJECT_AS_ARRAY, PHP_JSON_PARSER_DEFAULT_DEPTH);
-			php_json_parse(&parser);
+			/* As php_json_decode_ex() does, a failed parse leaves null, whatever the parser built. */
+			if (php_json_parse(&parser) != 0) {
+				zval_ptr_dtor(&SHARP_G(compile_command_report));
+				ZVAL_NULL(&SHARP_G(compile_command_report));
+			}
 			zend_string_release(printed);
 		}
 	}
