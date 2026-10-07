@@ -14,5 +14,5 @@ class UrlCalls
 
     public static bool isValid(string url) => Url.isValid(url);
 
-    public static Map<string, Any?> parseQuery(string query) => Url.parseQuery(query);
+    public static Map<int|string, Any?> parseQuery(string query) => Url.parseQuery(query);
 }
