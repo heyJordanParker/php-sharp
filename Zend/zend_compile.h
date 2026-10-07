@@ -1110,10 +1110,12 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  * sharp/bin/census reads the lines below, so each keeps the shape `field of KINDS  upstream: FLAGS`.
  *
  * ZEND_SHARP_OPERATOR_SYNTAX: the operator follows PHP#'s rules. Integer overflow throws
- * ArithmeticError instead of producing a float, and + joins two strings.
+ * ArithmeticError instead of producing a float, + joins two strings, and (int) throws
+ * ArithmeticError on a float that is NaN, infinite or out of int range instead of inventing an int.
  *   attr of ZEND_AST_BINARY_OP, ZEND_AST_ASSIGN_OP          upstream: the opcode
  *   attr of ZEND_AST_UNARY_MINUS, ZEND_AST_PRE_INC,
  *     ZEND_AST_PRE_DEC, ZEND_AST_POST_INC, ZEND_AST_POST_DEC  upstream: none
+ *   attr of ZEND_AST_CAST to IS_LONG                          upstream: the type
  *
  * ZEND_SHARP_OPERATOR: the compiler turns ZEND_SHARP_OPERATOR_SYNTAX into it.
  *   extended_value of ZEND_ADD, ZEND_SUB, ZEND_MUL, ZEND_POW  upstream: none
@@ -1123,6 +1125,7 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  *     ZEND_POST_INC, ZEND_POST_DEC                            upstream: none
  *   extended_value of ZEND_PRE_INC_OBJ, ZEND_PRE_DEC_OBJ,
  *     ZEND_POST_INC_OBJ, ZEND_POST_DEC_OBJ                    upstream: ZEND_FETCH_OBJ_FLAGS, the cache slot
+ *   extended_value of ZEND_CAST to IS_LONG                    upstream: the type
  * A cache slot reaches ZEND_SHARP_OPERATOR only past 1 GiB of run-time cache, which no assert can check.
  */
 #define ZEND_SHARP_OPERATOR_SYNTAX	(1<<15)
@@ -1132,10 +1135,14 @@ ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR_SYNTAX & UINT8_MAX),
 	"ZEND_SHARP_OPERATOR_SYNTAX overlaps the opcode in the attr of ZEND_AST_BINARY_OP");
 ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR_SYNTAX & UINT8_MAX),
 	"ZEND_SHARP_OPERATOR_SYNTAX overlaps the opcode in the attr of ZEND_AST_ASSIGN_OP");
+ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR_SYNTAX & UINT8_MAX),
+	"ZEND_SHARP_OPERATOR_SYNTAX overlaps the type in the attr of ZEND_AST_CAST");
 ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & UINT8_MAX),
 	"ZEND_SHARP_OPERATOR overlaps the opcode in the extended_value of the ZEND_ASSIGN_*_OP opcodes");
 ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & ZEND_FETCH_OBJ_FLAGS),
 	"ZEND_SHARP_OPERATOR overlaps ZEND_FETCH_OBJ_FLAGS in the extended_value of the ZEND_*_INC_OBJ and ZEND_*_DEC_OBJ opcodes");
+ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & UINT8_MAX),
+	"ZEND_SHARP_OPERATOR overlaps the type in the extended_value of ZEND_CAST");
 
 static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 {
