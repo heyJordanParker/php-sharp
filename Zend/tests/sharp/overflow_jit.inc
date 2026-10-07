@@ -2,26 +2,6 @@
 
 namespace Demo;
 
-final class Counter
-{
-    public function __construct(public int $value) {}
-}
-
-final class LooseCounter
-{
-    public $value;
-
-    public function __construct($value)
-    {
-        $this->value = $value;
-    }
-}
-
-final class Probe
-{
-    public static function touch(int &$x): void {}
-}
-
 final class PhpOverflow
 {
     public static function add(int $a, int $b) { return $a + $b; }
@@ -29,6 +9,7 @@ final class PhpOverflow
 }
 
 require __DIR__ . '/attempt.inc';
+require __DIR__ . '/harness/Overflow.inc';
 require __DIR__ . '/Overflow.sharp';
 
 echo 'jit ', opcache_get_status()['jit']['on'] ? 'on' : 'off', "\n";
@@ -56,23 +37,23 @@ foreach ([
 }
 
 for ($i = 0; $i < 100; $i++) {
-    Overflow::incProperty(new Counter(1));
-    Overflow::addProperty(new Counter(1), 2);
+    Overflow::incProperty(new Cell(1));
+    Overflow::addProperty(new Cell(1), 2);
     Overflow::incLoose(new LooseCounter(1));
     Overflow::addLoose(new LooseCounter(1), 2);
     Overflow::incAfterCall(1);
     Overflow::addAfterCall(1, 2);
     Overflow::sumAfterCall(1, 2);
 }
-attempt(fn () => Overflow::incProperty(new Counter(PHP_INT_MAX)));
-attempt(fn () => Overflow::addProperty(new Counter(PHP_INT_MAX), 1));
+attempt(fn () => Overflow::incProperty(new Cell(PHP_INT_MAX)));
+attempt(fn () => Overflow::addProperty(new Cell(PHP_INT_MAX), 1));
 attempt(fn () => Overflow::incLoose(new LooseCounter(PHP_INT_MAX)));
 attempt(fn () => Overflow::addLoose(new LooseCounter(PHP_INT_MAX), 1));
 attempt(fn () => Overflow::incAfterCall(PHP_INT_MAX));
 attempt(fn () => Overflow::addAfterCall(PHP_INT_MAX, 1));
 attempt(fn () => Overflow::sumAfterCall(PHP_INT_MAX, 1));
 
-$held = new Counter(PHP_INT_MAX);
+$held = new Cell(PHP_INT_MAX);
 $reference = &$held->value;
 attempt(fn () => Overflow::addProperty($held, 1));
 attempt(fn () => Overflow::incProperty($held));
@@ -97,8 +78,8 @@ foreach ([
 }
 
 foreach ([
-    'incProperty' => [new Counter(PHP_INT_MAX - 300), fn ($counter) => Overflow::incProperty($counter)],
-    'addProperty' => [new Counter(PHP_INT_MAX - 300), fn ($counter) => Overflow::addProperty($counter, 1)],
+    'incProperty' => [new Cell(PHP_INT_MAX - 300), fn ($counter) => Overflow::incProperty($counter)],
+    'addProperty' => [new Cell(PHP_INT_MAX - 300), fn ($counter) => Overflow::addProperty($counter, 1)],
     'incLoose' => [new LooseCounter(PHP_INT_MAX - 300), fn ($counter) => Overflow::incLoose($counter)],
     'addLoose' => [new LooseCounter(PHP_INT_MAX - 300), fn ($counter) => Overflow::addLoose($counter, 1)],
 ] as $method => [$counter, $step]) {
@@ -117,6 +98,52 @@ for ($i = 0; $i < 100; $i++) {
 }
 attempt(fn () => PhpOverflow::add(PHP_INT_MAX, 1));
 attempt(fn () => PhpOverflow::preInc(PHP_INT_MAX));
+
+final class Kept
+{
+    public function __destruct()
+    {
+        echo "Kept destroyed\n";
+    }
+}
+
+function leaveInSecondSlot($a, $value) { return $value; }
+function leaveInThirdSlot($a, $b, $value) { return $value; }
+
+$kept = new Kept();
+
+leaveInThirdSlot(1, 2, $kept);
+try {
+    Overflow::add(PHP_INT_MAX, 1);
+} catch (\ArithmeticError $e) {
+    echo 'add: ', $e->getMessage(), "\n";
+}
+
+leaveInThirdSlot(1, 2, $kept);
+try {
+    Overflow::mul(PHP_INT_MAX, 2);
+} catch (\ArithmeticError $e) {
+    echo 'mul: ', $e->getMessage(), "\n";
+}
+
+leaveInThirdSlot(1, 2, $kept);
+try {
+    Overflow::preInc(PHP_INT_MAX);
+} catch (\ArithmeticError $e) {
+    echo 'preInc: ', $e->getMessage(), "\n";
+}
+
+Overflow::decLoose(new LooseCounter(1));
+$loose = new LooseCounter(PHP_INT_MIN);
+leaveInSecondSlot(1, $kept);
+try {
+    Overflow::decLoose($loose);
+} catch (\ArithmeticError $e) {
+    echo 'decLoose: ', $e->getMessage(), "\n";
+}
+
+echo "Kept alive\n";
+unset($kept);
 
 // The JIT compiled every PHP# operator itself, with no call to a VM handler.
 var_dump(opcache_get_status()['jit']['sharp_operator_vm_calls']);

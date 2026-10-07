@@ -1095,14 +1095,6 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
 #define ZEND_FETCH_DIM_WRITE	2
 #define ZEND_FETCH_OBJ_FLAGS	3
 
-/* A PHP# `Class.y` read: a class constant fetch that reads the static property of the same name when the class
- * has no such constant, because PHP# looks up the member's kind when it runs. ZEND_FETCH_CLASS_MEMBER_SYNTAX is
- * set in the attr of ZEND_AST_CLASS_CONST, above the fetch flags a constant expression passes there. The
- * compiler turns it into ZEND_FETCH_CLASS_MEMBER in the extended_value of ZEND_FETCH_CLASS_CONSTANT, below its
- * cache slot. */
-#define ZEND_FETCH_CLASS_MEMBER_SYNTAX	(1<<15)
-#define ZEND_FETCH_CLASS_MEMBER	(1<<0)
-
 /* Used to mark what kind of operation a writing FETCH_DIM is used in,
  * to produce a more precise error on incorrect string offset use. */
 #define ZEND_FETCH_DIM_REF 1
@@ -1112,14 +1104,84 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
 
 #define ZEND_ISEMPTY			(1<<0)
 
-/* The operator follows PHP#'s rules: integer overflow throws ArithmeticError instead of
- * producing a float, and + joins two strings. ZEND_SHARP_OPERATOR_SYNTAX is set in the attr of
- * ZEND_AST_BINARY_OP, ZEND_AST_ASSIGN_OP, ZEND_AST_UNARY_MINUS and the increment kinds. The
- * compiler turns it into ZEND_SHARP_OPERATOR in the extended_value of ZEND_ADD, ZEND_SUB,
- * ZEND_MUL, ZEND_POW, the ZEND_ASSIGN_*_OP opcodes, where it sits next to the opcode, and the
- * increment and decrement opcodes, where it sits above the cache slot. */
+/* PHP# marks
+ * ==========
+ * PHP# marks AST nodes and oplines in fields php-src already fills. This register lists every mark
+ * with the upstream flags of the same field and node kind or opcode, and a static assert per field
+ * and kind fails the build when a mark overlaps one of them. A mark may reuse a bit that another
+ * kind uses, so no assert checks one global mask. A mark on a kind that ZEND_SHORT_CIRCUITING_INNER
+ * also marks is asserted beside that flag in zend_compile.c, where the flag is private.
+ * sharp/bin/census reads the lines below, so each keeps the shape `field of KINDS  upstream: FLAGS`.
+ *
+ * ZEND_SHARP_OPERATOR_SYNTAX: the operator follows PHP#'s rules. Integer overflow throws
+ * ArithmeticError instead of producing a float, + joins two strings, and (int) throws
+ * ArithmeticError on a float that is NaN, infinite or out of int range instead of inventing an int.
+ *   attr of ZEND_AST_BINARY_OP, ZEND_AST_ASSIGN_OP          upstream: the opcode
+ *   attr of ZEND_AST_UNARY_MINUS, ZEND_AST_PRE_INC,
+ *     ZEND_AST_PRE_DEC, ZEND_AST_POST_INC, ZEND_AST_POST_DEC  upstream: none
+ *   attr of ZEND_AST_CAST to IS_LONG                          upstream: the type
+ *
+ * ZEND_SHARP_OPERATOR: the compiler turns ZEND_SHARP_OPERATOR_SYNTAX into it.
+ *   extended_value of ZEND_ADD, ZEND_SUB, ZEND_MUL, ZEND_POW  upstream: none
+ *   extended_value of ZEND_ASSIGN_OP, ZEND_ASSIGN_DIM_OP,
+ *     ZEND_ASSIGN_OBJ_OP, ZEND_ASSIGN_STATIC_PROP_OP          upstream: the opcode
+ *   extended_value of ZEND_PRE_INC, ZEND_PRE_DEC,
+ *     ZEND_POST_INC, ZEND_POST_DEC                            upstream: none
+ *   extended_value of ZEND_PRE_INC_OBJ, ZEND_PRE_DEC_OBJ,
+ *     ZEND_POST_INC_OBJ, ZEND_POST_DEC_OBJ                    upstream: ZEND_FETCH_OBJ_FLAGS, the cache slot
+ *   extended_value of ZEND_PRE_INC_STATIC_PROP, ZEND_PRE_DEC_STATIC_PROP,
+ *     ZEND_POST_INC_STATIC_PROP, ZEND_POST_DEC_STATIC_PROP    upstream: ZEND_FETCH_OBJ_FLAGS, the cache slot
+ *   extended_value of ZEND_CAST to IS_LONG                    upstream: the type
+ * A cache slot reaches ZEND_SHARP_OPERATOR only past 1 GiB of run-time cache, which no assert can check.
+ *
+ * ZEND_FETCH_CLASS_MEMBER_SYNTAX: a PHP# `Class.y` read. The class constant fetch reads the static
+ * property of the same name when the class has no such constant, because PHP# looks up the member's
+ * kind when it runs.
+ *   attr of ZEND_AST_CLASS_CONST                              upstream: the ZEND_FETCH_CLASS_* flags
+ *
+ * ZEND_FETCH_CLASS_MEMBER: the compiler turns ZEND_FETCH_CLASS_MEMBER_SYNTAX into it, below the cache slot.
+ *   extended_value of ZEND_FETCH_CLASS_CONSTANT               upstream: the cache slot
+ *
+ * ZEND_ACC_PARENT_IN_INTERFACES: a PHP# class whose header lowered into the interface list. Linking
+ * takes the one class there as the parent. It is defined with the other class flags, and the bridge
+ * sets it in the flags of ZEND_AST_CLASS.
+ *   ce_flags of a class                                       upstream: every class flag
+ */
 #define ZEND_SHARP_OPERATOR_SYNTAX	(1<<15)
 #define ZEND_SHARP_OPERATOR	(1<<30)
+#define ZEND_FETCH_CLASS_MEMBER_SYNTAX	(1<<15)
+#define ZEND_FETCH_CLASS_MEMBER	(1<<0)
+
+ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR_SYNTAX & UINT8_MAX),
+	"ZEND_SHARP_OPERATOR_SYNTAX overlaps the opcode in the attr of ZEND_AST_BINARY_OP");
+ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR_SYNTAX & UINT8_MAX),
+	"ZEND_SHARP_OPERATOR_SYNTAX overlaps the opcode in the attr of ZEND_AST_ASSIGN_OP");
+ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR_SYNTAX & UINT8_MAX),
+	"ZEND_SHARP_OPERATOR_SYNTAX overlaps the type in the attr of ZEND_AST_CAST");
+ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & UINT8_MAX),
+	"ZEND_SHARP_OPERATOR overlaps the opcode in the extended_value of the ZEND_ASSIGN_*_OP opcodes");
+ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & ZEND_FETCH_OBJ_FLAGS),
+	"ZEND_SHARP_OPERATOR overlaps ZEND_FETCH_OBJ_FLAGS in the extended_value of the ZEND_*_INC_OBJ and ZEND_*_DEC_OBJ opcodes");
+ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & ZEND_FETCH_OBJ_FLAGS),
+	"ZEND_SHARP_OPERATOR overlaps ZEND_FETCH_OBJ_FLAGS in the extended_value of the ZEND_*_INC_STATIC_PROP and ZEND_*_DEC_STATIC_PROP opcodes");
+ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & UINT8_MAX),
+	"ZEND_SHARP_OPERATOR overlaps the type in the extended_value of ZEND_CAST");
+ZEND_STATIC_ASSERT(!(ZEND_FETCH_CLASS_MEMBER_SYNTAX & (ZEND_FETCH_CLASS_MASK | ZEND_FETCH_CLASS_NO_AUTOLOAD
+		| ZEND_FETCH_CLASS_SILENT | ZEND_FETCH_CLASS_EXCEPTION | ZEND_FETCH_CLASS_ALLOW_UNLINKED
+		| ZEND_FETCH_CLASS_ALLOW_NEARLY_LINKED)),
+	"ZEND_FETCH_CLASS_MEMBER_SYNTAX overlaps a ZEND_FETCH_CLASS_* flag in the attr of ZEND_AST_CLASS_CONST");
+ZEND_STATIC_ASSERT(ZEND_FETCH_CLASS_MEMBER < sizeof(void *),
+	"ZEND_FETCH_CLASS_MEMBER overlaps the cache slot in the extended_value of ZEND_FETCH_CLASS_CONSTANT");
+ZEND_STATIC_ASSERT(!(ZEND_ACC_PARENT_IN_INTERFACES & (ZEND_ACC_INTERFACE | ZEND_ACC_TRAIT | ZEND_ACC_ANON_CLASS
+		| ZEND_ACC_LINKED | ZEND_ACC_IMPLICIT_ABSTRACT_CLASS | ZEND_ACC_FINAL | ZEND_ACC_EXPLICIT_ABSTRACT_CLASS
+		| ZEND_ACC_IMMUTABLE | ZEND_ACC_HAS_TYPE_HINTS | ZEND_ACC_TOP_LEVEL | ZEND_ACC_PRELOADED
+		| ZEND_ACC_DEPRECATED | ZEND_ACC_CONSTANTS_UPDATED | ZEND_ACC_NO_DYNAMIC_PROPERTIES
+		| ZEND_HAS_STATIC_IN_METHODS | ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES | ZEND_ACC_READONLY_CLASS
+		| ZEND_ACC_RESOLVED_PARENT | ZEND_ACC_RESOLVED_INTERFACES | ZEND_ACC_UNRESOLVED_VARIANCE
+		| ZEND_ACC_NEARLY_LINKED | ZEND_ACC_HAS_READONLY_PROPS | ZEND_ACC_CACHED | ZEND_ACC_CACHEABLE
+		| ZEND_ACC_HAS_AST_CONSTANTS | ZEND_ACC_HAS_AST_PROPERTIES | ZEND_ACC_HAS_AST_STATICS
+		| ZEND_ACC_FILE_CACHED | ZEND_ACC_ENUM | ZEND_ACC_NOT_SERIALIZABLE | ZEND_ACC_USE_GUARDS)),
+	"ZEND_ACC_PARENT_IN_INTERFACES overlaps a class flag in ce_flags");
 
 static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 {

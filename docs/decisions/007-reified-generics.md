@@ -2,7 +2,7 @@
 
 ## Decision
 
-Generic classes and methods keep their written type arguments at runtime. A collection's elements are checked once, where the collection crosses in from plain PHP, and `as` to a collection type checks every element and gives null on a wrong one.
+Generic classes and methods keep their written type arguments at runtime. A collection's elements are checked once, where the collection crosses in from plain PHP, and `as` to a collection type checks every element and gives null on a wrong one. Decision 29 carries inferred type arguments at runtime too.
 
 ## Options
 

@@ -29,6 +29,9 @@ ZEND_VM_COLD_HELPER(zend_integer_overflow_helper, ANY, ANY)
 
 	SAVE_OPLINE();
 	zend_integer_overflow_error();
+	if (RETURN_VALUE_USED(opline)) {
+		ZVAL_UNDEF(EX_VAR(opline->result.var));
+	}
 	HANDLE_EXCEPTION();
 }
 
@@ -6611,6 +6614,20 @@ ZEND_VM_COLD_CONST_HANDLER(51, ZEND_CAST, CONST|TMP|VAR|CV, ANY, TYPE)
 		case IS_LONG:
 			ZVAL_LONG(result, zval_get_long(expr));
 			break;
+		case IS_LONG | ZEND_SHARP_OPERATOR: {
+			zval *value = expr;
+
+			ZVAL_DEREF(value);
+			if (Z_TYPE_P(value) == IS_DOUBLE
+			 && UNEXPECTED(!zend_finite(Z_DVAL_P(value)) || !ZEND_DOUBLE_FITS_LONG(Z_DVAL_P(value)))) {
+				zend_float_to_int_error(Z_DVAL_P(value));
+				FREE_OP1();
+				UNDEF_RESULT();
+				HANDLE_EXCEPTION();
+			}
+			ZVAL_LONG(result, zval_get_long(expr));
+			break;
+		}
 		case IS_DOUBLE:
 			ZVAL_DOUBLE(result, zval_get_double(expr));
 			break;

@@ -1,0 +1,9 @@
+namespace Demo;
+
+class Truthy
+{
+    public static string label(string name)
+    {
+        return name ? name : "guest";
+    }
+}

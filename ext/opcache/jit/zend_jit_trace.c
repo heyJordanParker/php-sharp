@@ -2033,7 +2033,8 @@ static zend_ssa *zend_jit_trace_build_tssa(zend_jit_trace_rec *trace_buffer, uin
 					}
 					break;
 				case ZEND_CAST:
-					if (opline->extended_value != op1_type) {
+					if (opline->extended_value != op1_type
+					 && (opline->extended_value != (IS_LONG | ZEND_SHARP_OPERATOR) || op1_type != IS_LONG)) {
 						break;
 					}
 					ADD_OP1_TRACE_GUARD();
@@ -5226,7 +5227,8 @@ static zend_vm_opcode_handler_t zend_jit_trace(zend_jit_trace_rec *trace_buffer,
 						}
 						goto done;
 					case ZEND_CAST:
-						if (opline->extended_value != op1_type) {
+						if (opline->extended_value != op1_type
+						 && (opline->extended_value != (IS_LONG | ZEND_SHARP_OPERATOR) || op1_type != IS_LONG)) {
 							break;
 						}
 						ZEND_FALLTHROUGH;
