@@ -172,7 +172,7 @@ public class Order : Model
 - **The written type must fit the parent's.** When PHP declares the parent's property with no type, the written type must be assignable to the parent's `@var` type, or to anything when there is no `@var`. The engine drops the written type when the class links, because PHP refuses a typed redeclaration there. When PHP declares the parent's property with a type, the written type must equal it, because PHP checks property types for invariance when the class links. The engine keeps it.
 - **The access level is written and must match the parent's.** It is `public` when the parent's property is, as `timestamps` is in `Model`.
 - **The value must be constant.** Section 6 sets any other initial value at the start of the constructor, and the parent's constructor may already have read it, as Eloquent's does.
-- **This applies only to a plain PHP parent's property.** A PHP# parent's property is overridden as a property, as the list above says.
+- **A PHP# parent's field is overridden the same way,** measured against that field. A PHP# parent's property with accessor bodies is overridden as a property, as the list above says.
 
 ### 6.2 Change observers
 
