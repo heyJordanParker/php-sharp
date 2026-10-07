@@ -2,14 +2,14 @@ namespace Demo;
 
 import Lib.Field;
 
-public enum Status : string, HasLabel
+public enum Stage : string, HasLabel
 {
     case Active = "a";
     [Field("Paused by support")]
     case Paused = "p";
     case Closed = "c";
 
-    public const Status Default = Status.Active;
+    public const Stage Default = Stage.Active;
 
     public string label()
     {
@@ -18,11 +18,11 @@ public enum Status : string, HasLabel
 
     public bool isActive()
     {
-        return this === Status.Active;
+        return this === Stage.Active;
     }
 
-    public static Status parse(string value)
+    public static Stage parse(string value)
     {
-        return Status.tryFrom(value) ?? Status.from("a");
+        return Stage.tryFrom(value) ?? Stage.from("a");
     }
 }

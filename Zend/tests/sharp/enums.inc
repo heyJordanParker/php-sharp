@@ -3,7 +3,7 @@
 require __DIR__ . '/harness/Attributes.inc';
 require __DIR__ . '/harness/Priority.inc';
 require __DIR__ . '/harness/HasLabel.inc';
-require __DIR__ . '/Status.sharp';
+require __DIR__ . '/Stage.sharp';
 require __DIR__ . '/Suit.sharp';
 require __DIR__ . '/Rank.sharp';
 require __DIR__ . '/Shipment.sharp';
@@ -12,7 +12,7 @@ require __DIR__ . '/Task.sharp';
 use Demo\HasLabel;
 use Demo\Rank;
 use Demo\Shipment;
-use Demo\Status;
+use Demo\Stage;
 use Demo\Suit;
 use Demo\Task;
 
@@ -27,31 +27,31 @@ function failure(callable $run): string
 }
 
 for ($round = 0; $round < 100; $round++) {
-    $shipment = new Shipment(Status::from('a'));
+    $shipment = new Shipment(Stage::from('a'));
     $task = new Task(2);
     $results = [
-        Status::from('a')->label(),
-        Status::from('p') instanceof BackedEnum,
-        Status::cases(),
-        Status::parse('p'),
-        Status::parse('zzz'),
-        Status::Default,
-        Status::Active instanceof HasLabel,
-        (new ReflectionEnum(Status::class))->getInterfaceNames(),
-        Status::Active->isActive(),
-        Status::Paused->isActive(),
-        failure(fn() => Status::from('nope')),
-        (new ReflectionEnumBackedCase(Status::class, 'Paused'))->getAttributes()[0]->newInstance()->label,
+        Stage::from('a')->label(),
+        Stage::from('p') instanceof BackedEnum,
+        Stage::cases(),
+        Stage::parse('p'),
+        Stage::parse('zzz'),
+        Stage::Default,
+        Stage::Active instanceof HasLabel,
+        (new ReflectionEnum(Stage::class))->getInterfaceNames(),
+        Stage::Active->isActive(),
+        Stage::Paused->isActive(),
+        failure(fn() => Stage::from('nope')),
+        (new ReflectionEnumBackedCase(Stage::class, 'Paused'))->getAttributes()[0]->newInstance()->label,
         $shipment->code(),
         $shipment->state(),
         $shipment->describe(),
-        $shipment->close() === Status::Closed,
+        $shipment->close() === Stage::Closed,
         $shipment->status,
         (new Shipment())->state(),
         $shipment->pause(),
         Shipment::activeLabel(),
         Shipment::fallback(),
-        Shipment::find('p') === Status::Paused,
+        Shipment::find('p') === Stage::Paused,
         Shipment::find('zzz'),
         Shipment::kinds(),
         failure(fn() => new Shipment(Suit::Hearts)),

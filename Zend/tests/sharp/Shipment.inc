@@ -2,9 +2,9 @@
 
 class Shipment
 {
-    public private(set) \Demo\Status $status;
+    public private(set) \Demo\Stage $status;
 
-    public function __construct(\Demo\Status $status = \Demo\Status::Active)
+    public function __construct(\Demo\Stage $status = \Demo\Stage::Active)
     {
         $this->status = $status;
     }
@@ -24,35 +24,35 @@ class Shipment
         return $this->status->label();
     }
 
-    public function close(): \Demo\Status
+    public function close(): \Demo\Stage
     {
-        $this->status = \Demo\Status::from("c");
+        $this->status = \Demo\Stage::from("c");
         return $this->status;
     }
 
-    public function pause(): \Demo\Status
+    public function pause(): \Demo\Stage
     {
-        $this->status = \Demo\Status::Paused;
+        $this->status = \Demo\Stage::Paused;
         return $this->status;
     }
 
     public static function activeLabel(): string
     {
-        return ((object) \Demo\Status::Active)->label();
+        return ((object) \Demo\Stage::Active)->label();
     }
 
-    public static function fallback(): \Demo\Status
+    public static function fallback(): \Demo\Stage
     {
-        return \Demo\Status::Default;
+        return \Demo\Stage::Default;
     }
 
-    public static function find(string $code): ?\Demo\Status
+    public static function find(string $code): ?\Demo\Stage
     {
-        return \Demo\Status::tryFrom($code);
+        return \Demo\Stage::tryFrom($code);
     }
 
     public static function kinds(): int
     {
-        return \count(\Demo\Status::cases());
+        return \count(\Demo\Stage::cases());
     }
 }

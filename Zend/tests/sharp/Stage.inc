@@ -2,14 +2,14 @@
 
 use Lib\Field;
 
-enum Status: string implements HasLabel
+enum Stage: string implements HasLabel
 {
     case Active = "a";
     #[Field("Paused by support")]
     case Paused = "p";
     case Closed = "c";
 
-    public const \Demo\Status Default = \Demo\Status::Active;
+    public const \Demo\Stage Default = \Demo\Stage::Active;
 
     public function label(): string
     {
@@ -18,11 +18,11 @@ enum Status: string implements HasLabel
 
     public function isActive(): bool
     {
-        return $this === \Demo\Status::Active;
+        return $this === \Demo\Stage::Active;
     }
 
-    public static function parse(string $value): \Demo\Status
+    public static function parse(string $value): \Demo\Stage
     {
-        return \Demo\Status::tryFrom($value) ?? \Demo\Status::from("a");
+        return \Demo\Stage::tryFrom($value) ?? \Demo\Stage::from("a");
     }
 }

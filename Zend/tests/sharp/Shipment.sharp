@@ -2,9 +2,9 @@ namespace Demo;
 
 class Shipment
 {
-    public Status status { get; private set; }
+    public Stage status { get; private set; }
 
-    public Shipment(Status status = Status.Active)
+    public Shipment(Stage status = Stage.Active)
     {
         this.status = status;
     }
@@ -24,35 +24,35 @@ class Shipment
         return this.status.label();
     }
 
-    public Status close()
+    public Stage close()
     {
-        this.status = Status.from("c");
+        this.status = Stage.from("c");
         return this.status;
     }
 
-    public Status pause()
+    public Stage pause()
     {
-        this.status = Status.Paused;
+        this.status = Stage.Paused;
         return this.status;
     }
 
     public static string activeLabel()
     {
-        return Status.Active.label();
+        return Stage.Active.label();
     }
 
-    public static Status fallback()
+    public static Stage fallback()
     {
-        return Status.Default;
+        return Stage.Default;
     }
 
-    public static Status? find(string code)
+    public static Stage? find(string code)
     {
-        return Status.tryFrom(code);
+        return Stage.tryFrom(code);
     }
 
     public static int kinds()
     {
-        return count(Status.cases());
+        return count(Stage.cases());
     }
 }
