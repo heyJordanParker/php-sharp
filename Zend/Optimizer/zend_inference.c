@@ -1299,7 +1299,7 @@ ZEND_API bool zend_inference_propagate_range(const zend_op_array *op_array, cons
 					}
 				}
 			} else if (ssa_op->result_def == var) {
-				if (opline->extended_value == IS_LONG) {
+				if ((opline->extended_value & ~ZEND_SHARP_OPERATOR) == IS_LONG) {
 					if (OP1_HAS_RANGE()) {
 						tmp->min = OP1_MIN_RANGE();
 						tmp->max = OP1_MAX_RANGE();

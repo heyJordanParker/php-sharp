@@ -709,7 +709,7 @@ ZEND_API zend_result ZEND_FASTCALL zend_ast_evaluate_inner(
 				ret = FAILURE;
 				break;
 			}
-			if (ast->attr == Z_TYPE(op1)) {
+			if ((ast->attr & ~ZEND_SHARP_OPERATOR_SYNTAX) == Z_TYPE(op1)) {
 				ZVAL_COPY_VALUE(result, &op1);
 			} else {
 				switch (ast->attr) {
@@ -718,6 +718,11 @@ ZEND_API zend_result ZEND_FASTCALL zend_ast_evaluate_inner(
 						break;
 					case IS_LONG:
 						ZVAL_LONG(result, zval_get_long_func(&op1, false));
+						break;
+					case IS_LONG | ZEND_SHARP_OPERATOR_SYNTAX:
+						if (!zend_try_ct_eval_cast(result, IS_LONG, &op1)) {
+							zend_float_to_int_error(Z_DVAL(op1));
+						}
 						break;
 					case IS_DOUBLE:
 						ZVAL_DOUBLE(result, zval_get_double_func(&op1));
