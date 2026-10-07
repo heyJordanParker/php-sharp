@@ -1840,7 +1840,7 @@ Log.info("charged", ["class": typeof(Order)]);                   // compiles: re
 - As a parameter's default, `Position.current()` gives the caller's position, as C++20's `std::source_location::current()` and Swift's `#file` defaults do.
 - A plain PHP caller gets the position where the parameter is declared, because PHP# does not compile plain PHP's calls.
 
-**A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. The checker's types reach the running program, inferred ones too, so generic code (section 11), loops over enum-keyed maps (section 12) and class values (section 25) work without a written type.
+**A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. A pragma, `mago.toml`'s `ignore` or the baseline can hide a warning, never an error. The checker's types reach the running program, inferred ones too, so generic code (section 11), loops over enum-keyed maps (section 12) and class values (section 25) work without a written type.
 
 **`vendor/bin/mago compile` compiles the project.** It checks every `.sharp` file, vendor packages included, and writes each accepted file as a `.sharpc` file into one `.sharp/` folder at the project root. The folder mirrors the source paths:
 
