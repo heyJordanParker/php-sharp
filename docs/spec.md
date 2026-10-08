@@ -2226,11 +2226,12 @@ extern StripeClient uses Http;
 - **An `extern` that names no effect declares the class, method or function pure,** as in `extern BigDecimal;`.
 - **Each class, method or function has at most one `extern` declaration in the whole project.** A second one is a compile error, as declaring a class twice is.
 - **A call to plain PHP with an `extern` declaration has that effect,** so it fits a `uses` that names it: `StripeClient.charges().create(…)` fits `uses Http`.
+- **An object a declared plain PHP call returns carries that call's effect,** so `StripeClient.charges()` returns an object with `Http`, and calling it fits `uses Http`. An `extern` on the returned class itself wins over the inherited effect. Kotlin treats Java's return values the same way.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
-- **PHP#'s Composer package ships the declarations for PHP's built-in functions and for Laravel.** Among PHP's built-ins, PDO is `Database`, curl is `Http`, `printf` and `fwrite` to `STDOUT` or `STDERR` are `Console`, `file_put_contents` and every other file function are `Files`, `exit` is `Process`, `time()` is `Clock`, `random_int` is `Random`, and `getenv()` and PHP's other environment built-ins are `Environment`. Every other built-in function has the effect `Php` (below). In Laravel, Eloquent and `DB` are `Database`, the `Http` facade is `Http`, `Cache` is `Cache`, `Mail` is `Mail`, and `now()` and Carbon's clock reads are `Clock`.
+- **PHP#'s Composer package ships the declarations for PHP's built-in functions and for Laravel.** Among PHP's built-ins, PDO is `Database`, curl is `Http`, `printf` and `fwrite` to `STDOUT` or `STDERR` are `Console`, `file_put_contents` and every other file function are `Files`, `exit` is `Process`, `time()` is `Clock`, `random_int` is `Random`, and `getenv()` and PHP's other environment built-ins are `Environment`. Every other built-in function is declared with its own effect, or as pure. In Laravel, Eloquent and `DB` are `Database`, the `Http` facade is `Http`, `Cache` is `Cache`, `Mail` is `Mail`, and `now()` and Carbon's clock reads are `Clock`.
 - **A project declares its own libraries,** conventionally in `app/Stubs`.
 
-**A built-in function the standard library has not classified has the effect `Php`,** which means "calls PHP code the checker cannot see into". When the standard library wraps a function, its real effect replaces `Php`, as `Environment` does for `getenv()`. Other families get theirs as each is wrapped. Pure code cannot call a function with `Php`. `Console` covers standard output and standard error, which includes `printf` and `fwrite(STDOUT, …)` or `fwrite(STDERR, …)`. `Files` covers every other file. `Process` covers `exit`.
+**Every built-in function has a declaration, so its effect is always known.** `Console` covers standard output and standard error, which includes `printf` and `fwrite(STDOUT, …)` or `fwrite(STDERR, …)`. `Files` covers every other file. `Process` covers `exit`.
 
 ```csharp
 public interface Formatter
@@ -2241,14 +2242,14 @@ public interface Formatter
 public class Visitor
 {
     public string greet(string name) => "Hello, " + name.trim();    // pure: trim is a standard-library method
-    public void remember(string token) { setcookie("t", token); }   // has Php: setcookie is not classified yet
+    public void remember(string token) { file_put_contents("seen.txt", token); }   // has Files
 }
 
-public class CookieFormatter : Formatter
+public class FileFormatter : Formatter
 {
     public string format(string name)
     {
-        setcookie("seen", name);                                    // compile error: format must be pure, and setcookie has the effect Php
+        file_put_contents("seen.txt", name);                        // compile error: format must be pure, and file_put_contents has the effect Files
         return name;
     }
 }
@@ -2323,7 +2324,7 @@ public class TenantCache
 - **A class's effects** are the `foreign` classes it holds, directly or through its fields, the effects of the plain PHP its methods call, and the events its methods emit. The checker works them out from field and constructor types and from method bodies. Nothing is written down.
 - **A `foreign` object** is created in a module (section 32), as often as its binding's lifetime decides, and handed down through constructors. Creating one anywhere else, or storing one in a static, is a compile error.
 
-**Pure code** reaches no `foreign` object, emits no event, calls no plain PHP unless an `extern` declares it pure, calls no built-in function with the effect `Php`, and changes nothing it was given (section 13). Getters must be pure. Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
+**Pure code** reaches no `foreign` object, emits no event, calls no plain PHP unless an `extern` declares it pure, and changes nothing it was given (section 13). Getters must be pure. Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
 
 **Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types. Every implementation is held to what the declaration allows:
 
