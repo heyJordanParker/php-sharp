@@ -985,7 +985,7 @@ public class ImportScreen
 }
 ```
 
-**Effects:** `emit` is an effect (section 29), so a method that emits shows it among its effects.
+**Effects:** `emit` has the effect `Events` (section 29), so a method that emits shows `Events` among its effects, and code without a body allows it with `uses Events`.
 
 **Timing:** the default dispatcher runs listeners immediately, before `emit` returns. An app replaces the dispatcher once at startup, to run listeners later, after a save, with retries, or not at all in tests.
 
@@ -1975,7 +1975,7 @@ theorem refundNeverExceedsPaid (paid refunded amount : Int)
 
 ## 29. Effects
 
-An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities, which Scala 3, Effekt and Pony also use. It also records every call into plain PHP, whose effect an `extern` declaration states, and every `emit`, which raises an event (section 15).
+An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities, which Scala 3, Effekt and Pony also use. It also records every call into plain PHP, whose effect an `extern` declaration states, and every `emit`, which raises an event and has the effect `Events` (section 15).
 
 **Any PHP# code may call plain PHP,** including Laravel's facades, helpers and model methods, and PHP's built-in functions the standard library does not wrap yet (section 8). Most libraries are plain PHP, so this is how PHP# code uses them.
 
@@ -2060,6 +2060,8 @@ public foreign class RedisStore
 
 The standard library ships `Database`, `Http`, `Files`, `Clock`, `Random`, `Cache`, `Mail` and `Environment`. A project declares its own `foreign` classes the same way.
 
+**`Events` is the effect of `emit`** (section 15). It is the one standard effect that is not a `foreign` class: a method has it when its body emits, and no object carries it.
+
 **PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS` are compile errors that read "PHP# has no superglobals; take a Request". Request data arrives as an object, such as a framework's `Request`. The process environment arrives as `Environment`, a standard `foreign` class like `Clock` and `Random`:
 
 - `string? variable(string name)` reads an environment variable, or gives null when it is not set.
@@ -2136,6 +2138,20 @@ public class MailchimpSync : AudienceSync
 ```text
 MailchimpSync.sync calls Mailchimp, which has no extern declaration, so `uses Http` cannot accept it.
 Declare its effect in a .sharp file, such as `extern Mailchimp uses Http;`.
+```
+
+**`uses Events` lets an implementation emit:**
+
+```csharp
+public interface Checkout
+{
+    void complete(Order order) uses Events;                                            // implementations may emit, nothing else
+}
+
+public class StoreCheckout : Checkout
+{
+    public void complete(Order order) { emit new Order.Paid(order.id, order.total); }   // fits: emit has the effect Events
+}
 ```
 
 **A method that takes a function can have that function's effects.** Its declaration writes `uses f`, where `f` is one of its function-typed parameters, with or without a body. At each call, the method has its body's own effects plus the effects of the function passed as `f`. Code that calls it writes nothing.

@@ -2,7 +2,7 @@
 
 ## Decision
 
-An event is a type. `public event Paid(int orderId, Money amount);` inside `Order` declares `Order.Paid`, and `emit new Paid(this.id, this.total);` raises it. Any code may raise any event type. A method listens with a trailing `on` clause that lists its events, and `vendor/bin/mago compile` finds every one at build time. `Events.on<T>` listens until the handle it returns goes out of scope. `emit` is an effect, and the app's dispatcher decides when listeners run.
+An event is a type. `public event Paid(int orderId, Money amount);` inside `Order` declares `Order.Paid`, and `emit new Paid(this.id, this.total);` raises it. Any code may raise any event type. A method listens with a trailing `on` clause that lists its events, and `vendor/bin/mago compile` finds every one at build time. `Events.on<T>` listens until the handle it returns goes out of scope. `emit` has the effect `Events`, which code without a body allows with `uses Events`. The app's dispatcher decides when listeners run.
 
 This replaces the earlier design, where an event was a member of its owner, named as `Order.paid`, and only the owner could raise it.
 
@@ -44,6 +44,20 @@ public class ImportScreen
 ```
 
 The compiler sees every listener. A wrong event name, or a parameter type the listed events don't share, is a compile error, and a reader follows `on Order.Paid` from an `emit` to every listener. The clause lists the events apart from the parameter, so a listener can pick specific events through a broader type, or take no parameter at all. Its one cost is a single-event listener that reads the event, which names the event twice.
+
+`emit` has the effect `Events`, so a method's effects show that it runs listeners. Code without a body allows it with `uses Events`:
+
+```csharp
+public interface Checkout
+{
+    void complete(Order order) uses Events;                             // compiles; implementations may emit
+}
+
+public class StoreCheckout : Checkout
+{
+    public void complete(Order order) { emit new Order.Paid(order.id, order.total); }   // compiles; fits uses Events
+}
+```
 
 ### Rejected: an event as a member of its owner
 
@@ -101,6 +115,22 @@ public void deliver() on Order.Paid { this.mail.send(new Receipt(event.orderId))
 
 The body reads a name the method never declares, so its type is written nowhere a reader can see.
 
+### Rejected: `emit` as no effect
+
+```csharp
+public interface Checkout
+{
+    void complete(Order order);                                         // not PHP#: pure, yet its implementation emits
+}
+
+public class StoreCheckout : Checkout
+{
+    public void complete(Order order) { emit new Order.Paid(order.id, order.total); }   // a listener for Order.Paid writes to the database
+}
+```
+
+A method whose signature reaches nothing could run listeners that reach the database.
+
 ### Rejected: attributes
 
 ```csharp
@@ -116,7 +146,9 @@ Attributes are for consumers, such as an app's own `[Retry]`, not for the core l
 - **Chosen, the trailing clause:** VB.NET's `Handles a.Click, b.Click`, which lists events after a method's signature.
 - **Chosen, listing events and allowing no parameter:** Spring's `@EventListener({A.class, B.class})`.
 - **Chosen, the scoped handle:** Rust's `tokio` broadcast receiver, which stops when it is dropped, and C#'s `using var`.
+- **Chosen, `emit` as an effect:** Koka's `effect fun emit(msg : string) : ()` and Unison's `Stream` ability, where emitting shows in a function's type.
 - **Rejected, runtime-only subscription:** C#'s `+=` on an event.
+- **Rejected, `emit` as no effect:** C#, where raising an event shows nowhere in a method's signature.
 - **Rejected, the class-level interface:** MediatR's `INotificationHandler<OrderPaid>` and actix's `Handler<OrderPaid>`.
 
 ## Spec
