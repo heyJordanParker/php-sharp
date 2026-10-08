@@ -1,0 +1,8 @@
+namespace Aliased;
+
+import App.Pair;
+
+public class Maker
+{
+    public static Pair<int, string> pair() => new Pair<int, string>(1, "one");
+}
