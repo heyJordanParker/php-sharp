@@ -18,13 +18,18 @@ echo 'second run exits with ', $status, "\n";
 echo [file_get_contents($header), file_get_contents($library)] === $first ? 'same' : 'different', " files on the second run\n";
 
 preg_match('/^#define SHARP_NATIVE "([0-9a-f]{32})"$/m', $first[0], $define);
-preg_match("/^return '([0-9a-f]{32})';$/m", $first[1], $returned);
-echo $define[1] === $returned[1] ? 'one' : 'two', " SHARP_NATIVE in sharp_native.h and native.php\n";
+$fingerprint = native_generator_fingerprint($copy);
+echo $define[1] === $fingerprint ? 'one' : 'two', " SHARP_NATIVE in sharp_native.h and native.php\n";
+preg_match('/^static const char \*const sharp_native_bodies\[\] = \{\n((?:\t"[^"\n]+",\n)*)\tNULL\n\};$/m', $first[0], $table);
+preg_match_all('/"([^"]+)"/', $table[1], $engine);
+preg_match("/^    'bodies' => \[\n((?:        '[^'\n]+',\n)*)    \],$/m", $first[1], $list);
+preg_match_all("/'([^']+)'/", $list[1], $declared);
+echo $engine[1] !== [] && $engine[1] === $declared[1] ? 'one' : 'two', " list of native bodies in sharp_native.h and native.php\n";
 
 file_put_contents("$copy/ext/sharp/src/lib.rs", "\n", FILE_APPEND);
 $status = native_generator_run($copy);
 echo 'run after the edit exits with ', $status, "\n";
-echo native_generator_fingerprint($copy) === $returned[1] ? 'same' : 'new', " SHARP_NATIVE after a Rust source changed\n";
+echo native_generator_fingerprint($copy) === $fingerprint ? 'same' : 'new', " SHARP_NATIVE after a Rust source changed\n";
 
 $fingerprints = [];
 foreach ([
@@ -44,6 +49,7 @@ first run exits with 0
 second run exits with 0
 same files on the second run
 one SHARP_NATIVE in sharp_native.h and native.php
+one list of native bodies in sharp_native.h and native.php
 run after the edit exits with 0
 new SHARP_NATIVE after a Rust source changed
 same SHARP_NATIVE with the fixture lock

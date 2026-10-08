@@ -7,8 +7,9 @@ typedef struct { const char *ptr; size_t len; } sharp_native_str;
 void sharp_native_str_free(sharp_native_str string);
 sharp_native_str sharp_native_Text_Text_slug(sharp_native_str title);
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_requireNative, 0, 2, IS_VOID, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_requireNative, 0, 3, IS_VOID, 0)
 	ZEND_ARG_TYPE_INFO(0, fingerprint, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, bodies, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, version, IS_STRING, 0)
 ZEND_END_ARG_INFO()
 
@@ -35,4 +36,9 @@ static const zend_function_entry sharp_native_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "requireNative"), zif_Sharp_Internal_requireNative, arginfo_Sharp_Internal_requireNative, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal\\Text\\Text", "slug"), zif_Sharp_Internal_Text_Text_slug, arginfo_Sharp_Internal_Text_Text_slug, 0, NULL, NULL)
 	ZEND_FE_END
+};
+
+static const char *const sharp_native_bodies[] = {
+	"Sharp.Text.Text.slug",
+	NULL
 };

@@ -25,7 +25,7 @@ function native_generator_run(string $copy): int
 
 function native_generator_fingerprint(string $copy): string
 {
-    preg_match("/^return '([0-9a-f]{32})';$/m", file_get_contents("$copy/sharp/composer/native.php"), $returned);
+    preg_match("/^    'fingerprint' => '([0-9a-f]{32})',$/m", file_get_contents("$copy/sharp/composer/native.php"), $returned);
 
     return $returned[1];
 }

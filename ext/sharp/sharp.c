@@ -1392,22 +1392,54 @@ ZEND_METHOD(Sharp_Collection, sortedBy)
 	zval_ptr_dtor(&pairs);
 }
 
-/* The standard library's autoload.php passes the SHARP_NATIVE it was built with and its package's version, as
- * Composer's platform_check.php checks the platform before anything loads. */
+static bool sharp_native_has_body(const zend_string *body)
+{
+	for (const char *const *own = sharp_native_bodies; *own; own++) {
+		if (zend_string_equals_cstr(body, *own, strlen(*own))) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/* The standard library's autoload.php passes the SHARP_NATIVE it was built with, the native bodies it declares and its
+ * package's version when vendor/autoload.php loads it, as Composer's platform_check.php checks the platform before
+ * anything loads. A body is named by its full PHP# name, as Sharp.Text.Text.slug, and a refusal shows it as Text.slug. */
 static ZEND_FUNCTION(Sharp_Internal_requireNative)
 {
 	zend_string *fingerprint;
+	HashTable *bodies;
 	zend_string *version;
 
-	ZEND_PARSE_PARAMETERS_START(2, 2)
+	ZEND_PARSE_PARAMETERS_START(3, 3)
 		Z_PARAM_STR(fingerprint)
+		Z_PARAM_ARRAY_HT(bodies)
 		Z_PARAM_STR(version)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (!zend_string_equals_literal(fingerprint, SHARP_NATIVE)) {
-		zend_throw_error(NULL, "The PHP# standard library %s needs the native bodies of PHP# engine %s, and this engine is "
-			PHP_SHARP_VERSION ". Install the same PHP# version of both.", ZSTR_VAL(version), ZSTR_VAL(version));
+	if (zend_string_equals_literal(fingerprint, SHARP_NATIVE)) {
+		return;
 	}
+
+	zval *body;
+	ZEND_HASH_FOREACH_VAL(bodies, body) {
+		if (Z_TYPE_P(body) != IS_STRING) {
+			zend_argument_type_error(2, "must contain only strings, %s given", zend_zval_value_name(body));
+			RETURN_THROWS();
+		}
+		if (!sharp_native_has_body(Z_STR_P(body))) {
+			const char *name = Z_STRVAL_P(body);
+			const char *method = zend_memrchr(name, '.', Z_STRLEN_P(body));
+			const char *owner = method ? zend_memrchr(name, '.', method - name) : NULL;
+			zend_throw_error(NULL, "The PHP# standard library %s declares the native body %s, which PHP# engine "
+				PHP_SHARP_VERSION " does not have. Install the same PHP# version of both.",
+				ZSTR_VAL(version), owner ? owner + 1 : name);
+			RETURN_THROWS();
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	zend_throw_error(NULL, "The PHP# standard library %s was built for other native bodies than PHP# engine "
+		PHP_SHARP_VERSION " has. Install the same PHP# version of both.", ZSTR_VAL(version));
 }
 
 ZEND_METHOD(Sharp_Position, __construct)
