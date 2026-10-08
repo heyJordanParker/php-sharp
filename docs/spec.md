@@ -1868,7 +1868,7 @@ app/Orders/Order.sharp has 3 errors. The first is on line 12: Invalid return typ
 - **In development,** the `php.ini` setting `sharp.compile_command` lets the engine compile a stale file on demand before it runs, instead of refusing it. When the checker refuses the file it just compiled, the refusal names the first error in the file, its line and how many errors the file has.
 - **A deploy** runs `vendor/bin/mago compile` and ships `.sharp/` with the code.
 - **A type error, or a broken structure rule (section 28), stops the file from running.** A rules file that fails to prove stops every `.sharp` file in its namespace.
-- **A rule that reads the whole project's structure can lag in development** until the next full compile. At deploy, `mago compile` checks every rule exactly.
+- **A rule or a PHP plugin that reads the whole project's structure can lag in development** until the next full compile. At deploy, `mago compile` checks every rule and every plugin exactly.
 
 ## 28. Verification
 
