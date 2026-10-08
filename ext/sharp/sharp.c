@@ -19,6 +19,7 @@
 #include "zend_closures.h"
 #include "zend_enum.h"
 #include "zend_exceptions.h"
+#include "zend_smart_str.h"
 #include "zend_system_id.h"
 #include "php_sharp.h"
 #include "sharp_arginfo.h"
@@ -496,23 +497,23 @@ static zval *sharp_member(const zval *object, const char *key, uint8_t type)
 	return member && Z_TYPE_P(member) == type ? member : NULL;
 }
 
-/* Refuses a file with the errors the compile command's checker reported for it: the first in the file, its line, and
- * how many there are. The report lists errors by checking pass rather than by line, and counts lines from 0. Returns
- * false when the report holds no error for the file. */
+/* Refuses a file with every error the compile command's checker reported for it, in the order they appear in the file.
+ * The report covers every file the command compiled, lists errors by checking pass rather than by line, and counts
+ * lines from 0. Returns false when the report holds no error for the file. */
 static ZEND_COLD bool sharp_refuse_checked(const sharp_compiled *compiled, const char *name)
 {
 	zval *issues = sharp_member(&SHARP_G(compile_command_report), "issues", IS_ARRAY), *issue;
-	zend_string *message = NULL;
-	zend_long first_offset = 0, line = 0;
+	struct { zend_long offset, line; zend_string *message; } *errors;
 	uint32_t count = 0;
-	size_t length;
 
 	if (!issues) {
 		return false;
 	}
+	errors = safe_emalloc(zend_hash_num_elements(Z_ARRVAL_P(issues)), sizeof(*errors), 0);
 	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(issues), issue) {
 		zval *level = sharp_member(issue, "level", IS_STRING), *text = sharp_member(issue, "message", IS_STRING);
 		zval *annotations = sharp_member(issue, "annotations", IS_ARRAY), *annotation, *span = NULL, *path, *start, *offset, *start_line;
+		uint32_t at;
 
 		if (!level || !zend_string_equals_literal(Z_STR_P(level), "Error") || !text || !annotations) {
 			continue;
@@ -532,29 +533,30 @@ static ZEND_COLD bool sharp_refuse_checked(const sharp_compiled *compiled, const
 		if (!path || !zend_string_equals(Z_STR_P(path), compiled->source) || !offset || !start_line) {
 			continue;
 		}
-		count++;
-		if (!message || Z_LVAL_P(offset) < first_offset) {
-			message = Z_STR_P(text);
-			first_offset = Z_LVAL_P(offset);
-			line = Z_LVAL_P(start_line) + 1;
+		/* Inserted after every error that starts at or before it, so errors at one offset keep the report's order. */
+		for (at = count++; at > 0 && errors[at - 1].offset > Z_LVAL_P(offset); at--) {
+			errors[at] = errors[at - 1];
 		}
+		errors[at].offset = Z_LVAL_P(offset);
+		errors[at].line = Z_LVAL_P(start_line) + 1;
+		errors[at].message = Z_STR_P(text);
 	} ZEND_HASH_FOREACH_END();
 
-	if (!message) {
-		return false;
-	}
-	length = ZSTR_LEN(message) - (ZSTR_LEN(message) > 0 && ZSTR_VAL(message)[ZSTR_LEN(message) - 1] == '.');
-	if (count == 1) {
-		zend_throw_exception_ex(zend_ce_compile_error, 0,
-			"%s has an error on line " ZEND_LONG_FMT ": %.*s. Run vendor/bin/mago compile to see it.",
-			name, line, (int) length, ZSTR_VAL(message));
-	} else {
-		zend_throw_exception_ex(zend_ce_compile_error, 0,
-			"%s has %u errors. The first is on line " ZEND_LONG_FMT ": %.*s. Run vendor/bin/mago compile to see them all.",
-			name, count, line, (int) length, ZSTR_VAL(message));
-	}
+	if (count > 0) {
+		smart_str refusal = {0};
 
-	return true;
+		smart_str_append_printf(&refusal, "%s has %u error%s:", name, count, count == 1 ? "" : "s");
+		for (uint32_t i = 0; i < count; i++) {
+			smart_str_append_printf(&refusal, "\nline " ZEND_LONG_FMT ": ", errors[i].line);
+			smart_str_append(&refusal, errors[i].message);
+		}
+		smart_str_0(&refusal);
+		zend_throw_exception(zend_ce_compile_error, ZSTR_VAL(refusal.s), 0);
+		smart_str_free(&refusal);
+	}
+	efree(errors);
+
+	return count > 0;
 }
 
 static ZEND_COLD void sharp_refuse(const sharp_compiled *compiled, sharp_state state)
