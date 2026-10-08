@@ -79,7 +79,7 @@ const plan = this.planner.plan(id);
 Checkout.maximum;
 ```
 
-**`Class.y` without a call reads whichever member `y` is:** a static property, a constant or an enum case. The same applies to members used as values (sections 6.3 and 14.3).
+**`Class.y` without a call always reads a static value:** a static property, a constant, an enum case, or a static method as a function value (section 14.3). A bare `Order.total` is never a property reference, which is written `nameof(Order.total)` (section 6.3).
 
 ## 5. Access modifiers
 
@@ -184,11 +184,15 @@ public string name { get; set; didSet => this.touch(); }
 
 ### 6.3 Typed property references
 
-`Link.name` used as a value is a typed reference to that property. The checker rejects a misspelled or removed property wherever it is used.
+`nameof(Order.total)` names a property. The reference is typed, and the checker rejects a misspelled or removed property wherever it is used. It sits beside `typeof(Order)` (section 25), as in C#'s `nameof`.
 
 ```csharp
-query.orderBy(Link.name);
+query.orderBy(nameof(Order.total));   // compiles: a typed reference to Order's total property
+query.orderBy(nameof(Order.totl));    // compile error: Order has no property totl
+query.orderBy(Order.total);           // compile error: Order.total reads a static value, and total is an instance property
 ```
+
+A bare `Order.total` is never a property reference, so `Class.y` always reads a static value (section 4).
 
 ### 6.4 Reusable property behaviors
 
@@ -241,7 +245,7 @@ Math.max(0, ...prices);  // into the standard library too. The 0 gives max a val
 
 There are no top-level functions. Shared code lives in static methods on a class.
 
-**A PHP function is reached through the type it works on,** as a method the standard library declares with an extension (section 26), as in `name.trim()`. Otherwise it goes through a static class in its module (section 23), as in `Math.max(a, b)` and `Json.encode(body)`.
+**A PHP function is reached through the type it works on,** as a method the standard library declares with an extension (section 26), as in `name.trim()`. Otherwise it goes through a static class in its standard library namespace (section 23), as in `Math.max(a, b)` and `Json.encode(body)`.
 
 ```csharp
 import Sharp.Json.Json;
@@ -281,7 +285,7 @@ die("Prune failed");                                     // compile error: write
 ```
 
 - `exit` skips every `finally` block, as Java's `System.exit` and C#'s `Environment.Exit` do.
-- Printing and `exit` have the effect `Php` until the standard library wraps them (section 29).
+- Printing has the effect `Console`, and `exit` has the effect `Process` (section 29), as Koka's `console` effect marks printing.
 
 ## 9. Constructors
 
@@ -324,7 +328,7 @@ let artifact = new Artifact.fromJson(json);
 
 - A constructor calls its base class's constructor with `: super(…)`, as in `public Order(Row row) : super(row) { }`.
 - A named constructor runs on the new object, so it can set get-only properties and `init` properties.
-- The dependency container always uses the main constructor.
+- The dependency container always uses the main constructor (section 32).
 - There is no overloading by argument types.
 - A static method that looks up an existing object, such as `Journey.forUuid`, stays a static method.
 
@@ -332,11 +336,8 @@ let artifact = new Artifact.fromJson(json);
 
 A `struct` is a value type.
 
-- **Assigning or passing a struct shares it until someone writes to it.** The first write copies it if anything else still holds it, the same copy-on-write PHP uses for arrays.
-- **A struct changes only through its properties,** as in `point.x = 5`.
-- **A struct held in a property changes through that property's `set`,** as a collection does (section 12). `this.origin.x = 5` reads `origin`, changes the copy and writes it back.
-- **A method cannot change `this`.** A method that "changes" a struct returns a new one, usually built with `with`.
-- **A `readonly struct` cannot change at all.**
+- **A struct never changes.** A method returns a changed copy, usually built with `with`, as Kotlin's data class `copy` does. `point.x = 5` is a compile error that names a method returning a changed copy.
+- **`readonly struct` is a compile error,** because every struct is already read-only.
 - **`==` compares values.** `===` works on classes only (section 19).
 - **A struct cannot inherit or be inherited,** but it can implement interfaces.
 - **A struct has no default value.** Every `required` property must be set when one is created.
@@ -344,13 +345,14 @@ A `struct` is a value type.
 ```csharp
 public struct Point
 {
-    public int x { get; set; }
-    public int y { get; set; }
-    public Point moved(int dx) => this with { x: this.x + dx };
+    public int x { get; init; }
+    public int y { get; init; }
+    public Point moved(int dx, int dy) => this with { x: this.x + dx, y: this.y + dy };
 }
 
-let b = a;
-b.x = 5;   // b is copied here, and a is unchanged
+Point q = p.moved(1, 0);              // compiles: q is a changed copy, and p is unchanged
+p.x = 5;                              // compile error: a struct never changes; return a changed copy from a method, such as moved
+public readonly struct Size { … }     // compile error: every struct is already read-only; write struct
 ```
 
 `with` copies an object or a struct and sets the listed properties through their `init` or `set` accessors. The original is unchanged.
@@ -398,20 +400,59 @@ public struct OrderRow
 OrderRow order = OrderRow.parse(row);   // row is a plain PHP object from a database query; throws: "id: expected int, got string 'abc'"
 ```
 
-**Reference:** php-src PR #13800, "Implement structs", implements this copy-on-write mechanism. Its `mutating` methods with `!` call syntax are left out for now, and can be added later without breaking code.
-
 ## 11. Generics
 
 **Generics are reified.** The running program knows every type argument.
 
 - Reflection shows `PaginatedList<Order>`.
+- Plain PHP reads an object's type arguments with `ReflectionObject::getTypeArguments()`, as C#'s `Type.GetGenericArguments()` does. A class value reaches plain PHP as a plain class-name string (section 25), so it carries none.
 - `page is PaginatedList<Order>` is checked while the code runs.
 - A value of the wrong type throws a `TypeError` where it enters PHP# from plain PHP. Section 12 lists where a value enters.
 
+**Each type argument of a generic class has its own static members,** as in C#. `Counter<Order>.count` is separate from `Counter<User>.count`, and a static member may use the class's type parameters:
+
+```csharp
+public class Counter<T>
+{
+    public static int count { get; set; } = 0;
+    public static List<T> seen { get; set; } = [];      // compiles: a static member may use T
+}
+
+Counter<Order>.count += 1;
+Counter<User>.count;                                     // 0: Counter<User> has its own count
+```
+
 **Writing type arguments:**
 
-- **`new` always names them:** `new PaginatedList<Order>(…)`.
-- **A generic method call infers them** from the arguments it receives.
+- **`new` always names them:** `new PaginatedList<Order>(…)`, or names a class value that carries them, as in `new (pages)()` (section 25).
+- **A generic method call fixes them** from the arguments it receives, or from the declared type its result goes into. A type argument that neither fixes is a compile error, as in C#'s error CS0411 and in Swift.
+- **Plain PHP generics,** declared with PHPDoc's `@template`, keep their fallback.
+
+```csharp
+public class Cache
+{
+    public T get<T>(string key) { … }
+}
+
+List<Order> orders = cache.get("orders");   // compiles: the declared type fixes T as List<Order>
+const orders = cache.get("orders");         // compile error: nothing fixes T; write cache.get<List<Order>>("orders")
+```
+
+**A generic object that plain PHP creates without type arguments** (`new PaginatedList($rows)`, or Laravel's container) has its bounds as its type arguments, as Java's raw types do, but checked where it enters PHP# instead of trusted. Under `PaginatedList<TItem : DatabaseEntity>`, a raw page is a `PaginatedList<DatabaseEntity>`. A parameter that needs `PaginatedList<Order>` throws `TypeError`. A method that takes any page is generic. PHP# code never creates a raw object, because a type argument it can't fix or infer is a compile error.
+
+```php
+$page = new PaginatedList($rows);                       // plain PHP: no type arguments, so the page is a PaginatedList<DatabaseEntity>
+$report->show($page);                                   // throws TypeError: show needs a PaginatedList<Order>
+$report->count($page);                                  // accepted: TItem is fixed as DatabaseEntity
+```
+
+```csharp
+public class Report
+{
+    public void show(PaginatedList<Order> page) { … }
+    public int count<TItem : DatabaseEntity>(PaginatedList<TItem> page) { … }
+}
+```
 
 **Every type argument is carried at runtime, written or inferred.** The checker's types reach the running program (section 27), so a generic method can use a type parameter that its call inferred:
 
@@ -435,6 +476,18 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 ```csharp
 public class PaginatedList<TItem : DatabaseEntity> { … }
 public PaginatedList<TItem> list<TItem : DatabaseEntity>(Query<TItem> query) { … }
+```
+
+**`Self` on a receiver typed by a type parameter is that type parameter** (section 25). In `TBox refill<TBox : Box<int>>(TBox box)`, `box.withValue(5)` returns a `TBox`, not `Box<int>`, as Rust's `t.clone()` on a `T: Clone` returns a `T`:
+
+```csharp
+public class Box<T>
+{
+    public required Box(public T value { get; }) { }
+    public Self withValue(T value) => new Self(value);
+}
+
+public TBox refill<TBox : Box<int>>(TBox box) => box.withValue(5);   // compiles: withValue returns a TBox
 ```
 
 ### 11.1 Variance
@@ -560,12 +613,16 @@ A `Map` keeps its keys (decision 26), and the engine knows which collection a sp
 - A bare read, `x[i]`, throws `OutOfRangeException` when the index or key is missing.
 - `x[k] = v` inserts or replaces a key. It is `Map`-only, so `lines[0] = line` is a compile error that names `set`.
 - `set(i, v)` replaces a `List` element, and throws `OutOfRangeException` past the end. Appending is `add`.
+- A `List` index is an `int`. Any wider index, such as `int|string` or `Any`, is a compile error. A negative index is never in a `List`, so `items[-1]` throws `OutOfRangeException`, and the last item is `items.last()`, as in Kotlin.
 
 ```csharp
 const first = lines[0];       // throws OutOfRangeException when lines is empty
 lines.set(0, line);           // throws OutOfRangeException when lines is empty
 lines[0] = line;              // compile error: write lines.set(0, line)
 plans["pro"] = pro;           // inserts or replaces
+items[-1];                    // throws OutOfRangeException: write items.last()
+items.last();                 // the last item
+items[id];                    // compile error when id is int|string: a List index is an int
 ```
 
 **A `Map` read is handled where it is read,** with `??`, `?.`, `is`, `as`, `match` or `get`. A bare `Map` read is a compile error that names `??` and `get`:
@@ -581,7 +638,15 @@ int? maybe = prices.get(plan);                              // compiles: null wh
 
 Data with fixed keys is a class, so a `Map` holds keys that come from outside, where a missing key is normal.
 
-**A `Map` with nullable values reads as Kotlin's does:** a read from `Map<string, int?>` gives `int?`, so a missing key and a stored null look the same until the standard library's methods tell them apart.
+**A `Map` with nullable values reads as Kotlin's does:** a read from `Map<string, int?>` gives `int?`, so a missing key and a stored null read the same. `map.has(key)` tells them apart, as Kotlin's `containsKey` does.
+
+```csharp
+Map<string, int?> limits = ["pro": null];
+limits["pro"] ?? 0;          // 0: the stored null
+limits["team"] ?? 0;         // 0: the missing key
+limits.has("pro");           // true
+limits.has("team");          // false
+```
 
 **A key read back out of a `Map<string, TValue>` is a `string`.** PHP stores an all-digit string key, such as `"5"`, as the int `5`. The engine knows the key type (section 27), so it hands the key back as `"5"`. Plain PHP reading the same array still sees `5`. This covers the key of `for (const [key, value] of map)` and of `keys()`.
 
@@ -638,8 +703,6 @@ for (const [status, n] of stats.countByStatus(orders)) { … }   // compiles: st
 for (const [status, group] of orders.groupBy(o => o.status)) { … }   // compiles: an inferred Map's keys arrive as Status too
 Map<Username, Order> byUser = [:];                               // keyed by username.value
 ```
-
-**Open:** `keys()` and `entries()` on a `Map` whose key has a backing value.
 
 **A list passed where a `Set` or a tuple is expected becomes one.** The receiving parameter converts it on arrival, as PHP already converts arguments to a parameter's type:
 
@@ -780,8 +843,29 @@ public readonly Customer buyer() readonly         // both
 
 - property `get` accessors
 - methods marked `readonly`
+- any plain PHP method
 
-Setters and unmarked methods are compile errors.
+Setters and unmarked PHP# methods are compile errors. Any plain PHP method can be called through a `readonly` value, because PHP# checks PHP# code only, as Kotlin's platform types leave a Java value unchecked:
+
+```csharp
+import Illuminate.Database.Eloquent.Model;
+
+public class Order : Model
+{
+    public string number { get; set; }
+    public Money totalIn(string currency) readonly { … }
+    public void markPaid() { … }
+}
+
+public void render(readonly Order order)
+{
+    order.number;              // compiles: a get accessor
+    order.totalIn("USD");      // compiles: totalIn is marked readonly
+    order.markPaid();          // compile error: markPaid is not marked readonly
+    order.number = "A-1";      // compile error: order is readonly
+    order.save();              // compiles: save is a plain PHP method of Model, which PHP# does not check
+}
+```
 
 **Readonly reaches everything read through it.** A property read through a `readonly` value is also `readonly`, so `order.lines` is readonly when `order` is.
 
@@ -800,7 +884,28 @@ totalIn does not change Order, so declare it `totalIn(string currency) readonly`
 
 `readonly` is enforced by the checker. The engine sees ordinary methods, so plain PHP callers are not checked.
 
-**Properties use `get` and `set`, not `readonly`.** A get-only property already cannot be reassigned. `readonly struct` keeps its meaning from section 10: every value of the struct is readonly.
+**Fields, properties and classes use `{ get; }`, not `readonly`.** A get-only property already cannot be reassigned. `readonly` on a field, a promoted constructor parameter or a class is a compile error that names `{ get; }`:
+
+```csharp
+public class Invoice
+{
+    private readonly Money total;                       // compile error: declare a get-only property with { get; }
+}
+
+public class Bill
+{
+    public Bill(public readonly Money due) { }          // compile error: declare a get-only property with { get; }
+}
+
+public class Quote
+{
+    public Quote(public Money due { get; }) { }         // compiles
+}
+
+public readonly class Receipt { … }                     // compile error: declare its properties with { get; }
+```
+
+`readonly struct` is a compile error too, because every struct is already read-only (section 10).
 
 ## 14. Functions as values
 
@@ -901,40 +1006,92 @@ public Customer? current() { return this.customer; } // compile error: current n
 
 ## 15. Events
 
-The language wires events. An app adds its own attributes, such as `[Retry]`, for its policy.
+An event says that something happened, such as an order being paid. `emit` raises it, and every listener for it runs. `vendor/bin/mago compile` finds every listener at build time (section 27), so nothing is wired by hand.
 
 ```csharp
 public class Order
 {
-    public event OrderPaid paid;                        // declared on its owner
-    void settle() { emit paid(new OrderPaid(this)); }   // only Order can emit it
+    public interface Event { int orderId { get; } }                   // declares Order.Event, the type both events share
+    public event Paid(int orderId, Money amount) : Event;             // declares the event type Order.Paid
+    public event Refunded(int orderId, Money amount) : Event;         // declares Order.Refunded
+
+    public void markPaid()
+    {
+        …
+        emit new Paid(this.id, this.total);                            // runs every listener for Order.Paid
+    }
 }
 
-[Retry(Retry.ExponentialDays)]
-public void deliver(OrderPaid e) on Order.paid { … }    // subscribes this method
+public class Receipts
+{
+    public void deliver(Order.Paid e) on Order.Paid { … }             // listens to every Order.Paid
+}
 ```
 
-**Declaring:** `event` declares an event on a class. Its type is the payload.
+**Declaring:** `event` declares an event type. `public event Paid(int orderId, Money amount);` inside `Order` declares `Order.Paid`, a class whose parameters become get-only properties, as C#'s positional records and Kotlin's data classes do. An event is declared inside the class that raises it, and an interface its events share is declared beside them, as `Order.Event` is, the way C# nests types. An event that no single class owns is declared on its own, in its own file:
 
-**Emitting:** `emit` raises the event. Only the class that declares it can emit it, and anywhere else is a compile error.
+```csharp
+// app/Imports/RowImported.sharp
+namespace App.Imports;
 
-**Subscribing:** `on Owner.event` after a method's parameters subscribes that method. It sits in the same position as `readonly`.
+public event RowImported(int row);
+```
 
-- A renamed or removed event is a compile error at every `on` that names it.
-- The parameter type must match the event's payload type.
+**Emitting:** `emit` raises an event. Any code may raise any event type:
 
-**Wiring is automatic:**
+```csharp
+emit new Paid(this.id, this.total);              // inside Order
+emit new Order.Paid(order.id, order.total);      // anywhere else
+```
 
-1. **At build time,** the checker writes an index of every `on` subscription.
-2. **At boot,** the runtime loads that index once.
-3. **On `emit`,** the runtime passes the event and its handlers to the dispatcher.
+**Plain PHP events:** `extern event` marks a plain PHP class, such as a Laravel event, as an event, so PHP# code can listen to it:
 
-**The dispatcher:**
+```csharp
+// app/Stubs/Laravel.sharp
+namespace App.Stubs;
 
-- **By default,** it calls each handler immediately, in the same request.
-- **An app can replace it** with its own, registered once at boot. An app's durable event bus, for example, builds listeners through its framework's container, queues them and applies `[Retry]`.
+import Illuminate.Queue.Events.JobFailed;
 
-**Open:** the API for registering a dispatcher. It is specified with the standard library.
+extern event JobFailed;
+```
+
+**Listening:** a trailing `on` clause after a method's parameters lists the events the method listens to, for as long as the app runs. The method takes zero parameters, or one parameter whose type every listed event shares. It takes no other parameter, and no parameter is implicit. The namespace's `Module.sharp` container creates the object each listener runs on.
+
+```csharp
+public class OrderNotices
+{
+    public void send(Order.Event e) on Order.Paid, Order.Refunded { … }    // two events, read through the type they share
+    public void refresh() on Order.Paid { … }                              // no parameter: the event's data is not needed
+    public void audit(Order.Event e) on Order.Event { … }                  // every event that implements Order.Event
+    public void alert(JobFailed e) on JobFailed { … }                      // a plain PHP event marked with extern event
+}
+```
+
+- **A listener on an interface hears every event that implements it.**
+- **`vendor/bin/mago compile` finds every `on` at build time.** A wrong event name, or a parameter type the listed events don't share, is a compile error:
+
+```csharp
+public void send(Order.Paid e) on Order.Paid, Order.Refunded { … }      // compile error: Order.Refunded is not an Order.Paid
+public void refresh() on Order.Payed { … }                               // compile error: Order has no event Payed
+public void log(Order.Paid e, Logger logger) on Order.Paid { … }         // compile error: a listener takes only the event
+```
+
+**Listening for a while:** `Events.on<RowImported>(e => …)` starts a listener and returns a handle. The listener stops when the handle goes out of scope:
+
+```csharp
+public class ImportScreen
+{
+    public void import(string path)
+    {
+        const listening = Events.on<RowImported>(e => this.progress.advance());   // listens until import returns
+        this.importer.run(path);
+    }
+}
+```
+
+**Effects:** `emit` has the effect `Events` (section 29), so a method that emits shows `Events` among its effects, and code without a body allows it with `uses Events`.
+
+**Timing:** the default dispatcher runs listeners immediately, before `emit` returns. An app replaces the dispatcher once at startup, to run listeners later, after a save, with retries, or not at all in tests.
 
 ## 16. Naming a value
 
@@ -1061,6 +1218,7 @@ cart === cart;                   // true: the same object
 - **Overloadable operators:** `+ - * / % **`, unary `-`, `==` and `<=>`. No other operator can be overloaded.
 - **`!=`** is derived from `==`.
 - **`< > <= >=` and sorting** are derived from `<=>`.
+- **Strings compare byte by byte,** as in Go. `<`, `>` and `sort` put `"10"` before `"9"` and capitals before lowercase, so `"10" < "9"` is true and `"Zebra" < "apple"` is true. The order agrees with `==`. `compareTo` gives -1, 0 or 1 in the same order, so `"b".compareTo("a")` is 1.
 - **`==` and `hash()` go together:** declaring `==` without `hash()` is a compile error, because `Set` needs both.
 
 **`==` and `!=` on a nullable type are lifted,** as C#'s operators on nullable values and Kotlin's `==` are. Null equals only null. Two non-null values use the type's own `==`, including a declared `operator ==`, so an `operator ==` takes two non-null values and never sees a null. `x != null` is the normal null check, and it never runs user code. `x is null` and `x is not null` stay valid as ordinary patterns (section 21).
@@ -1458,8 +1616,10 @@ class LegacyPage implements HasDesign
 ```csharp
 import Illuminate.Database.Eloquent.Model;
 import Illuminate.Database.Eloquent.Factories.HasFactory;
+import App.Legacy.Copies;
 
 public class Order : Model, HasFactory { … }
+public class Draft : Copies { … }               // compiles: a trait may stand alone in the header, as an interface may
 if (entity is HasFactory f) { … }
 public void seed(HasFactory owner) { … }
 List<HasFactory> owners = [];
@@ -1476,15 +1636,15 @@ namespace App.Tenant.Store;
 import App.Shared.Schema.Entities.DatabaseEntity;
 ```
 
-**Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always a class, or a plain PHP function that an `extern` declares (section 29). A full name inside code is a compile error that names the import to add.
+**Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always a class, or a plain PHP function that an `extern` declares (section 29). A full class name inside code is a compile error that names the import to add. A module header names a namespace, as the `namespace` line does, so `module : App.Shop` compiles (section 32).
 
 **An import never carries `uses`,** because a library's effect lives in its one `extern` declaration (section 29).
 
-**The standard library lives under one root, `Sharp`,** with the topic modules `Sharp.Text`, `Sharp.Math`, `Sharp.Json`, `Sharp.IO`, `Sharp.Time`, `Sharp.Net` and `Sharp.Data`, as .NET has `System.*` and Rust has `std::*`.
+**The standard library lives under one root, `Sharp`,** with the standard library namespaces `Sharp.Text`, `Sharp.Math`, `Sharp.Json`, `Sharp.IO`, `Sharp.Time`, `Sharp.Net` and `Sharp.Data`, as .NET has `System.*` and Rust has `std::*`.
 
 **Only `Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports under the same name shadows the default one.
 
-**A static class in a topic module needs one import line,** and the import's last part is the class, as for any import:
+**A static class in a standard library namespace needs one import line,** and the import's last part is the class, as for any import:
 
 ```csharp
 import Sharp.Json.Json;
@@ -1514,6 +1674,34 @@ public struct Entry
 ## 24. Built-in types and `Any`
 
 Built-in types are lowercase: `int`, `float`, `bool`, `string`, `void`, `null`. Every other type is capitalized: `List`, `Money`, `Any`.
+
+**Names** follow TypeScript's casing:
+
+- **PascalCase:** namespaces, types, type parameters, events and enum cases.
+- **camelCase:** methods, properties, fields, parameters and locals.
+- **UPPER_SNAKE_CASE:** constants.
+
+```csharp
+namespace App.Billing;                                         // namespace
+
+public enum Status : string { case Paid = "paid"; }            // type and enum case
+
+public class Invoice<TLine : Line>                             // type and type parameter
+{
+    const MAX_LINES = 100;                                     // constant
+    List<TLine> pendingLines = [];                             // field
+    public string dueDate { get; set; }                        // property
+    public event Paid(int orderId, Money amount);              // event
+
+    public Money totalIn(string currency)                      // method and parameter
+    {
+        const lineCount = this.pendingLines.count();           // local
+        …
+    }
+}
+```
+
+Mago warns on a `.sharp` name that breaks the rule, through its existing naming lint rules and in their message shape, as in `method-name`'s "Method name `TotalIn` should be in camel case."
 
 **A type holds null only when it is written with `?`,** for parameters, return types, properties and locals alike: `Customer?` may hold null, and `Customer` never does. Section 14.4 lists the compile errors for a `?` or a null check that cannot matter.
 
@@ -1663,11 +1851,29 @@ type.attributes<Listen>();
 typeof(TItem);
 ```
 
+**`typeof(TItem)` works for any type argument, including `int`,** as C#'s `typeof(T)` does. It is a `Class<TItem>`, which can create objects, only when `TItem`'s bound is a class:
+
+```csharp
+public TItem make<TItem : Element>(string key)
+{
+    const type = typeof(TItem);
+    return new (type)(key);                                      // compiles: TItem's bound is a class
+}
+
+public void log<TItem>(TItem value) { Log.info("type", ["class": typeof(TItem)]); }   // compiles, also when TItem is int
+
+public TItem blank<TItem>()
+{
+    const type = typeof(TItem);
+    return new (type)();                                         // compile error: TItem's bound is not a class
+}
+```
+
 **`typeof(value)` gives an object's class.** For a value of type `T`, it is typed `Class<T>` and holds the object's runtime class, which may be a subclass of `T`. Plain PHP receives the class-name string. It replaces PHP's `$order::class` and `get_class($order)`.
 
 ```csharp
 Class<Order> type = typeof(order);              // compiles: order's runtime class, which may be a subclass of Order
-const fresh = new type(id);                     // compiles: a new object of that class
+const fresh = new (type)(id);                   // compiles: a new object of that class
 Log.info("saved", ["class": typeof(order)]);    // compiles; runs: plain PHP receives the class-name string
 ```
 
@@ -1691,7 +1897,7 @@ public class FormBuilder
     public Element make(string kind, string key)
     {
         const type = this.elements[kind] ?? throw new UnknownElement(kind);   // Class<Element>, with no type written
-        return new type(key);                                                  // compiles: Element's constructor is required
+        return new (type)(key);                                                // compiles: Element's constructor is required
     }
 
     public string tagFor(string kind)
@@ -1704,7 +1910,7 @@ public class FormBuilder
 }
 ```
 
-- **`new type(…)`** needs a `required` constructor, as `new Self(…)` does. For a plain PHP class, such as `Class<Model>`, the checker checks the call against that class's own constructor.
+- **`new (type)(…)`** creates an object from a class value. The parentheses around `type` mark it as an expression, not a class name. It needs a `required` constructor, as `new Self(…)` does. For a plain PHP class, such as `Class<Model>`, the checker checks the call against that class's own constructor.
 - **A static call through a class value,** such as `type.defaultTag()` or `type.find(id)`, calls the static on the class the value holds.
 - **`Class`'s own members win,** such as `attributes`. A class cannot declare a static named like one of them, as in TypeScript's error 2699.
 - **A class value's type need not be written.** `const type = …` holds a `Class<Element>`, because the checker's types reach the running program (section 27).
@@ -1713,8 +1919,24 @@ public class FormBuilder
 ```csharp
 type.attributes<Listen>();                       // Class's own method
 public static string attributes() => "";         // compile error: attributes is a member of Class
-new kind(key);                                   // compile error: kind is a string, not a Class
+new (kind)(key);                                 // compile error: kind is a string, not a Class
 order.getAttribute(column);                      // compiles: Eloquent's API replaces $order->$column
+```
+
+**A class value of a generic class can carry its type arguments or leave them out,** as in C#. `typeof(PaginatedList<Order>)` is a `Class<PaginatedList<Order>>`, and `new (pages)()` creates a `PaginatedList<Order>`. A `Class<PaginatedList>` leaves them out, so `new` names them: `new (any)<Order>()`. `new (any)()` on an open generic class is a compile error.
+
+```csharp
+public class Pages
+{
+    public PaginatedList<Order> fresh()
+    {
+        Class<PaginatedList<Order>> pages = typeof(PaginatedList<Order>);
+        return new (pages)();                                    // compiles: a PaginatedList<Order>
+    }
+
+    public PaginatedList<Order> ofOrders(Class<PaginatedList> any) => new (any)<Order>();   // compiles: a PaginatedList<Order>
+    public Any open(Class<PaginatedList> any) => new (any)();                              // compile error: PaginatedList is generic, so new names its type arguments
+}
 ```
 
 **`Self`** means the class a static method was actually called on. It replaces PHP's `static`. PHP's `self` is removed: to mean the declaring class, write its name.
@@ -1849,11 +2071,12 @@ project/
 ├── app/Orders/Order.sharp
 ├── app/Orders/LegacyExport.php             <- plain PHP: never compiled, runs as today
 ├── vendor/acme/money/src/Money.sharp       <- vendor is never written to
-└── .sharp/                                 <- the only folder mago compile writes; add it to .gitignore
+└── .sharp/                                 <- generated by mago compile; add it to .gitignore
     ├── app/Orders/Order.sharpc
     └── vendor/acme/money/src/Money.sharpc
 ```
 
+- **`mago compile` writes `.sharp/`, and it also creates a missing `.lean` file beside a class that has a law** (section 28.1). It never rewrites an existing one.
 - **The engine finds `.sharp/`** by walking up from the source file, as git finds `.git`. Nothing needs configuring.
 - **The engine runs a `.sharp` file only from its current `.sharpc` file.** A missing, stale or mismatched one is refused, and the refusal names the fix:
 
@@ -1861,11 +2084,19 @@ project/
 app/Orders/Order.sharp isn't compiled. Run vendor/bin/mago compile.
 app/Orders/Order.sharp is out of date (app/Shared/Money.sharp changed). Run vendor/bin/mago compile.
 app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mago-sharp release that matches this engine.
+
+app/Orders/Order.sharp has 1 error:
+line 12: Invalid return type for method `Order.total`: expected `int`, but found `string`.
+
+app/Orders/Order.sharp has 3 errors:
+line 12: Invalid return type for method `Order.total`: expected `int`, but found `string`.
+line 19: …
+line 31: …
 ```
 
-- **In development,** the `php.ini` setting `sharp.compile_command` lets the engine compile a stale file on demand before it runs, instead of refusing it.
+- **In development,** the `php.ini` setting `sharp.compile_command` lets the engine compile a stale file on demand before it runs, instead of refusing it. When the checker refuses the file it just compiled, the refusal lists every error in the file in line order, each on its own line with its line number.
 - **A deploy** runs `vendor/bin/mago compile` and ships `.sharp/` with the code.
-- **A type error, or a broken structure rule (section 28), stops the file from running.** A rules file that fails to prove stops every `.sharp` file in its namespace.
+- **A type error, or a broken structure rule (section 28), stops the file from running.** So does a law without a proof, a gap, or a proof whose law was deleted, each a compile error that names it.
 - **A rule that reads the whole project's structure can lag in development** until the next full compile. At deploy, `mago compile` checks every rule exactly.
 
 ## 28. Verification
@@ -1873,51 +2104,108 @@ app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mag
 The checker verifies two kinds of facts before code runs:
 
 - **Structure:** what code may depend on and do. Visibility and effects belong to the language. Code-shape and style rules stay plugins in the checker.
-- **Values:** facts the code guarantees, written as laws with hand-written proofs, as in Bend, Lean and Agda.
+- **Values:** facts the code guarantees, written as laws with proofs, as in Bend, Lean and Agda.
 
-Both kinds are written in Lean 4 and checked by Lean. Laws and rules never sit in a `.sharp` file.
+**A class states its laws in PHP#,** with `law`. A law's parameters range over every possible value. Its proofs go in a Lean file of the same name beside it, `Money.lean` beside `Money.sharp`, written in Lean 4 and checked by Lean. Bend 2 splits claims from proofs the same way, into `LAWS.bend` and `PROOF.bend`.
 
-**Rules gate running.** A broken structure rule stops the code that breaks it from running, as a type error does, and a rules file that fails to prove stops every `.sharp` file in its namespace (section 27).
+```csharp
+// app/Shared/Money.sharp
+namespace App.Shared;
+
+public class Money
+{
+    public Money(public int amount { get; }, public string currency { get; }) { }
+    public Money add(Money other) => new Money(this.amount + other.amount, this.currency);
+
+    law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;
+}
+```
+
+**A module states laws that span its classes** in `Module.sharp` (section 32). Their proofs, and the namespace's structure rules, go in `Module.lean` in the same folder. Both files are optional.
+
+```csharp
+// app/Tenant/Store/Module.sharp
+namespace App.Tenant.Store;
+
+module
+{
+    law receiptMatchesRefunds(int paid, int refunded) => Receipts.refundable(paid, refunded) == Refunds.remaining(paid, refunded);
+}
+```
+
+**Rules and laws gate running.** A broken structure rule stops the code that breaks it from running, as a type error does. A law without a proof, a gap, or a proof whose law was deleted is a compile error that names it (section 27).
 
 **Laws hold only over pure code** (section 29). The checker translates pure PHP# code to Lean, and Lean's kernel checks the proofs. Bend's `--verdict` mode and Aeneas, which translates Rust to Lean, work the same way.
 
+**A state machine gets its laws through a pure transition method on its status enum,** so a law covers every state and event:
+
+```csharp
+public enum Status : string
+{
+    case Open = "open";
+    case Paid = "paid";
+    case Refunded = "refunded";
+
+    public Status after(Payment e) => match (this) { … };                          // pure: the next status for every status and event
+    law refundedIsFinal(Payment e) => Status.Refunded.after(e) == Status.Refunded;
+}
+```
+
 **Structure rules are checks that Lean runs.** The checker loads the code's structure, meaning its namespaces, imports and references, as data, and Lean runs each rule over it like a function. A broken rule reports every offending line. Laws, which cover every possible value, stay theorems proved by Lean's kernel. A structure rule only scans the facts that exist, where a kernel proof gives the same answer far more slowly. Structure rules replace architecture linters such as a Mago module-boundary rule, the way CodeQL queries and Mathlib's `#lint` checks do.
 
-### 28.1 Rules files
+### 28.1 Lean files
 
-Each namespace may have one rules file: a `.lean` file named after the namespace, placed beside its folder. Lean projects lay files out the same way, as with `Mathlib/Order.lean` beside `Mathlib/Order/`.
+A class's proofs sit in a Lean file of the same name beside it. A namespace's module laws, their proofs and its structure rules sit in `Module.sharp` and `Module.lean` in its folder.
 
 ```text
-app/Tenant/
-├── Store.lean           <- Lean module App.Tenant.Store: every rule and law about this namespace
-└── Store/
+app/
+├── Module.lean                  <- structure rules about the whole application
+├── Shared/
+│   ├── Module.lean              <- App.Shared's structure rules, such as "Shared never reaches Tenant"
+│   ├── Money.sharp              <- states the law addKeepsCurrency
+│   └── Money.lean               <- proves addKeepsCurrency
+└── Tenant/Store/
+    ├── Module.sharp             <- the module (section 32), and the law receiptMatchesRefunds
+    ├── Module.lean              <- proves receiptMatchesRefunds, and holds App.Tenant.Store's structure rules
+    ├── Receipts.sharp
     ├── Refunds.sharp
     └── StoreService.sharp
 ```
 
-```lean
--- app/Tenant/Store.lean
-@[rule] def requires : Rule :=
-  Sharp.importsOf "App.Tenant.Store" ⊆ ["App.Tenant.Community", "App.Shared.Schema"]
+The checker created `Money.lean` and appended the proof `simp` found:
 
-theorem refundNeverExceedsPaid (paid refunded amount : Int)
-    (h1 : refunded ≤ paid) (h2 : amount ≤ App.Tenant.Store.Refunds.remaining paid refunded) :
-    refunded + amount ≤ paid := by
-  unfold App.Tenant.Store.Refunds.remaining at h2
-  omega
+```lean
+-- app/Shared/Money.lean
+import Code.App.Shared.Money
+open Sharp
+
+theorem addKeepsCurrency : App.Shared.Money.addKeepsCurrency := by
+  simp [App.Shared.Money.addKeepsCurrency, App.Shared.Money.add]
 ```
 
-- **Rules files are optional.** A namespace without one has no rules beyond the language's own.
-- **A rule lives with the namespace it constrains.** "Shared never reaches Tenant" goes in `App/Shared.lean`. A rule about the whole application goes in `App.lean`.
+`app/Tenant/Store/Module.lean` proves the module law. It imports `Code.App.Tenant.Store.Module` because `Module.sharp` states a law. The same file also holds the namespace's structure rule: "`App.Tenant.Store` imports only `App.Tenant.Community` and `App.Shared.Schema`."
+
+```lean
+-- app/Tenant/Store/Module.lean
+import Code.App.Tenant.Store.Module
+open Sharp
+
+theorem receiptMatchesRefunds : App.Tenant.Store.Module.receiptMatchesRefunds := by
+  simp [App.Tenant.Store.Module.receiptMatchesRefunds, App.Tenant.Store.Receipts.refundable, App.Tenant.Store.Refunds.remaining]
+```
+
+- **The checker generates the Lean translation of pure code and the Lean statement of each law into `.sharp/`,** never into the source tree.
+- **A law's generated Lean statement is named by its class's full name and the law's name,** as in `App.Shared.Money.addKeepsCurrency`. A module law's is named by its namespace, `Module` and the law's name, as in `App.Tenant.Store.Module.receiptMatchesRefunds`.
+- **When a class or module has a law and no Lean file, the checker creates the file.** For each new law, it appends a proof found by Lean's automatic steps (`simp`, `omega`, `decide`), or a marked gap when none is found. It never rewrites a proof that exists.
+- **A law without a proof, a gap, or a proof whose law was deleted is a compile error that names it.**
+- **A rule lives with the namespace it constrains.** "Shared never reaches Tenant" goes in `app/Shared/Module.lean`. A rule about the whole application goes in `app/Module.lean`.
 - **Names match exactly.** Translated code keeps its PHP# names in Lean, with no prefix.
 - **A failed rule is reported on the code that breaks it,** such as the offending `import` line, not only as a failed theorem.
 - **The editor shows,** above each method, the laws that mention it.
 
-**Open:** the API of the generated structure module (`Sharp.importsOf` and the rest).
-
 ## 29. Effects
 
-An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities, which Scala 3, Effekt and Pony also use. It also records every call into plain PHP, whose effect an `extern` declaration states.
+An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities, which Scala 3, Effekt and Pony also use. It also records every call into plain PHP, whose effect an `extern` declaration states, and every `emit`, which raises an event and has the effect `Events` (section 15).
 
 **Any PHP# code may call plain PHP,** including Laravel's facades, helpers and model methods, and PHP's built-in functions the standard library does not wrap yet (section 8). Most libraries are plain PHP, so this is how PHP# code uses them.
 
@@ -1946,11 +2234,12 @@ extern StripeClient uses Http;
 - **An `extern` that names no effect declares the class, method or function pure,** as in `extern BigDecimal;`.
 - **Each class, method or function has at most one `extern` declaration in the whole project.** A second one is a compile error, as declaring a class twice is.
 - **A call to plain PHP with an `extern` declaration has that effect,** so it fits a `uses` that names it: `StripeClient.charges().create(…)` fits `uses Http`.
+- **An object a declared plain PHP call returns carries that call's effect,** so `StripeClient.charges()` returns an object with `Http`, and calling it fits `uses Http`. An `extern` on the returned class itself wins over the inherited effect. Kotlin treats Java's return values the same way.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
-- **PHP#'s Composer package ships the declarations for PHP's built-in functions and for Laravel.** Among PHP's built-ins, PDO is `Database`, curl is `Http`, `file_put_contents` and the other file functions are `Files`, `time()` is `Clock`, `random_int` is `Random`, and `getenv()` and PHP's other environment built-ins are `Environment`. Every other built-in function has the effect `Php` (below). In Laravel, Eloquent and `DB` are `Database`, the `Http` facade is `Http`, `Cache` is `Cache`, `Mail` is `Mail`, and `now()` and Carbon's clock reads are `Clock`.
+- **PHP#'s Composer package ships the declarations for PHP's built-in functions and for Laravel.** Among PHP's built-ins, PDO is `Database`, curl is `Http`, `printf` and `fwrite` to `STDOUT` or `STDERR` are `Console`, `file_put_contents` and every other file function are `Files`, `exit` is `Process`, `time()` is `Clock`, `random_int` is `Random`, and `getenv()` and PHP's other environment built-ins are `Environment`. Every other built-in function is declared with its own effect, or as pure. In Laravel, Eloquent and `DB` are `Database`, the `Http` facade is `Http`, `Cache` is `Cache`, `Mail` is `Mail`, and `now()` and Carbon's clock reads are `Clock`.
 - **A project declares its own libraries,** conventionally in `app/Stubs`.
 
-**A built-in function the standard library has not classified has the effect `Php`,** which means "calls PHP code the checker cannot see into". When the standard library wraps a function, its real effect replaces `Php`, as `Environment` does for `getenv()`. Other families get theirs as each is wrapped. Pure code cannot call a function with `Php`. Printing and `exit` have `Php` until the standard library wraps them.
+**Every built-in function has a declaration, so its effect is always known.** `Console` covers standard output and standard error, which includes `printf` and `fwrite(STDOUT, …)` or `fwrite(STDERR, …)`. `Files` covers every other file. `Process` covers `exit`.
 
 ```csharp
 public interface Formatter
@@ -1961,14 +2250,14 @@ public interface Formatter
 public class Visitor
 {
     public string greet(string name) => "Hello, " + name.trim();    // pure: trim is a standard-library method
-    public void remember(string token) { setcookie("t", token); }   // has Php: setcookie is not classified yet
+    public void remember(string token) { file_put_contents("seen.txt", token); }   // has Files
 }
 
-public class CookieFormatter : Formatter
+public class FileFormatter : Formatter
 {
     public string format(string name)
     {
-        setcookie("seen", name);                                    // compile error: format must be pure, and setcookie has the effect Php
+        file_put_contents("seen.txt", name);                        // compile error: format must be pure, and file_put_contents has the effect Files
         return name;
     }
 }
@@ -2000,13 +2289,16 @@ public foreign class RedisStore
 }
 ```
 
-The standard library ships `Database`, `Http`, `Files`, `Clock`, `Random`, `Cache`, `Mail` and `Environment`. A project declares its own `foreign` classes the same way.
+The standard library ships `Database`, `Http`, `Files`, `Console`, `Process`, `Clock`, `Random`, `Cache`, `Mail` and `Environment`. A project declares its own `foreign` classes the same way.
+
+**`Events` is the effect of `emit`** (section 15). It is the one standard effect that is not a `foreign` class: a method has it when its body emits, and no object carries it.
 
 **PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS` are compile errors that read "PHP# has no superglobals; take a Request". Request data arrives as an object, such as a framework's `Request`. The process environment arrives as `Environment`, a standard `foreign` class like `Clock` and `Random`:
 
 - `string? variable(string name)` reads an environment variable, or gives null when it is not set.
 - `List<string> arguments { get; }` holds the command-line arguments, starting with the script's name.
 - `string currentDirectory { get; }` is the directory the process runs in.
+- `static string require(string name)` reads an environment variable, and stops the app at startup when it is not set. A module calls it as `Environment.require("NAME")` (section 32).
 
 ```csharp
 import Illuminate.Http.Request;
@@ -2037,10 +2329,10 @@ public class TenantCache
 }
 ```
 
-- **A class's effects** are the `foreign` classes it holds, directly or through its fields, and the effects of the plain PHP its methods call. The checker works them out from field and constructor types and from method bodies. Nothing is written down.
-- **A `foreign` object** is created once, where the app starts, and handed down through constructors. Creating one anywhere else, or storing one in a static, is a compile error.
+- **A class's effects** are the `foreign` classes it holds, directly or through its fields, the effects of the plain PHP its methods call, and the events its methods emit. The checker works them out from field and constructor types and from method bodies. Nothing is written down.
+- **A `foreign` object** is created in a module (section 32), as often as its binding's lifetime decides, and handed down through constructors. Creating one anywhere else, or storing one in a static, is a compile error.
 
-**Pure code** reaches no `foreign` object, calls no plain PHP unless an `extern` declares it pure, calls no built-in function with the effect `Php`, and changes nothing it was given (section 13). Getters must be pure. Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
+**Pure code** reaches no `foreign` object, emits no event, calls no plain PHP unless an `extern` declares it pure, and changes nothing it was given (section 13). Getters must be pure. Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
 
 **Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types. Every implementation is held to what the declaration allows:
 
@@ -2080,6 +2372,20 @@ MailchimpSync.sync calls Mailchimp, which has no extern declaration, so `uses Ht
 Declare its effect in a .sharp file, such as `extern Mailchimp uses Http;`.
 ```
 
+**`uses Events` lets an implementation emit:**
+
+```csharp
+public interface Checkout
+{
+    void complete(Order order) uses Events;                                            // implementations may emit, nothing else
+}
+
+public class StoreCheckout : Checkout
+{
+    public void complete(Order order) { emit new Order.Paid(order.id, order.total); }   // fits: emit has the effect Events
+}
+```
+
 **A method that takes a function can have that function's effects.** Its declaration writes `uses f`, where `f` is one of its function-typed parameters, with or without a body. At each call, the method has its body's own effects plus the effects of the function passed as `f`. Code that calls it writes nothing.
 
 ```csharp
@@ -2095,7 +2401,7 @@ public Charge charge(Cart cart, Function<Cart(Cart)> prepare) uses prepare => th
 
 The standard library's collection methods (section 12) are declared this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
 
-**Code with a body writes no `uses` except `uses f`.** Its effects enter through the constructor, through the plain PHP it calls and through each function its `uses f` names, and its body and declaration show all three. The checker works out each method's effects, and the editor displays them.
+**Code with a body writes no `uses` except `uses f`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function its `uses f` names, and its body and declaration show all four. The checker works out each method's effects, and the editor displays them.
 
 ## 30. Tuples
 
@@ -2159,6 +2465,117 @@ public enum PaymentError : Error
 
 **Inside `.sharp` files, `Error` always means this interface.** PHP's global engine class `Error` is never named in PHP# code. Bugs are caught as `Throwable`, and engine subclasses such as `TypeError` keep their names.
 
+## 32. Modules
+
+A module says how the app builds its objects. Each namespace folder may hold `Module.sharp`, a `module { … }` declaration with no name, because the folder names it. `Module` is a reserved file name. NestJS modules have the same per-folder structure and overrides, and Dagger has the same compile-time check.
+
+**A module declares services** with `singleton`, `scoped` and `transient`:
+
+```csharp
+// app/Shop/Module.sharp
+namespace App.Shop;
+
+import App.Mail.Mailer;
+import App.Mail.SmtpMailer;
+import App.Mail.QueueMailer;
+import App.Pricing.PriceRule;
+import App.Pricing.TaxRule;
+import App.Pricing.DiscountRule;
+import App.Cache.RedisStore;
+
+module
+{
+    singleton Mailer = SmtpMailer;                                             // every class that takes a Mailer gets the SmtpMailer
+    singleton Mailer for SendReceipt = QueueMailer;                            // SendReceipt gets a QueueMailer instead
+    singleton List<PriceRule> = [TaxRule, DiscountRule];                       // a class that takes a List<PriceRule> gets both
+    singleton RedisStore = new RedisStore(Environment.require("REDIS_URL"));   // a foreign object, created here as its singleton lifetime decides
+}
+```
+
+- **A service is built only by a constructor call** whose arguments are constants, configuration values or other services. A module holds no statements, branches, loops or methods. A choice made while the app runs goes in a class that implements `Factory<T>`, which the module binds.
+- **`Environment.require("NAME")` is a static method** (section 29). It returns a `string`, and stops the app at startup when the value is missing.
+- **A module is where `foreign` objects are created** (section 29). The binding's lifetime decides how often one is created, and it reaches classes only through constructors.
+- **A module also states the laws that span its classes** (section 28).
+
+**A `scoped` lifetime is one HTTP request, one queued job or one console command run.** The host starts and ends each scope, and the `php-sharp/laravel` adapter does that for Laravel, as ASP.NET Core does for each request. Under PHP-FPM, `singleton` and `scoped` behave the same. They differ in long-running workers.
+
+**`Factory<T>` is `public interface Factory<T> { T create(); }`.** Binding a class that implements `Factory<Mailer>` to `Mailer` makes the container call `create()` each time the binding's lifetime needs a new `Mailer`, as Spring's `FactoryBean<T>` does:
+
+```csharp
+// app/Shop/MailerFactory.sharp
+namespace App.Shop;
+
+import App.Mail.Mailer;
+import App.Mail.SmtpMailer;
+import App.Mail.QueueMailer;
+import App.Flags.FeatureFlags;
+
+public class MailerFactory : Factory<Mailer>
+{
+    public MailerFactory(private FeatureFlags flags, private SmtpMailer smtp, private QueueMailer queue) { }
+    public Mailer create() => this.flags.enabled("queue-mail") ? this.queue : this.smtp;   // the choice is made while the app runs
+}
+```
+
+```csharp
+module
+{
+    scoped Mailer = MailerFactory;                                             // create() runs once per request, job or command
+}
+```
+
+```csharp
+module
+{
+    singleton Mailer = Environment.require("MAILER") == "queue" ? new QueueMailer() : new SmtpMailer();   // compile error: a service is built only by a constructor call; a choice made while the app runs goes in a Factory<Mailer>
+    singleton Mailer = TaxRule;                                                                           // compile error: TaxRule is not a Mailer
+}
+```
+
+**A nested folder's module overrides its parent's services.** A test or environment module overrides with `module : App.Shop { … }`, and the compiler checks every environment's set of services.
+
+- **An environment module is `Module.<Environment>.sharp`** beside the `Module.sharp` it overrides, such as `Module.Production.sharp`. `APP_ENV` picks it, as it picks ASP.NET Core's `appsettings.Production.json`.
+- **A test module is declared in the test file that uses it,** with the same header, as NestJS's testing module is.
+
+```csharp
+// app/Shop/Module.Production.sharp
+namespace App.Shop;
+
+import App.Mail.Mailer;
+import App.Mail.QueueMailer;
+
+module : App.Shop
+{
+    singleton Mailer = QueueMailer;                                            // in production, replaces App.Shop's SmtpMailer
+}
+```
+
+```csharp
+// tests/Shop/CheckoutTest.sharp
+namespace App.Shop;
+
+import App.Mail.Mailer;
+import Tests.Fakes.FakeMailer;
+
+module : App.Shop
+{
+    singleton Mailer = FakeMailer;                                             // the tests in this file get a FakeMailer
+}
+
+public class CheckoutTest { … }
+```
+
+**A missing or mistyped service is a compile error.** The container builds every class through its main constructor (section 9.1), including `on` listeners (section 15).
+
+```csharp
+public class Checkout
+{
+    public Checkout(private Mailer mailer, private PaymentGateway gateway) { }   // compile error when no module binds PaymentGateway
+}
+```
+
+**The container implements PSR-11.** The optional package `php-sharp/laravel` makes Laravel's container ask PHP#'s container for every PHP# class. The language never depends on Laravel.
+
 ## Undecided, in order
 
-None. The standard library's APIs are specified with the library itself: event dispatch, JSON decoding, the complete collection methods, and the generated structure module for rules files.
+None. The standard library is specified with the library itself, by the team lead.

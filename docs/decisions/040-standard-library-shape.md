@@ -2,15 +2,15 @@
 
 ## Decision
 
-The standard library lives under one root, `Sharp`, with the topic modules `Sharp.Text`, `Sharp.Math`, `Sharp.Json`, `Sharp.IO`, `Sharp.Time`, `Sharp.Net` and `Sharp.Data`. Only `Sharp` is imported by default, together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`. A static class in a topic module needs one import, such as `import Sharp.Json.Json;`.
+The standard library lives under one root, `Sharp`, with the standard library namespaces `Sharp.Text`, `Sharp.Math`, `Sharp.Json`, `Sharp.IO`, `Sharp.Time`, `Sharp.Net` and `Sharp.Data`. Only `Sharp` is imported by default, together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`. A static class in a standard library namespace needs one import, such as `import Sharp.Json.Json;`.
 
-A PHP function is reached through the type it works on, as an extension method such as `name.trim()`. Otherwise it goes through a static class in its module, such as `Math.max(a, b)`. The compiler inlines a standard-library method whose body is one call, so `name.trim()` runs as `trim($name)`. Once the standard library wraps a PHP function, calling that function from `.sharp` code outside the standard library is a compile error that names the method. Functions not wrapped yet stay callable.
+A PHP function is reached through the type it works on, as an extension method such as `name.trim()`. Otherwise it goes through a static class in its standard library namespace, such as `Math.max(a, b)`. The compiler inlines a standard-library method whose body is one call, so `name.trim()` runs as `trim($name)`. Once the standard library wraps a PHP function, calling that function from `.sharp` code outside the standard library is a compile error that names the method. Functions not wrapped yet stay callable.
 
 `extern` means "implemented outside PHP#", both for a plain PHP declaration and for a native body. A native body is written in Rust behind a C interface and compiled into the engine. Only the standard library declares native bodies. One generator writes the C header from the `.sharp` declarations, and the engine refuses to start if a declared native body is missing.
 
 ## Options
 
-### Chosen: topic modules under `Sharp`, PHP functions as inlined methods, one `extern`, native bodies in the engine
+### Chosen: standard library namespaces under `Sharp`, PHP functions as inlined methods, one `extern`, native bodies in the engine
 
 ```csharp
 import Sharp.Json.Json;
