@@ -2110,16 +2110,24 @@ app/
     └── StoreService.sharp
 ```
 
+The checker created `Money.lean` and appended the proof `simp` found:
+
 ```lean
--- app/Shared/Money.lean: the checker created the file and appended this proof, found by simp
+-- app/Shared/Money.lean
+import Code.App.Shared.Money
+open Sharp
+
 theorem addKeepsCurrency : App.Shared.Money.addKeepsCurrency := by
   simp [App.Shared.Money.addKeepsCurrency, App.Shared.Money.add]
 ```
 
-`app/Tenant/Store/Module.lean` holds the namespace's structure rule: "`App.Tenant.Store` imports only `App.Tenant.Community` and `App.Shared.Schema`." It also holds the module law's proof:
+`app/Tenant/Store/Module.lean` proves the module law. It imports `Code.App.Tenant.Store.Module` because `Module.sharp` states a law. The same file also holds the namespace's structure rule: "`App.Tenant.Store` imports only `App.Tenant.Community` and `App.Shared.Schema`."
 
 ```lean
 -- app/Tenant/Store/Module.lean
+import Code.App.Tenant.Store.Module
+open Sharp
+
 theorem receiptMatchesRefunds : App.Tenant.Store.Module.receiptMatchesRefunds := by
   simp [App.Tenant.Store.Module.receiptMatchesRefunds, App.Tenant.Store.Receipts.refundable, App.Tenant.Store.Refunds.remaining]
 ```

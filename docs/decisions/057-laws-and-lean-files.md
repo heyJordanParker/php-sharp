@@ -24,12 +24,15 @@ public class Money
 ```
 
 ```lean
--- app/Shared/Money.lean: the checker created the file and appended this proof, found by simp
+-- app/Shared/Money.lean
+import Code.App.Shared.Money
+open Sharp
+
 theorem addKeepsCurrency : App.Shared.Money.addKeepsCurrency := by
   simp [App.Shared.Money.addKeepsCurrency, App.Shared.Money.add]
 ```
 
-A PHP# developer reads what a class claims in the class itself, in PHP#. The proof sits one file away, and the checker writes the first draft of it.
+The checker created `Money.lean` and appended the proof `simp` found. A PHP# developer reads what a class claims in the class itself, in PHP#. The proof sits one file away, and the checker writes the first draft of it.
 
 ### Rejected: one rules file beside each namespace folder
 
@@ -47,6 +50,9 @@ This was the old layout, `app/Tenant/Store.lean`. Every law of a namespace colle
 
 ```lean
 -- app/Tenant/Store.lean
+import Code.App.Tenant.Store.Refunds
+open Sharp
+
 theorem refundNeverExceedsPaid (paid refunded amount : Int)
     (h1 : refunded ≤ paid) (h2 : amount ≤ App.Tenant.Store.Refunds.remaining paid refunded) :
     refunded + amount ≤ paid := by
