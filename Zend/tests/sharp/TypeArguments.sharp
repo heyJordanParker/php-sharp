@@ -29,6 +29,8 @@ public class PaginatedList<TItem : DatabaseEntity>
         const Function<PaginatedList<TItem>()> make = () => new Self(this.items);
         return make();
     }
+
+    public Function<PaginatedList<TItem>()> maker() => () => new Self([]);
 }
 
 public class OrderPage : PaginatedList<Order>

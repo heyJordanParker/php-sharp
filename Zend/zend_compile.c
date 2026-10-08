@@ -5508,6 +5508,10 @@ static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_a
 			opline->op2_type = IS_CONST;
 			opline->op2.constant = zend_add_literal_string(&text);
 			opline->extended_value = zend_alloc_cache_slot();
+		} else {
+			/* `new Self` reads this's type arguments, so a closure around it keeps its this, as one reading $this
+			 * does. */
+			CG(active_op_array)->fn_flags |= ZEND_ACC_USES_THIS;
 		}
 	}
 

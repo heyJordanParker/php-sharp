@@ -34,6 +34,9 @@ var_dump(arguments(clone new App\PaginatedList([])));
 echo "new Self in a lambda\n";
 $copy = Queue::orders()->copyLater();
 var_dump($copy::class, arguments($copy));
+// The lambda reads this's type arguments, so it uses this, and PHP refuses to unbind it.
+$maker = Closure::bind(Queue::orders()->maker(), null, App\Order::class);
+var_dump($maker === null ? null : $maker());
 
 echo "lazy objects\n";
 $class = new ReflectionClass(App\PaginatedList::class);
@@ -74,7 +77,7 @@ Queue::entities()->copy();
 Queue::page();
 Lib\Witness::$look = null;
 ?>
---EXPECT--
+--EXPECTF--
 new
 array(1) {
   [0]=>
@@ -130,6 +133,9 @@ array(1) {
   [0]=>
   string(9) "App.Order"
 }
+
+Warning: Cannot unbind $this of closure using $this, this will be an error in PHP 9 in %s on line %d
+NULL
 lazy objects
 array(1) {
   [0]=>
