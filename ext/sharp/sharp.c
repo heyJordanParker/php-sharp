@@ -1763,13 +1763,11 @@ static const sharp_type *sharp_type_bounds(const zend_class_entry *ce, const zen
 	return list;
 }
 
-const sharp_type *sharp_type_arguments(zend_object *object)
+const sharp_type *sharp_type_arguments_of_slot(zend_object *object)
 {
 	const zend_property_info *slot = sharp_type_arguments_slot(object->ce);
 
-	if (!slot) {
-		return NULL;
-	}
+	ZEND_ASSERT(slot != NULL);
 
 	zval *value = OBJ_PROP(object, slot->offset);
 	if (Z_TYPE_P(value) == IS_PTR) {

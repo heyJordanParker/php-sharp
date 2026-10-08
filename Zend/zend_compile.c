@@ -5540,6 +5540,7 @@ static void zend_compile_sharp_type_args_slot(zend_ast *ast)
 	ZVAL_STR_COPY(&bounds, zend_sharp_type_text(ast->child[1]));
 	zend_declare_typed_property(CG(active_class_entry), sharp_type_arguments_key, &bounds,
 		ZEND_ACC_PUBLIC | ZEND_ACC_SHARP_HIDDEN, NULL, (zend_type) ZEND_TYPE_INIT_NONE(0));
+	CG(active_class_entry)->ce_flags |= ZEND_ACC_SHARP_GENERIC;
 }
 
 static void zend_compile_global_var(zend_ast *ast) /* {{{ */

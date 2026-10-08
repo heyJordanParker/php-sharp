@@ -279,7 +279,7 @@ typedef struct _zend_oparray_context {
 /* which no view of the object shows, see ext/sharp       |     |     |     */
 #define ZEND_ACC_SHARP_HIDDEN            (1 << 13) /*     |     |  X  |     */
 /*                                                        |     |     |     */
-/* Class Flags (unused: 31)                               |     |     |     */
+/* Class Flags (unused: none)                             |     |     |     */
 /* ===========                                            |     |     |     */
 /*                                                        |     |     |     */
 /* Special class types                                    |     |     |     */
@@ -344,6 +344,10 @@ typedef struct _zend_oparray_context {
 /*                                                        |     |     |     */
 /* Class cannot be serialized or unserialized             |     |     |     */
 #define ZEND_ACC_NOT_SERIALIZABLE        (1 << 29) /*  X  |     |     |     */
+/*                                                        |     |     |     */
+/* PHP#: the class declares the hidden slot of its        |     |     |     */
+/* objects' type arguments, see ext/sharp                 |     |     |     */
+#define ZEND_ACC_SHARP_GENERIC           (1U << 31) /* X  |     |     |     */
 /*                                                        |     |     |     */
 /* Function Flags (unused: 30)                            |     |     |     */
 /* ==============                                         |     |     |     */
@@ -1159,6 +1163,10 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  *
  * ZEND_ACC_SHARP_HIDDEN: the hidden slot an object of a generic PHP# class keeps its type arguments in.
  *   flags of zend_property_info                               upstream: the ZEND_ACC_* property flags
+ *
+ * ZEND_ACC_SHARP_GENERIC: the class declares that hidden slot, so == and serialize read type arguments only
+ * from objects of such a class. Inheritance never copies it.
+ *   ce_flags of zend_class_entry                              upstream: the ZEND_ACC_* class flags
  */
 #define ZEND_SHARP_OPERATOR_SYNTAX	(1<<15)
 #define ZEND_SHARP_OPERATOR	(1<<30)
@@ -1183,6 +1191,15 @@ ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_HIDDEN & (ZEND_ACC_PPP_MASK|ZEND_ACC_PPP_SET
 		|ZEND_ACC_FINAL|ZEND_ACC_ABSTRACT|ZEND_ACC_READONLY|ZEND_ACC_PROMOTED|ZEND_ACC_VIRTUAL|ZEND_ACC_DEPRECATED
 		|ZEND_ACC_OVERRIDE)),
 	"ZEND_ACC_SHARP_HIDDEN overlaps a ZEND_ACC_* flag in the flags of zend_property_info");
+ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_GENERIC & (ZEND_ACC_INTERFACE|ZEND_ACC_TRAIT|ZEND_ACC_ANON_CLASS|ZEND_ACC_LINKED
+		|ZEND_ACC_IMPLICIT_ABSTRACT_CLASS|ZEND_ACC_FINAL|ZEND_ACC_EXPLICIT_ABSTRACT_CLASS|ZEND_ACC_IMMUTABLE
+		|ZEND_ACC_HAS_TYPE_HINTS|ZEND_ACC_TOP_LEVEL|ZEND_ACC_PRELOADED|ZEND_ACC_DEPRECATED|ZEND_ACC_CONSTANTS_UPDATED
+		|ZEND_ACC_NO_DYNAMIC_PROPERTIES|ZEND_HAS_STATIC_IN_METHODS|ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES
+		|ZEND_ACC_READONLY_CLASS|ZEND_ACC_RESOLVED_PARENT|ZEND_ACC_RESOLVED_INTERFACES|ZEND_ACC_UNRESOLVED_VARIANCE
+		|ZEND_ACC_NEARLY_LINKED|ZEND_ACC_HAS_READONLY_PROPS|ZEND_ACC_CACHED|ZEND_ACC_CACHEABLE|ZEND_ACC_HAS_AST_CONSTANTS
+		|ZEND_ACC_HAS_AST_PROPERTIES|ZEND_ACC_HAS_AST_STATICS|ZEND_ACC_FILE_CACHED|ZEND_ACC_ENUM
+		|ZEND_ACC_NOT_SERIALIZABLE|ZEND_ACC_USE_GUARDS)),
+	"ZEND_ACC_SHARP_GENERIC overlaps a ZEND_ACC_* flag in the ce_flags of zend_class_entry");
 
 static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 {

@@ -49,9 +49,16 @@ const sharp_type *sharp_type_list(const char *text, size_t length);
  * IS_PTR of an interned list. The name is also the key serialize writes the list under. */
 extern zend_string *sharp_type_arguments_key;
 
-/* The type arguments of `object`, NULL when its class declares no type parameter. The first read of an object plain
- * PHP created interns its class's bounds. */
-const sharp_type *sharp_type_arguments(zend_object *object);
+/* The type arguments of `object`, whose class carries ZEND_ACC_SHARP_GENERIC. The first read of an object plain PHP
+ * created interns its class's bounds. */
+const sharp_type *sharp_type_arguments_of_slot(zend_object *object);
+
+/* The type arguments of `object`, NULL when its class declares no type parameter. An object of a plain PHP class costs
+ * one flag test. */
+static zend_always_inline const sharp_type *sharp_type_arguments(zend_object *object)
+{
+	return UNEXPECTED(object->ce->ce_flags & ZEND_ACC_SHARP_GENERIC) ? sharp_type_arguments_of_slot(object) : NULL;
+}
 
 /* Stores `arguments` in the slot of `object`, whose class declares one. */
 void sharp_type_arguments_store(zend_object *object, const sharp_type *arguments);
