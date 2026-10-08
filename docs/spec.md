@@ -2116,11 +2116,10 @@ theorem addKeepsCurrency : App.Shared.Money.addKeepsCurrency := by
   simp [App.Shared.Money.addKeepsCurrency, App.Shared.Money.add]
 ```
 
+`app/Tenant/Store/Module.lean` holds the namespace's structure rule: "`App.Tenant.Store` imports only `App.Tenant.Community` and `App.Shared.Schema`." It also holds the module law's proof:
+
 ```lean
 -- app/Tenant/Store/Module.lean
-@[rule] def requires : Rule :=
-  Sharp.importsOf "App.Tenant.Store" ⊆ ["App.Tenant.Community", "App.Shared.Schema"]
-
 theorem receiptMatchesRefunds : App.Tenant.Store.Module.receiptMatchesRefunds := by
   simp [App.Tenant.Store.Module.receiptMatchesRefunds, App.Tenant.Store.Receipts.refundable, App.Tenant.Store.Refunds.remaining]
 ```
