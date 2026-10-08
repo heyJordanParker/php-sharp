@@ -49,19 +49,12 @@ const sharp_type *sharp_type_list(const char *text, size_t length);
  * IS_PTR of an interned list. The name is also the key serialize writes the list under. */
 extern zend_string *sharp_type_arguments_key;
 
-/* The hidden slot `ce` itself declares, NULL when it declares none: a class without type parameters inherits its
- * parent's slot and never fills it. */
-const zend_property_info *sharp_type_arguments_slot(const zend_class_entry *ce);
-
 /* The type arguments of `object`, NULL when its class declares no type parameter. The first read of an object plain
  * PHP created interns its class's bounds. */
 const sharp_type *sharp_type_arguments(zend_object *object);
 
 /* Stores `arguments` in the slot of `object`, whose class declares one. */
 void sharp_type_arguments_store(zend_object *object, const sharp_type *arguments);
-
-/* Whether `a` and `b`, objects of one class, have equal type arguments. */
-bool sharp_type_arguments_equal(zend_object *a, zend_object *b);
 
 /* Gives `object` the type arguments `text` spells, from serialized data. Fails, with nothing stored, when `object`
  * has no slot, `text` spells no list of as many arguments as its class has type parameters, or a class it names

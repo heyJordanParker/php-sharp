@@ -2299,8 +2299,8 @@ ZEND_API int zend_std_compare_objects(zval *o1, zval *o2) /* {{{ */
 	if (zobj1->ce != zobj2->ce) {
 		return ZEND_UNCOMPARABLE; /* different classes */
 	}
-	/* PHP#: objects with different type arguments are uncomparable too. */
-	if (!sharp_type_arguments_equal(zobj1, zobj2)) {
+	/* PHP#: objects with different type arguments are uncomparable too. Equal types are one interned pointer. */
+	if (sharp_type_arguments(zobj1) != sharp_type_arguments(zobj2)) {
 		return ZEND_UNCOMPARABLE;
 	}
 	if (!zobj1->properties && !zobj2->properties

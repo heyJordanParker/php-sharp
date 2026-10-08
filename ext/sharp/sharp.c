@@ -1743,7 +1743,9 @@ const sharp_type *sharp_type_list(const char *text, size_t length)
 	return list;
 }
 
-const zend_property_info *sharp_type_arguments_slot(const zend_class_entry *ce)
+/* The hidden slot `ce` itself declares, NULL when it declares none: a class without type parameters inherits its
+ * parent's slot and never fills it. */
+static const zend_property_info *sharp_type_arguments_slot(const zend_class_entry *ce)
 {
 	const zend_property_info *slot = zend_hash_find_ptr(&ce->properties_info, sharp_type_arguments_key);
 
@@ -1794,13 +1796,6 @@ void sharp_type_arguments_store(zend_object *object, const sharp_type *arguments
 	value = OBJ_PROP(object, slot->offset);
 	zval_ptr_dtor(value);
 	ZVAL_PTR(value, (void *) arguments);
-}
-
-bool sharp_type_arguments_equal(zend_object *a, zend_object *b)
-{
-	ZEND_ASSERT(a->ce == b->ce);
-
-	return sharp_type_arguments(a) == sharp_type_arguments(b);
 }
 
 /* Whether every class `type` names loads. */
