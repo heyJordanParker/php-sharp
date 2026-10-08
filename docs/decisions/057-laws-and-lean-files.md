@@ -50,9 +50,6 @@ This was the old layout, `app/Tenant/Store.lean`. Every law of a namespace colle
 
 ```lean
 -- app/Tenant/Store.lean
-import Code.App.Tenant.Store.Refunds
-open Sharp
-
 theorem refundNeverExceedsPaid (paid refunded amount : Int)
     (h1 : refunded ≤ paid) (h2 : amount ≤ App.Tenant.Store.Refunds.remaining paid refunded) :
     refunded + amount ≤ paid := by
