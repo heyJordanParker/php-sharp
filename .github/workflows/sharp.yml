@@ -97,7 +97,7 @@ jobs:
           git -C "$mago" fetch --quiet --depth=1 https://github.com/heyJordanParker/mago-sharp "${{ steps.mago.outputs.rev }}"
           git -C "$mago" checkout --quiet FETCH_HEAD
           sharp/docker/run php "$mago/scripts/regen-sharp-kinds.php" Zend/zend_ast.h | diff -u "$mago/crates/sharp-bridge/src/kind.rs" -
-          sharp/docker/run sh -c "cd $mago && \"\$(rustup which cargo)\" build --locked -p mago-sharp-bridge --message-format=json" > "$RUNNER_TEMP/build.json"
+          sharp/docker/run sh -c 'cargo="$(cd ext/sharp && rustup which cargo)" && cd "$1" && PATH="$(dirname "$cargo"):$PATH" "$cargo" build --locked -p mago-sharp-bridge --message-format=json' sh "$mago" > "$RUNNER_TEMP/build.json"
           header="$(jq -r 'select(.reason == "build-script-executed" and (.package_id | contains("mago-sharp-bridge"))) | .out_dir | ltrimstr("/src/")' "$RUNNER_TEMP/build.json")/sharp_unit.h"
           diff -u ext/sharp/sharp_unit.h "$header"
   MACOS:
