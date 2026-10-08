@@ -1185,12 +1185,18 @@ again:
 						return;
 					}
 
+					/* PHP#: the engine writes the type arguments, so a copy of their key in the array gives way. */
 					const sharp_type *type_arguments = sharp_type_arguments(Z_OBJ(obj));
+					bool returned_key = type_arguments && zend_hash_exists(Z_ARRVAL(retval), sharp_type_arguments_key);
 
 					php_var_serialize_class_name(buf, &obj);
-					smart_str_append_unsigned(buf, zend_hash_num_elements(Z_ARRVAL(retval)) + (type_arguments != NULL));
+					smart_str_append_unsigned(
+						buf, zend_hash_num_elements(Z_ARRVAL(retval)) - returned_key + (type_arguments != NULL));
 					smart_str_appendl(buf, ":{", 2);
 					ZEND_HASH_FOREACH_KEY_VAL(Z_ARRVAL(retval), index, key, data) {
+						if (returned_key && key && zend_string_equals(key, sharp_type_arguments_key)) {
+							continue;
+						}
 						if (!key) {
 							php_var_serialize_long(buf, index);
 						} else {

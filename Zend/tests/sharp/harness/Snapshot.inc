@@ -5,13 +5,16 @@ namespace Lib;
 /** A parent that serializes its objects through `__serialize`, and keeps the data its `__unserialize` gets. */
 abstract class Snapshot
 {
+    /** @var array<string, mixed> */
+    public static array $serialized = ['kept' => true];
+
     /** @var array<array-key, mixed> */
     public static array $restored = [];
 
     /** @return array<string, mixed> */
     public function __serialize(): array
     {
-        return ['kept' => true];
+        return self::$serialized;
     }
 
     /** @param array<array-key, mixed> $data */

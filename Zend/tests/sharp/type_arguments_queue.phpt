@@ -21,6 +21,12 @@ show($queued);
 $run = unserialize($queued);
 echo get_class($run), '<', implode(', ', arguments($run)), ">\n";
 var_dump(Lib\Snapshot::$restored);
+// A __serialize array that holds the key itself gets the engine's key once.
+Lib\Snapshot::$serialized = ['kept' => true, "\0<sharp>\0types" => 'int'];
+$queued = serialize(Queue::ledger());
+show($queued);
+echo get_class(unserialize($queued)), '<', implode(', ', arguments(unserialize($queued))), ">\n";
+Lib\Snapshot::$serialized = ['kept' => true];
 
 echo "the __sleep form\n";
 // Journal inherits __sleep from Lib\Sleeper, which names only entries.
@@ -68,6 +74,8 @@ array(1) {
   ["kept"]=>
   bool(true)
 }
+O:10:"App\Ledger":2:{s:4:"kept";b:1;s:14:"\0<sharp>\0types";s:9:"App.Order";}
+App\Ledger<App.Order>
 the __sleep form
 O:11:"App\Journal":2:{s:7:"entries";a:0:{}s:14:"\0<sharp>\0types";s:9:"App.Order";}
 App\Journal<App.Order>
