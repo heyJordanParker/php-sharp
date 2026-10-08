@@ -1716,8 +1716,10 @@ void zend_build_properties_info_table(zend_class_entry *ce)
 	}
 
 	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&ce->properties_info, zend_string *key, prop) {
+		/* PHP#: the slot that keeps an object's type arguments is never one of its properties, so no walk of this
+		 * table sees it, and a lazy object never makes it lazy. */
 		if (prop->ce == ce && (prop->flags & ZEND_ACC_STATIC) == 0
-		 && !(prop->flags & ZEND_ACC_VIRTUAL)) {
+		 && !(prop->flags & (ZEND_ACC_VIRTUAL|ZEND_ACC_SHARP_HIDDEN))) {
 			const zend_property_info *root_prop = prop->prototype;
 			if (UNEXPECTED(root_prop->flags & ZEND_ACC_VIRTUAL)) {
 				/* Prototype is virtual, we need to manually hunt down the first backed property. */

@@ -86,8 +86,7 @@ ZEND_API HashTable *rebuild_object_properties_internal(zend_object *zobj) /* {{{
 			for (i = 0; i < ce->default_properties_count; i++) {
 				prop_info = ce->properties_info_table[i];
 
-				/* PHP#: the slot that keeps an object's type arguments is never one of its properties. */
-				if (!prop_info || UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_HIDDEN)) {
+				if (!prop_info) {
 					continue;
 				}
 
@@ -122,8 +121,7 @@ ZEND_API HashTable *zend_std_build_object_properties_array(zend_object *zobj) /*
 		for (i = 0; i < ce->default_properties_count; i++) {
 			prop_info = ce->properties_info_table[i];
 
-			/* PHP#: the slot that keeps an object's type arguments is never one of its properties. */
-			if (!prop_info || UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_HIDDEN)) {
+			if (!prop_info) {
 				continue;
 			}
 
@@ -2332,8 +2330,7 @@ ZEND_API int zend_std_compare_objects(zval *o1, zval *o2) /* {{{ */
 
 			info = zobj1->ce->properties_info_table[i];
 
-			/* PHP#: the type arguments compared above. */
-			if (!info || UNEXPECTED(info->flags & ZEND_ACC_SHARP_HIDDEN)) {
+			if (!info) {
 				continue;
 			}
 

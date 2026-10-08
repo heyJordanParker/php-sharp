@@ -1765,6 +1765,14 @@ static const sharp_type *sharp_type_bounds(const zend_class_entry *ce, const zen
 
 const sharp_type *sharp_type_arguments_of_slot(zend_object *object)
 {
+	/* A lazy proxy has the type arguments of its real instance, which it initializes first, as == and serialize do.
+	 * NULL with an exception when the initializer fails. */
+	if (UNEXPECTED(zend_object_is_lazy_proxy(object))) {
+		zend_object *instance = zend_lazy_object_init(object);
+
+		return instance ? sharp_type_arguments(instance) : NULL;
+	}
+
 	const zend_property_info *slot = sharp_type_arguments_slot(object->ce);
 
 	ZEND_ASSERT(slot != NULL);
@@ -1774,8 +1782,8 @@ const sharp_type *sharp_type_arguments_of_slot(zend_object *object)
 		return Z_PTR_P(value);
 	}
 
-	/* Plain PHP created the object, so its slot holds its class's bounds as a type text, or is UNDEF while the object
-	 * is lazy. */
+	/* Plain PHP created the object, so its slot holds its class's bounds as a type text, or is UNDEF when the object
+	 * was created lazy. */
 	const sharp_type *bounds = sharp_type_bounds(object->ce, slot);
 	if (Z_TYPE_P(value) == IS_STRING) {
 		zval_ptr_dtor_str(value);
