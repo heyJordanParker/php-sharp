@@ -49,6 +49,11 @@ $fixtures = [
     'Signatures' => null,
     'Accessors' => null,
     'Parcel' => 'harness/Row.inc',
+    'Exits' => null,
+    'Positions' => null,
+    'Deploy' => null,
+    'Tags' => null,
+    'PhpForms' => null,
 ];
 $user_class = '/(?:Class|Enum) \[ <user> /';
 
@@ -182,3 +187,8 @@ Parcel: different opcodes and lines in 3 op arrays, same signatures in 1 classes
   .sharp 0000 DECLARE_CLASS string("store\\parcel")
   .php   L0005 0000 DECLARE_CLASS string("store\\parcel") string("lib\\row")
   .php   0000 DECLARE_CLASS_DELAYED string("store\\parcel") string("lib\\row")
+Exits: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+Positions: same opcodes and lines in 5 op arrays, same signatures in 1 classes
+Deploy: same opcodes and lines in 7 op arrays, same signatures in 1 classes
+Tags: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+PhpForms: same opcodes and lines in 15 op arrays, same signatures in 1 classes
