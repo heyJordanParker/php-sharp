@@ -217,7 +217,10 @@ $fingerprint = hash('xxh128', implode('', array_map(static fn (array $extern): s
     . $sources);
 
 $prototypes = "void sharp_native_str_free(sharp_native_str string);\n";
-$arginfos = arginfo('Sharp_Internal_requireNative', 'void', [['type' => 'string', 'name' => 'fingerprint', 'default' => null]]);
+$arginfos = arginfo('Sharp_Internal_requireNative', 'void', [
+    ['type' => 'string', 'name' => 'fingerprint', 'default' => null],
+    ['type' => 'string', 'name' => 'version', 'default' => null],
+]);
 $wrappers = "static ZEND_FUNCTION(Sharp_Internal_requireNative);\n";
 $entries = "\tZEND_RAW_FENTRY(ZEND_NS_NAME(\"Sharp\\\\Internal\", \"requireNative\"), zif_Sharp_Internal_requireNative, arginfo_Sharp_Internal_requireNative, 0, NULL, NULL)\n";
 foreach ($externs as $extern) {

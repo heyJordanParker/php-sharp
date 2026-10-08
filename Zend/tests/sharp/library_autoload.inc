@@ -1,6 +1,24 @@
 <?php
-// php library_autoload.inc <engine|other> <psr4|classmap>: loads sharp/composer/autoload.php beside a native.php that
-// holds the engine's SHARP_NATIVE or another one, with Sharp\ found by PSR-4 or by an authoritative class map.
+// php library_autoload.inc <engine|other> <psr4|classmap> <version|absent>: loads sharp/composer/autoload.php beside a
+// native.php that holds the engine's SHARP_NATIVE or another one, with Sharp\ found by PSR-4 or by an authoritative
+// class map, and Composer reporting the package at that version or not installed.
+
+namespace Composer {
+    final class InstalledVersions
+    {
+        public static ?string $version = null;
+
+        public static function isInstalled(string $packageName): bool
+        {
+            return $packageName === 'heyjordanparker/php-sharp-composer' && self::$version !== null;
+        }
+
+        public static function getPrettyVersion(string $packageName): string
+        {
+            return self::isInstalled($packageName) ? self::$version : throw new \OutOfBoundsException("Package \"$packageName\" is not installed");
+        }
+    }
+}
 
 namespace Composer\Autoload {
     final class ClassLoader
@@ -42,10 +60,11 @@ namespace Composer\Autoload {
 namespace {
     use Composer\Autoload\ClassLoader;
 
-    [, $fingerprint, $layout] = $argv;
+    [, $fingerprint, $layout, $version] = $argv;
+    Composer\InstalledVersions::$version = $version === 'absent' ? null : $version;
     $root = dirname(__DIR__, 3);
     $engine = require "$root/sharp/composer/native.php";
-    $package = sys_get_temp_dir() . "/sharp_library_autoload_{$fingerprint}_$layout";
+    $package = sys_get_temp_dir() . "/sharp_library_autoload_{$fingerprint}_{$layout}_$version";
     @mkdir("$package/vendor/composer", 0777, true);
     copy("$root/sharp/composer/autoload.php", "$package/autoload.php");
     file_put_contents("$package/native.php", "<?php return '" . ($fingerprint === 'engine' ? $engine : '0123456789abcdef0123456789abcdef') . "';");
@@ -68,7 +87,7 @@ namespace {
     try {
         echo \Sharp\Text\Text::slug('A B'), "\n";
     } catch (Error $error) {
-        echo get_class($error), ': ', str_replace($engine, '<engine>', $error->getMessage()), "\n";
+        echo get_class($error), ': ', str_replace(phpversion('sharp'), '<engine version>', $error->getMessage()), "\n";
     }
 
     unlink("$package/autoload.php");

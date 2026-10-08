@@ -1012,20 +1012,21 @@ ZEND_METHOD(Sharp_Collection, sortedBy)
 	zval_ptr_dtor(&pairs);
 }
 
-/* The standard library's autoload.php passes the SHARP_NATIVE it was built with, as Composer's
- * platform_check.php checks the platform before anything loads. */
+/* The standard library's autoload.php passes the SHARP_NATIVE it was built with and its package's version, as
+ * Composer's platform_check.php checks the platform before anything loads. */
 static ZEND_FUNCTION(Sharp_Internal_requireNative)
 {
 	zend_string *fingerprint;
+	zend_string *version;
 
-	ZEND_PARSE_PARAMETERS_START(1, 1)
+	ZEND_PARSE_PARAMETERS_START(2, 2)
 		Z_PARAM_STR(fingerprint)
+		Z_PARAM_STR(version)
 	ZEND_PARSE_PARAMETERS_END();
 
 	if (!zend_string_equals_literal(fingerprint, SHARP_NATIVE)) {
-		zend_throw_error(NULL, "The PHP# standard library in vendor/ was built for other native bodies than this engine has"
-			" (library %s, engine " SHARP_NATIVE "). Install the heyjordanparker/php-sharp-composer version that matches this PHP# build.",
-			ZSTR_VAL(fingerprint));
+		zend_throw_error(NULL, "The PHP# standard library %s needs the native bodies of PHP# engine %s, and this engine is "
+			PHP_SHARP_VERSION ". Install the same PHP# version of both.", ZSTR_VAL(version), ZSTR_VAL(version));
 	}
 }
 
@@ -1094,7 +1095,7 @@ zend_module_entry sharp_module_entry = {
 	NULL,
 	PHP_RSHUTDOWN(sharp),
 	PHP_MINFO(sharp),
-	PHP_VERSION,
+	PHP_SHARP_VERSION,
 	PHP_MODULE_GLOBALS(sharp),
 	PHP_GINIT(sharp),
 	NULL,
