@@ -411,7 +411,7 @@ OrderRow order = OrderRow.parse(row);   // row is a plain PHP object from a data
 **Writing type arguments:**
 
 - **`new` always names them:** `new PaginatedList<Order>(…)`. `new Self(…)` is the one exception: it names no type arguments, because `Self` is the class with its own type parameters.
-- **A type names them too:** `PaginatedList<Order> page`.
+- **A type names them too:** `PaginatedList<Order> page`. `Class<PaginatedList>` is the one exception: a class type names the class itself.
 - **A generic method call infers them** from the arguments it receives.
 
 **Every type argument is carried at runtime, written or inferred.** The checker's types reach the running program (section 27), so a generic method can use a type parameter that its call inferred:
