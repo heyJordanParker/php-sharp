@@ -253,6 +253,18 @@ void zend_assert_valid_class_name(const zend_string *name, const char *type) /* 
 }
 /* }}} */
 
+static bool zend_is_sharp_type_class(const zend_string *unqualified_name)
+{
+	const zend_string *file = CG(compiled_filename);
+
+	return FC(current_namespace) && zend_string_equals_literal(FC(current_namespace), "Sharp")
+		&& (zend_string_equals_literal(unqualified_name, "Int")
+			|| zend_string_equals_literal(unqualified_name, "Float")
+			|| zend_string_equals_literal(unqualified_name, "Bool"))
+		&& file && ZSTR_LEN(file) > strlen(".sharp")
+		&& memcmp(ZSTR_VAL(file) + ZSTR_LEN(file) - strlen(".sharp"), ".sharp", strlen(".sharp")) == 0;
+}
+
 typedef struct _builtin_type_info {
 	const char* name;
 	const size_t name_len;
@@ -9305,7 +9317,9 @@ static void zend_compile_class_decl(znode *result, zend_ast *ast, bool toplevel)
 		} else if (decl->flags & ZEND_ACC_TRAIT) {
 			type = "a trait name";
 		}
-		zend_assert_valid_class_name(unqualified_name, type);
+		if (!zend_is_sharp_type_class(unqualified_name)) {
+			zend_assert_valid_class_name(unqualified_name, type);
+		}
 		name = zend_prefix_with_ns(unqualified_name);
 		name = zend_new_interned_string(name);
 		lcname = zend_string_tolower(name);
