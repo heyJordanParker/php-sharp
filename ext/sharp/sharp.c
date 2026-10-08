@@ -1564,14 +1564,21 @@ static int sharp_type_built_in_arity(const char *name, size_t length)
 	return -1;
 }
 
-static bool sharp_type_skip(sharp_type_reader *reader, const char *token)
+/* Whether `token` comes next. */
+static bool sharp_type_ahead(const sharp_type_reader *reader, const char *token)
 {
 	size_t length = strlen(token);
 
-	if ((size_t) (reader->end - reader->at) < length || memcmp(reader->at, token, length) != 0) {
+	return (size_t) (reader->end - reader->at) >= length && memcmp(reader->at, token, length) == 0;
+}
+
+/* Reads past `token` when it comes next. */
+static bool sharp_type_skip(sharp_type_reader *reader, const char *token)
+{
+	if (!sharp_type_ahead(reader, token)) {
 		return false;
 	}
-	reader->at += length;
+	reader->at += strlen(token);
 
 	return true;
 }
@@ -1735,12 +1742,52 @@ static sharp_type_node *sharp_type_read_atom(sharp_type_reader *reader)
 	return type;
 }
 
+/* An intersection that starts with `first`, which `start` points at: the classes after it, ` & B & C`, each sorted after
+ * the one before it. */
+static sharp_type_node *sharp_type_read_intersection(sharp_type_reader *reader, sharp_type_node *first, const char *start)
+{
+	sharp_type_node *type = sharp_type_node_start(reader, SHARP_TYPE_INTERSECTION, start);
+
+	sharp_type_node_add(type, first);
+	while (sharp_type_skip(reader, " & ")) {
+		sharp_type_node *member = sharp_type_read_atom(reader);
+
+		if (!member || zend_binary_strcmp(type->last->text, type->last->length, member->text, member->length) >= 0) {
+			return NULL;
+		}
+		sharp_type_node_add(type, member);
+	}
+	type->length = reader->at - start;
+
+	for (const sharp_type_node *member = type->first; member; member = member->next) {
+		if (member->kind != SHARP_TYPE_NAMED || !member->name) {
+			return NULL;
+		}
+	}
+
+	return type->count > 1 ? type : NULL;
+}
+
+/* A union member: an atom, or an intersection in parentheses, `(A & B)`, whose text leaves the parentheses out. */
+static sharp_type_node *sharp_type_read_member(sharp_type_reader *reader)
+{
+	if (!sharp_type_skip(reader, "(")) {
+		return sharp_type_read_atom(reader);
+	}
+
+	const char *start = reader->at;
+	sharp_type_node *first = sharp_type_read_atom(reader);
+	sharp_type_node *type = first ? sharp_type_read_intersection(reader, first, start) : NULL;
+
+	return type && sharp_type_skip(reader, ")") ? type : NULL;
+}
+
 /* Union members after the first one, `|B|C`, each sorted after the one before it. `null` is never a member, because
  * a nullable union is `(A|B)?`, and neither is `Any`, which holds every other type. */
 static bool sharp_type_read_union(sharp_type_reader *reader, sharp_type_node *type)
 {
 	while (sharp_type_skip(reader, "|")) {
-		sharp_type_node *member = sharp_type_read_atom(reader);
+		sharp_type_node *member = sharp_type_read_member(reader);
 
 		if (!member || zend_binary_strcmp(type->last->text, type->last->length, member->text, member->length) >= 0) {
 			return false;
@@ -1768,10 +1815,33 @@ static sharp_type_node *sharp_type_nullable(sharp_type_reader *reader, sharp_typ
 	return type;
 }
 
-/* A type: an atom, `T?`, `A|B` or `(A|B)?`. */
+/* What stands in parentheses after `(`, up to the `)`: an intersection, or a union. */
+static sharp_type_node *sharp_type_read_group(sharp_type_reader *reader)
+{
+	const char *start = reader->at;
+	sharp_type_node *first = sharp_type_read_member(reader);
+	sharp_type_node *group;
+
+	if (!first) {
+		return NULL;
+	}
+	if (first->kind == SHARP_TYPE_NAMED && sharp_type_ahead(reader, " & ")) {
+		group = sharp_type_read_intersection(reader, first, start);
+	} else {
+		group = sharp_type_node_start(reader, SHARP_TYPE_UNION, start);
+		sharp_type_node_add(group, first);
+		group = sharp_type_read_union(reader, group) ? group : NULL;
+	}
+
+	return group && sharp_type_skip(reader, ")") ? group : NULL;
+}
+
+/* A type: an atom, `T?`, `A|B`, `A & B`, or a union or an intersection in parentheses: `(A|B)?`, `(A & B)?`, and
+ * `(A & B)|C`. */
 static sharp_type_node *sharp_type_read(sharp_type_reader *reader)
 {
 	const char *start = reader->at;
+	sharp_type_node *type;
 
 #ifdef ZEND_CHECK_STACK_LIMIT
 	if (UNEXPECTED(zend_call_stack_overflowed(EG(stack_limit)))) {
@@ -1780,28 +1850,30 @@ static sharp_type_node *sharp_type_read(sharp_type_reader *reader)
 #endif
 
 	if (sharp_type_skip(reader, "(")) {
-		sharp_type_node *first = sharp_type_read_atom(reader);
-		if (!first) {
+		type = sharp_type_read_group(reader);
+		if (!type) {
 			return NULL;
 		}
-
-		sharp_type_node *members = sharp_type_node_start(reader, SHARP_TYPE_UNION, start + 1);
-		sharp_type_node_add(members, first);
-		if (!sharp_type_read_union(reader, members) || !sharp_type_skip(reader, ")") || !sharp_type_skip(reader, "?")) {
+		if (sharp_type_skip(reader, "?")) {
+			return sharp_type_nullable(reader, type, start);
+		}
+		/* Without `?`, only an intersection stands in parentheses, as the first member of a union. */
+		if (type->kind != SHARP_TYPE_INTERSECTION) {
 			return NULL;
 		}
-
-		return sharp_type_nullable(reader, members, start);
+	} else {
+		type = sharp_type_read_atom(reader);
+		if (!type) {
+			return NULL;
+		}
+		if (sharp_type_skip(reader, "?")) {
+			return sharp_type_node_is(type, "null") ? NULL : sharp_type_nullable(reader, type, start);
+		}
+		if (sharp_type_ahead(reader, " & ")) {
+			return sharp_type_read_intersection(reader, type, start);
+		}
 	}
-
-	sharp_type_node *type = sharp_type_read_atom(reader);
-	if (!type) {
-		return NULL;
-	}
-	if (sharp_type_skip(reader, "?")) {
-		return sharp_type_node_is(type, "null") ? NULL : sharp_type_nullable(reader, type, start);
-	}
-	if (reader->at < reader->end && *reader->at == '|') {
+	if (sharp_type_ahead(reader, "|")) {
 		sharp_type_node *members = sharp_type_node_start(reader, SHARP_TYPE_UNION, start);
 
 		sharp_type_node_add(members, type);
@@ -1809,7 +1881,7 @@ static sharp_type_node *sharp_type_read(sharp_type_reader *reader)
 		return sharp_type_read_union(reader, members) ? members : NULL;
 	}
 
-	return type;
+	return type->kind == SHARP_TYPE_INTERSECTION ? NULL : type;
 }
 
 /* A type argument list, `A, B`, which is the whole text. */
@@ -1945,7 +2017,7 @@ static bool sharp_type_node_resolve(sharp_type_node *node, sharp_type_class_reso
 	return node->ce != NULL;
 }
 
-/* Sorts the members of the union `node` by their text. False when two of them are one type. */
+/* Sorts the members of the union or intersection `node` by their text. False when two of them are one type. */
 static bool sharp_type_node_sort(sharp_type_node *node)
 {
 	sharp_type_node *sorted = NULL;
@@ -1981,8 +2053,22 @@ static void sharp_type_node_join(smart_str *text, const sharp_type_node *first, 
 	}
 }
 
+/* Appends `member` as a union or a nullable type holds it, an intersection in parentheses. */
+static void sharp_type_node_append_grouped(smart_str *text, const sharp_type_node *member)
+{
+	bool grouped = member->kind == SHARP_TYPE_INTERSECTION;
+
+	if (grouped) {
+		smart_str_appendc(text, '(');
+	}
+	smart_str_appendl(text, member->text, member->length);
+	if (grouped) {
+		smart_str_appendc(text, ')');
+	}
+}
+
 /* Spells `node` as code spells it, into `arena`: each class by the name it was declared with, the members of a union
- * sorted by their spelling. False when two members of a union are one type. */
+ * or an intersection sorted by their spelling. False when two members of one are one type. */
 static bool sharp_type_node_respell(sharp_type_node *node, zend_arena **arena)
 {
 	for (sharp_type_node *member = node->first; member; member = member->next) {
@@ -1990,7 +2076,7 @@ static bool sharp_type_node_respell(sharp_type_node *node, zend_arena **arena)
 			return false;
 		}
 	}
-	if (node->kind == SHARP_TYPE_UNION && !sharp_type_node_sort(node)) {
+	if ((node->kind == SHARP_TYPE_UNION || node->kind == SHARP_TYPE_INTERSECTION) && !sharp_type_node_sort(node)) {
 		return false;
 	}
 
@@ -2018,14 +2104,22 @@ static bool sharp_type_node_respell(sharp_type_node *node, zend_arena **arena)
 			if (node->first->kind == SHARP_TYPE_UNION) {
 				smart_str_appendc(&text, '(');
 				smart_str_appendl(&text, node->first->text, node->first->length);
-				smart_str_appends(&text, ")?");
+				smart_str_appendc(&text, ')');
 			} else {
-				smart_str_appendl(&text, node->first->text, node->first->length);
-				smart_str_appendc(&text, '?');
+				sharp_type_node_append_grouped(&text, node->first);
 			}
+			smart_str_appendc(&text, '?');
 			break;
 		case SHARP_TYPE_UNION:
-			sharp_type_node_join(&text, node->first, "|");
+			for (const sharp_type_node *member = node->first; member; member = member->next) {
+				if (member != node->first) {
+					smart_str_appendc(&text, '|');
+				}
+				sharp_type_node_append_grouped(&text, member);
+			}
+			break;
+		case SHARP_TYPE_INTERSECTION:
+			sharp_type_node_join(&text, node->first, " & ");
 			break;
 		case SHARP_TYPE_FUNCTION:
 			smart_str_appends(&text, "Function<");
@@ -2050,8 +2144,9 @@ static bool sharp_type_node_respell(sharp_type_node *node, zend_arena **arena)
 
 static bool sharp_type_arguments_fit(const sharp_type_node *arguments, const zend_class_entry *ce);
 
-/* Whether `type` is within `bound`: `Any?` holds every type, `Any` every type but null, a class its subclasses, and
- * any other bound only itself. A union is within a bound when each of its members is. */
+/* Whether `type` is within `bound`: `Any?` holds every type, `Any` every type but null, a class its subclasses, an
+ * intersection what each of its classes holds, and any other bound only itself. A union is within a bound when each of
+ * its members is, and an intersection when one of its classes is. */
 static bool sharp_type_fits(const sharp_type_node *type, const sharp_type *bound)
 {
 	if (zend_string_equals_literal(bound->text, "Any?")) {
@@ -2079,8 +2174,26 @@ static bool sharp_type_fits(const sharp_type_node *type, const sharp_type *bound
 
 		return false;
 	}
+	if (bound->kind == SHARP_TYPE_INTERSECTION) {
+		for (uint32_t i = 0; i < bound->count; i++) {
+			if (!sharp_type_fits(type, bound->members[i])) {
+				return false;
+			}
+		}
+
+		return true;
+	}
 	if (zend_string_equals_literal(bound->text, "Any")) {
 		return type->kind != SHARP_TYPE_NULLABLE && !sharp_type_node_is(type, "null");
+	}
+	if (type->kind == SHARP_TYPE_INTERSECTION) {
+		for (const sharp_type_node *member = type->first; member; member = member->next) {
+			if (sharp_type_fits(member, bound)) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 	if (bound->class_name && !bound->count) {
 		/* A loaded class has loaded each class it extends or implements. */

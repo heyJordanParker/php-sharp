@@ -44,6 +44,21 @@ public class Pair<TKey, TValue>
     }
 }
 
+public interface Shareable
+{
+}
+
+public class SharedOrder : DatabaseEntity, Shareable
+{
+}
+
+public class Report<TItem : DatabaseEntity & Shareable>
+{
+    public Report(public List<TItem> items { get; })
+    {
+    }
+}
+
 public class Ledger<TEntry : DatabaseEntity> : Snapshot
 {
     public Ledger(public List<TEntry> entries { get; })
@@ -71,4 +86,6 @@ public class Queue
     public static Ledger<Order> ledger() => new Ledger<Order>([]);
 
     public static Journal<Order> journal() => new Journal<Order>([], 4);
+
+    public static Report<SharedOrder> report() => new Report<SharedOrder>([]);
 }

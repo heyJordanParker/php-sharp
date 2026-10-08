@@ -15,7 +15,7 @@ void sharp_collection_of_value(zval *result, zval *value);
 void sharp_collection_of_property(zval *result, zend_object *object, zend_string *name, void **cache_slot);
 
 /* PHP# type texts, the one spelling of a type the bridge prints and the engine reads: `App.Order`, `int?`,
- * `List<App.Order>`, `(int|string)?`, `Function<bool(App.Order, int)>`. Each text parses once into an interned
+ * `List<App.Order>`, `(int|string)?`, `App.DatabaseEntity & App.Shareable`, `Function<bool(App.Order, int)>`. Each text parses once into an interned
  * sharp_type, so equal types are one pointer. A type code spells lives for the process. A type first read from input
  * lives for its request, and only a type that lives for the process goes into a run-time cache slot. */
 typedef enum {
@@ -25,8 +25,10 @@ typedef enum {
 	SHARP_TYPE_NAMED,
 	/* `T?`: T is the one member. */
 	SHARP_TYPE_NULLABLE,
-	/* `A|B`: the members, sorted by their text. */
+	/* `A|B`: the members, sorted by their text. An intersection member stands in parentheses, `(A & B)|C`. */
 	SHARP_TYPE_UNION,
+	/* `A & B`: the classes, sorted by their text. */
+	SHARP_TYPE_INTERSECTION,
 	/* `Function<R(P1, P2)>`: the return type, then each parameter type. */
 	SHARP_TYPE_FUNCTION,
 } sharp_type_kind;

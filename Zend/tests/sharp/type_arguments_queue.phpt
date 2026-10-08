@@ -72,6 +72,16 @@ spl_autoload_register(static function (string $class): void {
 $shared = new stdClass();
 $run = unserialize(str_replace('s:10:"Any?, Any?"', 's:13:"App.Late, int"', serialize([new App\Pair(1, 2), $shared, $shared])));
 echo implode(', ', arguments($run[0])), ' ', var_export($run[1] === $run[2], true), "\n";
+
+echo "an object plain PHP creates has its intersection bound as its type argument\n";
+foreach ([new App\Report([]), Queue::report()] as $report) {
+    $queued = serialize($report);
+    show($queued);
+    $run = unserialize($queued);
+    echo implode(', ', arguments($run)), ' ', var_export($run == $report, true), "\n";
+}
+// A type argument is within an intersection bound when it is within each of its members.
+var_dump(@unserialize(str_replace('s:15:"App.SharedOrder"', 's:9:"App.Order"', serialize(Queue::report()))));
 ?>
 --EXPECT--
 the default form
@@ -112,3 +122,9 @@ unserialize resolves each class a type argument names, as it resolves an object'
 App.Order, int true
 App\Pair
 App.Late, int true
+an object plain PHP creates has its intersection bound as its type argument
+O:10:"App\Report":2:{s:5:"items";a:0:{}s:14:"\0<sharp>\0types";s:34:"App.DatabaseEntity & App.Shareable";}
+App.DatabaseEntity & App.Shareable true
+O:10:"App\Report":2:{s:5:"items";a:0:{}s:14:"\0<sharp>\0types";s:15:"App.SharedOrder";}
+App.SharedOrder true
+bool(false)
