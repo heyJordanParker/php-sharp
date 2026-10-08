@@ -5084,7 +5084,7 @@ ZEND_API bool zend_may_throw_ex(const zend_op *opline, const zend_ssa_op *ssa_op
 			return 0;
 		case ZEND_SHARP_TYPE_ARGS:
 			/* Reading this's type arguments runs a lazy proxy's initializer. */
-			return opline->op2_type == IS_UNUSED;
+			return opline->op2_type == IS_UNUSED || opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN;
 		case ZEND_IS_IDENTICAL:
 		case ZEND_IS_NOT_IDENTICAL:
 		case ZEND_CASE_STRICT:

@@ -5502,15 +5502,23 @@ static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_a
 		}
 
 		opline = zend_emit_op_tmp(&type_args_node, ZEND_SHARP_TYPE_ARGS, NULL, NULL);
-		if (type_args_ast->child[1]) {
-			zend_string *text = zend_string_copy(zend_sharp_type_text(type_args_ast->child[1]));
-
+		zend_string *text = type_args_ast->child[1] ? zend_ast_get_str(type_args_ast->child[1]) : NULL;
+		bool open = text && sharp_type_list_is_open(ZSTR_VAL(text), ZSTR_LEN(text));
+		if (text) {
+			if (!open) {
+				zend_sharp_type_text(type_args_ast->child[1]);
+			}
+			text = zend_string_copy(text);
 			opline->op2_type = IS_CONST;
 			opline->op2.constant = zend_add_literal_string(&text);
-			opline->extended_value = zend_alloc_cache_slot();
-		} else {
-			/* `new Self` reads this's type arguments, so a closure around it keeps its this, as one reading $this
-			 * does. */
+			opline->extended_value = zend_alloc_cache_slots(open ? 2 : 1);
+			if (open) {
+				opline->op1.num = ZEND_SHARP_TYPE_ARGS_OPEN;
+			}
+		}
+		if (!text || open) {
+			/* `new Self` and an open text read this's type arguments, so a closure around them keeps its this, as
+			 * one reading $this does. */
 			CG(active_op_array)->fn_flags |= ZEND_ACC_USES_THIS;
 		}
 	}

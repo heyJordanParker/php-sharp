@@ -52,6 +52,16 @@ static zend_always_inline bool sharp_type_is_persistent(const sharp_type *type)
 /* The interned type argument list code spells as `text`, or NULL when it spells none. */
 const sharp_type *sharp_type_list(const char *text, size_t length);
 
+/* Whether `text` is an open type argument list: one that writes a type parameter of the class of the method it is in as
+ * `$` and its index, `$0` for the first, which stands for this's type argument at that index. */
+bool sharp_type_list_is_open(const char *text, size_t length);
+
+/* The interned type argument list the open `text` spells once each `$i` in it is `object`'s type argument i, for a
+ * method of `scope`, cached in the two pointers at `cache`. NULL when `object` is not of class `scope`, or `scope`
+ * declares no type parameter. */
+const sharp_type *sharp_type_list_of_this(
+	const zval *text, zend_object *object, const zend_class_entry *scope, void **cache);
+
 /* An object of a generic PHP# class keeps its type arguments in a declared property of this name, which carries
  * ZEND_ACC_SHARP_HIDDEN. It holds the class's bounds as a type text until PHP# code or unserialize stores the
  * IS_PTR of an interned list. The name is also the key serialize writes the list under. */

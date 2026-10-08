@@ -38,6 +38,22 @@ var_dump($copy::class, arguments($copy));
 $maker = Closure::bind(Queue::orders()->maker(), null, App\Order::class);
 var_dump($maker === null ? null : $maker());
 
+echo "new with a type argument that names a type parameter of the class\n";
+// It takes this's type argument, nested, nullable or in a union, as code would write the type it is.
+echo implode(', ', arguments(Queue::orders()->paired(new App\Order(5)))), "\n";
+echo implode(', ', arguments(Queue::entities()->paired(new App\Order(5)))), "\n";
+echo implode(', ', arguments(Queue::pair()->swapped())), "\n";
+echo implode(', ', arguments(Queue::pair()->swapped()->swapped())), "\n";
+echo implode(', ', arguments(Queue::pair()->widened())), "\n";
+echo implode(', ', arguments(Queue::pair()->widened()->swapped()->swapped()->widened())), "\n";
+// One the code spells the same way is the same type.
+var_dump(Queue::orders()->emptied()() == new App\PaginatedList([]), Queue::orders()->emptied()() == Queue::orders());
+// The lambda reads this's type arguments, so it uses this.
+var_dump(Closure::bind(Queue::orders()->emptied(), null, App\Order::class));
+// A type argument the request read from input stays the request's.
+$read = unserialize(str_replace('s:9:"App.Order"', 's:15:"App.SharedOrder"', serialize(Queue::orders())));
+echo implode(', ', arguments($read->paired(new App\SharedOrder(6)))), "\n";
+
 echo "lazy objects\n";
 $class = new ReflectionClass(App\PaginatedList::class);
 $orders = static fn (): App\PaginatedList => Queue::orders();
@@ -152,6 +168,19 @@ array(1) {
 
 Warning: Cannot unbind $this of closure using $this, this will be an error in PHP 9 in %s on line %d
 NULL
+new with a type argument that names a type parameter of the class
+App.Order, List<App.Order>?
+App.DatabaseEntity, List<App.DatabaseEntity>?
+int, App.Order?
+App.Order?, int?
+App.Order|int, int
+(App.Order|int)?, int?
+bool(false)
+bool(true)
+
+Warning: Cannot unbind $this of closure using $this, this will be an error in PHP 9 in %s on line %d
+NULL
+App.SharedOrder, List<App.SharedOrder>?
 lazy objects
 array(1) {
   [0]=>

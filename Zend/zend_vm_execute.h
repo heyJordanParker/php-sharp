@@ -10991,8 +10991,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_CONS
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. The
- * result is an IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
+/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
+ * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments. The result is an
+ * IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
 static zend_never_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV_EX  zend_fetch_var_address_helper_SPEC_CONST_UNUSED(ZEND_OPCODE_HANDLER_ARGS_EX int type)
 {
 	USE_OPLINE
@@ -11546,8 +11547,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_CONS
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. The
- * result is an IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
+/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
+ * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments. The result is an
+ * IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_ADD_ARRAY_ELEMENT_SPEC_CONST_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -30171,8 +30173,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_VAR_
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. The
- * result is an IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
+/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
+ * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments. The result is an
+ * IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_IS_IDENTICAL_SPEC_VAR_VAR_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -31809,8 +31812,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_VAR_
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. The
- * result is an IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
+/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
+ * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments. The result is an
+ * IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_ADD_ARRAY_ELEMENT_SPEC_VAR_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -36654,7 +36658,14 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 	USE_OPLINE
 	const sharp_type *arguments;
 
-	if (IS_CONST == IS_CONST) {
+	if (IS_CONST == IS_CONST && UNEXPECTED(opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN)) {
+		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		SAVE_OPLINE();
+		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)),
+			EX(func)->op_array.scope, CACHE_ADDR(opline->extended_value));
+		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+	} else if (IS_CONST == IS_CONST) {
 		arguments = CACHED_PTR(opline->extended_value);
 		if (UNEXPECTED(arguments == NULL)) {
 			zval *text = RT_CONSTANT(opline, opline->op2);
@@ -39209,8 +39220,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_UNUS
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. The
- * result is an IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
+/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
+ * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments. The result is an
+ * IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_CLASS_SPEC_UNUSED_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	zval *class_name;
@@ -39631,14 +39643,22 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_UNUS
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. The
- * result is an IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
+/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
+ * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments. The result is an
+ * IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_ARGS_SPEC_UNUSED_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
 	const sharp_type *arguments;
 
-	if (IS_UNUSED == IS_CONST) {
+	if (IS_UNUSED == IS_CONST && UNEXPECTED(opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN)) {
+		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		SAVE_OPLINE();
+		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)),
+			EX(func)->op_array.scope, CACHE_ADDR(opline->extended_value));
+		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+	} else if (IS_UNUSED == IS_CONST) {
 		arguments = CACHED_PTR(opline->extended_value);
 		if (UNEXPECTED(arguments == NULL)) {
 			zval *text = RT_CONSTANT(opline, opline->op2);
@@ -67532,8 +67552,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_CONST_TMP
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. The
- * result is an IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
+/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
+ * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments. The result is an
+ * IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
 static zend_never_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV_EX  zend_fetch_var_address_helper_SPEC_CONST_UNUSED_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_EX int type);
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_R_SPEC_CONST_UNUSED_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
@@ -67985,8 +68006,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_CONST_UNU
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. The
- * result is an IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
+/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
+ * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments. The result is an
+ * IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_ADD_ARRAY_ELEMENT_SPEC_CONST_UNUSED_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -86510,8 +86532,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_VAR_TMP_T
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. The
- * result is an IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
+/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
+ * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments. The result is an
+ * IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_IS_IDENTICAL_SPEC_VAR_VAR_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -88148,8 +88171,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_VAR_UNUSE
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. The
- * result is an IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
+/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
+ * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments. The result is an
+ * IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_ADD_ARRAY_ELEMENT_SPEC_VAR_UNUSED_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -92993,7 +93017,14 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 	USE_OPLINE
 	const sharp_type *arguments;
 
-	if (IS_CONST == IS_CONST) {
+	if (IS_CONST == IS_CONST && UNEXPECTED(opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN)) {
+		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		SAVE_OPLINE();
+		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)),
+			EX(func)->op_array.scope, CACHE_ADDR(opline->extended_value));
+		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+	} else if (IS_CONST == IS_CONST) {
 		arguments = CACHED_PTR(opline->extended_value);
 		if (UNEXPECTED(arguments == NULL)) {
 			zval *text = RT_CONSTANT(opline, opline->op2);
@@ -95548,8 +95579,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_UNUSED_TM
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. The
- * result is an IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
+/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
+ * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments. The result is an
+ * IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_CLASS_SPEC_UNUSED_UNUSED_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	zval *class_name;
@@ -95970,14 +96002,22 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_UNUSED_UN
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. The
- * result is an IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
+/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
+ * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments. The result is an
+ * IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SPEC_UNUSED_UNUSED_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
 	const sharp_type *arguments;
 
-	if (IS_UNUSED == IS_CONST) {
+	if (IS_UNUSED == IS_CONST && UNEXPECTED(opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN)) {
+		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		SAVE_OPLINE();
+		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)),
+			EX(func)->op_array.scope, CACHE_ADDR(opline->extended_value));
+		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+	} else if (IS_UNUSED == IS_CONST) {
 		arguments = CACHED_PTR(opline->extended_value);
 		if (UNEXPECTED(arguments == NULL)) {
 			zval *text = RT_CONSTANT(opline, opline->op2);

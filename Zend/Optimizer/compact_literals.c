@@ -691,9 +691,9 @@ void zend_optimizer_compact_literals(zend_op_array *op_array, zend_optimizer_ctx
 					break;
 				case ZEND_SHARP_TYPE_ARGS:
 					if (opline->op2_type == IS_CONST) {
-						// op2 type text
+						// op2 type text, and for an open one the type arguments of this it was spelled with
 						opline->extended_value = cache_size;
-						cache_size += sizeof(void *);
+						cache_size += (opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN ? 2 : 1) * sizeof(void *);
 					}
 					break;
 				case ZEND_CATCH:

@@ -31,6 +31,10 @@ public class PaginatedList<TItem : DatabaseEntity>
     }
 
     public Function<PaginatedList<TItem>()> maker() => () => new Self([]);
+
+    public Pair<TItem, List<TItem>?> paired(TItem item) => new Pair<TItem, List<TItem>?>(item, null);
+
+    public Function<PaginatedList<TItem>()> emptied() => () => new PaginatedList<TItem>([]);
 }
 
 public class OrderPage : PaginatedList<Order>
@@ -42,6 +46,10 @@ public class Pair<TKey, TValue>
     public Pair(public TKey key { get; }, public TValue value { get; })
     {
     }
+
+    public Pair<TValue, TKey?> swapped() => new Pair<TValue, TKey?>(this.value, this.key);
+
+    public Pair<TKey|int, TValue> widened() => new Pair<TKey|int, TValue>(this.key, this.value);
 }
 
 public interface Shareable
