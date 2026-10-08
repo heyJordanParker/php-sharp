@@ -12,7 +12,7 @@
 #include "zend_system_id.h"
 #include "php_sharp.h"
 #include "sharp_arginfo.h"
-#include "sharp_bridge.h"
+#include "sharp_unit.h"
 #include "sharp_build_id.h"
 
 #define SHARP_FILE_EXTENSION ".sharp"
@@ -25,12 +25,12 @@ static zend_op_array *(*sharp_next_compile_file)(zend_file_handle *file_handle, 
 
 static zend_ast *sharp_translate(const sharp_unit *unit, uint32_t index);
 
-static zend_string *sharp_string(sharp_str text)
+static zend_string *sharp_string(const sharp_unit *unit, sharp_str text)
 {
-	return zend_string_init(text.ptr, text.len, 0);
+	return zend_string_init(unit->texts + text.offset, text.len, 0);
 }
 
-static zend_ast *sharp_translate_zval(const sharp_node *node)
+static zend_ast *sharp_translate_zval(const sharp_unit *unit, const sharp_node *node)
 {
 	zval value;
 
@@ -51,7 +51,7 @@ static zend_ast *sharp_translate_zval(const sharp_node *node)
 			ZVAL_DOUBLE(&value, node->double_value);
 			break;
 		case SHARP_STRING:
-			ZVAL_STR(&value, sharp_string(node->text));
+			ZVAL_STR(&value, sharp_string(unit, node->text));
 			break;
 		EMPTY_SWITCH_DEFAULT_CASE();
 	}
@@ -110,7 +110,7 @@ static zend_ast *sharp_translate_decl(const sharp_unit *unit, const sharp_node *
 	/* php-src's grammar gives a closure and an arrow function no name. */
 	CG(zend_lineno) = node->end_line;
 	return zend_ast_create_decl(kind, node->attr, node->line, NULL,
-		kind == ZEND_AST_CLOSURE || kind == ZEND_AST_ARROW_FUNC ? NULL : sharp_string(node->text),
+		kind == ZEND_AST_CLOSURE || kind == ZEND_AST_ARROW_FUNC ? NULL : sharp_string(unit, node->text),
 		child[0], child[1], child[2], child[3], child[4]);
 }
 
@@ -146,7 +146,7 @@ static zend_ast *sharp_translate(const sharp_unit *unit, uint32_t index)
 
 	if (kind == ZEND_AST_ZVAL) {
 		CG(zend_lineno) = node->line;
-		return sharp_translate_zval(node);
+		return sharp_translate_zval(unit, node);
 	}
 	if ((kind >> ZEND_AST_IS_LIST_SHIFT) & 1) {
 		ast = sharp_translate_list(unit, node, kind);
@@ -175,7 +175,7 @@ static int sharp_parse(void)
 			CG(zend_lineno) = diagnostic->line;
 			zend_throw_exception_ex(
 				diagnostic->severity == SHARP_PARSE_ERROR ? zend_ce_parse_error : zend_ce_compile_error,
-				0, "%.*s", (int) diagnostic->message.len, diagnostic->message.ptr);
+				0, "%.*s", (int) diagnostic->message.len, unit->texts + diagnostic->message.offset);
 		} else {
 			CG(ast) = sharp_translate(unit, unit->root);
 			CG(zend_lineno) = unit->nodes[unit->root].end_line;
@@ -1269,14 +1269,9 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 
 static PHP_MINFO_FUNCTION(sharp)
 {
-	sharp_str commit = sharp_mago_commit();
-	char *value = estrndup(commit.ptr, commit.len);
-
 	php_info_print_table_start();
-	php_info_print_table_row(2, "Mago commit", value);
+	php_info_print_table_row(2, "Mago commit", SHARP_MAGO_COMMIT);
 	php_info_print_table_end();
-
-	efree(value);
 }
 
 zend_module_entry sharp_module_entry = {

@@ -84,7 +84,7 @@ jobs:
           sharp/docker/run build/gen_stub.php -f --generate-optimizer-info --verify
           # Use the -a flag for a bug in git 2.46.0, which doesn't consider changed -diff files.
           git add . -N && git diff -a --exit-code
-      - name: Verify the bridge's sharp_kind is generated from Zend/zend_ast.h
+      - name: Verify the bridge's sharp_kind and SHARP_UNIT_ABI are generated from Zend/zend_ast.h
         run: |
           sharp/docker/run sh -c 'cd ext/sharp && "$(rustup which cargo)" metadata --format-version 1 --locked' > "$RUNNER_TEMP/metadata.json"
           mago="$(jq -r '.packages[] | select(.name == "mago-sharp-bridge") | .manifest_path | ltrimstr("/src/") | rtrimstr("/crates/sharp-bridge/Cargo.toml")' "$RUNNER_TEMP/metadata.json")"
