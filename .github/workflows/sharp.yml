@@ -62,7 +62,7 @@ jobs:
           key: SHARP_LINUX_RUST-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock') }}
       - name: Pinned Mago commit
         id: mago
-        run: sed -n 's/^mago-sharp-bridge = { git = ".*", rev = "\(.*\)" }$/rev=\1/p' ext/sharp/Cargo.toml >> "$GITHUB_OUTPUT"
+        run: sed -n 's/^#define SHARP_MAGO_COMMIT "\(.*\)"$/rev=\1/p' ext/sharp/sharp_unit.h >> "$GITHUB_OUTPUT"
       - name: Mago cache
         uses: actions/cache@v5
         with:
@@ -72,6 +72,8 @@ jobs:
         run: sharp/bin/build --linux
       - name: Test PHP#
         run: sharp/bin/test --linux --opcache --repeat --passes --census --differential
+      - name: Check the standard library with the checker the differential built
+        run: sharp/docker/run sh -c '"sharp/build/linux-$(uname -m)/mago/bin/mago" --colors never --workspace sharp/composer analyze --minimum-fail-level note'
       - name: Test upstream
         run: sharp/bin/test --linux --upstream --opcache
       - name: Verify generated files are up to date
@@ -84,11 +86,20 @@ jobs:
           sharp/docker/run build/gen_stub.php -f --generate-optimizer-info --verify
           # Use the -a flag for a bug in git 2.46.0, which doesn't consider changed -diff files.
           git add . -N && git diff -a --exit-code
-      - name: Verify the bridge's sharp_kind is generated from Zend/zend_ast.h
+      - name: Verify the native interface is generated from the standard library's extern declarations
         run: |
-          sharp/docker/run sh -c 'cd ext/sharp && "$(rustup which cargo)" metadata --format-version 1 --locked' > "$RUNNER_TEMP/metadata.json"
-          mago="$(jq -r '.packages[] | select(.name == "mago-sharp-bridge") | .manifest_path | ltrimstr("/src/") | rtrimstr("/crates/sharp-bridge/Cargo.toml")' "$RUNNER_TEMP/metadata.json")"
+          sharp/docker/run sharp/bin/native
+          git diff --exit-code ext/sharp/sharp_native.h sharp/composer/native.php
+      - name: Verify ext/sharp/sharp_unit.h, with its sharp_kind and SHARP_UNIT_ABI, is the header the pinned Mago commit generates from Zend/zend_ast.h
+        run: |
+          mago=sharp/build/mago-source
+          git init --quiet "$mago"
+          git -C "$mago" fetch --quiet --depth=1 https://github.com/heyJordanParker/mago-sharp "${{ steps.mago.outputs.rev }}"
+          git -C "$mago" checkout --quiet FETCH_HEAD
           sharp/docker/run php "$mago/scripts/regen-sharp-kinds.php" Zend/zend_ast.h | diff -u "$mago/crates/sharp-bridge/src/kind.rs" -
+          sharp/docker/run sh -c 'cargo="$(cd ext/sharp && rustup which cargo)" && cd "$1" && PATH="$(dirname "$cargo"):$PATH" "$cargo" build --locked -p mago-sharp-bridge --message-format=json' sh "$mago" > "$RUNNER_TEMP/build.json"
+          header="$(jq -r 'select(.reason == "build-script-executed" and (.package_id | contains("mago-sharp-bridge"))) | .out_dir | ltrimstr("/src/")' "$RUNNER_TEMP/build.json")/sharp_unit.h"
+          diff -u ext/sharp/sharp_unit.h "$header"
   MACOS:
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true'
@@ -116,7 +127,7 @@ jobs:
           name: SHARP_MACOS
       - name: Pinned Mago commit
         id: mago
-        run: sed -n 's/^mago-sharp-bridge = { git = ".*", rev = "\(.*\)" }$/rev=\1/p' ext/sharp/Cargo.toml >> "$GITHUB_OUTPUT"
+        run: sed -n 's/^#define SHARP_MAGO_COMMIT "\(.*\)"$/rev=\1/p' ext/sharp/sharp_unit.h >> "$GITHUB_OUTPUT"
       - name: Mago cache
         uses: actions/cache@v5
         with:

@@ -1,0 +1,33 @@
+namespace Demo;
+
+class Deploy
+{
+    public Deploy(private Environment environment)
+    {
+    }
+
+    public static Deploy create()
+    {
+        return new Deploy(new Environment());
+    }
+
+    public string? variable(string name)
+    {
+        return this.environment.variable(name);
+    }
+
+    public List<string> arguments()
+    {
+        return this.environment.arguments;
+    }
+
+    public string target()
+    {
+        return this.environment.arguments[1];
+    }
+
+    public string folder()
+    {
+        return this.environment.currentDirectory;
+    }
+}

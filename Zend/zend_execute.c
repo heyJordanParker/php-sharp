@@ -45,6 +45,8 @@
 #include "zend_call_stack.h"
 #include "zend_attributes.h"
 #include "Optimizer/zend_func_info.h"
+#include "ext/spl/spl_exceptions.h"
+#include "ext/sharp/php_sharp.h"
 
 /* Virtual current working directory support */
 #include "zend_virtual_cwd.h"
@@ -1794,7 +1796,7 @@ ZEND_API ZEND_COLD void zend_wrong_string_offset_error(void)
 		case ZEND_FETCH_DIM_RW:
 		case ZEND_FETCH_DIM_FUNC_ARG:
 		case ZEND_FETCH_DIM_UNSET:
-			switch (opline->extended_value) {
+			switch (opline->extended_value & ~ZEND_SHARP_OPERATOR) {
 				case ZEND_FETCH_DIM_REF:
 					msg = "Cannot create references to/from string offsets";
 					break;
@@ -2496,13 +2498,33 @@ static zend_always_inline HashTable *zend_get_target_symbol_table(int fetch_type
 	return ht;
 }
 
-static zend_never_inline ZEND_COLD void ZEND_FASTCALL zend_undefined_offset(zend_long lval)
+/* A PHP# index read throws OutOfRangeException where PHP warns about a missing key. The compiler
+ * marks the read's FETCH_DIM_R or FETCH_DIM_FUNC_ARG with ZEND_SHARP_OPERATOR, and only a miss
+ * reads the mark, from the opline the VM and the JIT save before they report the miss. */
+static ZEND_COLD bool zend_is_sharp_index_read(void)
 {
+	const zend_execute_data *ex = EG(current_execute_data);
+
+	return ex && ex->func && ZEND_USER_CODE(ex->func->type)
+		&& (ex->opline->opcode == ZEND_FETCH_DIM_R || ex->opline->opcode == ZEND_FETCH_DIM_FUNC_ARG)
+		&& (ex->opline->extended_value & ZEND_SHARP_OPERATOR);
+}
+
+ZEND_API ZEND_COLD void ZEND_FASTCALL zend_undefined_offset(zend_long lval)
+{
+	if (zend_is_sharp_index_read()) {
+		zend_throw_exception_ex(spl_ce_OutOfRangeException, 0, "Undefined array key " ZEND_LONG_FMT, lval);
+		return;
+	}
 	zend_error(E_WARNING, "Undefined array key " ZEND_LONG_FMT, lval);
 }
 
-static zend_never_inline ZEND_COLD void ZEND_FASTCALL zend_undefined_index(const zend_string *offset)
+ZEND_API ZEND_COLD void ZEND_FASTCALL zend_undefined_index(const zend_string *offset)
 {
+	if (zend_is_sharp_index_read()) {
+		zend_throw_exception_ex(spl_ce_OutOfRangeException, 0, "Undefined array key \"%s\"", ZSTR_VAL(offset));
+		return;
+	}
 	zend_error(E_WARNING, "Undefined array key \"%s\"", ZSTR_VAL(offset));
 }
 
@@ -2552,7 +2574,7 @@ ZEND_API ZEND_COLD zval* ZEND_FASTCALL zend_undefined_index_write(HashTable *ht,
 	return retval;
 }
 
-ZEND_API zend_never_inline ZEND_COLD void ZEND_FASTCALL zend_undefined_method(const zend_class_entry *ce, const zend_string *method)
+ZEND_API ZEND_COLD void ZEND_FASTCALL zend_undefined_method(const zend_class_entry *ce, const zend_string *method)
 {
 	zend_throw_error(NULL, "Call to undefined method %s::%s()", ZSTR_VAL(ce->name), ZSTR_VAL(method));
 }

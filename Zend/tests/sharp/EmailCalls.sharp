@@ -1,0 +1,8 @@
+namespace Demo;
+
+import Sharp.Net.Email;
+
+class EmailCalls
+{
+    public static bool isValid(string address) => Email.isValid(address);
+}

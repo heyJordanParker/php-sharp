@@ -1,0 +1,12 @@
+namespace Demo;
+
+import Sharp.Time.Date;
+
+class DateCalls
+{
+    public static string format(int timestamp, string pattern) => Date.format(timestamp, pattern);
+
+    public static string formatIn(int timestamp, string pattern, string timeZone) => Date.format(timestamp, pattern, timeZone);
+
+    public static int? parse(string text) => Date.parse(text);
+}

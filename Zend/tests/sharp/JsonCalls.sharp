@@ -1,0 +1,8 @@
+namespace Demo;
+
+import Sharp.Json.Json;
+
+class JsonCalls
+{
+    public static Any? decode(string json) => Json.decode(json);
+}

@@ -1,0 +1,15 @@
+namespace Demo;
+
+class Positions
+{
+    public Position here()
+    {
+        return Position.current();
+    }
+
+    public Position folder => Position.current();
+
+    public string slug { get { return Position.current().function; } }
+
+    public string? title { get; set { field = value ?? Position.current().function; } }
+}

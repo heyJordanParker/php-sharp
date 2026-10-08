@@ -4,6 +4,6 @@ class NullReturned
 {
     public int must(int? value)
     {
-        return value;
+        return Helper.trusted(value);
     }
 }

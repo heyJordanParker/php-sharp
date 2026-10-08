@@ -1,8 +1,0 @@
-namespace Demo;
-
-import Lib.Other;
-import Lib.Record;
-
-public class Twice : Record, Other
-{
-}

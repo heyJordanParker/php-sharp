@@ -1,0 +1,74 @@
+namespace Demo;
+
+class Signatures
+{
+    private int|string receipt = "unpaid";
+    public int|float amount { get; set; } = 0;
+
+    public Signatures(private int|string id, int ...values)
+    {
+        if (count(values) > 0) {
+            this.id = Signatures.sum(...values);
+        }
+    }
+
+    public int|string label(int|string id)
+    {
+        if (id === "") {
+            return this.id;
+        }
+        return id;
+    }
+
+    public (int|string)? matching((int|string)? id)
+    {
+        (int|string)? found = null;
+        if (id === this.id) {
+            found = id;
+        }
+        return found;
+    }
+
+    public bool isSame(Signatures|int other)
+    {
+        return other === this || other === this.id;
+    }
+
+    public int scale(int first, int second = 0, int factor = 1)
+    {
+        return (first + second) * factor;
+    }
+
+    public int doubled(int ...values)
+    {
+        return this.scale(...values, factor: 2);
+    }
+
+    public int|string pay(int|float amount)
+    {
+        this.amount += amount;
+        if (amount > 0) {
+            this.receipt = this.id;
+        }
+        return this.receipt;
+    }
+
+    public static int sum(int ...values)
+    {
+        let total = 0;
+        for (const value of values) {
+            total += value;
+        }
+        return total;
+    }
+
+    public static int spread(int first, int ...values)
+    {
+        return Signatures.sum(first, ...values) + max(first, ...values);
+    }
+
+    public static int|string made(int ...values)
+    {
+        return new Signatures("none", ...values).label("");
+    }
+}

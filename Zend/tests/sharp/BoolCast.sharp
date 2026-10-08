@@ -1,9 +1,0 @@
-namespace Demo;
-
-class BoolCast
-{
-    public static bool flag(int count)
-    {
-        return (bool)count;
-    }
-}

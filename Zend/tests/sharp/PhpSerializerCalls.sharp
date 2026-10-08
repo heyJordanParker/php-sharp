@@ -1,0 +1,14 @@
+namespace Demo;
+
+import Sharp.Data.PhpSerializer;
+
+class PhpSerializerCalls
+{
+    public static string serialize(Any? value) => PhpSerializer.serialize(value);
+
+    public static Any? unserialize(string text) => PhpSerializer.unserialize(text);
+
+    public static Any? unserializeAllowing(string text, List<string> allowedClasses) => PhpSerializer.unserialize(text, allowedClasses);
+
+    public static string export(Any? value) => PhpSerializer.export(value);
+}

@@ -15,6 +15,4 @@ enum(Lib\Order::Ascending)
 enum(Lib\Order::Descending)
 string(7) "changed"
 int(1)
-Undefined constant or static property Lib\Registry::missing
-Cannot access protected property Lib\Registry::$hidden
 Typed static property Lib\Registry::$late must not be accessed before initialization

@@ -1,0 +1,12 @@
+namespace Store;
+
+import Lib.Row;
+
+class Parcel : Row
+{
+    public Address? destination
+    {
+        get => this.getAttribute("destination") as Address;
+        set => this.setAttribute("destination", value);
+    }
+}

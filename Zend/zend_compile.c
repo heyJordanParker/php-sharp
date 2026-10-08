@@ -86,6 +86,7 @@ static inline uint32_t zend_alloc_cache_slot(void) {
 
 ZEND_API zend_op_array *(*zend_compile_file)(zend_file_handle *file_handle, int type);
 ZEND_API zend_op_array *(*zend_compile_string)(zend_string *source_string, const char *filename, zend_compile_position position);
+ZEND_API bool (*zend_compiled_revision)(zend_file_handle *file_handle, zend_long *revision);
 
 #ifndef ZTS
 ZEND_API zend_compiler_globals compiler_globals;
@@ -252,6 +253,18 @@ void zend_assert_valid_class_name(const zend_string *name, const char *type) /* 
 	}
 }
 /* }}} */
+
+static bool zend_is_sharp_type_class(const zend_string *unqualified_name)
+{
+	const zend_string *file = CG(compiled_filename);
+
+	return FC(current_namespace) && zend_string_equals_literal(FC(current_namespace), "Sharp")
+		&& (zend_string_equals_literal(unqualified_name, "Int")
+			|| zend_string_equals_literal(unqualified_name, "Float")
+			|| zend_string_equals_literal(unqualified_name, "Bool"))
+		&& file && ZSTR_LEN(file) > strlen(".sharp")
+		&& memcmp(ZSTR_VAL(file) + ZSTR_LEN(file) - strlen(".sharp"), ".sharp", strlen(".sharp")) == 0;
+}
 
 typedef struct _builtin_type_info {
 	const char* name;
@@ -1773,9 +1786,7 @@ static void zend_ensure_valid_class_fetch_type(uint32_t fetch_type) /* {{{ */
 			zend_error_noreturn(E_COMPILE_ERROR, "Cannot use \"%s\" when no class scope is active",
 				fetch_type == ZEND_FETCH_CLASS_SELF ? "self" :
 				fetch_type == ZEND_FETCH_CLASS_PARENT ? "parent" : "static");
-		} else if (fetch_type == ZEND_FETCH_CLASS_PARENT && !ce->parent_name
-				/* A PHP# class finds its parent in its interface list when it links. */
-				&& !(ce->ce_flags & ZEND_ACC_PARENT_IN_INTERFACES)) {
+		} else if (fetch_type == ZEND_FETCH_CLASS_PARENT && !ce->parent_name) {
 			zend_error_noreturn(E_COMPILE_ERROR,
 				"Cannot use \"parent\" when current class scope has no parent");
 		}
@@ -2534,6 +2545,11 @@ static void zend_assert_not_short_circuited(const zend_ast *ast)
 
 #define ZEND_SHORT_CIRCUITING_INNER 0x8000
 
+ZEND_STATIC_ASSERT(!(ZEND_DIM_SHARP & ZEND_SHORT_CIRCUITING_INNER),
+	"ZEND_DIM_SHARP overlaps ZEND_SHORT_CIRCUITING_INNER in the attr of ZEND_AST_DIM");
+ZEND_STATIC_ASSERT(!(ZEND_METHOD_CALL_SHARP & ZEND_SHORT_CIRCUITING_INNER),
+	"ZEND_METHOD_CALL_SHARP overlaps ZEND_SHORT_CIRCUITING_INNER in the attr of ZEND_AST_METHOD_CALL");
+
 static void zend_short_circuiting_mark_inner(zend_ast *ast) {
 	if (zend_ast_kind_is_short_circuited(ast->kind)) {
 		ast->attr |= ZEND_SHORT_CIRCUITING_INNER;
@@ -3082,7 +3098,7 @@ static zend_op *zend_delayed_compile_dim(znode *result, zend_ast *ast, uint32_t 
 					|| opline->opcode == ZEND_FETCH_DIM_RW
 					|| opline->opcode == ZEND_FETCH_DIM_FUNC_ARG
 					|| opline->opcode == ZEND_FETCH_DIM_UNSET) {
-				opline->extended_value = ZEND_FETCH_DIM_DIM;
+				opline->extended_value |= ZEND_FETCH_DIM_DIM;
 			}
 		}
 	}
@@ -3105,6 +3121,9 @@ static zend_op *zend_delayed_compile_dim(znode *result, zend_ast *ast, uint32_t 
 	zend_adjust_for_fetch_type(opline, result, type);
 	if (by_ref) {
 		opline->extended_value = ZEND_FETCH_DIM_REF;
+	}
+	if ((type == BP_VAR_R || type == BP_VAR_FUNC_ARG) && (ast->attr & ZEND_DIM_SHARP)) {
+		opline->extended_value |= ZEND_SHARP_OPERATOR;
 	}
 
 	if (dim_node.op_type == IS_CONST) {
@@ -3147,7 +3166,7 @@ static zend_op *zend_delayed_compile_prop(znode *result, zend_ast *ast, uint32_t
 				|| opline->opcode == ZEND_FETCH_DIM_RW
 				|| opline->opcode == ZEND_FETCH_DIM_FUNC_ARG
 				|| opline->opcode == ZEND_FETCH_DIM_UNSET)) {
-			opline->extended_value = ZEND_FETCH_DIM_OBJ;
+			opline->extended_value |= ZEND_FETCH_DIM_OBJ;
 		}
 
 		zend_separate_if_call_and_write(&obj_node, obj_ast, type);
@@ -5239,6 +5258,32 @@ static void zend_compile_call(znode *result, zend_ast *ast, uint32_t type) /* {{
 }
 /* }}} */
 
+/* A PHP# method call on a List or Map runs a Sharp\Collection method, so the receiver's fetch is
+ * marked to make that object: the fetch of a property, so a changing method writes the property
+ * back, or else a cast, which keeps a local's slot or a copy of any other value. Before a `?.` call
+ * the receiver ends its own null-safe chain ahead of the cast, as PHP's ((object) $a?->b())?->c()
+ * does: the call's own JMP_NULL gives null for either. */
+static void zend_compile_sharp_receiver(znode *result, zend_ast *ast, bool nullsafe)
+{
+	zend_op *opline;
+
+	if (ast->kind == ZEND_AST_PROP || ast->kind == ZEND_AST_NULLSAFE_PROP) {
+		opline = zend_compile_var(result, ast, BP_VAR_R, 0);
+		if (opline && opline->opcode == ZEND_FETCH_OBJ_R && opline->op2_type == IS_CONST) {
+			opline->extended_value |= ZEND_SHARP_OPERATOR;
+			return;
+		}
+	} else {
+		if (nullsafe) {
+			ast->attr &= ~ZEND_SHORT_CIRCUITING_INNER;
+		}
+		zend_compile_expr(result, ast);
+	}
+
+	opline = zend_emit_op_tmp(result, ZEND_CAST, result, NULL);
+	opline->extended_value = IS_OBJECT | ZEND_SHARP_OPERATOR;
+}
+
 static void zend_compile_method_call(znode *result, zend_ast *ast, uint32_t type) /* {{{ */
 {
 	zend_ast *obj_ast = ast->child[0];
@@ -5263,7 +5308,11 @@ static void zend_compile_method_call(znode *result, zend_ast *ast, uint32_t type
 		 * check for a nullsafe access. */
 	} else {
 		zend_short_circuiting_mark_inner(obj_ast);
-		zend_compile_expr(&obj_node, obj_ast);
+		if (ast->attr & ZEND_METHOD_CALL_SHARP) {
+			zend_compile_sharp_receiver(&obj_node, obj_ast, nullsafe);
+		} else {
+			zend_compile_expr(&obj_node, obj_ast);
+		}
 		if (nullsafe) {
 			zend_emit_jmp_null(&obj_node, type);
 		}
@@ -7135,9 +7184,10 @@ static zend_type zend_compile_single_typename(zend_ast *ast)
 					}
 				} else {
 					ZEND_ASSERT(fetch_type == ZEND_FETCH_CLASS_PARENT);
-					/* Scope might be unknown for unbound closures and traits, and a PHP# parent until it links */
-					if (substitute_self_parent && CG(active_class_entry)->parent_name) {
+					/* Scope might be unknown for unbound closures and traits */
+					if (substitute_self_parent) {
 						class_name = CG(active_class_entry)->parent_name;
+						ZEND_ASSERT(class_name && "must know class name when resolving parent type at compile time");
 					}
 				}
 				zend_string_addref(class_name);
@@ -9267,7 +9317,9 @@ static void zend_compile_class_decl(znode *result, zend_ast *ast, bool toplevel)
 		} else if (decl->flags & ZEND_ACC_TRAIT) {
 			type = "a trait name";
 		}
-		zend_assert_valid_class_name(unqualified_name, type);
+		if (!zend_is_sharp_type_class(unqualified_name)) {
+			zend_assert_valid_class_name(unqualified_name, type);
+		}
 		name = zend_prefix_with_ns(unqualified_name);
 		name = zend_new_interned_string(name);
 		lcname = zend_string_tolower(name);
@@ -9954,10 +10006,6 @@ ZEND_API bool zend_binary_op_produces_error(uint32_t opcode, const zval *op1, co
 {
 	if (opcode & ZEND_SHARP_OPERATOR) {
 		opcode &= ~ZEND_SHARP_OPERATOR;
-		if (opcode == ZEND_ADD && Z_TYPE_P(op1) == IS_STRING && Z_TYPE_P(op2) == IS_STRING) {
-			/* PHP#'s + joins two strings. */
-			return 0;
-		}
 		/* A negative exponent gives PHP's float, and PHP's own checks below cover it. */
 		if (Z_TYPE_P(op1) == IS_LONG && Z_TYPE_P(op2) == IS_LONG && !(opcode == ZEND_POW && Z_LVAL_P(op2) < 0)) {
 			zval result;
@@ -11120,10 +11168,7 @@ static void zend_compile_class_const(znode *result, zend_ast *ast) /* {{{ */
 
 	zend_set_class_name_op1(opline, &class_node);
 
-	if (ast->attr & ZEND_FETCH_CLASS_MEMBER_SYNTAX) {
-		/* The static property it falls back to caches its class, address and info, as FETCH_STATIC_PROP_R does. */
-		opline->extended_value = zend_alloc_cache_slots(3) | ZEND_FETCH_CLASS_MEMBER;
-	} else if (opline->op1_type == IS_CONST || opline->op2_type == IS_CONST) {
+	if (opline->op1_type == IS_CONST || opline->op2_type == IS_CONST) {
 		opline->extended_value = zend_alloc_cache_slots(2);
 	}
 }

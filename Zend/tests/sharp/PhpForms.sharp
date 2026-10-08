@@ -1,0 +1,48 @@
+namespace Demo;
+
+public class PhpForms
+{
+    public PhpForms(private Environment environment) { }
+
+    public Position origin => Position.current();
+
+    public void report(int pruned)
+    {
+        printf("Pruned %d carts" + PHP_EOL, pruned);
+    }
+
+    public void warn(string message)
+    {
+        fwrite(STDERR, message + PHP_EOL);
+    }
+
+    public void fail(string message, int code)
+    {
+        this.warn(message);
+        exit(code);
+    }
+
+    public string setting(string name) => this.environment.variable(name) ?? "unset";
+
+    public string target() => this.environment.arguments[1];
+
+    public string folder() => this.environment.currentDirectory;
+
+    public string stubs() => Position.current().directory + "/stubs";
+
+    public List<string> here()
+    {
+        const here = Position.current();
+        return [here.file, (string) here.line, (string) here.column, here.function];
+    }
+
+    public Position located()
+    {
+        const locate = () => Position.current();
+        return locate();
+    }
+
+    public string kind() => typeof(PhpForms);
+
+    public List<string> tags(string|List<string> value) => List.wrap(value);
+}
