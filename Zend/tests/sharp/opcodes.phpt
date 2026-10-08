@@ -28,6 +28,11 @@ $fixtures = [
     'Expressions' => null,
     'Checkout' => null,
     'Page' => null,
+    'Stage' => 'harness/HasLabel.inc',
+    'Suit' => null,
+    'Rank' => null,
+    'Shipment' => null,
+    'Task' => null,
     'Shapes' => null,
     'Members' => 'harness/Registry.inc',
     'Site' => 'harness/SiteLib.inc',
@@ -61,7 +66,18 @@ $fixtures = [
         '../../../sharp/composer/library/Sharp/Time/Date.sharp',
         '../../../sharp/composer/library/Sharp/Time/TimeZone.sharp',
     ],
+    'Inbox' => null,
+    'Patterns' => null,
+    'Signatures' => null,
+    'Accessors' => null,
+    'Parcel' => 'harness/Row.inc',
+    'Exits' => null,
+    'Positions' => null,
+    'Deploy' => null,
+    'Tags' => null,
+    'PhpForms' => null,
 ];
+$user_class = '/(?:Class|Enum) \[ <user> /';
 
 foreach ($fixtures as $fixture => $library) {
     $prelude = implode('', array_map(static fn (string $file): string => 'require ' . var_export(__DIR__ . "/$file", true) . ';', (array) $library));
@@ -71,8 +87,8 @@ foreach ($fixtures as $fixture => $library) {
     preg_match_all('~^(\S.*):\n {5}; \(lines=~m', $sharp, $op_arrays);
     echo $fixture, ': ', $sharp === $php ? 'same' : 'different', ' opcodes and lines in ',
         count(array_unique($op_arrays[1])), ' op arrays, ',
-        substr_count($sharp, 'Class [ <user> ') === substr_count($php, 'Class [ <user> ') ? 'same' : 'different',
-        ' signatures in ', substr_count($sharp, 'Class [ <user> '), " classes\n";
+        preg_match_all($user_class, $sharp) === preg_match_all($user_class, $php) ? 'same' : 'different',
+        ' signatures in ', preg_match_all($user_class, $sharp), " classes\n";
 
     // A difference PHP# makes on purpose is pinned line by line below, so any other one fails.
     $sharp_lines = explode("\n", $sharp);
@@ -94,6 +110,11 @@ Product: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Expressions: same opcodes and lines in 8 op arrays, same signatures in 1 classes
 Checkout: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Page: same opcodes and lines in 10 op arrays, same signatures in 1 classes
+Stage: same opcodes and lines in 4 op arrays, same signatures in 1 classes
+Suit: same opcodes and lines in 3 op arrays, same signatures in 1 classes
+Rank: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+Shipment: same opcodes and lines in 11 op arrays, same signatures in 1 classes
+Task: same opcodes and lines in 4 op arrays, same signatures in 1 classes
 Shapes: same opcodes and lines in 5 op arrays, same signatures in 2 classes
 Members: same opcodes and lines in 10 op arrays, same signatures in 1 classes
 Site: same opcodes and lines in 13 op arrays, same signatures in 3 classes
@@ -108,3 +129,13 @@ RushOrders: same opcodes and lines in 2 op arrays, same signatures in 2 classes
 TypedOrders: same opcodes and lines in 2 op arrays, same signatures in 2 classes
 Permalink: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 Library: same opcodes and lines in 19 op arrays, same signatures in 1 classes
+Inbox: same opcodes and lines in 9 op arrays, same signatures in 1 classes
+Patterns: same opcodes and lines in 11 op arrays, same signatures in 1 classes
+Signatures: same opcodes and lines in 11 op arrays, same signatures in 1 classes
+Accessors: same opcodes and lines in 15 op arrays, same signatures in 2 classes
+Parcel: same opcodes and lines in 3 op arrays, same signatures in 1 classes
+Exits: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+Positions: same opcodes and lines in 5 op arrays, same signatures in 1 classes
+Deploy: same opcodes and lines in 7 op arrays, same signatures in 1 classes
+Tags: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+PhpForms: same opcodes and lines in 15 op arrays, same signatures in 1 classes
