@@ -2,7 +2,7 @@
 
 ## Decision
 
-A class value works wherever a class name works. `new type(key)` needs a `required` constructor, or for a plain PHP class its own constructor. `type.defaultTag()` and `type.find(id)` call the static on the class the value holds. `Class`'s own members, such as `attributes`, win, and a class cannot declare a static named like one of them. A property named by a variable stays refused, and `order.getAttribute(column)` replaces `$order->$column`.
+A class value works wherever a class name works. `new (type)(key)` needs a `required` constructor, or for a plain PHP class its own constructor. `type.defaultTag()` and `type.find(id)` call the static on the class the value holds. `Class`'s own members, such as `attributes`, win, and a class cannot declare a static named like one of them. A property named by a variable stays refused, and `order.getAttribute(column)` replaces `$order->$column`.
 
 ## Options
 
@@ -16,7 +16,7 @@ public class FormBuilder
     public Element make(string kind, string key)
     {
         const type = this.elements[kind] ?? throw new UnknownElement(kind);
-        return new type(key);                                          // compiles: Element's constructor is required
+        return new (type)(key);                                        // compiles: Element's constructor is required
     }
 
     public string tagFor(string kind)
@@ -36,7 +36,7 @@ The checker's types reach the running program (decision 29), so the engine knows
 ### Rejected: `new` on a class value only, and members through it refused
 
 ```csharp
-new type(key);                                                             // compiles
+new (type)(key);                                                           // compiles
 type.defaultTag();                                                         // compile error: no static member through a class value; pass a function
 Map<string, Function<string()>> tags = ["form": FormElement.defaultTag];   // compiles; the replacement
 ```
@@ -46,7 +46,7 @@ Every static a caller needs through a class value becomes a hand-kept map of fun
 ### Rejected: no class values
 
 ```csharp
-Map<string, Function<Element(string)>> makers = ["form": key => new FormElement(key)];   // compiles; replaces new type(key)
+Map<string, Function<Element(string)>> makers = ["form": key => new FormElement(key)];   // compiles; replaces new (type)(key)
 ```
 
 Every `new $class` becomes a hand-written map of lambdas, and a class name from Laravel can only be built through the container.

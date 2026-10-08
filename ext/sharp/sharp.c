@@ -3,7 +3,9 @@
 #endif
 
 #include "php.h"
+#include "SAPI.h"
 #include "ext/spl/spl_exceptions.h"
+#include "ext/standard/basic_functions.h"
 #include "ext/standard/info.h"
 #include "zend_closures.h"
 #include "zend_enum.h"
@@ -12,7 +14,7 @@
 #include "zend_system_id.h"
 #include "php_sharp.h"
 #include "sharp_arginfo.h"
-#include "sharp_bridge.h"
+#include "sharp_unit.h"
 #include "sharp_build_id.h"
 
 #define SHARP_FILE_EXTENSION ".sharp"
@@ -25,12 +27,12 @@ static zend_op_array *(*sharp_next_compile_file)(zend_file_handle *file_handle, 
 
 static zend_ast *sharp_translate(const sharp_unit *unit, uint32_t index);
 
-static zend_string *sharp_string(sharp_str text)
+static zend_string *sharp_string(const sharp_unit *unit, sharp_str text)
 {
-	return zend_string_init(text.ptr, text.len, 0);
+	return zend_string_init(unit->texts + text.offset, text.len, 0);
 }
 
-static zend_ast *sharp_translate_zval(const sharp_node *node)
+static zend_ast *sharp_translate_zval(const sharp_unit *unit, const sharp_node *node)
 {
 	zval value;
 
@@ -51,7 +53,7 @@ static zend_ast *sharp_translate_zval(const sharp_node *node)
 			ZVAL_DOUBLE(&value, node->double_value);
 			break;
 		case SHARP_STRING:
-			ZVAL_STR(&value, sharp_string(node->text));
+			ZVAL_STR(&value, sharp_string(unit, node->text));
 			break;
 		EMPTY_SWITCH_DEFAULT_CASE();
 	}
@@ -110,7 +112,7 @@ static zend_ast *sharp_translate_decl(const sharp_unit *unit, const sharp_node *
 	/* php-src's grammar gives a closure and an arrow function no name. */
 	CG(zend_lineno) = node->end_line;
 	return zend_ast_create_decl(kind, node->attr, node->line, NULL,
-		kind == ZEND_AST_CLOSURE || kind == ZEND_AST_ARROW_FUNC ? NULL : sharp_string(node->text),
+		kind == ZEND_AST_CLOSURE || kind == ZEND_AST_ARROW_FUNC ? NULL : sharp_string(unit, node->text),
 		child[0], child[1], child[2], child[3], child[4]);
 }
 
@@ -146,7 +148,7 @@ static zend_ast *sharp_translate(const sharp_unit *unit, uint32_t index)
 
 	if (kind == ZEND_AST_ZVAL) {
 		CG(zend_lineno) = node->line;
-		return sharp_translate_zval(node);
+		return sharp_translate_zval(unit, node);
 	}
 	if ((kind >> ZEND_AST_IS_LIST_SHIFT) & 1) {
 		ast = sharp_translate_list(unit, node, kind);
@@ -175,7 +177,7 @@ static int sharp_parse(void)
 			CG(zend_lineno) = diagnostic->line;
 			zend_throw_exception_ex(
 				diagnostic->severity == SHARP_PARSE_ERROR ? zend_ce_parse_error : zend_ce_compile_error,
-				0, "%.*s", (int) diagnostic->message.len, diagnostic->message.ptr);
+				0, "%.*s", (int) diagnostic->message.len, unit->texts + diagnostic->message.offset);
 		} else {
 			CG(ast) = sharp_translate(unit, unit->root);
 			CG(zend_lineno) = unit->nodes[unit->root].end_line;
@@ -334,6 +336,7 @@ zval *sharp_method_value(zend_class_entry *ce, zend_object *object, zend_string 
 
 ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	zend_object *spare_collections[SHARP_SPARE_COLLECTIONS];
+	zval arguments;
 ZEND_END_MODULE_GLOBALS(sharp)
 
 ZEND_DECLARE_MODULE_GLOBALS(sharp)
@@ -1221,6 +1224,175 @@ ZEND_METHOD(Sharp_Collection, sortedBy)
 	zval_ptr_dtor(&pairs);
 }
 
+ZEND_METHOD(Sharp_Position, __construct)
+{
+	zend_string *file, *function;
+	zend_long line, column;
+
+	ZEND_PARSE_PARAMETERS_START(4, 4)
+		Z_PARAM_STR(file)
+		Z_PARAM_LONG(line)
+		Z_PARAM_LONG(column)
+		Z_PARAM_STR(function)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_object *position = Z_OBJ_P(ZEND_THIS);
+	zend_update_property_str(position->ce, position, ZEND_STRL("file"), file);
+	if (EG(exception)) {
+		RETURN_THROWS();
+	}
+
+	zend_string *directory = zend_string_init(ZSTR_VAL(file), ZSTR_LEN(file), 0);
+	ZSTR_LEN(directory) = zend_dirname(ZSTR_VAL(directory), ZSTR_LEN(directory));
+	zend_update_property_str(position->ce, position, ZEND_STRL("directory"), directory);
+	zend_string_release(directory);
+	zend_update_property_long(position->ce, position, ZEND_STRL("line"), line);
+	zend_update_property_long(position->ce, position, ZEND_STRL("column"), column);
+	zend_update_property_str(position->ce, position, ZEND_STRL("function"), function);
+}
+
+static zend_object_handlers sharp_environment_handlers;
+
+static bool sharp_environment_is_property(const zend_string *name)
+{
+	return zend_string_equals_literal(name, "arguments") || zend_string_equals_literal(name, "currentDirectory");
+}
+
+static bool sharp_environment_read(const zend_string *name, zval *result)
+{
+	if (zend_string_equals_literal(name, "arguments")) {
+		ZVAL_COPY(result, &SHARP_G(arguments));
+		return true;
+	}
+
+	char directory[MAXPATHLEN];
+	if (!VCWD_GETCWD(directory, MAXPATHLEN)) {
+		zend_throw_error(NULL, "Cannot read the current directory: %s", strerror(errno));
+		return false;
+	}
+	ZVAL_STRING(result, directory);
+
+	return true;
+}
+
+static zval *sharp_environment_read_property(zend_object *object, zend_string *name, int type, void **cache_slot, zval *rv)
+{
+	if (!sharp_environment_is_property(name)) {
+		return zend_std_read_property(object, name, type, cache_slot, rv);
+	}
+	if (type == BP_VAR_W || type == BP_VAR_RW || type == BP_VAR_UNSET) {
+		zend_throw_error(NULL, "Indirect modification of %s::$%s is not allowed", ZSTR_VAL(object->ce->name), ZSTR_VAL(name));
+		return &EG(uninitialized_zval);
+	}
+
+	return sharp_environment_read(name, rv) ? rv : &EG(uninitialized_zval);
+}
+
+static zval *sharp_environment_write_property(zend_object *object, zend_string *name, zval *value, void **cache_slot)
+{
+	if (!sharp_environment_is_property(name)) {
+		return zend_std_write_property(object, name, value, cache_slot);
+	}
+	zend_throw_error(NULL, "Property %s::$%s is read-only", ZSTR_VAL(object->ce->name), ZSTR_VAL(name));
+
+	return &EG(error_zval);
+}
+
+static zval *sharp_environment_get_property_ptr_ptr(zend_object *object, zend_string *name, int type, void **cache_slot)
+{
+	return NULL;
+}
+
+static int sharp_environment_has_property(zend_object *object, zend_string *name, int check_empty, void **cache_slot)
+{
+	if (!sharp_environment_is_property(name)) {
+		return zend_std_has_property(object, name, check_empty, cache_slot);
+	}
+	if (check_empty != ZEND_PROPERTY_NOT_EMPTY) {
+		return true;
+	}
+
+	zval value;
+	if (!sharp_environment_read(name, &value)) {
+		return false;
+	}
+	bool is_true = zend_is_true(&value);
+	zval_ptr_dtor(&value);
+
+	return is_true;
+}
+
+static void sharp_environment_unset_property(zend_object *object, zend_string *name, void **cache_slot)
+{
+	if (!sharp_environment_is_property(name)) {
+		zend_std_unset_property(object, name, cache_slot);
+		return;
+	}
+	zend_throw_error(NULL, "Cannot unset hooked property %s::$%s", ZSTR_VAL(object->ce->name), ZSTR_VAL(name));
+}
+
+ZEND_METHOD(Sharp_Environment, __construct)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+}
+
+ZEND_METHOD(Sharp_Environment, variable)
+{
+	char *name;
+	size_t name_length;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STRING(name, name_length)
+	ZEND_PARSE_PARAMETERS_END();
+
+	char *sapi_value = sapi_getenv(name, name_length);
+	if (sapi_value) {
+		RETVAL_STRING(sapi_value);
+		efree(sapi_value);
+		return;
+	}
+
+	zend_string *value = php_getenv(name, name_length);
+	if (!value) {
+		RETURN_NULL();
+	}
+	RETURN_STR(value);
+}
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_List_wrap, 0, 1, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_METHOD(Sharp_List, wrap)
+{
+	zval *value;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (Z_TYPE_P(value) == IS_ARRAY) {
+		RETURN_COPY(value);
+	}
+	array_init_size(return_value, 1);
+	Z_TRY_ADDREF_P(value);
+	zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), value);
+}
+
+static const zend_function_entry class_Sharp_List_methods[] = {
+	ZEND_ME(Sharp_List, wrap, arginfo_class_Sharp_List_wrap, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_FE_END
+};
+
+static zend_class_entry *register_class_Sharp_List(void)
+{
+	zend_class_entry ce;
+
+	INIT_NS_CLASS_ENTRY(ce, "Sharp", "List", class_Sharp_List_methods);
+
+	return zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES);
+}
+
 static PHP_MINIT_FUNCTION(sharp)
 {
 	register_class_Sharp_Int();
@@ -1234,6 +1406,18 @@ static PHP_MINIT_FUNCTION(sharp)
 	sharp_collection_handlers.clone_obj = NULL;
 	sharp_ce_collection->default_object_handlers = &sharp_collection_handlers;
 
+	register_class_Sharp_Position();
+	register_class_Sharp_List();
+
+	zend_class_entry *environment = register_class_Sharp_Environment();
+	memcpy(&sharp_environment_handlers, &std_object_handlers, sizeof(zend_object_handlers));
+	sharp_environment_handlers.read_property = sharp_environment_read_property;
+	sharp_environment_handlers.write_property = sharp_environment_write_property;
+	sharp_environment_handlers.get_property_ptr_ptr = sharp_environment_get_property_ptr_ptr;
+	sharp_environment_handlers.has_property = sharp_environment_has_property;
+	sharp_environment_handlers.unset_property = sharp_environment_unset_property;
+	environment->default_object_handlers = &sharp_environment_handlers;
+
 	sharp_init();
 	zend_add_system_entropy("sharp", "SHARP_BUILD_ID", SHARP_BUILD_ID, sizeof(SHARP_BUILD_ID) - 1);
 
@@ -1246,6 +1430,18 @@ static PHP_MINIT_FUNCTION(sharp)
 static PHP_GINIT_FUNCTION(sharp)
 {
 	memset(sharp_globals, 0, sizeof(*sharp_globals));
+}
+
+static PHP_RINIT_FUNCTION(sharp)
+{
+	zval *arguments = &SHARP_G(arguments);
+
+	array_init_size(arguments, SG(request_info).argc);
+	for (int i = 0; i < SG(request_info).argc; i++) {
+		add_next_index_string(arguments, SG(request_info).argv[i]);
+	}
+
+	return SUCCESS;
 }
 
 /* Runs after the request's destructors and before its objects are freed. A spare is freed without
@@ -1263,20 +1459,17 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 			OBJ_RELEASE(spare);
 		}
 	}
+	zval_ptr_dtor(&SHARP_G(arguments));
+	ZVAL_UNDEF(&SHARP_G(arguments));
 
 	return SUCCESS;
 }
 
 static PHP_MINFO_FUNCTION(sharp)
 {
-	sharp_str commit = sharp_mago_commit();
-	char *value = estrndup(commit.ptr, commit.len);
-
 	php_info_print_table_start();
-	php_info_print_table_row(2, "Mago commit", value);
+	php_info_print_table_row(2, "Mago commit", SHARP_MAGO_COMMIT);
 	php_info_print_table_end();
-
-	efree(value);
 }
 
 zend_module_entry sharp_module_entry = {
@@ -1285,7 +1478,7 @@ zend_module_entry sharp_module_entry = {
 	NULL,
 	PHP_MINIT(sharp),
 	NULL,
-	NULL,
+	PHP_RINIT(sharp),
 	PHP_RSHUTDOWN(sharp),
 	PHP_MINFO(sharp),
 	PHP_VERSION,

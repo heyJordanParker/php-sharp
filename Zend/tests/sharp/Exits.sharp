@@ -1,0 +1,13 @@
+namespace Demo;
+
+class Exits
+{
+    public static void stop(int code)
+    {
+        try {
+            exit(code);
+        } finally {
+            printf("finally\n");
+        }
+    }
+}

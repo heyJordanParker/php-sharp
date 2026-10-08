@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 99eb32d2518ef30a06f06e15bee0a9bd9d27b692 */
+ * Stub hash: 330aad8a91d233b12909b88cc8e2fe8fc3760389 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Int_parse, 0, 1, IS_LONG, 0)
 	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
@@ -72,6 +72,19 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_sortedBy,
 	ZEND_ARG_OBJ_INFO(0, selector, Closure, 0)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Sharp_Position___construct, 0, 0, 4)
+	ZEND_ARG_TYPE_INFO(0, file, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, line, IS_LONG, 0)
+	ZEND_ARG_TYPE_INFO(0, column, IS_LONG, 0)
+	ZEND_ARG_TYPE_INFO(0, function, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+#define arginfo_class_Sharp_Environment___construct arginfo_class_Sharp_Collection___construct
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Environment_variable, 0, 1, IS_STRING, 1)
+	ZEND_ARG_TYPE_INFO(0, name, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_METHOD(Sharp_Int, parse);
 ZEND_METHOD(Sharp_Int, tryParse);
 ZEND_METHOD(Sharp_Float, parse);
@@ -91,6 +104,9 @@ ZEND_METHOD(Sharp_Collection, any);
 ZEND_METHOD(Sharp_Collection, groupBy);
 ZEND_METHOD(Sharp_Collection, associateBy);
 ZEND_METHOD(Sharp_Collection, sortedBy);
+ZEND_METHOD(Sharp_Position, __construct);
+ZEND_METHOD(Sharp_Environment, __construct);
+ZEND_METHOD(Sharp_Environment, variable);
 
 static const zend_function_entry class_Sharp_Int_methods[] = {
 	ZEND_ME(Sharp_Int, parse, arginfo_class_Sharp_Int_parse, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
@@ -123,6 +139,17 @@ static const zend_function_entry class_Sharp_Collection_methods[] = {
 	ZEND_FE_END
 };
 
+static const zend_function_entry class_Sharp_Position_methods[] = {
+	ZEND_ME(Sharp_Position, __construct, arginfo_class_Sharp_Position___construct, ZEND_ACC_PUBLIC)
+	ZEND_FE_END
+};
+
+static const zend_function_entry class_Sharp_Environment_methods[] = {
+	ZEND_ME(Sharp_Environment, __construct, arginfo_class_Sharp_Environment___construct, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Environment, variable, arginfo_class_Sharp_Environment_variable, ZEND_ACC_PUBLIC)
+	ZEND_FE_END
+};
+
 static zend_class_entry *register_class_Sharp_Int(void)
 {
 	zend_class_entry ce, *class_entry;
@@ -149,6 +176,62 @@ static zend_class_entry *register_class_Sharp_Collection(void)
 
 	INIT_NS_CLASS_ENTRY(ce, "Sharp", "Collection", class_Sharp_Collection_methods);
 	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES|ZEND_ACC_NOT_SERIALIZABLE);
+
+	return class_entry;
+}
+
+static zend_class_entry *register_class_Sharp_Position(void)
+{
+	zend_class_entry ce, *class_entry;
+
+	INIT_NS_CLASS_ENTRY(ce, "Sharp", "Position", class_Sharp_Position_methods);
+	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES);
+
+	zval property_file_default_value;
+	ZVAL_UNDEF(&property_file_default_value);
+	zend_declare_typed_property(class_entry, ZSTR_KNOWN(ZEND_STR_FILE), &property_file_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_STRING));
+
+	zval property_directory_default_value;
+	ZVAL_UNDEF(&property_directory_default_value);
+	zend_string *property_directory_name = zend_string_init("directory", sizeof("directory") - 1, 1);
+	zend_declare_typed_property(class_entry, property_directory_name, &property_directory_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_STRING));
+	zend_string_release(property_directory_name);
+
+	zval property_line_default_value;
+	ZVAL_UNDEF(&property_line_default_value);
+	zend_declare_typed_property(class_entry, ZSTR_KNOWN(ZEND_STR_LINE), &property_line_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_LONG));
+
+	zval property_column_default_value;
+	ZVAL_UNDEF(&property_column_default_value);
+	zend_string *property_column_name = zend_string_init("column", sizeof("column") - 1, 1);
+	zend_declare_typed_property(class_entry, property_column_name, &property_column_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_LONG));
+	zend_string_release(property_column_name);
+
+	zval property_function_default_value;
+	ZVAL_UNDEF(&property_function_default_value);
+	zend_declare_typed_property(class_entry, ZSTR_KNOWN(ZEND_STR_FUNCTION), &property_function_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_STRING));
+
+	return class_entry;
+}
+
+static zend_class_entry *register_class_Sharp_Environment(void)
+{
+	zend_class_entry ce, *class_entry;
+
+	INIT_NS_CLASS_ENTRY(ce, "Sharp", "Environment", class_Sharp_Environment_methods);
+	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES|ZEND_ACC_NOT_SERIALIZABLE);
+
+	zval property_arguments_default_value;
+	ZVAL_UNDEF(&property_arguments_default_value);
+	zend_string *property_arguments_name = zend_string_init("arguments", sizeof("arguments") - 1, 1);
+	zend_declare_typed_property(class_entry, property_arguments_name, &property_arguments_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_VIRTUAL, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_ARRAY));
+	zend_string_release(property_arguments_name);
+
+	zval property_currentDirectory_default_value;
+	ZVAL_UNDEF(&property_currentDirectory_default_value);
+	zend_string *property_currentDirectory_name = zend_string_init("currentDirectory", sizeof("currentDirectory") - 1, 1);
+	zend_declare_typed_property(class_entry, property_currentDirectory_name, &property_currentDirectory_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_VIRTUAL, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_STRING));
+	zend_string_release(property_currentDirectory_name);
 
 	return class_entry;
 }

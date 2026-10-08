@@ -2,7 +2,7 @@
 
 ## Decision
 
-Output and exit are function calls only. `echo` and `print` are removed, with a compile error that names `printf` or `fwrite`. `die` is removed, with a compile error that says to write the message to STDERR, then `exit(1)`, because `die("…")` exits with status 0. `exit(code)` stays as PHP 8.4's built-in function. It skips `finally` blocks, as in Java and C#, and has the effect `Php` until the standard library wraps it (decision 43).
+Output and exit are function calls only. `echo` and `print` are removed, with a compile error that names `printf` or `fwrite`. `die` is removed, with a compile error that says to write the message to STDERR, then `exit(1)`, because `die("…")` exits with status 0. `exit(code)` stays as PHP 8.4's built-in function. It skips `finally` blocks, as in Java and C#, and has the effect `Process`, while printing has the effect `Console` (decision 63).
 
 ## Options
 
