@@ -1006,38 +1006,92 @@ public Customer? current() { return this.customer; } // compile error: current n
 
 ## 15. Events
 
-The language wires events. An app adds its own attributes, such as `[Retry]`, for its policy.
+An event says that something happened, such as an order being paid. `emit` raises it, and every listener for it runs. `vendor/bin/mago compile` finds every listener at build time (section 27), so nothing is wired by hand.
 
 ```csharp
 public class Order
 {
-    public event OrderPaid paid;                        // declared on its owner
-    void settle() { emit paid(new OrderPaid(this)); }   // only Order can emit it
+    public interface Event { int orderId { get; } }                   // declares Order.Event, the type both events share
+    public event Paid(int orderId, Money amount) : Event;             // declares the event type Order.Paid
+    public event Refunded(int orderId, Money amount) : Event;         // declares Order.Refunded
+
+    public void markPaid()
+    {
+        …
+        emit new Paid(this.id, this.total);                            // runs every listener for Order.Paid
+    }
 }
 
-[Retry(Retry.ExponentialDays)]
-public void deliver(OrderPaid e) on Order.paid { … }    // subscribes this method
+public class Receipts
+{
+    public void deliver(Order.Paid e) on Order.Paid { … }             // listens to every Order.Paid
+}
 ```
 
-**Declaring:** `event` declares an event on a class. Its type is the payload.
+**Declaring:** `event` declares an event type. `public event Paid(int orderId, Money amount);` inside `Order` declares `Order.Paid`, a class whose parameters become get-only properties, as C#'s positional records and Kotlin's data classes do. An event is declared inside the class that raises it, and an interface its events share is declared beside them, as `Order.Event` is, the way C# nests types. An event that no single class owns is declared on its own, in its own file:
 
-**Emitting:** `emit` raises the event. Only the class that declares it can emit it, and anywhere else is a compile error.
+```csharp
+// app/Imports/RowImported.sharp
+namespace App.Imports;
 
-**Subscribing:** `on Owner.event` after a method's parameters subscribes that method. It sits in the same position as `readonly`.
+public event RowImported(int row);
+```
 
-- A renamed or removed event is a compile error at every `on` that names it.
-- The parameter type must match the event's payload type.
+**Emitting:** `emit` raises an event. Any code may raise any event type:
 
-**Wiring is automatic:**
+```csharp
+emit new Paid(this.id, this.total);              // inside Order
+emit new Order.Paid(order.id, order.total);      // anywhere else
+```
 
-1. **At build time,** the checker writes an index of every `on` subscription.
-2. **At boot,** the runtime loads that index once.
-3. **On `emit`,** the runtime passes the event and its handlers to the dispatcher.
+**Plain PHP events:** `extern event` marks a plain PHP class, such as a Laravel event, as an event, so PHP# code can listen to it:
 
-**The dispatcher:**
+```csharp
+// app/Stubs/Laravel.sharp
+namespace App.Stubs;
 
-- **By default,** it calls each handler immediately, in the same request.
-- **An app can replace it** with its own, registered once at boot. An app's durable event bus, for example, builds listeners through its framework's container, queues them and applies `[Retry]`.
+import Illuminate.Queue.Events.JobFailed;
+
+extern event JobFailed;
+```
+
+**Listening:** a trailing `on` clause after a method's parameters lists the events the method listens to, for as long as the app runs. The method takes zero parameters, or one parameter whose type every listed event shares. It takes no other parameter, and no parameter is implicit. The namespace's `Module.sharp` container creates the object each listener runs on.
+
+```csharp
+public class OrderNotices
+{
+    public void send(Order.Event e) on Order.Paid, Order.Refunded { … }    // two events, read through the type they share
+    public void refresh() on Order.Paid { … }                              // no parameter: the event's data is not needed
+    public void audit(Order.Event e) on Order.Event { … }                  // every event that implements Order.Event
+    public void alert(JobFailed e) on JobFailed { … }                      // a plain PHP event marked with extern event
+}
+```
+
+- **A listener on an interface hears every event that implements it.**
+- **`vendor/bin/mago compile` finds every `on` at build time.** A wrong event name, or a parameter type the listed events don't share, is a compile error:
+
+```csharp
+public void send(Order.Paid e) on Order.Paid, Order.Refunded { … }      // compile error: Order.Refunded is not an Order.Paid
+public void refresh() on Order.Payed { … }                               // compile error: Order has no event Payed
+public void log(Order.Paid e, Logger logger) on Order.Paid { … }         // compile error: a listener takes only the event
+```
+
+**Listening for a while:** `Events.on<RowImported>(e => …)` starts a listener and returns a handle. The listener stops when the handle goes out of scope:
+
+```csharp
+public class ImportScreen
+{
+    public void import(string path)
+    {
+        const listening = Events.on<RowImported>(e => this.progress.advance());   // listens until import returns
+        this.importer.run(path);
+    }
+}
+```
+
+**Effects:** `emit` has the effect `Events` (section 29), so a method that emits shows `Events` among its effects, and code without a body allows it with `uses Events`.
+
+**Timing:** the default dispatcher runs listeners immediately, before `emit` returns. An app replaces the dispatcher once at startup, to run listeners later, after a save, with retries, or not at all in tests.
 
 ## 16. Naming a value
 
@@ -2143,7 +2197,7 @@ theorem receiptMatchesRefunds : App.Tenant.Store.Module.receiptMatchesRefunds :=
 
 ## 29. Effects
 
-An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities, which Scala 3, Effekt and Pony also use. It also records every call into plain PHP, whose effect an `extern` declaration states.
+An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities, which Scala 3, Effekt and Pony also use. It also records every call into plain PHP, whose effect an `extern` declaration states, and every `emit`, which raises an event and has the effect `Events` (section 15).
 
 **Any PHP# code may call plain PHP,** including Laravel's facades, helpers and model methods, and PHP's built-in functions the standard library does not wrap yet (section 8). Most libraries are plain PHP, so this is how PHP# code uses them.
 
@@ -2228,6 +2282,8 @@ public foreign class RedisStore
 
 The standard library ships `Database`, `Http`, `Files`, `Console`, `Process`, `Clock`, `Random`, `Cache`, `Mail` and `Environment`. A project declares its own `foreign` classes the same way.
 
+**`Events` is the effect of `emit`** (section 15). It is the one standard effect that is not a `foreign` class: a method has it when its body emits, and no object carries it.
+
 **PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS` are compile errors that read "PHP# has no superglobals; take a Request". Request data arrives as an object, such as a framework's `Request`. The process environment arrives as `Environment`, a standard `foreign` class like `Clock` and `Random`:
 
 - `string? variable(string name)` reads an environment variable, or gives null when it is not set.
@@ -2264,10 +2320,10 @@ public class TenantCache
 }
 ```
 
-- **A class's effects** are the `foreign` classes it holds, directly or through its fields, and the effects of the plain PHP its methods call. The checker works them out from field and constructor types and from method bodies. Nothing is written down.
+- **A class's effects** are the `foreign` classes it holds, directly or through its fields, the effects of the plain PHP its methods call, and the events its methods emit. The checker works them out from field and constructor types and from method bodies. Nothing is written down.
 - **A `foreign` object** is created in a module (section 32), as often as its binding's lifetime decides, and handed down through constructors. Creating one anywhere else, or storing one in a static, is a compile error.
 
-**Pure code** reaches no `foreign` object, calls no plain PHP unless an `extern` declares it pure, calls no built-in function with the effect `Php`, and changes nothing it was given (section 13). Getters must be pure. Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
+**Pure code** reaches no `foreign` object, emits no event, calls no plain PHP unless an `extern` declares it pure, calls no built-in function with the effect `Php`, and changes nothing it was given (section 13). Getters must be pure. Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
 
 **Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types. Every implementation is held to what the declaration allows:
 
@@ -2307,6 +2363,20 @@ MailchimpSync.sync calls Mailchimp, which has no extern declaration, so `uses Ht
 Declare its effect in a .sharp file, such as `extern Mailchimp uses Http;`.
 ```
 
+**`uses Events` lets an implementation emit:**
+
+```csharp
+public interface Checkout
+{
+    void complete(Order order) uses Events;                                            // implementations may emit, nothing else
+}
+
+public class StoreCheckout : Checkout
+{
+    public void complete(Order order) { emit new Order.Paid(order.id, order.total); }   // fits: emit has the effect Events
+}
+```
+
 **A method that takes a function can have that function's effects.** Its declaration writes `uses f`, where `f` is one of its function-typed parameters, with or without a body. At each call, the method has its body's own effects plus the effects of the function passed as `f`. Code that calls it writes nothing.
 
 ```csharp
@@ -2322,7 +2392,7 @@ public Charge charge(Cart cart, Function<Cart(Cart)> prepare) uses prepare => th
 
 The standard library's collection methods (section 12) are declared this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
 
-**Code with a body writes no `uses` except `uses f`.** Its effects enter through the constructor, through the plain PHP it calls and through each function its `uses f` names, and its body and declaration show all three. The checker works out each method's effects, and the editor displays them.
+**Code with a body writes no `uses` except `uses f`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function its `uses f` names, and its body and declaration show all four. The checker works out each method's effects, and the editor displays them.
 
 ## 30. Tuples
 
