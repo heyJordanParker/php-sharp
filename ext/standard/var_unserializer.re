@@ -623,7 +623,9 @@ static zend_always_inline int process_nested_object_data(UNSERIALIZE_PARAMETER, 
 
 		if (EXPECTED(Z_TYPE(key) == IS_STRING)) {
 string_key:
-			if (UNEXPECTED(zend_string_equals(Z_STR(key), sharp_type_arguments_key))) {
+			/* PHP#: an incomplete class keeps the type arguments as an ordinary entry, so it serializes back to the
+			 * same bytes. */
+			if (UNEXPECTED(zend_string_equals(Z_STR(key), sharp_type_arguments_key)) && obj->ce != PHP_IC_ENTRY) {
 				zval_ptr_dtor_str(&key);
 				if (!process_type_arguments(p, max, obj)) {
 					goto failure;

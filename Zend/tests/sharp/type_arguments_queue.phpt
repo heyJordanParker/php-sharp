@@ -43,6 +43,13 @@ foreach (['default form' => Queue::orders(), '__serialize form' => Queue::ledger
     $copy[4] = 'changed';
     echo $copy[5], "\n";
 }
+
+echo "an incomplete class keeps the type arguments as an ordinary entry, and serializes back to the same bytes\n";
+$gone = str_replace('O:17:"App\PaginatedList"', 'O:11:"App\Missing"', serialize(Queue::orders()));
+foreach ([serialize(Queue::orders()), serialize(Queue::ledger()), $gone] as $queued) {
+    $run = unserialize($queued, ['allowed_classes' => $queued === $gone]);
+    echo get_class($run), ' ', var_export(serialize($run) === $queued, true), "\n";
+}
 ?>
 --EXPECT--
 the default form
@@ -73,3 +80,7 @@ __serialize form: true true 7 App.Order
 changed
 __sleep form: true true 7 App.Order
 changed
+an incomplete class keeps the type arguments as an ordinary entry, and serializes back to the same bytes
+__PHP_Incomplete_Class true
+__PHP_Incomplete_Class true
+__PHP_Incomplete_Class true
