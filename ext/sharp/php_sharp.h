@@ -15,9 +15,9 @@ void sharp_collection_of_value(zval *result, zval *value);
 void sharp_collection_of_property(zval *result, zend_object *object, zend_string *name, void **cache_slot);
 
 /* PHP# type texts, the one spelling of a type the bridge prints and the engine reads: `App.Order`, `int?`,
- * `List<App.Order>`, `(int|string)?`, `Function<bool(App.Order, int)>`. Each text parses once into a sharp_type,
- * interned for the process, so equal types are one pointer. None is freed before module shutdown, so a run-time
- * cache slot may keep one. */
+ * `List<App.Order>`, `(int|string)?`, `Function<bool(App.Order, int)>`. Each text parses once into an interned
+ * sharp_type, so equal types are one pointer. A type code spells lives for the process. A type first read from input
+ * lives for its request, and only a type that lives for the process goes into a run-time cache slot. */
 typedef enum {
 	/* A type argument list, `App.Order, int`: each argument is a member. */
 	SHARP_TYPE_LIST,
@@ -41,7 +41,13 @@ struct _sharp_type {
 	const sharp_type *members[1];
 };
 
-/* The interned type argument list `text` spells, or NULL when it spells none. */
+/* Whether `type` lives for the process. */
+static zend_always_inline bool sharp_type_is_persistent(const sharp_type *type)
+{
+	return GC_FLAGS(type->text) & IS_STR_PERSISTENT;
+}
+
+/* The interned type argument list code spells as `text`, or NULL when it spells none. */
 const sharp_type *sharp_type_list(const char *text, size_t length);
 
 /* An object of a generic PHP# class keeps its type arguments in a declared property of this name, which carries

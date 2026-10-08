@@ -48,6 +48,9 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	/* Undefined until the request runs its compile command, then the checker report the command printed, or null. */
 	zval compile_command_report;
 	zval arguments;
+	/* The types and argument lists first read from input this request, NULL until there is one. See sharp_types. */
+	HashTable *request_types;
+	HashTable *request_type_lists;
 ZEND_END_MODULE_GLOBALS(sharp)
 
 ZEND_DECLARE_MODULE_GLOBALS(sharp)
@@ -1441,7 +1444,11 @@ ZEND_METHOD(Sharp_Position, __construct)
  * one pointer: a single space after each comma and nowhere else, union members sorted by their text, and `T?` in
  * place of `T|null`. Types and argument lists live in two tables, because a one-argument list spells its argument.
  * A text parses whole into a tree of sharp_type_node in a request arena before any of it is interned, and the tables'
- * lock is held only across a lookup or an insert, so an allocation that fails never leaves it held. */
+ * lock is held only across a lookup or an insert, so an allocation that fails never leaves it held.
+ *
+ * The process's tables keep the types code spells, which its source bounds. A type first read from input, or holding
+ * one, interns in the request's own tables instead and is freed with them, so input never grows a worker. A lookup
+ * reads the process's table, then the request's, so a type is one pointer either way. */
 
 zend_string *sharp_type_arguments_key;
 
@@ -1483,24 +1490,27 @@ typedef struct {
 
 static sharp_type_node *sharp_type_read(sharp_type_reader *reader);
 
-/* A persistent string no request frees or counts, as an interned string is. */
-static zend_string *sharp_type_string(const char *text, size_t length)
+/* A string no zval counts, as an interned string is, for the process or for the request. */
+static zend_string *sharp_type_string(const char *text, size_t length, bool persistent)
 {
-	zend_string *string = zend_string_init(text, length, true);
+	zend_string *string = zend_string_init(text, length, persistent);
 
 	zend_string_hash_val(string);
-	GC_TYPE_INFO(string) = GC_STRING | ((IS_STR_INTERNED | IS_STR_PERSISTENT | IS_STR_PERMANENT) << GC_FLAGS_SHIFT);
+	GC_TYPE_INFO(string) = GC_STRING
+		| ((IS_STR_INTERNED | (persistent ? IS_STR_PERSISTENT | IS_STR_PERMANENT : 0)) << GC_FLAGS_SHIFT);
 
 	return string;
 }
 
 static void sharp_type_release(sharp_type *type)
 {
+	bool persistent = sharp_type_is_persistent(type);
+
 	if (type->class_name) {
-		pefree(type->class_name, true);
+		pefree(type->class_name, persistent);
 	}
-	pefree(type->text, true);
-	pefree(type, true);
+	pefree(type->text, persistent);
+	pefree(type, persistent);
 }
 
 static void sharp_type_free(zval *entry)
@@ -1564,35 +1574,45 @@ static bool sharp_type_identifier(sharp_type_reader *reader)
 	return reader->at > start;
 }
 
-static const sharp_type *sharp_type_find(const HashTable *table, const char *text, size_t length)
+/* The interned type or list `text` spells, from the process's tables or the request's. */
+static const sharp_type *sharp_type_find(bool list, const char *text, size_t length)
 {
 	SHARP_TYPES_LOCK();
-	const sharp_type *type = zend_hash_str_find_ptr(table, text, length);
+	const sharp_type *type = zend_hash_str_find_ptr(list ? &sharp_type_lists : &sharp_types, text, length);
 	SHARP_TYPES_UNLOCK();
+
+	HashTable *request = list ? SHARP_G(request_type_lists) : SHARP_G(request_types);
+	if (!type && request) {
+		type = zend_hash_str_find_ptr(request, text, length);
+	}
 
 	return type;
 }
 
-/* The interned type `node` spells, which `table` keeps. Each member interns in sharp_types first. */
-static const sharp_type *sharp_type_intern(HashTable *table, const sharp_type_node *node, zend_arena **arena)
+/* The interned type `node` spells. It lives for the process when code spells it and each member does too. */
+static const sharp_type *sharp_type_intern(const sharp_type_node *node, bool from_code, zend_arena **arena)
 {
-	const sharp_type *found = sharp_type_find(table, node->text, node->length);
+	bool list = node->kind == SHARP_TYPE_LIST;
+	const sharp_type *found = sharp_type_find(list, node->text, node->length);
 
 	if (found) {
 		return found;
 	}
 
 	const sharp_type **members = zend_arena_alloc(arena, MAX(node->count, 1) * sizeof(*members));
+	bool persistent = from_code;
 	uint32_t i = 0;
 	for (const sharp_type_node *member = node->first; member; member = member->next) {
-		members[i++] = sharp_type_intern(&sharp_types, member, arena);
+		members[i] = sharp_type_intern(member, from_code, arena);
+		persistent = persistent && sharp_type_is_persistent(members[i]);
+		i++;
 	}
 
-	sharp_type *type = pemalloc(offsetof(sharp_type, members) + MAX(node->count, 1) * sizeof(sharp_type *), true);
-	type->text = sharp_type_string(node->text, node->length);
+	sharp_type *type = pemalloc(offsetof(sharp_type, members) + MAX(node->count, 1) * sizeof(sharp_type *), persistent);
+	type->text = sharp_type_string(node->text, node->length, persistent);
 	type->class_name = NULL;
 	if (node->name) {
-		type->class_name = sharp_type_string(node->name, node->name_length);
+		type->class_name = sharp_type_string(node->name, node->name_length, persistent);
 		for (char *c = ZSTR_VAL(type->class_name); *c; c++) {
 			if (*c == '.') {
 				*c = '\\';
@@ -1603,7 +1623,20 @@ static const sharp_type *sharp_type_intern(HashTable *table, const sharp_type_no
 	type->count = node->count;
 	memcpy(type->members, members, node->count * sizeof(*members));
 
+	if (!persistent) {
+		HashTable **request = list ? &SHARP_G(request_type_lists) : &SHARP_G(request_types);
+
+		if (!*request) {
+			ALLOC_HASHTABLE(*request);
+			zend_hash_init(*request, 8, NULL, sharp_type_free, false);
+		}
+		zend_hash_add_new_ptr(*request, type->text, type);
+
+		return type;
+	}
+
 	/* Another thread may have interned the same text since the lookup above. */
+	HashTable *table = list ? &sharp_type_lists : &sharp_types;
 	SHARP_TYPES_LOCK();
 	found = zend_hash_find_ptr(table, type->text);
 	if (!found) {
@@ -1765,9 +1798,11 @@ static sharp_type_node *sharp_type_read(sharp_type_reader *reader)
 	return type;
 }
 
-const sharp_type *sharp_type_list(const char *text, size_t length)
+/* The interned type argument list `text` spells, or NULL when it spells none. `from_code` tells a text code spells
+ * from one read from input. */
+static const sharp_type *sharp_type_list_of(const char *text, size_t length, bool from_code)
 {
-	const sharp_type *list = sharp_type_find(&sharp_type_lists, text, length);
+	const sharp_type *list = sharp_type_find(true, text, length);
 
 	if (list) {
 		return list;
@@ -1787,11 +1822,25 @@ const sharp_type *sharp_type_list(const char *text, size_t length)
 
 	if (arguments && reader.at == reader.end) {
 		arguments->length = length;
-		list = sharp_type_intern(&sharp_type_lists, arguments, &reader.arena);
+		list = sharp_type_intern(arguments, from_code, &reader.arena);
 	}
 	zend_arena_destroy(reader.arena);
 
 	return list;
+}
+
+const sharp_type *sharp_type_list(const char *text, size_t length)
+{
+	return sharp_type_list_of(text, length, true);
+}
+
+static void sharp_type_request_table_free(HashTable **table)
+{
+	if (*table) {
+		zend_hash_destroy(*table);
+		FREE_HASHTABLE(*table);
+		*table = NULL;
+	}
 }
 
 /* The hidden slot `ce` itself declares, NULL when it declares none: a class without type parameters inherits its
@@ -1878,7 +1927,7 @@ zend_result sharp_type_arguments_unserialize(zend_object *object, const zval *te
 		return FAILURE;
 	}
 
-	const sharp_type *arguments = sharp_type_list(Z_STRVAL_P(text), Z_STRLEN_P(text));
+	const sharp_type *arguments = sharp_type_list_of(Z_STRVAL_P(text), Z_STRLEN_P(text), false);
 	if (!arguments || arguments->count != sharp_type_bounds(object->ce, slot)->count
 		|| !sharp_type_classes_load(arguments)) {
 		return FAILURE;
@@ -2131,6 +2180,15 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 	return SUCCESS;
 }
 
+/* Runs after the request's objects are freed, so no slot still points into the request's types. */
+static ZEND_MODULE_POST_ZEND_DEACTIVATE_D(sharp)
+{
+	sharp_type_request_table_free(&SHARP_G(request_type_lists));
+	sharp_type_request_table_free(&SHARP_G(request_types));
+
+	return SUCCESS;
+}
+
 static PHP_MINFO_FUNCTION(sharp)
 {
 	php_info_print_table_start();
@@ -2154,6 +2212,6 @@ zend_module_entry sharp_module_entry = {
 	PHP_MODULE_GLOBALS(sharp),
 	PHP_GINIT(sharp),
 	PHP_GSHUTDOWN(sharp),
-	NULL,
+	ZEND_MODULE_POST_ZEND_DEACTIVATE_N(sharp),
 	STANDARD_MODULE_PROPERTIES_EX
 };

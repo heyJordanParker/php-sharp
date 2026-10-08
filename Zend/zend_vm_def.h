@@ -6111,7 +6111,10 @@ ZEND_VM_HANDLER(211, ZEND_SHARP_TYPE_ARGS, UNUSED, CONST|UNUSED, CACHE_SLOT)
 
 			arguments = sharp_type_list(Z_STRVAL_P(text), Z_STRLEN_P(text));
 			ZEND_ASSERT(arguments != NULL);
-			CACHE_PTR(opline->extended_value, (void *) arguments);
+			/* A list unserialize read first this request is the request's, so the cache never keeps it. */
+			if (EXPECTED(sharp_type_is_persistent(arguments))) {
+				CACHE_PTR(opline->extended_value, (void *) arguments);
+			}
 		}
 	} else {
 		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
