@@ -2,7 +2,7 @@
 
 ## Decision
 
-A PHP built-in function the standard library has not classified has one catch-all effect, `Php`, which means "calls PHP code the checker cannot see into". It replaces the earlier rule that every other built-in function is pure. When the standard library wraps a function, its real effect replaces `Php`, as `Environment` does for `getenv()`, and other families get theirs as each is wrapped. Pure code cannot call a function with `Php`. Printing and `exit` have `Php` until the standard library wraps them.
+A PHP built-in function the standard library has not classified has one catch-all effect, `Php`, which means "calls PHP code the checker cannot see into". It replaces the earlier rule that every other built-in function is pure. When the standard library wraps a function, its real effect replaces `Php`, as `Environment` does for `getenv()`, and other families get theirs as each is wrapped. Pure code cannot call a function with `Php`. Printing has the effect `Console`, and `exit` has the effect `Process` (decision 63).
 
 `Php` covers PHP's built-in functions only. A call into a plain PHP library with no `extern` keeps its unknown effect, which no `uses` accepts (decision 16).
 
