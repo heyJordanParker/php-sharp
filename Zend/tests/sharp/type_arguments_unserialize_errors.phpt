@@ -2,10 +2,7 @@
 unserialize fails, with the warning malformed data gives, on type arguments it cannot give the object
 --FILE--
 <?php
-require __DIR__ . '/harness/Witness.inc';
-require __DIR__ . '/harness/Snapshot.inc';
-require __DIR__ . '/harness/Sleeper.inc';
-require __DIR__ . '/TypeArguments.sharp';
+require __DIR__ . '/type_arguments.inc';
 
 $key = 's:14:"' . "\0<sharp>\0types" . '";';
 $inputs = [
