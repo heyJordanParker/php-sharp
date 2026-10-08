@@ -1,0 +1,22 @@
+namespace Demo;
+
+public abstract class Shape
+{
+    public abstract float area();
+
+    protected abstract string name();
+
+    public string describe()
+    {
+        return this.name();
+    }
+}
+
+final class Unit
+{
+}
+
+public interface Measured
+{
+    float area();
+}

@@ -44,7 +44,10 @@
 #include "zend_system_id.h"
 #include "zend_call_stack.h"
 #include "zend_attributes.h"
+#include "zend_enum.h"
 #include "Optimizer/zend_func_info.h"
+#include "ext/spl/spl_exceptions.h"
+#include "ext/sharp/php_sharp.h"
 
 /* Virtual current working directory support */
 #include "zend_virtual_cwd.h"
@@ -1794,7 +1797,7 @@ ZEND_API ZEND_COLD void zend_wrong_string_offset_error(void)
 		case ZEND_FETCH_DIM_RW:
 		case ZEND_FETCH_DIM_FUNC_ARG:
 		case ZEND_FETCH_DIM_UNSET:
-			switch (opline->extended_value) {
+			switch (opline->extended_value & ~ZEND_SHARP_OPERATOR) {
 				case ZEND_FETCH_DIM_REF:
 					msg = "Cannot create references to/from string offsets";
 					break;
@@ -2496,13 +2499,84 @@ static zend_always_inline HashTable *zend_get_target_symbol_table(int fetch_type
 	return ht;
 }
 
-static zend_never_inline ZEND_COLD void ZEND_FASTCALL zend_undefined_offset(zend_long lval)
+/* The opline of a PHP# index or list or map literal, which the compiler marks with
+ * ZEND_SHARP_OPERATOR, or NULL. Only a cold path reads the mark, from the opline the VM and the JIT
+ * save before they report a missing key or an illegal one. */
+static ZEND_COLD const zend_op *zend_sharp_index_opline(void)
 {
+	const zend_execute_data *ex = EG(current_execute_data);
+
+	if (!ex || !ex->func || !ZEND_USER_CODE(ex->func->type)
+			|| !(ex->opline->extended_value & ZEND_SHARP_OPERATOR)) {
+		return NULL;
+	}
+	return ex->opline;
+}
+
+/* A PHP# index read throws OutOfRangeException where PHP warns about a missing key. */
+static ZEND_COLD bool zend_is_sharp_index_read(void)
+{
+	const zend_op *opline = zend_sharp_index_opline();
+
+	return opline && (opline->opcode == ZEND_FETCH_DIM_R || opline->opcode == ZEND_FETCH_DIM_FUNC_ARG);
+}
+
+/* A PHP# index or list or map literal turns a backed enum case into the key its value stands for,
+ * so plain PHP receives the backing values. The VM and the JIT reach this only with a key PHP
+ * refuses, on the path that throws for plain PHP. Gives IS_LONG or IS_STRING, as PHP stores the
+ * key, or IS_UNDEF when the key stays illegal. */
+ZEND_API ZEND_COLD uint8_t ZEND_FASTCALL zend_sharp_index_key(const zval *dim, zend_value *value)
+{
+	const zend_op *opline;
+	const zval *key = zend_sharp_enum_key(dim);
+	zend_ulong index;
+
+	if (!key || !(opline = zend_sharp_index_opline())) {
+		return IS_UNDEF;
+	}
+
+	switch (opline->opcode) {
+		case ZEND_FETCH_DIM_R:
+		case ZEND_FETCH_DIM_W:
+		case ZEND_FETCH_DIM_RW:
+		case ZEND_FETCH_DIM_IS:
+		case ZEND_FETCH_DIM_FUNC_ARG:
+		case ZEND_FETCH_DIM_UNSET:
+		case ZEND_ASSIGN_DIM:
+		case ZEND_INIT_ARRAY:
+		case ZEND_ADD_ARRAY_ELEMENT:
+			break;
+		default:
+			return IS_UNDEF;
+	}
+
+	if (Z_TYPE_P(key) == IS_LONG) {
+		value->lval = Z_LVAL_P(key);
+		return IS_LONG;
+	}
+	if (ZEND_HANDLE_NUMERIC(Z_STR_P(key), index)) {
+		value->lval = (zend_long) index;
+		return IS_LONG;
+	}
+	value->str = Z_STR_P(key);
+	return IS_STRING;
+}
+
+ZEND_API ZEND_COLD void ZEND_FASTCALL zend_undefined_offset(zend_long lval)
+{
+	if (zend_is_sharp_index_read()) {
+		zend_throw_exception_ex(spl_ce_OutOfRangeException, 0, "Undefined array key " ZEND_LONG_FMT, lval);
+		return;
+	}
 	zend_error(E_WARNING, "Undefined array key " ZEND_LONG_FMT, lval);
 }
 
-static zend_never_inline ZEND_COLD void ZEND_FASTCALL zend_undefined_index(const zend_string *offset)
+ZEND_API ZEND_COLD void ZEND_FASTCALL zend_undefined_index(const zend_string *offset)
 {
+	if (zend_is_sharp_index_read()) {
+		zend_throw_exception_ex(spl_ce_OutOfRangeException, 0, "Undefined array key \"%s\"", ZSTR_VAL(offset));
+		return;
+	}
 	zend_error(E_WARNING, "Undefined array key \"%s\"", ZSTR_VAL(offset));
 }
 
@@ -2552,7 +2626,7 @@ ZEND_API ZEND_COLD zval* ZEND_FASTCALL zend_undefined_index_write(HashTable *ht,
 	return retval;
 }
 
-ZEND_API zend_never_inline ZEND_COLD void ZEND_FASTCALL zend_undefined_method(const zend_class_entry *ce, const zend_string *method)
+ZEND_API ZEND_COLD void ZEND_FASTCALL zend_undefined_method(const zend_class_entry *ce, const zend_string *method)
 {
 	zend_throw_error(NULL, "Call to undefined method %s::%s()", ZSTR_VAL(ce->name), ZSTR_VAL(method));
 }
@@ -2709,9 +2783,15 @@ static zend_never_inline uint8_t slow_index_convert(HashTable *ht, const zval *d
 		case IS_TRUE:
 			value->lval = 1;
 			return IS_LONG;
-		default:
+		default: {
+			uint8_t type = zend_sharp_index_key(dim, value);
+
+			if (type != IS_UNDEF) {
+				return type;
+			}
 			zend_illegal_array_offset_access(dim);
 			return IS_NULL;
+		}
 	}
 }
 
@@ -2795,9 +2875,15 @@ static zend_never_inline uint8_t slow_index_convert_w(HashTable *ht, const zval 
 		case IS_TRUE:
 			value->lval = 1;
 			return IS_LONG;
-		default:
+		default: {
+			uint8_t type = zend_sharp_index_key(dim, value);
+
+			if (type != IS_UNDEF) {
+				return type;
+			}
 			zend_illegal_array_offset_access(dim);
 			return IS_NULL;
+		}
 	}
 }
 

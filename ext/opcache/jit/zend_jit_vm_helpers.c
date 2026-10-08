@@ -320,7 +320,7 @@ void ZEND_FASTCALL zend_jit_undefined_long_key(EXECUTE_DATA_D)
 		dim = EX_VAR(opline->op2.var);
 	}
 	ZEND_ASSERT(Z_TYPE_P(dim) == IS_LONG);
-	zend_error(E_WARNING, "Undefined array key " ZEND_LONG_FMT, Z_LVAL_P(dim));
+	zend_undefined_offset(Z_LVAL_P(dim));
 	ZVAL_NULL(result);
 }
 
@@ -329,7 +329,7 @@ void ZEND_FASTCALL zend_jit_undefined_long_key_ex(zend_long key EXECUTE_DATA_DC)
 	const zend_op *opline = EX(opline);
 	zval *result = EX_VAR(opline->result.var);
 
-	zend_error(E_WARNING, "Undefined array key " ZEND_LONG_FMT, key);
+	zend_undefined_offset(key);
 	ZVAL_NULL(result);
 }
 
@@ -347,9 +347,9 @@ void ZEND_FASTCALL zend_jit_undefined_string_key(EXECUTE_DATA_D)
 	}
 	ZEND_ASSERT(Z_TYPE_P(dim) == IS_STRING);
 	if (ZEND_HANDLE_NUMERIC(Z_STR_P(dim), lval)) {
-		zend_error(E_WARNING, "Undefined array key " ZEND_LONG_FMT, lval);
+		zend_undefined_offset(lval);
 	} else {
-		zend_error(E_WARNING, "Undefined array key \"%s\"", Z_STRVAL_P(dim));
+		zend_undefined_index(Z_STR_P(dim));
 	}
 	ZVAL_NULL(result);
 }
@@ -983,7 +983,7 @@ zend_jit_trace_stop ZEND_FASTCALL zend_jit_trace_execute(zend_execute_data  *ex,
 			case ZEND_FETCH_OBJ_R: {
 				if (opline->op2_type == IS_CONST) {
 					/* Remove the SIMPLE_GET flag to avoid inlining hooks. */
-					void **cache_slot = CACHE_ADDR(opline->extended_value & ~ZEND_FETCH_REF);
+					void **cache_slot = CACHE_ADDR(opline->extended_value & ~(ZEND_FETCH_REF|ZEND_SHARP_OPERATOR));
 					uintptr_t prop_offset = (uintptr_t)CACHED_PTR_EX(cache_slot + 1);
 					if (IS_HOOKED_PROPERTY_OFFSET(prop_offset)) {
 						CACHE_PTR_EX(cache_slot + 1, (void*)((uintptr_t)CACHED_PTR_EX(cache_slot + 1) & ~ZEND_PROPERTY_HOOK_SIMPLE_GET_BIT)); \

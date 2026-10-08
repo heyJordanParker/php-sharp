@@ -58,4 +58,19 @@ class Nulls
         }
         return total;
     }
+
+    public bool missing(int? value)
+    {
+        return value == null;
+    }
+
+    public bool present(string? value)
+    {
+        return value != null;
+    }
+
+    public bool absent(bool? value)
+    {
+        return null == value;
+    }
 }

@@ -1,0 +1,28 @@
+namespace Demo;
+
+import Lib.Field;
+
+public enum Stage : string, HasLabel
+{
+    case Active = "a";
+    [Field("Paused by support")]
+    case Paused = "p";
+    case Closed = "c";
+
+    public const Stage Default = Stage.Active;
+
+    public string label()
+    {
+        return `${this.name} (${this.value})`;
+    }
+
+    public bool isActive()
+    {
+        return this === Stage.Active;
+    }
+
+    public static Stage parse(string value)
+    {
+        return Stage.tryFrom(value) ?? Stage.from("a");
+    }
+}
