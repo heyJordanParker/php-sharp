@@ -1,0 +1,10 @@
+namespace Demo;
+
+import Sharp.Data.Base64;
+
+class Base64Calls
+{
+    public static string encode(string data) => Base64.encode(data);
+
+    public static string decode(string text) => Base64.decode(text);
+}

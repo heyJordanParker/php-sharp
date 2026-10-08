@@ -1,0 +1,8 @@
+namespace Demo;
+
+import Sharp.Time.TimeZone;
+
+class TimeZoneCalls
+{
+    public static List<string> names() => TimeZone.names();
+}

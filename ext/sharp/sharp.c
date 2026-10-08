@@ -17,12 +17,12 @@
 #include "zend_closures.h"
 #include "zend_enum.h"
 #include "zend_exceptions.h"
-#include "zend_smart_str.h"
 #include "zend_system_id.h"
 #include "php_sharp.h"
 #include "sharp_arginfo.h"
 #include "sharp_unit.h"
 #include "sharp_build_id.h"
+#include "sharp_native.h"
 
 #define SHARP_FILE_EXTENSION ".sharp"
 #define SHARP_COMPILED_FOLDER ".sharp"
@@ -887,215 +887,6 @@ static void sharp_collection_write_back(sharp_collection *collection)
 	EG(fake_scope) = scope;
 }
 
-typedef enum {
-	SHARP_PARSED,
-	SHARP_NOT_A_STRING,
-	SHARP_NOT_A_NUMBER,
-	SHARP_OUT_OF_RANGE,
-} sharp_parse_result;
-
-/* The white space C#'s int.Parse skips: U+0009 to U+000D and U+0020. */
-static bool sharp_is_space(char c)
-{
-	return c == ' ' || (c >= '\t' && c <= '\r');
-}
-
-static const char *sharp_skip_digits(const char *p)
-{
-	while (*p >= '0' && *p <= '9') {
-		p++;
-	}
-
-	return p;
-}
-
-/* Accepts what C#'s int.Parse accepts: [ws][sign]digits[ws], in ASCII digits only. */
-static sharp_parse_result sharp_parse_int(const zval *value, zend_long *result)
-{
-	if (Z_TYPE_P(value) != IS_STRING) {
-		return SHARP_NOT_A_STRING;
-	}
-
-	const char *p = Z_STRVAL_P(value);
-	const char *end = p + Z_STRLEN_P(value);
-	while (sharp_is_space(*p)) {
-		p++;
-	}
-	bool negative = *p == '-';
-	if (*p == '-' || *p == '+') {
-		p++;
-	}
-	const char *digits = p;
-	p = sharp_skip_digits(p);
-	if (p == digits) {
-		return SHARP_NOT_A_NUMBER;
-	}
-	const char *digits_end = p;
-	while (sharp_is_space(*p)) {
-		p++;
-	}
-	if (p != end) {
-		return SHARP_NOT_A_NUMBER;
-	}
-
-	zend_ulong limit = negative ? (zend_ulong) ZEND_LONG_MAX + 1 : (zend_ulong) ZEND_LONG_MAX;
-	zend_ulong magnitude = 0;
-	for (p = digits; p < digits_end; p++) {
-		zend_ulong digit = *p - '0';
-		if (magnitude > (limit - digit) / 10) {
-			return SHARP_OUT_OF_RANGE;
-		}
-		magnitude = magnitude * 10 + digit;
-	}
-	*result = negative ? (zend_long) (0 - magnitude) : (zend_long) magnitude;
-
-	return SHARP_PARSED;
-}
-
-/* Accepts [ws][sign](digits[.digits] | .digits)([eE][sign]digits)?[ws], so no thousands separator, NaN or Infinity. */
-static sharp_parse_result sharp_parse_float(const zval *value, double *result)
-{
-	if (Z_TYPE_P(value) != IS_STRING) {
-		return SHARP_NOT_A_STRING;
-	}
-
-	const char *p = Z_STRVAL_P(value);
-	const char *end = p + Z_STRLEN_P(value);
-	while (sharp_is_space(*p)) {
-		p++;
-	}
-	const char *number = p;
-	if (*p == '-' || *p == '+') {
-		p++;
-	}
-	const char *integer = p;
-	p = sharp_skip_digits(p);
-	if (*p == '.') {
-		const char *fraction = ++p;
-		p = sharp_skip_digits(p);
-		if (p == fraction) {
-			return SHARP_NOT_A_NUMBER;
-		}
-	} else if (p == integer) {
-		return SHARP_NOT_A_NUMBER;
-	}
-	if (*p == 'e' || *p == 'E') {
-		p++;
-		if (*p == '-' || *p == '+') {
-			p++;
-		}
-		const char *exponent = p;
-		p = sharp_skip_digits(p);
-		if (p == exponent) {
-			return SHARP_NOT_A_NUMBER;
-		}
-	}
-	while (sharp_is_space(*p)) {
-		p++;
-	}
-	if (p != end) {
-		return SHARP_NOT_A_NUMBER;
-	}
-
-	*result = zend_strtod(number, NULL);
-
-	return zend_finite(*result) ? SHARP_PARSED : SHARP_OUT_OF_RANGE;
-}
-
-/* Shows the string the way an unhandled match case does, so zend.exception_ignore_args hides request data. */
-static ZEND_COLD void sharp_throw_parse_error(sharp_parse_result parsed, const zval *value, const char *number, const char *range)
-{
-	if (parsed == SHARP_NOT_A_STRING) {
-		zend_argument_value_error(1, "must be a string, %s given", zend_zval_value_name(value));
-		return;
-	}
-
-	zend_long max_len = EG(exception_string_param_max_len);
-	smart_str shown = {0};
-	if (EG(exception_ignore_args) || max_len == 0) {
-		smart_str_appends(&shown, "string");
-	} else {
-		smart_str_append_scalar(&shown, value, max_len);
-	}
-	smart_str_0(&shown);
-
-	if (parsed == SHARP_OUT_OF_RANGE) {
-		zend_argument_error(zend_ce_arithmetic_error, 1, "must hold %s, %s given", range, ZSTR_VAL(shown.s));
-	} else {
-		zend_argument_value_error(1, "must hold %s, %s given", number, ZSTR_VAL(shown.s));
-	}
-
-	smart_str_free(&shown);
-}
-
-ZEND_METHOD(Sharp_Int, parse)
-{
-	zval *value;
-	zend_long result;
-
-	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_ZVAL(value)
-	ZEND_PARSE_PARAMETERS_END();
-
-	sharp_parse_result parsed = sharp_parse_int(value, &result);
-	if (parsed != SHARP_PARSED) {
-		sharp_throw_parse_error(parsed, value, "an int", "an int from PHP_INT_MIN to PHP_INT_MAX");
-		RETURN_THROWS();
-	}
-
-	RETURN_LONG(result);
-}
-
-ZEND_METHOD(Sharp_Int, tryParse)
-{
-	zval *value;
-	zend_long result;
-
-	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_ZVAL(value)
-	ZEND_PARSE_PARAMETERS_END();
-
-	if (sharp_parse_int(value, &result) != SHARP_PARSED) {
-		RETURN_NULL();
-	}
-
-	RETURN_LONG(result);
-}
-
-ZEND_METHOD(Sharp_Float, parse)
-{
-	zval *value;
-	double result;
-
-	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_ZVAL(value)
-	ZEND_PARSE_PARAMETERS_END();
-
-	sharp_parse_result parsed = sharp_parse_float(value, &result);
-	if (parsed != SHARP_PARSED) {
-		sharp_throw_parse_error(parsed, value, "a float", "a float from -PHP_FLOAT_MAX to PHP_FLOAT_MAX");
-		RETURN_THROWS();
-	}
-
-	RETURN_DOUBLE(result);
-}
-
-ZEND_METHOD(Sharp_Float, tryParse)
-{
-	zval *value;
-	double result;
-
-	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_ZVAL(value)
-	ZEND_PARSE_PARAMETERS_END();
-
-	if (sharp_parse_float(value, &result) != SHARP_PARSED) {
-		RETURN_NULL();
-	}
-
-	RETURN_DOUBLE(result);
-}
-
 ZEND_METHOD(Sharp_Collection, __construct)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
@@ -1600,11 +1391,27 @@ ZEND_METHOD(Sharp_Collection, sortedBy)
 	zval_ptr_dtor(&pairs);
 }
 
+/* The standard library's autoload.php passes the SHARP_NATIVE it was built with and its package's version, as
+ * Composer's platform_check.php checks the platform before anything loads. */
+static ZEND_FUNCTION(Sharp_Internal_requireNative)
+{
+	zend_string *fingerprint;
+	zend_string *version;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_STR(fingerprint)
+		Z_PARAM_STR(version)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!zend_string_equals_literal(fingerprint, SHARP_NATIVE)) {
+		zend_throw_error(NULL, "The PHP# standard library %s needs the native bodies of PHP# engine %s, and this engine is "
+			PHP_SHARP_VERSION ". Install the same PHP# version of both.", ZSTR_VAL(version), ZSTR_VAL(version));
+	}
+}
+
 static PHP_MINIT_FUNCTION(sharp)
 {
 	REGISTER_INI_ENTRIES();
-	register_class_Sharp_Int();
-	register_class_Sharp_Float();
 	sharp_ce_collection = register_class_Sharp_Collection();
 	sharp_ce_collection->create_object = sharp_collection_create;
 	memcpy(&sharp_collection_handlers, &std_object_handlers, sizeof(zend_object_handlers));
@@ -1673,6 +1480,7 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 static PHP_MINFO_FUNCTION(sharp)
 {
 	php_info_print_table_start();
+	php_info_print_table_row(2, "Version", PHP_SHARP_VERSION);
 	php_info_print_table_row(2, "Mago commit", SHARP_MAGO_COMMIT);
 	php_info_print_table_end();
 
@@ -1682,13 +1490,13 @@ static PHP_MINFO_FUNCTION(sharp)
 zend_module_entry sharp_module_entry = {
 	STANDARD_MODULE_HEADER,
 	"sharp",
-	NULL,
+	sharp_native_functions,
 	PHP_MINIT(sharp),
 	PHP_MSHUTDOWN(sharp),
 	PHP_RINIT(sharp),
 	PHP_RSHUTDOWN(sharp),
 	PHP_MINFO(sharp),
-	PHP_VERSION,
+	PHP_SHARP_VERSION,
 	PHP_MODULE_GLOBALS(sharp),
 	PHP_GINIT(sharp),
 	PHP_GSHUTDOWN(sharp),

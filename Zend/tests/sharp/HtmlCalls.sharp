@@ -1,0 +1,14 @@
+namespace Demo;
+
+import Sharp.Text.Html;
+
+class HtmlCalls
+{
+    public static string escape(string text) => Html.escape(text);
+
+    public static string unescape(string text) => Html.unescape(text);
+
+    public static string decodeEntities(string text) => Html.decodeEntities(text);
+
+    public static string stripTags(string text) => Html.stripTags(text);
+}

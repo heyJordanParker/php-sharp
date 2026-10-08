@@ -2,6 +2,8 @@
 Sharp\Int and Sharp\Float parse a string holding only a number, and tryParse gives null where parse throws
 --FILE--
 <?php
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Float.sharp';
 
 function attempt(callable $parse, mixed $value): void
 {
@@ -15,7 +17,7 @@ function attempt(callable $parse, mixed $value): void
 foreach (['12', ' -12 ', "+007\t", '-9223372036854775808', '9223372036854775807'] as $value) {
     attempt(Sharp\Int::parse(...), $value);
 }
-foreach (['12abc', 'abc', '', ' ', '1.0', '1e3', '0x1A', '1 2', '+', '- 1', "\u{0661}", null, 12, 1.5, true] as $value) {
+foreach (['12abc', 'abc', '', ' ', '1.0', '1e3', '0x1A', '1 2', '+', '- 1', "\u{0661}", null, 12, 1.5, true, ['12'], new stdClass()] as $value) {
     attempt(Sharp\Int::parse(...), $value);
     attempt(Sharp\Int::tryParse(...), $value);
 }
@@ -27,7 +29,7 @@ foreach (['9223372036854775808', '-9223372036854775809', '99999999999999999999']
 foreach (['1.5', ' -0.25 ', '.5', '+3', '1e3', '2.5E-2', '-0', '00012.50'] as $value) {
     attempt(Sharp\Float::parse(...), $value);
 }
-foreach (['1,5', '1,000', '5.', '.', 'e3', '1e', '1e+', 'NaN', 'INF', '-Infinity', '0x1A', '1.5abc', '', null, 1.5] as $value) {
+foreach (['1,5', '1,000', '5.', '.', 'e3', '1e', '1e+', 'NaN', 'INF', '-Infinity', '0x1A', '1.5abc', '', null, 1.5, ['1.5'], new stdClass()] as $value) {
     attempt(Sharp\Float::parse(...), $value);
     attempt(Sharp\Float::tryParse(...), $value);
 }
@@ -43,41 +45,45 @@ int(-12)
 int(7)
 int(-9223372036854775808)
 int(9223372036854775807)
-ValueError: Sharp\Int::parse(): Argument #1 ($value) must hold an int, '12abc' given
+ValueError: Int.parse: "12abc" is not an int
 NULL
-ValueError: Sharp\Int::parse(): Argument #1 ($value) must hold an int, 'abc' given
+ValueError: Int.parse: "abc" is not an int
 NULL
-ValueError: Sharp\Int::parse(): Argument #1 ($value) must hold an int, '' given
+ValueError: Int.parse: "" is not an int
 NULL
-ValueError: Sharp\Int::parse(): Argument #1 ($value) must hold an int, ' ' given
+ValueError: Int.parse: " " is not an int
 NULL
-ValueError: Sharp\Int::parse(): Argument #1 ($value) must hold an int, '1.0' given
+ValueError: Int.parse: "1.0" is not an int
 NULL
-ValueError: Sharp\Int::parse(): Argument #1 ($value) must hold an int, '1e3' given
+ValueError: Int.parse: "1e3" is not an int
 NULL
-ValueError: Sharp\Int::parse(): Argument #1 ($value) must hold an int, '0x1A' given
+ValueError: Int.parse: "0x1A" is not an int
 NULL
-ValueError: Sharp\Int::parse(): Argument #1 ($value) must hold an int, '1 2' given
+ValueError: Int.parse: "1 2" is not an int
 NULL
-ValueError: Sharp\Int::parse(): Argument #1 ($value) must hold an int, '+' given
+ValueError: Int.parse: "+" is not an int
 NULL
-ValueError: Sharp\Int::parse(): Argument #1 ($value) must hold an int, '- 1' given
+ValueError: Int.parse: "- 1" is not an int
 NULL
-ValueError: Sharp\Int::parse(): Argument #1 ($value) must hold an int, '\xD9\xA1' given
+ValueError: Int.parse: "١" is not an int
 NULL
-ValueError: Sharp\Int::parse(): Argument #1 ($value) must be a string, null given
+ValueError: Int.parse: null is not a string
 NULL
-ValueError: Sharp\Int::parse(): Argument #1 ($value) must be a string, int given
+ValueError: Int.parse: int is not a string
 NULL
-ValueError: Sharp\Int::parse(): Argument #1 ($value) must be a string, float given
+ValueError: Int.parse: float is not a string
 NULL
-ValueError: Sharp\Int::parse(): Argument #1 ($value) must be a string, true given
+ValueError: Int.parse: bool is not a string
 NULL
-ArithmeticError: Sharp\Int::parse(): Argument #1 ($value) must hold an int from PHP_INT_MIN to PHP_INT_MAX, '922337203685477...' given
+ValueError: Int.parse: array is not a string
 NULL
-ArithmeticError: Sharp\Int::parse(): Argument #1 ($value) must hold an int from PHP_INT_MIN to PHP_INT_MAX, '-92233720368547...' given
+ValueError: Int.parse: stdClass is not a string
 NULL
-ArithmeticError: Sharp\Int::parse(): Argument #1 ($value) must hold an int from PHP_INT_MIN to PHP_INT_MAX, '999999999999999...' given
+ArithmeticError: Int.parse: "9223372036854775808" is out of range for an int
+NULL
+ArithmeticError: Int.parse: "-9223372036854775809" is out of range for an int
+NULL
+ArithmeticError: Int.parse: "99999999999999999999" is out of range for an int
 NULL
 float(1.5)
 float(-0.25)
@@ -87,38 +93,42 @@ float(1000)
 float(0.025)
 float(-0)
 float(12.5)
-ValueError: Sharp\Float::parse(): Argument #1 ($value) must hold a float, '1,5' given
+ValueError: Float.parse: "1,5" is not a float
 NULL
-ValueError: Sharp\Float::parse(): Argument #1 ($value) must hold a float, '1,000' given
+ValueError: Float.parse: "1,000" is not a float
 NULL
-ValueError: Sharp\Float::parse(): Argument #1 ($value) must hold a float, '5.' given
+ValueError: Float.parse: "5." is not a float
 NULL
-ValueError: Sharp\Float::parse(): Argument #1 ($value) must hold a float, '.' given
+ValueError: Float.parse: "." is not a float
 NULL
-ValueError: Sharp\Float::parse(): Argument #1 ($value) must hold a float, 'e3' given
+ValueError: Float.parse: "e3" is not a float
 NULL
-ValueError: Sharp\Float::parse(): Argument #1 ($value) must hold a float, '1e' given
+ValueError: Float.parse: "1e" is not a float
 NULL
-ValueError: Sharp\Float::parse(): Argument #1 ($value) must hold a float, '1e+' given
+ValueError: Float.parse: "1e+" is not a float
 NULL
-ValueError: Sharp\Float::parse(): Argument #1 ($value) must hold a float, 'NaN' given
+ValueError: Float.parse: "NaN" is not a float
 NULL
-ValueError: Sharp\Float::parse(): Argument #1 ($value) must hold a float, 'INF' given
+ValueError: Float.parse: "INF" is not a float
 NULL
-ValueError: Sharp\Float::parse(): Argument #1 ($value) must hold a float, '-Infinity' given
+ValueError: Float.parse: "-Infinity" is not a float
 NULL
-ValueError: Sharp\Float::parse(): Argument #1 ($value) must hold a float, '0x1A' given
+ValueError: Float.parse: "0x1A" is not a float
 NULL
-ValueError: Sharp\Float::parse(): Argument #1 ($value) must hold a float, '1.5abc' given
+ValueError: Float.parse: "1.5abc" is not a float
 NULL
-ValueError: Sharp\Float::parse(): Argument #1 ($value) must hold a float, '' given
+ValueError: Float.parse: "" is not a float
 NULL
-ValueError: Sharp\Float::parse(): Argument #1 ($value) must be a string, null given
+ValueError: Float.parse: null is not a string
 NULL
-ValueError: Sharp\Float::parse(): Argument #1 ($value) must be a string, float given
+ValueError: Float.parse: float is not a string
 NULL
-ArithmeticError: Sharp\Float::parse(): Argument #1 ($value) must hold a float from -PHP_FLOAT_MAX to PHP_FLOAT_MAX, '1e999' given
+ValueError: Float.parse: array is not a string
 NULL
-ArithmeticError: Sharp\Float::parse(): Argument #1 ($value) must hold a float from -PHP_FLOAT_MAX to PHP_FLOAT_MAX, '-1e999' given
+ValueError: Float.parse: stdClass is not a string
+NULL
+ArithmeticError: Float.parse: "1e999" is out of range for a float
+NULL
+ArithmeticError: Float.parse: "-1e999" is out of range for a float
 NULL
 float(0)

@@ -1,5 +1,5 @@
 --TEST--
-php --ri sharp prints the Mago commit ext/sharp/sharp_unit.h was generated at
+php --ri sharp prints the PHP# version and the Mago commit ext/sharp/sharp_unit.h was generated at
 --FILE--
 <?php
 
@@ -11,6 +11,7 @@ echo str_replace($match[1], '<the Mago commit in sharp_unit.h>', $info);
 --EXPECT--
 sharp
 
+Version => 0.2.0
 Mago commit => <the Mago commit in sharp_unit.h>
 
 Directive => Local Value => Master Value

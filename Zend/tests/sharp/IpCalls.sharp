@@ -1,0 +1,10 @@
+namespace Demo;
+
+import Sharp.Net.Ip;
+
+class IpCalls
+{
+    public static bool isValid(string address) => Ip.isValid(address);
+
+    public static string toBinary(string address) => Ip.toBinary(address);
+}

@@ -1,0 +1,10 @@
+namespace Demo;
+
+import Sharp.Data.Compression;
+
+class CompressionCalls
+{
+    public static string compress(string data) => Compression.compress(data);
+
+    public static string uncompress(string data) => Compression.uncompress(data);
+}

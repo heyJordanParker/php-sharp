@@ -8,7 +8,7 @@ class Cashier
 
     public Cashier(int percent)
     {
-        this.discount = cents => cents - intdiv(cents * percent, 100);
+        this.discount = cents => cents - cents * percent / 100;
     }
 
     public List<string> receipt(List<int> prices, Cashier other, Ledger ledger)
@@ -29,5 +29,5 @@ class Cashier
         ];
     }
 
-    private string format(int cents) => sprintf("%d.%02d", intdiv(cents, 100), cents % 100);
+    private string format(int cents) => sprintf("%d.%02d", cents / 100, cents % 100);
 }

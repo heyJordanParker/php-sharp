@@ -63,12 +63,18 @@ PATH="$(dirname "$cargo"):$PATH" "$cargo" install --quiet --locked --git https:/
 mago="$build_dir/mago/bin/mago"
 
 echo "== mago compile, at the Mago commit in ext/sharp/sharp_unit.h"
-if ! "$mago" --no-version-check --colors never --workspace "$root/Zend/tests/sharp" compile; then
+if ! "$mago" --no-version-check --colors never --workspace "$root" --config "$root/Zend/tests/sharp/mago.toml" compile; then
   echo "mago compile refused a PHP# test fixture, and the engine runs only compiled files." >&2
   exit 1
 fi
 
 export TEST_MAGO_EXECUTABLE="$mago"
+
+jobs="${CARGO_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN)}"
+if [[ " ${MAKEFLAGS:-}" =~ [[:space:]](-j[[:space:]]*|--jobs=)([0-9]+) ]]; then
+  jobs="${BASH_REMATCH[2]}"
+fi
+
 export SKIP_IO_CAPTURE_TESTS=1
 export STACK_LIMIT_DEFAULTS_CHECK=1
 export RUN_RESOURCE_HEAVY_TESTS=1
@@ -83,7 +89,7 @@ run_tests() {
   if ! (cd "$root" && "$php" run-tests.php -P -q \
     -d opcache.jit=disable \
     -d opcache.protect_memory=1 \
-    -j"$(getconf _NPROCESSORS_ONLN)" \
+    -j"$jobs" \
     -g FAIL,BORK,LEAK,XLEAK \
     --no-progress \
     --offline \

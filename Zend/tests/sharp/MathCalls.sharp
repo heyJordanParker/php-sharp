@@ -1,0 +1,20 @@
+namespace Demo;
+
+import Sharp.Math.Math;
+
+class MathCalls
+{
+    public static float ceil(float x) => Math.ceil(x);
+
+    public static float floor(float x) => Math.floor(x);
+
+    public static float sqrt(float x) => Math.sqrt(x);
+
+    public static float log(float x) => Math.log(x);
+
+    public static float round(float x) => Math.round(x);
+
+    public static float roundTo(float x, int precision) => Math.round(x, precision);
+
+    public static float pow(float base, float exponent) => Math.pow(base, exponent);
+}

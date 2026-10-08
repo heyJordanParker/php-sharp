@@ -1,0 +1,18 @@
+namespace Demo;
+
+import Sharp.Data.Hash;
+
+class HashCalls
+{
+    public static string of(string algorithm, string data) => Hash.of(algorithm, data);
+
+    public static string hmac(string algorithm, string data, string key) => Hash.hmac(algorithm, data, key);
+
+    public static string md5(string data) => Hash.md5(data);
+
+    public static string sha1(string data) => Hash.sha1(data);
+
+    public static int crc32(string data) => Hash.crc32(data);
+
+    public static bool equals(string known, string given) => Hash.equals(known, given);
+}

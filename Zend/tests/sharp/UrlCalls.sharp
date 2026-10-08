@@ -1,0 +1,18 @@
+namespace Demo;
+
+import Sharp.Net.Url;
+
+class UrlCalls
+{
+    public static string encode(string text) => Url.encode(text);
+
+    public static string encodeForm(string text) => Url.encodeForm(text);
+
+    public static string decode(string text) => Url.decode(text);
+
+    public static string buildQuery(Map<string, Any?> values) => Url.buildQuery(values);
+
+    public static bool isValid(string url) => Url.isValid(url);
+
+    public static Map<int|string, Any?> parseQuery(string query) => Url.parseQuery(query);
+}
