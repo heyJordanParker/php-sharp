@@ -1558,15 +1558,21 @@ static void do_inherit_property(zend_property_info *parent_info, zend_string *ke
 					add_property_compatibility_obligation(ce, child_info, parent_info, variance);
 				}
 			} else if (UNEXPECTED(ZEND_TYPE_IS_SET(child_info->type) && !ZEND_TYPE_IS_SET(parent_info->type))) {
-				zend_error_noreturn(E_COMPILE_ERROR,
-						"Type of %s::$%s must be omitted to match the parent definition in class %s",
-						ZSTR_VAL(ce->name),
-						ZSTR_VAL(key),
-						ZSTR_VAL(parent_info->ce->name));
+				if (!(child_info->flags & ZEND_ACC_TYPE_FOLLOWS_PARENT)) {
+					zend_error_noreturn(E_COMPILE_ERROR,
+							"Type of %s::$%s must be omitted to match the parent definition in class %s",
+							ZSTR_VAL(ce->name),
+							ZSTR_VAL(key),
+							ZSTR_VAL(parent_info->ce->name));
+				}
+				/* A PHP# override of an untyped property runs untyped, as its PHP twin does: the checker proved
+				 * the written type against the parent's @var, and its constant initial value is the default. */
+				zend_type_release(child_info->type, /* persistent */ false);
+				child_info->type = (zend_type) ZEND_TYPE_INIT_NONE(0);
 			}
 
 			if (child_info->ce == ce) {
-				child_info->flags &= ~ZEND_ACC_OVERRIDE;
+				child_info->flags &= ~(ZEND_ACC_OVERRIDE | ZEND_ACC_TYPE_FOLLOWS_PARENT);
 			}
 		}
 	} else {

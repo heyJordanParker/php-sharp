@@ -67,7 +67,7 @@ The conversion goes one way, so the `Map` loses the key's type, and every call s
 Map<Status, int> counts = [:];             // compile error: a Map's keys are int or string
 Map<string, int> counts = [:];
 counts[status.value] = 1;                  // compiles
-for (const [key, n] of counts) { … }       // compiles; key is int|string, not a Status
+for (const [key, n] of counts) { … }       // compiles; key is a string, not a Status
 ```
 
 Every read and write converts by hand, and a key read back loses its type.

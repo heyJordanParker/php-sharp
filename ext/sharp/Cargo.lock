@@ -283,8 +283,8 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "mago-allocator"
-version = "1.53.0"
-source = "git+https://github.com/heyJordanParker/mago-sharp?rev=0f7dc46623c29f03770d5805e51b76836281bd22#0f7dc46623c29f03770d5805e51b76836281bd22"
+version = "0.1.0"
+source = "git+https://github.com/heyJordanParker/mago-sharp?rev=93f6a89d6e98621cbc6c71583b19e60c45401989#93f6a89d6e98621cbc6c71583b19e60c45401989"
 dependencies = [
  "allocator-api2",
  "blink-alloc",
@@ -292,14 +292,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "mago-build-id"
+version = "0.1.0"
+source = "git+https://github.com/heyJordanParker/mago-sharp?rev=93f6a89d6e98621cbc6c71583b19e60c45401989#93f6a89d6e98621cbc6c71583b19e60c45401989"
+dependencies = [
+ "xxhash-rust",
+]
+
+[[package]]
 name = "mago-bytes"
-version = "1.53.0"
-source = "git+https://github.com/heyJordanParker/mago-sharp?rev=0f7dc46623c29f03770d5805e51b76836281bd22#0f7dc46623c29f03770d5805e51b76836281bd22"
+version = "0.1.0"
+source = "git+https://github.com/heyJordanParker/mago-sharp?rev=93f6a89d6e98621cbc6c71583b19e60c45401989#93f6a89d6e98621cbc6c71583b19e60c45401989"
 
 [[package]]
 name = "mago-database"
-version = "1.53.0"
-source = "git+https://github.com/heyJordanParker/mago-sharp?rev=0f7dc46623c29f03770d5805e51b76836281bd22#0f7dc46623c29f03770d5805e51b76836281bd22"
+version = "0.1.0"
+source = "git+https://github.com/heyJordanParker/mago-sharp?rev=93f6a89d6e98621cbc6c71583b19e60c45401989#93f6a89d6e98621cbc6c71583b19e60c45401989"
 dependencies = [
  "foldhash",
  "globset",
@@ -310,8 +318,8 @@ dependencies = [
 
 [[package]]
 name = "mago-names"
-version = "1.53.0"
-source = "git+https://github.com/heyJordanParker/mago-sharp?rev=0f7dc46623c29f03770d5805e51b76836281bd22#0f7dc46623c29f03770d5805e51b76836281bd22"
+version = "0.1.0"
+source = "git+https://github.com/heyJordanParker/mago-sharp?rev=93f6a89d6e98621cbc6c71583b19e60c45401989#93f6a89d6e98621cbc6c71583b19e60c45401989"
 dependencies = [
  "foldhash",
  "mago-allocator",
@@ -324,16 +332,16 @@ dependencies = [
 
 [[package]]
 name = "mago-php-version"
-version = "1.53.0"
-source = "git+https://github.com/heyJordanParker/mago-sharp?rev=0f7dc46623c29f03770d5805e51b76836281bd22#0f7dc46623c29f03770d5805e51b76836281bd22"
+version = "0.1.0"
+source = "git+https://github.com/heyJordanParker/mago-sharp?rev=93f6a89d6e98621cbc6c71583b19e60c45401989#93f6a89d6e98621cbc6c71583b19e60c45401989"
 dependencies = [
  "schemars",
 ]
 
 [[package]]
 name = "mago-reporting"
-version = "1.53.0"
-source = "git+https://github.com/heyJordanParker/mago-sharp?rev=0f7dc46623c29f03770d5805e51b76836281bd22#0f7dc46623c29f03770d5805e51b76836281bd22"
+version = "0.1.0"
+source = "git+https://github.com/heyJordanParker/mago-sharp?rev=93f6a89d6e98621cbc6c71583b19e60c45401989#93f6a89d6e98621cbc6c71583b19e60c45401989"
 dependencies = [
  "blake3",
  "foldhash",
@@ -348,8 +356,8 @@ dependencies = [
 
 [[package]]
 name = "mago-semantics"
-version = "1.53.0"
-source = "git+https://github.com/heyJordanParker/mago-sharp?rev=0f7dc46623c29f03770d5805e51b76836281bd22#0f7dc46623c29f03770d5805e51b76836281bd22"
+version = "0.1.0"
+source = "git+https://github.com/heyJordanParker/mago-sharp?rev=93f6a89d6e98621cbc6c71583b19e60c45401989#93f6a89d6e98621cbc6c71583b19e60c45401989"
 dependencies = [
  "mago-bytes",
  "mago-database",
@@ -363,11 +371,12 @@ dependencies = [
 
 [[package]]
 name = "mago-sharp-bridge"
-version = "1.53.0"
-source = "git+https://github.com/heyJordanParker/mago-sharp?rev=0f7dc46623c29f03770d5805e51b76836281bd22#0f7dc46623c29f03770d5805e51b76836281bd22"
+version = "0.1.0"
+source = "git+https://github.com/heyJordanParker/mago-sharp?rev=93f6a89d6e98621cbc6c71583b19e60c45401989#93f6a89d6e98621cbc6c71583b19e60c45401989"
 dependencies = [
  "cbindgen",
  "mago-allocator",
+ "mago-build-id",
  "mago-database",
  "mago-names",
  "mago-php-version",
@@ -376,20 +385,21 @@ dependencies = [
  "mago-span",
  "mago-syntax",
  "mago-syntax-core",
+ "xxhash-rust",
 ]
 
 [[package]]
 name = "mago-span"
-version = "1.53.0"
-source = "git+https://github.com/heyJordanParker/mago-sharp?rev=0f7dc46623c29f03770d5805e51b76836281bd22#0f7dc46623c29f03770d5805e51b76836281bd22"
+version = "0.1.0"
+source = "git+https://github.com/heyJordanParker/mago-sharp?rev=93f6a89d6e98621cbc6c71583b19e60c45401989#93f6a89d6e98621cbc6c71583b19e60c45401989"
 dependencies = [
  "mago-database",
 ]
 
 [[package]]
 name = "mago-syntax"
-version = "1.53.0"
-source = "git+https://github.com/heyJordanParker/mago-sharp?rev=0f7dc46623c29f03770d5805e51b76836281bd22#0f7dc46623c29f03770d5805e51b76836281bd22"
+version = "0.1.0"
+source = "git+https://github.com/heyJordanParker/mago-sharp?rev=93f6a89d6e98621cbc6c71583b19e60c45401989#93f6a89d6e98621cbc6c71583b19e60c45401989"
 dependencies = [
  "mago-allocator",
  "mago-database",
@@ -405,8 +415,8 @@ dependencies = [
 
 [[package]]
 name = "mago-syntax-core"
-version = "1.53.0"
-source = "git+https://github.com/heyJordanParker/mago-sharp?rev=0f7dc46623c29f03770d5805e51b76836281bd22#0f7dc46623c29f03770d5805e51b76836281bd22"
+version = "0.1.0"
+source = "git+https://github.com/heyJordanParker/mago-sharp?rev=93f6a89d6e98621cbc6c71583b19e60c45401989#93f6a89d6e98621cbc6c71583b19e60c45401989"
 dependencies = [
  "mago-allocator",
  "mago-database",
@@ -417,13 +427,13 @@ dependencies = [
 
 [[package]]
 name = "mago-text-edit"
-version = "1.53.0"
-source = "git+https://github.com/heyJordanParker/mago-sharp?rev=0f7dc46623c29f03770d5805e51b76836281bd22#0f7dc46623c29f03770d5805e51b76836281bd22"
+version = "0.1.0"
+source = "git+https://github.com/heyJordanParker/mago-sharp?rev=93f6a89d6e98621cbc6c71583b19e60c45401989#93f6a89d6e98621cbc6c71583b19e60c45401989"
 
 [[package]]
 name = "mago-word"
-version = "1.53.0"
-source = "git+https://github.com/heyJordanParker/mago-sharp?rev=0f7dc46623c29f03770d5805e51b76836281bd22#0f7dc46623c29f03770d5805e51b76836281bd22"
+version = "0.1.0"
+source = "git+https://github.com/heyJordanParker/mago-sharp?rev=93f6a89d6e98621cbc6c71583b19e60c45401989#93f6a89d6e98621cbc6c71583b19e60c45401989"
 dependencies = [
  "foldhash",
  "itoa",
@@ -937,6 +947,12 @@ name = "winnow"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
+
+[[package]]
+name = "xxhash-rust"
+version = "0.8.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "550a2b930b62486a393c52d5c3b84bff264b28aa437ed64694d31e93b1757af7"
 
 [[package]]
 name = "zmij"

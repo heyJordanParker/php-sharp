@@ -265,7 +265,7 @@ static bool can_replace_op1(
 			return 0;
 		case ZEND_CAST:
 			/* The receiver of a PHP# method call keeps the variable it may change. */
-			return !(opline->extended_value & ZEND_SHARP_OPERATOR);
+			return opline->extended_value != (IS_OBJECT | ZEND_SHARP_OPERATOR);
 		case ZEND_OP_DATA:
 			return (opline - 1)->opcode != ZEND_ASSIGN_OBJ_REF &&
 				(opline - 1)->opcode != ZEND_ASSIGN_STATIC_PROP_REF;

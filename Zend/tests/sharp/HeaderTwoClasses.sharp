@@ -1,8 +1,8 @@
 namespace Demo;
 
-import Lib.Entity;
 import Lib.Other;
+import Lib.Record;
 
-public class Twice : Entity, Other
+public class Twice : Record, Other
 {
 }

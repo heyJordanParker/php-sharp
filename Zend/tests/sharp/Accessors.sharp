@@ -1,0 +1,60 @@
+namespace Store;
+
+import InvalidArgumentException;
+
+class Product
+{
+    public string sku { get; set; } = "";
+    public string name { get => field; set => field = trim(value); } = "";
+    public int price
+    {
+        get;
+        set
+        {
+            if (value < 0) {
+                throw new InvalidArgumentException("A price is never negative.");
+            }
+
+            field = value;
+        }
+    } = 0;
+    public int stock { get; private set => field = max(0, value); } = 0;
+    public List<string> tags
+    {
+        get => field;
+        set
+        {
+            field = [];
+            for (const tag of value) {
+                field.add(strtolower(tag));
+            }
+        }
+    } = [];
+    public List<int> ratings { get; private set; } = [];
+    public int rating { get; set => this.ratings.add(value); } = 0;
+
+    public void tag(string tag)
+    {
+        this.tags.add(tag);
+    }
+
+    public void restock(int count)
+    {
+        this.stock = this.stock + count;
+    }
+}
+
+class Address
+{
+    protected string region { get => strtoupper(field); }
+
+    public Address(public string city { get; set => field = ucfirst(trim(value)); }, string region)
+    {
+        this.region = region;
+    }
+
+    public string label()
+    {
+        return sprintf("%s, %s", this.city, this.region);
+    }
+}

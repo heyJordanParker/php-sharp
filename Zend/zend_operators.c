@@ -1347,6 +1347,15 @@ ZEND_API ZEND_COLD void zend_integer_overflow_error(void) /* {{{ */
 }
 /* }}} */
 
+ZEND_API ZEND_COLD void zend_float_to_int_error(double d) /* {{{ */
+{
+	zend_string *message = zend_strpprintf_unchecked(0, "The float %.*H is not representable as an int", -1, d);
+
+	zend_throw_error(zend_ce_arithmetic_error, "%s", ZSTR_VAL(message));
+	zend_string_release(message);
+}
+/* }}} */
+
 /* The result keeps the left operand's long, so a typed property or reference that receives it
  * still holds its old int. */
 static ZEND_COLD zend_never_inline zend_result ZEND_FASTCALL checked_overflow(zval *result, zval *op1, zval *value1) /* {{{ */

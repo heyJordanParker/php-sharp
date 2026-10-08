@@ -1,0 +1,18 @@
+namespace Demo;
+
+import Lib.Inspector;
+
+class Inspection
+{
+    public static List<int> look(List<int> numbers)
+    {
+        let kept = numbers;
+        return kept.filter(n => Inspector.look(n));
+    }
+
+    public static List<int> pause(List<int> numbers)
+    {
+        let kept = numbers;
+        return kept.filter(n => Inspector.pause(n));
+    }
+}
