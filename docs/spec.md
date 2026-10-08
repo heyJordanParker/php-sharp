@@ -411,6 +411,7 @@ OrderRow order = OrderRow.parse(row);   // row is a plain PHP object from a data
 **Writing type arguments:**
 
 - **`new` always names them:** `new PaginatedList<Order>(…)`. `new Self(…)` is the one exception: it names no type arguments, because `Self` is the class with its own type parameters.
+- **A type names them too:** `PaginatedList<Order> page`.
 - **A generic method call infers them** from the arguments it receives.
 
 **Every type argument is carried at runtime, written or inferred.** The checker's types reach the running program (section 27), so a generic method can use a type parameter that its call inferred:
@@ -432,6 +433,7 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 - **The bound is written inline:** `<TItem : DatabaseEntity>`.
 - **Several bounds use `&`:** `<TItem : DatabaseEntity & Shareable>`.
 - **A type parameter with no bound may hold `null`,** so it is bounded by `Any?`.
+- **A static member can't use its class's type parameters,** because every `Box<…>` shares one.
 
 ```csharp
 public class PaginatedList<TItem : DatabaseEntity> { … }
@@ -447,6 +449,7 @@ Variance is declared on the type parameter. Classes and interfaces can both decl
 - **No marker:** the type is invariant, and neither substitution is allowed.
 
 The checker enforces the marker on every member. A member that breaks it is a compile error on that member's line.
+A private member may break the marker, and is then reachable only through `this`.
 
 When a missing marker blocks a substitution, the error names the marker to add:
 
