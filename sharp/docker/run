@@ -8,6 +8,8 @@ exec docker run --rm --init \
   --ulimit stack=8388608:-1 \
   --env CARGO_HOME=/src/sharp/build/cargo \
   --env RUSTUP_HOME=/src/sharp/build/rustup \
+  --env MAKEFLAGS \
+  --env CARGO_BUILD_JOBS \
   --volume "$root:/src" \
   --workdir /src \
   php-sharp-linux "$@"

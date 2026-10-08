@@ -53,6 +53,11 @@ if [[ ! -x "$php" ]]; then
   exit 1
 fi
 
+jobs="${CARGO_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN)}"
+if [[ " ${MAKEFLAGS:-}" =~ [[:space:]](-j[[:space:]]*|--jobs=)([0-9]+) ]]; then
+  jobs="${BASH_REMATCH[2]}"
+fi
+
 export SKIP_IO_CAPTURE_TESTS=1
 export STACK_LIMIT_DEFAULTS_CHECK=1
 export RUN_RESOURCE_HEAVY_TESTS=1
@@ -67,7 +72,7 @@ run_tests() {
   if ! (cd "$root" && "$php" run-tests.php -P -q \
     -d opcache.jit=disable \
     -d opcache.protect_memory=1 \
-    -j"$(getconf _NPROCESSORS_ONLN)" \
+    -j"$jobs" \
     -g FAIL,BORK,LEAK,XLEAK \
     --no-progress \
     --offline \
