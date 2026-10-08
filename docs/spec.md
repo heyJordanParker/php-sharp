@@ -904,12 +904,11 @@ public Customer? current() { return this.customer; } // compile error: current n
 An event says that something happened, such as an order being paid. `emit` raises it, and every listener for it runs. `vendor/bin/mago compile` finds every listener at build time (section 27), so nothing is wired by hand.
 
 ```csharp
-public interface OrderEvent { int orderId { get; } }
-
 public class Order
 {
-    public event Paid(int orderId, Money amount) : OrderEvent;        // declares the event type Order.Paid
-    public event Refunded(int orderId, Money amount) : OrderEvent;    // declares Order.Refunded
+    public interface Event { int orderId { get; } }                   // declares Order.Event, the type both events share
+    public event Paid(int orderId, Money amount) : Event;             // declares the event type Order.Paid
+    public event Refunded(int orderId, Money amount) : Event;         // declares Order.Refunded
 
     public void markPaid()
     {
@@ -924,7 +923,7 @@ public class Receipts
 }
 ```
 
-**Declaring:** `event` declares an event type. `public event Paid(int orderId, Money amount);` inside `Order` declares `Order.Paid`, a class whose parameters become get-only properties, as C#'s positional records and Kotlin's data classes do. An event is declared inside the class that raises it. An event that no single class owns is declared on its own, in its own file:
+**Declaring:** `event` declares an event type. `public event Paid(int orderId, Money amount);` inside `Order` declares `Order.Paid`, a class whose parameters become get-only properties, as C#'s positional records and Kotlin's data classes do. An event is declared inside the class that raises it, and an interface its events share is declared beside them, as `Order.Event` is, the way C# nests types. An event that no single class owns is declared on its own, in its own file:
 
 ```csharp
 // app/Imports/RowImported.sharp
@@ -951,14 +950,14 @@ import Illuminate.Queue.Events.JobFailed;
 extern event JobFailed;
 ```
 
-**Listening:** a trailing `on` clause after a method's parameters lists the events the method listens to, for as long as the app runs. The method takes zero parameters, or one parameter whose type every listed event shares. It takes no other parameter, and no parameter is implicit.
+**Listening:** a trailing `on` clause after a method's parameters lists the events the method listens to, for as long as the app runs. The method takes zero parameters, or one parameter whose type every listed event shares. It takes no other parameter, and no parameter is implicit. The namespace's `Module.sharp` container creates the object each listener runs on.
 
 ```csharp
 public class OrderNotices
 {
-    public void send(OrderEvent e) on Order.Paid, Order.Refunded { … }     // two events, read through the type they share
+    public void send(Order.Event e) on Order.Paid, Order.Refunded { … }    // two events, read through the type they share
     public void refresh() on Order.Paid { … }                              // no parameter: the event's data is not needed
-    public void audit(OrderEvent e) on OrderEvent { … }                    // every event that implements OrderEvent
+    public void audit(Order.Event e) on Order.Event { … }                  // every event that implements Order.Event
     public void alert(JobFailed e) on JobFailed { … }                      // a plain PHP event marked with extern event
 }
 ```
@@ -989,10 +988,7 @@ public class ImportScreen
 
 **Timing:** the default dispatcher runs listeners immediately, before `emit` returns. An app replaces the dispatcher once at startup, to run listeners later, after a save, with retries, or not at all in tests.
 
-**Open:**
-
-- How PHP# creates the object an `on` method runs on is a separate module, not yet decided.
-- The API for registering a dispatcher. It is specified with the standard library.
+**Open:** the API for registering a dispatcher. It is specified with the standard library.
 
 ## 16. Naming a value
 

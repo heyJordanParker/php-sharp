@@ -11,12 +11,11 @@ This replaces the earlier design, where an event was a member of its owner, name
 ### Chosen: event types, `emit`, and a trailing `on` clause
 
 ```csharp
-public interface OrderEvent { int orderId { get; } }
-
 public class Order
 {
-    public event Paid(int orderId, Money amount) : OrderEvent;
-    public event Refunded(int orderId, Money amount) : OrderEvent;
+    public interface Event { int orderId { get; } }
+    public event Paid(int orderId, Money amount) : Event;
+    public event Refunded(int orderId, Money amount) : Event;
 
     public void markPaid()
     {
@@ -28,9 +27,9 @@ public class Order
 public class OrderNotices
 {
     public void deliver(Order.Paid e) on Order.Paid { … }               // compiles
-    public void send(OrderEvent e) on Order.Paid, Order.Refunded { … }  // compiles; two events, read through the type they share
+    public void send(Order.Event e) on Order.Paid, Order.Refunded { … } // compiles; two events, read through the type they share
     public void refresh() on Order.Paid { … }                           // compiles; no parameter
-    public void audit(OrderEvent e) on OrderEvent { … }                 // compiles; every event that implements OrderEvent
+    public void audit(Order.Event e) on Order.Event { … }               // compiles; every event that implements Order.Event
 }
 
 public class ImportScreen
@@ -91,7 +90,7 @@ Every permanent listener is a line in startup code. A forgotten line silently ne
 
 ```csharp
 public void deliver(on Order.Paid e) { … }                              // not PHP#
-public void send(on OrderEvent e) { … }                                 // not PHP#: hears every OrderEvent, not only Paid and Refunded
+public void send(on Order.Event e) { … }                                // not PHP#: hears every Order.Event, not only Paid and Refunded
 ```
 
 The marker ties the events a listener hears to its parameter's type. A listener cannot pick two events through a type they share, and a listener that needs no data still declares a parameter.
