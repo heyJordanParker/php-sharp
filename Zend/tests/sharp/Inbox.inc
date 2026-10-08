@@ -21,7 +21,7 @@ class Inbox
 
     public function show(string $key): string { return \Demo\Settings::describe($this->read($key)); }
 
-    public function isPlan(string $plan): bool { return $this->read("plan") == $plan; }
+    public function isPlan(string $plan): bool { return $this->read("plan") === $plan; }
 
     public function save(string $key): void
     {

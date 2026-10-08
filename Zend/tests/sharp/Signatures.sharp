@@ -14,7 +14,7 @@ class Signatures
 
     public int|string label(int|string id)
     {
-        if (id === "") {
+        if (id == "") {
             return this.id;
         }
         return id;
@@ -23,7 +23,7 @@ class Signatures
     public (int|string)? matching((int|string)? id)
     {
         (int|string)? found = null;
-        if (id === this.id) {
+        if (id == this.id) {
             found = id;
         }
         return found;
@@ -31,7 +31,7 @@ class Signatures
 
     public bool isSame(Signatures|int other)
     {
-        return other === this || other === this.id;
+        return other is int ? other == this.id : other === this;
     }
 
     public int scale(int first, int second = 0, int factor = 1)

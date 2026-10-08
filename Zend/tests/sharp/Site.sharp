@@ -41,7 +41,7 @@ public class Page : Resource, Linkable
 
     public bool live()
     {
-        return this.status === Status.Live;
+        return this.status == Status.Live;
     }
 
     public Status draft()

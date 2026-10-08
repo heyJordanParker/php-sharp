@@ -35,7 +35,7 @@ class ControlFlow
             if ($n > $limit) {
                 break;
             }
-            if ($n % 2 == 0) {
+            if ($n % 2 === 0) {
                 continue;
             }
             $total += $n;

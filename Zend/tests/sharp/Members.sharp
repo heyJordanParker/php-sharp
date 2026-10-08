@@ -62,7 +62,7 @@ public class Members
     {
         let count = 0;
         for (let item of Registry.items) {
-            if (item === 1) {
+            if (item == 1) {
                 count++;
             }
         }
