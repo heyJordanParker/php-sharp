@@ -704,8 +704,6 @@ for (const [status, group] of orders.groupBy(o => o.status)) { … }   // compil
 Map<Username, Order> byUser = [:];                               // keyed by username.value
 ```
 
-**Open:** `keys()` and `entries()` on a `Map` whose key has a backing value.
-
 **A list passed where a `Set` or a tuple is expected becomes one.** The receiving parameter converts it on arrival, as PHP already converts arguments to a parameter's type:
 
 ```csharp
@@ -1040,8 +1038,6 @@ public void deliver(OrderPaid e) on Order.paid { … }    // subscribes this met
 
 - **By default,** it calls each handler immediately, in the same request.
 - **An app can replace it** with its own, registered once at boot. An app's durable event bus, for example, builds listeners through its framework's container, queues them and applies `[Retry]`.
-
-**Open:** the API for registering a dispatcher. It is specified with the standard library.
 
 ## 16. Naming a value
 
@@ -2124,18 +2120,19 @@ theorem addKeepsCurrency : App.Shared.Money.addKeepsCurrency := by
 -- app/Tenant/Store/Module.lean
 @[rule] def requires : Rule :=
   Sharp.importsOf "App.Tenant.Store" ⊆ ["App.Tenant.Community", "App.Shared.Schema"]
+
+theorem receiptMatchesRefunds : App.Tenant.Store.Module.receiptMatchesRefunds := by
+  simp [App.Tenant.Store.Module.receiptMatchesRefunds, App.Tenant.Store.Receipts.refundable, App.Tenant.Store.Refunds.remaining]
 ```
 
 - **The checker generates the Lean translation of pure code and the Lean statement of each law into `.sharp/`,** never into the source tree.
-- **A law's generated Lean statement is named by its class's full name and the law's name,** as in `App.Shared.Money.addKeepsCurrency`.
+- **A law's generated Lean statement is named by its class's full name and the law's name,** as in `App.Shared.Money.addKeepsCurrency`. A module law's is named by its namespace, `Module` and the law's name, as in `App.Tenant.Store.Module.receiptMatchesRefunds`.
 - **When a class or module has a law and no Lean file, the checker creates the file.** For each new law, it appends a proof found by Lean's automatic steps (`simp`, `omega`, `decide`), or a marked gap when none is found. It never rewrites a proof that exists.
 - **A law without a proof, a gap, or a proof whose law was deleted is a compile error that names it.**
 - **A rule lives with the namespace it constrains.** "Shared never reaches Tenant" goes in `app/Shared/Module.lean`. A rule about the whole application goes in `app/Module.lean`.
 - **Names match exactly.** Translated code keeps its PHP# names in Lean, with no prefix.
 - **A failed rule is reported on the code that breaks it,** such as the offending `import` line, not only as a failed theorem.
 - **The editor shows,** above each method, the laws that mention it.
-
-**Open:** the API of the generated structure facts (`Sharp.importsOf` and the rest).
 
 ## 29. Effects
 

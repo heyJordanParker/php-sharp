@@ -2,7 +2,7 @@
 
 ## Decision
 
-"Undecided, in order" lists no standard library APIs. The standard library is specified with the library itself, by the team lead.
+"Undecided, in order" lists no standard library APIs. The standard library is specified with the library itself, by the team lead. No section holds an **Open** heading for a standard library API either. Sections 12, 15 and 28.1 state the capability, and the library specifies `keys()` and `entries()`, the dispatcher (php-sharp #56) and the structure facts (php-sharp #53).
 
 ## Options
 
@@ -28,4 +28,7 @@ This was the old text. It listed APIs that the spec never decides, beside the qu
 
 ## Spec
 
+- [Section 12, Collections](../spec.md#12-collections)
+- [Section 15, Events](../spec.md#15-events)
+- [Section 28.1, Lean files](../spec.md#281-lean-files)
 - [Undecided, in order](../spec.md#undecided-in-order)
