@@ -59,18 +59,6 @@ static zend_always_inline zval *zend_enum_fetch_case_value(zend_object *zobj)
 	return OBJ_PROP_NUM(zobj, 1);
 }
 
-/* The value a backed enum case stands for as a PHP# key, as spec section 12 writes it, or NULL for
- * any other value. */
-static zend_always_inline zval *zend_sharp_enum_key(const zval *key)
-{
-	if (Z_TYPE_P(key) != IS_OBJECT
-			|| !(Z_OBJCE_P(key)->ce_flags & ZEND_ACC_ENUM)
-			|| Z_OBJCE_P(key)->enum_backing_type == IS_UNDEF) {
-		return NULL;
-	}
-	return zend_enum_fetch_case_value(Z_OBJ_P(key));
-}
-
 END_EXTERN_C()
 
 #endif /* ZEND_ENUM_H */

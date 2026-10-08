@@ -119,8 +119,6 @@ static zend_ast_attr sharp_operator_attr(zend_ast_kind kind, uint32_t attr)
 			return attr | ZEND_SHARP_OPERATOR_SYNTAX;
 		case ZEND_AST_DIM:
 			return attr | ZEND_DIM_SHARP;
-		case ZEND_AST_ARRAY:
-			return attr | ZEND_ARRAY_SHARP;
 		case ZEND_AST_METHOD_CALL:
 		case ZEND_AST_NULLSAFE_METHOD_CALL:
 			return attr | ZEND_METHOD_CALL_SHARP;
@@ -949,10 +947,8 @@ ZEND_METHOD(Sharp_Collection, set)
 /* The key a Map method takes: an int, a string, or a backed enum case, which stands for its value. */
 static bool sharp_collection_key(zval *key, zend_string **string_key, zend_long *long_key)
 {
-	zval *value = zend_sharp_enum_key(key);
-
-	if (value) {
-		key = value;
+	if (Z_TYPE_P(key) == IS_OBJECT && instanceof_function(Z_OBJCE_P(key), zend_ce_backed_enum)) {
+		key = zend_enum_fetch_case_value(Z_OBJ_P(key));
 	}
 	if (Z_TYPE_P(key) == IS_LONG) {
 		*string_key = NULL;

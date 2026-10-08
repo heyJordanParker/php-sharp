@@ -574,21 +574,10 @@ static void ZEND_FASTCALL zend_jit_fetch_dim_r_helper(zend_array *ht, zval *dim,
 		case IS_TRUE:
 			hval = 1;
 			goto num_index;
-		default: {
-			zend_value key;
-
-			switch (zend_sharp_index_key(dim, &key)) {
-				case IS_LONG:
-					hval = key.lval;
-					goto num_index;
-				case IS_STRING:
-					offset_key = key.str;
-					goto str_index;
-			}
+		default:
 			zend_illegal_container_offset(ZSTR_KNOWN(ZEND_STR_ARRAY), dim, BP_VAR_R);
 			undef_result_after_exception();
 			return;
-		}
 	}
 
 str_index:
@@ -732,23 +721,12 @@ static void ZEND_FASTCALL zend_jit_fetch_dim_is_helper(zend_array *ht, zval *dim
 		case IS_TRUE:
 			hval = 1;
 			goto num_index;
-		default: {
-			zend_value key;
-
-			switch (zend_sharp_index_key(dim, &key)) {
-				case IS_LONG:
-					hval = key.lval;
-					goto num_index;
-				case IS_STRING:
-					offset_key = key.str;
-					goto str_index;
-			}
+		default:
 			zend_illegal_container_offset(ZSTR_KNOWN(ZEND_STR_ARRAY), dim,
 				EG(current_execute_data)->opline->opcode == ZEND_ISSET_ISEMPTY_DIM_OBJ ?
 					BP_VAR_IS : BP_VAR_RW);
 			undef_result_after_exception();
 			return;
-		}
 	}
 
 str_index:
@@ -1011,21 +989,10 @@ static zval* ZEND_FASTCALL zend_jit_fetch_dim_rw_helper(zend_array *ht, zval *di
 		case IS_TRUE:
 			hval = 1;
 			goto num_index;
-		default: {
-			zend_value key;
-
-			switch (zend_sharp_index_key(dim, &key)) {
-				case IS_LONG:
-					hval = key.lval;
-					goto num_index;
-				case IS_STRING:
-					offset_key = key.str;
-					goto str_index;
-			}
+		default:
 			zend_illegal_container_offset(ZSTR_KNOWN(ZEND_STR_ARRAY), dim, BP_VAR_RW);
 			undef_result_after_exception();
 			return NULL;
-		}
 	}
 
 str_index:
@@ -1182,17 +1149,7 @@ static zval* ZEND_FASTCALL zend_jit_fetch_dim_w_helper(zend_array *ht, zval *dim
 		case IS_TRUE:
 			hval = 1;
 			goto num_index;
-		default: {
-			zend_value key;
-
-			switch (zend_sharp_index_key(dim, &key)) {
-				case IS_LONG:
-					hval = key.lval;
-					goto num_index;
-				case IS_STRING:
-					offset_key = key.str;
-					goto str_index;
-			}
+		default:
 			zend_illegal_container_offset(ZSTR_KNOWN(ZEND_STR_ARRAY), dim, BP_VAR_R);
 			undef_result_after_exception();
 			if (EG(opline_before_exception)
@@ -1203,7 +1160,6 @@ static zval* ZEND_FASTCALL zend_jit_fetch_dim_w_helper(zend_array *ht, zval *dim
 				zval_ptr_dtor_nogc(EX_VAR((EG(opline_before_exception)+1)->op1.var));
 			}
 			return NULL;
-		}
 	}
 
 str_index:

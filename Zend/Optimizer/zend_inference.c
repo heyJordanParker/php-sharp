@@ -2190,15 +2190,6 @@ ZEND_API uint32_t zend_array_element_type(uint32_t t1, uint8_t op_type, int writ
 	return tmp;
 }
 
-/* A PHP# index or list or map literal stores a backed enum key as its int or string value, see
- * zend_sharp_index_key(). */
-static zend_always_inline uint32_t sharp_index_dim_type(const zend_op *opline, uint32_t dim_type) {
-	if ((dim_type & MAY_BE_OBJECT) && (opline->extended_value & ZEND_SHARP_OPERATOR)) {
-		return dim_type | MAY_BE_LONG | MAY_BE_STRING;
-	}
-	return dim_type;
-}
-
 static uint32_t assign_dim_array_result_type(
 		uint32_t arr_type, uint32_t dim_type, uint32_t value_type, uint8_t dim_op_type) {
 	uint32_t tmp = 0;
@@ -3024,7 +3015,7 @@ static zend_always_inline zend_result _zend_update_type_info(
 			break;
 		case ZEND_ASSIGN_DIM:
 			if (opline->op1_type == IS_CV) {
-				tmp = assign_dim_result_type(t1, sharp_index_dim_type(opline, t2), OP1_DATA_INFO(), opline->op2_type);
+				tmp = assign_dim_result_type(t1, t2, OP1_DATA_INFO(), opline->op2_type);
 				tmp |= ssa->var_info[ssa_op->op1_def].type & (MAY_BE_ARRAY_PACKED|MAY_BE_ARRAY_NUMERIC_HASH|MAY_BE_ARRAY_STRING_HASH);
 				UPDATE_SSA_TYPE(tmp, ssa_op->op1_def);
 				COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->op1_def);
@@ -3472,7 +3463,6 @@ static zend_always_inline zend_result _zend_update_type_info(
 			}
 			if (ssa_op->result_def >= 0) {
 				uint32_t arr_type;
-				t2 = sharp_index_dim_type(opline, t2);
 				if (opline->opcode == ZEND_INIT_ARRAY) {
 					arr_type = 0;
 				} else {
@@ -3603,7 +3593,6 @@ static zend_always_inline zend_result _zend_update_type_info(
 		case ZEND_FETCH_LIST_W:
 			if (ssa_op->op1_def >= 0) {
 				uint32_t key_type = 0;
-				t2 = sharp_index_dim_type(opline, t2);
 				tmp = t1 & ~(MAY_BE_RC1|MAY_BE_RCN);
 				if (opline->opcode == ZEND_FETCH_DIM_W ||
 				    opline->opcode == ZEND_FETCH_DIM_RW ||

@@ -1,6 +1,5 @@
 namespace Demo;
 
-import Lib.Standing;
 import SplFixedArray;
 
 class IndexRead
@@ -42,8 +41,8 @@ class IndexRead
         return arrays[key]?.getSize();
     }
 
-    public static int standing(List<int> counts, Standing status)
+    public static int standing(List<int> counts, Any key)
     {
-        return counts[Helper.trusted(status)];
+        return counts[Helper.trusted(key)];
     }
 }

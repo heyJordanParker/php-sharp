@@ -23,8 +23,9 @@ for ($round = 0; $round < 100; $round++) {
     attempt(fn () => Demo\IndexRead::passed([1, 7], 2));
     attempt(fn () => Demo\IndexRead::size(['a' => new SplFixedArray(4)], 'a'));
     attempt(fn () => Demo\IndexRead::size(['a' => new SplFixedArray(4)], 'b'));
+    attempt(fn () => Demo\IndexRead::standing(['active' => 3], 'active'));
+    attempt(fn () => Demo\IndexRead::standing(['active' => 3], 'closed'));
     attempt(fn () => Demo\IndexRead::standing(['active' => 3], Standing::Active));
-    attempt(fn () => Demo\IndexRead::standing(['active' => 3], Standing::Closed));
     $output = ob_get_clean();
 }
 

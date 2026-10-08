@@ -1059,10 +1059,6 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
 #define ZEND_ARRAY_SYNTAX_LIST 1  /* list() */
 #define ZEND_ARRAY_SYNTAX_LONG 2  /* array() */
 #define ZEND_ARRAY_SYNTAX_SHORT 3 /* [] */
-#define ZEND_ARRAY_SHARP (1 << 2) /* PHP# list or map literal, see ZEND_SHARP_OPERATOR. Set in ext/sharp for every ZEND_AST_ARRAY. */
-
-ZEND_STATIC_ASSERT(!(ZEND_ARRAY_SHARP & (ZEND_ARRAY_SYNTAX_LIST|ZEND_ARRAY_SYNTAX_LONG|ZEND_ARRAY_SYNTAX_SHORT)),
-	"ZEND_ARRAY_SHARP overlaps ZEND_ARRAY_SYNTAX_* in the attr of ZEND_AST_ARRAY");
 
 /* var status for backpatching */
 #define BP_VAR_R			0
@@ -1144,22 +1140,13 @@ ZEND_STATIC_ASSERT(!(ZEND_ARRAY_SHARP & (ZEND_ARRAY_SYNTAX_LIST|ZEND_ARRAY_SYNTA
  * where it lives, and leaves any other value as it is.
  *   extended_value of ZEND_FETCH_OBJ_R                        upstream: ZEND_FETCH_OBJ_FLAGS, the cache slot
  *   extended_value of ZEND_CAST to IS_OBJECT                  upstream: the type
- * It also marks a PHP# index or list or map literal, which ZEND_DIM_SHARP and ZEND_ARRAY_SHARP turn
- * into it: a backed enum key stands for its value, where plain PHP throws.
- *   extended_value of ZEND_FETCH_DIM_W, ZEND_FETCH_DIM_RW, ZEND_FETCH_DIM_IS,
- *     ZEND_FETCH_DIM_UNSET, ZEND_ASSIGN_DIM                   upstream: the ZEND_FETCH_DIM_* flags
- *   extended_value of ZEND_INIT_ARRAY, ZEND_ADD_ARRAY_ELEMENT  upstream: ZEND_ARRAY_ELEMENT_REF, ZEND_ARRAY_NOT_PACKED, the size
- * A cache slot reaches ZEND_SHARP_OPERATOR only past 1 GiB of run-time cache, and an array size only
- * past 2^28 elements in one literal, which no assert can check. Their readers mask it out.
+ * A cache slot reaches ZEND_SHARP_OPERATOR only past 1 GiB of run-time cache, which no assert can check.
  *
  * ZEND_DIM_SHARP: a PHP# index, set in ext/sharp for every ZEND_AST_DIM.
  *   attr of ZEND_AST_DIM                                      upstream: ZEND_DIM_IS
  *
  * ZEND_METHOD_CALL_SHARP: a PHP# method call, set in ext/sharp for every method call.
  *   attr of ZEND_AST_METHOD_CALL, ZEND_AST_NULLSAFE_METHOD_CALL  upstream: none
- *
- * ZEND_ARRAY_SHARP: a PHP# list or map literal, set in ext/sharp for every ZEND_AST_ARRAY.
- *   attr of ZEND_AST_ARRAY                                    upstream: ZEND_ARRAY_SYNTAX_*
  */
 #define ZEND_SHARP_OPERATOR_SYNTAX	(1<<15)
 #define ZEND_SHARP_OPERATOR	(1<<30)
