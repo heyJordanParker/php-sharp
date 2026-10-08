@@ -2582,6 +2582,10 @@ simple_list:
 				smart_str_appendc(str, ')');
 			}
 			break;
+		case ZEND_AST_SHARP_TYPE_ARGS:
+			/* PHP#: a `new` whose type arguments PHP has no syntax for, as in the message of an assert(). */
+			zend_ast_export_ex(str, ast->child[0], priority, indent);
+			break;
 		case ZEND_AST_INSTANCEOF:
 			zend_ast_export_ex(str, ast->child[0], 0, indent);
 			smart_str_appends(str, " instanceof ");

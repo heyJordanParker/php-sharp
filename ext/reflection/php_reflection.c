@@ -51,6 +51,7 @@
 #include "zend_smart_str.h"
 #include "zend_enum.h"
 #include "zend_fibers.h"
+#include "ext/sharp/php_sharp.h"
 
 #define REFLECTION_ATTRIBUTE_IS_INSTANCEOF (1 << 1)
 
@@ -446,7 +447,8 @@ static void _class_string(smart_str *str, zend_class_entry *ce, zval *obj, const
 		zend_property_info *prop;
 
 		ZEND_HASH_MAP_FOREACH_PTR(&ce->properties_info, prop) {
-			if ((prop->flags & ZEND_ACC_PRIVATE) && prop->ce != ce) {
+			/* PHP#: the slot that keeps an object's type arguments counts as a shadow, so no listing shows it. */
+			if (((prop->flags & ZEND_ACC_PRIVATE) && prop->ce != ce) || (prop->flags & ZEND_ACC_SHARP_HIDDEN)) {
 				count_shadow_props++;
 			} else if (prop->flags & ZEND_ACC_STATIC) {
 				count_static_props++;
@@ -507,7 +509,7 @@ static void _class_string(smart_str *str, zend_class_entry *ce, zval *obj, const
 		zend_property_info *prop;
 
 		ZEND_HASH_MAP_FOREACH_PTR(&ce->properties_info, prop) {
-			if (!(prop->flags & ZEND_ACC_STATIC)
+			if (!(prop->flags & (ZEND_ACC_STATIC|ZEND_ACC_SHARP_HIDDEN))
 			 && (!(prop->flags & ZEND_ACC_PRIVATE) || prop->ce == ce)) {
 				_property_string(str, prop, NULL, ZSTR_VAL(sub_indent));
 			}
@@ -4231,7 +4233,7 @@ static void add_class_vars(zend_class_entry *ce, bool statics, zval *return_valu
 
 	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&ce->properties_info, key, prop_info) {
 		if (((prop_info->flags & ZEND_ACC_PRIVATE) &&
-		     prop_info->ce != ce)) {
+		     prop_info->ce != ce) || (prop_info->flags & ZEND_ACC_SHARP_HIDDEN)) {
 			continue;
 		}
 
@@ -4712,6 +4714,7 @@ ZEND_METHOD(ReflectionClass, hasProperty)
 
 	GET_REFLECTION_OBJECT_PTR(ce);
 	if ((property_info = zend_hash_find_ptr(&ce->properties_info, name)) != NULL
+	 && !(property_info->flags & ZEND_ACC_SHARP_HIDDEN)
 	 && (!(property_info->flags & ZEND_ACC_PRIVATE)
 	  || property_info->ce == ce)) {
 		RETURN_TRUE;
@@ -4741,6 +4744,7 @@ ZEND_METHOD(ReflectionClass, getProperty)
 
 	GET_REFLECTION_OBJECT_PTR(ce);
 	if ((property_info = zend_hash_find_ptr(&ce->properties_info, name)) != NULL
+	 && !(property_info->flags & ZEND_ACC_SHARP_HIDDEN)
 	 && (!(property_info->flags & ZEND_ACC_PRIVATE)
 	  || property_info->ce == ce)) {
 		reflection_property_factory(ce, name, property_info, return_value);
@@ -4788,6 +4792,7 @@ ZEND_METHOD(ReflectionClass, getProperty)
 
 		property_info = zend_hash_str_find_ptr(&ce->properties_info, str_name, str_name_len);
 		if (property_info != NULL
+		 && !(property_info->flags & ZEND_ACC_SHARP_HIDDEN)
 		 && (!(property_info->flags & ZEND_ACC_PRIVATE)
 		  || property_info->ce == ce)) {
 			reflection_property_factory_str(ce, str_name, str_name_len, property_info, return_value);
@@ -4813,7 +4818,7 @@ ZEND_METHOD(ReflectionClass, getProperty)
 /* {{{ _addproperty */
 static void _addproperty(zend_property_info *pptr, zend_string *key, zend_class_entry *ce, HashTable *ht, long filter)
 {
-	if ((pptr->flags & ZEND_ACC_PRIVATE) && pptr->ce != ce) {
+	if (((pptr->flags & ZEND_ACC_PRIVATE) && pptr->ce != ce) || (pptr->flags & ZEND_ACC_SHARP_HIDDEN)) {
 		return;
 	}
 
@@ -5820,6 +5825,28 @@ ZEND_METHOD(ReflectionObject, __construct)
 }
 /* }}} */
 
+/* {{{ PHP#: the type texts of the object's type arguments, one per type parameter of its own class */
+ZEND_METHOD(ReflectionObject, getTypeArguments)
+{
+	reflection_object *intern;
+	const sharp_type *arguments;
+
+	ZEND_PARSE_PARAMETERS_NONE();
+	GET_REFLECTION_OBJECT();
+	ZEND_ASSERT(Z_TYPE(intern->obj) == IS_OBJECT);
+
+	arguments = sharp_type_arguments(Z_OBJ(intern->obj));
+	if (!arguments) {
+		RETURN_EMPTY_ARRAY();
+	}
+
+	array_init_size(return_value, arguments->count);
+	for (uint32_t i = 0; i < arguments->count; i++) {
+		add_next_index_str(return_value, arguments->members[i]->text);
+	}
+}
+/* }}} */
+
 /* {{{ Constructor. Throws an Exception in case the given property does not exist */
 ZEND_METHOD(ReflectionProperty, __construct)
 {
@@ -5855,6 +5882,7 @@ ZEND_METHOD(ReflectionProperty, __construct)
 
 	property_info = zend_hash_find_ptr(&ce->properties_info, name);
 	if (property_info == NULL
+	 || (property_info->flags & ZEND_ACC_SHARP_HIDDEN)
 	 || ((property_info->flags & ZEND_ACC_PRIVATE)
 	  && property_info->ce != ce)) {
 		/* Check for dynamic properties */

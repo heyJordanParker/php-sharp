@@ -19,6 +19,7 @@
 #include "php_incomplete_class.h"
 #include "zend_portability.h"
 #include "zend_exceptions.h"
+#include "ext/sharp/php_sharp.h"
 
 /* {{{ reference-handling for unserializer: var_* */
 #define VAR_ENTRIES_MAX 1018     /* 1024 - offsetof(php_unserialize_data, entries) / sizeof(void*) */
@@ -460,7 +461,23 @@ static inline size_t parse_uiv(const unsigned char *p)
 
 static int php_var_unserialize_internal(UNSERIALIZE_PARAMETER);
 
-static zend_always_inline int process_nested_array_data(UNSERIALIZE_PARAMETER, HashTable *ht, zend_long elements)
+/* PHP#: reads the value serialize wrote under sharp_type_arguments_key into the hidden slot of `obj`. Serialize gives
+ * the value no number, so no R: or r: can name it, and it is read without the var_hash. */
+static int process_type_arguments(const unsigned char **p, const unsigned char *max, zend_object *obj)
+{
+	zval text;
+	int filled;
+
+	ZVAL_UNDEF(&text);
+	filled = php_var_unserialize_internal(&text, p, max, NULL)
+		&& sharp_type_arguments_unserialize(obj, &text) == SUCCESS;
+	zval_ptr_dtor(&text);
+
+	return filled;
+}
+
+/* `obj` is the object whose __unserialize gets the data, NULL for an array. */
+static zend_always_inline int process_nested_array_data(UNSERIALIZE_PARAMETER, HashTable *ht, zend_long elements, zend_object *obj)
 {
 	if (var_hash) {
 		if ((*var_hash)->max_depth > 0 && (*var_hash)->cur_depth >= (*var_hash)->max_depth) {
@@ -497,6 +514,13 @@ numeric_key:
 			if (UNEXPECTED(ZEND_HANDLE_NUMERIC(Z_STR(key), idx))) {
 				zval_ptr_dtor_str(&key);
 				goto numeric_key;
+			}
+			if (UNEXPECTED(obj && zend_string_equals(Z_STR(key), sharp_type_arguments_key))) {
+				zval_ptr_dtor_str(&key);
+				if (!process_type_arguments(p, max, obj)) {
+					goto failure;
+				}
+				continue;
 			}
 			data = zend_hash_lookup(ht, Z_STR(key));
 			if (UNEXPECTED(Z_TYPE_INFO_P(data) != IS_NULL)) {
@@ -599,6 +623,13 @@ static zend_always_inline int process_nested_object_data(UNSERIALIZE_PARAMETER, 
 
 		if (EXPECTED(Z_TYPE(key) == IS_STRING)) {
 string_key:
+			if (UNEXPECTED(zend_string_equals(Z_STR(key), sharp_type_arguments_key))) {
+				zval_ptr_dtor_str(&key);
+				if (!process_type_arguments(p, max, obj)) {
+					goto failure;
+				}
+				continue;
+			}
 			data = zend_hash_find(ht, Z_STR(key));
 			if (data != NULL) {
 				if (Z_TYPE_P(data) == IS_INDIRECT) {
@@ -799,7 +830,7 @@ static inline int object_common(UNSERIALIZE_PARAMETER, zend_long elements, bool 
 		array_init_size(&ary, elements);
 		/* Avoid reallocation due to packed -> mixed conversion. */
 		zend_hash_real_init_mixed(Z_ARRVAL(ary));
-		if (!process_nested_array_data(UNSERIALIZE_PASSTHRU, Z_ARRVAL(ary), elements)) {
+		if (!process_nested_array_data(UNSERIALIZE_PASSTHRU, Z_ARRVAL(ary), elements, Z_OBJ_P(rval))) {
 			ZVAL_DEREF(rval);
 			GC_ADD_FLAGS(Z_OBJ_P(rval), IS_OBJ_DESTRUCTOR_CALLED);
 			zval_ptr_dtor(&ary);
@@ -1121,7 +1152,7 @@ use_double:
 	 * prohibit "r:" references to non-objects, as we only generate them for objects. */
 	HT_ALLOW_COW_VIOLATION(Z_ARRVAL_P(rval));
 
-	if (!process_nested_array_data(UNSERIALIZE_PASSTHRU, Z_ARRVAL_P(rval), elements)) {
+	if (!process_nested_array_data(UNSERIALIZE_PASSTHRU, Z_ARRVAL_P(rval), elements, /* obj */ NULL)) {
 		return 0;
 	}
 

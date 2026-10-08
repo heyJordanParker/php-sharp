@@ -772,7 +772,7 @@ static void add_class_vars(zend_class_entry *scope, zend_class_entry *ce, bool s
 			 !zend_check_protected(prop_info->ce, scope)) ||
 			((prop_info->flags & ZEND_ACC_PRIVATE) &&
 			  prop_info->ce != scope) ||
-			(prop_info->flags & ZEND_ACC_VIRTUAL)) {
+			(prop_info->flags & (ZEND_ACC_VIRTUAL|ZEND_ACC_SHARP_HIDDEN))) {
 			continue;
 		}
 		prop = NULL;
@@ -1052,6 +1052,7 @@ static void _property_exists(zval *return_value, zval *object, zend_string *prop
 
 	property_info = zend_hash_find_ptr(&ce->properties_info, property);
 	if (property_info != NULL
+	 && !(property_info->flags & ZEND_ACC_SHARP_HIDDEN)
 	 && (!(property_info->flags & ZEND_ACC_PRIVATE)
 	  || property_info->ce == ce)) {
 		RETURN_TRUE;

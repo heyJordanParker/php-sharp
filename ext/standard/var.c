@@ -30,6 +30,7 @@
 #include "zend_enum.h"
 #include "zend_exceptions.h"
 #include "zend_types.h"
+#include "ext/sharp/php_sharp.h"
 /* }}} */
 
 struct php_serialize_data {
@@ -997,9 +998,17 @@ static int php_var_serialize_get_sleep_props(
 }
 /* }}} */
 
-static void php_var_serialize_nested_data(smart_str *buf, zval *struc, HashTable *ht, uint32_t count, bool incomplete_class, php_serialize_data_t var_hash, bool in_rcn_array) /* {{{ */
+/* PHP#: the entry that keeps the type arguments of an object of a generic PHP# class, after its properties. */
+static void php_var_serialize_type_arguments(smart_str *buf, const sharp_type *type_arguments)
 {
-	smart_str_append_unsigned(buf, count);
+	php_var_serialize_string(buf, ZSTR_VAL(sharp_type_arguments_key), ZSTR_LEN(sharp_type_arguments_key));
+	php_var_serialize_string(buf, ZSTR_VAL(type_arguments->text), ZSTR_LEN(type_arguments->text));
+}
+
+/* `type_arguments` are those of the object `struc`, or NULL. */
+static void php_var_serialize_nested_data(smart_str *buf, zval *struc, HashTable *ht, uint32_t count, bool incomplete_class, php_serialize_data_t var_hash, bool in_rcn_array, const sharp_type *type_arguments) /* {{{ */
+{
+	smart_str_append_unsigned(buf, count + (type_arguments != NULL));
 	smart_str_appendl(buf, ":{", 2);
 	if (count > 0) {
 		zend_string *key;
@@ -1036,6 +1045,9 @@ static void php_var_serialize_nested_data(smart_str *buf, zval *struc, HashTable
 			}
 		} ZEND_HASH_FOREACH_END();
 	}
+	if (type_arguments) {
+		php_var_serialize_type_arguments(buf, type_arguments);
+	}
 	smart_str_appendc(buf, '}');
 }
 /* }}} */
@@ -1047,7 +1059,8 @@ static void php_var_serialize_class(smart_str *buf, zval *struc, HashTable *ht, 
 	if (php_var_serialize_get_sleep_props(&props, struc, ht) == SUCCESS) {
 		php_var_serialize_class_name(buf, struc);
 		php_var_serialize_nested_data(
-			buf, struc, &props, zend_hash_num_elements(&props), /* incomplete_class */ 0, var_hash, GC_REFCOUNT(&props) > 1);
+			buf, struc, &props, zend_hash_num_elements(&props), /* incomplete_class */ 0, var_hash, GC_REFCOUNT(&props) > 1,
+			sharp_type_arguments(Z_OBJ_P(struc)));
 	}
 	zend_hash_destroy(&props);
 }
@@ -1172,8 +1185,10 @@ again:
 						return;
 					}
 
+					const sharp_type *type_arguments = sharp_type_arguments(Z_OBJ(obj));
+
 					php_var_serialize_class_name(buf, &obj);
-					smart_str_append_unsigned(buf, zend_hash_num_elements(Z_ARRVAL(retval)));
+					smart_str_append_unsigned(buf, zend_hash_num_elements(Z_ARRVAL(retval)) + (type_arguments != NULL));
 					smart_str_appendl(buf, ":{", 2);
 					ZEND_HASH_FOREACH_KEY_VAL(Z_ARRVAL(retval), index, key, data) {
 						if (!key) {
@@ -1187,6 +1202,9 @@ again:
 						}
 						php_var_serialize_intern(buf, data, var_hash, Z_REFCOUNT(retval) > 1, false);
 					} ZEND_HASH_FOREACH_END();
+					if (type_arguments) {
+						php_var_serialize_type_arguments(buf, type_arguments);
+					}
 					smart_str_appendc(buf, '}');
 
 					zval_ptr_dtor(&obj);
@@ -1264,14 +1282,15 @@ again:
 					/* Optimized version without rebulding properties HashTable */
 					zend_object *obj = Z_OBJ_P(struc);
 					zend_class_entry *ce = obj->ce;
+					const sharp_type *type_arguments = sharp_type_arguments(obj);
 					zend_property_info *prop_info;
 					zval *prop;
 					int i;
 
-					count = ce->default_properties_count;
+					count = ce->default_properties_count + (type_arguments != NULL);
 					for (i = 0; i < ce->default_properties_count; i++) {
 						prop_info = ce->properties_info_table[i];
-						if (!prop_info) {
+						if (!prop_info || (prop_info->flags & ZEND_ACC_SHARP_HIDDEN)) {
 							count--;
 							continue;
 						}
@@ -1286,7 +1305,7 @@ again:
 						smart_str_appendl(buf, ":{", 2);
 						for (i = 0; i < ce->default_properties_count; i++) {
 							prop_info = ce->properties_info_table[i];
-							if (!prop_info) {
+							if (!prop_info || (prop_info->flags & ZEND_ACC_SHARP_HIDDEN)) {
 								continue;
 							}
 							prop = OBJ_PROP(obj, prop_info->offset);
@@ -1302,6 +1321,9 @@ again:
 
 							php_var_serialize_intern(buf, prop, var_hash, false, false);
 						}
+						if (type_arguments) {
+							php_var_serialize_type_arguments(buf, type_arguments);
+						}
 						smart_str_appendc(buf, '}');
 					} else {
 						smart_str_appendl(buf, "0:{}", 4);
@@ -1315,7 +1337,8 @@ again:
 				if (count > 0 && incomplete_class) {
 					--count;
 				}
-				php_var_serialize_nested_data(buf, struc, myht, count, incomplete_class, var_hash, GC_REFCOUNT(myht) > 1);
+				php_var_serialize_nested_data(buf, struc, myht, count, incomplete_class, var_hash, GC_REFCOUNT(myht) > 1,
+					sharp_type_arguments(Z_OBJ_P(struc)));
 				zend_release_properties(myht);
 				return;
 			}
@@ -1324,7 +1347,7 @@ again:
 			myht = Z_ARRVAL_P(struc);
 			php_var_serialize_nested_data(
 				buf, struc, myht, zend_array_count(myht), /* incomplete_class */ 0, var_hash,
-					!is_root && (in_rcn_array || GC_REFCOUNT(myht) > 1));
+					!is_root && (in_rcn_array || GC_REFCOUNT(myht) > 1), /* type_arguments */ NULL);
 			return;
 		case IS_REFERENCE:
 			struc = Z_REFVAL_P(struc);

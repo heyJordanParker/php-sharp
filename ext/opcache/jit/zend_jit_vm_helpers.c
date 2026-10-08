@@ -853,6 +853,8 @@ zend_jit_trace_stop ZEND_FASTCALL zend_jit_trace_execute(zend_execute_data  *ex,
 		}
 		if (opline->op2_type & (IS_TMP_VAR|IS_VAR|IS_CV)
 		 && opline->opcode != ZEND_INSTANCEOF
+		 /* PHP#: a NEW's TMP op2 holds the IS_PTR type arguments of ZEND_SHARP_TYPE_ARGS, which is no PHP type. */
+		 && opline->opcode != ZEND_NEW
 		 && opline->opcode != ZEND_UNSET_STATIC_PROP
 		 && opline->opcode != ZEND_ISSET_ISEMPTY_STATIC_PROP
 		 && opline->opcode != ZEND_ASSIGN_STATIC_PROP

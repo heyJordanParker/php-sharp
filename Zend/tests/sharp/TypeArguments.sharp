@@ -1,0 +1,72 @@
+namespace App;
+
+import Lib.Sleeper;
+import Lib.Snapshot;
+import Lib.Witness;
+
+public abstract class DatabaseEntity
+{
+    public DatabaseEntity(public int id { get; })
+    {
+    }
+}
+
+public class Order : DatabaseEntity
+{
+}
+
+public class PaginatedList<TItem : DatabaseEntity>
+{
+    public required PaginatedList(public List<TItem> items { get; })
+    {
+        Witness.see(this);
+    }
+
+    public Self copy() => new Self(this.items);
+
+    public PaginatedList<TItem> copyLater()
+    {
+        const Function<PaginatedList<TItem>()> make = () => new Self(this.items);
+        return make();
+    }
+}
+
+public class OrderPage : PaginatedList<Order>
+{
+}
+
+public class Pair<TKey, TValue>
+{
+    public Pair(public TKey key { get; }, public TValue value { get; })
+    {
+    }
+}
+
+public class Ledger<TEntry : DatabaseEntity> : Snapshot
+{
+    public Ledger(public List<TEntry> entries { get; })
+    {
+    }
+}
+
+public class Journal<TEntry : DatabaseEntity> : Sleeper
+{
+    public Journal(public List<TEntry> entries { get; }, public int pages { get; })
+    {
+    }
+}
+
+public class Queue
+{
+    public static PaginatedList<Order> orders() => new PaginatedList<Order>([]);
+
+    public static PaginatedList<DatabaseEntity> entities() => new PaginatedList<DatabaseEntity>([]);
+
+    public static Pair<Order, int> pair() => new Pair<Order, int>(new Order(2), 3);
+
+    public static OrderPage page() => new OrderPage([]);
+
+    public static Ledger<Order> ledger() => new Ledger<Order>([]);
+
+    public static Journal<Order> journal() => new Journal<Order>([], 4);
+}

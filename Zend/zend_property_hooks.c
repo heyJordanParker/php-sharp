@@ -78,7 +78,8 @@ static zend_array *zho_build_properties_ex(zend_object *zobj, bool check_access,
 
 		zend_property_info *prop_info;
 		ZEND_HASH_MAP_FOREACH_PTR(&pce->properties_info, prop_info) {
-			if (prop_info->flags & ZEND_ACC_STATIC) {
+			/* PHP#: the slot that keeps an object's type arguments is never one of its properties. */
+			if (prop_info->flags & (ZEND_ACC_STATIC|ZEND_ACC_SHARP_HIDDEN)) {
 				continue;
 			}
 			zend_string *property_name = prop_info->name;

@@ -1437,6 +1437,405 @@ ZEND_METHOD(Sharp_Position, __construct)
 	zend_update_property_str(position->ce, position, ZEND_STRL("function"), function);
 }
 
+/* Type texts, see sharp_type in php_sharp.h. A text parses in its one canonical spelling only, so equal types are
+ * one pointer: a single space after each comma and nowhere else, union members sorted by their text, and `T?` in
+ * place of `T|null`. Types and argument lists live in two tables, because a one-argument list spells its argument. */
+
+zend_string *sharp_type_arguments_key;
+
+static HashTable sharp_types;
+static HashTable sharp_type_lists;
+#ifdef ZTS
+static MUTEX_T sharp_types_lock;
+#endif
+
+static const char *const sharp_built_in_types[] = {
+	"int", "float", "bool", "string", "void", "null", "Any", "Object", "List", "Map", "Set", "Iterable", "Class",
+};
+
+typedef struct {
+	const char *at;
+	const char *end;
+} sharp_type_reader;
+
+typedef struct {
+	const sharp_type **items;
+	uint32_t count;
+	uint32_t size;
+} sharp_type_members;
+
+static const sharp_type *sharp_type_read(sharp_type_reader *reader);
+
+/* A persistent string no request frees or counts, as an interned string is. */
+static zend_string *sharp_type_string(const char *text, size_t length)
+{
+	zend_string *string = zend_string_init(text, length, true);
+
+	zend_string_hash_val(string);
+	GC_TYPE_INFO(string) = GC_STRING | ((IS_STR_INTERNED | IS_STR_PERSISTENT | IS_STR_PERMANENT) << GC_FLAGS_SHIFT);
+
+	return string;
+}
+
+static void sharp_type_free(zval *entry)
+{
+	sharp_type *type = Z_PTR_P(entry);
+
+	if (type->class_name) {
+		pefree(type->class_name, true);
+	}
+	pefree(type->text, true);
+	pefree(type, true);
+}
+
+static void sharp_type_members_add(sharp_type_members *members, const sharp_type *member)
+{
+	if (members->count == members->size) {
+		members->size = members->size ? members->size * 2 : 4;
+		members->items = erealloc(members->items, members->size * sizeof(*members->items));
+	}
+	members->items[members->count++] = member;
+}
+
+static bool sharp_type_skip(sharp_type_reader *reader, const char *token)
+{
+	size_t length = strlen(token);
+
+	if ((size_t) (reader->end - reader->at) < length || memcmp(reader->at, token, length) != 0) {
+		return false;
+	}
+	reader->at += length;
+
+	return true;
+}
+
+static bool sharp_type_identifier(sharp_type_reader *reader)
+{
+	const char *start = reader->at;
+
+	while (reader->at < reader->end) {
+		unsigned char c = *reader->at;
+
+		if (c == '_' || c >= 0x80 || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+			|| (reader->at > start && c >= '0' && c <= '9')) {
+			reader->at++;
+		} else {
+			break;
+		}
+	}
+
+	return reader->at > start;
+}
+
+/* The interned type of `kind` that `length` bytes at `text` spell. `name` is a class's dotted name, or NULL. */
+static const sharp_type *sharp_type_intern(
+	HashTable *table, sharp_type_kind kind, const char *text, size_t length, const char *name, size_t name_length,
+	const sharp_type_members *members)
+{
+	sharp_type *type = zend_hash_str_find_ptr(table, text, length);
+
+	if (type) {
+		return type;
+	}
+
+	uint32_t count = members ? members->count : 0;
+	type = pemalloc(offsetof(sharp_type, members) + MAX(count, 1) * sizeof(sharp_type *), true);
+	type->text = sharp_type_string(text, length);
+	type->class_name = NULL;
+	if (name) {
+		type->class_name = sharp_type_string(name, name_length);
+		for (char *c = ZSTR_VAL(type->class_name); *c; c++) {
+			if (*c == '.') {
+				*c = '\\';
+			}
+		}
+	}
+	type->kind = kind;
+	type->count = count;
+	if (count) {
+		memcpy(type->members, members->items, count * sizeof(sharp_type *));
+	}
+	zend_hash_add_new_ptr(table, type->text, type);
+
+	return type;
+}
+
+/* `name`, `name<A, B>` or `Function<R(P1, P2)>`. */
+static const sharp_type *sharp_type_read_atom(sharp_type_reader *reader)
+{
+	const char *start = reader->at;
+	sharp_type_members members = {0};
+	const sharp_type *type = NULL;
+
+	if (sharp_type_skip(reader, "Function<")) {
+		const sharp_type *returned = sharp_type_read(reader);
+
+		if (!returned || !sharp_type_skip(reader, "(")) {
+			goto done;
+		}
+		sharp_type_members_add(&members, returned);
+		if (!sharp_type_skip(reader, ")")) {
+			do {
+				const sharp_type *parameter = sharp_type_read(reader);
+
+				if (!parameter) {
+					goto done;
+				}
+				sharp_type_members_add(&members, parameter);
+			} while (sharp_type_skip(reader, ", "));
+			if (!sharp_type_skip(reader, ")")) {
+				goto done;
+			}
+		}
+		if (sharp_type_skip(reader, ">")) {
+			type = sharp_type_intern(&sharp_types, SHARP_TYPE_FUNCTION, start, reader->at - start, NULL, 0, &members);
+		}
+		goto done;
+	}
+
+	do {
+		if (!sharp_type_identifier(reader)) {
+			goto done;
+		}
+	} while (sharp_type_skip(reader, "."));
+
+	size_t name_length = reader->at - start;
+	bool built_in = false;
+	for (size_t i = 0; i < sizeof(sharp_built_in_types) / sizeof(*sharp_built_in_types); i++) {
+		if (strlen(sharp_built_in_types[i]) == name_length && memcmp(sharp_built_in_types[i], start, name_length) == 0) {
+			built_in = true;
+		}
+	}
+
+	if (sharp_type_skip(reader, "<")) {
+		do {
+			const sharp_type *argument = sharp_type_read(reader);
+
+			if (!argument) {
+				goto done;
+			}
+			sharp_type_members_add(&members, argument);
+		} while (sharp_type_skip(reader, ", "));
+		if (!sharp_type_skip(reader, ">")) {
+			goto done;
+		}
+	}
+	type = sharp_type_intern(&sharp_types, SHARP_TYPE_NAMED, start, reader->at - start,
+		built_in ? NULL : start, name_length, &members);
+
+done:
+	if (members.items) {
+		efree(members.items);
+	}
+
+	return type;
+}
+
+/* Union members after the first one, `|B|C`, each sorted after the one before it. `null` is never a member, because
+ * a nullable union is `(A|B)?`, and neither is `Any`, which holds every other type. */
+static bool sharp_type_read_union(sharp_type_reader *reader, sharp_type_members *members)
+{
+	while (sharp_type_skip(reader, "|")) {
+		const sharp_type *member = sharp_type_read_atom(reader);
+		const sharp_type *before = members->items[members->count - 1];
+
+		if (!member || zend_binary_strcmp(ZSTR_VAL(before->text), ZSTR_LEN(before->text),
+				ZSTR_VAL(member->text), ZSTR_LEN(member->text)) >= 0) {
+			return false;
+		}
+		sharp_type_members_add(members, member);
+	}
+
+	for (uint32_t i = 0; i < members->count; i++) {
+		if (zend_string_equals_literal(members->items[i]->text, "null")
+			|| zend_string_equals_literal(members->items[i]->text, "Any")) {
+			return false;
+		}
+	}
+
+	return members->count > 1;
+}
+
+/* A type: an atom, `T?`, `A|B` or `(A|B)?`. */
+static const sharp_type *sharp_type_read(sharp_type_reader *reader)
+{
+	const char *start = reader->at;
+	sharp_type_members members = {0};
+	const sharp_type *type = NULL;
+
+#ifdef ZEND_CHECK_STACK_LIMIT
+	if (UNEXPECTED(zend_call_stack_overflowed(EG(stack_limit)))) {
+		return NULL;
+	}
+#endif
+
+	if (sharp_type_skip(reader, "(")) {
+		const sharp_type *first = sharp_type_read_atom(reader);
+
+		if (first) {
+			sharp_type_members_add(&members, first);
+			if (sharp_type_read_union(reader, &members) && sharp_type_skip(reader, ")")) {
+				const sharp_type *nullable[] = {sharp_type_intern(&sharp_types, SHARP_TYPE_UNION, start + 1,
+					reader->at - start - 2, NULL, 0, &members)};
+
+				if (sharp_type_skip(reader, "?")) {
+					type = sharp_type_intern(&sharp_types, SHARP_TYPE_NULLABLE, start, reader->at - start, NULL, 0,
+						&(sharp_type_members) {.items = nullable, .count = 1});
+				}
+			}
+		}
+	} else if ((type = sharp_type_read_atom(reader)) != NULL) {
+		if (sharp_type_skip(reader, "?")) {
+			const sharp_type *nullable[] = {type};
+
+			type = zend_string_equals_literal(type->text, "null")
+				? NULL
+				: sharp_type_intern(&sharp_types, SHARP_TYPE_NULLABLE, start, reader->at - start, NULL, 0,
+					&(sharp_type_members) {.items = nullable, .count = 1});
+		} else if (reader->at < reader->end && *reader->at == '|') {
+			sharp_type_members_add(&members, type);
+			type = sharp_type_read_union(reader, &members)
+				? sharp_type_intern(&sharp_types, SHARP_TYPE_UNION, start, reader->at - start, NULL, 0, &members)
+				: NULL;
+		}
+	}
+
+	if (members.items) {
+		efree(members.items);
+	}
+
+	return type;
+}
+
+const sharp_type *sharp_type_list(const char *text, size_t length)
+{
+	const sharp_type *list;
+
+#ifdef ZTS
+	tsrm_mutex_lock(sharp_types_lock);
+#endif
+	list = zend_hash_str_find_ptr(&sharp_type_lists, text, length);
+	if (!list) {
+		sharp_type_reader reader = {text, text + length};
+		sharp_type_members members = {0};
+
+		do {
+			const sharp_type *argument = sharp_type_read(&reader);
+
+			if (!argument) {
+				members.count = 0;
+				break;
+			}
+			sharp_type_members_add(&members, argument);
+		} while (sharp_type_skip(&reader, ", "));
+
+		if (members.count && reader.at == reader.end) {
+			list = sharp_type_intern(&sharp_type_lists, SHARP_TYPE_LIST, text, length, NULL, 0, &members);
+		}
+		if (members.items) {
+			efree(members.items);
+		}
+	}
+#ifdef ZTS
+	tsrm_mutex_unlock(sharp_types_lock);
+#endif
+
+	return list;
+}
+
+const zend_property_info *sharp_type_arguments_slot(const zend_class_entry *ce)
+{
+	const zend_property_info *slot = zend_hash_find_ptr(&ce->properties_info, sharp_type_arguments_key);
+
+	return slot && slot->ce == ce && (slot->flags & ZEND_ACC_SHARP_HIDDEN) ? slot : NULL;
+}
+
+/* The type arguments `ce`'s objects start with: its bounds, the default of its slot. */
+static const sharp_type *sharp_type_bounds(const zend_class_entry *ce, const zend_property_info *slot)
+{
+	const zval *bounds = &ce->default_properties_table[OBJ_PROP_TO_NUM(slot->offset)];
+	const sharp_type *list = sharp_type_list(Z_STRVAL_P(bounds), Z_STRLEN_P(bounds));
+
+	ZEND_ASSERT(list != NULL);
+
+	return list;
+}
+
+const sharp_type *sharp_type_arguments(zend_object *object)
+{
+	const zend_property_info *slot = sharp_type_arguments_slot(object->ce);
+
+	if (!slot) {
+		return NULL;
+	}
+
+	zval *value = OBJ_PROP(object, slot->offset);
+	if (Z_TYPE_P(value) == IS_PTR) {
+		return Z_PTR_P(value);
+	}
+
+	/* Plain PHP created the object, so its slot holds its class's bounds as a type text, or is UNDEF while the object
+	 * is lazy. */
+	const sharp_type *bounds = sharp_type_bounds(object->ce, slot);
+	if (Z_TYPE_P(value) == IS_STRING) {
+		zval_ptr_dtor_str(value);
+		ZVAL_PTR(value, (void *) bounds);
+	}
+
+	return bounds;
+}
+
+void sharp_type_arguments_store(zend_object *object, const sharp_type *arguments)
+{
+	const zend_property_info *slot = sharp_type_arguments_slot(object->ce);
+	zval *value;
+
+	ZEND_ASSERT(slot != NULL && arguments->kind == SHARP_TYPE_LIST);
+	value = OBJ_PROP(object, slot->offset);
+	zval_ptr_dtor(value);
+	ZVAL_PTR(value, (void *) arguments);
+}
+
+bool sharp_type_arguments_equal(zend_object *a, zend_object *b)
+{
+	ZEND_ASSERT(a->ce == b->ce);
+
+	return sharp_type_arguments(a) == sharp_type_arguments(b);
+}
+
+/* Whether every class `type` names loads. */
+static bool sharp_type_classes_load(const sharp_type *type)
+{
+	if (type->class_name && !zend_lookup_class(type->class_name)) {
+		return false;
+	}
+	for (uint32_t i = 0; i < type->count; i++) {
+		if (!sharp_type_classes_load(type->members[i])) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+zend_result sharp_type_arguments_unserialize(zend_object *object, const zval *text)
+{
+	const zend_property_info *slot = sharp_type_arguments_slot(object->ce);
+
+	if (!slot || Z_TYPE_P(text) != IS_STRING) {
+		return FAILURE;
+	}
+
+	const sharp_type *arguments = sharp_type_list(Z_STRVAL_P(text), Z_STRLEN_P(text));
+	if (!arguments || arguments->count != sharp_type_bounds(object->ce, slot)->count
+		|| !sharp_type_classes_load(arguments)) {
+		return FAILURE;
+	}
+	sharp_type_arguments_store(object, arguments);
+
+	return SUCCESS;
+}
+
 static zend_object_handlers sharp_environment_handlers;
 
 static bool sharp_environment_is_property(const zend_string *name)
@@ -1605,6 +2004,13 @@ static PHP_MINIT_FUNCTION(sharp)
 
 	zend_add_system_entropy("sharp", "SHARP_BUILD_ID", SHARP_BUILD_ID, sizeof(SHARP_BUILD_ID) - 1);
 
+	sharp_type_arguments_key = zend_string_init_interned("\0<sharp>\0types", sizeof("\0<sharp>\0types") - 1, true);
+	zend_hash_init(&sharp_types, 64, NULL, sharp_type_free, true);
+	zend_hash_init(&sharp_type_lists, 64, NULL, sharp_type_free, true);
+#ifdef ZTS
+	sharp_types_lock = tsrm_mutex_alloc();
+#endif
+
 	sharp_next_compile_file = zend_compile_file;
 	zend_compile_file = sharp_compile_file;
 	zend_compiled_revision = sharp_compiled_revision;
@@ -1615,6 +2021,11 @@ static PHP_MINIT_FUNCTION(sharp)
 static PHP_MSHUTDOWN_FUNCTION(sharp)
 {
 	UNREGISTER_INI_ENTRIES();
+	zend_hash_destroy(&sharp_type_lists);
+	zend_hash_destroy(&sharp_types);
+#ifdef ZTS
+	tsrm_mutex_free(sharp_types_lock);
+#endif
 
 	return SUCCESS;
 }

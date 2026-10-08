@@ -38,6 +38,7 @@
 #include "zend_call_stack.h"
 #include "zend_frameless_function.h"
 #include "zend_property_hooks.h"
+#include "ext/sharp/php_sharp.h"
 
 #define SET_NODE(target, src) do { \
 		target ## _type = (src)->op_type; \
@@ -5458,12 +5459,25 @@ static void zend_compile_static_call(znode *result, zend_ast *ast, uint32_t type
 
 static void zend_compile_class_decl(znode *result, zend_ast *ast, bool toplevel);
 
-static void zend_compile_new(znode *result, zend_ast *ast) /* {{{ */
+/* The type text a ZEND_AST_SHARP_TYPE_ARGS holds, which the bridge printed and the engine interns when it runs. */
+static zend_string *zend_sharp_type_text(zend_ast *text_ast)
+{
+	zend_string *text = zend_ast_get_str(text_ast);
+
+	if (!sharp_type_list(ZSTR_VAL(text), ZSTR_LEN(text))) {
+		zend_error_noreturn(E_COMPILE_ERROR, "PHP# type arguments \"%s\" are no type text", ZSTR_VAL(text));
+	}
+
+	return text;
+}
+
+/* `type_args_ast` is the ZEND_AST_SHARP_TYPE_ARGS around a PHP# `new`, or NULL. */
+static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_ast) /* {{{ */
 {
 	zend_ast *class_ast = ast->child[0];
 	zend_ast *args_ast = ast->child[1];
 
-	znode class_node, ctor_result;
+	znode class_node, type_args_node, ctor_result;
 	zend_op *opline;
 
 	if (class_ast->kind == ZEND_AST_CLASS) {
@@ -5471,6 +5485,30 @@ static void zend_compile_new(znode *result, zend_ast *ast) /* {{{ */
 		zend_compile_class_decl(&class_node, class_ast, 0);
 	} else {
 		zend_compile_class_ref(&class_node, class_ast, ZEND_FETCH_CLASS_EXCEPTION);
+	}
+
+	if (type_args_ast) {
+		/* NEW keeps a constant class's cache slot in op2, which holds the type arguments here, so the class goes
+		 * through FETCH_CLASS, as `new $name` does. */
+		ZEND_ASSERT(class_ast->kind != ZEND_AST_CLASS);
+		if (class_node.op_type == IS_CONST) {
+			zend_string *name = Z_STR(class_node.u.constant);
+
+			opline = zend_emit_op(&class_node, ZEND_FETCH_CLASS, NULL, NULL);
+			opline->op1.num = ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION;
+			opline->op2_type = IS_CONST;
+			opline->op2.constant = zend_add_class_name_literal(name);
+			opline->extended_value = zend_alloc_cache_slot();
+		}
+
+		opline = zend_emit_op_tmp(&type_args_node, ZEND_SHARP_TYPE_ARGS, NULL, NULL);
+		if (type_args_ast->child[1]) {
+			zend_string *text = zend_string_copy(zend_sharp_type_text(type_args_ast->child[1]));
+
+			opline->op2_type = IS_CONST;
+			opline->op2.constant = zend_add_literal_string(&text);
+			opline->extended_value = zend_alloc_cache_slot();
+		}
 	}
 
 	opline = zend_emit_op(result, ZEND_NEW, NULL, NULL);
@@ -5483,11 +5521,26 @@ static void zend_compile_new(znode *result, zend_ast *ast) /* {{{ */
 	} else {
 		SET_NODE(opline->op1, &class_node);
 	}
+	if (type_args_ast) {
+		SET_NODE(opline->op2, &type_args_node);
+	}
 
 	zend_compile_call_common(&ctor_result, args_ast, NULL, ast->lineno);
 	zend_do_free(&ctor_result);
 }
 /* }}} */
+
+/* A ZEND_AST_SHARP_TYPE_ARGS in a class's member list declares the slot its objects keep their type arguments in,
+ * with the class's bounds as its default. */
+static void zend_compile_sharp_type_args_slot(zend_ast *ast)
+{
+	zval bounds;
+
+	ZEND_ASSERT(CG(active_class_entry) && ast->child[0] == NULL);
+	ZVAL_STR_COPY(&bounds, zend_sharp_type_text(ast->child[1]));
+	zend_declare_typed_property(CG(active_class_entry), sharp_type_arguments_key, &bounds,
+		ZEND_ACC_PUBLIC | ZEND_ACC_SHARP_HIDDEN, NULL, (zend_type) ZEND_TYPE_INIT_NONE(0));
+}
 
 static void zend_compile_global_var(zend_ast *ast) /* {{{ */
 {
@@ -11830,6 +11883,9 @@ static void zend_compile_stmt(zend_ast *ast) /* {{{ */
 		case ZEND_AST_PROP_GROUP:
 			zend_compile_prop_group(ast);
 			break;
+		case ZEND_AST_SHARP_TYPE_ARGS:
+			zend_compile_sharp_type_args_slot(ast);
+			break;
 		case ZEND_AST_CLASS_CONST_GROUP:
 			zend_compile_class_const_group(ast);
 			break;
@@ -11911,7 +11967,10 @@ static void zend_compile_expr_inner(znode *result, zend_ast *ast) /* {{{ */
 			zend_compile_assign_ref(result, ast);
 			return;
 		case ZEND_AST_NEW:
-			zend_compile_new(result, ast);
+			zend_compile_new(result, ast, NULL);
+			return;
+		case ZEND_AST_SHARP_TYPE_ARGS:
+			zend_compile_new(result, ast->child[0], ast);
 			return;
 		case ZEND_AST_ASSIGN_OP:
 			zend_compile_compound_assign(result, ast);

@@ -6011,7 +6011,9 @@ ZEND_VM_C_LABEL(case_double):
 	ZEND_VM_DISPATCH_TO_HELPER(zend_case_helper, op_1, op1, op_2, op2);
 }
 
-ZEND_VM_HANDLER(68, ZEND_NEW, UNUSED|CLASS_FETCH|CONST|VAR, UNUSED|CACHE_SLOT, NUM)
+/* PHP#: a TMP op2 holds the type arguments ZEND_SHARP_TYPE_ARGS gave the new object, see ZEND_AST_SHARP_TYPE_ARGS.
+ * Its class then comes from FETCH_CLASS, so op2 never holds a cache slot. */
+ZEND_VM_HANDLER(68, ZEND_NEW, UNUSED|CLASS_FETCH|CONST|VAR, UNUSED|CACHE_SLOT|TMP, NUM)
 {
 	USE_OPLINE
 	zval *result;
@@ -6020,6 +6022,7 @@ ZEND_VM_HANDLER(68, ZEND_NEW, UNUSED|CLASS_FETCH|CONST|VAR, UNUSED|CACHE_SLOT, N
 	zend_execute_data *call;
 
 	SAVE_OPLINE();
+	ZEND_ASSERT(OP1_TYPE != IS_CONST || OP2_TYPE == IS_UNUSED);
 	if (OP1_TYPE == IS_CONST) {
 		ce = CACHED_PTR(opline->op2.num);
 		if (UNEXPECTED(ce == NULL)) {
@@ -6044,6 +6047,14 @@ ZEND_VM_HANDLER(68, ZEND_NEW, UNUSED|CLASS_FETCH|CONST|VAR, UNUSED|CACHE_SLOT, N
 	if (UNEXPECTED(object_init_ex(result, ce) != SUCCESS)) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
+	}
+
+	if (OP2_TYPE == IS_TMP_VAR) {
+		const sharp_type *arguments = Z_PTR_P(EX_VAR(opline->op2.var));
+
+		if (arguments) {
+			sharp_type_arguments_store(Z_OBJ_P(result), arguments);
+		}
 	}
 
 	constructor = Z_OBJ_HT_P(result)->get_constructor(Z_OBJ_P(result));
@@ -6077,6 +6088,30 @@ ZEND_VM_HANDLER(68, ZEND_NEW, UNUSED|CLASS_FETCH|CONST|VAR, UNUSED|CACHE_SLOT, N
 
 	call->prev_execute_data = EX(call);
 	EX(call) = call;
+	ZEND_VM_NEXT_OPCODE();
+}
+
+/* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. The
+ * result is an IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
+ZEND_VM_HANDLER(211, ZEND_SHARP_TYPE_ARGS, UNUSED, CONST|UNUSED, CACHE_SLOT)
+{
+	USE_OPLINE
+	const sharp_type *arguments;
+
+	if (OP2_TYPE == IS_CONST) {
+		arguments = CACHED_PTR(opline->extended_value);
+		if (UNEXPECTED(arguments == NULL)) {
+			zval *text = RT_CONSTANT(opline, opline->op2);
+
+			arguments = sharp_type_list(Z_STRVAL_P(text), Z_STRLEN_P(text));
+			ZEND_ASSERT(arguments != NULL);
+			CACHE_PTR(opline->extended_value, (void *) arguments);
+		}
+	} else {
+		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
+	}
+	ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
 	ZEND_VM_NEXT_OPCODE();
 }
 

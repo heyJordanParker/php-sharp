@@ -141,6 +141,99 @@ Deploy: same opcodes and lines in 7 op arrays, same signatures in 1 classes
 Tags: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 PhpForms: same opcodes and lines in 15 op arrays, same signatures in 1 classes
 Generics: different opcodes and lines in 33 op arrays, same signatures in 10 classes
+  .sharp      ; (lines=15, args=0, vars=0, tmps=8)
+  .sharp L0120 0000 V0 = FETCH_CLASS (exception) string("Paging\\PaginatedList")
+  .sharp L0120 0001 T1 = SHARP_TYPE_ARGS string("Paging.Order")
+  .sharp L0120 0002 V2 = NEW 1 V0 T1
+  .sharp L0120 0003 INIT_STATIC_METHOD_CALL 0 string("Paging\\Catalog") string("orders")
+  .sharp L0120 0004 V3 = DO_FCALL
+  .sharp L0120 0005 SEND_VAR_NO_REF_EX V3 1
+  .sharp L0120 0006 DO_FCALL
+  .sharp L0120 0007 T5 = CAST (object) V2
+  .sharp L0120 0008 INIT_METHOD_CALL 0 T5 string("first")
+  .sharp L0120 0009 V6 = DO_FCALL
+  .sharp L0120 0010 T7 = FETCH_OBJ_R V6 string("id")
+  .sharp L0120 0011 VERIFY_RETURN_TYPE T7
+  .sharp L0120 0012 RETURN T7
+  .sharp L0120 0013 VERIFY_RETURN_TYPE
+  .sharp L0120 0014 RETURN null
+  .sharp      ; (lines=14, args=0, vars=0, tmps=6)
+  .sharp L0132 0001 V0 = FETCH_CLASS (exception) string("Paging\\Feed")
+  .sharp L0132 0002 T1 = SHARP_TYPE_ARGS string("Paging.Order")
+  .sharp L0132 0003 V2 = NEW 1 V0 T1
+  .sharp L0132 0004 INIT_STATIC_METHOD_CALL 0 string("Paging\\Catalog") string("orders")
+  .sharp L0132 0005 V3 = DO_FCALL
+  .sharp L0132 0006 SEND_VAR_NO_REF_EX V3 1
+  .sharp L0132 0007 DO_FCALL
+  .sharp L0132 0008 SEND_VAR V2 1
+  .sharp L0132 0009 V5 = DO_FCALL
+  .sharp L0132 0010 VERIFY_RETURN_TYPE V5
+  .sharp L0132 0011 RETURN V5
+  .sharp L0132 0012 VERIFY_RETURN_TYPE
+  .sharp L0132 0013 RETURN null
+  .sharp      ; (lines=15, args=0, vars=0, tmps=8)
+  .sharp 0000 V0 = FETCH_CLASS (exception) string("Paging\\PaginatedList")
+  .sharp 0001 T1 = SHARP_TYPE_ARGS string("Paging.Order")
+  .sharp 0002 V2 = NEW 1 V0 T1
+  .sharp 0003 INIT_STATIC_METHOD_CALL 0 string("Paging\\Catalog") string("orders")
+  .sharp 0004 V3 = DO_UCALL
+  .sharp 0007 T5 = CAST (object) V2
+  .sharp 0008 INIT_METHOD_CALL 0 T5 string("first")
+  .sharp 0009 V6 = DO_FCALL
+  .sharp 0010 T7 = FETCH_OBJ_R V6 string("id")
+  .sharp 0011 VERIFY_RETURN_TYPE T7
+  .sharp 0012 RETURN T7
+  .sharp      2: 0003 - 0007 (new)
+  .sharp      7: 0011 - 0012 (tmp/var)
+  .sharp      ; (lines=14, args=0, vars=0, tmps=6)
+  .sharp 0001 V0 = FETCH_CLASS (exception) string("Paging\\Feed")
+  .sharp 0002 T1 = SHARP_TYPE_ARGS string("Paging.Order")
+  .sharp 0003 V2 = NEW 1 V0 T1
+  .sharp 0007 DO_FCALL
+  .sharp 0008 SEND_VAR V2 1
+  .sharp 0009 V5 = DO_UCALL
+  .sharp 0010 VERIFY_RETURN_TYPE V5
+  .sharp 0011 RETURN V5
+  .sharp      2: 0004 - 0008 (new)
+  .sharp      5: 0010 - 0011 (tmp/var)
+  .php   L0120 0000 V0 = NEW 1 string("Paging\\PaginatedList")
+  .php   L0120 0001 INIT_STATIC_METHOD_CALL 0 string("Paging\\Catalog") string("orders")
+  .php   L0120 0002 V1 = DO_FCALL
+  .php   L0120 0003 SEND_VAR_NO_REF_EX V1 1
+  .php   L0120 0004 DO_FCALL
+  .php   L0120 0005 T3 = CAST (object) V0
+  .php   L0120 0006 INIT_METHOD_CALL 0 T3 string("first")
+  .php   L0120 0007 V4 = DO_FCALL
+  .php   L0120 0008 T5 = FETCH_OBJ_R V4 string("id")
+  .php   L0120 0009 VERIFY_RETURN_TYPE T5
+  .php   L0120 0010 RETURN T5
+  .php   L0120 0011 VERIFY_RETURN_TYPE
+  .php   L0120 0012 RETURN null
+  .php        ; (lines=12, args=0, vars=0, tmps=4)
+  .php   L0132 0001 V0 = NEW 1 string("Paging\\Feed")
+  .php   L0132 0002 INIT_STATIC_METHOD_CALL 0 string("Paging\\Catalog") string("orders")
+  .php   L0132 0003 V1 = DO_FCALL
+  .php   L0132 0004 SEND_VAR_NO_REF_EX V1 1
+  .php   L0132 0005 DO_FCALL
+  .php   L0132 0006 SEND_VAR V0 1
+  .php   L0132 0007 V3 = DO_FCALL
+  .php   L0132 0008 VERIFY_RETURN_TYPE V3
+  .php   L0132 0009 RETURN V3
+  .php   L0132 0010 VERIFY_RETURN_TYPE
+  .php   L0132 0011 RETURN null
+  .php   0000 V0 = NEW 1 string("Paging\\PaginatedList")
+  .php        ; (lines=12, args=0, vars=0, tmps=4)
+  .php   0001 V0 = NEW 1 string("Paging\\Feed")
+  .php   0002 INIT_STATIC_METHOD_CALL 0 string("Paging\\Catalog") string("orders")
+  .php   0003 V1 = DO_UCALL
+  .php   0004 SEND_VAR_NO_REF_EX V1 1
+  .php   0005 DO_FCALL
+  .php   0006 SEND_VAR V0 1
+  .php   0007 V3 = DO_UCALL
+  .php   0008 VERIFY_RETURN_TYPE V3
+  .php   0009 RETURN V3
+  .php        0: 0002 - 0006 (new)
+  .php        3: 0008 - 0009 (tmp/var)
   .php   /** @implements Query<Order> */
   .php       /** @param list<Order> $orders */
   .php   /** @template TItem of DatabaseEntity */

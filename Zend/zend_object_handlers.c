@@ -33,6 +33,7 @@
 #include "zend_hash.h"
 #include "zend_property_hooks.h"
 #include "zend_observer.h"
+#include "ext/sharp/php_sharp.h"
 
 #define DEBUG_OBJECT_HANDLERS 0
 
@@ -85,7 +86,8 @@ ZEND_API HashTable *rebuild_object_properties_internal(zend_object *zobj) /* {{{
 			for (i = 0; i < ce->default_properties_count; i++) {
 				prop_info = ce->properties_info_table[i];
 
-				if (!prop_info) {
+				/* PHP#: the slot that keeps an object's type arguments is never one of its properties. */
+				if (!prop_info || UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_HIDDEN)) {
 					continue;
 				}
 
@@ -120,7 +122,8 @@ ZEND_API HashTable *zend_std_build_object_properties_array(zend_object *zobj) /*
 		for (i = 0; i < ce->default_properties_count; i++) {
 			prop_info = ce->properties_info_table[i];
 
-			if (!prop_info) {
+			/* PHP#: the slot that keeps an object's type arguments is never one of its properties. */
+			if (!prop_info || UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_HIDDEN)) {
 				continue;
 			}
 
@@ -392,7 +395,15 @@ dynamic:
 	property_info = (zend_property_info*)Z_PTR_P(zv);
 	flags = property_info->flags;
 
-	if (flags & (ZEND_ACC_CHANGED|ZEND_ACC_PRIVATE|ZEND_ACC_PROTECTED)) {
+	if (flags & (ZEND_ACC_CHANGED|ZEND_ACC_PRIVATE|ZEND_ACC_PROTECTED|ZEND_ACC_SHARP_HIDDEN)) {
+		/* PHP#: no code names the slot that keeps an object's type arguments, see ZEND_ACC_SHARP_HIDDEN. */
+		if (UNEXPECTED(flags & ZEND_ACC_SHARP_HIDDEN)) {
+			if (!silent) {
+				zend_bad_property_name();
+			}
+			return ZEND_WRONG_PROPERTY_OFFSET;
+		}
+
 		const zend_class_entry *scope = get_fake_or_executed_scope();
 
 		if (property_info->ce != scope) {
@@ -492,7 +503,15 @@ dynamic:
 	property_info = (zend_property_info*)Z_PTR_P(zv);
 	flags = property_info->flags;
 
-	if (flags & (ZEND_ACC_CHANGED|ZEND_ACC_PRIVATE|ZEND_ACC_PROTECTED)) {
+	if (flags & (ZEND_ACC_CHANGED|ZEND_ACC_PRIVATE|ZEND_ACC_PROTECTED|ZEND_ACC_SHARP_HIDDEN)) {
+		/* PHP#: no code names the slot that keeps an object's type arguments, see ZEND_ACC_SHARP_HIDDEN. */
+		if (UNEXPECTED(flags & ZEND_ACC_SHARP_HIDDEN)) {
+			if (!silent) {
+				zend_bad_property_name();
+			}
+			return ZEND_WRONG_PROPERTY_INFO;
+		}
+
 		const zend_class_entry *scope = get_fake_or_executed_scope();
 		if (property_info->ce != scope) {
 			if (flags & ZEND_ACC_CHANGED) {
@@ -2280,6 +2299,10 @@ ZEND_API int zend_std_compare_objects(zval *o1, zval *o2) /* {{{ */
 	if (zobj1->ce != zobj2->ce) {
 		return ZEND_UNCOMPARABLE; /* different classes */
 	}
+	/* PHP#: objects with different type arguments are uncomparable too. */
+	if (!sharp_type_arguments_equal(zobj1, zobj2)) {
+		return ZEND_UNCOMPARABLE;
+	}
 	if (!zobj1->properties && !zobj2->properties
 			&& !zend_object_is_lazy(zobj1) && !zend_object_is_lazy(zobj2)) {
 		zend_property_info *info;
@@ -2309,7 +2332,8 @@ ZEND_API int zend_std_compare_objects(zval *o1, zval *o2) /* {{{ */
 
 			info = zobj1->ce->properties_info_table[i];
 
-			if (!info) {
+			/* PHP#: the type arguments compared above. */
+			if (!info || UNEXPECTED(info->flags & ZEND_ACC_SHARP_HIDDEN)) {
 				continue;
 			}
 

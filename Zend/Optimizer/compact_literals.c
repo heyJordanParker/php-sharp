@@ -689,6 +689,13 @@ void zend_optimizer_compact_literals(zend_op_array *op_array, zend_optimizer_ctx
 						}
 					}
 					break;
+				case ZEND_SHARP_TYPE_ARGS:
+					if (opline->op2_type == IS_CONST) {
+						// op2 type text
+						opline->extended_value = cache_size;
+						cache_size += sizeof(void *);
+					}
+					break;
 				case ZEND_CATCH:
 					if (opline->op1_type == IS_CONST) {
 						// op1 class
