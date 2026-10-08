@@ -1463,8 +1463,13 @@ static MUTEX_T sharp_types_lock;
 # define SHARP_TYPES_UNLOCK()
 #endif
 
-static const char *const sharp_built_in_types[] = {
-	"int", "float", "bool", "string", "void", "null", "Any", "Object", "List", "Map", "Set", "Iterable", "Class",
+/* Each built-in type, with the number of type arguments it takes. */
+static const struct {
+	const char *name;
+	uint32_t arity;
+} sharp_built_in_types[] = {
+	{"int", 0}, {"float", 0}, {"bool", 0}, {"string", 0}, {"void", 0}, {"null", 0}, {"Any", 0}, {"Object", 0},
+	{"List", 1}, {"Map", 2}, {"Set", 1}, {"Iterable", 1}, {"Class", 1},
 };
 
 /* A type as its text spells it, before it is interned. */
@@ -1473,9 +1478,11 @@ struct _sharp_type_node {
 	sharp_type_kind kind;
 	const char *text;
 	size_t length;
-	/* A SHARP_TYPE_NAMED class's dotted name, NULL for a built-in type. */
+	/* A SHARP_TYPE_NAMED type's dotted name, which `name_length` measures. `name` is NULL for a built-in type. */
 	const char *name;
 	size_t name_length;
+	/* The class `name` names, once unserialize resolved it. */
+	zend_class_entry *ce;
 	uint32_t count;
 	sharp_type_node *first;
 	sharp_type_node *last;
@@ -1542,6 +1549,19 @@ static void sharp_type_node_add(sharp_type_node *node, sharp_type_node *member)
 static bool sharp_type_node_is(const sharp_type_node *node, const char *text)
 {
 	return node->length == strlen(text) && memcmp(node->text, text, node->length) == 0;
+}
+
+/* The number of type arguments the built-in type the `length` bytes at `name` name takes, -1 when they name a
+ * class. */
+static int sharp_type_built_in_arity(const char *name, size_t length)
+{
+	for (size_t i = 0; i < sizeof(sharp_built_in_types) / sizeof(*sharp_built_in_types); i++) {
+		if (strlen(sharp_built_in_types[i].name) == length && memcmp(sharp_built_in_types[i].name, name, length) == 0) {
+			return (int) sharp_built_in_types[i].arity;
+		}
+	}
+
+	return -1;
 }
 
 static bool sharp_type_skip(sharp_type_reader *reader, const char *token)
@@ -1694,14 +1714,8 @@ static sharp_type_node *sharp_type_read_atom(sharp_type_reader *reader)
 	} while (sharp_type_skip(reader, "."));
 
 	type = sharp_type_node_start(reader, SHARP_TYPE_NAMED, start);
-	type->name = start;
 	type->name_length = reader->at - start;
-	for (size_t i = 0; i < sizeof(sharp_built_in_types) / sizeof(*sharp_built_in_types); i++) {
-		if (strlen(sharp_built_in_types[i]) == type->name_length
-			&& memcmp(sharp_built_in_types[i], start, type->name_length) == 0) {
-			type->name = NULL;
-		}
-	}
+	type->name = sharp_type_built_in_arity(start, type->name_length) < 0 ? start : NULL;
 
 	if (sharp_type_skip(reader, "<")) {
 		do {
@@ -1798,9 +1812,28 @@ static sharp_type_node *sharp_type_read(sharp_type_reader *reader)
 	return type;
 }
 
-/* The interned type argument list `text` spells, or NULL when it spells none. `from_code` tells a text code spells
- * from one read from input. */
-static const sharp_type *sharp_type_list_of(const char *text, size_t length, bool from_code)
+/* A type argument list, `A, B`, which is the whole text. */
+static sharp_type_node *sharp_type_read_list(sharp_type_reader *reader)
+{
+	sharp_type_node *arguments = sharp_type_node_start(reader, SHARP_TYPE_LIST, reader->at);
+
+	do {
+		sharp_type_node *argument = sharp_type_read(reader);
+
+		if (!argument) {
+			return NULL;
+		}
+		sharp_type_node_add(arguments, argument);
+	} while (sharp_type_skip(reader, ", "));
+	if (reader->at != reader->end) {
+		return NULL;
+	}
+	arguments->length = reader->at - arguments->text;
+
+	return arguments;
+}
+
+const sharp_type *sharp_type_list(const char *text, size_t length)
 {
 	const sharp_type *list = sharp_type_find(true, text, length);
 
@@ -1809,29 +1842,13 @@ static const sharp_type *sharp_type_list_of(const char *text, size_t length, boo
 	}
 
 	sharp_type_reader reader = {text, text + length, zend_arena_create(1024)};
-	sharp_type_node *arguments = sharp_type_node_start(&reader, SHARP_TYPE_LIST, text);
-	do {
-		sharp_type_node *argument = sharp_type_read(&reader);
-
-		if (!argument) {
-			arguments = NULL;
-			break;
-		}
-		sharp_type_node_add(arguments, argument);
-	} while (sharp_type_skip(&reader, ", "));
-
-	if (arguments && reader.at == reader.end) {
-		arguments->length = length;
-		list = sharp_type_intern(arguments, from_code, &reader.arena);
+	sharp_type_node *arguments = sharp_type_read_list(&reader);
+	if (arguments) {
+		list = sharp_type_intern(arguments, true, &reader.arena);
 	}
 	zend_arena_destroy(reader.arena);
 
 	return list;
-}
-
-const sharp_type *sharp_type_list(const char *text, size_t length)
-{
-	return sharp_type_list_of(text, length, true);
 }
 
 static void sharp_type_request_table_free(HashTable **table)
@@ -1904,14 +1921,211 @@ void sharp_type_arguments_store(zend_object *object, const sharp_type *arguments
 	ZVAL_PTR(value, (void *) arguments);
 }
 
-/* Whether every class `type` names loads. */
-static bool sharp_type_classes_load(const sharp_type *type)
+/* Resolves each class `node` names through `resolve`. */
+static bool sharp_type_node_resolve(sharp_type_node *node, sharp_type_class_resolver resolve, void *context)
 {
-	if (type->class_name && !zend_lookup_class(type->class_name)) {
+	for (sharp_type_node *member = node->first; member; member = member->next) {
+		if (!sharp_type_node_resolve(member, resolve, context)) {
+			return false;
+		}
+	}
+	if (!node->name) {
+		return true;
+	}
+
+	zend_string *name = zend_string_init(node->name, node->name_length, false);
+	for (char *c = ZSTR_VAL(name); *c; c++) {
+		if (*c == '.') {
+			*c = '\\';
+		}
+	}
+	node->ce = resolve(name, context);
+	zend_string_release_ex(name, false);
+
+	return node->ce != NULL;
+}
+
+/* Sorts the members of the union `node` by their text. False when two of them are one type. */
+static bool sharp_type_node_sort(sharp_type_node *node)
+{
+	sharp_type_node *sorted = NULL;
+
+	for (sharp_type_node *member = node->first, *next; member; member = next) {
+		sharp_type_node **at = &sorted;
+		int order = -1;
+
+		next = member->next;
+		while (*at && (order = zend_binary_strcmp((*at)->text, (*at)->length, member->text, member->length)) < 0) {
+			at = &(*at)->next;
+		}
+		if (*at && order == 0) {
+			return false;
+		}
+		member->next = *at;
+		*at = member;
+	}
+	node->first = sorted;
+	for (node->last = sorted; node->last->next; node->last = node->last->next) {
+	}
+
+	return true;
+}
+
+static void sharp_type_node_join(smart_str *text, const sharp_type_node *first, const char *separator)
+{
+	for (const sharp_type_node *member = first; member; member = member->next) {
+		if (member != first) {
+			smart_str_appends(text, separator);
+		}
+		smart_str_appendl(text, member->text, member->length);
+	}
+}
+
+/* Spells `node` as code spells it, into `arena`: each class by the name it was declared with, the members of a union
+ * sorted by their spelling. False when two members of a union are one type. */
+static bool sharp_type_node_respell(sharp_type_node *node, zend_arena **arena)
+{
+	for (sharp_type_node *member = node->first; member; member = member->next) {
+		if (!sharp_type_node_respell(member, arena)) {
+			return false;
+		}
+	}
+	if (node->kind == SHARP_TYPE_UNION && !sharp_type_node_sort(node)) {
 		return false;
 	}
-	for (uint32_t i = 0; i < type->count; i++) {
-		if (!sharp_type_classes_load(type->members[i])) {
+
+	smart_str text = {0};
+	switch (node->kind) {
+		case SHARP_TYPE_LIST:
+			sharp_type_node_join(&text, node->first, ", ");
+			break;
+		case SHARP_TYPE_NAMED:
+			if (node->ce) {
+				node->name_length = ZSTR_LEN(node->ce->name);
+				for (size_t i = 0; i < node->name_length; i++) {
+					smart_str_appendc(&text, ZSTR_VAL(node->ce->name)[i] == '\\' ? '.' : ZSTR_VAL(node->ce->name)[i]);
+				}
+			} else {
+				smart_str_appendl(&text, node->text, node->name_length);
+			}
+			if (node->count) {
+				smart_str_appendc(&text, '<');
+				sharp_type_node_join(&text, node->first, ", ");
+				smart_str_appendc(&text, '>');
+			}
+			break;
+		case SHARP_TYPE_NULLABLE:
+			if (node->first->kind == SHARP_TYPE_UNION) {
+				smart_str_appendc(&text, '(');
+				smart_str_appendl(&text, node->first->text, node->first->length);
+				smart_str_appends(&text, ")?");
+			} else {
+				smart_str_appendl(&text, node->first->text, node->first->length);
+				smart_str_appendc(&text, '?');
+			}
+			break;
+		case SHARP_TYPE_UNION:
+			sharp_type_node_join(&text, node->first, "|");
+			break;
+		case SHARP_TYPE_FUNCTION:
+			smart_str_appends(&text, "Function<");
+			smart_str_appendl(&text, node->first->text, node->first->length);
+			smart_str_appendc(&text, '(');
+			sharp_type_node_join(&text, node->first->next, ", ");
+			smart_str_appends(&text, ")>");
+			break;
+	}
+
+	char *spelling = zend_arena_alloc(arena, ZSTR_LEN(text.s));
+	memcpy(spelling, ZSTR_VAL(text.s), ZSTR_LEN(text.s));
+	node->text = spelling;
+	node->length = ZSTR_LEN(text.s);
+	if (node->name) {
+		node->name = spelling;
+	}
+	smart_str_free(&text);
+
+	return true;
+}
+
+static bool sharp_type_arguments_fit(const sharp_type_node *arguments, const zend_class_entry *ce);
+
+/* Whether `type` is within `bound`: `Any?` holds every type, `Any` every type but null, a class its subclasses, and
+ * any other bound only itself. A union is within a bound when each of its members is. */
+static bool sharp_type_fits(const sharp_type_node *type, const sharp_type *bound)
+{
+	if (zend_string_equals_literal(bound->text, "Any?")) {
+		return true;
+	}
+	if (type->kind == SHARP_TYPE_UNION) {
+		for (const sharp_type_node *member = type->first; member; member = member->next) {
+			if (!sharp_type_fits(member, bound)) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+	if (bound->kind == SHARP_TYPE_NULLABLE) {
+		return sharp_type_node_is(type, "null")
+			|| sharp_type_fits(type->kind == SHARP_TYPE_NULLABLE ? type->first : type, bound->members[0]);
+	}
+	if (bound->kind == SHARP_TYPE_UNION) {
+		for (uint32_t i = 0; i < bound->count; i++) {
+			if (sharp_type_fits(type, bound->members[i])) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+	if (zend_string_equals_literal(bound->text, "Any")) {
+		return type->kind != SHARP_TYPE_NULLABLE && !sharp_type_node_is(type, "null");
+	}
+	if (bound->class_name && !bound->count) {
+		/* A loaded class has loaded each class it extends or implements. */
+		zend_class_entry *ce = zend_lookup_class_ex(bound->class_name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+
+		return type->ce && ce && instanceof_function(type->ce, ce);
+	}
+
+	return zend_string_equals_cstr(bound->text, type->text, type->length);
+}
+
+/* Whether each type `node` holds takes the type arguments it is given, as many as it has type parameters, each
+ * within its bound. */
+static bool sharp_type_node_complete(const sharp_type_node *node)
+{
+	for (const sharp_type_node *member = node->first; member; member = member->next) {
+		if (!sharp_type_node_complete(member)) {
+			return false;
+		}
+	}
+	if (node->kind != SHARP_TYPE_NAMED) {
+		return true;
+	}
+
+	return node->ce
+		? sharp_type_arguments_fit(node, node->ce)
+		: node->count == (uint32_t) sharp_type_built_in_arity(node->text, node->name_length);
+}
+
+/* Whether `arguments`, a type argument list or a class type, gives `ce` one type argument within each bound. */
+static bool sharp_type_arguments_fit(const sharp_type_node *arguments, const zend_class_entry *ce)
+{
+	const zend_property_info *slot = sharp_type_arguments_slot(ce);
+
+	if (!slot) {
+		return arguments->count == 0;
+	}
+
+	const sharp_type *bounds = sharp_type_bounds(ce, slot);
+	if (arguments->count != bounds->count) {
+		return false;
+	}
+	uint32_t i = 0;
+	for (const sharp_type_node *argument = arguments->first; argument; argument = argument->next) {
+		if (!sharp_type_fits(argument, bounds->members[i++])) {
 			return false;
 		}
 	}
@@ -1919,20 +2133,28 @@ static bool sharp_type_classes_load(const sharp_type *type)
 	return true;
 }
 
-zend_result sharp_type_arguments_unserialize(zend_object *object, const zval *text)
+zend_result sharp_type_arguments_unserialize(
+	zend_object *object, const zval *text, sharp_type_class_resolver resolve, void *context)
 {
-	const zend_property_info *slot = sharp_type_arguments_slot(object->ce);
-
-	if (!slot || Z_TYPE_P(text) != IS_STRING) {
+	if (!sharp_type_arguments_slot(object->ce) || Z_TYPE_P(text) != IS_STRING) {
 		return FAILURE;
 	}
 
-	const sharp_type *arguments = sharp_type_list_of(Z_STRVAL_P(text), Z_STRLEN_P(text), false);
-	if (!arguments || arguments->count != sharp_type_bounds(object->ce, slot)->count
-		|| !sharp_type_classes_load(arguments)) {
+	/* The text parses whole and each class it names resolves before any of it is interned. */
+	sharp_type_reader reader = {Z_STRVAL_P(text), Z_STRVAL_P(text) + Z_STRLEN_P(text), zend_arena_create(1024)};
+	sharp_type_node *arguments = sharp_type_read_list(&reader);
+	const sharp_type *list = NULL;
+	if (arguments && sharp_type_node_resolve(arguments, resolve, context)
+		&& sharp_type_node_respell(arguments, &reader.arena) && sharp_type_node_complete(arguments)
+		&& sharp_type_arguments_fit(arguments, object->ce)) {
+		list = sharp_type_intern(arguments, false, &reader.arena);
+	}
+	zend_arena_destroy(reader.arena);
+
+	if (!list) {
 		return FAILURE;
 	}
-	sharp_type_arguments_store(object, arguments);
+	sharp_type_arguments_store(object, list);
 
 	return SUCCESS;
 }

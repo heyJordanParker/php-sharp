@@ -461,16 +461,34 @@ static inline size_t parse_uiv(const unsigned char *p)
 
 static int php_var_unserialize_internal(UNSERIALIZE_PARAMETER);
 
+/* PHP#: the class a type argument names, which `context` holds the var_hash for. It resolves as an object's class does:
+ * allowed_classes first, then the autoloader under the serialize lock, so an unserialize the autoloader runs keeps its
+ * own reference numbers. */
+static zend_class_entry *unserialize_type_argument_class(zend_string *class_name, void *context)
+{
+	zend_string *lc_name = zend_string_tolower(class_name);
+	zend_class_entry *ce = NULL;
+
+	if (unserialize_allowed_class(lc_name, context)) {
+		BG(serialize_lock)++;
+		ce = zend_lookup_class_ex(class_name, lc_name, 0);
+		BG(serialize_lock)--;
+	}
+	zend_string_release_ex(lc_name, 0);
+
+	return EG(exception) ? NULL : ce;
+}
+
 /* PHP#: reads the value serialize wrote under sharp_type_arguments_key into the hidden slot of `obj`. Serialize gives
  * the value no number, so no R: or r: can name it, and it is read without the var_hash. */
-static int process_type_arguments(const unsigned char **p, const unsigned char *max, zend_object *obj)
+static int process_type_arguments(UNSERIALIZE_PARAMETER, zend_object *obj)
 {
 	zval text;
 	int filled;
 
 	ZVAL_UNDEF(&text);
 	filled = php_var_unserialize_internal(&text, p, max, NULL)
-		&& sharp_type_arguments_unserialize(obj, &text) == SUCCESS;
+		&& sharp_type_arguments_unserialize(obj, &text, unserialize_type_argument_class, var_hash) == SUCCESS;
 	zval_ptr_dtor(&text);
 
 	return filled;
@@ -517,7 +535,7 @@ numeric_key:
 			}
 			if (UNEXPECTED(obj && zend_string_equals(Z_STR(key), sharp_type_arguments_key))) {
 				zval_ptr_dtor_str(&key);
-				if (!process_type_arguments(p, max, obj)) {
+				if (!process_type_arguments(UNSERIALIZE_PASSTHRU, obj)) {
 					goto failure;
 				}
 				continue;
@@ -627,7 +645,7 @@ string_key:
 			 * same bytes. */
 			if (UNEXPECTED(zend_string_equals(Z_STR(key), sharp_type_arguments_key)) && obj->ce != PHP_IC_ENTRY) {
 				zval_ptr_dtor_str(&key);
-				if (!process_type_arguments(p, max, obj)) {
+				if (!process_type_arguments(UNSERIALIZE_PASSTHRU, obj)) {
 					goto failure;
 				}
 				continue;

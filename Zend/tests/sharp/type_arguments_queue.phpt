@@ -56,6 +56,22 @@ foreach ([serialize(Queue::orders()), serialize(Queue::ledger()), $gone] as $que
     $run = unserialize($queued, ['allowed_classes' => $queued === $gone]);
     echo get_class($run), ' ', var_export(serialize($run) === $queued, true), "\n";
 }
+
+echo "unserialize resolves each class a type argument names, as it resolves an object's class\n";
+// A class written in the wrong case takes its declared spelling, so the type is the one code spells.
+$run = unserialize(str_replace('"App.Order, int"', '"app.ORDER, int"', serialize(Queue::pair())));
+echo implode(', ', arguments($run)), ' ', var_export($run == Queue::pair(), true), "\n";
+echo get_class(unserialize(serialize(Queue::pair()), ['allowed_classes' => ['App\Pair', 'App\Order']])), "\n";
+// An autoloader that unserializes leaves the outer data's reference numbers alone.
+spl_autoload_register(static function (string $class): void {
+    if ($class === 'App\Late') {
+        unserialize(serialize([new stdClass(), new stdClass()]));
+        eval('namespace App; class Late {}');
+    }
+});
+$shared = new stdClass();
+$run = unserialize(str_replace('s:10:"Any?, Any?"', 's:13:"App.Late, int"', serialize([new App\Pair(1, 2), $shared, $shared])));
+echo implode(', ', arguments($run[0])), ' ', var_export($run[1] === $run[2], true), "\n";
 ?>
 --EXPECT--
 the default form
@@ -92,3 +108,7 @@ an incomplete class keeps the type arguments as an ordinary entry, and serialize
 __PHP_Incomplete_Class true
 __PHP_Incomplete_Class true
 __PHP_Incomplete_Class true
+unserialize resolves each class a type argument names, as it resolves an object's class
+App.Order, int true
+App\Pair
+App.Late, int true

@@ -69,9 +69,14 @@ static zend_always_inline const sharp_type *sharp_type_arguments(zend_object *ob
 /* Stores `arguments` in the slot of `object`, whose class declares one. */
 void sharp_type_arguments_store(zend_object *object, const sharp_type *arguments);
 
-/* Gives `object` the type arguments `text` spells, from serialized data. Fails, with nothing stored, when `object`
- * has no slot, `text` spells no list of as many arguments as its class has type parameters, or a class it names
- * does not load. */
-zend_result sharp_type_arguments_unserialize(zend_object *object, const zval *text);
+/* The class `name`, as PHP writes it, names in serialized data, or NULL when the data may not hold it. */
+typedef zend_class_entry *(*sharp_type_class_resolver)(zend_string *name, void *context);
+
+/* Gives `object` the type arguments `text` spells, from serialized data. Each class the text names resolves through
+ * `resolve` and takes the spelling it was declared with. Fails, with nothing stored, when `object` has no slot, `text`
+ * spells no type, a class does not resolve, or a type is given type arguments it does not take or outside its
+ * bounds. */
+zend_result sharp_type_arguments_unserialize(
+	zend_object *object, const zval *text, sharp_type_class_resolver resolve, void *context);
 
 #endif
