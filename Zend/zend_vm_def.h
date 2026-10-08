@@ -6115,9 +6115,14 @@ ZEND_VM_HANDLER(211, ZEND_SHARP_TYPE_ARGS, UNUSED, CONST|UNUSED, CACHE_SLOT)
 		}
 	} else {
 		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		/* A lazy proxy's initializer runs here, and can throw. */
+		SAVE_OPLINE();
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
 	}
 	ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+	if (OP2_TYPE == IS_UNUSED) {
+		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+	}
 	ZEND_VM_NEXT_OPCODE();
 }
 

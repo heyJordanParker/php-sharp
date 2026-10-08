@@ -124,9 +124,11 @@ static inline bool may_have_side_effects(
 		case ZEND_FUNC_NUM_ARGS:
 		case ZEND_FUNC_GET_ARGS:
 		case ZEND_ARRAY_KEY_EXISTS:
-		case ZEND_SHARP_TYPE_ARGS:
 			/* No side effects */
 			return 0;
+		case ZEND_SHARP_TYPE_ARGS:
+			/* Reading this's type arguments runs a lazy proxy's initializer. */
+			return opline->op2_type == IS_UNUSED;
 		case ZEND_FREE:
 			return opline->extended_value == ZEND_FREE_VOID_CAST;
 		case ZEND_ADD_ARRAY_ELEMENT:

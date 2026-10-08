@@ -36665,9 +36665,14 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 		}
 	} else {
 		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		/* A lazy proxy's initializer runs here, and can throw. */
+		SAVE_OPLINE();
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
 	}
 	ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+	if (IS_CONST == IS_UNUSED) {
+		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+	}
 	ZEND_VM_NEXT_OPCODE();
 }
 
@@ -39641,9 +39646,14 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 		}
 	} else {
 		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		/* A lazy proxy's initializer runs here, and can throw. */
+		SAVE_OPLINE();
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
 	}
 	ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+	if (IS_UNUSED == IS_UNUSED) {
+		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+	}
 	ZEND_VM_NEXT_OPCODE();
 }
 
@@ -92988,9 +92998,14 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 		}
 	} else {
 		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		/* A lazy proxy's initializer runs here, and can throw. */
+		SAVE_OPLINE();
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
 	}
 	ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+	if (IS_CONST == IS_UNUSED) {
+		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+	}
 	ZEND_VM_NEXT_OPCODE();
 }
 
@@ -95964,9 +95979,14 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 		}
 	} else {
 		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		/* A lazy proxy's initializer runs here, and can throw. */
+		SAVE_OPLINE();
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
 	}
 	ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+	if (IS_UNUSED == IS_UNUSED) {
+		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+	}
 	ZEND_VM_NEXT_OPCODE();
 }
 

@@ -49,6 +49,22 @@ var_dump(arguments($class->newLazyProxy($orders)));
 var_dump($class->newLazyProxy($orders) == Queue::orders());
 show(serialize($class->newLazyProxy($orders)));
 var_dump(arguments($class->newLazyProxy($orders)->copy()));
+// A proxy whose initializer throws hands that exception on, and makes nothing.
+$failing = $class->newLazyProxy(static function (): never {
+    throw new RuntimeException('no orders');
+});
+foreach ([
+    static fn () => arguments($failing),
+    static fn () => $failing == Queue::orders(),
+    static fn () => serialize($failing),
+    static fn () => $failing->copy(),
+] as $read) {
+    try {
+        var_dump($read());
+    } catch (RuntimeException $exception) {
+        echo $exception->getMessage(), "\n";
+    }
+}
 // A ghost's type arguments are never lazy, so reading them leaves it lazy.
 $ghost = $class->newLazyGhost($construct);
 var_dump(arguments($ghost), $class->isUninitializedLazyObject($ghost));
@@ -147,6 +163,10 @@ array(1) {
   [0]=>
   string(9) "App.Order"
 }
+no orders
+no orders
+no orders
+no orders
 array(1) {
   [0]=>
   string(18) "App.DatabaseEntity"
