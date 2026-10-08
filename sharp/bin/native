@@ -62,7 +62,7 @@ function externs(string $root, string $path): array
             [$namespace, $class] = [$match[1], null];
         } elseif (preg_match('/^public static class ([A-Z][A-Za-z0-9]*)$/', $text, $match)) {
             $class = $namespace === null ? null : "$namespace.$match[1]";
-        } elseif (preg_match('/\bextern\b/', $text)) {
+        } elseif (preg_match('/\bextern\b/', $text) && !str_starts_with($text, 'extern ')) {
             if ($class === null || !preg_match($method, $text, $match)) {
                 fail($path, $index + 1, $text, EXTERN_FORM);
             }
