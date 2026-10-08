@@ -2084,9 +2084,17 @@ project/
 app/Orders/Order.sharp isn't compiled. Run vendor/bin/mago compile.
 app/Orders/Order.sharp is out of date (app/Shared/Money.sharp changed). Run vendor/bin/mago compile.
 app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mago-sharp release that matches this engine.
+
+app/Orders/Order.sharp has 1 error:
+line 12: Invalid return type for method `Order.total`: expected `int`, but found `string`.
+
+app/Orders/Order.sharp has 3 errors:
+line 12: Invalid return type for method `Order.total`: expected `int`, but found `string`.
+line 19: …
+line 31: …
 ```
 
-- **In development,** the `php.ini` setting `sharp.compile_command` lets the engine compile a stale file on demand before it runs, instead of refusing it.
+- **In development,** the `php.ini` setting `sharp.compile_command` lets the engine compile a stale file on demand before it runs, instead of refusing it. When the checker refuses the file it just compiled, the refusal lists every error in the file in line order, each on its own line with its line number.
 - **A deploy** runs `vendor/bin/mago compile` and ships `.sharp/` with the code.
 - **A type error, or a broken structure rule (section 28), stops the file from running.** So does a law without a proof, a gap, or a proof whose law was deleted, each a compile error that names it.
 - **A rule that reads the whole project's structure can lag in development** until the next full compile. At deploy, `mago compile` checks every rule exactly.
