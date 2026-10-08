@@ -12,8 +12,8 @@
 #endif
 
 #define SHARP_UNIT_MAGIC "\x53\x48\x41\x52\x50\x43\x00\x00"
-#define SHARP_UNIT_ABI "\x16\xfb\x94\xe5\x9e\xd8\xe9\xd2\x8f\x36\x08\xc0\x79\x43\x5d\x7f"
-#define SHARP_MAGO_COMMIT "93152ae4a409e4ea29ba2518ab7e4d2d45ef6bb0"
+#define SHARP_UNIT_ABI "\x8a\xcf\x02\xd0\xaa\xbf\xe3\xc9\xc8\xff\xd1\xce\x1d\x0c\xb7\x36"
+#define SHARP_MAGO_COMMIT "93f6a89d6e98621cbc6c71583b19e60c45401989"
 
 #define SHARP_KINDS(X) \
   X(ZVAL) \
