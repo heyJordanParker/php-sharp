@@ -46,12 +46,12 @@ class Headcount
 
     public static function lookup(array $counts, Standing $status): ?int
     {
-        return ((object) $counts)->get($status); // PHP# makes the array a Sharp\Collection
+        return ((object) $counts)->get($status->value); // PHP# makes the array a Sharp\Collection
     }
 
     public static function without(array $counts, Standing $status): array
     {
-        ((object) $counts)->delete($status); // PHP# makes the array a Sharp\Collection
+        ((object) $counts)->delete($status->value); // PHP# makes the array a Sharp\Collection
         return $counts;
     }
 

@@ -17,8 +17,8 @@
 #include "ext/standard/basic_functions.h"
 #include "ext/standard/info.h"
 #include "zend_closures.h"
-#include "zend_enum.h"
 #include "zend_exceptions.h"
+#include "zend_language_parser.h"
 #include "zend_smart_str.h"
 #include "zend_system_id.h"
 #include "php_sharp.h"
@@ -33,6 +33,7 @@
 #define SHARP_KIND_IS_ZEND_KIND(kind) \
 	ZEND_STATIC_ASSERT((zend_ast_kind) SHARP_AST_##kind == ZEND_AST_##kind, "SHARP_AST_" #kind " differs from ZEND_AST_" #kind);
 SHARP_KINDS(SHARP_KIND_IS_ZEND_KIND)
+ZEND_STATIC_ASSERT(SHARP_T_FILE == T_FILE, "SHARP_T_FILE differs from T_FILE");
 
 ZEND_STATIC_ASSERT(sizeof(sharp_unit_header) == 104, "a .sharpc header is 104 bytes");
 ZEND_STATIC_ASSERT(sizeof(sharp_input) == 40, "a .sharpc input is 40 bytes");
@@ -946,12 +947,9 @@ ZEND_METHOD(Sharp_Collection, set)
 	zval_ptr_dtor(&old);
 }
 
-/* The key a Map method takes: an int, a string, or a backed enum case, which stands for its value. */
+/* The key a Map method takes: an int or a string. */
 static bool sharp_collection_key(zval *key, zend_string **string_key, zend_long *long_key)
 {
-	if (Z_TYPE_P(key) == IS_OBJECT && instanceof_function(Z_OBJCE_P(key), zend_ce_backed_enum)) {
-		key = zend_enum_fetch_case_value(Z_OBJ_P(key));
-	}
 	if (Z_TYPE_P(key) == IS_LONG) {
 		*string_key = NULL;
 		*long_key = Z_LVAL_P(key);
@@ -962,7 +960,7 @@ static bool sharp_collection_key(zval *key, zend_string **string_key, zend_long 
 		return true;
 	}
 
-	zend_argument_type_error(1, "must be of type BackedEnum|string|int, %s given", zend_zval_value_name(key));
+	zend_argument_type_error(1, "must be of type string|int, %s given", zend_zval_value_name(key));
 	return false;
 }
 

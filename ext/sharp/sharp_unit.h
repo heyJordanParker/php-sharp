@@ -12,8 +12,8 @@
 #endif
 
 #define SHARP_UNIT_MAGIC "\x53\x48\x41\x52\x50\x43\x00\x00"
-#define SHARP_UNIT_ABI "\x8a\xcf\x02\xd0\xaa\xbf\xe3\xc9\xc8\xff\xd1\xce\x1d\x0c\xb7\x36"
-#define SHARP_MAGO_COMMIT "9c95c77272584ea83cc35cbc552f80e8308eddee"
+#define SHARP_UNIT_ABI "\x06\xe5\xcb\x52\x31\xdb\x6a\xf2\x7f\x2e\xb7\x23\x50\xd6\xd8\x2a"
+#define SHARP_MAGO_COMMIT "b7ef351940a16c64ad81f8f7ed46632ff7b429bf"
 
 #define SHARP_KINDS(X) \
   X(ZVAL) \
@@ -140,6 +140,8 @@
   X(PROP_ELEM) \
   X(PARAM)
 
+
+#define SHARP_T_FILE 347
 
 // One value per `zend_ast_kind`, named as that kind without `ZEND_` and equal to it, so `ext/sharp` casts it.
 enum sharp_kind
