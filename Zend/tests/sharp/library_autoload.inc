@@ -1,13 +1,12 @@
 <?php
-// php library_autoload.inc <engine|changed|missing> <psr4|classmap> <version|absent> <class|composer>: requires
+// php library_autoload.inc <engine|changed|missing> <psr4|classmap> <version|absent> <class> [composer]: requires
 // sharp/composer/autoload.php beside a native.php that is the engine's own, one with another SHARP_NATIVE and the same
 // native bodies, or one that also declares Text.missing, with Sharp\ and a project's App\Clock found by PSR-4 or by an
 // authoritative class map, and Composer reporting the package at that version or not installed, then uses
-// Sharp\Text\Text or App\Clock. With composer, Composer itself requires autoload.php, as it does to load a plugin, and
-// uses no class.
+// Sharp\Text\Text or App\Clock. With composer, Composer itself requires autoload.php, as it does to load a plugin.
 
 namespace Composer\Plugin {
-    if ($argv[4] === 'composer') {
+    if (($argv[5] ?? null) === 'composer') {
         final class PluginManager
         {
         }
@@ -76,7 +75,7 @@ namespace {
     [, $native, $layout, $version, $class] = $argv;
     Composer\InstalledVersions::$version = $version === 'absent' ? null : $version;
     $root = dirname(__DIR__, 3);
-    $package = sys_get_temp_dir() . "/sharp_library_autoload_{$native}_{$layout}_{$version}_" . strtr($class, '\\', '_');
+    $package = sys_get_temp_dir() . "/sharp_library_autoload_{$native}_{$layout}_{$version}_" . strtr($class, '\\', '_') . '_' . ($argv[5] ?? 'app');
     @mkdir("$package/vendor/composer", 0777, true);
     @mkdir("$package/src/App", 0777, true);
     copy("$root/sharp/composer/autoload.php", "$package/autoload.php");
@@ -106,9 +105,7 @@ namespace {
         require "$package/autoload.php";
         echo 'booted, with ', class_exists('Sharp\Text\Text', false) ? 'a' : 'no', " library class declared\n";
         echo 'class map handed to Composer: ', json_encode(array_keys($loader->classMap)), "\n";
-        if ($class !== 'composer') {
-            echo $class === 'Sharp\Text\Text' ? \Sharp\Text\Text::slug('A B') : (new $class())->now(), "\n";
-        }
+        echo $class === 'Sharp\Text\Text' ? \Sharp\Text\Text::slug('A B') : (new $class())->now(), "\n";
     } catch (Error $error) {
         echo get_class($error), ': ', str_replace(phpversion('sharp'), '<engine version>', $error->getMessage()), "\n";
         echo count(array_filter(get_included_files(), static fn (string $file): bool => str_contains($file, '.sharp'))), " .sharp files included\n";
