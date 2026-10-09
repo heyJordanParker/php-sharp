@@ -1514,11 +1514,23 @@ static sharp_type_reader sharp_type_reader_of(const char *text, size_t length, z
 
 static sharp_type_node *sharp_type_read(sharp_type_reader *reader);
 
-/* A string no zval counts, as an interned string is, for the process or for the request. */
-static zend_string *sharp_type_string(const char *text, size_t length, bool persistent)
+/* The class the dotted `name` names, as PHP writes it: `App\Order` for `App.Order`. */
+static zend_string *sharp_type_class_name(const char *name, size_t length, bool persistent)
 {
-	zend_string *string = zend_string_init(text, length, persistent);
+	zend_string *class_name = zend_string_init(name, length, persistent);
 
+	for (char *c = ZSTR_VAL(class_name); *c; c++) {
+		if (*c == '.') {
+			*c = '\\';
+		}
+	}
+
+	return class_name;
+}
+
+/* `string`, which no zval counts from now on, as an interned string is, for the process or for the request. */
+static zend_string *sharp_type_string(zend_string *string, bool persistent)
+{
 	zend_string_hash_val(string);
 	GC_TYPE_INFO(string) = GC_STRING
 		| ((IS_STR_INTERNED | (persistent ? IS_STR_PERSISTENT | IS_STR_PERMANENT : 0)) << GC_FLAGS_SHIFT);
@@ -1653,15 +1665,10 @@ static const sharp_type *sharp_type_intern(const sharp_type_node *node, bool fro
 	}
 
 	sharp_type *type = pemalloc(offsetof(sharp_type, members) + MAX(node->count, 1) * sizeof(sharp_type *), persistent);
-	type->text = sharp_type_string(node->text, node->length, persistent);
+	type->text = sharp_type_string(zend_string_init(node->text, node->length, persistent), persistent);
 	type->class_name = NULL;
 	if (node->name) {
-		type->class_name = sharp_type_string(node->name, node->name_length, persistent);
-		for (char *c = ZSTR_VAL(type->class_name); *c; c++) {
-			if (*c == '.') {
-				*c = '\\';
-			}
-		}
+		type->class_name = sharp_type_string(sharp_type_class_name(node->name, node->name_length, persistent), persistent);
 	}
 	type->kind = node->kind;
 	type->count = node->count;
@@ -2064,12 +2071,7 @@ static bool sharp_type_node_resolve(sharp_type_node *node, sharp_type_class_reso
 		return true;
 	}
 
-	zend_string *name = zend_string_init(node->name, node->name_length, false);
-	for (char *c = ZSTR_VAL(name); *c; c++) {
-		if (*c == '.') {
-			*c = '\\';
-		}
-	}
+	zend_string *name = sharp_type_class_name(node->name, node->name_length, false);
 	node->ce = resolve(name, context);
 	zend_string_release_ex(name, false);
 
