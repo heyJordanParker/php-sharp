@@ -54,6 +54,8 @@ public class Pair<TKey, TValue>
     public Pair<TValue, TKey?> swapped() => new Pair<TValue, TKey?>(this.value, this.key);
 
     public Pair<TKey|int, TValue> widened() => new Pair<TKey|int, TValue>(this.key, this.value);
+
+    public Function<Box<TValue>()> boxer() => () => new Box<TValue>();
 }
 
 public interface Shareable
@@ -122,6 +124,8 @@ public class Holder<TBox : Box<int>>
 
 public class Maker<T>
 {
+    public int made { get; set; } = 0;
+
     public Maker()
     {
     }
@@ -137,8 +141,15 @@ public class ListMaker<T> : Maker<List<T>>
 {
 }
 
+public class Labeled<TLabel, T> : Maker<T>
+{
+    public Box<T> inner() => new Box<T>();
+}
+
 public class Queue
 {
+    public static Maker<Order> maker() => new Maker<Order>();
+
     public static Box<Query<Order>> queryBox() => new Box<Query<Order>>();
 
     public static Holder<IntBox> holder() => new Holder<IntBox>();

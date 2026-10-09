@@ -71,8 +71,8 @@ const sharp_type *sharp_type_list(const char *text, size_t length);
 bool sharp_type_list_is_open(const char *text, size_t length);
 
 /* The interned type argument list the open `text` spells once each `$i` in it is `object`'s type argument i, for a
- * method of `scope`, cached in the two pointers at `cache`. NULL when `object` is not of class `scope`, or `scope`
- * declares no type parameter. */
+ * method of `scope`, cached in the two pointers at `cache`. NULL when `object` is not of class `scope`, `scope`
+ * declares no type parameter, or `text` names an index `object` has no type argument at. */
 const sharp_type *sharp_type_list_of_this(
 	const zval *text, zend_object *object, const zend_class_entry *scope, void **cache);
 
@@ -91,6 +91,11 @@ static zend_always_inline const sharp_type *sharp_type_arguments(zend_object *ob
 {
 	return UNEXPECTED(object->ce->ce_flags & ZEND_ACC_SHARP_GENERIC) ? sharp_type_arguments_of_slot(object) : NULL;
 }
+
+/* Whether `new` can give an object of `ce` the type arguments `arguments`, one for each type parameter `ce` declares.
+ * PHP# checked them against the class the name reached when it compiled, but an alias or an autoloader can bind the
+ * name to a class that declares none, or another number. Throws an Error when they do not fit. */
+bool sharp_class_takes(const zend_class_entry *ce, const sharp_type *arguments);
 
 /* Stores `arguments` in the slot of `object`, whose class declares one. */
 void sharp_type_arguments_store(zend_object *object, const sharp_type *arguments);

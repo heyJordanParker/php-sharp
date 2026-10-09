@@ -6045,11 +6045,7 @@ ZEND_VM_HANDLER(68, ZEND_NEW, UNUSED|CLASS_FETCH|CONST|VAR, UNUSED|CACHE_SLOT|TM
 
 	result = EX_VAR(opline->result.var);
 	const sharp_type *arguments = OP2_TYPE == IS_TMP_VAR ? Z_PTR_P(EX_VAR(opline->op2.var)) : NULL;
-	/* PHP# checked the type arguments against the class it saw, but an alias or an autoloader can bind the name to a
-	 * class that keeps none. */
-	if (arguments && UNEXPECTED(!(ce->ce_flags & ZEND_ACC_SHARP_GENERIC))) {
-		zend_throw_error(NULL, "Class %s declares no type parameters, so new cannot give it <%s>",
-			ZSTR_VAL(ce->name), ZSTR_VAL(arguments->text));
+	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}

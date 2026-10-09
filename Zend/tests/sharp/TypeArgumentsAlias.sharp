@@ -1,8 +1,18 @@
 namespace Aliased;
 
+import App.Node;
 import App.Pair;
+
+public class Twin<TFirst, TSecond>
+{
+    public Twin()
+    {
+    }
+}
 
 public class Maker
 {
     public static Pair<int, string> pair() => new Pair<int, string>(1, "one");
+
+    public static Node<int> node() => new Node<int>();
 }

@@ -10939,11 +10939,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_CONS
 
 	result = EX_VAR(opline->result.var);
 	const sharp_type *arguments = IS_TMP_VAR == IS_TMP_VAR ? Z_PTR_P(EX_VAR(opline->op2.var)) : NULL;
-	/* PHP# checked the type arguments against the class it saw, but an alias or an autoloader can bind the name to a
-	 * class that keeps none. */
-	if (arguments && UNEXPECTED(!(ce->ce_flags & ZEND_ACC_SHARP_GENERIC))) {
-		zend_throw_error(NULL, "Class %s declares no type parameters, so new cannot give it <%s>",
-			ZSTR_VAL(ce->name), ZSTR_VAL(arguments->text));
+	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -11495,11 +11491,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_CONS
 
 	result = EX_VAR(opline->result.var);
 	const sharp_type *arguments = IS_UNUSED == IS_TMP_VAR ? Z_PTR_P(EX_VAR(opline->op2.var)) : NULL;
-	/* PHP# checked the type arguments against the class it saw, but an alias or an autoloader can bind the name to a
-	 * class that keeps none. */
-	if (arguments && UNEXPECTED(!(ce->ce_flags & ZEND_ACC_SHARP_GENERIC))) {
-		zend_throw_error(NULL, "Class %s declares no type parameters, so new cannot give it <%s>",
-			ZSTR_VAL(ce->name), ZSTR_VAL(arguments->text));
+	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -30121,11 +30113,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_VAR_
 
 	result = EX_VAR(opline->result.var);
 	const sharp_type *arguments = IS_TMP_VAR == IS_TMP_VAR ? Z_PTR_P(EX_VAR(opline->op2.var)) : NULL;
-	/* PHP# checked the type arguments against the class it saw, but an alias or an autoloader can bind the name to a
-	 * class that keeps none. */
-	if (arguments && UNEXPECTED(!(ce->ce_flags & ZEND_ACC_SHARP_GENERIC))) {
-		zend_throw_error(NULL, "Class %s declares no type parameters, so new cannot give it <%s>",
-			ZSTR_VAL(ce->name), ZSTR_VAL(arguments->text));
+	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -31760,11 +31748,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_VAR_
 
 	result = EX_VAR(opline->result.var);
 	const sharp_type *arguments = IS_UNUSED == IS_TMP_VAR ? Z_PTR_P(EX_VAR(opline->op2.var)) : NULL;
-	/* PHP# checked the type arguments against the class it saw, but an alias or an autoloader can bind the name to a
-	 * class that keeps none. */
-	if (arguments && UNEXPECTED(!(ce->ce_flags & ZEND_ACC_SHARP_GENERIC))) {
-		zend_throw_error(NULL, "Class %s declares no type parameters, so new cannot give it <%s>",
-			ZSTR_VAL(ce->name), ZSTR_VAL(arguments->text));
+	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -39173,11 +39157,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_UNUS
 
 	result = EX_VAR(opline->result.var);
 	const sharp_type *arguments = IS_TMP_VAR == IS_TMP_VAR ? Z_PTR_P(EX_VAR(opline->op2.var)) : NULL;
-	/* PHP# checked the type arguments against the class it saw, but an alias or an autoloader can bind the name to a
-	 * class that keeps none. */
-	if (arguments && UNEXPECTED(!(ce->ce_flags & ZEND_ACC_SHARP_GENERIC))) {
-		zend_throw_error(NULL, "Class %s declares no type parameters, so new cannot give it <%s>",
-			ZSTR_VAL(ce->name), ZSTR_VAL(arguments->text));
+	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -39596,11 +39576,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_UNUS
 
 	result = EX_VAR(opline->result.var);
 	const sharp_type *arguments = IS_UNUSED == IS_TMP_VAR ? Z_PTR_P(EX_VAR(opline->op2.var)) : NULL;
-	/* PHP# checked the type arguments against the class it saw, but an alias or an autoloader can bind the name to a
-	 * class that keeps none. */
-	if (arguments && UNEXPECTED(!(ce->ce_flags & ZEND_ACC_SHARP_GENERIC))) {
-		zend_throw_error(NULL, "Class %s declares no type parameters, so new cannot give it <%s>",
-			ZSTR_VAL(ce->name), ZSTR_VAL(arguments->text));
+	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -67510,11 +67486,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_CONST_TMP
 
 	result = EX_VAR(opline->result.var);
 	const sharp_type *arguments = IS_TMP_VAR == IS_TMP_VAR ? Z_PTR_P(EX_VAR(opline->op2.var)) : NULL;
-	/* PHP# checked the type arguments against the class it saw, but an alias or an autoloader can bind the name to a
-	 * class that keeps none. */
-	if (arguments && UNEXPECTED(!(ce->ce_flags & ZEND_ACC_SHARP_GENERIC))) {
-		zend_throw_error(NULL, "Class %s declares no type parameters, so new cannot give it <%s>",
-			ZSTR_VAL(ce->name), ZSTR_VAL(arguments->text));
+	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -67964,11 +67936,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_CONST_UNU
 
 	result = EX_VAR(opline->result.var);
 	const sharp_type *arguments = IS_UNUSED == IS_TMP_VAR ? Z_PTR_P(EX_VAR(opline->op2.var)) : NULL;
-	/* PHP# checked the type arguments against the class it saw, but an alias or an autoloader can bind the name to a
-	 * class that keeps none. */
-	if (arguments && UNEXPECTED(!(ce->ce_flags & ZEND_ACC_SHARP_GENERIC))) {
-		zend_throw_error(NULL, "Class %s declares no type parameters, so new cannot give it <%s>",
-			ZSTR_VAL(ce->name), ZSTR_VAL(arguments->text));
+	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -86490,11 +86458,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_VAR_TMP_T
 
 	result = EX_VAR(opline->result.var);
 	const sharp_type *arguments = IS_TMP_VAR == IS_TMP_VAR ? Z_PTR_P(EX_VAR(opline->op2.var)) : NULL;
-	/* PHP# checked the type arguments against the class it saw, but an alias or an autoloader can bind the name to a
-	 * class that keeps none. */
-	if (arguments && UNEXPECTED(!(ce->ce_flags & ZEND_ACC_SHARP_GENERIC))) {
-		zend_throw_error(NULL, "Class %s declares no type parameters, so new cannot give it <%s>",
-			ZSTR_VAL(ce->name), ZSTR_VAL(arguments->text));
+	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -88129,11 +88093,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_VAR_UNUSE
 
 	result = EX_VAR(opline->result.var);
 	const sharp_type *arguments = IS_UNUSED == IS_TMP_VAR ? Z_PTR_P(EX_VAR(opline->op2.var)) : NULL;
-	/* PHP# checked the type arguments against the class it saw, but an alias or an autoloader can bind the name to a
-	 * class that keeps none. */
-	if (arguments && UNEXPECTED(!(ce->ce_flags & ZEND_ACC_SHARP_GENERIC))) {
-		zend_throw_error(NULL, "Class %s declares no type parameters, so new cannot give it <%s>",
-			ZSTR_VAL(ce->name), ZSTR_VAL(arguments->text));
+	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -95542,11 +95502,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_UNUSED_TM
 
 	result = EX_VAR(opline->result.var);
 	const sharp_type *arguments = IS_TMP_VAR == IS_TMP_VAR ? Z_PTR_P(EX_VAR(opline->op2.var)) : NULL;
-	/* PHP# checked the type arguments against the class it saw, but an alias or an autoloader can bind the name to a
-	 * class that keeps none. */
-	if (arguments && UNEXPECTED(!(ce->ce_flags & ZEND_ACC_SHARP_GENERIC))) {
-		zend_throw_error(NULL, "Class %s declares no type parameters, so new cannot give it <%s>",
-			ZSTR_VAL(ce->name), ZSTR_VAL(arguments->text));
+	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
@@ -95965,11 +95921,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_UNUSED_UN
 
 	result = EX_VAR(opline->result.var);
 	const sharp_type *arguments = IS_UNUSED == IS_TMP_VAR ? Z_PTR_P(EX_VAR(opline->op2.var)) : NULL;
-	/* PHP# checked the type arguments against the class it saw, but an alias or an autoloader can bind the name to a
-	 * class that keeps none. */
-	if (arguments && UNEXPECTED(!(ce->ce_flags & ZEND_ACC_SHARP_GENERIC))) {
-		zend_throw_error(NULL, "Class %s declares no type parameters, so new cannot give it <%s>",
-			ZSTR_VAL(ce->name), ZSTR_VAL(arguments->text));
+	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}

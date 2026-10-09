@@ -2033,11 +2033,18 @@ static const sharp_type *sharp_class_bounds(const zend_class_entry *ce)
 const sharp_type *sharp_type_arguments_of_slot(zend_object *object)
 {
 	/* A lazy proxy has the type arguments of its real instance, which it initializes first, as == and serialize do.
-	 * NULL with an exception when the initializer fails. */
+	 * NULL with an exception when the initializer fails. A real instance of a parent class has as many type arguments
+	 * as the parent has type parameters, so the proxy reads its own slot, which is never lazy, as an object plain PHP
+	 * creates does. */
 	if (UNEXPECTED(zend_object_is_lazy_proxy(object))) {
 		zend_object *instance = zend_lazy_object_init(object);
 
-		return instance ? sharp_type_arguments(instance) : NULL;
+		if (!instance) {
+			return NULL;
+		}
+		if (instance->ce == object->ce) {
+			return sharp_type_arguments(instance);
+		}
 	}
 
 	const zend_property_info *slot = sharp_type_arguments_slot(object->ce);
@@ -2058,6 +2065,52 @@ const sharp_type *sharp_type_arguments_of_slot(zend_object *object)
 	}
 
 	return bounds;
+}
+
+/* How many type parameters `ce`, a PHP# class-like, declares: the members of its bounds text, separated by the commas
+ * outside any `<>` or `()`. `new` counts them on each call, so it reads the text instead of looking up its interned
+ * list, which hashes the text and, under ZTS, takes the process tables' lock. */
+static uint32_t sharp_class_arity(const zend_class_entry *ce)
+{
+	const zend_string *bounds = ce->info.user.sharp_bounds;
+	uint32_t count = ZSTR_LEN(bounds) ? 1 : 0;
+	uint32_t depth = 0;
+
+	for (size_t i = 0; i < ZSTR_LEN(bounds); i++) {
+		switch (ZSTR_VAL(bounds)[i]) {
+			case '<':
+			case '(':
+				depth++;
+				break;
+			case '>':
+			case ')':
+				depth--;
+				break;
+			case ',':
+				count += depth == 0;
+				break;
+		}
+	}
+
+	return count;
+}
+
+bool sharp_class_takes(const zend_class_entry *ce, const sharp_type *arguments)
+{
+	uint32_t count = sharp_class_is_sharp(ce) ? sharp_class_arity(ce) : 0;
+
+	if (EXPECTED(arguments->count == count)) {
+		return true;
+	}
+	if (!count) {
+		zend_throw_error(NULL, "Class %s declares no type parameters, so new cannot give it <%s>",
+			ZSTR_VAL(ce->name), ZSTR_VAL(arguments->text));
+	} else {
+		zend_throw_error(NULL, "Class %s declares %" PRIu32 " type parameter%s, so new cannot give it <%s>",
+			ZSTR_VAL(ce->name), count, count == 1 ? "" : "s", ZSTR_VAL(arguments->text));
+	}
+
+	return false;
 }
 
 void sharp_type_arguments_store(zend_object *object, const sharp_type *arguments)
@@ -2436,7 +2489,13 @@ const sharp_type *sharp_type_list_of_this(
 	sharp_type_node *open = sharp_type_read_list(&reader);
 	ZEND_ASSERT(open && reader.open);
 	sharp_type_node *list = sharp_type_node_substitute(open, sharp_type_node_list(arguments->text, &reader), &reader);
-	ZEND_ASSERT(list != NULL);
+	/* A lambda bound to an object of another class that has no type argument at an index the text names makes an object
+	 * with its class's bounds, as one plain PHP creates. */
+	if (!list) {
+		zend_arena_destroy(reader.arena);
+
+		return NULL;
+	}
 	/* A type a substitution spells is bounded by how deep the program nests it, not by its source, as in
 	 * Node<List<T>>, so a new one lives for the request. One code already spells is the process's. */
 	const sharp_type *substituted = sharp_type_intern(list, false, &reader.arena);

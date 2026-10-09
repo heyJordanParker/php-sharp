@@ -64,6 +64,8 @@ echo implode(', ', arguments($read->paired(new App\SharedOrder(6)))), "\n";
 // In a method a subclass inherits, the subclass's header gives the method's class its type arguments.
 echo implode(', ', arguments(Queue::orderMaker()->make())), "\n";
 echo implode(', ', arguments(Queue::listMaker()->make())), "\n";
+// A lambda bound to an object whose class has no type argument at the index it names makes an object with its bounds.
+echo implode(', ', arguments(Closure::bind(Queue::pair()->boxer(), new App\Box(), App\Box::class)())), "\n";
 
 echo "lazy objects\n";
 $class = new ReflectionClass(App\PaginatedList::class);
@@ -76,6 +78,11 @@ var_dump(arguments($class->newLazyProxy($orders)));
 var_dump($class->newLazyProxy($orders) == Queue::orders());
 show(serialize($class->newLazyProxy($orders)));
 var_dump(arguments($class->newLazyProxy($orders)->copy()));
+// A proxy whose real instance is of its parent class has its own class's bounds, since the parent's type arguments
+// count the parent's type parameters.
+$labeled = (new ReflectionClass(App\Labeled::class))->newLazyProxy(static fn (): App\Maker => Queue::maker());
+var_dump(arguments($labeled));
+echo implode(', ', arguments($labeled->inner())), "\n";
 // A proxy whose initializer throws hands that exception on, and makes nothing.
 $failing = $class->newLazyProxy(static function (): never {
     throw new RuntimeException('no orders');
@@ -196,6 +203,7 @@ NULL
 App.SharedOrder, List<App.SharedOrder>?
 App.Order
 List<int>
+Any?
 lazy objects
 array(1) {
   [0]=>
@@ -207,6 +215,13 @@ array(1) {
   [0]=>
   string(9) "App.Order"
 }
+array(2) {
+  [0]=>
+  string(4) "Any?"
+  [1]=>
+  string(4) "Any?"
+}
+Any?
 no orders
 no orders
 no orders
