@@ -302,7 +302,8 @@ before it changes the engine or the bridge.
     must equal the type's own, except where the type's argument is `Any?`. Only a class PHP# declares with type
     parameters has type arguments to compare (R2e).
   - A built-in type needs a value of its PHP type: `int`, `string`, `bool`, `null`, `Any` (not null) and `Object`.
-    `float` also takes an int, as PHP's own `float` parameter does.
+    `float` also takes an int, as PHP's own `float` parameter does, and `sharp_type_check_arguments` then turns the
+    argument into a float in place, for `float`, `float?` and a union with `float` and no `int` (R2e).
   - A nullable type takes null, a union any member, and an intersection every member.
   - `List`, `Map`, `Set`, `Iterable`, `Class` and `Function` take every value. A variadic parameter is a list, so its
     elements are not checked either.
@@ -389,6 +390,9 @@ before it changes the engine or the bridge.
   intersection that declares it gives,** as the analyzer's `resolve_method_value` does. `Lowering::is_method_value`
   reads `receiver_intersections`. `receiver_classes` keeps only the first class of each intersection, which
   `operator_class` relies on.
+- **An int a plain PHP call gives a `float` position becomes a float,** as PHP's own `float` parameter makes it. A
+  type parameter erases to `mixed`, so PHP's check never sees it. Without the conversion `Box<float>`'s `put(2)` kept
+  an int, and PHP#'s `get() == 2.0` was false.
 
 ### D. Readers
 

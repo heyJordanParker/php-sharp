@@ -21,4 +21,26 @@ public class Pages
     public static string keep(Holder<Order> holder) => "kept";
 
     public static string relay(List<PaginatedList<Order>> pages) => Pages.take(pages[0]);
+
+    public static Cell<float> floats() => new Cell<float>(0.5);
+
+    public static Cell<float?> nullableFloats() => new Cell<float?>(null);
+
+    public static Cell<float|string> floatsOrStrings() => new Cell<float|string>("none");
+
+    public static bool two(Cell<float> cell) => cell.get() == 2.0;
+}
+
+public class Cell<T>
+{
+    public Cell(private T value)
+    {
+    }
+
+    public void put(T value)
+    {
+        this.value = value;
+    }
+
+    public T get() => this.value;
 }

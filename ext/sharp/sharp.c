@@ -2613,6 +2613,28 @@ static ZEND_COLD void sharp_type_argument_error(
 	smart_str_free(&given);
 }
 
+/* Whether a parameter of `type` takes an int as a float, as PHP's own parameter does: `float`, `float?`, or a union with
+ * `float` and no `int`. */
+static bool sharp_type_takes_int_as_float(const sharp_type *type)
+{
+	if (type->kind == SHARP_TYPE_NULLABLE) {
+		type = type->members[0];
+	}
+	if (type->kind != SHARP_TYPE_UNION) {
+		return type->kind == SHARP_TYPE_NAMED && zend_string_equals_literal(type->text, "float");
+	}
+
+	bool takes_float = false;
+	for (uint32_t i = 0; i < type->count; i++) {
+		if (zend_string_equals_literal(type->members[i]->text, "int")) {
+			return false;
+		}
+		takes_float |= zend_string_equals_literal(type->members[i]->text, "float");
+	}
+
+	return takes_float;
+}
+
 void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *text, const sharp_type *method,
 	void **cache)
 {
@@ -2625,7 +2647,7 @@ void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *tex
 	/* A variadic parameter holds a list, whose elements are not checked. */
 	uint32_t count = MIN(expected->count, EX(func)->op_array.num_args);
 	for (uint32_t i = 0; i < count; i++) {
-		const zval *value = EX_VAR_NUM(i);
+		zval *value = EX_VAR_NUM(i);
 
 		if (!sharp_type_accepts(expected->members[i], value)) {
 			if (!EG(exception)) {
@@ -2635,6 +2657,10 @@ void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *tex
 		}
 		if (UNEXPECTED(EG(exception))) {
 			return;
+		}
+		ZVAL_DEREF(value);
+		if (Z_TYPE_P(value) == IS_LONG && sharp_type_takes_int_as_float(expected->members[i])) {
+			ZVAL_DOUBLE(value, (double) Z_LVAL_P(value));
 		}
 	}
 }

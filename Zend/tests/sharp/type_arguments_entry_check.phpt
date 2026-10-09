@@ -1,5 +1,5 @@
 --TEST--
-Plain PHP, call_user_func and array_map entering a PHP# method get a TypeError for an argument whose type arguments differ from the parameter's, a call from PHP# is never checked, and a plain PHP generic class's type arguments are erased
+Plain PHP, call_user_func and array_map entering a PHP# method get a TypeError for an argument whose type arguments differ from the parameter's, a call from PHP# is never checked, a plain PHP generic class's type arguments are erased, and an int given for a float becomes a float
 --FILE--
 <?php
 require __DIR__ . '/type_arguments.inc';
@@ -36,6 +36,14 @@ attempt(fn () => call_user_func([Pages::class, 'take'], $customers));
 attempt(fn () => array_map([Pages::class, 'take'], [$customers])[0]);
 attempt(fn () => Pages::relay([$customers]));
 attempt(fn () => Pages::keep(new Holder()));
+
+foreach ([Pages::floats(), Pages::nullableFloats(), Pages::floatsOrStrings()] as $cell) {
+    $cell->put(2);
+    var_dump($cell->get());
+}
+$floats = Pages::floats();
+$floats->put(2);
+var_dump(Pages::two($floats));
 ?>
 --EXPECTF--
 took
@@ -50,3 +58,7 @@ Checks\Pages::take(): Argument #1 ($page) must be of type App.PaginatedList<App.
 Checks\Pages::take(): Argument #1 ($page) must be of type App.PaginatedList<App.Order>, App.PaginatedList<Checks.Customer> given
 took
 kept
+float(2)
+float(2)
+float(2)
+bool(true)
