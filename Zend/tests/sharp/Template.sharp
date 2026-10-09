@@ -31,4 +31,6 @@ b`;
     {
         return `${`x`}`;
     }
+
+    public static string paid(bool isPaid) => `Paid: ${isPaid}`;
 }

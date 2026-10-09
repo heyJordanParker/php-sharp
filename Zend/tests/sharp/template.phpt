@@ -1,5 +1,5 @@
 --TEST--
-A PHP# template interpolates any expression in `${…}`, takes JavaScript's escapes and spans lines, and `"…"` never interpolates
+A PHP# template shows an int, a float, a string or a bool in `${…}`, a bool as true or false, takes JavaScript's escapes and spans lines, and `"…"` never interpolates
 --FILE--
 <?php
 
@@ -12,6 +12,8 @@ var_dump(Demo\Template::constant());
 var_dump(Demo\Template::constantAfter('name'));
 var_dump(Demo\Template::empty());
 var_dump(Demo\Template::nested());
+echo Demo\Template::paid(true), "\n";
+echo Demo\Template::paid(false), "\n";
 ?>
 --EXPECT--
 cart: 2 items! ✓ `${name} {$name} $name`
@@ -21,3 +23,5 @@ string(2) "v1"
 string(7) "v1 name"
 string(0) ""
 string(1) "x"
+Paid: true
+Paid: false
