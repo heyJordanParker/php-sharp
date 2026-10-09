@@ -13,7 +13,7 @@
 
 #define SHARP_UNIT_MAGIC "\x53\x48\x41\x52\x50\x43\x00\x00"
 #define SHARP_UNIT_ABI "\xff\x67\x0e\x4b\x2c\x66\x43\xb1\xc2\x09\x1f\x47\xca\x97\xa4\x15"
-#define SHARP_MAGO_COMMIT "cb95f6573f81f593b21bc694307b580c0776b2af"
+#define SHARP_MAGO_COMMIT "6eebb8b6ad6811b7d2237f5c324d71b33cf0e603"
 
 #define SHARP_KINDS(X) \
   X(ZVAL) \
