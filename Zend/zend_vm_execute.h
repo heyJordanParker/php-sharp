@@ -36646,26 +36646,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 	USE_OPLINE
 	const sharp_type *arguments;
 
-	if (IS_CONST == IS_CONST && UNEXPECTED(opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN)) {
-		void **cache = CACHE_ADDR(opline->extended_value);
-
-		/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. */
-		if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
-			ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
-		}
-		/* Closure::call() and Closure::bind() change the scope of a lambda, never the class it is written in, which
-		 * is loaded since its code runs. */
-		if (UNEXPECTED(cache[3] == NULL)) {
-			zval *name = RT_CONSTANT(opline, opline->op2) + 1;
-
-			cache[3] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
-			ZEND_ASSERT(cache[3] != NULL);
-		}
-		SAVE_OPLINE();
-		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)), cache[3], cache);
-		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
-		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
-	} else if (IS_CONST == IS_CONST) {
+	if (IS_CONST == IS_CONST && EXPECTED(opline->op1.num != ZEND_SHARP_TYPE_ARGS_OPEN)) {
 		arguments = CACHED_PTR(opline->extended_value);
 		if (UNEXPECTED(arguments == NULL)) {
 			zval *text = RT_CONSTANT(opline, opline->op2);
@@ -36677,19 +36658,33 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 				CACHE_PTR(opline->extended_value, (void *) arguments);
 			}
 		}
-	} else {
-		if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
-			ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+		ZEND_VM_NEXT_OPCODE();
+	}
+
+	/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. */
+	if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
+		ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+	}
+	SAVE_OPLINE();
+	if (IS_CONST == IS_CONST) {
+		void **cache = CACHE_ADDR(opline->extended_value);
+
+		/* Closure::call() and Closure::bind() change the scope of a lambda, never the class it is written in, which
+		 * is loaded since its code runs. */
+		if (UNEXPECTED(cache[3] == NULL)) {
+			zval *name = RT_CONSTANT(opline, opline->op2) + 1;
+
+			cache[3] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
+			ZEND_ASSERT(cache[3] != NULL);
 		}
+		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)), cache[3], cache);
+	} else {
 		/* A lazy proxy's initializer runs here, and can throw. */
-		SAVE_OPLINE();
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
 	}
 	ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
-	if (IS_CONST == IS_UNUSED) {
-		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
-	}
-	ZEND_VM_NEXT_OPCODE();
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
 static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_CONSTANT_SPEC_UNUSED_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
@@ -39647,26 +39642,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 	USE_OPLINE
 	const sharp_type *arguments;
 
-	if (IS_UNUSED == IS_CONST && UNEXPECTED(opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN)) {
-		void **cache = CACHE_ADDR(opline->extended_value);
-
-		/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. */
-		if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
-			ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
-		}
-		/* Closure::call() and Closure::bind() change the scope of a lambda, never the class it is written in, which
-		 * is loaded since its code runs. */
-		if (UNEXPECTED(cache[3] == NULL)) {
-			zval *name = RT_CONSTANT(opline, opline->op2) + 1;
-
-			cache[3] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
-			ZEND_ASSERT(cache[3] != NULL);
-		}
-		SAVE_OPLINE();
-		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)), cache[3], cache);
-		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
-		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
-	} else if (IS_UNUSED == IS_CONST) {
+	if (IS_UNUSED == IS_CONST && EXPECTED(opline->op1.num != ZEND_SHARP_TYPE_ARGS_OPEN)) {
 		arguments = CACHED_PTR(opline->extended_value);
 		if (UNEXPECTED(arguments == NULL)) {
 			zval *text = RT_CONSTANT(opline, opline->op2);
@@ -39678,19 +39654,33 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 				CACHE_PTR(opline->extended_value, (void *) arguments);
 			}
 		}
-	} else {
-		if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
-			ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+		ZEND_VM_NEXT_OPCODE();
+	}
+
+	/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. */
+	if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
+		ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+	}
+	SAVE_OPLINE();
+	if (IS_UNUSED == IS_CONST) {
+		void **cache = CACHE_ADDR(opline->extended_value);
+
+		/* Closure::call() and Closure::bind() change the scope of a lambda, never the class it is written in, which
+		 * is loaded since its code runs. */
+		if (UNEXPECTED(cache[3] == NULL)) {
+			zval *name = RT_CONSTANT(opline, opline->op2) + 1;
+
+			cache[3] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
+			ZEND_ASSERT(cache[3] != NULL);
 		}
+		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)), cache[3], cache);
+	} else {
 		/* A lazy proxy's initializer runs here, and can throw. */
-		SAVE_OPLINE();
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
 	}
 	ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
-	if (IS_UNUSED == IS_UNUSED) {
-		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
-	}
-	ZEND_VM_NEXT_OPCODE();
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SPEC_UNUSED_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
@@ -93015,26 +93005,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 	USE_OPLINE
 	const sharp_type *arguments;
 
-	if (IS_CONST == IS_CONST && UNEXPECTED(opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN)) {
-		void **cache = CACHE_ADDR(opline->extended_value);
-
-		/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. */
-		if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
-			ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
-		}
-		/* Closure::call() and Closure::bind() change the scope of a lambda, never the class it is written in, which
-		 * is loaded since its code runs. */
-		if (UNEXPECTED(cache[3] == NULL)) {
-			zval *name = RT_CONSTANT(opline, opline->op2) + 1;
-
-			cache[3] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
-			ZEND_ASSERT(cache[3] != NULL);
-		}
-		SAVE_OPLINE();
-		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)), cache[3], cache);
-		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
-		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
-	} else if (IS_CONST == IS_CONST) {
+	if (IS_CONST == IS_CONST && EXPECTED(opline->op1.num != ZEND_SHARP_TYPE_ARGS_OPEN)) {
 		arguments = CACHED_PTR(opline->extended_value);
 		if (UNEXPECTED(arguments == NULL)) {
 			zval *text = RT_CONSTANT(opline, opline->op2);
@@ -93046,19 +93017,33 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 				CACHE_PTR(opline->extended_value, (void *) arguments);
 			}
 		}
-	} else {
-		if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
-			ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+		ZEND_VM_NEXT_OPCODE();
+	}
+
+	/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. */
+	if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
+		ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+	}
+	SAVE_OPLINE();
+	if (IS_CONST == IS_CONST) {
+		void **cache = CACHE_ADDR(opline->extended_value);
+
+		/* Closure::call() and Closure::bind() change the scope of a lambda, never the class it is written in, which
+		 * is loaded since its code runs. */
+		if (UNEXPECTED(cache[3] == NULL)) {
+			zval *name = RT_CONSTANT(opline, opline->op2) + 1;
+
+			cache[3] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
+			ZEND_ASSERT(cache[3] != NULL);
 		}
+		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)), cache[3], cache);
+	} else {
 		/* A lazy proxy's initializer runs here, and can throw. */
-		SAVE_OPLINE();
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
 	}
 	ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
-	if (IS_CONST == IS_UNUSED) {
-		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
-	}
-	ZEND_VM_NEXT_OPCODE();
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
 static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_CONSTANT_SPEC_UNUSED_CONST_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
@@ -96016,26 +96001,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 	USE_OPLINE
 	const sharp_type *arguments;
 
-	if (IS_UNUSED == IS_CONST && UNEXPECTED(opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN)) {
-		void **cache = CACHE_ADDR(opline->extended_value);
-
-		/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. */
-		if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
-			ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
-		}
-		/* Closure::call() and Closure::bind() change the scope of a lambda, never the class it is written in, which
-		 * is loaded since its code runs. */
-		if (UNEXPECTED(cache[3] == NULL)) {
-			zval *name = RT_CONSTANT(opline, opline->op2) + 1;
-
-			cache[3] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
-			ZEND_ASSERT(cache[3] != NULL);
-		}
-		SAVE_OPLINE();
-		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)), cache[3], cache);
-		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
-		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
-	} else if (IS_UNUSED == IS_CONST) {
+	if (IS_UNUSED == IS_CONST && EXPECTED(opline->op1.num != ZEND_SHARP_TYPE_ARGS_OPEN)) {
 		arguments = CACHED_PTR(opline->extended_value);
 		if (UNEXPECTED(arguments == NULL)) {
 			zval *text = RT_CONSTANT(opline, opline->op2);
@@ -96047,19 +96013,33 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 				CACHE_PTR(opline->extended_value, (void *) arguments);
 			}
 		}
-	} else {
-		if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
-			ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+		ZEND_VM_NEXT_OPCODE();
+	}
+
+	/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. */
+	if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
+		ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+	}
+	SAVE_OPLINE();
+	if (IS_UNUSED == IS_CONST) {
+		void **cache = CACHE_ADDR(opline->extended_value);
+
+		/* Closure::call() and Closure::bind() change the scope of a lambda, never the class it is written in, which
+		 * is loaded since its code runs. */
+		if (UNEXPECTED(cache[3] == NULL)) {
+			zval *name = RT_CONSTANT(opline, opline->op2) + 1;
+
+			cache[3] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
+			ZEND_ASSERT(cache[3] != NULL);
 		}
+		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)), cache[3], cache);
+	} else {
 		/* A lazy proxy's initializer runs here, and can throw. */
-		SAVE_OPLINE();
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
 	}
 	ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
-	if (IS_UNUSED == IS_UNUSED) {
-		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
-	}
-	ZEND_VM_NEXT_OPCODE();
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_UNUSED_UNUSED_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
