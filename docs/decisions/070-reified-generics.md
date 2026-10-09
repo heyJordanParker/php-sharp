@@ -358,6 +358,12 @@ before it changes the engine or the bridge.
   - `zend_compile_call_common` asserts that only `DO_FCALL`, `DO_UCALL` and `DO_FCALL_BY_NAME` take type arguments, and
     the bridge gives them only to a call of a PHP# method, so `optimize_func_calls.c` never turns one into a
     `DO_ICALL`.
+- **A generic call costs about 30 ns more than a plain PHP# call on the debug build, and a plain call costs what it
+  did before R2.** `Calls.pick<Order>(order)` against `Calls.same(order)`, both taking an `Order`, over 200000 calls,
+  best of 7 on CPU time, on the ZTS debug build, with the machine's load average between 80 and 134:
+  - before R2, at R1's head 7913e5c2e3: 204 ns generic, 204 ns plain, since R1 erases a call's type arguments
+  - after R2: 229 ns generic, 196 ns plain
+  - The NTS debug build after R2 gives 198 ns generic and 170 ns plain.
 
 ### D. Readers
 
