@@ -1008,6 +1008,11 @@ static void php_var_serialize_type_arguments(smart_str *buf, const sharp_type *t
 /* `type_arguments` are those of the object `struc`, or NULL. */
 static void php_var_serialize_nested_data(smart_str *buf, zval *struc, HashTable *ht, uint32_t count, bool incomplete_class, php_serialize_data_t var_hash, bool in_rcn_array, const sharp_type *type_arguments) /* {{{ */
 {
+	/* PHP#: an incomplete class keeps the type arguments of the object it stands for as an ordinary entry, which it
+	 * writes last and without a reference number, as serialize wrote them for that object. */
+	bool keeps_type_arguments = Z_TYPE_P(struc) == IS_OBJECT && Z_OBJCE_P(struc) == PHP_IC_ENTRY;
+	zval *kept_type_arguments = NULL;
+
 	smart_str_append_unsigned(buf, count + (type_arguments != NULL));
 	smart_str_appendl(buf, ":{", 2);
 	if (count > 0) {
@@ -1018,6 +1023,11 @@ static void php_var_serialize_nested_data(smart_str *buf, zval *struc, HashTable
 		ZEND_HASH_FOREACH_KEY_VAL_IND(ht, index, key, data) {
 			if (incomplete_class && zend_string_equals_literal(key, MAGIC_MEMBER)) {
 				incomplete_class = 0;
+				continue;
+			}
+			if (UNEXPECTED(keeps_type_arguments && key && zend_string_equals(key, sharp_type_arguments_key)
+					&& Z_TYPE_P(data) == IS_STRING)) {
+				kept_type_arguments = data;
 				continue;
 			}
 
@@ -1047,6 +1057,10 @@ static void php_var_serialize_nested_data(smart_str *buf, zval *struc, HashTable
 	}
 	if (type_arguments) {
 		php_var_serialize_type_arguments(buf, type_arguments);
+	}
+	if (kept_type_arguments) {
+		php_var_serialize_string(buf, ZSTR_VAL(sharp_type_arguments_key), ZSTR_LEN(sharp_type_arguments_key));
+		php_var_serialize_string(buf, Z_STRVAL_P(kept_type_arguments), Z_STRLEN_P(kept_type_arguments));
 	}
 	smart_str_appendc(buf, '}');
 }

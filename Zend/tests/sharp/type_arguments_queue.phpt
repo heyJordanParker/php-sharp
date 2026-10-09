@@ -56,6 +56,12 @@ foreach ([serialize(Queue::orders()), serialize(Queue::ledger()), $gone] as $que
     $run = unserialize($queued, ['allowed_classes' => $queued === $gone]);
     echo get_class($run), ' ', var_export(serialize($run) === $queued, true), "\n";
 }
+// The entry takes no reference number there either, so r: and R: after it still name the right value.
+$queued = serialize([Queue::orders(), $order, $order, &$tag, &$tag]);
+$run = unserialize($queued, ['allowed_classes' => false]);
+echo var_export(serialize($run) === $queued, true), ' ', var_export($run[1] === $run[2], true), ' ';
+$run[3] = 'changed';
+echo $run[4], "\n";
 
 echo "unserialize resolves each class a type argument names, as it resolves an object's class\n";
 // A class written in the wrong case takes its declared spelling, so the type is the one code spells.
@@ -118,6 +124,7 @@ an incomplete class keeps the type arguments as an ordinary entry, and serialize
 __PHP_Incomplete_Class true
 __PHP_Incomplete_Class true
 __PHP_Incomplete_Class true
+true true changed
 unserialize resolves each class a type argument names, as it resolves an object's class
 App.Order, int true
 App\Pair

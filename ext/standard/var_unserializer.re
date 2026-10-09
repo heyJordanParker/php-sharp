@@ -641,11 +641,20 @@ static zend_always_inline int process_nested_object_data(UNSERIALIZE_PARAMETER, 
 
 		if (EXPECTED(Z_TYPE(key) == IS_STRING)) {
 string_key:
-			/* PHP#: an incomplete class keeps the type arguments as an ordinary entry, so it serializes back to the
-			 * same bytes. */
-			if (UNEXPECTED(zend_string_equals(Z_STR(key), sharp_type_arguments_key)) && obj->ce != PHP_IC_ENTRY) {
+			if (UNEXPECTED(zend_string_equals(Z_STR(key), sharp_type_arguments_key))) {
 				zval_ptr_dtor_str(&key);
-				if (!process_type_arguments(UNSERIALIZE_PASSTHRU, obj)) {
+				if (obj->ce == PHP_IC_ENTRY) {
+					/* PHP#: an incomplete class keeps the type arguments as an ordinary entry, read as serialize
+					 * wrote them, without a reference number, so it serializes back to the same bytes. */
+					zval text;
+
+					ZVAL_UNDEF(&text);
+					if (!php_var_unserialize_internal(&text, p, max, NULL) || Z_TYPE(text) != IS_STRING) {
+						zval_ptr_dtor(&text);
+						goto failure;
+					}
+					zend_hash_update(ht, sharp_type_arguments_key, &text);
+				} else if (!process_type_arguments(UNSERIALIZE_PASSTHRU, obj)) {
 					goto failure;
 				}
 				continue;

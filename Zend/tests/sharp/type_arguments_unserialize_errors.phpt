@@ -11,6 +11,7 @@ $inputs = [
     'a class that does not load' => [$list('App.Missing'), []],
     'a class without type parameters' => ['O:9:"App\Order":2:{s:2:"id";i:1;' . $key . 's:9:"App.Order";}', []],
     'a value that is not a string' => ['O:17:"App\PaginatedList":2:{s:5:"items";a:0:{}' . $key . 'i:1;}', []],
+    'a value that is not a string, in an incomplete class' => ['O:17:"App\PaginatedList":2:{s:5:"items";a:0:{}' . $key . 'i:1;}', ['allowed_classes' => false]],
     'a reference in place of the text' => ['O:17:"App\PaginatedList":2:{s:5:"items";a:0:{}' . $key . 'R:2;}', []],
     'a text that is no type' => [$list('App.('), []],
     'too many type arguments' => [$list('App.Order, int'), []],
@@ -39,6 +40,10 @@ a class without type parameters:
 Warning: unserialize(): Error at offset %d of %d bytes in %s on line %d
 bool(false)
 a value that is not a string:
+
+Warning: unserialize(): Error at offset %d of %d bytes in %s on line %d
+bool(false)
+a value that is not a string, in an incomplete class:
 
 Warning: unserialize(): Error at offset %d of %d bytes in %s on line %d
 bool(false)
