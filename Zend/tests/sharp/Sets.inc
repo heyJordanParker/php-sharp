@@ -11,7 +11,7 @@ class Tagged
     private array $sizes = [];
     private int $calls = 0;
 
-    public function __construct(public array $ids) { $this->ids = \Sharp\Set::from($this->ids); // PHP# makes each Set parameter a Set
+    public array $ids; public readonly array $labels; public function __construct(array $ids, array $labels) { $this->ids = \Sharp\Set::from($ids); $this->labels = \Sharp\Set::from($labels); // PHP# declares each promoted Set and makes it a Set
 
     }
 
@@ -86,5 +86,33 @@ class Tagged
     {
         $this->calls += 1;
         return "n{$this->calls}";
+    }
+
+    public static function lambdas(array $names): array
+    {
+        $prefix = "v";
+        $check = function (array $tags) use ($prefix) { $tags = \Sharp\Set::from($tags); return isset($tags[$prefix]); };
+        $size = function (array $tags) { $tags = \Sharp\Set::from($tags);
+            return \count($tags);
+        };
+        return [$check($names), $check([$prefix]), $size(["a", "a", "b"])];
+    }
+
+    public static function groups(array ...$groups): array { $groups = \array_map(\Sharp\Set::from(...), $groups);
+
+        $found = [];
+        foreach ($groups as $group) {
+            ((object) $found)->add(isset($group["a"]));
+        }
+        return $found;
+    }
+
+    public static function maybe(?array ...$groups): array { $groups = \array_map(fn ($set) => $set === null ? null : \Sharp\Set::from($set), $groups);
+
+        $found = [];
+        foreach ($groups as $group) {
+            ((object) $found)->add((($group === null) ? null : isset($group["a"])));
+        }
+        return $found;
     }
 }

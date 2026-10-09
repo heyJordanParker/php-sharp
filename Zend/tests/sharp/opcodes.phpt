@@ -125,7 +125,7 @@ Interop: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Lambdas: same opcodes and lines in 35 op arrays, same signatures in 1 classes
 Cashier: same opcodes and lines in 8 op arrays, same signatures in 1 classes
 Roster: same opcodes and lines in 6 op arrays, same signatures in 1 classes
-Sets: same opcodes and lines in 20 op arrays, same signatures in 1 classes
+Sets: same opcodes and lines in 26 op arrays, same signatures in 1 classes
 Store: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 RushOrders: same opcodes and lines in 2 op arrays, same signatures in 2 classes
 TypedOrders: same opcodes and lines in 2 op arrays, same signatures in 2 classes

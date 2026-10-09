@@ -16,12 +16,18 @@ namespace {
         attempt(fn () => Demo\Tagged::cases([Lib\Standing::Active]));
         attempt(fn () => Demo\Tagged::strings([1.5]));
 
-        $tagged = new Demo\Tagged([3, 3, 1]);
+        $tagged = new Demo\Tagged([3, 3, 1], ['b', 'a', 'b']);
         attempt(fn () => $tagged->ids);
         attempt(fn () => $tagged->properties(Lib\Standing::Closed));
         attempt(fn () => $tagged->tags);
         attempt(fn () => $tagged->once(['x']));
         attempt(fn () => $tagged->once(null));
+        // A get-only promoted Set is set once, to the Set of the list.
+        attempt(fn () => $tagged->labels);
+        // A lambda, a variadic and a nullable variadic make each list they take a Set, so contains finds an element.
+        attempt(fn () => Demo\Tagged::lambdas(['v', 'v', 'x']));
+        attempt(fn () => Demo\Tagged::groups(['a', 'b'], ['c']));
+        attempt(fn () => Demo\Tagged::maybe(['a'], null, ['b', 'a']));
         $output = ob_get_clean();
     }
 

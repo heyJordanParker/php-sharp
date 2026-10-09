@@ -11,7 +11,7 @@ class Tagged
     private Set<int> sizes = [];
     private int calls = 0;
 
-    public Tagged(public Set<int> ids { get; set; })
+    public Tagged(public Set<int> ids { get; set; }, public Set<string> labels { get; })
     {
     }
 
@@ -86,5 +86,33 @@ class Tagged
     {
         this.calls += 1;
         return `n${this.calls}`;
+    }
+
+    public static List<Any> lambdas(List<string> names)
+    {
+        const prefix = "v";
+        const check = (Set<string> tags) => tags.contains(prefix);
+        const size = (Set<string> tags) => {
+            return tags.count();
+        };
+        return [check(names), check([prefix]), size(["a", "a", "b"])];
+    }
+
+    public static List<bool> groups(Set<string> ...groups)
+    {
+        List<bool> found = [];
+        for (const group of groups) {
+            found.add(group.contains("a"));
+        }
+        return found;
+    }
+
+    public static List<Any?> maybe(Set<string>? ...groups)
+    {
+        List<Any?> found = [];
+        for (const group of groups) {
+            found.add(group?.contains("a"));
+        }
+        return found;
     }
 }

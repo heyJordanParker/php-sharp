@@ -228,6 +228,34 @@ array(9) {
   [8]=>
   NULL
 }
+array(2) {
+  ["b"]=>
+  string(1) "b"
+  ["a"]=>
+  string(1) "a"
+}
+array(3) {
+  [0]=>
+  bool(true)
+  [1]=>
+  bool(true)
+  [2]=>
+  int(2)
+}
+array(2) {
+  [0]=>
+  bool(true)
+  [1]=>
+  bool(false)
+}
+array(3) {
+  [0]=>
+  bool(true)
+  [1]=>
+  NULL
+  [2]=>
+  bool(true)
+}
 array(3) {
   ["b"]=>
   string(1) "b"
@@ -263,5 +291,5 @@ array(1) {
   ["x"]=>
   string(1) "x"
 }
-TypeError: Sharp\Set::from(): Argument #1 ($values) must hold only int, string or backed enum values, null given in set_methods.inc on line 37
-TypeError: Sharp\Set::from(): Argument #1 ($values) must hold only int, string or backed enum values, stdClass given in set_methods.inc on line 38
+TypeError: Sharp\Set::from(): Argument #1 ($values) must hold only int, string or backed enum values, null given in set_methods.inc on line 43
+TypeError: Sharp\Set::from(): Argument #1 ($values) must hold only int, string or backed enum values, stdClass given in set_methods.inc on line 44
