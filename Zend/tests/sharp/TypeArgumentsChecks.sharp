@@ -4,6 +4,7 @@ import App.Box;
 import App.DatabaseEntity;
 import App.Order;
 import App.PaginatedList;
+import Lib.Holder;
 
 public class Customer : DatabaseEntity
 {
@@ -16,6 +17,8 @@ public class Pages
     public static string take(PaginatedList<Order> page) => "took";
 
     public static string open(Box<Any?> box) => "opened";
+
+    public static string keep(Holder<Order> holder) => "kept";
 
     public static string relay(List<PaginatedList<Order>> pages) => Pages.take(pages[0]);
 }

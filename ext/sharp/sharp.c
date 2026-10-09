@@ -2487,14 +2487,15 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 }
 
 /* Whether `object` is an instance of the class `type` names whose type arguments for that class are `type`'s own,
- * where `type`'s argument is not `Any?`. A loaded object's class has loaded each class it extends or implements. */
+ * where `type`'s argument is not `Any?`. Only a class PHP# declares with type parameters has type arguments to compare:
+ * plain PHP's generics are erased. A loaded object's class has loaded each class it extends or implements. */
 static bool sharp_object_is(zend_object *object, const sharp_type *type)
 {
 	zend_class_entry *ce = zend_lookup_class_ex(type->class_name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
 	if (!ce || !instanceof_function(object->ce, ce)) {
 		return false;
 	}
-	if (!type->count) {
+	if (!type->count || !sharp_class_is_sharp(ce) || !ce->info.user.sharp_bounds) {
 		return true;
 	}
 

@@ -3,6 +3,7 @@
 require __DIR__ . '/harness/Witness.inc';
 require __DIR__ . '/harness/Snapshot.inc';
 require __DIR__ . '/harness/Sleeper.inc';
+require __DIR__ . '/harness/Holder.inc';
 require __DIR__ . '/TypeArguments.sharp';
 
 function arguments(object $object): array

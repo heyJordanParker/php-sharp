@@ -1,5 +1,5 @@
 --TEST--
-Plain PHP, call_user_func and array_map entering a PHP# method get a TypeError for an argument whose type arguments differ from the parameter's, and a call from PHP# is never checked
+Plain PHP, call_user_func and array_map entering a PHP# method get a TypeError for an argument whose type arguments differ from the parameter's, a call from PHP# is never checked, and a plain PHP generic class's type arguments are erased
 --FILE--
 <?php
 require __DIR__ . '/type_arguments.inc';
@@ -11,6 +11,7 @@ use App\PaginatedList;
 use App\Queue;
 use Checks\Customer;
 use Checks\Pages;
+use Lib\Holder;
 
 function attempt(callable $call): void
 {
@@ -34,6 +35,7 @@ attempt(fn () => get_class(Queue::orders()->paired(new Customer(1))));
 attempt(fn () => call_user_func([Pages::class, 'take'], $customers));
 attempt(fn () => array_map([Pages::class, 'take'], [$customers])[0]);
 attempt(fn () => Pages::relay([$customers]));
+attempt(fn () => Pages::keep(new Holder()));
 ?>
 --EXPECTF--
 took
@@ -47,3 +49,4 @@ App\PaginatedList::paired(): Argument #1 ($item) must be of type App.Order, Chec
 Checks\Pages::take(): Argument #1 ($page) must be of type App.PaginatedList<App.Order>, App.PaginatedList<Checks.Customer> given, called in %s on line %d
 Checks\Pages::take(): Argument #1 ($page) must be of type App.PaginatedList<App.Order>, App.PaginatedList<Checks.Customer> given
 took
+kept

@@ -299,7 +299,8 @@ before it changes the engine or the bridge.
 - **`sharp_type_accepts(type, value)` takes one type of the parameters list,** after `sharp_type_list_of_frame`
   spelled the list for the frame: `$i` from this, `#i` from the method's type arguments or bounds.
   - A class type needs an instance of the class. Its type arguments for that class, through the header metadata,
-    must equal the type's own, except where the type's argument is `Any?`.
+    must equal the type's own, except where the type's argument is `Any?`. Only a class PHP# declares with type
+    parameters has type arguments to compare (R2e).
   - A built-in type needs a value of its PHP type: `int`, `string`, `bool`, `null`, `Any` (not null) and `Object`.
     `float` also takes an int, as PHP's own `float` parameter does.
   - A nullable type takes null, a union any member, and an intersection every member.
@@ -364,6 +365,15 @@ before it changes the engine or the bridge.
   - before R2, at R1's head 7913e5c2e3: 204 ns generic, 204 ns plain, since R1 erases a call's type arguments
   - after R2: 229 ns generic, 196 ns plain
   - The NTS debug build after R2 gives 198 ns generic and 170 ns plain.
+
+#### R2e decisions: the first correctness review
+
+- **Plain PHP's generics are erased at the entry check.** A PHP# method that takes a plain PHP `@template` class, such
+  as a Laravel `Collection<int, Order>`, accepts any instance of it from plain PHP.
+  - The bridge's `Types::method_metadata` writes no check for a parameter whose class is not PHP#'s, as
+    `call_type_arguments` writes no type arguments for a callee plain PHP declares.
+  - `sharp_object_is` compares type arguments only for a class PHP# declares with type parameters, so a member of a
+    checked union that names a plain PHP generic class matches any instance of it.
 
 ### D. Readers
 
