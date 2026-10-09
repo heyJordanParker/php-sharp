@@ -182,7 +182,7 @@ before it changes the engine or the bridge.
   `i_init_func_execute_data` skips the first `num_args` opcodes of a function without type hints. In that position,
   `zend_try_inline_call` never inlines a generic method.
 - **It reads `EX(prev_execute_data)->opline->op1` into a hidden local only when all three hold:**
-  - its frame is not `ZEND_CALL_TOP`
+  - its frame is not both `ZEND_CALL_TOP` and `ZEND_CALL_DYNAMIC`, as a frame of `zend_call_function` is (R2e)
   - the previous frame is user code
   - the previous opline is one of the three `DO_*CALL`s with a TMP op1
 - **Otherwise the call has no type arguments.** Plain PHP called it: the arguments are the bounds, and generic
@@ -227,7 +227,7 @@ before it changes the engine or the bridge.
   - The result is the method's hidden local, a CV, when op1 is CONST.
   - extended_value holds four cache slots per CONST text.
 - **It copies the caller's descriptor into the hidden local only when all three hold:**
-  - its own frame is not `ZEND_CALL_TOP`
+  - its own frame is not both `ZEND_CALL_TOP` and `ZEND_CALL_DYNAMIC` (R2e)
   - the previous frame is user code
   - the previous opline is a `DO_*CALL` with a TMP op1
 - **Otherwise the call has no type arguments, and the bounds stand in (ruling G.1).** A NULL descriptor in the TMP,
@@ -235,7 +235,7 @@ before it changes the engine or the bridge.
 - **The descriptor is an interned `IS_PTR` and is never freed.** Neither the TMP nor the hidden local is refcounted, so
   no live range, `FREE` or destructor needs it.
 - **Entry from PHP# holds when all three of these do:**
-  - the frame is not `ZEND_CALL_TOP`
+  - the frame is not both `ZEND_CALL_TOP` and `ZEND_CALL_DYNAMIC` (R2e)
   - the previous frame is user code compiled from a `.sharp` file, which `sharp_is_sharp_file` tells
   - the previous opline is a `DO_*CALL`
 - **Every other entry is from plain PHP:** plain PHP callers, `call_user_func`, internal callbacks such as `array_map`,
@@ -374,6 +374,17 @@ before it changes the engine or the bridge.
     `call_type_arguments` writes no type arguments for a callee plain PHP declares.
   - `sharp_object_is` compares type arguments only for a class PHP# declares with type parameters, so a member of a
     checked union that names a plain PHP generic class matches any instance of it.
+- **The first guard asks for both `ZEND_CALL_TOP` and `ZEND_CALL_DYNAMIC`, not `ZEND_CALL_TOP` alone.** An extension that
+  replaces `zend_execute_ex`, as a debugger or a profiler does, makes every `DO_*CALL` mark its frame `ZEND_CALL_TOP`.
+  `zend_call_function` gives its frames `ZEND_CALL_TOP_FUNCTION | ZEND_CALL_DYNAMIC`, and a `DO_*CALL` adds
+  `ZEND_CALL_DYNAMIC` only to a frame `INIT_DYNAMIC_CALL` or `INIT_USER_CALL` pushed. So under the replacement a PHP#
+  call still gives its type arguments and is not checked, and a plain PHP call is still checked.
+  - One difference remains under the replacement: a call of a function value from a `.sharp` file, which
+    `INIT_DYNAMIC_CALL` pushes, counts as a call from plain PHP, so the method's checked parameters are checked. The
+    checker proved those arguments, and it refuses the value of a generic method, so the check always passes. The
+    method gets no type arguments either way, since a function value's call carries none.
+  - `type_arguments_call_execute_ex.phpt` runs under `zend_test.replace_zend_execute_ex=1`, with the JIT off, since
+    the JIT turns itself off under the replacement.
 
 ### D. Readers
 

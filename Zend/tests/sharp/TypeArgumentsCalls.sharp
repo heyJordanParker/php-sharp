@@ -3,6 +3,7 @@ namespace Calls;
 import App.Box;
 import App.DatabaseEntity;
 import App.Order;
+import App.PaginatedList;
 import App.Pair;
 import Legacy.Converter;
 import Lib.Inspector;
@@ -68,6 +69,10 @@ public class Shelf
     public Box<T> make<T>(T item) => new Box<T>();
 
     public Box<Order> stock(Order order) => this.make<Order>(order);
+
+    public string take<T : DatabaseEntity>(PaginatedList<T> page) => "took";
+
+    public string taken() => this.take<Order>(new PaginatedList<Order>([]));
 }
 
 public class Keyed<TKey>
