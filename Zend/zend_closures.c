@@ -27,6 +27,7 @@
 #include "zend_objects_API.h"
 #include "zend_globals.h"
 #include "zend_closures_arginfo.h"
+#include "ext/sharp/php_sharp.h"
 
 typedef struct _zend_closure {
 	zend_object       std;
@@ -646,6 +647,9 @@ static HashTable *zend_closure_get_debug_info(zend_object *object, int *is_temp)
 		ZEND_HASH_MAP_FOREACH_STR_KEY_VAL(static_variables, key, var) {
 			zval copy;
 
+			if (UNEXPECTED(sharp_is_type_arguments_key(key))) {
+				continue;
+			}
 			if (Z_ISREF_P(var) && Z_REFCOUNT_P(var) == 1) {
 				var = Z_REFVAL_P(var);
 			}

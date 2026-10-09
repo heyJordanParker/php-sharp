@@ -88,6 +88,14 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
  * list. The name is also the key serialize writes the list under. */
 extern zend_string *sharp_type_arguments_key;
 
+/* Whether `name` is sharp_type_arguments_key, which also names the hidden local a PHP# generic method keeps its own
+ * type arguments in as an IS_PTR. Its name starts with NUL, so no PHP variable names it, and nothing that lists a
+ * frame's or a closure's variables to user code lists it. */
+static zend_always_inline bool sharp_is_type_arguments_key(const zend_string *name)
+{
+	return zend_string_equals(name, sharp_type_arguments_key);
+}
+
 /* The type arguments of `object`, whose class carries ZEND_ACC_SHARP_GENERIC. The first read of an object plain PHP
  * created interns its class's bounds. */
 const sharp_type *sharp_type_arguments_of_slot(zend_object *object);

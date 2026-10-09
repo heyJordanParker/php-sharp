@@ -866,7 +866,8 @@ static void _function_closure_string(smart_str *str, const zend_function *fptr, 
 	}
 
 	static_variables = ZEND_MAP_PTR_GET(fptr->op_array.static_variables_ptr);
-	count = zend_hash_num_elements(static_variables);
+	/* A PHP# lambda's hidden local of its method's type arguments is no variable it binds. */
+	count = zend_hash_num_elements(static_variables) - zend_hash_exists(static_variables, sharp_type_arguments_key);
 
 	if (!count) {
 		return;
@@ -876,6 +877,9 @@ static void _function_closure_string(smart_str *str, const zend_function *fptr, 
 	smart_str_append_printf(str, "%s- Bound Variables [%u] {\n", indent, count);
 	i = 0;
 	ZEND_HASH_MAP_FOREACH_STR_KEY(static_variables, key) {
+		if (UNEXPECTED(sharp_is_type_arguments_key(key))) {
+			continue;
+		}
 		smart_str_append_printf(str, "%s    Variable #%d [ $%s ]\n", indent, i++, ZSTR_VAL(key));
 	} ZEND_HASH_FOREACH_END();
 	smart_str_append_printf(str, "%s}\n", indent);
@@ -1968,7 +1972,7 @@ ZEND_METHOD(ReflectionFunctionAbstract, getClosureUsedVariables)
 				(((char*)static_variables->arData) +
 				(opline->extended_value & ~(ZEND_BIND_REF|ZEND_BIND_IMPLICIT|ZEND_BIND_EXPLICIT)));
 
-			if (Z_ISUNDEF(bucket->val)) {
+			if (Z_ISUNDEF(bucket->val) || UNEXPECTED(sharp_is_type_arguments_key(bucket->key))) {
 				continue;
 			}
 
@@ -2151,6 +2155,8 @@ ZEND_METHOD(ReflectionFunctionAbstract, getStaticVariables)
 			ZEND_MAP_PTR_SET(fptr->op_array.static_variables_ptr, ht);
 		}
 		zend_hash_copy(Z_ARRVAL_P(return_value), ht, zval_add_ref);
+		/* A PHP# lambda's hidden local of its method's type arguments is no variable of the lambda. */
+		zend_hash_del(Z_ARRVAL_P(return_value), sharp_type_arguments_key);
 	} else {
 		RETURN_EMPTY_ARRAY();
 	}
