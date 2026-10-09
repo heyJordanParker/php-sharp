@@ -6094,21 +6094,31 @@ ZEND_VM_HANDLER(68, ZEND_NEW, UNUSED|CLASS_FETCH|CONST|VAR, UNUSED|CACHE_SLOT|TM
 }
 
 /* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
- * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments. The result is an
- * IS_PTR, NULL when this has none, for the ZEND_NEW that follows. */
+ * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments, and the class name
+ * literals after it name the class it is written in. The result is an IS_PTR, NULL when this has none, for the
+ * ZEND_NEW that follows. */
 ZEND_VM_HANDLER(211, ZEND_SHARP_TYPE_ARGS, UNUSED, CONST|UNUSED, CACHE_SLOT)
 {
 	USE_OPLINE
 	const sharp_type *arguments;
 
 	if (OP2_TYPE == IS_CONST && UNEXPECTED(opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN)) {
+		void **cache = CACHE_ADDR(opline->extended_value);
+
 		/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. */
 		if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
 			ZEND_VM_DISPATCH_TO_HELPER(zend_this_not_in_object_context_helper);
 		}
+		/* Closure::call() and Closure::bind() change the scope of a lambda, never the class it is written in, which
+		 * is loaded since its code runs. */
+		if (UNEXPECTED(cache[3] == NULL)) {
+			zval *name = RT_CONSTANT(opline, opline->op2) + 1;
+
+			cache[3] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
+			ZEND_ASSERT(cache[3] != NULL);
+		}
 		SAVE_OPLINE();
-		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)),
-			EX(func)->op_array.scope, CACHE_ADDR(opline->extended_value));
+		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)), cache[3], cache);
 		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
 		ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 	} else if (OP2_TYPE == IS_CONST) {

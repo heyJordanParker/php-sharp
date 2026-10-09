@@ -69,6 +69,9 @@ echo implode(', ', arguments(Queue::orderMaker()->make())), "\n";
 echo implode(', ', arguments(Queue::listMaker()->make())), "\n";
 // A lambda bound to an object whose class has no type argument at the index it names makes an object with its bounds.
 echo implode(', ', arguments(Closure::bind(Queue::pair()->boxer(), new App\Box(), App\Box::class)())), "\n";
+// The indexes count the type parameters of the class the lambda is written in, whatever scope a call or a bind gives it.
+echo implode(', ', arguments(Queue::orders()->emptied()->call(Queue::pair()->swapped()))), "\n";
+echo implode(', ', arguments(Closure::bind(Queue::entities()->emptied(), Queue::page(), App\OrderPage::class)())), "\n";
 
 echo "lazy objects\n";
 $class = new ReflectionClass(App\PaginatedList::class);
@@ -215,6 +218,8 @@ App.SharedOrder, List<App.SharedOrder>?
 App.Order
 List<int>
 Any?
+App.DatabaseEntity
+App.Order
 lazy objects
 array(1) {
   [0]=>

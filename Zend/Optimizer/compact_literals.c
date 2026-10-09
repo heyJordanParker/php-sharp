@@ -210,6 +210,12 @@ void zend_optimizer_compact_literals(zend_op_array *op_array, zend_optimizer_ctx
 						LITERAL_INFO(opline->op1.constant, 2);
 					}
 					break;
+				case ZEND_SHARP_TYPE_ARGS:
+					if (opline->op2_type == IS_CONST) {
+						// an open type text is followed by the name of the class it is written in
+						LITERAL_INFO(opline->op2.constant, opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN ? 3 : 1);
+					}
+					break;
 				case ZEND_DECLARE_CLASS:
 				case ZEND_DECLARE_CLASS_DELAYED:
 					LITERAL_INFO(opline->op1.constant, 2);
@@ -692,8 +698,9 @@ void zend_optimizer_compact_literals(zend_op_array *op_array, zend_optimizer_ctx
 				case ZEND_SHARP_TYPE_ARGS:
 					if (opline->op2_type == IS_CONST) {
 						// op2 type text, and for an open one the class and type arguments of this it was spelled with
+						// and the class it is written in
 						opline->extended_value = cache_size;
-						cache_size += (opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN ? 3 : 1) * sizeof(void *);
+						cache_size += (opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN ? 4 : 1) * sizeof(void *);
 					}
 					break;
 				case ZEND_CATCH:

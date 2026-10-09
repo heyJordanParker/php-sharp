@@ -2464,7 +2464,7 @@ static const sharp_type *sharp_type_arguments_of_ancestor(
 const sharp_type *sharp_type_list_of_this(
 	const zval *text, zend_object *object, const zend_class_entry *scope, void **cache)
 {
-	/* A lambda bound to an object of an unrelated class has no type arguments of the method's class to read. */
+	/* A lambda bound to an object of an unrelated class has no type arguments of the class it is written in to read. */
 	if (!instanceof_function(object->ce, scope)) {
 		return NULL;
 	}
@@ -2478,7 +2478,8 @@ const sharp_type *sharp_type_list_of_this(
 	if (cache[0] == object->ce && cache[1] == own) {
 		return cache[2];
 	}
-	/* The indexes count the type parameters of the method's class, which a subclass's header gives their values. */
+	/* The indexes count the type parameters of the class the code is written in, which a subclass's header gives their
+	 * values. */
 	const sharp_type *arguments = object->ce == scope ? own : sharp_type_arguments_of_ancestor(object->ce, own, scope);
 	if (!arguments) {
 		return NULL;

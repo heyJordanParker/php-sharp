@@ -5837,6 +5837,10 @@ ZEND_METHOD(ReflectionObject, getTypeArguments)
 
 	arguments = sharp_type_arguments(Z_OBJ(intern->obj));
 	if (!arguments) {
+		/* A lazy proxy's initializer runs here, and can throw. */
+		if (UNEXPECTED(EG(exception))) {
+			RETURN_THROWS();
+		}
 		RETURN_EMPTY_ARRAY();
 	}
 

@@ -5511,9 +5511,13 @@ static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_a
 			text = zend_string_copy(text);
 			opline->op2_type = IS_CONST;
 			opline->op2.constant = zend_add_literal_string(&text);
-			opline->extended_value = zend_alloc_cache_slots(open ? 3 : 1);
+			opline->extended_value = zend_alloc_cache_slots(open ? 4 : 1);
 			if (open) {
 				opline->op1.num = ZEND_SHARP_TYPE_ARGS_OPEN;
+				/* Its `$i` count the type parameters of the class it is written in, which a lambda keeps when
+				 * Closure::call() or Closure::bind() gives it another scope. */
+				ZEND_ASSERT(CG(active_class_entry));
+				zend_add_class_name_literal(zend_string_copy(CG(active_class_entry)->name));
 			}
 		}
 		if (!text || open) {

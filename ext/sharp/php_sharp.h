@@ -70,9 +70,9 @@ const sharp_type *sharp_type_list(const char *text, size_t length);
  * `$` and its index, `$0` for the first, which stands for this's type argument at that index. */
 bool sharp_type_list_is_open(const char *text, size_t length);
 
-/* The interned type argument list the open `text` spells once each `$i` in it is `object`'s type argument i, for a
- * method of `scope`, cached for `object`'s class in the three pointers at `cache`. NULL when `object` is not of class
- * `scope`, `scope` declares no type parameter, or `text` names an index `object` has no type argument at. */
+/* The interned type argument list the open `text` spells once each `$i` in it is `object`'s type argument i, for code
+ * written in class `scope`, cached for `object`'s class in the three pointers at `cache`. NULL when `object` is not of
+ * class `scope`, `scope` declares no type parameter, or `text` names an index `object` has no type argument at. */
 const sharp_type *sharp_type_list_of_this(
 	const zval *text, zend_object *object, const zend_class_entry *scope, void **cache);
 
