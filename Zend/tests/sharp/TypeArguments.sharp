@@ -35,6 +35,10 @@ public class PaginatedList<TItem : DatabaseEntity>
     public Pair<TItem, List<TItem>?> paired(TItem item) => new Pair<TItem, List<TItem>?>(item, null);
 
     public Function<PaginatedList<TItem>()> emptied() => () => new PaginatedList<TItem>([]);
+
+    public Function<Function<PaginatedList<TItem>()>()> makerLater() => () => () => new Self([]);
+
+    public Function<Function<PaginatedList<TItem>()>()> emptiedLater() => () => () => new PaginatedList<TItem>([]);
 }
 
 public class OrderPage : PaginatedList<Order>

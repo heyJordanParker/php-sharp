@@ -37,6 +37,14 @@ var_dump($copy::class, arguments($copy));
 // The lambda reads this's type arguments, so it uses this, and PHP refuses to unbind it.
 $maker = Closure::bind(Queue::orders()->maker(), null, App\Order::class);
 var_dump($maker === null ? null : $maker());
+// A lambda around it does not use this, as in PHP, so it unbinds, and the inner lambda throws as $this does.
+foreach ([Queue::orders()->makerLater(), Queue::orders()->emptiedLater()] as $later) {
+    try {
+        var_dump(Closure::bind($later, null, App\Order::class)()());
+    } catch (Error $error) {
+        echo $error::class, ': ', $error->getMessage(), "\n";
+    }
+}
 
 echo "new with a type argument that names a type parameter of the class\n";
 // It takes this's type argument, nested, nullable or in a union, as code would write the type it is.
@@ -168,6 +176,8 @@ array(1) {
 
 Warning: Cannot unbind $this of closure using $this, this will be an error in PHP 9 in %s on line %d
 NULL
+Error: Using $this when not in object context
+Error: Using $this when not in object context
 new with a type argument that names a type parameter of the class
 App.Order, List<App.Order>?
 App.DatabaseEntity, List<App.DatabaseEntity>?

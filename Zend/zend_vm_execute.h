@@ -36659,7 +36659,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 	const sharp_type *arguments;
 
 	if (IS_CONST == IS_CONST && UNEXPECTED(opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN)) {
-		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. */
+		if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
+			ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+		}
 		SAVE_OPLINE();
 		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)),
 			EX(func)->op_array.scope, CACHE_ADDR(opline->extended_value));
@@ -36678,7 +36681,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 			}
 		}
 	} else {
-		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
+			ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+		}
 		/* A lazy proxy's initializer runs here, and can throw. */
 		SAVE_OPLINE();
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
@@ -39652,7 +39657,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 	const sharp_type *arguments;
 
 	if (IS_UNUSED == IS_CONST && UNEXPECTED(opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN)) {
-		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. */
+		if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
+			ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+		}
 		SAVE_OPLINE();
 		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)),
 			EX(func)->op_array.scope, CACHE_ADDR(opline->extended_value));
@@ -39671,7 +39679,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 			}
 		}
 	} else {
-		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
+			ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+		}
 		/* A lazy proxy's initializer runs here, and can throw. */
 		SAVE_OPLINE();
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
@@ -93018,7 +93028,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 	const sharp_type *arguments;
 
 	if (IS_CONST == IS_CONST && UNEXPECTED(opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN)) {
-		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. */
+		if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
+			ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+		}
 		SAVE_OPLINE();
 		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)),
 			EX(func)->op_array.scope, CACHE_ADDR(opline->extended_value));
@@ -93037,7 +93050,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 			}
 		}
 	} else {
-		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
+			ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+		}
 		/* A lazy proxy's initializer runs here, and can throw. */
 		SAVE_OPLINE();
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
@@ -96011,7 +96026,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 	const sharp_type *arguments;
 
 	if (IS_UNUSED == IS_CONST && UNEXPECTED(opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN)) {
-		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. */
+		if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
+			ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+		}
 		SAVE_OPLINE();
 		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)),
 			EX(func)->op_array.scope, CACHE_ADDR(opline->extended_value));
@@ -96030,7 +96048,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 			}
 		}
 	} else {
-		ZEND_ASSERT(Z_TYPE(EX(This)) == IS_OBJECT);
+		if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
+			ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+		}
 		/* A lazy proxy's initializer runs here, and can throw. */
 		SAVE_OPLINE();
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
