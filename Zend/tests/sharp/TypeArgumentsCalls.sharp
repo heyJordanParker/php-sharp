@@ -5,6 +5,7 @@ import App.DatabaseEntity;
 import App.Order;
 import App.Pair;
 import Legacy.Converter;
+import Lib.Inspector;
 import Lib.Witness;
 
 public class Repository
@@ -22,6 +23,10 @@ public class Repository
     public static Box<T> gather<T>(T first, T ...rest) => new Box<T>();
 
     public static Box<Order> spread(List<Order> orders) => Repository.gather<Order>(orders[0], ...orders);
+
+    public static Box<T> pick<T>(T item, bool paused) => new Box<T>();
+
+    public static Box<Order> suspended(Order order) => Repository.pick<Order>(order, Inspector.pause(1));
 
     public static Function<Box<T>()> later<T>(T item) => () => new Box<T>();
 
