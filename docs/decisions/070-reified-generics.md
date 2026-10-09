@@ -408,6 +408,9 @@ before it changes the engine or the bridge.
   too.** `Types::call_type_arguments` takes it from `call_target(call).class`, as the analysis recorded it. Before
   R2e `super.m()` asked the direct parent, so a plain PHP parent that inherits a PHP# `pick<T>` lost the call's type
   arguments.
+- **`sharp_type_list_of_frame` reads this's type arguments only when the text names a `$i`,** which a `memchr` for `$`
+  tells. Reading them runs a lazy proxy's initializer, so before R2e a generic method that never names its class's
+  type parameters initialized the proxy it was called on.
 
 ### D. Readers
 

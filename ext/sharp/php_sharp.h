@@ -81,7 +81,8 @@ uint32_t sharp_type_list_names(const char *text, size_t length);
 /* The interned type argument list `text` spells once each `$i` in it is `object`'s type argument i, for code written in
  * class `scope`, and each `#i` is member i of `method`, the type arguments of the method the code runs in. The four
  * pointers at `cache` keep the last list it spelled for `object`'s class and type arguments and for `method`. `object` is
- * NULL for code that runs without this, which never names a `$i`. NULL when `object` is not of class `scope`, `method`
+ * NULL for code that runs without this, which never names a `$i`, and only a text that names one reads `object`'s type
+ * arguments, which initializes a lazy proxy. NULL when `object` is not of class `scope`, `method`
  * is NULL for a text that names a `#i`, or `text` names an index the arguments have no member at. */
 const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object, const sharp_type *method,
 	const zend_class_entry *scope, void **cache);

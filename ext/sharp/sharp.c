@@ -2454,8 +2454,11 @@ static sharp_type_node *sharp_type_node_ancestor(const zend_class_entry *ce, sha
 static const sharp_type *sharp_type_list_of_frame_ex(const zval *text, zend_object *object, const sharp_type *method,
 	bool unresolved, const zend_class_entry *scope, void **cache)
 {
-	/* A lambda bound to an object of an unrelated class has no type arguments of the class it is written in to read. */
-	const zend_class_entry *ce = object && instanceof_function(object->ce, scope) ? object->ce : NULL;
+	/* Only a text that names a `$i` reads this's type arguments, so one that names none never runs a lazy proxy's
+	 * initializer. A lambda bound to an object of an unrelated class has no type arguments of the class it is written
+	 * in to read. */
+	bool names_this = memchr(Z_STRVAL_P(text), '$', Z_STRLEN_P(text)) != NULL;
+	const zend_class_entry *ce = names_this && object && instanceof_function(object->ce, scope) ? object->ce : NULL;
 	const sharp_type *own = NULL;
 	if (ce) {
 		/* A lazy proxy's initializer runs here, and can throw. */
