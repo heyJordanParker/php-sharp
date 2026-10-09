@@ -89,7 +89,7 @@ class Store
     public static function pick(array $items, int $id): ?DatabaseEntity
     {
         foreach ($items as $item) {
-            if ($item->id == $id) {
+            if ($item->id === $id) {
                 return $item;
             }
         }
