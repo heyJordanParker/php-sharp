@@ -581,7 +581,7 @@ let messages = [];                             // compile error: an empty litera
 List<string> messages = [];                    // compiles
 ```
 
-**A literal of the other collection than its declared `List` or `Map` is a compile error,** at a declaration, an assignment, a default, a return or an argument, because `[:]` and `[key: value]` write a `Map`, and `[]` and `[a, b]` write a `List` or a `Set`:
+**A `List` literal where a `Map` is declared, or a `Map` literal where a `List` is declared, is a compile error,** at a declaration, an assignment, a default, a return or an argument, because `[:]` and `[key: value]` write a `Map`, and `[]` and `[a, b]` write a `List` or a `Set`:
 
 ```csharp
 Map<string, int> counts = [];                  // compile error: `[]` is an empty List. An empty Map is written `[:]`.
