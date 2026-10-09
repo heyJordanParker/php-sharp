@@ -8740,9 +8740,11 @@ static zend_op_array *zend_compile_func_decl_ex(
 		}
 	}
 	/* A lambda in a PHP# generic method, or in another such lambda, that spells a type with the method's type arguments
-	 * captures them by value, as it captures a local it reads. */
+	 * captures them by value, as it captures a local it reads. Only a .sharp file holds one, so plain PHP's lambdas
+	 * skip the scan. */
 	bool captures_type_arguments = (decl->kind == ZEND_AST_CLOSURE || decl->kind == ZEND_AST_ARROW_FUNC)
-		&& zend_holds_sharp_type_arguments(orig_op_array) && zend_ast_names_sharp_method_parameter(stmt_ast);
+		&& sharp_is_sharp_file(orig_op_array->filename) && zend_holds_sharp_type_arguments(orig_op_array)
+		&& zend_ast_names_sharp_method_parameter(stmt_ast);
 
 	init_op_array(op_array, ZEND_USER_FUNCTION, INITIAL_OP_ARRAY_SIZE);
 

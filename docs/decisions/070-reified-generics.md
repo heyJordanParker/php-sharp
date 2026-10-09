@@ -411,6 +411,9 @@ before it changes the engine or the bridge.
 - **`sharp_type_list_of_frame` reads this's type arguments only when the text names a `$i`,** which a `memchr` for `$`
   tells. Reading them runs a lazy proxy's initializer, so before R2e a generic method that never names its class's
   type parameters initialized the proxy it was called on.
+- **The lambda capture scan tests `sharp_is_sharp_file` first,** as R2 decided. Before R2e it walked every local of
+  the enclosing function for every plain PHP lambda. A plain PHP function with 20000 locals and 20000 lambdas
+  compiled in 4.66 to 4.77 s of user time on the NTS debug build, and compiles in 1.70 to 1.76 s after, three runs each.
 
 ### D. Readers
 
