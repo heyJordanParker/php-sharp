@@ -51,3 +51,9 @@ bool(true)
 int(0)
 string(5) "c a b"
 string(16) "10 9 Zebra apple"
+int(20)
+int(1)
+string(7) "450 EUR"
+int(2)
+int(2)
+int(4)

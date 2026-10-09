@@ -297,3 +297,50 @@ class Operators
 
     public function nested(bool $a, bool $c, int $b, int $d, int $e): int { return $a ? $b : ($c ? $d : $e); }
 }
+
+class Invoice
+{
+    public int $total;
+    public \Billing\Money $balance;
+
+    public function __construct(int $total, \Billing\Money $balance)
+    {
+        $this->total = $total;
+        $this->balance = $balance;
+    }
+}
+
+class InvoiceQueue
+{
+    public private(set) int $calls = 0;
+    private \Billing\Invoice $invoice;
+
+    public function __construct(\Billing\Invoice $invoice)
+    {
+        $this->invoice = $invoice;
+    }
+
+    public function next(): \Billing\Invoice
+    {
+        $this->calls += 1;
+        return $this->invoice;
+    }
+
+    public function halve(): int
+    {
+        ${'receiver#1'}->total = \intdiv((${'receiver#1'} = $this->next())->total, 2);
+        return $this->invoice->total;
+    }
+
+    public function halveBalance(): \Billing\Money
+    {
+        ${'receiver#1'}->balance = \Billing\Money::op_Division((${'receiver#1'} = $this->next())->balance, 2);
+        return $this->invoice->balance;
+    }
+
+    public function halveTwice(): int
+    {
+        ${'receiver#1'}->total = \intdiv((${'receiver#1'} = $this->next())->total, ${'receiver#2'}->total = \intdiv((${'receiver#2'} = $this->next())->total, 2));
+        return $this->invoice->total;
+    }
+}

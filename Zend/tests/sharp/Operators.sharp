@@ -297,3 +297,50 @@ public class Operators
 
     public int nested(bool a, bool c, int b, int d, int e) => a ? b : (c ? d : e);
 }
+
+public class Invoice
+{
+    public int total { get; set; }
+    public Money balance { get; set; }
+
+    public Invoice(int total, Money balance)
+    {
+        this.total = total;
+        this.balance = balance;
+    }
+}
+
+public class InvoiceQueue
+{
+    public int calls { get; private set; } = 0;
+    private Invoice invoice;
+
+    public InvoiceQueue(Invoice invoice)
+    {
+        this.invoice = invoice;
+    }
+
+    public Invoice next()
+    {
+        this.calls += 1;
+        return this.invoice;
+    }
+
+    public int halve()
+    {
+        this.next().total /= 2;
+        return this.invoice.total;
+    }
+
+    public Money halveBalance()
+    {
+        this.next().balance /= 2;
+        return this.invoice.balance;
+    }
+
+    public int halveTwice()
+    {
+        this.next().total /= (this.next().total /= 2);
+        return this.invoice.total;
+    }
+}

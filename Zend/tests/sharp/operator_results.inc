@@ -1,6 +1,8 @@
 <?php
 
 namespace {
+    use Billing\Invoice;
+    use Billing\InvoiceQueue;
     use Billing\Line;
     use Billing\Money;
     use Billing\Operators;
@@ -62,6 +64,14 @@ namespace {
             new Line('c', new Money(300, 'EUR')),
         ])));
         attempt(fn () => implode(' ', $operators->byCode(['9', '10', 'apple', 'Zebra'])));
+
+        $queue = new InvoiceQueue(new Invoice(40, new Money(900, 'EUR')));
+        attempt(fn () => $queue->halve());
+        attempt(fn () => $queue->calls);
+        attempt(fn () => $amount($queue->halveBalance()));
+        attempt(fn () => $queue->calls);
+        attempt(fn () => $queue->halveTwice());
+        attempt(fn () => $queue->calls);
         $output = ob_get_clean();
     }
 
