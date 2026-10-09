@@ -581,6 +581,14 @@ let messages = [];                             // compile error: an empty litera
 List<string> messages = [];                    // compiles
 ```
 
+**A `List` literal where a `Map` is declared, or a `Map` literal where a `List` is declared, is a compile error,** at a declaration, an assignment, a default, a return or an argument, because `[:]` and `[key: value]` write a `Map`, and `[]` and `[a, b]` write a `List` or a `Set`:
+
+```csharp
+Map<string, int> counts = [];                  // compile error: `[]` is an empty List. An empty Map is written `[:]`.
+List<string> tags = [:];                       // compile error: `[:]` is an empty Map. An empty List is written `[]`.
+Map<int, string> names = ["a"];                // compile error: A Map literal is written `[key: value]`.
+```
+
 **A spread copies a collection into a literal,** and the collection's type decides what it means:
 
 ```csharp
@@ -1629,7 +1637,7 @@ Reflection lists a class's traits, just as it lists the class's interfaces.
 
 ## 23. Namespaces and imports
 
-Namespace parts are separated with `.`, and imports use `import`.
+Namespace parts are separated with `.`, and imports use `import`. Every part of a `namespace` line starts with a capital letter, as every type but the built-in ones does (section 24), so `namespace App.store;` is a compile error and `namespace App.Store;` compiles.
 
 ```csharp
 namespace App.Tenant.Store;
