@@ -16,6 +16,9 @@ var_dump(arguments(Queue::entities()->copy()));
 var_dump(arguments(Queue::page()));
 var_dump(arguments(new App\Order(1)));
 var_dump(arguments(new stdClass()));
+// Box declares no constructor, and ListMaker's parent Maker declares none.
+var_dump(arguments(Queue::box()));
+var_dump(arguments(Queue::listMaker()));
 
 echo "an object plain PHP creates\n";
 var_dump(arguments(new App\PaginatedList([])));
@@ -152,6 +155,14 @@ array(0) {
 array(0) {
 }
 array(0) {
+}
+array(1) {
+  [0]=>
+  string(3) "int"
+}
+array(1) {
+  [0]=>
+  string(3) "int"
 }
 an object plain PHP creates
 array(1) {

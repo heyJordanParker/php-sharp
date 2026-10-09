@@ -89,10 +89,6 @@ public class Journal<TEntry : DatabaseEntity> : Sleeper
 
 public class Node<T>
 {
-    public Node()
-    {
-    }
-
     public Node<List<T>> deeper() => new Node<List<T>>();
 }
 
@@ -102,9 +98,6 @@ public interface Query<TItem : DatabaseEntity>
 
 public class Box<T>
 {
-    public Box()
-    {
-    }
 }
 
 public class IntBox : Box<int>
@@ -117,18 +110,11 @@ public class StringBox : Box<string>
 
 public class Holder<TBox : Box<int>>
 {
-    public Holder()
-    {
-    }
 }
 
 public class Maker<T>
 {
     public int made { get; set; } = 0;
-
-    public Maker()
-    {
-    }
 
     public Box<T> make() => new Box<T>();
 }
@@ -149,6 +135,8 @@ public class Labeled<TLabel, T> : Maker<T>
 public class Queue
 {
     public static Maker<Order> maker() => new Maker<Order>();
+
+    public static Box<int> box() => new Box<int>();
 
     public static Box<Query<Order>> queryBox() => new Box<Query<Order>>();
 
