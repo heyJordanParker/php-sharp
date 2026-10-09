@@ -11,6 +11,9 @@
 // - compares the whole field, unless it compares with a value that never carries the mark, such
 //   as ZEND_CONCAT in the extended_value of ZEND_ASSIGN_OP
 // - switches on the whole field, unless a case of the switch names the mark
+// A mark on an operand, op1 or op2, is lost by a write of the operand, its type or one of its members, or by
+// SET_UNUSED. A comparison of an operand's type handles every later statement of the same case or block, since the
+// code then tells the operand's forms apart.
 // Code that picks the opcode with an `if`, or passes the field to another function, is not seen.
 
 $root = dirname(__DIR__, 2);
@@ -67,7 +70,7 @@ function read_register(string $header): array
         if (!str_starts_with($line, ' *')) {
             break;
         }
-        if (preg_match('~^ \*   (attr|extended_value|ce_flags)\b(.*)$~', $line, $m)) {
+        if (preg_match('~^ \*   (attr|extended_value|ce_flags|op1|op2)\b(.*)$~', $line, $m)) {
             $entry = [$m[1], $m[2]];
         } elseif ($entry !== null && preg_match('~^ \*     (.*)$~', $line, $m)) {
             $entry[1] .= ' ' . $m[1];
@@ -153,6 +156,23 @@ function scan_file(string $file, string $name, array $register, array $marked_va
             }
         }
     };
+    // A comparison of an operand's type handles the operand marks of the opcodes around it.
+    $guard = function () use (&$frames, &$handler, $register): void {
+        $labels = $handler;
+        foreach ($frames as $frame) {
+            if ($frame['switch']) {
+                array_push($labels, ...$frame['labels']);
+            }
+        }
+        $top = array_key_last($frames);
+        foreach ($labels as $label) {
+            foreach (['op1', 'op2'] as $field) {
+                foreach ($register[$field][$label] ?? [] as $mark => $_) {
+                    $frames[$top]['handled'][$mark] = true;
+                }
+            }
+        }
+    };
 
     for ($i = 0; $i < $length; $i++) {
         $c = $code[$i];
@@ -210,6 +230,16 @@ function scan_file(string $file, string $name, array $register, array $marked_va
                 } elseif (preg_match('~^\s*[!=]=\s*(\w+)?~', $after, $a)) {
                     $check($field, $statement($i), "an exact comparison of $field", $a[1] ?? '');
                 }
+            } elseif (preg_match('~^(op[12])(_type)?\b~', $rest, $m)
+                    && preg_match('~[\w\]]\s*->\s*$~', substr($code, max(0, $i - 40), min(40, $i)))) {
+                $after = substr($rest, strlen($m[0]));
+                if (preg_match('~^\s*(\.\s*\w+\s*)?=(?!=)~', $after)) {
+                    $check($m[1], $statement($i), "a write of $m[0]", null);
+                } elseif (isset($m[2]) && preg_match('~^\s*[!=]=~', $after)) {
+                    $guard();
+                }
+            } elseif (preg_match('~^SET_UNUSED\s*\([^()]*->\s*(op[12])\s*\)~', $rest, $m)) {
+                $check($m[1], $statement($i), "SET_UNUSED of $m[1]", null);
             }
         }
     }
