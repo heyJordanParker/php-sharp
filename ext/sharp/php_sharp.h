@@ -4,7 +4,7 @@
 extern zend_module_entry sharp_module_entry;
 #define phpext_sharp_ptr &sharp_module_entry
 
-#define PHP_SHARP_VERSION "0.2.0"
+#define PHP_SHARP_VERSION "0.3.0"
 
 /* Whether `filename` names a PHP# source file, which ends in `.sharp`. */
 bool sharp_is_sharp_file(const zend_string *filename);
