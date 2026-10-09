@@ -102,6 +102,11 @@ public class Box<T>
 {
 }
 
+public class Picker
+{
+    public Box<T> pick<T>(T item) => new Box<T>();
+}
+
 public class IntBox : Box<int>
 {
 }

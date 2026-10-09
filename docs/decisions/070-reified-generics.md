@@ -404,6 +404,10 @@ before it changes the engine or the bridge.
     first wildcard, and by text everywhere else.
   - A failed check names the wildcard as `?`: `must be of type Checks.Page<App.Box<?>>`.
   - The wildcard does not check the bound. At the top level PHP's own parameter type, the bound's class, does.
+- **The class that declares a method decides whether its call carries type arguments, for `super.m()` and `Self.m()`
+  too.** `Types::call_type_arguments` takes it from `call_target(call).class`, as the analysis recorded it. Before
+  R2e `super.m()` asked the direct parent, so a plain PHP parent that inherits a PHP# `pick<T>` lost the call's type
+  arguments.
 
 ### D. Readers
 

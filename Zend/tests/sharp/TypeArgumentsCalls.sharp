@@ -8,6 +8,7 @@ import App.Shareable;
 import App.SharedOrder;
 import Legacy.Converter;
 import Lib.Inspector;
+import Lib.PlainPicker;
 import Lib.Witness;
 
 public class Repository
@@ -104,6 +105,11 @@ public class Feed<TItem : DatabaseEntity & Shareable>
         const Function<string()> share = new Feed<SharedOrder>().sharer(new SharedOrder(5));
         return share();
     }
+}
+
+public class OrderPicker : PlainPicker
+{
+    public Box<Order> pickOrder(Order order) => super.pick<Order>(order);
 }
 
 public class Labeled
