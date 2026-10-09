@@ -16,11 +16,11 @@ final class Collection
 
     public function set(int $index, mixed $value): void {}
 
-    public function get(int|string|\BackedEnum $key): mixed {}
+    public function get(int|string $key): mixed {}
 
     public function entries(): array {}
 
-    public function delete(int|string|\BackedEnum $key): void {}
+    public function delete(int|string $key): void {}
 
     public function filter(\Closure $predicate): array {}
 

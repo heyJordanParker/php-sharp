@@ -90,13 +90,13 @@ jobs:
         run: |
           sharp/docker/run sharp/bin/native
           git diff --exit-code ext/sharp/sharp_native.h sharp/composer/native.php
-      - name: Verify ext/sharp/sharp_unit.h, with its sharp_kind and SHARP_UNIT_ABI, is the header the pinned Mago commit generates from Zend/zend_ast.h
+      - name: Verify ext/sharp/sharp_unit.h, with its sharp_kind, SHARP_T_ tokens and SHARP_UNIT_ABI, is the header the pinned Mago commit generates from Zend/zend_ast.h and Zend/zend_language_parser.h
         run: |
           mago=sharp/build/mago-source
           git init --quiet "$mago"
           git -C "$mago" fetch --quiet --depth=1 https://github.com/heyJordanParker/mago-sharp "${{ steps.mago.outputs.rev }}"
           git -C "$mago" checkout --quiet FETCH_HEAD
-          sharp/docker/run php "$mago/scripts/regen-sharp-kinds.php" Zend/zend_ast.h | diff -u "$mago/crates/sharp-bridge/src/kind.rs" -
+          sharp/docker/run php "$mago/scripts/regen-sharp-kinds.php" Zend/zend_ast.h Zend/zend_language_parser.h | diff -u "$mago/crates/sharp-bridge/src/kind.rs" -
           sharp/docker/run sh -c 'cargo="$(cd ext/sharp && rustup which cargo)" && cd "$1" && PATH="$(dirname "$cargo"):$PATH" "$cargo" build --locked -p mago-sharp-bridge --message-format=json' sh "$mago" > "$RUNNER_TEMP/build.json"
           header="$(jq -r 'select(.reason == "build-script-executed" and (.package_id | contains("mago-sharp-bridge"))) | .out_dir | ltrimstr("/src/")' "$RUNNER_TEMP/build.json")/sharp_unit.h"
           diff -u ext/sharp/sharp_unit.h "$header"

@@ -2,9 +2,9 @@
 
 ## Decision
 
-A PHP built-in function the standard library has not classified has one catch-all effect, `Php`, which means "calls PHP code the checker cannot see into". It replaces the earlier rule that every other built-in function is pure. When the standard library wraps a function, its real effect replaces `Php`, as `Environment` does for `getenv()`, and other families get theirs as each is wrapped. Pure code cannot call a function with `Php`. Printing and `exit` have `Php` until the standard library wraps them.
+PHP#'s Composer package ships an `extern` declaration for every PHP built-in function, with its real effect or as pure. There is no catch-all effect. This replaces the earlier rule that every other built-in function is pure. Printing has the effect `Console`, and `exit` has the effect `Process` (decision 63).
 
-`Php` covers PHP's built-in functions only. A call into a plain PHP library with no `extern` keeps its unknown effect, which no `uses` accepts (decision 16).
+A call into a plain PHP library with no `extern` has an unknown effect, which no `uses` accepts (decision 16). A built-in function follows the same rule, so a missing declaration is a compile error that names it.
 
 ## Options
 
@@ -19,20 +19,20 @@ public interface Formatter
 public class Visitor
 {
     public string greet(string name) => "Hello, " + name.trim();    // compiles; pure: trim is a standard-library method
-    public void remember(string token) { setcookie("t", token); }   // compiles; has Php: setcookie is not classified yet
+    public void remember(string token) { file_put_contents("seen.txt", token); }   // compiles; has Files
 }
 
-public class CookieFormatter : Formatter
+public class FileFormatter : Formatter
 {
     public string format(string name)
     {
-        setcookie("seen", name);                                    // compile error: format must be pure, and setcookie has the effect Php
+        file_put_contents("seen.txt", name);                        // compile error: format must be pure, and file_put_contents has the effect Files
         return name;
     }
 }
 ```
 
-A function nobody has classified never passes as pure. A missing classification shows up as a compile error, and each family the standard library wraps makes more code pure.
+A built-in function never passes as pure unless its declaration says so. A missing declaration shows up as a compile error, not as a silent pass.
 
 ### Rejected: pure by default, with a list of impure functions
 

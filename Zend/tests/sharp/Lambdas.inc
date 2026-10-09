@@ -42,9 +42,9 @@ class Lambdas
 
     public static function pipeline(array $numbers, array $prices): array
     {
-        $odd = ((object) $numbers)->filter(fn ($n) => $n % 2 == 1);
+        $odd = ((object) $numbers)->filter(fn ($n) => $n % 2 === 1);
         $labels = ((object) $odd)->map(fn ($n) => (string) ($n * 10));
-        $groups = ((object) $numbers)->groupBy(fn ($n) => $n % 2 == 0 ? "even" : "odd");
+        $groups = ((object) $numbers)->groupBy(fn ($n) => $n % 2 === 0 ? "even" : "odd");
         return [
             \implode(",", $labels),
             \implode(",", ((object) $numbers)->sortedBy(fn ($n) => -$n)),

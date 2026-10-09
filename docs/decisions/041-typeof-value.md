@@ -10,7 +10,7 @@
 
 ```csharp
 Class<Order> type = typeof(order);              // compiles: order's runtime class, which may be a subclass of Order
-const fresh = new type(id);                     // compiles: a new object of that class
+const fresh = new (type)(id);                   // compiles: a new object of that class
 Log.info("saved", ["class": typeof(order)]);    // compiles; runs: plain PHP receives the class-name string
 ```
 

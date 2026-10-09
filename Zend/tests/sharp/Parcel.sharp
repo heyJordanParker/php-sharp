@@ -1,7 +1,7 @@
 namespace Store;
 
 import Lib.Row;
-
+extern Row.getAttribute;
 class Parcel : Row
 {
     public Address? destination

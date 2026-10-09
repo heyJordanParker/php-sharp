@@ -76,29 +76,25 @@ mkdir($unrooted);
 file_put_contents("$unrooted/Shop.sharp", SHOP);
 refusal("$unrooted/Shop.sharp", ['sharp.compile_command' => 'echo run > ' . escapeshellarg("$unrooted/runs.log")]);
 var_dump(file_exists("$unrooted/runs.log"));
-?>
---CLEAN--
-<?php
-require __DIR__ . '/project.inc';
-remove_project(sys_get_temp_dir() . '/sharp-test-compile-command');
-remove_project(sys_get_temp_dir() . '/sharp-test-compile-command-unrooted');
+remove_project($root);
+remove_project($unrooted);
 ?>
 --EXPECTF--
 ran
 ran
 run
 CompileError: Broken.sharp has 1 error:
-line 5: Invalid return type for function `Demo\Broken::run`: expected `int`, but found `"text"`.
+line 5: Invalid return type for method `Broken.run`: expected `int`, but found `string`.
 CompileError: Torn.sharp has 2 errors:
 line 5: Parse error encountered during parsing
 line 5: Parse error encountered during parsing
 CompileError: Wrong.sharp has 2 errors:
 line 5: PHP# has no `echo`: write `printf` or `fwrite`.
-line 5: class method `Wrong::run` has already been defined
+line 5: class method `Wrong.run` has already been defined
 CompileError: app/Orders/Order.sharp has 3 errors:
-line 12: Invalid return type for function `App\Orders\Order::total`: expected `int`, but found `"text"`.
+line 12: Invalid return type for method `Order.total`: expected `int`, but found `string`.
 line 19: PHP# has no `echo`: write `printf` or `fwrite`.
-line 31: Invalid return type for function `App\Orders\Order::label`: expected `string`, but found `1`.
+line 31: Invalid return type for method `Order.label`: expected `string`, but found `int`.
 run
 run
 CompileError: Broken.sharp isn't compiled. Run vendor/bin/mago compile.

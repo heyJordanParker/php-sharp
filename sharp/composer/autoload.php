@@ -4,6 +4,26 @@ declare(strict_types=1);
 
 use Composer\Autoload\ClassLoader;
 use Composer\InstalledVersions;
+use Composer\Plugin\PluginManager;
+
+$requireEngine = static function (): void {
+    static $required = false;
+    if ($required) {
+        return;
+    }
+    if (!function_exists('Sharp\Internal\requireNative')) {
+        throw new Error('This project needs the PHP# engine, and this is plain PHP. Install php-sharp, or run the ghcr.io/heyjordanparker/php-sharp image.');
+    }
+    $package = 'heyjordanparker/php-sharp-composer';
+    $version = InstalledVersions::isInstalled($package) ? InstalledVersions::getPrettyVersion($package) : 'unknown';
+    ['fingerprint' => $fingerprint, 'bodies' => $bodies] = require __DIR__ . '/native.php';
+    \Sharp\Internal\requireNative($fingerprint, $bodies, preg_replace('/^v(?=[0-9])/', '', $version));
+    $required = true;
+};
+
+if (!class_exists(PluginManager::class, false)) {
+    $requireEngine();
+}
 
 $classMap = [];
 foreach (array_keys(ClassLoader::getRegisteredLoaders()) as $vendorDir) {
@@ -12,32 +32,19 @@ foreach (array_keys(ClassLoader::getRegisteredLoaders()) as $vendorDir) {
     }
 }
 
-$includeFile = Closure::bind(static function (string $file): void {
+$includeFile = Closure::bind(static function (string $file) use ($requireEngine): void {
+    $requireEngine();
     include $file;
 }, null, null);
 
-$includeClass = static function (string $file) use ($includeFile): void {
-    static $native = false;
-    if (!$native) {
-        if (!function_exists('Sharp\Internal\requireNative')) {
-            throw new Error('This project needs the PHP# engine, and this is plain PHP. Install php-sharp, or run the ghcr.io/heyjordanparker/php-sharp image.');
-        }
-        $package = 'heyjordanparker/php-sharp-composer';
-        $version = InstalledVersions::isInstalled($package) ? InstalledVersions::getPrettyVersion($package) : 'unknown';
-        \Sharp\Internal\requireNative(require __DIR__ . '/native.php', preg_replace('/^v(?=[0-9])/', '', $version));
-        $native = true;
-    }
-    $includeFile($file);
-};
-
-spl_autoload_register(static function (string $class) use ($includeClass, $classMap): void {
+spl_autoload_register(static function (string $class) use ($includeFile, $classMap): void {
     static $missing = [];
     if (isset($missing[$class])) {
         return;
     }
 
     if (isset($classMap[$class])) {
-        $includeClass($classMap[$class]);
+        $includeFile($classMap[$class]);
 
         return;
     }
@@ -64,7 +71,7 @@ spl_autoload_register(static function (string $class) use ($includeClass, $class
 
         foreach ($files as $file) {
             if (file_exists($file)) {
-                $includeClass($file);
+                $includeFile($file);
 
                 return;
             }

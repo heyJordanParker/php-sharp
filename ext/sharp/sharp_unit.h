@@ -142,6 +142,8 @@
   X(PARAM)
 
 
+#define SHARP_T_FILE 347
+
 // One value per `zend_ast_kind`, named as that kind without `ZEND_` and equal to it, so `ext/sharp` casts it.
 enum sharp_kind
 #if __STDC_VERSION__ >= 202311L
