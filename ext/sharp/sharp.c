@@ -2164,10 +2164,10 @@ static void sharp_type_node_join(smart_str *text, const sharp_type_node *first, 
 	}
 }
 
-/* Appends `member` as a union or a nullable type holds it, an intersection in parentheses. */
+/* Appends `member` as a union or a nullable type holds it, an intersection or a union in parentheses. */
 static void sharp_type_node_append_grouped(smart_str *text, const sharp_type_node *member)
 {
-	bool grouped = member->kind == SHARP_TYPE_INTERSECTION;
+	bool grouped = member->kind == SHARP_TYPE_INTERSECTION || member->kind == SHARP_TYPE_UNION;
 
 	if (grouped) {
 		smart_str_appendc(text, '(');
@@ -2203,13 +2203,7 @@ static void sharp_type_node_spell(sharp_type_node *node, zend_arena **arena)
 			}
 			break;
 		case SHARP_TYPE_NULLABLE:
-			if (node->first->kind == SHARP_TYPE_UNION) {
-				smart_str_appendc(&text, '(');
-				smart_str_appendl(&text, node->first->text, node->first->length);
-				smart_str_appendc(&text, ')');
-			} else {
-				sharp_type_node_append_grouped(&text, node->first);
-			}
+			sharp_type_node_append_grouped(&text, node->first);
 			smart_str_appendc(&text, '?');
 			break;
 		case SHARP_TYPE_UNION:
