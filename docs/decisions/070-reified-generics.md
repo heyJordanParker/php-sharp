@@ -130,6 +130,11 @@ before it changes the engine or the bridge.
 - **The compiler stores both on the class,** as `zend_class_entry`'s `info.user.sharp_bounds` and
   `info.user.sharp_header`, each `NULL` when the class-like has none. A generic class, never an interface, also
   declares the slot from the member.
+- **The two fields grow `zend_class_entry` by 16 bytes, so php-sharp bumps both API numbers:** `ZEND_MODULE_API_NO`
+  to 20261009 and `ZEND_EXTENSION_API_NO` to 420261009. PHP refuses an extension built against stock headers before
+  it can read a class entry of the wrong size: `Module compiled with module API=20250925, PHP compiled with module
+  API=20261009, These options need to match`. The fields need no zeroing code: `INIT_CLASS_ENTRY` zeroes an internal
+  class, the compiler sets a user class's to `NULL`, and every reader checks `ZEND_USER_CLASS` first.
 - **A class is PHP#'s when its file name ends in `.sharp`,** as `sharp_is_sharp_file` and `zend_is_sharp_type_class`
   already tell PHP# code apart. `sharp_class_is_sharp` reads `info.user.filename`, so a PHP# class without type
   parameters takes none, and a class plain PHP declares takes any (below).
