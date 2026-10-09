@@ -14,6 +14,10 @@ function made(App\Maker $maker): string
     return get_class($maker) . ': ' . implode(', ', arguments($box)) . ($spelled ? ' spelled' : ' cached');
 }
 
+// The site keeps only a list that lives for the process. Code spelling Maker<Order> makes App.Order one, whether this file
+// was compiled now or read from the opcache file cache, where nothing compiles it.
+Queue::maker();
+
 // OrderMaker's header gives Maker<T> its argument, so the site in Maker.make() keeps what it spelled for OrderMaker. A
 // Maker<int> misses it and spells again, and keeps its own. A ListMaker<int> spells a List<int> code never spells, which
 // lives for the request, so it spells it on every call and keeps nothing, and OrderMaker's list stays.
