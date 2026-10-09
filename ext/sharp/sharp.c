@@ -1497,12 +1497,19 @@ typedef struct {
 	zend_arena *arena;
 	/* Whether the text read a `$i`, so it is open. */
 	bool open;
+	/* How many more types may nest in the one being read, each in another's `<>` or `()`. */
+	uint32_t depth_left;
 } sharp_type_reader;
+
+/* The deepest a type text unserialize reads may nest, counting the outermost type. Its depth costs the request memory
+ * in its square, since each nested type is interned with its whole text. The deepest text the bridge writes in
+ * Zend/tests/sharp is `$0, List<$0>?`, 2 deep. */
+#define SHARP_TYPE_INPUT_DEPTH 64
 
 /* A reader at the start of the `length` bytes at `text`, whose nodes go into `arena`. */
 static sharp_type_reader sharp_type_reader_of(const char *text, size_t length, zend_arena *arena)
 {
-	return (sharp_type_reader) {text, text + length, arena, false};
+	return (sharp_type_reader) {text, text + length, arena, false, UINT32_MAX};
 }
 
 static sharp_type_node *sharp_type_read(sharp_type_reader *reader);
@@ -1863,9 +1870,24 @@ static sharp_type_node *sharp_type_read_group(sharp_type_reader *reader)
 	return group && sharp_type_skip(reader, ")") ? group : NULL;
 }
 
+static sharp_type_node *sharp_type_read_nested(sharp_type_reader *reader);
+
+/* A type, nested no deeper than the reader allows. */
+static sharp_type_node *sharp_type_read(sharp_type_reader *reader)
+{
+	if (reader->depth_left == 0) {
+		return NULL;
+	}
+	reader->depth_left--;
+	sharp_type_node *type = sharp_type_read_nested(reader);
+	reader->depth_left++;
+
+	return type;
+}
+
 /* A type: an atom, `T?`, `A|B`, `A & B`, or a union or an intersection in parentheses: `(A|B)?`, `(A & B)?`, and
  * `(A & B)|C`. */
-static sharp_type_node *sharp_type_read(sharp_type_reader *reader)
+static sharp_type_node *sharp_type_read_nested(sharp_type_reader *reader)
 {
 	const char *start = reader->at;
 	sharp_type_node *type;
@@ -2438,6 +2460,7 @@ zend_result sharp_type_arguments_unserialize(
 
 	/* The text parses whole and each class it names resolves before any of it is interned. */
 	sharp_type_reader reader = sharp_type_reader_of(Z_STRVAL_P(text), Z_STRLEN_P(text), zend_arena_create(1024));
+	reader.depth_left = SHARP_TYPE_INPUT_DEPTH;
 	sharp_type_node *arguments = sharp_type_read_list(&reader);
 	const sharp_type *list = NULL;
 	if (arguments && !reader.open && sharp_type_node_resolve(arguments, resolve, context)

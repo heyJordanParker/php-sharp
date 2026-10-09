@@ -23,6 +23,7 @@ $inputs = [
     'a type argument outside its bound' => [$list('int'), []],
     'a nested type argument outside its bound' => [$pair('App.PaginatedList<int>, int'), []],
     'a union member outside the bound' => [$list('App.Order|int'), []],
+    'a type nested deeper than input may nest' => [$pair(str_repeat('List<', 8000) . 'int' . str_repeat('>', 8000) . ', int'), []],
 ];
 foreach ($inputs as $case => [$input, $options]) {
     echo $case, ":\n";
@@ -88,6 +89,10 @@ a nested type argument outside its bound:
 Warning: unserialize(): Error at offset %d of %d bytes in %s on line %d
 bool(false)
 a union member outside the bound:
+
+Warning: unserialize(): Error at offset %d of %d bytes in %s on line %d
+bool(false)
+a type nested deeper than input may nest:
 
 Warning: unserialize(): Error at offset %d of %d bytes in %s on line %d
 bool(false)
