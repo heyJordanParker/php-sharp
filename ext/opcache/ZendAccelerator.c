@@ -1025,9 +1025,17 @@ static accel_time_t zend_get_file_handle_timestamp_win(zend_file_handle *file_ha
 accel_time_t zend_get_file_handle_timestamp(zend_file_handle *file_handle, size_t *size)
 {
 	zend_stat_t statbuf = {0};
+	zend_long revision;
 #ifdef ZEND_WIN32
 	accel_time_t res;
 #endif
+
+	if (zend_compiled_revision && zend_compiled_revision(file_handle, &revision)) {
+		if (size) {
+			*size = 0;
+		}
+		return (accel_time_t) revision;
+	}
 
 	if (sapi_module.get_stat &&
 	    !EG(current_execute_data) &&
@@ -1768,7 +1776,17 @@ static zend_persistent_script *opcache_compile_file(zend_file_handle *file_handl
 		return NULL;
 	}
 
-	if (ZCG(accel_directives).validate_timestamps ||
+	zend_long revision;
+
+	/* PHP#: a file compiled ahead of time is cached under its revision, which is no time, so
+	 * file_update_protection does not apply to it. Its compiled file is written whole, by a rename. */
+	if (zend_compiled_revision && zend_compiled_revision(file_handle, &revision)) {
+		timestamp = (accel_time_t) revision;
+		if (timestamp == 0) {
+			*op_array_p = accelerator_orig_compile_file(file_handle, type);
+			return NULL;
+		}
+	} else if (ZCG(accel_directives).validate_timestamps ||
 	    ZCG(accel_directives).file_update_protection ||
 	    ZCG(accel_directives).max_file_size > 0) {
 		size_t size = 0;

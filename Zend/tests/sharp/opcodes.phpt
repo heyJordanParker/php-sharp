@@ -18,7 +18,7 @@ function compiled(string $file, string $prelude): string
     return str_replace($file, '<file>', $opcodes . $dump . $classes);
 }
 
-// Each fixture names the PHP library its classes link against.
+// Each fixture names the libraries its classes link against.
 $fixtures = [
     'Calc' => null,
     'Nulls' => null,
@@ -35,7 +35,6 @@ $fixtures = [
     'Task' => null,
     'Shapes' => null,
     'Members' => 'harness/Registry.inc',
-    'MembersErrors' => 'harness/Registry.inc',
     'Site' => 'harness/SiteLib.inc',
     'Collections' => null,
     'EnumKeys' => null,
@@ -44,6 +43,29 @@ $fixtures = [
     'Cashier' => null,
     'Roster' => null,
     'Store' => 'harness/Model.inc',
+    'RushOrders' => 'harness/Model.inc',
+    'TypedOrders' => 'harness/TypedModel.inc',
+    'Permalink' => '../../../sharp/composer/library/Sharp/Text/Text.sharp',
+    'Library' => [
+        '../../../sharp/composer/library/Sharp/Data/Base64.sharp',
+        '../../../sharp/composer/library/Sharp/Data/Binary.sharp',
+        '../../../sharp/composer/library/Sharp/Data/Compression.sharp',
+        '../../../sharp/composer/library/Sharp/Data/Hash.sharp',
+        '../../../sharp/composer/library/Sharp/Data/Hex.sharp',
+        '../../../sharp/composer/library/Sharp/Data/Password.sharp',
+        '../../../sharp/composer/library/Sharp/Data/PhpSerializer.sharp',
+        '../../../sharp/composer/library/Sharp/IO/Path.sharp',
+        '../../../sharp/composer/library/Sharp/Json/Json.sharp',
+        '../../../sharp/composer/library/Sharp/Math/Math.sharp',
+        '../../../sharp/composer/library/Sharp/Net/Email.sharp',
+        '../../../sharp/composer/library/Sharp/Net/Ip.sharp',
+        '../../../sharp/composer/library/Sharp/Net/Url.sharp',
+        '../../../sharp/composer/library/Sharp/Text/Html.sharp',
+        '../../../sharp/composer/library/Sharp/Text/Regex.sharp',
+        '../../../sharp/composer/library/Sharp/Text/Text.sharp',
+        '../../../sharp/composer/library/Sharp/Time/Date.sharp',
+        '../../../sharp/composer/library/Sharp/Time/TimeZone.sharp',
+    ],
     'Inbox' => null,
     'Patterns' => null,
     'Signatures' => null,
@@ -58,7 +80,7 @@ $fixtures = [
 $user_class = '/(?:Class|Enum) \[ <user> /';
 
 foreach ($fixtures as $fixture => $library) {
-    $prelude = $library === null ? '' : 'require ' . var_export(__DIR__ . "/$library", true) . ';';
+    $prelude = implode('', array_map(static fn (string $file): string => 'require ' . var_export(__DIR__ . "/$file", true) . ';', (array) $library));
     $sharp = compiled(__DIR__ . "/$fixture.sharp", $prelude);
     $php = compiled(__DIR__ . "/$fixture.inc", $prelude);
     // An op array either listing prints counts once: phpdbg prints abstract methods, and the dump prints hooks.
@@ -85,7 +107,7 @@ Nulls: same opcodes and lines in 13 op arrays, same signatures in 1 classes
 ControlFlow: same opcodes and lines in 6 op arrays, same signatures in 1 classes
 Order: same opcodes and lines in 4 op arrays, same signatures in 2 classes
 Product: same opcodes and lines in 3 op arrays, same signatures in 1 classes
-Expressions: same opcodes and lines in 7 op arrays, same signatures in 1 classes
+Expressions: same opcodes and lines in 8 op arrays, same signatures in 1 classes
 Checkout: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Page: same opcodes and lines in 10 op arrays, same signatures in 1 classes
 Stage: same opcodes and lines in 4 op arrays, same signatures in 1 classes
@@ -94,99 +116,24 @@ Rank: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 Shipment: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Task: same opcodes and lines in 4 op arrays, same signatures in 1 classes
 Shapes: same opcodes and lines in 5 op arrays, same signatures in 2 classes
-Members: different opcodes and lines in 10 op arrays, same signatures in 1 classes
-  .sharp L0042 0000 T0 = FETCH_CLASS_CONSTANT string("Lib\\Registry") string("label")
-  .sharp L0053 0002 T1 = FETCH_CLASS_CONSTANT string("Demo\\Members") string("count")
-  .sharp L0058 0000 T0 = FETCH_CLASS_CONSTANT string("Lib\\Registry") string("late")
-  .sharp L0064 0001 T3 = FETCH_CLASS_CONSTANT string("Lib\\Registry") string("items")
-  .sharp 0000 T0 = FETCH_CLASS_CONSTANT string("Lib\\Registry") string("label")
-  .sharp 0002 T1 = FETCH_CLASS_CONSTANT string("Demo\\Members") string("count")
-  .sharp 0000 T0 = FETCH_CLASS_CONSTANT string("Lib\\Registry") string("late")
-  .sharp 0001 T3 = FETCH_CLASS_CONSTANT string("Lib\\Registry") string("items")
-  .php   L0042 0000 T0 = FETCH_STATIC_PROP_R string("label") string("Lib\\Registry")
-  .php   L0053 0002 T1 = FETCH_STATIC_PROP_R string("count") string("Demo\\Members")
-  .php   L0058 0000 T0 = FETCH_STATIC_PROP_R string("late") string("Lib\\Registry")
-  .php   L0064 0001 T3 = FETCH_STATIC_PROP_R string("items") string("Lib\\Registry")
-  .php   0000 T0 = FETCH_STATIC_PROP_R string("label") string("Lib\\Registry")
-  .php   0002 T1 = FETCH_STATIC_PROP_R string("count") string("Demo\\Members")
-  .php   0000 T0 = FETCH_STATIC_PROP_R string("late") string("Lib\\Registry")
-  .php   0001 T3 = FETCH_STATIC_PROP_R string("items") string("Lib\\Registry")
-MembersErrors: different opcodes and lines in 3 op arrays, same signatures in 1 classes
-  .sharp L0009 0000 T0 = FETCH_CLASS_CONSTANT string("Lib\\Registry") string("missing")
-  .sharp L0014 0000 T0 = FETCH_CLASS_CONSTANT string("Lib\\Registry") string("hidden")
-  .sharp 0000 T0 = FETCH_CLASS_CONSTANT string("Lib\\Registry") string("missing")
-  .sharp 0000 T0 = FETCH_CLASS_CONSTANT string("Lib\\Registry") string("hidden")
-  .php   L0009 0000 T0 = FETCH_STATIC_PROP_R string("missing") string("Lib\\Registry")
-  .php   L0014 0000 T0 = FETCH_STATIC_PROP_R string("hidden") string("Lib\\Registry")
-  .php   0000 T0 = FETCH_STATIC_PROP_R string("missing") string("Lib\\Registry")
-  .php   0000 T0 = FETCH_STATIC_PROP_R string("hidden") string("Lib\\Registry")
-Site: different opcodes and lines in 13 op arrays, same signatures in 3 classes
-  .sharp L0010 0000 DECLARE_CLASS string("site\\page")
-  .sharp L0068 0001 DECLARE_CLASS string("site\\square")
-  .sharp L0080 0002 RETURN int(1)
-  .sharp L0039 0001 T1 = FETCH_CLASS_CONSTANT string("Site\\Page") string("views")
-  .sharp 0000 DECLARE_CLASS string("site\\page")
-  .sharp 0001 DECLARE_CLASS string("site\\square")
-  .sharp 0002 RETURN int(1)
-  .sharp 0001 T1 = FETCH_CLASS_CONSTANT string("Site\\Page") string("views")
-  .php   L0010 0000 DECLARE_CLASS string("site\\page") string("lib\\resource")
-  .php   L0080 0001 RETURN int(1)
-  .php   L0039 0001 T1 = FETCH_STATIC_PROP_R string("views") string("Site\\Page")
-  .php   0000 DECLARE_CLASS string("site\\page") string("lib\\resource")
-  .php   0001 RETURN int(1)
-  .php   0001 T1 = FETCH_STATIC_PROP_R string("views") string("Site\\Page")
+Members: same opcodes and lines in 10 op arrays, same signatures in 1 classes
+Site: same opcodes and lines in 13 op arrays, same signatures in 3 classes
 Collections: same opcodes and lines in 7 op arrays, same signatures in 2 classes
 EnumKeys: same opcodes and lines in 12 op arrays, same signatures in 1 classes
 Interop: same opcodes and lines in 3 op arrays, same signatures in 1 classes
-Lambdas: different opcodes and lines in 35 op arrays, same signatures in 1 classes
-  .sharp      ; (lines=10, args=1, vars=1, tmps=3)
-  .sharp L0099 0003 T2 = FETCH_CLASS_CONSTANT string("Demo\\Lambdas") string("twice")
-  .sharp L0099 0004 SEND_VAL_EX T2 1
-  .sharp L0099 0005 V3 = DO_FCALL
-  .sharp L0099 0006 VERIFY_RETURN_TYPE V3
-  .sharp L0099 0007 RETURN V3
-  .sharp L0099 0008 VERIFY_RETURN_TYPE
-  .sharp L0099 0009 RETURN null
-  .sharp      ; (lines=10, args=1, vars=1, tmps=3)
-  .sharp 0003 T2 = FETCH_CLASS_CONSTANT string("Demo\\Lambdas") string("twice")
-  .sharp 0006 VERIFY_RETURN_TYPE V3
-  .sharp 0007 RETURN V3
-  .sharp 0008 VERIFY_RETURN_TYPE
-  .sharp 0009 RETURN null
-  .sharp      3: 0006 - 0007 (tmp/var)
-  .php        ; (lines=11, args=1, vars=1, tmps=3)
-  .php   L0099 0003 INIT_STATIC_METHOD_CALL 0 string("Demo\\Lambdas") string("twice")
-  .php   L0099 0004 T2 = CALLABLE_CONVERT
-  .php   L0099 0005 SEND_VAL_EX T2 1
-  .php   L0099 0006 V3 = DO_FCALL
-  .php   L0099 0007 VERIFY_RETURN_TYPE V3
-  .php   L0099 0008 RETURN V3
-  .php   L0099 0009 VERIFY_RETURN_TYPE
-  .php   L0099 0010 RETURN null
-  .php        ; (lines=11, args=1, vars=1, tmps=3)
-  .php   0003 INIT_STATIC_METHOD_CALL 0 string("Demo\\Lambdas") string("twice")
-  .php   0004 T2 = CALLABLE_CONVERT
-  .php   0005 SEND_VAL_EX T2 1
-  .php   0006 V3 = DO_FCALL
-  .php   0007 VERIFY_RETURN_TYPE V3
-  .php   0008 RETURN V3
-  .php        3: 0007 - 0008 (tmp/var)
+Lambdas: same opcodes and lines in 35 op arrays, same signatures in 1 classes
 Cashier: same opcodes and lines in 8 op arrays, same signatures in 1 classes
 Roster: same opcodes and lines in 6 op arrays, same signatures in 1 classes
-Store: different opcodes and lines in 3 op arrays, same signatures in 1 classes
-  .sharp L0005 0000 DECLARE_CLASS string("store\\order")
-  .sharp 0000 DECLARE_CLASS string("store\\order")
-  .php   L0005 0000 DECLARE_CLASS string("store\\order") string("lib\\model")
-  .php   0000 DECLARE_CLASS_DELAYED string("store\\order") string("lib\\model")
+Store: same opcodes and lines in 3 op arrays, same signatures in 1 classes
+RushOrders: same opcodes and lines in 2 op arrays, same signatures in 2 classes
+TypedOrders: same opcodes and lines in 2 op arrays, same signatures in 2 classes
+Permalink: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+Library: same opcodes and lines in 19 op arrays, same signatures in 1 classes
 Inbox: same opcodes and lines in 9 op arrays, same signatures in 1 classes
 Patterns: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Signatures: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Accessors: same opcodes and lines in 15 op arrays, same signatures in 2 classes
-Parcel: different opcodes and lines in 3 op arrays, same signatures in 1 classes
-  .sharp L0005 0000 DECLARE_CLASS string("store\\parcel")
-  .sharp 0000 DECLARE_CLASS string("store\\parcel")
-  .php   L0005 0000 DECLARE_CLASS string("store\\parcel") string("lib\\row")
-  .php   0000 DECLARE_CLASS_DELAYED string("store\\parcel") string("lib\\row")
+Parcel: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Exits: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 Positions: same opcodes and lines in 5 op arrays, same signatures in 1 classes
 Deploy: same opcodes and lines in 7 op arrays, same signatures in 1 classes

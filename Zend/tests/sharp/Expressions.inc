@@ -50,6 +50,13 @@ class Expressions
 total";
     }
 
+    public static function greet(string $first, string $last): string
+    {
+        $line = $first . " " . $last;
+        $line .= "!";
+        return $line;
+    }
+
     private static function lookup(int $value): ?int
     {
         if ($value < 0) {

@@ -25,11 +25,13 @@ sharp/bin/test --opcache        # also run with the opcache file cache, priming 
 sharp/bin/test --repeat         # also run each test twice in one process, the second time from opcache shared memory
 sharp/bin/test --passes         # also run with each optimizer pass alone, then under the tracing and the function JIT
 sharp/bin/test --census         # also check every write and comparison of a field that holds a PHP# mark
-sharp/bin/test --differential   # also check that php -l compiles every Zend/tests/sharp/*.sharp file the checker accepts
+sharp/bin/test --differential   # also check that php -l compiles every Zend/tests/sharp/*.sharp file
 sharp/bin/test --upstream       # run Zend/tests, ext/reflection, ext/tokenizer and ext/opcache
 ```
 
-`--differential` runs `mago analyze` built from the Mago commit that `ext/sharp/Cargo.toml` pins for the bridge, installed under `sharp/build/<os>-<arch>/mago`. `Zend/tests/sharp/mago.toml` makes the `.sharp` fixtures and the plain PHP classes and functions they call, in `Zend/tests/sharp/harness/`, one checker project. A file the checker refuses needs nothing from the engine. A file it accepts must make `php -l` print nothing but "No syntax errors detected", so a compile warning or deprecation also fails the run.
+The engine runs only `.sharpc` files that `mago compile` wrote. So before any test runs, `sharp/bin/test` installs `mago` from the Mago commit that `SHARP_MAGO_COMMIT` in `ext/sharp/sharp_unit.h` names, under `sharp/build/<os>-<arch>/mago`, and runs `mago compile` from the repository root into its `.sharp/` folder. `Zend/tests/sharp/mago.toml` makes the `.sharp` fixtures, the plain PHP classes and functions they call, in `Zend/tests/sharp/harness/`, and the standard library in `sharp/composer/library/` one checker project. A fixture the checker refuses fails the run, because a refusal is Mago's to test. Tests that build their own project, such as the refusal tests, find `mago` in `TEST_MAGO_EXECUTABLE`.
+
+`--differential` checks that every `.sharp` fixture `mago compile` accepted makes `php -l` print nothing but "No syntax errors detected", so a compile warning or deprecation also fails the run.
 
 `--passes` runs the suite once per bit of `opcache.optimization_level` from pass 1 to pass 16, each pass alone, and then under `opcache.jit=tracing` and `opcache.jit=function`. Every run expects the output of the run without opcache, so a pass that drops a PHP# mark fails on its own run instead of hiding behind the other passes. A test whose output depends on the whole optimizer, such as a count of oplines the JIT left to the VM, sets `opcache.optimization_level=0x7FFEBFFF` in its `--INI--` section.
 
@@ -59,7 +61,7 @@ git archive HEAD | docker build -f sharp/docker/runtime/Dockerfile -t php-sharp 
 
 ## Composer
 
-`sharp/composer/` is the Composer plugin `heyjordanparker/php-sharp-composer`. Composer's autoloader then tries `.sharp` after `.php` by the PSR-4 rules, the way it tries `.hh` on HHVM. Composer's class map scanner reads only `<?php` files, so on `composer dump-autoload --optimize` the plugin writes every `.sharp` file under a PSR-4 folder to `vendor/composer/autoload_sharp.php`, and the autoloader adds it to the class map.
+`sharp/composer/` is the Composer plugin `heyjordanparker/php-sharp-composer`. Composer's autoloader then tries `.sharp` after `.php` by the PSR-4 rules, the way it tries `.hh` on HHVM. Composer's class map scanner reads only `<?php` files, so on `composer dump-autoload --optimize` the plugin writes every `.sharp` file under a PSR-4 folder to `vendor/composer/autoload_sharp.php`, and the autoloader reads it. The package's autoloader includes every `.sharp` class itself, never Composer's, so on plain PHP the first one stops with "This project needs the PHP# engine" before its source can reach the output.
 
 `sharp/composer/` is the plugin's source of truth. Composer installs it from `heyJordanParker/php-sharp-composer`, a read-only split that CI rewrites from this folder's history, the way Symfony splits its components. Change the plugin here, never in the split.
 
@@ -71,7 +73,7 @@ brew install autoconf bison re2c pkgconf icu4c libiconv libpq libsodium libzip o
 
 ## CI
 
-`.github/workflows/sharp.yml` builds and tests on Linux in the `sharp/docker/` image and on `macos-latest`, for every push and pull request to `master` that changes more than documentation. The Linux job also fails when a generated file differs from the committed one, or when `ext/sharp/Cargo.lock` names a local `path+file://` or `git+file://` source. The generated-file step copies `.github/actions/verify-generated-files/action.yml`, so compare the two on every merge from upstream.
+`.github/workflows/sharp.yml` builds and tests on Linux in the `sharp/docker/` image and on `macos-latest`, for every push and pull request to `master` that changes more than documentation. The Linux job also fails when a generated file differs from the committed one, when `ext/sharp/sharp_unit.h` differs from the header the Mago commit it names generates from `Zend/zend_ast.h`, or when `ext/sharp/Cargo.lock` names a local `path+file://` or `git+file://` source. The generated-file step copies `.github/actions/verify-generated-files/action.yml`, so compare the two on every merge from upstream.
 
 `master` takes changes only through a pull request whose `LINUX` and `MACOS` checks pass on a branch that is up to date with `master`. A repository ruleset enforces it for every account, admins included, and refuses force pushes and deletion. The `CHANGES` job skips both checks on a pull request that changes documentation alone, and GitHub counts a skipped job as passing, so that pull request can still merge.
 

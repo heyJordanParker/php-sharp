@@ -1,0 +1,10 @@
+namespace Demo;
+
+import Sharp.Data.Hex;
+
+class HexCalls
+{
+    public static string encode(string data) => Hex.encode(data);
+
+    public static string decode(string text) => Hex.decode(text);
+}

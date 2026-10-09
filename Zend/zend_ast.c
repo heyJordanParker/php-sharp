@@ -851,15 +851,6 @@ ZEND_API zend_result ZEND_FASTCALL zend_ast_evaluate_inner(
 							zval_ptr_dtor_nogc(result);
 							return FAILURE;
 						}
-						if (ast->attr & ZEND_ARRAY_SHARP) {
-							zval *key = zend_sharp_enum_key(&op1);
-
-							if (key) {
-								ZVAL_COPY(&op2, key);
-								zval_ptr_dtor_nogc(&op1);
-								ZVAL_COPY_VALUE(&op1, &op2);
-							}
-						}
 					} else {
 						ZVAL_UNDEF(&op1);
 					}

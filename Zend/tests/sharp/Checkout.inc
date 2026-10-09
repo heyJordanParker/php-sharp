@@ -4,7 +4,7 @@ class Checkout
 {
     public static function host(string $host): ?string
     {
-        return $host != "" ? $host : null;
+        return $host !== "" ? $host : null;
     }
 
     public static function sign(int $value): string

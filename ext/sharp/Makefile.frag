@@ -1,6 +1,4 @@
-$(builddir)/sharp.lo: $(srcdir)/sharp_unit.h $(builddir)/sharp_build_id.h $(builddir)/target/release/libsharp.a
-
-$(srcdir)/sharp_unit.h: $(builddir)/target/release/libsharp.a
+$(builddir)/sharp.lo: $(srcdir)/sharp_unit.h $(srcdir)/sharp_native.h $(builddir)/sharp_build_id.h $(top_srcdir)/Zend/zend_language_parser.h
 
 $(builddir)/target/release/libsharp.a: sharp-always
 	+cd $(srcdir) && cargo=`$(RUSTUP) which cargo` && PATH="`dirname "$$cargo"`:$$PATH" CC="$(CC)" CFLAGS="$(CFLAGS_CLEAN)" "$$cargo" build --locked --release --target-dir $(top_builddir)/$(builddir)/target

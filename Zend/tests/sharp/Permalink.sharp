@@ -1,0 +1,8 @@
+namespace Demo;
+
+import Sharp.Text.Text;
+
+class Permalink
+{
+    public static string of(string title) => Text.slug(title);
+}

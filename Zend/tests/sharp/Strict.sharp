@@ -4,6 +4,6 @@ class Strict
 {
     public static int run()
     {
-        return Helper.take("5");
+        return Helper.take(Helper.trusted("5"));
     }
 }

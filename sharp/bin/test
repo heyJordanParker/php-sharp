@@ -53,6 +53,28 @@ if [[ ! -x "$php" ]]; then
   exit 1
 fi
 
+mago_commit="$(sed -n 's/^#define SHARP_MAGO_COMMIT "\([0-9a-f]\{40\}\)"$/\1/p' "$root/ext/sharp/sharp_unit.h")"
+if [[ -z "$mago_commit" ]]; then
+  echo "ext/sharp/sharp_unit.h defines no SHARP_MAGO_COMMIT." >&2
+  exit 1
+fi
+cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
+PATH="$(dirname "$cargo"):$PATH" "$cargo" install --quiet --locked --git https://github.com/heyJordanParker/mago-sharp --rev "$mago_commit" --root "$build_dir/mago" mago
+mago="$build_dir/mago/bin/mago"
+
+echo "== mago compile, at the Mago commit in ext/sharp/sharp_unit.h"
+if ! "$mago" --no-version-check --colors never --workspace "$root" --config "$root/Zend/tests/sharp/mago.toml" compile; then
+  echo "mago compile refused a PHP# test fixture, and the engine runs only compiled files." >&2
+  exit 1
+fi
+
+export TEST_MAGO_EXECUTABLE="$mago"
+
+jobs="${CARGO_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN)}"
+if [[ " ${MAKEFLAGS:-}" =~ [[:space:]](-j[[:space:]]*|--jobs=)([0-9]+) ]]; then
+  jobs="${BASH_REMATCH[2]}"
+fi
+
 export SKIP_IO_CAPTURE_TESTS=1
 export STACK_LIMIT_DEFAULTS_CHECK=1
 export RUN_RESOURCE_HEAVY_TESTS=1
@@ -67,7 +89,7 @@ run_tests() {
   if ! (cd "$root" && "$php" run-tests.php -P -q \
     -d opcache.jit=disable \
     -d opcache.protect_memory=1 \
-    -j"$(getconf _NPROCESSORS_ONLN)" \
+    -j"$jobs" \
     -g FAIL,BORK,LEAK,XLEAK \
     --no-progress \
     --offline \
@@ -125,31 +147,20 @@ if $census; then
 fi
 
 check_differential() {
-  echo "== the checker at the bridge's pinned Mago commit against php -l"
-  local url rev cargo mago file name checked linted mismatch=false
-  read -r url rev < <(sed -n 's/^mago-sharp-bridge = { git = "\(.*\)", rev = "\(.*\)" }$/\1 \2/p' "$root/ext/sharp/Cargo.toml") || {
-    echo "ext/sharp/Cargo.toml does not pin mago-sharp-bridge as { git = \"...\", rev = \"...\" }." >&2
-    exit 1
-  }
-  cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
-  PATH="$(dirname "$cargo"):$PATH" "$cargo" install --quiet --locked --git "$url" --rev "$rev" --root "$build_dir/mago" mago
-  mago="$build_dir/mago/bin/mago"
+  echo "== every file mago compile accepted against php -l, through its .sharpc file"
+  local file name linted mismatch=false
   for file in "$root"/Zend/tests/sharp/*.sharp; do
     name="${file#"$root"/}"
-    if ! checked="$("$mago" --colors never --workspace "$root/Zend/tests/sharp" analyze --minimum-fail-level error "$file" 2>&1)"; then
-      echo "REFUSED BY THE CHECKER $name"
-      continue
-    fi
     linted="$("$php" -l "$file" 2>&1)" || true
     if [[ "$linted" == "No syntax errors detected in $file" ]]; then
       echo "COMPILES $name"
     else
-      printf 'FAIL %s: the checker accepts it and php -l does not.\n-- mago analyze:\n%s\n-- php -l:\n%s\n' "$name" "$checked" "$linted"
+      printf 'FAIL %s: mago compile accepts it and php -l does not.\n%s\n' "$name" "$linted"
       mismatch=true
     fi
   done
   if $mismatch; then
-    failed+=("the checker at the bridge's pinned Mago commit against php -l")
+    failed+=("every file mago compile accepted against php -l")
   fi
 }
 

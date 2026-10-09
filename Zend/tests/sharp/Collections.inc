@@ -17,8 +17,8 @@ class Cart
         foreach ($this->items as $item) {
             $total += $item->cents;
         }
-        foreach ($this->counts as $name => $size) {
-            if ($name == "items") {
+        foreach ($this->counts as $name => $size) { $name = (string) $name; // PHP# reads the key back as a string
+            if ($name === "items") {
                 $total += $size * 10;
             }
         }

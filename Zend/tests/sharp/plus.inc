@@ -15,6 +15,8 @@ for ($round = 0; $round < 100; $round++) {
         Demo\Plus::repeat('ab', 3),
         Demo\Plus::list('a', 'b', 'c'),
         Demo\Plus::add(1, 2),
+        Demo\Plus::named(),
+        Demo\Plus::appendName('Class: '),
     ];
 }
 

@@ -1,7 +1,0 @@
-namespace Demo;
-
-import Lib.Suit;
-
-public class Suited : Suit
-{
-}

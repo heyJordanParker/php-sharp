@@ -1,0 +1,277 @@
+#!/usr/bin/env php
+<?php
+// Writes ext/sharp/sharp_native.h and sharp/composer/native.php from the extern declarations in
+// sharp/composer/library. SHARP_NATIVE hashes those declarations, the name, version, source and checksum of each
+// package ext/sharp/Cargo.lock resolves for the native crate, and the Rust sources in ext/sharp/src.
+
+declare(strict_types=1);
+
+const TYPES = [
+    'string' => ['c' => 'sharp_native_str', 'arginfo' => 'IS_STRING', 'parameter' => 'Z_PARAM_STR', 'variable' => 'zend_string *', 'default' => '"[^"\\\\$]*"'],
+    'int' => ['c' => 'int64_t', 'arginfo' => 'IS_LONG', 'parameter' => 'Z_PARAM_LONG', 'variable' => 'zend_long ', 'default' => '-?[0-9]+'],
+    'float' => ['c' => 'double', 'arginfo' => 'IS_DOUBLE', 'parameter' => 'Z_PARAM_DOUBLE', 'variable' => 'double ', 'default' => '-?[0-9]+\.[0-9]+'],
+    'bool' => ['c' => 'bool', 'arginfo' => '_IS_BOOL', 'parameter' => 'Z_PARAM_BOOL', 'variable' => 'bool ', 'default' => 'true|false'],
+];
+
+const RETURNS = [
+    'string' => ['c' => 'sharp_native_str', 'arginfo' => 'IS_STRING'],
+    'int' => ['c' => 'int64_t', 'arginfo' => 'IS_LONG'],
+    'float' => ['c' => 'double', 'arginfo' => 'IS_DOUBLE'],
+    'bool' => ['c' => 'bool', 'arginfo' => '_IS_BOOL'],
+    'void' => ['c' => 'void', 'arginfo' => 'IS_VOID'],
+];
+
+const EXTERN_FORM = 'It reads `public static extern <type> <name>(<parameters>);` in a `public static class` under `namespace Sharp`,'
+    . ' where every type is string, int, float or bool, the return type may be void, and every parameter after one with a default has a default too.';
+
+const LOCK_FORM = 'It reads the [[package]] tables Cargo writes, with name, version, source, checksum and dependencies.';
+
+function fail(string $file, int $line, string $text, string $form): never
+{
+    fwrite(STDERR, "$file:$line: sharp/bin/native cannot read `$text`. $form\n");
+    exit(1);
+}
+
+function files(string $root, string $folder, string $extension): array
+{
+    $paths = [];
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator("$root/$folder", FilesystemIterator::SKIP_DOTS)) as $file) {
+        if ($file->getExtension() === $extension) {
+            $paths[] = substr($file->getPathname(), strlen($root) + 1);
+        }
+    }
+    sort($paths, SORT_STRING);
+
+    return $paths;
+}
+
+function externs(string $root, string $path): array
+{
+    $parameter = implode('|', array_map(
+        static fn (string $type): string => "$type [a-z][A-Za-z0-9]*(?: = (?:" . TYPES[$type]['default'] . '))?',
+        array_keys(TYPES),
+    ));
+    $method = '/^public static extern (' . implode('|', array_keys(RETURNS)) . ") ([a-z][A-Za-z0-9]*)\(((?:$parameter)(?:, (?:$parameter))*)?\);$/";
+
+    $externs = [];
+    $namespace = null;
+    $class = null;
+    foreach (file("$root/$path", FILE_IGNORE_NEW_LINES) as $index => $source) {
+        $text = trim($source);
+        if (preg_match('/^namespace (Sharp(?:\.[A-Z][A-Za-z0-9]*)*);$/', $text, $match)) {
+            [$namespace, $class] = [$match[1], null];
+        } elseif (preg_match('/^public static class ([A-Z][A-Za-z0-9]*)$/', $text, $match)) {
+            $class = $namespace === null ? null : "$namespace.$match[1]";
+        } elseif (preg_match('/\bextern\b/', $text) && !str_starts_with($text, 'extern ')) {
+            if ($class === null || !preg_match($method, $text, $match)) {
+                fail($path, $index + 1, $text, EXTERN_FORM);
+            }
+            preg_match_all('/(string|int|float|bool) ([a-z][A-Za-z0-9]*)(?: = ("[^"]*"|[^,]+))?(?:, |$)/', $match[3] ?? '', $found, PREG_SET_ORDER);
+            $parameters = [];
+            foreach ($found as $one) {
+                if (!isset($one[3]) && $parameters !== [] && end($parameters)['default'] !== null) {
+                    fail($path, $index + 1, $text, EXTERN_FORM);
+                }
+                $parameters[] = ['type' => $one[1], 'name' => $one[2], 'default' => $one[3] ?? null];
+            }
+            $externs[] = ['class' => $class, 'name' => $match[2], 'return' => $match[1], 'parameters' => $parameters];
+        }
+    }
+
+    return $externs;
+}
+
+function dependencies(string $root, string $path): array
+{
+    $packages = [];
+    $current = null;
+    $listing = false;
+    foreach (file("$root/$path", FILE_IGNORE_NEW_LINES) as $index => $text) {
+        if ($listing) {
+            if ($text === ']') {
+                $listing = false;
+            } elseif (preg_match('/^ "([^"]+)",$/', $text, $match)) {
+                $packages[$current]['dependencies'][] = $match[1];
+            } else {
+                fail($path, $index + 1, $text, LOCK_FORM);
+            }
+        } elseif ($text === '[[package]]') {
+            $current = count($packages);
+            $packages[] = ['name' => null, 'version' => null, 'source' => '', 'checksum' => '', 'dependencies' => []];
+        } elseif (str_starts_with($text, '[')) {
+            $current = null;
+        } elseif ($current !== null && preg_match('/^(name|version|source|checksum) = "([^"]*)"$/', $text, $match)) {
+            $packages[$current][$match[1]] = $match[2];
+        } elseif ($current !== null && $text === 'dependencies = [') {
+            $listing = true;
+        } elseif ($current !== null && $text !== '') {
+            fail($path, $index + 1, $text, LOCK_FORM);
+        }
+    }
+
+    $find = static function (string $dependency) use ($packages, $path): array {
+        [$name, $version] = explode(' ', $dependency) + [1 => null];
+        foreach ($packages as $package) {
+            if ($package['name'] === $name && ($version === null || $package['version'] === $version)) {
+                return $package;
+            }
+        }
+        fail($path, 0, $dependency, 'It names no [[package]] table.');
+    };
+
+    $resolved = [];
+    $pending = [$find('sharp')];
+    while ($pending !== []) {
+        foreach (array_pop($pending)['dependencies'] as $dependency) {
+            $package = $find($dependency);
+            $key = "$package[name] $package[version]";
+            if (!isset($resolved[$key])) {
+                $resolved[$key] = "$key $package[source] $package[checksum]";
+                $pending[] = $package;
+            }
+        }
+    }
+    ksort($resolved, SORT_STRING);
+
+    return array_values($resolved);
+}
+
+function declaration(array $extern): string
+{
+    $parameters = array_map(
+        static fn (array $parameter): string => "$parameter[type] $parameter[name]" . ($parameter['default'] === null ? '' : " = $parameter[default]"),
+        $extern['parameters'],
+    );
+
+    return "$extern[class].$extern[name](" . implode(', ', $parameters) . "): $extern[return]";
+}
+
+function arginfo(string $name, string $return, array $parameters): string
+{
+    $required = count(array_filter($parameters, static fn (array $parameter): bool => $parameter['default'] === null));
+    $arginfo = "ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_$name, 0, $required, " . RETURNS[$return]['arginfo'] . ", 0)\n";
+    foreach ($parameters as $parameter) {
+        $type = TYPES[$parameter['type']]['arginfo'];
+        $arginfo .= $parameter['default'] === null
+            ? "\tZEND_ARG_TYPE_INFO(0, $parameter[name], $type, 0)\n"
+            : "\tZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, $parameter[name], $type, 0, \"" . addcslashes($parameter['default'], '"') . "\")\n";
+    }
+
+    return $arginfo . "ZEND_END_ARG_INFO()\n";
+}
+
+function wrapper(string $function, string $native, array $extern): string
+{
+    $parameters = $extern['parameters'];
+    $variables = '';
+    $parsing = "\tZEND_PARSE_PARAMETERS_NONE();\n";
+    $arguments = [];
+    if ($parameters !== []) {
+        $required = count(array_filter($parameters, static fn (array $parameter): bool => $parameter['default'] === null));
+        $parsing = "\tZEND_PARSE_PARAMETERS_START($required, " . count($parameters) . ")\n";
+        foreach ($parameters as $position => $parameter) {
+            [$type, $name, $default] = [$parameter['type'], $parameter['name'], $parameter['default']];
+            $initial = $default === null ? '' : ' = ' . ($type === 'string' ? 'NULL' : $default);
+            $variables .= "\t" . TYPES[$type]['variable'] . "$name$initial;\n";
+            $parsing .= ($position === $required ? "\t\tZ_PARAM_OPTIONAL\n" : '') . "\t\t" . TYPES[$type]['parameter'] . "($name)\n";
+            $string = "(sharp_native_str) { ZSTR_VAL($name), ZSTR_LEN($name) }";
+            $arguments[] = match (true) {
+                $type !== 'string' => $name,
+                $default === null => $string,
+                default => "$name ? $string : (sharp_native_str) { $default, sizeof($default) - 1 }",
+            };
+        }
+        $parsing .= "\tZEND_PARSE_PARAMETERS_END();\n";
+    }
+
+    $call = "$native(" . implode(', ', $arguments) . ')';
+    $result = match ($extern['return']) {
+        'string' => "\tsharp_native_str result = $call;\n\tRETVAL_STRINGL_FAST(result.ptr, result.len);\n\tsharp_native_str_free(result);\n",
+        'int' => "\tRETURN_LONG($call);\n",
+        'float' => "\tRETURN_DOUBLE($call);\n",
+        'bool' => "\tRETURN_BOOL($call);\n",
+        'void' => "\t$call;\n",
+    };
+
+    return "static ZEND_FUNCTION($function)\n{\n" . $variables . ($variables === '' ? '' : "\n") . $parsing . "\n" . $result . "}\n";
+}
+
+function write(string $path, string $content): void
+{
+    if (@file_get_contents($path) !== $content) {
+        file_put_contents($path, $content);
+    }
+}
+
+$root = dirname(__DIR__, 2);
+
+$externs = [];
+foreach (files($root, 'sharp/composer/library', 'sharp') as $path) {
+    array_push($externs, ...externs($root, $path));
+}
+usort($externs, static fn (array $a, array $b): int => strcmp(declaration($a), declaration($b)));
+
+$sources = implode('', array_map(static fn (string $path): string => file_get_contents("$root/$path"), files($root, 'ext/sharp/src', 'rs')));
+$fingerprint = hash('xxh128', implode('', array_map(static fn (array $extern): string => declaration($extern) . "\n", $externs))
+    . implode('', array_map(static fn (string $package): string => "$package\n", dependencies($root, 'ext/sharp/Cargo.lock')))
+    . $sources);
+
+$prototypes = "void sharp_native_str_free(sharp_native_str string);\n";
+$arginfos = <<<C
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_requireNative, 0, 3, IS_VOID, 0)
+\tZEND_ARG_TYPE_INFO(0, fingerprint, IS_STRING, 0)
+\tZEND_ARG_TYPE_INFO(0, bodies, IS_ARRAY, 0)
+\tZEND_ARG_TYPE_INFO(0, version, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+C;
+$wrappers = "static ZEND_FUNCTION(Sharp_Internal_requireNative);\n";
+$entries = "\tZEND_RAW_FENTRY(ZEND_NS_NAME(\"Sharp\\\\Internal\", \"requireNative\"), zif_Sharp_Internal_requireNative, arginfo_Sharp_Internal_requireNative, 0, NULL, NULL)\n";
+$bodyNames = '';
+$bodyItems = '';
+foreach ($externs as $extern) {
+    $path = explode('.', $extern['class']);
+    array_shift($path);
+    $native = 'sharp_native_' . implode('_', [...$path, $extern['name']]);
+    $function = 'Sharp_Internal_' . implode('_', [...$path, $extern['name']]);
+    $parameters = array_map(static fn (array $parameter): string => TYPES[$parameter['type']]['c'] . " $parameter[name]", $extern['parameters']);
+    $prototypes .= RETURNS[$extern['return']]['c'] . " $native(" . ($parameters === [] ? 'void' : implode(', ', $parameters)) . ");\n";
+    $arginfos .= "\n" . arginfo($function, $extern['return'], $extern['parameters']);
+    $wrappers .= "\n" . wrapper($function, $native, $extern);
+    $entries .= "\tZEND_RAW_FENTRY(ZEND_NS_NAME(\"" . implode('\\\\', ['Sharp', 'Internal', ...$path]) . "\", \"$extern[name]\"), zif_$function, arginfo_$function, 0, NULL, NULL)\n";
+    $bodyNames .= "\t\"$extern[class].$extern[name]\",\n";
+    $bodyItems .= "        '$extern[class].$extern[name]',\n";
+}
+
+write("$root/ext/sharp/sharp_native.h", <<<C
+/* Generated by sharp/bin/native from the extern declarations in sharp/composer/library. Do not edit. */
+
+#define SHARP_NATIVE "$fingerprint"
+
+typedef struct { const char *ptr; size_t len; } sharp_native_str;
+
+$prototypes
+$arginfos
+$wrappers
+static const zend_function_entry sharp_native_functions[] = {
+$entries	ZEND_FE_END
+};
+
+static const char *const sharp_native_bodies[] = {
+$bodyNames	NULL
+};
+
+C);
+
+write("$root/sharp/composer/native.php", <<<PHP
+<?php
+
+// Generated by sharp/bin/native. Do not edit.
+
+return [
+    'fingerprint' => '$fingerprint',
+    'bodies' => [
+$bodyItems    ],
+];
+
+PHP);

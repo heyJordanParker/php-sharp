@@ -31,7 +31,7 @@ class Signatures
 
     public function isSame(Signatures|int $other): bool
     {
-        return $other === $this || $other === $this->id;
+        return \is_int($other) ? $other === $this->id : $other === $this;
     }
 
     public function scale(int $first, int $second = 0, int $factor = 1): int

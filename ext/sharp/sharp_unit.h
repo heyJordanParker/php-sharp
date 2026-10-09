@@ -12,8 +12,8 @@
 #endif
 
 #define SHARP_UNIT_MAGIC "\x53\x48\x41\x52\x50\x43\x00\x00"
-#define SHARP_UNIT_ABI "\x8a\xcf\x02\xd0\xaa\xbf\xe3\xc9\xc8\xff\xd1\xce\x1d\x0c\xb7\x36"
-#define SHARP_MAGO_COMMIT "93f6a89d6e98621cbc6c71583b19e60c45401989"
+#define SHARP_UNIT_ABI "\x06\xe5\xcb\x52\x31\xdb\x6a\xf2\x7f\x2e\xb7\x23\x50\xd6\xd8\x2a"
+#define SHARP_MAGO_COMMIT "98d123849b6d27a836c1d4f64d4515d2f1e8f78f"
 
 #define SHARP_KINDS(X) \
   X(ZVAL) \
@@ -140,6 +140,8 @@
   X(PROP_ELEM) \
   X(PARAM)
 
+
+#define SHARP_T_FILE 347
 
 // One value per `zend_ast_kind`, named as that kind without `ZEND_` and equal to it, so `ext/sharp` casts it.
 enum sharp_kind
@@ -295,69 +297,6 @@ typedef enum sharp_value sharp_value;
 typedef uint8_t sharp_value;
 #endif // __STDC_VERSION__ >= 202311L
 
-enum sharp_severity
-#if __STDC_VERSION__ >= 202311L
-  : uint8_t
-#endif // __STDC_VERSION__ >= 202311L
- {
-  SHARP_PARSE_ERROR,
-  SHARP_COMPILE_ERROR,
-};
-#if __STDC_VERSION__ >= 202311L
-typedef enum sharp_severity sharp_severity;
-#else
-typedef uint8_t sharp_severity;
-#endif // __STDC_VERSION__ >= 202311L
-
-// `len` bytes of UTF-8 at `offset` in the unit's texts, not NUL-terminated.
-typedef struct {
-  uint32_t offset;
-  uint32_t len;
-} sharp_str;
-
-typedef struct {
-  sharp_kind kind;
-  // `zend_ast` attr: flags, modifiers, operator, `ZEND_NAME_FQ`.
-  uint32_t attr;
-  // First line.
-  uint32_t line;
-  // Closing line, for declarations.
-  uint32_t end_line;
-  // Index into `children[]`.
-  uint32_t first_child;
-  // List kinds are variadic.
-  uint32_t child_count;
-  // `SHARP_AST_ZVAL` only.
-  sharp_value value;
-  int64_t long_value;
-  double double_value;
-  // Names, string values, doc comments.
-  sharp_str text;
-} sharp_node;
-
-typedef struct {
-  uint32_t line;
-  uint32_t column;
-  sharp_severity severity;
-  sharp_str message;
-} sharp_diagnostic;
-
-typedef struct {
-  const sharp_node *nodes;
-  size_t node_count;
-  // `UINT32_MAX` is a null child.
-  const uint32_t *children;
-  size_t children_count;
-  // A `SHARP_AST_STMT_LIST`.
-  uint32_t root;
-  // The bytes every `sharp_str` of the unit points into.
-  const char *texts;
-  size_t texts_size;
-  // Non-empty: nodes are empty.
-  const sharp_diagnostic *diagnostics;
-  size_t diagnostic_count;
-} sharp_unit;
-
 // The first bytes of a `.sharpc` file. Every 16-byte hash is xxh3-128 in canonical big-endian order.
 typedef struct {
   // `SHARP_UNIT_MAGIC`.
@@ -379,6 +318,12 @@ typedef struct {
   uint32_t facts_size;
 } sharp_unit_header;
 
+// `len` bytes of UTF-8 at `offset` in the unit's texts, not NUL-terminated.
+typedef struct {
+  uint32_t offset;
+  uint32_t len;
+} sharp_str;
+
 // A file whose edit makes the compiled file's source due for a check.
 typedef struct {
   // Workspace-relative, with `/` separators.
@@ -388,19 +333,24 @@ typedef struct {
   uint8_t hash[16];
 } sharp_input;
 
-// MINIT: installs the silent panic hook.
-void sharp_init(void);
-
-// Lowers one `.sharp` file. Free the result with `sharp_unit_free`.
-//
-// # Safety
-//
-// `path` and `source` point to `path_len` and `source_len` readable bytes.
-sharp_unit *sharp_lower(const char *path, size_t path_len, const char *source, size_t source_len);
-
-// # Safety
-//
-// `unit` is null, or a unit `sharp_lower` returned that is not freed yet.
-void sharp_unit_free(sharp_unit *unit);
+typedef struct {
+  sharp_kind kind;
+  // `zend_ast` attr: flags, modifiers, operator, `ZEND_NAME_FQ`.
+  uint32_t attr;
+  // First line.
+  uint32_t line;
+  // Closing line, for declarations.
+  uint32_t end_line;
+  // Index into `children[]`.
+  uint32_t first_child;
+  // List kinds are variadic.
+  uint32_t child_count;
+  // `SHARP_AST_ZVAL` only.
+  sharp_value value;
+  int64_t long_value;
+  double double_value;
+  // Names, string values, doc comments.
+  sharp_str text;
+} sharp_node;
 
 #endif  /* SHARP_UNIT_H */

@@ -3,6 +3,7 @@ PHP# nullable types take and return null, and refuse it where the type is not nu
 --FILE--
 <?php
 
+require __DIR__ . '/harness/Helper.inc';
 require __DIR__ . '/Nulls.sharp';
 require __DIR__ . '/NullReturned.sharp';
 

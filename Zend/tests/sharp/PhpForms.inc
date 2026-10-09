@@ -8,12 +8,12 @@ class PhpForms
 
     public function report(int $pruned): void
     {
-        \printf("Pruned %d carts" + PHP_EOL, $pruned);
+        \printf("Pruned %d carts" . PHP_EOL, $pruned);
     }
 
     public function warn(string $message): void
     {
-        \fwrite(STDERR, $message + PHP_EOL);
+        \fwrite(STDERR, $message . PHP_EOL);
     }
 
     public function fail(string $message, int $code): void
@@ -28,7 +28,7 @@ class PhpForms
 
     public function folder(): string { return $this->environment->currentDirectory; }
 
-    public function stubs(): string { return (new \Sharp\Position(__FILE__, 31, 30, 'Demo.PhpForms.stubs'))->directory + "/stubs"; }
+    public function stubs(): string { return (new \Sharp\Position(__FILE__, 31, 30, 'Demo.PhpForms.stubs'))->directory . "/stubs"; }
 
     public function here(): array
     {

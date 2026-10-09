@@ -27,6 +27,8 @@ int(5)
 string(6) "ababab"
 string(7) "a, b, c"
 int(3)
+string(16) "Class: Demo\Plus"
+string(16) "Class: Demo\Plus"
 ADD run by the VM: 0
 ASSIGN_OP run by the VM: 0
 ASSIGN_OBJ_OP run by the VM: 0

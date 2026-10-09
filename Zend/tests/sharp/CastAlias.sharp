@@ -1,9 +1,0 @@
-namespace Demo;
-
-class CastAlias
-{
-    public static int whole(float ratio)
-    {
-        return (integer)ratio;
-    }
-}

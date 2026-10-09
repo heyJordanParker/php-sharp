@@ -1,0 +1,14 @@
+namespace Demo;
+
+import Sharp.IO.Path;
+
+class PathCalls
+{
+    public static string fileName(string path) => Path.fileName(path);
+
+    public static string directory(string path) => Path.directory(path);
+
+    public static string extension(string path) => Path.extension(path);
+
+    public static string fileNameWithoutExtension(string path) => Path.fileNameWithoutExtension(path);
+}

@@ -1380,10 +1380,6 @@ zend_result ZEND_FASTCALL checked_add_function(zval *result, zval *op1, zval *op
 		}
 		return SUCCESS;
 	}
-	/* PHP#'s + joins two strings, numeric or not. */
-	if (Z_TYPE_P(value1) == IS_STRING && Z_TYPE_P(value2) == IS_STRING) {
-		return concat_function(result, op1, op2);
-	}
 	return add_function(result, op1, op2);
 }
 /* }}} */

@@ -50,6 +50,13 @@ class Expressions
 total`;
     }
 
+    public static string greet(string first, string last)
+    {
+        let line = first + " " + last;
+        line += "!";
+        return line;
+    }
+
     private static int? lookup(int value)
     {
         if (value < 0) {

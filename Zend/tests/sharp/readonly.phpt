@@ -11,8 +11,9 @@ echo $label->isReadOnly() ? 'readonly' : 'writable', ' ', $label->hasDefaultValu
 $badge = new Demo\Badge(4);
 echo $badge->id, ' ', $badge->label, "\n";
 
+// mago compile refuses a PHP# write to a get-only property, so a PHP caller makes the write here.
 try {
-    $badge->rename('old');
+    $badge->label = 'old';
 } catch (Error $e) {
     echo $e->getMessage(), "\n";
 }

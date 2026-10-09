@@ -10,7 +10,7 @@ class Lambdas
     {
         let count = 0;
         const twice = (int a) => a * extra;
-        const Function<int(int)> half = b => intdiv(b, 2);
+        const Function<int(int)> half = b => b / 2;
         const add = (int step) => {
             count += step + this.base;
         };
