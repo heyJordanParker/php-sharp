@@ -61,6 +61,9 @@ var_dump(Closure::bind(Queue::orders()->emptied(), null, App\Order::class));
 // A type argument the request read from input stays the request's.
 $read = unserialize(str_replace('s:9:"App.Order"', 's:15:"App.SharedOrder"', serialize(Queue::orders())));
 echo implode(', ', arguments($read->paired(new App\SharedOrder(6)))), "\n";
+// In a method a subclass inherits, the subclass's header gives the method's class its type arguments.
+echo implode(', ', arguments(Queue::orderMaker()->make())), "\n";
+echo implode(', ', arguments(Queue::listMaker()->make())), "\n";
 
 echo "lazy objects\n";
 $class = new ReflectionClass(App\PaginatedList::class);
@@ -191,6 +194,8 @@ bool(true)
 Warning: Cannot unbind $this of closure using $this, this will be an error in PHP 9 in %s on line %d
 NULL
 App.SharedOrder, List<App.SharedOrder>?
+App.Order
+List<int>
 lazy objects
 array(1) {
   [0]=>

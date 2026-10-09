@@ -1051,6 +1051,12 @@ zend_class_entry *zend_persist_class_entry(zend_class_entry *orig_ce)
 		if (ce->info.user.filename) {
 			zend_accel_store_string(ce->info.user.filename);
 		}
+		if (ce->info.user.sharp_bounds) {
+			zend_accel_store_interned_string(ce->info.user.sharp_bounds);
+		}
+		if (ce->info.user.sharp_header) {
+			zend_accel_store_interned_string(ce->info.user.sharp_header);
+		}
 
 		if (ce->doc_comment) {
 			if (ZCG(accel_directives).save_comments) {

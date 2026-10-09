@@ -94,8 +94,59 @@ public class Node<T>
     public Node<List<T>> deeper() => new Node<List<T>>();
 }
 
+public interface Query<TItem : DatabaseEntity>
+{
+}
+
+public class Box<T>
+{
+    public Box()
+    {
+    }
+}
+
+public class IntBox : Box<int>
+{
+}
+
+public class StringBox : Box<string>
+{
+}
+
+public class Holder<TBox : Box<int>>
+{
+    public Holder()
+    {
+    }
+}
+
+public class Maker<T>
+{
+    public Maker()
+    {
+    }
+
+    public Box<T> make() => new Box<T>();
+}
+
+public class OrderMaker : Maker<Order>
+{
+}
+
+public class ListMaker<T> : Maker<List<T>>
+{
+}
+
 public class Queue
 {
+    public static Box<Query<Order>> queryBox() => new Box<Query<Order>>();
+
+    public static Holder<IntBox> holder() => new Holder<IntBox>();
+
+    public static OrderMaker orderMaker() => new OrderMaker();
+
+    public static ListMaker<int> listMaker() => new ListMaker<int>();
+
     public static Node<int> intNode() => new Node<int>();
 
     public static Node<string> stringNode() => new Node<string>();

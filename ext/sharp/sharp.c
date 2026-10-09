@@ -2007,12 +2007,24 @@ static const zend_property_info *sharp_type_arguments_slot(const zend_class_entr
 	return slot && slot->ce == ce && (slot->flags & ZEND_ACC_SHARP_HIDDEN) ? slot : NULL;
 }
 
-/* The type arguments `ce`'s objects start with: its bounds, the default of its slot. */
-static const sharp_type *sharp_type_bounds(const zend_class_entry *ce, const zend_property_info *slot)
+/* Whether PHP# declared `ce`, so its metadata says which type parameters it has. A class plain PHP declares writes its
+ * type parameters in docblocks only, which the engine never reads. */
+static bool sharp_class_is_sharp(const zend_class_entry *ce)
 {
-	const zval *bounds = &ce->default_properties_table[OBJ_PROP_TO_NUM(slot->offset)];
-	const sharp_type *list = sharp_type_list(Z_STRVAL_P(bounds), Z_STRLEN_P(bounds));
+	return ce->type == ZEND_USER_CLASS && ce->info.user.sharp_bounds;
+}
 
+/* The bounds of the type parameters of `ce`, a PHP# class-like, which its objects start with as their type arguments.
+ * NULL when it declares none. */
+static const sharp_type *sharp_class_bounds(const zend_class_entry *ce)
+{
+	const zend_string *bounds = ce->info.user.sharp_bounds;
+
+	if (!ZSTR_LEN(bounds)) {
+		return NULL;
+	}
+
+	const sharp_type *list = sharp_type_list(ZSTR_VAL(bounds), ZSTR_LEN(bounds));
 	ZEND_ASSERT(list != NULL);
 
 	return list;
@@ -2039,7 +2051,7 @@ const sharp_type *sharp_type_arguments_of_slot(zend_object *object)
 
 	/* Plain PHP created the object, so its slot holds its class's bounds as a type text, or is UNDEF when the object
 	 * was created lazy. */
-	const sharp_type *bounds = sharp_type_bounds(object->ce, slot);
+	const sharp_type *bounds = sharp_class_bounds(object->ce);
 	if (Z_TYPE_P(value) == IS_STRING) {
 		zval_ptr_dtor_str(value);
 		ZVAL_PTR(value, (void *) bounds);
@@ -2234,19 +2246,23 @@ static void sharp_type_union_add(sharp_type_node *node, sharp_type_node *type, b
 	}
 }
 
-/* `node` with each `$i` in it replaced by member i of `arguments`, spelled as code spells the type it becomes: a union
- * flattens a union or a nullable type it is given, `Any` takes in a whole union, and a nullable type stays one `?`. NULL
- * when `node` names an index `arguments` has no member at. */
+/* `node` with each `$i` in it replaced by member i of `arguments`, a list or a class type, spelled as code spells the
+ * type it becomes: a union flattens a union or a nullable type it is given, `Any` takes in a whole union, and a nullable
+ * type stays one `?`. NULL when `node` names an index `arguments` has no member at. */
 static sharp_type_node *sharp_type_node_substitute(
-	sharp_type_node *node, const sharp_type *arguments, sharp_type_reader *reader)
+	sharp_type_node *node, const sharp_type_node *arguments, sharp_type_reader *reader)
 {
 	if (node->parameter) {
 		if (node->parameter > arguments->count) {
 			return NULL;
 		}
 
-		const zend_string *text = arguments->members[node->parameter - 1]->text;
-		sharp_type_reader argument = sharp_type_reader_of(ZSTR_VAL(text), ZSTR_LEN(text), reader->arena);
+		const sharp_type_node *given = arguments->first;
+		for (uint32_t i = 1; i < node->parameter; i++) {
+			given = given->next;
+		}
+		/* A copy, since the type it goes into is respelled in place. */
+		sharp_type_reader argument = sharp_type_reader_of(given->text, given->length, reader->arena);
 		sharp_type_node *type = sharp_type_read(&argument);
 		reader->arena = argument.arena;
 		ZEND_ASSERT(type && argument.at == argument.end);
@@ -2312,17 +2328,103 @@ static sharp_type_node *sharp_type_node_substitute(
 	return node;
 }
 
+/* The type argument list `text` spells, read whole into `reader`'s arena, or an empty list when `text` is empty. */
+static sharp_type_node *sharp_type_node_list(const zend_string *text, sharp_type_reader *reader)
+{
+	if (!ZSTR_LEN(text)) {
+		return sharp_type_node_start(reader, SHARP_TYPE_LIST, ZSTR_VAL(text));
+	}
+
+	sharp_type_reader list = sharp_type_reader_of(ZSTR_VAL(text), ZSTR_LEN(text), reader->arena);
+	sharp_type_node *node = sharp_type_read_list(&list);
+	reader->arena = list.arena;
+	ZEND_ASSERT(node != NULL);
+
+	return node;
+}
+
+/* The type arguments `ancestor`, one of the classes `ce` extends or implements, takes from `ce` given `arguments`, a
+ * list or a class type: the entry of `ce`'s header for the class it leads up through, with each `$i` in it replaced by
+ * argument i, and so on up. A class the header gives no type arguments, or plain PHP's, starts from its bounds, as an
+ * object plain PHP creates does. NULL when an entry names an index `arguments` has no member at. */
+static sharp_type_node *sharp_type_node_ancestor(const zend_class_entry *ce, sharp_type_node *arguments,
+	const zend_class_entry *ancestor, sharp_type_reader *reader)
+{
+	while (arguments && ce != ancestor) {
+		const zend_class_entry *next = NULL;
+
+		if (sharp_class_is_sharp(ce) && ce->info.user.sharp_header) {
+			sharp_type_node *header = sharp_type_node_list(ce->info.user.sharp_header, reader);
+
+			/* A loaded class has loaded each class it extends or implements. */
+			for (sharp_type_node *entry = header->first; entry && !next; entry = entry->next) {
+				zend_string *name = sharp_type_class_name(entry->name, entry->name_length, false);
+				zend_class_entry *named = zend_lookup_class_ex(name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+				zend_string_release_ex(name, false);
+
+				if (named && instanceof_function(named, ancestor)) {
+					next = named;
+					arguments = sharp_type_node_substitute(entry, arguments, reader);
+				}
+			}
+		}
+		if (!next) {
+			next = ce->parent && instanceof_function(ce->parent, ancestor) ? ce->parent : NULL;
+			for (uint32_t i = 0; !next && i < ce->num_interfaces; i++) {
+				next = instanceof_function(ce->interfaces[i], ancestor) ? ce->interfaces[i] : NULL;
+			}
+			ZEND_ASSERT(next != NULL);
+			arguments = sharp_type_node_list(
+				sharp_class_is_sharp(next) ? next->info.user.sharp_bounds : ZSTR_EMPTY_ALLOC(), reader);
+		}
+		ce = next;
+	}
+
+	return arguments;
+}
+
+/* The interned type arguments `ancestor`, one of the classes `ce` extends or implements, takes from `ce` given its own
+ * `arguments`, NULL when `ce` declares none. NULL when `ancestor` takes none from it. */
+static const sharp_type *sharp_type_arguments_of_ancestor(
+	const zend_class_entry *ce, const sharp_type *arguments, const zend_class_entry *ancestor)
+{
+	sharp_type_reader reader = sharp_type_reader_of(NULL, 0, zend_arena_create(1024));
+	sharp_type_node *given = sharp_type_node_list(arguments ? arguments->text : ZSTR_EMPTY_ALLOC(), &reader);
+	sharp_type_node *passed = sharp_type_node_ancestor(ce, given, ancestor, &reader);
+	const sharp_type *list = NULL;
+
+	if (passed && passed->count) {
+		sharp_type_node *members = sharp_type_node_start(&reader, SHARP_TYPE_LIST, NULL);
+
+		members->first = passed->first;
+		members->last = passed->last;
+		members->count = passed->count;
+		sharp_type_node_spell(members, &reader.arena);
+		/* The object's own type arguments can be the request's, so the list is too unless code spells it. */
+		list = sharp_type_intern(members, false, &reader.arena);
+	}
+	zend_arena_destroy(reader.arena);
+
+	return list;
+}
+
 const sharp_type *sharp_type_list_of_this(
 	const zval *text, zend_object *object, const zend_class_entry *scope, void **cache)
 {
-	/* The indexes count the type parameters of the method's class. A subclass's own type arguments count its own, and
-	 * one that declares none takes them from its header, which no object holds. */
-	if (object->ce != scope) {
+	/* A lambda bound to an object of an unrelated class has no type arguments of the method's class to read. */
+	if (!instanceof_function(object->ce, scope)) {
 		return NULL;
 	}
 
 	/* A lazy proxy's initializer runs here, and can throw. */
 	const sharp_type *arguments = sharp_type_arguments(object);
+	if (UNEXPECTED(EG(exception))) {
+		return NULL;
+	}
+	/* The indexes count the type parameters of the method's class, which a subclass's header gives their values. */
+	if (object->ce != scope) {
+		arguments = sharp_type_arguments_of_ancestor(object->ce, arguments, scope);
+	}
 	if (!arguments) {
 		return NULL;
 	}
@@ -2333,7 +2435,7 @@ const sharp_type *sharp_type_list_of_this(
 	sharp_type_reader reader = sharp_type_reader_of(Z_STRVAL_P(text), Z_STRLEN_P(text), zend_arena_create(1024));
 	sharp_type_node *open = sharp_type_read_list(&reader);
 	ZEND_ASSERT(open && reader.open);
-	sharp_type_node *list = sharp_type_node_substitute(open, arguments, &reader);
+	sharp_type_node *list = sharp_type_node_substitute(open, sharp_type_node_list(arguments->text, &reader), &reader);
 	ZEND_ASSERT(list != NULL);
 	/* A type a substitution spells is bounded by how deep the program nests it, not by its source, as in
 	 * Node<List<T>>, so a new one lives for the request. One code already spells is the process's. */
@@ -2349,19 +2451,21 @@ const sharp_type *sharp_type_list_of_this(
 	return substituted;
 }
 
-static bool sharp_type_arguments_fit(const sharp_type_node *arguments, const zend_class_entry *ce);
+static bool sharp_type_arguments_fit(
+	const sharp_type_node *arguments, const zend_class_entry *ce, sharp_type_reader *reader);
 
-/* Whether `type` is within `bound`: `Any?` holds every type, `Any` every type but null, a class its subclasses, an
- * intersection what each of its classes holds, and any other bound only itself. A union is within a bound when each of
- * its members is, and an intersection when one of its classes is. */
-static bool sharp_type_fits(const sharp_type_node *type, const sharp_type *bound)
+/* Whether `type` is within `bound`: `Any?` holds every type, `Any` every type but null, a class its subclasses, a class
+ * with type arguments each subclass whose header gives it those, an intersection what each of its classes holds, and
+ * any other bound only itself. A union is within a bound when each of its members is, and an intersection when one of
+ * its classes is. */
+static bool sharp_type_fits(sharp_type_node *type, const sharp_type *bound, sharp_type_reader *reader)
 {
 	if (zend_string_equals_literal(bound->text, "Any?")) {
 		return true;
 	}
 	if (type->kind == SHARP_TYPE_UNION) {
-		for (const sharp_type_node *member = type->first; member; member = member->next) {
-			if (!sharp_type_fits(member, bound)) {
+		for (sharp_type_node *member = type->first; member; member = member->next) {
+			if (!sharp_type_fits(member, bound, reader)) {
 				return false;
 			}
 		}
@@ -2370,11 +2474,11 @@ static bool sharp_type_fits(const sharp_type_node *type, const sharp_type *bound
 	}
 	if (bound->kind == SHARP_TYPE_NULLABLE) {
 		return sharp_type_node_is(type, "null")
-			|| sharp_type_fits(type->kind == SHARP_TYPE_NULLABLE ? type->first : type, bound->members[0]);
+			|| sharp_type_fits(type->kind == SHARP_TYPE_NULLABLE ? type->first : type, bound->members[0], reader);
 	}
 	if (bound->kind == SHARP_TYPE_UNION) {
 		for (uint32_t i = 0; i < bound->count; i++) {
-			if (sharp_type_fits(type, bound->members[i])) {
+			if (sharp_type_fits(type, bound->members[i], reader)) {
 				return true;
 			}
 		}
@@ -2383,7 +2487,7 @@ static bool sharp_type_fits(const sharp_type_node *type, const sharp_type *bound
 	}
 	if (bound->kind == SHARP_TYPE_INTERSECTION) {
 		for (uint32_t i = 0; i < bound->count; i++) {
-			if (!sharp_type_fits(type, bound->members[i])) {
+			if (!sharp_type_fits(type, bound->members[i], reader)) {
 				return false;
 			}
 		}
@@ -2394,30 +2498,48 @@ static bool sharp_type_fits(const sharp_type_node *type, const sharp_type *bound
 		return type->kind != SHARP_TYPE_NULLABLE && !sharp_type_node_is(type, "null");
 	}
 	if (type->kind == SHARP_TYPE_INTERSECTION) {
-		for (const sharp_type_node *member = type->first; member; member = member->next) {
-			if (sharp_type_fits(member, bound)) {
+		for (sharp_type_node *member = type->first; member; member = member->next) {
+			if (sharp_type_fits(member, bound, reader)) {
 				return true;
 			}
 		}
 
 		return false;
 	}
-	if (bound->class_name && !bound->count) {
-		/* A loaded class has loaded each class it extends or implements. */
-		zend_class_entry *ce = zend_lookup_class_ex(bound->class_name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
-
-		return type->ce && ce && instanceof_function(type->ce, ce);
+	if (!bound->class_name) {
+		return zend_string_equals_cstr(bound->text, type->text, type->length);
 	}
 
-	return zend_string_equals_cstr(bound->text, type->text, type->length);
+	/* A loaded class has loaded each class it extends or implements. */
+	zend_class_entry *ce = zend_lookup_class_ex(bound->class_name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+	if (!type->ce || !ce || !instanceof_function(type->ce, ce)) {
+		return false;
+	}
+	if (!bound->count) {
+		return true;
+	}
+
+	/* The type arguments must be the bound's own, so `IntBox : Box<int>` is within `Box<int>`. */
+	const sharp_type_node *given = sharp_type_node_ancestor(type->ce, type, ce, reader);
+	if (!given || given->count != bound->count) {
+		return false;
+	}
+	uint32_t i = 0;
+	for (const sharp_type_node *argument = given->first; argument; argument = argument->next) {
+		if (!zend_string_equals_cstr(bound->members[i++]->text, argument->text, argument->length)) {
+			return false;
+		}
+	}
+
+	return true;
 }
 
 /* Whether each type `node` holds takes the type arguments it is given, as many as it has type parameters, each
  * within its bound. */
-static bool sharp_type_node_complete(const sharp_type_node *node)
+static bool sharp_type_node_complete(sharp_type_node *node, sharp_type_reader *reader)
 {
-	for (const sharp_type_node *member = node->first; member; member = member->next) {
-		if (!sharp_type_node_complete(member)) {
+	for (sharp_type_node *member = node->first; member; member = member->next) {
+		if (!sharp_type_node_complete(member, reader)) {
 			return false;
 		}
 	}
@@ -2426,26 +2548,29 @@ static bool sharp_type_node_complete(const sharp_type_node *node)
 	}
 
 	return node->ce
-		? sharp_type_arguments_fit(node, node->ce)
+		? sharp_type_arguments_fit(node, node->ce, reader)
 		: node->count == (uint32_t) sharp_type_built_in_arity(node->text, node->name_length);
 }
 
-/* Whether `arguments`, a type argument list or a class type, gives `ce` one type argument within each bound. */
-static bool sharp_type_arguments_fit(const sharp_type_node *arguments, const zend_class_entry *ce)
+/* Whether `arguments`, a type argument list or a class type, gives `ce` one type argument within each bound. Plain PHP
+ * writes a class's type parameters in docblocks only, so a class it declares takes any type arguments. */
+static bool sharp_type_arguments_fit(
+	const sharp_type_node *arguments, const zend_class_entry *ce, sharp_type_reader *reader)
 {
-	const zend_property_info *slot = sharp_type_arguments_slot(ce);
-
-	if (!slot) {
-		return arguments->count == 0;
+	if (!sharp_class_is_sharp(ce)) {
+		return true;
 	}
 
-	const sharp_type *bounds = sharp_type_bounds(ce, slot);
+	const sharp_type *bounds = sharp_class_bounds(ce);
+	if (!bounds) {
+		return arguments->count == 0;
+	}
 	if (arguments->count != bounds->count) {
 		return false;
 	}
 	uint32_t i = 0;
-	for (const sharp_type_node *argument = arguments->first; argument; argument = argument->next) {
-		if (!sharp_type_fits(argument, bounds->members[i++])) {
+	for (sharp_type_node *argument = arguments->first; argument; argument = argument->next) {
+		if (!sharp_type_fits(argument, bounds->members[i++], reader)) {
 			return false;
 		}
 	}
@@ -2466,8 +2591,8 @@ zend_result sharp_type_arguments_unserialize(
 	sharp_type_node *arguments = sharp_type_read_list(&reader);
 	const sharp_type *list = NULL;
 	if (arguments && !reader.open && sharp_type_node_resolve(arguments, resolve, context)
-		&& sharp_type_node_respell(arguments, &reader.arena) && sharp_type_node_complete(arguments)
-		&& sharp_type_arguments_fit(arguments, object->ce)) {
+		&& sharp_type_node_respell(arguments, &reader.arena) && sharp_type_node_complete(arguments, &reader)
+		&& sharp_type_arguments_fit(arguments, object->ce, &reader)) {
 		list = sharp_type_intern(arguments, false, &reader.arena);
 	}
 	zend_arena_destroy(reader.arena);

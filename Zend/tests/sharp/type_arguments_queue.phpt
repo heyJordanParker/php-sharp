@@ -88,6 +88,29 @@ foreach ([new App\Report([]), Queue::report()] as $report) {
 }
 // A type argument is within an intersection bound when it is within each of its members.
 var_dump(@unserialize(str_replace('s:15:"App.SharedOrder"', 's:9:"App.Order"', serialize(Queue::report()))));
+
+echo "a type argument can name a generic interface, or a class whose header gives a generic bound its type arguments\n";
+foreach ([Queue::queryBox(), Queue::holder()] as $job) {
+    $queued = serialize($job);
+    show($queued);
+    $run = unserialize($queued);
+    echo get_class($run), '<', implode(', ', arguments($run)), '> ', var_export($run == $job, true), "\n";
+}
+// Holder's bound is Box<int>, which Box<int> is, and StringBox's header makes it a Box<string>.
+foreach (['App.Box<int>', 'App.StringBox'] as $text) {
+    $run = @unserialize(str_replace('s:10:"App.IntBox"', 's:' . strlen($text) . ':"' . $text . '"', serialize(Queue::holder())));
+    echo $text, ': ', $run === false ? 'refused' : implode(', ', arguments($run)), "\n";
+}
+
+echo "a plain PHP class declares its type parameters only in a docblock, so it takes any type arguments\n";
+/** @template T */
+final class PlainBag
+{
+}
+foreach (['PlainBag', 'PlainBag<int>', 'PlainBag<int, string>'] as $text) {
+    $run = unserialize(str_replace('s:20:"App.Query<App.Order>"', 's:' . strlen($text) . ':"' . $text . '"', serialize(Queue::queryBox())));
+    echo implode(', ', arguments($run)), "\n";
+}
 ?>
 --EXPECT--
 the default form
@@ -135,3 +158,14 @@ App.DatabaseEntity & App.Shareable true
 O:10:"App\Report":2:{s:5:"items";a:0:{}s:14:"\0<sharp>\0types";s:15:"App.SharedOrder";}
 App.SharedOrder true
 bool(false)
+a type argument can name a generic interface, or a class whose header gives a generic bound its type arguments
+O:7:"App\Box":1:{s:14:"\0<sharp>\0types";s:20:"App.Query<App.Order>";}
+App\Box<App.Query<App.Order>> true
+O:10:"App\Holder":1:{s:14:"\0<sharp>\0types";s:10:"App.IntBox";}
+App\Holder<App.IntBox> true
+App.Box<int>: App.Box<int>
+App.StringBox: refused
+a plain PHP class declares its type parameters only in a docblock, so it takes any type arguments
+PlainBag
+PlainBag<int>
+PlainBag<int, string>

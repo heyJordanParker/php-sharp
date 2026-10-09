@@ -5542,17 +5542,40 @@ static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_a
 }
 /* }}} */
 
-/* A ZEND_AST_SHARP_TYPE_ARGS in a class's member list declares the slot its objects keep their type arguments in,
- * with the class's bounds as its default. */
-static void zend_compile_sharp_type_args_slot(zend_ast *ast)
+/* A ZEND_AST_SHARP_TYPE_ARGS in the member list of a PHP# class-like holds its metadata: the type arguments its header
+ * gives each generic parent and interface, and the bounds of its type parameters, each a type text or NULL. A generic
+ * class also declares from it the slot its objects keep their type arguments in, with its bounds as the default. */
+static void zend_compile_sharp_class_metadata(zend_ast *ast)
 {
-	zval bounds;
+	zend_class_entry *ce = CG(active_class_entry);
+	zend_ast *header_ast = ast->child[0];
+	zend_ast *bounds_ast = ast->child[1];
 
-	ZEND_ASSERT(CG(active_class_entry) && ast->child[0] == NULL);
-	ZVAL_STR_COPY(&bounds, zend_sharp_type_text(ast->child[1]));
-	zend_declare_typed_property(CG(active_class_entry), sharp_type_arguments_key, &bounds,
+	ZEND_ASSERT(ce && ce->type == ZEND_USER_CLASS);
+	if (header_ast) {
+		zend_string *header = zend_ast_get_str(header_ast);
+
+		/* The header writes the class's own type parameters as `$i`, as an open `new` does. */
+		if (!sharp_type_list_is_open(ZSTR_VAL(header), ZSTR_LEN(header))) {
+			zend_sharp_type_text(header_ast);
+		}
+		ce->info.user.sharp_header = zend_string_copy(header);
+	}
+	if (!bounds_ast) {
+		ce->info.user.sharp_bounds = ZSTR_EMPTY_ALLOC();
+		return;
+	}
+
+	ce->info.user.sharp_bounds = zend_string_copy(zend_sharp_type_text(bounds_ast));
+	if (ce->ce_flags & ZEND_ACC_INTERFACE) {
+		return;
+	}
+
+	zval bounds;
+	ZVAL_STR_COPY(&bounds, ce->info.user.sharp_bounds);
+	zend_declare_typed_property(ce, sharp_type_arguments_key, &bounds,
 		ZEND_ACC_PUBLIC | ZEND_ACC_SHARP_HIDDEN, NULL, (zend_type) ZEND_TYPE_INIT_NONE(0));
-	CG(active_class_entry)->ce_flags |= ZEND_ACC_SHARP_GENERIC;
+	ce->ce_flags |= ZEND_ACC_SHARP_GENERIC;
 }
 
 static void zend_compile_global_var(zend_ast *ast) /* {{{ */
@@ -9430,6 +9453,8 @@ static void zend_compile_class_decl(znode *result, zend_ast *ast, bool toplevel)
 	ce->info.user.filename = zend_string_copy(zend_get_compiled_filename());
 	ce->info.user.line_start = decl->start_lineno;
 	ce->info.user.line_end = decl->end_lineno;
+	ce->info.user.sharp_bounds = NULL;
+	ce->info.user.sharp_header = NULL;
 
 	if (decl->doc_comment) {
 		ce->doc_comment = zend_string_copy(decl->doc_comment);
@@ -11897,7 +11922,7 @@ static void zend_compile_stmt(zend_ast *ast) /* {{{ */
 			zend_compile_prop_group(ast);
 			break;
 		case ZEND_AST_SHARP_TYPE_ARGS:
-			zend_compile_sharp_type_args_slot(ast);
+			zend_compile_sharp_class_metadata(ast);
 			break;
 		case ZEND_AST_CLASS_CONST_GROUP:
 			zend_compile_class_const_group(ast);

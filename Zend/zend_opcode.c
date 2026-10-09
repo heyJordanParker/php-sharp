@@ -342,6 +342,12 @@ ZEND_API void destroy_zend_class(zval *zv)
 
 				zend_string_release_ex(ce->name, 0);
 				zend_string_release_ex(ce->info.user.filename, 0);
+				if (ce->info.user.sharp_bounds) {
+					zend_string_release_ex(ce->info.user.sharp_bounds, 0);
+				}
+				if (ce->info.user.sharp_header) {
+					zend_string_release_ex(ce->info.user.sharp_header, 0);
+				}
 
 				if (ce->doc_comment) {
 					zend_string_release_ex(ce->doc_comment, 0);
