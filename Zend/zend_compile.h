@@ -1160,6 +1160,10 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  * right after it. The NEW's class is then never a CONST, whose cache slot upstream keeps in op2, and the
  * NEW handler asserts it.
  *   op2 of ZEND_NEW                                           upstream: UNUSED, the cache slot of a CONST op1
+ * It also gives a PHP# generic call the type arguments of the method it calls, in the TMP right before the call op,
+ * which the method's ZEND_SHARP_RECV_TYPE_ARGS reads through the caller's opline. Upstream never writes this operand,
+ * which init_op leaves IS_UNUSED.
+ *   op1 of ZEND_DO_FCALL, ZEND_DO_UCALL, ZEND_DO_FCALL_BY_NAME   upstream: UNUSED
  *
  * ZEND_ACC_SHARP_HIDDEN: the hidden slot an object of a generic PHP# class keeps its type arguments in.
  *   flags of zend_property_info                               upstream: the ZEND_ACC_* property flags
@@ -1187,6 +1191,8 @@ ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & UINT8_MAX),
 	"ZEND_SHARP_OPERATOR overlaps the type in the extended_value of ZEND_CAST");
 ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & (ZEND_FETCH_DIM_REF|ZEND_FETCH_DIM_DIM|ZEND_FETCH_DIM_OBJ|ZEND_FETCH_DIM_INCDEC)),
 	"ZEND_SHARP_OPERATOR overlaps the ZEND_FETCH_DIM_* flags in the extended_value of ZEND_FETCH_DIM_R and ZEND_FETCH_DIM_FUNC_ARG");
+ZEND_STATIC_ASSERT(IS_UNUSED == 0,
+	"init_op leaves op1 of the ZEND_DO_*CALL opcodes IS_UNUSED only while IS_UNUSED is 0");
 ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_HIDDEN & (ZEND_ACC_PPP_MASK|ZEND_ACC_PPP_SET_MASK|ZEND_ACC_CHANGED|ZEND_ACC_STATIC
 		|ZEND_ACC_FINAL|ZEND_ACC_ABSTRACT|ZEND_ACC_READONLY|ZEND_ACC_PROMOTED|ZEND_ACC_VIRTUAL|ZEND_ACC_DEPRECATED
 		|ZEND_ACC_OVERRIDE)),
@@ -1206,10 +1212,11 @@ static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 	return (ast->attr & ZEND_SHARP_OPERATOR_SYNTAX) ? ZEND_SHARP_OPERATOR : 0;
 }
 
-/* op1.num of a ZEND_SHARP_TYPE_ARGS whose CONST op2 is an open type text, one that writes a type parameter of the class
- * it is written in as `$` and its index. The class name literals after op2 name that class, which Closure::call() and
- * Closure::bind() never change. Its four cache slots hold this's class, this's own type arguments, the list they
- * spelled, and the class it is written in. */
+/* op1.num of a ZEND_SHARP_TYPE_ARGS whose CONST op2 is an open type text that writes only type parameters of the class
+ * it is written in, as `$` and its index. A text that also writes one of its method, as `#` and its index, takes the
+ * method's hidden local as its CV op1 instead. The class name literals after an open op2 name that class, which
+ * Closure::call() and Closure::bind() never change. Its five cache slots hold this's class, this's own type arguments,
+ * the method's type arguments, the list they spelled, and the class it is written in. */
 #define ZEND_SHARP_TYPE_ARGS_OPEN 1
 
 #define ZEND_LAST_CATCH			(1<<0)

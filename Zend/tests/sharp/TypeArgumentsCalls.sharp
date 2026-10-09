@@ -1,0 +1,88 @@
+namespace Calls;
+
+import App.Box;
+import App.DatabaseEntity;
+import App.Order;
+import App.Pair;
+import Legacy.Converter;
+import Lib.Witness;
+
+public class Repository
+{
+    public static Box<T> box<T>(T item) => new Box<T>();
+
+    public static Box<Order> written(Order order) => Repository.box<Order>(order);
+
+    public static Box<Order> inferred(Order order) => Repository.box(order);
+
+    public static Box<T> forward<T : DatabaseEntity>(T item) => Repository.box<T>(item);
+
+    public static Box<Order> forwarded(Order order) => Repository.forward<Order>(order);
+
+    public static Box<T> gather<T>(T first, T ...rest) => new Box<T>();
+
+    public static Box<Order> spread(List<Order> orders) => Repository.gather<Order>(orders[0], ...orders);
+
+    public static Function<Box<T>()> later<T>(T item) => () => new Box<T>();
+
+    public static Function<Function<Box<T>()>()> laterStill<T>(T item) => () => () => new Box<T>();
+
+    public static Function<Box<T>()> held<T>(T item) => () => Repository.box<T>(item);
+
+    public static Function<Box<Order>()> orderLater(Order order) => Repository.later<Order>(order);
+
+    public static Function<Function<Box<Order>()>()> orderLaterStill(Order order) => Repository.laterStill<Order>(order);
+
+    public static Function<Box<Order>()> orderHeld(Order order) => Repository.held<Order>(order);
+
+    public static Keyed<int> numbered() => new Keyed<int>(7);
+
+    public static Pair<int, Order> keyed(Order order) => Repository.numbered().again<Order>(order);
+
+    public static int one<T>() => 1;
+
+    public static int called() => Repository.one<Order>();
+
+    public static Order converted(Order order) => Converter.convert<Order>(order);
+
+    public static bool record<T>(T level, string message)
+    {
+        Witness.see(new Box<T>());
+        return true;
+    }
+
+    public static Map<int|string, Any?> locals<T>(T item) => get_defined_vars();
+}
+
+public class Shelf
+{
+    public Shelf()
+    {
+    }
+
+    public Box<T> make<T>(T item) => new Box<T>();
+
+    public Box<Order> stock(Order order) => this.make<Order>(order);
+}
+
+public class Keyed<TKey>
+{
+    public Keyed(public TKey key { get; })
+    {
+    }
+
+    public Pair<TKey, T> with<T>(T value) => new Pair<TKey, T>(this.key, value);
+
+    public Pair<TKey, T> again<T>(T value) => this.with<T>(value);
+
+    public Pair<TKey, TKey> twice() => this.with<TKey>(this.key);
+}
+
+public class Labeled
+{
+    public Labeled(public Order order { get; })
+    {
+    }
+
+    public Box<Order> boxed { get => Repository.box<Order>(this.order); }
+}

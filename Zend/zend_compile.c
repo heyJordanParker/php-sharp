@@ -3972,6 +3972,8 @@ ZEND_API uint8_t zend_get_call_op(const zend_op *init_op, zend_function *fbc, bo
 }
 /* }}} */
 
+static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast);
+
 static bool zend_compile_call_common(znode *result, zend_ast *args_ast, zend_function *fbc, uint32_t lineno) /* {{{ */
 {
 	zend_op *opline;
@@ -3993,10 +3995,26 @@ static bool zend_compile_call_common(znode *result, zend_ast *args_ast, zend_fun
 		return true;
 	}
 
+	/* A PHP# generic call ends its arguments with the type arguments it gives the method, a ZEND_AST_SHARP_TYPE_ARGS
+	 * without a `new`, which the call op takes. */
+	zend_ast_list *args = zend_ast_get_list(args_ast);
+	zend_ast *type_args_ast = NULL;
+	if (args->children && args->child[args->children - 1]->kind == ZEND_AST_SHARP_TYPE_ARGS
+		&& !args->child[args->children - 1]->child[0]) {
+		type_args_ast = args->child[--args->children];
+	}
+
 	bool may_have_extra_named_args;
 	uint32_t arg_count = zend_compile_args(args_ast, fbc, &may_have_extra_named_args);
 
 	zend_do_extended_fcall_begin();
+
+	znode type_args_node;
+	if (type_args_ast) {
+		zend_compile_sharp_type_args(&type_args_node, type_args_ast->child[1]);
+		/* zend_ast_destroy frees the node with the list. */
+		args->children++;
+	}
 
 	opline = &CG(active_op_array)->opcodes[opnum_init];
 	opline->extended_value = arg_count;
@@ -4014,7 +4032,8 @@ static bool zend_compile_call_common(znode *result, zend_ast *args_ast, zend_fun
 		 */
 		false
 	);
-	opline = zend_emit_op(result, call_op, NULL, NULL);
+	ZEND_ASSERT(!type_args_ast || call_op == ZEND_DO_FCALL || call_op == ZEND_DO_UCALL || call_op == ZEND_DO_FCALL_BY_NAME);
+	opline = zend_emit_op(result, call_op, type_args_ast ? &type_args_node : NULL, NULL);
 	if (may_have_extra_named_args) {
 		opline->extended_value = ZEND_FCALL_MAY_HAVE_EXTRA_NAMED_PARAMS;
 	}
@@ -5471,6 +5490,121 @@ static zend_string *zend_sharp_type_text(zend_ast *text_ast)
 	return text;
 }
 
+/* Emits the ZEND_SHARP_TYPE_ARGS that resolves the type arguments `text_ast` spells into `result`, or this's when
+ * `text_ast` is NULL, as `new Self` gives them. */
+static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast)
+{
+	zend_op *opline = zend_emit_op_tmp(result, ZEND_SHARP_TYPE_ARGS, NULL, NULL);
+
+	if (!text_ast) {
+		/* `new Self` reads this's type arguments, so a closure around it keeps its this, as one reading $this does. */
+		CG(active_op_array)->fn_flags |= ZEND_ACC_USES_THIS;
+		return;
+	}
+
+	zend_string *text = zend_ast_get_str(text_ast);
+	uint32_t names = sharp_type_list_names(ZSTR_VAL(text), ZSTR_LEN(text));
+	if (!names) {
+		zend_sharp_type_text(text_ast);
+	}
+	text = zend_string_copy(text);
+	opline->op2_type = IS_CONST;
+	opline->op2.constant = zend_add_literal_string(&text);
+	opline->extended_value = zend_alloc_cache_slots(names ? 5 : 1);
+	if (!names) {
+		return;
+	}
+
+	/* Its `$i` count the type parameters of the class it is written in, which a lambda keeps when Closure::call() or
+	 * Closure::bind() gives it another scope. */
+	ZEND_ASSERT(CG(active_class_entry));
+	zend_add_class_name_literal(zend_string_copy(CG(active_class_entry)->name));
+	if (names & SHARP_TYPE_NAMES_METHOD) {
+		opline->op1_type = IS_CV;
+		opline->op1.var = lookup_cv(sharp_type_arguments_key);
+	} else {
+		opline->op1.num = ZEND_SHARP_TYPE_ARGS_OPEN;
+	}
+	if (names & SHARP_TYPE_NAMES_THIS) {
+		/* A text that names `$i` reads this's type arguments, so a closure around it keeps its this. */
+		CG(active_op_array)->fn_flags |= ZEND_ACC_USES_THIS;
+	}
+}
+
+/* Emits the ZEND_SHARP_RECV_TYPE_ARGS that gives a PHP# generic method its own type arguments in its hidden local: the
+ * ones its call gives, or the bounds `bounds_ast` spells. It follows the RECVs, so the optimizer never inlines the
+ * method and the frame of a function without type hints, which skips its RECVs, still runs it. */
+static void zend_compile_sharp_recv_type_args(zend_ast *bounds_ast)
+{
+	zend_op_array *op_array = CG(active_op_array);
+	ZEND_ASSERT(get_next_op_number() == op_array->num_args + ((op_array->fn_flags & ZEND_ACC_VARIADIC) != 0));
+
+	/* A bound names a type parameter of the method's class as `$i`, never one of the method. */
+	zend_string *bounds = zend_ast_get_str(bounds_ast);
+	if (!sharp_type_list_names(ZSTR_VAL(bounds), ZSTR_LEN(bounds))) {
+		zend_sharp_type_text(bounds_ast);
+	}
+	bounds = zend_string_copy(bounds);
+
+	zend_op *opline = zend_emit_op(NULL, ZEND_SHARP_RECV_TYPE_ARGS, NULL, NULL);
+	opline->op1_type = IS_CONST;
+	opline->op1.constant = zend_add_literal_string(&bounds);
+	opline->result_type = IS_CV;
+	opline->result.var = lookup_cv(sharp_type_arguments_key);
+	opline->extended_value = zend_alloc_cache_slots(4);
+}
+
+/* Whether `op_array` holds the hidden local of a PHP# generic method's type arguments, as the method and each lambda in
+ * it that captures them do. */
+static bool zend_holds_sharp_type_arguments(const zend_op_array *op_array)
+{
+	for (int i = 0; i < op_array->last_var; i++) {
+		if (zend_string_equals(op_array->vars[i], sharp_type_arguments_key)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/* Whether `ast`, or a lambda in it, holds a type text that names a type parameter of its method as `#i`. */
+static bool zend_ast_names_sharp_method_parameter(zend_ast *ast)
+{
+	if (!ast) {
+		return false;
+	}
+	if (zend_ast_is_list(ast)) {
+		zend_ast_list *list = zend_ast_get_list(ast);
+		for (uint32_t i = 0; i < list->children; i++) {
+			if (zend_ast_names_sharp_method_parameter(list->child[i])) {
+				return true;
+			}
+		}
+		return false;
+	}
+	if (ast->kind == ZEND_AST_CLOSURE || ast->kind == ZEND_AST_ARROW_FUNC) {
+		return zend_ast_names_sharp_method_parameter(((zend_ast_decl *) ast)->child[2]);
+	}
+	if (zend_ast_is_special(ast)) {
+		return false;
+	}
+	if (ast->kind == ZEND_AST_SHARP_TYPE_ARGS && ast->child[1]) {
+		zend_string *text = zend_ast_get_str(ast->child[1]);
+		if (sharp_type_list_names(ZSTR_VAL(text), ZSTR_LEN(text)) & SHARP_TYPE_NAMES_METHOD) {
+			return true;
+		}
+	}
+
+	uint32_t children = zend_ast_get_num_children(ast);
+	for (uint32_t i = 0; i < children; i++) {
+		if (zend_ast_names_sharp_method_parameter(ast->child[i])) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 /* `type_args_ast` is the ZEND_AST_SHARP_TYPE_ARGS around a PHP# `new`, or NULL. */
 static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_ast) /* {{{ */
 {
@@ -5501,30 +5635,7 @@ static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_a
 			opline->extended_value = zend_alloc_cache_slot();
 		}
 
-		opline = zend_emit_op_tmp(&type_args_node, ZEND_SHARP_TYPE_ARGS, NULL, NULL);
-		zend_string *text = type_args_ast->child[1] ? zend_ast_get_str(type_args_ast->child[1]) : NULL;
-		bool open = text && sharp_type_list_is_open(ZSTR_VAL(text), ZSTR_LEN(text));
-		if (text) {
-			if (!open) {
-				zend_sharp_type_text(type_args_ast->child[1]);
-			}
-			text = zend_string_copy(text);
-			opline->op2_type = IS_CONST;
-			opline->op2.constant = zend_add_literal_string(&text);
-			opline->extended_value = zend_alloc_cache_slots(open ? 4 : 1);
-			if (open) {
-				opline->op1.num = ZEND_SHARP_TYPE_ARGS_OPEN;
-				/* Its `$i` count the type parameters of the class it is written in, which a lambda keeps when
-				 * Closure::call() or Closure::bind() gives it another scope. */
-				ZEND_ASSERT(CG(active_class_entry));
-				zend_add_class_name_literal(zend_string_copy(CG(active_class_entry)->name));
-			}
-		}
-		if (!text || open) {
-			/* `new Self` and an open text read this's type arguments, so a closure around them keeps its this, as
-			 * one reading $this does. */
-			CG(active_op_array)->fn_flags |= ZEND_ACC_USES_THIS;
-		}
+		zend_compile_sharp_type_args(&type_args_node, type_args_ast->child[1]);
 	}
 
 	opline = zend_emit_op(result, ZEND_NEW, NULL, NULL);
@@ -5560,7 +5671,7 @@ static void zend_compile_sharp_class_metadata(zend_ast *ast)
 		zend_string *header = zend_ast_get_str(header_ast);
 
 		/* The header writes the class's own type parameters as `$i`, as an open `new` does. */
-		if (!sharp_type_list_is_open(ZSTR_VAL(header), ZSTR_LEN(header))) {
+		if (!sharp_type_list_names(ZSTR_VAL(header), ZSTR_LEN(header))) {
 			zend_sharp_type_text(header_ast);
 		}
 		ce->info.user.sharp_header = zend_string_copy(header);
@@ -8599,6 +8710,20 @@ static zend_op_array *zend_compile_func_decl_ex(
 	closure_info info;
 	memset(&info, 0, sizeof(closure_info));
 
+	/* A PHP# method ends its parameters with its metadata: the bounds of its own type parameters, and the type a call
+	 * from plain PHP checks each parameter against. */
+	zend_ast *metadata_ast = NULL;
+	if (params_ast) {
+		zend_ast_list *params = zend_ast_get_list(params_ast);
+		if (params->children && params->child[params->children - 1]->kind == ZEND_AST_SHARP_TYPE_ARGS) {
+			metadata_ast = params->child[--params->children];
+		}
+	}
+	/* A lambda in a PHP# generic method, or in another such lambda, that spells a type with the method's type arguments
+	 * captures them by value, as it captures a local it reads. */
+	bool captures_type_arguments = (decl->kind == ZEND_AST_CLOSURE || decl->kind == ZEND_AST_ARROW_FUNC)
+		&& zend_holds_sharp_type_arguments(orig_op_array) && zend_ast_names_sharp_method_parameter(stmt_ast);
+
 	init_op_array(op_array, ZEND_USER_FUNCTION, INITIAL_OP_ARRAY_SIZE);
 
 	if (CG(compiler_options) & ZEND_COMPILE_PRELOAD) {
@@ -8628,9 +8753,19 @@ static zend_op_array *zend_compile_func_decl_ex(
 		lcname = zend_begin_func_decl(result, op_array, decl, level);
 		if (decl->kind == ZEND_AST_ARROW_FUNC) {
 			find_implicit_binds(&info, params_ast, stmt_ast);
+		} else {
+			if (uses_ast) {
+				zend_compile_closure_binding(result, op_array, uses_ast);
+			}
+			if (captures_type_arguments) {
+				zend_hash_init(&info.uses, 1, NULL, NULL, 0);
+			}
+		}
+		if (captures_type_arguments) {
+			zend_hash_add_empty_element(&info.uses, sharp_type_arguments_key);
+		}
+		if (decl->kind == ZEND_AST_ARROW_FUNC || captures_type_arguments) {
 			compile_implicit_lexical_binds(&info, result, op_array);
-		} else if (uses_ast) {
-			zend_compile_closure_binding(result, op_array, uses_ast);
 		}
 	}
 
@@ -8693,15 +8828,23 @@ static zend_op_array *zend_compile_func_decl_ex(
 
 	zend_compile_params(params_ast, return_type_ast,
 		is_method && zend_string_equals_literal(lcname, ZEND_TOSTRING_FUNC_NAME) ? IS_STRING : 0);
+	if (metadata_ast) {
+		if (metadata_ast->child[0]) {
+			zend_compile_sharp_recv_type_args(metadata_ast->child[0]);
+		}
+		/* zend_ast_destroy frees the node with the list. */
+		zend_ast_get_list(params_ast)->children++;
+	}
 	if (CG(active_op_array)->fn_flags & ZEND_ACC_GENERATOR) {
 		zend_mark_function_as_generator();
 		zend_emit_op(NULL, ZEND_GENERATOR_CREATE, NULL, NULL);
 	}
-	if (decl->kind == ZEND_AST_ARROW_FUNC) {
+	if (uses_ast) {
+		zend_compile_closure_uses(uses_ast);
+	}
+	if (decl->kind == ZEND_AST_ARROW_FUNC || captures_type_arguments) {
 		zend_compile_implicit_closure_uses(&info);
 		zend_hash_destroy(&info.uses);
-	} else if (uses_ast) {
-		zend_compile_closure_uses(uses_ast);
 	}
 
 	if (ast->kind == ZEND_AST_ARROW_FUNC && decl->child[2]->kind != ZEND_AST_RETURN) {

@@ -3413,6 +3413,7 @@ static zend_always_inline zend_result _zend_update_type_info(
 			}
 			break;
 		case ZEND_SHARP_TYPE_ARGS:
+		case ZEND_SHARP_RECV_TYPE_ARGS:
 			/* The IS_PTR to an interned type argument list, no zend_class_entry, see the inference mask in the
 			 * design of PHP# reified generics. */
 			UPDATE_SSA_TYPE(MAY_BE_CLASS, ssa_op->result_def);
@@ -5084,7 +5085,8 @@ ZEND_API bool zend_may_throw_ex(const zend_op *opline, const zend_ssa_op *ssa_op
 			return 0;
 		case ZEND_SHARP_TYPE_ARGS:
 			/* Reading this's type arguments runs a lazy proxy's initializer. */
-			return opline->op2_type == IS_UNUSED || opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN;
+			return opline->op2_type == IS_UNUSED || opline->op1_type != IS_UNUSED
+				|| opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN;
 		case ZEND_IS_IDENTICAL:
 		case ZEND_IS_NOT_IDENTICAL:
 		case ZEND_CASE_STRICT:

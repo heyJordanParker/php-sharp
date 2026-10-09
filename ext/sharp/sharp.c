@@ -1484,7 +1484,9 @@ struct _sharp_type_node {
 	/* The class `name` names, once unserialize resolved it. */
 	zend_class_entry *ce;
 	/* For `$i` in an open text, i + 1: it stands for this's type argument at index i. 0 for any other type. */
-	uint32_t parameter;
+	uint32_t class_parameter;
+	/* For `#i` in an open text, i + 1: it stands for the method's own type argument at index i. 0 for any other type. */
+	uint32_t method_parameter;
 	uint32_t count;
 	sharp_type_node *first;
 	sharp_type_node *last;
@@ -1495,8 +1497,8 @@ typedef struct {
 	const char *at;
 	const char *end;
 	zend_arena *arena;
-	/* Whether the text read a `$i`, so it is open. */
-	bool open;
+	/* What the text names, as SHARP_TYPE_NAMES_* bits: it is open when it read a `$i` or a `#i`. */
+	uint32_t names;
 	/* How many more types may nest in the one being read, each in another's `<>` or `()`. */
 	uint32_t depth_left;
 } sharp_type_reader;
@@ -1509,7 +1511,7 @@ typedef struct {
 /* A reader at the start of the `length` bytes at `text`, whose nodes go into `arena`. */
 static sharp_type_reader sharp_type_reader_of(const char *text, size_t length, zend_arena *arena)
 {
-	return (sharp_type_reader) {text, text + length, arena, false, UINT32_MAX};
+	return (sharp_type_reader) {text, text + length, arena, 0, UINT32_MAX};
 }
 
 static sharp_type_node *sharp_type_read(sharp_type_reader *reader);
@@ -1709,10 +1711,11 @@ static sharp_type_node *sharp_type_read_atom(sharp_type_reader *reader)
 	const char *start = reader->at;
 	sharp_type_node *type;
 
-	if (sharp_type_skip(reader, "$")) {
+	bool of_class = sharp_type_skip(reader, "$");
+	if (of_class || sharp_type_skip(reader, "#")) {
 		uint32_t index = 0;
 
-		/* An index past 9999 is past any class's type parameters. */
+		/* An index past 9999 is past any class's or method's type parameters. */
 		while (reader->at < reader->end && *reader->at >= '0' && *reader->at <= '9' && reader->at - start <= 4) {
 			index = index * 10 + (uint32_t) (*reader->at++ - '0');
 		}
@@ -1720,9 +1723,13 @@ static sharp_type_node *sharp_type_read_atom(sharp_type_reader *reader)
 			return NULL;
 		}
 		type = sharp_type_node_start(reader, SHARP_TYPE_NAMED, start);
-		type->parameter = index + 1;
+		if (of_class) {
+			type->class_parameter = index + 1;
+		} else {
+			type->method_parameter = index + 1;
+		}
 		type->length = reader->at - start;
-		reader->open = true;
+		reader->names |= of_class ? SHARP_TYPE_NAMES_THIS : SHARP_TYPE_NAMES_METHOD;
 
 		return type;
 	}
@@ -1971,7 +1978,7 @@ const sharp_type *sharp_type_list(const char *text, size_t length)
 
 	sharp_type_reader reader = sharp_type_reader_of(text, length, zend_arena_create(1024));
 	sharp_type_node *arguments = sharp_type_read_list(&reader);
-	if (arguments && !reader.open) {
+	if (arguments && !reader.names) {
 		list = sharp_type_intern(arguments, true, &reader.arena);
 	}
 	zend_arena_destroy(reader.arena);
@@ -1979,14 +1986,14 @@ const sharp_type *sharp_type_list(const char *text, size_t length)
 	return list;
 }
 
-bool sharp_type_list_is_open(const char *text, size_t length)
+uint32_t sharp_type_list_names(const char *text, size_t length)
 {
 	sharp_type_reader reader = sharp_type_reader_of(text, length, zend_arena_create(1024));
-	bool open = sharp_type_read_list(&reader) && reader.open;
+	uint32_t names = sharp_type_read_list(&reader) ? reader.names : 0;
 
 	zend_arena_destroy(reader.arena);
 
-	return open;
+	return names;
 }
 
 static void sharp_type_request_table_free(HashTable **table)
@@ -2256,19 +2263,22 @@ static void sharp_type_union_add(sharp_type_node *node, sharp_type_node *type, b
 	}
 }
 
-/* `node` with each `$i` in it replaced by member i of `arguments`, a list or a class type, spelled as code spells the
- * type it becomes: a union flattens a union or a nullable type it is given, `Any` takes in a whole union, and a nullable
- * type stays one `?`. NULL when `node` names an index `arguments` has no member at. */
-static sharp_type_node *sharp_type_node_substitute(
-	sharp_type_node *node, const sharp_type_node *arguments, sharp_type_reader *reader)
+/* `node` with each `$i` in it replaced by member i of `of_class`, a list or a class type, and each `#i` by member i of
+ * `of_method`, a list, spelled as code spells the type it becomes: a union flattens a union or a nullable type it is
+ * given, `Any` takes in a whole union, and a nullable type stays one `?`. NULL when `node` names an index the list has
+ * no member at, or names one of a list that is NULL. */
+static sharp_type_node *sharp_type_node_substitute(sharp_type_node *node, const sharp_type_node *of_class,
+	const sharp_type_node *of_method, sharp_type_reader *reader)
 {
-	if (node->parameter) {
-		if (node->parameter > arguments->count) {
+	uint32_t parameter = node->class_parameter ? node->class_parameter : node->method_parameter;
+	if (parameter) {
+		const sharp_type_node *arguments = node->class_parameter ? of_class : of_method;
+		if (!arguments || parameter > arguments->count) {
 			return NULL;
 		}
 
 		const sharp_type_node *given = arguments->first;
-		for (uint32_t i = 1; i < node->parameter; i++) {
+		for (uint32_t i = 1; i < parameter; i++) {
 			given = given->next;
 		}
 		/* A copy, since the type it goes into is respelled in place. */
@@ -2288,7 +2298,7 @@ static sharp_type_node *sharp_type_node_substitute(
 		next = member->next;
 		member->next = NULL;
 
-		sharp_type_node *type = sharp_type_node_substitute(member, arguments, reader);
+		sharp_type_node *type = sharp_type_node_substitute(member, of_class, of_method, reader);
 		if (!type) {
 			return NULL;
 		}
@@ -2374,7 +2384,7 @@ static sharp_type_node *sharp_type_node_ancestor(const zend_class_entry *ce, sha
 
 				if (named && instanceof_function(named, ancestor)) {
 					next = named;
-					arguments = sharp_type_node_substitute(entry, arguments, reader);
+					arguments = sharp_type_node_substitute(entry, arguments, NULL, reader);
 				}
 			}
 		}
@@ -2392,31 +2402,35 @@ static sharp_type_node *sharp_type_node_ancestor(const zend_class_entry *ce, sha
 	return arguments;
 }
 
-const sharp_type *sharp_type_list_of_this(
-	const zval *text, zend_object *object, const zend_class_entry *scope, void **cache)
+const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object, const sharp_type *method,
+	const zend_class_entry *scope, void **cache)
 {
 	/* A lambda bound to an object of an unrelated class has no type arguments of the class it is written in to read. */
-	if (!instanceof_function(object->ce, scope)) {
-		return NULL;
+	const zend_class_entry *ce = object && instanceof_function(object->ce, scope) ? object->ce : NULL;
+	const sharp_type *own = NULL;
+	if (ce) {
+		/* A lazy proxy's initializer runs here, and can throw. */
+		own = sharp_type_arguments(object);
+		if (UNEXPECTED(EG(exception))) {
+			return NULL;
+		}
 	}
-
-	/* A lazy proxy's initializer runs here, and can throw. */
-	const sharp_type *own = sharp_type_arguments(object);
-	if (UNEXPECTED(EG(exception))) {
-		return NULL;
-	}
-	/* The list depends only on this's class and its own type arguments, so the site keeps the last one it spelled. */
-	if (cache[0] == object->ce && cache[1] == own) {
-		return cache[2];
+	/* The list depends only on this's class, its own type arguments and the method's, so the site keeps the last one it
+	 * spelled. */
+	if (cache[3] && cache[0] == ce && cache[1] == own && cache[2] == method) {
+		return cache[3];
 	}
 	sharp_type_reader reader = sharp_type_reader_of(Z_STRVAL_P(text), Z_STRLEN_P(text), zend_arena_create(1024));
 	sharp_type_node *open = sharp_type_read_list(&reader);
-	ZEND_ASSERT(open && reader.open);
-	/* The indexes count the type parameters of the class the code is written in, which a subclass's header gives their
-	 * values. */
-	sharp_type_node *arguments =
-		sharp_type_node_ancestor(object->ce, sharp_type_node_list(own ? own->text : NULL, &reader), scope, &reader);
-	sharp_type_node *list = arguments ? sharp_type_node_substitute(open, arguments, &reader) : NULL;
+	ZEND_ASSERT(open != NULL);
+	ZEND_ASSERT(object || !(reader.names & SHARP_TYPE_NAMES_THIS));
+	/* The indexes of `$i` count the type parameters of the class the code is written in, which a subclass's header gives
+	 * their values. */
+	sharp_type_node *of_class = ce
+		? sharp_type_node_ancestor(ce, sharp_type_node_list(own ? own->text : NULL, &reader), scope, &reader)
+		: NULL;
+	sharp_type_node *of_method = method ? sharp_type_node_list(method->text, &reader) : NULL;
+	sharp_type_node *list = sharp_type_node_substitute(open, of_class, of_method, &reader);
 	/* A lambda bound to an object of another class that has no type argument at an index the text names makes an object
 	 * with its class's bounds, as one plain PHP creates. */
 	if (!list) {
@@ -2425,15 +2439,18 @@ const sharp_type *sharp_type_list_of_this(
 		return NULL;
 	}
 	/* A type a substitution spells is bounded by how deep the program nests it, not by its source, as in
-	 * Node<List<T>>, so a new one lives for the request. One code already spells is the process's. */
-	const sharp_type *substituted = sharp_type_intern(list, false, &reader.arena);
+	 * Node<List<T>>, so a new one lives for the request. One code already spells is the process's, as is a closed text
+	 * code writes. */
+	const sharp_type *substituted = sharp_type_intern(list, !reader.names, &reader.arena);
 	zend_arena_destroy(reader.arena);
 
 	/* A list that lives for the request, which unserialize or a substitution makes, never goes in the cache. */
-	if ((!own || sharp_type_is_persistent(own)) && sharp_type_is_persistent(substituted)) {
-		cache[0] = object->ce;
+	if ((!own || sharp_type_is_persistent(own)) && (!method || sharp_type_is_persistent(method))
+		&& sharp_type_is_persistent(substituted)) {
+		cache[0] = (void *) ce;
 		cache[1] = (void *) own;
-		cache[2] = (void *) substituted;
+		cache[2] = (void *) method;
+		cache[3] = (void *) substituted;
 	}
 
 	return substituted;
@@ -2593,7 +2610,7 @@ zend_result sharp_type_arguments_unserialize(
 	reader.depth_left = SHARP_TYPE_INPUT_DEPTH;
 	sharp_type_node *arguments = sharp_type_read_list(&reader);
 	const sharp_type *list = NULL;
-	if (arguments && !reader.open && sharp_type_node_accept(arguments, resolve, context, &reader)
+	if (arguments && !reader.names && sharp_type_node_accept(arguments, resolve, context, &reader)
 		&& sharp_type_arguments_fit(arguments, object->ce, &reader)) {
 		list = sharp_type_intern(arguments, false, &reader.arena);
 	}

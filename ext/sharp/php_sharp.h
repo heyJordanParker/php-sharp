@@ -66,15 +66,22 @@ static zend_always_inline bool sharp_type_equals(const sharp_type *a, const shar
 /* The interned type argument list code spells as `text`, or NULL when it spells none. */
 const sharp_type *sharp_type_list(const char *text, size_t length);
 
-/* Whether `text` is an open type argument list: one that writes a type parameter of the class of the method it is in as
- * `$` and its index, `$0` for the first, which stands for this's type argument at that index. */
-bool sharp_type_list_is_open(const char *text, size_t length);
+/* The type parameters an open type argument list writes. A class's is `$` and its index, `$0` for the first, which
+ * stands for this's type argument at that index. A method's own is `#` and its index, which stands for the method's
+ * type argument at that index. */
+#define SHARP_TYPE_NAMES_THIS (1 << 0)
+#define SHARP_TYPE_NAMES_METHOD (1 << 1)
 
-/* The interned type argument list the open `text` spells once each `$i` in it is `object`'s type argument i, for code
- * written in class `scope`, cached for `object`'s class in the three pointers at `cache`. NULL when `object` is not of
- * class `scope`, `scope` declares no type parameter, or `text` names an index `object` has no type argument at. */
-const sharp_type *sharp_type_list_of_this(
-	const zval *text, zend_object *object, const zend_class_entry *scope, void **cache);
+/* Which SHARP_TYPE_NAMES_* type parameters the type argument list `text` writes, 0 when it is closed or no list. */
+uint32_t sharp_type_list_names(const char *text, size_t length);
+
+/* The interned type argument list `text` spells once each `$i` in it is `object`'s type argument i, for code written in
+ * class `scope`, and each `#i` is member i of `method`, the type arguments of the method the code runs in. The four
+ * pointers at `cache` keep the last list it spelled for `object`'s class and type arguments and for `method`. `object` is
+ * NULL for code that runs without this, which never names a `$i`. NULL when `object` is not of class `scope`, `method`
+ * is NULL for a text that names a `#i`, or `text` names an index the arguments have no member at. */
+const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object, const sharp_type *method,
+	const zend_class_entry *scope, void **cache);
 
 /* An object of a generic PHP# class keeps its type arguments in a declared property of this name, which carries
  * ZEND_ACC_SHARP_HIDDEN. It holds null until PHP# code, unserialize or the first read stores the IS_PTR of an interned

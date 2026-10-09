@@ -213,7 +213,8 @@ void zend_optimizer_compact_literals(zend_op_array *op_array, zend_optimizer_ctx
 				case ZEND_SHARP_TYPE_ARGS:
 					if (opline->op2_type == IS_CONST) {
 						// an open type text is followed by the name of the class it is written in
-						LITERAL_INFO(opline->op2.constant, opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN ? 3 : 1);
+						LITERAL_INFO(opline->op2.constant,
+							opline->op1_type == IS_CV || opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN ? 3 : 1);
 					}
 					break;
 				case ZEND_DECLARE_CLASS:
@@ -697,11 +698,17 @@ void zend_optimizer_compact_literals(zend_op_array *op_array, zend_optimizer_ctx
 					break;
 				case ZEND_SHARP_TYPE_ARGS:
 					if (opline->op2_type == IS_CONST) {
-						// op2 type text, and for an open one the class and type arguments of this it was spelled with
-						// and the class it is written in
+						// op2 type text, and for an open one the class and type arguments of this and the method's
+						// type arguments it was spelled with, and the class it is written in
 						opline->extended_value = cache_size;
-						cache_size += (opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN ? 4 : 1) * sizeof(void *);
+						cache_size += (opline->op1_type == IS_CV || opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN
+							? 5 : 1) * sizeof(void *);
 					}
+					break;
+				case ZEND_SHARP_RECV_TYPE_ARGS:
+					// op1 bounds text, spelled with the class and type arguments of this
+					opline->extended_value = cache_size;
+					cache_size += 4 * sizeof(void *);
 					break;
 				case ZEND_CATCH:
 					if (opline->op1_type == IS_CONST) {

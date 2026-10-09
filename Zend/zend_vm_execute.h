@@ -10988,9 +10988,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_CONS
 }
 
 /* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
- * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments, and the class name
- * literals after it name the class it is written in. The result is an IS_PTR, NULL when this has none, for the
- * ZEND_NEW that follows. */
+ * CONST op2 spells them with this's type arguments, when op1.num marks it ZEND_SHARP_TYPE_ARGS_OPEN, or also with the
+ * method's own, which its CV op1 holds. The class name literals after it name the class it is written in. The result
+ * is an IS_PTR, NULL when this has none, for the ZEND_NEW or the ZEND_DO_*CALL that follows. */
 static zend_never_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV_EX  zend_fetch_var_address_helper_SPEC_CONST_UNUSED(ZEND_OPCODE_HANDLER_ARGS_EX int type)
 {
 	USE_OPLINE
@@ -11541,9 +11541,36 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_CONS
 }
 
 /* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
- * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments, and the class name
- * literals after it name the class it is written in. The result is an IS_PTR, NULL when this has none, for the
- * ZEND_NEW that follows. */
+ * CONST op2 spells them with this's type arguments, when op1.num marks it ZEND_SHARP_TYPE_ARGS_OPEN, or also with the
+ * method's own, which its CV op1 holds. The class name literals after it name the class it is written in. The result
+ * is an IS_PTR, NULL when this has none, for the ZEND_NEW or the ZEND_DO_*CALL that follows. */
+static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_RECV_TYPE_ARGS_SPEC_CONST_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
+{
+	USE_OPLINE
+	const sharp_type *arguments = NULL;
+
+	if (EXPECTED(!(EX_CALL_INFO() & ZEND_CALL_TOP)) && ZEND_USER_CODE(EX(prev_execute_data)->func->type)) {
+		zend_execute_data *caller = EX(prev_execute_data);
+		const zend_op *call = caller->opline;
+
+		if ((call->opcode == ZEND_DO_FCALL || call->opcode == ZEND_DO_UCALL || call->opcode == ZEND_DO_FCALL_BY_NAME)
+			&& call->op1_type == IS_TMP_VAR) {
+			arguments = Z_PTR_P(ZEND_CALL_VAR(caller, call->op1.var));
+		}
+	}
+	if (!arguments) {
+		SAVE_OPLINE();
+		arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op1),
+			Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, EX(func)->common.scope,
+			CACHE_ADDR(opline->extended_value));
+		if (UNEXPECTED(EG(exception))) {
+			HANDLE_EXCEPTION();
+		}
+	}
+	ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+	ZEND_VM_NEXT_OPCODE();
+}
+
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_ADD_ARRAY_ELEMENT_SPEC_CONST_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -30164,9 +30191,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_VAR_
 }
 
 /* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
- * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments, and the class name
- * literals after it name the class it is written in. The result is an IS_PTR, NULL when this has none, for the
- * ZEND_NEW that follows. */
+ * CONST op2 spells them with this's type arguments, when op1.num marks it ZEND_SHARP_TYPE_ARGS_OPEN, or also with the
+ * method's own, which its CV op1 holds. The class name literals after it name the class it is written in. The result
+ * is an IS_PTR, NULL when this has none, for the ZEND_NEW or the ZEND_DO_*CALL that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_IS_IDENTICAL_SPEC_VAR_VAR_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -31800,9 +31827,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_VAR_
 }
 
 /* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
- * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments, and the class name
- * literals after it name the class it is written in. The result is an IS_PTR, NULL when this has none, for the
- * ZEND_NEW that follows. */
+ * CONST op2 spells them with this's type arguments, when op1.num marks it ZEND_SHARP_TYPE_ARGS_OPEN, or also with the
+ * method's own, which its CV op1 holds. The class name literals after it name the class it is written in. The result
+ * is an IS_PTR, NULL when this has none, for the ZEND_NEW or the ZEND_DO_*CALL that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_ADD_ARRAY_ELEMENT_SPEC_VAR_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -36646,7 +36673,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 	USE_OPLINE
 	const sharp_type *arguments;
 
-	if (IS_CONST == IS_CONST && EXPECTED(opline->op1.num != ZEND_SHARP_TYPE_ARGS_OPEN)) {
+	if (IS_UNUSED == IS_UNUSED && IS_CONST == IS_CONST && EXPECTED(opline->op1.num != ZEND_SHARP_TYPE_ARGS_OPEN)) {
 		arguments = CACHED_PTR(opline->extended_value);
 		if (UNEXPECTED(arguments == NULL)) {
 			zval *text = RT_CONSTANT(opline, opline->op2);
@@ -36662,23 +36689,29 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 		ZEND_VM_NEXT_OPCODE();
 	}
 
-	/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. */
-	if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
+	/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. A text
+	 * that names only the method's type parameters needs no this, so it runs in a static method, unless code that
+	 * uses this holds it. */
+	if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)
+		&& (IS_UNUSED == IS_UNUSED || (EX(func)->op_array.fn_flags & ZEND_ACC_USES_THIS))) {
 		ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 	}
 	SAVE_OPLINE();
 	if (IS_CONST == IS_CONST) {
 		void **cache = CACHE_ADDR(opline->extended_value);
+		const zval *method = IS_UNUSED == IS_CV ? EX_VAR(opline->op1.var) : NULL;
 
 		/* Closure::call() and Closure::bind() change the scope of a lambda, never the class it is written in, which
 		 * is loaded since its code runs. */
-		if (UNEXPECTED(cache[3] == NULL)) {
+		if (UNEXPECTED(cache[4] == NULL)) {
 			zval *name = RT_CONSTANT(opline, opline->op2) + 1;
 
-			cache[3] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
-			ZEND_ASSERT(cache[3] != NULL);
+			cache[4] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
+			ZEND_ASSERT(cache[4] != NULL);
 		}
-		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)), cache[3], cache);
+		arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op2),
+			Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL,
+			method && Z_TYPE_P(method) == IS_PTR ? Z_PTR_P(method) : NULL, cache[4], cache);
 	} else {
 		/* A lazy proxy's initializer runs here, and can throw. */
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
@@ -36687,6 +36720,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
+/* PHP#: gives a generic method its own type arguments in its hidden CV result. Only a PHP# call gives them, in the TMP
+ * op1 of the ZEND_DO_*CALL the caller runs, and only a frame that call pushed reads it: a frame of zend_call_function,
+ * as call_user_func, array_map, an error handler or a property hook push, is ZEND_CALL_TOP, and its caller's opline is
+ * another call's. Any other call gives none, and the bounds the CONST op1 spells stand in, as for an object plain PHP
+ * creates. The descriptor is interned and never freed. */
 static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_CONSTANT_SPEC_UNUSED_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -39214,9 +39252,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_UNUS
 }
 
 /* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
- * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments, and the class name
- * literals after it name the class it is written in. The result is an IS_PTR, NULL when this has none, for the
- * ZEND_NEW that follows. */
+ * CONST op2 spells them with this's type arguments, when op1.num marks it ZEND_SHARP_TYPE_ARGS_OPEN, or also with the
+ * method's own, which its CV op1 holds. The class name literals after it name the class it is written in. The result
+ * is an IS_PTR, NULL when this has none, for the ZEND_NEW or the ZEND_DO_*CALL that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_CLASS_SPEC_UNUSED_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	zval *class_name;
@@ -39634,15 +39672,15 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_NEW_SPEC_UNUS
 }
 
 /* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
- * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments, and the class name
- * literals after it name the class it is written in. The result is an IS_PTR, NULL when this has none, for the
- * ZEND_NEW that follows. */
+ * CONST op2 spells them with this's type arguments, when op1.num marks it ZEND_SHARP_TYPE_ARGS_OPEN, or also with the
+ * method's own, which its CV op1 holds. The class name literals after it name the class it is written in. The result
+ * is an IS_PTR, NULL when this has none, for the ZEND_NEW or the ZEND_DO_*CALL that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_ARGS_SPEC_UNUSED_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
 	const sharp_type *arguments;
 
-	if (IS_UNUSED == IS_CONST && EXPECTED(opline->op1.num != ZEND_SHARP_TYPE_ARGS_OPEN)) {
+	if (IS_UNUSED == IS_UNUSED && IS_UNUSED == IS_CONST && EXPECTED(opline->op1.num != ZEND_SHARP_TYPE_ARGS_OPEN)) {
 		arguments = CACHED_PTR(opline->extended_value);
 		if (UNEXPECTED(arguments == NULL)) {
 			zval *text = RT_CONSTANT(opline, opline->op2);
@@ -39658,23 +39696,29 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 		ZEND_VM_NEXT_OPCODE();
 	}
 
-	/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. */
-	if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
+	/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. A text
+	 * that names only the method's type parameters needs no this, so it runs in a static method, unless code that
+	 * uses this holds it. */
+	if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)
+		&& (IS_UNUSED == IS_UNUSED || (EX(func)->op_array.fn_flags & ZEND_ACC_USES_THIS))) {
 		ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 	}
 	SAVE_OPLINE();
 	if (IS_UNUSED == IS_CONST) {
 		void **cache = CACHE_ADDR(opline->extended_value);
+		const zval *method = IS_UNUSED == IS_CV ? EX_VAR(opline->op1.var) : NULL;
 
 		/* Closure::call() and Closure::bind() change the scope of a lambda, never the class it is written in, which
 		 * is loaded since its code runs. */
-		if (UNEXPECTED(cache[3] == NULL)) {
+		if (UNEXPECTED(cache[4] == NULL)) {
 			zval *name = RT_CONSTANT(opline, opline->op2) + 1;
 
-			cache[3] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
-			ZEND_ASSERT(cache[3] != NULL);
+			cache[4] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
+			ZEND_ASSERT(cache[4] != NULL);
 		}
-		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)), cache[3], cache);
+		arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op2),
+			Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL,
+			method && Z_TYPE_P(method) == IS_PTR ? Z_PTR_P(method) : NULL, cache[4], cache);
 	} else {
 		/* A lazy proxy's initializer runs here, and can throw. */
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
@@ -39683,6 +39727,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
+/* PHP#: gives a generic method its own type arguments in its hidden CV result. Only a PHP# call gives them, in the TMP
+ * op1 of the ZEND_DO_*CALL the caller runs, and only a frame that call pushed reads it: a frame of zend_call_function,
+ * as call_user_func, array_map, an error handler or a property hook push, is ZEND_CALL_TOP, and its caller's opline is
+ * another call's. Any other call gives none, and the bounds the CONST op1 spells stand in, as for an object plain PHP
+ * creates. The descriptor is interned and never freed. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SPEC_UNUSED_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	zval *array;
@@ -47110,6 +47159,63 @@ send_var_by_ref:
 	ZEND_VM_NEXT_OPCODE();
 }
 
+static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_ARGS_SPEC_CV_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
+{
+	USE_OPLINE
+	const sharp_type *arguments;
+
+	if (IS_CV == IS_UNUSED && IS_CONST == IS_CONST && EXPECTED(opline->op1.num != ZEND_SHARP_TYPE_ARGS_OPEN)) {
+		arguments = CACHED_PTR(opline->extended_value);
+		if (UNEXPECTED(arguments == NULL)) {
+			zval *text = RT_CONSTANT(opline, opline->op2);
+
+			arguments = sharp_type_list(Z_STRVAL_P(text), Z_STRLEN_P(text));
+			ZEND_ASSERT(arguments != NULL);
+			/* A list unserialize read first this request is the request's, so the cache never keeps it. */
+			if (EXPECTED(sharp_type_is_persistent(arguments))) {
+				CACHE_PTR(opline->extended_value, (void *) arguments);
+			}
+		}
+		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+		ZEND_VM_NEXT_OPCODE();
+	}
+
+	/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. A text
+	 * that names only the method's type parameters needs no this, so it runs in a static method, unless code that
+	 * uses this holds it. */
+	if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)
+		&& (IS_CV == IS_UNUSED || (EX(func)->op_array.fn_flags & ZEND_ACC_USES_THIS))) {
+		ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+	}
+	SAVE_OPLINE();
+	if (IS_CONST == IS_CONST) {
+		void **cache = CACHE_ADDR(opline->extended_value);
+		const zval *method = IS_CV == IS_CV ? EX_VAR(opline->op1.var) : NULL;
+
+		/* Closure::call() and Closure::bind() change the scope of a lambda, never the class it is written in, which
+		 * is loaded since its code runs. */
+		if (UNEXPECTED(cache[4] == NULL)) {
+			zval *name = RT_CONSTANT(opline, opline->op2) + 1;
+
+			cache[4] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
+			ZEND_ASSERT(cache[4] != NULL);
+		}
+		arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op2),
+			Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL,
+			method && Z_TYPE_P(method) == IS_PTR ? Z_PTR_P(method) : NULL, cache[4], cache);
+	} else {
+		/* A lazy proxy's initializer runs here, and can throw. */
+		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
+	}
+	ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+}
+
+/* PHP#: gives a generic method its own type arguments in its hidden CV result. Only a PHP# call gives them, in the TMP
+ * op1 of the ZEND_DO_*CALL the caller runs, and only a frame that call pushed reads it: a frame of zend_call_function,
+ * as call_user_func, array_map, an error handler or a property hook push, is ZEND_CALL_TOP, and its caller's opline is
+ * another call's. Any other call gives none, and the bounds the CONST op1 spells stand in, as for an object plain PHP
+ * creates. The descriptor is interned and never freed. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_ADD_ARRAY_ELEMENT_SPEC_CV_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -53023,6 +53129,63 @@ send_var_by_ref:
 	ZEND_VM_NEXT_OPCODE();
 }
 
+static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_ARGS_SPEC_CV_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
+{
+	USE_OPLINE
+	const sharp_type *arguments;
+
+	if (IS_CV == IS_UNUSED && IS_UNUSED == IS_CONST && EXPECTED(opline->op1.num != ZEND_SHARP_TYPE_ARGS_OPEN)) {
+		arguments = CACHED_PTR(opline->extended_value);
+		if (UNEXPECTED(arguments == NULL)) {
+			zval *text = RT_CONSTANT(opline, opline->op2);
+
+			arguments = sharp_type_list(Z_STRVAL_P(text), Z_STRLEN_P(text));
+			ZEND_ASSERT(arguments != NULL);
+			/* A list unserialize read first this request is the request's, so the cache never keeps it. */
+			if (EXPECTED(sharp_type_is_persistent(arguments))) {
+				CACHE_PTR(opline->extended_value, (void *) arguments);
+			}
+		}
+		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+		ZEND_VM_NEXT_OPCODE();
+	}
+
+	/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. A text
+	 * that names only the method's type parameters needs no this, so it runs in a static method, unless code that
+	 * uses this holds it. */
+	if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)
+		&& (IS_CV == IS_UNUSED || (EX(func)->op_array.fn_flags & ZEND_ACC_USES_THIS))) {
+		ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+	}
+	SAVE_OPLINE();
+	if (IS_UNUSED == IS_CONST) {
+		void **cache = CACHE_ADDR(opline->extended_value);
+		const zval *method = IS_CV == IS_CV ? EX_VAR(opline->op1.var) : NULL;
+
+		/* Closure::call() and Closure::bind() change the scope of a lambda, never the class it is written in, which
+		 * is loaded since its code runs. */
+		if (UNEXPECTED(cache[4] == NULL)) {
+			zval *name = RT_CONSTANT(opline, opline->op2) + 1;
+
+			cache[4] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
+			ZEND_ASSERT(cache[4] != NULL);
+		}
+		arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op2),
+			Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL,
+			method && Z_TYPE_P(method) == IS_PTR ? Z_PTR_P(method) : NULL, cache[4], cache);
+	} else {
+		/* A lazy proxy's initializer runs here, and can throw. */
+		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
+	}
+	ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+}
+
+/* PHP#: gives a generic method its own type arguments in its hidden CV result. Only a PHP# call gives them, in the TMP
+ * op1 of the ZEND_DO_*CALL the caller runs, and only a frame that call pushed reads it: a frame of zend_call_function,
+ * as call_user_func, array_map, an error handler or a property hook push, is ZEND_CALL_TOP, and its caller's opline is
+ * another call's. Any other call gives none, and the bounds the CONST op1 spells stand in, as for an object plain PHP
+ * creates. The descriptor is interned and never freed. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_ADD_ARRAY_ELEMENT_SPEC_CV_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -67549,9 +67712,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_CONST_TMP
 }
 
 /* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
- * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments, and the class name
- * literals after it name the class it is written in. The result is an IS_PTR, NULL when this has none, for the
- * ZEND_NEW that follows. */
+ * CONST op2 spells them with this's type arguments, when op1.num marks it ZEND_SHARP_TYPE_ARGS_OPEN, or also with the
+ * method's own, which its CV op1 holds. The class name literals after it name the class it is written in. The result
+ * is an IS_PTR, NULL when this has none, for the ZEND_NEW or the ZEND_DO_*CALL that follows. */
 static zend_never_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV_EX  zend_fetch_var_address_helper_SPEC_CONST_UNUSED_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_EX int type);
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_R_SPEC_CONST_UNUSED_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
@@ -68000,9 +68163,36 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_CONST_UNU
 }
 
 /* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
- * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments, and the class name
- * literals after it name the class it is written in. The result is an IS_PTR, NULL when this has none, for the
- * ZEND_NEW that follows. */
+ * CONST op2 spells them with this's type arguments, when op1.num marks it ZEND_SHARP_TYPE_ARGS_OPEN, or also with the
+ * method's own, which its CV op1 holds. The class name literals after it name the class it is written in. The result
+ * is an IS_PTR, NULL when this has none, for the ZEND_NEW or the ZEND_DO_*CALL that follows. */
+static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_RECV_TYPE_ARGS_SPEC_CONST_UNUSED_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
+{
+	USE_OPLINE
+	const sharp_type *arguments = NULL;
+
+	if (EXPECTED(!(EX_CALL_INFO() & ZEND_CALL_TOP)) && ZEND_USER_CODE(EX(prev_execute_data)->func->type)) {
+		zend_execute_data *caller = EX(prev_execute_data);
+		const zend_op *call = caller->opline;
+
+		if ((call->opcode == ZEND_DO_FCALL || call->opcode == ZEND_DO_UCALL || call->opcode == ZEND_DO_FCALL_BY_NAME)
+			&& call->op1_type == IS_TMP_VAR) {
+			arguments = Z_PTR_P(ZEND_CALL_VAR(caller, call->op1.var));
+		}
+	}
+	if (!arguments) {
+		SAVE_OPLINE();
+		arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op1),
+			Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, EX(func)->common.scope,
+			CACHE_ADDR(opline->extended_value));
+		if (UNEXPECTED(EG(exception))) {
+			HANDLE_EXCEPTION();
+		}
+	}
+	ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+	ZEND_VM_NEXT_OPCODE();
+}
+
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_ADD_ARRAY_ELEMENT_SPEC_CONST_UNUSED_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -86523,9 +86713,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_VAR_TMP_T
 }
 
 /* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
- * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments, and the class name
- * literals after it name the class it is written in. The result is an IS_PTR, NULL when this has none, for the
- * ZEND_NEW that follows. */
+ * CONST op2 spells them with this's type arguments, when op1.num marks it ZEND_SHARP_TYPE_ARGS_OPEN, or also with the
+ * method's own, which its CV op1 holds. The class name literals after it name the class it is written in. The result
+ * is an IS_PTR, NULL when this has none, for the ZEND_NEW or the ZEND_DO_*CALL that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_IS_IDENTICAL_SPEC_VAR_VAR_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -88159,9 +88349,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_VAR_UNUSE
 }
 
 /* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
- * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments, and the class name
- * literals after it name the class it is written in. The result is an IS_PTR, NULL when this has none, for the
- * ZEND_NEW that follows. */
+ * CONST op2 spells them with this's type arguments, when op1.num marks it ZEND_SHARP_TYPE_ARGS_OPEN, or also with the
+ * method's own, which its CV op1 holds. The class name literals after it name the class it is written in. The result
+ * is an IS_PTR, NULL when this has none, for the ZEND_NEW or the ZEND_DO_*CALL that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_ADD_ARRAY_ELEMENT_SPEC_VAR_UNUSED_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -93005,7 +93195,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 	USE_OPLINE
 	const sharp_type *arguments;
 
-	if (IS_CONST == IS_CONST && EXPECTED(opline->op1.num != ZEND_SHARP_TYPE_ARGS_OPEN)) {
+	if (IS_UNUSED == IS_UNUSED && IS_CONST == IS_CONST && EXPECTED(opline->op1.num != ZEND_SHARP_TYPE_ARGS_OPEN)) {
 		arguments = CACHED_PTR(opline->extended_value);
 		if (UNEXPECTED(arguments == NULL)) {
 			zval *text = RT_CONSTANT(opline, opline->op2);
@@ -93021,23 +93211,29 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 		ZEND_VM_NEXT_OPCODE();
 	}
 
-	/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. */
-	if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
+	/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. A text
+	 * that names only the method's type parameters needs no this, so it runs in a static method, unless code that
+	 * uses this holds it. */
+	if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)
+		&& (IS_UNUSED == IS_UNUSED || (EX(func)->op_array.fn_flags & ZEND_ACC_USES_THIS))) {
 		ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 	}
 	SAVE_OPLINE();
 	if (IS_CONST == IS_CONST) {
 		void **cache = CACHE_ADDR(opline->extended_value);
+		const zval *method = IS_UNUSED == IS_CV ? EX_VAR(opline->op1.var) : NULL;
 
 		/* Closure::call() and Closure::bind() change the scope of a lambda, never the class it is written in, which
 		 * is loaded since its code runs. */
-		if (UNEXPECTED(cache[3] == NULL)) {
+		if (UNEXPECTED(cache[4] == NULL)) {
 			zval *name = RT_CONSTANT(opline, opline->op2) + 1;
 
-			cache[3] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
-			ZEND_ASSERT(cache[3] != NULL);
+			cache[4] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
+			ZEND_ASSERT(cache[4] != NULL);
 		}
-		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)), cache[3], cache);
+		arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op2),
+			Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL,
+			method && Z_TYPE_P(method) == IS_PTR ? Z_PTR_P(method) : NULL, cache[4], cache);
 	} else {
 		/* A lazy proxy's initializer runs here, and can throw. */
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
@@ -93046,6 +93242,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
+/* PHP#: gives a generic method its own type arguments in its hidden CV result. Only a PHP# call gives them, in the TMP
+ * op1 of the ZEND_DO_*CALL the caller runs, and only a frame that call pushed reads it: a frame of zend_call_function,
+ * as call_user_func, array_map, an error handler or a property hook push, is ZEND_CALL_TOP, and its caller's opline is
+ * another call's. Any other call gives none, and the bounds the CONST op1 spells stand in, as for an object plain PHP
+ * creates. The descriptor is interned and never freed. */
 static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_CONSTANT_SPEC_UNUSED_CONST_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -95573,9 +95774,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_UNUSED_TM
 }
 
 /* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
- * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments, and the class name
- * literals after it name the class it is written in. The result is an IS_PTR, NULL when this has none, for the
- * ZEND_NEW that follows. */
+ * CONST op2 spells them with this's type arguments, when op1.num marks it ZEND_SHARP_TYPE_ARGS_OPEN, or also with the
+ * method's own, which its CV op1 holds. The class name literals after it name the class it is written in. The result
+ * is an IS_PTR, NULL when this has none, for the ZEND_NEW or the ZEND_DO_*CALL that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_CLASS_SPEC_UNUSED_UNUSED_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	zval *class_name;
@@ -95993,15 +96194,15 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_NEW_SPEC_UNUSED_UN
 }
 
 /* PHP#: the interned type arguments a CONST op2 spells, cached per site, or those of this when op2 is UNUSED. An open
- * CONST op2, which op1.num marks ZEND_SHARP_TYPE_ARGS_OPEN, spells them with this's type arguments, and the class name
- * literals after it name the class it is written in. The result is an IS_PTR, NULL when this has none, for the
- * ZEND_NEW that follows. */
+ * CONST op2 spells them with this's type arguments, when op1.num marks it ZEND_SHARP_TYPE_ARGS_OPEN, or also with the
+ * method's own, which its CV op1 holds. The class name literals after it name the class it is written in. The result
+ * is an IS_PTR, NULL when this has none, for the ZEND_NEW or the ZEND_DO_*CALL that follows. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SPEC_UNUSED_UNUSED_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
 	const sharp_type *arguments;
 
-	if (IS_UNUSED == IS_CONST && EXPECTED(opline->op1.num != ZEND_SHARP_TYPE_ARGS_OPEN)) {
+	if (IS_UNUSED == IS_UNUSED && IS_UNUSED == IS_CONST && EXPECTED(opline->op1.num != ZEND_SHARP_TYPE_ARGS_OPEN)) {
 		arguments = CACHED_PTR(opline->extended_value);
 		if (UNEXPECTED(arguments == NULL)) {
 			zval *text = RT_CONSTANT(opline, opline->op2);
@@ -96017,23 +96218,29 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 		ZEND_VM_NEXT_OPCODE();
 	}
 
-	/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. */
-	if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)) {
+	/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. A text
+	 * that names only the method's type parameters needs no this, so it runs in a static method, unless code that
+	 * uses this holds it. */
+	if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)
+		&& (IS_UNUSED == IS_UNUSED || (EX(func)->op_array.fn_flags & ZEND_ACC_USES_THIS))) {
 		ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
 	}
 	SAVE_OPLINE();
 	if (IS_UNUSED == IS_CONST) {
 		void **cache = CACHE_ADDR(opline->extended_value);
+		const zval *method = IS_UNUSED == IS_CV ? EX_VAR(opline->op1.var) : NULL;
 
 		/* Closure::call() and Closure::bind() change the scope of a lambda, never the class it is written in, which
 		 * is loaded since its code runs. */
-		if (UNEXPECTED(cache[3] == NULL)) {
+		if (UNEXPECTED(cache[4] == NULL)) {
 			zval *name = RT_CONSTANT(opline, opline->op2) + 1;
 
-			cache[3] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
-			ZEND_ASSERT(cache[3] != NULL);
+			cache[4] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
+			ZEND_ASSERT(cache[4] != NULL);
 		}
-		arguments = sharp_type_list_of_this(RT_CONSTANT(opline, opline->op2), Z_OBJ(EX(This)), cache[3], cache);
+		arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op2),
+			Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL,
+			method && Z_TYPE_P(method) == IS_PTR ? Z_PTR_P(method) : NULL, cache[4], cache);
 	} else {
 		/* A lazy proxy's initializer runs here, and can throw. */
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
@@ -96042,6 +96249,11 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
+/* PHP#: gives a generic method its own type arguments in its hidden CV result. Only a PHP# call gives them, in the TMP
+ * op1 of the ZEND_DO_*CALL the caller runs, and only a frame that call pushed reads it: a frame of zend_call_function,
+ * as call_user_func, array_map, an error handler or a property hook push, is ZEND_CALL_TOP, and its caller's opline is
+ * another call's. Any other call gives none, and the bounds the CONST op1 spells stand in, as for an object plain PHP
+ * creates. The descriptor is interned and never freed. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_UNUSED_UNUSED_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	zval *array;
@@ -103469,6 +103681,63 @@ send_var_by_ref:
 	ZEND_VM_NEXT_OPCODE();
 }
 
+static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SPEC_CV_CONST_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
+{
+	USE_OPLINE
+	const sharp_type *arguments;
+
+	if (IS_CV == IS_UNUSED && IS_CONST == IS_CONST && EXPECTED(opline->op1.num != ZEND_SHARP_TYPE_ARGS_OPEN)) {
+		arguments = CACHED_PTR(opline->extended_value);
+		if (UNEXPECTED(arguments == NULL)) {
+			zval *text = RT_CONSTANT(opline, opline->op2);
+
+			arguments = sharp_type_list(Z_STRVAL_P(text), Z_STRLEN_P(text));
+			ZEND_ASSERT(arguments != NULL);
+			/* A list unserialize read first this request is the request's, so the cache never keeps it. */
+			if (EXPECTED(sharp_type_is_persistent(arguments))) {
+				CACHE_PTR(opline->extended_value, (void *) arguments);
+			}
+		}
+		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+		ZEND_VM_NEXT_OPCODE();
+	}
+
+	/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. A text
+	 * that names only the method's type parameters needs no this, so it runs in a static method, unless code that
+	 * uses this holds it. */
+	if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)
+		&& (IS_CV == IS_UNUSED || (EX(func)->op_array.fn_flags & ZEND_ACC_USES_THIS))) {
+		ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+	}
+	SAVE_OPLINE();
+	if (IS_CONST == IS_CONST) {
+		void **cache = CACHE_ADDR(opline->extended_value);
+		const zval *method = IS_CV == IS_CV ? EX_VAR(opline->op1.var) : NULL;
+
+		/* Closure::call() and Closure::bind() change the scope of a lambda, never the class it is written in, which
+		 * is loaded since its code runs. */
+		if (UNEXPECTED(cache[4] == NULL)) {
+			zval *name = RT_CONSTANT(opline, opline->op2) + 1;
+
+			cache[4] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
+			ZEND_ASSERT(cache[4] != NULL);
+		}
+		arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op2),
+			Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL,
+			method && Z_TYPE_P(method) == IS_PTR ? Z_PTR_P(method) : NULL, cache[4], cache);
+	} else {
+		/* A lazy proxy's initializer runs here, and can throw. */
+		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
+	}
+	ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+}
+
+/* PHP#: gives a generic method its own type arguments in its hidden CV result. Only a PHP# call gives them, in the TMP
+ * op1 of the ZEND_DO_*CALL the caller runs, and only a frame that call pushed reads it: a frame of zend_call_function,
+ * as call_user_func, array_map, an error handler or a property hook push, is ZEND_CALL_TOP, and its caller's opline is
+ * another call's. Any other call gives none, and the bounds the CONST op1 spells stand in, as for an object plain PHP
+ * creates. The descriptor is interned and never freed. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_ADD_ARRAY_ELEMENT_SPEC_CV_CONST_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -109280,6 +109549,63 @@ send_var_by_ref:
 	ZEND_VM_NEXT_OPCODE();
 }
 
+static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SPEC_CV_UNUSED_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
+{
+	USE_OPLINE
+	const sharp_type *arguments;
+
+	if (IS_CV == IS_UNUSED && IS_UNUSED == IS_CONST && EXPECTED(opline->op1.num != ZEND_SHARP_TYPE_ARGS_OPEN)) {
+		arguments = CACHED_PTR(opline->extended_value);
+		if (UNEXPECTED(arguments == NULL)) {
+			zval *text = RT_CONSTANT(opline, opline->op2);
+
+			arguments = sharp_type_list(Z_STRVAL_P(text), Z_STRLEN_P(text));
+			ZEND_ASSERT(arguments != NULL);
+			/* A list unserialize read first this request is the request's, so the cache never keeps it. */
+			if (EXPECTED(sharp_type_is_persistent(arguments))) {
+				CACHE_PTR(opline->extended_value, (void *) arguments);
+			}
+		}
+		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+		ZEND_VM_NEXT_OPCODE();
+	}
+
+	/* A lambda around a lambda never uses this, as in PHP, so it can be unbound and make this one without this. A text
+	 * that names only the method's type parameters needs no this, so it runs in a static method, unless code that
+	 * uses this holds it. */
+	if (UNEXPECTED(Z_TYPE(EX(This)) != IS_OBJECT)
+		&& (IS_CV == IS_UNUSED || (EX(func)->op_array.fn_flags & ZEND_ACC_USES_THIS))) {
+		ZEND_VM_TAIL_CALL(zend_this_not_in_object_context_helper_SPEC_TAILCALL(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU));
+	}
+	SAVE_OPLINE();
+	if (IS_UNUSED == IS_CONST) {
+		void **cache = CACHE_ADDR(opline->extended_value);
+		const zval *method = IS_CV == IS_CV ? EX_VAR(opline->op1.var) : NULL;
+
+		/* Closure::call() and Closure::bind() change the scope of a lambda, never the class it is written in, which
+		 * is loaded since its code runs. */
+		if (UNEXPECTED(cache[4] == NULL)) {
+			zval *name = RT_CONSTANT(opline, opline->op2) + 1;
+
+			cache[4] = zend_lookup_class_ex(Z_STR_P(name), Z_STR_P(name + 1), ZEND_FETCH_CLASS_NO_AUTOLOAD);
+			ZEND_ASSERT(cache[4] != NULL);
+		}
+		arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op2),
+			Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL,
+			method && Z_TYPE_P(method) == IS_PTR ? Z_PTR_P(method) : NULL, cache[4], cache);
+	} else {
+		/* A lazy proxy's initializer runs here, and can throw. */
+		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
+	}
+	ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+}
+
+/* PHP#: gives a generic method its own type arguments in its hidden CV result. Only a PHP# call gives them, in the TMP
+ * op1 of the ZEND_DO_*CALL the caller runs, and only a frame that call pushed reads it: a frame of zend_call_function,
+ * as call_user_func, array_map, an error handler or a property hook push, is ZEND_CALL_TOP, and its caller's opline is
+ * another call's. Any other call gives none, and the bounds the CONST op1 spells stand in, as for an object plain PHP
+ * creates. The descriptor is interned and never freed. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_ADD_ARRAY_ELEMENT_SPEC_CV_UNUSED_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -117085,11 +117411,32 @@ ZEND_API void execute_ex(zend_execute_data *ex)
 			(void*)&&ZEND_JMP_FRAMELESS_SPEC_CONST_LABEL,
 			(void*)&&ZEND_INIT_PARENT_PROPERTY_HOOK_CALL_SPEC_CONST_UNUSED_LABEL,
 			(void*)&&ZEND_DECLARE_ATTRIBUTED_CONST_SPEC_CONST_CONST_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
 			(void*)&&ZEND_SHARP_TYPE_ARGS_SPEC_UNUSED_CONST_LABEL,
 			(void*)&&ZEND_NULL_LABEL,
 			(void*)&&ZEND_NULL_LABEL,
 			(void*)&&ZEND_SHARP_TYPE_ARGS_SPEC_UNUSED_UNUSED_LABEL,
 			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_SHARP_TYPE_ARGS_SPEC_CV_CONST_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_SHARP_TYPE_ARGS_SPEC_CV_UNUSED_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_SHARP_RECV_TYPE_ARGS_SPEC_CONST_UNUSED_LABEL,
 			(void*)&&ZEND_INIT_FCALL_OFFSET_SPEC_CONST_LABEL,
 			(void*)&&ZEND_RECV_NOTYPE_SPEC_LABEL,
 			(void*)&&ZEND_NULL_LABEL,
@@ -119422,6 +119769,11 @@ zend_leave_helper_SPEC_LABEL:
 				VM_TRACE(ZEND_NEW_SPEC_CONST_UNUSED)
 				ZEND_NEW_SPEC_CONST_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU);
 				VM_TRACE_OP_END(ZEND_NEW_SPEC_CONST_UNUSED)
+				HYBRID_BREAK();
+			HYBRID_CASE(ZEND_SHARP_RECV_TYPE_ARGS_SPEC_CONST_UNUSED):
+				VM_TRACE(ZEND_SHARP_RECV_TYPE_ARGS_SPEC_CONST_UNUSED)
+				ZEND_SHARP_RECV_TYPE_ARGS_SPEC_CONST_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU);
+				VM_TRACE_OP_END(ZEND_SHARP_RECV_TYPE_ARGS_SPEC_CONST_UNUSED)
 				HYBRID_BREAK();
 			HYBRID_CASE(ZEND_ADD_ARRAY_ELEMENT_SPEC_CONST_UNUSED):
 				VM_TRACE(ZEND_ADD_ARRAY_ELEMENT_SPEC_CONST_UNUSED)
@@ -122895,6 +123247,11 @@ zend_leave_helper_SPEC_LABEL:
 				ZEND_SEND_VAR_EX_SPEC_CV_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU);
 				VM_TRACE_OP_END(ZEND_SEND_VAR_EX_SPEC_CV_CONST)
 				HYBRID_BREAK();
+			HYBRID_CASE(ZEND_SHARP_TYPE_ARGS_SPEC_CV_CONST):
+				VM_TRACE(ZEND_SHARP_TYPE_ARGS_SPEC_CV_CONST)
+				ZEND_SHARP_TYPE_ARGS_SPEC_CV_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU);
+				VM_TRACE_OP_END(ZEND_SHARP_TYPE_ARGS_SPEC_CV_CONST)
+				HYBRID_BREAK();
 			HYBRID_CASE(ZEND_ADD_ARRAY_ELEMENT_SPEC_CV_CONST):
 				VM_TRACE(ZEND_ADD_ARRAY_ELEMENT_SPEC_CV_CONST)
 				ZEND_ADD_ARRAY_ELEMENT_SPEC_CV_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU);
@@ -123354,6 +123711,11 @@ zend_leave_helper_SPEC_LABEL:
 				VM_TRACE(ZEND_SEND_VAR_EX_SPEC_CV_UNUSED_QUICK)
 				ZEND_SEND_VAR_EX_SPEC_CV_UNUSED_QUICK_HANDLER(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU);
 				VM_TRACE_OP_END(ZEND_SEND_VAR_EX_SPEC_CV_UNUSED_QUICK)
+				HYBRID_BREAK();
+			HYBRID_CASE(ZEND_SHARP_TYPE_ARGS_SPEC_CV_UNUSED):
+				VM_TRACE(ZEND_SHARP_TYPE_ARGS_SPEC_CV_UNUSED)
+				ZEND_SHARP_TYPE_ARGS_SPEC_CV_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU);
+				VM_TRACE_OP_END(ZEND_SHARP_TYPE_ARGS_SPEC_CV_UNUSED)
 				HYBRID_BREAK();
 			HYBRID_CASE(ZEND_ADD_ARRAY_ELEMENT_SPEC_CV_UNUSED):
 				VM_TRACE(ZEND_ADD_ARRAY_ELEMENT_SPEC_CV_UNUSED)
@@ -126386,11 +126748,32 @@ void zend_vm_init(void)
 		ZEND_JMP_FRAMELESS_SPEC_CONST_HANDLER,
 		ZEND_INIT_PARENT_PROPERTY_HOOK_CALL_SPEC_CONST_UNUSED_HANDLER,
 		ZEND_DECLARE_ATTRIBUTED_CONST_SPEC_CONST_CONST_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_NULL_HANDLER,
 		ZEND_SHARP_TYPE_ARGS_SPEC_UNUSED_CONST_HANDLER,
 		ZEND_NULL_HANDLER,
 		ZEND_NULL_HANDLER,
 		ZEND_SHARP_TYPE_ARGS_SPEC_UNUSED_UNUSED_HANDLER,
 		ZEND_NULL_HANDLER,
+		ZEND_SHARP_TYPE_ARGS_SPEC_CV_CONST_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_SHARP_TYPE_ARGS_SPEC_CV_UNUSED_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_SHARP_RECV_TYPE_ARGS_SPEC_CONST_UNUSED_HANDLER,
 		ZEND_INIT_FCALL_OFFSET_SPEC_CONST_HANDLER,
 		ZEND_RECV_NOTYPE_SPEC_HANDLER,
 		ZEND_NULL_HANDLER,
@@ -129908,11 +130291,32 @@ void zend_vm_init(void)
 		ZEND_JMP_FRAMELESS_SPEC_CONST_TAILCALL_HANDLER,
 		ZEND_INIT_PARENT_PROPERTY_HOOK_CALL_SPEC_CONST_UNUSED_TAILCALL_HANDLER,
 		ZEND_DECLARE_ATTRIBUTED_CONST_SPEC_CONST_CONST_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
 		ZEND_SHARP_TYPE_ARGS_SPEC_UNUSED_CONST_TAILCALL_HANDLER,
 		ZEND_NULL_TAILCALL_HANDLER,
 		ZEND_NULL_TAILCALL_HANDLER,
 		ZEND_SHARP_TYPE_ARGS_SPEC_UNUSED_UNUSED_TAILCALL_HANDLER,
 		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_SHARP_TYPE_ARGS_SPEC_CV_CONST_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_SHARP_TYPE_ARGS_SPEC_CV_UNUSED_TAILCALL_HANDLER,
+		ZEND_NULL_TAILCALL_HANDLER,
+		ZEND_SHARP_RECV_TYPE_ARGS_SPEC_CONST_UNUSED_TAILCALL_HANDLER,
 		ZEND_INIT_FCALL_OFFSET_SPEC_CONST_TAILCALL_HANDLER,
 		ZEND_RECV_NOTYPE_SPEC_TAILCALL_HANDLER,
 		ZEND_NULL_TAILCALL_HANDLER,
@@ -130881,7 +131285,7 @@ void zend_vm_init(void)
 		1255,
 		1256 | SPEC_RULE_OP1,
 		1261 | SPEC_RULE_OP1,
-		3518,
+		3539,
 		1266 | SPEC_RULE_OP1,
 		1271 | SPEC_RULE_OP1,
 		1276 | SPEC_RULE_OP2,
@@ -130915,7 +131319,7 @@ void zend_vm_init(void)
 		1579 | SPEC_RULE_OP1 | SPEC_RULE_OP2,
 		1604 | SPEC_RULE_OP1,
 		1609,
-		3518,
+		3539,
 		1610 | SPEC_RULE_OP1,
 		1615 | SPEC_RULE_OP1 | SPEC_RULE_OP2,
 		1640 | SPEC_RULE_OP1 | SPEC_RULE_OP2,
@@ -131047,51 +131451,51 @@ void zend_vm_init(void)
 		2595,
 		2596,
 		2597,
-		2598 | SPEC_RULE_OP2,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
-		3518,
+		2598 | SPEC_RULE_OP1 | SPEC_RULE_OP2,
+		2623,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
+		3539,
 	};
 #if 0
 #elif (ZEND_VM_KIND == ZEND_VM_KIND_HYBRID)
@@ -131284,7 +131688,7 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 2611 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
+				spec = 2632 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
 				if (op->op1_type < op->op2_type) {
 					zend_swap_operands(op);
 				}
@@ -131292,7 +131696,7 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 2636 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
+				spec = 2657 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
 				if (op->op1_type < op->op2_type) {
 					zend_swap_operands(op);
 				}
@@ -131300,7 +131704,7 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 2661 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
+				spec = 2682 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
 				if (op->op1_type < op->op2_type) {
 					zend_swap_operands(op);
 				}
@@ -131311,17 +131715,17 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 2686 | SPEC_RULE_OP1 | SPEC_RULE_OP2;
+				spec = 2707 | SPEC_RULE_OP1 | SPEC_RULE_OP2;
 			} else if (op1_info == MAY_BE_LONG && op2_info == MAY_BE_LONG) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 2711 | SPEC_RULE_OP1 | SPEC_RULE_OP2;
+				spec = 2732 | SPEC_RULE_OP1 | SPEC_RULE_OP2;
 			} else if (op1_info == MAY_BE_DOUBLE && op2_info == MAY_BE_DOUBLE) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 2736 | SPEC_RULE_OP1 | SPEC_RULE_OP2;
+				spec = 2757 | SPEC_RULE_OP1 | SPEC_RULE_OP2;
 			}
 			break;
 		case ZEND_MUL:
@@ -131332,17 +131736,17 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 2761 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
+				spec = 2782 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
 			} else if (op1_info == MAY_BE_LONG && op2_info == MAY_BE_LONG) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 2786 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
+				spec = 2807 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
 			} else if (op1_info == MAY_BE_DOUBLE && op2_info == MAY_BE_DOUBLE) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 2811 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
+				spec = 2832 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
 			}
 			break;
 		case ZEND_IS_IDENTICAL:
@@ -131353,16 +131757,16 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 2836 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
+				spec = 2857 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
 			} else if (op1_info == MAY_BE_DOUBLE && op2_info == MAY_BE_DOUBLE) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 2911 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
+				spec = 2932 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
 			} else if (op->op2_type == IS_CONST && (Z_TYPE_P(RT_CONSTANT(op, op->op2)) == IS_ARRAY && zend_hash_num_elements(Z_ARR_P(RT_CONSTANT(op, op->op2))) == 0)) {
-				spec = 3136 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
+				spec = 3157 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
 			} else if (op->op1_type == IS_CV && (op->op2_type & (IS_CONST|IS_CV)) && !(op1_info & (MAY_BE_UNDEF|MAY_BE_REF)) && !(op2_info & (MAY_BE_UNDEF|MAY_BE_REF))) {
-				spec = 3142 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
+				spec = 3163 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
 			}
 			break;
 		case ZEND_IS_NOT_IDENTICAL:
@@ -131373,16 +131777,16 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 2986 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
+				spec = 3007 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
 			} else if (op1_info == MAY_BE_DOUBLE && op2_info == MAY_BE_DOUBLE) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3061 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
+				spec = 3082 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
 			} else if (op->op2_type == IS_CONST && (Z_TYPE_P(RT_CONSTANT(op, op->op2)) == IS_ARRAY && zend_hash_num_elements(Z_ARR_P(RT_CONSTANT(op, op->op2))) == 0)) {
-				spec = 3139 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
+				spec = 3160 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
 			} else if (op->op1_type == IS_CV && (op->op2_type & (IS_CONST|IS_CV)) && !(op1_info & (MAY_BE_UNDEF|MAY_BE_REF)) && !(op2_info & (MAY_BE_UNDEF|MAY_BE_REF))) {
-				spec = 3147 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
+				spec = 3168 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
 			}
 			break;
 		case ZEND_IS_EQUAL:
@@ -131393,12 +131797,12 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 2836 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
+				spec = 2857 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
 			} else if (op1_info == MAY_BE_DOUBLE && op2_info == MAY_BE_DOUBLE) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 2911 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
+				spec = 2932 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
 			}
 			break;
 		case ZEND_IS_NOT_EQUAL:
@@ -131409,12 +131813,12 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 2986 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
+				spec = 3007 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
 			} else if (op1_info == MAY_BE_DOUBLE && op2_info == MAY_BE_DOUBLE) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3061 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
+				spec = 3082 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
 			}
 			break;
 		case ZEND_IS_SMALLER:
@@ -131422,12 +131826,12 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3152 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH;
+				spec = 3173 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH;
 			} else if (op1_info == MAY_BE_DOUBLE && op2_info == MAY_BE_DOUBLE) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3227 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH;
+				spec = 3248 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH;
 			}
 			break;
 		case ZEND_IS_SMALLER_OR_EQUAL:
@@ -131435,79 +131839,79 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3302 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH;
+				spec = 3323 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH;
 			} else if (op1_info == MAY_BE_DOUBLE && op2_info == MAY_BE_DOUBLE) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3377 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH;
+				spec = 3398 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH;
 			}
 			break;
 		case ZEND_QM_ASSIGN:
 			if (op1_info == MAY_BE_LONG) {
-				spec = 3464 | SPEC_RULE_OP1;
+				spec = 3485 | SPEC_RULE_OP1;
 			} else if (op1_info == MAY_BE_DOUBLE) {
-				spec = 3469 | SPEC_RULE_OP1;
+				spec = 3490 | SPEC_RULE_OP1;
 			} else if ((op->op1_type == IS_CONST) ? !Z_REFCOUNTED_P(RT_CONSTANT(op, op->op1)) : (!(op1_info & ((MAY_BE_ANY|MAY_BE_UNDEF)-(MAY_BE_NULL|MAY_BE_FALSE|MAY_BE_TRUE|MAY_BE_LONG|MAY_BE_DOUBLE))))) {
-				spec = 3474 | SPEC_RULE_OP1;
+				spec = 3495 | SPEC_RULE_OP1;
 			}
 			break;
 		case ZEND_PRE_INC:
 			if (res_info == MAY_BE_LONG && op1_info == MAY_BE_LONG) {
-				spec = 3452 | SPEC_RULE_RETVAL;
+				spec = 3473 | SPEC_RULE_RETVAL;
 			} else if (op1_info == MAY_BE_LONG) {
-				spec = 3454 | SPEC_RULE_RETVAL;
+				spec = 3475 | SPEC_RULE_RETVAL;
 			}
 			break;
 		case ZEND_PRE_DEC:
 			if (res_info == MAY_BE_LONG && op1_info == MAY_BE_LONG) {
-				spec = 3456 | SPEC_RULE_RETVAL;
+				spec = 3477 | SPEC_RULE_RETVAL;
 			} else if (op1_info == MAY_BE_LONG) {
-				spec = 3458 | SPEC_RULE_RETVAL;
+				spec = 3479 | SPEC_RULE_RETVAL;
 			}
 			break;
 		case ZEND_POST_INC:
 			if (res_info == MAY_BE_LONG && op1_info == MAY_BE_LONG) {
-				spec = 3460;
+				spec = 3481;
 			} else if (op1_info == MAY_BE_LONG) {
-				spec = 3461;
+				spec = 3482;
 			}
 			break;
 		case ZEND_POST_DEC:
 			if (res_info == MAY_BE_LONG && op1_info == MAY_BE_LONG) {
-				spec = 3462;
+				spec = 3483;
 			} else if (op1_info == MAY_BE_LONG) {
-				spec = 3463;
+				spec = 3484;
 			}
 			break;
 		case ZEND_JMP:
 			if (OP_JMP_ADDR(op, op->op1) > op) {
-				spec = 2610;
+				spec = 2631;
 			}
 			break;
 		case ZEND_INIT_FCALL:
 			if (Z_EXTRA_P(RT_CONSTANT(op, op->op2)) != 0) {
-				spec = 2603;
+				spec = 2624;
 			}
 			break;
 		case ZEND_RECV:
 			if (op->op2.num == MAY_BE_ANY) {
-				spec = 2604;
+				spec = 2625;
 			}
 			break;
 		case ZEND_SEND_VAL:
 			if (op->op1_type == IS_CONST && op->op2_type == IS_UNUSED && !Z_REFCOUNTED_P(RT_CONSTANT(op, op->op1))) {
-				spec = 3514;
+				spec = 3535;
 			}
 			break;
 		case ZEND_SEND_VAR_EX:
 			if (op->op2_type == IS_UNUSED && op->op2.num <= MAX_ARG_FLAG_NUM && (op1_info & (MAY_BE_UNDEF|MAY_BE_REF)) == 0) {
-				spec = 3509 | SPEC_RULE_OP1;
+				spec = 3530 | SPEC_RULE_OP1;
 			}
 			break;
 		case ZEND_FE_FETCH_R:
 			if (op->op2_type == IS_CV && (op1_info & (MAY_BE_ANY|MAY_BE_REF)) == MAY_BE_ARRAY) {
-				spec = 3516 | SPEC_RULE_RETVAL;
+				spec = 3537 | SPEC_RULE_RETVAL;
 			}
 			break;
 		case ZEND_FETCH_DIM_R:
@@ -131515,22 +131919,22 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3479 | SPEC_RULE_OP1 | SPEC_RULE_OP2;
+				spec = 3500 | SPEC_RULE_OP1 | SPEC_RULE_OP2;
 			}
 			break;
 		case ZEND_SEND_VAL_EX:
 			if (op->op2_type == IS_UNUSED && op->op2.num <= MAX_ARG_FLAG_NUM && op->op1_type == IS_CONST && !Z_REFCOUNTED_P(RT_CONSTANT(op, op->op1))) {
-				spec = 3515;
+				spec = 3536;
 			}
 			break;
 		case ZEND_SEND_VAR:
 			if (op->op2_type == IS_UNUSED && (op1_info & (MAY_BE_UNDEF|MAY_BE_REF)) == 0) {
-				spec = 3504 | SPEC_RULE_OP1;
+				spec = 3525 | SPEC_RULE_OP1;
 			}
 			break;
 		case ZEND_COUNT:
 			if ((op1_info & (MAY_BE_ANY|MAY_BE_UNDEF|MAY_BE_REF)) == MAY_BE_ARRAY) {
-				spec = 2605 | SPEC_RULE_OP1;
+				spec = 2626 | SPEC_RULE_OP1;
 			}
 			break;
 		case ZEND_BW_OR:

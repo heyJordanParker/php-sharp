@@ -1,0 +1,6 @@
+namespace Legacy;
+
+public class Converter
+{
+    public static T convert<T>(T value) => value;
+}

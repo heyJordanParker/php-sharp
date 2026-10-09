@@ -141,6 +141,50 @@ Deploy: same opcodes and lines in 7 op arrays, same signatures in 1 classes
 Tags: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 PhpForms: same opcodes and lines in 15 op arrays, same signatures in 1 classes
 Generics: different opcodes and lines in 33 op arrays, same signatures in 10 classes
+  .sharp      ; (lines=14, args=1, vars=2, tmps=6)
+  .sharp L0055 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity")
+  .sharp L0055 0002 V2 = FETCH_CLASS (exception) string("Paging\\PaginatedList")
+  .sharp L0055 0003 T3 = SHARP_TYPE_ARGS CV1($) string("#0")
+  .sharp L0055 0004 V4 = NEW 1 V2 T3
+  .sharp L0055 0005 T5 = CAST (object) CV0($query)
+  .sharp L0055 0006 INIT_METHOD_CALL 0 T5 string("rows")
+  .sharp L0055 0007 V6 = DO_FCALL
+  .sharp L0055 0008 SEND_VAR_NO_REF_EX V6 1
+  .sharp L0055 0009 DO_FCALL
+  .sharp L0055 0010 VERIFY_RETURN_TYPE V4
+  .sharp L0055 0011 RETURN V4
+  .sharp L0055 0012 VERIFY_RETURN_TYPE
+  .sharp L0055 0013 RETURN null
+  .sharp      ; (lines=16, args=2, vars=4, tmps=3)
+  .sharp L0089 0002 CV2($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity")
+  .sharp L0091 0003 V4 = FE_RESET_R CV0($items) 0012
+  .sharp L0091 0004 FE_FETCH_R V4 CV3($item) 0012
+  .sharp L0092 0005 T5 = FETCH_OBJ_R CV3($item) string("id")
+  .sharp L0092 0006 T6 = IS_EQUAL CV1($id) T5
+  .sharp L0092 0007 JMPZ T6 0011
+  .sharp L0093 0008 VERIFY_RETURN_TYPE CV3($item)
+  .sharp L0093 0009 FE_FREE V4 loop-end(+3)
+  .sharp L0093 0010 RETURN CV3($item)
+  .sharp L0091 0011 JMP 0004
+  .sharp L0091 0012 FE_FREE V4
+  .sharp L0096 0013 RETURN null
+  .sharp L0097 0014 VERIFY_RETURN_TYPE
+  .sharp L0097 0015 RETURN null
+  .sharp      ; (lines=6, args=1, vars=2, tmps=1)
+  .sharp L0102 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Any?")
+  .sharp L0102 0002 T2 = FETCH_DIM_R CV0($items) int(0)
+  .sharp L0102 0003 RETURN T2
+  .sharp L0102 0004 VERIFY_RETURN_TYPE
+  .sharp L0102 0005 RETURN null
+  .sharp      ; (lines=9, args=1, vars=2, tmps=2)
+  .sharp L0106 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity & Paging.Shareable")
+  .sharp L0106 0002 T2 = CAST (object) CV0($item)
+  .sharp L0106 0003 INIT_METHOD_CALL 0 T2 string("link")
+  .sharp L0106 0004 V3 = DO_FCALL
+  .sharp L0106 0005 VERIFY_RETURN_TYPE V3
+  .sharp L0106 0006 RETURN V3
+  .sharp L0106 0007 VERIFY_RETURN_TYPE
+  .sharp L0106 0008 RETURN null
   .sharp      ; (lines=15, args=0, vars=0, tmps=8)
   .sharp L0120 0000 V0 = FETCH_CLASS (exception) string("Paging\\PaginatedList")
   .sharp L0120 0001 T1 = SHARP_TYPE_ARGS string("Paging.Order")
@@ -157,6 +201,39 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp L0120 0012 RETURN T7
   .sharp L0120 0013 VERIFY_RETURN_TYPE
   .sharp L0120 0014 RETURN null
+  .sharp      ; (lines=20, args=0, vars=0, tmps=11)
+  .sharp L0122 0010 T6 = SHARP_TYPE_ARGS string("Paging.Order")
+  .sharp L0122 0011 V7 = DO_FCALL T6
+  .sharp L0122 0012 T8 = CAST (object) V7
+  .sharp L0122 0013 INIT_METHOD_CALL 0 T8 string("first")
+  .sharp L0122 0014 V9 = DO_FCALL
+  .sharp L0122 0015 T10 = FETCH_OBJ_R V9 string("id")
+  .sharp L0122 0016 VERIFY_RETURN_TYPE T10
+  .sharp L0122 0017 RETURN T10
+  .sharp L0122 0018 VERIFY_RETURN_TYPE
+  .sharp L0122 0019 RETURN null
+  .sharp      ; (lines=15, args=0, vars=0, tmps=5)
+  .sharp L0124 0005 T1 = SHARP_TYPE_ARGS string("Paging.Order")
+  .sharp L0124 0006 V2 = DO_FCALL T1
+  .sharp L0124 0007 T3 = JMP_NULL V2 0009
+  .sharp L0124 0008 T3 = FETCH_OBJ_IS V2 string("id")
+  .sharp L0124 0009 T4 = COALESCE T3 0011
+  .sharp L0124 0010 T4 = QM_ASSIGN int(0)
+  .sharp L0124 0011 VERIFY_RETURN_TYPE T4
+  .sharp L0124 0012 RETURN T4
+  .sharp L0124 0013 VERIFY_RETURN_TYPE
+  .sharp L0124 0014 RETURN null
+  .sharp      ; (lines=15, args=0, vars=0, tmps=5)
+  .sharp L0126 0005 T1 = SHARP_TYPE_ARGS string("Paging.Order")
+  .sharp L0126 0006 V2 = DO_FCALL T1
+  .sharp L0126 0007 T3 = JMP_NULL V2 0009
+  .sharp L0126 0008 T3 = FETCH_OBJ_IS V2 string("id")
+  .sharp L0126 0009 T4 = COALESCE T3 0011
+  .sharp L0126 0010 T4 = QM_ASSIGN int(0)
+  .sharp L0126 0011 VERIFY_RETURN_TYPE T4
+  .sharp L0126 0012 RETURN T4
+  .sharp L0126 0013 VERIFY_RETURN_TYPE
+  .sharp L0126 0014 RETURN null
   .sharp      ; (lines=14, args=0, vars=0, tmps=6)
   .sharp L0132 0001 V0 = FETCH_CLASS (exception) string("Paging\\Feed")
   .sharp L0132 0002 T1 = SHARP_TYPE_ARGS string("Paging.Order")
@@ -171,6 +248,61 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp L0132 0011 RETURN V5
   .sharp L0132 0012 VERIFY_RETURN_TYPE
   .sharp L0132 0013 RETURN null
+  .sharp      ; (lines=14, args=0, vars=0, tmps=7)
+  .sharp L0138 0007 T4 = SHARP_TYPE_ARGS string("Paging.Order")
+  .sharp L0138 0008 V5 = DO_FCALL T4
+  .sharp L0138 0009 T6 = FETCH_OBJ_R V5 string("id")
+  .sharp L0138 0010 VERIFY_RETURN_TYPE T6
+  .sharp L0138 0011 RETURN T6
+  .sharp L0138 0012 VERIFY_RETURN_TYPE
+  .sharp L0138 0013 RETURN null
+  .sharp      ; (lines=14, args=0, vars=0, tmps=7)
+  .sharp L0140 0008 T5 = SHARP_TYPE_ARGS string("Paging.Order")
+  .sharp L0140 0009 V6 = DO_FCALL T5
+  .sharp L0140 0010 VERIFY_RETURN_TYPE V6
+  .sharp L0140 0011 RETURN V6
+  .sharp L0140 0012 VERIFY_RETURN_TYPE
+  .sharp L0140 0013 RETURN null
+  .sharp      ; (lines=14, args=1, vars=2, tmps=6)
+  .sharp 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity")
+  .sharp 0002 V2 = FETCH_CLASS (exception) string("Paging\\PaginatedList")
+  .sharp 0003 T3 = SHARP_TYPE_ARGS CV1($) string("#0")
+  .sharp 0004 V4 = NEW 1 V2 T3
+  .sharp 0005 T5 = CAST (object) CV0($query)
+  .sharp 0006 INIT_METHOD_CALL 0 T5 string("rows")
+  .sharp 0007 V6 = DO_FCALL
+  .sharp 0008 SEND_VAR_NO_REF_EX V6 1
+  .sharp 0009 DO_FCALL
+  .sharp 0010 VERIFY_RETURN_TYPE V4
+  .sharp 0011 RETURN V4
+  .sharp      4: 0005 - 0010 (new)
+  .sharp      4: 0010 - 0011 (tmp/var)
+  .sharp      ; (lines=16, args=2, vars=4, tmps=3)
+  .sharp 0002 CV2($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity")
+  .sharp 0003 V4 = FE_RESET_R CV0($items) 0012
+  .sharp 0004 FE_FETCH_R V4 CV3($item) 0012
+  .sharp 0005 T5 = FETCH_OBJ_R CV3($item) string("id")
+  .sharp 0006 T6 = IS_EQUAL CV1($id) T5
+  .sharp 0007 JMPZ T6 0011
+  .sharp 0008 VERIFY_RETURN_TYPE CV3($item)
+  .sharp 0009 FE_FREE V4 loop-end(+3)
+  .sharp 0010 RETURN CV3($item)
+  .sharp 0011 JMP 0004
+  .sharp 0012 FE_FREE V4
+  .sharp 0014 VERIFY_RETURN_TYPE
+  .sharp 0015 RETURN null
+  .sharp      4: 0004 - 0009 (loop)
+  .sharp      4: 0011 - 0012 (loop)
+  .sharp      ; (lines=6, args=1, vars=2, tmps=1)
+  .sharp 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Any?")
+  .sharp 0002 T2 = FETCH_DIM_R CV0($items) int(0)
+  .sharp 0003 RETURN T2
+  .sharp      ; (lines=9, args=1, vars=2, tmps=2)
+  .sharp 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity & Paging.Shareable")
+  .sharp 0002 T2 = CAST (object) CV0($item)
+  .sharp 0003 INIT_METHOD_CALL 0 T2 string("link")
+  .sharp 0005 VERIFY_RETURN_TYPE V3
+  .sharp 0006 RETURN V3
   .sharp      ; (lines=15, args=0, vars=0, tmps=8)
   .sharp 0000 V0 = FETCH_CLASS (exception) string("Paging\\PaginatedList")
   .sharp 0001 T1 = SHARP_TYPE_ARGS string("Paging.Order")
@@ -185,6 +317,40 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp 0012 RETURN T7
   .sharp      2: 0003 - 0007 (new)
   .sharp      7: 0011 - 0012 (tmp/var)
+  .sharp      ; (lines=20, args=0, vars=0, tmps=11)
+  .sharp 0010 T6 = SHARP_TYPE_ARGS string("Paging.Order")
+  .sharp 0011 V7 = DO_FCALL T6
+  .sharp 0012 T8 = CAST (object) V7
+  .sharp 0013 INIT_METHOD_CALL 0 T8 string("first")
+  .sharp 0014 V9 = DO_FCALL
+  .sharp 0015 T10 = FETCH_OBJ_R V9 string("id")
+  .sharp 0016 VERIFY_RETURN_TYPE T10
+  .sharp 0017 RETURN T10
+  .sharp 0018 VERIFY_RETURN_TYPE
+  .sharp 0019 RETURN null
+  .sharp      10: 0016 - 0017 (tmp/var)
+  .sharp      ; (lines=15, args=0, vars=0, tmps=5)
+  .sharp 0005 T1 = SHARP_TYPE_ARGS string("Paging.Order")
+  .sharp 0006 V2 = DO_UCALL T1
+  .sharp 0007 T3 = JMP_NULL V2 0009
+  .sharp 0008 T3 = FETCH_OBJ_IS V2 string("id")
+  .sharp 0009 T4 = COALESCE T3 0011
+  .sharp 0010 T4 = QM_ASSIGN int(0)
+  .sharp 0011 VERIFY_RETURN_TYPE T4
+  .sharp 0012 RETURN T4
+  .sharp      2: 0007 - 0008 (tmp/var)
+  .sharp      4: 0011 - 0012 (tmp/var)
+  .sharp      ; (lines=15, args=0, vars=0, tmps=5)
+  .sharp 0005 T1 = SHARP_TYPE_ARGS string("Paging.Order")
+  .sharp 0006 V2 = DO_UCALL T1
+  .sharp 0007 T3 = JMP_NULL V2 0009
+  .sharp 0008 T3 = FETCH_OBJ_IS V2 string("id")
+  .sharp 0009 T4 = COALESCE T3 0011
+  .sharp 0010 T4 = QM_ASSIGN int(0)
+  .sharp 0011 VERIFY_RETURN_TYPE T4
+  .sharp 0012 RETURN T4
+  .sharp      2: 0007 - 0008 (tmp/var)
+  .sharp      4: 0011 - 0012 (tmp/var)
   .sharp      ; (lines=14, args=0, vars=0, tmps=6)
   .sharp 0001 V0 = FETCH_CLASS (exception) string("Paging\\Feed")
   .sharp 0002 T1 = SHARP_TYPE_ARGS string("Paging.Order")
@@ -196,6 +362,57 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp 0011 RETURN V5
   .sharp      2: 0004 - 0008 (new)
   .sharp      5: 0010 - 0011 (tmp/var)
+  .sharp      ; (lines=14, args=0, vars=0, tmps=7)
+  .sharp 0007 T4 = SHARP_TYPE_ARGS string("Paging.Order")
+  .sharp 0008 V5 = DO_FCALL T4
+  .sharp 0009 T6 = FETCH_OBJ_R V5 string("id")
+  .sharp 0010 VERIFY_RETURN_TYPE T6
+  .sharp 0011 RETURN T6
+  .sharp      6: 0010 - 0011 (tmp/var)
+  .sharp      ; (lines=14, args=0, vars=0, tmps=7)
+  .sharp 0008 T5 = SHARP_TYPE_ARGS string("Paging.Order")
+  .sharp 0009 V6 = DO_FCALL T5
+  .sharp 0010 VERIFY_RETURN_TYPE V6
+  .sharp 0011 RETURN V6
+  .sharp      6: 0010 - 0011 (tmp/var)
+  .php        ; (lines=11, args=1, vars=1, tmps=4)
+  .php   L0055 0001 V1 = NEW 1 string("Paging\\PaginatedList")
+  .php   L0055 0002 T2 = CAST (object) CV0($query)
+  .php   L0055 0003 INIT_METHOD_CALL 0 T2 string("rows")
+  .php   L0055 0004 V3 = DO_FCALL
+  .php   L0055 0005 SEND_VAR_NO_REF_EX V3 1
+  .php   L0055 0006 DO_FCALL
+  .php   L0055 0007 VERIFY_RETURN_TYPE V1
+  .php   L0055 0008 RETURN V1
+  .php   L0055 0009 VERIFY_RETURN_TYPE
+  .php   L0055 0010 RETURN null
+  .php        ; (lines=15, args=2, vars=3, tmps=3)
+  .php   L0091 0002 V3 = FE_RESET_R CV0($items) 0011
+  .php   L0091 0003 FE_FETCH_R V3 CV2($item) 0011
+  .php   L0092 0004 T4 = FETCH_OBJ_R CV2($item) string("id")
+  .php   L0092 0005 T5 = IS_EQUAL CV1($id) T4
+  .php   L0092 0006 JMPZ T5 0010
+  .php   L0093 0007 VERIFY_RETURN_TYPE CV2($item)
+  .php   L0093 0008 FE_FREE V3 loop-end(+3)
+  .php   L0093 0009 RETURN CV2($item)
+  .php   L0091 0010 JMP 0003
+  .php   L0091 0011 FE_FREE V3
+  .php   L0096 0012 RETURN null
+  .php   L0097 0013 VERIFY_RETURN_TYPE
+  .php   L0097 0014 RETURN null
+  .php        ; (lines=5, args=1, vars=1, tmps=1)
+  .php   L0102 0001 T1 = FETCH_DIM_R CV0($items) int(0)
+  .php   L0102 0002 RETURN T1
+  .php   L0102 0003 VERIFY_RETURN_TYPE
+  .php   L0102 0004 RETURN null
+  .php        ; (lines=8, args=1, vars=1, tmps=2)
+  .php   L0106 0001 T1 = CAST (object) CV0($item)
+  .php   L0106 0002 INIT_METHOD_CALL 0 T1 string("link")
+  .php   L0106 0003 V2 = DO_FCALL
+  .php   L0106 0004 VERIFY_RETURN_TYPE V2
+  .php   L0106 0005 RETURN V2
+  .php   L0106 0006 VERIFY_RETURN_TYPE
+  .php   L0106 0007 RETURN null
   .php   L0120 0000 V0 = NEW 1 string("Paging\\PaginatedList")
   .php   L0120 0001 INIT_STATIC_METHOD_CALL 0 string("Paging\\Catalog") string("orders")
   .php   L0120 0002 V1 = DO_FCALL
@@ -209,6 +426,36 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php   L0120 0010 RETURN T5
   .php   L0120 0011 VERIFY_RETURN_TYPE
   .php   L0120 0012 RETURN null
+  .php        ; (lines=19, args=0, vars=0, tmps=10)
+  .php   L0122 0010 V6 = DO_FCALL
+  .php   L0122 0011 T7 = CAST (object) V6
+  .php   L0122 0012 INIT_METHOD_CALL 0 T7 string("first")
+  .php   L0122 0013 V8 = DO_FCALL
+  .php   L0122 0014 T9 = FETCH_OBJ_R V8 string("id")
+  .php   L0122 0015 VERIFY_RETURN_TYPE T9
+  .php   L0122 0016 RETURN T9
+  .php   L0122 0017 VERIFY_RETURN_TYPE
+  .php   L0122 0018 RETURN null
+  .php        ; (lines=14, args=0, vars=0, tmps=4)
+  .php   L0124 0005 V1 = DO_FCALL
+  .php   L0124 0006 T2 = JMP_NULL V1 0008
+  .php   L0124 0007 T2 = FETCH_OBJ_IS V1 string("id")
+  .php   L0124 0008 T3 = COALESCE T2 0010
+  .php   L0124 0009 T3 = QM_ASSIGN int(0)
+  .php   L0124 0010 VERIFY_RETURN_TYPE T3
+  .php   L0124 0011 RETURN T3
+  .php   L0124 0012 VERIFY_RETURN_TYPE
+  .php   L0124 0013 RETURN null
+  .php        ; (lines=14, args=0, vars=0, tmps=4)
+  .php   L0126 0005 V1 = DO_FCALL
+  .php   L0126 0006 T2 = JMP_NULL V1 0008
+  .php   L0126 0007 T2 = FETCH_OBJ_IS V1 string("id")
+  .php   L0126 0008 T3 = COALESCE T2 0010
+  .php   L0126 0009 T3 = QM_ASSIGN int(0)
+  .php   L0126 0010 VERIFY_RETURN_TYPE T3
+  .php   L0126 0011 RETURN T3
+  .php   L0126 0012 VERIFY_RETURN_TYPE
+  .php   L0126 0013 RETURN null
   .php        ; (lines=12, args=0, vars=0, tmps=4)
   .php   L0132 0001 V0 = NEW 1 string("Paging\\Feed")
   .php   L0132 0002 INIT_STATIC_METHOD_CALL 0 string("Paging\\Catalog") string("orders")
@@ -221,7 +468,79 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php   L0132 0009 RETURN V3
   .php   L0132 0010 VERIFY_RETURN_TYPE
   .php   L0132 0011 RETURN null
+  .php   L0138 0007 V4 = DO_FCALL
+  .php   L0138 0008 T5 = FETCH_OBJ_R V4 string("id")
+  .php   L0138 0009 VERIFY_RETURN_TYPE T5
+  .php   L0138 0010 RETURN T5
+  .php   L0138 0011 VERIFY_RETURN_TYPE
+  .php   L0138 0012 RETURN null
+  .php   L0140 0008 V5 = DO_FCALL
+  .php   L0140 0009 VERIFY_RETURN_TYPE V5
+  .php   L0140 0010 RETURN V5
+  .php   L0140 0011 VERIFY_RETURN_TYPE
+  .php   L0140 0012 RETURN null
+  .php        ; (lines=11, args=1, vars=1, tmps=4)
+  .php   0001 V1 = NEW 1 string("Paging\\PaginatedList")
+  .php   0002 T2 = CAST (object) CV0($query)
+  .php   0003 INIT_METHOD_CALL 0 T2 string("rows")
+  .php   0007 VERIFY_RETURN_TYPE V1
+  .php   0008 RETURN V1
+  .php   0009 VERIFY_RETURN_TYPE
+  .php        1: 0002 - 0007 (new)
+  .php        1: 0007 - 0008 (tmp/var)
+  .php        ; (lines=15, args=2, vars=3, tmps=3)
+  .php   0002 V3 = FE_RESET_R CV0($items) 0011
+  .php   0003 FE_FETCH_R V3 CV2($item) 0011
+  .php   0004 T4 = FETCH_OBJ_R CV2($item) string("id")
+  .php   0005 T5 = IS_EQUAL CV1($id) T4
+  .php   0006 JMPZ T5 0010
+  .php   0007 VERIFY_RETURN_TYPE CV2($item)
+  .php   0008 FE_FREE V3 loop-end(+3)
+  .php   0009 RETURN CV2($item)
+  .php   0010 JMP 0003
+  .php   0011 FE_FREE V3
+  .php        3: 0003 - 0008 (loop)
+  .php        3: 0010 - 0011 (loop)
+  .php        ; (lines=5, args=1, vars=1, tmps=1)
+  .php   0001 T1 = FETCH_DIM_R CV0($items) int(0)
+  .php   0002 RETURN T1
+  .php        ; (lines=8, args=1, vars=1, tmps=2)
+  .php   0001 T1 = CAST (object) CV0($item)
+  .php   0002 INIT_METHOD_CALL 0 T1 string("link")
+  .php   0004 VERIFY_RETURN_TYPE V2
+  .php   0005 RETURN V2
   .php   0000 V0 = NEW 1 string("Paging\\PaginatedList")
+  .php        ; (lines=19, args=0, vars=0, tmps=10)
+  .php   0010 V6 = DO_FCALL
+  .php   0011 T7 = CAST (object) V6
+  .php   0012 INIT_METHOD_CALL 0 T7 string("first")
+  .php   0013 V8 = DO_FCALL
+  .php   0014 T9 = FETCH_OBJ_R V8 string("id")
+  .php   0015 VERIFY_RETURN_TYPE T9
+  .php   0016 RETURN T9
+  .php   0017 VERIFY_RETURN_TYPE
+  .php   0018 RETURN null
+  .php        9: 0015 - 0016 (tmp/var)
+  .php        ; (lines=14, args=0, vars=0, tmps=4)
+  .php   0005 V1 = DO_UCALL
+  .php   0006 T2 = JMP_NULL V1 0008
+  .php   0007 T2 = FETCH_OBJ_IS V1 string("id")
+  .php   0008 T3 = COALESCE T2 0010
+  .php   0009 T3 = QM_ASSIGN int(0)
+  .php   0010 VERIFY_RETURN_TYPE T3
+  .php   0011 RETURN T3
+  .php        1: 0006 - 0007 (tmp/var)
+  .php        3: 0010 - 0011 (tmp/var)
+  .php        ; (lines=14, args=0, vars=0, tmps=4)
+  .php   0005 V1 = DO_UCALL
+  .php   0006 T2 = JMP_NULL V1 0008
+  .php   0007 T2 = FETCH_OBJ_IS V1 string("id")
+  .php   0008 T3 = COALESCE T2 0010
+  .php   0009 T3 = QM_ASSIGN int(0)
+  .php   0010 VERIFY_RETURN_TYPE T3
+  .php   0011 RETURN T3
+  .php        1: 0006 - 0007 (tmp/var)
+  .php        3: 0010 - 0011 (tmp/var)
   .php        ; (lines=12, args=0, vars=0, tmps=4)
   .php   0001 V0 = NEW 1 string("Paging\\Feed")
   .php   0002 INIT_STATIC_METHOD_CALL 0 string("Paging\\Catalog") string("orders")
@@ -234,6 +553,9 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php   0009 RETURN V3
   .php        0: 0002 - 0006 (new)
   .php        3: 0008 - 0009 (tmp/var)
+  .php   0008 V5 = DO_FCALL
+  .php   0009 VERIFY_RETURN_TYPE V5
+  .php   0010 RETURN V5
   .php   /** @implements Query<Order> */
   .php       /** @param list<Order> $orders */
   .php   /** @template TItem of DatabaseEntity */
