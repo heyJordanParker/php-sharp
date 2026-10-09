@@ -2438,31 +2438,6 @@ static sharp_type_node *sharp_type_node_ancestor(const zend_class_entry *ce, sha
 	return arguments;
 }
 
-/* The interned type arguments `ancestor`, one of the classes `ce` extends or implements, takes from `ce` given its own
- * `arguments`, NULL when `ce` declares none. NULL when `ancestor` takes none from it. */
-static const sharp_type *sharp_type_arguments_of_ancestor(
-	const zend_class_entry *ce, const sharp_type *arguments, const zend_class_entry *ancestor)
-{
-	sharp_type_reader reader = sharp_type_reader_of(NULL, 0, zend_arena_create(1024));
-	sharp_type_node *given = sharp_type_node_list(arguments ? arguments->text : NULL, &reader);
-	sharp_type_node *passed = sharp_type_node_ancestor(ce, given, ancestor, &reader);
-	const sharp_type *list = NULL;
-
-	if (passed && passed->count) {
-		sharp_type_node *members = sharp_type_node_start(&reader, SHARP_TYPE_LIST, NULL);
-
-		members->first = passed->first;
-		members->last = passed->last;
-		members->count = passed->count;
-		sharp_type_node_spell(members, &reader.arena);
-		/* The object's own type arguments can be the request's, so the list is too unless code spells it. */
-		list = sharp_type_intern(members, false, &reader.arena);
-	}
-	zend_arena_destroy(reader.arena);
-
-	return list;
-}
-
 const sharp_type *sharp_type_list_of_this(
 	const zval *text, zend_object *object, const zend_class_entry *scope, void **cache)
 {
@@ -2480,17 +2455,14 @@ const sharp_type *sharp_type_list_of_this(
 	if (cache[0] == object->ce && cache[1] == own) {
 		return cache[2];
 	}
-	/* The indexes count the type parameters of the class the code is written in, which a subclass's header gives their
-	 * values. */
-	const sharp_type *arguments = object->ce == scope ? own : sharp_type_arguments_of_ancestor(object->ce, own, scope);
-	if (!arguments) {
-		return NULL;
-	}
-
 	sharp_type_reader reader = sharp_type_reader_of(Z_STRVAL_P(text), Z_STRLEN_P(text), zend_arena_create(1024));
 	sharp_type_node *open = sharp_type_read_list(&reader);
 	ZEND_ASSERT(open && reader.open);
-	sharp_type_node *list = sharp_type_node_substitute(open, sharp_type_node_list(arguments->text, &reader), &reader);
+	/* The indexes count the type parameters of the class the code is written in, which a subclass's header gives their
+	 * values. */
+	sharp_type_node *arguments =
+		sharp_type_node_ancestor(object->ce, sharp_type_node_list(own ? own->text : NULL, &reader), scope, &reader);
+	sharp_type_node *list = arguments ? sharp_type_node_substitute(open, arguments, &reader) : NULL;
 	/* A lambda bound to an object of another class that has no type argument at an index the text names makes an object
 	 * with its class's bounds, as one plain PHP creates. */
 	if (!list) {
