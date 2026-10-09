@@ -49,6 +49,20 @@ static zend_always_inline bool sharp_type_is_persistent(const sharp_type *type)
 	return GC_FLAGS(type->text) & IS_STR_PERSISTENT;
 }
 
+/* Whether `a` and `b` are one type. Two types that live for the process are one pointer, but a type a request interned
+ * can share its text with one another thread interned for the process at the same time, so their texts decide. */
+static zend_always_inline bool sharp_type_equals(const sharp_type *a, const sharp_type *b)
+{
+	if (a == b) {
+		return true;
+	}
+	if (!a || !b || (sharp_type_is_persistent(a) && sharp_type_is_persistent(b))) {
+		return false;
+	}
+
+	return zend_string_equals(a->text, b->text);
+}
+
 /* The interned type argument list code spells as `text`, or NULL when it spells none. */
 const sharp_type *sharp_type_list(const char *text, size_t length);
 
