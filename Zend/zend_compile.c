@@ -5548,7 +5548,7 @@ static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_a
 
 /* A ZEND_AST_SHARP_TYPE_ARGS in the member list of a PHP# class-like holds its metadata: the type arguments its header
  * gives each generic parent and interface, and the bounds of its type parameters, each a type text or NULL. A generic
- * class also declares from it the slot its objects keep their type arguments in, with its bounds as the default. */
+ * class also declares from it the slot its objects keep their type arguments in, null until the object has some. */
 static void zend_compile_sharp_class_metadata(zend_ast *ast)
 {
 	zend_class_entry *ce = CG(active_class_entry);
@@ -5574,9 +5574,9 @@ static void zend_compile_sharp_class_metadata(zend_ast *ast)
 		return;
 	}
 
-	zval bounds;
-	ZVAL_STR_COPY(&bounds, ce->info.user.sharp_bounds);
-	zend_declare_typed_property(ce, sharp_type_arguments_key, &bounds,
+	zval none;
+	ZVAL_NULL(&none);
+	zend_declare_typed_property(ce, sharp_type_arguments_key, &none,
 		ZEND_ACC_PUBLIC | ZEND_ACC_SHARP_HIDDEN, NULL, (zend_type) ZEND_TYPE_INIT_NONE(0));
 	ce->ce_flags |= ZEND_ACC_SHARP_GENERIC;
 }

@@ -2056,11 +2056,10 @@ const sharp_type *sharp_type_arguments_of_slot(zend_object *object)
 		return Z_PTR_P(value);
 	}
 
-	/* Plain PHP created the object, so its slot holds its class's bounds as a type text, or is UNDEF when the object
-	 * was created lazy. */
+	/* Plain PHP created the object, so its slot holds null, which keeps its class's bounds once they are looked up, or is
+	 * UNDEF when the object was created lazy. */
 	const sharp_type *bounds = sharp_class_bounds(object->ce);
-	if (Z_TYPE_P(value) == IS_STRING) {
-		zval_ptr_dtor_str(value);
+	if (Z_TYPE_P(value) == IS_NULL) {
 		ZVAL_PTR(value, (void *) bounds);
 	}
 
@@ -2119,12 +2118,9 @@ bool sharp_class_takes(const zend_class_entry *ce, const sharp_type *arguments)
 void sharp_type_arguments_store(zend_object *object, const sharp_type *arguments)
 {
 	const zend_property_info *slot = sharp_type_arguments_slot(object->ce);
-	zval *value;
 
 	ZEND_ASSERT(slot != NULL && arguments->kind == SHARP_TYPE_LIST);
-	value = OBJ_PROP(object, slot->offset);
-	zval_ptr_dtor(value);
-	ZVAL_PTR(value, (void *) arguments);
+	ZVAL_PTR(OBJ_PROP(object, slot->offset), (void *) arguments);
 }
 
 /* Sorts the members of the union or intersection `node` by their text. Two members that are one type are one member

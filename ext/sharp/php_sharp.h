@@ -77,8 +77,8 @@ const sharp_type *sharp_type_list_of_this(
 	const zval *text, zend_object *object, const zend_class_entry *scope, void **cache);
 
 /* An object of a generic PHP# class keeps its type arguments in a declared property of this name, which carries
- * ZEND_ACC_SHARP_HIDDEN. It holds the class's bounds as a type text until PHP# code or unserialize stores the
- * IS_PTR of an interned list. The name is also the key serialize writes the list under. */
+ * ZEND_ACC_SHARP_HIDDEN. It holds null until PHP# code, unserialize or the first read stores the IS_PTR of an interned
+ * list. The name is also the key serialize writes the list under. */
 extern zend_string *sharp_type_arguments_key;
 
 /* The type arguments of `object`, whose class carries ZEND_ACC_SHARP_GENERIC. The first read of an object plain PHP
