@@ -1471,8 +1471,8 @@ ZEND_METHOD(Sharp_Position, __construct)
 }
 
 /* Type texts, see sharp_type in php_sharp.h. A text parses in its one canonical spelling only, so equal types are
- * one pointer: a single space after each comma and nowhere else, union members sorted by their text, and `T?` in
- * place of `T|null`. Types and argument lists live in two tables, because a one-argument list spells its argument.
+ * one pointer: a single space after each comma and on each side of an intersection's `&` (`A & B`), and nowhere else,
+ * union and intersection members sorted by their text, and `T?` in place of `T|null`. Types and argument lists live in two tables, because a one-argument list spells its argument.
  * A text parses whole into a tree of sharp_type_node in a request arena before any of it is interned, and the tables'
  * lock is held only across a lookup or an insert, so an allocation that fails never leaves it held.
  *
