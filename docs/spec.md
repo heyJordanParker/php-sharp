@@ -1637,7 +1637,7 @@ Reflection lists a class's traits, just as it lists the class's interfaces.
 
 ## 23. Namespaces and imports
 
-Namespace parts are separated with `.`, and imports use `import`.
+Namespace parts are separated with `.`, and imports use `import`. Every part of a `namespace` line starts with a capital letter, as every type but the built-in ones does (section 24), so `namespace App.store;` is a compile error and `namespace App.Store;` compiles.
 
 ```csharp
 namespace App.Tenant.Store;
