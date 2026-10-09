@@ -581,6 +581,14 @@ let messages = [];                             // compile error: an empty litera
 List<string> messages = [];                    // compiles
 ```
 
+**A literal of the other collection than its declared type is a compile error,** at a declaration, an assignment, a default, a return or an argument, because `[:]` and `[key: value]` write a `Map`, and `[]` and `[a, b]` write a `List` or a `Set`:
+
+```csharp
+Map<string, int> counts = [];                  // compile error: `[]` is an empty List. An empty Map is written `[:]`.
+List<string> tags = [:];                       // compile error: `[:]` is an empty Map. An empty List is written `[]`.
+Map<int, string> names = ["a"];                // compile error: A Map literal is written `[key: value]`.
+```
+
 **A spread copies a collection into a literal,** and the collection's type decides what it means:
 
 ```csharp
