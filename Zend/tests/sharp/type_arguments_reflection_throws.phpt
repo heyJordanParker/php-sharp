@@ -1,5 +1,5 @@
 --TEST--
-ReflectionObject::getTypeArguments returns nothing beside the exception a lazy proxy's initializer throws, as an observer sees it
+ReflectionObject::getTypeArguments returns nothing beside the exception a lazy proxy's initializer throws, or the Error a reflection without its object throws, as an observer sees it
 --EXTENSIONS--
 zend_test
 --INI--
@@ -20,9 +20,24 @@ try {
 } catch (RuntimeException $exception) {
     echo $exception->getMessage(), "\n";
 }
+
+class ReflectionWithoutObject extends ReflectionObject {
+    public function __construct(object $object) {
+        ReflectionClass::__construct($object);
+    }
+}
+try {
+    (new ReflectionWithoutObject(new stdClass()))->getTypeArguments();
+} catch (Error $exception) {
+    echo $exception->getMessage(), "\n";
+}
 ?>
 --EXPECTF--
 %A<ReflectionObject::getTypeArguments>
 %A  <!-- Exception: RuntimeException -->
 </ReflectionObject::getTypeArguments:NULL>
 %Ano orders
+%A<ReflectionObject::getTypeArguments>
+%A  <!-- Exception: Error -->
+</ReflectionObject::getTypeArguments:NULL>
+%AInternal error: Failed to retrieve the reflection object

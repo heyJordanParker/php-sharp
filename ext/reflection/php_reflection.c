@@ -5833,7 +5833,10 @@ ZEND_METHOD(ReflectionObject, getTypeArguments)
 
 	ZEND_PARSE_PARAMETERS_NONE();
 	GET_REFLECTION_OBJECT();
-	ZEND_ASSERT(Z_TYPE(intern->obj) == IS_OBJECT);
+	if (UNEXPECTED(Z_TYPE(intern->obj) != IS_OBJECT)) {
+		zend_throw_error(NULL, "Internal error: Failed to retrieve the reflection object");
+		RETURN_THROWS();
+	}
 
 	arguments = sharp_type_arguments(Z_OBJ(intern->obj));
 	if (!arguments) {
