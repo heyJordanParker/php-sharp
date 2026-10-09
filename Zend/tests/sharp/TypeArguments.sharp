@@ -60,10 +60,12 @@ public class Pair<TKey, TValue>
 
 public interface Shareable
 {
+    string share();
 }
 
 public class SharedOrder : DatabaseEntity, Shareable
 {
+    public string share() => sprintf("shared %d", this.id);
 }
 
 public class Report<TItem : DatabaseEntity & Shareable>

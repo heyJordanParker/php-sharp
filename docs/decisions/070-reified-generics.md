@@ -327,7 +327,7 @@ before it changes the engine or the bridge.
   gives a type parameter its bound's classes, so the same lowering writes the static call.
   - `receiver_classes` serves four more callers: method values, property calls, inlining and a generic call's type
     arguments. Each now sees the bound's classes on a `T` receiver, so a generic method called on a `T` carries its type
-    arguments.
+    arguments. Method values read every class of an intersection bound (R2e).
   - PHP files never run PHP# operators, so a templated PHP object keeps PHP's `+` and its `TypeError`.
 - **A generic call stays pending across a Fiber suspension, and is tested there.** PHP# has no `yield` yet: spec
   section 12 specifies it, and Mago's checker refuses it as an expression it does not support. So `f<Order>(yield)`
@@ -385,6 +385,10 @@ before it changes the engine or the bridge.
     method gets no type arguments either way, since a function value's call carries none.
   - `type_arguments_call_execute_ex.phpt` runs under `zend_test.replace_zend_execute_ex=1`, with the JIT off, since
     the JIT turns itself off under the replacement.
+- **A method value on a value of an intersection-bounded type parameter takes the member the first class of the
+  intersection that declares it gives,** as the analyzer's `resolve_method_value` does. `Lowering::is_method_value`
+  reads `receiver_intersections`. `receiver_classes` keeps only the first class of each intersection, which
+  `operator_class` relies on.
 
 ### D. Readers
 

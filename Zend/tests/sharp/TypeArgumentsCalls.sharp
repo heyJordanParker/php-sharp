@@ -5,6 +5,8 @@ import App.DatabaseEntity;
 import App.Order;
 import App.PaginatedList;
 import App.Pair;
+import App.Shareable;
+import App.SharedOrder;
 import Legacy.Converter;
 import Lib.Inspector;
 import Lib.Witness;
@@ -86,6 +88,17 @@ public class Keyed<TKey>
     public Pair<TKey, T> again<T>(T value) => this.with<T>(value);
 
     public Pair<TKey, TKey> twice() => this.with<TKey>(this.key);
+}
+
+public class Feed<TItem : DatabaseEntity & Shareable>
+{
+    public Function<string()> sharer(TItem item) => item.share;
+
+    public static string shared()
+    {
+        const Function<string()> share = new Feed<SharedOrder>().sharer(new SharedOrder(5));
+        return share();
+    }
 }
 
 public class Labeled
