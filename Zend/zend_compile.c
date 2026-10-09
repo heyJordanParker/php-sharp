@@ -5511,7 +5511,7 @@ static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_a
 			text = zend_string_copy(text);
 			opline->op2_type = IS_CONST;
 			opline->op2.constant = zend_add_literal_string(&text);
-			opline->extended_value = zend_alloc_cache_slots(open ? 2 : 1);
+			opline->extended_value = zend_alloc_cache_slots(open ? 3 : 1);
 			if (open) {
 				opline->op1.num = ZEND_SHARP_TYPE_ARGS_OPEN;
 			}

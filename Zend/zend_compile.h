@@ -1207,7 +1207,8 @@ static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 }
 
 /* op1.num of a ZEND_SHARP_TYPE_ARGS whose CONST op2 is an open type text, one that writes a type parameter of the
- * method's class as `$` and its index. Its two cache slots hold this's type arguments and the list they spelled. */
+ * method's class as `$` and its index. Its three cache slots hold this's class, this's own type arguments, and the list
+ * they spelled. */
 #define ZEND_SHARP_TYPE_ARGS_OPEN 1
 
 #define ZEND_LAST_CATCH			(1<<0)

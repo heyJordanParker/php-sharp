@@ -136,6 +136,8 @@ public class Queue
 {
     public static Maker<Order> maker() => new Maker<Order>();
 
+    public static Maker<int> intMaker() => new Maker<int>();
+
     public static Box<int> box() => new Box<int>();
 
     public static Box<Query<Order>> queryBox() => new Box<Query<Order>>();

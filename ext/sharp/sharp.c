@@ -2470,19 +2470,18 @@ const sharp_type *sharp_type_list_of_this(
 	}
 
 	/* A lazy proxy's initializer runs here, and can throw. */
-	const sharp_type *arguments = sharp_type_arguments(object);
+	const sharp_type *own = sharp_type_arguments(object);
 	if (UNEXPECTED(EG(exception))) {
 		return NULL;
 	}
-	/* The indexes count the type parameters of the method's class, which a subclass's header gives their values. */
-	if (object->ce != scope) {
-		arguments = sharp_type_arguments_of_ancestor(object->ce, arguments, scope);
+	/* The list depends only on this's class and its own type arguments, so the site keeps the last one it spelled. */
+	if (cache[0] == object->ce && cache[1] == own) {
+		return cache[2];
 	}
+	/* The indexes count the type parameters of the method's class, which a subclass's header gives their values. */
+	const sharp_type *arguments = object->ce == scope ? own : sharp_type_arguments_of_ancestor(object->ce, own, scope);
 	if (!arguments) {
 		return NULL;
-	}
-	if (cache[0] == arguments) {
-		return cache[1];
 	}
 
 	sharp_type_reader reader = sharp_type_reader_of(Z_STRVAL_P(text), Z_STRLEN_P(text), zend_arena_create(1024));
@@ -2501,10 +2500,11 @@ const sharp_type *sharp_type_list_of_this(
 	const sharp_type *substituted = sharp_type_intern(list, false, &reader.arena);
 	zend_arena_destroy(reader.arena);
 
-	/* A list unserialize read first this request is the request's, so the cache never keeps it. */
-	if (sharp_type_is_persistent(arguments) && sharp_type_is_persistent(substituted)) {
-		cache[0] = (void *) arguments;
-		cache[1] = (void *) substituted;
+	/* A list that lives for the request, which unserialize or a substitution makes, never goes in the cache. */
+	if ((!own || sharp_type_is_persistent(own)) && sharp_type_is_persistent(substituted)) {
+		cache[0] = object->ce;
+		cache[1] = (void *) own;
+		cache[2] = (void *) substituted;
 	}
 
 	return substituted;
