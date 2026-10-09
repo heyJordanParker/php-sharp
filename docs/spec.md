@@ -1187,7 +1187,7 @@ const html = `
 `;
 ```
 
-A template's `${expr}` accepts `int`, `float`, `string` and `bool`. A `bool` prints `true` or `false`. Every other type is a compile error, "A template shows `int`, `float`, `string` or `bool`, and `Status` is none of them.", with the offending type's name in place of `Status`. A literal or narrowed type counts as its base type, so `1|2` is an `int`. A nullable value such as `int?` is refused until it is checked (section 24), and the same error names `int?`.
+A template's `${expr}` accepts `int`, `float`, `string` and `bool`. A `bool` prints `true` or `false`. Every other type is a compile error, "A template shows `int`, `float`, `string` or `bool`, and `Status` is none of them.", with the offending type's name in place of `Status`. A literal or narrowed type counts as its base type, so `1|2` is an `int`. A union of two of them, such as `int|string`, is none of the four and is refused. A nullable value such as `int?` is refused until it is checked (section 24), and the same error names `int?`.
 
 ```csharp
 const a = `Total: ${count}`;   // int: "Total: 3"

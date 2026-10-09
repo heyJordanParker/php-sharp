@@ -2,7 +2,7 @@
 
 ## Decision
 
-A template's `${expr}` accepts `int`, `float`, `string` and `bool`. A `bool` prints `true` or `false`. Every other type is a compile error, "A template shows `int`, `float`, `string` or `bool`, and `Status` is none of them.", with the offending type's PHP# name in place of `Status`. A literal or narrowed type counts as its base type, so `1|2` is an `int` and `true` is a `bool`. A nullable value such as `int?` is refused until it is checked, as section 24 already states, and the same error names `int?`. `Any`, `Any?`, enums, collections, objects, function values and tuples are refused. A plain PHP file keeps PHP's own interpolation.
+A template's `${expr}` accepts `int`, `float`, `string` and `bool`. A `bool` prints `true` or `false`. Every other type is a compile error, "A template shows `int`, `float`, `string` or `bool`, and `Status` is none of them.", with the offending type's PHP# name in place of `Status`. A literal or narrowed type counts as its base type, so `1|2` is an `int` and `true` is a `bool`. A nullable value such as `int?` is refused until it is checked, as section 24 already states, and the same error names `int?`. `Any`, `Any?`, enums, collections, objects, function values, tuples and unions such as `int|string` are refused. A plain PHP file keeps PHP's own interpolation.
 
 ## Options
 
@@ -44,7 +44,10 @@ A default text, such as JavaScript's `[object Object]`, reaches the page or the 
 
 ## Precedent
 
-- **Chosen:** Kotlin and C#, whose templates print a `bool` by its name. Kotlin's [string templates](https://kotlinlang.org/docs/strings.html#string-templates) print `true`, and C#'s [interpolated strings](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/tokens/interpolated) print [`Boolean.ToString`](https://learn.microsoft.com/en-us/dotnet/api/system.boolean.tostring), `True`. Both print any other value through its `toString()` or `ToString()`. PHP# has no such method, because it refuses `__toString()`, so it keeps the types whose text is built in.
+- **Chosen:** Kotlin and C#, whose templates print a `bool` by its name.
+  - Kotlin's [strings](https://kotlinlang.org/docs/strings.html#string-templates): "In string templates and string concatenation, Kotlin converts values to strings automatically." A `bool` prints `true`.
+  - C#'s [interpolated strings](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/tokens/interpolated): "the compiler replaces items with interpolation expressions by the string representations of the expression results." A `bool`'s is [`Boolean.ToString`](https://learn.microsoft.com/en-us/dotnet/api/system.boolean.tostring): "This method returns the constants "True" or "False"."
+  - Both print any other value through its `toString()` or `ToString()`. PHP# has no such method, because it refuses `__toString()`, so it keeps the types whose text is built in.
 - **Rejected, only numbers and strings:** Elm, which has no interpolation. Its `++` joins two strings, and its [`String` module](https://github.com/elm/core/blob/master/src/String.elm) converts numbers with `fromInt` and `fromFloat` and has no `fromBool`.
 - **Rejected, anything prints a default text:** Swift, whose default interpolation takes a value of any type ([SE-0228](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0228-fix-expressiblebystringinterpolation.md), `appendInterpolation<T>(_ value: T)`), and JavaScript, whose [template literals](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals) "coerce their expressions directly to strings".
 

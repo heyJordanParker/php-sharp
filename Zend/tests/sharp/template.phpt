@@ -14,6 +14,7 @@ var_dump(Demo\Template::empty());
 var_dump(Demo\Template::nested());
 echo Demo\Template::paid(true), "\n";
 echo Demo\Template::paid(false), "\n";
+echo Demo\Template::totals(3, 1.5, "cart"), "\n";
 ?>
 --EXPECT--
 cart: 2 items! ✓ `${name} {$name} $name`
@@ -25,3 +26,4 @@ string(0) ""
 string(1) "x"
 Paid: true
 Paid: false
+Total: 3, ratio 1.5, name cart
