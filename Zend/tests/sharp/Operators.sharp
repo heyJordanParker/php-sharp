@@ -344,3 +344,23 @@ public class InvoiceQueue
         return this.invoice.total;
     }
 }
+
+public class Grade
+{
+    public int score { get; }
+
+    public Grade(int score)
+    {
+        this.score = score;
+    }
+
+    public static int operator <=>(Grade a, Grade b)
+    {
+        if (a.score < 0 || b.score < 0) {
+            throw new Ungraded("a negative grade has no order");
+        }
+        return a.score <=> b.score;
+    }
+
+    public static List<Grade> ranked(List<Grade> grades) => grades.sortedBy(grade => grade);
+}

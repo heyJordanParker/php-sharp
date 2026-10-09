@@ -1,6 +1,7 @@
 <?php
 
 namespace {
+    use Billing\Grade;
     use Billing\Invoice;
     use Billing\InvoiceQueue;
     use Billing\Line;
@@ -14,6 +15,7 @@ namespace {
 
     $amount = static fn (Money $money): string => "$money->cents $money->currency";
     $skus = static fn (array $lines): string => implode(' ', array_map(static fn (Line $line): string => $line->sku, $lines));
+    $scores = static fn (array $grades): string => implode(' ', array_map(static fn (Grade $grade): string => (string) $grade->score, $grades));
 
     for ($round = 0; $round < 100; $round++) {
         ob_start();
@@ -72,6 +74,9 @@ namespace {
         attempt(fn () => $queue->calls);
         attempt(fn () => $queue->halveTwice());
         attempt(fn () => $queue->calls);
+
+        attempt(fn () => $scores(Grade::ranked([new Grade(3), new Grade(-1), new Grade(2)])));
+        attempt(fn () => $scores(Grade::ranked([new Grade(3), new Grade(1), new Grade(2)])));
         $output = ob_get_clean();
     }
 

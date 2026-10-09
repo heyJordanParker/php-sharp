@@ -39,6 +39,10 @@ final class BadPayload extends \Exception
 {
 }
 
+final class Ungraded extends \LogicException
+{
+}
+
 final class Body
 {
     public function __construct(public string $type)
