@@ -58,6 +58,14 @@ if [[ -z "$mago_commit" ]]; then
   echo "ext/sharp/sharp_unit.h defines no SHARP_MAGO_COMMIT." >&2
   exit 1
 fi
+version="$(sed -n 's/^#define PHP_SHARP_VERSION "\(.*\)"$/\1/p' "$root/ext/sharp/php_sharp.h")"
+engine="$("$php" -n --ri sharp)"
+engine_version="$(sed -n 's/^Version => //p' <<<"$engine")"
+engine_mago_commit="$(sed -n 's/^Mago commit => //p' <<<"$engine")"
+if [[ "$engine_version" != "$version" || "$engine_mago_commit" != "$mago_commit" ]]; then
+  echo "The built engine is $engine_version at Mago ${engine_mago_commit:0:9}, but the tree is $version at Mago ${mago_commit:0:9}. Run sharp/bin/build." >&2
+  exit 1
+fi
 cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
 PATH="$(dirname "$cargo"):$PATH" "$cargo" install --quiet --locked --git https://github.com/heyJordanParker/mago-sharp --rev "$mago_commit" --root "$build_dir/mago" mago
 mago="$build_dir/mago/bin/mago"
