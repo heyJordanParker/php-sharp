@@ -2127,25 +2127,6 @@ void sharp_type_arguments_store(zend_object *object, const sharp_type *arguments
 	ZVAL_PTR(value, (void *) arguments);
 }
 
-/* Resolves each class `node` names through `resolve`. */
-static bool sharp_type_node_resolve(sharp_type_node *node, sharp_type_class_resolver resolve, void *context)
-{
-	for (sharp_type_node *member = node->first; member; member = member->next) {
-		if (!sharp_type_node_resolve(member, resolve, context)) {
-			return false;
-		}
-	}
-	if (!node->name) {
-		return true;
-	}
-
-	zend_string *name = sharp_type_class_name(node->name, node->name_length, false);
-	node->ce = resolve(name, context);
-	zend_string_release_ex(name, false);
-
-	return node->ce != NULL;
-}
-
 /* Sorts the members of the union or intersection `node` by their text. Two members that are one type are one member
  * when `merge` holds, and make it fail otherwise. */
 static bool sharp_type_node_sort(sharp_type_node *node, bool merge)
@@ -2263,23 +2244,6 @@ static void sharp_type_node_spell(sharp_type_node *node, zend_arena **arena)
 		node->name = spelling;
 	}
 	smart_str_free(&text);
-}
-
-/* Spells `node` as code spells it, into `arena`: each class by the name it was declared with, the members of a union
- * or an intersection sorted by their spelling. False when two members of one are one type. */
-static bool sharp_type_node_respell(sharp_type_node *node, zend_arena **arena)
-{
-	for (sharp_type_node *member = node->first; member; member = member->next) {
-		if (!sharp_type_node_respell(member, arena)) {
-			return false;
-		}
-	}
-	if ((node->kind == SHARP_TYPE_UNION || node->kind == SHARP_TYPE_INTERSECTION) && !sharp_type_node_sort(node, false)) {
-		return false;
-	}
-	sharp_type_node_spell(node, arena);
-
-	return true;
 }
 
 /* Adds `type` to the union `node` as code writes a union: the members of a union one by one, and `null`, or the null of a
@@ -2568,15 +2532,30 @@ static bool sharp_type_fits(sharp_type_node *type, const sharp_type *bound, shar
 	return true;
 }
 
-/* Whether each type `node` holds takes the type arguments it is given, as many as it has type parameters, each
- * within its bound. */
-static bool sharp_type_node_complete(sharp_type_node *node, sharp_type_reader *reader)
+/* Whether `node`, read from input, is a type code can spell, made so in one walk of its members before it: each class
+ * it names resolves through `resolve` and takes the name it was declared with, the members of a union or an
+ * intersection sort by their spelling and no two are one type, and each type takes the type arguments it is given, as
+ * many as it has type parameters, each within its bound. */
+static bool sharp_type_node_accept(
+	sharp_type_node *node, sharp_type_class_resolver resolve, void *context, sharp_type_reader *reader)
 {
 	for (sharp_type_node *member = node->first; member; member = member->next) {
-		if (!sharp_type_node_complete(member, reader)) {
+		if (!sharp_type_node_accept(member, resolve, context, reader)) {
 			return false;
 		}
 	}
+	if (node->name) {
+		zend_string *name = sharp_type_class_name(node->name, node->name_length, false);
+		node->ce = resolve(name, context);
+		zend_string_release_ex(name, false);
+		if (!node->ce) {
+			return false;
+		}
+	}
+	if ((node->kind == SHARP_TYPE_UNION || node->kind == SHARP_TYPE_INTERSECTION) && !sharp_type_node_sort(node, false)) {
+		return false;
+	}
+	sharp_type_node_spell(node, &reader->arena);
 	if (node->kind != SHARP_TYPE_NAMED) {
 		return true;
 	}
@@ -2624,8 +2603,7 @@ zend_result sharp_type_arguments_unserialize(
 	reader.depth_left = SHARP_TYPE_INPUT_DEPTH;
 	sharp_type_node *arguments = sharp_type_read_list(&reader);
 	const sharp_type *list = NULL;
-	if (arguments && !reader.open && sharp_type_node_resolve(arguments, resolve, context)
-		&& sharp_type_node_respell(arguments, &reader.arena) && sharp_type_node_complete(arguments, &reader)
+	if (arguments && !reader.open && sharp_type_node_accept(arguments, resolve, context, &reader)
 		&& sharp_type_arguments_fit(arguments, object->ce, &reader)) {
 		list = sharp_type_intern(arguments, false, &reader.arena);
 	}
