@@ -15,11 +15,7 @@ refusal("$root/Shop.sharp");
 
 unlink("$root/composer.lock");
 refusal("$root/Shop.sharp");
-?>
---CLEAN--
-<?php
-require __DIR__ . '/project.inc';
-remove_project(sys_get_temp_dir() . '/sharp-test-absent-input');
+remove_project($root);
 ?>
 --EXPECT--
 ran

@@ -8,11 +8,7 @@ $root = compile_project('out-of-date-source', ['Shop.sharp' => SHOP, 'Counter.sh
 file_put_contents("$root/Shop.sharp", SHOP . "\n");
 
 refusal("$root/Shop.sharp");
-?>
---CLEAN--
-<?php
-require __DIR__ . '/project.inc';
-remove_project(sys_get_temp_dir() . '/sharp-test-out-of-date-source');
+remove_project($root);
 ?>
 --EXPECT--
 CompileError: Shop.sharp is out of date (Shop.sharp changed). Run vendor/bin/mago compile.

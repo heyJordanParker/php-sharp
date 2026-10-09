@@ -56,11 +56,7 @@ request('its own source changed');
 
 run_mago($root);
 request('compiled once more');
-?>
---CLEAN--
-<?php
-require __DIR__ . '/project.inc';
-remove_project(sys_get_temp_dir() . '/sharp-test-opcache-revision');
+remove_project($root);
 ?>
 --EXPECT--
 first: ran, cached with 0 hits

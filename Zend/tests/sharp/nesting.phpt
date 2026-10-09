@@ -21,11 +21,7 @@ function run(string $root, string $where): void {
 
 run($root, 'Main');
 (new Fiber(fn () => run($root, 'Fiber')))->start();
-?>
---CLEAN--
-<?php
-require __DIR__ . '/project.inc';
-remove_project(sys_get_temp_dir() . '/sharp-test-nesting');
+remove_project($root);
 ?>
 --EXPECT--
 Main: 509

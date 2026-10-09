@@ -14,11 +14,7 @@ refusal("$root/Shop.sharp");
 
 unlink("$root/Counter.sharp");
 refusal("$root/Shop.sharp");
-?>
---CLEAN--
-<?php
-require __DIR__ . '/project.inc';
-remove_project(sys_get_temp_dir() . '/sharp-test-out-of-date-input');
+remove_project($root);
 ?>
 --EXPECT--
 ran

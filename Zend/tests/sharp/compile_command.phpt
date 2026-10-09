@@ -76,12 +76,8 @@ mkdir($unrooted);
 file_put_contents("$unrooted/Shop.sharp", SHOP);
 refusal("$unrooted/Shop.sharp", ['sharp.compile_command' => 'echo run > ' . escapeshellarg("$unrooted/runs.log")]);
 var_dump(file_exists("$unrooted/runs.log"));
-?>
---CLEAN--
-<?php
-require __DIR__ . '/project.inc';
-remove_project(sys_get_temp_dir() . '/sharp-test-compile-command');
-remove_project(sys_get_temp_dir() . '/sharp-test-compile-command-unrooted');
+remove_project($root);
+remove_project($unrooted);
 ?>
 --EXPECTF--
 ran

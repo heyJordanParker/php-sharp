@@ -24,11 +24,7 @@ foreach ([
     echo $damage, ': ';
     refusal("$root/Shop.sharp");
 }
-?>
---CLEAN--
-<?php
-require __DIR__ . '/project.inc';
-remove_project(sys_get_temp_dir() . '/sharp-test-damaged');
+remove_project($root);
 ?>
 --EXPECT--
 one byte too long: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
