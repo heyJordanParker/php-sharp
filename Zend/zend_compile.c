@@ -5566,7 +5566,6 @@ static void zend_compile_sharp_class_metadata(zend_ast *ast)
 		ce->info.user.sharp_header = zend_string_copy(header);
 	}
 	if (!bounds_ast) {
-		ce->info.user.sharp_bounds = ZSTR_EMPTY_ALLOC();
 		return;
 	}
 

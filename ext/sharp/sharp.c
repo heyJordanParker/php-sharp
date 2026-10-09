@@ -2011,7 +2011,7 @@ static const zend_property_info *sharp_type_arguments_slot(const zend_class_entr
  * type parameters in docblocks only, which the engine never reads. */
 static bool sharp_class_is_sharp(const zend_class_entry *ce)
 {
-	return ce->type == ZEND_USER_CLASS && ce->info.user.sharp_bounds;
+	return ce->type == ZEND_USER_CLASS && sharp_is_sharp_file(ce->info.user.filename);
 }
 
 /* The bounds of the type parameters of `ce`, a PHP# class-like, which its objects start with as their type arguments.
@@ -2020,7 +2020,7 @@ static const sharp_type *sharp_class_bounds(const zend_class_entry *ce)
 {
 	const zend_string *bounds = ce->info.user.sharp_bounds;
 
-	if (!ZSTR_LEN(bounds)) {
+	if (!bounds) {
 		return NULL;
 	}
 
@@ -2073,9 +2073,12 @@ const sharp_type *sharp_type_arguments_of_slot(zend_object *object)
 static uint32_t sharp_class_arity(const zend_class_entry *ce)
 {
 	const zend_string *bounds = ce->info.user.sharp_bounds;
-	uint32_t count = ZSTR_LEN(bounds) ? 1 : 0;
+	uint32_t count = 1;
 	uint32_t depth = 0;
 
+	if (!bounds) {
+		return 0;
+	}
 	for (size_t i = 0; i < ZSTR_LEN(bounds); i++) {
 		switch (ZSTR_VAL(bounds)[i]) {
 			case '<':
@@ -2381,11 +2384,11 @@ static sharp_type_node *sharp_type_node_substitute(
 	return node;
 }
 
-/* The type argument list `text` spells, read whole into `reader`'s arena, or an empty list when `text` is empty. */
+/* The type argument list `text` spells, read whole into `reader`'s arena, or an empty list when `text` is NULL. */
 static sharp_type_node *sharp_type_node_list(const zend_string *text, sharp_type_reader *reader)
 {
-	if (!ZSTR_LEN(text)) {
-		return sharp_type_node_start(reader, SHARP_TYPE_LIST, ZSTR_VAL(text));
+	if (!text) {
+		return sharp_type_node_start(reader, SHARP_TYPE_LIST, NULL);
 	}
 
 	sharp_type_reader list = sharp_type_reader_of(ZSTR_VAL(text), ZSTR_LEN(text), reader->arena);
@@ -2427,8 +2430,7 @@ static sharp_type_node *sharp_type_node_ancestor(const zend_class_entry *ce, sha
 				next = instanceof_function(ce->interfaces[i], ancestor) ? ce->interfaces[i] : NULL;
 			}
 			ZEND_ASSERT(next != NULL);
-			arguments = sharp_type_node_list(
-				sharp_class_is_sharp(next) ? next->info.user.sharp_bounds : ZSTR_EMPTY_ALLOC(), reader);
+			arguments = sharp_type_node_list(sharp_class_is_sharp(next) ? next->info.user.sharp_bounds : NULL, reader);
 		}
 		ce = next;
 	}
@@ -2442,7 +2444,7 @@ static const sharp_type *sharp_type_arguments_of_ancestor(
 	const zend_class_entry *ce, const sharp_type *arguments, const zend_class_entry *ancestor)
 {
 	sharp_type_reader reader = sharp_type_reader_of(NULL, 0, zend_arena_create(1024));
-	sharp_type_node *given = sharp_type_node_list(arguments ? arguments->text : ZSTR_EMPTY_ALLOC(), &reader);
+	sharp_type_node *given = sharp_type_node_list(arguments ? arguments->text : NULL, &reader);
 	sharp_type_node *passed = sharp_type_node_ancestor(ce, given, ancestor, &reader);
 	const sharp_type *list = NULL;
 

@@ -229,8 +229,8 @@ struct _zend_class_entry {
 			uint32_t line_start;
 			uint32_t line_end;
 			/* PHP#: a PHP# class-like's metadata, both type texts, see ext/sharp/php_sharp.h. sharp_bounds is the
-			 * bounds of its type parameters, empty when it declares none, and NULL for a class plain PHP declares.
-			 * sharp_header is the type arguments its header gives each generic parent and interface, or NULL. */
+			 * bounds of its type parameters, or NULL when it declares none. sharp_header is the type arguments its
+			 * header gives each generic parent and interface, or NULL. */
 			zend_string *sharp_bounds;
 			zend_string *sharp_header;
 		} user;
