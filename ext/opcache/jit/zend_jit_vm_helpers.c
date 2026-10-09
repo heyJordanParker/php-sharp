@@ -821,12 +821,7 @@ zend_jit_trace_stop ZEND_FASTCALL zend_jit_trace_execute(zend_execute_data  *ex,
 		 && opline->opcode != ZEND_ROPE_END
 		 && opline->opcode != ZEND_NEW
 		 && opline->opcode != ZEND_FETCH_CLASS_CONSTANT
-		 && opline->opcode != ZEND_INIT_STATIC_METHOD_CALL
-		 /* PHP#: a call's TMP op1 and ZEND_SHARP_TYPE_ARGS's CV op1 hold IS_PTR type arguments, which is no PHP type. */
-		 && opline->opcode != ZEND_DO_FCALL
-		 && opline->opcode != ZEND_DO_UCALL
-		 && opline->opcode != ZEND_DO_FCALL_BY_NAME
-		 && opline->opcode != ZEND_SHARP_TYPE_ARGS) {
+		 && opline->opcode != ZEND_INIT_STATIC_METHOD_CALL) {
 			zval *zv = EX_VAR(opline->op1.var);
 			op1_type = Z_TYPE_P(zv);
 			uint8_t flags = 0;
@@ -848,7 +843,9 @@ zend_jit_trace_stop ZEND_FASTCALL zend_jit_trace_execute(zend_execute_data  *ex,
 					flags |= IS_TRACE_PACKED;
 				}
 			}
-			op1_type |= flags;
+			/* PHP#: an IS_PTR, such as a generic call's type arguments or the hidden local that holds them, is no PHP
+			 * type. */
+			op1_type = op1_type == IS_PTR ? IS_UNKNOWN : op1_type | flags;
 		} else if (opline->op1_type == IS_UNUSED && (op_array->fn_flags & ZEND_ACC_CLOSURE)) {
 			uint32_t op1_flags = ZEND_VM_OP1_FLAGS(zend_get_opcode_flags(opline->opcode));
 			if ((op1_flags & ZEND_VM_OP_MASK) == ZEND_VM_OP_THIS) {
@@ -858,8 +855,6 @@ zend_jit_trace_stop ZEND_FASTCALL zend_jit_trace_execute(zend_execute_data  *ex,
 		}
 		if (opline->op2_type & (IS_TMP_VAR|IS_VAR|IS_CV)
 		 && opline->opcode != ZEND_INSTANCEOF
-		 /* PHP#: a NEW's TMP op2 holds the IS_PTR type arguments of ZEND_SHARP_TYPE_ARGS, which is no PHP type. */
-		 && opline->opcode != ZEND_NEW
 		 && opline->opcode != ZEND_UNSET_STATIC_PROP
 		 && opline->opcode != ZEND_ISSET_ISEMPTY_STATIC_PROP
 		 && opline->opcode != ZEND_ASSIGN_STATIC_PROP
@@ -895,7 +890,7 @@ zend_jit_trace_stop ZEND_FASTCALL zend_jit_trace_execute(zend_execute_data  *ex,
 			if (Z_TYPE_P(zv) == IS_OBJECT) {
 				ce2 = Z_OBJCE_P(zv);
 			}
-			op2_type |= flags;
+			op2_type = op2_type == IS_PTR ? IS_UNKNOWN : op2_type | flags;
 		}
 		if (opline->opcode == ZEND_ASSIGN_DIM ||
 			opline->opcode == ZEND_ASSIGN_OBJ ||
@@ -920,7 +915,7 @@ zend_jit_trace_stop ZEND_FASTCALL zend_jit_trace_execute(zend_execute_data  *ex,
 					op3_type = Z_TYPE_P(zv);
 					flags |= IS_TRACE_REFERENCE;
 				}
-				op3_type |= flags;
+				op3_type = op3_type == IS_PTR ? IS_UNKNOWN : op3_type | flags;
 			}
 		}
 

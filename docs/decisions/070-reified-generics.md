@@ -273,8 +273,8 @@ before it changes the engine or the bridge.
   - `zend_jit_do_fcall` and its second spread test in `ext/opcache/jit/zend_jit_ir.c`, and the frame setup in
     `zend_jit_trace.c`, step back from the call op over `EXT_FCALL_BEGIN`, `TICKS` and now `ZEND_SHARP_TYPE_ARGS`, to
     find a `SEND_UNPACK`, `SEND_ARRAY` or `CHECK_UNDEF_ARGS`.
-  - `zend_jit_trace_execute` records no op1 type for the three `DO_*CALL`s, nor for a `ZEND_SHARP_TYPE_ARGS`, since an
-    `IS_PTR` is no PHP type.
+  - `zend_jit_trace_execute` records `IS_UNKNOWN` for any operand that holds an `IS_PTR`, since an `IS_PTR` is no PHP
+    type (R2e).
   - `zend_jit_escape_if_undef` addrefs the previous opline's TMP op1 only when it is refcounted, so an `IS_PTR` is safe.
 - **The optimizer:**
   - `zend_try_inline_call` inlines only a function whose `opcodes[num_args]` is a `RETURN`, so it never inlines a
@@ -348,7 +348,8 @@ before it changes the engine or the bridge.
 
 - **`zend_jit_trace_execute` records no op1 type for the three `DO_*CALL`s and `ZEND_SHARP_TYPE_ARGS`.** Before R2d it
   read their `IS_PTR` op1 as a PHP type and recorded it as `iterable`, the type whose number `IS_PTR` shares.
-  `type_arguments_call_jit_trace_types.phpt` reads the tracing JIT's trace dump and pins it.
+  `type_arguments_call_jit_trace_types.phpt` reads the tracing JIT's trace dump and pins it. R2e replaces the list
+  of opcodes with one rule for every operand.
 - **No other JIT or optimizer path reads op1 of a `DO_*CALL`:**
   - Every `op1_type == IS_UNUSED` test in `ext/opcache/jit` belongs to an opcode that takes `this` in op1, never to a
     call op.
@@ -414,6 +415,9 @@ before it changes the engine or the bridge.
 - **The lambda capture scan tests `sharp_is_sharp_file` first,** as R2 decided. Before R2e it walked every local of
   the enclosing function for every plain PHP lambda. A plain PHP function with 20000 locals and 20000 lambdas
   compiled in 4.66 to 4.77 s of user time on the NTS debug build, and compiles in 1.70 to 1.76 s after, three runs each.
+- **The tracing JIT's recorder records `IS_UNKNOWN` for any operand that holds an `IS_PTR`,** in place of R2d's list of
+  the opcodes that read one. The list missed `BIND_LEXICAL`, whose op2 is the hidden local a lambda captures, and
+  recorded it as `iterable`. Upstream's exclusions stay: their operand is a class `VAR`, whose type byte is not set.
 
 ### D. Readers
 
