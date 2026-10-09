@@ -1329,7 +1329,7 @@ public enum PaymentResult
 {
     case Paid(string transactionId);
     case Declined(string reason);
-    case RequiresAction(Url redirect);
+    case RequiresAction(string redirect);
 }
 
 return PaymentResult.Declined(reason: "card expired");
@@ -1379,7 +1379,7 @@ const message = match (result) {
     PaymentResult.Paid(string transactionId) when order.isTest => `Test payment ${transactionId}`,
     PaymentResult.Paid(string transactionId) => `Paid ${transactionId}`,
     PaymentResult.Declined d => `Declined: ${d.reason}`,
-    PaymentResult.RequiresAction(Url redirect) => `Continue at ${redirect}`,
+    PaymentResult.RequiresAction(string redirect) => `Continue at ${redirect}`,
 };
 
 match (result) {
