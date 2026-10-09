@@ -392,7 +392,7 @@ before it changes the engine or the bridge.
   reads `receiver_intersections`. `receiver_classes` keeps only the first class of each intersection, which
   `operator_class` relies on.
 - **An int a plain PHP call gives a `float` position becomes a float,** as PHP's own `float` parameter makes it. A
-  type parameter erases to `mixed`, so PHP's check never sees it. Without the conversion `Box<float>`'s `put(2)` kept
+  type parameter erases to `mixed`, so PHP's check never sees it. Without the conversion `Cell<float>`'s `put(2)` kept
   an int, and PHP#'s `get() == 2.0` was false.
 - **A method's own type parameter is a wildcard at every depth on entry from plain PHP, and a written `Any?` matches
   only `Any?`.** Before R2e the check gave each `#i` the method's bounds and let any `Any?` type argument match
