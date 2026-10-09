@@ -85,8 +85,25 @@ public class Journal<TEntry : DatabaseEntity> : Sleeper
     }
 }
 
+public class Node<T>
+{
+    public Node()
+    {
+    }
+
+    public Node<List<T>> deeper() => new Node<List<T>>();
+}
+
 public class Queue
 {
+    public static Node<int> intNode() => new Node<int>();
+
+    public static Node<string> stringNode() => new Node<string>();
+
+    public static Node<float> floatNode() => new Node<float>();
+
+    public static Node<bool> boolNode() => new Node<bool>();
+
     public static PaginatedList<Order> orders() => new PaginatedList<Order>([]);
 
     public static PaginatedList<DatabaseEntity> entities() => new PaginatedList<DatabaseEntity>([]);

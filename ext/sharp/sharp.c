@@ -2311,7 +2311,9 @@ const sharp_type *sharp_type_list_of_this(
 	ZEND_ASSERT(open && reader.open);
 	sharp_type_node *list = sharp_type_node_substitute(open, arguments, &reader);
 	ZEND_ASSERT(list != NULL);
-	const sharp_type *substituted = sharp_type_intern(list, true, &reader.arena);
+	/* A type a substitution spells is bounded by how deep the program nests it, not by its source, as in
+	 * Node<List<T>>, so a new one lives for the request. One code already spells is the process's. */
+	const sharp_type *substituted = sharp_type_intern(list, false, &reader.arena);
 	zend_arena_destroy(reader.arena);
 
 	/* A list unserialize read first this request is the request's, so the cache never keeps it. */

@@ -1,5 +1,5 @@
 --TEST--
-Type texts from unserialize last one request, so a worker that reads new ones in every request keeps its size
+Type texts from unserialize, and type arguments a new spells from this's, last one request, so a worker that reads or nests new ones in every request keeps its size
 --SKIPIF--
 <?php
 if (getenv('SKIP_SLOW_TESTS')) die('skip slow test');
@@ -8,7 +8,7 @@ if (getenv('SKIP_SLOW_TESTS')) die('skip slow test');
 <?php
 require __DIR__ . '/type_arguments.inc';
 
-if (($argv[1] ?? null) === 'request') {
+if (($argv[1] ?? null) === 'unserialize') {
     // Twenty thousand type texts no other request reads: Function types whose parameters spell a random number.
     $base = random_int(0, PHP_INT_MAX >> 32) << 32;
     $template = serialize(App\Queue::pair());
@@ -27,14 +27,38 @@ if (($argv[1] ?? null) === 'request') {
     return;
 }
 
-$output = shell_exec(escapeshellarg(PHP_BINARY) . ' -n --repeat 4 ' . escapeshellarg(__FILE__) . ' request');
-preg_match_all('/^peak (\d+)$/m', $output, $peaks);
-if (count($peaks[1]) !== 4) {
-    echo $output;
+if (($argv[1] ?? null) === 'new') {
+    // Each request starts from another type argument code spells, so it spells types no request before it did:
+    // Node<List<int>>, Node<List<List<int>>> and on, then the same from string, float and bool.
+    $counter = sys_get_temp_dir() . '/type_arguments_requests.' . getmypid();
+    $request = (int) @file_get_contents($counter);
+    file_put_contents($counter, $request + 1);
+    $node = [App\Queue::intNode(...), App\Queue::stringNode(...), App\Queue::floatNode(...), App\Queue::boolNode(...)][$request]();
+    for ($depth = 0; $depth < 400; $depth++) {
+        $node = $node->deeper();
+    }
+    if ($request === 3) {
+        unlink($counter);
+    }
+    echo 'peak ', getrusage()['ru_maxrss'] * (PHP_OS_FAMILY === 'Darwin' ? 1 : 1024), "\n";
+    return;
 }
-// Kept for the process, the texts would add some 10 MB to every request after the first.
-$growth = $peaks[1][3] - $peaks[1][1];
-echo $growth < 4 * 1024 * 1024 ? "the peak stays\n" : "the peak grew by $growth bytes\n";
+
+foreach ([
+    // Kept for the process, the texts would add some 10 MB to every request after the first.
+    'unserialize' => 4 * 1024 * 1024,
+    // Kept for the process, the types would add some 1 MB to every request after the first.
+    'new' => 512 * 1024,
+] as $reads => $limit) {
+    $output = shell_exec(escapeshellarg(PHP_BINARY) . ' -n --repeat 4 ' . escapeshellarg(__FILE__) . ' ' . $reads);
+    preg_match_all('/^peak (\d+)$/m', $output, $peaks);
+    if (count($peaks[1]) !== 4) {
+        echo $output;
+    }
+    $growth = $peaks[1][3] - $peaks[1][1];
+    echo $reads, ': ', $growth < $limit ? "the peak stays\n" : "the peak grew by $growth bytes\n";
+}
 ?>
 --EXPECT--
-the peak stays
+unserialize: the peak stays
+new: the peak stays
