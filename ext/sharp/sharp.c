@@ -1538,6 +1538,11 @@ typedef struct {
  * Zend/tests/sharp is `$0, List<$0>?`, 2 deep. */
 #define SHARP_TYPE_INPUT_DEPTH 64
 
+/* The spelling of a method's type parameter that a call from plain PHP left unresolved, in the parameter types its entry
+ * check spells. It matches any type at any depth. No type text spells a bare `?`, so it is never the written `Any?`, and
+ * the two intern apart. */
+#define SHARP_TYPE_UNRESOLVED "?"
+
 /* A reader at the start of the `length` bytes at `text`, whose nodes go into `arena`. */
 static sharp_type_reader sharp_type_reader_of(const char *text, size_t length, zend_arena *arena)
 {
@@ -2294,12 +2299,19 @@ static void sharp_type_union_add(sharp_type_node *node, sharp_type_node *type, b
 }
 
 /* `node` with each `$i` in it replaced by member i of `of_class`, a list or a class type, and each `#i` by member i of
- * `of_method`, a list, spelled as code spells the type it becomes: a union flattens a union or a nullable type it is
- * given, `Any` takes in a whole union, and a nullable type stays one `?`. NULL when `node` names an index the list has
- * no member at, or names one of a list that is NULL. */
+ * `of_method`, a list, or by SHARP_TYPE_UNRESOLVED when `unresolved` holds, spelled as code spells the type it becomes:
+ * a union flattens a union or a nullable type it is given, `Any` takes in a whole union, an unresolved type parameter
+ * takes in a whole union or nullable type, and a nullable type stays one `?`. NULL when `node` names an index the list
+ * has no member at, or names one of a list that is NULL. */
 static sharp_type_node *sharp_type_node_substitute(sharp_type_node *node, const sharp_type_node *of_class,
-	const sharp_type_node *of_method, sharp_type_reader *reader)
+	const sharp_type_node *of_method, bool unresolved, sharp_type_reader *reader)
 {
+	if (node->method_parameter && unresolved) {
+		sharp_type_node *wildcard = sharp_type_node_start(reader, SHARP_TYPE_NAMED, SHARP_TYPE_UNRESOLVED);
+		wildcard->length = wildcard->name_length = strlen(SHARP_TYPE_UNRESOLVED);
+
+		return wildcard;
+	}
 	uint32_t parameter = node->class_parameter ? node->class_parameter : node->method_parameter;
 	if (parameter) {
 		const sharp_type_node *arguments = node->class_parameter ? of_class : of_method;
@@ -2328,7 +2340,7 @@ static sharp_type_node *sharp_type_node_substitute(sharp_type_node *node, const 
 		next = member->next;
 		member->next = NULL;
 
-		sharp_type_node *type = sharp_type_node_substitute(member, of_class, of_method, reader);
+		sharp_type_node *type = sharp_type_node_substitute(member, of_class, of_method, unresolved, reader);
 		if (!type) {
 			return NULL;
 		}
@@ -2340,11 +2352,17 @@ static sharp_type_node *sharp_type_node_substitute(sharp_type_node *node, const 
 	}
 
 	if (node->kind == SHARP_TYPE_NULLABLE
-		&& (node->first->kind == SHARP_TYPE_NULLABLE || sharp_type_node_is(node->first, "null"))) {
+		&& (node->first->kind == SHARP_TYPE_NULLABLE || sharp_type_node_is(node->first, "null")
+			|| sharp_type_node_is(node->first, SHARP_TYPE_UNRESOLVED))) {
 		return node->first;
 	}
 	if (node->kind == SHARP_TYPE_UNION) {
 		for (sharp_type_node *member = node->first; member; member = member->next) {
+			if (sharp_type_node_is(member, SHARP_TYPE_UNRESOLVED)) {
+				member->next = NULL;
+
+				return member;
+			}
 			if (sharp_type_node_is(member, "Any")) {
 				member->next = NULL;
 				node->first = node->last = member;
@@ -2414,7 +2432,7 @@ static sharp_type_node *sharp_type_node_ancestor(const zend_class_entry *ce, sha
 
 				if (named && instanceof_function(named, ancestor)) {
 					next = named;
-					arguments = sharp_type_node_substitute(entry, arguments, NULL, reader);
+					arguments = sharp_type_node_substitute(entry, arguments, NULL, false, reader);
 				}
 			}
 		}
@@ -2432,8 +2450,9 @@ static sharp_type_node *sharp_type_node_ancestor(const zend_class_entry *ce, sha
 	return arguments;
 }
 
-const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object, const sharp_type *method,
-	const zend_class_entry *scope, void **cache)
+/* sharp_type_list_of_frame, with each `#i` SHARP_TYPE_UNRESOLVED when `unresolved` holds. */
+static const sharp_type *sharp_type_list_of_frame_ex(const zval *text, zend_object *object, const sharp_type *method,
+	bool unresolved, const zend_class_entry *scope, void **cache)
 {
 	/* A lambda bound to an object of an unrelated class has no type arguments of the class it is written in to read. */
 	const zend_class_entry *ce = object && instanceof_function(object->ce, scope) ? object->ce : NULL;
@@ -2460,7 +2479,7 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 		? sharp_type_node_ancestor(ce, sharp_type_node_list(own ? own->text : NULL, &reader), scope, &reader)
 		: NULL;
 	sharp_type_node *of_method = method ? sharp_type_node_list(method->text, &reader) : NULL;
-	sharp_type_node *list = sharp_type_node_substitute(open, of_class, of_method, &reader);
+	sharp_type_node *list = sharp_type_node_substitute(open, of_class, of_method, unresolved, &reader);
 	/* A lambda bound to an object of another class that has no type argument at an index the text names makes an object
 	 * with its class's bounds, as one plain PHP creates. */
 	if (!list) {
@@ -2486,9 +2505,52 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 	return substituted;
 }
 
-/* Whether `object` is an instance of the class `type` names whose type arguments for that class are `type`'s own,
- * where `type`'s argument is not `Any?`. Only a class PHP# declares with type parameters has type arguments to compare:
- * plain PHP's generics are erased. A loaded object's class has loaded each class it extends or implements. */
+const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object, const sharp_type *method,
+	const zend_class_entry *scope, void **cache)
+{
+	return sharp_type_list_of_frame_ex(text, object, method, false, scope, cache);
+}
+
+/* Whether `given`, a type argument an object holds, matches `expected`: SHARP_TYPE_UNRESOLVED matches any type at any
+ * depth, and every other type only itself, a written `Any?` too. An intersection that holds SHARP_TYPE_UNRESOLVED
+ * matches any type, since it unifies with any class. */
+static bool sharp_type_argument_matches(const sharp_type *expected, const sharp_type_node *given)
+{
+	if (zend_string_equals_literal(expected->text, SHARP_TYPE_UNRESOLVED)
+		|| zend_string_equals_cstr(expected->text, given->text, given->length)) {
+		return true;
+	}
+	if (expected->kind != given->kind || expected->count != given->count) {
+		return false;
+	}
+	if (expected->kind == SHARP_TYPE_NAMED) {
+		/* The same class or built-in type, then its type arguments. */
+		size_t name_length = given->name_length;
+		if (!expected->count || ZSTR_LEN(expected->text) <= name_length
+			|| memcmp(ZSTR_VAL(expected->text), given->text, name_length) != 0
+			|| ZSTR_VAL(expected->text)[name_length] != '<') {
+			return false;
+		}
+	}
+	for (uint32_t i = 0; expected->kind == SHARP_TYPE_INTERSECTION && i < expected->count; i++) {
+		if (zend_string_equals_literal(expected->members[i]->text, SHARP_TYPE_UNRESOLVED)) {
+			return true;
+		}
+	}
+
+	uint32_t i = 0;
+	for (const sharp_type_node *member = given->first; member; member = member->next, i++) {
+		if (!sharp_type_argument_matches(expected->members[i], member)) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+/* Whether `object` is an instance of the class `type` names whose type arguments for that class match `type`'s own, as
+ * sharp_type_argument_matches matches them. Only a class PHP# declares with type parameters has type arguments to
+ * compare: plain PHP's generics are erased. A loaded object's class has loaded each class it extends or implements. */
 static bool sharp_object_is(zend_object *object, const sharp_type *type)
 {
 	zend_class_entry *ce = zend_lookup_class_ex(type->class_name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
@@ -2510,10 +2572,7 @@ static bool sharp_object_is(zend_object *object, const sharp_type *type)
 	bool is = given && given->count == type->count;
 	uint32_t i = 0;
 	for (const sharp_type_node *argument = is ? given->first : NULL; argument; argument = argument->next, i++) {
-		const zend_string *expected = type->members[i]->text;
-
-		if (!zend_string_equals_literal(expected, "Any?")
-			&& !zend_string_equals_cstr(expected, argument->text, argument->length)) {
+		if (!sharp_type_argument_matches(type->members[i], argument)) {
 			is = false;
 			break;
 		}
@@ -2635,11 +2694,11 @@ static bool sharp_type_takes_int_as_float(const sharp_type *type)
 	return takes_float;
 }
 
-void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *text, const sharp_type *method,
-	void **cache)
+void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *text, void **cache)
 {
-	const sharp_type *expected = sharp_type_list_of_frame(text,
-		Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, method, EX(func)->common.scope, cache);
+	/* Only a call from plain PHP is checked, and it gives the method no type arguments. */
+	const sharp_type *expected = sharp_type_list_of_frame_ex(text,
+		Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, true, EX(func)->common.scope, cache);
 	if (!expected) {
 		return;
 	}

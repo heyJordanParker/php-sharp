@@ -3,7 +3,6 @@ namespace Calls;
 import App.Box;
 import App.DatabaseEntity;
 import App.Order;
-import App.PaginatedList;
 import App.Pair;
 import App.Shareable;
 import App.SharedOrder;
@@ -72,9 +71,15 @@ public class Shelf
 
     public Box<Order> stock(Order order) => this.make<Order>(order);
 
-    public string take<T : DatabaseEntity>(PaginatedList<T> page) => "took";
+    public string drain(Source<DatabaseEntity> source) => "drained";
 
-    public string taken() => this.take<Order>(new PaginatedList<Order>([]));
+    public string drained() => this.drain(new Source<Order>());
+
+    public static Source<Order> orders() => new Source<Order>();
+}
+
+public class Source<out TItem : DatabaseEntity>
+{
 }
 
 public class Keyed<TKey>

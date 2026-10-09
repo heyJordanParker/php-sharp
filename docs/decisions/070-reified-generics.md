@@ -241,8 +241,8 @@ before it changes the engine or the bridge.
 - **Every other entry is from plain PHP:** plain PHP callers, `call_user_func`, internal callbacks such as `array_map`,
   error handlers and property hooks. On that entry each parameter whose expected type is not `Any?` is checked by one
   engine function, `sharp_type_accepts(descriptor, value)`, which R3's `is` reuses.
-  - An `Any?` type argument accepts anything.
-  - Every other type argument must match exactly. Variance waits for R4.
+  - A method's own type parameter is unresolved on that entry, and accepts any type argument at any depth (R2e).
+  - Every other type argument must match exactly, a written `Any?` too. Variance waits for R4.
   - A class with type arguments matches an object of a subclass through the header metadata of part B, as
     `sharp_type_node_ancestor` maps it.
 - **Values of `List`, `Map`, `Iterable`, `Class` and `Function` get only PHP's own type check at this boundary.**
@@ -297,9 +297,9 @@ before it changes the engine or the bridge.
   check runs only in a method with a checked parameter, and the suffix test costs one compare of six bytes, so no
   new mark enters the register.
 - **`sharp_type_accepts(type, value)` takes one type of the parameters list,** after `sharp_type_list_of_frame`
-  spelled the list for the frame: `$i` from this, `#i` from the method's type arguments or bounds.
+  spelled the list for the frame: `$i` from this, and `#i` unresolved (R2e).
   - A class type needs an instance of the class. Its type arguments for that class, through the header metadata,
-    must equal the type's own, except where the type's argument is `Any?`. Only a class PHP# declares with type
+    must equal the type's own, except where the type holds an unresolved `#i`. Only a class PHP# declares with type
     parameters has type arguments to compare (R2e).
   - A built-in type needs a value of its PHP type: `int`, `string`, `bool`, `null`, `Any` (not null) and `Object`.
     `float` also takes an int, as PHP's own `float` parameter does, and `sharp_type_check_arguments` then turns the
@@ -393,6 +393,17 @@ before it changes the engine or the bridge.
 - **An int a plain PHP call gives a `float` position becomes a float,** as PHP's own `float` parameter makes it. A
   type parameter erases to `mixed`, so PHP's check never sees it. Without the conversion `Box<float>`'s `put(2)` kept
   an int, and PHP#'s `get() == 2.0` was false.
+- **A method's own type parameter is a wildcard at every depth on entry from plain PHP, and a written `Any?` matches
+  only `Any?`.** Before R2e the check gave each `#i` the method's bounds and let any `Any?` type argument match
+  anything, but only at the top level: `count<T>(Page<Box<T>>)` refused a `Page<Box<Order>>`, and `open(Box<Any?>)`
+  took a `Box<int>`.
+  - Only a call from plain PHP is checked, and it gives no type arguments, so the check spells each `#i` as
+    `SHARP_TYPE_UNRESOLVED`, a bare `?`. No type text spells a bare `?`, so the wildcard interns apart from `Any?`.
+  - A union or a nullable type that holds the wildcard is the wildcard. An intersection that holds it matches any type.
+  - `sharp_type_argument_matches` compares an object's type argument with the expected one, member by member below the
+    first wildcard, and by text everywhere else.
+  - A failed check names the wildcard as `?`: `must be of type Checks.Page<App.Box<?>>`.
+  - The wildcard does not check the bound. At the top level PHP's own parameter type, the bound's class, does.
 
 ### D. Readers
 

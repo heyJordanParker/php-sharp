@@ -87,16 +87,17 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 	const zend_class_entry *scope, void **cache);
 
 /* Whether `value` is of `type`, one type: `Any?` holds every value, a class an instance of it or of a subclass, whose
- * type arguments for the class must be the type's own, except where the type's argument is `Any?`, and a built-in type
- * the values of its PHP type, an int also for `float`. `List`, `Map`, `Set`, `Iterable`, `Class` and `Function` hold
- * every value, as PHP's own parameter type checks them, and their elements are not checked. */
+ * type arguments for the class must be the type's own, except where the type has a method's type parameter a call
+ * from plain PHP left unresolved, and a built-in type the values of its PHP type, an int also for `float`. `List`,
+ * `Map`, `Set`, `Iterable`, `Class` and `Function` hold every value, as PHP's own parameter type checks them, and their
+ * elements are not checked. */
 bool sharp_type_accepts(const sharp_type *type, const zval *value);
 
 /* Throws PHP's TypeError for the first argument of the call `execute_data` runs that the type text list `text` does
- * not accept, one entry per parameter, spelled for the frame as sharp_type_list_of_frame spells it, with `method` the
- * method's own type arguments. */
-void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *text, const sharp_type *method,
-	void **cache);
+ * not accept, one entry per parameter, spelled for the frame as sharp_type_list_of_frame spells it, with each of the
+ * method's own type parameters unresolved, since only a call from plain PHP is checked. An int it accepts for a float
+ * becomes a float. */
+void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *text, void **cache);
 
 /* An object of a generic PHP# class keeps its type arguments in a declared property of this name, which carries
  * ZEND_ACC_SHARP_HIDDEN. It holds null until PHP# code, unserialize or the first read stores the IS_PTR of an interned

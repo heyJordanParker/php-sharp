@@ -7850,7 +7850,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_RECV_TY
 	}
 	if (IS_CONST == IS_CONST && (!call || !sharp_is_sharp_file(caller->func->op_array.filename))) {
 		SAVE_OPLINE();
-		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2), arguments,
+		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2),
 			CACHE_ADDR(opline->extended_value + (IS_CONST == IS_CONST ? 4 * sizeof(void *) : 0)));
 		if (UNEXPECTED(EG(exception))) {
 			HANDLE_EXCEPTION();
@@ -11613,7 +11613,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_RECV_TY
 	}
 	if (IS_UNUSED == IS_CONST && (!call || !sharp_is_sharp_file(caller->func->op_array.filename))) {
 		SAVE_OPLINE();
-		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2), arguments,
+		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2),
 			CACHE_ADDR(opline->extended_value + (IS_CONST == IS_CONST ? 4 * sizeof(void *) : 0)));
 		if (UNEXPECTED(EG(exception))) {
 			HANDLE_EXCEPTION();
@@ -36811,7 +36811,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_RECV_TY
 	}
 	if (IS_CONST == IS_CONST && (!call || !sharp_is_sharp_file(caller->func->op_array.filename))) {
 		SAVE_OPLINE();
-		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2), arguments,
+		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2),
 			CACHE_ADDR(opline->extended_value + (IS_UNUSED == IS_CONST ? 4 * sizeof(void *) : 0)));
 		if (UNEXPECTED(EG(exception))) {
 			HANDLE_EXCEPTION();
@@ -39862,7 +39862,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_RECV_TY
 	}
 	if (IS_UNUSED == IS_CONST && (!call || !sharp_is_sharp_file(caller->func->op_array.filename))) {
 		SAVE_OPLINE();
-		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2), arguments,
+		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2),
 			CACHE_ADDR(opline->extended_value + (IS_UNUSED == IS_CONST ? 4 * sizeof(void *) : 0)));
 		if (UNEXPECTED(EG(exception))) {
 			HANDLE_EXCEPTION();
@@ -64723,7 +64723,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_RECV_TYPE_AR
 	}
 	if (IS_CONST == IS_CONST && (!call || !sharp_is_sharp_file(caller->func->op_array.filename))) {
 		SAVE_OPLINE();
-		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2), arguments,
+		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2),
 			CACHE_ADDR(opline->extended_value + (IS_CONST == IS_CONST ? 4 * sizeof(void *) : 0)));
 		if (UNEXPECTED(EG(exception))) {
 			HANDLE_EXCEPTION();
@@ -68384,7 +68384,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_RECV_TYPE_AR
 	}
 	if (IS_UNUSED == IS_CONST && (!call || !sharp_is_sharp_file(caller->func->op_array.filename))) {
 		SAVE_OPLINE();
-		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2), arguments,
+		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2),
 			CACHE_ADDR(opline->extended_value + (IS_CONST == IS_CONST ? 4 * sizeof(void *) : 0)));
 		if (UNEXPECTED(EG(exception))) {
 			HANDLE_EXCEPTION();
@@ -93482,7 +93482,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_RECV_TYPE_AR
 	}
 	if (IS_CONST == IS_CONST && (!call || !sharp_is_sharp_file(caller->func->op_array.filename))) {
 		SAVE_OPLINE();
-		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2), arguments,
+		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2),
 			CACHE_ADDR(opline->extended_value + (IS_UNUSED == IS_CONST ? 4 * sizeof(void *) : 0)));
 		if (UNEXPECTED(EG(exception))) {
 			HANDLE_EXCEPTION();
@@ -96533,7 +96533,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_RECV_TYPE_AR
 	}
 	if (IS_UNUSED == IS_CONST && (!call || !sharp_is_sharp_file(caller->func->op_array.filename))) {
 		SAVE_OPLINE();
-		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2), arguments,
+		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2),
 			CACHE_ADDR(opline->extended_value + (IS_UNUSED == IS_CONST ? 4 * sizeof(void *) : 0)));
 		if (UNEXPECTED(EG(exception))) {
 			HANDLE_EXCEPTION();

@@ -29,6 +29,14 @@ public class Pages
     public static Cell<float|string> floatsOrStrings() => new Cell<float|string>("none");
 
     public static bool two(Cell<float> cell) => cell.get() == 2.0;
+
+    public static Page<Box<Order>> boxedOrders() => new Page<Box<Order>>();
+
+    public static int count<T>(Page<Box<T>> page) => 1;
+}
+
+public class Page<T>
+{
 }
 
 public class Cell<T>

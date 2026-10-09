@@ -10,7 +10,6 @@ opcache.jit=disable
 require __DIR__ . '/type_arguments_calls.inc';
 
 use App\Order;
-use App\Queue;
 use Calls\Repository;
 use Calls\Shelf;
 
@@ -23,15 +22,15 @@ function attempt(callable $call): void
     }
 }
 
-attempt(fn () => (new Shelf())->taken());
+attempt(fn () => (new Shelf())->drained());
 attempt(fn () => shown(Repository::written(new Order(1))));
-attempt(fn () => (new Shelf())->take(Queue::orders()));
-attempt(fn () => call_user_func([new Shelf(), 'take'], Queue::orders()));
-attempt(fn () => array_map([new Shelf(), 'take'], [Queue::orders()])[0]);
+attempt(fn () => (new Shelf())->drain(Shelf::orders()));
+attempt(fn () => call_user_func([new Shelf(), 'drain'], Shelf::orders()));
+attempt(fn () => array_map([new Shelf(), 'drain'], [Shelf::orders()])[0]);
 ?>
 --EXPECTF--
-took
+drained
 App\Box<App.Order>
-Calls\Shelf::take(): Argument #1 ($page) must be of type App.PaginatedList<App.DatabaseEntity>, App.PaginatedList<App.Order> given, called in %s on line %d
-Calls\Shelf::take(): Argument #1 ($page) must be of type App.PaginatedList<App.DatabaseEntity>, App.PaginatedList<App.Order> given, called in %s on line %d
-Calls\Shelf::take(): Argument #1 ($page) must be of type App.PaginatedList<App.DatabaseEntity>, App.PaginatedList<App.Order> given
+Calls\Shelf::drain(): Argument #1 ($source) must be of type Calls.Source<App.DatabaseEntity>, Calls.Source<App.Order> given, called in %s on line %d
+Calls\Shelf::drain(): Argument #1 ($source) must be of type Calls.Source<App.DatabaseEntity>, Calls.Source<App.Order> given, called in %s on line %d
+Calls\Shelf::drain(): Argument #1 ($source) must be of type Calls.Source<App.DatabaseEntity>, Calls.Source<App.Order> given

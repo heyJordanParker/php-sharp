@@ -6189,7 +6189,7 @@ ZEND_VM_HANDLER(212, ZEND_SHARP_RECV_TYPE_ARGS, CONST|UNUSED, CONST|UNUSED, CACH
 	}
 	if (OP2_TYPE == IS_CONST && (!call || !sharp_is_sharp_file(caller->func->op_array.filename))) {
 		SAVE_OPLINE();
-		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2), arguments,
+		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2),
 			CACHE_ADDR(opline->extended_value + (OP1_TYPE == IS_CONST ? 4 * sizeof(void *) : 0)));
 		if (UNEXPECTED(EG(exception))) {
 			HANDLE_EXCEPTION();
