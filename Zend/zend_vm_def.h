@@ -6149,35 +6149,49 @@ ZEND_VM_HANDLER(211, ZEND_SHARP_TYPE_ARGS, UNUSED|CV, CONST|UNUSED, CACHE_SLOT)
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
-/* PHP#: gives a generic method its own type arguments in its hidden CV result. Only a PHP# call gives them, in the TMP
- * op1 of the ZEND_DO_*CALL the caller runs, and only a frame that call pushed reads it: a frame of zend_call_function,
- * as call_user_func, array_map, an error handler or a property hook push, is ZEND_CALL_TOP, and its caller's opline is
- * another call's. Any other call gives none, and the bounds the CONST op1 spells stand in, as for an object plain PHP
- * creates. The descriptor is interned and never freed. */
-ZEND_VM_HANDLER(212, ZEND_SHARP_RECV_TYPE_ARGS, CONST, UNUSED, CACHE_SLOT)
+/* PHP#: gives a generic method its own type arguments in its hidden CV result, when the CONST op1 spells their bounds,
+ * and checks the arguments of a call from plain PHP, when the CONST op2 spells the parameters' types. Only a frame a
+ * ZEND_DO_*CALL pushed has a caller's call: a frame of zend_call_function, as call_user_func, array_map, an error handler
+ * or a property hook push, is ZEND_CALL_TOP, and its caller's opline is another call's.
+ * Only a PHP# call gives type arguments, in the TMP op1 of its ZEND_DO_*CALL. Any other call gives none, and the bounds
+ * stand in, as for an object plain PHP creates. The descriptor is interned and never freed.
+ * A call from a .sharp file is never checked, since the checker proved its arguments (ruling G.2). Four cache slots
+ * follow each CONST text. */
+ZEND_VM_HANDLER(212, ZEND_SHARP_RECV_TYPE_ARGS, CONST|UNUSED, CONST|UNUSED, CACHE_SLOT)
 {
 	USE_OPLINE
 	const sharp_type *arguments = NULL;
+	zend_execute_data *caller = EX(prev_execute_data);
+	const zend_op *call = NULL;
 
-	if (EXPECTED(!(EX_CALL_INFO() & ZEND_CALL_TOP)) && ZEND_USER_CODE(EX(prev_execute_data)->func->type)) {
-		zend_execute_data *caller = EX(prev_execute_data);
-		const zend_op *call = caller->opline;
-
-		if ((call->opcode == ZEND_DO_FCALL || call->opcode == ZEND_DO_UCALL || call->opcode == ZEND_DO_FCALL_BY_NAME)
-			&& call->op1_type == IS_TMP_VAR) {
+	if (EXPECTED(!(EX_CALL_INFO() & ZEND_CALL_TOP)) && ZEND_USER_CODE(caller->func->type)
+		&& (caller->opline->opcode == ZEND_DO_FCALL || caller->opline->opcode == ZEND_DO_UCALL
+			|| caller->opline->opcode == ZEND_DO_FCALL_BY_NAME)) {
+		call = caller->opline;
+	}
+	if (OP1_TYPE == IS_CONST) {
+		if (call && call->op1_type == IS_TMP_VAR) {
 			arguments = Z_PTR_P(ZEND_CALL_VAR(caller, call->op1.var));
 		}
+		if (!arguments) {
+			SAVE_OPLINE();
+			arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op1),
+				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, EX(func)->common.scope,
+				CACHE_ADDR(opline->extended_value));
+			if (UNEXPECTED(EG(exception))) {
+				HANDLE_EXCEPTION();
+			}
+		}
+		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
 	}
-	if (!arguments) {
+	if (OP2_TYPE == IS_CONST && (!call || !sharp_is_sharp_file(caller->func->op_array.filename))) {
 		SAVE_OPLINE();
-		arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op1),
-			Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, EX(func)->common.scope,
-			CACHE_ADDR(opline->extended_value));
+		sharp_type_check_arguments(execute_data, RT_CONSTANT(opline, opline->op2), arguments,
+			CACHE_ADDR(opline->extended_value + (OP1_TYPE == IS_CONST ? 4 * sizeof(void *) : 0)));
 		if (UNEXPECTED(EG(exception))) {
 			HANDLE_EXCEPTION();
 		}
 	}
-	ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
 	ZEND_VM_NEXT_OPCODE();
 }
 

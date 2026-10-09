@@ -706,9 +706,10 @@ void zend_optimizer_compact_literals(zend_op_array *op_array, zend_optimizer_ctx
 					}
 					break;
 				case ZEND_SHARP_RECV_TYPE_ARGS:
-					// op1 bounds text, spelled with the class and type arguments of this
+					// op1 bounds text and op2 parameters text, each spelled with the class and type arguments of this
+					// and the method's type arguments
 					opline->extended_value = cache_size;
-					cache_size += 4 * sizeof(void *);
+					cache_size += 4 * ((opline->op1_type == IS_CONST) + (opline->op2_type == IS_CONST)) * sizeof(void *);
 					break;
 				case ZEND_CATCH:
 					if (opline->op1_type == IS_CONST) {

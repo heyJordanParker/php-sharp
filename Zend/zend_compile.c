@@ -5531,27 +5531,40 @@ static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast)
 	}
 }
 
-/* Emits the ZEND_SHARP_RECV_TYPE_ARGS that gives a PHP# generic method its own type arguments in its hidden local: the
- * ones its call gives, or the bounds `bounds_ast` spells. It follows the RECVs, so the optimizer never inlines the
- * method and the frame of a function without type hints, which skips its RECVs, still runs it. */
-static void zend_compile_sharp_recv_type_args(zend_ast *bounds_ast)
+/* The literal of the type text list `text_ast`, which may name the type parameters of the method's class as `$i` and
+ * the method's own as `#i`. A closed text is checked here. */
+static uint32_t zend_add_sharp_open_type_text(zend_ast *text_ast)
+{
+	zend_string *text = zend_ast_get_str(text_ast);
+	if (!sharp_type_list_names(ZSTR_VAL(text), ZSTR_LEN(text))) {
+		zend_sharp_type_text(text_ast);
+	}
+	text = zend_string_copy(text);
+
+	return zend_add_literal_string(&text);
+}
+
+/* Emits the ZEND_SHARP_RECV_TYPE_ARGS of a PHP# method. With `bounds_ast`, it gives a generic method its own type
+ * arguments in its hidden local: the ones its call gives, or those bounds. With `parameters_ast`, one type per
+ * parameter, it checks the arguments of a call from plain PHP (ruling G.2). It follows the RECVs, so the optimizer
+ * never inlines the method and the frame of a function without type hints, which skips its RECVs, still runs it. */
+static void zend_compile_sharp_recv_type_args(zend_ast *bounds_ast, zend_ast *parameters_ast)
 {
 	zend_op_array *op_array = CG(active_op_array);
 	ZEND_ASSERT(get_next_op_number() == op_array->num_args + ((op_array->fn_flags & ZEND_ACC_VARIADIC) != 0));
 
-	/* A bound names a type parameter of the method's class as `$i`, never one of the method. */
-	zend_string *bounds = zend_ast_get_str(bounds_ast);
-	if (!sharp_type_list_names(ZSTR_VAL(bounds), ZSTR_LEN(bounds))) {
-		zend_sharp_type_text(bounds_ast);
-	}
-	bounds = zend_string_copy(bounds);
-
 	zend_op *opline = zend_emit_op(NULL, ZEND_SHARP_RECV_TYPE_ARGS, NULL, NULL);
-	opline->op1_type = IS_CONST;
-	opline->op1.constant = zend_add_literal_string(&bounds);
-	opline->result_type = IS_CV;
-	opline->result.var = lookup_cv(sharp_type_arguments_key);
-	opline->extended_value = zend_alloc_cache_slots(4);
+	if (bounds_ast) {
+		opline->op1_type = IS_CONST;
+		opline->op1.constant = zend_add_sharp_open_type_text(bounds_ast);
+		opline->result_type = IS_CV;
+		opline->result.var = lookup_cv(sharp_type_arguments_key);
+	}
+	if (parameters_ast) {
+		opline->op2_type = IS_CONST;
+		opline->op2.constant = zend_add_sharp_open_type_text(parameters_ast);
+	}
+	opline->extended_value = zend_alloc_cache_slots(4 * ((bounds_ast != NULL) + (parameters_ast != NULL)));
 }
 
 /* Whether `op_array` holds the hidden local of a PHP# generic method's type arguments, as the method and each lambda in
@@ -7982,7 +7995,9 @@ static bool zend_property_is_virtual(zend_class_entry *ce, zend_string *property
 	return is_virtual;
 }
 
-static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32_t fallback_return_type) /* {{{ */
+/* PHP#: `sharp_metadata_ast` is the SHARP_TYPE_ARGS the bridge ends a method's parameter list with, or NULL. */
+static void zend_compile_params(
+	zend_ast *ast, zend_ast *return_type_ast, uint32_t fallback_return_type, zend_ast *sharp_metadata_ast) /* {{{ */
 {
 	zend_ast_list *list = zend_ast_get_list(ast);
 	uint32_t i;
@@ -8261,6 +8276,11 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 		op_array->num_args--;
 	}
 	zend_set_function_arg_flags((zend_function*)op_array);
+
+	/* PHP#: the arguments are checked before a promoted property takes one. */
+	if (sharp_metadata_ast && (sharp_metadata_ast->child[0] || sharp_metadata_ast->child[1])) {
+		zend_compile_sharp_recv_type_args(sharp_metadata_ast->child[0], sharp_metadata_ast->child[1]);
+	}
 
 	for (i = 0; i < list->children; i++) {
 		zend_ast *param_ast = list->child[i];
@@ -8827,11 +8847,8 @@ static zend_op_array *zend_compile_func_decl_ex(
 	}
 
 	zend_compile_params(params_ast, return_type_ast,
-		is_method && zend_string_equals_literal(lcname, ZEND_TOSTRING_FUNC_NAME) ? IS_STRING : 0);
+		is_method && zend_string_equals_literal(lcname, ZEND_TOSTRING_FUNC_NAME) ? IS_STRING : 0, metadata_ast);
 	if (metadata_ast) {
-		if (metadata_ast->child[0]) {
-			zend_compile_sharp_recv_type_args(metadata_ast->child[0]);
-		}
 		/* zend_ast_destroy frees the node with the list. */
 		zend_ast_get_list(params_ast)->children++;
 	}

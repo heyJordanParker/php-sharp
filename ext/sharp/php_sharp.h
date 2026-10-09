@@ -6,6 +6,9 @@ extern zend_module_entry sharp_module_entry;
 
 #define PHP_SHARP_VERSION "0.2.0"
 
+/* Whether `filename` names a PHP# source file, which ends in `.sharp`. */
+bool sharp_is_sharp_file(const zend_string *filename);
+
 /* The VM makes the Sharp\Collection receiver of a PHP# method call on an array with these, see
  * ZEND_SHARP_OPERATOR in Zend/zend_compile.h. The receiver may point at a local of the calling frame,
  * so a backtrace never hands it out as a frame's object. */
@@ -82,6 +85,18 @@ uint32_t sharp_type_list_names(const char *text, size_t length);
  * is NULL for a text that names a `#i`, or `text` names an index the arguments have no member at. */
 const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object, const sharp_type *method,
 	const zend_class_entry *scope, void **cache);
+
+/* Whether `value` is of `type`, one type: `Any?` holds every value, a class an instance of it or of a subclass, whose
+ * type arguments for the class must be the type's own, except where the type's argument is `Any?`, and a built-in type
+ * the values of its PHP type, an int also for `float`. `List`, `Map`, `Set`, `Iterable`, `Class` and `Function` hold
+ * every value, as PHP's own parameter type checks them, and their elements are not checked. */
+bool sharp_type_accepts(const sharp_type *type, const zval *value);
+
+/* Throws PHP's TypeError for the first argument of the call `execute_data` runs that the type text list `text` does
+ * not accept, one entry per parameter, spelled for the frame as sharp_type_list_of_frame spells it, with `method` the
+ * method's own type arguments. */
+void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *text, const sharp_type *method,
+	void **cache);
 
 /* An object of a generic PHP# class keeps its type arguments in a declared property of this name, which carries
  * ZEND_ACC_SHARP_HIDDEN. It holds null until PHP# code, unserialize or the first read stores the IS_PTR of an interned

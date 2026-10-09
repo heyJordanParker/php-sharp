@@ -1,0 +1,21 @@
+namespace Checks;
+
+import App.Box;
+import App.DatabaseEntity;
+import App.Order;
+import App.PaginatedList;
+
+public class Customer : DatabaseEntity
+{
+}
+
+public class Pages
+{
+    public static PaginatedList<Customer> customers() => new PaginatedList<Customer>([]);
+
+    public static string take(PaginatedList<Order> page) => "took";
+
+    public static string open(Box<Any?> box) => "opened";
+
+    public static string relay(List<PaginatedList<Order>> pages) => Pages.take(pages[0]);
+}
