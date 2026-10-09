@@ -342,6 +342,23 @@ before it changes the engine or the bridge.
   merge adds `Set` to `built_in_generic_arity`, a `TArray::Set` arm to `atomic_text`, and `Set` with one type argument to
   the engine's type-text parser.
 
+#### R2d decisions: the JIT and optimizer audit
+
+- **`zend_jit_trace_execute` records no op1 type for the three `DO_*CALL`s and `ZEND_SHARP_TYPE_ARGS`.** Before R2d it
+  read their `IS_PTR` op1 as a PHP type and recorded it as `iterable`, the type whose number `IS_PTR` shares.
+  `type_arguments_call_jit_trace_types.phpt` reads the tracing JIT's trace dump and pins it.
+- **No other JIT or optimizer path reads op1 of a `DO_*CALL`:**
+  - Every `op1_type == IS_UNUSED` test in `ext/opcache/jit` belongs to an opcode that takes `this` in op1, never to a
+    call op.
+  - `zend_jit_trace_exit` addrefs a repeated opline's TMP op1 with `Z_TRY_ADDREF_P`, which skips an `IS_PTR`. Only a
+    `FETCH_DIM` or `FETCH_OBJ` exit frees op1.
+  - compact_literals finds no literal in a TMP op1, SSA and the DFG give it an ordinary use, SCCP leaves
+    `ZEND_SHARP_TYPE_ARGS` unknown, and `zend_try_inline_call` never reaches a method with
+    `ZEND_SHARP_RECV_TYPE_ARGS`.
+  - `zend_compile_call_common` asserts that only `DO_FCALL`, `DO_UCALL` and `DO_FCALL_BY_NAME` take type arguments, and
+    the bridge gives them only to a call of a PHP# method, so `optimize_func_calls.c` never turns one into a
+    `DO_ICALL`.
+
 ### D. Readers
 
 - **`is`, `as` and `match` compare descriptors, with a cached check per site.**

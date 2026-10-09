@@ -821,7 +821,12 @@ zend_jit_trace_stop ZEND_FASTCALL zend_jit_trace_execute(zend_execute_data  *ex,
 		 && opline->opcode != ZEND_ROPE_END
 		 && opline->opcode != ZEND_NEW
 		 && opline->opcode != ZEND_FETCH_CLASS_CONSTANT
-		 && opline->opcode != ZEND_INIT_STATIC_METHOD_CALL) {
+		 && opline->opcode != ZEND_INIT_STATIC_METHOD_CALL
+		 /* PHP#: a call's TMP op1 and ZEND_SHARP_TYPE_ARGS's CV op1 hold IS_PTR type arguments, which is no PHP type. */
+		 && opline->opcode != ZEND_DO_FCALL
+		 && opline->opcode != ZEND_DO_UCALL
+		 && opline->opcode != ZEND_DO_FCALL_BY_NAME
+		 && opline->opcode != ZEND_SHARP_TYPE_ARGS) {
 			zval *zv = EX_VAR(opline->op1.var);
 			op1_type = Z_TYPE_P(zv);
 			uint8_t flags = 0;
