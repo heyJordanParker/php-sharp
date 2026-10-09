@@ -998,11 +998,11 @@ static int php_var_serialize_get_sleep_props(
 }
 /* }}} */
 
-/* PHP#: the entry that keeps the type arguments of an object of a generic PHP# class, after its properties. */
-static void php_var_serialize_type_arguments(smart_str *buf, const sharp_type *type_arguments)
+/* PHP#: the entry that keeps the type arguments `text` of an object of a generic PHP# class, after its properties. */
+static void php_var_serialize_type_arguments(smart_str *buf, zend_string *text)
 {
 	php_var_serialize_string(buf, ZSTR_VAL(sharp_type_arguments_key), ZSTR_LEN(sharp_type_arguments_key));
-	php_var_serialize_string(buf, ZSTR_VAL(type_arguments->text), ZSTR_LEN(type_arguments->text));
+	php_var_serialize_string(buf, ZSTR_VAL(text), ZSTR_LEN(text));
 }
 
 /* `type_arguments` are those of the object `struc`, or NULL. */
@@ -1056,11 +1056,10 @@ static void php_var_serialize_nested_data(smart_str *buf, zval *struc, HashTable
 		} ZEND_HASH_FOREACH_END();
 	}
 	if (type_arguments) {
-		php_var_serialize_type_arguments(buf, type_arguments);
+		php_var_serialize_type_arguments(buf, type_arguments->text);
 	}
 	if (kept_type_arguments) {
-		php_var_serialize_string(buf, ZSTR_VAL(sharp_type_arguments_key), ZSTR_LEN(sharp_type_arguments_key));
-		php_var_serialize_string(buf, Z_STRVAL_P(kept_type_arguments), Z_STRLEN_P(kept_type_arguments));
+		php_var_serialize_type_arguments(buf, Z_STR_P(kept_type_arguments));
 	}
 	smart_str_appendc(buf, '}');
 }
@@ -1223,7 +1222,7 @@ again:
 						php_var_serialize_intern(buf, data, var_hash, Z_REFCOUNT(retval) > 1, false);
 					} ZEND_HASH_FOREACH_END();
 					if (type_arguments) {
-						php_var_serialize_type_arguments(buf, type_arguments);
+						php_var_serialize_type_arguments(buf, type_arguments->text);
 					}
 					smart_str_appendc(buf, '}');
 
@@ -1342,7 +1341,7 @@ again:
 							php_var_serialize_intern(buf, prop, var_hash, false, false);
 						}
 						if (type_arguments) {
-							php_var_serialize_type_arguments(buf, type_arguments);
+							php_var_serialize_type_arguments(buf, type_arguments->text);
 						}
 						smart_str_appendc(buf, '}');
 					} else {
