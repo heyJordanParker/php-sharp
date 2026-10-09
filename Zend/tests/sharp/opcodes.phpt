@@ -163,7 +163,7 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp L0091 0003 V4 = FE_RESET_R CV0($items) 0012
   .sharp L0091 0004 FE_FETCH_R V4 CV3($item) 0012
   .sharp L0092 0005 T5 = FETCH_OBJ_R CV3($item) string("id")
-  .sharp L0092 0006 T6 = IS_EQUAL CV1($id) T5
+  .sharp L0092 0006 T6 = IS_IDENTICAL CV1($id) T5
   .sharp L0092 0007 JMPZ T6 0011
   .sharp L0093 0008 VERIFY_RETURN_TYPE CV3($item)
   .sharp L0093 0009 FE_FREE V4 loop-end(+3)
@@ -305,7 +305,7 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp 0003 V4 = FE_RESET_R CV0($items) 0012
   .sharp 0004 FE_FETCH_R V4 CV3($item) 0012
   .sharp 0005 T5 = FETCH_OBJ_R CV3($item) string("id")
-  .sharp 0006 T6 = IS_EQUAL CV1($id) T5
+  .sharp 0006 T6 = IS_IDENTICAL CV1($id) T5
   .sharp 0007 JMPZ T6 0011
   .sharp 0008 VERIFY_RETURN_TYPE CV3($item)
   .sharp 0009 FE_FREE V4 loop-end(+3)
@@ -433,7 +433,7 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php   L0091 0002 V3 = FE_RESET_R CV0($items) 0011
   .php   L0091 0003 FE_FETCH_R V3 CV2($item) 0011
   .php   L0092 0004 T4 = FETCH_OBJ_R CV2($item) string("id")
-  .php   L0092 0005 T5 = IS_EQUAL CV1($id) T4
+  .php   L0092 0005 T5 = IS_IDENTICAL CV1($id) T4
   .php   L0092 0006 JMPZ T5 0010
   .php   L0093 0007 VERIFY_RETURN_TYPE CV2($item)
   .php   L0093 0008 FE_FREE V3 loop-end(+3)
@@ -551,7 +551,7 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php   0002 V3 = FE_RESET_R CV0($items) 0011
   .php   0003 FE_FETCH_R V3 CV2($item) 0011
   .php   0004 T4 = FETCH_OBJ_R CV2($item) string("id")
-  .php   0005 T5 = IS_EQUAL CV1($id) T4
+  .php   0005 T5 = IS_IDENTICAL CV1($id) T4
   .php   0006 JMPZ T5 0010
   .php   0007 VERIFY_RETURN_TYPE CV2($item)
   .php   0008 FE_FREE V3 loop-end(+3)
