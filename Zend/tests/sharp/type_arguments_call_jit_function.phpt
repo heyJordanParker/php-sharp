@@ -1,10 +1,19 @@
 --TEST--
-A generic call gives the method the type arguments it writes or the checker infers, static or not and through a spread, and a method passes its own and its class's on to the next generic call
+A generic call gives the method the type arguments it writes or the checker infers, static or not and through a spread, under the function JIT
+--EXTENSIONS--
+opcache
+--INI--
+opcache.enable=1
+opcache.enable_cli=1
+opcache.jit=function
+opcache.jit_buffer_size=32M
 --FILE--
 <?php
+echo 'jit ', opcache_get_status()['jit']['on'] ? 'on' : 'off', "\n";
 require __DIR__ . '/type_arguments_call.inc';
 ?>
 --EXPECT--
+jit on
 App\Box<App.Order>
 App\Box<App.Order>
 App\Box<App.Order>

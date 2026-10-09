@@ -10133,7 +10133,9 @@ static int zend_jit_do_fcall(zend_jit_ctx *jit, const zend_op *opline, const zen
 	ir_ref rx, func_ref = IR_UNUSED, if_user = IR_UNUSED, user_path = IR_UNUSED;
 
 	prev_opline = opline - 1;
-	while (prev_opline->opcode == ZEND_EXT_FCALL_BEGIN || prev_opline->opcode == ZEND_TICKS) {
+	/* A PHP# generic call spells its type arguments right before the call op. */
+	while (prev_opline->opcode == ZEND_EXT_FCALL_BEGIN || prev_opline->opcode == ZEND_TICKS
+			|| prev_opline->opcode == ZEND_SHARP_TYPE_ARGS) {
 		prev_opline--;
 	}
 	if (prev_opline->opcode == ZEND_SEND_UNPACK || prev_opline->opcode == ZEND_SEND_ARRAY ||

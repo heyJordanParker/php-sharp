@@ -6901,7 +6901,9 @@ done:
 				if (opline > op_array->opcodes) {
 					const zend_op *prev_opline = opline - 1;
 
-					while (prev_opline->opcode == ZEND_EXT_FCALL_BEGIN || prev_opline->opcode == ZEND_TICKS) {
+					/* A PHP# generic call spells its type arguments right before the call op. */
+					while (prev_opline->opcode == ZEND_EXT_FCALL_BEGIN || prev_opline->opcode == ZEND_TICKS
+							|| prev_opline->opcode == ZEND_SHARP_TYPE_ARGS) {
 						prev_opline--;
 					}
 					JIT_G(current_frame) = call;
