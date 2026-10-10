@@ -111,6 +111,8 @@ enum _zend_ast_kind {
 	ZEND_AST_BREAK,
 	ZEND_AST_CONTINUE,
 	ZEND_AST_PROPERTY_HOOK_SHORT_BODY,
+	/* PHP#: `typeof(T)` of a type parameter, the class value of the type child 0, a type text, spells. */
+	ZEND_AST_SHARP_TYPE_OF,
 
 	/* 2 child nodes */
 	ZEND_AST_DIM = 2 << ZEND_AST_NUM_CHILDREN_SHIFT,
@@ -158,6 +160,8 @@ enum _zend_ast_kind {
 	 * ZEND_AST_NEW, and a NULL text means $this's type arguments. In a class's member list child 0 is NULL
 	 * and the text is the class's bounds, which declares its hidden type-argument slot. */
 	ZEND_AST_SHARP_TYPE_ARGS,
+	/* PHP#: whether child 0 is of the type child 1, a type text, spells, type arguments included. */
+	ZEND_AST_SHARP_IS_TYPE,
 
 	/* 3 child nodes */
 	ZEND_AST_METHOD_CALL = 3 << ZEND_AST_NUM_CHILDREN_SHIFT,
