@@ -5567,57 +5567,6 @@ static void zend_compile_sharp_recv_type_args(zend_ast *bounds_ast, zend_ast *pa
 	opline->extended_value = zend_alloc_cache_slots(4 * ((bounds_ast != NULL) + (parameters_ast != NULL)));
 }
 
-/* Whether `op_array` holds the hidden local of a PHP# generic method's type arguments, as the method and each lambda in
- * it that captures them do. */
-static bool zend_holds_sharp_type_arguments(const zend_op_array *op_array)
-{
-	for (int i = 0; i < op_array->last_var; i++) {
-		if (zend_string_equals(op_array->vars[i], sharp_type_arguments_key)) {
-			return true;
-		}
-	}
-
-	return false;
-}
-
-/* Whether `ast`, or a lambda in it, holds a type text that names a type parameter of its method as `#i`. */
-static bool zend_ast_names_sharp_method_parameter(zend_ast *ast)
-{
-	if (!ast) {
-		return false;
-	}
-	if (zend_ast_is_list(ast)) {
-		zend_ast_list *list = zend_ast_get_list(ast);
-		for (uint32_t i = 0; i < list->children; i++) {
-			if (zend_ast_names_sharp_method_parameter(list->child[i])) {
-				return true;
-			}
-		}
-		return false;
-	}
-	if (ast->kind == ZEND_AST_CLOSURE || ast->kind == ZEND_AST_ARROW_FUNC) {
-		return zend_ast_names_sharp_method_parameter(((zend_ast_decl *) ast)->child[2]);
-	}
-	if (zend_ast_is_special(ast)) {
-		return false;
-	}
-	if (ast->kind == ZEND_AST_SHARP_TYPE_ARGS && ast->child[1]) {
-		zend_string *text = zend_ast_get_str(ast->child[1]);
-		if (sharp_type_list_names(ZSTR_VAL(text), ZSTR_LEN(text)) & SHARP_TYPE_NAMES_METHOD) {
-			return true;
-		}
-	}
-
-	uint32_t children = zend_ast_get_num_children(ast);
-	for (uint32_t i = 0; i < children; i++) {
-		if (zend_ast_names_sharp_method_parameter(ast->child[i])) {
-			return true;
-		}
-	}
-
-	return false;
-}
-
 /* `type_args_ast` is the ZEND_AST_SHARP_TYPE_ARGS around a PHP# `new`, or NULL. */
 static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_ast) /* {{{ */
 {
@@ -7995,14 +7944,20 @@ static bool zend_property_is_virtual(zend_class_entry *ce, zend_string *property
 	return is_virtual;
 }
 
-/* PHP#: `sharp_metadata_ast` is the SHARP_TYPE_ARGS the bridge ends a method's parameter list with, or NULL. */
-static void zend_compile_params(
-	zend_ast *ast, zend_ast *return_type_ast, uint32_t fallback_return_type, zend_ast *sharp_metadata_ast) /* {{{ */
+static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32_t fallback_return_type) /* {{{ */
 {
 	zend_ast_list *list = zend_ast_get_list(ast);
 	uint32_t i;
 	zend_op_array *op_array = CG(active_op_array);
 	zend_arg_info *arg_infos;
+
+	/* PHP#: a method ends its parameters with its metadata, a SHARP_TYPE_ARGS of the bounds of its own type parameters
+	 * and the type a call from plain PHP checks each parameter against. The parameters skip it, and the list counts it
+	 * again on return, so zend_ast_destroy frees it with the list. */
+	zend_ast *sharp_metadata_ast = NULL;
+	if (list->children && list->child[list->children - 1]->kind == ZEND_AST_SHARP_TYPE_ARGS) {
+		sharp_metadata_ast = list->child[--list->children];
+	}
 
 	if (return_type_ast || fallback_return_type) {
 		/* Use op_array->arg_info[-1] for return type */
@@ -8026,6 +7981,7 @@ static void zend_compile_params(
 		}
 	} else {
 		if (list->children == 0) {
+			list->children += sharp_metadata_ast != NULL;
 			return;
 		}
 		arg_infos = safe_emalloc(sizeof(zend_arg_info), list->children, 0);
@@ -8307,6 +8263,7 @@ static void zend_compile_params(
 		opline->extended_value = zend_alloc_cache_slots(3);
 		zend_emit_op_data(&value_node);
 	}
+	list->children += sharp_metadata_ast != NULL;
 }
 /* }}} */
 
@@ -8730,22 +8687,6 @@ static zend_op_array *zend_compile_func_decl_ex(
 	closure_info info;
 	memset(&info, 0, sizeof(closure_info));
 
-	/* A PHP# method ends its parameters with its metadata: the bounds of its own type parameters, and the type a call
-	 * from plain PHP checks each parameter against. */
-	zend_ast *metadata_ast = NULL;
-	if (params_ast) {
-		zend_ast_list *params = zend_ast_get_list(params_ast);
-		if (params->children && params->child[params->children - 1]->kind == ZEND_AST_SHARP_TYPE_ARGS) {
-			metadata_ast = params->child[--params->children];
-		}
-	}
-	/* A lambda in a PHP# generic method, or in another such lambda, that spells a type with the method's type arguments
-	 * captures them by value, as it captures a local it reads. Only a .sharp file holds one, so plain PHP's lambdas
-	 * skip the scan. */
-	bool captures_type_arguments = (decl->kind == ZEND_AST_CLOSURE || decl->kind == ZEND_AST_ARROW_FUNC)
-		&& sharp_is_sharp_file(orig_op_array->filename) && zend_holds_sharp_type_arguments(orig_op_array)
-		&& zend_ast_names_sharp_method_parameter(stmt_ast);
-
 	init_op_array(op_array, ZEND_USER_FUNCTION, INITIAL_OP_ARRAY_SIZE);
 
 	if (CG(compiler_options) & ZEND_COMPILE_PRELOAD) {
@@ -8775,19 +8716,9 @@ static zend_op_array *zend_compile_func_decl_ex(
 		lcname = zend_begin_func_decl(result, op_array, decl, level);
 		if (decl->kind == ZEND_AST_ARROW_FUNC) {
 			find_implicit_binds(&info, params_ast, stmt_ast);
-		} else {
-			if (uses_ast) {
-				zend_compile_closure_binding(result, op_array, uses_ast);
-			}
-			if (captures_type_arguments) {
-				zend_hash_init(&info.uses, 1, NULL, NULL, 0);
-			}
-		}
-		if (captures_type_arguments) {
-			zend_hash_add_empty_element(&info.uses, sharp_type_arguments_key);
-		}
-		if (decl->kind == ZEND_AST_ARROW_FUNC || captures_type_arguments) {
 			compile_implicit_lexical_binds(&info, result, op_array);
+		} else if (uses_ast) {
+			zend_compile_closure_binding(result, op_array, uses_ast);
 		}
 	}
 
@@ -8849,21 +8780,16 @@ static zend_op_array *zend_compile_func_decl_ex(
 	}
 
 	zend_compile_params(params_ast, return_type_ast,
-		is_method && zend_string_equals_literal(lcname, ZEND_TOSTRING_FUNC_NAME) ? IS_STRING : 0, metadata_ast);
-	if (metadata_ast) {
-		/* zend_ast_destroy frees the node with the list. */
-		zend_ast_get_list(params_ast)->children++;
-	}
+		is_method && zend_string_equals_literal(lcname, ZEND_TOSTRING_FUNC_NAME) ? IS_STRING : 0);
 	if (CG(active_op_array)->fn_flags & ZEND_ACC_GENERATOR) {
 		zend_mark_function_as_generator();
 		zend_emit_op(NULL, ZEND_GENERATOR_CREATE, NULL, NULL);
 	}
-	if (uses_ast) {
-		zend_compile_closure_uses(uses_ast);
-	}
-	if (decl->kind == ZEND_AST_ARROW_FUNC || captures_type_arguments) {
+	if (decl->kind == ZEND_AST_ARROW_FUNC) {
 		zend_compile_implicit_closure_uses(&info);
 		zend_hash_destroy(&info.uses);
+	} else if (uses_ast) {
+		zend_compile_closure_uses(uses_ast);
 	}
 
 	if (ast->kind == ZEND_AST_ARROW_FUNC && decl->child[2]->kind != ZEND_AST_RETURN) {

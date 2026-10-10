@@ -221,8 +221,8 @@ before it changes the engine or the bridge.
   `EXT_FCALL_BEGIN`. The `DO_FCALL`, `DO_UCALL` or `DO_FCALL_BY_NAME` takes that TMP as its op1.
   `zend_compile_call_common` strips the trailing node from the argument list before it compiles the arguments.
 - **The callee's `ZEND_SHARP_RECV_TYPE_ARGS` sits right after the RECVs,** at `opcodes[num_args]`, or one later after a
-  `RECV_VARIADIC`. It comes before `GENERATOR_CREATE`, never first. `zend_compile_func_decl_ex` strips the trailing node
-  from the parameter list before `zend_compile_params`, which emits the opcode after the RECVs.
+  `RECV_VARIADIC`. It comes before `GENERATOR_CREATE`, never first. `zend_compile_params` leaves the trailing node out
+  of the parameters and emits the opcode after the RECVs, so `zend_compile_func_decl_ex` keeps its upstream shape.
   - op1 is the CONST bounds text, or UNUSED. op2 is the CONST parameters text, or UNUSED.
   - The result is the method's hidden local, a CV, when op1 is CONST.
   - extended_value holds four cache slots per CONST text.
@@ -262,10 +262,11 @@ before it changes the engine or the bridge.
   keeps op1 UNUSED with op1.num `ZEND_SHARP_TYPE_ARGS_OPEN`. Every open text, either kind, has five cache slots: this's
   class, this's own type arguments, the method's type arguments, the list they spelled, and the class the text is
   written in. A text that names only `#i` needs no `this`, so a static generic method spells it.
-- **A lambda captures its method's hidden local by value,** through the existing capture path. When a lambda's body,
-  or a lambda inside it, holds a text that names `#i`, `zend_compile_func_decl_ex` adds the hidden local to the lambda's
-  binds: `compile_implicit_lexical_binds` emits its `ZEND_BIND_LEXICAL`, and `zend_compile_implicit_closure_uses` its
-  `ZEND_BIND_STATIC`. The scan runs only for a file whose name ends in `.sharp`, so plain PHP pays nothing.
+- **A lambda captures its method's hidden local by value, in its `use` list.** The bridge writes the type texts, so it
+  knows which lambda needs them: when a lambda's body, or a lambda inside it, writes a text that names `#i`, the bridge
+  lowers the lambda as a `CLOSURE`, never an `ARROW_FUNC`, and ends its `use` list with the hidden local's name. The
+  engine's existing capture path compiles it: `zend_compile_closure_binding` emits its `ZEND_BIND_LEXICAL`, and
+  `zend_compile_closure_uses` its `ZEND_BIND_STATIC`. The engine scans no lambda, so plain PHP pays nothing.
 - **The mark register in `Zend/zend_compile.h` lists op1 of the three `DO_*CALL`s,** upstream UNUSED. Its static
   assert pins `IS_UNUSED == 0`, the value `init_op` leaves in an opline, which is why no upstream `DO_*CALL` carries a
   TMP op1. `sharp/bin/census` checks every write of it.
@@ -430,9 +431,10 @@ before it changes the engine or the bridge.
     for the request, and every plain PHP call read the text again: `Calls\Repository::box($order)` from plain PHP,
     200000 calls, best of 7 on CPU time, on the NTS debug build with the machine's one-minute load average between 188 and 246,
     cost 1049 ns before and 497 ns after.
-- **The lambda capture scan tests `sharp_is_sharp_file` first,** as R2 decided. Before R2e it walked every local of
-  the enclosing function for every plain PHP lambda. A plain PHP function with 20000 locals and 20000 lambdas
-  compiled in 4.66 to 4.77 s of user time on the NTS debug build, and compiles in 1.70 to 1.76 s after, three runs each.
+- **The engine runs no lambda capture scan.** Before R2e the scan walked every local of the enclosing function for
+  every plain PHP lambda: a plain PHP function with 20000 locals and 20000 lambdas compiled in 4.66 to 4.77 s of user
+  time on the NTS debug build, and in 1.70 to 1.76 s once the scan tested `sharp_is_sharp_file` first, three runs
+  each. The size review then deleted the scan, since the bridge writes the capture in the lambda's `use` list.
 - **The tracing JIT's recorder records `IS_UNKNOWN` for any operand that holds an `IS_PTR`,** in place of R2d's list of
   the opcodes that read one. The list missed `BIND_LEXICAL`, whose op2 is the hidden local a lambda captures, and
   recorded it as `iterable`. Upstream's exclusions stay: their operand is a class `VAR`, whose type byte is not set.
