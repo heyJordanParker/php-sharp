@@ -424,6 +424,12 @@ before it changes the engine or the bridge.
 - **`sharp_type_list_of_frame` reads this's type arguments only when the text names a `$i`,** which a `memchr` for `$`
   tells. Reading them runs a lazy proxy's initializer, so before R2e a generic method that never names its class's
   type parameters initialized the proxy it was called on.
+  - A text that names no `$i`, on a call that gives no type arguments, spells a list the text alone decides, such as
+    the wildcard a call from plain PHP checks against. It lives for the process and the site caches it, so input
+    still cannot grow the process's table, as `type_arguments_requests.phpt` shows. Before the second review it lived
+    for the request, and every plain PHP call read the text again: `Calls\Repository::box($order)` from plain PHP,
+    200000 calls, best of 7 on CPU time, on the NTS debug build with the machine's one-minute load average between 188 and 246,
+    cost 1049 ns before and 497 ns after.
 - **The lambda capture scan tests `sharp_is_sharp_file` first,** as R2 decided. Before R2e it walked every local of
   the enclosing function for every plain PHP lambda. A plain PHP function with 20000 locals and 20000 lambdas
   compiled in 4.66 to 4.77 s of user time on the NTS debug build, and compiles in 1.70 to 1.76 s after, three runs each.

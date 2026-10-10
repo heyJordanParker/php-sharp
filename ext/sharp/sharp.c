@@ -2492,8 +2492,9 @@ static const sharp_type *sharp_type_list_of_frame_ex(const zval *text, zend_obje
 	}
 	/* A type a substitution spells is bounded by how deep the program nests it, not by its source, as in
 	 * Node<List<T>>, so a new one lives for the request. One code already spells is the process's, as is a closed text
-	 * code writes. */
-	const sharp_type *substituted = sharp_type_intern(list, !reader.names, &reader.arena);
+	 * code writes, and an open one that names no `$i` on a call that gives no type arguments, such as the wildcard a
+	 * plain PHP call checks against, which the text alone decides. */
+	const sharp_type *substituted = sharp_type_intern(list, !reader.names || (!names_this && !method), &reader.arena);
 	zend_arena_destroy(reader.arena);
 
 	/* A list that lives for the request, which unserialize or a substitution makes, never goes in the cache. */
