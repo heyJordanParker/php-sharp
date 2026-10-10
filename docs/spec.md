@@ -919,7 +919,7 @@ public readonly class Receipt { … }                     // compile error: decl
 
 ### 14.1 Function types
 
-A function type is written as `Function<ReturnType(ParameterTypes)>`, in the same order as a method declaration. One name covers every case, including functions that return `void`.
+A function type is written as `Function<ReturnType(ParameterTypes)>`, in the same order as a method declaration. One name covers every case, including functions that return `void`. Its effects go inside the brackets, after the parameter types, as in `Function<Charge(Cart) uses Http>` (section 29).
 
 ```csharp
 Function<Money?(readonly Line, string)> priceOf
@@ -2364,7 +2364,16 @@ public interface PaymentGateway
 }
 
 Function<Money(Offer)> priceOf                       // a pure function value
-Function<Charge(Cart)> uses Http charge              // may reach Http
+Function<Charge(Cart) uses Http> charge              // may reach Http
+```
+
+**A function type lists its effects inside its brackets,** after the parameter types, wherever the type is written:
+
+```csharp
+Function<Charge(Cart) uses Http> charge;                        // compiles
+Function<Charge(Cart) uses Http>? fallback;                      // compiles
+Map<string, Function<Charge(Cart) uses Http, Mail>> handlers;    // compiles: Http and Mail are both effects
+Function<int(Function<int(int) uses Http>)> apply;               // compiles
 ```
 
 An implementation that calls plain PHP fits the declaration only through an `extern`:
