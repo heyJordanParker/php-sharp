@@ -11,7 +11,7 @@ echo str_replace($match[1], '<the Mago commit in sharp_unit.h>', $info);
 --EXPECT--
 sharp
 
-Version => 0.3.0
+Version => 0.3.1
 Mago commit => <the Mago commit in sharp_unit.h>
 
 Directive => Local Value => Master Value
