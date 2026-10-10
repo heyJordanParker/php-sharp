@@ -1187,6 +1187,18 @@ const html = `
 `;
 ```
 
+A template's `${expr}` accepts `int`, `float`, `string` and `bool`. A `bool` prints `true` or `false`. Every other type is a compile error, "A template shows `int`, `float`, `string` or `bool`, and `Status` is none of them.", with the offending type's name in place of `Status`. A literal or narrowed type counts as its base type, so `1|2` is an `int`. A union of two of them, such as `int|string`, is none of the four and is refused. A nullable value such as `int?` is refused until it is checked (section 24), and the same error names `int?`.
+
+```csharp
+const a = `Total: ${count}`;   // int: "Total: 3"
+const b = `Paid: ${isPaid}`;   // bool: "Paid: true"
+const c = `Status: ${status}`; // enum case: compile error
+const d = `Items: ${items}`;   // List<int>: compile error
+const e = `Order: ${order}`;   // class Order: compile error
+```
+
+A plain PHP file keeps PHP's own interpolation.
+
 **Plain strings:** `"…"` and `'…'` never interpolate, so braces and `$` inside them are literal.
 
 PHP's backtick shell execution is removed. `shell_exec()` stays.
@@ -1317,7 +1329,7 @@ public enum PaymentResult
 {
     case Paid(string transactionId);
     case Declined(string reason);
-    case RequiresAction(Url redirect);
+    case RequiresAction(string redirect);
 }
 
 return PaymentResult.Declined(reason: "card expired");
@@ -1367,7 +1379,7 @@ const message = match (result) {
     PaymentResult.Paid(string transactionId) when order.isTest => `Test payment ${transactionId}`,
     PaymentResult.Paid(string transactionId) => `Paid ${transactionId}`,
     PaymentResult.Declined d => `Declined: ${d.reason}`,
-    PaymentResult.RequiresAction(Url redirect) => `Continue at ${redirect}`,
+    PaymentResult.RequiresAction(string redirect) => `Continue at ${redirect}`,
 };
 
 match (result) {

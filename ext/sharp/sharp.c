@@ -1331,11 +1331,39 @@ ZEND_METHOD(Sharp_Collection, associateBy)
 	sharp_collection_key_by(INTERNAL_FUNCTION_PARAM_PASSTHRU, false);
 }
 
-/* Orders two [key, element] pairs by key, as PHP's <=> does, and equal keys by their original order,
- * which zend_hash_sort keeps in each bucket's extra space, so the sort is stable as Kotlin's is. */
+/* Orders two [key, element] pairs by key, as PHP#'s <=> does: two objects by the op_Comparison the left key's
+ * class declares or inherits, else the right key's, two strings by their bytes, and other keys as PHP's <=> does.
+ * Equal keys keep their original order, which zend_hash_sort keeps in each bucket's extra space, so the sort is
+ * stable as Kotlin's is. A call that throws leaves the exception for sortedBy to throw. */
 static int sharp_collection_compare_keys(Bucket *a, Bucket *b)
 {
-	int result = zend_compare(zend_hash_index_find(Z_ARRVAL(a->val), 0), zend_hash_index_find(Z_ARRVAL(b->val), 0));
+	zval *left = zend_hash_index_find(Z_ARRVAL(a->val), 0);
+	zval *right = zend_hash_index_find(Z_ARRVAL(b->val), 0);
+	zend_class_entry *scope = NULL;
+	zend_function *comparison = NULL;
+	int result;
+
+	if (Z_TYPE_P(left) == IS_OBJECT && Z_TYPE_P(right) == IS_OBJECT) {
+		scope = Z_OBJCE_P(left);
+		comparison = zend_hash_str_find_ptr(&scope->function_table, ZEND_STRL("op_comparison"));
+		if (!comparison) {
+			scope = Z_OBJCE_P(right);
+			comparison = zend_hash_str_find_ptr(&scope->function_table, ZEND_STRL("op_comparison"));
+		}
+	}
+
+	if (comparison) {
+		zval keys[2], order;
+		ZVAL_COPY_VALUE(&keys[0], left);
+		ZVAL_COPY_VALUE(&keys[1], right);
+		ZVAL_UNDEF(&order);
+		zend_call_known_function(comparison, NULL, scope, &order, 2, keys, NULL);
+		result = Z_TYPE(order) == IS_LONG ? ZEND_NORMALIZE_BOOL(Z_LVAL(order)) : 0;
+	} else if (Z_TYPE_P(left) == IS_STRING && Z_TYPE_P(right) == IS_STRING) {
+		result = ZEND_NORMALIZE_BOOL(zend_binary_zval_strcmp(left, right));
+	} else {
+		result = zend_compare(left, right);
+	}
 
 	if (result) {
 		return result;

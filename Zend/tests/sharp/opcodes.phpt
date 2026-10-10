@@ -77,6 +77,7 @@ $fixtures = [
     'Deploy' => null,
     'Tags' => null,
     'PhpForms' => null,
+    'Operators' => 'harness/Billing.inc',
 ];
 $user_class = '/(?:Class|Enum) \[ <user> /';
 
@@ -141,3 +142,4 @@ Positions: same opcodes and lines in 5 op arrays, same signatures in 1 classes
 Deploy: same opcodes and lines in 7 op arrays, same signatures in 1 classes
 Tags: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 PhpForms: same opcodes and lines in 15 op arrays, same signatures in 1 classes
+Operators: same opcodes and lines in 72 op arrays, same signatures in 9 classes
