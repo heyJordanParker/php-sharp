@@ -1,0 +1,118 @@
+namespace Demo;
+
+import Lib.Size;
+import Lib.Standing;
+
+class Tagged
+{
+    public Set<string> tags { get; set; } = ["new"];
+    public Set<Standing> states { get => field; set { this.writes += 1; field = value; } } = [];
+    public int writes { get; private set; } = 0;
+    private Set<int> sizes = [];
+    private int calls = 0;
+
+    public Tagged(public Set<int> ids { get; set; }, public Set<string> labels { get; })
+    {
+    }
+
+    public static List<Any> strings(Set<string> tags)
+    {
+        const added = tags.add("vip");
+        const again = tags.add("vip");
+        const removed = tags.remove("new");
+        const absent = tags.remove("none");
+        let joined = "";
+        for (const tag of tags) {
+            joined = joined + tag + ";";
+        }
+        return [added, again, removed, absent, tags.contains("5"), tags.contains("new"), tags.count(), tags.toList(), joined];
+    }
+
+    public static List<Any> reads(Set<string> tags)
+    {
+        return [
+            tags.filter(tag => tag != "vip").toList(),
+            tags.map(tag => strlen(tag)),
+            tags.any(tag => tag == "5"),
+            tags.first(tag => strlen(tag) > 2),
+            tags.sortedBy(tag => tag),
+            implode(",", tags),
+        ];
+    }
+
+    public static string missing(Set<string> tags) => tags.first(tag => tag == "none");
+
+    public static List<Any> ints(Set<int> ids)
+    {
+        Set<int> more = [3, 1, 3];
+        return [ids.add(4), ids.add(4), ids.remove(7), ids.contains(2), ids.toList(), more.toList(), ids.sumOf(id => id)];
+    }
+
+    public static List<Any> cases(Set<Standing> states)
+    {
+        Set<Size> sizes = [Size.Large, Size.Small, Size.Large];
+        const closed = states.add(Standing.Closed);
+        const active = states.add(Standing.Active);
+        const has = states.contains(Standing.Closed);
+        const removed = states.remove(Standing.Active);
+        return [closed, active, has, removed, states.toList(), sizes.toList(), sizes.contains(Size.Small)];
+    }
+
+    public List<Any> properties(Standing state)
+    {
+        const vip = this.tags.add("vip");
+        const again = this.tags.add("vip");
+        const removed = this.tags.remove("new");
+        const tags = this.tags.toList();
+        const added = this.states.add(state);
+        const twice = this.states.add(state);
+        const dropped = this.states.remove(state);
+        return [vip, again, removed, tags, added, twice, dropped, this.states.contains(state), this.writes, this.sizes.add(4), this.sizes.contains(4), this.ids.add(9), this.ids.toList()];
+    }
+
+    public List<Any?> once(Set<string>? maybe)
+    {
+        const copied = this.copy().add("copy");
+        const kept = this.tags.contains("copy");
+        const added = this.tags.add(this.next());
+        const named = this.tags.toList();
+        this.tags.clear();
+        return [copied, kept, added, this.calls, named, this.tags.toList(), maybe?.add("x"), maybe?.contains("x"), maybe?.count()];
+    }
+
+    private Set<string> copy() => this.tags;
+
+    private string next()
+    {
+        this.calls += 1;
+        return `n${this.calls}`;
+    }
+
+    public static List<Any> lambdas(List<string> names)
+    {
+        const prefix = "v";
+        const check = (Set<string> tags) => tags.contains(prefix);
+        const size = (Set<string> tags) => {
+            return tags.count();
+        };
+        return [check(names), check([prefix]), size(["a", "a", "b"])];
+    }
+
+    public static List<bool> groups(Set<string> ...groups)
+    {
+        List<bool> found = [];
+        for (const group of groups) {
+            found.add(group.contains("a"));
+        }
+        return found;
+    }
+
+    public static List<Any?> maybe(Set<string>? ...groups)
+    {
+        List<Any?> found = [];
+        for (const group of groups) {
+            found.add(group?.contains("a"));
+        }
+        return found;
+    }
+}
