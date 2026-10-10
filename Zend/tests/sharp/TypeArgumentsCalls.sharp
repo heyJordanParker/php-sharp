@@ -9,7 +9,9 @@ import App.SharedOrder;
 import Legacy.Converter;
 import Lib.Inspector;
 import Lib.PlainPicker;
+import Lib.PlainWrapper;
 import Lib.Witness;
+import Lib.Wrapper;
 
 public class Repository
 {
@@ -60,6 +62,10 @@ public class Repository
     }
 
     public static Map<int|string, Any?> locals<T>(T item) => get_defined_vars();
+
+    public static Box<Order> wrapped(Wrapper wrapper, Order order) => wrapper.wrap(order);
+
+    public static Box<Order> wrappedByParent(PlainWrapper wrapper, Order order) => wrapper.wrap(order);
 }
 
 public class Shelf
@@ -110,6 +116,16 @@ public class Feed<TItem : DatabaseEntity & Shareable>
 public class OrderPicker : PlainPicker
 {
     public Box<Order> pickOrder(Order order) => super.pick<Order>(order);
+}
+
+public class SharpWrapper : Wrapper
+{
+    public Box<T> wrap<T>(T item) => new Box<T>();
+}
+
+public class SharpPlainWrapper : PlainWrapper
+{
+    public override Box<T> wrap<T>(T item) => new Box<T>();
 }
 
 public class Labeled

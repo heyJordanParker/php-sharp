@@ -359,8 +359,9 @@ before it changes the engine or the bridge.
     `ZEND_SHARP_TYPE_ARGS` unknown, and `zend_try_inline_call` never reaches a method with
     `ZEND_SHARP_RECV_TYPE_ARGS`.
   - `zend_compile_call_common` asserts that only `DO_FCALL`, `DO_UCALL` and `DO_FCALL_BY_NAME` take type arguments, and
-    the bridge gives them only to a call of a PHP# method, so `optimize_func_calls.c` never turns one into a
-    `DO_ICALL`.
+    the bridge gives them only to a method call. `zend_get_call_op` gives `DO_ICALL` only to a call `INIT_FCALL` starts,
+    and `optimize_func_calls.c` turns only a function call's `INIT_FCALL_BY_NAME` and `INIT_NS_FCALL_BY_NAME` into one,
+    so a call with type arguments never becomes a `DO_ICALL`.
 - **A generic call costs about 30 ns more than a plain PHP# call on the debug build, and a plain call costs what it
   did before R2.** `Calls.pick<Order>(order)` against `Calls.same(order)`, both taking an `Order`, over 200000 calls,
   best of 7 on CPU time, on the ZTS debug build, with the machine's load average between 80 and 134:
@@ -372,8 +373,8 @@ before it changes the engine or the bridge.
 
 - **Plain PHP's generics are erased at the entry check.** A PHP# method that takes a plain PHP `@template` class, such
   as a Laravel `Collection<int, Order>`, accepts any instance of it from plain PHP.
-  - The bridge's `Types::method_metadata` writes no check for a parameter whose class is not PHP#'s, as
-    `call_type_arguments` writes no type arguments for a callee plain PHP declares.
+  - The bridge's `Types::method_metadata` writes no check for a parameter whose class is not PHP#'s, since an object of
+    a plain PHP generic class carries no type arguments.
   - `sharp_object_is` compares type arguments only for a class PHP# declares with type parameters, so a member of a
     checked union that names a plain PHP generic class matches any instance of it.
 - **The first guard asks for both `ZEND_CALL_TOP` and `ZEND_CALL_DYNAMIC`, not `ZEND_CALL_TOP` alone.** An extension that
@@ -409,6 +410,13 @@ before it changes the engine or the bridge.
   too.** `Types::call_type_arguments` takes it from `call_target(call).class`, as the analysis recorded it. Before
   R2e `super.m()` asked the direct parent, so a plain PHP parent that inherits a PHP# `pick<T>` lost the call's type
   arguments.
+  - Every generic call carries them unless a built-in class declares the method. A PHP# class can implement a plain
+    PHP `@template` interface or override a plain PHP parent's `@template` method, and PHP# calls it through that
+    type: `wrapper.wrap(order)` on a `Wrapper`. Before the second review only a method PHP# declares got them, so the
+    PHP# `wrap<T>` built a `Box<Any?>` where the checker said `Box<Order>`.
+  - A plain PHP method never reads the operand, a non-refcounted `IS_PTR`, as a call from plain PHP never gives one.
+  - A built-in method gets none, as `List.wrap` and a `List`'s `map` do.
+  - `type_arguments_call_interface.phpt` and `type_arguments_call_parent.phpt` run the call through each.
 - **`sharp_type_list_of_frame` reads this's type arguments only when the text names a `$i`,** which a `memchr` for `$`
   tells. Reading them runs a lazy proxy's initializer, so before R2e a generic method that never names its class's
   type parameters initialized the proxy it was called on.
