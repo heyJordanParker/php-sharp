@@ -379,13 +379,17 @@ before it changes the engine or the bridge.
     checked union that names a plain PHP generic class matches any instance of it.
 - **The first guard asks for both `ZEND_CALL_TOP` and `ZEND_CALL_DYNAMIC`, not `ZEND_CALL_TOP` alone.** An extension that
   replaces `zend_execute_ex`, as a debugger or a profiler does, makes every `DO_*CALL` mark its frame `ZEND_CALL_TOP`.
-  `zend_call_function` gives its frames `ZEND_CALL_TOP_FUNCTION | ZEND_CALL_DYNAMIC`, and a `DO_*CALL` adds
-  `ZEND_CALL_DYNAMIC` only to a frame `INIT_DYNAMIC_CALL` or `INIT_USER_CALL` pushed. So under the replacement a PHP#
-  call still gives its type arguments and is not checked, and a plain PHP call is still checked.
+  `zend_call_function` gives its frames `ZEND_CALL_TOP_FUNCTION | ZEND_CALL_DYNAMIC`. No `DO_*CALL` adds
+  `ZEND_CALL_DYNAMIC`: of the frames one runs, only those `INIT_DYNAMIC_CALL` and `INIT_USER_CALL` push carry it, set
+  when they push the frame. So under the replacement a PHP# call still gives its type arguments and is not checked, and
+  a plain PHP call is still checked.
   - One difference remains under the replacement: a call of a function value from a `.sharp` file, which
     `INIT_DYNAMIC_CALL` pushes, counts as a call from plain PHP, so the method's checked parameters are checked. The
-    checker proved those arguments, and it refuses the value of a generic method, so the check always passes. The
-    method gets no type arguments either way, since a function value's call carries none.
+    checker accepts the value of a generic method, as the analyzer's `resolve_method_value` reads it and
+    `calling_a_stored_method_value_keeps_the_self_of_its_receiver` pins. The check still passes: the wildcard that
+    spells each of the method's own type parameters accepts any type argument, and the checker proved the positions
+    that name a `$i` of the class. The method gets no type arguments either way, since a function value's call carries
+    none.
   - `type_arguments_call_execute_ex.phpt` runs under `zend_test.replace_zend_execute_ex=1`, with the JIT off, since
     the JIT turns itself off under the replacement.
 - **A method value on a value of an intersection-bounded type parameter takes the member the first class of the
