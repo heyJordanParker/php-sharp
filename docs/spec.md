@@ -644,6 +644,8 @@ if (prices[plan] is int price) { charge(price); }           // compiles: runs on
 int? maybe = prices.get(plan);                              // compiles: null when plan is missing
 ```
 
+The same holds for a `List` index: when the index is missing, `if (lines[i] is Line line)` does not run its block, `lines[i] as Line` gives null, and a `match` on `lines[i]` takes its `null` or `default` arm.
+
 Data with fixed keys is a class, so a `Map` holds keys that come from outside, where a missing key is normal.
 
 **A `Map` with nullable values reads as Kotlin's does:** a read from `Map<string, int?>` gives `int?`, so a missing key and a stored null read the same. `map.has(key)` tells them apart, as Kotlin's `containsKey` does.
