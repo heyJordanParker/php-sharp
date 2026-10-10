@@ -1,11 +1,13 @@
 <?php
 require __DIR__ . '/type_arguments_calls.inc';
+require __DIR__ . '/harness/Inspector.inc';
 
 use App\Order;
 use Calls\Repository;
 use Calls\Shelf;
 
-// A hot function's second call runs the code the tracing JIT compiled on its first.
+// A hot function's second call runs the code the tracing JIT compiled on its first. Calls\Repository::suspended
+// suspends the Fiber after it sent the first argument of a generic call.
 $order = new Order(1);
 foreach ([1, 2] as $round) {
     echo shown(Repository::written($order)), "\n";
@@ -15,4 +17,9 @@ foreach ([1, 2] as $round) {
     echo shown(Repository::spread([$order, new Order(2)])), "\n";
     echo shown(Repository::keyed($order)), "\n";
     echo shown(Repository::numbered()->twice()), "\n";
+    $fiber = new Fiber(fn () => Repository::suspended(new Order($round)));
+    $fiber->start();
+    echo $fiber->isSuspended() ? 'suspended' : 'returned', "\n";
+    $fiber->resume();
+    echo shown($fiber->getReturn()), "\n";
 }
