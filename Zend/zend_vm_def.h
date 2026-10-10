@@ -6140,7 +6140,7 @@ ZEND_VM_HANDLER(211, ZEND_SHARP_TYPE_ARGS, UNUSED|CV, CONST|UNUSED, CACHE_SLOT)
 		}
 		arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op2),
 			Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL,
-			method && Z_TYPE_P(method) == IS_PTR ? Z_PTR_P(method) : NULL, cache[4], cache);
+			method && Z_TYPE_P(method) == IS_PTR ? Z_PTR_P(method) : NULL, false, cache[4], cache);
 	} else {
 		/* A lazy proxy's initializer runs here, and can throw. */
 		arguments = sharp_type_arguments(Z_OBJ(EX(This)));
@@ -6179,7 +6179,7 @@ ZEND_VM_HANDLER(212, ZEND_SHARP_RECV_TYPE_ARGS, CONST|UNUSED, CONST|UNUSED, CACH
 		if (!arguments) {
 			SAVE_OPLINE();
 			arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op1),
-				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, EX(func)->common.scope,
+				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, false, EX(func)->common.scope,
 				CACHE_ADDR(opline->extended_value));
 			if (UNEXPECTED(EG(exception))) {
 				HANDLE_EXCEPTION();

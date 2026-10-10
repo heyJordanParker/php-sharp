@@ -5490,6 +5490,19 @@ static zend_string *zend_sharp_type_text(zend_ast *text_ast)
 	return text;
 }
 
+/* The literal of the type text list `text_ast`, which may name the type parameters of the method's class as `$i` and
+ * the method's own as `#i`. A closed text is checked here. */
+static uint32_t zend_add_sharp_open_type_text(zend_ast *text_ast)
+{
+	zend_string *text = zend_ast_get_str(text_ast);
+	if (!sharp_type_list_names(ZSTR_VAL(text), ZSTR_LEN(text))) {
+		zend_sharp_type_text(text_ast);
+	}
+	text = zend_string_copy(text);
+
+	return zend_add_literal_string(&text);
+}
+
 /* Emits the ZEND_SHARP_TYPE_ARGS that resolves the type arguments `text_ast` spells into `result`, or this's when
  * `text_ast` is NULL, as `new Self` gives them. */
 static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast)
@@ -5502,14 +5515,10 @@ static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast)
 		return;
 	}
 
+	opline->op2_type = IS_CONST;
+	opline->op2.constant = zend_add_sharp_open_type_text(text_ast);
 	zend_string *text = zend_ast_get_str(text_ast);
 	uint32_t names = sharp_type_list_names(ZSTR_VAL(text), ZSTR_LEN(text));
-	if (!names) {
-		zend_sharp_type_text(text_ast);
-	}
-	text = zend_string_copy(text);
-	opline->op2_type = IS_CONST;
-	opline->op2.constant = zend_add_literal_string(&text);
 	opline->extended_value = zend_alloc_cache_slots(names ? 5 : 1);
 	if (!names) {
 		return;
@@ -5529,19 +5538,6 @@ static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast)
 		/* A text that names `$i` reads this's type arguments, so a closure around it keeps its this. */
 		CG(active_op_array)->fn_flags |= ZEND_ACC_USES_THIS;
 	}
-}
-
-/* The literal of the type text list `text_ast`, which may name the type parameters of the method's class as `$i` and
- * the method's own as `#i`. A closed text is checked here. */
-static uint32_t zend_add_sharp_open_type_text(zend_ast *text_ast)
-{
-	zend_string *text = zend_ast_get_str(text_ast);
-	if (!sharp_type_list_names(ZSTR_VAL(text), ZSTR_LEN(text))) {
-		zend_sharp_type_text(text_ast);
-	}
-	text = zend_string_copy(text);
-
-	return zend_add_literal_string(&text);
 }
 
 /* Emits the ZEND_SHARP_RECV_TYPE_ARGS of a PHP# method. With `bounds_ast`, it gives a generic method its own type

@@ -79,13 +79,14 @@ const sharp_type *sharp_type_list(const char *text, size_t length);
 uint32_t sharp_type_list_names(const char *text, size_t length);
 
 /* The interned type argument list `text` spells once each `$i` in it is `object`'s type argument i, for code written in
- * class `scope`, and each `#i` is member i of `method`, the type arguments of the method the code runs in. The four
- * pointers at `cache` keep the last list it spelled for `object`'s class and type arguments and for `method`. `object` is
- * NULL for code that runs without this, which never names a `$i`, and only a text that names one reads `object`'s type
- * arguments, which initializes a lazy proxy. NULL when `object` is not of class `scope`, `method`
- * is NULL for a text that names a `#i`, or `text` names an index the arguments have no member at. */
+ * class `scope`, and each `#i` is member i of `method`, the type arguments of the method the code runs in, or
+ * SHARP_TYPE_UNRESOLVED when `unresolved` holds. The four pointers at `cache` keep the last list it spelled for
+ * `object`'s class and type arguments and for `method`. `object` is NULL for code that runs without this, which never
+ * names a `$i`, and only a text that names one reads `object`'s type arguments, which initializes a lazy proxy. NULL
+ * when `object` is not of class `scope`, `text` names a `#i` while `method` is NULL and `unresolved` does not hold, or
+ * `text` names an index the arguments have no member at. */
 const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object, const sharp_type *method,
-	const zend_class_entry *scope, void **cache);
+	bool unresolved, const zend_class_entry *scope, void **cache);
 
 /* Whether `value` is of `type`, one type: `Any?` holds every value, a class an instance of it or of a subclass, whose
  * type arguments for the class must be the type's own, except where the type has a method's type parameter a call

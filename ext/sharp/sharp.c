@@ -2450,8 +2450,7 @@ static sharp_type_node *sharp_type_node_ancestor(const zend_class_entry *ce, sha
 	return arguments;
 }
 
-/* sharp_type_list_of_frame, with each `#i` SHARP_TYPE_UNRESOLVED when `unresolved` holds. */
-static const sharp_type *sharp_type_list_of_frame_ex(const zval *text, zend_object *object, const sharp_type *method,
+const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object, const sharp_type *method,
 	bool unresolved, const zend_class_entry *scope, void **cache)
 {
 	/* Only a text that names a `$i` reads this's type arguments, so one that names none never runs a lazy proxy's
@@ -2507,12 +2506,6 @@ static const sharp_type *sharp_type_list_of_frame_ex(const zval *text, zend_obje
 	}
 
 	return substituted;
-}
-
-const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object, const sharp_type *method,
-	const zend_class_entry *scope, void **cache)
-{
-	return sharp_type_list_of_frame_ex(text, object, method, false, scope, cache);
 }
 
 /* Whether `given`, a type argument an object holds, matches `expected`: SHARP_TYPE_UNRESOLVED matches any type at any
@@ -2649,7 +2642,6 @@ static ZEND_COLD void sharp_type_argument_error(
 	const zend_execute_data *execute_data, uint32_t number, const sharp_type *expected, const zval *value)
 {
 	smart_str given = {0};
-	ZVAL_DEREF(value);
 	const sharp_type *arguments = Z_TYPE_P(value) == IS_OBJECT ? sharp_type_arguments(Z_OBJ_P(value)) : NULL;
 	if (arguments) {
 		const zend_string *name = Z_OBJCE_P(value)->name;
@@ -2701,7 +2693,7 @@ static bool sharp_type_takes_int_as_float(const sharp_type *type)
 void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *text, void **cache)
 {
 	/* Only a call from plain PHP is checked, and it gives the method no type arguments. */
-	const sharp_type *expected = sharp_type_list_of_frame_ex(text,
+	const sharp_type *expected = sharp_type_list_of_frame(text,
 		Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, true, EX(func)->common.scope, cache);
 	if (!expected) {
 		return;
@@ -2712,6 +2704,8 @@ void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *tex
 	for (uint32_t i = 0; i < count; i++) {
 		zval *value = EX_VAR_NUM(i);
 
+		/* A PHP# parameter is never by reference, and every call derefs a by-value argument. */
+		ZEND_ASSERT(!Z_ISREF_P(value));
 		if (!sharp_type_accepts(expected->members[i], value)) {
 			if (!EG(exception)) {
 				sharp_type_argument_error(execute_data, i + 1, expected->members[i], value);
@@ -2721,8 +2715,6 @@ void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *tex
 		if (UNEXPECTED(EG(exception))) {
 			return;
 		}
-		/* A PHP# parameter is never by reference, and every call derefs a by-value argument. */
-		ZEND_ASSERT(!Z_ISREF_P(value));
 		if (Z_TYPE_P(value) == IS_LONG && sharp_type_takes_int_as_float(expected->members[i])) {
 			ZVAL_DOUBLE(value, (double) Z_LVAL_P(value));
 		}
