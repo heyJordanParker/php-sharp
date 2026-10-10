@@ -421,7 +421,8 @@ before it changes the engine or the bridge.
     PHP# `wrap<T>` built a `Box<Any?>` where the checker said `Box<Order>`.
   - A plain PHP method never reads the operand, a non-refcounted `IS_PTR`, as a call from plain PHP never gives one.
   - A built-in method gets none, as `List.wrap` and a `List`'s `map` do.
-  - `type_arguments_call_interface.phpt` and `type_arguments_call_parent.phpt` run the call through each.
+  - `type_arguments_call.inc` runs the call through each, and the `super.m()` call, without the JIT and under both
+    JITs.
 - **`sharp_type_list_of_frame` reads this's type arguments only when the text names a `$i`,** which a `memchr` for `$`
   tells. Reading them runs a lazy proxy's initializer, so before R2e a generic method that never names its class's
   type parameters initialized the proxy it was called on.

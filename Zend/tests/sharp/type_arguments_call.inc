@@ -3,7 +3,10 @@ require __DIR__ . '/type_arguments_calls.inc';
 require __DIR__ . '/harness/Inspector.inc';
 
 use App\Order;
+use Calls\OrderPicker;
 use Calls\Repository;
+use Calls\SharpPlainWrapper;
+use Calls\SharpWrapper;
 use Calls\Shelf;
 
 // A hot function's second call runs the code the tracing JIT compiled on its first. Calls\Repository::suspended
@@ -17,6 +20,9 @@ foreach ([1, 2] as $round) {
     echo shown(Repository::spread([$order, new Order(2)])), "\n";
     echo shown(Repository::keyed($order)), "\n";
     echo shown(Repository::numbered()->twice()), "\n";
+    echo shown(Repository::wrapped(new SharpWrapper(), $order)), "\n";
+    echo shown(Repository::wrappedByParent(new SharpPlainWrapper(), $order)), "\n";
+    echo shown((new OrderPicker())->pickOrder($order)), "\n";
     $fiber = new Fiber(fn () => Repository::suspended(new Order($round)));
     $fiber->start();
     echo $fiber->isSuspended() ? 'suspended' : 'returned', "\n";
