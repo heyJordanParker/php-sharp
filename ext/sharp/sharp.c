@@ -2720,7 +2720,8 @@ void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *tex
 		if (UNEXPECTED(EG(exception))) {
 			return;
 		}
-		ZVAL_DEREF(value);
+		/* A PHP# parameter is never by reference, and every call derefs a by-value argument. */
+		ZEND_ASSERT(!Z_ISREF_P(value));
 		if (Z_TYPE_P(value) == IS_LONG && sharp_type_takes_int_as_float(expected->members[i])) {
 			ZVAL_DOUBLE(value, (double) Z_LVAL_P(value));
 		}
