@@ -3,7 +3,7 @@ namespace App;
 import Lib.Sleeper;
 import Lib.Snapshot;
 import Lib.Witness;
-
+extern Witness.see;
 public abstract class DatabaseEntity
 {
     public DatabaseEntity(public int id { get; })

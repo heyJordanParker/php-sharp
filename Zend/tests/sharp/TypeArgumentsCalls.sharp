@@ -90,12 +90,12 @@ public class Shelf
 
     public string drain(Source<DatabaseEntity> source) => "drained";
 
-    public string drained() => this.drain(new Source<Order>());
+    public string drained() => this.drain(new Source<DatabaseEntity>());
 
     public static Source<Order> orders() => new Source<Order>();
 }
 
-public class Source<out TItem : DatabaseEntity>
+public class Source<TItem : DatabaseEntity>
 {
 }
 

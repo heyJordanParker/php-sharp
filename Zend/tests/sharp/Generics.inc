@@ -54,7 +54,7 @@ class Repository
      *  @return PaginatedList<TItem> */
     public function list(Query $query): PaginatedList { return new PaginatedList(((object) $query)->rows()); }
 }
-/** @template-covariant TItem of DatabaseEntity */
+/** @template TItem of DatabaseEntity */
 class Feed
 {
     /** @param list<TItem> $items */
@@ -64,7 +64,7 @@ class Feed
     /** @return TItem */
     public function next(): DatabaseEntity { return $this->items[0]; }
 }
-/** @template-contravariant TItem of DatabaseEntity */
+/** @template TItem of DatabaseEntity */
 interface Validator
 {
     /** @param TItem $item */
@@ -126,11 +126,11 @@ class Catalog
     public static function inferred(): int { return Store::pick(Catalog::orders(), 2)?->id ?? 0; }
 
     public static function headed(): int { return ((object) new OrderPage(Catalog::orders()))->first()->id; }
-    /** @param Feed<DatabaseEntity> $feed */
+    /** @param Feed<Order> $feed */
     public static function newest(Feed $feed): int { return ((object) $feed)->next()->id; }
 
     public static function fed(): int { return Catalog::newest(new Feed(Catalog::orders())); }
-    /** @param Validator<Order> $validator */
+    /** @param Validator<DatabaseEntity> $validator */
     public static function check(Validator $validator, Order $order): bool { return ((object) $validator)->validate($order); }
 
     public static function checked(): bool { return Catalog::check(new EntityValidator(), new Order(3)); }

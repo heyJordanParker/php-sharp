@@ -241,7 +241,7 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp L0126 0013 VERIFY_RETURN_TYPE
   .sharp L0126 0014 RETURN null
   .sharp      ; (lines=10, args=1, vars=1, tmps=3)
-  .sharp L0130 0001 SHARP_RECV_TYPE_ARGS string("Paging.Feed<Paging.DatabaseEntity>")
+  .sharp L0130 0001 SHARP_RECV_TYPE_ARGS string("Paging.Feed<Paging.Order>")
   .sharp L0130 0002 T1 = CAST (object) CV0($feed)
   .sharp L0130 0003 INIT_METHOD_CALL 0 T1 string("next")
   .sharp L0130 0004 V2 = DO_FCALL
@@ -265,7 +265,7 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp L0132 0012 VERIFY_RETURN_TYPE
   .sharp L0132 0013 RETURN null
   .sharp      ; (lines=11, args=2, vars=2, tmps=2)
-  .sharp L0134 0002 SHARP_RECV_TYPE_ARGS string("Paging.Validator<Paging.Order>, Any?")
+  .sharp L0134 0002 SHARP_RECV_TYPE_ARGS string("Paging.Validator<Paging.DatabaseEntity>, Any?")
   .sharp L0134 0003 T2 = CAST (object) CV0($validator)
   .sharp L0134 0004 INIT_METHOD_CALL 1 T2 string("validate")
   .sharp L0134 0005 SEND_VAR_EX CV1($order) 1
@@ -378,7 +378,7 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp      2: 0007 - 0008 (tmp/var)
   .sharp      4: 0011 - 0012 (tmp/var)
   .sharp      ; (lines=10, args=1, vars=1, tmps=3)
-  .sharp 0001 SHARP_RECV_TYPE_ARGS string("Paging.Feed<Paging.DatabaseEntity>")
+  .sharp 0001 SHARP_RECV_TYPE_ARGS string("Paging.Feed<Paging.Order>")
   .sharp 0002 T1 = CAST (object) CV0($feed)
   .sharp 0003 INIT_METHOD_CALL 0 T1 string("next")
   .sharp 0004 V2 = DO_FCALL
@@ -397,7 +397,7 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp      2: 0004 - 0008 (new)
   .sharp      5: 0010 - 0011 (tmp/var)
   .sharp      ; (lines=11, args=2, vars=2, tmps=2)
-  .sharp 0002 SHARP_RECV_TYPE_ARGS string("Paging.Validator<Paging.Order>, Any?")
+  .sharp 0002 SHARP_RECV_TYPE_ARGS string("Paging.Validator<Paging.DatabaseEntity>, Any?")
   .sharp 0003 T2 = CAST (object) CV0($validator)
   .sharp 0004 INIT_METHOD_CALL 1 T2 string("validate")
   .sharp 0005 SEND_VAR_EX CV1($order) 1
@@ -641,7 +641,7 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php       /** @template TItem of DatabaseEntity
   .php        *  @param Query<TItem> $query
   .php        *  @return PaginatedList<TItem> */
-  .php   /** @template-covariant TItem of DatabaseEntity */
+  .php   /** @template TItem of DatabaseEntity */
   .php       /** @param list<TItem> $items */
   .php       /** @return TItem */
   .php   /** @implements Validator<DatabaseEntity> */
@@ -659,6 +659,6 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php       /** @param class-string<DatabaseEntity> $type */
   .php       /** @return class-string<DatabaseEntity> */
   .php       /** @return list<Order> */
-  .php       /** @param Feed<DatabaseEntity> $feed */
-  .php       /** @param Validator<Order> $validator */
+  .php       /** @param Feed<Order> $feed */
+  .php       /** @param Validator<DatabaseEntity> $validator */
 Operators: same opcodes and lines in 72 op arrays, same signatures in 9 classes

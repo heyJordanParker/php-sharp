@@ -1,5 +1,5 @@
 --TEST--
-Under an extension that replaces zend_execute_ex, as a debugger or a profiler does, a generic call from PHP# gives the method its type arguments and is not checked, and a call from plain PHP is
+Under an extension that replaces zend_execute_ex, as a debugger or a profiler does, a generic call from PHP# gives the method its type arguments, and a call from plain PHP is checked
 --SKIPIF--
 <?php if (!extension_loaded('zend_test')) die('skip zend_test is missing'); ?>
 --INI--

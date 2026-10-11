@@ -55,7 +55,7 @@ public class Repository
     public PaginatedList<TItem> list<TItem : DatabaseEntity>(Query<TItem> query) => new PaginatedList<TItem>(query.rows());
 }
 
-public class Feed<out TItem : DatabaseEntity>
+public class Feed<TItem : DatabaseEntity>
 {
 
     public Feed(private List<TItem> items)
@@ -65,7 +65,7 @@ public class Feed<out TItem : DatabaseEntity>
     public TItem next() => this.items[0];
 }
 
-public interface Validator<in TItem : DatabaseEntity>
+public interface Validator<TItem : DatabaseEntity>
 {
 
     bool validate(TItem item);
@@ -127,11 +127,11 @@ public class Catalog
 
     public static int headed() => new OrderPage(Catalog.orders()).first().id;
 
-    public static int newest(Feed<DatabaseEntity> feed) => feed.next().id;
+    public static int newest(Feed<Order> feed) => feed.next().id;
 
     public static int fed() => Catalog.newest(new Feed<Order>(Catalog.orders()));
 
-    public static bool check(Validator<Order> validator, Order order) => validator.validate(order);
+    public static bool check(Validator<DatabaseEntity> validator, Order order) => validator.validate(order);
 
     public static bool checked() => Catalog.check(new EntityValidator(), new Order(3));
 
