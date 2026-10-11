@@ -2108,7 +2108,6 @@ return 2.0 ** -1;            // 0.5
 7 / 2          // 3
 -7 / 2         // -3
 7 / 2.0        // 3.5
-public int half() => 8 / 2;   // 3
 ```
 
 - Division by zero throws `DivisionByZeroError`.
