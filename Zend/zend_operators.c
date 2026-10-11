@@ -1368,6 +1368,16 @@ static ZEND_COLD zend_never_inline zend_result ZEND_FASTCALL checked_overflow(zv
 }
 /* }}} */
 
+static ZEND_COLD zend_never_inline zend_result ZEND_FASTCALL checked_negative_exponent(zval *result, zval *op1, zval *value1) /* {{{ */
+{
+	zend_throw_error(zend_ce_arithmetic_error, "Integer raised to a negative power");
+	if (result != op1) {
+		ZVAL_LONG(result, Z_LVAL_P(value1));
+	}
+	return FAILURE;
+}
+/* }}} */
+
 zend_result ZEND_FASTCALL checked_add_function(zval *result, zval *op1, zval *op2) /* {{{ */
 {
 	zval *value1 = op1, *value2 = op2;
@@ -1525,16 +1535,18 @@ ZEND_API zend_result ZEND_FASTCALL pow_function(zval *result, zval *op1, zval *o
 }
 /* }}} */
 
-/* A negative exponent keeps PHP's float, which is no overflow. */
 zend_result ZEND_FASTCALL checked_pow_function(zval *result, zval *op1, zval *op2) /* {{{ */
 {
 	zval *value1 = op1, *value2 = op2;
 
 	ZVAL_DEREF(value1);
 	ZVAL_DEREF(value2);
-	if (Z_TYPE_P(value1) == IS_LONG && Z_TYPE_P(value2) == IS_LONG && Z_LVAL_P(value2) >= 0) {
+	if (Z_TYPE_P(value1) == IS_LONG && Z_TYPE_P(value2) == IS_LONG) {
 		zval power;
 
+		if (UNEXPECTED(Z_LVAL_P(value2) < 0)) {
+			return checked_negative_exponent(result, op1, value1);
+		}
 		pow_function_base(&power, value1, value2);
 		if (UNEXPECTED(Z_TYPE(power) == IS_DOUBLE)) {
 			return checked_overflow(result, op1, value1);
