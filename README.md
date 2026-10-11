@@ -39,9 +39,6 @@ public class Cart
     };
 }
 ```
-<!-- run readme-cart
-1 + 1;   // 3
--->
 
 Plain PHP uses it like any other class:
 
