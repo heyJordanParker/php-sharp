@@ -1,8 +1,8 @@
-# 73. An int where a float is expected
+# 73. An `int` where a `float` is expected
 
 ## Decision
 
-In PHP# code, an `int` value where a `float` is expected is a compile error, "`int` is not `float`: write 0.0, or convert with (float) n". The rule covers every place a value lands: assignments, arguments, returns, property writes, list and map elements, and a generic `T` that is `float`. A literal `0` is an `int`, as in Kotlin. Arithmetic that mixes an `int` and a `float`, such as `count * 1.5`, gives a `float` and compiles. Plain PHP keeps PHP's rules, so a plain-PHP caller that passes an `int` to a PHP# `float` parameter gets PHP's own conversion.
+In PHP# code, an `int` value where a `float` is expected is a compile error, "`int` is not `float`: write 0.0, or convert with (float) n". The rule covers every place a value lands, such as an assignment, an argument, a return, a property write, a list or map element, or a generic `T` that is `float`. A literal `0` is an `int`, as in Kotlin. Arithmetic that mixes an `int` and a `float`, such as `count * 1.5`, gives a `float` and compiles. Plain PHP keeps PHP's rules, so a plain-PHP caller that passes an `int` to a PHP# `float` parameter gets PHP's own conversion.
 
 ## Options
 
@@ -20,17 +20,17 @@ cell.put((float) n);                 // compiles
 bool same = cell.get() == 2.0;       // true
 ```
 
-Every change from `int` to `float` is written where it happens, so a reader sees it in the code. The value keeps the type it was declared with, as every other type does in PHP# code.
+Every change from `int` to `float` is written where it happens, so a reader sees it in the code.
 
 ### Rejected: an int converts to a float, as PHP converts it
 
 ```csharp
-float total = 0;                     // compiles
+float total = 0;                     // would compile
 float total = 0.0;                   // compiles
-float price = count;                 // compiles
+float price = count;                 // would compile
 float price = (float) count;         // compiles: the conversion is written out
 Cell<float> cell = Cell.empty();
-cell.put(2);                         // compiles: the cell holds 2.0
+cell.put(2);                         // would compile: the cell holds 2.0
 cell.put(2.0);                       // compiles
 cell.put((float) n);                 // compiles
 bool same = cell.get() == 2.0;       // true

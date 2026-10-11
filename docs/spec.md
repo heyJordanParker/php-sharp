@@ -1770,6 +1770,24 @@ public int|string|null find2()                 // compile error: write (int|stri
 - `/=` follows the same rules.
 - Like `+` (section 18), `/` chooses when it runs, from the types of its operands.
 
+**An `int` where a `float` is expected is a compile error in PHP# code,** wherever a value lands, such as an assignment, an argument, a return, a property write, a list or map element, or a generic `T` that is `float`, as in `Cell<float>`.
+
+```csharp
+float total = 0;                     // compile error: `int` is not `float`: write 0.0, or convert with (float) n
+float total = 0.0;                   // compiles
+float price = count;                 // compile error, same message
+float price = (float) count;         // compiles: the conversion is written out
+Cell<float> cell = Cell.empty();
+cell.put(2);                         // compile error, same message
+cell.put(2.0);                       // compiles
+cell.put((float) n);                 // compiles
+bool same = cell.get() == 2.0;       // true
+```
+
+- A literal `0` is an `int`, as in Kotlin.
+- Arithmetic that mixes an `int` and a `float`, such as `count * 1.5`, gives a `float` and compiles.
+- Plain PHP keeps PHP's rules, so a plain-PHP caller that passes an `int` to a PHP# `float` parameter gets PHP's own conversion.
+
 **Converting values:**
 
 ```csharp
@@ -1788,24 +1806,6 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 - PHP# has no user-defined conversion operators, such as C#'s `implicit operator`. A type converts only through a property or method it declares, such as `username.value`.
 - `(bool)`, `(array)` and `(object)` do not exist. Conditions are `bool` (section 21), so a comparison such as `request.input("flag") == "1"` replaces `(bool)`. `(array)` and `(object)` are compile errors that name their replacements, shown below.
 - PHP's cast aliases `(integer)`, `(double)`, `(boolean)` and `(binary)` do not exist.
-
-**An `int` where a `float` is expected is a compile error in PHP# code,** wherever a value lands: assignments, arguments, returns, property writes, list and map elements, and a generic `T` that is `float`, as in `Cell<float>`.
-
-```csharp
-float total = 0;                     // compile error: `int` is not `float`: write 0.0, or convert with (float) n
-float total = 0.0;                   // compiles
-float price = count;                 // compile error, same message
-float price = (float) count;         // compiles: the conversion is written out
-Cell<float> cell = Cell.empty();
-cell.put(2);                         // compile error, same message
-cell.put(2.0);                       // compiles
-cell.put((float) n);                 // compiles
-bool same = cell.get() == 2.0;       // true
-```
-
-- A literal `0` is an `int`, as in Kotlin.
-- Arithmetic that mixes an `int` and a `float`, such as `count * 1.5`, gives a `float` and compiles.
-- Plain PHP keeps PHP's rules, so a plain-PHP caller that passes an `int` to a PHP# `float` parameter gets PHP's own conversion.
 
 **Replacing `(array)` and `(object)`:**
 
