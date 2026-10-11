@@ -20,5 +20,5 @@ App\Maker: int spelled
 App\Maker: int cached
 App\OrderMaker: App.Order spelled
 App\ListMaker: List<int> spelled
-App\ListMaker: List<int> spelled
-App\OrderMaker: App.Order cached
+App\ListMaker: List<int> cached
+App\OrderMaker: App.Order spelled

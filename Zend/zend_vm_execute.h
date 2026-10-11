@@ -36731,10 +36731,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 
 			arguments = sharp_type_list(Z_STRVAL_P(text), Z_STRLEN_P(text));
 			ZEND_ASSERT(arguments != NULL);
-			/* A list unserialize read first this request is the request's, so the cache never keeps it. */
-			if (EXPECTED(sharp_type_is_persistent(arguments))) {
-				CACHE_PTR(opline->extended_value, (void *) arguments);
-			}
+			/* The run-time cache lives for one request, so it keeps a list unserialize read first this request too,
+			 * which request end frees after every object. */
+			CACHE_PTR(opline->extended_value, (void *) arguments);
 		}
 		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
 		ZEND_VM_NEXT_OPCODE();
@@ -39783,10 +39782,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 
 			arguments = sharp_type_list(Z_STRVAL_P(text), Z_STRLEN_P(text));
 			ZEND_ASSERT(arguments != NULL);
-			/* A list unserialize read first this request is the request's, so the cache never keeps it. */
-			if (EXPECTED(sharp_type_is_persistent(arguments))) {
-				CACHE_PTR(opline->extended_value, (void *) arguments);
-			}
+			/* The run-time cache lives for one request, so it keeps a list unserialize read first this request too,
+			 * which request end frees after every object. */
+			CACHE_PTR(opline->extended_value, (void *) arguments);
 		}
 		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
 		ZEND_VM_NEXT_OPCODE();
@@ -47312,10 +47310,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 
 			arguments = sharp_type_list(Z_STRVAL_P(text), Z_STRLEN_P(text));
 			ZEND_ASSERT(arguments != NULL);
-			/* A list unserialize read first this request is the request's, so the cache never keeps it. */
-			if (EXPECTED(sharp_type_is_persistent(arguments))) {
-				CACHE_PTR(opline->extended_value, (void *) arguments);
-			}
+			/* The run-time cache lives for one request, so it keeps a list unserialize read first this request too,
+			 * which request end frees after every object. */
+			CACHE_PTR(opline->extended_value, (void *) arguments);
 		}
 		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
 		ZEND_VM_NEXT_OPCODE();
@@ -53288,10 +53285,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_TYPE_AR
 
 			arguments = sharp_type_list(Z_STRVAL_P(text), Z_STRLEN_P(text));
 			ZEND_ASSERT(arguments != NULL);
-			/* A list unserialize read first this request is the request's, so the cache never keeps it. */
-			if (EXPECTED(sharp_type_is_persistent(arguments))) {
-				CACHE_PTR(opline->extended_value, (void *) arguments);
-			}
+			/* The run-time cache lives for one request, so it keeps a list unserialize read first this request too,
+			 * which request end frees after every object. */
+			CACHE_PTR(opline->extended_value, (void *) arguments);
 		}
 		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
 		ZEND_VM_NEXT_OPCODE();
@@ -93406,10 +93402,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 
 			arguments = sharp_type_list(Z_STRVAL_P(text), Z_STRLEN_P(text));
 			ZEND_ASSERT(arguments != NULL);
-			/* A list unserialize read first this request is the request's, so the cache never keeps it. */
-			if (EXPECTED(sharp_type_is_persistent(arguments))) {
-				CACHE_PTR(opline->extended_value, (void *) arguments);
-			}
+			/* The run-time cache lives for one request, so it keeps a list unserialize read first this request too,
+			 * which request end frees after every object. */
+			CACHE_PTR(opline->extended_value, (void *) arguments);
 		}
 		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
 		ZEND_VM_NEXT_OPCODE();
@@ -96458,10 +96453,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 
 			arguments = sharp_type_list(Z_STRVAL_P(text), Z_STRLEN_P(text));
 			ZEND_ASSERT(arguments != NULL);
-			/* A list unserialize read first this request is the request's, so the cache never keeps it. */
-			if (EXPECTED(sharp_type_is_persistent(arguments))) {
-				CACHE_PTR(opline->extended_value, (void *) arguments);
-			}
+			/* The run-time cache lives for one request, so it keeps a list unserialize read first this request too,
+			 * which request end frees after every object. */
+			CACHE_PTR(opline->extended_value, (void *) arguments);
 		}
 		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
 		ZEND_VM_NEXT_OPCODE();
@@ -103987,10 +103981,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 
 			arguments = sharp_type_list(Z_STRVAL_P(text), Z_STRLEN_P(text));
 			ZEND_ASSERT(arguments != NULL);
-			/* A list unserialize read first this request is the request's, so the cache never keeps it. */
-			if (EXPECTED(sharp_type_is_persistent(arguments))) {
-				CACHE_PTR(opline->extended_value, (void *) arguments);
-			}
+			/* The run-time cache lives for one request, so it keeps a list unserialize read first this request too,
+			 * which request end frees after every object. */
+			CACHE_PTR(opline->extended_value, (void *) arguments);
 		}
 		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
 		ZEND_VM_NEXT_OPCODE();
@@ -109861,10 +109854,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_TYPE_ARGS_SP
 
 			arguments = sharp_type_list(Z_STRVAL_P(text), Z_STRLEN_P(text));
 			ZEND_ASSERT(arguments != NULL);
-			/* A list unserialize read first this request is the request's, so the cache never keeps it. */
-			if (EXPECTED(sharp_type_is_persistent(arguments))) {
-				CACHE_PTR(opline->extended_value, (void *) arguments);
-			}
+			/* The run-time cache lives for one request, so it keeps a list unserialize read first this request too,
+			 * which request end frees after every object. */
+			CACHE_PTR(opline->extended_value, (void *) arguments);
 		}
 		ZVAL_PTR(EX_VAR(opline->result.var), (void *) arguments);
 		ZEND_VM_NEXT_OPCODE();

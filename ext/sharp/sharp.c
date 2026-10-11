@@ -2525,14 +2525,13 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 	const sharp_type *substituted = sharp_type_intern(list, !reader.names || (!names_this && !method), &reader.arena);
 	zend_arena_destroy(reader.arena);
 
-	/* A list that lives for the request, which unserialize or a substitution makes, never goes in the cache. */
-	if ((!own || sharp_type_is_persistent(own)) && (!method || sharp_type_is_persistent(method))
-		&& sharp_type_is_persistent(substituted)) {
-		cache[0] = (void *) ce;
-		cache[1] = (void *) own;
-		cache[2] = (void *) method;
-		cache[3] = (void *) substituted;
-	}
+	/* Every user run-time cache lives for one request: zend_activate zeroes the dynamic map_ptr table, and accel_activate
+	 * the preloaded caches. A list that lives for the request, which unserialize or a substitution makes, is freed at
+	 * request end after every object, so the site keeps it as it keeps one the process holds. */
+	cache[0] = (void *) ce;
+	cache[1] = (void *) own;
+	cache[2] = (void *) method;
+	cache[3] = (void *) substituted;
 
 	return substituted;
 }
