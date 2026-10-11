@@ -1,0 +1,366 @@
+namespace Billing;
+
+public abstract class DatabaseEntity
+{
+    public int id { get; }
+
+    public DatabaseEntity(int id)
+    {
+        this.id = id;
+    }
+
+    public static bool operator ==(DatabaseEntity a, DatabaseEntity b) => a.id == b.id;
+
+    public int hash() => this.id;
+}
+
+public class Order : DatabaseEntity
+{
+}
+
+public class Cart
+{
+}
+
+public class Money
+{
+    public static int equalityRuns { get; private set; } = 0;
+
+    public int cents { get; }
+    public string currency { get; }
+
+    public Money(int cents, string currency)
+    {
+        this.cents = cents;
+        this.currency = currency;
+    }
+
+    public static bool operator ==(Money a, Money b)
+    {
+        Money.equalityRuns += 1;
+        return a.cents == b.cents && a.currency == b.currency;
+    }
+
+    public int hash() => this.cents;
+
+    public static int operator <=>(Money a, Money b) => a.currency == b.currency ? a.cents <=> b.cents : a.currency <=> b.currency;
+
+    public static Money operator +(Money a, Money b) => new Money(a.cents + b.cents, a.currency);
+
+    public static Money operator -(Money a, Money b) => new Money(a.cents - b.cents, a.currency);
+
+    public static Money operator *(Money a, int factor) => new Money(a.cents * factor, a.currency);
+
+    public static Money operator /(Money a, int parts) => new Money(a.cents / parts, a.currency);
+
+    public static Money operator %(Money a, int parts) => new Money(a.cents % parts, a.currency);
+
+    public static Money operator **(Money a, int power) => new Money(a.cents ** power, a.currency);
+
+    public static Money operator -(Money a) => new Money(-a.cents, a.currency);
+}
+
+public class Line
+{
+    public string sku { get; }
+    public Money price { get; }
+
+    public Line(string sku, Money price)
+    {
+        this.sku = sku;
+        this.price = price;
+    }
+}
+
+public class Operators
+{
+    public bool sameOrder(Order order, Order sameOrderLoadedAgain) => order == sameOrderLoadedAgain;
+
+    public bool sameCart(Cart cart, Cart sameCartAgain) => cart === sameCartAgain;
+
+    public bool same(string a, string b) => a == b;
+
+    public bool sameNumber(int a, float b) => a == b;
+
+    public bool before(string a, string b) => a < b;
+
+    public bool unpriced(Money? price) => price == null;
+
+    public bool priceIsZero(Money? price, Money zero) => price == zero;
+
+    public bool priceIsNotZero(Money? price, Money zero) => price != zero;
+
+    public bool totalIsZero(Money total, Money zero) => total == zero;
+
+    public bool priced(Money? price)
+    {
+        if (price != null) {
+            return true;
+        }
+        return false;
+    }
+
+    public bool present(Money? price)
+    {
+        if (price is not null) {
+            return true;
+        }
+        return false;
+    }
+
+    public Money sum(Money a, Money b) => a + b;
+
+    public Money difference(Money a, Money b) => a - b;
+
+    public Money scaled(Money a, int factor) => a * factor;
+
+    public Money split(Money a, int parts) => a / parts;
+
+    public Money leftover(Money a, int parts) => a % parts;
+
+    public Money raised(Money a, int power) => a ** power;
+
+    public Money refund(Money a) => -a;
+
+    public bool cheaper(Money a, Money b) => a < b;
+
+    public int compared(Money a, Money b) => a <=> b;
+
+    public Money settled(Money total, Money paid, int parts)
+    {
+        let left = total;
+        left -= paid;
+        left %= parts;
+        return left;
+    }
+
+    public List<Line> byPrice(List<Line> lines) => lines.sortedBy(l => l.price);
+
+    public List<string> byCode(List<string> codes) => codes.sortedBy(code => code);
+
+    public int flags(int read, int write, int delete)
+    {
+        let permissions = read | write;
+        permissions |= delete;
+        if (permissions & write != 0) {
+            permissions ^= read;
+        }
+        if ((permissions & write) != 0) {
+            permissions = permissions << 1;
+        }
+        return permissions;
+    }
+
+    public int cleared(int permissions, int flag) => permissions & ~flag;
+
+    public int remainder(int total, int size)
+    {
+        let left = total;
+        left %= size;
+        return left;
+    }
+
+    public int mask(int count)
+    {
+        const mask = 1 << count;
+        return mask;
+    }
+
+    public string active(Status status)
+    {
+        string label = match (status) {
+            Status.Active => "on",
+            Status.Paused => "paused",
+            Status.Closed => "closed",
+        };
+        return label;
+    }
+
+    public string size(int n)
+    {
+        string size = match (n) {
+            200 => "exact",
+            < 10 => "small",
+            >= 1000 and < 10000 => "large",
+            default => "other",
+        };
+        return size;
+    }
+
+    public string limited(Any? value)
+    {
+        const limit = 10;
+        const label = match (value) {
+            limit => "at the limit",
+            Circle => "a circle",
+            default => "other",
+        };
+        return label;
+    }
+
+    public string shape(Response response)
+    {
+        return match (response) {
+            { status: 200, body: string body } => body,
+            default => "",
+        };
+    }
+
+    public bool answered(Response response)
+    {
+        if (response is { status: 200 }) {
+            return true;
+        }
+        return false;
+    }
+
+    public bool json(Response response)
+    {
+        if (response is { status: 200, body: { type: "json" } }) {
+            return true;
+        }
+        return false;
+    }
+
+    public int paid(Payment result)
+    {
+        if (result is Paid p) {
+            return p.amount;
+        }
+        const paid = result as Paid;
+        return paid?.amount ?? 0;
+    }
+
+    public Paid required(Payment result)
+    {
+        const paid = result as Paid ?? throw new NotPaid(result);
+        return paid;
+    }
+
+    public string design(Any? entity)
+    {
+        if (entity is HasDesign) {
+            return entity.designKey();
+        }
+        return "";
+    }
+
+    public int total(Tab order)
+    {
+        if (order.total is int t) {
+            return t + 1;
+        }
+        return 0;
+    }
+
+    public float area(Any? shape)
+    {
+        let area = 0.0;
+        if (shape is Circle circle) {
+            area = circle.radius;
+        }
+        return area;
+    }
+
+    public Receipt checkout(Map<string, Any?> payload, string plan, Map<string, Any?> prices)
+    {
+        if (payload.get("orderId") is not int orderId) { throw new BadPayload("orderId"); }
+        if (prices.get(plan) is not int price) { return Receipt.unknownPlan(plan); }
+        return this.charge(orderId, price);
+    }
+
+    private Receipt charge(int orderId, int price) => new Receipt(`${orderId}: ${price}`);
+
+    public bool undesigned(Any? entity)
+    {
+        if (entity is not HasDesign) {
+            return true;
+        }
+        return false;
+    }
+
+    public bool unsettled(Payment result)
+    {
+        if (result is not (Paid or Refunded)) {
+            return true;
+        }
+        return false;
+    }
+
+    public bool coded(string? code)
+    {
+        if (code is not null and not "") {
+            return true;
+        }
+        return false;
+    }
+
+    public int nested(bool a, bool c, int b, int d, int e) => a ? b : (c ? d : e);
+}
+
+public class Invoice
+{
+    public int total { get; set; }
+    public Money balance { get; set; }
+
+    public Invoice(int total, Money balance)
+    {
+        this.total = total;
+        this.balance = balance;
+    }
+}
+
+public class InvoiceQueue
+{
+    public int calls { get; private set; } = 0;
+    private Invoice invoice;
+
+    public InvoiceQueue(Invoice invoice)
+    {
+        this.invoice = invoice;
+    }
+
+    public Invoice next()
+    {
+        this.calls += 1;
+        return this.invoice;
+    }
+
+    public int halve()
+    {
+        this.next().total /= 2;
+        return this.invoice.total;
+    }
+
+    public Money halveBalance()
+    {
+        this.next().balance /= 2;
+        return this.invoice.balance;
+    }
+
+    public int halveTwice()
+    {
+        this.next().total /= (this.next().total /= 2);
+        return this.invoice.total;
+    }
+}
+
+public class Grade
+{
+    public int score { get; }
+
+    public Grade(int score)
+    {
+        this.score = score;
+    }
+
+    public static int operator <=>(Grade a, Grade b)
+    {
+        if (a.score < 0 || b.score < 0) {
+            throw new Ungraded("a negative grade has no order");
+        }
+        return a.score <=> b.score;
+    }
+
+    public static List<Grade> ranked(List<Grade> grades) => grades.sortedBy(grade => grade);
+}

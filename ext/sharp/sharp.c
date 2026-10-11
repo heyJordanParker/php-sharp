@@ -17,6 +17,7 @@
 #include "ext/standard/basic_functions.h"
 #include "ext/standard/info.h"
 #include "zend_closures.h"
+#include "zend_enum.h"
 #include "zend_exceptions.h"
 #include "zend_language_parser.h"
 #include "zend_smart_str.h"
@@ -1333,11 +1334,39 @@ ZEND_METHOD(Sharp_Collection, associateBy)
 	sharp_collection_key_by(INTERNAL_FUNCTION_PARAM_PASSTHRU, false);
 }
 
-/* Orders two [key, element] pairs by key, as PHP's <=> does, and equal keys by their original order,
- * which zend_hash_sort keeps in each bucket's extra space, so the sort is stable as Kotlin's is. */
+/* Orders two [key, element] pairs by key, as PHP#'s <=> does: two objects by the op_Comparison the left key's
+ * class declares or inherits, else the right key's, two strings by their bytes, and other keys as PHP's <=> does.
+ * Equal keys keep their original order, which zend_hash_sort keeps in each bucket's extra space, so the sort is
+ * stable as Kotlin's is. A call that throws leaves the exception for sortedBy to throw. */
 static int sharp_collection_compare_keys(Bucket *a, Bucket *b)
 {
-	int result = zend_compare(zend_hash_index_find(Z_ARRVAL(a->val), 0), zend_hash_index_find(Z_ARRVAL(b->val), 0));
+	zval *left = zend_hash_index_find(Z_ARRVAL(a->val), 0);
+	zval *right = zend_hash_index_find(Z_ARRVAL(b->val), 0);
+	zend_class_entry *scope = NULL;
+	zend_function *comparison = NULL;
+	int result;
+
+	if (Z_TYPE_P(left) == IS_OBJECT && Z_TYPE_P(right) == IS_OBJECT) {
+		scope = Z_OBJCE_P(left);
+		comparison = zend_hash_str_find_ptr(&scope->function_table, ZEND_STRL("op_comparison"));
+		if (!comparison) {
+			scope = Z_OBJCE_P(right);
+			comparison = zend_hash_str_find_ptr(&scope->function_table, ZEND_STRL("op_comparison"));
+		}
+	}
+
+	if (comparison) {
+		zval keys[2], order;
+		ZVAL_COPY_VALUE(&keys[0], left);
+		ZVAL_COPY_VALUE(&keys[1], right);
+		ZVAL_UNDEF(&order);
+		zend_call_known_function(comparison, NULL, scope, &order, 2, keys, NULL);
+		result = Z_TYPE(order) == IS_LONG ? ZEND_NORMALIZE_BOOL(Z_LVAL(order)) : 0;
+	} else if (Z_TYPE_P(left) == IS_STRING && Z_TYPE_P(right) == IS_STRING) {
+		result = ZEND_NORMALIZE_BOOL(zend_binary_zval_strcmp(left, right));
+	} else {
+		result = zend_compare(left, right);
+	}
 
 	if (result) {
 		return result;
@@ -3031,6 +3060,84 @@ static zend_class_entry *register_class_Sharp_List(void)
 	return zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES);
 }
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Set_from, 0, 1, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, values, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
+/* The key a Set holds element under, as PHP stores an array key: a backed enum case's value or the
+ * element itself, with a numeric string as its int, so name is NULL for an int key. False after a
+ * TypeError for any other element. */
+static bool sharp_set_key(zval *element, zend_ulong *index, zend_string **name)
+{
+	if (Z_TYPE_P(element) == IS_OBJECT && (Z_OBJCE_P(element)->ce_flags & ZEND_ACC_ENUM)
+		&& Z_OBJCE_P(element)->enum_backing_type != IS_UNDEF) {
+		element = zend_enum_fetch_case_value(Z_OBJ_P(element));
+	}
+	if (Z_TYPE_P(element) == IS_LONG) {
+		*index = (zend_ulong) Z_LVAL_P(element);
+		*name = NULL;
+		return true;
+	}
+	if (Z_TYPE_P(element) == IS_STRING) {
+		*name = ZEND_HANDLE_NUMERIC(Z_STR_P(element), *index) ? NULL : Z_STR_P(element);
+		return true;
+	}
+
+	zend_argument_type_error(1, "must hold only int, string or backed enum values, %s given", zend_zval_value_name(element));
+	return false;
+}
+
+/* Spec section 12: the Set of values's elements in their first order, each under its key. A PHP#
+ * method runs it on each Set parameter, which a List or plain PHP may pass, so an array that is
+ * already a Set comes back as it is, after one pass and no copy. */
+ZEND_METHOD(Sharp_Set, from)
+{
+	zval *values, *element;
+	zend_ulong held_index, index;
+	zend_string *held_name, *name;
+	bool is_set = true;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ARRAY(values)
+	ZEND_PARSE_PARAMETERS_END();
+
+	ZEND_HASH_FOREACH_KEY_VAL(Z_ARRVAL_P(values), held_index, held_name, element) {
+		ZVAL_DEREF(element);
+		if (!sharp_set_key(element, &index, &name)) {
+			RETURN_THROWS();
+		}
+		is_set = is_set && (name ? held_name && zend_string_equals(held_name, name) : !held_name && held_index == index);
+	} ZEND_HASH_FOREACH_END();
+	if (is_set) {
+		RETURN_COPY(values);
+	}
+
+	HashTable *set = zend_new_array(zend_hash_num_elements(Z_ARRVAL_P(values)));
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(values), element) {
+		ZVAL_DEREF(element);
+		sharp_set_key(element, &index, &name);
+		if (name ? zend_hash_add(set, name, element) : zend_hash_index_add(set, index, element)) {
+			Z_TRY_ADDREF_P(element);
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	RETURN_ARR(set);
+}
+
+static const zend_function_entry class_Sharp_Set_methods[] = {
+	ZEND_ME(Sharp_Set, from, arginfo_class_Sharp_Set_from, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_FE_END
+};
+
+static zend_class_entry *register_class_Sharp_Set(void)
+{
+	zend_class_entry ce;
+
+	INIT_NS_CLASS_ENTRY(ce, "Sharp", "Set", class_Sharp_Set_methods);
+
+	return zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES);
+}
+
 static PHP_MINIT_FUNCTION(sharp)
 {
 	REGISTER_INI_ENTRIES();
@@ -3045,6 +3152,7 @@ static PHP_MINIT_FUNCTION(sharp)
 
 	register_class_Sharp_Position();
 	register_class_Sharp_List();
+	register_class_Sharp_Set();
 
 	zend_class_entry *environment = register_class_Sharp_Environment();
 	memcpy(&sharp_environment_handlers, &std_object_handlers, sizeof(zend_object_handlers));

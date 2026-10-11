@@ -3,7 +3,7 @@
 # built from this repository's source instead of the php.net tarball.
 #
 
-FROM debian:trixie-slim AS source
+FROM public.ecr.aws/docker/library/debian:trixie-slim AS source
 
 RUN set -eux; \
 	apt-get update; \
@@ -26,7 +26,7 @@ RUN set -eux; \
 	cd /usr/src; \
 	tar -cJf php.tar.xz --owner=0 --group=0 --numeric-owner --sort=name php
 
-FROM debian:trixie-slim
+FROM public.ecr.aws/docker/library/debian:trixie-slim
 
 # prevent Debian's PHP packages from being installed
 # https://github.com/docker-library/php/pull/542

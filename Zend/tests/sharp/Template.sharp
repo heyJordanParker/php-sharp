@@ -31,4 +31,8 @@ b`;
     {
         return `${`x`}`;
     }
+
+    public static string paid(bool isPaid) => `Paid: ${isPaid}`;
+
+    public static string totals(int count, float ratio, string name) => `Total: ${count}, ratio ${ratio}, name ${name}`;
 }

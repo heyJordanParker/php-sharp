@@ -29,6 +29,8 @@ sharp/bin/test --differential   # also check that php -l compiles every Zend/tes
 sharp/bin/test --upstream       # run Zend/tests, ext/reflection, ext/tokenizer and ext/opcache
 ```
 
+`sharp/bin/test` first compares the version and Mago commit the built engine prints in `php --ri sharp` with `PHP_SHARP_VERSION` in `ext/sharp/php_sharp.h` and `SHARP_MAGO_COMMIT` in `ext/sharp/sharp_unit.h`, and refuses to run until `sharp/bin/build` rebuilds an engine that differs.
+
 The engine runs only `.sharpc` files that `mago compile` wrote. So before any test runs, `sharp/bin/test` installs `mago` from the Mago commit that `SHARP_MAGO_COMMIT` in `ext/sharp/sharp_unit.h` names, under `sharp/build/<os>-<arch>/mago`, and runs `mago compile` from the repository root into its `.sharp/` folder. `Zend/tests/sharp/mago.toml` makes the `.sharp` fixtures, the plain PHP classes and functions they call, in `Zend/tests/sharp/harness/`, and the standard library in `sharp/composer/library/` one checker project. A fixture the checker refuses fails the run, because a refusal is Mago's to test. Tests that build their own project, such as the refusal tests, find `mago` in `TEST_MAGO_EXECUTABLE`.
 
 `--differential` checks that every `.sharp` fixture `mago compile` accepted makes `php -l` print nothing but "No syntax errors detected", so a compile warning or deprecation also fails the run.
