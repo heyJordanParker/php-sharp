@@ -14,8 +14,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
   cancel-in-progress: true
 jobs:
-  # LINUX and MACOS are required checks, so the workflow always runs and they skip a change
-  # to documentation alone. GitHub counts a job skipped by its `if` as passing.
+  # CI_PASSED is the one required check, so the workflow always runs, and LINUX, MACOS and
+  # PLAIN_PHP skip a change to documentation alone.
   CHANGES:
     runs-on: ubuntu-24.04
     outputs:
@@ -189,6 +189,19 @@ jobs:
           composer require --no-interaction --dev heyjordanparker/mago-sharp:^0.3
           vendor/bin/mago analyze
           vendor/bin/mago compile
+  # The one required check. A matrix job skipped by its `if` reports one check under the job's
+  # name, not one per platform, so CI_PASSED stands in for every job it needs. It fails when any
+  # of them failed or was cancelled.
+  CI_PASSED:
+    if: always()
+    needs: [CHANGES, LINUX, MACOS, PLAIN_PHP]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Every job passed, or skipped a change to documentation alone
+        uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # release/v1
+        with:
+          allowed-skips: LINUX, MACOS, PLAIN_PHP
+          jobs: ${{ toJSON(needs) }}
   COMPOSER:
     needs: [LINUX, MACOS, PLAIN_PHP]
     if: ${{ !failure() && !cancelled() && github.event_name == 'push' }}
