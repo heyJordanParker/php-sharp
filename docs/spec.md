@@ -206,23 +206,6 @@ private void touch() { }
 public string name { get; set; didSet => this.touch(); }
 ```
 
-<!-- example probe-opener: members -->
-```csharp
-public int renew()
-{
-    int total = 1;          // compile error: the rule this example states
-}
-```
-
-<!-- example probe-lambda: statements
-List<int> numbers = [1, 2, 3];
--->
-```csharp
-int f = numbers.filter(n => {
-    return true;            // compile error: the rule this example states
-});
-```
-
 ### 6.3 Typed property references
 
 `nameof(Order.total)` names a property. The reference is typed, and the checker rejects a misspelled or removed property wherever it is used. It sits beside `typeof(Order)` (section 25), as in C#'s `nameof`.
