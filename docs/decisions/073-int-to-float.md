@@ -2,7 +2,7 @@
 
 ## Decision
 
-In PHP# code, an `int` value where a `float` is expected is a compile error, "`int` is not `float`: write 0.0, or convert with (float) n". The rule covers every place a value lands, such as an assignment, an argument, a return, a property write, a list or map element, or a generic `T` that is `float`. A literal `0` is an `int`, as in Kotlin. Arithmetic that mixes an `int` and a `float`, such as `count * 1.5`, gives a `float` and compiles. Plain PHP keeps PHP's rules, so a plain-PHP caller that passes an `int` to a PHP# `float` parameter gets PHP's own conversion.
+In PHP# code, an `int` value where a `float` is expected is a compile error, "`int` is not `float`: write 0.0, or convert with (float) n". The rule covers every place a value lands, such as an assignment, an argument, a return, a property write, a list or map element, or a generic `T` that is `float`. A literal `0` is an `int`, as in Kotlin. Arithmetic that mixes an `int` and a `float`, such as `count * 1.5`, gives a `float` and compiles. Decision 74 sets the rule for an `int` from plain PHP: it becomes a `float` wherever PHP# expects a `float`.
 
 ## Options
 

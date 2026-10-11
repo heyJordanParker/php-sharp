@@ -407,7 +407,7 @@ OrderRow order = OrderRow.parse(row);   // row is a plain PHP object from a data
 - Reflection shows `PaginatedList<Order>`.
 - Plain PHP reads an object's type arguments with `ReflectionObject::getTypeArguments()`, as C#'s `Type.GetGenericArguments()` does. A class value reaches plain PHP as a plain class-name string (section 25), so it carries none.
 - `page is PaginatedList<Order>` is checked while the code runs.
-- A value of the wrong type throws a `TypeError` where it enters PHP# from plain PHP. Section 12 lists where a value enters.
+- A value of the wrong type throws a `TypeError` where it enters PHP# from plain PHP. Section 12 lists where a value enters. An `int` where PHP# expects a `float` does not throw: it becomes a `float` (section 24).
 
 **Each type argument of a generic class has its own static members,** as in C#. `Counter<Order>.count` is separate from `Counter<User>.count`, and a static member may use the class's type parameters:
 
@@ -554,7 +554,7 @@ copy.add(line);           // changes only copy
 - a typed assignment takes a value that plain PHP returned
 - plain PHP writes a PHP# property
 
-At each crossing, the runtime checks every element once and throws a `TypeError` that names the element. A call from PHP# to PHP# checks nothing at runtime, because the checker proved it.
+At each crossing, the runtime checks every element once and throws a `TypeError` that names the element. An `int` where PHP# expects a `float` does not throw: it becomes a `float` (section 24). A call from PHP# to PHP# checks nothing at runtime, because the checker proved it.
 
 `as` to a collection type checks every element too, wherever the value came from, and gives null if any element is wrong (section 21).
 
@@ -1787,7 +1787,15 @@ bool same = cell.get() == 2.0;       // true
 
 - A literal `0` is an `int`, as in Kotlin.
 - Arithmetic that mixes an `int` and a `float`, such as `count * 1.5`, gives a `float` and compiles.
-- Plain PHP keeps PHP's rules, so a plain-PHP caller that passes an `int` to a PHP# `float` parameter gets PHP's own conversion.
+- An `int` from plain PHP becomes a `float` wherever PHP# expects a `float`, such as a parameter, a generic `T` that is `float`, the elements of a `List<float>` or a `Set<float>`, and the values of a `Map<K, float>`. PHP# code then sees what its type says, so `cell.get() == 2.0` is true.
+
+```php
+<?php declare(strict_types=1);
+
+$price->set(5);              // PHP# set(float value): value is 5.0
+$cell->put(2);               // PHP# Cell<float>: the cell holds 2.0
+$report->total([1, 2, 3]);   // PHP# total(List<float> amounts): amounts is [1.0, 2.0, 3.0]
+```
 
 **Converting values:**
 
