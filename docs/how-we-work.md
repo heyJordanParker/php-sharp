@@ -35,6 +35,8 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 3. Cass checks the architecture across the whole system and the plan, and posts an approval on the PR. If Cass asks for changes, the builder makes them and the reviewer reviews again.
 4. The builder merges with `gh pr merge --merge --match-head-commit <full head SHA>`.
 
+A PR that finishes spec sections says so in its body, on a line such as `Completes: §6.1, §9`. The `COMPLETES` check fails while `sharp/baseline/spec` still lists an example of a named section.
+
 A mago-sharp PR merges before the php-sharp PR that pins it. The builder then re-pins the php-sharp PR once, to the mago-sharp merge commit.
 
 Master requires CI to pass. It doesn't require a branch to include the latest master. CI runs on master after every merge, and a red master is fixed before anything else merges.
@@ -61,7 +63,7 @@ PHP# supports macOS and Linux. CI and releases build for those two only.
 
 ## Where things are written
 
-- `docs/spec.md`: the language, as the Architect approved it.
+- `docs/spec.md`: the language, as the Architect approved it. CI compiles and runs its examples, and `sharp/baseline/spec` lists the ones that fail today, which is the distance to v1.
 - `docs/decisions/`: each approved language proposal, with the options it chose between.
 - `docs/architecture/`: how the checker and the engine are built, and why. Until it lands, the architecture is in `~/Developer/php-sharp/sharp/agents/architecture.md`, which git ignores.
 - `docs/how-we-work.md`: this file.

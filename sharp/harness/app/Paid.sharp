@@ -1,0 +1,6 @@
+namespace App;
+
+public class Paid : Payment
+{
+    public int amount { get; set; } = 1500;
+}

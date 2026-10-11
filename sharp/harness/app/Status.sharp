@@ -1,0 +1,9 @@
+namespace App;
+
+public enum Status : string
+{
+    case Active = "active";
+    case Paused = "paused";
+    case Closed = "closed";
+    case Paid = "paid";
+}

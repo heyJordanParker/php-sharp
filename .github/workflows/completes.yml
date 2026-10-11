@@ -1,0 +1,48 @@
+name: Completes
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches:
+      - master
+permissions:
+  contents: read
+jobs:
+  # A pull request body line such as `Completes: §6.1, §9` claims those sections are done, so
+  # sharp/baseline/spec at the pull request's head lists no example in them. `§9` covers `§9.1`.
+  # It runs on `edited` too, so an edited body is checked again, which the main workflow never does.
+  COMPLETES:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: git checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Every section the body completes has no entry in sharp/baseline/spec
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          sections="$(printf '%s\n' "$BODY" | tr -d '\r' | sed -n 's/^Completes:[[:space:]]*//p' | tr ',' '\n' | tr -d ' ')"
+          if [[ -z "$sections" ]]; then
+            echo "The pull request body has no Completes: line."
+            exit 0
+          fi
+          list="$(git show HEAD:sharp/baseline/spec)"
+          failed=false
+          while read -r section; do
+            if [[ ! "$section" =~ ^(§[0-9]+(\.[0-9]+)*|README)$ ]]; then
+              echo "::error::Completes: names \`$section\`, and a section is written §9, §6.1 or README."
+              failed=true
+              continue
+            fi
+            entries="$(awk -F '\t' -v section="$section" '$1 == section || index($1, section ".") == 1' <<<"$list")"
+            if [[ -n "$entries" ]]; then
+              echo "::error::The body completes $section, and sharp/baseline/spec still lists these of its examples:"
+              printf '%s\n' "$entries"
+              failed=true
+            else
+              echo "$section has no entry in sharp/baseline/spec."
+            fi
+          done <<<"$sections"
+          if $failed; then
+            exit 1
+          fi

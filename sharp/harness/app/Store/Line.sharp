@@ -1,0 +1,6 @@
+namespace App.Store;
+
+public class Line
+{
+    public Line(public int amount { get; }, public bool refunded { get; }) { }
+}
