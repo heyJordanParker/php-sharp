@@ -39,6 +39,8 @@ A PR that finishes spec sections says so in its body, on its own line, exactly a
 
 A builder PR leaves the spec's examples, `sharp/harness/` and `sharp/bin/spec` as master has them. Only a spec PR changes them. When the builder's work makes listed examples pass, the failing run prints the `cp` command that writes the shorter list, and the entries leave through it.
 
+New example-marker or run-comment syntax lands in `sharp/bin/spec` one PR before the examples use it, because CI reads a PR's spec with the base's checker.
+
 A mago-sharp PR merges before the php-sharp PR that pins it. The builder then re-pins the php-sharp PR once, to the mago-sharp merge commit.
 
 Master requires CI to pass. It doesn't require a branch to include the latest master. CI runs on master after every merge, and a red master is fixed before anything else merges.

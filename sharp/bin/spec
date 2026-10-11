@@ -5,9 +5,9 @@
 // sharp/bin/test --spec runs it on the built engine, with the pinned mago in TEST_MAGO_EXECUTABLE.
 //
 // With --base <commit>, it instead compares sharp/baseline/spec and the examples with that commit. CI runs the base
-// commit's copy of this script, so a pull request's own checker never judges it. It fails when an example whose code
-// and setup are the same at both commits joins the list or gains a refusal, and when a pull request that changes
-// anything outside the spec files also changes an example, the harness or this script.
+// commit's copy of this script, so a pull request's own checker never judges it. It fails when an example whose
+// fingerprint is the same at both commits joins the list or gains a refusal, and when a pull request that changes
+// anything outside the spec files also changes an example's fingerprint, the harness or this script.
 //
 // With --completes, it reads the pull request body from BODY and fails unless every section its `Completes:` line names
 // has a checked example and no entry in sharp/baseline/spec. Neither mode needs a build.
@@ -24,6 +24,9 @@ const MARKER = '<!-- example ';
 const RUN_MARKER = '<!-- run ';
 const REFUSAL = 'not supported yet';
 const RUNTIME = ['value', 'throws', 'message'];
+// The errors mago reports at a construct's first line for the whole construct, by code, or by message when the code is
+// the generic `semantics`. Only these move to the `compile error` line inside the construct. A new one joins in a spec PR.
+const MOVES = ['match-not-exhaustive', 'rejected-nullable-parameter', 'A `match` needs a `default` arm.'];
 const SECTION = '§\d+(?:\.\d+)*|README';
 const PARALLEL = 4;
 const TYPE_DECLARATION = '~^(?:\[.*\]\s*)*(?:(?:public|private|protected|internal|abstract|final|sealed|static|readonly|foreign|extern)\s+)*(?:class|struct|enum|interface|event|trait|module)\b|^extern\b|^module\b~';
@@ -70,8 +73,9 @@ function git(string $root, string ...$arguments): string
 /**
  * Every example of README.md and docs/spec.md, by id, from the working tree or from $commit.
  *
- * The fingerprint covers every marker, setup line, code line and run line of the example, all but its id, so a
- * renamed example keeps its fingerprint. `codes` holds a hash of each block's code alone, which an `ignore` marker keeps.
+ * The fingerprint covers the whole example but its id: its section, and every block's marker line, setup, fence
+ * language, code and run comment. So a renamed example keeps its fingerprint, and any other change gives it a new one.
+ * `codes` holds a hash of each block's code alone, which an `ignore` marker keeps.
  *
  * @return array<string, array{id: string, section: string, ignore: ?string, fingerprint: string, codes: list<string>, blocks: list<array>}>
  */
@@ -86,7 +90,11 @@ function examples(string $root, ?string $commit = null): array
             if (isset($examples[$id]) && $last !== $id) {
                 fail("$document:$block[fence]: the id $id is already used by another example. Blocks of one example follow each other.");
             }
-            $examples[$id] ??= ['id' => $id, 'section' => $block['section'], 'ignore' => null, 'fingerprint' => '', 'codes' => [], 'blocks' => []];
+            $before = isset($examples[$id]) ? $examples[$id]['blocks'][array_key_last($examples[$id]['blocks'])] : null;
+            if ($before !== null && $before['run'] !== null) {
+                fail("{$before['run']['marker']}: a run comment follows the last block of its example, and $id has another block after it.");
+            }
+            $examples[$id] ??= ['id' => $id, 'section' => $block['section'], 'ignore' => null, 'fingerprint' => sha1($block['section']), 'codes' => [], 'blocks' => []];
             $examples[$id]['blocks'][] = $block;
             $examples[$id]['ignore'] ??= $block['ignore'];
             $examples[$id]['fingerprint'] = sha1($examples[$id]['fingerprint'] . $block['fingerprint']);
@@ -100,7 +108,8 @@ function examples(string $root, ?string $commit = null): array
 
 /**
  * Moves an example's run lines into a block that runs them: the end of its last block when that block's statements
- * run, and otherwise a `statements in ExampleRun` block of their own.
+ * run, and otherwise a `statements in ExampleRun` block of their own. A block's `run_from` is the index of its first
+ * run line.
  */
 function attach_run(array $example): array
 {
@@ -111,13 +120,14 @@ function attach_run(array $example): array
     }
     $block = $example['blocks'][$last];
     if ($block['language'] === 'sharp' && $block['shape'] === 'statements') {
+        $example['blocks'][$last]['run_from'] = count($block['lines']);
         $example['blocks'][$last]['lines'] = [...$block['lines'], ...$run['lines']];
         $example['blocks'][$last]['at'] = [...$block['at'], ...$run['at']];
     } else {
         $example['blocks'][] = [
             'id' => $block['id'], 'shape' => 'statements', 'class' => 'ExampleRun', 'alone' => null, 'ignore' => null, 'setup' => [],
             'document' => $block['document'], 'fence' => $run['at'][0] - 1, 'section' => $block['section'], 'language' => 'sharp',
-            'lines' => $run['lines'], 'at' => $run['at'], 'run' => null, 'fingerprint' => '',
+            'lines' => $run['lines'], 'at' => $run['at'], 'run' => null, 'run_from' => 0, 'fingerprint' => '',
         ];
     }
 
@@ -171,13 +181,19 @@ function blocks(string $document, string $text): array
             $run = null;
             if (str_starts_with($lines[$i + 1] ?? '', RUN_MARKER)) {
                 $i++;
+                $run = ['marker' => "$document:" . ($i + 1), 'lines' => [], 'at' => []];
                 if (rtrim($lines[$i]) !== RUN_MARKER . $marker['id']) {
-                    fail("$document:" . ($i + 1) . ": a run marker reads `<!-- run $marker[id]`, with the id of the block above it, and its run lines below.");
+                    fail("$run[marker]: a run marker reads `<!-- run $marker[id]`, with the id of the block above it, and its run lines below.");
                 }
-                $run = ['lines' => [], 'at' => []];
                 while (++$i < $count && $lines[$i] !== '-->') {
+                    if (str_starts_with($lines[$i], '```') || str_starts_with($lines[$i], '<!--')) {
+                        break;
+                    }
                     $run['lines'][] = $lines[$i];
                     $run['at'][] = $i + 1;
+                }
+                if (($lines[$i] ?? null) !== '-->') {
+                    fail("$run[marker]: the run comment has no `-->` line after its run lines.");
                 }
             }
             $blocks[] = $marker + [
@@ -188,7 +204,7 @@ function blocks(string $document, string $text): array
                 'lines' => $code,
                 'at' => range($fence + 1, $fence + count($code)),
                 'run' => $run,
-                'fingerprint' => sha1(implode("\0", [$marker['header'], ...$marker['setup'], '```', ...$code, '<!-- run', ...($run['lines'] ?? [])])),
+                'fingerprint' => sha1(implode("\0", [$marker['header'], ...$marker['setup'], "```$m[1]", ...$code, ...($run === null ? [] : [RUN_MARKER, ...$run['lines']])])),
             ];
             $marker = null;
         } elseif (str_starts_with($line, RUN_MARKER)) {
@@ -579,8 +595,9 @@ function runs(array $block, array $line): bool
 }
 
 /**
- * Whether line $j sits inside the brackets line $i opens, a `{` that starts the next line included. An error mago
- * reports at a construct's first line, such as a `match` that lacks an arm, belongs to a `compile error` line inside it.
+ * Whether line $j sits inside the brackets line $i opens, a `{` that starts the next line included. An error in MOVES
+ * that mago reports at a construct's first line, such as a `match` that lacks an arm, belongs to a `compile error` line
+ * inside it.
  */
 function encloses(array $read, int $i, int $j): bool
 {
@@ -876,7 +893,7 @@ function check_compile(array $example, array $reads, array $files, array $varian
             $refusals["$b:$i:$error[message]"] = true;
         }
         $kind = $read[$i]['expect']['kind'];
-        if ($kind === 'none' || $kind === 'prose') {
+        if (($kind === 'none' || $kind === 'prose') && (in_array($error['code'], MOVES, true) || in_array($error['message'], MOVES, true))) {
             $owners = array_keys(array_filter($read, static fn (array $line, int $j): bool => $line['expect']['kind'] === 'error'
                 && !isset($variant[$b][$j]) && encloses($read, $i, $j), ARRAY_FILTER_USE_BOTH));
             if (count($owners) === 1) {
@@ -948,14 +965,15 @@ function check_run(array $example, array $reads, string $outcomes): array
 
 /**
  * Fails on a value, `throws` or message annotation that no run reaches, such as one on a method's line, unless a run
- * line of the example restates it. A `<!-- run <id> -->` comment after the block holds those run lines.
+ * line of the example restates it. A `<!-- run <id> -->` comment after the example's last block holds those run lines,
+ * and only they restate a claim.
  */
 function check_reached(array $example, array $reads): void
 {
     $restated = [];
     foreach ($example['blocks'] as $b => $block) {
-        foreach ($reads[$b] as $line) {
-            if (in_array($line['expect']['kind'], RUNTIME, true) && runs($block, $line)) {
+        foreach ($reads[$b] as $i => $line) {
+            if ($i >= ($block['run_from'] ?? PHP_INT_MAX) && in_array($line['expect']['kind'], RUNTIME, true) && runs($block, $line)) {
                 $restated[] = $line['expect'];
             }
         }
@@ -1153,9 +1171,10 @@ function parse_list(string $text): array
 }
 
 /**
- * Compares the working tree with $base. A pull request that changes a file outside SPEC_FILES must leave every example,
- * marker, `ignore`, harness file and this script as $base has them, so it can only remove entries. In any pull request,
- * an example whose fingerprint $base also has, under its id or another, never joins the list or gains a refusal.
+ * Compares the working tree with $base. A pull request that changes a file outside SPEC_FILES must leave every example's
+ * fingerprint, the harness files and this script as $base has them, so it can only remove entries. In any pull request,
+ * an example whose fingerprint $base also has, under its id or another, never joins the list or gains a refusal, except
+ * that a renamed example takes over its old id's entry.
  */
 function compare_with_base(string $root, string $base): int
 {
@@ -1192,7 +1211,8 @@ function compare_with_base(string $root, string $base): int
     $added = array_diff_key($after, $before);
     foreach ($added as $id => [$section]) {
         $same = $unchanged($id);
-        if ($same !== null) {
+        // A rename keeps the fingerprint: the entry moves to the new id when the old id was listed and has left the list.
+        if ($same !== null && !(isset($before[$same]) && !isset($after[$same]))) {
             $problems[] = "$section $id joins the list, and its code and setup are the same as $same's at $base.";
         }
     }
@@ -1225,14 +1245,14 @@ function compare_with_base(string $root, string $base): int
 
 /**
  * Checks a pull request body's `Completes: §6.1, §9` line: every section it names, its subsections included, has a
- * checked example and no entry in sharp/baseline/spec. Any other line with a `Completes:` label fails, so a claim the
- * check can't read never passes in silence.
+ * checked example and no entry in sharp/baseline/spec. Any other line with a `Completes:` label, or that starts with
+ * the word, fails, so a claim the check can't read never passes in silence.
  */
 function completes(string $root, string $body): int
 {
     $sections = [];
     foreach (preg_split('~\r?\n~', $body) as $line) {
-        if (!preg_match('~completes[*_`\s]*:~i', $line)) {
+        if (!preg_match('~completes[*_`\s]*:|^\W*completes\b~i', $line)) {
             continue;
         }
         if (!preg_match('~^Completes: ((?:' . SECTION . ')(?:, (?:' . SECTION . '))*)$~u', rtrim($line), $m)) {

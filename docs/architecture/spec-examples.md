@@ -38,7 +38,7 @@ Every `csharp`, `ts` and `php` block in `docs/spec.md` and `README.md` has a mar
 - **A template** replaces the shape when none fits. It is the setup with a line holding only `…`, where the block goes. The block's namespace, import and type declaration lines still go to the head of the file, and every other line goes in the `…` slot.
 - **`<!-- example <id>: ignore <reason> -->`** skips a block that is not complete code by design. Only two blocks have it: `naming-values` in §16 and `native-body` in §29. Adding `ignore` to an example that had none counts as adding an entry to the list, also under a new id: an ignored block whose code a checked example ran at the base fails the comparison.
 
-**Run lines** follow the block's closing fence in a second hidden comment, for a claim the block itself can't run:
+**Run lines** follow the closing fence of the example's last block in a second hidden comment, for a claim the block itself can't run:
 
 ```text
 <!-- run <id>
@@ -46,7 +46,11 @@ Every `csharp`, `ts` and `php` block in `docs/spec.md` and `README.md` has a mar
 -->
 ```
 
-Run lines are PHP# and carry annotations like any other line. They run after the block's own lines, in its `run` method when the block is `statements`, and otherwise in a `run` method of their own. A value, `throws` or message annotation that no run reaches, such as `// throws OutOfRangeException when no argument was passed` on a method's line, fails the check before anything compiles, unless a run line of the same example makes the same claim. `environment` (§29) shows its `throws` this way, and `copy-on-write`, `capture-by-reference` and `capture-and-change` check the values their prose states, such as `a.count();   // 1`.
+Run lines are PHP# and carry annotations like any other line. They run after the block's own lines, in its `run` method when the block is `statements`, and otherwise in a `run` method of their own. A value, `throws` or message annotation that no run reaches, such as `// throws OutOfRangeException when no argument was passed` on a method's line, fails the check before anything compiles, unless a run line of the same example makes the same claim. Only a run line restates a claim, never another line of the block. `environment` (§29) shows its `throws` this way, and `copy-on-write`, `capture-by-reference` and `capture-and-change` check the values their prose states, such as `a.count();   // 1`.
+
+A run line calls the code whose claim it restates, as `new Deploy(new Environment()).target();` calls `target()`. The checker can't see that: `throw new OutOfRangeException();   // throws OutOfRangeException` would satisfy the same claim. Only a spec PR changes run lines, so its review checks it.
+
+The check fails at the run marker's own line when a run comment follows a block that is not its example's last, when its id is not the block's, and when it has no `-->` line before the next fence or comment.
 
 ### How a fragment becomes a file
 
@@ -172,7 +176,12 @@ A value is a number, `true`, `false`, `null`, a quoted string, or a balanced `[�
 - **A refusal is not the error the spec means.** An error whose message holds "not supported yet" never satisfies a `compile error` line. It says the feature is missing, not that the rule holds.
 - **A missing class is not the error the spec means either.** mago's `non-existent-class-like` error, such as "Cannot find class, interface, enum, or type alias `App\Mailer`", never satisfies a `compile error` line. It says the setup lacks a name.
 - **A parse error satisfies only a `parse error` line.** That is a parse error mago reports as "Parse error encountered during parsing …", which says the parser could not read the line. A message the parser writes to name a PHP# rule, such as "PHP# has no `echo`: write `printf` or `fwrite`.", satisfies a `compile error` line.
-- **Every error must belong to a line that expects one.** An error belongs to the line its primary span starts on. An error on a line with no annotation, or with prose, moves to a `compile error` line only when that line sits inside the brackets the error's line opens, a `{` that starts the next line included, and only when exactly one such line does. So "A `match` needs a `default` arm.", which mago reports at the `match` keyword, belongs to the arm annotated below it. An error on a line beside the `compile error` line never moves, and an error on a line annotated `compiles` stays on that line. An error no line expects fails the example.
+- **Every error must belong to a line that expects one.** An error belongs to the line its primary span starts on. An error on a line with no annotation, or with prose, moves to a `compile error` line only when three things hold:
+  - mago reports it for a whole construct at the construct's first line. `MOVES` in `sharp/bin/spec` lists those errors: `match-not-exhaustive`, `rejected-nullable-parameter`, and "A `match` needs a `default` arm.", matched by its message because its code is the generic `semantics`. A new one joins the list in a spec PR.
+  - the `compile error` line sits inside the brackets the error's line opens, a `{` that starts the next line included.
+  - exactly one such line does.
+
+  So "A `match` needs a `default` arm.", which mago reports at the `match` keyword, belongs to the arm annotated below it. A method header's "Missing return statement" or a lambda call's "Invalid assignment" never moves into the body. An error on a line annotated `compiles` stays on that line. An error no line expects fails the example.
 
 **A `throws: "<message>"` is compared exactly.** The spec quotes it, and the message is what a caller of `parse` reads.
 
@@ -236,7 +245,7 @@ README	readme-cart	0
 
 **`Completes:` runs in its own workflow,** `.github/workflows/completes.yml`, on the `pull_request` types `opened`, `edited`, `synchronize` and `reopened`. Its one job, `COMPLETES`, runs `sharp/bin/spec --completes` with the body in `BODY`, on the merge commit `LINUX` tests and with the runner's own PHP. It builds nothing, so an edited body reruns it in seconds, and the main workflow never runs on `edited`. A body with no `Completes:` line passes. It fails:
 
-- on any line with a `Completes:` label, in any case or emphasis, that is not exactly `Completes: §6.1, §9` on its own line, such as `- Completes: §6`, `**Completes:** §6` or `completes: §6`;
+- on any line with a `Completes:` label, in any case or emphasis, or that starts with the word, that is not exactly `Completes: §6.1, §9` on its own line, such as `- Completes: §6`, `**Completes:** §6`, `completes: §6` or `Completes §6`;
 - on a named section with no checked example, such as `§99`;
 - on a named section that still has an entry in `sharp/baseline/spec`. `§9` covers `§9` and every `§9.x`.
 
@@ -248,9 +257,13 @@ CI fails in each of the five cases:
 4. **`Completes: §6.1, §9` names a section that still has entries.** `COMPLETES`.
 5. **A PR raises the count of "not supported yet" refusals.** `--base`: an example's last field rises, and the base has an example with the same fingerprint. Each example compares with itself, so a refusal removed in one example can't hide one added in another.
 
-**A builder PR can't change what measures it.** The spec files are `docs/spec.md`, `README.md`, `sharp/baseline/spec`, `sharp/harness/` and `sharp/bin/spec`. A pull request that changes any other file must leave every example exactly as the base has it, its marker, setup, code, run lines and `ignore` included, and must leave `sharp/harness/` and `sharp/bin/spec` unchanged. It can only remove entries and lower refusals, through the `cp` command a failing run prints. An example's fingerprint covers its marker line, all but the id, so a changed shape, `alone` or `in <Class>` counts as an edit, and a renamed example keeps its fingerprint.
+**A builder PR can't change what measures it.** The spec files are `docs/spec.md`, `README.md`, `sharp/baseline/spec`, `sharp/harness/` and `sharp/bin/spec`. A pull request that changes any other file must leave every example's fingerprint as the base has it, and must leave `sharp/harness/` and `sharp/bin/spec` unchanged. It can only remove entries and lower refusals, through the `cp` command a failing run prints.
 
-**Only a spec PR may grow the list.** A new or edited example may join the list only in a pull request that changes nothing outside the spec files. A ruling Jordan approves lands with its examples before any builder implements it, and those examples are v1's remaining work.
+**One fingerprint covers the whole example,** all but its id: its section, and every block's marker line, setup, fence language, code and run comment. A moved example, a renumbered heading, a changed fence language, shape, `alone`, `in <Class>` or `ignore` all change it. A renamed example keeps it. The builder-PR rule compares it by id, and cases 3 and 5 match it across ids.
+
+**Only a spec PR may grow the list.** A new or edited example may join the list only in a pull request that changes nothing outside the spec files. A ruling Jordan approves lands with its examples before any builder implements it, and those examples are v1's remaining work. A spec PR may rename a listed example: the new id takes the entry when the base listed the old id and the head no longer does.
+
+**New marker or run syntax lands in the checker first.** CI reads the head's documents with the base's checker, so a pull request that adds syntax and uses it fails to parse. The checker change merges in one pull request, and the examples that use it in the next.
 
 ## Runtime
 
