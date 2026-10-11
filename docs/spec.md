@@ -598,6 +598,10 @@ Line line = new Line();
 let b = a;
 b.add(line);   // b is copied here, and a is unchanged
 ```
+<!-- run copy-on-write
+a.count();   // 1
+b.count();   // 2
+-->
 
 **A method that changes a collection it was given changes its own copy.** It returns the collection when the caller should see the change:
 
@@ -1111,6 +1115,9 @@ let count = 0;
 const increment = () => { count += 1; };
 increment();   // count is now 1
 ```
+<!-- run capture-by-reference
+count;   // 1
+-->
 
 A lambda that calls `add`, `set` or `remove` on a captured variable changes the variable itself:
 
@@ -1121,6 +1128,9 @@ List<int> numbers = [1, 2, 3];
 List<int> seen = [];
 numbers.filter(n => { seen.add(n); return true; });   // seen now holds every number
 ```
+<!-- run capture-and-change
+seen.count();   // 3
+-->
 
 ### 14.3 Methods as values
 
@@ -2784,6 +2794,9 @@ public class CheckoutController
     public string origin() => _SERVER["HTTP_HOST"];             // compile error: PHP# has no superglobals; take a Request
 }
 ```
+<!-- run environment
+new Deploy(new Environment()).target();   // throws OutOfRangeException
+-->
 
 `Deploy` holds an `Environment`, so it has that effect (see the rule on a class's effects below).
 
@@ -3071,7 +3084,9 @@ public class CheckoutTest { … }
 
 **A missing or mistyped service is a compile error.** The container builds every class through its main constructor (section 9.1), including `on` listeners (section 15).
 
-<!-- example missing-service -->
+<!-- example missing-service
+import App.Mail.Mailer;
+-->
 ```csharp
 public class Checkout
 {

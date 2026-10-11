@@ -36,7 +36,17 @@ Every `csharp`, `ts` and `php` block in `docs/spec.md` and `README.md` has a mar
 - **Setup lines** are compiled with the block and never rendered. They are PHP# for a PHP# block and PHP for a PHP block.
 - **Two blocks with the same `<id>`** are one example with two files, such as a plain PHP caller and the PHP# class it calls. The blocks must be next to each other.
 - **A template** replaces the shape when none fits. It is the setup with a line holding only `…`, where the block goes. The block's namespace, import and type declaration lines still go to the head of the file, and every other line goes in the `…` slot.
-- **`<!-- example <id>: ignore <reason> -->`** skips a block that is not complete code by design. Only two blocks have it: `naming-values` in §16 and `native-body` in §29. Adding `ignore` to an example that had none counts as adding an entry to the list.
+- **`<!-- example <id>: ignore <reason> -->`** skips a block that is not complete code by design. Only two blocks have it: `naming-values` in §16 and `native-body` in §29. Adding `ignore` to an example that had none counts as adding an entry to the list, also under a new id: an ignored block whose code a checked example ran at the base fails the comparison.
+
+**Run lines** follow the block's closing fence in a second hidden comment, for a claim the block itself can't run:
+
+```text
+<!-- run <id>
+<run lines>
+-->
+```
+
+Run lines are PHP# and carry annotations like any other line. They run after the block's own lines, in its `run` method when the block is `statements`, and otherwise in a `run` method of their own. A value, `throws` or message annotation that no run reaches, such as `// throws OutOfRangeException when no argument was passed` on a method's line, fails the check before anything compiles, unless a run line of the same example makes the same claim. `environment` (§29) shows its `throws` this way, and `copy-on-write`, `capture-by-reference` and `capture-and-change` check the values their prose states, such as `a.count();   // 1`.
 
 ### How a fragment becomes a file
 
@@ -157,11 +167,12 @@ A value is a number, `true`, `false`, `null`, a quoted string, or a balanced `[�
 
 **Every line is checked, annotated or not.** A line with no annotation, or with prose, must compile with no error. A `compile error` line must get one. The check is the whole block, so a block the checker can't read fails on its first line.
 
-**The text after `compile error:` is not compared.** The spec writes it for the reader, and most of it is a paraphrase, such as "int is not bool" for the checker's "`if` takes a `bool`, but this is `int`." Comparing it would fail examples whose checker is right. What a message says is guard 2's job, the message rules in mago-sharp. The check still refuses three wrong reasons:
+**The text after `compile error:` is not compared.** The spec writes it for the reader, and most of it is a paraphrase, such as "int is not bool" for the checker's "`if` takes a `bool`, but this is `int`." Comparing it would fail examples whose checker is right. What a message says is guard 2's job, the message rules in mago-sharp. The check still refuses four wrong reasons:
 
 - **A refusal is not the error the spec means.** An error whose message holds "not supported yet" never satisfies a `compile error` line. It says the feature is missing, not that the rule holds.
+- **A missing class is not the error the spec means either.** mago's `non-existent-class-like` error, such as "Cannot find class, interface, enum, or type alias `App\Mailer`", never satisfies a `compile error` line. It says the setup lacks a name.
 - **A parse error satisfies only a `parse error` line.** That is a parse error mago reports as "Parse error encountered during parsing …", which says the parser could not read the line. A message the parser writes to name a PHP# rule, such as "PHP# has no `echo`: write `printf` or `fwrite`.", satisfies a `compile error` line.
-- **Every error must belong to a line that expects one.** An error belongs to the line its primary span starts on. An error on a line with no annotation, or with prose, belongs to the one `compile error` line in the same top-level construct of the block, so "A `match` needs a `default` arm.", which mago reports at the `match` keyword, belongs to the arm annotated below it. An error on a line annotated `compiles` stays on that line. An error no line expects fails the example.
+- **Every error must belong to a line that expects one.** An error belongs to the line its primary span starts on. An error on a line with no annotation, or with prose, moves to a `compile error` line only when that line sits inside the brackets the error's line opens, a `{` that starts the next line included, and only when exactly one such line does. So "A `match` needs a `default` arm.", which mago reports at the `match` keyword, belongs to the arm annotated below it. An error on a line beside the `compile error` line never moves, and an error on a line annotated `compiles` stays on that line. An error no line expects fails the example.
 
 **A `throws: "<message>"` is compared exactly.** The spec quotes it, and the message is what a caller of `parse` reads.
 
@@ -209,26 +220,37 @@ README	readme-cart	0
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           git fetch --depth=1 origin "$BASE"
-          sharp/docker/run php sharp/bin/spec --base "$BASE"
+          if ! git cat-file -e "$BASE:sharp/bin/spec"; then
+            echo "sharp/bin/spec does not exist at $BASE, so there is nothing to compare."
+            exit 0
+          fi
+          git show "$BASE:sharp/bin/spec" > sharp/build/base-spec
+          sharp/docker/run php sharp/build/base-spec --base "$BASE"
 ```
 
-The comparison needs no build. It reads `sharp/baseline/spec`, `docs/spec.md` and `README.md` at the base commit with `git show`, so it runs on the PHP of the `sharp/docker/` image.
+**The base commit's checker judges the pull request.** The step runs the copy of `sharp/bin/spec` that the base holds, so a pull request that changes the checker never runs its own comparison. The comparison needs no build. It reads `sharp/baseline/spec`, `docs/spec.md` and `README.md` at the base with `git show`, so it runs on the PHP of the `sharp/docker/` image. The base must be a commit in the repository, and any git call that fails fails the check. Only a commit that has no `sharp/baseline/spec` reads as "nothing to compare".
 
 `CHANGES` treats `docs/spec.md` and `README.md` as code, so a pull request that changes only the spec still runs `LINUX`.
 
 **A law needs Lean.** mago proves a law (section 28) with Lean 4.34.1, so the `sharp/docker/` image installs Debian's `elan` beside `rustup`, and `sharp/docker/run` sets `ELAN_HOME=/src/sharp/build/elan`, as it sets `CARGO_HOME`. It also sets `XDG_CACHE_HOME=/src/sharp/build/cache`, because mago builds its Lean runtime library in its cache folder, and the container's user has no writable home. The first law example a run compiles downloads the toolchain, which took 31 seconds and 3.0 GB in `debian:trixie`. CI caches none of it, because restoring 3 GB is no faster than the download. When mago installs elan into its own cache folder, the §28 Slice removes `elan` from the image.
 
-**`Completes:` runs in its own workflow,** `.github/workflows/completes.yml`, on the `pull_request` types `opened`, `edited`, `synchronize` and `reopened`. Its one job, `COMPLETES`, reads the body's `Completes:` line, reads `sharp/baseline/spec` at the pull request's head with `git show`, and fails when a named section still has an entry. It builds nothing, so an edited body reruns it in seconds, and the main workflow never runs on `edited`. A body with no `Completes:` line passes.
+**`Completes:` runs in its own workflow,** `.github/workflows/completes.yml`, on the `pull_request` types `opened`, `edited`, `synchronize` and `reopened`. Its one job, `COMPLETES`, runs `sharp/bin/spec --completes` with the body in `BODY`, on the merge commit `LINUX` tests and with the runner's own PHP. It builds nothing, so an edited body reruns it in seconds, and the main workflow never runs on `edited`. A body with no `Completes:` line passes. It fails:
+
+- on any line with a `Completes:` label, in any case or emphasis, that is not exactly `Completes: §6.1, §9` on its own line, such as `- Completes: §6`, `**Completes:** §6` or `completes: §6`;
+- on a named section with no checked example, such as `§99`;
+- on a named section that still has an entry in `sharp/baseline/spec`. `§9` covers `§9` and every `§9.x`.
 
 CI fails in each of the five cases:
 
 1. **An example that is not on the list fails.** `sharp/bin/spec`: the list differs from the run.
 2. **A listed example passes.** The same check.
-3. **A PR adds an entry to the list.** `--base`: the head list has an id the base list doesn't, and the example's code and setup are the same at both commits.
-4. **`Completes: §6.1, §9` names a section that still has entries.** `COMPLETES`: `§9` covers `§9` and every `§9.x`.
-5. **A PR raises the count of "not supported yet" refusals in a section it doesn't complete.** `--base`: the section's sum of the last field rises across the examples whose code and setup are the same at both commits.
+3. **A PR adds an entry to the list.** `--base`: the head list has an id the base list doesn't, and the base has an example with the same fingerprint, under that id or another.
+4. **`Completes: §6.1, §9` names a section that still has entries.** `COMPLETES`.
+5. **A PR raises the count of "not supported yet" refusals.** `--base`: an example's last field rises, and the base has an example with the same fingerprint. Each example compares with itself, so a refusal removed in one example can't hide one added in another.
 
-**Only a spec PR may grow the list.** Cases 3 and 5 count only examples whose code and setup are the same at the base and the head. A new or edited example may join the list only in a pull request that changes nothing outside `docs/spec.md`, `README.md` and `sharp/baseline/spec`, so a builder can't edit an example and break the engine in one pull request. A ruling Jordan approves lands with its examples before any builder implements it, and those examples are v1's remaining work. Adding `ignore` to an example counts as adding an entry.
+**A builder PR can't change what measures it.** The spec files are `docs/spec.md`, `README.md`, `sharp/baseline/spec`, `sharp/harness/` and `sharp/bin/spec`. A pull request that changes any other file must leave every example exactly as the base has it, its marker, setup, code, run lines and `ignore` included, and must leave `sharp/harness/` and `sharp/bin/spec` unchanged. It can only remove entries and lower refusals, through the `cp` command a failing run prints. An example's fingerprint covers its marker line, all but the id, so a changed shape, `alone` or `in <Class>` counts as an edit, and a renamed example keeps its fingerprint.
+
+**Only a spec PR may grow the list.** A new or edited example may join the list only in a pull request that changes nothing outside the spec files. A ruling Jordan approves lands with its examples before any builder implements it, and those examples are v1's remaining work.
 
 ## Runtime
 
@@ -244,7 +266,7 @@ Measured on an Apple M-series Mac with the pinned `mago` at `449377ad4` and a de
 
 ```text
 sharp/
-├── bin/spec              # new: PHP, like census. Checks every example, or with --base compares two commits
+├── bin/spec              # new: PHP, like census. Checks every example, compares with a base (--base), or reads Completes: (--completes)
 ├── bin/test              # --spec runs sharp/bin/spec after the suite
 ├── baseline/spec         # new: the examples that fail today, the v1 meter
 ├── docker/Dockerfile     # installs elan, for the law examples
@@ -257,12 +279,12 @@ README.md                 # a marker above its two blocks
 sharp/README.md           # documents --spec, the list and COMPLETES
 docs/how-we-work.md       # a PR that completes a section says Completes: §N
 .github/workflows/
-├── sharp.yml             # CHANGES counts the spec as code, LINUX runs --spec and --base
-└── completes.yml         # new: the COMPLETES job
+├── sharp.yml             # CHANGES counts the spec as code, LINUX runs --spec and the base's --base
+└── completes.yml         # new: the COMPLETES job, sharp/bin/spec --completes
 ```
 
 `COMPLETES` joins the `master merge gate` ruleset after this lands.
 
 ## The markers
 
-`docs/spec.md` has a marker above each of its 162 checked blocks, and `README.md` above each of its 2. Three examples have two blocks, so there are 161 examples in all: 159 checked and 2 ignored. The markers themselves are the record, so this note lists none of them by line.
+`docs/spec.md` has a marker above each of its 162 checked blocks, and `README.md` above each of its 2. Three examples have two blocks, so there are 161 examples in all: 159 checked and 2 ignored. Four examples have run lines: `copy-on-write`, `capture-by-reference`, `capture-and-change` and `environment`. The markers themselves are the record, so this note lists none of them by line.

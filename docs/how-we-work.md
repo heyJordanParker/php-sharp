@@ -35,7 +35,9 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 3. Cass checks the architecture across the whole system and the plan, and posts an approval on the PR. If Cass asks for changes, the builder makes them and the reviewer reviews again.
 4. The builder merges with `gh pr merge --merge --match-head-commit <full head SHA>`.
 
-A PR that finishes spec sections says so in its body, on a line such as `Completes: §6.1, §9`. The `COMPLETES` check fails while `sharp/baseline/spec` still lists an example of a named section.
+A PR that finishes spec sections says so in its body, on its own line, exactly as `Completes: §6.1, §9`. The `COMPLETES` check fails while `sharp/baseline/spec` still lists an example of a named section.
+
+A builder PR leaves the spec's examples, `sharp/harness/` and `sharp/bin/spec` as master has them. Only a spec PR changes them. When the builder's work makes listed examples pass, the failing run prints the `cp` command that writes the shorter list, and the entries leave through it.
 
 A mago-sharp PR merges before the php-sharp PR that pins it. The builder then re-pins the php-sharp PR once, to the mago-sharp merge commit.
 

@@ -90,6 +90,7 @@
 §31	try-propagation	0
 §32	environment-module	0
 §32	factory	0
+§32	missing-service	0
 §32	module-errors	0
 §32	module-services	0
 §32	scoped-binding	0
