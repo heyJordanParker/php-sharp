@@ -238,7 +238,11 @@ public string name { get; set; } via Trimmed, Tracked;
 
 `lazy` is a modifier, not a behavior. A lazy property computes its value on the first read, then keeps it and never recomputes it. `static lazy` computes once per process.
 
-```text
+<!-- example lazy-property: members
+private Planner planner = new Planner();
+private int id = 1;
+-->
+```csharp
 public lazy Plan plan => this.planner.plan(this.id);
 ```
 
