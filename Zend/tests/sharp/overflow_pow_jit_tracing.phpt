@@ -30,6 +30,7 @@ ArithmeticError: Integer overflow in Overflow.sharp on line 267
 ArithmeticError: Integer raised to a negative power in Overflow.sharp on line 256
 ArithmeticError: Integer raised to a negative power in Overflow.sharp on line 256
 ArithmeticError: Integer raised to a negative power in Overflow.sharp on line 342
+ArithmeticError: Integer raised to a negative power in Overflow.sharp on line 349
 float(0.5)
 float(0.5)
 float(0.25)
@@ -56,6 +57,7 @@ ArithmeticError: Integer overflow in Overflow.sharp on line 267
 ArithmeticError: Integer raised to a negative power in Overflow.sharp on line 256
 ArithmeticError: Integer raised to a negative power in Overflow.sharp on line 256
 ArithmeticError: Integer raised to a negative power in Overflow.sharp on line 342
+ArithmeticError: Integer raised to a negative power in Overflow.sharp on line 349
 float(0.5)
 float(0.5)
 float(0.25)

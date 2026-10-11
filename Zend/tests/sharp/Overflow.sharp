@@ -341,4 +341,11 @@ class Overflow
         let b = -1;
         return 2 ** b;
     }
+
+    public static int zeroNegativePower()
+    {
+        let z = 0;
+        let n = -1;
+        return z ** n;
+    }
 }

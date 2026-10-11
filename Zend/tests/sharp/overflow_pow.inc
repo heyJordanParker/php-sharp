@@ -24,6 +24,7 @@ function powCases(): void
     attempt(fn () => Overflow::power(2, -1));
     attempt(fn () => Overflow::power(0, -1));
     attempt(fn () => Overflow::constantNegativePower());
+    attempt(fn () => Overflow::zeroNegativePower());
     attempt(fn () => Overflow::inverse(2, -1));
     attempt(fn () => Overflow::half());
     attempt(fn () => Overflow::floatExponent(4, -1.0));
