@@ -225,7 +225,7 @@ A bare `Order.total` is never a property reference, so `Class.y` always reads a 
 
 A clause after the property names its behaviors. It reads as "get/set via Trimmed".
 
-<!-- example behaviors-clause: ignore a sketch -->
+<!-- example property-behaviors: members -->
 ```csharp
 public string name { get; set; } via Trimmed, Tracked;
 ```
