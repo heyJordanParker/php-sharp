@@ -210,15 +210,6 @@ public string name { get; set; didSet => this.touch(); }
 
 `nameof(Order.total)` names a property. The reference is typed, and the checker rejects a misspelled or removed property wherever it is used. It sits beside `typeof(Order)` (section 25), as in C#'s `nameof`.
 
-<!-- example property-references: statements
-Query query = new Query();
--->
-```csharp
-query.orderBy(nameof(Order.total));   // compiles: a typed reference to Order's total property
-query.orderBy(nameof(Order.totl));    // compile error: Order has no property totl
-query.orderBy(Order.total);           // compile error: Order.total reads a static value, and total is an instance property
-```
-
 A bare `Order.total` is never a property reference, so `Class.y` always reads a static value (section 4).
 
 ### 6.4 Reusable property behaviors
