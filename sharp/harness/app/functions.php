@@ -1,10 +1,19 @@
 <?php
 
-// Plain PHP functions the spec's examples call by a bare name.
-function deliver(mixed ...$arguments): void
-{
+namespace App {
+    function charge(mixed ...$arguments): \App\Receipt
+    {
+        return new \App\Receipt();
+    }
 }
 
-function render(mixed ...$arguments): void
-{
+namespace {
+    // Plain PHP functions the spec's examples call by a bare name.
+    function deliver(mixed ...$arguments): void
+    {
+    }
+
+    function render(mixed ...$arguments): void
+    {
+    }
 }

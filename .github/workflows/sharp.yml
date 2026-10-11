@@ -77,7 +77,7 @@ jobs:
       - name: Compare sharp/baseline/spec with the base branch
         if: github.event_name == 'pull_request'
         env:
-          BASE: 743438816b9fea981313c95d7ac65b2cbdc8ddd7
+          BASE: ccad742519ad200dad19ee18f8ae5342bdb26039
         run: |
           git fetch --depth=1 origin "$BASE"
           sharp/docker/run php sharp/bin/spec --base "$BASE"
