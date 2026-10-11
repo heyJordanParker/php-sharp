@@ -2095,7 +2095,7 @@ return 2.0 ** -1;            // 0.5
 
 <!-- example integer-division: statements -->
 ```csharp
-7 / 2          // 3
+7 / 2          // 4
 -7 / 2         // -3
 7 / 2.0        // 3.5
 ```
