@@ -338,14 +338,14 @@ class Overflow
 
     public static int constantNegativePower()
     {
-        int b = -1;
+        let b = ~0; // -1, which the checker types as any `int` and the optimizer still folds
         return 2 ** b;
     }
 
     public static int zeroNegativePower()
     {
         let z = 0;
-        int n = -1;
+        let n = ~0; // -1, which the checker types as any `int` and the optimizer still folds
         return z ** n;
     }
 }
