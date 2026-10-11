@@ -8,5 +8,5 @@ class Deadlines
 
     public static List<int?> byDue(Map<string, int?> tasks) => tasks.sortedBy(day => day);
 
-    public static List<int> bySlot(Set<int> slots) => slots.sortedBy(slot => slot == 5 ? null : slot);
+    public static List<int> bySlot(Set<int> slots) => slots.sortedBy(slot => slot == 5 || slot == 7 ? null : slot);
 }

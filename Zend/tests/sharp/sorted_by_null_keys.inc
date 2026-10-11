@@ -14,7 +14,8 @@ namespace {
         echo $shown(Demo\Deadlines::byOwner(['', 'B', 'a', null, 'b'])), "\n";
         echo $shown(Demo\Deadlines::byDue(['ship' => 3, 'draft' => null, 'review' => -2, 'test' => 1, 'plan' => 0])), "\n";
         echo $shown(Demo\Deadlines::byDue(['plan' => 0, 'test' => 1, 'review' => -2, 'draft' => null, 'ship' => 3])), "\n";
-        echo $shown(Demo\Deadlines::bySlot([0, 1, -2, 5, 3])), "\n";
+        echo $shown(Demo\Deadlines::bySlot([7, 0, 5, 1, -2, 3])), "\n";
+        echo $shown(Demo\Deadlines::bySlot([3, 1, 5, -2, 0, 7])), "\n";
         $output = ob_get_clean();
     }
 
