@@ -151,6 +151,9 @@ jobs:
     steps:
       - name: git checkout
         uses: actions/checkout@v6
+      - name: brew
+        if: runner.os == 'macOS'
+        run: brew install php composer
       - name: Run mago from Composer on plain PHP, with php-sharp-composer from sharp/composer
         run: |
           php -v
