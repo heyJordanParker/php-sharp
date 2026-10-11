@@ -72,7 +72,8 @@ class Tagged
 
     public function once(?array $maybe): array { $maybe = $maybe === null ? null : \Sharp\Set::from($maybe);
 
-        $copy = $this->copy(); $copied = !isset($copy["copy"]) && ($copy += ["copy" => "copy"]);
+        $copy = $this->copy();
+        $copied = !isset($copy["copy"]) && ($copy += ["copy" => "copy"]);
         $kept = isset($this->tags["copy"]);
         $added = !isset($this->tags[${'element#1'} = $this->next()]) && ($this->tags += [${'element#1'} => ${'element#1'}]);
         $named = \array_values($this->tags);

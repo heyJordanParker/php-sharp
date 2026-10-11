@@ -338,14 +338,14 @@ class Overflow
 
     public static int constantNegativePower()
     {
-        let b = -1;
+        int b = -1;
         return 2 ** b;
     }
 
     public static int zeroNegativePower()
     {
         let z = 0;
-        let n = -1;
+        int n = -1;
         return z ** n;
     }
 }
