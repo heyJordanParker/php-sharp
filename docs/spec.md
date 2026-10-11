@@ -115,6 +115,14 @@ Checkout.maximum;
   - Too wide is a warning, for example a `public` member that nothing outside its namespace uses.
 - **There is no named reach,** such as `internal(App\Tenant)`. A helper shared by sibling namespaces moves to their parent namespace.
 
+<!-- example nullable-members: members alone -->
+```csharp
+private int? total;                      // compiles: starts as null
+public string? nickname { get; set; }    // compiles: starts as null
+public string? note { get; }             // compile error: give note an initial value, or a set accessor
+public string? note { get; } = null;     // compiles
+```
+
 ## 6. Fields and properties
 
 Fields and properties are separate concepts.
@@ -142,14 +150,6 @@ public List<Tag> tags { get; set; } = new List<Tag>();
 A constant initial value is stored as the member's default. Any other value is set at the start of the constructor, in the order the members are declared.
 
 **A `T?` field or settable auto-property with no initial value starts as null,** as in C# and Swift. A get-only `T?` property in the class body with no initial value is a compile error. The error names both fixes: an initial value, or a `set` accessor.
-
-<!-- example nullable-members: members alone -->
-```csharp
-private int? total;                      // compiles: starts as null
-public string? nickname { get; set; }    // compiles: starts as null
-public string? note { get; }             // compile error: give note an initial value, or a set accessor
-public string? note { get; } = null;     // compiles
-```
 
 ### 6.1 Property features
 
