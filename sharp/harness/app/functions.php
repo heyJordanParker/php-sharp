@@ -1,6 +1,6 @@
 <?php
 
-// Plain PHP functions the spec's examples call by a bare name. Probe: a builder PR edits the harness.
+// Plain PHP functions the spec's examples call by a bare name.
 function charge(mixed ...$arguments): \App\Receipt
 {
     return new \App\Receipt();
