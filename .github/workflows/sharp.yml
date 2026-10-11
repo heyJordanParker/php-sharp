@@ -157,6 +157,7 @@ jobs:
       - name: Run mago from Composer on plain PHP, with php-sharp-composer from sharp/composer
         run: |
           php -v
+          exit 1
           mkdir -p "$RUNNER_TEMP/project/src/App"
           cd "$RUNNER_TEMP/project"
           cat > composer.json <<JSON
