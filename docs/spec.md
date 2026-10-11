@@ -736,6 +736,7 @@ lines.sortedBy(l => l.amount);
 
 - Methods that read return a new collection.
 - `first` throws `OutOfRangeException` when nothing matches, as a bare index read does.
+- `sortedBy` takes only a key that `<` can compare, so it refuses a key `<` refuses. A `null` key sorts before every other key.
 - A method that takes a function has that function's effects (section 29), so `lines.map(l => l.name)` is pure.
 - Methods that change a collection change it in place:
 

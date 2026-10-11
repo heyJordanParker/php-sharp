@@ -1331,10 +1331,12 @@ ZEND_METHOD(Sharp_Collection, associateBy)
 	sharp_collection_key_by(INTERNAL_FUNCTION_PARAM_PASSTHRU, false);
 }
 
-/* Orders two [key, element] pairs by key, as PHP#'s <=> does: two objects by the op_Comparison the left key's
- * class declares or inherits, else the right key's, two strings by their bytes, and other keys as PHP's <=> does.
- * Equal keys keep their original order, which zend_hash_sort keeps in each bucket's extra space, so the sort is
- * stable as Kotlin's is. A call that throws leaves the exception for sortedBy to throw. */
+/* Orders two [key, element] pairs by key. A null key sorts before every other key, as Kotlin's sortedBy puts it, since
+ * PHP's <=> compares null with a number as two bools, which is no order. Two other keys order as PHP#'s <=> does: two
+ * objects by the op_Comparison the left key's class declares or inherits, else the right key's, two strings by their
+ * bytes, and other keys as PHP's <=> does. Equal keys keep their original order, which zend_hash_sort keeps in each
+ * bucket's extra space, so the sort is stable as Kotlin's is. A call that throws leaves the exception for sortedBy to
+ * throw. */
 static int sharp_collection_compare_keys(Bucket *a, Bucket *b)
 {
 	zval *left = zend_hash_index_find(Z_ARRVAL(a->val), 0);
@@ -1352,7 +1354,9 @@ static int sharp_collection_compare_keys(Bucket *a, Bucket *b)
 		}
 	}
 
-	if (comparison) {
+	if (Z_TYPE_P(left) == IS_NULL || Z_TYPE_P(right) == IS_NULL) {
+		result = (Z_TYPE_P(left) != IS_NULL) - (Z_TYPE_P(right) != IS_NULL);
+	} else if (comparison) {
 		zval keys[2], order;
 		ZVAL_COPY_VALUE(&keys[0], left);
 		ZVAL_COPY_VALUE(&keys[1], right);
