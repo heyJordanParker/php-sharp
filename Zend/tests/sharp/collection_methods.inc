@@ -30,6 +30,10 @@ namespace {
         attempt(fn () => Demo\Pantry::size($pantry));
         attempt(fn () => Demo\Pantry::lineCount($basket));
         attempt(fn () => Demo\Pantry::made());
+        attempt(fn () => Demo\Pantry::sizeCount([]));
+        attempt(fn () => Demo\Pantry::sizeCount([4, 5, 6]));
+        attempt(fn () => Demo\Pantry::stockCount(['tea' => 3, '5' => 7]));
+        attempt(fn () => $pantry->heldCount());
         attempt(fn () => Demo\Tray::filled());
         attempt(fn () => Demo\Link::after(new Demo\Link(1), 2));
         attempt(fn () => Demo\Link::after(null, 2));

@@ -88,6 +88,10 @@ array(2) {
   [1]=>
   int(2)
 }
+int(0)
+int(3)
+int(2)
+int(3)
 array(2) {
   [0]=>
   int(5)
@@ -104,5 +108,5 @@ string(6) "2 of 2"
 NULL
 DivisionByZeroError: Modulo by zero in CollectionMethods.sharp on line 79
 NULL
-Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 61
-ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 62
+Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 65
+ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 66
