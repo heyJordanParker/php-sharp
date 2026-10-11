@@ -102,11 +102,11 @@ Checkout.maximum;
 
 Fields and properties are separate concepts.
 
-- **A field is storage.** It can only be `private` or `protected`. There are no public fields, except an override of a plain PHP parent's `public` property (section 6.1).
+- **A field is storage.** It can only be `private` or `protected`. A field with no modifier is `private`. There are no public fields, except an override of a plain PHP parent's `public` property (section 6.1).
 - **A property is the API.** It has `get` and `set` accessors, and each accessor carries its own access level.
 
 ```csharp
-Map<string, Plan> cache = [];                                   // field
+Map<string, Plan> cache = [:];                                  // field
 public int views { get; private set; }                          // auto-property
 public string name { get; internal set => field = value.trim(); }
 public string slug => Str.slug(name);                           // computed
@@ -115,7 +115,7 @@ public string slug => Str.slug(name);                           // computed
 **A field or an auto-property can have an initial value,** written after its declaration as in C#:
 
 ```csharp
-Map<string, Plan> cache = [];                                   // field
+Map<string, Plan> cache = [:];                                  // field
 public int views { get; private set; } = 0;                     // auto-property
 public List<Tag> tags { get; set; } = new List<Tag>();
 ```
@@ -407,7 +407,7 @@ OrderRow order = OrderRow.parse(row);   // row is a plain PHP object from a data
 - Reflection shows `PaginatedList<Order>`.
 - Plain PHP reads an object's type arguments with `ReflectionObject::getTypeArguments()`, as C#'s `Type.GetGenericArguments()` does. A class value reaches plain PHP as a plain class-name string (section 25), so it carries none.
 - `page is PaginatedList<Order>` is checked while the code runs.
-- A value of the wrong type throws a `TypeError` where it enters PHP# from plain PHP. Section 12 lists where a value enters.
+- A value of the wrong type throws a `TypeError` where it enters PHP# from plain PHP. Section 12 lists where a value enters. An `int` where PHP# expects a `float` does not throw: it becomes a `float` (section 24).
 
 **Each type argument of a generic class has its own static members,** as in C#. `Counter<Order>.count` is separate from `Counter<User>.count`, and a static member may use the class's type parameters:
 
@@ -559,7 +559,7 @@ copy.add(line);           // changes only copy
 - a typed assignment takes a value that plain PHP returned
 - plain PHP writes a PHP# property
 
-At each crossing, the runtime checks every element once and throws a `TypeError` that names the element. A call from PHP# to PHP# checks nothing at runtime, because the checker proved it.
+At each crossing, the runtime checks every element once and throws a `TypeError` that names the element. An `int` where PHP# expects a `float` does not throw: it becomes a `float` (section 24). A call from PHP# to PHP# checks nothing at runtime, because the checker proved it.
 
 `as` to a collection type checks every element too, wherever the value came from, and gives null if any element is wrong (section 21).
 
@@ -741,6 +741,7 @@ lines.sortedBy(l => l.amount);
 
 - Methods that read return a new collection.
 - `first` throws `OutOfRangeException` when nothing matches, as a bare index read does.
+- A `sortedBy` key of type `T` or `T?` compiles exactly when `<` compiles on two non-null `T` values. The nullable part is allowed, and it sorts first.
 - A method that takes a function has that function's effects (section 29), so `lines.map(l => l.name)` is pure.
 - Methods that change a collection change it in place:
 
@@ -926,7 +927,7 @@ public readonly class Receipt { … }                     // compile error: decl
 
 ### 14.1 Function types
 
-A function type is written as `Function<ReturnType(ParameterTypes)>`, in the same order as a method declaration. One name covers every case, including functions that return `void`.
+A function type is written as `Function<ReturnType(ParameterTypes)>`, in the same order as a method declaration. One name covers every case, including functions that return `void`. Its effects go inside the brackets, after the parameter types, as in `Function<Charge(Cart) uses Http>` (section 29).
 
 ```csharp
 Function<Money?(readonly Line, string)> priceOf
@@ -1763,6 +1764,15 @@ public int|string|null find2()                 // compile error: write (int|stri
 
 **Integer overflow throws `ArithmeticError`** at the operation that overflows, as in Swift and C#'s `checked`. PHP's silent change to `float` does not happen in PHP# code. A shift is not an overflow: `<<` drops the bits it shifts out, and a shift by a negative count throws `ArithmeticError` (section 19).
 
+- `int ** int` is an `int`. A negative exponent throws `ArithmeticError`, as in Rust, where `i64::pow` takes no negative exponent, and C#'s `BigInteger.Pow`. A `float` on either side gives a `float`: `2.0 ** -1` is `0.5`.
+
+```csharp
+let area = side ** 2;        // int
+return 2 ** -1;              // compile error: `2 ** -1` is an `int` raised to a negative power, which throws: write `2.0 ** -1`
+return a ** b;               // int. Throws ArithmeticError at runtime when b < 0
+return 2.0 ** -1;            // 0.5
+```
+
 **`/` on two integers truncates toward zero,** as in C#. `/` with a `float` operand stays float division.
 
 ```csharp
@@ -1775,6 +1785,32 @@ public int|string|null find2()                 // compile error: write (int|stri
 - `PHP_INT_MIN / -1` throws `ArithmeticError`, because the result overflows.
 - `/=` follows the same rules.
 - Like `+` (section 18), `/` chooses when it runs, from the types of its operands.
+
+**An `int` where a `float` is expected is a compile error in PHP# code,** wherever a value lands, such as an assignment, an argument, a return, a property write, a list or map element, or a generic `T` that is `float`, as in `Cell<float>`.
+
+```csharp
+float total = 0;                     // compile error: `int` is not `float`: write 0.0, or convert with (float) n
+float total = 0.0;                   // compiles
+float price = count;                 // compile error, same message
+float price = (float) count;         // compiles: the conversion is written out
+Cell<float> cell = Cell.empty();
+cell.put(2);                         // compile error, same message
+cell.put(2.0);                       // compiles
+cell.put((float) n);                 // compiles
+bool same = cell.get() == 2.0;       // true
+```
+
+- A literal `0` is an `int`, as in Kotlin.
+- Arithmetic that mixes an `int` and a `float`, such as `count * 1.5`, gives a `float` and compiles.
+- An `int` from plain PHP becomes a `float` wherever PHP# expects a `float`, such as a parameter, a generic `T` that is `float`, the elements of a `List<float>` or a `Set<float>`, and the values of a `Map<K, float>`. PHP# code then sees what its type says, so `cell.get() == 2.0` is true.
+
+```php
+<?php declare(strict_types=1);
+
+$price->set(5);              // PHP# set(float value): value is 5.0
+$cell->put(2);               // PHP# Cell<float>: the cell holds 2.0
+$report->total([1, 2, 3]);   // PHP# total(List<float> amounts): amounts is [1.0, 2.0, 3.0]
+```
 
 **Converting values:**
 
@@ -2372,7 +2408,16 @@ public interface PaymentGateway
 }
 
 Function<Money(Offer)> priceOf                       // a pure function value
-Function<Charge(Cart)> uses Http charge              // may reach Http
+Function<Charge(Cart) uses Http> charge              // may reach Http
+```
+
+**A function type lists its effects inside its brackets,** after the parameter types, wherever the type is written:
+
+```csharp
+Function<Charge(Cart) uses Http> charge;                        // compiles
+Function<Charge(Cart) uses Http>? fallback;                      // compiles
+Map<string, Function<Charge(Cart) uses Http, Mail>> handlers;    // compiles: Http and Mail are both effects
+Function<int(Function<int(int) uses Http>)> apply;               // compiles
 ```
 
 An implementation that calls plain PHP fits the declaration only through an `extern`:
