@@ -102,11 +102,11 @@ Checkout.maximum;
 
 Fields and properties are separate concepts.
 
-- **A field is storage.** It can only be `private` or `protected`. There are no public fields, except an override of a plain PHP parent's `public` property (section 6.1).
+- **A field is storage.** It can only be `private` or `protected`. A field with no modifier is `private`. There are no public fields, except an override of a plain PHP parent's `public` property (section 6.1).
 - **A property is the API.** It has `get` and `set` accessors, and each accessor carries its own access level.
 
 ```csharp
-Map<string, Plan> cache = [];                                   // field
+Map<string, Plan> cache = [:];                                  // field
 public int views { get; private set; }                          // auto-property
 public string name { get; internal set => field = value.trim(); }
 public string slug => Str.slug(name);                           // computed
@@ -115,7 +115,7 @@ public string slug => Str.slug(name);                           // computed
 **A field or an auto-property can have an initial value,** written after its declaration as in C#:
 
 ```csharp
-Map<string, Plan> cache = [];                                   // field
+Map<string, Plan> cache = [:];                                  // field
 public int views { get; private set; } = 0;                     // auto-property
 public List<Tag> tags { get; set; } = new List<Tag>();
 ```
