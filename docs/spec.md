@@ -1789,6 +1789,16 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 - `(bool)`, `(array)` and `(object)` do not exist. Conditions are `bool` (section 21), so a comparison such as `request.input("flag") == "1"` replaces `(bool)`. `(array)` and `(object)` are compile errors that name their replacements, shown below.
 - PHP's cast aliases `(integer)`, `(double)`, `(boolean)` and `(binary)` do not exist.
 
+**An `int` where a `float` is expected is a compile error in PHP# code,** for a literal too, in declarations, assignments, property and parameter defaults, arguments and returns.
+
+```csharp
+float price = 5;               // compile error: `5` is an int, and a float is expected. Write `5.0`.
+float price = 5.0;             // compiles
+float total = count;           // compile error: `count` is an int, and a float is expected. Convert it with `(float) count`.
+float total = (float) count;   // compiles
+float half = count * 1.5;      // compiles: an int times a float is a float
+```
+
 **Replacing `(array)` and `(object)`:**
 
 ```csharp
