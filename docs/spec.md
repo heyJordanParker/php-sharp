@@ -242,7 +242,7 @@ public string name { get; set; } via Trimmed, Tracked;
 private Planner planner = new Planner();
 private int id = 1;
 -->
-```csharp
+```php
 public lazy Plan plan => this.planner.plan(this.id);
 ```
 
