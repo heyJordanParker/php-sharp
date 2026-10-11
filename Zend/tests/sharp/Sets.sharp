@@ -72,7 +72,7 @@ class Tagged
 
     public List<Any?> once(Set<string>? maybe)
     {
-        const copied = this.copy().add("copy");
+        let copy = this.copy(); const copied = copy.add("copy");
         const kept = this.tags.contains("copy");
         const added = this.tags.add(this.next());
         const named = this.tags.toList();
