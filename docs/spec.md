@@ -147,7 +147,6 @@ A constant initial value is stored as the member's default. Any other value is s
 ```csharp
 private int? total;                      // compiles: starts as null
 public string? nickname { get; set; }    // compiles: starts as null
-public string? note { get; }             // compile error: give note an initial value, or a set accessor
 public string? note { get; } = null;     // compiles
 ```
 
