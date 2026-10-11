@@ -2079,6 +2079,11 @@ public int|string|null find2()                 // compile error: write (int|stri
 
 - `int ** int` is an `int`. A negative exponent throws `ArithmeticError`, as in Rust, where `i64::pow` takes no negative exponent, and C#'s `BigInteger.Pow`. A `float` on either side gives a `float`: `2.0 ** -1` is `0.5`.
 
+<!-- example int-power: statements
+int side = 3;
+int a = 2;
+int b = 3;
+-->
 ```csharp
 let area = side ** 2;        // int
 return 2 ** -1;              // compile error: `2 ** -1` is an `int` raised to a negative power, which throws: write `2.0 ** -1`

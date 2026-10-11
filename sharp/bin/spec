@@ -354,11 +354,18 @@ function complete(string $code, string $language, bool $top, bool $last_of_const
 /**
  * A top-level statement rewritten so the run records its value or what it throws. A bare expression with no
  * annotation to check, such as `order == sameOrderLoadedAgain;`, is handed to Outcome too, because the spec writes
- * it to show what it gives, and PHP# refuses a statement that has no effect.
+ * it to show what it gives, and PHP# refuses a statement that has no effect. A top-level `return x;` shows the value
+ * of `x` the same way, since the run method returns nothing.
  */
 function observe(string $code, int $line, array $expect, string $language): string
 {
     $statement = rtrim(trim($code), ';');
+    if ($language === 'sharp' && preg_match('~^return\s+(.+)$~', $statement, $m)) {
+        $statement = $m[1];
+        if (!in_array($expect['kind'], ['value', 'throws', 'message'], true)) {
+            return "Outcome.value($line, $statement);";
+        }
+    }
     if (!in_array($expect['kind'], ['value', 'throws', 'message'], true)) {
         $unquoted = preg_replace('~"(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\'|`[^`]*`~', '""', $statement);
         $bare = $language === 'sharp' && $expect['kind'] !== 'error' && $expect['kind'] !== 'parse' && str_ends_with(trim($code), ';')

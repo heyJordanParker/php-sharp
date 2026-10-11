@@ -51,7 +51,7 @@ A line goes where the line that starts its construct goes. A construct continues
 
 A file with no `namespace` line gets `namespace App;`, the namespace of the shared setup classes, so the block's names resolve with no imports, as the reader assumes.
 
-The spec writes `…` for code the reader doesn't need. `sharp/bin/spec` replaces it as Kotlin's `TODO()` and Rust's `todo!()` stand in for a missing body:
+The spec writes `…` for code the reader doesn't need. `sharp/bin/spec` replaces it, as Kotlin's `TODO()` and Rust's `todo!()` stand in for a missing body:
 
 - `{ … }` after a type's header, or after `if`, `else`, `while`, `for`, `do`, `try`, `catch` or `finally`, becomes `{ }`, so a run passes through it.
 - `{ … }` anywhere else becomes `{ throw new Elided(); }`.
@@ -61,7 +61,7 @@ The spec writes `…` for code the reader doesn't need. `sharp/bin/spec` replace
 - A line holding only `…` is dropped.
 - Any other `…` becomes `throw new Elided()`.
 
-A line that ends a statement with no `;`, such as `7 / 2`, gets one, and a method signature with no body, such as `public void tag(string label = null)`, gets `{ … }`. A top-level statement that is a bare expression, such as `order == sameOrderLoadedAgain;`, runs as the argument of the call that records values, because the spec writes it to show what it gives, and PHP# refuses a statement with no effect. Each rewrite keeps the line on its own line, so every line number the checker reports is the spec's.
+A line that ends a statement with no `;`, such as `7 / 2`, gets one, and a method signature with no body, such as `public void tag(string label = null)`, gets `{ … }`. A top-level statement that is a bare expression, such as `order == sameOrderLoadedAgain;`, runs as the argument of the call that records values, because the spec writes it to show what it gives, and PHP# refuses a statement with no effect. A top-level `return x;` under `statements`, such as `return 2.0 ** -1;`, runs the same way, since the `run` method returns nothing. Each rewrite keeps the line on its own line, so every line number the checker reports is the spec's.
 
 ### Five blocks, five shapes
 
@@ -236,7 +236,7 @@ Measured on an Apple M-series Mac with the pinned `mago` at `449377ad4` and a de
 - **Four at once with `MAGO_THREADS=1`:** 0.18 seconds for all four.
 - **One run on the engine:** 0.13 seconds for the README's plain PHP caller.
 
-`sharp/bin/spec` runs four single-threaded compiles at a time. A full run over the 160 examples, 158 checked and 2 ignored, takes 26 seconds on that Mac.
+`sharp/bin/spec` runs four single-threaded compiles at a time. A full run over the 161 examples, 159 checked and 2 ignored, takes 26 seconds on that Mac.
 
 ## Files
 
@@ -261,4 +261,4 @@ docs/how-we-work.md       # a PR that completes a section says Completes: §N
 
 ## The markers
 
-`docs/spec.md` has a marker above each of its 161 checked blocks, and `README.md` above each of its 2. Three examples have two blocks, so there are 160 examples in all: 158 checked and 2 ignored. The markers themselves are the record, so this note lists none of them by line.
+`docs/spec.md` has a marker above each of its 162 checked blocks, and `README.md` above each of its 2. Three examples have two blocks, so there are 161 examples in all: 159 checked and 2 ignored. The markers themselves are the record, so this note lists none of them by line.
