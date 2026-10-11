@@ -24,11 +24,11 @@ One rule covers every place a `float` is expected, and it is the rule PHP alread
 <?php declare(strict_types=1);
 
 $price->set(5);              // value is 5.0
-$cell->put(2);               // throws TypeError: T is float, and 2 is an int
-$report->total([1, 2, 3]);   // throws TypeError: amounts is a List<float>, and its elements are ints
+$cell->put(2);               // the cell holds 2.0: T is float, so this is a float parameter
+$report->total([1, 2, 3]);   // TypeError: a List<float> can't hold int 1
 ```
 
-The same `int` passes one PHP# method and throws at the next, depending on whether the `float` is written directly or inside a generic or a collection type. Plain PHP code cannot see which one it is calling.
+The same `int` passes one PHP# method and throws at the next, depending on whether the `float` is a parameter or an element of a collection. Plain PHP code cannot see which one it is calling.
 
 ### Rejected: every int throws
 
