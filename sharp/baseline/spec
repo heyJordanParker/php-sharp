@@ -60,6 +60,7 @@
 §24	any-checks	0
 §24	array-object-replacements	0
 §24	int-power	0
+§24	integer-division	0
 §24	int-to-float	1
 §24	json-encoding	0
 §24	naming-cases	0
