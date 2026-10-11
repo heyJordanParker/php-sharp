@@ -2122,12 +2122,12 @@ int count = 3;
 int n = 2;
 -->
 ```csharp
-float total = 0;                     // compile error: `int` is not `float`: write 0.0, or convert with (float) n
+float total = 0;                     // compile error: `int` is not `float`: write 0.0
 float total = 0.0;                   // compiles
-float price = count;                 // compile error, same message
+float price = count;                 // compile error: `int` is not `float`: convert with (float) count
 float price = (float) count;         // compiles: the conversion is written out
 Cell<float> cell = Cell.empty();
-cell.put(2);                         // compile error, same message
+cell.put(2);                         // compile error: `int` is not `float`: write 2.0
 cell.put(2.0);                       // compiles
 cell.put((float) n);                 // compiles
 bool same = cell.get() == 2.0;       // true
