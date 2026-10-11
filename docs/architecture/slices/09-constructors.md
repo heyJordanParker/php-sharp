@@ -427,8 +427,12 @@ mago-sharp
 │   │                                             ConstructorName { dot, name }: the `.fromJson` of `new Artifact.fromJson(json)`
 │   ├── cst/cst/modifier.rs                    <- Modifier::Lazy added, contextual as Modifier::Required is
 │   ├── cst/node.rs, walker/mod.rs             <- Node::ConstructorInitializer, Node::NamedConstructor, Node::ConstructorName
+│   ├── error.rs                               <- ParseError::ComputedParameterInSharp(Span), at the `=>` (PR 1), and
+│   │                                             ParseError::ConstructorInitializerInSharp(Span) for "A constructor passes
+│   │                                             control with `: super(…)` or `: this(…)`." (PR 2)
 │   └── parser/internal/class_like/method.rs   <- parse_named_constructor and parse_optional_constructor_initializer added;
 │                                                 both NotSupportedYetInSharp("A named constructor") paths deleted
+├── crates/hir/src/ir/item/modifier.rs         <- ModifierKind::Lazy, the mirror every Modifier variant has
 ├── crates/codex/src/
 │   ├── metadata/flags.rs                      <- MetadataFlags::NAMED_CONSTRUCTOR added
 │   └── signature_builder.rs                   <- walk_in_named_constructor: the static method a named constructor lowers to
@@ -457,7 +461,7 @@ php-sharp
 └── ext/sharp/Cargo.toml, Cargo.lock           <- the pinned Mago commit moves
 ```
 
-Not added: no new `sharp_kind`, no change to `ext/sharp/sharp.c`, no new crate, no new parse error variant. The parse errors use `ParseError::NotSupportedYetInSharp` and the existing generic error with a message.
+Not added: no new `sharp_kind`, no change to `ext/sharp/sharp.c`, no new crate. Two parse error variants are added, `ComputedParameterInSharp` and `ConstructorInitializerInSharp`, after the `UntypedFieldInSharp` precedent: every PHP# parse error with its own message has its own variant, and the generic one prints "Parse error encountered during parsing".
 
 The names, each with the slate it was picked from:
 
