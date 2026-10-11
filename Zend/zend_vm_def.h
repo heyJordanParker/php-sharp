@@ -6152,7 +6152,8 @@ ZEND_VM_HANDLER(211, ZEND_SHARP_TYPE_ARGS, UNUSED|CV, CONST|UNUSED, CACHE_SLOT)
 /* PHP#: gives a generic method its own type arguments in its hidden CV result, when the CONST op1 spells their bounds,
  * and checks the arguments of a call from plain PHP, when the CONST op2 spells the parameters' types. Only a frame a
  * ZEND_DO_*CALL pushed has a caller's call: a frame of zend_call_function, as call_user_func, array_map, an error handler
- * or a property hook push, is ZEND_CALL_TOP and ZEND_CALL_DYNAMIC, and its caller's opline is another call's. A
+ * or a property hook push, is ZEND_CALL_TOP and ZEND_CALL_DYNAMIC, and its caller's opline is another call's. The
+ * previous frame must be user code, because an internal frame has no opline of its own to read the call from. A
  * ZEND_DO_*CALL marks its frame ZEND_CALL_TOP too when an extension replaces zend_execute_ex, as a debugger or a
  * profiler does, but never ZEND_CALL_DYNAMIC unless a function value's INIT_DYNAMIC_CALL or INIT_USER_CALL pushed it.
  * Only a PHP# call gives type arguments, in the TMP op1 of its ZEND_DO_*CALL. Any other call gives none, and the bounds

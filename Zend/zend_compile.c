@@ -4009,6 +4009,8 @@ static bool zend_compile_call_common(znode *result, zend_ast *args_ast, zend_fun
 
 	zend_do_extended_fcall_begin();
 
+	/* The type arguments compile after the arguments, because the callee reads them through its caller's call op. A
+	 * Fiber that suspends inside an argument suspends before they exist, so no suspended frame holds them. */
 	znode type_args_node;
 	if (type_args_ast) {
 		zend_compile_sharp_type_args(&type_args_node, type_args_ast->child[1]);
