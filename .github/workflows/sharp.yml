@@ -19,7 +19,7 @@ jobs:
   CHANGES:
     runs-on: ubuntu-24.04
     outputs:
-      code: ${{ github.ref_type == 'tag' || steps.diff.outputs.code }}
+      code: 'false'
     steps:
       - name: git checkout
         if: github.ref_type != 'tag'
