@@ -2077,6 +2077,15 @@ public int|string|null find2()                 // compile error: write (int|stri
 
 **Integer overflow throws `ArithmeticError`** at the operation that overflows, as in Swift and C#'s `checked`. PHP's silent change to `float` does not happen in PHP# code. A shift is not an overflow: `<<` drops the bits it shifts out, and a shift by a negative count throws `ArithmeticError` (section 19).
 
+- `int ** int` is an `int`. A negative exponent throws `ArithmeticError`, as in Rust, where `i64::pow` takes no negative exponent, and C#'s `BigInteger.Pow`. A `float` on either side gives a `float`: `2.0 ** -1` is `0.5`.
+
+```csharp
+let area = side ** 2;        // int
+return 2 ** -1;              // compile error: `2 ** -1` is an `int` raised to a negative power, which throws: write `2.0 ** -1`
+return a ** b;               // int. Throws ArithmeticError at runtime when b < 0
+return 2.0 ** -1;            // 0.5
+```
+
 **`/` on two integers truncates toward zero,** as in C#. `/` with a `float` operand stays float division.
 
 <!-- example integer-division: statements -->

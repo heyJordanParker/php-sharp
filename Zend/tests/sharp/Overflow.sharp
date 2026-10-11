@@ -270,12 +270,12 @@ class Overflow
 
     public static float inverse(int a, int b)
     {
-        return a ** b;
+        return ((float) a) ** b;
     }
 
     public static float half()
     {
-        return 2 ** -1;
+        return 2.0 ** -1;
     }
 
     private int big = 9223372036854775807 + 1;
@@ -329,5 +329,23 @@ class Overflow
     public static int decLoose(LooseCounter counter)
     {
         return --counter.value;
+    }
+
+    public static float floatExponent(int a, float b)
+    {
+        return a ** b;
+    }
+
+    public static int constantNegativePower()
+    {
+        let b = -1;
+        return 2 ** b;
+    }
+
+    public static int zeroNegativePower()
+    {
+        let z = 0;
+        let n = -1;
+        return z ** n;
     }
 }
