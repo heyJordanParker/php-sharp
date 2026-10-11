@@ -4,6 +4,12 @@
 
 The running program carries every type argument, as decisions 7 and 29 require. An object holds its class's type arguments from `new`, through `clone`, serialize and unserialize, and a generic method's own type arguments ride on its call. Plain PHP reads an object's with `ReflectionObject::getTypeArguments()`, and a call from plain PHP into a PHP# method is checked against the parameter's type arguments.
 
+A method value of a generic method takes its type arguments from the parameter types of the function type it goes into, as C#'s method group conversion does, and one that nothing fixes is a compile error, as C#'s CS0411 is.
+
+A union is refused only where the engine can't tell two members apart: a type written twice, two of `List`, `Map` and `Set`, which share PHP's one array kind, or a collection beside an `Iterable` of its element type.
+
+A call site keeps a type list the request made in its run-time cache, as it keeps one the process holds, because every user run-time cache lives for one request.
+
 ## Options
 
 ### Chosen: type arguments ride on the object and on the call

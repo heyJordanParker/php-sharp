@@ -78,6 +78,16 @@ public class Shelf
 
     public Box<Order> stock(Order order) => this.make<Order>(order);
 
+    public Box<Order> made(Order order)
+    {
+        Function<Box<Order>(Order)> make = this.make;
+        return make(order);
+    }
+
+    public int take<T : DatabaseEntity>(Source<T> source) => 1;
+
+    public List<int> taken(List<Source<Order>> sources) => sources.map(this.take);
+
     public string drain(Source<DatabaseEntity> source) => "drained";
 
     public string drained() => this.drain(new Source<Order>());

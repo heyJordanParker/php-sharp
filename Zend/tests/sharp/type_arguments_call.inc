@@ -16,6 +16,8 @@ foreach ([1, 2] as $round) {
     echo shown(Repository::written($order)), "\n";
     echo shown(Repository::inferred($order)), "\n";
     echo shown((new Shelf())->stock($order)), "\n";
+    echo shown((new Shelf())->made($order)), "\n";
+    echo implode(', ', (new Shelf())->taken([Shelf::orders(), Shelf::orders()])), "\n";
     echo shown(Repository::forwarded($order)), "\n";
     echo shown(Repository::spread([$order, new Order(2)])), "\n";
     echo shown(Repository::keyed($order)), "\n";

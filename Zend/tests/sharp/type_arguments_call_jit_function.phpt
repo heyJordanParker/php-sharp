@@ -1,5 +1,5 @@
 --TEST--
-A generic call gives the method the type arguments it writes or the checker infers, static or not, through a spread, a plain PHP @template interface, parent or super call and across a Fiber suspension, under the function JIT
+A generic call gives the method the type arguments it writes or the checker infers, static or not, through a method value, a spread, a plain PHP @template interface, parent or super call and across a Fiber suspension, under the function JIT
 --EXTENSIONS--
 opcache
 --INI--
@@ -18,6 +18,8 @@ App\Box<App.Order>
 App\Box<App.Order>
 App\Box<App.Order>
 App\Box<App.Order>
+1, 1
+App\Box<App.Order>
 App\Box<App.Order>
 App\Pair<int, App.Order>
 App\Pair<int, int>
@@ -29,6 +31,8 @@ App\Box<App.Order>
 App\Box<App.Order>
 App\Box<App.Order>
 App\Box<App.Order>
+App\Box<App.Order>
+1, 1
 App\Box<App.Order>
 App\Box<App.Order>
 App\Pair<int, App.Order>
