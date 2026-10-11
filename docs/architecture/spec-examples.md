@@ -216,7 +216,7 @@ The comparison needs no build. It reads `sharp/baseline/spec`, `docs/spec.md` an
 
 `CHANGES` treats `docs/spec.md` and `README.md` as code, so a pull request that changes only the spec still runs `LINUX`.
 
-**A law needs Lean.** mago proves a law (section 28) with Lean 4.34.1, so the `sharp/docker/` image installs Debian's `elan` beside `rustup`, and `sharp/docker/run` sets `ELAN_HOME=/src/sharp/build/elan`, as it sets `CARGO_HOME`. The first law example a run compiles downloads the toolchain, which took 31 seconds and 3.0 GB in `debian:trixie`. CI caches none of it, because restoring 3 GB is no faster than the download. When mago installs elan into its own cache folder, the §28 Slice removes `elan` from the image.
+**A law needs Lean.** mago proves a law (section 28) with Lean 4.34.1, so the `sharp/docker/` image installs Debian's `elan` beside `rustup`, and `sharp/docker/run` sets `ELAN_HOME=/src/sharp/build/elan`, as it sets `CARGO_HOME`. It also sets `XDG_CACHE_HOME=/src/sharp/build/cache`, because mago builds its Lean runtime library in its cache folder, and the container's user has no writable home. The first law example a run compiles downloads the toolchain, which took 31 seconds and 3.0 GB in `debian:trixie`. CI caches none of it, because restoring 3 GB is no faster than the download. When mago installs elan into its own cache folder, the §28 Slice removes `elan` from the image.
 
 **`Completes:` runs in its own workflow,** `.github/workflows/completes.yml`, on the `pull_request` types `opened`, `edited`, `synchronize` and `reopened`. Its one job, `COMPLETES`, reads the body's `Completes:` line, reads `sharp/baseline/spec` at the pull request's head with `git show`, and fails when a named section still has an entry. It builds nothing, so an edited body reruns it in seconds, and the main workflow never runs on `edited`. A body with no `Completes:` line passes.
 
@@ -248,7 +248,7 @@ sharp/
 ├── bin/test              # --spec runs sharp/bin/spec after the suite
 ├── baseline/spec         # new: the examples that fail today, the v1 meter
 ├── docker/Dockerfile     # installs elan, for the law examples
-├── docker/run            # ELAN_HOME=/src/sharp/build/elan
+├── docker/run            # ELAN_HOME and XDG_CACHE_HOME under sharp/build/
 └── harness/              # new: the classes and plain PHP stubs the examples share
 docs/
 ├── spec.md               # a marker above every csharp, ts and php block
