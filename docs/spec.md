@@ -1117,7 +1117,6 @@ increment();   // count is now 1
 ```
 <!-- run capture-by-reference
 count;   // 1
--->
 
 A lambda that calls `add`, `set` or `remove` on a captured variable changes the variable itself:
 
