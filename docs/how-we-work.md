@@ -1,11 +1,11 @@
 # How we work
 
-One Architect, one CTO agent and a team of agents build PHP#. This file says how the team works. It changes only through a PR the Architect approves, so git keeps its history.
+One Architect, one CTO agent and a team of agents build PHP#. This file says how the team works. Cass owns it, and it changes only through a PR, so git keeps its history.
 
 ## Who does what
 
 - **Jordan, the Architect,** owns the language: `docs/spec.md` and the proposals in `docs/decisions/`. He approves or corrects proposals. He doesn't review code or plan work.
-- **Cass, the CTO agent,** owns everything else: the plan, the order of work, the architecture in `docs/architecture/`, and this file. Cass starts every agent, approves every PR's architecture after its review, and checks that what lands works.
+- **Cass, the CTO agent,** owns everything else: the plan, the order of work, the architecture, and this file. Cass starts every agent, approves every PR's architecture after its review, and checks that what lands works.
 - **A builder** is an agent that does one task: one PR, from a new branch to its merge.
 - **A reviewer** is an agent that reviews one PR and posts its verdict on that PR.
 - **A helper** is an agent that reads, searches or researches for Cass, and changes nothing.
@@ -13,7 +13,7 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 ## One agent, one task
 
 - Every task has a task file, and every task gets a fresh agent.
-- No agent starts another agent. Only Cass does.
+- Only Cass starts agents.
 - The changes a review asks for belong to the same task, so the same builder makes them.
 
 ## Parallelism
@@ -31,11 +31,11 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 ## A PR's path to master
 
 1. The builder opens the PR, and CI must pass.
-2. A fresh reviewer reviews the details and the architecture, and posts its verdict on the PR. The builder makes the changes it asks for, until it approves.
+2. A fresh reviewer reviews the details and the architecture, and posts its verdict on the PR. The builder makes the changes the reviewer asks for, until the reviewer approves.
 3. Cass checks the architecture across the whole system and the plan, and posts an approval on the PR. If Cass asks for changes, the builder makes them and the reviewer reviews again.
 4. The builder merges with `gh pr merge --merge --match-head-commit <full head SHA>`.
 
-A Mago PR merges before the php-sharp PR that pins it. The php-sharp PR is re-pinned once, to the Mago merge commit.
+A mago-sharp PR merges before the php-sharp PR that pins it. The builder then re-pins the php-sharp PR once, to the mago-sharp merge commit.
 
 Master requires CI to pass. It doesn't require a branch to include the latest master. CI runs on master after every merge, and a red master is fixed before anything else merges.
 
@@ -46,12 +46,14 @@ Agents make mistakes, and a rule written only in prose gets broken again. So whe
 1. Fix the mistake.
 2. Add the check that would have caught it: a test, a lint, a CI step or a Claude Code hook. The check fails on the mistake and passes on the fix, and the PR shows both runs.
 
-A mistake that no check can catch yet goes in `docs/architecture/guards.md`, with what a check for it would need. Each entry becomes a task, and it runs before any new feature work in the same area.
+A mistake that no check can catch yet goes in `docs/architecture/guards.md`, with what a check for it would need. Each entry becomes a task, and it runs before any new feature work in the same area. Until `docs/architecture/guards.md` exists, Cass writes each such mistake straight into a task file.
 
 ## Test runs
 
-- CI runs every PHP# engine test 22 times, on Linux and on macOS: plain PHP, three runs with cached bytecode, each of PHP's 16 optimizer passes on its own, and both JIT compilers. A PR can't merge until all 22 pass on both.
-- A builder runs only the plain run locally, plus the Mago workspace suite, clippy and fmt.
+- CI runs every PHP# engine test 22 times, on Linux and on macOS: plain PHP, three runs with cached bytecode, each of PHP's 16 optimizer passes on its own, and both JIT compilers. A PR can't merge until all 22 pass on both. A PR that changes only documentation skips them, and GitHub counts the skipped `LINUX` and `MACOS` checks as passing.
+- A builder runs only these locally, and leaves the other runs to CI:
+  - In php-sharp: `sharp/bin/test`, the run without opcache.
+  - In mago-sharp: `cargo test --workspace --locked`, `cargo clippy --workspace --all-features -- -D warnings` and `cargo fmt --all -- --check`.
 
 ## Platforms
 
@@ -61,6 +63,6 @@ PHP# supports macOS and Linux. CI and releases build for those two only.
 
 - `docs/spec.md`: the language, as the Architect approved it.
 - `docs/decisions/`: each approved language proposal, with the options it chose between.
-- `docs/architecture/`: how the checker and the engine are built, and why.
+- `docs/architecture/`: how the checker and the engine are built, and why. Until it lands, the architecture is in `~/Developer/php-sharp/sharp/agents/architecture.md`, which git ignores.
 - `docs/how-we-work.md`: this file.
-- `sharp/agents/`: task files. Git ignores them.
+- `~/Developer/php-sharp/sharp/agents/`: task files. Git ignores them, so they exist only in that checkout and not in the worktree slots.
