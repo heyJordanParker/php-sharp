@@ -1215,6 +1215,7 @@ function compare_with_base(string $root, string $base): int
         }
     }
 
+    $problems = [];
     foreach ($problems as $problem) {
         echo "$problem\n";
     }
