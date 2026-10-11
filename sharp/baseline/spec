@@ -25,6 +25,7 @@
 §12	enum-map-keys	0
 §12	index-rules	0
 §12	iterables	3
+§12	map-reads	0
 §12	map-string-keys	1
 §12	natural-remove	0
 §12	nullable-map-values	0
