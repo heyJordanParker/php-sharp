@@ -554,7 +554,7 @@ copy.add(line);           // changes only copy
 - a typed assignment takes a value that plain PHP returned
 - plain PHP writes a PHP# property
 
-At each crossing, the runtime checks every element once and throws a `TypeError` that names the element. A call from PHP# to PHP# checks nothing at runtime, because the checker proved it.
+At each crossing, the runtime checks every element once and throws a `TypeError` that names the element. An `int` where PHP# expects a `float` does not throw: it becomes a `float` (section 24). A call from PHP# to PHP# checks nothing at runtime, because the checker proved it.
 
 `as` to a collection type checks every element too, wherever the value came from, and gives null if any element is wrong (section 21).
 
