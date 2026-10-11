@@ -1,5 +1,5 @@
 --TEST--
-PHP# throws ArithmeticError when ** or **= overflows under the function JIT
+PHP# throws ArithmeticError when int ** int or **= overflows or has a negative exponent under the function JIT
 --EXTENSIONS--
 opcache
 --INI--
@@ -22,11 +22,22 @@ ArithmeticError: Integer overflow in Overflow.sharp on line 256
 ArithmeticError: Integer overflow in Overflow.sharp on line 261
 int(9223372030926249001)
 ArithmeticError: Integer overflow in Overflow.sharp on line 267
+ArithmeticError: Integer raised to a negative power in Overflow.sharp on line 256
+ArithmeticError: Integer raised to a negative power in Overflow.sharp on line 256
+ArithmeticError: Integer raised to a negative power in Overflow.sharp on line 342
+float(0.5)
+float(0.5)
+float(0.25)
 float(0.5)
 float(0.5)
 int(9223372030926249001)
 ArithmeticError: Integer overflow in Overflow.sharp on line 313
 int(3037000500)
 ArithmeticError: Integer overflow in Overflow.sharp on line 319
+ArithmeticError: Integer raised to a negative power in Overflow.sharp on line 313
+int(2)
+ArithmeticError: Integer raised to a negative power in Overflow.sharp on line 319
 int(2)
 ArithmeticError: Integer overflow in Overflow.sharp on line 325
+ArithmeticError: Integer raised to a negative power in Overflow.sharp on line 325
+ArithmeticError: Integer raised to a negative power in Overflow.sharp on line 307
