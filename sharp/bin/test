@@ -157,6 +157,10 @@ if $census; then
 fi
 
 if $spec; then
+  echo "== every rule of sharp/bin/spec, on the examples of sharp/spec-self-test.md"
+  if ! "$php" "$root/sharp/bin/spec" --self-test; then
+    failed+=("the self-test of sharp/bin/spec")
+  fi
   echo "== every code example in docs/spec.md and README.md, compared with sharp/baseline/spec"
   if ! "$php" "$root/sharp/bin/spec"; then
     failed+=("the code examples of docs/spec.md and README.md")
