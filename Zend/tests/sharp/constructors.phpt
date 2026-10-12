@@ -20,7 +20,12 @@ for ($round = 0; $round < 3; $round++) {
     });
     // A plain PHP subclass inherits the static method, which creates the class that declares it.
     attempt(fn () => get_class(Demo\LegacyArtifact::fromJson('x')));
-    attempt(fn () => get_class(new Demo\LegacyArtifact(new Demo\Manifest('y'))));
+    // A plain PHP subclass runs the main constructor and its `: super(…)`.
+    attempt(function () {
+        $legacy = new Demo\LegacyArtifact(new Demo\Manifest('y'));
+
+        return [get_class($legacy), $legacy->manifest->name, $legacy->name];
+    });
     // The guard clause, in braces, throws for an inactive tenant and passes an active one.
     attempt(function () {
         $tenant = new Demo\Tenant();
@@ -85,11 +90,18 @@ array(4) {
   bool(true)
 }
 string(13) "Demo\Artifact"
-string(19) "Demo\LegacyArtifact"
-Demo\InactiveTenant: The tenant is inactive. in Constructors.sharp on line 55
+array(3) {
+  [0]=>
+  string(19) "Demo\LegacyArtifact"
+  [1]=>
+  string(1) "y"
+  [2]=>
+  string(1) "y"
+}
+Demo\InactiveTenant: The tenant is inactive. in Constructors.sharp on line 57
 bool(true)
 string(2) "HI"
-Error: Cannot modify protected(set) property Demo\Label::$text from global scope in constructors.php on line 34
+Error: Cannot modify protected(set) property Demo\Label::$text from global scope in constructors.php on line 39
 string(1) "b"
 string(11) "__construct"
 string(8) "manifest"

@@ -19,7 +19,7 @@ class Entity
 {
     public Entity(public string name { get; }) { }
 
-    public string describe() => "entity " + this.name;
+    public virtual string describe() => "entity " + this.name;
 }
 
 class Artifact : Entity
@@ -27,6 +27,8 @@ class Artifact : Entity
     public string seen { get; set; } = "";
 
     public Artifact(public Manifest manifest { get; }) : super(manifest.name) { }
+
+    public override string describe() => "artifact " + this.name;
 
     [Retry(times: 2)]
     public Artifact.fromJson(string json) : this(Manifest.parse(json))
