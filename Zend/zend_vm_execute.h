@@ -921,7 +921,7 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET zend_fetch_static_prop_helper_
 	SAVE_OPLINE();
 
 	prop = zend_fetch_static_property_address(
-		&prop_info, opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS, type,
+		&prop_info, opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR), type,
 		type == BP_VAR_W ? opline->extended_value : 0 OPLINE_CC EXECUTE_DATA_CC);
 	if (UNEXPECTED(!prop)) {
 		ZEND_ASSERT(EG(exception) || (type == BP_VAR_IS));
@@ -940,6 +940,10 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET zend_fetch_static_prop_helper_
 	if (type == BP_VAR_R || type == BP_VAR_IS) {
 copy_deref:
 		ZVAL_COPY_DEREF(EX_VAR(opline->result.var), prop);
+		if (type == BP_VAR_R && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)
+		 && Z_TYPE_P(EX_VAR(opline->result.var)) == IS_ARRAY) {
+			sharp_collection_of_static_property(EX_VAR(opline->result.var), prop, prop_info);
+		}
 	} else {
 		ZVAL_INDIRECT(EX_VAR(opline->result.var), prop);
 	}
@@ -113196,7 +113200,7 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET zend_fetch_static_prop_helper_
 	SAVE_OPLINE();
 
 	prop = zend_fetch_static_property_address(
-		&prop_info, opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS, type,
+		&prop_info, opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR), type,
 		type == BP_VAR_W ? opline->extended_value : 0 OPLINE_CC EXECUTE_DATA_CC);
 	if (UNEXPECTED(!prop)) {
 		ZEND_ASSERT(EG(exception) || (type == BP_VAR_IS));
@@ -113215,6 +113219,10 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET zend_fetch_static_prop_helper_
 	if (type == BP_VAR_R || type == BP_VAR_IS) {
 copy_deref:
 		ZVAL_COPY_DEREF(EX_VAR(opline->result.var), prop);
+		if (type == BP_VAR_R && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)
+		 && Z_TYPE_P(EX_VAR(opline->result.var)) == IS_ARRAY) {
+			sharp_collection_of_static_property(EX_VAR(opline->result.var), prop, prop_info);
+		}
 	} else {
 		ZVAL_INDIRECT(EX_VAR(opline->result.var), prop);
 	}

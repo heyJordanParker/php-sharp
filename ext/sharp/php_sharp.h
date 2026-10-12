@@ -13,5 +13,6 @@ extern zend_class_entry *sharp_ce_collection;
 void sharp_collection_of_local(zval *result, zval *local);
 void sharp_collection_of_value(zval *result, zval *value);
 void sharp_collection_of_property(zval *result, zend_object *object, zend_string *name, void **cache_slot);
+void sharp_collection_of_static_property(zval *result, zval *slot, const zend_property_info *info);
 
 #endif

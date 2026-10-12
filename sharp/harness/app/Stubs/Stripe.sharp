@@ -1,0 +1,5 @@
+namespace App.Stubs;
+
+import Stripe.StripeClient;
+
+extern StripeClient uses Http;

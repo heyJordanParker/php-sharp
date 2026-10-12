@@ -1,0 +1,15 @@
+namespace App;
+
+public class Order : DatabaseEntity
+{
+    public string number { get; set; } = "A-1";
+    public int total { get; set; } = 500;
+    public bool paid { get; set; } = true;
+    public bool isTest { get; set; } = false;
+    public Status status { get; set; } = Status.from("paid");
+    public List<Line> lines { get; private set; } = [];
+
+    public static OrderQuery query() => new OrderQuery();
+
+    public void markPaid() { this.paid = true; }
+}
