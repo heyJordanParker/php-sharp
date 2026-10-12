@@ -127,7 +127,7 @@ Fields and properties are separate concepts.
 Map<string, Plan> cache = [:];                                  // field
 public int views { get; private set; }                          // auto-property
 public string name { get; internal set => field = value.trim(); }
-public string slug => Str.slug(name);                           // computed
+public string slug => Str.slug(this.name);                      // computed
 ```
 
 **A field or an auto-property can have an initial value,** written after its declaration as in C#:
@@ -1166,13 +1166,16 @@ The field or property is read after the arguments run, which differs from C#. An
 - **`f?.(x)`:** calls `f` only when it is not null.
 - **`a ?? throw …`, `a ?? return`, `a ?? continue` and `a ?? break`:** leave when `a` is null. `return` takes a value when the method returns one.
 
-<!-- example leave-on-null: members -->
+<!-- example leave-on-null: members
+private Map<string, int> prices = [:];
+private Map<int, Customer> customers = [:];
+-->
 ```csharp
 public void renewAll(List<int> customerIds, string plan)
 {
-    int price = prices[plan] ?? return;                     // no such plan: nothing to renew
+    int price = this.prices[plan] ?? return;                // no such plan: nothing to renew
     for (const id of customerIds) {
-        Customer customer = customers[id] ?? continue;      // skip ids with no customer
+        Customer customer = this.customers[id] ?? continue; // skip ids with no customer
         charge(customer, price);
     }
 }
@@ -1212,6 +1215,9 @@ public class Order
     public event Paid(int orderId, Money amount) : Event;             // declares the event type Order.Paid
     public event Refunded(int orderId, Money amount) : Event;         // declares Order.Refunded
 
+    public int id { get; }
+    public Money total { get; }
+
     public void markPaid()
     {
         …
@@ -1235,6 +1241,16 @@ namespace App.Imports;
 public event RowImported(int row);
 ```
 
+**A class can't declare a nested type with its own name,** as C# refuses it with CS0542:
+
+<!-- example nested-type-own-name -->
+```csharp
+public class Order
+{
+    public event Order(int orderId);              // compile error: `Order` cannot declare a nested type named `Order`
+}
+```
+
 **Emitting:** `emit` raises an event. Any code may raise any event type:
 
 <!-- example emit-forms: statements in Order
@@ -1248,6 +1264,39 @@ emit new Paid(this.id, this.total);              // inside Order
 emit new Order.Paid(order.id, order.total);      // anywhere else
 ```
 
+**`new Order.Paid(…)` creates the nested type when `Order` declares one,** and calls `Order`'s named constructor `Paid` (section 9.1) otherwise:
+
+<!-- example nested-type-or-constructor -->
+```csharp
+public class Order
+{
+    public Order(public int id { get; }) { }
+    public Order.reopened(Order closed) : this(closed.id) { }
+    public event Paid(int orderId);
+}
+
+public class Checkout
+{
+    public void pay(Order order)
+    {
+        const paid = new Order.Paid(order.id);    // creates the event: Order declares the nested type Paid
+        const again = new Order.reopened(order);  // calls the named constructor: Order declares no nested type reopened
+    }
+}
+```
+
+A class that declares both a nested type and a named constructor with one name is a compile error, as C# refuses a nested type and a member with one name:
+
+<!-- example nested-type-and-constructor -->
+```csharp
+public class Order
+{
+    public Order(public int id { get; }) { }
+    public event Paid(int orderId);
+    public Order.Paid(int id) : this(id) { }      // compile error: `Order` declares both an event and a named constructor named `Paid`
+}
+```
+
 **Plain PHP events:** `extern event` marks a plain PHP class, such as a Laravel event, as an event, so PHP# code can listen to it:
 
 <!-- example extern-event -->
@@ -1258,6 +1307,18 @@ namespace App.Stubs;
 import Illuminate.Queue.Events.JobFailed;
 
 extern event JobFailed;
+```
+
+**`extern event` states the class's effects after `uses`,** as every `extern` does (section 29). `extern event JobFailed;` names no effect, so it declares an event that is pure. With `uses`, a call into the event's class has the effect it names:
+
+<!-- example extern-event-effects -->
+```csharp
+// app/Stubs/Laravel.sharp
+namespace App.Stubs;
+
+import Illuminate.Queue.Events.JobFailed;
+
+extern event JobFailed uses Database;            // an event, and a call into JobFailed has the effect Database
 ```
 
 **Listening:** a trailing `on` clause after a method's parameters lists the events the method listens to, for as long as the app runs. The method takes zero parameters, or one parameter whose type every listed event shares. It takes no other parameter, and no parameter is implicit. The namespace's `Module.sharp` container creates the object each listener runs on.
@@ -1287,10 +1348,17 @@ public void log(Order.Paid e, Logger logger) on Order.Paid { … }         // co
 
 **Listening for a while:** `Events.on<RowImported>(e => …)` starts a listener and returns a handle. The listener stops when the handle goes out of scope:
 
-<!-- example scoped-listener -->
+<!-- example scoped-listener: members
+public class ProgressBar { public void advance() { } }
+public class Importer { public void run(string path) { } }
+-->
 ```csharp
+import App.Imports.RowImported;
+
 public class ImportScreen
 {
+    public ImportScreen(private ProgressBar progress, private Importer importer) { }
+
     public void import(string path)
     {
         const listening = Events.on<RowImported>(e => this.progress.advance());   // listens until import returns
@@ -1457,6 +1525,7 @@ Cart otherCart = new Cart();
 ```csharp
 public abstract class DatabaseEntity
 {
+    public int id { get; }
     public static bool operator ==(DatabaseEntity a, DatabaseEntity b) => a.id == b.id;
     public int hash() => this.id;
 }
@@ -1488,8 +1557,8 @@ Money total = new Money(500, "USD");
 ```csharp
 Money? price = null;
 price == null;                   // true, without running Money's ==
-price == Money.zero;             // false, without running Money's ==
-total == Money.zero;             // total is a Money, so this runs Money's ==
+price == Money.zero("USD");      // false, without running Money's ==
+total == Money.zero("USD");      // false: total is a Money, so this runs Money's ==
 if (price != null) { … }         // the normal null check
 if (price is not null) { … }     // compiles: an ordinary pattern
 ```
@@ -1635,6 +1704,7 @@ Use an enum when the cases are small data. Use a sealed interface when each case
 `match` is the only branching construct on a value. `switch` is removed. `match` works both as an expression and, with block arms, as a statement. It compares strictly and never falls through.
 
 <!-- example match-forms: statements
+import Illuminate.Support.Facades.Log;
 PaymentResult result = PaymentResult.Declined(reason: "card expired");
 Order order = new Order();
 -->
@@ -1649,7 +1719,7 @@ const message = match (result) {
 match (result) {
     PaymentResult.Paid(string transactionId) => {
         deliver(order);
-        log(transactionId);
+        Log.info(transactionId);
     },
     default => {},
 }
@@ -1745,8 +1815,8 @@ if (entity is HasDesign) {
 Tab order = new Tab();
 -->
 ```csharp
-if (order.total is int) { order.total + 1; }   // compile error: order.total may have changed since the test
-if (order.total is int t) { t + 1; }           // compiles: t holds the value that was tested
+if (order.total is int) { order.total + 1; }    // compile error: order.total may have changed since the test
+if (order.total is int t) { let next = t + 1; } // compiles: t holds the value that was tested
 ```
 
 - **A variable that `is` creates exists only where the test held:** inside the `if` for `is`, and after an `if` whose block always exits for `is not`, as in C#. A block always exits when every path through it ends in `return`, `throw`, `break` or `continue`.
@@ -1762,12 +1832,14 @@ if (shape is Circle circle) {
 circle.radius;                         // compile error: `circle` exists only where `shape is Circle circle` is true
 ```
 
-<!-- example is-not-scope: members -->
+<!-- example is-not-scope: members
+private Map<string, int> prices = [:];
+-->
 ```csharp
 public Receipt checkout(Map<string, Any?> payload, string plan)
 {
     if (payload["orderId"] is not int orderId) { throw new BadPayload("orderId"); }
-    if (prices[plan] is not int price) { return Receipt.unknownPlan(plan); }
+    if (this.prices[plan] is not int price) { return Receipt.unknownPlan(plan); }
     return charge(orderId, price);                          // orderId and price are both known here
 }
 ```
@@ -2220,7 +2292,7 @@ import Sharp.Json.Json;
 string body = "{}";
 -->
 ```csharp
-Any payload = Json.decode(body);
+Any? payload = Json.decode(body);
 payload.order;                              // compile error: check what payload is first
 if (payload is WebhookPayload) {
     payload.order.total;                    // narrowed to WebhookPayload
@@ -2441,10 +2513,13 @@ public class Invoice : DatabaseEntity
 
 An extension adds methods and properties to an existing type from outside it. Extensions are declared in `extension(...)` blocks inside a static class, as in C# 14:
 
-<!-- example extensions: statements
-string title = "Spring Sale";
--->
+<!-- example extensions -->
 ```csharp
+// app/Shared/Text/TextExtensions.sharp
+namespace App.Shared.Text;
+
+import Illuminate.Support.Str;
+
 public static class TextExtensions
 {
     extension(string value)
@@ -2453,8 +2528,14 @@ public static class TextExtensions
         public bool isBlank => value.trim() == "";
     }
 }
+```
 
+<!-- example extensions: statements
+string title = "Spring Sale";
+-->
+```csharp
 import App.Shared.Text.TextExtensions;
+
 title.slug();
 title.isBlank;
 ```
@@ -2617,7 +2698,11 @@ public enum Status : string
     case Paid = "paid";
     case Refunded = "refunded";
 
-    public Status after(Payment e) => match (this) { … };                          // pure: the next status for every status and event
+    public Status after(Payment e) => match (this) {                               // pure: the next status for every status and event
+        Status.Open => Status.Paid,
+        Status.Paid => Status.Refunded,
+        Status.Refunded => Status.Refunded,
+    };
     law refundedIsFinal(Payment e) => Status.Refunded.after(e) == Status.Refunded;
 }
 ```
@@ -2669,6 +2754,7 @@ theorem receiptMatchesRefunds : App.Tenant.Store.Module.receiptMatchesRefunds :=
 - **A law's generated Lean statement is named by its class's full name and the law's name,** as in `App.Shared.Money.addKeepsCurrency`. A module law's is named by its namespace, `Module` and the law's name, as in `App.Tenant.Store.Module.receiptMatchesRefunds`.
 - **When a class or module has a law and no Lean file, the checker creates the file.** For each new law, it appends a proof found by Lean's automatic steps (`simp`, `omega`, `decide`), or a marked gap when none is found. It never rewrites a proof that exists.
 - **A law without a proof, a gap, or a proof whose law was deleted is a compile error that names it.**
+- **A structure rule is a Lean definition with the `@[rule]` attribute,** as in `@[rule] def importsOnly : Rule := .importsOnly [Billing.Money, Shared]`, the way Lean marks a simp lemma with `@[simp]`.
 - **A rule lives with the namespace it constrains.** "Shared never reaches Tenant" goes in `app/Shared/Module.lean`. A rule about the whole application goes in `app/Module.lean`.
 - **Names match exactly.** Translated code keeps its PHP# names in Lean, with no prefix.
 - **A failed rule is reported on the code that breaks it,** such as the offending `import` line, not only as a failed theorem.
