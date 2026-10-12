@@ -20,8 +20,8 @@ Queue::maker();
 
 // OrderMaker's header gives Maker<T> its argument, so the site in Maker.make() keeps what it spelled for OrderMaker. A
 // Maker<int> misses it and spells again, and keeps its own. A ListMaker<int> spells a List<int> code never spells, which
-// lives for the request, and the site keeps it too, since its cache lives for the request, so the OrderMaker after it
-// spells again.
+// lives for the request, and the site keeps it too, since its cache lives for the request. The request keeps every list
+// the site spelled, so an OrderMaker after another class spells nothing again.
 foreach ([
     Queue::orderMaker(), Queue::orderMaker(), Queue::intMaker(), Queue::intMaker(),
     Queue::orderMaker(), Queue::listMaker(), Queue::listMaker(), Queue::orderMaker(),

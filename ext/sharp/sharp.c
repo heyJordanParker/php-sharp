@@ -53,6 +53,8 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	/* The types and argument lists first read from input this request, NULL until there is one. See sharp_types. */
 	HashTable *request_types;
 	HashTable *request_type_lists;
+	/* The lists sharp_type_list_of_frame spelled this request, keyed by a sharp_type_spelling, NULL until there is one. */
+	HashTable *request_spelled_lists;
 ZEND_END_MODULE_GLOBALS(sharp)
 
 ZEND_DECLARE_MODULE_GLOBALS(sharp)
@@ -2483,6 +2485,17 @@ static sharp_type_node *sharp_type_node_ancestor(const zend_class_entry *ce, sha
 	return arguments;
 }
 
+/* What a list sharp_type_list_of_frame spells depends on, as the key of the request's table. Its padding is zeroed, since
+ * the table hashes its bytes. */
+typedef struct {
+	const zend_string *text;
+	const zend_class_entry *scope;
+	const zend_class_entry *ce;
+	const sharp_type *own;
+	const sharp_type *method;
+	bool unresolved;
+} sharp_type_spelling;
+
 const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object, const sharp_type *method,
 	bool unresolved, const zend_class_entry *scope, void **cache)
 {
@@ -2503,6 +2516,28 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 	 * spelled. */
 	if (cache[3] && cache[0] == ce && cache[1] == own && cache[2] == method) {
 		return cache[3];
+	}
+	/* The request keeps every list it spelled, so a site whose this alternates between classes or type arguments, as one
+	 * generic service used for several entity types does, spells each once. The text is an interned literal, and two
+	 * sites write one text into one pointer, so the class each is written in tells them apart. */
+	ZEND_ASSERT(ZSTR_IS_INTERNED(Z_STR_P(text)));
+	sharp_type_spelling key;
+	memset(&key, 0, sizeof(key));
+	key.text = Z_STR_P(text);
+	key.scope = scope;
+	key.ce = ce;
+	key.own = own;
+	key.method = method;
+	key.unresolved = unresolved;
+	HashTable **spelled = &SHARP_G(request_spelled_lists);
+	const sharp_type *substituted = *spelled ? zend_hash_str_find_ptr(*spelled, (const char *) &key, sizeof(key)) : NULL;
+	if (substituted) {
+		cache[0] = (void *) ce;
+		cache[1] = (void *) own;
+		cache[2] = (void *) method;
+		cache[3] = (void *) substituted;
+
+		return substituted;
 	}
 	sharp_type_reader reader = sharp_type_reader_of(Z_STRVAL_P(text), Z_STRLEN_P(text), zend_arena_create(1024));
 	sharp_type_node *open = sharp_type_read_list(&reader);
@@ -2526,8 +2561,13 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 	 * Node<List<T>>, so a new one lives for the request. One code already spells is the process's, as is a closed text
 	 * code writes, and an open one that names no `$i` on a call that gives no type arguments, such as the wildcard a
 	 * plain PHP call checks against, which the text alone decides. */
-	const sharp_type *substituted = sharp_type_intern(list, !reader.names || (!names_this && !method), &reader.arena);
+	substituted = sharp_type_intern(list, !reader.names || (!names_this && !method), &reader.arena);
 	zend_arena_destroy(reader.arena);
+	if (!*spelled) {
+		ALLOC_HASHTABLE(*spelled);
+		zend_hash_init(*spelled, 8, NULL, NULL, false);
+	}
+	zend_hash_str_add_new_ptr(*spelled, (const char *) &key, sizeof(key), (void *) substituted);
 
 	/* Every user run-time cache lives for one request: zend_activate zeroes the dynamic map_ptr table, and accel_activate
 	 * the preloaded caches. A list that lives for the request, which unserialize or a substitution makes, is freed at
@@ -2541,8 +2581,7 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 }
 
 /* Whether `given`, a type argument an object holds, matches `expected`: SHARP_TYPE_UNRESOLVED matches any type at any
- * depth, and every other type only itself, a written `Any?` too. An intersection that holds SHARP_TYPE_UNRESOLVED
- * matches any type, since it unifies with any class. */
+ * depth, and every other type only itself, a written `Any?` too. */
 static bool sharp_type_argument_matches(const sharp_type *expected, const sharp_type_node *given)
 {
 	if (zend_string_equals_literal(expected->text, SHARP_TYPE_UNRESOLVED)
@@ -2561,11 +2600,6 @@ static bool sharp_type_argument_matches(const sharp_type *expected, const sharp_
 			return false;
 		}
 	}
-	for (uint32_t i = 0; expected->kind == SHARP_TYPE_INTERSECTION && i < expected->count; i++) {
-		if (zend_string_equals_literal(expected->members[i]->text, SHARP_TYPE_UNRESOLVED)) {
-			return true;
-		}
-	}
 
 	uint32_t i = 0;
 	for (const sharp_type_node *member = given->first; member; member = member->next, i++) {
@@ -2582,6 +2616,24 @@ static bool sharp_type_argument_matches(const sharp_type *expected, const sharp_
  * compare: plain PHP's generics are erased. A loaded object's class has loaded each class it extends or implements. */
 static bool sharp_object_is(zend_object *object, const sharp_type *type)
 {
+	/* An object of the class itself holds its type arguments for that class, interned, so equal ones are one pointer. A
+	 * plain PHP class holds none. A subclass, a name written in another case, or a member that differs, as one a call
+	 * from plain PHP left unresolved, takes the walk below. */
+	if (zend_string_equals(object->ce->name, type->class_name)) {
+		/* A lazy proxy's initializer runs here, and can throw. Its exception stands for the check. */
+		const sharp_type *own = sharp_type_arguments(object);
+		if (!own || !type->count || UNEXPECTED(EG(exception))) {
+			return true;
+		}
+		bool is = own->count == type->count;
+		for (uint32_t i = 0; is && i < type->count; i++) {
+			is = sharp_type_equals(own->members[i], type->members[i]);
+		}
+		if (is) {
+			return true;
+		}
+	}
+
 	zend_class_entry *ce = zend_lookup_class_ex(type->class_name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
 	if (!ce || !instanceof_function(object->ce, ce)) {
 		return false;
@@ -3246,6 +3298,7 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 /* Runs after the request's objects are freed, so no slot still points into the request's types. */
 static ZEND_MODULE_POST_ZEND_DEACTIVATE_D(sharp)
 {
+	sharp_type_request_table_free(&SHARP_G(request_spelled_lists));
 	sharp_type_request_table_free(&SHARP_G(request_type_lists));
 	sharp_type_request_table_free(&SHARP_G(request_types));
 
