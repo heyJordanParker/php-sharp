@@ -3,7 +3,7 @@ PHP# constructors: `: super(…)`, named constructors and `init` properties, as 
 --FILE--
 <?php
 require __DIR__ . '/attempt.inc';
-require __DIR__ . '/Constructors.inc';
+require __DIR__ . '/constructors.inc';
 
 // Each round runs every form, so the JIT runs compiled code before the last round, whose output is printed.
 for ($round = 0; $round < 3; $round++) {

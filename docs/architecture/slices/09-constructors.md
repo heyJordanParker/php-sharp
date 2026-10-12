@@ -460,9 +460,10 @@ the PHP the bridge emits
 
 php-sharp
 ├── Zend/tests/sharp/Constructors.sharp        <- added: SalesReport, Artifact, the braced guard clause, an `init` Label
-├── Zend/tests/sharp/Constructors.inc          <- added: the plain PHP subclasses LegacyArtifact and LegacyLabel
-├── Zend/tests/sharp/harness/Report.inc        <- added: the plain PHP base class SalesReport extends
+├── Zend/tests/sharp/constructors.inc          <- added: the plain PHP subclasses LegacyArtifact and LegacyLabel; lowercase,
+│                                                 because it is no opcode twin of Constructors.sharp
 ├── Zend/tests/sharp/constructors.phpt         <- added: a plain PHP caller, reflection, and the `init` boundary
+├── Zend/tests/sharp/harness/Report.inc        <- added: the plain PHP base class SalesReport extends
 ├── ext/sharp/sharp_unit.h                     <- SHARP_MAGO_COMMIT, the pinned Mago commit, moves
 └── sharp/baseline/spec                        <- the section 9.1 examples leave it
 ```
@@ -489,7 +490,7 @@ Each PR lands with tests on both sides where the engine is reached, and ends in 
    - Run: `compile` compiles `Super.sharp` and `RequiredChildren.sharp`'s `Ledger`, refuses `Invoice` with section 25's rule, refuses `Child` with `missing-super-call`, and refuses `Inherits` as not supported yet.
 3. **mago-sharp: named constructors.** `NamedConstructor`, `ConstructorName`, `parse_named_constructor`, `walk_in_named_constructor` with `NAMED_CONSTRUCTOR`, the analyzer's instantiation path, `named-constructor-without-new`, non-inheritance, `invalid-property-write` for an overwrite, the semantics rules, `Lowering::named_constructor`, the Lean refusal, and `NodeKind.php` regenerated.
    - Run: `compile` compiles `Artifact.sharp` and `ArtifactUse.sharp`. A file holding `Artifact.fromJson(json)` is refused with `named-constructor-without-new`.
-4. **php-sharp: the engine runs section 9 and `init`.** Bump the pinned Mago commit and add `Constructors.sharp`, `Constructors.inc` and `constructors.phpt` in all four opcache modes:
+4. **php-sharp: the engine runs section 9 and `init`.** Bump the pinned Mago commit and add `Constructors.sharp`, `constructors.inc` and `constructors.phpt` in all four opcache modes:
    - `new SalesReport(1)` runs `Report`'s constructor through `: super(…)`.
    - `new Artifact.fromJson(json)` and `Artifact::fromJson($json)` give the same object, and `super.m()` inside a named constructor runs on the new object.
    - Reflection shows what "What a plain PHP caller sees" lists, and `LegacyArtifact::fromJson($json)` returns an `Artifact`.
