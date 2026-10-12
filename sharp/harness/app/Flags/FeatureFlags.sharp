@@ -1,0 +1,6 @@
+namespace App.Flags;
+
+public class FeatureFlags
+{
+    public bool enabled(string flag) => false;
+}

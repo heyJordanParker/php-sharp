@@ -1,0 +1,12 @@
+namespace App;
+
+import LogicException;
+
+// What an example's `…` compiles to: code the spec leaves out, which throws if it ever runs.
+public class Elided : LogicException
+{
+    public static Any value()
+    {
+        throw new Elided();
+    }
+}

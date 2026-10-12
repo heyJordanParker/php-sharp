@@ -20,6 +20,7 @@ Precedent: Go and esbuild.
 
 ## Example
 
+<!-- example readme-cart -->
 ```csharp
 // app/Store/Cart.sharp
 namespace App.Store;
@@ -41,6 +42,9 @@ public class Cart
 
 Plain PHP uses it like any other class:
 
+<!-- example readme-cart: statements
+$line = new App\Store\Line(500, false);
+-->
 ```php
 $cart = new App\Store\Cart();
 $cart->add($line);
