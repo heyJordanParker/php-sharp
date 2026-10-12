@@ -975,6 +975,578 @@ ZEND_METHOD(Sharp_Collection, set)
 	zval_ptr_dtor(&old);
 }
 
+/* Spec section 10: a struct keys a Map and joins a Set by its whole value, stored as its key text. One encoder writes
+ * the text and sharp_key_read_struct is its exact inverse. The text is the struct's class name, then each stored
+ * property in declaration order, as App\Spot{"x":1,"y":2}. Inside it a value is null, true, false, an int, a float in
+ * its shortest round-trip form with a fraction or an exponent, so 1.0 never reads back as 1, -0.0 as 0.0, INF, -INF
+ * and NAN, a string as JSON writes it with only ", \ and the bytes below 0x20 escaped, an enum case as
+ * App\Status::Open, a nested struct as its own text, and an array as [v,...] when its keys in order are 0 to n-1, else
+ * as {"k":v,...} with int keys first in ascending order and then string keys by their bytes. So two values == calls
+ * equal share one text, and the class name first keeps PHP from reading a text as an int key. NaN is the one value
+ * never == to itself, and its text is still one key. */
+static zend_class_entry *sharp_ce_struct;
+
+#define SHARP_KEY_DEPTH PHP_JSON_PARSER_DEFAULT_DEPTH
+
+/* As PHP lets only an enum implement UnitEnum, only a struct implements Sharp\Struct: the final class the bridge
+ * lowers a struct to, from a .sharp file, whose checker lets no PHP# code name Sharp.Struct. A plain PHP class could
+ * hold a cycle, and the encoder would never end. */
+static int sharp_struct_implemented(zend_class_entry *interface, zend_class_entry *class_type)
+{
+	if (class_type->type == ZEND_USER_CLASS && (class_type->ce_flags & ZEND_ACC_FINAL)
+			&& class_type->info.user.filename && sharp_is_sharp_file(class_type->info.user.filename)) {
+		return SUCCESS;
+	}
+
+	zend_error_noreturn(E_ERROR, "Non-struct class %s cannot implement interface %s",
+		ZSTR_VAL(class_type->name), ZSTR_VAL(interface->name));
+	return FAILURE;
+}
+
+static bool sharp_key_write(smart_str *text, zval *value, int depth);
+
+static void sharp_key_write_string(smart_str *text, const zend_string *string)
+{
+	smart_str_appendc(text, '"');
+	for (size_t i = 0; i < ZSTR_LEN(string); i++) {
+		unsigned char byte = (unsigned char) ZSTR_VAL(string)[i];
+		if (byte == '"' || byte == '\\') {
+			smart_str_appendc(text, '\\');
+			smart_str_appendc(text, byte);
+		} else if (byte < 0x20) {
+			smart_str_append_printf(text, "\\u%04x", byte);
+		} else {
+			smart_str_appendc(text, byte);
+		}
+	}
+	smart_str_appendc(text, '"');
+}
+
+static void sharp_key_write_double(smart_str *text, double number)
+{
+	if (zend_isnan(number)) {
+		smart_str_appendl(text, "NAN", 3);
+	} else if (zend_isinf(number)) {
+		smart_str_appends(text, number > 0 ? "INF" : "-INF");
+	} else {
+		/* == calls -0.0 and 0.0 equal, so they share one text. */
+		smart_str_append_double(text, number == 0 ? 0.0 : number, -1, true);
+	}
+}
+
+/* Orders two entries as a key text writes an array: int keys first in ascending order, then string keys by bytes. */
+static int sharp_key_compare(Bucket *a, Bucket *b)
+{
+	if (!a->key && !b->key) {
+		return ZEND_THREEWAY_COMPARE((zend_long) a->h, (zend_long) b->h);
+	}
+	if (!a->key || !b->key) {
+		return a->key ? 1 : -1;
+	}
+
+	return zend_binary_strcmp(ZSTR_VAL(a->key), ZSTR_LEN(a->key), ZSTR_VAL(b->key), ZSTR_LEN(b->key));
+}
+
+static bool sharp_key_write_array(smart_str *text, HashTable *array, int depth)
+{
+	HashTable *sorted = zend_array_dup(array);
+	zend_hash_sort(sorted, sharp_key_compare, false);
+	bool is_list = zend_array_is_list(sorted);
+	bool written = true;
+	bool first = true;
+	zend_ulong index;
+	zend_string *key;
+	zval *element;
+
+	smart_str_appendc(text, is_list ? '[' : '{');
+	ZEND_HASH_FOREACH_KEY_VAL(sorted, index, key, element) {
+		if (!first) {
+			smart_str_appendc(text, ',');
+		}
+		first = false;
+		if (!is_list) {
+			if (key) {
+				sharp_key_write_string(text, key);
+			} else {
+				smart_str_appendc(text, '"');
+				smart_str_append_long(text, (zend_long) index);
+				smart_str_appendc(text, '"');
+			}
+			smart_str_appendc(text, ':');
+		}
+		if (!sharp_key_write(text, element, depth)) {
+			written = false;
+			break;
+		}
+	} ZEND_HASH_FOREACH_END();
+	smart_str_appendc(text, is_list ? ']' : '}');
+	zend_array_release(sorted);
+
+	return written;
+}
+
+static bool sharp_key_write_struct(smart_str *text, zend_object *object, int depth)
+{
+	zend_string *name;
+	zend_property_info *info;
+	bool first = true;
+
+	smart_str_append(text, object->ce->name);
+	smart_str_appendc(text, '{');
+	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&object->ce->properties_info, name, info) {
+		if (info->flags & (ZEND_ACC_STATIC | ZEND_ACC_VIRTUAL)) {
+			continue;
+		}
+		zval *value = OBJ_PROP(object, info->offset);
+		if (Z_TYPE_P(value) == IS_UNDEF) {
+			zend_throw_error(NULL, "%s::$%s must be set before its struct is a key", ZSTR_VAL(object->ce->name), ZSTR_VAL(name));
+			return false;
+		}
+		if (!first) {
+			smart_str_appendc(text, ',');
+		}
+		first = false;
+		sharp_key_write_string(text, name);
+		smart_str_appendc(text, ':');
+		if (!sharp_key_write(text, value, depth)) {
+			return false;
+		}
+	} ZEND_HASH_FOREACH_END();
+	smart_str_appendc(text, '}');
+
+	return true;
+}
+
+static bool sharp_key_write(smart_str *text, zval *value, int depth)
+{
+	if (depth > SHARP_KEY_DEPTH) {
+		zend_value_error("A key text nests deeper than %d", SHARP_KEY_DEPTH);
+		return false;
+	}
+
+	ZVAL_DEREF(value);
+	switch (Z_TYPE_P(value)) {
+		case IS_NULL:
+			smart_str_appendl(text, "null", 4);
+			return true;
+		case IS_FALSE:
+			smart_str_appendl(text, "false", 5);
+			return true;
+		case IS_TRUE:
+			smart_str_appendl(text, "true", 4);
+			return true;
+		case IS_LONG:
+			smart_str_append_long(text, Z_LVAL_P(value));
+			return true;
+		case IS_DOUBLE:
+			sharp_key_write_double(text, Z_DVAL_P(value));
+			return true;
+		case IS_STRING:
+			sharp_key_write_string(text, Z_STR_P(value));
+			return true;
+		case IS_ARRAY:
+			return sharp_key_write_array(text, Z_ARRVAL_P(value), depth + 1);
+		case IS_OBJECT:
+			if (Z_OBJCE_P(value)->ce_flags & ZEND_ACC_ENUM) {
+				smart_str_append(text, Z_OBJCE_P(value)->name);
+				smart_str_appendl(text, "::", 2);
+				smart_str_append(text, Z_STR_P(zend_enum_fetch_case_name(Z_OBJ_P(value))));
+				return true;
+			}
+			if (instanceof_function(Z_OBJCE_P(value), sharp_ce_struct)) {
+				return sharp_key_write_struct(text, Z_OBJ_P(value), depth + 1);
+			}
+			ZEND_FALLTHROUGH;
+		default:
+			zend_type_error("A struct key holds only values, %s given", zend_zval_value_name(value));
+			return false;
+	}
+}
+
+/* The key text of the struct object, which the caller releases, or NULL after an exception. */
+static zend_string *sharp_struct_key(zend_object *object)
+{
+	smart_str text = {0};
+
+	if (!sharp_key_write_struct(&text, object, 1)) {
+		smart_str_free(&text);
+		return NULL;
+	}
+
+	return smart_str_extract(&text);
+}
+
+typedef struct {
+	const char *at;
+	const char *end;
+} sharp_key_reader;
+
+static bool sharp_key_read(sharp_key_reader *reader, zval *value, int depth);
+
+static bool sharp_key_skip(sharp_key_reader *reader, const char *expected, size_t length)
+{
+	if ((size_t) (reader->end - reader->at) < length || memcmp(reader->at, expected, length) != 0) {
+		return false;
+	}
+	reader->at += length;
+
+	return true;
+}
+
+/* Skips a word the encoder writes, such as null or INF, only when a delimiter follows it, since a class name such as
+ * INFO\Spot starts as INF does. */
+static bool sharp_key_skip_word(sharp_key_reader *reader, const char *word, size_t length)
+{
+	const char *after = reader->at + length;
+
+	if ((size_t) (reader->end - reader->at) < length || memcmp(reader->at, word, length) != 0
+			|| (after < reader->end && !strchr(",]}", *after))) {
+		return false;
+	}
+	reader->at = after;
+
+	return true;
+}
+
+static zend_string *sharp_key_read_name(sharp_key_reader *reader)
+{
+	const char *start = reader->at;
+
+	while (reader->at < reader->end && (isalnum((unsigned char) *reader->at) || *reader->at == '_'
+			|| *reader->at == '\\' || (unsigned char) *reader->at >= 0x80)) {
+		reader->at++;
+	}
+
+	return reader->at > start ? zend_string_init(start, reader->at - start, false) : NULL;
+}
+
+static int sharp_key_hex(char digit)
+{
+	return digit >= 'a' ? digit - 'a' + 10 : digit >= 'A' ? digit - 'A' + 10 : digit - '0';
+}
+
+static zend_string *sharp_key_read_string(sharp_key_reader *reader)
+{
+	smart_str read = {0};
+
+	if (!sharp_key_skip(reader, "\"", 1)) {
+		return NULL;
+	}
+	while (reader->at < reader->end && *reader->at != '"') {
+		char byte = *reader->at++;
+		if (byte != '\\') {
+			smart_str_appendc(&read, byte);
+		} else if (reader->at < reader->end && (*reader->at == '"' || *reader->at == '\\')) {
+			smart_str_appendc(&read, *reader->at++);
+		} else if (reader->end - reader->at >= 5 && reader->at[0] == 'u' && reader->at[1] == '0' && reader->at[2] == '0'
+				&& isxdigit((unsigned char) reader->at[3]) && isxdigit((unsigned char) reader->at[4])
+				&& sharp_key_hex(reader->at[3]) < 2) {
+			smart_str_appendc(&read, (char) (sharp_key_hex(reader->at[3]) * 16 + sharp_key_hex(reader->at[4])));
+			reader->at += 5;
+		} else {
+			smart_str_free(&read);
+			return NULL;
+		}
+	}
+	if (!sharp_key_skip(reader, "\"", 1)) {
+		smart_str_free(&read);
+		return NULL;
+	}
+
+	return read.s ? smart_str_extract(&read) : ZSTR_EMPTY_ALLOC();
+}
+
+static bool sharp_key_read_number(sharp_key_reader *reader, zval *value)
+{
+	const char *start = reader->at;
+	bool is_double = false;
+
+	if (sharp_key_skip_word(reader, "-INF", 4)) {
+		ZVAL_DOUBLE(value, -ZEND_INFINITY);
+		return true;
+	}
+	if (reader->at < reader->end && *reader->at == '-') {
+		reader->at++;
+	}
+	while (reader->at < reader->end && (isdigit((unsigned char) *reader->at) || strchr(".eE+-", *reader->at))) {
+		is_double = is_double || !isdigit((unsigned char) *reader->at);
+		reader->at++;
+	}
+
+	char *parsed_end;
+	if (is_double) {
+		ZVAL_DOUBLE(value, zend_strtod(start, (const char **) &parsed_end));
+	} else {
+		errno = 0;
+		ZVAL_LONG(value, ZEND_STRTOL(start, &parsed_end, 10));
+		if (errno == ERANGE) {
+			return false;
+		}
+	}
+
+	return parsed_end == reader->at && reader->at > start;
+}
+
+/* Reads one value of an array into array, and the separator after it. Returns 1 when the array goes on, 0 when it
+ * ends, and -1 for a text no encoder wrote. */
+static int sharp_key_read_element(sharp_key_reader *reader, HashTable *array, bool is_list, char closer, int depth)
+{
+	zend_string *key = NULL;
+	zval element;
+
+	if (!is_list && (!(key = sharp_key_read_string(reader)) || !sharp_key_skip(reader, ":", 1))) {
+		if (key) {
+			zend_string_release(key);
+		}
+		return -1;
+	}
+	if (!sharp_key_read(reader, &element, depth)) {
+		if (key) {
+			zend_string_release(key);
+		}
+		return -1;
+	}
+	if (key) {
+		zend_symtable_update(array, key, &element);
+		zend_string_release(key);
+	} else {
+		zend_hash_next_index_insert_new(array, &element);
+	}
+
+	return sharp_key_skip(reader, ",", 1) ? 1 : sharp_key_skip(reader, &closer, 1) ? 0 : -1;
+}
+
+/* Destroys a value a failed read built, and leaves it undefined, so the caller frees nothing twice. */
+static void sharp_key_drop(zval *value)
+{
+	zval_ptr_dtor(value);
+	ZVAL_UNDEF(value);
+}
+
+static bool sharp_key_read_array(sharp_key_reader *reader, zval *value, bool is_list, int depth)
+{
+	char closer = is_list ? ']' : '}';
+	int more = 1;
+
+	reader->at++;
+	array_init(value);
+	if (sharp_key_skip(reader, &closer, 1)) {
+		return true;
+	}
+	while (more > 0) {
+		more = sharp_key_read_element(reader, Z_ARRVAL_P(value), is_list, closer, depth);
+	}
+	if (more < 0) {
+		sharp_key_drop(value);
+		return false;
+	}
+
+	return true;
+}
+
+static bool sharp_key_read_case(sharp_key_reader *reader, zend_string *name, zval *value)
+{
+	zend_class_entry *ce = zend_lookup_class(name);
+	if (!ce || !(ce->ce_flags & ZEND_ACC_ENUM)) {
+		if (!EG(exception)) {
+			zend_argument_value_error(1, "names %s, which is not an enum", ZSTR_VAL(name));
+		}
+		return false;
+	}
+
+	zend_string *case_name = sharp_key_read_name(reader);
+	zend_class_constant *constant = case_name ? zend_hash_find_ptr(CE_CONSTANTS_TABLE(ce), case_name) : NULL;
+	if (!constant || !(ZEND_CLASS_CONST_FLAGS(constant) & ZEND_CLASS_CONST_IS_CASE)) {
+		if (case_name) {
+			zend_string_release(case_name);
+		}
+		return false;
+	}
+	zend_object *found = zend_enum_get_case(ce, case_name);
+	zend_string_release(case_name);
+	ZVAL_OBJ_COPY(value, found);
+
+	return true;
+}
+
+/* The struct the text names, built from its stored properties in declaration order without running its constructor,
+ * as unserialize builds an object. Each property's type is checked as an assignment checks it. */
+static bool sharp_key_read_struct(sharp_key_reader *reader, zend_string *name, zval *value, int depth)
+{
+	if (!sharp_key_skip(reader, "{", 1)) {
+		return false;
+	}
+	zend_class_entry *ce = zend_lookup_class(name);
+	if (!ce) {
+		if (!EG(exception)) {
+			zend_argument_value_error(1, "names %s, which does not exist", ZSTR_VAL(name));
+		}
+		return false;
+	}
+	if (!instanceof_function(ce, sharp_ce_struct)) {
+		zend_argument_value_error(1, "names %s, which is not a struct", ZSTR_VAL(ce->name));
+		return false;
+	}
+	if (object_init_ex(value, ce) != SUCCESS) {
+		return false;
+	}
+
+	zend_string *property;
+	zend_property_info *info;
+	bool first = true;
+	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&ce->properties_info, property, info) {
+		if (info->flags & (ZEND_ACC_STATIC | ZEND_ACC_VIRTUAL)) {
+			continue;
+		}
+		zend_string *written = NULL;
+		zval read;
+		if ((!first && !sharp_key_skip(reader, ",", 1)) || !(written = sharp_key_read_string(reader))
+				|| !zend_string_equals(written, property) || !sharp_key_skip(reader, ":", 1)
+				|| !sharp_key_read(reader, &read, depth)) {
+			if (written) {
+				zend_string_release(written);
+			}
+			sharp_key_drop(value);
+			return false;
+		}
+		zend_string_release(written);
+		first = false;
+		if (ZEND_TYPE_IS_SET(info->type) && !zend_verify_property_type(info, &read, true)) {
+			zval_ptr_dtor(&read);
+			sharp_key_drop(value);
+			return false;
+		}
+
+		zval *slot = OBJ_PROP(Z_OBJ_P(value), info->offset);
+		zval garbage;
+		ZVAL_COPY_VALUE(&garbage, slot);
+		ZVAL_COPY_VALUE(slot, &read);
+		Z_PROP_FLAG_P(slot) &= ~(IS_PROP_UNINIT | IS_PROP_REINITABLE);
+		zval_ptr_dtor(&garbage);
+	} ZEND_HASH_FOREACH_END();
+	if (!sharp_key_skip(reader, "}", 1)) {
+		sharp_key_drop(value);
+		return false;
+	}
+
+	return true;
+}
+
+static bool sharp_key_read(sharp_key_reader *reader, zval *value, int depth)
+{
+	if (depth > SHARP_KEY_DEPTH) {
+		zend_argument_value_error(1, "nests deeper than %d", SHARP_KEY_DEPTH);
+		return false;
+	}
+	if (reader->at >= reader->end) {
+		return false;
+	}
+
+	char first = *reader->at;
+	if (sharp_key_skip_word(reader, "null", 4)) {
+		ZVAL_NULL(value);
+		return true;
+	}
+	if (sharp_key_skip_word(reader, "true", 4)) {
+		ZVAL_TRUE(value);
+		return true;
+	}
+	if (sharp_key_skip_word(reader, "false", 5)) {
+		ZVAL_FALSE(value);
+		return true;
+	}
+	if (sharp_key_skip_word(reader, "NAN", 3)) {
+		ZVAL_DOUBLE(value, ZEND_NAN);
+		return true;
+	}
+	if (sharp_key_skip_word(reader, "INF", 3)) {
+		ZVAL_DOUBLE(value, ZEND_INFINITY);
+		return true;
+	}
+	if (first == '-' || isdigit((unsigned char) first)) {
+		return sharp_key_read_number(reader, value);
+	}
+	if (first == '"') {
+		zend_string *string = sharp_key_read_string(reader);
+		if (!string) {
+			return false;
+		}
+		ZVAL_STR(value, string);
+		return true;
+	}
+	if (first == '[' || first == '{') {
+		return sharp_key_read_array(reader, value, first == '[', depth + 1);
+	}
+
+	zend_string *name = sharp_key_read_name(reader);
+	if (!name) {
+		return false;
+	}
+	bool read = sharp_key_skip(reader, "::", 2)
+		? sharp_key_read_case(reader, name, value)
+		: sharp_key_read_struct(reader, name, value, depth + 1);
+	zend_string_release(name);
+
+	return read;
+}
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Map_key, 0, 1, IS_STRING, 0)
+	ZEND_ARG_OBJ_INFO(0, struct, Sharp\\Struct, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Sharp_Map_readKey, 0, 1, Sharp\\Struct, 0)
+	ZEND_ARG_TYPE_INFO(0, text, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+/* The key text a Map holds the struct under. */
+ZEND_METHOD(Sharp_Map, key)
+{
+	zend_object *object;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJ_OF_CLASS(object, sharp_ce_struct)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_string *text = sharp_struct_key(object);
+	if (!text) {
+		RETURN_THROWS();
+	}
+	RETURN_STR(text);
+}
+
+/* The struct a key text names, which a loop over a Map reads its key back as. */
+ZEND_METHOD(Sharp_Map, readKey)
+{
+	zend_string *text;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STR(text)
+	ZEND_PARSE_PARAMETERS_END();
+
+	sharp_key_reader reader = {ZSTR_VAL(text), ZSTR_VAL(text) + ZSTR_LEN(text)};
+	zend_string *name = sharp_key_read_name(&reader);
+	bool read = name && sharp_key_read_struct(&reader, name, return_value, 1);
+	if (name) {
+		zend_string_release(name);
+	}
+	if (read && reader.at != reader.end) {
+		sharp_key_drop(return_value);
+		read = false;
+	}
+	if (!read) {
+		if (!EG(exception)) {
+			zend_argument_value_error(1, "is not a key text");
+		}
+		RETURN_THROWS();
+	}
+}
+
+static const zend_function_entry class_Sharp_Map_methods[] = {
+	ZEND_ME(Sharp_Map, key, arginfo_class_Sharp_Map_key, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(Sharp_Map, readKey, arginfo_class_Sharp_Map_readKey, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_FE_END
+};
+
 /* The key a Map method takes: an int or a string. */
 static bool sharp_collection_key(zval *key, zend_string **string_key, zend_long *long_key)
 {
@@ -1280,8 +1852,8 @@ ZEND_METHOD(Sharp_Collection, any)
 	RETURN_BOOL(element != NULL);
 }
 
-/* The slot of a map under the key a function gave, which spec section 12 makes an int or a string. A
- * string of digits is the int key, as in any PHP array. */
+/* The slot of a map under the key a function gave, which spec section 12 makes an int or a string, and section 10 a
+ * struct, held as its key text. A string of digits is the int key, as in any PHP array. */
 static zval *sharp_collection_key_slot(HashTable *map, zval *key)
 {
 	zend_ulong index;
@@ -1294,8 +1866,19 @@ static zval *sharp_collection_key_slot(HashTable *map, zval *key)
 				return zend_hash_index_lookup(map, index);
 			}
 			return zend_hash_lookup(map, Z_STR_P(key));
+		case IS_OBJECT:
+			if (instanceof_function(Z_OBJCE_P(key), sharp_ce_struct)) {
+				zend_string *text = sharp_struct_key(Z_OBJ_P(key));
+				if (!text) {
+					return NULL;
+				}
+				zval *slot = zend_hash_lookup(map, text);
+				zend_string_release(text);
+				return slot;
+			}
+			ZEND_FALLTHROUGH;
 		default:
-			zend_type_error("A map key must be of type int|string, %s given", zend_zval_value_name(key));
+			zend_type_error("A map key must be of type int|string or a struct, %s given", zend_zval_value_name(key));
 			return NULL;
 	}
 }
@@ -1673,11 +2256,15 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Set_from, 0, 1, IS_A
 	ZEND_ARG_TYPE_INFO(0, values, IS_ARRAY, 0)
 ZEND_END_ARG_INFO()
 
-/* The key a Set holds element under, as PHP stores an array key: a backed enum case's value or the
- * element itself, with a numeric string as its int, so name is NULL for an int key. False after a
- * TypeError for any other element. */
+/* The key a Set holds element under, as PHP stores an array key: a backed enum case's value, a struct's key text or
+ * the element itself, with a numeric string as its int, so name is NULL for an int key. The caller releases name.
+ * False after a TypeError for any other element. */
 static bool sharp_set_key(zval *element, zend_ulong *index, zend_string **name)
 {
+	if (Z_TYPE_P(element) == IS_OBJECT && instanceof_function(Z_OBJCE_P(element), sharp_ce_struct)) {
+		*name = sharp_struct_key(Z_OBJ_P(element));
+		return *name != NULL;
+	}
 	if (Z_TYPE_P(element) == IS_OBJECT && (Z_OBJCE_P(element)->ce_flags & ZEND_ACC_ENUM)
 		&& Z_OBJCE_P(element)->enum_backing_type != IS_UNDEF) {
 		element = zend_enum_fetch_case_value(Z_OBJ_P(element));
@@ -1688,11 +2275,11 @@ static bool sharp_set_key(zval *element, zend_ulong *index, zend_string **name)
 		return true;
 	}
 	if (Z_TYPE_P(element) == IS_STRING) {
-		*name = ZEND_HANDLE_NUMERIC(Z_STR_P(element), *index) ? NULL : Z_STR_P(element);
+		*name = ZEND_HANDLE_NUMERIC(Z_STR_P(element), *index) ? NULL : zend_string_copy(Z_STR_P(element));
 		return true;
 	}
 
-	zend_argument_type_error(1, "must hold only int, string or backed enum values, %s given", zend_zval_value_name(element));
+	zend_argument_type_error(1, "must hold only int, string, backed enum or struct values, %s given", zend_zval_value_name(element));
 	return false;
 }
 
@@ -1716,6 +2303,9 @@ ZEND_METHOD(Sharp_Set, from)
 			RETURN_THROWS();
 		}
 		is_set = is_set && (name ? held_name && zend_string_equals(held_name, name) : !held_name && held_index == index);
+		if (name) {
+			zend_string_release(name);
+		}
 	} ZEND_HASH_FOREACH_END();
 	if (is_set) {
 		RETURN_COPY(values);
@@ -1727,6 +2317,9 @@ ZEND_METHOD(Sharp_Set, from)
 		sharp_set_key(element, &index, &name);
 		if (name ? zend_hash_add(set, name, element) : zend_hash_index_add(set, index, element)) {
 			Z_TRY_ADDREF_P(element);
+		}
+		if (name) {
+			zend_string_release(name);
 		}
 	} ZEND_HASH_FOREACH_END();
 
@@ -1747,6 +2340,26 @@ static zend_class_entry *register_class_Sharp_Set(void)
 	return zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES);
 }
 
+static zend_class_entry *register_class_Sharp_Map(void)
+{
+	zend_class_entry ce;
+
+	INIT_NS_CLASS_ENTRY(ce, "Sharp", "Map", class_Sharp_Map_methods);
+
+	return zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES);
+}
+
+static zend_class_entry *register_class_Sharp_Struct(void)
+{
+	zend_class_entry ce;
+
+	INIT_NS_CLASS_ENTRY(ce, "Sharp", "Struct", NULL);
+	zend_class_entry *interface = zend_register_internal_interface(&ce);
+	interface->interface_gets_implemented = sharp_struct_implemented;
+
+	return interface;
+}
+
 static PHP_MINIT_FUNCTION(sharp)
 {
 	REGISTER_INI_ENTRIES();
@@ -1762,6 +2375,8 @@ static PHP_MINIT_FUNCTION(sharp)
 	register_class_Sharp_Position();
 	register_class_Sharp_List();
 	register_class_Sharp_Set();
+	sharp_ce_struct = register_class_Sharp_Struct();
+	register_class_Sharp_Map();
 
 	zend_class_entry *environment = register_class_Sharp_Environment();
 	memcpy(&sharp_environment_handlers, &std_object_handlers, sizeof(zend_object_handlers));

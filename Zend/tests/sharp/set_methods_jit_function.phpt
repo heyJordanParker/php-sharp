@@ -125,7 +125,7 @@ array(7) {
   [6]=>
   bool(true)
 }
-TypeError: Sharp\Set::from(): Argument #1 ($values) must hold only int, string or backed enum values, float given in Sets.sharp on line 18
+TypeError: Sharp\Set::from(): Argument #1 ($values) must hold only int, string, backed enum or struct values, float given in Sets.sharp on line 18
 array(2) {
   [3]=>
   int(3)
@@ -287,5 +287,5 @@ array(1) {
   ["x"]=>
   string(1) "x"
 }
-TypeError: Sharp\Set::from(): Argument #1 ($values) must hold only int, string or backed enum values, null given in set_methods.inc on line 43
-TypeError: Sharp\Set::from(): Argument #1 ($values) must hold only int, string or backed enum values, stdClass given in set_methods.inc on line 44
+TypeError: Sharp\Set::from(): Argument #1 ($values) must hold only int, string, backed enum or struct values, null given in set_methods.inc on line 43
+TypeError: Sharp\Set::from(): Argument #1 ($values) must hold only int, string, backed enum or struct values, stdClass given in set_methods.inc on line 44
