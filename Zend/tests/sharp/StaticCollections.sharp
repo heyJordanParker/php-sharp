@@ -24,6 +24,7 @@ class Archive
     private static Set<string> tags = [];
     protected static List<string> shared = [];
     public static List<string> shown { get; private set; } = [];
+    private static Ticker? ticker = null;
     private List<string> own = [];
 
     public static List<string> retitle(string title)
@@ -62,6 +63,13 @@ class Archive
 
     public static Function<void(string)> shower() => title => Archive.shown.add(title);
 
+    public static int tickTwice()
+    {
+        Archive.ticker = new Ticker();
+        Archive.ticker.tick();
+        return Archive.ticker.tick();
+    }
+
     public List<string> keep(string title)
     {
         this.own = [];
@@ -77,6 +85,17 @@ class Branch : Archive
         Branch.shared = [];
         Branch.shared.add(title);
         return Archive.shelved();
+    }
+}
+
+class Ticker
+{
+    public int ticks { get; private set; } = 0;
+
+    public int tick()
+    {
+        this.ticks += 1;
+        return this.ticks;
     }
 }
 

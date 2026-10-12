@@ -16190,35 +16190,12 @@ static int zend_jit_incdec_obj(zend_jit_ctx         *jit,
 static int zend_jit_fetch_static_prop(zend_jit_ctx *jit, const zend_op *opline, const zend_op_array *op_array)
 {
 	zend_jit_addr res_addr = RES_ADDR();
-	uint32_t cache_slot = opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS;
+	/* A PHP# method call's receiver may carry ZEND_SHARP_OPERATOR */
+	uint32_t cache_slot = opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR);
 	uint32_t flags;
 	ir_ref ref, ref2, if_cached, fast_path, cold_path, prop_info_ref, if_typed, if_def;
 	int fetch_type;
-	zend_property_info *known_prop_info = NULL;
-	zend_class_entry *ce;
-
-	ce = zend_get_known_class(op_array, opline, opline->op2_type, opline->op2);
-	if (ce && (opline->op2_type == IS_CONST || !(ce->ce_flags & ZEND_ACC_TRAIT))) {
-		zval *zv = RT_CONSTANT(opline, opline->op1);
-		zend_string *prop_name;
-
-		ZEND_ASSERT(Z_TYPE_P(zv) == IS_STRING);
-		prop_name = Z_STR_P(zv);
-		zv = zend_hash_find(&ce->properties_info, prop_name);
-		if (zv) {
-			zend_property_info *prop_info = Z_PTR_P(zv);
-
-			if (prop_info->flags & ZEND_ACC_STATIC) {
-				if (prop_info->ce == op_array->scope
-				 || (prop_info->flags & ZEND_ACC_PUBLIC)
-				 || ((prop_info->flags & ZEND_ACC_PROTECTED)
-				  && op_array->scope
-				  && instanceof_function_slow(op_array->scope, prop_info->ce))) {
-					known_prop_info = prop_info;
-				}
-			}
-		}
-	}
+	zend_property_info *known_prop_info = zend_get_known_static_property_info(op_array, opline);
 
 	switch (opline->opcode) {
 		case ZEND_FETCH_STATIC_PROP_R:

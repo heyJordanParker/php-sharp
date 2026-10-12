@@ -669,21 +669,56 @@ static zend_property_info* zend_get_known_property_info(const zend_op_array *op_
 	return NULL;
 }
 
+/* The static property a ZEND_FETCH_STATIC_PROP_* opline reads, when the JIT knows its class and the
+ * op array may read it. */
+static zend_property_info* zend_get_known_static_property_info(const zend_op_array *op_array, const zend_op *opline)
+{
+	zend_class_entry *ce = zend_get_known_class(op_array, opline, opline->op2_type, opline->op2);
+
+	if (ce && (opline->op2_type == IS_CONST || !(ce->ce_flags & ZEND_ACC_TRAIT))) {
+		zval *zv = RT_CONSTANT(opline, opline->op1);
+
+		ZEND_ASSERT(Z_TYPE_P(zv) == IS_STRING);
+		zv = zend_hash_find(&ce->properties_info, Z_STR_P(zv));
+		if (zv) {
+			zend_property_info *prop_info = Z_PTR_P(zv);
+
+			if (prop_info->flags & ZEND_ACC_STATIC) {
+				if (prop_info->ce == op_array->scope
+				 || (prop_info->flags & ZEND_ACC_PUBLIC)
+				 || ((prop_info->flags & ZEND_ACC_PROTECTED)
+				  && op_array->scope
+				  && instanceof_function_slow(op_array->scope, prop_info->ce))) {
+					return prop_info;
+				}
+			}
+		}
+	}
+
+	return NULL;
+}
+
 /* The receiver of a PHP# method call on an array becomes a Sharp\Collection, which only the VM makes,
- * see ZEND_SHARP_OPERATOR. The fetch stays inline when the declared type of the property rules out an
- * array, found as zend_jit_fetch_obj() finds the property. */
+ * see ZEND_SHARP_OPERATOR. The fetch of a property or a static property stays inline when the declared
+ * type of the property rules out an array, found as zend_jit_fetch_obj() and zend_jit_fetch_static_prop()
+ * find the property. */
 static bool zend_jit_sharp_receiver_may_be_array(const zend_op_array *op_array, const zend_op *opline,
 	zend_class_entry *ce, bool on_this, zend_class_entry *trace_ce)
 {
-	zend_string *member = Z_STR_P(RT_CONSTANT(opline, opline->op2));
 	zend_property_info *prop_info;
 
 	if (!(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 		return 0;
 	}
-	prop_info = zend_get_known_property_info(op_array, ce, member, on_this, op_array->filename);
-	if (!prop_info && trace_ce && (trace_ce->ce_flags & ZEND_ACC_IMMUTABLE)) {
-		prop_info = zend_get_known_property_info(op_array, trace_ce, member, on_this, op_array->filename);
+	if (opline->opcode == ZEND_FETCH_STATIC_PROP_R) {
+		prop_info = zend_get_known_static_property_info(op_array, opline);
+	} else {
+		zend_string *member = Z_STR_P(RT_CONSTANT(opline, opline->op2));
+
+		prop_info = zend_get_known_property_info(op_array, ce, member, on_this, op_array->filename);
+		if (!prop_info && trace_ce && (trace_ce->ce_flags & ZEND_ACC_IMMUTABLE)) {
+			prop_info = zend_get_known_property_info(op_array, trace_ce, member, on_this, op_array->filename);
+		}
 	}
 
 	return !prop_info
@@ -2569,8 +2604,8 @@ static int zend_jit(const zend_op_array *op_array, zend_ssa *ssa, const zend_op 
 						    || (opline->op2.num & ZEND_FETCH_CLASS_MASK) == ZEND_FETCH_CLASS_PARENT))))) {
 							break;
 						}
-						/* The VM makes the Sharp\Collection receiver of a PHP# method call, see ZEND_SHARP_OPERATOR. */
-						if (opline->extended_value & ZEND_SHARP_OPERATOR) {
+						if (opline->opcode == ZEND_FETCH_STATIC_PROP_R
+						 && zend_jit_sharp_receiver_may_be_array(op_array, opline, NULL, 0, NULL)) {
 							break;
 						}
 						if (!zend_jit_fetch_static_prop(&ctx, opline, op_array)) {

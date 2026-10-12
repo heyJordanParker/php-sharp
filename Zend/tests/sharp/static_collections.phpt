@@ -19,6 +19,8 @@ for ($round = 0; $round < 3; $round++) {
     attempt(fn () => Demo\Archive::show("poems"));
     attempt(fn () => Demo\Patron::count());
     attempt(fn () => (new Demo\Archive())->keep("diary"));
+    // An object in a static field is no collection: its method runs on the object itself.
+    attempt(fn () => Demo\Archive::tickTwice());
     // A lambda bound to a scope that may not set the static List throws, as an assignment to it from there does.
     attempt(fn () => Closure::bind(Demo\Archive::shower(), null, Demo\Patron::class)("verse"));
     attempt(fn () => Demo\Archive::$shown);
@@ -73,7 +75,8 @@ array(1) {
   [0]=>
   string(5) "diary"
 }
-Error: Cannot modify private(set) property Demo\Archive::$shown from scope Demo\Patron in StaticCollections.sharp on line 63
+int(2)
+Error: Cannot modify private(set) property Demo\Archive::$shown from scope Demo\Patron in StaticCollections.sharp on line 64
 array(1) {
   [0]=>
   string(5) "poems"
