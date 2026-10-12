@@ -14,7 +14,6 @@
 §9.1	named-constructors
 §9.1	set-once
 §9.1	super-call
-§10	struct-backing-value
 §10	struct-changes
 §10	struct-parse
 §10	struct-parse-object
