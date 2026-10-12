@@ -145,7 +145,7 @@ Tags: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 PhpForms: same opcodes and lines in 15 op arrays, same signatures in 1 classes
 Generics: different opcodes and lines in 33 op arrays, same signatures in 10 classes
   .sharp      ; (lines=14, args=1, vars=2, tmps=6)
-  .sharp L0055 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity") string("Paging.Query<#0>")
+  .sharp L0055 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity")
   .sharp L0055 0002 V2 = FETCH_CLASS (exception) string("Paging\\PaginatedList")
   .sharp L0055 0003 T3 = SHARP_TYPE_ARGS CV1($) string("#0")
   .sharp L0055 0004 V4 = NEW 1 V2 T3
@@ -183,7 +183,7 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp L0102 0004 VERIFY_RETURN_TYPE
   .sharp L0102 0005 RETURN null
   .sharp      ; (lines=9, args=1, vars=2, tmps=2)
-  .sharp L0106 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity & Paging.Shareable") string("#0")
+  .sharp L0106 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity & Paging.Shareable")
   .sharp L0106 0002 T2 = CAST (object) CV0($item)
   .sharp L0106 0003 INIT_METHOD_CALL 0 T2 string("link")
   .sharp L0106 0004 V3 = DO_FCALL
@@ -290,7 +290,7 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp L0140 0012 VERIFY_RETURN_TYPE
   .sharp L0140 0013 RETURN null
   .sharp      ; (lines=14, args=1, vars=2, tmps=6)
-  .sharp 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity") string("Paging.Query<#0>")
+  .sharp 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity")
   .sharp 0002 V2 = FETCH_CLASS (exception) string("Paging\\PaginatedList")
   .sharp 0003 T3 = SHARP_TYPE_ARGS CV1($) string("#0")
   .sharp 0004 V4 = NEW 1 V2 T3
@@ -324,7 +324,7 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp 0002 T2 = FETCH_DIM_R CV0($items) int(0)
   .sharp 0003 RETURN T2
   .sharp      ; (lines=9, args=1, vars=2, tmps=2)
-  .sharp 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity & Paging.Shareable") string("#0")
+  .sharp 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity & Paging.Shareable")
   .sharp 0002 T2 = CAST (object) CV0($item)
   .sharp 0003 INIT_METHOD_CALL 0 T2 string("link")
   .sharp 0005 VERIFY_RETURN_TYPE V3

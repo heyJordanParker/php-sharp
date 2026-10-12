@@ -45,6 +45,14 @@ public class Repository
 
     public static Function<Box<Order>()> orderHeld(Order order) => Repository.held<Order>(order);
 
+    public static Function<Box<T>(T)> boxer<T>() => Repository.box;
+
+    public static Box<Order> boxedByValue(Order order)
+    {
+        const box = Repository.boxer<Order>();
+        return box(order);
+    }
+
     public static Keyed<int> numbered() => new Keyed<int>(7);
 
     public static Pair<int, Order> keyed(Order order) => Repository.numbered().again<Order>(order);
