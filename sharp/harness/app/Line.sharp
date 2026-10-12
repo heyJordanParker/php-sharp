@@ -8,4 +8,8 @@ public class Line
     public bool refunded { get; set; } = false;
     public bool free { get; set; } = false;
     public Product product { get; set; } = new Product();
+
+    public static bool operator ==(Line a, Line b) => a.id == b.id;
+
+    public int hash() => this.id;
 }
