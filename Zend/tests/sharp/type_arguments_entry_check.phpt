@@ -1,5 +1,5 @@
 --TEST--
-Plain PHP, call_user_func and array_map entering a PHP# method get a TypeError for an argument whose type arguments differ from the parameter's, as a typed local does for a plain PHP call's return and a PHP# property for a write from plain PHP, a call or write from PHP# is never checked, a plain PHP generic class's type arguments are erased, an int given for a float becomes a float, a written Any? matches only Any?, and a type parameter plain PHP leaves unresolved matches any type at any depth
+Plain PHP, call_user_func and array_map entering a PHP# method get a TypeError for an argument whose type arguments differ from the parameter's, as a plain PHP call's return does wherever PHP# takes it and a PHP# property for a write from plain PHP, a call or write from PHP# is never checked, a plain PHP generic class's type arguments are erased, an int given for a float becomes a float, a written Any? matches only Any?, and a type parameter plain PHP leaves unresolved matches any type at any depth
 --FILE--
 <?php
 require __DIR__ . '/type_arguments.inc';
@@ -43,11 +43,15 @@ attempt(fn () => Pages::keep(new Holder()));
 attempt(fn () => Pages::count(Pages::boxedOrders()));
 attempt(fn () => Pages::count(new Page()));
 
-Pager::$next = $customers;
-attempt(fn () => Shelf::read());
-Pager::$next = Queue::orders();
-attempt(fn () => Shelf::read());
 $shelf = Shelf::filled();
+foreach ([$customers, Queue::orders()] as $next) {
+    Pager::$next = $next;
+    attempt(fn () => Shelf::read());
+    attempt(fn () => Shelf::untyped());
+    attempt(fn () => Shelf::passed());
+    attempt(fn () => get_class(Shelf::given()));
+    attempt(fn () => $shelf->stored());
+}
 attempt(function () use ($shelf, $customers) {
     $shelf->page = $customers;
 });
@@ -80,8 +84,16 @@ took
 kept
 1
 Checks\Pages::count(): Argument #1 ($page) must be of type Checks.Page<App.Box<?>>, Checks.Page<Any?> given, called in %s on line %d
-Cannot assign App.PaginatedList<Checks.Customer> to local page of type App.PaginatedList<App.Order>
+Cannot assign App.PaginatedList<Checks.Customer> to the result of Lib\Pager::orders() of type App.PaginatedList<App.Order>
+Cannot assign App.PaginatedList<Checks.Customer> to the result of Lib\Pager::orders() of type App.PaginatedList<App.Order>
+Cannot assign App.PaginatedList<Checks.Customer> to the result of Lib\Pager::orders() of type App.PaginatedList<App.Order>
+Cannot assign App.PaginatedList<Checks.Customer> to the result of Lib\Pager::orders() of type App.PaginatedList<App.Order>
+Cannot assign App.PaginatedList<Checks.Customer> to the result of Lib\Pager::orders() of type App.PaginatedList<App.Order>
 read
+untyped
+took
+App\PaginatedList
+stored
 Cannot assign App.PaginatedList<Checks.Customer> to property Checks\Shelf::$page of type App.PaginatedList<App.Order>?
 Cannot assign App.PaginatedList<Checks.Customer> to property Checks\Shelf::$page of type App.PaginatedList<App.Order>?
 written

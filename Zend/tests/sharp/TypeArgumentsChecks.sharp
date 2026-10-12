@@ -52,6 +52,24 @@ public class Shelf
         return "read";
     }
 
+    public static string untyped()
+    {
+        let page = Pager.orders();
+
+        return "untyped";
+    }
+
+    public static string passed() => Pages.take(Pager.orders());
+
+    public static PaginatedList<Order> given() => Pager.orders();
+
+    public string stored()
+    {
+        this.page = Pager.orders();
+
+        return "stored";
+    }
+
     public static Shelf filled()
     {
         Shelf shelf = new Shelf();
