@@ -388,12 +388,21 @@ let artifact = new Artifact.fromJson(json);
 
 **A subclass's constructor always calls its parent's with `: super(…)`,** as in `public Order(Row row) : super(row) { }`, even when the parent's takes no arguments, as Kotlin always writes `: Document()`. A constructor without the call is a compile error:
 
-<!-- example super-call: alone -->
+<!-- example super-call -->
 ```csharp
+// app/Document.sharp
+namespace App;
+
 public class Document
 {
     public Document() { }
 }
+```
+
+<!-- example super-call: alone -->
+```csharp
+// app/Invoice.sharp
+namespace App;
 
 public class Invoice : Document
 {
@@ -430,20 +439,33 @@ A `struct` is a value type.
 - **A struct cannot inherit or be inherited,** but it can implement interfaces.
 - **A struct has no default value.** Every `required` property must be set when one is created.
 
-<!-- example struct-changes: statements
-Point p = new Point { x: 1, y: 2 };
--->
+<!-- example struct-changes -->
 ```csharp
+// app/Point.sharp
+namespace App;
+
 public struct Point
 {
     public int x { get; init; }
     public int y { get; init; }
     public Point moved(int dx, int dy) => this with { x: this.x + dx, y: this.y + dy };
 }
+```
 
+<!-- example struct-changes -->
+```csharp
+// app/Size.sharp
+namespace App;
+
+public readonly struct Size { … }     // compile error: every struct is already read-only; write struct
+```
+
+<!-- example struct-changes: statements
+Point p = new Point { x: 1, y: 2 };
+-->
+```csharp
 Point q = p.moved(1, 0);              // compiles: q is a changed copy, and p is unchanged
 p.x = 5;                              // compile error: a struct never changes; return a changed copy from a method, such as moved
-public readonly struct Size { … }     // compile error: every struct is already read-only; write struct
 ```
 
 `with` copies an object or a struct and sets the listed properties through their `init` or `set` accessors. The original is unchanged.
@@ -796,7 +818,7 @@ items.last();                 // the last item
 items[id];                    // compile error when id is int|string: a List index is an int
 ```
 
-**A `List` index is a place,** as a Rust `Vec` index and a Go slice index are, so a change through it changes the element the list stores: `grid[0].add(5)` adds to the list at index 0, and `points[0].x = 5` sets `x` on the stored point. **A change through a `Map` index is a compile error,** as Go refuses `m[k].x = 5`, because a `Map` read is a copy:
+**A `List` index is a place,** as a Rust `Vec` index and a Go slice index are, so a change through it changes the element the list stores: `grid[0].add(5)` adds to the list at index 0. **A change through a `Map` index is a compile error,** as Go refuses `m[k].x = 5`, because a `Map` read is a copy:
 
 <!-- example index-changes: statements
 List<List<int>> grid = [[1, 2], [3]];
@@ -859,11 +881,11 @@ for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is a 
 - A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type, as in `const [Status status, int n]`, stays allowed. An inferred `Map`, such as a `groupBy` result, gives its keys back the same way, because the checker's types reach the running program (section 27).
 - Plain PHP receives the backing values.
 
-<!-- example enum-map-keys: statements
-OrderStats stats = new OrderStats();
-List<Order> orders = [new Order()];
--->
+<!-- example enum-map-keys -->
 ```csharp
+// app/Status.sharp
+namespace App;
+
 public enum Status : string
 {
     case Open = "open";
@@ -876,6 +898,12 @@ public enum Status : string
         Status.Refunded => "Refunded",
     };
 }
+```
+
+<!-- example enum-map-keys -->
+```csharp
+// app/OrderStats.sharp
+namespace App;
 
 public class OrderStats
 {
@@ -897,7 +925,13 @@ public class OrderStats
         return lines;
     }
 }
+```
 
+<!-- example enum-map-keys: statements
+OrderStats stats = new OrderStats();
+List<Order> orders = [new Order()];
+-->
+```csharp
 for (const [status, n] of stats.countByStatus(orders)) { … }   // compiles: status arrives as a Status, with no type written
 for (const [status, group] of orders.groupBy(o => o.status)) { … }   // compiles: an inferred Map's keys arrive as Status too
 Map<Username, Order> byUser = [:];                               // keyed by username.value
@@ -1114,20 +1148,41 @@ totalIn does not change Order, so declare it `totalIn(string currency) readonly`
 
 <!-- example readonly-fields -->
 ```csharp
+// app/Invoice.sharp
+namespace App;
+
 public class Invoice
 {
     private readonly Money total;                       // compile error: declare a get-only property with { get; }
 }
+```
+
+<!-- example readonly-fields -->
+```csharp
+// app/Bill.sharp
+namespace App;
 
 public class Bill
 {
     public Bill(public readonly Money due) { }          // compile error: declare a get-only property with { get; }
 }
+```
+
+<!-- example readonly-fields -->
+```csharp
+// app/Quote.sharp
+namespace App;
 
 public class Quote
 {
     public Quote(public Money due { get; }) { }         // compiles
 }
+```
+
+<!-- example readonly-fields -->
+```csharp
+// app/Receipt.sharp
+namespace App;
 
 public readonly class Receipt { … }                     // compile error: declare its properties with { get; }
 ```
@@ -1319,7 +1374,7 @@ public class Receipts
 
 **Declaring:** `event` declares an event type. `public event OrderPaid(int orderId, Money amount);` declares `OrderPaid`, a class whose parameters become get-only properties, as C#'s positional records and Kotlin's data classes do.
 
-**No type nests.** Every type, events and interfaces included, is declared at file level, in its own file, in the namespace its folder names (section 5). A reader finds a type by its namespace and its file, as in PHP. An interface that several events share, such as `OrderEvent`, is declared the same way. An event lives in the namespace of the code it describes:
+**No type nests.** Every type, events and interfaces included, is declared at file level in its own file (section 27). An interface that several events share, such as `OrderEvent`, is declared the same way. An event lives in the namespace of the code it describes:
 
 <!-- example standalone-event -->
 ```csharp
@@ -1578,19 +1633,24 @@ PHP's backtick shell execution is removed. `shell_exec()` stays.
 
 **Operators** are declared once on a type and inherited by its subclasses:
 
-<!-- example operators: statements
-Order order = new Order();
-Order sameOrderLoadedAgain = new Order();
-Cart cart = new Cart();
-Cart otherCart = new Cart();
--->
+<!-- example operators -->
 ```csharp
+// app/DatabaseEntity.sharp
+namespace App;
+
 public abstract class DatabaseEntity
 {
-    public int id { get; set; } = 1;
+    public int id { get; }
+    public DatabaseEntity(int id) { this.id = id; }
     public static bool operator ==(DatabaseEntity a, DatabaseEntity b) => a.id == b.id;
     public int hash() => this.id;
 }
+```
+
+<!-- example operators -->
+```csharp
+// app/Money.sharp
+namespace App;
 
 public class Money
 {
@@ -1599,7 +1659,15 @@ public class Money
     public static int operator <=>(Money a, Money b) { … }
     public static Money operator +(Money a, Money b) { … }
 }
+```
 
+<!-- example operators: statements
+Order order = new Order(1);
+Order sameOrderLoadedAgain = new Order(1);
+Cart cart = new Cart();
+Cart otherCart = new Cart();
+-->
+```csharp
 order == sameOrderLoadedAgain;   // Order inherits DatabaseEntity's ==, so this compares ids
 cart == otherCart;               // compile error: Cart declares no ==
 cart === cart;                   // true: the same object
@@ -1751,7 +1819,17 @@ A `sealed interface` is a closed set of classes. Its implementers must sit in th
 
 <!-- example sealed-interfaces -->
 ```csharp
+// app/Interaction.sharp
+namespace App;
+
 public sealed interface Interaction { … }
+```
+
+<!-- example sealed-interfaces -->
+```csharp
+// app/PopupInteraction.sharp
+namespace App;
+
 public class PopupInteraction : Interaction { … }      // same namespace: allowed
 ```
 
@@ -1973,11 +2051,20 @@ public class Page : DatabaseEntity, Linkable, Shareable { … }
 
 <!-- example virtual-methods -->
 ```csharp
+// app/DatabaseEntity.sharp
+namespace App;
+
 public abstract class DatabaseEntity
 {
     public virtual string label() { … }      // subclasses may replace it
     public void save() { … }                 // nobody may replace it
 }
+```
+
+<!-- example virtual-methods -->
+```csharp
+// app/Page.sharp
+namespace App;
 
 public class Page : DatabaseEntity
 {
@@ -2018,10 +2105,19 @@ These are compile errors, whether the parent is PHP# or plain PHP:
 
 <!-- example override-parameter-names -->
 ```csharp
+// app/Image.sharp
+namespace App;
+
 public class Image
 {
     public virtual void resize(int width, int height) { … }
 }
+```
+
+<!-- example override-parameter-names -->
+```csharp
+// app/Thumbnail.sharp
+namespace App;
 
 public class Thumbnail : Image
 {
@@ -2045,10 +2141,11 @@ public override string label() => super.label() + " (page)";
 
 **An interface can give a method a default body.** PHP# declares no traits:
 
-<!-- example interface-defaults: statements
-Page page = new Page();
--->
+<!-- example interface-defaults -->
 ```csharp
+// app/HasDesign.sharp
+namespace App;
+
 public interface HasDesign
 {
     List<string> claims { get; set; }                       // abstract: each class declares its storage
@@ -2056,13 +2153,24 @@ public interface HasDesign
     string designKey() => `design:${this.designColumn}`;    // compiles: a default body
     string designId() => `design:${this.id}`;               // compile error: a default body sees only HasDesign's members, and id is not one
 }
+```
+
+<!-- example interface-defaults -->
+```csharp
+// app/Page.sharp
+namespace App;
 
 public class Page : DatabaseEntity, HasDesign
 {
     public List<string> claims { get; set; } = [];          // the storage lives in the class that owns it
     public string designColumn => "design";
 }
+```
 
+<!-- example interface-defaults: statements
+Page page = new Page();
+-->
+```csharp
 page.designKey();                                           // "design:design", from the default body
 ```
 
@@ -2085,16 +2193,33 @@ class LegacyPage implements HasDesign
 
 **A plain PHP trait** is listed in the header with the base class and interfaces, and it is also a type. It works everywhere an interface does:
 
+<!-- example plain-php-traits -->
+```csharp
+// app/Order.sharp
+namespace App;
+
+import Illuminate.Database.Eloquent.Model;
+import Illuminate.Database.Eloquent.Factories.HasFactory;
+
+public class Order : Model, HasFactory { … }
+```
+
+<!-- example plain-php-traits -->
+```csharp
+// app/Draft.sharp
+namespace App;
+
+import App.Legacy.Copies;
+
+public class Draft : Copies { … }               // compiles: a trait may stand alone in the header, as an interface may
+```
+
 <!-- example plain-php-traits: statements
 Any? entity = new LegacyEntity();
 -->
 ```csharp
-import Illuminate.Database.Eloquent.Model;
 import Illuminate.Database.Eloquent.Factories.HasFactory;
-import App.Legacy.Copies;
 
-public class Order : Model, HasFactory { … }
-public class Draft : Copies { … }               // compiles: a trait may stand alone in the header, as an interface may
 if (entity is HasFactory f) { … }
 public void seed(HasFactory owner) { … }
 List<HasFactory> owners = [];
@@ -2165,9 +2290,16 @@ Built-in types are lowercase: `int`, `float`, `bool`, `string`, `void`, `null`. 
 
 <!-- example naming-cases -->
 ```csharp
+// app/Billing/Status.sharp
 namespace App.Billing;                                         // namespace
 
 public enum Status : string { case Paid = "paid"; }            // type and enum case
+```
+
+<!-- example naming-cases -->
+```csharp
+// app/Billing/Invoice.sharp
+namespace App.Billing;
 
 public class Invoice<TLine : Line>                             // type and type parameter
 {
@@ -2468,13 +2600,22 @@ Log.info("saved", ["class": typeof(order)]);    // compiles; runs: plain PHP rec
 
 <!-- example class-values -->
 ```csharp
-import Illuminate.Database.Eloquent.Model;
+// app/Element.sharp
+namespace App;
 
 public abstract class Element
 {
     public required Element(string key) { … }
     public static string defaultTag() => "div";
 }
+```
+
+<!-- example class-values -->
+```csharp
+// app/FormBuilder.sharp
+namespace App;
+
+import Illuminate.Database.Eloquent.Model;
 
 public class FormBuilder
 {
@@ -2565,10 +2706,19 @@ public bool same(Self other) { … }   // compile error: Self is a return type o
 
 <!-- example required-constructors -->
 ```csharp
+// app/Order.sharp
+namespace App;
+
 public class Order : DatabaseEntity
 {
     public Order(Row row, Clock? clock = null) : super(row) { … }   // compiles: new Self(row) can call it
 }
+```
+
+<!-- example required-constructors -->
+```csharp
+// app/Invoice.sharp
+namespace App;
 
 public class Invoice : DatabaseEntity
 {
@@ -2641,6 +2791,17 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 ```
 
 The extension is **`.sharp`**, as in `StoreService.sharp`.
+
+**A `.sharp` file declares one type, named like the file,** as Composer's PSR-4 autoloader loads one class per file. Every type, events and interfaces included, sits at file level in the namespace its folder names (section 5), so a reader finds a type by its namespace and its file, as in PHP. A second type in a file is a compile error:
+
+<!-- example one-type-per-file -->
+```csharp
+// app/Tenant/Store/StoreService.sharp
+namespace App.Tenant.Store;
+
+public class StoreService { … }       // compiles: StoreService.sharp declares StoreService
+public class StoreHelper { … }        // compile error: move StoreHelper to StoreHelper.sharp
+```
 
 Plain PHP files keep `.php` and `<?php`, and the two call each other freely. Composer's autoloader tries `.sharp` after `.php`, the same way it already tries `.hh` for Hack.
 
@@ -2870,16 +3031,31 @@ extern StripeClient uses Http;
 
 <!-- example pure-interface -->
 ```csharp
+// app/Formatter.sharp
+namespace App;
+
 public interface Formatter
 {
     string format(string name);                                     // implementations must be pure
 }
+```
+
+<!-- example pure-interface -->
+```csharp
+// app/Visitor.sharp
+namespace App;
 
 public class Visitor
 {
     public string greet(string name) => "Hello, " + name.trim();    // pure: trim is a standard-library method
     public void remember(string token) { file_put_contents("seen.txt", token); }   // has Files
 }
+```
+
+<!-- example pure-interface -->
+```csharp
+// app/FileFormatter.sharp
+namespace App;
 
 public class FileFormatter : Formatter
 {
@@ -2932,7 +3108,8 @@ The standard library ships `Database`, `Http`, `Files`, `Console`, `Process`, `C
 
 <!-- example environment -->
 ```csharp
-import Illuminate.Http.Request;
+// app/Deploy.sharp
+namespace App;
 
 public class Deploy
 {
@@ -2941,6 +3118,14 @@ public class Deploy
     public string region() => this.environment.variable("AWS_REGION") ?? "us-east-1";
     public string target() => this.environment.arguments[1];   // throws OutOfRangeException when no argument was passed
 }
+```
+
+<!-- example environment -->
+```csharp
+// app/CheckoutController.sharp
+namespace App;
+
+import Illuminate.Http.Request;
 
 public class CheckoutController
 {
@@ -2995,21 +3180,37 @@ Function<int(Function<int(int) uses Http>)> apply;               // compiles
 
 An implementation that calls plain PHP fits the declaration only through an `extern`:
 
-<!-- example extern-implementations
-import Stripe.StripeClient;
-import Mailchimp.Mailchimp;
--->
+<!-- example extern-implementations -->
 ```csharp
+// app/AudienceSync.sharp
+namespace App;
+
 public interface AudienceSync
 {
     void sync(Contact contact) uses Http;
 }
+```
+
+<!-- example extern-implementations -->
+```csharp
+// app/StripeGateway.sharp
+namespace App;
+
+import Stripe.StripeClient;
 
 public class StripeGateway : PaymentGateway
 {
     public Money quote(Cart cart) { … }
     public Charge charge(Cart cart) => StripeClient.charges().create(…);   // fits: StripeClient is declared Http
 }
+```
+
+<!-- example extern-implementations -->
+```csharp
+// app/MailchimpSync.sharp
+namespace App;
+
+import Mailchimp.Mailchimp;
 
 public class MailchimpSync : AudienceSync
 {
@@ -3024,14 +3225,29 @@ Declare its effect in a .sharp file, such as `extern Mailchimp uses Http;`.
 
 **`uses Events` lets an implementation emit:**
 
-<!-- example emit-effect
-public event OrderPaid(int orderId, int amount);
--->
+<!-- example emit-effect -->
 ```csharp
+// app/OrderPaid.sharp
+namespace App;
+
+public event OrderPaid(int orderId, int total);
+```
+
+<!-- example emit-effect -->
+```csharp
+// app/Checkout.sharp
+namespace App;
+
 public interface Checkout
 {
     void complete(Order order) uses Events;                                            // implementations may emit, nothing else
 }
+```
+
+<!-- example emit-effect -->
+```csharp
+// app/StoreCheckout.sharp
+namespace App;
 
 public class StoreCheckout : Checkout
 {
@@ -3120,7 +3336,14 @@ Methods declare no thrown exceptions, and the checker never reports an undeclare
 
 <!-- example error-interface -->
 ```csharp
+// in the standard library's Sharp
 public interface Error { string message { get; } }
+```
+
+<!-- example error-interface -->
+```csharp
+// app/PaymentError.sharp
+namespace App;
 
 public enum PaymentError : Error
 {
