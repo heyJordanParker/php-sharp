@@ -59,7 +59,7 @@ Decisions 1 (nested-type naming) and 6 (autoload through the outer class) of the
    opcache keeps it in shared memory, so a request reads no file. Laravel's `php artisan event:cache` writes `bootstrap/cache/events.php` the same way, and Symfony compiles its listeners into its container. `mago compile` already deletes every other file in `.sharp/`, and it keeps this one.
    - Rejected: a table inside each event's `.sharpc` file. An interface listener and an `extern event` have no event file to hold it, and a new listener file would have to make every event's file stale.
    - Rejected: listeners that register when their class loads. A listener class is autoloaded only when something names it, so it would never register, which is why Laravel needs explicit registration or its discovery cache.
-3. **`Sharp\Internal\emit` is engine code in `ext/sharp/sharp.c`,** as `Sharp\Collection` and `Sharp\Environment` are. It finds `.sharp/` as the engine finds it for a source file (spec section 27), walking up from the file that declares the event's class, so an `extern event` in `vendor/` finds the project's table. It includes the table once per request through `zend_compile_file`, so opcache serves it. For each event class it keeps, for the request, the listeners whose listed types the event is an `instanceof`, in table order. That is the one lookup path, the way a PSR-14 `ListenerProviderInterface::getListenersForEvent` matches by class and interface.
+3. **`Sharp\Internal\emit` is engine code in `ext/sharp/sharp.c`,** as `Sharp\Collection` and `Sharp\Environment` are. It finds `.sharp/` as the engine finds it for a source file (spec section 27), walking up from the file that declares the event's class, so an `extern event` in `vendor/` finds the project's table. It reads the table once per request through `zend_compile_file`, so opcache serves it, as the constant array the file returns, without running the file: code run from inside `emit` would give the caller a symbol table that a tracing-JIT frame never frees, a leak measured on `events_jit_tracing.phpt` with `--repeat 2`. For each event class it keeps, for the request, the listeners whose listed types the event is an `instanceof`, in table order. That is the one lookup path, the way a PSR-14 `ListenerProviderInterface::getListenersForEvent` matches by class and interface. A class with no `.sharp/` folder above its file has no listeners. A missing or damaged table throws `CompileError`, ".sharp/listeners.php is missing or damaged. Run vendor/bin/mago compile.", as the engine refuses a damaged compiled file, and a listener class or method the table names but the code no longer has throws PHP's own `Class "…" not found` or `Call to undefined method`.
 4. **Until section 32's container lands, the engine creates a listener's object with `new`,** and the checker refuses a listener class whose main constructor takes parameters as "not supported yet". Section 32 says the container builds every class through its main constructor, `on` listeners included. php-sharp PR C swaps `new` for the container with no change to any accepted program.
 5. **`extern event JobFailed;` is that class's one `extern` declaration.** `ExternMetadata` gains `event: bool`, and a second `extern` naming `JobFailed` is the existing "at most one `extern` declaration" error. Without `uses` it declares the class pure, as every `extern` without `uses` does. With `uses`, as `extern event JobFailed uses Database;`, it gives the class those effects, as `extern JobFailed uses Database;` does (Jordan's ruling on question 2). Creating a `JobFailed` then has the effect `Database`, through the existing `extern_of` in `crates/analyzer/src/effects/summary.rs`.
 6. **`emit` records a new `Effect::Emit` in its body's `EffectSummary`,** which `is_outside` matches against `Sharp\Events`. It carries no payload, because the effect's cause already holds the event's class. `Impurity::describe` gains the arms "emits `OrderPaid`, which has the effect `Events`" and "reaches `StoreCheckout.complete`, which emits `OrderPaid` with the effect `Events`". The effect is `Events` whatever the listeners do: decision 049 chose `Events` to stand for the listeners, so their own effects never reach the code that emits.
@@ -445,16 +445,19 @@ mago-sharp
 
 php-sharp
 ├── ext/sharp/sharp.stub.php, sharp_arginfo.h, sharp.c
-│                                        <- function Sharp\Internal\emit(object $event): void (PR A)
+│                                        <- function Sharp\Internal\emit(object $event): void (PR A), registered in
+│                                           MINIT, since the module's own table is the one sharp/bin/native writes
 │                                           function Sharp\Internal\listen(string $class, \Closure $listener): Sharp\Listening (PR B)
 │                                           final class Sharp\Listening, no methods, a destructor (PR B)
 ├── sharp/composer/library/Sharp/
 │   ├── Events.sharp                     <- new: static class Events, on<TEvent>(…) (PR B)
 │   ├── Dispatcher.sharp                 <- new: interface Dispatcher (PR C)
 │   └── ImmediateDispatcher.sharp        <- new: the default binding (PR C)
-├── Zend/tests/sharp/Events.sharp, events.inc, events.phpt, events_jit_*.phpt
-│                                        <- new, the engine's tests
-└── ext/sharp/Cargo.toml, Cargo.lock     <- the pinned Mago commit moves
+├── Zend/tests/sharp/OrderEvent.sharp, OrderPaid.sharp, OrderRefunded.sharp, OrderNotices.sharp,
+│   Receipts.sharp, Shipping.sharp, Register.sharp, harness/JobFailed.inc,
+│   events.inc, events.phpt, events_jit_*.phpt, events_table.phpt
+│                                        <- new, the engine's tests, one type per file
+└── ext/sharp/sharp_unit.h               <- SHARP_MAGO_COMMIT, the pinned Mago commit, moves
 
 the generated project file
 └── .sharp/listeners.php                 <- new: every listener, its listed types and whether it takes the event
@@ -487,7 +490,7 @@ Each PR ends in something a developer runs. mago-sharp PRs 1 to 3 and php-sharp 
 
 php-sharp:
 
-- **A: the engine runs events.** Pin mago-sharp PRs 1 to 3. `Sharp\Internal\emit`, the table, `new` for listener objects, the engine tests, and `sharp/baseline/spec` losing `standalone-event` and `extern-event`, plus `listeners`, `listener-errors`, `emit-forms` and `event-declarations` once their spec-files changes land, through the `cp` command a run prints.
+- **A: the engine runs events.** Pin mago-sharp PRs 1 to 3. `Sharp\Internal\emit`, the table, `new` for listener objects, the engine tests, and `sharp/baseline/spec` losing `standalone-event`, `extern-event`, `extern-event-effects` and `emit-forms`, plus `listeners`, `listener-errors` and `event-declarations` once their spec-files changes and #468's default-public interface members land, through the `cp` command a run prints.
   - Run: `sharp/bin/test Zend/tests/sharp/events.phpt` passes, and `sharp/bin/test --spec` passes with the shorter list.
   - Jordan's ruling shrank it: `sharp/composer/autoload.php` needs no nested-type branch.
 - **The spec-files PR** lands the harness's three event files, `Logger` and `RowImported`, and the stub's `extern event JobFailed;`. Jordan's ruling changed its shape: no `emit-forms` template marker, and three files where the approved note nested types in `app/Order.sharp`.
@@ -531,11 +534,12 @@ Each test proves one rule of section 15 and fails on a real bug in it, with its 
 
 - `compile_writes_every_listener_in_order`: two files, three listeners, the table's rows in order; a removed listener leaves the table; an empty project writes an empty table.
 
-**php-sharp, on the engine in all four opcache modes,** `Events.sharp`, `events.inc` and `events.phpt` with its two JIT variants:
+**php-sharp, on the engine in all four opcache modes,** the fixtures `OrderEvent.sharp` to `Register.sharp`, `events.inc` and `events.phpt` with its two JIT variants:
 
 - `emit` runs every listener before it returns; an interface listener hears every event that implements it; a listener listed twice runs once; listeners run in table order; a listener without a parameter runs; a `private` listener runs.
 - An exception from a listener leaves `emit`, and the next listener does not run; an `emit` inside a listener runs its listeners first.
-- Plain PHP: `\Sharp\Internal\emit` reaches PHP# listeners, an `extern event` raised from plain PHP reaches them (php-sharp #56's "Done when"), and an event's properties are read-only.
+- Plain PHP: `\Sharp\Internal\emit` reaches PHP# listeners, an `extern event` raised from plain PHP reaches them (php-sharp #56's "Done when"), an object no listener lists runs nothing, a non-object is a `TypeError`, and an event's properties are read-only.
+- `events_table.phpt`: a missing table, one that is not a list, and three damaged rows each throw the `CompileError`; a listener class or method the table names but the code lacks throws PHP's own error.
 - PR B adds: a scoped listener stops when its function returns and when an exception leaves it, and one started during an `emit` hears only the next.
 
 # What the Slice refuses as "not supported yet", and why

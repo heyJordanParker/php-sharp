@@ -73,3 +73,7 @@ final class Environment
 
     public function variable(string $name): ?string {}
 }
+
+namespace Sharp\Internal;
+
+function emit(object $event): void {}

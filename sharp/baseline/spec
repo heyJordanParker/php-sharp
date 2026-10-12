@@ -10,10 +10,6 @@
 §7	variadic-parameters
 §8	standard-library-calls
 §9	parameter-members
-§9.1	constructor-call-this
-§9.1	named-constructors
-§9.1	set-once
-§9.1	super-call
 §10	struct-backing-value
 §10	struct-changes
 §10	struct-parse
@@ -24,11 +20,9 @@
 §11	raw-generic-objects
 §11	self-on-type-parameters
 §11	type-parameter-bounds
-§12	collection-read-methods
 §12	collection-write-methods
 §12	enum-map-keys
 §12	index-changes
-§12	index-rules
 §12	iterables
 §12	map-string-keys
 §12	natural-remove
@@ -40,14 +34,10 @@
 §14.1	function-types
 §14.2	lambdas
 §14.4	leave-on-null
-§15	emit-forms
 §15	event-declarations
-§15	extern-event
-§15	extern-event-effects
 §15	listener-errors
 §15	listeners
 §15	scoped-listener
-§15	standalone-event
 §16	initializer-shorthand
 §17	braces
 §19	operators
