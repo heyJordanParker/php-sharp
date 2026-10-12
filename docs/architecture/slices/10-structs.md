@@ -42,7 +42,7 @@ Jordan's answers, through team-lead's Queue 3 and Queue 4:
 12. **Question 4, "yes, obviously":** generic structs are allowed and land with generics R3c, so `struct Box<T>` is refused whole until then.
 13. **Question 5, "sure":** `initializer-shorthand` declares its own struct. Example errata are team-lead's from now on.
 
-team-lead's Queue 5 to Queue 9:
+team-lead's Queue 5 to Queue 10:
 
 14. **`MetadataFlags::REQUIRED` means only "must be set at creation":** a property written `required`, or, in a struct, one with no initial value that is not a main-constructor parameter. Each constructor records the properties it definitely assigns on every path (`MethodMetadata::assigned_properties`), as C#'s definite assignment and Swift's definite initialization do, and a helper call doesn't count. At each `new`, the required set minus what that constructor assigns must be named by the initializer. A named constructor's set is its own plus the main constructor's it chains to.
 15. **`parse` checks types through generics R3c's engine walk, `sharp_type_accepts`,** one call per parameter with a problem collector. Its own work stays keys, `[Key]` renames, defaults, missing keys and nested structs through their own `parse`. This replaces decision 5's per-type checks and ruling 5's cross-slice order.
@@ -50,6 +50,7 @@ team-lead's Queue 5 to Queue 9:
 17. **A struct that holds a class instance, at any depth, can't key a `Map`:** "`Order` can't key a `Map`: `plan` is a `Plan`, a class, and a key holds only values." Refused where `Map<Order, …>` is written, and where a key type is inferred. Precedent: Rust's `HashMap` needs `Hash` on every field, and Swift's `Dictionary` needs `Hashable`. Section 19's `Set` of objects decides later whether a class with `hash()` can join.
 18. **`Sharp\Struct`, `Sharp\Map::key` and `Sharp\Map::readKey` are approved,** with three conditions: only a lowered struct implements `Sharp\Struct`, as only an enum implements `UnitEnum`; `readKey` builds only a struct, checks each property's type and limits nesting as `json_decode` does; and one encoder serves every key position.
 19. **The php-sharp PR adds the harness's `Username` and `OrderRow`,** one type per file, because only a Mago that parses `struct` compiles them. This replaces ruling 6's spec PR.
+20. **R3c's walk signature is fixed, and `parse` lowers to it:** generated PHP calls `\Sharp\Internal\accepts(string $type, mixed &$value, string $path, array &$problems): bool` once per parameter, with the type text for the calling frame and the input key as the path. The walk writes the problem text, so `InvalidFields.expected` has no caller and is deleted. The walk takes only a struct object where a struct is expected, so `parse` reads each nested struct through its own `parse` with the extended path first, then checks the result through the walk.
 
 ## Decisions
 
@@ -70,8 +71,10 @@ team-lead's Queue 5 to Queue 9:
    - Built as one path. The note first proposed plain writes and `clone($x, [...])` inside the class, but an initializer's several writes after `new` are statements, and an initializer is an expression, so it needs the closure or a hidden local in every position. `this with { … }` through `clone` alone cost 625 and 548 ns, against 601 and 659 ns through the closure, so the second path would buy nothing measurable.
    - Measured on Homebrew PHP 8.5.1 with opcache, 1,000,000 creations, two runs: a main constructor took 221 and 240 ns, an initializer through the closure 755 and 631 ns, `this with { … }` inside the class 625 and 548 ns, and `p with { … }` through the closure 601 and 659 ns. The closure costs about what `clone` with an array costs. A scoped write opcode would remove it later, as a Speed item.
    - Rejected: a generated public method that writes the properties. Plain PHP could call it on an existing struct and change it.
-5. **`parse` and `tryParse` are generated per struct by the bridge** (ruling 15 moves its type checks to R3c's `sharp_type_accepts`), from the parameter types typed compilation hands it, as serde's derive and kotlinx.serialization's compiler plugin generate a reader per type. `parse` collects every bad field, then throws one `Sharp\InvalidFields`. `tryParse` catches it and returns null. A nested struct is read through its own `parse`, and its fields are re-keyed under the outer path. The generated code needs no runtime type registry and no hidden member. The run below shows the generated shape giving the spec's exact message.
-   - Generics R3c builds an element walk for values entering PHP# from plain PHP. It and `parse` check the same thing. Whichever lands second reuses the first, so PHP# keeps one check: if R3c lands first, `parse` reads through R3c's walk with errors collected; if this Slice lands first, R3c's checks reuse `parse`'s per-type generator. team-lead rules which, as a cross-slice order.
+5. **`parse` and `tryParse` are generated per struct by the bridge,** from the parameter types typed compilation hands it, as serde's derive and kotlinx.serialization's compiler plugin generate a reader per type. Each field's type check is one call of R3c's walk, `\Sharp\Internal\accepts` (ruling 20), with the field's type text and its key as the path. `parse` collects every bad field, then throws one `Sharp\InvalidFields`. `tryParse` catches it and returns null. The generated code needs no runtime type registry and no hidden member.
+   - Before the walk, `parse` builds what the walk takes only as an object. A backed enum case comes from its backing value through `tryFrom`. A nested struct comes from a `Map` or an object through its own `parse`, element by element inside a `List`, `Set` or `Map`. Its problems move under the outer path, as `addresses[1].city`, and the walk's own problem at that path is then dropped. A union of several structs takes the first that builds, and moves no inner problems.
+   - After the walk accepts a value, each `Set` in it holds its elements under their keys, through `\Sharp\Set::from`.
+   - The type text is decision 72's, written by `Types::type_text` in the bridge: a class by its full dotted name, union members sorted, `T?` and `(A|B)?`. #152 has its own `type_text` for every type. This one covers the types a struct's `parse` reads, and the two become one where #152 merges.
    - Rejected: a library reader that interprets a type descriptor at runtime, as Valinor reads types by reflection. It needs each parameter's PHP# type at runtime, which only R3c gives, and a descriptor each struct publishes for nested structs.
 6. **Any struct keys a `Map` by its whole value, stored as a key text the engine writes** (ruling 9, replacing the backed key). `counts[point]` stores `\Sharp\Map::key($point)`, as `stored_key` stores a backed enum's `->value`, and a loop reads `\Sharp\Map::readKey($key)`, as `key_read_back` reads `Status::from($key)`. A `Set` of structs holds each struct under the same text, through `\Sharp\Set::from`.
    - The codex's `get_backing_key_type` gives a struct key the type `string`, its text, so every rule that reads a key type (comparators, template inference, array access) takes a struct with no further arm.
@@ -86,7 +89,7 @@ team-lead's Queue 5 to Queue 9:
 
 1. **The error is `Sharp.InvalidFields`, a subclass of `ValueError`,** with `public Map<string, string> fields { get; }`, path to problem, in the order the fields were read. Its message joins them with `; `. `Int.parse` throws `ValueError`, so `catch (ValueError e)` catches both. A caller that answers an HTTP request renders `fields` per field, as Laravel's `ValidationException::errors()` and Pydantic's `ValidationError.errors()` give per-field lists.
    - Names considered: `InvalidFields` (what the caller learns), `ParseError` (refused: PHP's own `\ParseError` is the class `eval` and `include` throw), `MappingError` (Valinor's), `ValidationError` (Pydantic's; PHP# validates nothing beyond types), `PayloadError` (`parse` also reads row objects).
-2. **The problem text is `missing` or `expected <type>, got <value>`.** The type is printed as PHP# writes it: `int`, `string?`, `List<Address>`, `Plan`. The value is `null`, `bool true`, `int 5`, `float 1.5`, `string 'abc'`, `List` or `Map` for an array, and `object App.Order`. A string longer than 40 bytes is cut with `…`, so a pasted document does not flood a log. PHP's `TypeError` names the given type the same way ("must be of type string, int given"). One library method builds it, `InvalidFields.expected(string type, Any? value)`, which every generated `parse` calls.
+2. **The problem text is `missing` or `expected <type>, got <value>`.** The type is printed as PHP# writes it, as decision 72's type text: `int`, `string?`, `List<App.Address>`, `App.Plan`. The value is `null`, `bool true`, `int 5`, `float 1.5`, `string 'abc'`, `List` or `Map` for an array, and `object App.Order`. A string longer than 40 bytes is cut with `…`, so a pasted document does not flood a log. PHP's `TypeError` names the given type the same way ("must be of type string, int given"). R3c's walk writes every `expected` problem (ruling 20), and `parse` writes only `missing`.
 3. **Every bad field is reported at once, depth first, in parameter order.** Valinor collects all errors into one `MappingError` (its docs: "containing information about all errors encountered during the mapping"). C#'s `System.Text.Json`, serde and kotlinx.serialization stop at the first error, except that kotlinx's `MissingFieldException` lists every missing field of one class. The spec chose "one error that lists every bad field".
 4. **A path is the input's keys, joined like a PHP# expression:** `address.city`, `addresses[2].city`, `prices["vip"]`. A key is the name the input uses, after `[Key]`, as the spec's `plan_code` shows. System.Text.Json's `JsonException.Path` and kotlinx write `$.addresses[2].city`, serde_path_to_error writes `addresses[2].city`, and Valinor's docs show dotted paths (`foo.bar`) with no list example. The library forms above come from their documentation, not from a run here.
 5. **No value is converted.** An `int` parameter takes only an `int`, so `"5"` is `expected int, got string '5'`, and `Int.parse` stays the one way to read a number from text. The one exception is section 24's: an `int` where a `float` is expected becomes a `float`, as at any border with plain PHP. System.Text.Json (`JsonNumberHandling.Strict`), serde, kotlinx (without `isLenient`) and Valinor (without `allowScalarValueCasting()`) are strict by default. Pydantic converts by default, and is the rejected precedent. A database row passes, because PDO returns native numbers since PHP 8.1: on Homebrew PHP 8.5.1, an SQLite `select 7 as id, 2.5 as total` row object held `int(7)` and `float(2.5)`.
@@ -354,26 +357,28 @@ which is already the spec's "Classes do not get them", with a second `mixed-retu
 app/Probe/Request.sharp:5 non-existent-attribute-class: Attribute class `Key` not found or could not be autoloaded. [Unknown attribute class `Key`]
 ```
 
-- PHP it lowers to, run on the slot 7 engine (`lowered.php`'s `RenewRequest` and `Address`, the spec's struct with an enum and a `List<Address>` added): each parameter is read in order into `$fields`, and the constructor runs only when none failed.
+- PHP it lowers to: each parameter is read in order, checked through R3c's walk into `$fields`, and the constructor runs only when none failed.
 
   ```php
-  if (!array_key_exists('customerId', $input)) {
+  if (\array_key_exists('customerId', $input)) {
+      $read = $input['customerId'];                                         // the value as plain PHP gave it
+      \Sharp\Internal\accepts('int', $read, 'customerId', $fields);        // R3c's walk adds each problem
+      $arguments['customerId'] = $read;                                     // the walk turned an int into a float where one is expected
+  } else {
       $fields['customerId'] = 'missing';
-  } elseif (!is_int($input['customerId'])) {
-      $fields['customerId'] = \Sharp\InvalidFields::expected('int', $input['customerId']);
   }
   ```
 
-  The run printed:
+  Run on the slot 8 engine, compiled by the slot 9 Mago at `0d1f411a6`, with `\Sharp\Internal\accepts` written in PHP from R3c's note until R3c's engine code exists, and `RenewRequest` widened with a nested `Address?`, a `List<Address>`, a `Map<Status, int>`, an `Address|Point` and a `List<Set<int>>`:
 
   ```text
-  RenewRequest.parse(["customerId": "abc"]): Sharp\InvalidFields: customerId: expected int, got string 'abc'; plan_code: missing
-  every bad field, nested paths: Sharp\InvalidFields: coupon: expected string?, got int 5; status: expected Status, got string 'gone'; addresses[1].city: expected string, got int 4; addresses[2]: expected Address, got string 'x'
+  parse(["customerId" => "abc"]): Sharp\InvalidFields: customerId: expected int, got string 'abc'; plan_code: missing; …
+  every bad field: …; home.city: expected string, got int 4; addresses[1].city: expected string, got int 4; addresses[2]: expected App.S.Address, got string 'x'; prices["gone"]: key expected App.S.Status, got string 'gone'; …; place: expected App.S.Address|App.S.Point, got Map; seen[0]: expected App.S.Status, got string 'nope'; groups[0][0]: expected int, got float 1.5; …
+  a good payload: home and addresses[0] built as Address, status Paid, amount 2.0, place ["x" => 4] built as Point, seen and each groups element held under their keys, retries 3
   tryParse on a bad payload: null
-  parse of a good payload: "Oslo"
   ```
 
-  The first line is the spec's message to the byte.
+  The first line starts with the spec's message. Each nested problem appears once, at its inner path.
 - Mechanism:
   - Codex: the scanner registers `public static Self parse(Map<string, Any?>|Object value)` and `tryParse`, returning `Self?`, on every struct. `Object` is the codex's own object type, so `parse` takes any object before #454 lets PHP# code write `Object`.
   - Analyzer: language rules 10 and 11.
@@ -452,12 +457,12 @@ mago-sharp
 php-sharp
 ├── sharp/composer/library/Sharp/
 │   ├── Key.sharp                         <- new: the attribute, `[Key("plan_code")]`
-│   └── InvalidFields.sharp               <- new: InvalidFields : ValueError, fields and expected(type, value)
+│   └── InvalidFields.sharp               <- new: InvalidFields : ValueError, with its fields
 ├── ext/sharp/sharp.c                     <- interface Sharp\Struct; final class Sharp\Map with
 │                                            key(Sharp\Struct $struct): string and readKey(string $text): Sharp\Struct;
 │                                            the struct arm of sharp_collection_key_slot and Sharp\Set::from
 ├── Zend/tests/sharp/Spot.sharp, Tone.sharp, Route.sharp, StructKeys.sharp, struct_keys.inc,
-│   struct_keys.phpt, struct_marker.phpt, Structs.sharp, structs.inc, structs.phpt, struct_parse.phpt
+│   struct_keys.phpt, struct_marker.phpt, Stamp.sharp, Structs.sharp, structs.inc, structs.phpt, struct_parse.phpt
 │                                         <- new, the engine's tests
 ├── sharp/harness/app/Username.sharp, OrderRow.sharp
 │                                         <- new (ruling 19)
@@ -490,7 +495,7 @@ The names, each with the slate it was picked from:
    - `==` by value, `===` refused (decision 3, rules 4 to 6), decision 7's value pattern, and collection `==` through `\array_all` with each element's `==`, a `Map` compared without regard to order.
    - The object initializer and its shorthand, `with` on structs and classes, `required` (rule 9), and #169's `init` write rule widened to both (rule 8). The required-property check closes task #463 for classes too.
    - Any struct as a `Map` key and a `Set` element by its whole value, the refusal of a struct holding a class instance, and the read-back (decision 6), in every key position #166 adds.
-   - `parse` and `tryParse` (decision 5), `[Key]` (rules 10 and 11), and question 3's answer. Its type checks call R3c's `sharp_type_accepts` once its signature is fixed (ruling 15).
+   - `parse` and `tryParse` (decision 5), `[Key]` (rules 10 and 11), and question 3's answer. Its type checks call R3c's `\Sharp\Internal\accepts` (ruling 20).
    - A generic struct refused whole (question 4).
    - Its tests stub `Sharp\Key` and `Sharp\InvalidFields` as fixtures, so the PR needs nothing from php-sharp.
    - It needs #166 merged, for a struct key in `has`, `keys()` and `remove`. The branch merges `origin/master` once #166 lands, then the PR opens with `ci-passed` and `patch-coverage` green. One fresh reviewer follows.
@@ -503,7 +508,7 @@ The work in flight:
 - **#166 (Map methods):** the mago-sharp PR opens after it merges.
 - **The collection Slice's engine PR:** the php-sharp PR follows it.
 - **#454 (`Object`, `typeof`):** `parse` itself does not need it: the codex types `parse`'s parameter with its own object type. The examples `struct-parse-object` and `array-object-replacements` write `Object` in PHP#. `Completes: §10` goes on the PR that removes `struct-parse-object`, which needs #454.
-- **#152, php-sharp #102 and generics R3c:** a generic struct is refused whole until them (question 4). `parse` checks types through R3c's `sharp_type_accepts` (ruling 15), so the php-sharp PR pins past R3c's php-sharp merge.
+- **#152, php-sharp #102 and generics R3c:** a generic struct is refused whole until them (question 4). `parse` checks types through R3c's `\Sharp\Internal\accepts` (ruling 20), so the php-sharp PR pins past R3c's php-sharp merge.
 - **The collection Slice:** widens `groupBy` and `associateBy`'s `G of array-key` for enum and struct keys. Until then a struct key there is refused as an enum key is.
 - **#169 (`init`) and #161 (named constructors): merged** at `c3a2b5af8`. The PR builds on #169's write rule and its `protected(set)` lowering, and a struct's named constructor runs through #161 unchanged.
 
@@ -559,7 +564,7 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 
 - `struct_keys.phpt`, with `Spot.sharp`, `Tone.sharp`, `Route.sharp`, `Boxed.sharp`, `StructKeys.sharp` and `struct_keys.inc`: two equal structs are one key in an index write, a literal and a `Set`; a loop reads each key back; `-0.0` and `0.0` are one key, and so are two equal `Map`s in any order; a round trip of `key` and `readKey` for a nested struct, a backed and a pure enum case, a float in each form (`0.1`, `1.0`, `1e25`, `-0.0`, `INF`, `-INF`, `NAN`, `123456789.125`), a `Map`, a nullable string with escapes and a `bool`; `readKey` refusing a class that is no struct, a missing class, a property of the wrong type, a missing property, a reordered one, an unknown enum case, trailing text, too deep a text, a case of a class that is no enum, an `int` past `PHP_INT_MAX`, an unknown escape and a text with no class name; `key` and `Set::from` refusing a plain object; and `key` throwing for a `Boxed` that plain PHP filled with an object or with lists nested past 512, and for a `Spot` created without its constructor.
 - `struct_marker.phpt`: a plain PHP class implementing `Sharp\Struct` stops.
-- `structs.phpt`: a changed copy leaves the original; `==` by value, with `null` and with another type; `contains` finds an equal struct; two `List<Point>` and two `Map`s in different orders compare equal; `with` runs an `init` body; an initializer from another class; plain PHP's write, `clone` with values and subclass each throw.
+- `structs.phpt`, with `Stamp.sharp`, `Structs.sharp` and `structs.inc`: a changed copy leaves the original; `==` by value, with `null` and with another type; `contains` finds an equal struct; two `List<Stamp>` and two `Map`s in different orders compare equal; `with` runs an `init` body; an initializer from another class runs it too; plain PHP's write to a get-only and to an `init` property and `clone` with values each throw, and a subclass stops with PHP's final-class error.
 - `struct_parse.phpt`: the spec's message to the byte; every bad field with nested paths; `tryParse` null; a row object; an `int` into a `float` parameter; an extra key ignored; a default value taken.
 
 # What the Slice refuses as "not supported yet", and why
