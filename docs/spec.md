@@ -50,6 +50,16 @@ const plan = this.plan();   // type inferred, cannot be reassigned
 const Plan plan = …;        // type written, cannot be reassigned
 ```
 
+**A PHP keyword that PHP# doesn't use is a plain name,** so `empty`, `list` and `print` can name a local. Every keyword PHP# uses stays reserved, such as `let`, `match` and `emit`:
+
+<!-- example keyword-names: statements -->
+```csharp
+const list = [1, 2, 3];     // compiles: PHP# has no list keyword
+let empty = true;           // compiles
+const print = "draft";      // compiles
+const match = 1;            // compile error: match is a PHP# keyword
+```
+
 - In a class, `const` declares a constant. It is never reassigned, and its value is known before the code runs.
 - These are removed:
   - `$$name` variable variables
@@ -127,7 +137,7 @@ Fields and properties are separate concepts.
 Map<string, Plan> cache = [:];                                  // field
 public int views { get; private set; }                          // auto-property
 public string name { get; internal set => field = value.trim(); }
-public string slug => Str.slug(name);                           // computed
+public string slug => Str.slug(this.name);                      // computed
 ```
 
 **A field or an auto-property can have an initial value,** written after its declaration as in C#:
@@ -343,7 +353,7 @@ public StoreService(
     private Planner planner,
     [Field(label: "Tenant")] public Tenant tenant { get; } via Tracked,
 ) {
-    if (!tenant.active) throw new InactiveTenant(tenant);
+    if (!tenant.active) { throw new InactiveTenant(tenant); }
 }
 ```
 
@@ -372,11 +382,62 @@ public Artifact.fromJson(string json) : this(Manifest.parse(json)) { }
 let artifact = new Artifact.fromJson(json);
 ```
 
-- A constructor calls its base class's constructor with `: super(…)`, as in `public Order(Row row) : super(row) { }`.
-- A named constructor runs on the new object, so it can set get-only properties and `init` properties.
 - The dependency container always uses the main constructor (section 32).
 - There is no overloading by argument types.
 - A static method that looks up an existing object, such as `Journey.forUuid`, stays a static method.
+
+**A subclass's constructor always calls its parent's with `: super(…)`,** as in `public Order(Row row) : super(row) { }`, even when the parent's takes no arguments, as Kotlin always writes `: Document()`. A constructor without the call is a compile error:
+
+<!-- example super-call -->
+```csharp
+// app/Document.sharp
+namespace App;
+
+public class Document
+{
+    public Document() { }
+}
+```
+
+<!-- example super-call -->
+```csharp
+// app/Invoice.sharp
+namespace App;
+
+public class Invoice : Document
+{
+    public Invoice(public int number { get; }) : super() { }      // compiles: Document takes no arguments, and the call is still written
+}
+```
+
+<!-- example super-call -->
+```csharp
+// app/CreditNote.sharp
+namespace App;
+
+public class CreditNote : Document
+{
+    public CreditNote(public int number { get; }) { }             // compile error: CreditNote extends Document, so write : super()
+}
+```
+
+**`this` is refused in the arguments of `: super(…)` and `: this(…)`,** as in C#, Java, Kotlin, Swift and TypeScript, because the object doesn't exist until the constructor runs:
+
+<!-- example constructor-call-this: members in Artifact -->
+```csharp
+public Artifact(public Manifest manifest { get; }) { }
+public Artifact.fromJson(string json) : this(Manifest.parse(json)) { }   // compiles
+public Artifact.copy() : this(this.manifest) { }                         // compile error: `this` is not available before the constructor runs: pass a parameter instead.
+```
+
+**A get-only property is set once.** A named constructor runs on the new object after the main constructor, so it can't set a get-only property again. A property that a named constructor sets again is declared `{ get; init; }` (section 6.1):
+
+<!-- example set-once: members in Money -->
+```csharp
+public Money(public int amount { get; }, public string currency { get; init; }) { }
+public Money.zero(string currency) : this(0, "USD") { this.currency = currency; }   // compiles: currency is init
+public Money.free(string currency) : this(1, currency) { this.amount = 0; }         // compile error: amount is get-only, and the main constructor set it
+```
 
 ## 10. Structs
 
@@ -388,20 +449,33 @@ A `struct` is a value type.
 - **A struct cannot inherit or be inherited,** but it can implement interfaces.
 - **A struct has no default value.** Every `required` property must be set when one is created.
 
-<!-- example struct-changes: statements
-Point p = new Point { x: 1, y: 2 };
--->
+<!-- example struct-changes -->
 ```csharp
+// app/Point.sharp
+namespace App;
+
 public struct Point
 {
     public int x { get; init; }
     public int y { get; init; }
     public Point moved(int dx, int dy) => this with { x: this.x + dx, y: this.y + dy };
 }
+```
 
+<!-- example struct-changes -->
+```csharp
+// app/Size.sharp
+namespace App;
+
+public readonly struct Size { … }     // compile error: every struct is already read-only; write struct
+```
+
+<!-- example struct-changes: statements
+Point p = new Point { x: 1, y: 2 };
+-->
+```csharp
 Point q = p.moved(1, 0);              // compiles: q is a changed copy, and p is unchanged
 p.x = 5;                              // compile error: a struct never changes; return a changed copy from a method, such as moved
-public readonly struct Size { … }     // compile error: every struct is already read-only; write struct
 ```
 
 `with` copies an object or a struct and sets the listed properties through their `init` or `set` accessors. The original is unchanged.
@@ -759,6 +833,21 @@ items.last();                 // the last item
 items[id];                    // compile error when id is int|string: a List index is an int
 ```
 
+**A `List` index is a place,** as a Rust `Vec` index and a Go slice index are, so a change through it changes the element the list stores: `grid[0].add(5)` adds to the list at index 0. **A change through a `Map` index is a compile error,** as Go refuses `m[k].x = 5`, because a `Map` read is a copy:
+
+<!-- example index-changes: statements
+List<List<int>> grid = [[1, 2], [3]];
+Map<string, List<int>> stock = ["sku-1": [1]];
+-->
+```csharp
+grid[0].add(5);                               // changes the list stored at index 0
+grid[0].count();                              // 3
+stock["sku-1"]?.add(5);                       // compile error: a Map read is a copy: read it, change it, and store it back
+List<int> counts = stock["sku-1"] ?? [];
+counts.add(5);
+stock["sku-1"] = counts;                      // stores the changed list back
+```
+
 **A `Map` read is handled where it is read,** with `??`, `?.`, `is`, `as`, `match` or `get`. A bare `Map` read is a compile error that names `??` and `get`:
 
 <!-- example map-reads: statements alone
@@ -807,11 +896,11 @@ for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is a 
 - A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type, as in `const [Status status, int n]`, stays allowed. An inferred `Map`, such as a `groupBy` result, gives its keys back the same way, because the checker's types reach the running program (section 27).
 - Plain PHP receives the backing values.
 
-<!-- example enum-map-keys: statements
-OrderStats stats = new OrderStats();
-List<Order> orders = [new Order()];
--->
+<!-- example enum-map-keys -->
 ```csharp
+// app/Status.sharp
+namespace App;
+
 public enum Status : string
 {
     case Open = "open";
@@ -824,6 +913,12 @@ public enum Status : string
         Status.Refunded => "Refunded",
     };
 }
+```
+
+<!-- example enum-map-keys -->
+```csharp
+// app/OrderStats.sharp
+namespace App;
 
 public class OrderStats
 {
@@ -845,7 +940,13 @@ public class OrderStats
         return lines;
     }
 }
+```
 
+<!-- example enum-map-keys: statements
+OrderStats stats = new OrderStats();
+List<Order> orders = [new Order()];
+-->
+```csharp
 for (const [status, n] of stats.countByStatus(orders)) { … }   // compiles: status arrives as a Status, with no type written
 for (const [status, group] of orders.groupBy(o => o.status)) { … }   // compiles: an inferred Map's keys arrive as Status too
 Map<Username, Order> byUser = [:];                               // keyed by username.value
@@ -1062,20 +1163,41 @@ totalIn does not change Order, so declare it `totalIn(string currency) readonly`
 
 <!-- example readonly-fields -->
 ```csharp
+// app/Invoice.sharp
+namespace App;
+
 public class Invoice
 {
     private readonly Money total;                       // compile error: declare a get-only property with { get; }
 }
+```
+
+<!-- example readonly-fields -->
+```csharp
+// app/Bill.sharp
+namespace App;
 
 public class Bill
 {
     public Bill(public readonly Money due) { }          // compile error: declare a get-only property with { get; }
 }
+```
+
+<!-- example readonly-fields -->
+```csharp
+// app/Quote.sharp
+namespace App;
 
 public class Quote
 {
     public Quote(public Money due { get; }) { }         // compiles
 }
+```
+
+<!-- example readonly-fields -->
+```csharp
+// app/Receipt.sharp
+namespace App;
 
 public readonly class Receipt { … }                     // compile error: declare its properties with { get; }
 ```
@@ -1107,7 +1229,7 @@ int minimum = 500;
 lines.filter(l => !l.refunded);
 const check = (Order order) => order.total >= minimum;
 const price = (readonly Line line, string currency) => {
-    if (line.free) return Money.zero(currency);
+    if (line.free) { return Money.zero(currency); }
     return line.product.priceIn(currency);
 };
 ```
@@ -1171,13 +1293,16 @@ The field or property is read after the arguments run, which differs from C#. An
 - **`f?.(x)`:** calls `f` only when it is not null.
 - **`a ?? throw …`, `a ?? return`, `a ?? continue` and `a ?? break`:** leave when `a` is null. `return` takes a value when the method returns one.
 
-<!-- example leave-on-null: members -->
+<!-- example leave-on-null: members
+private Map<string, int> prices = [:];
+private Map<int, Customer> customers = [:];
+-->
 ```csharp
 public void renewAll(List<int> customerIds, string plan)
 {
-    int price = prices[plan] ?? return;                     // no such plan: nothing to renew
+    int price = this.prices[plan] ?? return;                // no such plan: nothing to renew
     for (const id of customerIds) {
-        Customer customer = customers[id] ?? continue;      // skip ids with no customer
+        Customer customer = this.customers[id] ?? continue; // skip ids with no customer
         charge(customer, price);
     }
 }
@@ -1211,26 +1336,60 @@ An event says that something happened, such as an order being paid. `emit` raise
 
 <!-- example event-declarations -->
 ```csharp
+// app/OrderEvent.sharp
+namespace App;
+
+public interface OrderEvent { int orderId { get; } }                  // the type both events share
+```
+
+<!-- example event-declarations -->
+```csharp
+// app/OrderPaid.sharp
+namespace App;
+
+public event OrderPaid(int orderId, Money amount) : OrderEvent;       // declares the event type OrderPaid
+```
+
+<!-- example event-declarations -->
+```csharp
+// app/OrderRefunded.sharp
+namespace App;
+
+public event OrderRefunded(int orderId, Money amount) : OrderEvent;   // declares the event type OrderRefunded
+```
+
+<!-- example event-declarations -->
+```csharp
+// app/Order.sharp
+namespace App;
+
 public class Order
 {
-    public interface Event { int orderId { get; } }                   // declares Order.Event, the type both events share
-    public event Paid(int orderId, Money amount) : Event;             // declares the event type Order.Paid
-    public event Refunded(int orderId, Money amount) : Event;         // declares Order.Refunded
+    public int id { get; }
+    public Money total { get; }
 
     public void markPaid()
     {
         …
-        emit new Paid(this.id, this.total);                            // runs every listener for Order.Paid
+        emit new OrderPaid(this.id, this.total);                      // runs every listener for OrderPaid
     }
-}
-
-public class Receipts
-{
-    public void deliver(Order.Paid e) on Order.Paid { … }             // listens to every Order.Paid
 }
 ```
 
-**Declaring:** `event` declares an event type. `public event Paid(int orderId, Money amount);` inside `Order` declares `Order.Paid`, a class whose parameters become get-only properties, as C#'s positional records and Kotlin's data classes do. An event is declared inside the class that raises it, and an interface its events share is declared beside them, as `Order.Event` is, the way C# nests types. An event that no single class owns is declared on its own, in its own file:
+<!-- example event-declarations -->
+```csharp
+// app/Receipts.sharp
+namespace App;
+
+public class Receipts
+{
+    public void deliver(OrderPaid e) on OrderPaid { … }               // listens to every OrderPaid
+}
+```
+
+**Declaring:** `event` declares an event type. `public event OrderPaid(int orderId, Money amount);` declares `OrderPaid`, a class whose parameters become get-only properties, as C#'s positional records and Kotlin's data classes do.
+
+**No type nests.** Every type, events and interfaces included, is declared at file level in its own file (section 27). An interface that several events share, such as `OrderEvent`, is declared the same way. An event lives in the namespace of the code it describes:
 
 <!-- example standalone-event -->
 ```csharp
@@ -1242,16 +1401,16 @@ public event RowImported(int row);
 
 **Emitting:** `emit` raises an event. Any code may raise any event type:
 
-<!-- example emit-forms: statements in Order
-public int id { get; } = 1;
-public Money total { get; } = new Money(500, "USD");
-public event Paid(int orderId, Money amount);
-Order order = this;
+<!-- example emit-forms: statements
+public event OrderPaid(int orderId, Money amount);
+Order order = new Order();
+Money total = new Money(500, "USD");
 -->
 ```csharp
-emit new Paid(this.id, this.total);              // inside Order
-emit new Order.Paid(order.id, order.total);      // anywhere else
+emit new OrderPaid(order.id, total);             // runs every listener for OrderPaid
 ```
+
+**`new Order.Paid(…)` always calls `Order`'s named constructor `Paid`** (section 9.1), because `.` in code is always member access, and a type `App.Order.Paid` beside the class `App.Order` is already a compile error, because a class cannot share its full name with a namespace (section 23).
 
 **Plain PHP events:** `extern event` marks a plain PHP class, such as a Laravel event, as an event, so PHP# code can listen to it:
 
@@ -1265,37 +1424,62 @@ import Illuminate.Queue.Events.JobFailed;
 extern event JobFailed;
 ```
 
+**`extern event` states the class's effects after `uses`,** as every `extern` does (section 29). `extern event JobFailed;` names no effect, so it declares an event that is pure. With `uses`, a call into the event's class has the effect it names:
+
+<!-- example extern-event-effects -->
+```csharp
+// app/Stubs/Laravel.sharp
+namespace App.Stubs;
+
+import Illuminate.Queue.Events.JobFailed;
+
+extern event JobFailed uses Database;            // an event, and a call into JobFailed has the effect Database
+```
+
 **Listening:** a trailing `on` clause after a method's parameters lists the events the method listens to, for as long as the app runs. The method takes zero parameters, or one parameter whose type every listed event shares. It takes no other parameter, and no parameter is implicit. The namespace's `Module.sharp` container creates the object each listener runs on.
 
 <!-- example listeners
 import Illuminate.Queue.Events.JobFailed;
+public interface OrderEvent { int orderId { get; } }
+public event OrderPaid(int orderId, Money amount) : OrderEvent;
+public event OrderRefunded(int orderId, Money amount) : OrderEvent;
 -->
 ```csharp
 public class OrderNotices
 {
-    public void send(Order.Event e) on Order.Paid, Order.Refunded { … }    // two events, read through the type they share
-    public void refresh() on Order.Paid { … }                              // no parameter: the event's data is not needed
-    public void audit(Order.Event e) on Order.Event { … }                  // every event that implements Order.Event
-    public void alert(JobFailed e) on JobFailed { … }                      // a plain PHP event marked with extern event
+    public void send(OrderEvent e) on OrderPaid, OrderRefunded { … }      // two events, read through the type they share
+    public void refresh() on OrderPaid { … }                              // no parameter: the event's data is not needed
+    public void audit(OrderEvent e) on OrderEvent { … }                   // every event that implements OrderEvent
+    public void alert(JobFailed e) on JobFailed { … }                     // a plain PHP event marked with extern event
 }
 ```
 
 - **A listener on an interface hears every event that implements it.**
 - **`vendor/bin/mago compile` finds every `on` at build time.** A wrong event name, or a parameter type the listed events don't share, is a compile error:
 
-<!-- example listener-errors: members -->
+<!-- example listener-errors: members
+public event OrderPaid(int orderId, Money amount);
+public event OrderRefunded(int orderId, Money amount);
+-->
 ```csharp
-public void send(Order.Paid e) on Order.Paid, Order.Refunded { … }      // compile error: Order.Refunded is not an Order.Paid
-public void refresh() on Order.Payed { … }                               // compile error: Order has no event Payed
-public void log(Order.Paid e, Logger logger) on Order.Paid { … }         // compile error: a listener takes only the event
+public void send(OrderPaid e) on OrderPaid, OrderRefunded { … }         // compile error: OrderRefunded is not an OrderPaid
+public void refresh() on OrderPayed { … }                               // compile error: there is no event OrderPayed
+public void log(OrderPaid e, Logger logger) on OrderPaid { … }          // compile error: a listener takes only the event
 ```
 
 **Listening for a while:** `Events.on<RowImported>(e => …)` starts a listener and returns a handle. The listener stops when the handle goes out of scope:
 
-<!-- example scoped-listener -->
+<!-- example scoped-listener: members
+public class ProgressBar { public void advance() { } }
+public class Importer { public void run(string path) { } }
+-->
 ```csharp
+import App.Imports.RowImported;
+
 public class ImportScreen
 {
+    public ImportScreen(private ProgressBar progress, private Importer importer) { }
+
     public void import(string path)
     {
         const listening = Events.on<RowImported>(e => this.progress.advance());   // listens until import returns
@@ -1392,6 +1576,17 @@ These keep their C and PHP form:
 
 PHP's `foreach` is removed.
 
+**The body of every `if`, `else`, `while`, `do` and `for` is written in braces,** as in Go, Rust and Swift, and as PSR-12 requires of PHP. A body without braces is a compile error:
+
+<!-- example braces: statements
+bool done = false;
+-->
+```csharp
+if (done) { return; }           // compiles
+if (done) return;               // compile error: write the body in braces, as in { return; }
+while (!done) done = true;      // compile error: write the body in braces, as in { done = true; }
+```
+
 ## 18. Strings
 
 **Joining:** `+` joins strings. Joining a string with a number is a compile error, so `"1" + 1` cannot produce `"11"`. `+` in plain PHP files keeps its PHP meaning.
@@ -1453,18 +1648,24 @@ PHP's backtick shell execution is removed. `shell_exec()` stays.
 
 **Operators** are declared once on a type and inherited by its subclasses:
 
-<!-- example operators: statements
-Order order = new Order();
-Order sameOrderLoadedAgain = new Order();
-Cart cart = new Cart();
-Cart otherCart = new Cart();
--->
+<!-- example operators -->
 ```csharp
+// app/DatabaseEntity.sharp
+namespace App;
+
 public abstract class DatabaseEntity
 {
+    public int id { get; }
+    public DatabaseEntity(int id) { this.id = id; }
     public static bool operator ==(DatabaseEntity a, DatabaseEntity b) => a.id == b.id;
     public int hash() => this.id;
 }
+```
+
+<!-- example operators -->
+```csharp
+// app/Money.sharp
+namespace App;
 
 public class Money
 {
@@ -1473,7 +1674,15 @@ public class Money
     public static int operator <=>(Money a, Money b) { … }
     public static Money operator +(Money a, Money b) { … }
 }
+```
 
+<!-- example operators: statements
+Order order = new Order(1);
+Order sameOrderLoadedAgain = new Order(1);
+Cart cart = new Cart();
+Cart otherCart = new Cart();
+-->
+```csharp
 order == sameOrderLoadedAgain;   // Order inherits DatabaseEntity's ==, so this compares ids
 cart == otherCart;               // compile error: Cart declares no ==
 cart === cart;                   // true: the same object
@@ -1493,8 +1702,8 @@ Money total = new Money(500, "USD");
 ```csharp
 Money? price = null;
 price == null;                   // true, without running Money's ==
-price == Money.zero;             // false, without running Money's ==
-total == Money.zero;             // total is a Money, so this runs Money's ==
+price == Money.zero("USD");      // false, without running Money's ==
+total == Money.zero("USD");      // false: total is a Money, so this runs Money's ==
 if (price != null) { … }         // the normal null check
 if (price is not null) { … }     // compiles: an ordinary pattern
 ```
@@ -1625,7 +1834,17 @@ A `sealed interface` is a closed set of classes. Its implementers must sit in th
 
 <!-- example sealed-interfaces -->
 ```csharp
+// app/Interaction.sharp
+namespace App;
+
 public sealed interface Interaction { … }
+```
+
+<!-- example sealed-interfaces -->
+```csharp
+// app/PopupInteraction.sharp
+namespace App;
+
 public class PopupInteraction : Interaction { … }      // same namespace: allowed
 ```
 
@@ -1640,6 +1859,7 @@ Use an enum when the cases are small data. Use a sealed interface when each case
 `match` is the only branching construct on a value. `switch` is removed. `match` works both as an expression and, with block arms, as a statement. It compares strictly and never falls through.
 
 <!-- example match-forms: statements
+import Illuminate.Support.Facades.Log;
 PaymentResult result = PaymentResult.Declined(reason: "card expired");
 Order order = new Order();
 -->
@@ -1654,7 +1874,7 @@ const message = match (result) {
 match (result) {
     PaymentResult.Paid(string transactionId) => {
         deliver(order);
-        log(transactionId);
+        Log.info(transactionId);
     },
     default => {},
 }
@@ -1750,8 +1970,8 @@ if (entity is HasDesign) {
 Tab order = new Tab();
 -->
 ```csharp
-if (order.total is int) { order.total + 1; }   // compile error: order.total may have changed since the test
-if (order.total is int t) { t + 1; }           // compiles: t holds the value that was tested
+if (order.total is int) { order.total + 1; }    // compile error: order.total may have changed since the test
+if (order.total is int t) { let next = t + 1; } // compiles: t holds the value that was tested
 ```
 
 - **A variable that `is` creates exists only where the test held:** inside the `if` for `is`, and after an `if` whose block always exits for `is not`, as in C#. A block always exits when every path through it ends in `return`, `throw`, `break` or `continue`.
@@ -1767,12 +1987,14 @@ if (shape is Circle circle) {
 circle.radius;                         // compile error: `circle` exists only where `shape is Circle circle` is true
 ```
 
-<!-- example is-not-scope: members -->
+<!-- example is-not-scope: members
+private Map<string, int> prices = [:];
+-->
 ```csharp
 public Receipt checkout(Map<string, Any?> payload, string plan)
 {
     if (payload["orderId"] is not int orderId) { throw new BadPayload("orderId"); }
-    if (prices[plan] is not int price) { return Receipt.unknownPlan(plan); }
+    if (this.prices[plan] is not int price) { return Receipt.unknownPlan(plan); }
     return charge(orderId, price);                          // orderId and price are both known here
 }
 ```
@@ -1844,11 +2066,20 @@ public class Page : DatabaseEntity, Linkable, Shareable { … }
 
 <!-- example virtual-methods -->
 ```csharp
+// app/DatabaseEntity.sharp
+namespace App;
+
 public abstract class DatabaseEntity
 {
     public virtual string label() { … }      // subclasses may replace it
     public void save() { … }                 // nobody may replace it
 }
+```
+
+<!-- example virtual-methods -->
+```csharp
+// app/Page.sharp
+namespace App;
 
 public class Page : DatabaseEntity
 {
@@ -1889,10 +2120,19 @@ These are compile errors, whether the parent is PHP# or plain PHP:
 
 <!-- example override-parameter-names -->
 ```csharp
+// app/Image.sharp
+namespace App;
+
 public class Image
 {
     public virtual void resize(int width, int height) { … }
 }
+```
+
+<!-- example override-parameter-names -->
+```csharp
+// app/Thumbnail.sharp
+namespace App;
 
 public class Thumbnail : Image
 {
@@ -1916,10 +2156,11 @@ public override string label() => super.label() + " (page)";
 
 **An interface can give a method a default body.** PHP# declares no traits:
 
-<!-- example interface-defaults: statements
-Page page = new Page();
--->
+<!-- example interface-defaults -->
 ```csharp
+// app/HasDesign.sharp
+namespace App;
+
 public interface HasDesign
 {
     List<string> claims { get; set; }                       // abstract: each class declares its storage
@@ -1927,13 +2168,24 @@ public interface HasDesign
     string designKey() => `design:${this.designColumn}`;    // compiles: a default body
     string designId() => `design:${this.id}`;               // compile error: a default body sees only HasDesign's members, and id is not one
 }
+```
+
+<!-- example interface-defaults -->
+```csharp
+// app/Page.sharp
+namespace App;
 
 public class Page : DatabaseEntity, HasDesign
 {
     public List<string> claims { get; set; } = [];          // the storage lives in the class that owns it
     public string designColumn => "design";
 }
+```
 
+<!-- example interface-defaults: statements
+Page page = new Page();
+-->
+```csharp
 page.designKey();                                           // "design:design", from the default body
 ```
 
@@ -1956,16 +2208,33 @@ class LegacyPage implements HasDesign
 
 **A plain PHP trait** is listed in the header with the base class and interfaces, and it is also a type. It works everywhere an interface does:
 
+<!-- example plain-php-traits -->
+```csharp
+// app/Order.sharp
+namespace App;
+
+import Illuminate.Database.Eloquent.Model;
+import Illuminate.Database.Eloquent.Factories.HasFactory;
+
+public class Order : Model, HasFactory { … }
+```
+
+<!-- example plain-php-traits -->
+```csharp
+// app/Draft.sharp
+namespace App;
+
+import App.Legacy.Copies;
+
+public class Draft : Copies { … }               // compiles: a trait may stand alone in the header, as an interface may
+```
+
 <!-- example plain-php-traits: statements
 Any? entity = new LegacyEntity();
 -->
 ```csharp
-import Illuminate.Database.Eloquent.Model;
 import Illuminate.Database.Eloquent.Factories.HasFactory;
-import App.Legacy.Copies;
 
-public class Order : Model, HasFactory { … }
-public class Draft : Copies { … }               // compiles: a trait may stand alone in the header, as an interface may
 if (entity is HasFactory f) { … }
 public void seed(HasFactory owner) { … }
 List<HasFactory> owners = [];
@@ -2036,16 +2305,22 @@ Built-in types are lowercase: `int`, `float`, `bool`, `string`, `void`, `null`. 
 
 <!-- example naming-cases -->
 ```csharp
+// app/Billing/Status.sharp
 namespace App.Billing;                                         // namespace
 
 public enum Status : string { case Paid = "paid"; }            // type and enum case
+```
+
+<!-- example naming-cases -->
+```csharp
+// app/Billing/Invoice.sharp
+namespace App.Billing;
 
 public class Invoice<TLine : Line>                             // type and type parameter
 {
     const MAX_LINES = 100;                                     // constant
     List<TLine> pendingLines = [];                             // field
     public string dueDate { get; set; }                        // property
-    public event Paid(int orderId, Money amount);              // event
 
     public Money totalIn(string currency)                      // method and parameter
     {
@@ -2053,6 +2328,14 @@ public class Invoice<TLine : Line>                             // type and type 
         …
     }
 }
+```
+
+<!-- example naming-cases -->
+```csharp
+// app/Billing/InvoicePaid.sharp
+namespace App.Billing;
+
+public event InvoicePaid(int invoiceId, Money amount);         // event
 ```
 
 Mago warns on a `.sharp` name that breaks the rule, through its existing naming lint rules and in their message shape, as in `method-name`'s "Method name `TotalIn` should be in camel case."
@@ -2226,7 +2509,7 @@ import Sharp.Json.Json;
 string body = "{}";
 -->
 ```csharp
-Any payload = Json.decode(body);
+Any? payload = Json.decode(body);
 payload.order;                              // compile error: check what payload is first
 if (payload is WebhookPayload) {
     payload.order.total;                    // narrowed to WebhookPayload
@@ -2333,13 +2616,22 @@ Log.info("saved", ["class": typeof(order)]);    // compiles; runs: plain PHP rec
 
 <!-- example class-values -->
 ```csharp
-import Illuminate.Database.Eloquent.Model;
+// app/Element.sharp
+namespace App;
 
 public abstract class Element
 {
     public required Element(string key) { … }
     public static string defaultTag() => "div";
 }
+```
+
+<!-- example class-values -->
+```csharp
+// app/FormBuilder.sharp
+namespace App;
+
+import Illuminate.Database.Eloquent.Model;
 
 public class FormBuilder
 {
@@ -2430,10 +2722,19 @@ public bool same(Self other) { … }   // compile error: Self is a return type o
 
 <!-- example required-constructors -->
 ```csharp
+// app/Order.sharp
+namespace App;
+
 public class Order : DatabaseEntity
 {
     public Order(Row row, Clock? clock = null) : super(row) { … }   // compiles: new Self(row) can call it
 }
+```
+
+<!-- example required-constructors -->
+```csharp
+// app/Invoice.sharp
+namespace App;
 
 public class Invoice : DatabaseEntity
 {
@@ -2447,10 +2748,13 @@ public class Invoice : DatabaseEntity
 
 An extension adds methods and properties to an existing type from outside it. Extensions are declared in `extension(...)` blocks inside a static class, as in C# 14:
 
-<!-- example extensions: statements
-string title = "Spring Sale";
--->
+<!-- example extensions -->
 ```csharp
+// app/Shared/Text/TextExtensions.sharp
+namespace App.Shared.Text;
+
+import Illuminate.Support.Str;
+
 public static class TextExtensions
 {
     extension(string value)
@@ -2459,8 +2763,14 @@ public static class TextExtensions
         public bool isBlank => value.trim() == "";
     }
 }
+```
 
+<!-- example extensions: statements
+string title = "Spring Sale";
+-->
+```csharp
 import App.Shared.Text.TextExtensions;
+
 title.slug();
 title.isBlank;
 ```
@@ -2497,6 +2807,17 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 ```
 
 The extension is **`.sharp`**, as in `StoreService.sharp`.
+
+**A `.sharp` file declares one type, named like the file,** as Composer's PSR-4 autoloader loads one class per file. Every type, events and interfaces included, sits at file level in the namespace its folder names (section 5), so a reader finds a type by its namespace and its file, as in PHP. A second type in a file is a compile error:
+
+<!-- example one-type-per-file -->
+```csharp
+// app/Tenant/Store/StoreService.sharp
+namespace App.Tenant.Store;
+
+public class StoreService { … }       // compiles: StoreService.sharp declares StoreService
+public class StoreHelper { … }        // compile error: move StoreHelper to StoreHelper.sharp
+```
 
 Plain PHP files keep `.php` and `<?php`, and the two call each other freely. Composer's autoloader tries `.sharp` after `.php`, the same way it already tries `.hh` for Hack.
 
@@ -2623,7 +2944,11 @@ public enum Status : string
     case Paid = "paid";
     case Refunded = "refunded";
 
-    public Status after(Payment e) => match (this) { … };                          // pure: the next status for every status and event
+    public Status after(Payment e) => match (this) {                               // pure: the next status for every status and event
+        Status.Open => Status.Paid,
+        Status.Paid => Status.Refunded,
+        Status.Refunded => Status.Refunded,
+    };
     law refundedIsFinal(Payment e) => Status.Refunded.after(e) == Status.Refunded;
 }
 ```
@@ -2722,16 +3047,31 @@ extern StripeClient uses Http;
 
 <!-- example pure-interface -->
 ```csharp
+// app/Formatter.sharp
+namespace App;
+
 public interface Formatter
 {
     string format(string name);                                     // implementations must be pure
 }
+```
+
+<!-- example pure-interface -->
+```csharp
+// app/Visitor.sharp
+namespace App;
 
 public class Visitor
 {
     public string greet(string name) => "Hello, " + name.trim();    // pure: trim is a standard-library method
     public void remember(string token) { file_put_contents("seen.txt", token); }   // has Files
 }
+```
+
+<!-- example pure-interface -->
+```csharp
+// app/FileFormatter.sharp
+namespace App;
 
 public class FileFormatter : Formatter
 {
@@ -2784,7 +3124,8 @@ The standard library ships `Database`, `Http`, `Files`, `Console`, `Process`, `C
 
 <!-- example environment -->
 ```csharp
-import Illuminate.Http.Request;
+// app/Deploy.sharp
+namespace App;
 
 public class Deploy
 {
@@ -2793,6 +3134,14 @@ public class Deploy
     public string region() => this.environment.variable("AWS_REGION") ?? "us-east-1";
     public string target() => this.environment.arguments[1];   // throws OutOfRangeException when no argument was passed
 }
+```
+
+<!-- example environment -->
+```csharp
+// app/CheckoutController.sharp
+namespace App;
+
+import Illuminate.Http.Request;
 
 public class CheckoutController
 {
@@ -2847,21 +3196,37 @@ Function<int(Function<int(int) uses Http>)> apply;               // compiles
 
 An implementation that calls plain PHP fits the declaration only through an `extern`:
 
-<!-- example extern-implementations
-import Stripe.StripeClient;
-import Mailchimp.Mailchimp;
--->
+<!-- example extern-implementations -->
 ```csharp
+// app/AudienceSync.sharp
+namespace App;
+
 public interface AudienceSync
 {
     void sync(Contact contact) uses Http;
 }
+```
+
+<!-- example extern-implementations -->
+```csharp
+// app/StripeGateway.sharp
+namespace App;
+
+import Stripe.StripeClient;
 
 public class StripeGateway : PaymentGateway
 {
     public Money quote(Cart cart) { … }
     public Charge charge(Cart cart) => StripeClient.charges().create(…);   // fits: StripeClient is declared Http
 }
+```
+
+<!-- example extern-implementations -->
+```csharp
+// app/MailchimpSync.sharp
+namespace App;
+
+import Mailchimp.Mailchimp;
 
 public class MailchimpSync : AudienceSync
 {
@@ -2878,14 +3243,31 @@ Declare its effect in a .sharp file, such as `extern Mailchimp uses Http;`.
 
 <!-- example emit-effect -->
 ```csharp
+// app/OrderPaid.sharp
+namespace App;
+
+public event OrderPaid(int orderId, int total);
+```
+
+<!-- example emit-effect -->
+```csharp
+// app/Checkout.sharp
+namespace App;
+
 public interface Checkout
 {
     void complete(Order order) uses Events;                                            // implementations may emit, nothing else
 }
+```
+
+<!-- example emit-effect -->
+```csharp
+// app/StoreCheckout.sharp
+namespace App;
 
 public class StoreCheckout : Checkout
 {
-    public void complete(Order order) { emit new Order.Paid(order.id, order.total); }   // fits: emit has the effect Events
+    public void complete(Order order) { emit new OrderPaid(order.id, order.total); }    // fits: emit has the effect Events
 }
 ```
 
@@ -2970,7 +3352,14 @@ Methods declare no thrown exceptions, and the checker never reports an undeclare
 
 <!-- example error-interface -->
 ```csharp
+// in the standard library's Sharp
 public interface Error { string message { get; } }
+```
+
+<!-- example error-interface -->
+```csharp
+// app/PaymentError.sharp
+namespace App;
 
 public enum PaymentError : Error
 {
