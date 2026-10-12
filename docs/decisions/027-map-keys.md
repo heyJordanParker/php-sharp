@@ -28,11 +28,11 @@ public struct Cart
 Map<Cart, int> totals = [:];                        // compile error: Cart holds a Customer, a class instance
 ```
 
-A struct is a value already (section 10), and `==` already compares it field by field (section 19), so its whole value is the key. Nothing is written to make it one. Jordan ruled this on 2026-10-12, after he asked for a wider survey than the backing-value header.
+A struct is a value already (section 10), and `==` already compares it field by field (section 19), so its whole value is the key. Nothing is written to make it one. Jordan ruled this on 2026-10-12.
 
 ### Chosen: a struct holding a class instance can't key a `Map`
 
-team-lead ruled this from precedent on 2026-10-12, as Rust's `HashMap` needs every field to be `Hash` and Swift's `Dictionary` needs every field to be `Hashable`, and it stays open to Jordan. Section 19's `Set`, which hashes an object by its class's `hash()`, decides any later extension.
+Rust's `HashMap` needs every field of a key to be `Hash`, and Swift's `Dictionary` needs every field to be `Hashable`. Section 19's `Set`, which hashes an object by its class's `hash()`, decides any later extension.
 
 ### Chosen: JSON key text comes only from `toString()`
 
@@ -103,7 +103,7 @@ Map<Slot, Booking> bookings = [:];                  // keyed by slot.toString()
 for (const [slot, booking] of bookings) { … }       // runs: slot is the text, not a Slot
 ```
 
-Jordan asked for this in the survey, and ruled for the whole value instead. A text key reads back as text, so the `Map` loses the key's type, and two structs that print the same text become one key. `toString()` keeps one job: the JSON text of a key.
+A text key reads back as text, so the `Map` loses the key's type, and two structs that print the same text become one key. `toString()` keeps one job: the JSON text of a key.
 
 ### Rejected: the loop names the key's type
 

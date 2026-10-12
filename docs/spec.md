@@ -3499,4 +3499,4 @@ public class Checkout
 
 ## Undecided, in order
 
-None. The standard library is specified with the library itself, by the team lead.
+None. The standard library is specified with the library itself.
