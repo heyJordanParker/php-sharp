@@ -59,7 +59,7 @@ team-lead's Queue 5 to Queue 9:
 2. **A struct property lowers as a class property does.** A get-only property is `public readonly`, set once. An `init` property is `public protected(set)` with no `readonly`, so a named constructor can set it again after the main constructor (#169). The class is `final`, so `protected(set)` means only the struct's own code writes it, and the checker allows that write only while the object is created.
    - Rejected: `readonly` on every struct property. PHP refuses a hooked `readonly` property ("Hooked properties cannot be readonly", run on the slot 7 engine), so an `init` body could not run, and a named constructor that sets an `init` property again would throw where the checker accepts it.
 3. **`==` on a struct runs a generated `op_Equality(mixed $a, mixed $b): bool`.** It returns `$a === $b` unless both are instances of the struct, so null equals only null and a value of another type is unequal, as section 19 wants for `Any?`. Otherwise it compares each property with that property's own `==`, through `Lowering::equality`. The codex registers the operator, so the analyzer's `==` rules and `declared_equality` find it as they find `Money`'s.
-4. **An object initializer and `with` share one write path.** Inside the class being created or copied, they lower to plain writes and `clone($x, [...])`. Outside it, they lower to a closure bound to the object:
+4. **An object initializer and `with` share one write path,** a closure bound to the object, inside the class being created or copied and outside it alike:
 
    ```php
    (function ($x, $y) { $this->x = $x; $this->y = $y; return $this; })->call(new \App\Point(), 1, 2)   // new Point { x: 1, y: 2 }
@@ -67,6 +67,7 @@ team-lead's Queue 5 to Queue 9:
    ```
 
    The values are evaluated in the caller, as the arguments, so `this` in a value is the caller's. A write runs the `init` or `set` hook (run on the slot 7 engine).
+   - Built as one path. The note first proposed plain writes and `clone($x, [...])` inside the class, but an initializer's several writes after `new` are statements, and an initializer is an expression, so it needs the closure or a hidden local in every position. `this with { … }` through `clone` alone cost 625 and 548 ns, against 601 and 659 ns through the closure, so the second path would buy nothing measurable.
    - Measured on Homebrew PHP 8.5.1 with opcache, 1,000,000 creations, two runs: a main constructor took 221 and 240 ns, an initializer through the closure 755 and 631 ns, `this with { … }` inside the class 625 and 548 ns, and `p with { … }` through the closure 601 and 659 ns. The closure costs about what `clone` with an array costs. A scoped write opcode would remove it later, as a Speed item.
    - Rejected: a generated public method that writes the properties. Plain PHP could call it on an existing struct and change it.
 5. **`parse` and `tryParse` are generated per struct by the bridge** (ruling 15 moves its type checks to R3c's `sharp_type_accepts`), from the parameter types typed compilation hands it, as serde's derive and kotlinx.serialization's compiler plugin generate a reader per type. `parse` collects every bad field, then throws one `Sharp\InvalidFields`. `tryParse` catches it and returns null. A nested struct is read through its own `parse`, and its fields are re-keyed under the outer path. The generated code needs no runtime type registry and no hidden member. The run below shows the generated shape giving the spec's exact message.
@@ -516,32 +517,43 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 
 **mago-sharp, `crates/syntax/tests/sharp.rs`:**
 
-- `a_struct_header_lists_interfaces_only`: a plain struct, `: HasLabel`, a named constructor inside, and `struct` as a local name, which stays a name.
-- `with_copies_an_object_with_the_values_it_names`: `p with { x: 1 }`, the shorthand, two names, and its precedence against `!` and `+`.
-- `an_object_initializer_follows_new`: with and without arguments, a named constructor, the shorthand.
+- `a_struct_header_lists_interfaces_only`: interfaces parse, and `string` or `int` in the header is one error.
+- `a_generic_struct_is_one_not_supported_error_and_the_struct_parses_on`: question 4.
+- `with_copies_the_object_before_it_with_the_values_it_names`: `p with { x: 1, y }` with the shorthand, and its precedence against `+`, `!`, unary `-` and a `new` with its own initializer.
+- `an_object_initializer_follows_new`: with and without arguments, a named constructor, empty, and none.
 
 **mago-sharp, `crates/semantics/tests/sharp.rs`:**
 
-- `a_struct_is_never_readonly_abstract_or_static`: each modifier refused, the help's `struct` compiled.
-- `a_struct_property_takes_get_or_init`: `set` refused, `get` and `init` compile.
-- `required_needs_init_or_set`: a get-only `required` property refused, its help compiled.
+- `a_struct_takes_only_public`: `readonly`, `abstract` and `final` refused; the fix, `public struct`, compiles.
+- `a_struct_property_takes_init_not_set`: `set` refused on a property and a main constructor parameter; `init` compiles.
+- `a_struct_member_is_private_where_a_class_would_be_protected`: `protected`, `virtual` and `override` refused on a property, a method and a parameter; `private` compiles.
+- `a_struct_declares_no_operator_equality`: `operator ==` refused; `operator +` compiles.
+- `a_required_property_has_init_or_set`: a get-only `required` property refused; `init` and `set` compile.
 
 **mago-sharp, `crates/analyzer/tests/sharp.rs`:**
 
-- `a_struct_never_changes`: a property write, a write in its own method, a collection `add` through `this`, each refused; the help names `moved`, and names `with` when no method returns the struct; both fixes compile.
-- `a_struct_inherits_nothing_and_implements_interfaces`: a class in its header, a class extending it, `protected` and `virtual` members, each refused; an interface compiles.
-- `a_struct_compares_by_value`: `==` and `!=` compile, `===` refused with its fix compiled, a property without `==` refused naming it, a `List` property and a `Map` property compare, `operator ==` refused, `Any? == point` compiles.
+- `a_struct_never_changes`: a write from outside and in its own method, each refused; the help names `moved`, and names `with` when no method returns the struct; both fixes compile.
+- `a_struct_inherits_nothing_and_implements_interfaces`: a class in its header and a class extending it, each one error; an interface compiles.
+- `a_struct_compares_by_value`: `===` refused with its fix compiled, a property without `==` refused naming it, `!=` against `Any?` compiles.
 - `collections_compare_by_value`: two `List<int>`, two `List<Money>` through `Money`'s `==`, two `List<Point>`, a `Map` in another order, and a `List` of a class without `==` refused naming the class.
-- `a_struct_states_a_law`: a struct law with its proof in the struct's Lean file is proven, and the same law without its proof is refused as unproven.
-- `with_sets_init_and_set_properties`: a get-only property refused with its help compiled, a name given twice refused, a lambda refused, a class with `set` compiles, a plain PHP `readonly` property refused.
-- `every_required_property_is_set_at_creation`: missing in an initializer, set by the constructor, set through a named constructor, set by `with`'s copy; question 2's struct row.
+- `with_and_an_object_initializer_set_init_and_set_properties`: a get-only property refused with its help, a name given twice refused, a class with `set` compiles, a plain PHP `readonly` property refused without the help.
+- `every_required_property_is_set_where_its_object_is_created` and `a_get_only_property_no_constructor_sets_is_an_error`: ruling 14's rows.
 - `a_struct_keys_a_map_unless_it_holds_a_class_instance`: `Map<Username, int>` and `Set<Username>` compile, and a struct holding a class, an interface, a function or `Any`, directly, nested in a struct, in a `List`, in a `Map` or as `T?`, is refused where a `Map` or `Set` type is written and at a literal's key.
 - `a_sharp_class_cannot_implement_the_struct_marker`: `class Fake : Struct` after `import Sharp.Struct` is refused.
 - `every_struct_parses_and_classes_do_not`: `parse` and `tryParse` typed `Self` and `Self?`, a class's `parse` missing, `[Key]` off a struct's main constructor refused, two keys reading one name refused, a not-backed enum refused at the call.
 
+**mago-sharp, `tests/compile.rs`:**
+
+- `a_struct_states_a_law`: a struct law is proven, and refused once a changed method breaks it.
+
 **mago-sharp, `crates/sharp-bridge/tests/lower.rs`:**
 
-- One test per lowering form: the `final` class implementing `\Sharp\Struct` with `readonly` and `protected(set)` properties, `op_Equality`, `with` inside and outside the class, the initializer inside and outside the class, a struct key through `\Sharp\Map::key` in an index, a literal and a `Set` literal and read back through `\Sharp\Map::readKey`, collection `==` through `\array_all` for a `List` and a `Map`, `parse` and `tryParse` for each parameter kind (scalar, `T?`, a default value, enum, nested struct, `List`, `Map`, class instance, `Any?`), and a value pattern lowered through `==`.
+- `a_struct_is_a_final_class_whose_op_equality_compares_each_property`: the `final` class implementing `\Sharp\Struct`, its `readonly` properties and `op_Equality`.
+- `with_and_an_initializer_run_in_a_closure_bound_to_the_object`: the initializer's writes and `with`'s `clone`, with the shorthand.
+- `a_struct_key_goes_in_as_its_key_text_and_a_loop_reads_it_back`: `\Sharp\Map::key` in an index, a literal and a `Set` literal, and `\Sharp\Map::readKey` in a loop.
+- `equality_of_two_collections_compares_each_element_with_its_own_equality`: collection `==` through `\array_all` for a `List` and a `Map`.
+- `a_struct_parses_each_field_from_its_key_and_creates_itself_through_its_main_constructor` and `parse_reads_each_field_as_its_type`: `parse` and `tryParse` for each parameter kind (scalar, `T?`, a default value, enum, nested struct, `List`, `Map`, class instance, `Any?`).
+- `a_value_pattern_on_a_struct_runs_its_op_equality`: decision 7.
 
 **php-sharp, on the engine in all four opcache modes and both JITs:**
 
