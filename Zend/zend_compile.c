@@ -5281,17 +5281,18 @@ static void zend_compile_call(znode *result, zend_ast *ast, uint32_t type) /* {{
 /* }}} */
 
 /* A PHP# method call on a List or Map runs a Sharp\Collection method, so the receiver's fetch is
- * marked to make that object: the fetch of a property, so a changing method writes the property
- * back, or else a cast, which keeps a local's slot or a copy of any other value. Before a `?.` call
- * the receiver ends its own null-safe chain ahead of the cast, as PHP's ((object) $a?->b())?->c()
- * does: the call's own JMP_NULL gives null for either. */
+ * marked to make that object: the fetch of a property or a static property, so a changing method
+ * writes the property back, or else a cast, which keeps a local's slot or a copy of any other value.
+ * Before a `?.` call the receiver ends its own null-safe chain ahead of the cast, as PHP's
+ * ((object) $a?->b())?->c() does: the call's own JMP_NULL gives null for either. */
 static void zend_compile_sharp_receiver(znode *result, zend_ast *ast, bool nullsafe)
 {
 	zend_op *opline;
 
-	if (ast->kind == ZEND_AST_PROP || ast->kind == ZEND_AST_NULLSAFE_PROP) {
+	if (ast->kind == ZEND_AST_PROP || ast->kind == ZEND_AST_NULLSAFE_PROP || ast->kind == ZEND_AST_STATIC_PROP) {
 		opline = zend_compile_var(result, ast, BP_VAR_R, 0);
-		if (opline && opline->opcode == ZEND_FETCH_OBJ_R && opline->op2_type == IS_CONST) {
+		if (opline && ((opline->opcode == ZEND_FETCH_OBJ_R && opline->op2_type == IS_CONST)
+				|| opline->opcode == ZEND_FETCH_STATIC_PROP_R)) {
 			opline->extended_value |= ZEND_SHARP_OPERATOR;
 			return;
 		}

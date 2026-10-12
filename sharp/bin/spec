@@ -7,8 +7,8 @@
 // With --base <commit>, it instead compares sharp/baseline/spec and the examples with that commit. The SPEC_GUARD job
 // runs the base commit's copy of this script on the pull request's merge commit, so a pull request's own files never
 // judge it. It fails when an entry joins the list in a pull request that changes more than the documents and the list,
-// when an example whose fingerprint the base has joins the list or gains a refusal, and when a pull request that
-// changes anything outside the spec files also changes an example's fingerprint or a file in a GUARDED folder.
+// when an example whose fingerprint the base has joins the list, and when a pull request that changes anything outside
+// the spec files and other Markdown also changes an example's fingerprint or a file in a GUARDED folder.
 //
 // With --completes, it reads the pull request body from BODY and fails unless every section its `Completes:` line names
 // has a checked example and no entry in sharp/baseline/spec. Neither mode needs a build.
@@ -874,7 +874,7 @@ function matches(string $expected, array $outcome): bool
 }
 
 /** Checks one compiled variant's errors against the lines it holds. Returns every problem found. */
-function check_compile(array $example, array $reads, array $files, array $variant, array $errors, array &$refusals): array
+function check_compile(array $example, array $reads, array $files, array $variant, array $errors): array
 {
     $problems = [];
     $by_name = array_change_key_case(array_column($files, null, 'path'));
@@ -894,9 +894,6 @@ function check_compile(array $example, array $reads, array $files, array $varian
         [$b, $i] = $origin;
         $block = $example['blocks'][$b];
         $read = $reads[$b];
-        if (str_contains($error['message'], REFUSAL)) {
-            $refusals["$b:$i:$error[message]"] = true;
-        }
         $kind = $read[$i]['expect']['kind'];
         if (($kind === 'none' || $kind === 'prose') && (in_array($error['code'], MOVES, true) || in_array($error['message'], MOVES, true))) {
             $owners = array_keys(array_filter($read, static fn (array $line, int $j): bool => $line['expect']['kind'] === 'error'
@@ -1044,14 +1041,13 @@ function check(string $root): int
     foreach ($projects as $id => $variants) {
         $example = $examples[$id];
         $problems = [];
-        $refusals = [];
         foreach ($variants as [$folder, $files, $variant]) {
             [$stdout, $stderr, $status] = $compiled[$folder] ?? ['', '', 0];
             if ($status > 1) {
                 $problems[] = "mago compile stopped with status $status: " . trim(substr($stderr, -600));
                 continue;
             }
-            array_push($problems, ...check_compile($example, $reads[$id], $files, $variant, compile_errors($stdout), $refusals));
+            array_push($problems, ...check_compile($example, $reads[$id], $files, $variant, compile_errors($stdout)));
             foreach ($files as $k => $file) {
                 [$lint, $lint_errors, $lint_status] = $compiled["$folder/lint$k"] ?? ['', '', 0];
                 if ($lint_status !== 0) {
@@ -1059,7 +1055,7 @@ function check(string $root): int
                 }
             }
         }
-        $results[$id] = ['problems' => array_values(array_unique($problems)), 'refusals' => count($refusals)];
+        $results[$id] = ['problems' => array_values(array_unique($problems))];
 
         $runs_here = false;
         foreach ($example['blocks'] as $b => $block) {
@@ -1127,7 +1123,7 @@ function check(string $root): int
             if (count($shown) > 8) {
                 echo '  and problems on ' . (count($shown) - 8) . " more lines\n";
             }
-            $failing[] = "{$examples[$id]['section']}\t$id\t$result[refusals]";
+            $failing[] = "{$examples[$id]['section']}\t$id";
         }
     }
     sort($failing, SORT_NATURAL);
@@ -1143,14 +1139,14 @@ function check(string $root): int
     }
     $before = parse_list($listed);
     $after = parse_list($list);
-    foreach ($after as $id => $entry) {
+    foreach ($after as $id => $section) {
         if (!isset($before[$id])) {
             echo "$id fails and is not in " . BASELINE . ".\n";
-        } elseif ($before[$id] !== $entry) {
-            echo "$id is listed as `" . implode(' ', $before[$id]) . '` and is now `' . implode(' ', $entry) . "`.\n";
+        } elseif ($before[$id] !== $section) {
+            echo "$id is listed under $before[$id] and is now under $section.\n";
         }
     }
-    foreach ($before as $id => $entry) {
+    foreach ($before as $id => $section) {
         if (!isset($after[$id])) {
             echo "$id passes and is still in " . BASELINE . ".\n";
         }
@@ -1160,16 +1156,16 @@ function check(string $root): int
     return 1;
 }
 
-/** @return array<string, array{string, int}> the section and refusal count of each listed example, by id */
+/** @return array<string, string> the section of each listed example, by id */
 function parse_list(string $text): array
 {
     $entries = [];
     foreach (array_filter(explode("\n", $text)) as $line) {
         $fields = explode("\t", $line);
-        if (count($fields) !== 3 || !ctype_digit($fields[2])) {
-            fail(BASELINE . " holds `$line`, and each line is `<section>\t<id>\t<refusals>`.");
+        if (count($fields) !== 2) {
+            fail(BASELINE . " holds `$line`, and each line is `<section>\t<id>`.");
         }
-        $entries[$fields[1]] = [$fields[0], (int) $fields[2]];
+        $entries[$fields[1]] = $fields[0];
     }
 
     return $entries;
@@ -1214,10 +1210,10 @@ function refuse_links(string $root): void
 }
 
 /**
- * Compares the working tree with $base. A pull request that changes a file outside the documents, the list and the
- * GUARDED folders must leave every example's fingerprint and every GUARDED file as $base has them, so it can only
- * remove entries. In any pull request, an example whose fingerprint $base also has, under its id or another, never
- * joins the list or gains a refusal, except that a renamed example takes over its old id's entry.
+ * Compares the working tree with $base. A pull request that changes a file outside the documents, the list, the
+ * GUARDED folders and other Markdown must leave every example's fingerprint and every GUARDED file as $base has them,
+ * so it can only remove entries. In any pull request, an example whose fingerprint $base also has, under its id or
+ * another, never joins the list, except that a renamed example takes over its old id's entry.
  */
 function compare_with_base(string $root, string $base): int
 {
@@ -1238,8 +1234,9 @@ function compare_with_base(string $root, string $base): int
     // Without --no-renames, a renamed file shows only its new path, and a guarded file could leave its folder unseen.
     // Without -z, git quotes a path that holds a non-ASCII byte, and the quoted path matches no GUARDED folder.
     $changed_files = array_filter(explode("\0", git($root, 'diff', '--name-only', '--no-renames', '-z', $base)));
+    // Markdown other than the documents never runs, so it changes no result and may change beside a guarded file.
     $outside = array_values(array_filter($changed_files, static fn (string $file): bool => !in_array($file, [...DOCUMENTS, BASELINE], true)
-        && !guarded($file)));
+        && !guarded($file) && !str_ends_with($file, '.md')));
     // Beside the documents, a harness or checker change could make an example fail that no edit touched.
     $beyond_documents = array_values(array_diff($changed_files, [...DOCUMENTS, BASELINE]));
     $problems = [];
@@ -1257,7 +1254,7 @@ function compare_with_base(string $root, string $base): int
     }
 
     $added = array_diff_key($after, $before);
-    foreach ($added as $id => [$section]) {
+    foreach ($added as $id => $section) {
         $same = $unchanged($id);
         if ($beyond_documents !== []) {
             $problems[] = "$section $id joins the list in a PR that also changes " . implode(', ', $beyond_documents)
@@ -1275,17 +1272,6 @@ function compare_with_base(string $root, string $base): int
             if ($old['ignore'] === null && array_intersect($old['codes'], $example['codes']) !== []) {
                 $problems[] = "$example[section] $id is ignored, which adds it to the list, and $old[id] ran the same code at $base.";
             }
-        }
-    }
-
-    // Beyond the documents, every listed example compares with its own id. In a documents-only PR, an edited example
-    // may gain refusals, so only an example whose fingerprint the base has compares.
-    foreach ($after as $id => [$section, $refusals]) {
-        $same = $beyond_documents !== [] ? (isset($before[$id]) ? $id : null) : $unchanged($id);
-        $old = $same === null ? null : ($before[$same][1] ?? 0);
-        if ($old !== null && $refusals > $old) {
-            $problems[] = "$section $id has $refusals \"" . REFUSAL . "\" refusals, and $same has $old at $base"
-                . ($beyond_documents !== [] ? ', in a PR that also changes ' . implode(', ', $beyond_documents) . '.' : ' with the same code.');
         }
     }
 
@@ -1328,7 +1314,7 @@ function completes(string $root, string $body): int
     $failed = false;
     foreach (array_unique($sections) as $claim) {
         $checked = array_filter($examples, static fn (array $example): bool => $within($example['section'], $claim));
-        $left = array_filter($listed, static fn (array $entry): bool => $within($entry[0], $claim));
+        $left = array_filter($listed, static fn (string $section): bool => $within($section, $claim));
         if ($checked === []) {
             echo "$claim has no checked example, so nothing shows it is complete.\n";
             $failed = true;

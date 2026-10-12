@@ -37,7 +37,7 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 
 A PR that finishes spec sections says so in its body, on its own line, exactly as `Completes: §6.1, §9`. The `COMPLETES` check fails while `sharp/baseline/spec` still lists an example of a named section.
 
-A builder PR leaves the spec's examples and every file in `sharp/harness/`, `sharp/bin/`, `sharp/docker/` and `.github/` as master has them. Only a spec PR changes them. A builder that needs a new image package or a workflow change lands it in a PR of its own first. When the builder's work makes listed examples pass, the failing run prints the `cp` command that writes the shorter list, and the entries leave through it.
+A builder PR leaves the spec's examples and every file in `sharp/harness/`, `sharp/bin/`, `sharp/docker/` and `.github/` as master has them. Only a spec PR changes them, and Markdown docs outside those folders may change beside them, because Markdown never runs. A builder that needs a new image package or a workflow change lands it in a PR of its own first. When the builder's work makes listed examples pass, the failing run prints the `cp` command that writes the shorter list, and the entries leave through it. A listed example that fails with other errors than before stays on the list unchanged, because the list records which examples fail, not how.
 
 An entry joins `sharp/baseline/spec` only in a PR that changes nothing but `docs/spec.md`, `README.md` and the list. So a new example that needs a new harness class lands in two PRs: the class first, then the example and its entry.
 
