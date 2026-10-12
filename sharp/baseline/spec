@@ -9,9 +9,6 @@
 §7	variadic-parameters
 §8	standard-library-calls
 §9	parameter-members
-§9.1	constructor-call-this
-§9.1	named-constructors
-§9.1	set-once
 §10	struct-backing-value
 §10	struct-changes
 §10	struct-parse
@@ -36,12 +33,9 @@
 §14.4	leave-on-null
 §15	emit-forms
 §15	event-declarations
-§15	extern-event
-§15	extern-event-effects
 §15	listener-errors
 §15	listeners
 §15	scoped-listener
-§15	standalone-event
 §16	initializer-shorthand
 §17	braces
 §19	operators
