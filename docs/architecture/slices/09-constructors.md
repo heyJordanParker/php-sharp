@@ -21,7 +21,7 @@ Each one is drawn in full further down.
 
 1. **`: super(…)` and `: this(…)` are one CST node, `ConstructorInitializer`, after Roslyn's `ConstructorInitializerSyntax`.** The main constructor carries it on `Method` as `initializer`. The bridge lowers `: super(args)` to `parent::__construct(args)` after the class's initial values and before the body, the order C#, Dart and Swift use: a class sets its own fields before its base class runs.
 2. **A constructor without `: super(…)` calls the parent's constructor with no arguments, as C# calls `base()`.** When the parent's constructor needs an argument, that is the compile error `missing-super-call`, as C#'s CS7036. This closes the silent accept above. The spec does not write it (open question 1).
-3. **A named constructor is its own CST node, `NamedConstructor`, a `ClassLikeMember` beside `Operator`.** The codex registers it as the public static method it lowers to, flagged `NAMED_CONSTRUCTOR`, as `walk_in_operator` registers an operator as `op_Addition`. `new Artifact.fromJson(json)` carries the name on `Instantiation` as `constructor`, after Dart's `ConstructorName`.
+3. **A named constructor is its own CST node, `NamedConstructor`, a `ClassLikeMember` beside `Operator`.** The codex registers it as the public static method it lowers to, flagged `NAMED_CONSTRUCTOR`, as `walk_in_operator` registers an operator as `op_Addition`. `new Artifact.fromJson(json)` parses as a plain `Instantiation` whose class is the dotted name `Identifier::Dotted("Artifact.fromJson")`, the parse section 15's `new Order.Paid(…)` shares, because the parser cannot tell a named constructor from a nested type when `Artifact` is another file's. The binder resolves it to `Demo\Artifact\fromJson`. The analyzer's `new` path creates the type `Demo\Artifact\fromJson` when one exists, and otherwise calls the named constructor `fromJson` of `Demo\Artifact` and records that static method as the call target at the `new`. The bridge, the effects check and the Lean translation read that record.
 4. **A named constructor lowers to `public static function fromJson(string $json): \Demo\Artifact`.** Its body creates the object with the main constructor, runs its own statements on it, and returns it. Inside it, `this` is a hidden local, after the bridge's `receiver#1` and `operand#1` precedent. Plain PHP calls it as `Artifact::fromJson($json)`.
 5. **Named constructors are not inherited**, as in C# and Dart. `new Sub.fromJson(json)` is an error when only `Artifact` declares `fromJson`, and the static method creates an `Artifact` even when plain PHP calls it through a subclass.
 6. **A named constructor cannot overwrite a get-only property the main constructor already set.** PHP sets a `readonly` property once, and master lowers a get-only property to `readonly`. The analyzer reports it as the existing `invalid-property-write`. C# allows the overwrite, so this narrows the spec (open question 2).
@@ -30,7 +30,7 @@ Each one is drawn in full further down.
 
 ## Rulings
 
-team-lead approved decisions 1, 3, 4, 5, 7 and 8, the public names tree, and the PR order. Decisions 2 and 6 and the four open questions wait for the Architect, because each decides what compiles. Until he answers, the Slice refuses rather than guesses:
+team-lead approved decisions 1, 3, 4, 5, 7 and 8, the public names tree, and the PR order. team-lead later replaced decision 3's `Instantiation.constructor` field, which the parser cannot fill, with the analyzer's decision above. Whichever of PR 3 and the events Slice's PR 1 lands second adds the clash error "`Order` declares both an event and a named constructor named `Paid`." with its test. Decisions 2 and 6 and the four open questions wait for the Architect, because each decides what compiles. Until he answers, the Slice refuses rather than guesses:
 
 1. **Implicit `super()` (open question 1).** PR 2 refuses a constructor without `: super(…)` in a class whose parent has a constructor, with one named error: "`Child`'s constructor must call `Base`'s with `: super(…)`." That closes the silent accept. If the Architect picks implicit `super()`, PR 2 relaxes it to decision 2.
 2. **A named constructor overwriting a get-only property the main constructor set (open question 2).** PR 3 refuses it, as decision 6 says.
@@ -265,12 +265,12 @@ let artifact = new Artifact.fromJson(json);
 Refused, in both places. `app/Artifact.sharp` holds the two constructors in `class Artifact` and printed `app/Artifact.sharp:6:12:error - parse: A named constructor is not supported yet in PHP#.` `app/ArtifactUse.sharp` holds `let artifact = new Artifact.fromJson(json); return artifact;` in a method and printed `app/ArtifactUse.sharp:7:28:error - parse: A named constructor is not supported yet in PHP#.` Both refusals are deliberate: `parse_sharp_member_with_attributes_and_modifiers` and `parse_lhs_expression` in `crates/syntax/src/parser/internal/expression.rs` parse the form whole and push `ParseError::NotSupportedYetInSharp("A named constructor", …)`.
 
 - Mechanism: parser, CST, names, codex, analyzer, semantics, bridge (decisions 3 and 4).
-  - Parser: the two refusals become `parse_named_constructor`, which builds `NamedConstructor`, and `Instantiation.constructor`. Both paths already consume exactly the right tokens.
-  - Names: a named constructor's parameters and `this` bind as a constructor's do (`crates/names/src/internal/walker.rs`).
+  - Parser: the member refusal becomes `parse_named_constructor`, which builds `NamedConstructor`. The `new` refusal becomes a plain `Instantiation` whose class is `Identifier::Dotted("Artifact.fromJson")`, the same parse as the events Slice's `new Order.Paid(…)`.
+  - Names: a named constructor's parameters and `this` bind as a constructor's do (`crates/names/src/internal/walker.rs`). `NameWalker::resolve_class` resolves the first part of `Artifact.fromJson` as any class name and keeps the last part after it: `Demo\Artifact\fromJson`.
   - Codex: `SignatureBuilder::walk_in_named_constructor` in `crates/codex/src/signature_builder.rs` registers the public static method `fromJson(string $json): Artifact` with `MetadataFlags::NAMED_CONSTRUCTOR`, as `walk_in_operator` registers an operator. So a plain PHP file that calls `Artifact::fromJson($json)` is checked against it with no extra code.
-  - Analyzer: `analyze_class_instantiation` in `crates/analyzer/src/expression/instantiation.rs` resolves `new Artifact.fromJson(json)` to that method, declared on `Artifact` itself, checks the arguments as `analyze_invocation` does, and types the result `Artifact`. The `: this(…)` arguments are checked against the main constructor, as `new Artifact(…)` is. An abstract class keeps its existing refusal of `new`.
+  - Analyzer: `analyze_class_instantiation` in `crates/analyzer/src/expression/instantiation.rs` takes `Demo\Artifact\fromJson` when that type exists. Otherwise it resolves `new Artifact.fromJson(json)` to that method, declared on `Artifact` itself, records it as the call target at the `new`, checks the arguments as `analyze_invocation` does, and types the result `Artifact`. The `: this(…)` arguments are checked against the main constructor, as `new Artifact(…)` is. An abstract class keeps its existing refusal of `new`.
   - Semantics: `check_slice` requires `: this(…)` on a named constructor and refuses `: super(…)` there. A named constructor takes `public`, `protected` or `private` and nothing else. Its name follows a method's name rules: no `__` start, not its class's name, and not the name of another member, which PHP's duplicate-method check reports once the named constructor counts as a method.
-  - Bridge: `Lowering::named_constructor` (below).
+  - Bridge: `Lowering::named_constructor` (below). `new Artifact.fromJson(json)` lowers to the static call `Types::named_constructor` reads from the analyzer's call target.
 - **`: this(…)` on the main constructor** is an error: "The main constructor passes control to its base class with `: super(…)`. Only a named constructor calls `: this(…)`."
 - **`Artifact.fromJson(json)` without `new`** is the new analyzer error `named-constructor-without-new`: "`Artifact.fromJson` is a constructor: write `new Artifact.fromJson(json)`." The analyzer decides it, because `Artifact` may be another file's.
 - **`new Sub.fromJson(json)`**, where only `Artifact` declares `fromJson`, is an error: "`Sub` has no constructor `fromJson`: named constructors are not inherited." (decision 5).
@@ -423,10 +423,10 @@ mago-sharp
 │   │                                                                parameter_list, initializer: Option<ConstructorInitializer>, body }
 │   ├── cst/cst/class_like/method.rs           <- Method gains `initializer: Option<ConstructorInitializer>`; PHP never sets it
 │   ├── cst/cst/class_like/member.rs           <- ClassLikeMember::NamedConstructor added
-│   ├── cst/cst/instantiation.rs               <- Instantiation gains `constructor: Option<ConstructorName>`
-│   │                                             ConstructorName { dot, name }: the `.fromJson` of `new Artifact.fromJson(json)`
 │   ├── cst/cst/modifier.rs                    <- Modifier::Lazy added, contextual as Modifier::Required is
-│   ├── cst/node.rs, walker/mod.rs             <- Node::ConstructorInitializer, Node::NamedConstructor, Node::ConstructorName
+│   ├── cst/node.rs, walker/mod.rs             <- Node::ConstructorInitializer, Node::NamedConstructor
+│   ├── parser/internal/expression.rs          <- `new Artifact.fromJson(…)` is an Instantiation of
+│   │                                             Identifier::Dotted("Artifact.fromJson"), shared with section 15
 │   ├── error.rs                               <- ParseError::ComputedParameterInSharp(Span), at the `=>` (PR 1), and
 │   │                                             ParseError::ConstructorInitializerInSharp(Span) for "A constructor passes
 │   │                                             control with `: super(…)` or `: this(…)`." (PR 2)
@@ -444,7 +444,9 @@ mago-sharp
 │                                                 and `lazy`; has_braces accepts the guard clause
 ├── crates/sharp-bridge/src/
 │   ├── lower.rs                               <- Lowering::named_constructor added; Lowering::method emits parent::__construct
-│   └── lower/types.rs                         <- Types::parent_constructor added: the constructor parent::__construct reaches
+│   └── lower/types.rs                         <- Types::parent_constructor added: the constructor parent::__construct reaches;
+│                                                 Types::named_constructor added: the static method a `new` calls, from the
+│                                                 analyzer's call target
 └── composer/src/Sdk/Syntax/NodeKind.php       <- regenerated with scripts/regen-sdk-node-kinds.php
 
 the PHP the bridge emits
@@ -467,7 +469,6 @@ The names, each with the slate it was picked from:
 
 - `ConstructorInitializer`: Roslyn's name for `: base(…)` and `: this(…)`. Also considered: `ConstructorChain`, `ConstructorDelegation`, `ConstructorCall`, `SuperOrThisCall`.
 - `NamedConstructor`: the spec's own heading, and Dart's term. Also considered: `ConstructorDeclaration`, `SecondaryConstructor` (Kotlin), `ConvenienceConstructor` (Swift), `FactoryConstructor`.
-- `ConstructorName`: Dart's analyzer node for `.name` after the class in `new A.name()`. Also considered: `NamedConstructorReference`, `ConstructorSelector`.
 - `missing-super-call`: also considered `missing-constructor-initializer`, `missing-parent-constructor-call`, `implicit-super-needs-arguments`.
 - `named-constructor-without-new`: also considered `named-constructor-call`, `constructor-called-as-method`, `missing-new`.
 
@@ -481,7 +482,7 @@ Each PR lands with tests on both sides where the engine is reached, and ends in 
    - Run: `compile` on the scratch project compiles `Braceless.sharp` and `LambdaReturn.sharp`, and refuses `NotOnParameter.sharp`, `ComputedParameter.sharp` and `Overload.sharp` with one named error each.
 2. **mago-sharp: `: super(…)`.** `ConstructorInitializer`, `Method.initializer`, `parse_optional_constructor_initializer`, the names scope, the `this` refusal, `: this(…)` refused on the main constructor, the analyzer's argument check and initialization tracking, `missing-super-call`, the `not-supported-yet` refusal for `Inherits`, `Types::parent_constructor`, the bridge's explicit and implicit `parent::__construct`, and `NodeKind.php` regenerated.
    - Run: `compile` compiles `Super.sharp` and `RequiredChildren.sharp`'s `Ledger`, refuses `Invoice` with section 25's rule, refuses `Child` with `missing-super-call`, and refuses `Inherits` as not supported yet.
-3. **mago-sharp: named constructors.** `NamedConstructor`, `ConstructorName`, `parse_named_constructor`, `walk_in_named_constructor` with `NAMED_CONSTRUCTOR`, the analyzer's instantiation path, `named-constructor-without-new`, non-inheritance, `invalid-property-write` for an overwrite, the semantics rules, `Lowering::named_constructor`, the Lean refusal, and `NodeKind.php` regenerated.
+3. **mago-sharp: named constructors.** `NamedConstructor`, the dotted `new` parse, `parse_named_constructor`, `walk_in_named_constructor` with `NAMED_CONSTRUCTOR`, the analyzer's instantiation path, `named-constructor-without-new`, non-inheritance, `invalid-property-write` for an overwrite, the semantics rules, `Lowering::named_constructor`, the Lean refusal, and `NodeKind.php` regenerated.
    - Run: `compile` compiles `Artifact.sharp` and `ArtifactUse.sharp`. A file holding `Artifact.fromJson(json)` is refused with `named-constructor-without-new`.
 4. **php-sharp: the engine runs section 9.** Bump the pinned Mago commit and add `Constructors.sharp`, `Constructors.inc` and `constructors.phpt` in all four opcache modes: `new SalesReport(1)` runs `Report`'s constructor, an implicit `super()` runs a parent's constructor, `new Artifact.fromJson(json)` and `Artifact::fromJson($json)` give the same object, reflection shows what "What a plain PHP caller sees" lists, `LegacyArtifact::fromJson($json)` returns an `Artifact`, and the guard clause throws. Waits for PRs 1 to 3.
    - Run: `sharp/bin/test Zend/tests/sharp/constructors.phpt` passes.
