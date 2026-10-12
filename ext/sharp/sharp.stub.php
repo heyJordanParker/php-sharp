@@ -26,6 +26,10 @@ final class Collection
 
     public function delete(int|string $key): void {}
 
+    public function put(int|string $key, mixed $value): mixed {}
+
+    public function clear(): void {}
+
     public function filter(\Closure $predicate): array {}
 
     public function filterValues(\Closure $predicate): array {}

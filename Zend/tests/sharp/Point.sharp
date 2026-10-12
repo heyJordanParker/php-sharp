@@ -1,0 +1,12 @@
+namespace Demo;
+
+class Point
+{
+    public int x { get; set; } = 0;
+
+    public static List<Point> moved(List<Point> points)
+    {
+        points[0].x = 5;
+        return points;
+    }
+}

@@ -58,8 +58,9 @@ class Headcount
     public static Map<Standing, Map<Size, int>> nest(Standing status, Size size)
     {
         Map<Standing, Map<Size, int>> nested = [:];
-        nested[status] = [:];
-        nested[status][size] = 1;
+        Map<Size, int> sizes = [:];
+        sizes[size] = 1;
+        nested[status] = sizes;
         return nested;
     }
 

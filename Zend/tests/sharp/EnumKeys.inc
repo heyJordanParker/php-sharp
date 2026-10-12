@@ -58,8 +58,9 @@ class Headcount
     public static function nest(Standing $status, Size $size): array
     {
         $nested = [];
-        $nested[$status->value] = [];
-        $nested[$status->value][$size->value] = 1;
+        $sizes = [];
+        $sizes[$size->value] = 1;
+        $nested[$status->value] = $sizes;
         return $nested;
     }
 

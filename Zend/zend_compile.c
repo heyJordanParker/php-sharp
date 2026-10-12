@@ -5261,12 +5261,22 @@ static void zend_compile_call(znode *result, zend_ast *ast, uint32_t type) /* {{
 /* A PHP# method call on a List or Map runs a Sharp\Collection method, so the receiver's fetch is
  * marked to make that object: the fetch of a property or a static property, so a changing method
  * writes the property back, or else a cast, which keeps a local's slot or a copy of any other value.
+ * An index reads its element through the collection of what it indexes, because a List index is a
+ * place (spec section 12): `grid[0].add(5)` changes the list stored at index 0.
  * Before a `?.` call the receiver ends its own null-safe chain ahead of the cast, as PHP's
  * ((object) $a?->b())?->c() does: the call's own JMP_NULL gives null for either. */
 static void zend_compile_sharp_receiver(znode *result, zend_ast *ast, bool nullsafe)
 {
 	zend_op *opline;
 
+	if (ast->kind == ZEND_AST_DIM && ast->child[1]) {
+		znode container_node, dim_node;
+
+		zend_compile_sharp_receiver(&container_node, ast->child[0], false);
+		zend_compile_expr(&dim_node, ast->child[1]);
+		zend_emit_op_tmp(result, ZEND_FETCH_DIM_R, &container_node, &dim_node);
+		return;
+	}
 	if (ast->kind == ZEND_AST_PROP || ast->kind == ZEND_AST_NULLSAFE_PROP || ast->kind == ZEND_AST_STATIC_PROP) {
 		opline = zend_compile_var(result, ast, BP_VAR_R, 0);
 		if (opline && ((opline->opcode == ZEND_FETCH_OBJ_R && opline->op2_type == IS_CONST)
