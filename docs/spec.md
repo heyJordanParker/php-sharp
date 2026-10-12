@@ -2987,6 +2987,8 @@ theorem addKeepsCurrency : App.Shared.Money.addKeepsCurrency := by
 
 `app/Tenant/Store/Module.lean` proves the module law. It imports `Code.App.Tenant.Store.Module` because `Module.sharp` states a law. The same file also holds the namespace's structure rule: "`App.Tenant.Store` imports only `App.Tenant.Community` and `App.Shared.Schema`."
 
+**A structure rule is a Lean definition with the `@[rule]` attribute,** the way Lean marks a simp lemma with `@[simp]`. **It names a namespace by its full name, and a name that is no namespace in the project is a compile error,** as any unknown name in Lean is. That holds in the rules PHP# ships, such as `.neverImports`, and in a rule of your own, such as one built with `.imports` and `under`:
+
 ```lean
 -- app/Tenant/Store/Module.lean
 import Code.App.Tenant.Store.Module
@@ -2994,6 +2996,10 @@ open Sharp
 
 theorem receiptMatchesRefunds : App.Tenant.Store.Module.receiptMatchesRefunds := by
   simp [App.Tenant.Store.Module.receiptMatchesRefunds, App.Tenant.Store.Receipts.refundable, App.Tenant.Store.Refunds.remaining]
+
+@[rule] def importsOnly : Rule := .importsOnly [App.Tenant.Community, App.Shared.Schema]   -- compiles
+@[rule] def neverLedger : Rule := .neverImports App.Shared.Ledgr                            -- compile error: unknown identifier `App.Shared.Ledgr`
+@[rule] def ownLedger : Rule := .imports fun _ i => under i.name App.Shared.Ledgr           -- compile error: unknown identifier `App.Shared.Ledgr`
 ```
 
 - **The checker generates the Lean translation of pure code and the Lean statement of each law into `.sharp/`,** never into the source tree.
