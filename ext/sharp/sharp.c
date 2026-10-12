@@ -975,6 +975,87 @@ ZEND_METHOD(Sharp_Collection, set)
 	zval_ptr_dtor(&old);
 }
 
+/* Replaces the list at array with a renumbered copy: value goes in at index, or, with no value, the
+ * element at index leaves. A List's keys are its positions. The old list is released last, so a
+ * destructor an element runs sees the changed list. */
+static void sharp_collection_renumber(sharp_collection *collection, zval *array, zend_long index, zval *value)
+{
+	HashTable *elements = Z_ARRVAL_P(array);
+	zval changed, old;
+	zval *element;
+	zend_long position = 0;
+
+	array_init_size(&changed, zend_hash_num_elements(elements) + (value ? 1 : 0));
+	ZEND_HASH_FOREACH_VAL(elements, element) {
+		if (position == index && value) {
+			Z_TRY_ADDREF_P(value);
+			zend_hash_next_index_insert_new(Z_ARRVAL(changed), value);
+		}
+		if (position != index || value) {
+			Z_TRY_ADDREF_P(element);
+			zend_hash_next_index_insert_new(Z_ARRVAL(changed), element);
+		}
+		position++;
+	} ZEND_HASH_FOREACH_END();
+	if (position == index && value) {
+		Z_TRY_ADDREF_P(value);
+		zend_hash_next_index_insert_new(Z_ARRVAL(changed), value);
+	}
+
+	ZVAL_COPY_VALUE(&old, array);
+	ZVAL_COPY_VALUE(array, &changed);
+	sharp_collection_write_back(collection);
+	zval_ptr_dtor(&old);
+}
+
+/* Kotlin's add(index, element): value goes in at index, from 0 to the count, and the elements from
+ * index on move up one. Outside that range it throws as set does past the end. */
+ZEND_METHOD(Sharp_Collection, insert)
+{
+	zend_long index;
+	zval *value;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_LONG(index)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	sharp_collection *collection = sharp_collection_from(Z_OBJ_P(ZEND_THIS));
+	zval *array = sharp_collection_array(collection);
+	if (!array) {
+		RETURN_THROWS();
+	}
+	if (index < 0 || index > (zend_long) zend_hash_num_elements(Z_ARRVAL_P(array))) {
+		zend_throw_exception_ex(spl_ce_OutOfRangeException, 0, "Undefined array key " ZEND_LONG_FMT, index);
+		RETURN_THROWS();
+	}
+
+	sharp_collection_renumber(collection, array, index, value);
+}
+
+/* Removes the element at index and renumbers the list. A List's remove(value) finds the index and
+ * calls it, so the list keeps its keys 0 to n-1, where delete would leave a gap. */
+ZEND_METHOD(Sharp_Collection, removeAt)
+{
+	zend_long index;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_LONG(index)
+	ZEND_PARSE_PARAMETERS_END();
+
+	sharp_collection *collection = sharp_collection_from(Z_OBJ_P(ZEND_THIS));
+	zval *array = sharp_collection_array(collection);
+	if (!array) {
+		RETURN_THROWS();
+	}
+	if (!zend_hash_index_exists(Z_ARRVAL_P(array), index)) {
+		zend_throw_exception_ex(spl_ce_OutOfRangeException, 0, "Undefined array key " ZEND_LONG_FMT, index);
+		RETURN_THROWS();
+	}
+
+	sharp_collection_renumber(collection, array, index, NULL);
+}
+
 /* The key a Map method takes: an int or a string. */
 static bool sharp_collection_key(zval *key, zend_string **string_key, zend_long *long_key)
 {
@@ -1280,12 +1361,17 @@ ZEND_METHOD(Sharp_Collection, any)
 	RETURN_BOOL(element != NULL);
 }
 
-/* The slot of a map under the key a function gave, which spec section 12 makes an int or a string. A
- * string of digits is the int key, as in any PHP array. */
+/* The slot of a map under the key a function gave, which spec section 12 makes an int, a string or a
+ * backed enum case. A case goes in under its backing value, as a Map index stores it, and a string of
+ * digits is the int key, as in any PHP array. */
 static zval *sharp_collection_key_slot(HashTable *map, zval *key)
 {
 	zend_ulong index;
 
+	if (Z_TYPE_P(key) == IS_OBJECT && (Z_OBJCE_P(key)->ce_flags & ZEND_ACC_ENUM)
+		&& Z_OBJCE_P(key)->enum_backing_type != IS_UNDEF) {
+		key = zend_enum_fetch_case_value(Z_OBJ_P(key));
+	}
 	switch (Z_TYPE_P(key)) {
 		case IS_LONG:
 			return zend_hash_index_lookup(map, Z_LVAL_P(key));

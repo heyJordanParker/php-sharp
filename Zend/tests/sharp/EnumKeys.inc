@@ -51,7 +51,7 @@ class Headcount
 
     public static function without(array $counts, Standing $status): array
     {
-        ((object) $counts)->delete($status->value); // PHP# makes the array a Sharp\Collection
+        \array_key_exists($status->value, $counts) && ((object) $counts)->delete($status->value) === null; // PHP# makes the array a Sharp\Collection
         return $counts;
     }
 
@@ -81,5 +81,19 @@ class Headcount
             }
         }
         return $skus;
+    }
+
+    public static function grouped(array $sizes): array
+    {
+        return ((object) $sizes)->groupBy(fn ($n) => $n > 1 ? Standing::Closed : Standing::Active); // PHP# makes the array a Sharp\Collection
+    }
+
+    public static function groupNames(array $sizes): array
+    {
+        $names = [];
+        foreach (((object) $sizes)->groupBy(fn ($n) => $n > 1 ? Standing::Closed : Standing::Active) as $status => $group) { $status = Standing::from($status); // PHP# reads the key back as the case
+            ((object) $names)->add($status->name); // PHP# makes the array a Sharp\Collection
+        }
+        return $names;
     }
 }

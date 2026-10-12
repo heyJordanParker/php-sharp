@@ -51,7 +51,7 @@ class Lambdas
             \implode(",", $groups["odd"] ?? []),
             \implode(",", \array_keys(((object) $labels)->associateBy(fn ($label) => $label))),
             \implode(",", \array_keys(((object) $prices)->filterValues(fn ($price) => $price < 100))),
-            \implode(",", ((object) $prices)->filter(fn ($price) => $price < 100)),
+            \implode(",", ((object) $prices)->filterValues(fn ($price) => $price < 100)),
             \implode(",", ((object) $prices)->map(fn ($price) => $price * 2)),
         ];
     }

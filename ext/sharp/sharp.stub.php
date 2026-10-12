@@ -16,6 +16,10 @@ final class Collection
 
     public function set(int $index, mixed $value): void {}
 
+    public function insert(int $index, mixed $value): void {}
+
+    public function removeAt(int $index): void {}
+
     public function get(int|string $key): mixed {}
 
     public function entries(): array {}

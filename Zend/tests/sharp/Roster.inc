@@ -9,8 +9,8 @@ class Roster
         $ranked = ((object) $members)->sortedBy(fn ($n) => -$n);
         $tens = ((object) $members)->map(fn ($n) => $n * 10);
         $busy = ((object) $members)->filterValues(fn ($n) => $n > 1);
-        $kept = ((object) $members)->filter(function ($n) use (&$members) { return $n >= (((object) $members)->get(Standing::Active->value) ?? 0); });
-        ((object) $members)->delete(Standing::Closed->value);
+        $kept = ((object) $members)->filterValues(function ($n) use (&$members) { return $n >= (((object) $members)->get(Standing::Active->value) ?? 0); });
+        \array_key_exists(array: $members, key: Standing::Closed->value) && ((object) $members)->delete(Standing::Closed->value) === null;
         return [
             \implode(",", $ranked),
             \implode(",", $tens),

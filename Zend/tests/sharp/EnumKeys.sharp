@@ -51,7 +51,7 @@ class Headcount
 
     public static Map<Standing, int> without(Map<Standing, int> counts, Standing status)
     {
-        counts.delete(status);
+        counts.remove(status);
         return counts;
     }
 
@@ -81,5 +81,19 @@ class Headcount
             }
         }
         return skus;
+    }
+
+    public static Map<Standing, List<int>> grouped(List<int> sizes)
+    {
+        return sizes.groupBy(n => n > 1 ? Standing.Closed : Standing.Active);
+    }
+
+    public static List<string> groupNames(List<int> sizes)
+    {
+        List<string> names = [];
+        for (const [status, group] of sizes.groupBy(n => n > 1 ? Standing.Closed : Standing.Active)) {
+            names.add(status.name);
+        }
+        return names;
     }
 }
