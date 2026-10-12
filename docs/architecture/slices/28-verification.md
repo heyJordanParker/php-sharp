@@ -315,7 +315,7 @@ The lens: `Server::get_lens(file)` returns one `CodeLensItem` above each method 
 
 **What a user downloads:** `gh release view --repo leanprover/elan` lists `v4.2.4` with `elan-aarch64-apple-darwin.tar.gz` (2.2 MB), `elan-x86_64-apple-darwin.tar.gz` (2.3 MB), `elan-x86_64-unknown-linux-gnu.tar.gz` (5.0 MB) and `elan-aarch64-unknown-linux-gnu.tar.gz` (5.1 MB). `gh release view v4.34.1 --repo leanprover/lean4` lists the Lean archives elan then fetches at 562 to 582 MB per platform. That is a one-time download per machine, on the first compile that needs Lean.
 
-**Platforms:** macOS on Apple silicon and Intel, and Linux on x86-64 and ARM64 with glibc. elan ships no musl build, so on Alpine `missing-lean` names the platform and the install command, and nothing else changes.
+**Platforms:** macOS on Apple silicon and Intel, and Linux on x86-64 and ARM64 with glibc. Lean has no musl build, and `elan-init.sh` refuses musl hosts, so Mago's musl build pins no elan. With no `lake` on the `PATH`, its `missing-lean` describes the build, never the host, since the static musl binary also runs on glibc Linux: this musl build of Mago can't install Lean, because Lean has no musl build, so put a `lake` on the `PATH`, or use Mago's glibc Linux build, which installs Lean itself. A source build for any other target with no pinned elan names that target's OS and architecture the same way, and never claims Lean has no build for it.
 
 # Public names this Slice adds or changes
 
