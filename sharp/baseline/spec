@@ -12,7 +12,6 @@
 §9.1	constructor-call-this
 §9.1	named-constructors
 §9.1	set-once
-§9.1	super-call
 §10	struct-backing-value
 §10	struct-changes
 §10	struct-parse
@@ -21,11 +20,9 @@
 §11	inferred-type-arguments
 §11	raw-generic-objects
 §11	type-parameter-bounds
-§12	collection-read-methods
 §12	collection-write-methods
 §12	enum-map-keys
 §12	index-changes
-§12	index-rules
 §12	iterables
 §12	map-string-keys
 §12	natural-remove
