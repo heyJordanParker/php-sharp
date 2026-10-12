@@ -1219,6 +1219,10 @@ static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
  * the method's type arguments, the list they spelled, and the class it is written in. */
 #define ZEND_SHARP_TYPE_ARGS_OPEN 1
 
+/* Marks the extended_value of a ZEND_SHARP_VERIFY_TYPE_ARGS that checks a set hook's value, beside its cache slot, as
+ * ZEND_LAST_CATCH marks a ZEND_CATCH's. */
+#define ZEND_SHARP_VERIFY_SET_HOOK (1<<0)
+
 #define ZEND_LAST_CATCH			(1<<0)
 
 #define ZEND_FREE_ON_RETURN     (1<<0)

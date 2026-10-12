@@ -3419,6 +3419,21 @@ static zend_always_inline zend_result _zend_update_type_info(
 			UPDATE_SSA_TYPE(MAY_BE_CLASS, ssa_op->result_def);
 			UPDATE_SSA_OBJ_TYPE(NULL, 0, ssa_op->result_def);
 			break;
+		case ZEND_SHARP_VERIFY_TYPE_ARGS:
+			/* op1's value, dereferenced, and a float where an int becomes one. */
+			tmp = t1 & ~(MAY_BE_UNDEF|MAY_BE_REF);
+			if (t1 & MAY_BE_UNDEF) {
+				tmp |= MAY_BE_NULL;
+			}
+			if (t1 & MAY_BE_LONG) {
+				tmp |= MAY_BE_DOUBLE;
+			}
+			if (t1 & (MAY_BE_RC1|MAY_BE_RCN|MAY_BE_REF)) {
+				tmp |= MAY_BE_RC1|MAY_BE_RCN;
+			}
+			UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
+			COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->result_def);
+			break;
 		case ZEND_NEW:
 			tmp = MAY_BE_RC1|MAY_BE_RCN|MAY_BE_OBJECT;
 			ce = zend_optimizer_get_class_entry_from_op1(script, op_array, opline);

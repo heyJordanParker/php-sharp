@@ -5,6 +5,7 @@ import App.DatabaseEntity;
 import App.Order;
 import App.PaginatedList;
 import Lib.Holder;
+import Lib.Pager;
 
 public class Customer : DatabaseEntity
 {
@@ -37,6 +38,27 @@ public class Pages
 
 public class Page<T>
 {
+}
+
+public class Shelf
+{
+    public PaginatedList<Order>? page { get; set; }
+
+    public static string read()
+    {
+        PaginatedList<Order> page = Pager.orders();
+        page = Pager.orders();
+
+        return "read";
+    }
+
+    public static Shelf filled()
+    {
+        Shelf shelf = new Shelf();
+        shelf.page = new PaginatedList<Order>([]);
+
+        return shelf;
+    }
 }
 
 public class Cell<T>

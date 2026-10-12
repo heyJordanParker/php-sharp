@@ -2583,7 +2583,9 @@ simple_list:
 			}
 			break;
 		case ZEND_AST_SHARP_TYPE_ARGS:
-			/* PHP#: a `new` whose type arguments PHP has no syntax for, as in the message of an assert(). */
+		case ZEND_AST_VERIFY_TYPE_ARGS:
+			/* PHP#: a `new` whose type arguments, or a value whose check, PHP has no syntax for, as in the message of
+			 * an assert(). */
 			zend_ast_export_ex(str, ast->child[0], priority, indent);
 			break;
 		case ZEND_AST_INSTANCEOF:

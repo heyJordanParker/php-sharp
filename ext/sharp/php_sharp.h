@@ -101,6 +101,11 @@ bool sharp_type_accepts(const sharp_type *type, const zval *value);
  * becomes a float. */
 void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *text, void **cache);
 
+/* Whether `value` is of the one type the type text list `text` spells, spelled for the frame `execute_data` runs as
+ * sharp_type_check_arguments spells it. Throws PHP's TypeError, naming what takes the value as the literal after `text`
+ * names it, when not. An int it accepts for a float becomes a float. */
+bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval *text, void **cache);
+
 /* An object of a generic PHP# class keeps its type arguments in a declared property of this name, which carries
  * ZEND_ACC_SHARP_HIDDEN. It holds null until PHP# code, unserialize or the first read stores the IS_PTR of an interned
  * list. The name is also the key serialize writes the list under. */

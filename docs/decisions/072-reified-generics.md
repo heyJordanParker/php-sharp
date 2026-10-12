@@ -2,7 +2,7 @@
 
 ## Decision
 
-The running program carries every type argument, as decisions 7 and 29 require. An object holds its class's type arguments from `new`, through `clone`, serialize and unserialize, and a generic method's own type arguments ride on its call. Plain PHP reads an object's with `ReflectionObject::getTypeArguments()`, and a call from plain PHP into a PHP# method is checked against the parameter's type arguments.
+The running program carries every type argument, as decisions 7 and 29 require. An object holds its class's type arguments from `new`, through `clone`, serialize and unserialize, and a generic method's own type arguments ride on its call. Plain PHP reads an object's with `ReflectionObject::getTypeArguments()`. A value that enters PHP# from plain PHP is checked against the type arguments of what takes it: a call into a PHP# method against the parameter's, a plain PHP call's return against the typed local's, and a write from plain PHP against the property's, in the property's `set` hook.
 
 A method value of a generic method takes its type arguments from the parameter types of the function type it goes into, as C#'s method group conversion does, and one that nothing fixes is a compile error, as C#'s CS0411 is.
 

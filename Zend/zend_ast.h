@@ -173,6 +173,9 @@ enum _zend_ast_kind {
 
 	// Pseudo node for initializing enums
 	ZEND_AST_CONST_ENUM_INIT,
+	/* PHP#: the value child 0 holds, checked against the type text child 1 spells. Child 2 names what takes the
+	 * value, as `local counter`. Attr 1 marks a set hook's value, which a write from a .sharp file never checks. */
+	ZEND_AST_VERIFY_TYPE_ARGS,
 
 	/* 4 child nodes */
 	ZEND_AST_FOR = 4 << ZEND_AST_NUM_CHILDREN_SHIFT,

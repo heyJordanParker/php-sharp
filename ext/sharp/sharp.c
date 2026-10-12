@@ -2720,26 +2720,32 @@ bool sharp_type_accepts(const sharp_type *type, const zval *value)
 	return true;
 }
 
-/* Throws the TypeError PHP's own parameter check throws, with the PHP# type text expected and, for an object of a
- * generic class, its dotted class name and type arguments given. */
-static ZEND_COLD void sharp_type_argument_error(
-	const zend_execute_data *execute_data, uint32_t number, const sharp_type *expected, const zval *value)
+/* The type a TypeError gives `value`: PHP's name for it and, for an object of a generic class, its dotted class name and
+ * type arguments. */
+static ZEND_COLD void sharp_value_type_text(smart_str *given, const zval *value)
 {
-	smart_str given = {0};
 	const sharp_type *arguments = Z_TYPE_P(value) == IS_OBJECT ? sharp_type_arguments(Z_OBJ_P(value)) : NULL;
 	if (arguments) {
 		const zend_string *name = Z_OBJCE_P(value)->name;
 
 		for (size_t i = 0; i < ZSTR_LEN(name); i++) {
-			smart_str_appendc(&given, ZSTR_VAL(name)[i] == '\\' ? '.' : ZSTR_VAL(name)[i]);
+			smart_str_appendc(given, ZSTR_VAL(name)[i] == '\\' ? '.' : ZSTR_VAL(name)[i]);
 		}
-		smart_str_appendc(&given, '<');
-		smart_str_append(&given, arguments->text);
-		smart_str_appendc(&given, '>');
+		smart_str_appendc(given, '<');
+		smart_str_append(given, arguments->text);
+		smart_str_appendc(given, '>');
 	} else {
-		smart_str_appends(&given, zend_zval_value_name(value));
+		smart_str_appends(given, zend_zval_value_name(value));
 	}
-	smart_str_0(&given);
+	smart_str_0(given);
+}
+
+/* Throws the TypeError PHP's own parameter check throws, with the PHP# type text expected and the value's type given. */
+static ZEND_COLD void sharp_type_argument_error(
+	const zend_execute_data *execute_data, uint32_t number, const sharp_type *expected, const zval *value)
+{
+	smart_str given = {0};
+	sharp_value_type_text(&given, value);
 
 	const zend_execute_data *caller = EX(prev_execute_data);
 	if (caller && caller->func && ZEND_USER_CODE(caller->func->common.type)) {
@@ -2803,6 +2809,36 @@ void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *tex
 			ZVAL_DOUBLE(value, (double) Z_LVAL_P(value));
 		}
 	}
+}
+
+bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval *text, void **cache)
+{
+	const sharp_type *expected = sharp_type_list_of_frame(text,
+		Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, true, EX(func)->common.scope, cache);
+	if (!expected) {
+		return !EG(exception);
+	}
+
+	const sharp_type *type = expected->members[0];
+	if (!sharp_type_accepts(type, value)) {
+		if (!EG(exception)) {
+			/* Worded as PHP's TypeError for a typed property. */
+			smart_str given = {0};
+			sharp_value_type_text(&given, value);
+			zend_type_error("Cannot assign %s to %s of type %s",
+				ZSTR_VAL(given.s), Z_STRVAL_P(text + 1), ZSTR_VAL(type->text));
+			smart_str_free(&given);
+		}
+		return false;
+	}
+	if (UNEXPECTED(EG(exception))) {
+		return false;
+	}
+	if (Z_TYPE_P(value) == IS_LONG && sharp_type_takes_int_as_float(type)) {
+		ZVAL_DOUBLE(value, (double) Z_LVAL_P(value));
+	}
+
+	return true;
 }
 
 static bool sharp_type_arguments_fit(

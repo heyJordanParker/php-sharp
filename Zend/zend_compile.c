@@ -5542,6 +5542,28 @@ static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast)
 	}
 }
 
+/* Emits the ZEND_SHARP_VERIFY_TYPE_ARGS that checks the value a ZEND_AST_VERIFY_TYPE_ARGS holds against its type
+ * text, as a parameter checks the argument of a call from plain PHP, and gives it on in `result`. The literal after the
+ * text names what takes the value, for the TypeError. */
+static void zend_compile_sharp_verify_type_args(znode *result, zend_ast *ast)
+{
+	znode value_node;
+	zend_compile_expr(&value_node, ast->child[0]);
+
+	zend_op *opline = zend_emit_op_tmp(result, ZEND_SHARP_VERIFY_TYPE_ARGS, &value_node, NULL);
+	opline->op2_type = IS_CONST;
+	opline->op2.constant = zend_add_sharp_open_type_text(ast->child[1]);
+	zend_string *target = zend_string_copy(zend_ast_get_str(ast->child[2]));
+	zend_add_literal_string(&target);
+	opline->extended_value = zend_alloc_cache_slots(4) | (ast->attr ? ZEND_SHARP_VERIFY_SET_HOOK : 0);
+
+	zend_string *text = zend_ast_get_str(ast->child[1]);
+	if (sharp_type_list_names(ZSTR_VAL(text), ZSTR_LEN(text)) & SHARP_TYPE_NAMES_THIS) {
+		/* A text that names `$i` reads this's type arguments, so a closure around it keeps its this. */
+		CG(active_op_array)->fn_flags |= ZEND_ACC_USES_THIS;
+	}
+}
+
 /* Emits the ZEND_SHARP_RECV_TYPE_ARGS of a PHP# method. With `bounds_ast`, it gives a generic method its own type
  * arguments in its hidden local: the ones its call gives, or those bounds. With `parameters_ast`, one type per
  * parameter, it checks the arguments of a call from plain PHP (ruling G.2). It follows the RECVs, so the optimizer
@@ -12100,6 +12122,9 @@ static void zend_compile_expr_inner(znode *result, zend_ast *ast) /* {{{ */
 			return;
 		case ZEND_AST_SHARP_TYPE_ARGS:
 			zend_compile_new(result, ast->child[0], ast);
+			return;
+		case ZEND_AST_VERIFY_TYPE_ARGS:
+			zend_compile_sharp_verify_type_args(result, ast);
 			return;
 		case ZEND_AST_ASSIGN_OP:
 			zend_compile_compound_assign(result, ast);

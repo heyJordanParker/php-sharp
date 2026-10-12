@@ -6198,6 +6198,33 @@ ZEND_VM_HANDLER(212, ZEND_SHARP_RECV_TYPE_ARGS, CONST|UNUSED, CONST|UNUSED, CACH
 	ZEND_VM_NEXT_OPCODE();
 }
 
+/* PHP#: gives the value op1 holds on in its TMP result once it is of the type its CONST op2 spells, as
+ * ZEND_SHARP_RECV_TYPE_ARGS checks an argument, an int as a float where the type takes one. The literal after the text
+ * names what takes the value. A value of the wrong type throws a TypeError. ZEND_SHARP_VERIFY_SET_HOOK marks a set
+ * hook's value, which a write from a .sharp file never checks, since the checker proved it (ruling G.2). Four cache
+ * slots follow the text. */
+ZEND_VM_HANDLER(213, ZEND_SHARP_VERIFY_TYPE_ARGS, TMPVAR|CV, CONST, CACHE_SLOT)
+{
+	USE_OPLINE
+	zval *value, *result = EX_VAR(opline->result.var);
+	const zend_execute_data *writer = EX(prev_execute_data);
+
+	SAVE_OPLINE();
+	value = GET_OP1_ZVAL_PTR(BP_VAR_R);
+	ZVAL_COPY_DEREF(result, value);
+	FREE_OP1();
+	if ((!(opline->extended_value & ZEND_SHARP_VERIFY_SET_HOOK)
+			|| !writer || !writer->func || !ZEND_USER_CODE(writer->func->type)
+			|| !sharp_is_sharp_file(writer->func->op_array.filename))
+		&& !sharp_type_verify(execute_data, result, RT_CONSTANT(opline, opline->op2),
+			CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_VERIFY_SET_HOOK))) {
+		zval_ptr_dtor_nogc(result);
+		ZVAL_UNDEF(result);
+		HANDLE_EXCEPTION();
+	}
+	ZEND_VM_NEXT_OPCODE();
+}
+
 ZEND_VM_COLD_CONST_HANDLER(110, ZEND_CLONE, CONST|TMPVAR|UNUSED|THIS|CV, ANY)
 {
 	USE_OPLINE
