@@ -25,6 +25,8 @@ class Archive
     protected static List<string> shared = [];
     public static List<string> shown { get; private set; } = [];
     private static Ticker? ticker = null;
+    private static List<string> copied = [];
+    public static List<string> shelf { get; set; } = [];
     private List<string> own = [];
 
     public static List<string> retitle(string title)
@@ -75,6 +77,27 @@ class Archive
         this.own = [];
         this.own.add(title);
         return this.own;
+    }
+
+    public static List<List<string>> sharedWithStatic()
+    {
+        Archive.titles = ["one"];
+        Archive.copied = Archive.titles;
+        Archive.titles.add("two");
+        return [Archive.copied, Archive.titles];
+    }
+
+    public static List<List<string>> sharedWithLocal()
+    {
+        Archive.titles = ["one"];
+        const snapshot = Archive.titles;
+        Archive.titles.add("two");
+        return [snapshot, Archive.titles];
+    }
+
+    public static void shelve(string title)
+    {
+        Archive.shelf.add(title);
     }
 }
 

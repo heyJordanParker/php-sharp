@@ -20,10 +20,25 @@ for ($round = 0; $round < 3; $round++) {
     attempt(fn () => Demo\Patron::count());
     attempt(fn () => (new Demo\Archive())->keep("diary"));
     // An object in a static field is no collection: its method runs on the object itself.
-    attempt(fn () => Demo\Archive::tickTwice());
+    // A loop, so the tracing JIT runs the fetch it compiled inline.
+    attempt(function () {
+        $ticks = 0;
+        for ($i = 0; $i < 3; $i++) {
+            $ticks += Demo\Archive::tickTwice();
+        }
+        return $ticks;
+    });
     // A lambda bound to a scope that may not set the static List throws, as an assignment to it from there does.
     attempt(fn () => Closure::bind(Demo\Archive::shower(), null, Demo\Patron::class)("verse"));
     attempt(fn () => Demo\Archive::$shown);
+    // A change copies an array another static or a local shares, and reaches a plain PHP reference to the static.
+    attempt(fn () => Demo\Archive::sharedWithStatic());
+    attempt(fn () => Demo\Archive::sharedWithLocal());
+    $ref = &Demo\Archive::$shelf;
+    $ref = ["one"];
+    Demo\Archive::shelve("two");
+    var_dump($ref);
+    unset($ref);
     $output = ob_get_clean();
 }
 
@@ -75,9 +90,43 @@ array(1) {
   [0]=>
   string(5) "diary"
 }
-int(2)
-Error: Cannot modify private(set) property Demo\Archive::$shown from scope Demo\Patron in StaticCollections.sharp on line 64
+int(6)
+Error: Cannot modify private(set) property Demo\Archive::$shown from scope Demo\Patron in StaticCollections.sharp on line 66
 array(1) {
   [0]=>
   string(5) "poems"
+}
+array(2) {
+  [0]=>
+  array(1) {
+    [0]=>
+    string(3) "one"
+  }
+  [1]=>
+  array(2) {
+    [0]=>
+    string(3) "one"
+    [1]=>
+    string(3) "two"
+  }
+}
+array(2) {
+  [0]=>
+  array(1) {
+    [0]=>
+    string(3) "one"
+  }
+  [1]=>
+  array(2) {
+    [0]=>
+    string(3) "one"
+    [1]=>
+    string(3) "two"
+  }
+}
+array(2) {
+  [0]=>
+  string(3) "one"
+  [1]=>
+  string(3) "two"
 }
