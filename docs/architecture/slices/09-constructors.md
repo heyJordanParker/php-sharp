@@ -20,22 +20,22 @@ Section 9's headline example still does not compile when the Slice lands, becaus
 Each one is drawn in full further down.
 
 1. **`: super(…)` and `: this(…)` are one CST node, `ConstructorInitializer`, after Roslyn's `ConstructorInitializerSyntax`.** The main constructor carries it on `Method` as `initializer`. The bridge lowers `: super(args)` to `parent::__construct(args)` after the class's initial values and before the body, the order C#, Dart and Swift use: a class sets its own fields before its base class runs.
-2. **A constructor without `: super(…)` calls the parent's constructor with no arguments, as C# calls `base()`.** When the parent's constructor needs an argument, that is the compile error `missing-super-call`, as C#'s CS7036. This closes the silent accept above. The spec does not write it (open question 1).
+2. **A constructor whose class has a base class with a constructor always writes `: super(…)`, even with no arguments.** A constructor without it is the compile error `missing-super-call`. This closes the silent accept above. PHP# has no implicit `super()`, unlike C#'s implicit `base()` (ruling 1).
 3. **A named constructor is its own CST node, `NamedConstructor`, a `ClassLikeMember` beside `Operator`.** The codex registers it as the public static method it lowers to, flagged `NAMED_CONSTRUCTOR`, as `walk_in_operator` registers an operator as `op_Addition`. `new Artifact.fromJson(json)` carries the name on `Instantiation` as `constructor`, after Dart's `ConstructorName`. The parser can fill it because of section 23: full names appear only in `namespace` and `import` lines, `.` in code is always member access, and nothing nests, so `new X.y(…)` always calls class `X`'s named constructor `y`, and no type shares that name.
-4. **A named constructor lowers to `public static function fromJson(string $json): \Demo\Artifact`.** Its body creates the object with the main constructor, runs its own statements on it, and returns it. Inside it, `this` is a hidden local, after the bridge's `receiver#1` and `operand#1` precedent. Plain PHP calls it as `Artifact::fromJson($json)`.
+4. **A named constructor lowers to `public static function fromJson(string $json): \Demo\Artifact`.** Its body creates the object with the main constructor into a hidden local, after the bridge's `receiver#1` and `operand#1` precedent, runs its own statements in a closure bound to that object with `Closure::call`, and returns it. So `this`, `super.m()` and `return;` run inside it as they do in a method. Plain PHP calls it as `Artifact::fromJson($json)`.
 5. **Named constructors are not inherited**, as in C# and Dart. `new Sub.fromJson(json)` is an error when only `Artifact` declares `fromJson`, and the static method creates an `Artifact` even when plain PHP calls it through a subclass.
-6. **A named constructor cannot overwrite a get-only property the main constructor already set.** PHP sets a `readonly` property once, and master lowers a get-only property to `readonly`. The analyzer reports it as the existing `invalid-property-write`. C# allows the overwrite, so this narrows the spec (open question 2).
-7. **The guard clause is the only form without braces.** The spec decides braces nowhere. It writes exactly two statements without them, `if (…) throw …;` in section 9 and `if (…) return …;` in section 14.2, both an `if` without `else`. The Slice accepts exactly that shape and nothing wider (open question 3).
+6. **A named constructor cannot overwrite a get-only property the main constructor already set.** PHP sets a `readonly` property once, and master lowers a get-only property to `readonly`. The analyzer reports it as the existing `invalid-property-write`. A property a named constructor must set again is declared `{ get; init; }`. C# allows the overwrite, so this narrows C# (ruling 2).
+7. **The body of `if`, `else` and each loop is always a block in braces,** the guard clause `if (!tenant.active) { throw new InactiveTenant(tenant); }` too (ruling 3).
 8. **`lazy` becomes a contextual modifier now,** after `required` and `extern` in `parse_optional_modifier`, so a `lazy` parameter is one named error. `lazy` anywhere else is "not supported yet" until section 6.5 builds it.
 
 ## Rulings
 
-team-lead approved decisions 1, 3, 4, 5, 7 and 8, the public names tree, and the PR order. Decisions 2 and 6 and the four open questions wait for the Architect, because each decides what compiles. Until he answers, the Slice refuses rather than guesses:
+team-lead approved decisions 1, 3, 4, 5 and 8, the public names tree, and the PR order. The Architect ruled on the four questions that decide what compiles:
 
-1. **Implicit `super()` (open question 1).** PR 2 refuses a constructor without `: super(…)` in a class whose parent has a constructor, with one named error: "`Child`'s constructor must call `Base`'s with `: super(…)`." That closes the silent accept. If the Architect picks implicit `super()`, PR 2 relaxes it to decision 2.
-2. **A named constructor overwriting a get-only property the main constructor set (open question 2).** PR 3 refuses it, as decision 6 says.
-3. **Braces (open question 3).** PR 1 accepts exactly the two forms the spec writes, an `if` without `else` around one `return` or `throw`, as decision 7 says. `docs/spec.md` does not change until the Architect rules.
-4. **`this` in `: super(…)` and `: this(…)` (open question 4).** Refused in both, as the `: super(…)` section says.
+1. **No implicit `super()`.** A constructor whose class has a base class with a constructor always writes `: super(…)`. The Architect's words: "better to be always explicit than to be sometimes explicit". PR 2 refuses a constructor without it with `missing-super-call`: "`Child`'s constructor must call `Base`'s with `: super(…)`."
+2. **A get-only property is set once.** A named constructor cannot overwrite a get-only property the main constructor set. A property a named constructor must set again is declared `{ get; init; }`. PR 3 refuses the overwrite, and PR 5 builds `init`.
+3. **Braces are always required,** as in Go, Rust, Swift and PSR-12. The spec writes the guard clause with them: `if (!tenant.active) { throw new InactiveTenant(tenant); }`. mago-sharp #173 refuses every body of `if`, `else` and each loop written without braces, `if (x) return;` included, with "PHP# writes the body of `if`, `else` and each loop in braces." and the braced fix as help.
+4. **`this` in `: super(…)` and `: this(…)` is refused** (the Architect's ruling 12): "`this` is not available before the constructor runs: pass a parameter instead."
 
 ## How the states were observed
 
@@ -144,7 +144,9 @@ public StoreService(
     private Planner planner,
     [Field(label: "Tenant")] public Tenant tenant { get; } via Tracked,
 ) {
-    if (!tenant.active) throw new InactiveTenant(tenant);
+    if (!tenant.active) {
+        throw new InactiveTenant(tenant);
+    }
 }
 ```
 
@@ -152,7 +154,7 @@ Refused, by `via` alone. `app/StoreService.sharp` holds the block inside `class 
 
 - The field parameter, the attributed property parameter, and the trailing comma with `) {` work (`FieldParameter`, `AttributedParameter`, `TrailingComma` above).
 - `via Tracked` is refused. It waits on section 6.4 (below).
-- The guard clause is refused. `app/Braceless.sharp`:
+- The guard clause in braces works. The spec wrote it without braces when this note was observed, and that form was refused. `app/Braceless.sharp`:
 
   ```csharp
   namespace Demo;
@@ -170,23 +172,11 @@ Refused, by `via` alone. `app/StoreService.sharp` holds the block inside `class 
 
 After the Slice the example compiles once `via Tracked` is removed. With `via`, it stays refused with today's one message until section 6.4.
 
-### Which statements go without braces
+### Braces
 
-**The spec decides braces nowhere.** `trace grep -i "brace" docs/spec.md docs/decisions` finds only the accessor braces of section 9 and string braces of section 18. The rule "the body of `if`, `else` and each loop is a block in braces" lives only in `check_slice`'s doc comment and `has_braces` in `crates/semantics/src/internal/checker/sharp.rs`. It is the slice's narrowing, not the spec's.
+**Every body of `if`, `else` and each loop is a block in braces** (ruling 3). The spec writes the guard clause of section 9 and the early `return` of section 14.2 in braces.
 
-**The spec writes two statements without braces,** found with `trace grep "if \(.*\) (return|throw|continue|break)" docs`:
-
-- section 9: `if (!tenant.active) throw new InactiveTenant(tenant);`
-- section 14.2: `if (line.free) return Money.zero(currency);`, inside a lambda. Refused today: `app/LambdaReturn.sharp` printed `app/LambdaReturn.sharp:8:13:error - semantics: This statement without braces is not supported yet in PHP#.`
-
-Both are an `if` without `else` whose body is one statement that leaves. So the Slice accepts exactly this, and nothing wider:
-
-- **Accepted:** an `if` without `else` whose body is one `return`, with or without a value, or one `throw`.
-- **Still refused as "not supported yet":** an `else` or `else if` beside a body without braces, any other statement without braces (an assignment, a call, a local, `break`, `continue`), and every loop body without braces. The spec writes none of them.
-
-- Mechanism: semantics only. `has_braces` accepts `Statement::Return` and an expression statement whose expression is `Expression::Throw` as the body of an `If` without an `else_clause`. The note gains one sentence: "An `if` without `else` may hold one `return` or `throw` without braces."
-  - Names: none new. `always_exits` in `crates/names/src/internal/walker.rs` already counts a bare `return` and `throw`, so `if (x is not Paid p) return;` keeps `p` in scope after the `if`, as decision 020 says.
-  - Bridge: none new. `Lowering::r#if` lowers `body.statement` through `Lowering::statement`, which already lowers a bare `return` or `throw`. php-src's grammar builds `if (c) return x;` as an `IF_ELEM` holding the `RETURN` itself, so the tree is PHP's own.
+- Mechanism: semantics only. `body_without_braces` in `crates/semantics/src/internal/checker/sharp.rs` finds the first body that is not a block, and `enter` reports it: "PHP# writes the body of `if`, `else` and each loop in braces.", with the help "Write `{ <body> }`." quoting the body. mago-sharp #173 replaced PR 1's guard-clause exception with this rule.
 
 ## A member declared on a parameter supports what the class body supports
 
@@ -313,10 +303,10 @@ class NoSuperUse
   - Parser: `parse_optional_constructor_initializer` reads `:`, then `super` or `this`, then an argument list, after a constructor's parameters. Any other word after `:` is one error: "A constructor passes control with `: super(…)` or `: this(…)`."
   - CST: `ConstructorInitializer` on `Method.initializer` (decision 1).
   - Names: the arguments bind in the constructor's parameter scope.
-  - Semantics: the arguments are a method body's expressions, except `this`, which is an error: "`this` is not available before the constructor runs: pass a parameter instead." That follows C#'s CS0027. It is needed for `: this(…)`, where no object exists yet, and the Slice applies it to both forms (open question 4).
+  - Semantics: the arguments are a method body's expressions, except `this`, which is an error: "`this` is not available before the constructor runs: pass a parameter instead." That follows C#'s CS0027. It is needed for `: this(…)`, where no object exists yet, and the Slice applies it to both forms (ruling 4).
   - Analyzer: the arguments are checked against the parent's constructor as `parent::__construct(…)` is checked in `crates/analyzer/src/expression/call/static_method_call.rs`, so argument count and type errors are the existing ones. `crates/analyzer/src/readonly.rs` and `crates/analyzer/src/statement/class_like/initialization.rs` count the initializer as the parent constructor call they already track. When no constructor exists above the class, `: super()` is accepted and does nothing, as C#'s `: base()` on `object`, and `: super(args)` is an error: "`Base` has no constructor to call: remove the arguments."
-  - Analyzer, decision 2: a constructor without an initializer, in a class whose parent's constructor needs an argument, is `missing-super-call`: "`Child`'s constructor must call `Base`'s with `: super(…)`: `Base`'s constructor needs `row`."
-  - Bridge: `Lowering::method` puts `parent::__construct(args)` after the `Set` conversions and the initial values and before the body, as `STATIC_CALL` of `parent`, the node `super.m()` already lowers to in `Lowering::method_call`. A constructor without an initializer gets `parent::__construct()` when `Types::parent_constructor` finds a constructor above the class. The constructor `Lowering::class` makes for initial values gets the same call.
+  - Analyzer, decision 2: a constructor without an initializer, in a class whose base class has a constructor, is `missing-super-call`: "`Child`'s constructor must call `Base`'s with `: super(…)`."
+  - Bridge: `Lowering::method` puts `parent::__construct(args)` after the `Set` conversions and the initial values and before the body, as `STATIC_CALL` of `parent`, the node `super.m()` already lowers to in `Lowering::method_call`. The constructor `Lowering::class` makes for initial values calls `parent::__construct()` when `Types::parent_constructor` finds a constructor above the class.
   - Analyzer, the `Inherits` case: a class without a constructor, with a non-constant initial value, whose parent's constructor takes parameters, is `not-supported-yet` (below). That is the one shape the engine cannot run correctly yet.
 
 ## 9.1 A named constructor runs on the new object
@@ -326,7 +316,7 @@ class NoSuperUse
 Refused today, because named constructors are. `init` is refused everywhere on master: `app/BodyParity.sharp`'s `public string name { get; init; } = "";` printed `app/BodyParity.sharp:12:31:error - semantics: This accessor is not supported yet in PHP#.`
 
 - Mechanism: bridge and analyzer (decisions 4 and 6).
-  - The body runs on the object `: this(…)` created. `this` in it lowers to the hidden local `$this#1` instead of `$this`, `return;` lowers to `return $this#1;`, and a lambda in the body that reads `this` captures `$this#1`. The static method runs in the class's scope, so PHP lets it set a `readonly` property and reach private members.
+  - The body runs on the object `: this(…)` created. The static method stores the object in the hidden local `$this#1` and runs the body as a closure bound to it with `Closure::call`, so `this`, `super.m()`, `return;` and a lambda that reads `this` run as they do in a method. The closure runs in the class's scope, so PHP lets it set a `readonly` property and reach private members.
   - Get-only properties: PHP sets a `readonly` property once, and the main constructor has already run. So the body can set a get-only property the main constructor leaves unset, and setting one it already set is `invalid-property-write`: "`manifest` is already set by the main constructor, and a get-only property is set once." The check reuses the re-initialization tracking `report_parent_constructor_reinitialization` already does in `crates/analyzer/src/readonly.rs`.
   - `init` properties: PR 5 builds section 6.1's `init` whole. A write to an `init` property is accepted on `this`, in a constructor of its class or a subclass, or in a named constructor, as C# accepts it. Every other write is `invalid-property-write`: "`text` is set only while the object is created." A lambda is refused, as C# refuses it with CS8852, because it may run after the object is created. The get-only overwrite above gains the help "Declare it `{ get; init; }` to let a named constructor set it again."
   - The object initializer (section 16) and `with` (section 10) also set `init` properties in C#. Neither parses yet, so `new Money { … }` and `x with { … }` are parse errors today. The Slices for sections 16 and 10 accept `init` writes there.
@@ -391,12 +381,13 @@ class Artifact
     public static function fromJson(string $json): \Demo\Artifact
     {
         ${'this#1'} = new \Demo\Artifact(\Demo\Manifest::parse($json));
+        (function ($json) {})->call(${'this#1'}, $json);
         return ${'this#1'};
     }
 }
 ```
 
-`${'this#1'}` is how PHP source spells the local the bridge names `this#1`. No PHP# local can have that name. A plain PHP caller writes `Artifact::fromJson($json)`. PHP# writes `new Artifact.fromJson(json)`, which lowers to the same static call.
+`${'this#1'}` is how PHP source spells the local the bridge names `this#1`. No PHP# local can have that name. The closure holds the named constructor's body, empty in this example, and `Closure::call` runs it with `$this` bound to the new object. A plain PHP caller writes `Artifact::fromJson($json)`. PHP# writes `new Artifact.fromJson(json)`, which lowers to the same static call.
 
 **Reflection:**
 
@@ -410,6 +401,13 @@ class Artifact
 - `LegacyArtifact::fromJson($json)` returns an `Artifact`, not a `LegacyArtifact`, because the named constructor belongs to `Artifact`, as in C# and Dart (decision 5). `new static` would instead call `LegacyArtifact`'s constructor with `Artifact`'s arguments, which fails as soon as that constructor's parameters differ.
 - A subclass that declares its own constructor calls `parent::__construct($manifest)` itself, as in any PHP class.
 - A subclass that declares its own `fromJson` must keep a compatible signature, because PHP checks static methods for compatibility. A PHP# subclass meets the same check through `validate_method_signature_compatibility` (below).
+
+**An `init` property:** `public Label(public string text { get; init; }) { }` lowers to `public protected(set) string $text`.
+
+- Plain PHP outside the class cannot set it: `$label->text = 'b'` throws `Error` "Cannot modify protected(set) property Demo\Label::$text from global scope".
+- A plain PHP subclass can set it at any time, as in `class LegacyLabel extends Label { public function rename(string $text): void { $this->text = $text; } }`, because PHP has no set visibility that ends when the object is created. This is the known boundary. The checker refuses the same write in a PHP# subclass's method.
+
+`Zend/tests/sharp/constructors.phpt` runs every case in this section on the engine.
 
 # Public names this Slice adds or changes
 
@@ -443,8 +441,8 @@ mago-sharp
 │                                                 IssueCode::NamedConstructorWithoutNew ("named-constructor-without-new") added;
 │                                                 reuses invalid-property-write and not-supported-yet
 ├── crates/semantics/src/internal/checker/sharp.rs
-│                                              <- check_slice's doc gains the initializer, the named constructor, the guard clause
-│                                                 and `lazy`; has_braces accepts the guard clause
+│                                              <- check_slice's doc gains the initializer, the named constructor, braces
+│                                                 and `lazy`; body_without_braces replaces has_braces (#173)
 ├── crates/sharp-bridge/src/
 │   ├── lower.rs                               <- Lowering::named_constructor added; Lowering::method emits parent::__construct
 │   └── lower/types.rs                         <- Types::parent_constructor added: the constructor parent::__construct reaches
@@ -452,17 +450,21 @@ mago-sharp
 
 the PHP the bridge emits
 ├── parent::__construct(args);                 <- `: super(args)`, after the initial values, before the body
-├── parent::__construct();                     <- a constructor without `: super`, when a constructor exists above
+├── parent::__construct();                     <- the constructor made for initial values, when a constructor exists above
 ├── public static function name(…): \Class     <- a named constructor, with its written access level
-│     { ${'this#1'} = new \Class(…); …; return ${'this#1'}; }
+│     { ${'this#1'} = new \Class(…);
+│       (function (…) { body })->call(${'this#1'}, …);
+│       return ${'this#1'}; }
 ├── \Class::name(args)                         <- `new Class.name(args)`
 └── public protected(set) string $text;        <- `public string text { get; init; }` (PR 5)
 
 php-sharp
-├── Zend/tests/sharp/Constructors.sharp        <- added: SalesReport, Artifact, implicit super, the guard clause
-├── Zend/tests/sharp/Constructors.inc          <- added: a plain PHP caller, reflection, and LegacyArtifact
-├── Zend/tests/sharp/constructors.phpt         <- added
-└── ext/sharp/Cargo.toml, Cargo.lock           <- the pinned Mago commit moves
+├── Zend/tests/sharp/Constructors.sharp        <- added: SalesReport, Artifact, the braced guard clause, an `init` Label
+├── Zend/tests/sharp/Constructors.inc          <- added: the plain PHP subclasses LegacyArtifact and LegacyLabel
+├── Zend/tests/sharp/harness/Report.inc        <- added: the plain PHP base class SalesReport extends
+├── Zend/tests/sharp/constructors.phpt         <- added: a plain PHP caller, reflection, and the `init` boundary
+├── ext/sharp/sharp_unit.h                     <- SHARP_MAGO_COMMIT, the pinned Mago commit, moves
+└── sharp/baseline/spec                        <- the section 9.1 examples leave it
 ```
 
 Not added: no new `sharp_kind`, no change to `ext/sharp/sharp.c`, no new crate. Two parse error variants are added, `ComputedParameterInSharp` and `ConstructorInitializerInSharp`, after the `UntypedFieldInSharp` precedent: every PHP# parse error with its own message has its own variant, and the generic one prints "Parse error encountered during parsing".
@@ -481,15 +483,21 @@ Every exhaustive match over `ClassLikeMember` gains the `NamedConstructor` arm, 
 
 Each PR lands with tests on both sides where the engine is reached, and ends in something a developer runs. PR 1 is independent. PR 3 needs PR 2's `ConstructorInitializer`. PR 4 needs PRs 1 to 3.
 
-1. **mago-sharp: the main constructor's refusals and the guard clause.** `has_braces` accepts an `if` without `else` around one `return` or `throw`. `Modifier::Lazy`, with its parameter error and its "not supported yet" elsewhere. The computed-parameter error. The second-constructor error. `check_slice`'s doc. Tests in `crates/syntax/tests/sharp.rs`, `crates/semantics/tests/sharp.rs` and `crates/sharp-bridge/tests/lower.rs` (the guard clause lowers to an `IF_ELEM` holding a `THROW`).
-   - Run: `compile` on the scratch project compiles `Braceless.sharp` and `LambdaReturn.sharp`, and refuses `NotOnParameter.sharp`, `ComputedParameter.sharp` and `Overload.sharp` with one named error each.
-2. **mago-sharp: `: super(…)`.** `ConstructorInitializer`, `Method.initializer`, `parse_optional_constructor_initializer`, the names scope, the `this` refusal, `: this(…)` refused on the main constructor, the analyzer's argument check and initialization tracking, `missing-super-call`, the `not-supported-yet` refusal for `Inherits`, `Types::parent_constructor`, the bridge's explicit and implicit `parent::__construct`, and `NodeKind.php` regenerated.
+1. **mago-sharp: the main constructor's refusals.** `Modifier::Lazy`, with its parameter error and its "not supported yet" elsewhere. The computed-parameter error. The second-constructor error. `check_slice`'s doc. Tests in `crates/syntax/tests/sharp.rs`, `crates/semantics/tests/sharp.rs` and `crates/sharp-bridge/tests/lower.rs`. PR 1 also accepted a guard clause without braces, which mago-sharp #173 removed under ruling 3.
+   - Run: `compile` on the scratch project refuses `NotOnParameter.sharp`, `ComputedParameter.sharp` and `Overload.sharp` with one named error each.
+2. **mago-sharp: `: super(…)`.** `ConstructorInitializer`, `Method.initializer`, `parse_optional_constructor_initializer`, the names scope, the `this` refusal, `: this(…)` refused on the main constructor, the analyzer's argument check and initialization tracking, `missing-super-call`, the `not-supported-yet` refusal for `Inherits`, `Types::parent_constructor`, the bridge's `parent::__construct`, and `NodeKind.php` regenerated.
    - Run: `compile` compiles `Super.sharp` and `RequiredChildren.sharp`'s `Ledger`, refuses `Invoice` with section 25's rule, refuses `Child` with `missing-super-call`, and refuses `Inherits` as not supported yet.
 3. **mago-sharp: named constructors.** `NamedConstructor`, `ConstructorName`, `parse_named_constructor`, `walk_in_named_constructor` with `NAMED_CONSTRUCTOR`, the analyzer's instantiation path, `named-constructor-without-new`, non-inheritance, `invalid-property-write` for an overwrite, the semantics rules, `Lowering::named_constructor`, the Lean refusal, and `NodeKind.php` regenerated.
    - Run: `compile` compiles `Artifact.sharp` and `ArtifactUse.sharp`. A file holding `Artifact.fromJson(json)` is refused with `named-constructor-without-new`.
-4. **php-sharp: the engine runs section 9.** Bump the pinned Mago commit and add `Constructors.sharp`, `Constructors.inc` and `constructors.phpt` in all four opcache modes: `new SalesReport(1)` runs `Report`'s constructor, an implicit `super()` runs a parent's constructor, `new Artifact.fromJson(json)` and `Artifact::fromJson($json)` give the same object, reflection shows what "What a plain PHP caller sees" lists, `LegacyArtifact::fromJson($json)` returns an `Artifact`, and the guard clause throws. Waits for PRs 1 to 3.
-   - Run: `sharp/bin/test Zend/tests/sharp/constructors.phpt` passes.
-5. **mago-sharp: `init`.** `PropertyHookList::setter`, `PropertyHook::is_setter` and `PropertyHookList::is_get_only` counting `init`. `MetadataFlags::INIT`, beside `NAMED_CONSTRUCTOR`. The codex registers an `init` body as the `set` hook it becomes, so the `INIT` flag is the one place that knows it was written `init`. The semantics rules: one of `set` and `init`, narrower than the property, no `init` on a static property. The analyzer's write rule above. The bridge lowers `init` to `protected(set)` without `readonly`, and its body to the `set` hook. PHP has no set visibility that ends when the object is created, so a plain PHP subclass can write an `init` property at any time. That is a known boundary, like the static fields of a generic class. The engine row goes in PR 4's `constructors.phpt`.
+4. **php-sharp: the engine runs section 9 and `init`.** Bump the pinned Mago commit and add `Constructors.sharp`, `Constructors.inc` and `constructors.phpt` in all four opcache modes:
+   - `new SalesReport(1)` runs `Report`'s constructor through `: super(…)`.
+   - `new Artifact.fromJson(json)` and `Artifact::fromJson($json)` give the same object, and `super.m()` inside a named constructor runs on the new object.
+   - Reflection shows what "What a plain PHP caller sees" lists, and `LegacyArtifact::fromJson($json)` returns an `Artifact`.
+   - The braced guard clause throws.
+   - A named constructor sets an `init` property the main constructor already set, and the value it sets is the one read back. A plain PHP subclass writing it after the object is created shows the known boundary.
+   - A constructor without `: super(…)` is refused by the checker, which mago-sharp's tests prove, so it has no engine row. Waits for PRs 1 to 3 and 5.
+   - Run: `sharp/bin/test --opcache --repeat Zend/tests/sharp/constructors.phpt` passes.
+5. **mago-sharp: `init`.** `PropertyHookList::setter`, `PropertyHook::is_setter` and `PropertyHookList::is_get_only` counting `init`. `MetadataFlags::INIT`, beside `NAMED_CONSTRUCTOR`. The codex registers an `init` body as the `set` hook it becomes, so the `INIT` flag is the one place that knows it was written `init`. The semantics rules: one of `set` and `init`, narrower than the property, no `init` on a static property. The analyzer's write rule above. The bridge lowers `init` to `protected(set)` without `readonly`, and its body to the `set` hook. PHP has no set visibility that ends when the object is created, so a plain PHP subclass can write an `init` property at any time. That is a known boundary, like the static fields of a generic class. The engine row is in PR 4's `constructors.phpt`.
    - Run: `compile` compiles a class whose named constructor sets an `init` property the main constructor set, and refuses a write in a method, on another object, and in a lambda.
 
 # What the Slice refuses as "not supported yet", and why
@@ -498,7 +506,6 @@ Each PR lands with tests on both sides where the engine is reached, and ends in 
 - **`willSet` and `didSet`, on a parameter and in the class body.** Unchanged: "This accessor is not supported yet in PHP#." Section 6.2 builds them, in code parameters share. PR 5 builds `init`.
 - **`lazy` anywhere but a parameter.** "`lazy` is not supported yet in PHP#." Section 6.5 gives it a meaning. On a parameter it is a real error, because the spec forbids it there.
 - **A class without a constructor, with a non-constant initial value, whose parent's constructor takes parameters** (`Inherits` above). "A class whose initial values run in its constructor declares one when its base class's constructor takes arguments: write `public Inherits(Row row) : super(row) { }`." Its initial values need a PHP constructor, and the bridge cannot copy the parent's parameter list, defaults included, from another file. Master accepts it and runs it wrong today.
-- **Statements without braces other than the guard clause** keep today's "not supported yet", because the spec does not decide them.
 
 The Slice also refuses, as errors, what PHP itself refuses once named constructors are static methods:
 
@@ -508,10 +515,3 @@ The Slice also refuses, as errors, what PHP itself refuses once named constructo
 # Found outside the Slice
 
 - **A get-only property that the constructor never sets compiles, and a write to it outside the constructor is only a warning.** `app/GetOnly.sharp`, with `public string label { get; }`, a constructor that sets only `count`, and `public void relabel(string label) { this.label = label; }`, compiled with `app/GetOnly.sharp:15:14: warning[possibly-invalid-property-write]: Readonly property `GetOnly.label` may already be initialized.` (from `mago analyze`). The second `relabel` call throws at runtime. Section 6.1 says a get-only property is set in the constructor. `check_property_initialization` in `crates/analyzer/src/statement/class_like/initialization.rs` exists and returns early unless `settings.check_property_initialization` is on. This belongs to section 6.1's Slice.
-
-# Open questions for the Architect
-
-1. **Implicit `super()`.** Section 9.1 says a constructor calls its base class's constructor with `: super(…)`, and does not say what a constructor without one does. Master runs PHP's rule, which never calls the parent, and that compiles code that throws (`Child` above). The Slice follows C#: no initializer means `super()`, and an error when the parent needs arguments. The other choice is to require `: super(…)` in every constructor whose class has a parent with a constructor, which makes every Eloquent subclass with a constructor write `: super()`. The spec would gain: "A constructor without `: super(…)` calls the base class's constructor with no arguments."
-2. **A named constructor cannot overwrite what the main constructor set.** C# lets a constructor chained with `: this(…)` reassign a read-only member. PHP sets a `readonly` property once. The Slice refuses the overwrite. Allowing it would mean lowering get-only properties to `private(set)` instead of `readonly`, which changes every class's reflection and what plain PHP sees. The spec would gain, in 9.1: "It can set a get-only property the main constructor leaves unset."
-3. **Braces.** The spec never states a rule. The Slice accepts only the two forms the spec writes. The spec would gain, in section 17 or beside section 9's example: "A block is in braces, except an `if` without `else` whose body is one `return` or `throw`."
-4. **`this` in `: super(…)` and `: this(…)`.** The Slice refuses it in both, as C#'s CS0027 does. In `: this(…)` no object exists. In `: super(…)` the object exists in PHP, so allowing it there would work, but would make the two forms differ.
