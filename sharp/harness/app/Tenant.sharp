@@ -1,0 +1,7 @@
+namespace App;
+
+public class Tenant
+{
+    public string currency { get; set; } = "USD";
+    public bool active { get; set; } = true;
+}

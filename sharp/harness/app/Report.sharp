@@ -1,0 +1,6 @@
+namespace App;
+
+public class Report
+{
+    public float total(List<float> amounts) => amounts.sumOf(a => a);
+}

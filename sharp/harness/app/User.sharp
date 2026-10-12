@@ -1,0 +1,10 @@
+namespace App;
+
+public class User
+{
+    public string name { get; set; } = "Ada";
+
+    public static User byNumber(int id) => new User();
+
+    public static User bySlug(string slug) => new User();
+}
