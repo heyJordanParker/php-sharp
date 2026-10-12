@@ -323,12 +323,13 @@ class NoSuperUse
 
 "A named constructor runs on the new object, so it can set get-only properties and `init` properties."
 
-Refused today, because named constructors are. `init` is refused everywhere: `app/BodyParity.sharp`'s `public string name { get; init; } = "";` printed `app/BodyParity.sharp:12:31:error - semantics: This accessor is not supported yet in PHP#.`
+Refused today, because named constructors are. `init` is refused everywhere on master: `app/BodyParity.sharp`'s `public string name { get; init; } = "";` printed `app/BodyParity.sharp:12:31:error - semantics: This accessor is not supported yet in PHP#.`
 
 - Mechanism: bridge and analyzer (decisions 4 and 6).
   - The body runs on the object `: this(…)` created. `this` in it lowers to the hidden local `$this#1` instead of `$this`, `return;` lowers to `return $this#1;`, and a lambda in the body that reads `this` captures `$this#1`. The static method runs in the class's scope, so PHP lets it set a `readonly` property and reach private members.
   - Get-only properties: PHP sets a `readonly` property once, and the main constructor has already run. So the body can set a get-only property the main constructor leaves unset, and setting one it already set is `invalid-property-write`: "`manifest` is already set by the main constructor, and a get-only property is set once." The check reuses the re-initialization tracking `report_parent_constructor_reinitialization` already does in `crates/analyzer/src/readonly.rs`.
-  - `init` properties: section 6.1's `init` is not built. When it is, the analyzer treats a named constructor's body as constructor code, the same predicate this Slice gives get-only writes, so `init` needs no change here.
+  - `init` properties: PR 5 builds section 6.1's `init` whole. A write to an `init` property is accepted on `this`, in a constructor of its class or a subclass, or in a named constructor, as C# accepts it. Every other write is `invalid-property-write`: "`text` is set only while the object is created." A lambda is refused, as C# refuses it with CS8852, because it may run after the object is created. The get-only overwrite above gains the help "Declare it `{ get; init; }` to let a named constructor set it again."
+  - The object initializer (section 16) and `with` (section 10) also set `init` properties in C#. Neither parses yet, so `new Money { … }` and `x with { … }` are parse errors today. The Slices for sections 16 and 10 accept `init` writes there.
 
 ## 9.1 The dependency container
 
@@ -422,6 +423,8 @@ mago-sharp
 │   │                                             NamedConstructor { attribute_lists, modifiers, class, dot, name,
 │   │                                                                parameter_list, initializer: Option<ConstructorInitializer>, body }
 │   ├── cst/cst/class_like/method.rs           <- Method gains `initializer: Option<ConstructorInitializer>`; PHP never sets it
+│   ├── cst/cst/class_like/property.rs         <- PropertyHookList::setter and PropertyHook::is_setter added: `set` or
+│   │                                             `init`; PropertyHookList::is_get_only excludes `init` (PR 5)
 │   ├── cst/cst/class_like/member.rs           <- ClassLikeMember::NamedConstructor added
 │   ├── cst/cst/instantiation.rs               <- Instantiation gains `constructor: Option<ConstructorName>`
 │   │                                             ConstructorName { dot, name }: the `.fromJson` of `new Artifact.fromJson(json)`
@@ -434,7 +437,7 @@ mago-sharp
 │                                                 both NotSupportedYetInSharp("A named constructor") paths deleted
 ├── crates/hir/src/ir/item/modifier.rs         <- ModifierKind::Lazy, the mirror every Modifier variant has
 ├── crates/codex/src/
-│   ├── metadata/flags.rs                      <- MetadataFlags::NAMED_CONSTRUCTOR added
+│   ├── metadata/flags.rs                      <- MetadataFlags::NAMED_CONSTRUCTOR added; MetadataFlags::INIT added (PR 5)
 │   └── signature_builder.rs                   <- walk_in_named_constructor: the static method a named constructor lowers to
 ├── crates/analyzer/src/code.rs                <- IssueCode::MissingSuperCall ("missing-super-call") and
 │                                                 IssueCode::NamedConstructorWithoutNew ("named-constructor-without-new") added;
@@ -452,7 +455,8 @@ the PHP the bridge emits
 ├── parent::__construct();                     <- a constructor without `: super`, when a constructor exists above
 ├── public static function name(…): \Class     <- a named constructor, with its written access level
 │     { ${'this#1'} = new \Class(…); …; return ${'this#1'}; }
-└── \Class::name(args)                         <- `new Class.name(args)`
+├── \Class::name(args)                         <- `new Class.name(args)`
+└── public protected(set) string $text;        <- `public string text { get; init; }` (PR 5)
 
 php-sharp
 ├── Zend/tests/sharp/Constructors.sharp        <- added: SalesReport, Artifact, implicit super, the guard clause
@@ -485,11 +489,13 @@ Each PR lands with tests on both sides where the engine is reached, and ends in 
    - Run: `compile` compiles `Artifact.sharp` and `ArtifactUse.sharp`. A file holding `Artifact.fromJson(json)` is refused with `named-constructor-without-new`.
 4. **php-sharp: the engine runs section 9.** Bump the pinned Mago commit and add `Constructors.sharp`, `Constructors.inc` and `constructors.phpt` in all four opcache modes: `new SalesReport(1)` runs `Report`'s constructor, an implicit `super()` runs a parent's constructor, `new Artifact.fromJson(json)` and `Artifact::fromJson($json)` give the same object, reflection shows what "What a plain PHP caller sees" lists, `LegacyArtifact::fromJson($json)` returns an `Artifact`, and the guard clause throws. Waits for PRs 1 to 3.
    - Run: `sharp/bin/test Zend/tests/sharp/constructors.phpt` passes.
+5. **mago-sharp: `init`.** `PropertyHookList::setter`, `PropertyHook::is_setter` and `PropertyHookList::is_get_only` counting `init`. `MetadataFlags::INIT`, beside `NAMED_CONSTRUCTOR`. The codex registers an `init` body as the `set` hook it becomes, so the `INIT` flag is the one place that knows it was written `init`. The semantics rules: one of `set` and `init`, narrower than the property, no `init` on a static property. The analyzer's write rule above. The bridge lowers `init` to `protected(set)` without `readonly`, and its body to the `set` hook. PHP has no set visibility that ends when the object is created, so a plain PHP subclass can write an `init` property at any time. That is a known boundary, like the static fields of a generic class. The engine row goes in PR 4's `constructors.phpt`.
+   - Run: `compile` compiles a class whose named constructor sets an `init` property the main constructor set, and refuses a write in a method, on another object, and in a lambda.
 
 # What the Slice refuses as "not supported yet", and why
 
 - **`via` on a constructor parameter, and on a property.** Unchanged: the parser's `skip_via_clause(true)` in `crates/syntax/src/parser/internal/function_like/parameter.rs` skips the clause and reports "`via` is not supported yet in PHP#." Section 6.4 defines what a behavior is, and nothing in this Slice can run one. Because it is a parse error, it is the file's only error until it is removed, so section 9's own example stays refused until section 6.4 lands.
-- **`willSet`, `didSet` and `init`, on a parameter and in the class body.** Unchanged: "This accessor is not supported yet in PHP#." Sections 6.1 and 6.2 build them, in code parameters share.
+- **`willSet` and `didSet`, on a parameter and in the class body.** Unchanged: "This accessor is not supported yet in PHP#." Section 6.2 builds them, in code parameters share. PR 5 builds `init`.
 - **`lazy` anywhere but a parameter.** "`lazy` is not supported yet in PHP#." Section 6.5 gives it a meaning. On a parameter it is a real error, because the spec forbids it there.
 - **A class without a constructor, with a non-constant initial value, whose parent's constructor takes parameters** (`Inherits` above). "A class whose initial values run in its constructor declares one when its base class's constructor takes arguments: write `public Inherits(Row row) : super(row) { }`." Its initial values need a PHP constructor, and the bridge cannot copy the parent's parameter list, defaults included, from another file. Master accepts it and runs it wrong today.
 - **Statements without braces other than the guard clause** keep today's "not supported yet", because the spec does not decide them.
