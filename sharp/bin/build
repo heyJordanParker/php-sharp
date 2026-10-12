@@ -52,7 +52,7 @@ if $clean; then
 fi
 
 status="$build_dir/config.status"
-if [[ ! -f "$status" || "$0" -nt "$status" || "$root/sharp/docker/Dockerfile" -nt "$status" || -n "$(find "$root" \( -path "$root/.git" -o -path "$root/sharp" \) -prune -o \( -name configure.ac -o -name '*.m4' -o -name Makefile.frag -o -name Makefile.global \) -newer "$status" -print -quit)" ]]; then
+if [[ ! -f "$status" || "$0" -nt "$status" || "$root/sharp/docker/Dockerfile" -nt "$status" || "$root/Zend/zend_modules.h" -nt "$status" || -n "$(find "$root" \( -path "$root/.git" -o -path "$root/sharp" \) -prune -o \( -name configure.ac -o -name '*.m4' -o -name Makefile.frag -o -name Makefile.global \) -newer "$status" -print -quit)" ]]; then
   (cd "$root" && ./buildconf --force)
   mkdir -p "$build_dir"
   (cd "$build_dir" && "$root/configure" "${flags[@]}")
