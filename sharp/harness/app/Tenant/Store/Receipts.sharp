@@ -1,0 +1,6 @@
+namespace App.Tenant.Store;
+
+public static class Receipts
+{
+    public static int refundable(int paid, int refunded) => paid - refunded;
+}
