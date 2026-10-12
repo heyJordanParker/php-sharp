@@ -31,8 +31,11 @@ team-lead approved decisions 1 to 6 as written, with these rulings:
 - **Decision 7's spec line waits for Jordan.** PR 2's tests use the `@[rule] def importsOnly …` form, and `docs/spec.md` stays unchanged until Jordan rules. The `Rule` API in `Facts.lean` is the standard library and is approved as drawn: `Rule.each`, `Rule.eachIn`, `Rule.neverImports`, `Rule.importsOnly`, `Rule.noImportCycles`, and the namespace argument.
 - **Open question 2 is closed: decision 4 stands.** A broken module law refuses `Module.sharp`, as a broken class law refuses its own file. That meets "a compile error that names it", and section 32 makes `Module.sharp` load at startup.
 - **The empty `.sharpc` facts section stays in PR 2.** PR 2 finds every reader of `facts_size` in `crates/sharp-bridge/src/unit.rs` and in php-sharp's `ext/sharp/`, and its body says so if nothing reads it. team-lead decides its deletion with the format owner.
-- **A `Module.lean` that Lean rejects refuses every `.sharp` file of its namespace.** Each Lean error is its own issue, at its line and column, and names the `Module.lean`, so the developer sees why their file stopped.
-- **A structure rule names a namespace by its bare full name** (Jordan, specimen round 4): `.importsOnly [App.Tenant.Community, App.Shared.Schema]`, `.neverImports App.Shared.Ledgr`, `under i.name App.Shared.Ledgr`. `mago compile` declares one `Sharp.Namespace` constant per namespace that holds PHP# code, the standard library's included, and per namespace above one, in the generated module `Code`. A misspelled or deleted namespace is Lean's "Unknown identifier" at its line and column in the `Module.lean`, warm or cold.
+- **A `Module.lean` that Lean rejects refuses every `.sharp` file of its namespace.** Each Lean error is its own issue, at its line and column, and names the `Module.lean`, so the developer sees why their file stopped. The issue holds Lean's whole message, its lines joined by spaces.
+- **A structure rule names a namespace by its bare full name** (Jordan, specimen round 4): `.importsOnly [App.Tenant.Community, App.Shared.Schema]`, `.neverImports App.Shared.Ledgr`, `under i.name App.Shared.Ledgr`. A misspelled or deleted namespace is Lean's "Unknown identifier" at its line and column in the `Module.lean`, warm or cold.
+- **Every namespace of the codebase is a name a rule can write** (team-lead, round 2 of #171, reversing "namespaces taken from every PHP# class"). Spec §28.1 refuses only "a name that is no namespace in the project", and "domain code never imports the framework" is the rule Users most need. `mago compile` declares one `Sharp.Namespace` constant per namespace of every class-like that is not built in, PHP and PHP#, the project and `vendor/`, and per namespace above one, in the generated module `Code`.
+- **A `Namespace` comes only from a name `Code` declares.** Its constructor is private, so `⟨"App.Shared.Ledgr"⟩` and `{ name := … }` are Lean's errors at their line and column. `Code` declares each namespace through `namespace_decl`, which works only in `Code`. No public function turns a `String` into a `Namespace`.
+- **The rules check runs again when a Lean file it builds changes, joins or leaves**, as it does when a `.sharpc` is stale or `Code` changed. So a `@[rule]` added to a Lean file that no `.sharp` file reaches is refused on the next compile, warm or cold.
 
 ## How the states were observed
 
@@ -337,24 +340,26 @@ mago-sharp
 ├── crates/sharp-bridge/src/lower.rs      <- lowers Statement::Module to nothing
 ├── crates/sharp-lean/
 │   ├── lean/Sharp/Lean/Facts.lean        <- added, from the spike's Sharp/Facts.lean:
-│   │                                        Sharp.Fact, Sharp.Rule, @[rule], Sharp.Graph, Sharp.Namespace, under,
-│   │                                        Rule.each, Rule.eachIn, Rule.neverImports, Rule.importsOnly, Rule.noImportCycles;
-│   │                                        elabNamespaceName: a name below a namespace that names nothing is
-│   │                                        an unknown identifier
+│   │                                        Sharp.Fact, Sharp.Rule, @[rule], Sharp.Graph, Sharp.Namespace (private
+│   │                                        constructor), namespace_decl (only in Code), under, Rule.each,
+│   │                                        Rule.eachIn, Rule.neverImports, Rule.importsOnly, Rule.noImportCycles,
+│   │                                        Rule.breaks; elabNamespaceName: a name below a namespace that names
+│   │                                        nothing is an unknown identifier
 │   ├── lean/Sharp/Lean/Runner.lean       <- the sharp-lean runner gains the rules request kind
 │   ├── lean/lakefile.toml                <- Sharp.Lean.Facts joins the library's roots
 │   └── src/
 │       ├── facts.rs                      <- added, from the spike's walker.rs: one file's facts
 │       ├── rules.rs                      <- added: finds each Module.lean, asks the runner, returns broken-rule issues
-│       ├── package.rs                    <- namespaces(): the generated module Code, one Sharp.Namespace per
+│       ├── package.rs                    <- namespaces(): the generated module Code, one namespace_decl per
 │       │                                    namespace; every generated module imports Code
 │       ├── lean.rs                       <- Lean::prove renamed Lean::check(translations, namespaces): proves laws
-│       │                                    and checks rules, again whenever Code changes
+│       │                                    and checks rules, again whenever Code or a Lean file the check
+│       │                                    builds changes
 │       ├── library.rs                    <- installs the pinned elan into Mago's cache when lake is missing
 │       └── translate/mod.rs              <- Translation gains the file's facts; translates Statement::Module
 ├── crates/orchestrator/src/service/incremental_analysis/compile.rs
 │                                         <- compile(stamp, rules, check); each .sharpc lists its folders' Module.lean files
-│                                            as inputs; check gets the namespace of every PHP# class-like
+│                                            as inputs; check gets the namespace of every class-like not built in
 ├── crates/server/src/
 │   ├── capabilities/code_lens.rs         <- added, ported: Server::get_lens
 │   └── domain.rs                         <- added, ported: CodeLensItem { offset, laws }
@@ -366,8 +371,8 @@ the user's project
 ├── app/<Namespace>/Module.lean           <- spec: module proofs and `@[rule]`s; imports Code.<Namespace>.Module
 ├── .sharp/.lean/Code/<Namespace>/Module.lean
 │                                         <- generated for each folder with Module.sharp or Module.lean
-└── .sharp/.lean/Code.lean                <- generated: `def App.Shared.Schema : Sharp.Namespace := ⟨"App.Shared.Schema"⟩`
-                                             for each namespace
+├── .sharp/.lean/Code.lean                <- generated: `namespace_decl App.Shared.Schema` for each namespace
+└── .sharp/.lean/checked-rules            <- generated: each Lean file the last rules check built, with its hash
 
 Mago's cache folder (~/Library/Caches/mago, ~/.cache/mago, or $XDG_CACHE_HOME/mago)
 └── elan/                                 <- added: ELAN_HOME of the elan Mago installs
@@ -386,7 +391,11 @@ The rule API, as `Facts.lean` will declare it:
 +/-- A namespace a rule names by its bare full name, as `App.Shared.Schema`. `mago compile` declares one per namespace
 +in the generated module `Code`, so a name that names no namespace is Lean's unknown identifier. -/
 +structure Namespace where
++  private mk ::
 +  name : String
++
++/-- Declares the namespace constant `App.Shared`, unless Lean already holds that name. Works only in `Code`. -/
++elab "namespace_decl " id:ident : command => …
 +
 +def under (name : String) (ns : Namespace) : Bool := name == ns.name || name.startsWith (ns.name ++ ".")
 +
@@ -408,7 +417,7 @@ The rule API, as `Facts.lean` will declare it:
 +  .imports fun ns i => !(ns :: ⟨"Sharp"⟩ :: allowed).any (under i.name ·)
 ```
 
-Facts keep their names as strings: `under` compares a fact's `String` name with a `Namespace`. `elabNamespaceName` makes a name below a real namespace, such as `App.Shared.Ledgr` below `App.Shared`, an unknown identifier too, where Lean would otherwise read it as a field of `App.Shared`.
+Facts keep their names as strings: `under` compares a fact's `String` name with a `Namespace`. `Rule.breaks` gives the runner the rule's own namespace, inside `Facts.lean`, since no other module can build a `Namespace`. `elabNamespaceName` makes a name below a real namespace, such as `App.Shared.Ledgr` below `App.Shared`, an unknown identifier too, where Lean would otherwise read it as a field of `App.Shared`.
 
 The spec change, in section 28.1:
 
@@ -441,14 +450,15 @@ include app/Shared/Ledger.sharp                                  (ext/sharp/shar
    │                  │   ├─ lower (sharp-bridge)                  → the .sharpc tree
    │                  │   └─ translate (sharp-lean)                → Translation { laws, declarations, facts }
    │                  ├─ Lean::check(translations, namespaces)     (sharp-lean lean.rs)
-   │                  │   ├─ package::namespaces → .sharp/.lean/Code.lean, one Sharp.Namespace per namespace
+   │                  │   ├─ package::namespaces → .sharp/.lean/Code.lean, one namespace_decl per namespace
    │                  │   ├─ laws: as master proves them today
    │                  │   └─ rules::check                          (sharp-lean rules.rs)
-   │                  │       ├─ any translation stale, or Code.lean changed? no → no Lean process starts
+   │                  │       ├─ any translation stale, Code.lean changed, or a Lean file the check builds
+   │                  │       │  changed (checked-rules)? no → no Lean process starts
    │                  │       ├─ each Module.lean under a PSR-4 folder → App.Module, App.Shared.Module, …
    │                  │       ├─ Package::write + Package::build     the Proofs library already links app/
    │                  │       │   └─ Lean rejects a Module.lean → one broken-rule per Lean error, at its line and
-   │                  │       │      column, on every file of its namespace
+   │                  │       │      column with Lean's whole message, on every file of its namespace
    │                  │       ├─ runner::check_rules → lake env sharp-lean
    │                  │       │   └─ Sharp.Lean.Runner: import the rules modules, evaluate each @[rule]
    │                  │       │      over the facts under its namespace, answer each breaking fact
