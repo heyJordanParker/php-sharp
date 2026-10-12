@@ -207,14 +207,15 @@ A block's own variables, such as `lines` or `p`, are its setup lines, next to th
 `sharp/baseline/spec` follows `sharp/baseline/darwin` and `sharp/baseline/linux`: one tab-separated line per example that fails, in natural order, with no header.
 
 ```text
-README	readme-cart	0
-§6	nullable-members	1
-§12	iterables	3
+README	readme-cart
+§6	nullable-members
+§12	iterables
 ```
 
 - **The section** is the heading the block sits under, as in `§6.1`, or `README`.
 - **The id** is the marker's. A line number would change on every spec edit.
-- **The last field** counts the errors that say "not supported yet" across the example's files.
+
+**The list records which examples fail, not how,** as test262's expected-failure lists do in V8 and SpiderMonkey. A listed example may change its errors, so a checker that turns a parse error into a named "not supported yet" refusal passes, and so does a Mago re-pin that does the same. The list doesn't notice a listed example getting worse. mago-sharp's and php-sharp's own tests cover the rules those examples use.
 
 `sharp/bin/spec` fails when the list differs from what the examples do, and prints the `cp` command that writes the new list, as `sharp/bin/test --upstream` does for its baseline. An example that fails prints every line that differs from its annotation, with the checker's message or the value it gave.
 
@@ -273,17 +274,16 @@ No file of the pull request runs, which is what makes `pull_request_target` safe
 | `Completes the work the §6 Slice started.` | prose: no claim |
 | ``The `COMPLETES` job fails while §6 has entries.`` | prose: no claim |
 
-CI fails in each of the five cases:
+CI fails in each of the four cases:
 
 1. **An example that is not on the list fails.** `sharp/bin/spec`: the list differs from the run.
 2. **A listed example passes.** The same check.
 3. **A PR adds an entry to the list.** `SPEC_GUARD`: the head list has an id the base list doesn't, and the pull request changes more than `docs/spec.md`, `README.md` and `sharp/baseline/spec`, or the base has an example with the same fingerprint, under that id or another.
 4. **`Completes: §6.1, §9` names a section that still has entries.** `COMPLETES`.
-5. **A PR raises the count of "not supported yet" refusals.** `SPEC_GUARD`: an example's last field rises. In a pull request that changes more than the documents and the list, every listed example compares with its own id at the base. In one that changes only those, an example compares with the base example that has its fingerprint, because an edited example may gain refusals. Each example compares with itself, so a refusal removed in one example can't hide one added in another.
 
-**A builder PR can't change what measures it.** The spec files are `docs/spec.md`, `README.md`, `sharp/baseline/spec`, and every file in the folders `GUARDED` lists in `sharp/bin/spec`: `sharp/harness/`, `sharp/bin/`, `sharp/docker/` and `.github/`. They hold what measures the examples and everything between a CI step and the checker's exit status: the workflows, `sharp/bin/test`, `sharp/docker/run` and its image, and the checker. The guard matches whole folders, so a file added on that path is guarded too. A pull request that changes any other file must leave every example's fingerprint and every guarded file as the base has them. It can only remove entries and lower refusals, through the `cp` command a failing run prints. A builder that needs a new image package or a workflow change lands it in a pull request of its own. The engine and its build stay the builder's, because they are what the check measures.
+**A builder PR can't change what measures it.** The spec files are `docs/spec.md`, `README.md`, `sharp/baseline/spec`, and every file in the folders `GUARDED` lists in `sharp/bin/spec`: `sharp/harness/`, `sharp/bin/`, `sharp/docker/` and `.github/`. They hold what measures the examples and everything between a CI step and the checker's exit status: the workflows, `sharp/bin/test`, `sharp/docker/run` and its image, and the checker. The guard matches whole folders, so a file added on that path is guarded too. A pull request that changes any other file must leave every example's fingerprint and every guarded file as the base has them. It can only remove entries, through the `cp` command a failing run prints. Markdown never runs, so a Markdown file outside the guarded folders, such as this note, may change beside a guarded file. A builder that needs a new image package or a workflow change lands it in a pull request of its own. The engine and its build stay the builder's, because they are what the check measures.
 
-**One fingerprint covers the whole example,** all but its id: its section, and every block's marker line, setup, fence language, code and run comment. A moved example, a renumbered heading, a changed fence language, shape, `alone`, `in <Class>` or `ignore` all change it. A renamed example keeps it. The builder-PR rule compares it by id, and cases 3 and 5 match it across ids.
+**One fingerprint covers the whole example,** all but its id: its section, and every block's marker line, setup, fence language, code and run comment. A moved example, a renumbered heading, a changed fence language, shape, `alone`, `in <Class>` or `ignore` all change it. A renamed example keeps it. The builder-PR rule compares it by id, and case 3 matches it across ids.
 
 **Only a documents-only PR may grow the list.** An entry joins the list only in a pull request that changes nothing but `docs/spec.md`, `README.md` and `sharp/baseline/spec`. A pull request that also changes a guarded file can keep or shrink the list, never grow it, so a harness change can't make an unchanged example fail and list it, even under a renumbered heading. A new example that needs a new harness class lands in two pull requests: the class first, then the example and its entry. A ruling Jordan approves lands with its examples before any builder implements it, and those examples are v1's remaining work. A documents-only PR may rename a listed example: the new id takes the entry when the base listed the old id and the head no longer does.
 

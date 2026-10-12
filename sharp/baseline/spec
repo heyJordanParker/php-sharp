@@ -1,96 +1,96 @@
-§6	field-and-property	0
-§6	initial-values	0
-§6	nullable-members	1
-§6.2	change-observers	1
-§6.3	property-references	0
-§6.4	property-behaviors	1
-§6.5	lazy-property	0
-§7	method-declarations	0
-§7	variadic-parameters	0
-§8	standard-library-calls	0
-§9	parameter-members	1
-§9.1	named-constructors	2
-§10	struct-backing-value	0
-§10	struct-changes	0
-§10	struct-parse-object	0
-§10	struct-parse	0
-§11	generic-method-inference	0
-§11	generic-statics	0
-§11	inferred-type-arguments	0
-§11	raw-generic-objects	0
-§11	self-on-type-parameters	0
-§11	type-parameter-bounds	0
-§12	collection-read-methods	0
-§12	collection-write-methods	0
-§12	enum-map-keys	0
-§12	index-rules	0
-§12	iterables	3
-§12	map-string-keys	1
-§12	natural-remove	0
-§12	nullable-map-values	0
-§12	yield	0
-§13	readonly-fields	3
-§13	readonly-positions	0
-§13	readonly-values	0
-§14.1	function-types	0
-§14.2	lambdas	2
-§14.4	leave-on-null	0
-§15	emit-forms	1
-§15	event-declarations	0
-§15	extern-event	0
-§15	listener-errors	0
-§15	listeners	0
-§15	scoped-listener	0
-§15	standalone-event	0
-§16	initializer-shorthand	0
-§19	lifted-equality	0
-§19	operators	0
-§20	enum-data-cases	3
-§20	enum-shapes	2
-§20.1	sealed-interfaces	0
-§21	is-and-as	2
-§21	is-not-scope	0
-§21	match-forms	5
-§21	property-narrowing	0
-§21	property-patterns	0
-§22	interface-defaults	4
-§22	plain-php-traits	0
-§23	import-rename	0
-§23	standard-library-import	0
-§24	any-checks	0
-§24	array-object-replacements	0
-§24	int-to-float	1
-§24	json-encoding	0
-§24	naming-cases	0
-§24	nullable-unions	1
-§24	object-type	2
-§25	class-members	0
-§25	class-values	1
-§25	generic-class-values	0
-§25	required-constructors	0
-§25	self-return	0
-§25	typeof-type-parameters	0
-§25	typeof-types	0
-§25	typeof-values	0
-§26	extension-overloads	0
-§26	extensions	0
-§27	position	1
-§28	module-law	0
-§28	state-machine-law	0
-§29	effectful-declarations	0
-§29	emit-effect	1
-§29	extern-implementations	0
-§29	foreign-class	0
-§29	function-effects	0
-§29	pure-interface	0
-§30	tuples	0
-§31	error-interface	1
-§31	result-enum	0
-§31	try-propagation	0
-§32	environment-module	0
-§32	factory	0
-§32	missing-service	0
-§32	module-errors	0
-§32	module-services	0
-§32	scoped-binding	0
-§32	test-module	0
+§6	field-and-property
+§6	initial-values
+§6	nullable-members
+§6.2	change-observers
+§6.3	property-references
+§6.4	property-behaviors
+§6.5	lazy-property
+§7	method-declarations
+§7	variadic-parameters
+§8	standard-library-calls
+§9	parameter-members
+§9.1	named-constructors
+§10	struct-backing-value
+§10	struct-changes
+§10	struct-parse
+§10	struct-parse-object
+§11	generic-method-inference
+§11	generic-statics
+§11	inferred-type-arguments
+§11	raw-generic-objects
+§11	self-on-type-parameters
+§11	type-parameter-bounds
+§12	collection-read-methods
+§12	collection-write-methods
+§12	enum-map-keys
+§12	index-rules
+§12	iterables
+§12	map-string-keys
+§12	natural-remove
+§12	nullable-map-values
+§12	yield
+§13	readonly-fields
+§13	readonly-positions
+§13	readonly-values
+§14.1	function-types
+§14.2	lambdas
+§14.4	leave-on-null
+§15	emit-forms
+§15	event-declarations
+§15	extern-event
+§15	listener-errors
+§15	listeners
+§15	scoped-listener
+§15	standalone-event
+§16	initializer-shorthand
+§19	lifted-equality
+§19	operators
+§20	enum-data-cases
+§20	enum-shapes
+§20.1	sealed-interfaces
+§21	is-and-as
+§21	is-not-scope
+§21	match-forms
+§21	property-narrowing
+§21	property-patterns
+§22	interface-defaults
+§22	plain-php-traits
+§23	import-rename
+§23	standard-library-import
+§24	any-checks
+§24	array-object-replacements
+§24	int-to-float
+§24	json-encoding
+§24	naming-cases
+§24	nullable-unions
+§24	object-type
+§25	class-members
+§25	class-values
+§25	generic-class-values
+§25	required-constructors
+§25	self-return
+§25	typeof-type-parameters
+§25	typeof-types
+§25	typeof-values
+§26	extension-overloads
+§26	extensions
+§27	position
+§28	module-law
+§28	state-machine-law
+§29	effectful-declarations
+§29	emit-effect
+§29	extern-implementations
+§29	foreign-class
+§29	function-effects
+§29	pure-interface
+§30	tuples
+§31	error-interface
+§31	result-enum
+§31	try-propagation
+§32	environment-module
+§32	factory
+§32	missing-service
+§32	module-errors
+§32	module-services
+§32	scoped-binding
+§32	test-module
