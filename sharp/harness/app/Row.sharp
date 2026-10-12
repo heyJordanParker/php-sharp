@@ -1,0 +1,6 @@
+namespace App;
+
+public class Row
+{
+    public int id { get; set; } = 1;
+}

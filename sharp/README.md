@@ -9,7 +9,7 @@ The approved language rules live in [docs/spec.md](../docs/spec.md), and the rea
 - `master` is PHP#'s only line and the default branch of `heyJordanParker/php-sharp`. It starts at the upstream tag `php-8.5.11`, and all work lands on it directly.
 - Upstream's other branches, such as `PHP-8.5`, are read-only mirrors. Upstream's own `master` is reached through the `upstream` remote.
 - Upstream is merged into `master`, never rebased. Moving to a newer 8.5.x release means merging that release's tag.
-- PHP# owns `sharp/`, `ext/sharp/`, `Zend/tests/sharp/`, `.github/workflows/sharp.yml`, `.github/SECURITY.md`, `.github/ISSUE_TEMPLATE/`, `README.md`, `docs/spec.md`, `docs/decisions/` and `docs/php-src.md`. Everything else is an engine file.
+- PHP# owns `sharp/`, `ext/sharp/`, `Zend/tests/sharp/`, `.github/workflows/sharp.yml`, `.github/workflows/completes.yml`, `.github/SECURITY.md`, `.github/ISSUE_TEMPLATE/`, `README.md`, `docs/spec.md`, `docs/decisions/` and `docs/php-src.md`. Everything else is an engine file.
 - A merge from upstream meets conflicts only in engine files a feature had to change, and in the upstream files PHP# replaced: `README.md` and the forms in `.github/ISSUE_TEMPLATE/`. Each of those keeps PHP#'s side.
 
 ## Commands
@@ -25,6 +25,7 @@ sharp/bin/test --opcache        # also run with the opcache file cache, priming 
 sharp/bin/test --repeat         # also run each test twice in one process, the second time from opcache shared memory
 sharp/bin/test --passes         # also run with each optimizer pass alone, then under the tracing and the function JIT
 sharp/bin/test --census         # also check every write and comparison of a field that holds a PHP# mark
+sharp/bin/test --spec           # also compile and run every code example in docs/spec.md and README.md
 sharp/bin/test --differential   # also check that php -l compiles every Zend/tests/sharp/*.sharp file
 sharp/bin/test --upstream       # run Zend/tests, ext/reflection, ext/tokenizer and ext/opcache
 ```
@@ -41,7 +42,7 @@ The engine runs only `.sharpc` files that `mago compile` wrote. So before any te
 
 `--linux` runs either command inside the Debian trixie image from `sharp/docker/`, for example `sharp/bin/build --linux` and `sharp/bin/test --linux --opcache`.
 
-Every PHP# feature must pass `sharp/bin/test --opcache --repeat --passes --census --differential`. `sharp/bin/test` disables the JIT outside `--passes`.
+Every PHP# feature must pass `sharp/bin/test --opcache --repeat --passes --census --spec --differential`. `sharp/bin/test` disables the JIT outside `--passes`.
 
 `sharp/bin/build` reruns `buildconf` and `configure` by itself when `configure.ac`, a `*.m4` file, a `Makefile.frag`, `build/Makefile.global`, `sharp/docker/Dockerfile` or `sharp/bin/build` changes.
 
@@ -50,6 +51,16 @@ Run one build per tree at a time. Parallel Agents each work in their own git wor
 ## Upstream baseline
 
 `sharp/bin/test --upstream` compares the run without opcache with `sharp/baseline/darwin` or `sharp/baseline/linux`, and fails on any difference. Each file lists every test that did not pass on the untouched `php-8.5.11` build, as `STATUS<TAB>path`. An upstream FAIL, BORK or LEAK fails the run before any comparison, so the baseline only ever holds skips and expected failures. A changed result is a regression until the Architect accepts it by committing the regenerated file. The failing run prints the `cp` command that does this.
+
+## Spec examples
+
+`--spec` runs `sharp/bin/spec`. It compiles every checked code block in `docs/spec.md` and `README.md` with the pinned `mago`, runs the lines that claim a value or a throw on the engine, and compares each annotated line with its annotation. An HTML comment above a block, such as `<!-- example map-reads: statements alone -->`, names the example and says how to build it, as [docs/architecture/spec-examples.md](../docs/architecture/spec-examples.md) describes. Every example compiles against the classes and plain PHP stubs in `sharp/harness/`. A law example (section 28) needs Lean, so the `sharp/docker/` image installs Debian's `elan`, which downloads the Lean version mago pins into `sharp/build/elan` the first time a law compiles. mago's own cache folder sits in `sharp/build/cache` there.
+
+A `compile error` line needs the error its rule gives: a "not supported yet" refusal, a missing class or an unreadable line never satisfies it, and an error moves to it from another line only when it is one of the whole-construct errors in `MOVES` and its line's brackets enclose it. A value or `throws` annotation that no run reaches fails the check, unless a hidden `<!-- run <id> -->` comment after the example's last block holds a run line that makes the same claim.
+
+`sharp/baseline/spec` lists every example that fails today, one `section<TAB>id` line each. Its length is how far PHP# is from v1. The run fails when an unlisted example fails or a listed one passes, and prints the `cp` command that writes the new list. The list records which examples fail, not how, so a listed example may change its errors.
+
+On a pull request, the `SPEC_GUARD` job runs the base commit's `sharp/bin/spec --base <commit>`, from the base branch's `.github/workflows/completes.yml` on `pull_request_target`, so a pull request never runs or changes its own comparison. The spec files are `docs/spec.md`, `README.md`, `sharp/baseline/spec`, and every file in the `GUARDED` folders, which hold what measures the examples and everything that runs that measurement: `sharp/harness/`, `sharp/bin/`, `sharp/docker/` and `.github/`. A pull request that changes any other file leaves every example's fingerprint and every guarded file exactly as the base has them, so it can only remove entries. Markdown never runs, so a Markdown file outside the guarded folders may change beside a guarded file. The guard lists changed files with `--no-renames`, so a renamed guarded file shows its old path, and it fails on a symbolic link at a file it reads or in a guarded folder, naming the path only. The fingerprint covers the whole example but its id: its section, and every block's marker line, setup, fence language, code and run comment. An entry joins the list only in a pull request that changes nothing but `docs/spec.md`, `README.md` and `sharp/baseline/spec`. In a documents-only pull request, an example the base has with the same fingerprint, under its id or another, never joins the list, except that a renamed example takes over its old id's entry. An `ignore` on code the base checked counts as an entry.
 
 ## Runtime image
 
@@ -76,6 +87,8 @@ brew install autoconf bison re2c pkgconf icu4c libiconv libpq libsodium libzip o
 ## CI
 
 `.github/workflows/sharp.yml` builds and tests on Linux in the `sharp/docker/` image and on `macos-latest`, for every push and pull request to `master` that changes more than documentation. The `PLAIN_PHP` job runs on `ubuntu-24.04` and `macos-latest` with the runner's own PHP. It installs `heyjordanparker/php-sharp-composer` from `sharp/composer/` and `heyjordanparker/mago-sharp` from Packagist, then runs `mago analyze` and `mago compile` on a one-class `.sharp` project. The Linux job also fails when a generated file differs from the committed one, when `ext/sharp/sharp_unit.h` differs from the header the Mago commit it names generates from `Zend/zend_ast.h`, or when `ext/sharp/Cargo.lock` names a local `path+file://` or `git+file://` source. The generated-file step copies `.github/actions/verify-generated-files/action.yml`, so compare the two on every merge from upstream.
+
+A pull request body line such as `Completes: §6.1, §9` claims those sections are done. The `COMPLETES` job in `.github/workflows/completes.yml` runs the base commit's `sharp/bin/spec --completes` on the merge commit whenever the body is opened, edited or pushed to. It fails on a `Completes:` line in any other form, such as `**Completes:** §6`, on a section with no checked example, and on a section `sharp/baseline/spec` still lists. `§9` covers `§9.1`.
 
 `master` takes changes only through a pull request whose `CI_PASSED` check passes. A repository ruleset enforces it for every account, admins included, and refuses force pushes and deletion. `CI_PASSED` passes when `LINUX`, `MACOS` and `PLAIN_PHP` pass, or skip on a pull request that changes documentation alone.
 

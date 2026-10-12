@@ -1,0 +1,12 @@
+namespace App;
+
+public class Cart
+{
+    public List<Order> orders { get; set; } = [];
+
+    public static List<Line> withShipping(List<Line> lines, Line shipping)
+    {
+        lines.add(shipping);
+        return lines;
+    }
+}

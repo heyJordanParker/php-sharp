@@ -1,0 +1,6 @@
+namespace App;
+
+public class WebhookPayload
+{
+    public WebhookPayload(public Order order { get; }) { }
+}

@@ -1,0 +1,6 @@
+namespace App;
+
+public class Manifest
+{
+    public static Manifest parse(string json) => new Manifest();
+}

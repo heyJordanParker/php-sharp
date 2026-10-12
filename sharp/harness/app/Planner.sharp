@@ -1,0 +1,6 @@
+namespace App;
+
+public class Planner
+{
+    public Plan plan(int|string id) => new Plan();
+}
