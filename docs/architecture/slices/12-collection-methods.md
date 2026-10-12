@@ -11,13 +11,13 @@ Section 12's collection methods `add`, `set`, `get`, `filter` on a `List`, `map`
 - **`groupBy` and `associateBy` refuse a backed enum key,** which section 12's own `enum-map-keys` example writes: "Argument type mismatch for template `G`."
 - **`Map`'s `delete` and `filterValues` compile.** They were the interim names while the engine compiled each file alone. Typed compilation has landed, so decision 026's chosen names replace them.
 
-The Slice builds all of it in 3 mago-sharp PRs and 1 php-sharp PR, on the two precedents master already has. A read runs inline as PHP on the array, as `count` does (`INLINED_COLLECTION_METHODS`). A change writes back to its place, as a `Set`'s `add`, `remove` and `clear` do (`CHANGING_COLLECTION_METHODS`). The engine gains two `Sharp\Collection` methods, `insert` and `removeAt`, because a PHP function that takes the array by reference cannot write a property with a `set` accessor.
+The Slice builds all of it in 3 mago-sharp PRs and 1 php-sharp PR, on the two precedents master already has. A read runs inline as PHP on the array, as `count` does (`INLINED_COLLECTION_METHODS`). A change writes back to its place, as a `Set`'s `add`, `remove` and `clear` do (`CHANGING_COLLECTION_METHODS`). The engine gains four `Sharp\Collection` methods. `insert` and `removeAt` exist because a PHP function that takes the array by reference cannot write a property with a `set` accessor. `put` and `clear` exist because ruling 7 makes a `List` index a place, and only the engine's collection of a `List` element reaches the element the list stores (below).
 
-When the Slice lands, 6 of section 12's 9 entries leave `sharp/baseline/spec`: `collection-read-methods`, `collection-write-methods`, `natural-remove`, `nullable-map-values`, `index-rules` and `enum-map-keys`. Two of them need one spec-files change first: the harness `Line` declares no `operator ==`, so section 12's own rule makes `lines.contains(line)` and `lines.remove(line)` compile errors (ruling 1). The other 3 entries are not collection methods (found outside the Slice), so this Slice cannot write `Completes: §12` (ruling 2).
+When the Slice lands, 6 of section 12's 10 entries leave `sharp/baseline/spec`: `collection-read-methods`, `collection-write-methods`, `index-changes`, `index-rules`, `natural-remove` and `nullable-map-values`. `enum-map-keys` stays, because the example uses a `Username` struct it never declares (task #498). Two of them need one spec-files change first: the harness `Line` declares no `operator ==`, so section 12's own rule makes `lines.contains(line)` and `lines.remove(line)` compile errors (ruling 1). The other 3 entries are not collection methods (found outside the Slice), so this Slice cannot write `Completes: §12` (ruling 2).
 
 ## Decisions team-lead approves
 
-1. **Every read the spec names runs inline as PHP, and every change writes back to its place.** `contains`, `indexOf`, `last`, `has` and `keys` join `INLINED_COLLECTION_METHODS`. `clear` writes `$place = []`, as a `Set`'s does. `remove` searches inline, then removes through a `Sharp\Collection` method, as a `Set`'s `remove` does. `insert` is an ordinary call of the new `Sharp\Collection::insert`, as `add` and `set` are.
+1. **Every read the spec names runs inline as PHP, and every change writes back to its place.** `contains`, `indexOf`, `last`, `has` and `keys` join `INLINED_COLLECTION_METHODS`. `clear` writes `$place = []`, as a `Set`'s does, and on a `List` element it runs `Sharp\Collection::clear` (ruling 7, below). `remove` searches inline, then removes through a `Sharp\Collection` method, as a `Set`'s `remove` does. `insert` is an ordinary call of the new `Sharp\Collection::insert`, as `add` and `set` are.
 2. **`contains`, `indexOf` and a `List`'s `remove` compare by section 19's `==`, lowered once.** Where `==` on the element type lowers to `===`, the search is `\in_array` or `\array_search` with `strict: true`. Where the element's class declares `operator ==`, the search is `\array_find_key` with that `op_Equality`. Both forms come from the one helper `a == b` lowers through, so a search never compares differently from `==`.
 3. **The checker refuses a search where `==` has no meaning on the element type,** with the reason `==` itself gives: a class without `operator ==` is an error, and a collection element is "not supported yet", as `==` on a collection is today.
 4. **A `Map`'s `filter` runs as `Sharp\Collection::filterValues`,** which keeps the keys, as a `Set`'s `filter` does on master.
@@ -34,6 +34,19 @@ Each is a proposal with its precedent. team-lead rules. The note writes the prop
 3. **A `Map`'s `remove(key)` returns `bool`: true when the key was there.** Precedent: C#'s `Dictionary.Remove`. PHP#'s `List.remove` and `Set.remove` already return `bool` with that meaning, so one name has one result type. The other choice is Kotlin's and Swift's, which return the removed value as `V?`, and that cannot tell a missing key from a stored null in a `Map<string, int?>`.
 4. **`insert(i, v)` takes `0 <= i <= count()`.** `i == count()` appends. Outside the range it throws `OutOfRangeException` "Undefined array key N", the message `set` throws past the end. Precedent: Kotlin's `add(index, element)`, C#'s `Insert` and Java's `add(int, E)` all throw outside `0..size`.
 5. **A `List`'s `remove(value)` of a value it does not hold returns false and changes nothing.** The spec fixes this (`tags.remove("z"); // false, and tags is unchanged`). Nothing is written back, so a property's `set` does not run.
+
+## Ruling 7: a `List` index is a place
+
+Section 12 says "A `List` index is a place, as a Rust `Vec` index and a Go slice index are, so a change through it changes the element the list stores", and "A change through a `Map` index is a compile error". The Slice builds each rule this way:
+
+1. **A change through a `List` index changes the stored element.** `grid[0].add(5)`, `grid[0].insert(0, 7)`, `grid[0].remove(1)`, `grid[0].set(0, 8)` and `cube[1][0].add(3)` lower to the method on the index, `$grid[0]->add(5)`. `zend_compile_sharp_receiver` reads an index receiver through the collection of what it indexes. `sharp_collection_read_dimension` then gives an element collection that holds its container and index. A change separates every array the element is in, through `sharp_collection_place`, and writes back through the container. So a property's `set` hook runs once per change, and a copy that shares the list stays as it was.
+2. **A write into a `Map` element of a `List` is a `put`.** `maps[0]["c"] = 3` lowers to `$maps[0]->put('c', 3)`, and `maps[0]["d"] ??= 4` puts only for a missing key. A `Set`'s `add` on an index is a `put` too. `Sharp\Collection::put(key, value)` inserts or replaces the element and gives the value.
+3. **A write into a `Map` a hooked property holds is a `put` on the property.** PHP gives no reference to a hooked property, so `this.totals["c"] = 3` lowers to `$this->totals->put('c', 3)`, and its `set` hook runs. A property without hooks keeps PHP's write, so its opcodes match the PHP twin's.
+4. **`clear` on a `List` element is `Sharp\Collection::clear`.** `grid[0].clear()` lowers to `$grid[0]->clear()`, which empties the element and writes it back. A `clear` on a local, a field or a property stays `$place = []`.
+5. **A missing index throws `OutOfRangeException`,** as a bare read does, and leaves no gap. That covers a method through the index (`grid[5].add(1)`), a `clear`, a write into a `Map` element (`maps[2]["c"] = 3`), and a property written through the index (`points[5].x = 5`, `+=` and `++`). `zend_delayed_compile_prop` reads a PHP# index whose property is written, so `FETCH_DIM_R` with `ZEND_SHARP_OPERATOR` throws, where PHP's `FETCH_DIM_W` would add null at the key.
+6. **After `?.`, a change through a `List` index reaches the stored element, and `?.` skips only a null element.** `rows[0]?.add(5)` lowers to `$rows[0]?->add(5)`, the index itself, not a copy. A null element skips the call. A missing index throws `OutOfRangeException`, as every `List` read does. A method that changes nothing, such as `rows[0]?.entries()`, keeps `($rows[0] ?? null)?->entries()`.
+7. **A change through a `Map` index is a compile error,** as Go refuses `m[k].x = 5`, because a `Map` read is a copy. Section 12's `index-changes` example annotates `stock["sku-1"]?.add(5);` as a compile error, and the checker refuses it.
+8. **An element a plain PHP `ArrayAccess` object gives is a collection of its own.** `rows[0].map(…)` on such an object casts the array `offsetGet` gives to a `Sharp\Collection`, as master does. The change does not reach the object, which owns its own storage.
 
 ## Rulings needed outside this Slice
 
@@ -409,7 +422,7 @@ Every collection still is a PHP array, and every method runs in PHP#'s compiled 
 - A `List` after `insert` or `remove` is a list, `0..n-1`, as before.
 - `keys()` of a `Map<string, int>` holding `"5"` gives `["5", "sku-2"]`, strings, as a PHP# caller expects. Plain PHP reading the same `Map` still sees the int key `5`.
 - A `groupBy` result keyed by `Status` reaches plain PHP keyed by the backing values, as any `Map<Status, …>` does.
-- `Sharp\Collection` gains the public methods `insert` and `removeAt`. Plain PHP cannot make one, because its constructor is private.
+- `Sharp\Collection` gains the public methods `insert`, `removeAt`, `put` and `clear`. Plain PHP cannot make one, because its constructor is private.
 
 # Public names this Slice adds or changes
 
@@ -433,20 +446,29 @@ mago-sharp
 │                                                   reuses invalid-argument and not-supported-yet, no new code
 └── crates/sharp-bridge/src/lower.rs             <- Lowering::element_search and Lowering::equality added;
                                                     collection_call's arms keyed by (collection, method);
-                                                    key_read_back takes a lowered key, for loops and keys()
+                                                    key_read_back takes a lowered key, for loops and keys();
+                                                    element_write puts into a Map element of a List or of a
+                                                    hooked property; changes_list_element keeps the index after ?.
 
 php-sharp
 ├── ext/sharp/sharp.stub.php, sharp_arginfo.h, sharp.c
-│                                                <- Sharp\Collection::insert(int $index, mixed $value): void and
-│                                                   Sharp\Collection::removeAt(int $index): void added;
+│                                                <- Sharp\Collection::insert(int $index, mixed $value): void,
+│                                                   removeAt(int $index): void, put(mixed $key, mixed $value): mixed
+│                                                   and clear(): void added; element collections and
+│                                                   sharp_collection_place reach a List element;
 │                                                   sharp_collection_key_slot stores a backed enum case's value
+├── Zend/zend_compile.c                          <- zend_compile_sharp_receiver reads an index receiver through its
+│                                                   container; zend_delayed_compile_prop reads a written property's
+│                                                   PHP# index
+├── Zend/tests/sharp/Grid.sharp, Point.sharp, index_changes.{inc,phpt}, harness/RowSet.inc
+│                                                <- every change through a List index (ruling 7)
 ├── Zend/tests/sharp/CollectionMethods.sharp, collection_methods.{inc,phpt}, collection_methods_jit_*.phpt
 │                                                <- rows for every new method
 ├── Zend/tests/sharp/EnumKeys.sharp, EnumKeys.inc, enum_keys*.phpt
 │                                                <- a groupBy keyed by a backed enum, read back as the case
 ├── Zend/tests/sharp/{CollectionMethods,EnumKeys,Lambdas,Roster}.{sharp,inc}
 │                                                <- delete and filterValues moved to remove and filter
-└── ext/sharp/Cargo.toml, Cargo.lock             <- the pinned Mago commit moves
+└── ext/sharp/sharp_unit.h                       <- the pinned Mago commit moves
 
 the PHP the bridge emits
 ├── \in_array($v, $c, true)                                        <- contains, == as ===
@@ -455,6 +477,8 @@ the PHP the bridge emits
 ├── ($i = …search…) !== false && $c->removeAt($i) === null          <- List remove
 ├── $c->insert($i, $v)                                              <- insert
 ├── $c = []                                                         <- clear
+├── $c[$i]->clear(), $c[$i]->put($k, $v), $c[$i]->add($v)          <- a change through a List index
+├── $c[$i]?->add($v)                                                <- a change after ?. on a List index
 ├── ($c === [] ? throw new \OutOfRangeException('The list is empty.') : \array_last($c))   <- last
 ├── \array_key_exists($k, $c)                                       <- has
 ├── \array_keys($c), \array_map(\strval(...) | \E::from(...), \array_keys($c))   <- keys
@@ -480,7 +504,7 @@ Each PR ends in something a developer runs. PR 1 is independent. PRs 2 and 3 fol
    - Run: `compile` compiles `NaturalRemove.sharp`'s `tags.remove` lines, and `WriteMethods.sharp` but `lines.remove(line)` and `plans.remove("pro")`.
 3. **mago-sharp: a `Map`'s methods.** `has`, `keys` and `remove` in `MapMethods`; `filter` typed `array<K, V>` and lowered to `filterValues`; `delete` and `filterValues` deleted, with every test that used them; `key_read_back` shared with `keys()`; `groupBy` and `associateBy` keys with a backing value.
    - Run: `compile` compiles `NullableMapValues.sharp`, `MapKeys.sharp`, `NaturalRemove.sharp`, `EnumMapKeys.sharp` and `WriteMethods.sharp` but `lines.remove(line)`, and refuses `Interim.sharp` and `MapFilter.sharp` (the result is a `Map`, not a `List`).
-4. **php-sharp: the engine runs them.** Bump the pinned Mago commit; `Sharp\Collection::insert` and `removeAt`; a backed enum key in `sharp_collection_key_slot`; the moved uses of `delete` and `filterValues`; the engine tests below; `sharp/baseline/spec` loses `collection-read-methods`, `collection-write-methods`, `enum-map-keys`, `index-rules`, `natural-remove` and `nullable-map-values` through the `cp` command a run prints.
+4. **php-sharp: the engine runs them.** Bump the pinned Mago commit; `Sharp\Collection::insert`, `removeAt`, `put` and `clear`; every change through a `List` index (ruling 7); a backed enum key in `sharp_collection_key_slot`; the moved uses of `delete` and `filterValues`; the engine tests below; `sharp/baseline/spec` loses `collection-read-methods`, `collection-write-methods`, `index-changes`, `index-rules`, `natural-remove` and `nullable-map-values` through the `cp` command a run prints.
    - Run: `sharp/bin/test Zend/tests/sharp/collection_methods.phpt Zend/tests/sharp/enum_keys.phpt` passes, and `sharp/bin/test --spec` passes with the shorter list.
 
 Each PR body states the Problem, the Solution and an annotated file tree. PRs 1 to 3 are mago-sharp's, where Guard 1 does not run, and carry no `Completes:` line. PR 4's line follows ruling 2.
@@ -509,6 +533,7 @@ Each test proves one rule of section 12 and fails on a real bug in it, with its 
 
 - `CollectionMethods.sharp`, `collection_methods.inc`, `collection_methods.phpt` and its two JIT variants: each method on a local, on a parameter whose caller's copy stays unchanged, and on a property with a `set` accessor, which writes back through `set`; `insert` at `count()` appends and past it throws; `last()` of `[]` throws "The list is empty."; `remove` of an absent value is `false`; `indexOf` of an absent value is `null`; `contains` and `remove` on a `List<Money>` run `op_Equality`; `has` tells a stored null from a missing key; `keys()` gives `"5"`; a `Map`'s `filter` keeps its keys; `remove` by a backed enum key.
 - `EnumKeys.sharp` and `EnumKeys.inc`: a `groupBy` keyed by `Status`, read back as `Status` in an untyped loop, and seen by plain PHP keyed by the backing values.
+- `Grid.sharp`, `Point.sharp`, `index_changes.inc` and `index_changes.phpt`: each rule of ruling 7. That is `add`, `insert`, `remove`, `set` and `clear` through an index; a copy that shares the list left as it was; a nested index; a `Set`'s `add` and `remove`; a `Map` element's `remove`, write and `??=`; through a property, and through a hooked property, counting its `set` hook's runs, for `put` and `clear`; an index that runs code, once; a missing index for a method, a `clear`, a write and a property write, each `OutOfRangeException`; a change after `?.` on a local, a nullable element and a hooked property, and through a missing index; and `map` on an element of a plain PHP `ArrayAccess` holder.
 
 # What the Slice refuses as "not supported yet", and why
 
