@@ -35,7 +35,8 @@ team-lead approved decisions 1 to 6 as written, with these rulings:
 - **A structure rule names a namespace by its bare full name** (Jordan, specimen round 4): `.importsOnly [App.Tenant.Community, App.Shared.Schema]`, `.neverImports App.Shared.Ledgr`, `under i.name App.Shared.Ledgr`. A misspelled or deleted namespace is Lean's "Unknown identifier" at its line and column in the `Module.lean`, warm or cold.
 - **Every namespace of the codebase is a name a rule can write** (team-lead, round 2 of #171, reversing "namespaces taken from every PHP# class"). Spec §28.1 refuses only "a name that is no namespace in the project", and "domain code never imports the framework" is the rule Users most need. `mago compile` declares one `Sharp.Namespace` constant per namespace of every class-like that is not built in, PHP and PHP#, the project and `vendor/`, and per namespace above one, in the generated module `Code`.
 - **A `Namespace` comes only from a name `Code` declares.** Its constructor is private, so `⟨"App.Shared.Ledgr"⟩` and `{ name := … }` are Lean's errors at their line and column. `Code` declares every namespace in one `namespace_decl` command, which works only in `Code` and compiles them all at once.
-- **A structure rule runs only on what Lean's kernel checks** (team-lead, round 3 of #171). Before the runner evaluates a rule, it walks the constants the rule reaches, through the workspace's own and stopping at Lean's, the runtime library's and `Code`'s. It refuses a rule that reaches `Sharp.Namespace.mk` or `Sharp.Rule.breaks` (the two ways to make a `Namespace` from a string), an `unsafe` constant such as `unsafeCast`, a workspace constant with `implemented_by` or `extern`, `sorry`, or an axiom beyond `propext`, `Classical.choice` and `Quot.sound`, and a rule Lean cannot evaluate. Each refusal is a `broken-rule` issue on every file the rule's `Module.lean` judges, naming the rule, the line and column of its name, and what it reached. The rest of the compile goes on, where a `sorry` used to stop it with exit code 2.
+- **A structure rule runs only on what Lean's kernel checks** (team-lead, round 3 of #171). Before the runner evaluates a rule, it walks the constants the rule reaches, through the workspace's own and stopping at every module under a root Lean and Mago own. It refuses a rule that reaches `Sharp.Namespace.mk` or `Sharp.Rule.breaks` (the two ways to make a `Namespace` from a string), an `unsafe` constant such as `unsafeCast`, a workspace constant with `implemented_by` or `extern`, `sorry`, or an axiom beyond `propext`, `Classical.choice` and `Quot.sound`, and a rule Lean cannot evaluate. Each refusal is a `broken-rule` issue on every file the rule's `Module.lean` judges, naming the rule, the line and column of its name, and what it reached. The rest of the compile goes on, where a `sorry` used to stop it with exit code 2.
+- **Lean and Mago own one list of module roots** (team-lead, round 4 of #171): `Init`, `Lean`, `Std`, `Lake`, `Code` and `Sharp`. The runner trusts every module under them, no PSR-4 folder under them gets a link into the package, and a unit test keeps the runner's list and Mago's equal. So no Lean file of the project builds as a module the runner trusts, as one in a `Code\Evil\` folder did. A Lean file in such a folder can't be built: a `Module.lean` that imports it is refused at the import line, each `.sharp` file under its folder is refused, and a law whose proof file sits there is not proven, each with "`Code` is a name Lean or Mago keeps, so Lean files under the `Code\Evil\` root, such as code-evil/Names.lean, can't be built. Move them under one of your own namespaces." Every other rule still runs.
 - **The rules check runs again when a Lean file it builds changes, joins or leaves**, as it does when a `.sharpc` is stale or `Code` changed. So a `@[rule]` added to a Lean file that no `.sharp` file reaches is refused on the next compile, warm or cold.
 
 ## How the states were observed
@@ -348,15 +349,17 @@ mago-sharp
 │   │                                        nothing is an unknown identifier
 │   ├── lean/Sharp/Lean/Runner.lean       <- the sharp-lean runner gains the rules request kind; it refuses a
 │   │                                        rule by the constants it reaches, and answers the refusal with the
-│   │                                        line and column of the rule's name
+│   │                                        line and column of the rule's name; ownedRoots: the roots it trusts
 │   ├── lean/lakefile.toml                <- Sharp.Lean.Facts joins the library's roots
 │   └── src/
 │       ├── facts.rs                      <- added, from the spike's walker.rs: one file's facts
 │       ├── rules.rs                      <- added: finds each Module.lean, asks the runner, returns broken-rule issues;
-│       │                                    a refused rule refuses every file its Module.lean judges
+│       │                                    a refused rule refuses every file its Module.lean judges; Unbuilt: a
+│       │                                    Lean file under an owned root, or a Module.lean in no PSR-4 folder
 │       ├── runner.rs                     <- the runner's answer carries each refused rule: Refused, Refusal
 │       ├── package.rs                    <- namespaces(): the generated module Code, one namespace_decl command
-│       │                                    for every namespace; every generated module imports Code
+│       │                                    for every namespace; every generated module imports Code;
+│       │                                    OWNED_ROOTS, which linked_roots never links
 │       ├── lean.rs                       <- Lean::prove renamed Lean::check(translations, namespaces): proves laws
 │       │                                    and checks rules, again whenever Code or a Lean file the check
 │       │                                    builds changes
