@@ -1236,7 +1236,8 @@ function compare_with_base(string $root, string $base): int
     $base_fingerprints = array_column($base_examples, 'id', 'fingerprint');
     $unchanged = static fn (string $id): ?string => $base_fingerprints[$head_examples[$id]['fingerprint'] ?? ''] ?? null;
     // Without --no-renames, a renamed file shows only its new path, and a guarded file could leave its folder unseen.
-    $changed_files = array_filter(explode("\n", git($root, 'diff', '--name-only', '--no-renames', $base)));
+    // Without -z, git quotes a path that holds a non-ASCII byte, and the quoted path matches no GUARDED folder.
+    $changed_files = array_filter(explode("\0", git($root, 'diff', '--name-only', '--no-renames', '-z', $base)));
     $outside = array_values(array_filter($changed_files, static fn (string $file): bool => !in_array($file, [...DOCUMENTS, BASELINE], true)
         && !guarded($file)));
     // Beside the documents, a harness or checker change could make an example fail that no edit touched.
@@ -1298,17 +1299,17 @@ function compare_with_base(string $root, string $base): int
 
 /**
  * Checks a pull request body's `Completes: §6.1, §9` line: every section it names, its subsections included, has a
- * checked example and no entry in sharp/baseline/spec. A line is a claim when, after leading markdown such as `-`, `*`,
- * `**` and backticks, the word `completes` in any case is followed by an optional `:` or `**` and then `§`, as in
- * `**Completes:** §6`. A claim in any form but the exact one fails, so a claim the check can't read never passes in
- * silence. Prose that names the `COMPLETES` job is no claim.
+ * checked example and no entry in sharp/baseline/spec. A line is a claim when the word `completes`, in any case, starts
+ * it after only non-letters such as `-`, `1.`, `*` or backticks, and only non-letters follow it before a section start:
+ * `§`, a digit or `README`, as in `**Completes:** §6`. A claim in any form but the exact one fails, so a claim the check
+ * can't read never passes in silence. Prose that names the `COMPLETES` job goes on with a letter, so it is no claim.
  */
 function completes(string $root, string $body): int
 {
     refuse_links($root);
     $sections = [];
     foreach (preg_split('~\r?\n~', $body) as $line) {
-        if (!preg_match('~^[\s*_`>+-]*completes[\s*_`:]*§~iu', $line)) {
+        if (!preg_match('~^[^\pL]*completes\b[^\pL\d§]*(?:§|\d|readme\b)~iu', $line)) {
             continue;
         }
         if (!preg_match('~^Completes: ((?:' . SECTION . ')(?:, (?:' . SECTION . '))*)$~u', rtrim($line), $m)) {

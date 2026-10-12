@@ -242,7 +242,7 @@ No file of the pull request runs, which is what makes `pull_request_target` safe
           php "$RUNNER_TEMP/spec" --base "$BASE"
 ```
 
-`SPEC_GUARD` runs `--base`. It reads `sharp/baseline/spec`, `docs/spec.md` and `README.md` at the base with `git show`, and from the merge commit's checkout. It lists the changed files with `git diff --name-only --no-renames`, as `CHANGES` does, so a renamed file shows its old path too, and a guarded file can't leave its folder unseen. The base must be a commit in the repository, and any git call that fails fails the check.
+`SPEC_GUARD` runs `--base`. It reads `sharp/baseline/spec`, `docs/spec.md` and `README.md` at the base with `git show`, and from the merge commit's checkout. It lists the changed files with `git diff --name-only --no-renames -z`. With `--no-renames`, as `CHANGES` uses, a renamed file shows its old path too, so a guarded file can't leave its folder unseen. With `-z`, git doesn't quote a path that holds a non-ASCII byte, so `sharp/harness/app/fünctions.php` still matches its folder. The base must be a commit in the repository, and any git call that fails fails the check.
 
 **The guard reads no symbolic link.** Before it reads anything, each job fails when the pull request's tree holds a symbolic link at `docs/spec.md`, `README.md` or `sharp/baseline/spec`, anywhere in a guarded folder, or at a folder above any of them. It checks both git's mode `120000` in `git ls-files -s` and `is_link()` on the checkout. A link could point to a file outside the checkout, and the job's log is public, so the message names the link's path and never its target. Only a commit that has no `sharp/baseline/spec` reads as "nothing to compare". The checker finds the repository from its own folder, and from the working directory when it runs outside a repository, as the copy in `$RUNNER_TEMP` does.
 
@@ -250,7 +250,7 @@ No file of the pull request runs, which is what makes `pull_request_target` safe
 
 **A law needs Lean.** mago proves a law (section 28) with Lean 4.34.1, so the `sharp/docker/` image installs Debian's `elan` beside `rustup`, and `sharp/docker/run` sets `ELAN_HOME=/src/sharp/build/elan`, as it sets `CARGO_HOME`. It also sets `XDG_CACHE_HOME=/src/sharp/build/cache`, because mago builds its Lean runtime library in its cache folder, and the container's user has no writable home. The first law example a run compiles downloads the toolchain, which took 31 seconds and 3.0 GB in `debian:trixie`. CI caches none of it, because restoring 3 GB is no faster than the download. When mago installs elan into its own cache folder, the §28 Slice removes `elan` from the image.
 
-**`Completes:` runs in the same workflow,** on the `pull_request_target` types `opened`, `edited`, `synchronize` and `reopened`. Its job, `COMPLETES`, runs the base's `sharp/bin/spec --completes` with the body in `BODY`, on the merge commit's checkout. It builds nothing, so an edited body reruns it in seconds, and the main workflow never runs on `edited`. A body with no claim passes. A line is a claim when, after leading markdown such as `-`, `*`, `**` and backticks, the word `completes`, in any case, is followed by an optional `:` or `**` and then `§`. `COMPLETES` fails:
+**`Completes:` runs in the same workflow,** on the `pull_request_target` types `opened`, `edited`, `synchronize` and `reopened`. Its job, `COMPLETES`, runs the base's `sharp/bin/spec --completes` with the body in `BODY`, on the merge commit's checkout. It builds nothing, so an edited body reruns it in seconds, and the main workflow never runs on `edited`. A body with no claim passes. A line is a claim when the word `completes`, in any case, starts it after only non-letters, such as `-`, `1.`, `*`, `>` or backticks, and only non-letters follow it before a section start: `§`, a digit or `README`. Prose that names the `COMPLETES` job goes on with a letter, so it stays prose. `COMPLETES` fails:
 
 - on a claim that is not exactly `Completes: §6.1, §9` on its own line;
 - on a named section with no checked example, such as `§99`;
@@ -259,12 +259,19 @@ No file of the pull request runs, which is what makes `pull_request_target` safe
 | Body line | Read as |
 |---|---|
 | `Completes: §6.1, §9` | the claim, checked |
-| `- Completes: §6` | a malformed claim: fails |
+| `Completes: README` | the claim, checked |
+| `Completes: README, §6` | the claim, checked |
+| `Completes: 6.1, 9` | a malformed claim: fails |
+| `1. Completes: §6` | a malformed claim: fails |
+| `Completes - §6` | a malformed claim: fails |
 | `**Completes:** §6` | a malformed claim: fails |
+| `- Completes: §6` | a malformed claim: fails |
 | `completes: §6` | a malformed claim: fails |
 | `Completes §6` | a malformed claim: fails |
 | `` - `COMPLETES` runs `--completes` on the body. `` | prose: no claim |
+| `` - `COMPLETES` runs on every body edit, and §6 still has entries. `` | prose: no claim |
 | `Completes the work the §6 Slice started.` | prose: no claim |
+| ``The `COMPLETES` job fails while §6 has entries.`` | prose: no claim |
 
 CI fails in each of the five cases:
 
