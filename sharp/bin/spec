@@ -874,7 +874,7 @@ function matches(string $expected, array $outcome): bool
 }
 
 /** Checks one compiled variant's errors against the lines it holds. Returns every problem found. */
-function check_compile(array $example, array $reads, array $files, array $variant, array $errors, array &$refusals): array
+function check_compile(array $example, array $reads, array $files, array $variant, array $errors): array
 {
     $problems = [];
     $by_name = array_change_key_case(array_column($files, null, 'path'));
@@ -894,9 +894,6 @@ function check_compile(array $example, array $reads, array $files, array $varian
         [$b, $i] = $origin;
         $block = $example['blocks'][$b];
         $read = $reads[$b];
-        if (str_contains($error['message'], REFUSAL)) {
-            $refusals["$b:$i:$error[message]"] = true;
-        }
         $kind = $read[$i]['expect']['kind'];
         if (($kind === 'none' || $kind === 'prose') && (in_array($error['code'], MOVES, true) || in_array($error['message'], MOVES, true))) {
             $owners = array_keys(array_filter($read, static fn (array $line, int $j): bool => $line['expect']['kind'] === 'error'
@@ -1044,14 +1041,13 @@ function check(string $root): int
     foreach ($projects as $id => $variants) {
         $example = $examples[$id];
         $problems = [];
-        $refusals = [];
         foreach ($variants as [$folder, $files, $variant]) {
             [$stdout, $stderr, $status] = $compiled[$folder] ?? ['', '', 0];
             if ($status > 1) {
                 $problems[] = "mago compile stopped with status $status: " . trim(substr($stderr, -600));
                 continue;
             }
-            array_push($problems, ...check_compile($example, $reads[$id], $files, $variant, compile_errors($stdout), $refusals));
+            array_push($problems, ...check_compile($example, $reads[$id], $files, $variant, compile_errors($stdout)));
             foreach ($files as $k => $file) {
                 [$lint, $lint_errors, $lint_status] = $compiled["$folder/lint$k"] ?? ['', '', 0];
                 if ($lint_status !== 0) {
@@ -1059,7 +1055,7 @@ function check(string $root): int
                 }
             }
         }
-        $results[$id] = ['problems' => array_values(array_unique($problems)), 'refusals' => count($refusals)];
+        $results[$id] = ['problems' => array_values(array_unique($problems))];
 
         $runs_here = false;
         foreach ($example['blocks'] as $b => $block) {
@@ -1127,7 +1123,7 @@ function check(string $root): int
             if (count($shown) > 8) {
                 echo '  and problems on ' . (count($shown) - 8) . " more lines\n";
             }
-            $failing[] = "{$examples[$id]['section']}\t$id\t$result[refusals]";
+            $failing[] = "{$examples[$id]['section']}\t$id";
         }
     }
     sort($failing, SORT_NATURAL);
@@ -1137,11 +1133,12 @@ function check(string $root): int
     $ignored = count($examples) - $checked;
     echo "Checked $checked examples, ignored $ignored, and " . count($failing) . " fail.\n";
 
-    $before = parse_list(is_file("$root/" . BASELINE) ? file_get_contents("$root/" . BASELINE) : '');
-    $after = parse_list($list);
-    if ($before === $after) {
+    $listed = is_file("$root/" . BASELINE) ? file_get_contents("$root/" . BASELINE) : '';
+    if ($listed === $list) {
         return 0;
     }
+    $before = parse_list($listed);
+    $after = parse_list($list);
     foreach ($after as $id => $section) {
         if (!isset($before[$id])) {
             echo "$id fails and is not in " . BASELINE . ".\n";
@@ -1164,9 +1161,8 @@ function parse_list(string $text): array
 {
     $entries = [];
     foreach (array_filter(explode("\n", $text)) as $line) {
-        // Until the list drops it, a line may still end in a count of "not supported yet" errors that nothing reads.
         $fields = explode("\t", $line);
-        if (count($fields) !== 2 && (count($fields) !== 3 || !ctype_digit($fields[2]))) {
+        if (count($fields) !== 2) {
             fail(BASELINE . " holds `$line`, and each line is `<section>\t<id>`.");
         }
         $entries[$fields[1]] = $fields[0];
