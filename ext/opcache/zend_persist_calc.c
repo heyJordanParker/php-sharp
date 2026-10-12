@@ -404,6 +404,9 @@ static void zend_persist_property_info_calc(zend_property_info *prop)
 	if (ZCG(accel_directives).save_comments && prop->doc_comment) {
 		ADD_STRING(prop->doc_comment);
 	}
+	if (prop->sharp_type) {
+		ADD_INTERNED_STRING(prop->sharp_type);
+	}
 	if (prop->attributes) {
 		zend_persist_attributes_calc(prop->attributes);
 	}

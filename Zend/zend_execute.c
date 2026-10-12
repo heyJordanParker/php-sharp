@@ -856,6 +856,10 @@ ZEND_COLD zend_never_inline void zend_verify_property_type_error(const zend_prop
 	if (EG(exception)) {
 		return;
 	}
+	if (UNEXPECTED(info->sharp_type)) {
+		sharp_property_type_error(info, property, false);
+		return;
+	}
 
 	type_str = zend_type_to_string(info->type);
 	zend_type_error("Cannot assign %s to property %s::$%s of type %s",
@@ -1048,7 +1052,8 @@ static zend_always_inline bool i_zend_check_property_type(const zend_property_in
 
 	if (ZEND_TYPE_IS_COMPLEX(info->type) && Z_TYPE_P(property) == IS_OBJECT
 			&& zend_check_and_resolve_property_or_class_constant_class_type(info->ce, info->type, Z_OBJCE_P(property))) {
-		return 1;
+		/* PHP#: an object of the property's class also has its type arguments. */
+		return !UNEXPECTED(info->sharp_type) || sharp_property_accepts(info, property);
 	}
 
 	uint32_t type_mask = ZEND_TYPE_FULL_MASK(info->type);
@@ -3913,6 +3918,11 @@ ZEND_API ZEND_COLD void zend_throw_ref_type_error_type(const zend_property_info 
 }
 
 ZEND_API ZEND_COLD void zend_throw_ref_type_error_zval(const zend_property_info *prop, const zval *zv) {
+	if (UNEXPECTED(prop->sharp_type)) {
+		sharp_property_type_error(prop, zv, true);
+		return;
+	}
+
 	zend_string *type_str = zend_type_to_string(prop->type);
 	zend_type_error("Cannot assign %s to reference held by property %s::$%s of type %s",
 		zend_zval_value_name(zv),
@@ -3952,7 +3962,8 @@ static zend_always_inline int i_zend_verify_type_assignable_zval(
 
 	if (ZEND_TYPE_IS_COMPLEX(type) && zv_type == IS_OBJECT
 			&& zend_check_and_resolve_property_or_class_constant_class_type(info->ce, info->type, Z_OBJCE_P(zv))) {
-		return 1;
+		/* PHP#: an object of the property's class also has its type arguments. */
+		return !UNEXPECTED(info->sharp_type) || sharp_property_accepts(info, zv);
 	}
 
 	type_mask = ZEND_TYPE_FULL_MASK(type);

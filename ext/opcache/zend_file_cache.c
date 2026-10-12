@@ -730,6 +730,7 @@ static void zend_file_cache_serialize_prop_info(zval                     *zv,
 			if (prop->doc_comment) {
 				SERIALIZE_STR(prop->doc_comment);
 			}
+			SERIALIZE_STR(prop->sharp_type);
 			SERIALIZE_ATTRIBUTES(prop->attributes);
 			SERIALIZE_PTR(prop->prototype);
 			if (prop->hooks) {
@@ -1621,6 +1622,7 @@ static void zend_file_cache_unserialize_prop_info(zval                    *zv,
 			if (prop->doc_comment) {
 				UNSERIALIZE_STR(prop->doc_comment);
 			}
+			UNSERIALIZE_STR(prop->sharp_type);
 			UNSERIALIZE_ATTRIBUTES(prop->attributes);
 			UNSERIALIZE_PTR(prop->prototype);
 			if (prop->hooks) {

@@ -107,6 +107,15 @@ void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *tex
  * names it, when not. An int it accepts for a float becomes a float. */
 bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval *text, void **cache);
 
+/* Whether the property `info`, whose sharp_type is set, takes `value`, an object of its PHP class, as PHP checks a typed
+ * property on every write: its type arguments must be the type's own. A write from a .sharp file is never checked, as a
+ * set hook's value is not, since PHP# checked it where it compiled. */
+bool sharp_property_accepts(const zend_property_info *info, const zval *value);
+
+/* Throws PHP's TypeError for a write of `value` to the property `info`, whose sharp_type is set, or to a reference it
+ * holds when `reference` holds, worded as PHP words it with the value's type arguments and the property's PHP# type. */
+ZEND_COLD void sharp_property_type_error(const zend_property_info *info, const zval *value, bool reference);
+
 /* An object of a generic PHP# class keeps its type arguments in a declared property of this name, which carries
  * ZEND_ACC_SHARP_HIDDEN. It holds null until PHP# code, unserialize or the first read stores the IS_PTR of an interned
  * list. The name is also the key serialize writes the list under. */

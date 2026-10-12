@@ -156,7 +156,9 @@ enum _zend_ast_kind {
 	ZEND_AST_PIPE,
 	/* PHP#: the type arguments that child 1, a type text, gives child 0. In an expression child 0 is a
 	 * ZEND_AST_NEW, and a NULL text means $this's type arguments. In a class's member list child 0 is NULL
-	 * and the text is the class's bounds, which declares its hidden type-argument slot. */
+	 * and the text is the class's bounds, which declares its hidden type-argument slot. As the type of a
+	 * ZEND_AST_PROP_GROUP child 0 is the property's PHP type and the text its PHP# type, which every write
+	 * from plain PHP checks. */
 	ZEND_AST_SHARP_TYPE_ARGS,
 
 	/* 3 child nodes */

@@ -44,6 +44,18 @@ public class Shelf
 {
     public PaginatedList<Order>? page { get; set; }
 
+    public static PaginatedList<Order>? latest { get; set; }
+
+    protected static PaginatedList<Order>? kept;
+
+    public static string keepBoth(PaginatedList<Order> page)
+    {
+        Shelf.latest = page;
+        Shelf.kept = page;
+
+        return "kept both";
+    }
+
     public static string read()
     {
         PaginatedList<Order> page = Pager.orders();

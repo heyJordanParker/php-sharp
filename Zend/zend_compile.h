@@ -472,6 +472,9 @@ typedef struct _zend_property_info {
 	zend_type type;
 	const zend_property_info *prototype;
 	zend_function **hooks;
+	/* PHP#: the type text of a PHP# property whose type has type arguments, which every write from plain PHP checks
+	 * beside PHP's own type, see ext/sharp/php_sharp.h, or NULL. */
+	zend_string *sharp_type;
 } zend_property_info;
 
 #define OBJ_PROP(obj, offset) \

@@ -2,7 +2,7 @@
 
 ## Decision
 
-The running program carries every type argument, as decisions 7 and 29 require. An object holds its class's type arguments from `new`, through `clone`, serialize and unserialize, and a generic method's own type arguments ride on its call. Plain PHP reads an object's with `ReflectionObject::getTypeArguments()`. A value that enters PHP# from plain PHP is checked against its declared type arguments: a call into a PHP# method against the parameter's, a plain PHP call's return against the call's type wherever PHP# takes it, and a write from plain PHP against the property's, in the property's `set` hook. PHP has no hooks on a static property, so a static property plain PHP can write, whose type has type arguments of a PHP# generic class, is not supported yet.
+The running program carries every type argument, as decisions 7 and 29 require. An object holds its class's type arguments from `new`, through `clone`, serialize and unserialize, and a generic method's own type arguments ride on its call. Plain PHP reads an object's with `ReflectionObject::getTypeArguments()`. A value that enters PHP# from plain PHP is checked against its declared type arguments: a call into a PHP# method against the parameter's, a plain PHP call's return against the call's type wherever PHP# takes it, and a write from plain PHP against the property's: in an instance property's `set` hook, and in PHP's own typed property check for a static property, which PHP gives no hooks, through a reference and reflection too.
 
 A method value of a generic method takes its type arguments from the parameter types of the function type it goes into, as C#'s method group conversion does, and one that nothing fixes is a compile error, as C#'s CS0411 is.
 

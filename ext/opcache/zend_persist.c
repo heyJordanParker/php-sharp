@@ -832,6 +832,9 @@ static zend_property_info *zend_persist_property_info(zend_property_info *prop)
 			prop->doc_comment = NULL;
 		}
 	}
+	if (prop->sharp_type) {
+		zend_accel_store_interned_string(prop->sharp_type);
+	}
 	if (prop->attributes) {
 		prop->attributes = zend_persist_attributes(prop->attributes);
 	}

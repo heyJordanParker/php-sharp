@@ -1,5 +1,5 @@
 --TEST--
-Plain PHP, call_user_func and array_map entering a PHP# method get a TypeError for an argument whose type arguments differ from the parameter's, as a plain PHP call's return does wherever PHP# takes it and a PHP# property for a write from plain PHP, a call or write from PHP# is never checked, a plain PHP generic class's type arguments are erased, an int given for a float becomes a float, a written Any? matches only Any?, and a type parameter plain PHP leaves unresolved matches any type at any depth
+Plain PHP, call_user_func and array_map entering a PHP# method get a TypeError for an argument whose type arguments differ from the parameter's, as a plain PHP call's return does wherever PHP# takes it and a PHP# property for a write from plain PHP, a static one's public or protected also through a subclass, a reference and reflection, a call or write from PHP# is never checked, a plain PHP generic class's type arguments are erased, an int given for a float becomes a float, a written Any? matches only Any?, and a type parameter plain PHP leaves unresolved matches any type at any depth
 --FILE--
 <?php
 require __DIR__ . '/type_arguments.inc';
@@ -61,6 +61,31 @@ attempt(function () use ($shelf) {
     return 'written';
 });
 
+final class PlainShelf extends Shelf
+{
+    public static function keep(object $page): string
+    {
+        static::$kept = $page;
+        return 'kept';
+    }
+}
+
+attempt(function () use ($customers) {
+    Shelf::$latest = $customers;
+});
+attempt(fn () => PlainShelf::keep($customers));
+attempt(fn () => (new ReflectionProperty(Shelf::class, 'latest'))->setValue(null, $customers));
+attempt(function () use ($customers) {
+    $latest = &Shelf::$latest;
+    $latest = $customers;
+});
+attempt(function () {
+    Shelf::$latest = Queue::orders();
+    return 'written';
+});
+attempt(fn () => PlainShelf::keep(Queue::orders()));
+attempt(fn () => Shelf::keepBoth(Queue::orders()));
+
 foreach ([Pages::floats(), Pages::nullableFloats(), Pages::floatsOrStrings()] as $cell) {
     $cell->put(2);
     var_dump($cell->get());
@@ -97,6 +122,13 @@ stored
 Cannot assign App.PaginatedList<Checks.Customer> to property Checks\Shelf::$page of type App.PaginatedList<App.Order>?
 Cannot assign App.PaginatedList<Checks.Customer> to property Checks\Shelf::$page of type App.PaginatedList<App.Order>?
 written
+Cannot assign App.PaginatedList<Checks.Customer> to property Checks\Shelf::$latest of type App.PaginatedList<App.Order>?
+Cannot assign App.PaginatedList<Checks.Customer> to property Checks\Shelf::$kept of type App.PaginatedList<App.Order>?
+Cannot assign App.PaginatedList<Checks.Customer> to property Checks\Shelf::$latest of type App.PaginatedList<App.Order>?
+Cannot assign App.PaginatedList<Checks.Customer> to reference held by property Checks\Shelf::$latest of type App.PaginatedList<App.Order>?
+written
+kept
+kept both
 float(2)
 float(2)
 float(2)

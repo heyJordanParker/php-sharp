@@ -4629,6 +4629,7 @@ skip_property_storage:
 	property_info->hooks = NULL;
 	property_info->ce = ce;
 	property_info->type = type;
+	property_info->sharp_type = NULL;
 
 	if (is_persistent_class(ce)) {
 		zend_normalize_internal_type(&property_info->type);

@@ -9084,7 +9084,7 @@ static void zend_compile_property_hooks(
 	}
 }
 
-static void zend_compile_prop_decl(zend_ast *ast, zend_ast *type_ast, uint32_t flags, zend_ast *attr_ast) /* {{{ */
+static void zend_compile_prop_decl(zend_ast *ast, zend_ast *type_ast, uint32_t flags, zend_ast *attr_ast, zend_string *sharp_type) /* {{{ */
 {
 	zend_ast_list *list = zend_ast_get_list(ast);
 	zend_class_entry *ce = CG(active_class_entry);
@@ -9213,6 +9213,9 @@ static void zend_compile_prop_decl(zend_ast *ast, zend_ast *type_ast, uint32_t f
 		}
 
 		info = zend_declare_typed_property(ce, name, &value_zv, flags, doc_comment, type);
+		if (sharp_type) {
+			info->sharp_type = zend_string_copy(sharp_type);
+		}
 
 		if (hooks_ast) {
 			zend_compile_property_hooks(info, name, type_ast, zend_ast_get_list(hooks_ast));
@@ -9237,8 +9240,20 @@ static void zend_compile_prop_group(zend_ast *ast) /* {{{ */
 	zend_ast *type_ast = ast->child[0];
 	zend_ast *prop_ast = ast->child[1];
 	zend_ast *attr_ast = ast->child[2];
+	zend_string *sharp_type = NULL;
 
-	zend_compile_prop_decl(prop_ast, type_ast, ast->attr, attr_ast);
+	/* PHP#: the type arguments of a property's type, which every write from plain PHP checks, wrap the type. The type
+	 * of a static member names no type parameter, so the text is closed. */
+	if (type_ast && type_ast->kind == ZEND_AST_SHARP_TYPE_ARGS) {
+		sharp_type = zend_new_interned_string(zend_string_copy(zend_sharp_type_text(type_ast->child[1])));
+		ZEND_ASSERT(!sharp_type_list_names(ZSTR_VAL(sharp_type), ZSTR_LEN(sharp_type)));
+		type_ast = type_ast->child[0];
+	}
+
+	zend_compile_prop_decl(prop_ast, type_ast, ast->attr, attr_ast, sharp_type);
+	if (sharp_type) {
+		zend_string_release(sharp_type);
+	}
 }
 /* }}} */
 

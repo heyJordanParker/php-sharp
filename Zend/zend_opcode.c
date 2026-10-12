@@ -399,6 +399,9 @@ ZEND_API void destroy_zend_class(zval *zv)
 					if (prop_info->doc_comment) {
 						zend_string_release_ex(prop_info->doc_comment, 0);
 					}
+					if (prop_info->sharp_type) {
+						zend_string_release_ex(prop_info->sharp_type, 0);
+					}
 					if (prop_info->attributes) {
 						zend_hash_release(prop_info->attributes);
 					}

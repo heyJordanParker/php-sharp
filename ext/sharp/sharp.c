@@ -2868,6 +2868,31 @@ bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval 
 	return true;
 }
 
+bool sharp_property_accepts(const zend_property_info *info, const zval *value)
+{
+	const zend_execute_data *writer = EG(current_execute_data);
+	if (writer && writer->func && ZEND_USER_CODE(writer->func->type)
+			&& sharp_is_sharp_file(writer->func->op_array.filename)) {
+		return true;
+	}
+
+	/* The type is closed, since no static member names a type parameter, so code spells it once for the process. */
+	const sharp_type *type = sharp_type_list(ZSTR_VAL(info->sharp_type), ZSTR_LEN(info->sharp_type))->members[0];
+
+	/* A lazy proxy's initializer runs to read its type arguments, and can throw. */
+	return sharp_type_accepts(type, value) && !EG(exception);
+}
+
+ZEND_COLD void sharp_property_type_error(const zend_property_info *info, const zval *value, bool reference)
+{
+	smart_str given = {0};
+	sharp_value_type_text(&given, value);
+	zend_type_error("Cannot assign %s to %sproperty %s::$%s of type %s", ZSTR_VAL(given.s),
+		reference ? "reference held by " : "", ZSTR_VAL(info->ce->name), zend_get_unmangled_property_name(info->name),
+		ZSTR_VAL(info->sharp_type));
+	smart_str_free(&given);
+}
+
 static bool sharp_type_arguments_fit(
 	const sharp_type_node *arguments, const zend_class_entry *ce, sharp_type_reader *reader);
 
