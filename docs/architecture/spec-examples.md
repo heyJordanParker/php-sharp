@@ -251,7 +251,7 @@ No file of the pull request runs, which is what makes `pull_request_target` safe
 
 `SPEC_GUARD` and `COMPLETES` join the `master merge gate` ruleset after this lands. Until then a pull request's guard runs only from a base that has this workflow, so this pull request, whose base has none, proves the guard locally.
 
-**A law needs Lean.** mago proves a law (section 28) with Lean 4.34.1, so the `sharp/docker/` image installs Debian's `elan` beside `rustup`, and `sharp/docker/run` sets `ELAN_HOME=/src/sharp/build/elan`, as it sets `CARGO_HOME`. It also sets `XDG_CACHE_HOME=/src/sharp/build/cache`, because mago builds its Lean runtime library in its cache folder, and the container's user has no writable home. The first law example a run compiles downloads the toolchain, which took 31 seconds and 3.0 GB in `debian:trixie`. CI caches none of it, because restoring 3 GB is no faster than the download. When mago installs elan into its own cache folder, the §28 Slice removes `elan` from the image.
+**A law needs Lean.** mago proves a law (section 28) with Lean 4.34.1. With no `lake` on the `PATH`, mago installs elan and that Lean version into its own cache folder, once, while concurrent compiles wait for it. So the `sharp/docker/` image has no `elan`: the elan proxy installs a missing toolchain in every compile that starts it, and the spec examples compile in parallel, so their installs broke each other. `sharp/docker/run` sets `XDG_CACHE_HOME=/src/sharp/build/cache`, because mago's cache folder holds elan, Lean and its Lean runtime library, and the container's user has no writable home. The first law example a run compiles downloads the toolchain, which took 31 seconds and 3.0 GB in `debian:trixie`. CI caches none of it, because restoring 3 GB is no faster than the download.
 
 **`Completes:` runs in the same workflow,** on the `pull_request_target` types `opened`, `edited`, `synchronize` and `reopened`. Its job, `COMPLETES`, runs the base's `sharp/bin/spec --completes` with the body in `BODY`, on the merge commit's checkout. It builds nothing, so an edited body reruns it in seconds, and the main workflow never runs on `edited`. A body with no claim passes. A line is a claim when the word `completes`, in any case, starts it after only non-letters, such as `-`, `1.`, `*`, `>` or backticks, and only non-letters follow it before a section start: `§`, a digit or `README`. Prose that names the `COMPLETES` job goes on with a letter, so it stays prose. `COMPLETES` fails:
 
@@ -313,8 +313,8 @@ sharp/
 ├── baseline/spec         # new: the examples that fail today, the v1 meter
 ├── spec-self-test.md     # one example for each rule sharp/bin/spec applies, with the problems it must report
 ├── docker/               # (guarded)
-│   ├── Dockerfile        # installs elan, for the law examples
-│   └── run               # ELAN_HOME and XDG_CACHE_HOME under sharp/build/
+│   ├── Dockerfile        # no elan: mago installs Lean for the law examples
+│   └── run               # XDG_CACHE_HOME under sharp/build/, where mago installs Lean
 └── harness/              # (guarded) new: the classes and plain PHP stubs the examples share
 docs/
 ├── spec.md               # a marker above every csharp, ts and php block
