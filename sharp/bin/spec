@@ -907,7 +907,10 @@ function check_compile(array $example, array $reads, array $files, array $varian
         $parse = $error['code'] === 'parse';
         $unreadable = $parse && str_starts_with($error['message'], 'Parse error encountered');
         // A refusal says the feature is missing, and a missing class says the setup is: neither is the rule the line states.
-        $missing = str_contains($error['message'], REFUSAL) || $error['code'] === 'non-existent-class-like';
+        // A missing class the marked line names itself is the line's own error, as `on OrderPayed` names no event. mago
+        // quotes the missing name last.
+        $missing = str_contains($error['message'], REFUSAL) || $error['code'] === 'non-existent-class-like'
+            && !($kind === 'error' && preg_match('~.*`(?:[^`]*[\\\\.])?(\w+)`~s', $error['message'], $m) && preg_match('~\b' . $m[1] . '\b~', $read[$i]['bare']));
         if (($kind === 'error' && !$unreadable && !$missing) || ($kind === 'parse' && $parse)) {
             $claimed["$b:$i"] = true;
         } elseif ($kind === 'error' || $kind === 'parse') {
