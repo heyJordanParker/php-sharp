@@ -18,14 +18,18 @@ for ($round = 0; $round < 100; $round++) {
     $grid = new Demo\Grid();
     attempt(fn () => $grid->held());
     attempt(fn () => [$grid->hooked(), $grid->writes]);
+    // A write into a Map a property holds goes through the property, and its set hook, as a change does.
+    $grid = new Demo\Grid();
+    attempt(fn () => [$grid->totalled(), $grid->writes]);
     // An index that runs something runs once.
     attempt(fn () => (new Demo\Grid())->once([[1, 2], [3]]));
     // A missing index throws as a bare read does, and leaves no gap in the list.
     attempt(fn () => Demo\Grid::missing([[1]], 5));
     attempt(fn () => Demo\Grid::cleared([[1]], 1));
     attempt(fn () => Demo\Grid::missingWrite([['a' => 1]], 2));
-    // An element that is an object is the object, so a change to it sticks.
-    attempt(fn () => Demo\Point::moved([new Demo\Point()])[0]->x);
+    // An element that is an object is the object, so a change to it sticks, and a missing index throws.
+    attempt(fn () => Demo\Point::moved([new Demo\Point()], 0)[0]->x);
+    attempt(fn () => Demo\Point::moved([new Demo\Point()], 5));
     $output = ob_get_clean();
 }
 

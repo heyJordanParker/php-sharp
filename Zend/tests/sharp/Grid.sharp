@@ -12,6 +12,14 @@ class Grid
             this.writes = this.writes + 1;
         }
     } = [["a": 1]];
+    public Map<string, int> totals
+    {
+        get => field;
+        set {
+            field = value;
+            this.writes = this.writes + 1;
+        }
+    } = ["a": 1];
     private int calls = 0;
 
     public static List<List<int>> changed(List<List<int>> grid)
@@ -70,6 +78,14 @@ class Grid
         this.tallies[0]["b"] = 2;
         this.tallies[0].remove("a");
         return this.tallies;
+    }
+
+    public Map<string, int> totalled()
+    {
+        this.totals["c"] = 3;
+        this.totals["a"] ??= 9;
+        this.totals["d"] ??= 4;
+        return this.totals;
     }
 
     public List<List<int>> once(List<List<int>> grid)

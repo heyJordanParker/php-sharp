@@ -3159,6 +3159,14 @@ static zend_op *zend_delayed_compile_prop(znode *result, zend_ast *ast, uint32_t
 
 		/* We will throw if $this doesn't exist, so there's no need to emit a JMP_NULL
 		 * check for a nullsafe access. */
+	} else if (obj_ast->kind == ZEND_AST_DIM && (obj_ast->attr & ZEND_DIM_SHARP)
+			&& (type == BP_VAR_W || type == BP_VAR_RW)) {
+		/* A PHP# index whose property is written holds an object, which the write changes where the
+		 * list holds it, so the index is read: a missing one throws OutOfRangeException, as a bare
+		 * read does (spec section 12), instead of adding null at that key. The read is a VAR, as the
+		 * object of a property write is. */
+		zend_delayed_compile_dim(&obj_node, obj_ast, BP_VAR_R, 0)->result_type = IS_VAR;
+		obj_node.op_type = IS_VAR;
 	} else {
 		zend_short_circuiting_mark_inner(obj_ast);
 		opline = zend_delayed_compile_var(&obj_node, obj_ast, type, 0);

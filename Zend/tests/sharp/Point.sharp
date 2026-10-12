@@ -4,9 +4,11 @@ class Point
 {
     public int x { get; set; } = 0;
 
-    public static List<Point> moved(List<Point> points)
+    public static List<Point> moved(List<Point> points, int row)
     {
-        points[0].x = 5;
+        points[row].x = 5;
+        points[row].x += 2;
+        points[row].x++;
         return points;
     }
 }
