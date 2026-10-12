@@ -74,19 +74,6 @@ jobs:
         run: sharp/bin/build --linux
       - name: Test PHP#
         run: sharp/bin/test --linux --opcache --repeat --passes --census --spec --differential
-      # The base commit's checker judges the pull request, so a pull request can't change what measures it.
-      - name: Compare sharp/baseline/spec with the base branch
-        if: github.event_name == 'pull_request'
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          git fetch --depth=1 origin "$BASE"
-          if ! git cat-file -e "$BASE:sharp/bin/spec"; then
-            echo "sharp/bin/spec does not exist at $BASE, so there is nothing to compare."
-            exit 0
-          fi
-          git show "$BASE:sharp/bin/spec" > sharp/build/base-spec
-          sharp/docker/run php sharp/build/base-spec --base "$BASE"
       - name: Check the standard library with the checker the differential built
         run: sharp/docker/run sh -c '"sharp/build/linux-$(uname -m)/mago/bin/mago" --colors never --workspace sharp/composer analyze --minimum-fail-level note'
       - name: Test upstream

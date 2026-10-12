@@ -1,21 +1,56 @@
-name: Completes
+name: Spec guard
+# pull_request_target runs this file as the base branch has it, so a pull request can't change or skip these jobs.
+# Each job checks the pull request's merge commit out as data and runs only the base commit's sharp/bin/spec on it,
+# with a read-only token and no secrets. No file of the pull request runs, which is what makes pull_request_target safe.
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, edited, synchronize, reopened]
     branches:
       - master
 permissions:
   contents: read
 jobs:
+  # Compares sharp/baseline/spec and the examples with the base: sharp/bin/spec --base. It runs on `edited` too, where
+  # it finds what it found before.
+  SPEC_GUARD:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: git checkout
+        uses: actions/checkout@v6
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          persist-credentials: false
+      - name: The base branch's checker compares sharp/baseline/spec with the base
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --depth=1 origin "$BASE"
+          if ! git cat-file -e "$BASE:sharp/bin/spec"; then
+            echo "sharp/bin/spec does not exist at $BASE, so there is nothing to compare."
+            exit 0
+          fi
+          git show "$BASE:sharp/bin/spec" > "$RUNNER_TEMP/spec"
+          php "$RUNNER_TEMP/spec" --base "$BASE"
   # A pull request body line such as `Completes: §6.1, §9` claims those sections are done. sharp/bin/spec --completes
-  # reads it on the merge commit LINUX tests, and fails on a malformed claim, on a section with no checked example and
-  # on a section sharp/baseline/spec still lists. It runs on `edited` too, which the main workflow never does.
+  # fails on a malformed claim, on a section with no checked example and on a section sharp/baseline/spec still lists.
+  # It runs on `edited`, which the main workflow never does.
   COMPLETES:
     runs-on: ubuntu-24.04
     steps:
       - name: git checkout
         uses: actions/checkout@v6
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          persist-credentials: false
       - name: Every section the body completes has its examples passing
         env:
+          BASE: ${{ github.event.pull_request.base.sha }}
           BODY: ${{ github.event.pull_request.body }}
-        run: php sharp/bin/spec --completes
+        run: |
+          git fetch --depth=1 origin "$BASE"
+          if ! git cat-file -e "$BASE:sharp/bin/spec"; then
+            echo "sharp/bin/spec does not exist at $BASE, so there is no Completes: check."
+            exit 0
+          fi
+          git show "$BASE:sharp/bin/spec" > "$RUNNER_TEMP/spec"
+          php "$RUNNER_TEMP/spec" --completes

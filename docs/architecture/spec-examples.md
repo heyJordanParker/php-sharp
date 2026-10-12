@@ -220,30 +220,35 @@ README	readme-cart	0
 
 ## CI
 
-`sharp/bin/test --spec` runs `sharp/bin/spec` after the suite, as `--census` runs `sharp/bin/census`, with the engine and the `mago` that `sharp/bin/test` already installed. `LINUX` adds `--spec` to its `Test PHP#` step, so `CI_PASSED` covers it, and runs one more step on a pull request:
+`sharp/bin/test --spec` runs `sharp/bin/spec` after the suite, as `--census` runs `sharp/bin/census`, with the engine and the `mago` that `sharp/bin/test` already installed. `LINUX` adds `--spec` to its `Test PHP#` step, so `CI_PASSED` covers it. This main check compares the list with what the examples do.
+
+`CHANGES` treats `docs/spec.md` and `README.md` as code, so a pull request that changes only the spec still runs `LINUX`.
+
+**The base branch runs the guard.** A `pull_request` workflow runs the pull request's own copy of its file, so a pull request could change or delete a step that judges it. `.github/workflows/completes.yml` runs on `pull_request_target` instead, which runs the file as the base branch has it. It has two jobs, `SPEC_GUARD` and `COMPLETES`. Each one:
+
+- checks out the pull request's merge commit only as data, with `persist-credentials: false`;
+- fetches the base commit and writes the base's `sharp/bin/spec` to `$RUNNER_TEMP`, outside the checkout;
+- runs only that copy, on the runner's own PHP, with `permissions: contents: read` and no secrets.
+
+No file of the pull request runs, which is what makes `pull_request_target` safe here: GitHub's warning is about running a pull request's code with the base's permissions. Neither job builds anything. A base with no `sharp/bin/spec` prints a "nothing to compare" line and passes.
 
 ```yaml
-      - name: Compare sharp/baseline/spec with the base branch
-        if: github.event_name == 'pull_request'
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
           git fetch --depth=1 origin "$BASE"
           if ! git cat-file -e "$BASE:sharp/bin/spec"; then
             echo "sharp/bin/spec does not exist at $BASE, so there is nothing to compare."
             exit 0
           fi
-          git show "$BASE:sharp/bin/spec" > sharp/build/base-spec
-          sharp/docker/run php sharp/build/base-spec --base "$BASE"
+          git show "$BASE:sharp/bin/spec" > "$RUNNER_TEMP/spec"
+          php "$RUNNER_TEMP/spec" --base "$BASE"
 ```
 
-**The base commit's checker judges the pull request.** The step runs the copy of `sharp/bin/spec` that the base holds, so a pull request that changes the checker never runs its own comparison. The comparison needs no build. It reads `sharp/baseline/spec`, `docs/spec.md` and `README.md` at the base with `git show`, so it runs on the PHP of the `sharp/docker/` image. The base must be a commit in the repository, and any git call that fails fails the check. Only a commit that has no `sharp/baseline/spec` reads as "nothing to compare".
+`SPEC_GUARD` runs `--base`. It reads `sharp/baseline/spec`, `docs/spec.md` and `README.md` at the base with `git show`, and from the merge commit's checkout. The base must be a commit in the repository, and any git call that fails fails the check. Only a commit that has no `sharp/baseline/spec` reads as "nothing to compare". The checker finds the repository from its own folder, and from the working directory when it runs outside a repository, as the copy in `$RUNNER_TEMP` does.
 
-`CHANGES` treats `docs/spec.md` and `README.md` as code, so a pull request that changes only the spec still runs `LINUX`.
+`SPEC_GUARD` and `COMPLETES` join the `master merge gate` ruleset after this lands. Until then a pull request's guard runs only from a base that has this workflow, so this pull request, whose base has none, proves the guard locally.
 
 **A law needs Lean.** mago proves a law (section 28) with Lean 4.34.1, so the `sharp/docker/` image installs Debian's `elan` beside `rustup`, and `sharp/docker/run` sets `ELAN_HOME=/src/sharp/build/elan`, as it sets `CARGO_HOME`. It also sets `XDG_CACHE_HOME=/src/sharp/build/cache`, because mago builds its Lean runtime library in its cache folder, and the container's user has no writable home. The first law example a run compiles downloads the toolchain, which took 31 seconds and 3.0 GB in `debian:trixie`. CI caches none of it, because restoring 3 GB is no faster than the download. When mago installs elan into its own cache folder, the §28 Slice removes `elan` from the image.
 
-**`Completes:` runs in its own workflow,** `.github/workflows/completes.yml`, on the `pull_request` types `opened`, `edited`, `synchronize` and `reopened`. Its one job, `COMPLETES`, runs `sharp/bin/spec --completes` with the body in `BODY`, on the merge commit `LINUX` tests and with the runner's own PHP. It builds nothing, so an edited body reruns it in seconds, and the main workflow never runs on `edited`. A body with no `Completes:` line passes. It fails:
+**`Completes:` runs in the same workflow,** on the `pull_request_target` types `opened`, `edited`, `synchronize` and `reopened`. Its job, `COMPLETES`, runs the base's `sharp/bin/spec --completes` with the body in `BODY`, on the merge commit's checkout. It builds nothing, so an edited body reruns it in seconds, and the main workflow never runs on `edited`. A body with no `Completes:` line passes. It fails:
 
 - on any line with a `Completes:` label, in any case or emphasis, or that starts with the word, that is not exactly `Completes: §6.1, §9` on its own line, such as `- Completes: §6`, `**Completes:** §6`, `completes: §6` or `Completes §6`;
 - on a named section with no checked example, such as `§99`;
@@ -253,17 +258,17 @@ CI fails in each of the five cases:
 
 1. **An example that is not on the list fails.** `sharp/bin/spec`: the list differs from the run.
 2. **A listed example passes.** The same check.
-3. **A PR adds an entry to the list.** `--base`: the head list has an id the base list doesn't, and the base has an example with the same fingerprint, under that id or another.
+3. **A PR adds an entry to the list.** `SPEC_GUARD`: the head list has an id the base list doesn't, and the pull request changes more than `docs/spec.md`, `README.md` and `sharp/baseline/spec`, or the base has an example with the same fingerprint, under that id or another.
 4. **`Completes: §6.1, §9` names a section that still has entries.** `COMPLETES`.
-5. **A PR raises the count of "not supported yet" refusals.** `--base`: an example's last field rises, and the base has an example with the same fingerprint. Each example compares with itself, so a refusal removed in one example can't hide one added in another.
+5. **A PR raises the count of "not supported yet" refusals.** `SPEC_GUARD`: an example's last field rises. In a pull request that changes more than the documents and the list, every listed example compares with its own id at the base. In one that changes only those, an example compares with the base example that has its fingerprint, because an edited example may gain refusals. Each example compares with itself, so a refusal removed in one example can't hide one added in another.
 
-**A builder PR can't change what measures it.** The spec files are `docs/spec.md`, `README.md`, `sharp/baseline/spec`, `sharp/harness/` and `sharp/bin/spec`. A pull request that changes any other file must leave every example's fingerprint as the base has it, and must leave `sharp/harness/` and `sharp/bin/spec` unchanged. It can only remove entries and lower refusals, through the `cp` command a failing run prints.
+**A builder PR can't change what measures it.** The spec files are `docs/spec.md`, `README.md`, `sharp/baseline/spec`, `sharp/harness/`, and the files `GUARDED` lists in `sharp/bin/spec`: the checker `sharp/bin/spec`, and the files that run it, `sharp/bin/test`, `.github/workflows/sharp.yml` and `.github/workflows/completes.yml`. A pull request that changes any other file must leave every example's fingerprint as the base has it, and must leave `sharp/harness/` and the `GUARDED` files unchanged. It can only remove entries and lower refusals, through the `cp` command a failing run prints.
 
 **One fingerprint covers the whole example,** all but its id: its section, and every block's marker line, setup, fence language, code and run comment. A moved example, a renumbered heading, a changed fence language, shape, `alone`, `in <Class>` or `ignore` all change it. A renamed example keeps it. The builder-PR rule compares it by id, and cases 3 and 5 match it across ids.
 
-**Only a spec PR may grow the list.** A new or edited example may join the list only in a pull request that changes nothing outside the spec files. A ruling Jordan approves lands with its examples before any builder implements it, and those examples are v1's remaining work. A spec PR may rename a listed example: the new id takes the entry when the base listed the old id and the head no longer does.
+**Only a documents-only PR may grow the list.** An entry joins the list only in a pull request that changes nothing but `docs/spec.md`, `README.md` and `sharp/baseline/spec`. A pull request that also changes the harness or a `GUARDED` file can keep or shrink the list, never grow it, so a harness change can't make an unchanged example fail and list it, even under a renumbered heading. A new example that needs a new harness class lands in two pull requests: the class first, then the example and its entry. A ruling Jordan approves lands with its examples before any builder implements it, and those examples are v1's remaining work. A documents-only PR may rename a listed example: the new id takes the entry when the base listed the old id and the head no longer does.
 
-**New marker or run syntax lands in the checker first.** CI reads the head's documents with the base's checker, so a pull request that adds syntax and uses it fails to parse. The checker change merges in one pull request, and the examples that use it in the next.
+**New marker or run syntax lands in the checker first.** `SPEC_GUARD` reads the head's documents with the base's checker, so a pull request that adds syntax and uses it fails to parse. The checker change merges in one pull request, and the examples that use it in the next.
 
 ## Runtime
 
@@ -280,7 +285,7 @@ Measured on an Apple M-series Mac with the pinned `mago` at `449377ad4` and a de
 ```text
 sharp/
 ├── bin/spec              # new: PHP, like census. Checks every example, compares with a base (--base), or reads Completes: (--completes)
-├── bin/test              # --spec runs sharp/bin/spec after the suite
+├── bin/test              # --spec runs sharp/bin/spec after the suite. GUARDED
 ├── baseline/spec         # new: the examples that fail today, the v1 meter
 ├── docker/Dockerfile     # installs elan, for the law examples
 ├── docker/run            # ELAN_HOME and XDG_CACHE_HOME under sharp/build/
@@ -289,14 +294,14 @@ docs/
 ├── spec.md               # a marker above every csharp, ts and php block
 └── architecture/spec-examples.md
 README.md                 # a marker above its two blocks
-sharp/README.md           # documents --spec, the list and COMPLETES
+sharp/README.md           # documents --spec, the list, SPEC_GUARD and COMPLETES
 docs/how-we-work.md       # a PR that completes a section says Completes: §N
 .github/workflows/
-├── sharp.yml             # CHANGES counts the spec as code, LINUX runs --spec and the base's --base
-└── completes.yml         # new: the COMPLETES job, sharp/bin/spec --completes
+├── sharp.yml             # CHANGES counts the spec as code, LINUX runs --spec. GUARDED
+└── completes.yml         # new: Spec guard, on pull_request_target: the base's --base (SPEC_GUARD) and --completes (COMPLETES). GUARDED
 ```
 
-`COMPLETES` joins the `master merge gate` ruleset after this lands.
+`SPEC_GUARD` and `COMPLETES` join the `master merge gate` ruleset after this lands.
 
 ## The markers
 
