@@ -399,15 +399,25 @@ public class Document
 }
 ```
 
-<!-- example super-call: alone -->
+<!-- example super-call -->
 ```csharp
 // app/Invoice.sharp
 namespace App;
 
 public class Invoice : Document
 {
-    public Invoice(public int number { get; }) : super() { }   // compiles: Document takes no arguments, and the call is still written
-    public Invoice(public int number { get; }) { }             // compile error: Invoice extends Document, so write : super()
+    public Invoice(public int number { get; }) : super() { }      // compiles: Document takes no arguments, and the call is still written
+}
+```
+
+<!-- example super-call -->
+```csharp
+// app/CreditNote.sharp
+namespace App;
+
+public class CreditNote : Document
+{
+    public CreditNote(public int number { get; }) { }             // compile error: CreditNote extends Document, so write : super()
 }
 ```
 
@@ -422,11 +432,11 @@ public Artifact.copy() : this(this.manifest) { }                         // comp
 
 **A get-only property is set once.** A named constructor runs on the new object after the main constructor, so it can't set a get-only property again. A property that a named constructor sets again is declared `{ get; init; }` (section 6.1):
 
-<!-- example set-once: members in Money alone -->
+<!-- example set-once: members in Money -->
 ```csharp
 public Money(public int amount { get; }, public string currency { get; init; }) { }
 public Money.zero(string currency) : this(0, "USD") { this.currency = currency; }   // compiles: currency is init
-public Money.zero(string currency) : this(1, currency) { this.amount = 0; }         // compile error: amount is get-only, and the main constructor set it
+public Money.free(string currency) : this(1, currency) { this.amount = 0; }         // compile error: amount is get-only, and the main constructor set it
 ```
 
 ## 10. Structs
