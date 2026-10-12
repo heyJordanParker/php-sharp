@@ -1,0 +1,5 @@
+namespace App.Pricing;
+
+public class TaxRule : PriceRule
+{
+}

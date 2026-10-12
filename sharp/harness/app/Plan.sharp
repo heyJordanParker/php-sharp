@@ -1,0 +1,7 @@
+namespace App;
+
+public class Plan
+{
+    public int price { get; set; } = 2900;
+    public bool active { get; set; } = true;
+}

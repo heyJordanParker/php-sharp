@@ -1,0 +1,6 @@
+namespace App.Store;
+
+public class Order
+{
+    public int id { get; set; } = 1;
+}

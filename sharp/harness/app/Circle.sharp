@@ -1,0 +1,6 @@
+namespace App;
+
+public class Circle
+{
+    public float radius { get; set; } = 1.0;
+}

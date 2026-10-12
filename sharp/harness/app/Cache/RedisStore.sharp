@@ -1,0 +1,6 @@
+namespace App.Cache;
+
+public class RedisStore
+{
+    public RedisStore(private string url) { }
+}

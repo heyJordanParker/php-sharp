@@ -1,0 +1,15 @@
+namespace App;
+
+public class Line
+{
+    public int id { get; set; } = 1;
+    public string name { get; set; } = "Coffee";
+    public int amount { get; set; } = 500;
+    public bool refunded { get; set; } = false;
+    public bool free { get; set; } = false;
+    public Product product { get; set; } = new Product();
+
+    public static bool operator ==(Line a, Line b) => a.id == b.id;
+
+    public int hash() => this.id;
+}

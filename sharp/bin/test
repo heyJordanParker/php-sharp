@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: sharp/bin/test [--linux] [--opcache] [--repeat] [--passes] [--census] [--differential] [--upstream | paths...]" >&2
+  echo "usage: sharp/bin/test [--linux] [--opcache] [--repeat] [--passes] [--census] [--spec] [--differential] [--upstream | paths...]" >&2
   exit 2
 }
 
@@ -12,6 +12,7 @@ opcache=false
 repeat=false
 passes=false
 census=false
+spec=false
 differential=false
 upstream=false
 tests=()
@@ -23,6 +24,7 @@ for arg in "$@"; do
     --repeat) repeat=true ;;
     --passes) passes=true ;;
     --census) census=true ;;
+    --spec) spec=true ;;
     --differential) differential=true ;;
     --upstream) upstream=true ;;
     -*) usage ;;
@@ -151,6 +153,13 @@ if $census; then
   echo "== every write and comparison of a field that holds a PHP# mark"
   if ! "$php" "$root/sharp/bin/census"; then
     failed+=("the census of PHP# marks")
+  fi
+fi
+
+if $spec; then
+  echo "== every code example in docs/spec.md and README.md, compared with sharp/baseline/spec"
+  if ! "$php" "$root/sharp/bin/spec"; then
+    failed+=("the code examples of docs/spec.md and README.md")
   fi
 fi
 

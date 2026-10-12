@@ -1,0 +1,12 @@
+namespace App;
+
+public class Money
+{
+    public Money(public int amount { get; }, public string currency { get; }) { }
+
+    public static Money zero(string currency) => new Money(0, currency);
+
+    public static bool operator ==(Money a, Money b) => a.amount == b.amount && a.currency == b.currency;
+
+    public int hash() => this.amount;
+}

@@ -1,0 +1,8 @@
+namespace App;
+
+public class Price
+{
+    public float value { get; set; } = 0.0;
+
+    public void set(float value) { this.value = value; }
+}

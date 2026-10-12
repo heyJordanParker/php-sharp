@@ -1,0 +1,6 @@
+namespace App;
+
+public class Query
+{
+    public void orderBy(string column) { }
+}

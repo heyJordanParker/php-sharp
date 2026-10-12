@@ -1136,9 +1136,9 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  * key throws OutOfRangeException instead of PHP's warning.
  *   extended_value of ZEND_FETCH_DIM_R, ZEND_FETCH_DIM_FUNC_ARG  upstream: the ZEND_FETCH_DIM_* flags
  * It also marks the receiver of a PHP# method call, which ZEND_METHOD_CALL_SHARP turns into it: a
- * property fetch or a cast that turns an array into a Sharp\Collection, which changes the array
- * where it lives, and leaves any other value as it is.
- *   extended_value of ZEND_FETCH_OBJ_R                        upstream: ZEND_FETCH_OBJ_FLAGS, the cache slot
+ * property fetch, a static property fetch or a cast that turns an array into a Sharp\Collection,
+ * which changes the array where it lives, and leaves any other value as it is.
+ *   extended_value of ZEND_FETCH_OBJ_R, ZEND_FETCH_STATIC_PROP_R  upstream: ZEND_FETCH_OBJ_FLAGS, the cache slot
  *   extended_value of ZEND_CAST to IS_OBJECT                  upstream: the type
  * A cache slot reaches ZEND_SHARP_OPERATOR only past 1 GiB of run-time cache, which no assert can check.
  *
@@ -1163,6 +1163,8 @@ ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & ZEND_FETCH_OBJ_FLAGS),
 	"ZEND_SHARP_OPERATOR overlaps ZEND_FETCH_OBJ_FLAGS in the extended_value of the ZEND_*_INC_OBJ and ZEND_*_DEC_OBJ opcodes");
 ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & ZEND_FETCH_OBJ_FLAGS),
 	"ZEND_SHARP_OPERATOR overlaps ZEND_FETCH_OBJ_FLAGS in the extended_value of the ZEND_*_INC_STATIC_PROP and ZEND_*_DEC_STATIC_PROP opcodes");
+ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & ZEND_FETCH_OBJ_FLAGS),
+	"ZEND_SHARP_OPERATOR overlaps ZEND_FETCH_OBJ_FLAGS in the extended_value of ZEND_FETCH_OBJ_R and ZEND_FETCH_STATIC_PROP_R");
 ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & UINT8_MAX),
 	"ZEND_SHARP_OPERATOR overlaps the type in the extended_value of ZEND_CAST");
 ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & (ZEND_FETCH_DIM_REF|ZEND_FETCH_DIM_DIM|ZEND_FETCH_DIM_OBJ|ZEND_FETCH_DIM_INCDEC)),

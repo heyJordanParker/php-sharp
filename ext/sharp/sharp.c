@@ -728,13 +728,16 @@ zend_class_entry *sharp_ce_collection;
 static zend_object_handlers sharp_collection_handlers;
 
 /* The receiver of a PHP# method call on a List or Map, which PHP stores as an array. It changes the
- * array where it lives: a local or a plain property through its slot, and a property with hooks, or
- * one the caller may not write in place, through write_property with a changed copy. A value that
- * lives nowhere is a copy. It exists only as the $this of that one call. */
+ * array where it lives: a local, a plain property or a static property through its slot, and a
+ * property with hooks, or one the caller may not write in place, through write_property with a
+ * changed copy. A static property the caller may not set keeps a copy, and a change throws as an
+ * assignment to it does. A value that lives nowhere is a copy. It exists only as the $this of that
+ * one call. */
 typedef struct {
 	zval *slot;
 	zend_object *owner;
 	zend_string *property;
+	const zend_property_info *static_property;
 	const zend_class_entry *scope;
 	zval value;
 	zend_object std;
@@ -853,6 +856,25 @@ void sharp_collection_of_property(zval *result, zend_object *object, zend_string
 	}
 }
 
+/* result holds the array read from the static property at slot, and the caller's frame is still the
+ * current one. PHP refuses hooks and readonly on a static property, so only private(set) and
+ * protected(set) keep the caller from changing it in place. */
+void sharp_collection_of_static_property(zval *result, zval *slot, const zend_property_info *info)
+{
+	zval array;
+	ZVAL_COPY_VALUE(&array, result);
+	sharp_collection *collection = sharp_collection_new(result);
+
+	if (!(info->flags & ZEND_ACC_PPP_SET_MASK) || zend_asymmetric_property_has_set_access(info)) {
+		collection->slot = slot;
+		zval_ptr_dtor(&array);
+	} else {
+		collection->static_property = info;
+		collection->scope = zend_get_executed_scope();
+		ZVAL_COPY_VALUE(&collection->value, &array);
+	}
+}
+
 /* Plain PHP code may unset a property between the fetch and the call. */
 static zval *sharp_collection_array(sharp_collection *collection)
 {
@@ -879,16 +901,21 @@ static HashTable *sharp_collection_change(sharp_collection *collection)
 	return Z_ARRVAL_P(array);
 }
 
-/* Runs a property's set hook once with the changed array, in the caller's scope. */
+/* Runs a property's set hook once with the changed array, in the caller's scope, or throws for a
+ * static property the caller may not set. */
 static void sharp_collection_write_back(sharp_collection *collection)
 {
-	if (!collection->property) {
+	if (!collection->property && !collection->static_property) {
 		return;
 	}
 
 	const zend_class_entry *scope = EG(fake_scope);
 	EG(fake_scope) = collection->scope;
-	collection->owner->handlers->write_property(collection->owner, collection->property, &collection->value, NULL);
+	if (collection->static_property) {
+		zend_asymmetric_visibility_property_modification_error(collection->static_property, "modify");
+	} else {
+		collection->owner->handlers->write_property(collection->owner, collection->property, &collection->value, NULL);
+	}
 	EG(fake_scope) = scope;
 }
 
