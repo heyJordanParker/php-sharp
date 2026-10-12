@@ -1,0 +1,1356 @@
+#!/usr/bin/env php
+<?php
+// Checks every csharp, ts and php block of README.md and docs/spec.md against its annotations, as
+// docs/architecture/spec-examples.md describes, and fails when the examples that fail differ from sharp/baseline/spec.
+// sharp/bin/test --spec runs it on the built engine, with the pinned mago in TEST_MAGO_EXECUTABLE.
+//
+// With --base <commit>, it instead compares sharp/baseline/spec and the examples with that commit. The SPEC_GUARD job
+// runs the base commit's copy of this script on the pull request's merge commit, so a pull request's own files never
+// judge it. It fails when an entry joins the list in a pull request that changes more than the documents and the list,
+// when an example whose fingerprint the base has joins the list or gains a refusal, and when a pull request that
+// changes anything outside the spec files also changes an example's fingerprint or a file in a GUARDED folder.
+//
+// With --completes, it reads the pull request body from BODY and fails unless every section its `Completes:` line names
+// has a checked example and no entry in sharp/baseline/spec. Neither mode needs a build.
+
+declare(strict_types=1);
+
+const DOCUMENTS = ['README.md', 'docs/spec.md'];
+const BASELINE = 'sharp/baseline/spec';
+const HARNESS = 'sharp/harness';
+// The folders that hold what measures the examples and everything that runs that measurement: the harness, the
+// scripts, the CI image and the workflows. Only a spec PR changes a file in them.
+const GUARDED = [HARNESS . '/', 'sharp/bin/', 'sharp/docker/', '.github/'];
+const PACKAGE = 'sharp/composer';
+const PACKAGE_FOLDER = 'vendor/heyjordanparker/php-sharp-composer';
+const MARKER = '<!-- example ';
+const RUN_MARKER = '<!-- run ';
+const REFUSAL = 'not supported yet';
+const RUNTIME = ['value', 'throws', 'message'];
+// The errors mago reports at a construct's first line for the whole construct, by code, or by message when the code is
+// the generic `semantics`. Only these move to the `compile error` line inside the construct. A new one joins in a spec PR.
+const MOVES = ['match-not-exhaustive', 'rejected-nullable-parameter', 'A `match` needs a `default` arm.'];
+const SECTION = '§\d+(?:\.\d+)*|README';
+const PARALLEL = 4;
+const TYPE_DECLARATION = '~^(?:\[.*\]\s*)*(?:(?:public|private|protected|internal|abstract|final|sealed|static|readonly|foreign|extern)\s+)*(?:class|struct|enum|interface|event|trait|module)\b|^extern\b|^module\b~';
+const MEMBER = '~^(?:\[.*\]\s*)*(?:public|private|protected|internal|static)\b|^[\w<>?,|.\[\]]+\s+\w+\s*\([^)]*\)\s*(?:\{|=>)~';
+const PHP_DECLARATION = '~^(?:(?:abstract|final|readonly)\s+)*(?:class|interface|trait|enum|function)\b|^(?:namespace|use)\b~';
+
+// The repository holding this script, or the working directory's when CI runs a base commit's copy of it from
+// outside the pull request's checkout.
+[$top, $status] = git_status(__DIR__, 'rev-parse', '--show-toplevel');
+$root = rtrim($status === 0 ? $top : git((string) getcwd(), 'rev-parse', '--show-toplevel'), "\n");
+
+exit(match (true) {
+    count($argv) === 3 && $argv[1] === '--base' => compare_with_base($root, $argv[2]),
+    count($argv) === 2 && $argv[1] === '--completes' => completes($root, (string) getenv('BODY')),
+    count($argv) === 1 => check($root),
+    default => fail('usage: sharp/bin/spec [--base <commit> | --completes]'),
+});
+
+function fail(string $message): never
+{
+    fwrite(STDERR, "sharp/bin/spec: $message\n");
+    exit(2);
+}
+
+/** @return array{string, int} git's output and exit status */
+function git_status(string $root, string ...$arguments): array
+{
+    $process = proc_open(['git', '-C', $root, ...$arguments], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    $output = stream_get_contents($pipes[1]);
+    $errors = stream_get_contents($pipes[2]);
+    $status = proc_close($process);
+
+    return [$status === 0 ? $output : $errors, $status];
+}
+
+function git(string $root, string ...$arguments): string
+{
+    [$output, $status] = git_status($root, ...$arguments);
+    if ($status !== 0) {
+        fail('git ' . implode(' ', $arguments) . " failed:\n" . trim($output));
+    }
+
+    return $output;
+}
+
+/**
+ * Every example of README.md and docs/spec.md, by id, from the working tree or from $commit.
+ *
+ * The fingerprint covers the whole example but its id: its section, and every block's marker line, setup, fence
+ * language, code and run comment. So a renamed example keeps its fingerprint, and any other change gives it a new one.
+ * `codes` holds a hash of each block's code alone, which an `ignore` marker keeps.
+ *
+ * @return array<string, array{id: string, section: string, ignore: ?string, fingerprint: string, codes: list<string>, blocks: list<array>}>
+ */
+function examples(string $root, ?string $commit = null): array
+{
+    $examples = [];
+    $last = null;
+    foreach (DOCUMENTS as $document) {
+        $text = $commit === null ? file_get_contents("$root/$document") : git($root, 'show', "$commit:$document");
+        foreach (blocks($document, $text) as $block) {
+            $id = $block['id'];
+            if (isset($examples[$id]) && $last !== $id) {
+                fail("$document:$block[fence]: the id $id is already used by another example. Blocks of one example follow each other.");
+            }
+            $before = isset($examples[$id]) ? $examples[$id]['blocks'][array_key_last($examples[$id]['blocks'])] : null;
+            if ($before !== null && $before['run'] !== null) {
+                fail("{$before['run']['marker']}: a run comment follows the last block of its example, and $id has another block after it.");
+            }
+            $examples[$id] ??= ['id' => $id, 'section' => $block['section'], 'ignore' => null, 'fingerprint' => sha1($block['section']), 'codes' => [], 'blocks' => []];
+            $examples[$id]['blocks'][] = $block;
+            $examples[$id]['ignore'] ??= $block['ignore'];
+            $examples[$id]['fingerprint'] = sha1($examples[$id]['fingerprint'] . $block['fingerprint']);
+            $examples[$id]['codes'][] = sha1(implode("\n", $block['lines']));
+            $last = $id;
+        }
+    }
+
+    return array_map('attach_run', $examples);
+}
+
+/**
+ * Moves an example's run lines into a block that runs them: the end of its last block when that block's statements
+ * run, and otherwise a `statements in ExampleRun` block of their own. A block's `run_from` is the index of its first
+ * run line.
+ */
+function attach_run(array $example): array
+{
+    $last = array_key_last($example['blocks']);
+    $run = $example['blocks'][$last]['run'];
+    if ($run === null) {
+        return $example;
+    }
+    $block = $example['blocks'][$last];
+    if ($block['language'] === 'sharp' && $block['shape'] === 'statements') {
+        $example['blocks'][$last]['run_from'] = count($block['lines']);
+        $example['blocks'][$last]['lines'] = [...$block['lines'], ...$run['lines']];
+        $example['blocks'][$last]['at'] = [...$block['at'], ...$run['at']];
+    } else {
+        $example['blocks'][] = [
+            'id' => $block['id'], 'shape' => 'statements', 'class' => 'ExampleRun', 'alone' => null, 'ignore' => null, 'setup' => [],
+            'document' => $block['document'], 'fence' => $run['at'][0] - 1, 'section' => $block['section'], 'language' => 'sharp',
+            'lines' => $run['lines'], 'at' => $run['at'], 'run' => null, 'run_from' => 0, 'fingerprint' => '',
+        ];
+    }
+
+    return $example;
+}
+
+/** @return list<array> the checked blocks of one document, each with its marker */
+function blocks(string $document, string $text): array
+{
+    $lines = explode("\n", $text);
+    $section = $document === 'README.md' ? 'README' : null;
+    $marker = null;
+    $blocks = [];
+    for ($i = 0, $count = count($lines); $i < $count; $i++) {
+        $line = $lines[$i];
+        if ($document !== 'README.md' && preg_match('~^#{2,3} (\d+(?:\.\d+)?)\.? ~', $line, $m)) {
+            $section = "§$m[1]";
+        } elseif (str_starts_with($line, MARKER)) {
+            $header = substr($line, strlen(MARKER));
+            $setup = [];
+            if (str_ends_with($header, ' -->')) {
+                $header = substr($header, 0, -4);
+            } else {
+                while (++$i < $count && $lines[$i] !== '-->') {
+                    $setup[] = $lines[$i];
+                }
+            }
+            $marker = marker($header, "$document:" . ($i + 1)) + ['setup' => $setup, 'end' => $i, 'header' => preg_replace('~^[a-z0-9-]+~', '', $header)];
+        } elseif (preg_match('~^```(\S*)$~', $line, $m) && $m[1] !== '') {
+            $fence = $i + 1;
+            $code = [];
+            while (++$i < $count && $lines[$i] !== '```') {
+                $code[] = $lines[$i];
+            }
+            $language = match ($m[1]) {
+                'csharp', 'ts' => 'sharp',
+                'php' => 'php',
+                'text', 'lean', 'sh' => null,
+                default => fail("$document:$fence: a ```$m[1] block is neither checked code nor text, lean or sh."),
+            };
+            if ($language === null) {
+                $marker = null;
+                continue;
+            }
+            if ($marker === null || $marker['end'] !== $fence - 2) {
+                fail("$document:$fence: every csharp, ts and php block needs an example marker on the line before it.");
+            }
+            if ($section === null) {
+                fail("$document:$fence: the block sits under no numbered section.");
+            }
+            $run = null;
+            if (str_starts_with($lines[$i + 1] ?? '', RUN_MARKER)) {
+                $i++;
+                $run = ['marker' => "$document:" . ($i + 1), 'lines' => [], 'at' => []];
+                if (rtrim($lines[$i]) !== RUN_MARKER . $marker['id']) {
+                    fail("$run[marker]: a run marker reads `<!-- run $marker[id]`, with the id of the block above it, and its run lines below.");
+                }
+                while (++$i < $count && $lines[$i] !== '-->') {
+                    if (str_starts_with($lines[$i], '```') || str_starts_with($lines[$i], '<!--')) {
+                        break;
+                    }
+                    $run['lines'][] = $lines[$i];
+                    $run['at'][] = $i + 1;
+                }
+                if (($lines[$i] ?? null) !== '-->') {
+                    fail("$run[marker]: the run comment has no `-->` line after its run lines.");
+                }
+            }
+            $blocks[] = $marker + [
+                'document' => $document,
+                'fence' => $fence,
+                'section' => $section,
+                'language' => $language,
+                'lines' => $code,
+                'at' => range($fence + 1, $fence + count($code)),
+                'run' => $run,
+                'fingerprint' => sha1(implode("\0", [$marker['header'], ...$marker['setup'], "```$m[1]", ...$code, ...($run === null ? [] : [RUN_MARKER, ...$run['lines']])])),
+            ];
+            $marker = null;
+        } elseif (str_starts_with($line, RUN_MARKER)) {
+            fail("$document:" . ($i + 1) . ': a run marker sits on the line after the closing fence of its block.');
+        } elseif ($marker !== null && $marker['end'] !== $i) {
+            fail("$document:" . ($marker['end'] + 1) . ': an example marker sits on the line before its block.');
+        }
+    }
+
+    return $blocks;
+}
+
+function marker(string $header, string $where): array
+{
+    if (!preg_match('~^([a-z0-9]+(?:-[a-z0-9]+)*)(?:: (.+))?$~', $header, $m)) {
+        fail("$where: an example marker reads `<!-- example <id>[: <shape>][ in <Class>][ alone[ <lines>]]`.");
+    }
+    $marker = ['id' => $m[1], 'shape' => null, 'class' => 'Example', 'alone' => null, 'ignore' => null];
+    $rest = $m[2] ?? '';
+    if (preg_match('~^ignore (.+)$~', $rest, $ignore)) {
+        return ['ignore' => $ignore[1]] + $marker;
+    }
+    $words = $rest === '' ? [] : explode(' ', $rest);
+    while ($words !== []) {
+        $word = array_shift($words);
+        if ($word === 'members' || $word === 'statements') {
+            $marker['shape'] = $word;
+        } elseif ($word === 'in' && $words !== []) {
+            $marker['class'] = array_shift($words);
+        } elseif ($word === 'alone') {
+            $marker['alone'] = [];
+            if ($words !== [] && preg_match('~^\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$~', $words[0])) {
+                foreach (explode(',', array_shift($words)) as $range) {
+                    [$from, $to] = array_map('intval', explode('-', "$range-$range"));
+                    array_push($marker['alone'], ...range($from - 1, $to - 1));
+                }
+            } else {
+                $marker['alone'] = null;
+                $marker['alone_commented'] = true;
+            }
+        } else {
+            fail("$where: `$word` is not a shape, `in <Class>` or `alone` in an example marker.");
+        }
+    }
+
+    return $marker;
+}
+
+/**
+ * Splits a line into its code and its trailing comment. $quote carries a string still open from the line before.
+ *
+ * @return array{string, ?string, string} the code, the comment, and the code with every string blanked
+ */
+function split_line(string $line, ?string &$quote): array
+{
+    $bare = $line;
+    for ($i = 0, $length = strlen($line); $i < $length; $i++) {
+        $c = $line[$i];
+        if ($quote !== null) {
+            $bare[$i] = ' ';
+            if ($c === '\\') {
+                $i++;
+                if ($i < $length) {
+                    $bare[$i] = ' ';
+                }
+            } elseif ($c === $quote) {
+                $quote = null;
+            }
+        } elseif ($c === '"' || $c === "'" || $c === '`') {
+            $quote = $c;
+        } elseif ($c === '/' && ($line[$i + 1] ?? '') === '/') {
+            return [rtrim(substr($line, 0, $i)), trim(substr($line, $i + 2)), rtrim(substr($bare, 0, $i))];
+        }
+    }
+    if ($quote !== '`') {
+        $quote = null;
+    }
+
+    return [rtrim($line), null, rtrim($bare)];
+}
+
+/**
+ * What an annotation expects, as the table in docs/architecture/spec-examples.md lists.
+ *
+ * @return array{kind: string, class?: string, message?: string, value?: string}
+ */
+function expectation(?string $comment): array
+{
+    if ($comment === null) {
+        return ['kind' => 'none'];
+    }
+    $candidates = [$comment];
+    if (preg_match('~^[^:;]*?[:;] (.+)$~', $comment, $m)) {
+        $candidates[] = $m[1];
+    }
+    foreach ($candidates as $text) {
+        if (preg_match('~^(compiles\b|fits:|accepted:)~', $text)) {
+            return ['kind' => 'compiles'];
+        }
+        if (preg_match('~^compile error\b~', $text)) {
+            return ['kind' => 'error'];
+        }
+        if (preg_match('~^parse error\b~', $text)) {
+            return ['kind' => 'parse'];
+        }
+        if (preg_match('~^throws: "((?:\\\\.|[^"\\\\])*)"$~', $text, $m)) {
+            return ['kind' => 'message', 'message' => stripcslashes($m[1])];
+        }
+        if (preg_match('~^throws ([A-Z]\w*)~', $text, $m)) {
+            return ['kind' => 'throws', 'class' => $m[1]];
+        }
+        $value = literal($text);
+        if ($value !== null) {
+            return ['kind' => 'value', 'value' => $value];
+        }
+    }
+
+    return ['kind' => 'prose'];
+}
+
+/** The value at the start of an annotation, when one ends there or before `:` or `,`. */
+function literal(string $text): ?string
+{
+    if (preg_match('~^(-?\d+(?:\.\d+)?|true|false|null)(?=$|[:,])~', $text, $m)) {
+        return $m[1];
+    }
+    $open = $text[0] ?? '';
+    if ($open !== '"' && $open !== '[' && $open !== '{') {
+        return null;
+    }
+    $depth = 0;
+    $quote = null;
+    for ($i = 0, $length = strlen($text); $i < $length; $i++) {
+        $c = $text[$i];
+        if ($quote !== null) {
+            if ($c === '\\') {
+                $i++;
+            } elseif ($c === $quote) {
+                $quote = null;
+            }
+        } elseif ($c === '"') {
+            $quote = $c;
+        } elseif ($c === '[' || $c === '{') {
+            $depth++;
+        } elseif ($c === ']' || $c === '}') {
+            $depth--;
+        }
+        if ($quote === null && $depth === 0) {
+            $rest = substr($text, $i + 1);
+            return $rest === '' || $rest[0] === ':' || $rest[0] === ',' ? substr($text, 0, $i + 1) : null;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Reads a block's lines: code, annotation, nesting depth and the top-level construct each belongs to.
+ *
+ * @return list<array{code: string, comment: ?string, bare: string, expect: array, depth: int, delta: int, construct: int}>
+ */
+function read_block(array $block): array
+{
+    $quote = null;
+    $depth = 0;
+    $construct = -1;
+    $read = [];
+    $previous = null;
+    foreach ($block['lines'] as $index => $text) {
+        // A template string open across lines nests like a bracket, so its lines stay one statement.
+        $inside = $quote !== null;
+        [$code, $comment, $bare] = split_line($text, $quote);
+        $delta = substr_count($bare, '{') + substr_count($bare, '(') + substr_count($bare, '[')
+            - substr_count($bare, '}') - substr_count($bare, ')') - substr_count($bare, ']')
+            + (int) ($quote !== null) - (int) $inside;
+        $trimmed = ltrim($bare);
+        $continues = $previous !== null && ($depth > 0 || $trimmed === '' || str_starts_with($trimmed, '{')
+            || str_starts_with($trimmed, ':') || preg_match('~^\[.*\]$~', ltrim($previous)));
+        if (!$continues && trim($code) !== '') {
+            $construct = $index;
+        }
+        $read[] = [
+            'code' => $code,
+            'comment' => trim($code) === '' ? null : $comment,
+            'bare' => $bare,
+            'expect' => expectation(trim($code) === '' ? null : $comment),
+            'depth' => $depth,
+            'delta' => $delta,
+            'construct' => $construct,
+        ];
+        $depth += $delta;
+        if (trim($code) !== '') {
+            $previous = $bare;
+        }
+    }
+
+    return $read;
+}
+
+/** Rewrites `…` and completes a top-level line, as docs/architecture/spec-examples.md lists. */
+function complete(string $code, string $language, bool $top, bool $last_of_construct, ?string $next): string
+{
+    $throw = $language === 'sharp' ? 'throw new Elided()' : 'throw new \App\Elided()';
+    if (trim($code) === '…' || trim($code) === '') {
+        return '';
+    }
+    if ($top && $last_of_construct && $language === 'sharp' && !preg_match('~[;{},(\[]$|=>$~', rtrim($code))) {
+        $signature = preg_match('~^\s*(?:\[.*\]\s*)*(?:(?:public|private|protected|internal|static|abstract|virtual|override|final|readonly)\s+)+.*\)(?:\s+readonly)?$~', $code)
+            || preg_match('~^\s*[\w<>?,|() \[\].]+\s+\w+(?:<[^>]*>)?\(.*\)(?:\s+readonly)?$~', $code);
+        $code .= $signature && ($next === null || !preg_match('~^\s*[{:]~', $next)) ? ' { … }' : ';';
+    }
+    // A type's body and a control statement's block stay empty, so a run passes through them.
+    if (preg_match(TYPE_DECLARATION, ltrim($code)) || preg_match('~^\s*(?:\}\s*)?(?:if|else|while|for|foreach|do|try|catch|finally)\b~', $code)) {
+        $code = str_replace('{ … }', '{ }', $code);
+    }
+    $code = preg_replace('~(\bmatch\s*\([^)]*\)\s*)\{ … \}~u', '$1{ default => ' . $throw . ' }', $code);
+    if ($language === 'sharp') {
+        // A declaration with its type written gets a value of that type, since PHP# refuses to assign a `throw`.
+        $code = preg_replace('~^(\s*(?:const\s+|let\s+)?)((?!const\b|let\b)[\w.<>?,|\[\]]+)(\s+\w+\s*=\s*)…(\s*;)~u', '$1$2$3Elided.value() as $2 ?? throw new Elided()$4', $code);
+    }
+    $code = str_replace(['{ … }', '(…)'], ['{ ' . $throw . '; }', '()'], $code);
+
+    return str_replace('…', $throw, $code);
+}
+
+/**
+ * A top-level statement rewritten so the run records its value or what it throws. A bare expression with no
+ * annotation to check, such as `order == sameOrderLoadedAgain;`, is handed to Outcome too, because the spec writes
+ * it to show what it gives, and PHP# refuses a statement that has no effect. A top-level `return x;` shows the value
+ * of `x` the same way, since the run method returns nothing.
+ */
+function observe(string $code, int $line, array $expect, string $language): string
+{
+    $statement = rtrim(trim($code), ';');
+    if ($language === 'sharp' && preg_match('~^return\s+(.+)$~', $statement, $m)) {
+        $statement = $m[1];
+        if (!in_array($expect['kind'], RUNTIME, true)) {
+            return "Outcome.value($line, $statement);";
+        }
+    }
+    if (!in_array($expect['kind'], RUNTIME, true)) {
+        $unquoted = preg_replace('~"(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\'|`[^`]*`~', '""', $statement);
+        $bare = $language === 'sharp' && $expect['kind'] !== 'error' && $expect['kind'] !== 'parse' && str_ends_with(trim($code), ';')
+            && !preg_match('~^(?:if|for|while|do|return|throw|const|let|emit|yield|try|match|break|continue|new|echo|print)\b~', $statement)
+            && !preg_match('~(?<![=!<>])=(?![=>])~', $unquoted)
+            && (!str_ends_with($statement, ')') || preg_match('~^(?:typeof|nameof)\s*\([^()]*\)$~', $statement));
+
+        return $bare ? "Outcome.value($line, $statement);" : $code;
+    }
+    if ($language === 'php') {
+        if ($expect['kind'] === 'value') {
+            return preg_match('~^(\$\w+)\s*=(?!=)~', $statement, $m)
+                ? "$statement; \\App\\Outcome::value($line, $m[1]);"
+                : "\\App\\Outcome::value($line, $statement);";
+        }
+
+        return "try { $statement; \\App\\Outcome::ran($line); } catch (\\Throwable \$e) { \\App\\Outcome::threw($line, \$e); }";
+    }
+    if ($expect['kind'] === 'value') {
+        return preg_match('~^(?:(?:const|let)\s+)?(?:[\w.<>?,|() \[\]]+\s+)?([a-z]\w*)\s*=(?!=)~', $statement, $m)
+            ? "$statement; Outcome.value($line, $m[1]);"
+            : "Outcome.value($line, $statement);";
+    }
+
+    return "Outcome.attempt($line, () => { $statement; });";
+}
+
+/**
+ * Builds a block's file. A line of $blank is left empty, and observe() rewrites the run's top-level statements.
+ *
+ * @return array{path: ?string, contents: string, map: list<?array{int, int}>, names: list<string>, entry: ?string}
+ */
+function build_file(array $block, int $index, array $read, array $blank): array
+{
+    $language = $block['language'];
+    $lines = [];
+    $count = count($read);
+    foreach ($read as $i => $line) {
+        $next = null;
+        for ($j = $i + 1; $j < $count && $next === null; $j++) {
+            $next = trim($read[$j]['code']) === '' ? null : $j;
+        }
+        $top = $line['depth'] === 0 && $line['delta'] === 0;
+        $last = $next === null || $read[$next]['construct'] !== $line['construct'];
+        $code = isset($blank[$i]) ? '' : complete($line['code'], $language, $top, $last, $next === null ? null : $read[$next]['code']);
+        if ($top && !isset($blank[$i]) && run_line($block, $line)) {
+            $code = observe($code, outcome_key($index, $i), $line['expect'], $language);
+        }
+        $lines[] = [$code, [$index, $i]];
+    }
+    $setup = array_map(static fn (string $text): array => [$text, null], $block['setup']);
+
+    $path = null;
+    if ($language === 'sharp' && preg_match('~^// (\S+\.sharp)$~', $block['lines'][0] ?? '', $m)) {
+        $path = $m[1];
+    }
+
+    if ($language === 'php') {
+        $head = [];
+        $body = $lines;
+        if (!str_starts_with(ltrim($block['lines'][0] ?? ''), '<?php')) {
+            $head[] = ['<?php', null];
+        } else {
+            $head[] = array_shift($body);
+        }
+        if ($block['shape'] === null && !preg_grep('~^namespace\b~', $block['lines'])) {
+            $head[] = ['namespace App;', null];
+        }
+        $file = [...$head, ...$setup, ...$body];
+    } elseif ($block['shape'] === null && !in_array('…', array_map('trim', $block['setup']), true)) {
+        $file = [...$setup, ...$lines];
+        if (!preg_grep('~^namespace\b~', array_column($file, 0))) {
+            array_unshift($file, ['namespace App;', null]);
+        }
+    } else {
+        $template = in_array('…', array_map('trim', $block['setup']), true);
+        $groups = ['head' => [], 'types' => [], 'members' => [], 'run' => []];
+        $sources = $template ? [[$lines, $read]] : [[$setup, read_block(['lines' => $block['setup']])], [$lines, $read]];
+        foreach ($sources as [$source, $info]) {
+            $group = 'run';
+            foreach ($source as $i => $line) {
+                $first = ltrim($info[$i]['bare']);
+                if ($info[$i]['construct'] === $i) {
+                    $group = match (true) {
+                        (bool) preg_match('~^(namespace|import)\b~', $first) => 'head',
+                        (bool) preg_match(TYPE_DECLARATION, $first) => 'types',
+                        $template => 'run',
+                        $block['shape'] === 'members', (bool) preg_match(MEMBER, $first) => 'members',
+                        default => 'run',
+                    };
+                } elseif ($info[$i]['construct'] === -1 && trim($line[0]) === '') {
+                    continue;
+                }
+                $groups[$group][] = $line;
+            }
+        }
+        $head = $groups['head'];
+        if (!preg_grep('~^namespace\b~', array_column($head, 0))) {
+            array_unshift($head, ['namespace App;', null]);
+        }
+        if ($template) {
+            $class = [];
+            foreach ($setup as $line) {
+                array_push($class, ...(trim($line[0]) === '…' ? $groups['run'] : [$line]));
+            }
+        } else {
+            $class = [['public class ' . $block['class'], null], ['{', null], ...$groups['members']];
+            if ($block['shape'] === 'statements') {
+                $class = [...$class, ['    public void run()', null], ['    {', null], ...$groups['run'], ['    }', null]];
+            }
+            $class[] = ['}', null];
+        }
+        $file = [...$head, ...$groups['types'], ...$class];
+    }
+
+    $contents = implode("\n", array_column($file, 0)) . "\n";
+    if ($language === 'sharp' && preg_match('~^namespace (?!App;)~m', $contents)) {
+        $imports = (str_contains($contents, 'Elided') ? "import App.Elided; " : '') . (str_contains($contents, 'Outcome.') ? 'import App.Outcome;' : '');
+        $contents = preg_replace('~^(namespace [^;]+;)~m', '$1 ' . $imports, $contents, 1);
+    }
+
+    $namespace = preg_match('~^namespace ([\w.\\\\]+)~m', $contents, $m) ? str_replace('.', '\\', $m[1]) : '';
+    $entry = match (true) {
+        $language === 'php' && $block['shape'] === 'statements' => 'script',
+        $language === 'sharp' && $block['shape'] === 'statements' => "$namespace\\$block[class]",
+        default => null,
+    };
+
+    return ['path' => $path, 'contents' => $contents, 'map' => array_column($file, 1), 'names' => declared_names($contents, $language), 'entry' => $entry];
+}
+
+/** The number a run records for line $line of block $block. */
+function outcome_key(int $block, int $line): int
+{
+    return $block * 10000 + $line;
+}
+
+/** Where line $i of a block sits in its document, as `docs/spec.md:120`. */
+function where(array $block, int $i): string
+{
+    return "$block[document]:" . $block['at'][$i];
+}
+
+/** Whether a run records line $line: a whole top-level statement of a statements block, or of a plain PHP script. */
+function runs(array $block, array $line): bool
+{
+    return $line['depth'] === 0 && $line['delta'] === 0 && run_line($block, $line);
+}
+
+/**
+ * Whether line $j sits inside the brackets line $i opens, a `{` that starts the next line included. An error in MOVES
+ * that mago reports at a construct's first line, such as a `match` that lacks an arm, belongs to a `compile error` line
+ * inside it.
+ */
+function encloses(array $read, int $i, int $j): bool
+{
+    for ($k = $i + 1; $k <= $j; $k++) {
+        if ($read[$k]['depth'] <= $read[$i]['depth'] && !str_starts_with(ltrim($read[$k]['bare']), '{')) {
+            return false;
+        }
+    }
+
+    return $j > $i && $read[$j]['depth'] > $read[$i]['depth'];
+}
+
+/** Whether a top-level line runs in the example's run: a statement of a statements block, or of a plain PHP script. */
+function run_line(array $block, array $line): bool
+{
+    $first = ltrim($line['bare']);
+    if ($block['language'] === 'php') {
+        return $block['shape'] === 'statements' && !preg_match(PHP_DECLARATION, $first);
+    }
+
+    return $block['shape'] === 'statements' && !preg_match(TYPE_DECLARATION, $first) && !preg_match(MEMBER, $first)
+        && !preg_match('~^(namespace|import)\b~', $first);
+}
+
+/** @return list<string> the full name of every type a file declares at its top level */
+function declared_names(string $contents, string $language): array
+{
+    $namespace = preg_match('~^namespace ([\w.\\\\]+)~m', $contents, $m) ? str_replace('.', '\\', $m[1]) : '';
+    preg_match_all($language === 'php'
+        ? '~^(?:(?:abstract|final|readonly)\s+)*(?:class|interface|trait|enum)\s+(\w+)~m'
+        : '~^(?:(?:public|private|protected|internal|abstract|final|sealed|static|readonly|foreign)\s+)*(?:class|struct|enum|interface|event|trait)\s+(\w+)~m', $contents, $found);
+
+    return array_map(static fn (string $name): string => ltrim("$namespace\\$name", '\\'), $found[1]);
+}
+
+/** @return array<string, list<string>> every harness file, by its path under sharp/harness/, with the names it declares */
+function harness_files(string $root): array
+{
+    $files = [];
+    $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator("$root/" . HARNESS, FilesystemIterator::SKIP_DOTS));
+    foreach ($iterator as $file) {
+        $path = substr($file->getPathname(), strlen("$root/" . HARNESS) + 1);
+        $files[$path] = declared_names(file_get_contents($file->getPathname()), $file->getExtension() === 'php' ? 'php' : 'sharp');
+    }
+    ksort($files, SORT_STRING);
+
+    return $files;
+}
+
+/** Writes a project folder: the harness without the files whose names $files declare, the standard library, and $files. */
+function write_project(string $root, string $folder, array $harness, array $files): void
+{
+    $declared = array_merge([], ...array_column($files, 'names'));
+    foreach ($harness as $path => $names) {
+        if (array_intersect($names, $declared) === []) {
+            put("$folder/$path", file_get_contents("$root/" . HARNESS . "/$path"));
+        }
+    }
+    put("$folder/" . PACKAGE_FOLDER . '/composer.json', file_get_contents("$root/" . PACKAGE . '/composer.json'));
+    $library = new RecursiveIteratorIterator(new RecursiveDirectoryIterator("$root/" . PACKAGE . '/library', FilesystemIterator::SKIP_DOTS));
+    foreach ($library as $file) {
+        put("$folder/" . PACKAGE_FOLDER . '/library/' . substr($file->getPathname(), strlen("$root/" . PACKAGE . '/library/')), file_get_contents($file->getPathname()));
+    }
+    put("$folder/mago.toml", "[source]\npaths = [\".\"]\nextensions = [\"sharp\", \"php\"]\n");
+    put("$folder/composer.json", "{\"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}}\n");
+    foreach ($files as $file) {
+        put("$folder/$file[path]", $file['contents']);
+    }
+}
+
+function put(string $path, string $contents): void
+{
+    if (!is_dir(dirname($path))) {
+        mkdir(dirname($path), 0777, true);
+    }
+    file_put_contents($path, $contents);
+}
+
+/**
+ * Runs every command, PARALLEL at a time.
+ *
+ * @param array<string, array{list<string>, array<string, string>}> $commands the command and its extra environment, by key
+ * @return array<string, array{string, string, int}> stdout, stderr and exit status, by key
+ */
+function run_all(array $commands): array
+{
+    $results = [];
+    $running = [];
+    $pending = $commands;
+    while ($pending !== [] || $running !== []) {
+        while ($pending !== [] && count($running) < PARALLEL) {
+            $key = array_key_first($pending);
+            [$command, $environment] = $pending[$key];
+            unset($pending[$key]);
+            $process = proc_open($command, [1 => ['file', "$key.out", 'w'], 2 => ['file', "$key.err", 'w']], $pipes, null, $environment + getenv());
+            $running[$key] = $process;
+        }
+        foreach ($running as $key => $process) {
+            $status = proc_get_status($process);
+            if (!$status['running']) {
+                proc_close($process);
+                $results[$key] = [file_get_contents("$key.out"), file_get_contents("$key.err"), $status['exitcode']];
+                unset($running[$key]);
+            }
+        }
+        usleep(5000);
+    }
+
+    return $results;
+}
+
+/** @return list<array{name: string, line: int, message: string, code: string}> the errors of a mago compile's JSON report, with lines counted from 0 as mago counts them */
+function compile_errors(string $stdout): array
+{
+    $start = strpos($stdout, '{');
+    $report = $start === false ? ['issues' => []] : json_decode(substr($stdout, $start), true, 512, JSON_THROW_ON_ERROR);
+    $errors = [];
+    foreach ($report['issues'] as $issue) {
+        if ($issue['level'] !== 'Error') {
+            continue;
+        }
+        $primary = $issue['annotations'][0] ?? null;
+        foreach ($issue['annotations'] as $annotation) {
+            if ($annotation['kind'] === 'Primary') {
+                $primary = $annotation;
+                break;
+            }
+        }
+        $message = $issue['message'] . ($issue['code'] === 'parse' && $primary !== null ? ' ' . $primary['message'] : '');
+        $errors[] = [
+            'name' => $primary['span']['file_id']['name'] ?? '',
+            'line' => $primary['span']['start']['line'] ?? 0,
+            'message' => $message,
+            'code' => $issue['code'],
+        ];
+    }
+
+    return $errors;
+}
+
+/**
+ * The variants of an example to compile: each blanks some lines, as `alone` and `parse error` lines need.
+ *
+ * @return list<array<int, array<int, true>>> the lines each variant leaves empty, by block
+ */
+function variants(array $example, array $reads): array
+{
+    $variants = [[]];
+    foreach ($example['blocks'] as $b => $block) {
+        $read = $reads[$b];
+        $alone = $block['alone'] ?? null;
+        if (!empty($block['alone_commented'])) {
+            $alone = array_keys(array_filter($read, static fn (array $line): bool => $line['comment'] !== null));
+        }
+        if ($alone === null) {
+            $alone = array_keys(array_filter($read, static fn (array $line): bool => $line['expect']['kind'] === 'parse'));
+            $keep_base = true;
+        } else {
+            $keep_base = false;
+        }
+        foreach ($alone as $i) {
+            if (!isset($read[$i]) || $read[$i]['delta'] !== 0) {
+                fail(where($block, $i) . ': a line checked alone must open and close every bracket it uses.');
+            }
+        }
+        if ($alone === []) {
+            continue;
+        }
+        $next = [];
+        foreach ($variants as $variant) {
+            if ($keep_base) {
+                $next[] = $variant + [$b => array_fill_keys($alone, true)];
+            }
+            foreach ($alone as $i) {
+                $next[] = $variant + [$b => array_fill_keys(array_diff($alone, [$i]), true)];
+            }
+        }
+        $variants = $next;
+    }
+
+    return $variants;
+}
+
+/** @return list<array> the files of one variant of an example */
+function variant_files(array $example, array $reads, array $variant): array
+{
+    $files = [];
+    $entry = 0;
+    foreach ($example['blocks'] as $b => $block) {
+        $file = build_file($block, $b, $reads[$b], $variant[$b] ?? []);
+        if ($file['entry'] === 'script') {
+            $file['path'] = 'entry' . ($entry++ ?: '') . '.php';
+        } elseif ($file['path'] === null) {
+            $namespace = preg_match('~^namespace ([\w.\\\\]+)~m', $file['contents'], $m) ? preg_split('~[.\\\\]~', $m[1]) : [];
+            $name = $file['names'] === [] ? 'Example' : substr(strrchr('\\' . $file['names'][0], '\\'), 1);
+            if (($namespace[0] ?? '') === 'App') {
+                $namespace[0] = 'app';
+            }
+            $file['path'] = implode('/', [...$namespace, $name]) . '.' . $block['language'];
+        }
+        foreach ($files as $other) {
+            if ($other['path'] === $file['path']) {
+                $file['path'] = preg_replace('~\.(\w+)$~', "$b.$1", $file['path']);
+            }
+        }
+        $file['block'] = $b;
+        $files[] = $file;
+    }
+
+    return $files;
+}
+
+/** The plain PHP script that runs an example on the engine, with every class the project declares in its class map. */
+function runner(string $folder, array $files, array $harness): string
+{
+    $classes = [];
+    foreach ($harness as $path => $names) {
+        foreach ($names as $name) {
+            if (is_file("$folder/$path")) {
+                $classes[$name] = $path;
+            }
+        }
+    }
+    foreach ($files as $file) {
+        foreach ($file['names'] as $name) {
+            $classes[$name] = $file['path'];
+        }
+    }
+    $library = new RecursiveIteratorIterator(new RecursiveDirectoryIterator("$folder/" . PACKAGE_FOLDER . '/library', FilesystemIterator::SKIP_DOTS));
+    foreach ($library as $file) {
+        $path = substr($file->getPathname(), strlen("$folder/"));
+        foreach (declared_names(file_get_contents($file->getPathname()), 'sharp') as $name) {
+            $classes[$name] = $path;
+        }
+    }
+    // Every block that runs, in the order the example writes them: a plain PHP script, or the run method of a class.
+    $entries = [];
+    foreach ($files as $file) {
+        if ($file['entry'] === 'script') {
+            $entries[] = 'require __DIR__ . ' . var_export('/' . $file['path'], true) . ';';
+        } elseif ($file['entry'] !== null) {
+            $entries[] = '(new ReflectionClass(' . var_export($file['entry'], true) . '))->newInstanceWithoutConstructor()->run();';
+        }
+    }
+
+    return "<?php\n"
+        . '$classes = ' . var_export($classes, true) . ";\n"
+        . 'spl_autoload_register(static function (string $class) use ($classes): void { if (isset($classes[$class])) { require __DIR__ . "/" . $classes[$class]; } });' . "\n"
+        . (is_file("$folder/app/functions.php") ? "require __DIR__ . '/app/functions.php';\n" : '')
+        . "try {\n    " . implode("\n    ", $entries) . "\n} catch (\\Throwable \$e) {\n    \\App\\Outcome::threw(-1, \$e);\n}\n";
+}
+
+/** Whether a value the run recorded matches the annotation's value. */
+function matches(string $expected, array $outcome): bool
+{
+    if ($outcome['type'] === 'string') {
+        if (str_starts_with($expected, '"')) {
+            return $outcome['value'] === stripcslashes(substr($expected, 1, -1));
+        }
+        $pattern = '~^' . implode('.*', array_map(static fn (string $part): string => preg_quote($part, '~'), explode('…', $expected))) . '$~su';
+
+        return (bool) preg_match($pattern, $outcome['value']);
+    }
+    try {
+        return var_export(eval("return $expected;"), true) === $outcome['export'];
+    } catch (ParseError) {
+        return false;
+    }
+}
+
+/** Checks one compiled variant's errors against the lines it holds. Returns every problem found. */
+function check_compile(array $example, array $reads, array $files, array $variant, array $errors, array &$refusals): array
+{
+    $problems = [];
+    $by_name = array_change_key_case(array_column($files, null, 'path'));
+    $claimed = [];
+    foreach ($errors as $error) {
+        $file = $by_name[strtolower($error['name'])] ?? null;
+        $origin = $file['map'][$error['line']] ?? null;
+        $line = $error['line'] + 1;
+        if ($file === null) {
+            $problems[] = "the harness file $error[name] has an error on line $line: $error[message]";
+            continue;
+        }
+        if ($origin === null) {
+            $problems[] = "line $line of the generated $error[name], from the marker's setup or wrapper: $error[message]";
+            continue;
+        }
+        [$b, $i] = $origin;
+        $block = $example['blocks'][$b];
+        $read = $reads[$b];
+        if (str_contains($error['message'], REFUSAL)) {
+            $refusals["$b:$i:$error[message]"] = true;
+        }
+        $kind = $read[$i]['expect']['kind'];
+        if (($kind === 'none' || $kind === 'prose') && (in_array($error['code'], MOVES, true) || in_array($error['message'], MOVES, true))) {
+            $owners = array_keys(array_filter($read, static fn (array $line, int $j): bool => $line['expect']['kind'] === 'error'
+                && !isset($variant[$b][$j]) && encloses($read, $i, $j), ARRAY_FILTER_USE_BOTH));
+            if (count($owners) === 1) {
+                $i = $owners[0];
+                $kind = 'error';
+            }
+        }
+        $where = where($block, $i);
+        $parse = $error['code'] === 'parse';
+        $unreadable = $parse && str_starts_with($error['message'], 'Parse error encountered');
+        // A refusal says the feature is missing, and a missing class says the setup is: neither is the rule the line states.
+        $missing = str_contains($error['message'], REFUSAL) || $error['code'] === 'non-existent-class-like';
+        if (($kind === 'error' && !$unreadable && !$missing) || ($kind === 'parse' && $parse)) {
+            $claimed["$b:$i"] = true;
+        } elseif ($kind === 'error' || $kind === 'parse') {
+            $problems[] = "$where expects a " . ($kind === 'parse' ? 'parse error' : 'compile error') . ", and the checker reports: $error[message]";
+            $claimed["$b:$i"] ??= false;
+        } else {
+            $problems[] = "$where expects no error, and the checker reports: $error[message]";
+        }
+    }
+    foreach ($example['blocks'] as $b => $block) {
+        foreach ($reads[$b] as $i => $line) {
+            $kind = $line['expect']['kind'];
+            if (!isset($variant[$b][$i]) && ($kind === 'error' || $kind === 'parse') && !isset($claimed["$b:$i"])) {
+                $problems[] = where($block, $i) . ' expects a ' . ($kind === 'parse' ? 'parse error' : 'compile error') . ', and the checker accepts it';
+            }
+        }
+    }
+
+    return $problems;
+}
+
+/** Checks a run's outcomes against the run lines. Returns every problem found. */
+function check_run(array $example, array $reads, string $outcomes): array
+{
+    $recorded = [];
+    $problems = [];
+    foreach (array_filter(explode("\n", $outcomes)) as $json) {
+        $outcome = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        if ($outcome['line'] === -1) {
+            $problems[] = "the run threw $outcome[class]: $outcome[message]";
+        } else {
+            $recorded[$outcome['line']] = $outcome;
+        }
+    }
+    foreach ($example['blocks'] as $b => $block) {
+        foreach ($reads[$b] as $i => $line) {
+            $expect = $line['expect'];
+            if (!in_array($expect['kind'], RUNTIME, true) || !runs($block, $line)) {
+                continue;
+            }
+            $where = where($block, $i);
+            $outcome = $recorded[outcome_key($b, $i)] ?? null;
+            if ($outcome === null) {
+                $problems[] = "$where never ran";
+            } elseif ($expect['kind'] === 'value' && ($outcome['kind'] !== 'value' || !matches($expect['value'], $outcome))) {
+                $problems[] = "$where expects $expect[value], and " . ($outcome['kind'] === 'value' ? "gives $outcome[export]" : "throws $outcome[class]: $outcome[message]");
+            } elseif ($expect['kind'] === 'throws' && ($outcome['kind'] !== 'threw' || !in_array($expect['class'], $outcome['types'], true))) {
+                $problems[] = "$where expects a throw of $expect[class], and " . ($outcome['kind'] === 'threw' ? "throws $outcome[class]: $outcome[message]" : 'throws nothing');
+            } elseif ($expect['kind'] === 'message' && ($outcome['kind'] !== 'threw' || $outcome['message'] !== $expect['message'])) {
+                $problems[] = "$where expects a throw with the message \"$expect[message]\", and " . ($outcome['kind'] === 'threw' ? "throws $outcome[class]: $outcome[message]" : 'throws nothing');
+            }
+        }
+    }
+
+    return $problems;
+}
+
+/**
+ * Fails on a value, `throws` or message annotation that no run reaches, such as one on a method's line, unless a run
+ * line of the example restates it. A `<!-- run <id> -->` comment after the example's last block holds those run lines,
+ * and only they restate a claim.
+ */
+function check_reached(array $example, array $reads): void
+{
+    $restated = [];
+    foreach ($example['blocks'] as $b => $block) {
+        foreach ($reads[$b] as $i => $line) {
+            if ($i >= ($block['run_from'] ?? PHP_INT_MAX) && in_array($line['expect']['kind'], RUNTIME, true) && runs($block, $line)) {
+                $restated[] = $line['expect'];
+            }
+        }
+    }
+    foreach ($example['blocks'] as $b => $block) {
+        foreach ($reads[$b] as $i => $line) {
+            if (in_array($line['expect']['kind'], RUNTIME, true) && !runs($block, $line) && !in_array($line['expect'], $restated, true)) {
+                fail(where($block, $i) . ": no run reaches the claim `// $line[comment]`. Add a line that shows it to a `" . RUN_MARKER . "$example[id]` comment after the block.");
+            }
+        }
+    }
+}
+
+function check(string $root): int
+{
+    $mago = getenv('TEST_MAGO_EXECUTABLE');
+    if ($mago === false || !is_executable($mago)) {
+        fail('TEST_MAGO_EXECUTABLE names no mago. Run sharp/bin/test --spec, which installs the pinned one.');
+    }
+    $build = "$root/sharp/build/" . strtolower(php_uname('s')) . '-' . php_uname('m');
+    $work = "$build/spec";
+    remove($work);
+    mkdir($work, 0777, true);
+    $harness = harness_files($root);
+    $compile = static fn (string $folder): array => [[$mago, '--no-version-check', '--colors', 'never', '--workspace', $folder, 'compile'], ['MAGO_REPORTING_FORMAT' => 'json', 'MAGO_THREADS' => '1']];
+
+    write_project($root, "$work/harness", $harness, []);
+    [$stdout, $stderr, $status] = run_all(["$work/harness" => $compile("$work/harness")])["$work/harness"];
+    if ($status !== 0) {
+        $errors = array_map(static fn (array $error): string => "$error[name]:$error[line]: $error[message]", compile_errors($stdout));
+        fail("the harness in sharp/harness/ does not compile:\n" . implode("\n", $errors ?: [trim($stderr)]));
+    }
+
+    $examples = examples($root);
+    $reads = [];
+    $jobs = [];
+    $projects = [];
+    foreach ($examples as $id => $example) {
+        if ($example['ignore'] !== null) {
+            continue;
+        }
+        $reads[$id] = array_map('read_block', $example['blocks']);
+        check_reached($example, $reads[$id]);
+        foreach (variants($example, $reads[$id]) as $v => $variant) {
+            $folder = "$work/$id/$v";
+            $files = variant_files($example, $reads[$id], $variant);
+            write_project($root, $folder, $harness, $files);
+            $projects[$id][] = [$folder, $files, $variant];
+            if (array_filter($example['blocks'], static fn (array $block): bool => $block['language'] === 'sharp') !== []) {
+                $jobs[$folder] = $compile($folder);
+            }
+            foreach ($files as $k => $file) {
+                if (str_ends_with($file['path'], '.php')) {
+                    $jobs["$folder/lint$k"] = [[PHP_BINARY, '-n', '-l', "$folder/$file[path]"], []];
+                }
+            }
+        }
+    }
+    $compiled = run_all($jobs);
+
+    $results = [];
+    $runs = [];
+    foreach ($projects as $id => $variants) {
+        $example = $examples[$id];
+        $problems = [];
+        $refusals = [];
+        foreach ($variants as [$folder, $files, $variant]) {
+            [$stdout, $stderr, $status] = $compiled[$folder] ?? ['', '', 0];
+            if ($status > 1) {
+                $problems[] = "mago compile stopped with status $status: " . trim(substr($stderr, -600));
+                continue;
+            }
+            array_push($problems, ...check_compile($example, $reads[$id], $files, $variant, compile_errors($stdout), $refusals));
+            foreach ($files as $k => $file) {
+                [$lint, $lint_errors, $lint_status] = $compiled["$folder/lint$k"] ?? ['', '', 0];
+                if ($lint_status !== 0) {
+                    $problems[] = "php -l refuses the plain PHP block at {$example['blocks'][$file['block']]['document']}:{$example['blocks'][$file['block']]['fence']}: " . trim($lint . $lint_errors);
+                }
+            }
+        }
+        $results[$id] = ['problems' => array_values(array_unique($problems)), 'refusals' => count($refusals)];
+
+        $runs_here = false;
+        foreach ($example['blocks'] as $b => $block) {
+            foreach ($reads[$id][$b] as $line) {
+                $runs_here = $runs_here || ($block['language'] === 'php' && $block['shape'] === 'statements')
+                    || (in_array($line['expect']['kind'], RUNTIME, true) && runs($block, $line));
+            }
+        }
+        if ($runs_here && $results[$id]['problems'] === []) {
+            foreach (variants($example, $reads[$id]) as $v => $variant) {
+                foreach ($example['blocks'] as $b => $block) {
+                    foreach ($reads[$id][$b] as $i => $line) {
+                        if (in_array($line['expect']['kind'], ['error', 'parse'], true)) {
+                            $variant[$b][$i] = true;
+                        }
+                    }
+                }
+                $folder = "$work/$id/run$v";
+                $files = variant_files($example, $reads[$id], $variant);
+                write_project($root, $folder, $harness, $files);
+                file_put_contents("$folder/run.php", runner($folder, $files, $harness));
+                $runs[$id][] = [$folder, $files];
+            }
+        }
+    }
+
+    $run_compiles = run_all(array_merge(...array_map(static fn (array $list): array => array_combine(
+        array_column($list, 0),
+        array_map(static fn (array $run): array => $compile($run[0]), $list),
+    ), array_values($runs)), ...[[]]));
+    $run_jobs = [];
+    foreach ($runs as $id => $list) {
+        foreach ($list as [$folder, $files]) {
+            [$stdout, $stderr, $status] = $run_compiles[$folder];
+            if ($status !== 0) {
+                $results[$id]['problems'][] = 'the run, with every compile error line left out, does not compile: '
+                    . implode(' ', array_column(compile_errors($stdout), 'message')) . trim(substr($stderr, -300));
+                continue;
+            }
+            $run_jobs["$folder/run"] = [[PHP_BINARY, '-n', '-d', 'error_reporting=E_ALL', "$folder/run.php"], ['SHARP_SPEC_OUTCOMES' => "$folder/outcomes"]];
+        }
+    }
+    foreach (run_all($run_jobs) as $key => [$stdout, $stderr, $status]) {
+        $folder = dirname($key);
+        $id = basename(dirname($folder));
+        $outcomes = is_file("$folder/outcomes") ? file_get_contents("$folder/outcomes") : '';
+        if ($status !== 0) {
+            $results[$id]['problems'][] = "the run stopped with status $status: " . trim(substr($stdout . $stderr, -600));
+        }
+        array_push($results[$id]['problems'], ...check_run($examples[$id], $reads[$id], $outcomes));
+    }
+
+    $failing = [];
+    foreach ($results as $id => $result) {
+        if ($result['problems'] !== []) {
+            $block = $examples[$id]['blocks'][0];
+            echo "FAIL {$examples[$id]['section']} $id ($block[document]:$block[fence])\n";
+            $shown = [];
+            foreach ($result['problems'] as $problem) {
+                $shown[strtok($problem, ' ')] ??= $problem;
+            }
+            foreach (array_slice($shown, 0, 8) as $problem) {
+                echo "  $problem\n";
+            }
+            if (count($shown) > 8) {
+                echo '  and problems on ' . (count($shown) - 8) . " more lines\n";
+            }
+            $failing[] = "{$examples[$id]['section']}\t$id\t$result[refusals]";
+        }
+    }
+    sort($failing, SORT_NATURAL);
+    $list = implode('', array_map(static fn (string $line): string => "$line\n", $failing));
+    file_put_contents("$build/spec-results", $list);
+    $checked = count($results);
+    $ignored = count($examples) - $checked;
+    echo "Checked $checked examples, ignored $ignored, and " . count($failing) . " fail.\n";
+
+    $listed = is_file("$root/" . BASELINE) ? file_get_contents("$root/" . BASELINE) : '';
+    if ($listed === $list) {
+        return 0;
+    }
+    $before = parse_list($listed);
+    $after = parse_list($list);
+    foreach ($after as $id => $entry) {
+        if (!isset($before[$id])) {
+            echo "$id fails and is not in " . BASELINE . ".\n";
+        } elseif ($before[$id] !== $entry) {
+            echo "$id is listed as `" . implode(' ', $before[$id]) . '` and is now `' . implode(' ', $entry) . "`.\n";
+        }
+    }
+    foreach ($before as $id => $entry) {
+        if (!isset($after[$id])) {
+            echo "$id passes and is still in " . BASELINE . ".\n";
+        }
+    }
+    fwrite(STDERR, 'The examples that fail differ from ' . BASELINE . '. Write the new list with: cp ' . substr("$build/spec-results", strlen("$root/")) . ' ' . BASELINE . "\n");
+
+    return 1;
+}
+
+/** @return array<string, array{string, int}> the section and refusal count of each listed example, by id */
+function parse_list(string $text): array
+{
+    $entries = [];
+    foreach (array_filter(explode("\n", $text)) as $line) {
+        $fields = explode("\t", $line);
+        if (count($fields) !== 3 || !ctype_digit($fields[2])) {
+            fail(BASELINE . " holds `$line`, and each line is `<section>\t<id>\t<refusals>`.");
+        }
+        $entries[$fields[1]] = [$fields[0], (int) $fields[2]];
+    }
+
+    return $entries;
+}
+
+/** Whether $path sits in a GUARDED folder. */
+function guarded(string $path): bool
+{
+    foreach (GUARDED as $folder) {
+        if (str_starts_with($path, $folder)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Fails, before the guard reads anything, when the tree holds a symbolic link at a file the guard reads, in a GUARDED
+ * folder, or at a folder above either. A link could point outside the checkout, and the job's log is public, so the
+ * message names the path and never the target.
+ */
+function refuse_links(string $root): void
+{
+    $read = [...DOCUMENTS, BASELINE];
+    $watched = [...$read, ...GUARDED];
+    $refused = static fn (string $path): bool => in_array($path, $read, true) || guarded($path)
+        || array_filter($watched, static fn (string $kept): bool => str_starts_with($kept, "$path/")) !== [];
+    foreach (array_filter(explode("\0", git($root, 'ls-files', '-s', '-z'))) as $entry) {
+        [$mode, $path] = [strtok($entry, ' '), substr($entry, strpos($entry, "\t") + 1)];
+        if ($mode === '120000' && $refused($path)) {
+            fail("$path is a symbolic link. The guard reads and guards only regular files.");
+        }
+    }
+    foreach ($read as $path) {
+        for ($part = $path; $part !== '.'; $part = dirname($part)) {
+            if (is_link("$root/$part")) {
+                fail("$part is a symbolic link. The guard reads and guards only regular files.");
+            }
+        }
+    }
+}
+
+/**
+ * Compares the working tree with $base. A pull request that changes a file outside the documents, the list and the
+ * GUARDED folders must leave every example's fingerprint and every GUARDED file as $base has them, so it can only
+ * remove entries. In any pull request, an example whose fingerprint $base also has, under its id or another, never
+ * joins the list or gains a refusal, except that a renamed example takes over its old id's entry.
+ */
+function compare_with_base(string $root, string $base): int
+{
+    if (git_status($root, 'cat-file', '-e', "$base^{commit}")[1] !== 0) {
+        fail("$base is no commit in this repository. Fetch it first.");
+    }
+    if (git_status($root, 'cat-file', '-e', "$base:" . BASELINE)[1] !== 0) {
+        echo BASELINE . " does not exist at $base, so there is nothing to compare.\n";
+        return 0;
+    }
+    refuse_links($root);
+    $before = parse_list(git($root, 'show', "$base:" . BASELINE));
+    $after = parse_list(file_get_contents("$root/" . BASELINE));
+    $head_examples = examples($root);
+    $base_examples = examples($root, $base);
+    $base_fingerprints = array_column($base_examples, 'id', 'fingerprint');
+    $unchanged = static fn (string $id): ?string => $base_fingerprints[$head_examples[$id]['fingerprint'] ?? ''] ?? null;
+    // Without --no-renames, a renamed file shows only its new path, and a guarded file could leave its folder unseen.
+    // Without -z, git quotes a path that holds a non-ASCII byte, and the quoted path matches no GUARDED folder.
+    $changed_files = array_filter(explode("\0", git($root, 'diff', '--name-only', '--no-renames', '-z', $base)));
+    $outside = array_values(array_filter($changed_files, static fn (string $file): bool => !in_array($file, [...DOCUMENTS, BASELINE], true)
+        && !guarded($file)));
+    // Beside the documents, a harness or checker change could make an example fail that no edit touched.
+    $beyond_documents = array_values(array_diff($changed_files, [...DOCUMENTS, BASELINE]));
+    $problems = [];
+
+    if ($outside !== []) {
+        $also = 'This PR also changes ' . implode(', ', $outside) . ', and examples and the files in ' . implode(', ', GUARDED) . ' change only in a spec PR.';
+        foreach (array_keys($base_examples + $head_examples) as $id) {
+            if (($base_examples[$id]['fingerprint'] ?? null) !== ($head_examples[$id]['fingerprint'] ?? null)) {
+                $problems[] = "The example $id " . (!isset($head_examples[$id]) ? 'is gone' : (!isset($base_examples[$id]) ? 'is new' : 'changed')) . ". $also";
+            }
+        }
+        foreach (array_filter($changed_files, 'guarded') as $file) {
+            $problems[] = "$file changed. $also";
+        }
+    }
+
+    $added = array_diff_key($after, $before);
+    foreach ($added as $id => [$section]) {
+        $same = $unchanged($id);
+        if ($beyond_documents !== []) {
+            $problems[] = "$section $id joins the list in a PR that also changes " . implode(', ', $beyond_documents)
+                . '. An entry joins only in a PR that changes docs/spec.md, README.md and ' . BASELINE . ' alone.';
+        } elseif ($same !== null && !(isset($before[$same]) && !isset($after[$same]))) {
+            // A rename keeps the fingerprint: the entry moves to the new id when the old id was listed and has left the list.
+            $problems[] = "$section $id joins the list, and its code and setup are the same as $same's at $base.";
+        }
+    }
+    foreach ($head_examples as $id => $example) {
+        if ($example['ignore'] === null || ($base_examples[$id]['ignore'] ?? null) !== null && $base_examples[$id]['codes'] === $example['codes']) {
+            continue;
+        }
+        foreach ($base_examples as $old) {
+            if ($old['ignore'] === null && array_intersect($old['codes'], $example['codes']) !== []) {
+                $problems[] = "$example[section] $id is ignored, which adds it to the list, and $old[id] ran the same code at $base.";
+            }
+        }
+    }
+
+    // Beyond the documents, every listed example compares with its own id. In a documents-only PR, an edited example
+    // may gain refusals, so only an example whose fingerprint the base has compares.
+    foreach ($after as $id => [$section, $refusals]) {
+        $same = $beyond_documents !== [] ? (isset($before[$id]) ? $id : null) : $unchanged($id);
+        $old = $same === null ? null : ($before[$same][1] ?? 0);
+        if ($old !== null && $refusals > $old) {
+            $problems[] = "$section $id has $refusals \"" . REFUSAL . "\" refusals, and $same has $old at $base"
+                . ($beyond_documents !== [] ? ', in a PR that also changes ' . implode(', ', $beyond_documents) . '.' : ' with the same code.');
+        }
+    }
+
+    foreach ($problems as $problem) {
+        echo "$problem\n";
+    }
+    echo count($added) . ' entries join ' . BASELINE . ', ' . count(array_diff_key($before, $after)) . " leave it.\n";
+
+    return $problems === [] ? 0 : 1;
+}
+
+/**
+ * Checks a pull request body's `Completes: §6.1, §9` line: every section it names, its subsections included, has a
+ * checked example and no entry in sharp/baseline/spec. A line is a claim when the word `completes`, in any case, starts
+ * it after only non-letters such as `-`, `1.`, `*` or backticks, and only non-letters follow it before a section start:
+ * `§`, a digit or `README`, as in `**Completes:** §6`. A claim in any form but the exact one fails, so a claim the check
+ * can't read never passes in silence. Prose that names the `COMPLETES` job goes on with a letter, so it is no claim.
+ */
+function completes(string $root, string $body): int
+{
+    refuse_links($root);
+    $sections = [];
+    foreach (preg_split('~\r?\n~', $body) as $line) {
+        if (!preg_match('~^[^\pL]*completes\b[^\pL\d§]*(?:§|\d|readme\b)~iu', $line)) {
+            continue;
+        }
+        if (!preg_match('~^Completes: ((?:' . SECTION . ')(?:, (?:' . SECTION . '))*)$~u', rtrim($line), $m)) {
+            fail("the body's line `" . trim($line) . '` is not a claim this check reads. Write it as `Completes: §6.1, §9`, on its own line.');
+        }
+        array_push($sections, ...explode(', ', $m[1]));
+    }
+    if ($sections === []) {
+        echo "The pull request body has no Completes: line.\n";
+        return 0;
+    }
+
+    $within = static fn (string $section, string $claim): bool => $section === $claim || str_starts_with($section, "$claim.");
+    $examples = array_filter(examples($root), static fn (array $example): bool => $example['ignore'] === null);
+    $listed = parse_list(file_get_contents("$root/" . BASELINE));
+    $failed = false;
+    foreach (array_unique($sections) as $claim) {
+        $checked = array_filter($examples, static fn (array $example): bool => $within($example['section'], $claim));
+        $left = array_filter($listed, static fn (array $entry): bool => $within($entry[0], $claim));
+        if ($checked === []) {
+            echo "$claim has no checked example, so nothing shows it is complete.\n";
+            $failed = true;
+        } elseif ($left !== []) {
+            echo "$claim still has " . count($left) . ' entries in ' . BASELINE . ': ' . implode(', ', array_keys($left)) . ".\n";
+            $failed = true;
+        } else {
+            echo "$claim: all " . count($checked) . " checked examples pass.\n";
+        }
+    }
+
+    return $failed ? 1 : 0;
+}
+
+function remove(string $path): void
+{
+    if (!is_dir($path)) {
+        return;
+    }
+    $entries = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST);
+    foreach ($entries as $entry) {
+        $entry->isDir() ? rmdir($entry->getPathname()) : unlink($entry->getPathname());
+    }
+    rmdir($path);
+}

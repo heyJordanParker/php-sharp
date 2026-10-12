@@ -15,7 +15,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   # CI_PASSED is the one required check, so the workflow always runs, and LINUX, MACOS and
-  # PLAIN_PHP skip a change to documentation alone.
+  # PLAIN_PHP skip a change to documentation alone. docs/spec.md and README.md count as code,
+  # because LINUX compiles and runs their examples.
   CHANGES:
     runs-on: ubuntu-24.04
     outputs:
@@ -34,6 +35,7 @@ jobs:
           git diff --name-only --no-renames "$BASE" HEAD > "$RUNNER_TEMP/changed"
           while read -r file; do
             case "$file" in
+              docs/spec.md|README.md) echo code=true >> "$GITHUB_OUTPUT"; break ;;
               .circleci/*|.github/CODEOWNERS|.github/ISSUE_TEMPLATE/*|*.md|*.rst|docs/*) ;;
               EXTENSIONS|LICENSE|NEWS|UPGRADING|UPGRADING.INTERNALS) ;;
               *) echo code=true >> "$GITHUB_OUTPUT"; break ;;
@@ -71,7 +73,7 @@ jobs:
       - name: Build
         run: sharp/bin/build --linux
       - name: Test PHP#
-        run: sharp/bin/test --linux --opcache --repeat --passes --census --differential
+        run: sharp/bin/test --linux --opcache --repeat --passes --census --spec --differential
       - name: Check the standard library with the checker the differential built
         run: sharp/docker/run sh -c '"sharp/build/linux-$(uname -m)/mago/bin/mago" --colors never --workspace sharp/composer analyze --minimum-fail-level note'
       - name: Test upstream

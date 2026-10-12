@@ -1,0 +1,8 @@
+namespace App;
+
+public interface PaymentGateway
+{
+    Money quote(Cart cart);
+
+    Charge charge(Cart cart);
+}

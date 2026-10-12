@@ -1,0 +1,5 @@
+namespace App.Shop;
+
+public class SendReceipt
+{
+}

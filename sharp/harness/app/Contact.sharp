@@ -1,0 +1,6 @@
+namespace App;
+
+public class Contact
+{
+    public string name { get; set; } = "Ada";
+}

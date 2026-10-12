@@ -1,0 +1,6 @@
+namespace App;
+
+public class Receipt
+{
+    public static Receipt unknownPlan(string plan) => new Receipt();
+}
