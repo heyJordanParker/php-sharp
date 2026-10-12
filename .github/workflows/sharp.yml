@@ -78,7 +78,7 @@ jobs:
       - name: Compare sharp/baseline/spec with the base branch
         if: github.event_name == 'pull_request'
         env:
-          BASE: 69bbe52efe7369707573192fcc97482329bda985
+          BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           git fetch --depth=1 origin "$BASE"
           if ! git cat-file -e "$BASE:sharp/bin/spec"; then
