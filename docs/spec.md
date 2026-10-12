@@ -50,6 +50,16 @@ const plan = this.plan();   // type inferred, cannot be reassigned
 const Plan plan = …;        // type written, cannot be reassigned
 ```
 
+**A PHP keyword that PHP# doesn't use is a plain name,** so `empty`, `list` and `print` can name a local. Every keyword PHP# uses stays reserved, such as `let`, `match` and `emit`:
+
+<!-- example keyword-names: statements -->
+```csharp
+const list = [1, 2, 3];     // compiles: PHP# has no list keyword
+let empty = true;           // compiles
+const print = "draft";      // compiles
+const match = 1;            // compile error: match is a PHP# keyword
+```
+
 - In a class, `const` declares a constant. It is never reassigned, and its value is known before the code runs.
 - These are removed:
   - `$$name` variable variables
@@ -343,7 +353,7 @@ public StoreService(
     private Planner planner,
     [Field(label: "Tenant")] public Tenant tenant { get; } via Tracked,
 ) {
-    if (!tenant.active) throw new InactiveTenant(tenant);
+    if (!tenant.active) { throw new InactiveTenant(tenant); }
 }
 ```
 
@@ -372,11 +382,43 @@ public Artifact.fromJson(string json) : this(Manifest.parse(json)) { }
 let artifact = new Artifact.fromJson(json);
 ```
 
-- A constructor calls its base class's constructor with `: super(…)`, as in `public Order(Row row) : super(row) { }`.
-- A named constructor runs on the new object, so it can set get-only properties and `init` properties.
 - The dependency container always uses the main constructor (section 32).
 - There is no overloading by argument types.
 - A static method that looks up an existing object, such as `Journey.forUuid`, stays a static method.
+
+**A subclass's constructor always calls its parent's with `: super(…)`,** as in `public Order(Row row) : super(row) { }`, even when the parent's takes no arguments, as Kotlin always writes `: Document()`. A constructor without the call is a compile error:
+
+<!-- example super-call: alone -->
+```csharp
+public class Document
+{
+    public Document() { }
+}
+
+public class Invoice : Document
+{
+    public Invoice(public int number { get; }) : super() { }   // compiles: Document takes no arguments, and the call is still written
+    public Invoice(public int number { get; }) { }             // compile error: Invoice extends Document, so write : super()
+}
+```
+
+**`this` is refused in the arguments of `: super(…)` and `: this(…)`,** as in C#, Java, Kotlin, Swift and TypeScript, because the object doesn't exist until the constructor runs:
+
+<!-- example constructor-call-this: members in Artifact -->
+```csharp
+public Artifact(public Manifest manifest { get; }) { }
+public Artifact.fromJson(string json) : this(Manifest.parse(json)) { }   // compiles
+public Artifact.copy() : this(this.manifest) { }                         // compile error: `this` is not available before the constructor runs: pass a parameter instead.
+```
+
+**A get-only property is set once.** A named constructor runs on the new object after the main constructor, so it can't set a get-only property again. A property that a named constructor sets again is declared `{ get; init; }` (section 6.1):
+
+<!-- example set-once: members in Money alone -->
+```csharp
+public Money(public int amount { get; }, public string currency { get; init; }) { }
+public Money.zero(string currency) : this(0, "USD") { this.currency = currency; }   // compiles: currency is init
+public Money.zero(string currency) : this(1, currency) { this.amount = 0; }         // compile error: amount is get-only, and the main constructor set it
+```
 
 ## 10. Structs
 
@@ -754,6 +796,21 @@ items.last();                 // the last item
 items[id];                    // compile error when id is int|string: a List index is an int
 ```
 
+**A `List` index is a place,** as a Rust `Vec` index and a Go slice index are, so a change through it changes the element the list stores: `grid[0].add(5)` adds to the list at index 0, and `points[0].x = 5` sets `x` on the stored point. **A change through a `Map` index is a compile error,** as Go refuses `m[k].x = 5`, because a `Map` read is a copy:
+
+<!-- example index-changes: statements
+List<List<int>> grid = [[1, 2], [3]];
+Map<string, List<int>> stock = ["sku-1": [1]];
+-->
+```csharp
+grid[0].add(5);                               // changes the list stored at index 0
+grid[0].count();                              // 3
+stock["sku-1"]?.add(5);                       // compile error: a Map read is a copy: read it, change it, and store it back
+List<int> counts = stock["sku-1"] ?? [];
+counts.add(5);
+stock["sku-1"] = counts;                      // stores the changed list back
+```
+
 **A `Map` read is handled where it is read,** with `??`, `?.`, `is`, `as`, `match` or `get`. A bare `Map` read is a compile error that names `??` and `get`:
 
 <!-- example map-reads: statements alone
@@ -1102,7 +1159,7 @@ int minimum = 500;
 lines.filter(l => !l.refunded);
 const check = (Order order) => order.total >= minimum;
 const price = (readonly Line line, string currency) => {
-    if (line.free) return Money.zero(currency);
+    if (line.free) { return Money.zero(currency); }
     return line.product.priceIn(currency);
 };
 ```
@@ -1209,29 +1266,60 @@ An event says that something happened, such as an order being paid. `emit` raise
 
 <!-- example event-declarations -->
 ```csharp
+// app/OrderEvent.sharp
+namespace App;
+
+public interface OrderEvent { int orderId { get; } }                  // the type both events share
+```
+
+<!-- example event-declarations -->
+```csharp
+// app/OrderPaid.sharp
+namespace App;
+
+public event OrderPaid(int orderId, Money amount) : OrderEvent;       // declares the event type OrderPaid
+```
+
+<!-- example event-declarations -->
+```csharp
+// app/OrderRefunded.sharp
+namespace App;
+
+public event OrderRefunded(int orderId, Money amount) : OrderEvent;   // declares the event type OrderRefunded
+```
+
+<!-- example event-declarations -->
+```csharp
+// app/Order.sharp
+namespace App;
+
 public class Order
 {
-    public interface Event { int orderId { get; } }                   // declares Order.Event, the type both events share
-    public event Paid(int orderId, Money amount) : Event;             // declares the event type Order.Paid
-    public event Refunded(int orderId, Money amount) : Event;         // declares Order.Refunded
-
     public int id { get; }
     public Money total { get; }
 
     public void markPaid()
     {
         …
-        emit new Paid(this.id, this.total);                            // runs every listener for Order.Paid
+        emit new OrderPaid(this.id, this.total);                      // runs every listener for OrderPaid
     }
-}
-
-public class Receipts
-{
-    public void deliver(Order.Paid e) on Order.Paid { … }             // listens to every Order.Paid
 }
 ```
 
-**Declaring:** `event` declares an event type. `public event Paid(int orderId, Money amount);` inside `Order` declares `Order.Paid`, a class whose parameters become get-only properties, as C#'s positional records and Kotlin's data classes do. An event is declared inside the class that raises it, and an interface its events share is declared beside them, as `Order.Event` is, the way C# nests types. An event that no single class owns is declared on its own, in its own file:
+<!-- example event-declarations -->
+```csharp
+// app/Receipts.sharp
+namespace App;
+
+public class Receipts
+{
+    public void deliver(OrderPaid e) on OrderPaid { … }               // listens to every OrderPaid
+}
+```
+
+**Declaring:** `event` declares an event type. `public event OrderPaid(int orderId, Money amount);` declares `OrderPaid`, a class whose parameters become get-only properties, as C#'s positional records and Kotlin's data classes do.
+
+**No type nests.** Every type, events and interfaces included, is declared at file level, in its own file, in the namespace its folder names (section 5). A reader finds a type by its namespace and its file, as in PHP. An interface that several events share, such as `OrderEvent`, is declared the same way. An event lives in the namespace of the code it describes:
 
 <!-- example standalone-event -->
 ```csharp
@@ -1241,60 +1329,37 @@ namespace App.Imports;
 public event RowImported(int row);
 ```
 
-**A class can't declare a nested type with its own name,** as C# refuses it with CS0542:
-
-<!-- example nested-type-own-name -->
-```csharp
-public class Order
-{
-    public event Order(int orderId);              // compile error: `Order` cannot declare a nested type named `Order`
-}
-```
-
 **Emitting:** `emit` raises an event. Any code may raise any event type:
 
-<!-- example emit-forms: statements in Order
-public int id { get; } = 1;
-public Money total { get; } = new Money(500, "USD");
-public event Paid(int orderId, Money amount);
-Order order = this;
+<!-- example emit-forms: statements
+public event OrderPaid(int orderId, Money amount);
+Order order = new Order();
+Money total = new Money(500, "USD");
 -->
 ```csharp
-emit new Paid(this.id, this.total);              // inside Order
-emit new Order.Paid(order.id, order.total);      // anywhere else
+emit new OrderPaid(order.id, total);             // runs every listener for OrderPaid
 ```
 
-**`new Order.Paid(…)` creates the nested type when `Order` declares one,** and calls `Order`'s named constructor `Paid` (section 9.1) otherwise:
+**`new Order.Paid(…)` always calls `Order`'s named constructor `Paid`** (section 9.1), because code names a type only by its imported short name (section 23). A type `Paid` in the namespace `App.Order` beside the class `App.Order` is a compile error, because a class cannot share its full name with a namespace (section 23):
 
-<!-- example nested-type-or-constructor -->
+<!-- example event-beside-class -->
 ```csharp
+// app/Order.sharp
+namespace App;
+
 public class Order
 {
     public Order(public int id { get; }) { }
-    public Order.reopened(Order closed) : this(closed.id) { }
-    public event Paid(int orderId);
-}
-
-public class Checkout
-{
-    public void pay(Order order)
-    {
-        const paid = new Order.Paid(order.id);    // creates the event: Order declares the nested type Paid
-        const again = new Order.reopened(order);  // calls the named constructor: Order declares no nested type reopened
-    }
+    public Order.Paid(int id) : this(id) { }
 }
 ```
 
-A class that declares both a nested type and a named constructor with one name is a compile error, as C# refuses a nested type and a member with one name:
-
-<!-- example nested-type-and-constructor -->
+<!-- example event-beside-class -->
 ```csharp
-public class Order
-{
-    public Order(public int id { get; }) { }
-    public event Paid(int orderId);
-    public Order.Paid(int id) : this(id) { }      // compile error: `Order` declares both an event and a named constructor named `Paid`
-}
+// app/Order/Paid.sharp
+namespace App.Order;                             // compile error: App.Order is the class Order, so it can't also be a namespace
+
+public event Paid(int orderId);
 ```
 
 **Plain PHP events:** `extern event` marks a plain PHP class, such as a Laravel event, as an event, so PHP# code can listen to it:
@@ -1325,25 +1390,31 @@ extern event JobFailed uses Database;            // an event, and a call into Jo
 
 <!-- example listeners
 import Illuminate.Queue.Events.JobFailed;
+public interface OrderEvent { int orderId { get; } }
+public event OrderPaid(int orderId, Money amount) : OrderEvent;
+public event OrderRefunded(int orderId, Money amount) : OrderEvent;
 -->
 ```csharp
 public class OrderNotices
 {
-    public void send(Order.Event e) on Order.Paid, Order.Refunded { … }    // two events, read through the type they share
-    public void refresh() on Order.Paid { … }                              // no parameter: the event's data is not needed
-    public void audit(Order.Event e) on Order.Event { … }                  // every event that implements Order.Event
-    public void alert(JobFailed e) on JobFailed { … }                      // a plain PHP event marked with extern event
+    public void send(OrderEvent e) on OrderPaid, OrderRefunded { … }      // two events, read through the type they share
+    public void refresh() on OrderPaid { … }                              // no parameter: the event's data is not needed
+    public void audit(OrderEvent e) on OrderEvent { … }                   // every event that implements OrderEvent
+    public void alert(JobFailed e) on JobFailed { … }                     // a plain PHP event marked with extern event
 }
 ```
 
 - **A listener on an interface hears every event that implements it.**
 - **`vendor/bin/mago compile` finds every `on` at build time.** A wrong event name, or a parameter type the listed events don't share, is a compile error:
 
-<!-- example listener-errors: members -->
+<!-- example listener-errors: members
+public event OrderPaid(int orderId, Money amount);
+public event OrderRefunded(int orderId, Money amount);
+-->
 ```csharp
-public void send(Order.Paid e) on Order.Paid, Order.Refunded { … }      // compile error: Order.Refunded is not an Order.Paid
-public void refresh() on Order.Payed { … }                               // compile error: Order has no event Payed
-public void log(Order.Paid e, Logger logger) on Order.Paid { … }         // compile error: a listener takes only the event
+public void send(OrderPaid e) on OrderPaid, OrderRefunded { … }         // compile error: OrderRefunded is not an OrderPaid
+public void refresh() on OrderPayed { … }                               // compile error: there is no event OrderPayed
+public void log(OrderPaid e, Logger logger) on OrderPaid { … }          // compile error: a listener takes only the event
 ```
 
 **Listening for a while:** `Events.on<RowImported>(e => …)` starts a listener and returns a handle. The listener stops when the handle goes out of scope:
@@ -1454,6 +1525,17 @@ These keep their C and PHP form:
 - `for (let i = 0; i < n; i++) { … }`
 
 PHP's `foreach` is removed.
+
+**The body of every `if`, `else`, `while`, `do` and `for` is written in braces,** as in Go, Rust and Swift, and as PSR-12 requires of PHP. A body without braces is a compile error:
+
+<!-- example braces: statements
+bool done = false;
+-->
+```csharp
+if (done) { return; }           // compiles
+if (done) return;               // compile error: write the body in braces, as in { return; }
+while (!done) done = true;      // compile error: write the body in braces, as in { done = true; }
+```
 
 ## 18. Strings
 
@@ -2112,7 +2194,6 @@ public class Invoice<TLine : Line>                             // type and type 
     const MAX_LINES = 100;                                     // constant
     List<TLine> pendingLines = [];                             // field
     public string dueDate { get; set; }                        // property
-    public event Paid(int orderId, Money amount);              // event
 
     public Money totalIn(string currency)                      // method and parameter
     {
@@ -2120,6 +2201,14 @@ public class Invoice<TLine : Line>                             // type and type 
         …
     }
 }
+```
+
+<!-- example naming-cases -->
+```csharp
+// app/Billing/InvoicePaid.sharp
+namespace App.Billing;
+
+public event InvoicePaid(int invoiceId, Money amount);         // event
 ```
 
 Mago warns on a `.sharp` name that breaks the rule, through its existing naming lint rules and in their message shape, as in `method-name`'s "Method name `TotalIn` should be in camel case."
@@ -2956,7 +3045,9 @@ Declare its effect in a .sharp file, such as `extern Mailchimp uses Http;`.
 
 **`uses Events` lets an implementation emit:**
 
-<!-- example emit-effect -->
+<!-- example emit-effect
+public event OrderPaid(int orderId, int amount);
+-->
 ```csharp
 public interface Checkout
 {
@@ -2965,7 +3056,7 @@ public interface Checkout
 
 public class StoreCheckout : Checkout
 {
-    public void complete(Order order) { emit new Order.Paid(order.id, order.total); }   // fits: emit has the effect Events
+    public void complete(Order order) { emit new OrderPaid(order.id, order.total); }    // fits: emit has the effect Events
 }
 ```
 
