@@ -12,11 +12,15 @@
 //
 // With --completes, it reads the pull request body from BODY and fails unless every section its `Completes:` line names
 // has a checked example and no entry in sharp/baseline/spec. Neither mode needs a build.
+//
+// With --self-test, it checks the examples of sharp/spec-self-test.md, one for each rule the check applies, and fails
+// unless each gives exactly the problems its `<!-- expect <id>` comment lists.
 
 declare(strict_types=1);
 
 const DOCUMENTS = ['README.md', 'docs/spec.md'];
 const BASELINE = 'sharp/baseline/spec';
+const SELF_TEST = 'sharp/spec-self-test.md';
 const HARNESS = 'sharp/harness';
 // The folders that hold what measures the examples and everything that runs that measurement: the harness, the
 // scripts, the CI image and the workflows. Only a spec PR changes a file in them.
@@ -44,8 +48,9 @@ $root = rtrim($status === 0 ? $top : git((string) getcwd(), 'rev-parse', '--show
 exit(match (true) {
     count($argv) === 3 && $argv[1] === '--base' => compare_with_base($root, $argv[2]),
     count($argv) === 2 && $argv[1] === '--completes' => completes($root, (string) getenv('BODY')),
+    count($argv) === 2 && $argv[1] === '--self-test' => self_test($root),
     count($argv) === 1 => check($root),
-    default => fail('usage: sharp/bin/spec [--base <commit> | --completes]'),
+    default => fail('usage: sharp/bin/spec [--base <commit> | --completes | --self-test]'),
 });
 
 function fail(string $message): never
@@ -76,7 +81,7 @@ function git(string $root, string ...$arguments): string
 }
 
 /**
- * Every example of README.md and docs/spec.md, by id, from the working tree or from $commit.
+ * Every example of $documents, by id, from the working tree or from $commit.
  *
  * The fingerprint covers the whole example but its id: its section, and every block's marker line, setup, fence
  * language, code and run comment. So a renamed example keeps its fingerprint, and any other change gives it a new one.
@@ -84,11 +89,11 @@ function git(string $root, string ...$arguments): string
  *
  * @return array<string, array{id: string, section: string, ignore: ?string, fingerprint: string, codes: list<string>, blocks: list<array>}>
  */
-function examples(string $root, ?string $commit = null): array
+function examples(string $root, ?string $commit = null, array $documents = DOCUMENTS): array
 {
     $examples = [];
     $last = null;
-    foreach (DOCUMENTS as $document) {
+    foreach ($documents as $document) {
         $text = $commit === null ? file_get_contents("$root/$document") : git($root, 'show', "$commit:$document");
         foreach (blocks($document, $text) as $block) {
             $id = $block['id'];
@@ -862,15 +867,20 @@ function matches(string $expected, array $outcome): bool
         if (str_starts_with($expected, '"')) {
             return $outcome['value'] === stripcslashes(substr($expected, 1, -1));
         }
-        $pattern = '~^' . implode('.*', array_map(static fn (string $part): string => preg_quote($part, '~'), explode('…', $expected))) . '$~su';
 
-        return (bool) preg_match($pattern, $outcome['value']);
+        return like($expected, $outcome['value']);
     }
     try {
         return var_export(eval("return $expected;"), true) === $outcome['export'];
     } catch (ParseError) {
         return false;
     }
+}
+
+/** Whether $text matches $pattern, where `…` matches any text. */
+function like(string $pattern, string $text): bool
+{
+    return (bool) preg_match('~^' . implode('.*', array_map(static fn (string $part): string => preg_quote($part, '~'), explode('…', $pattern))) . '$~su', $text);
 }
 
 /** Checks one compiled variant's errors against the lines it holds. Returns every problem found. */
@@ -907,7 +917,10 @@ function check_compile(array $example, array $reads, array $files, array $varian
         $parse = $error['code'] === 'parse';
         $unreadable = $parse && str_starts_with($error['message'], 'Parse error encountered');
         // A refusal says the feature is missing, and a missing class says the setup is: neither is the rule the line states.
-        $missing = str_contains($error['message'], REFUSAL) || $error['code'] === 'non-existent-class-like';
+        // A missing class the marked line names itself is the line's own error, as `on OrderPayed` names no event. mago
+        // quotes the missing name last.
+        $missing = str_contains($error['message'], REFUSAL) || $error['code'] === 'non-existent-class-like'
+            && !($kind === 'error' && preg_match('~.*`(?:[^`]*[\\\\.])?(\w+)`~s', $error['message'], $m) && preg_match('~\b' . $m[1] . '\b~', $read[$i]['bare']));
         if (($kind === 'error' && !$unreadable && !$missing) || ($kind === 'parse' && $parse)) {
             $claimed["$b:$i"] = true;
         } elseif ($kind === 'error' || $kind === 'parse') {
@@ -991,12 +1004,144 @@ function check_reached(array $example, array $reads): void
 
 function check(string $root): int
 {
+    $build = build_folder($root);
+    $examples = examples($root);
+    $results = measure($root, "$build/spec", $examples);
+
+    $failing = [];
+    foreach ($results as $id => $problems) {
+        if ($problems !== []) {
+            $block = $examples[$id]['blocks'][0];
+            echo "FAIL {$examples[$id]['section']} $id ($block[document]:$block[fence])\n";
+            $shown = [];
+            foreach ($problems as $problem) {
+                $shown[strtok($problem, ' ')] ??= $problem;
+            }
+            foreach (array_slice($shown, 0, 8) as $problem) {
+                echo "  $problem\n";
+            }
+            if (count($shown) > 8) {
+                echo '  and problems on ' . (count($shown) - 8) . " more lines\n";
+            }
+            $failing[] = "{$examples[$id]['section']}\t$id";
+        }
+    }
+    sort($failing, SORT_NATURAL);
+    $list = implode('', array_map(static fn (string $line): string => "$line\n", $failing));
+    file_put_contents("$build/spec-results", $list);
+    $checked = count($results);
+    $ignored = count($examples) - $checked;
+    echo "Checked $checked examples, ignored $ignored, and " . count($failing) . " fail.\n";
+
+    $listed = is_file("$root/" . BASELINE) ? file_get_contents("$root/" . BASELINE) : '';
+    if ($listed === $list) {
+        return 0;
+    }
+    $before = parse_list($listed);
+    $after = parse_list($list);
+    foreach ($after as $id => $section) {
+        if (!isset($before[$id])) {
+            echo "$id fails and is not in " . BASELINE . ".\n";
+        } elseif ($before[$id] !== $section) {
+            echo "$id is listed under $before[$id] and is now under $section.\n";
+        }
+    }
+    foreach ($before as $id => $section) {
+        if (!isset($after[$id])) {
+            echo "$id passes and is still in " . BASELINE . ".\n";
+        }
+    }
+    fwrite(STDERR, 'The examples that fail differ from ' . BASELINE . '. Write the new list with: cp ' . substr("$build/spec-results", strlen("$root/")) . ' ' . BASELINE . "\n");
+
+    return 1;
+}
+
+/**
+ * Checks SELF_TEST. Each of its examples shows one rule that check_compile, check_run or the annotation reader applies,
+ * and the `<!-- expect <id>` comment after it lists every problem the check must report for it, one per line, or none.
+ * There a location reads `line <n>`, counted from the example's first fence, so a row above can grow, and `…` matches
+ * any text, so a message mago words differently after a re-pin keeps the row.
+ */
+function self_test(string $root): int
+{
+    $examples = examples($root, null, [SELF_TEST]);
+    $expected = expectations(file_get_contents("$root/" . SELF_TEST));
+    foreach ($examples as $id => $example) {
+        if (!isset($expected[$id]) || $example['ignore'] !== null) {
+            fail(SELF_TEST . ":{$example['blocks'][0]['fence']}: $id needs an `<!-- expect $id` comment, and no self-test example is ignored.");
+        }
+    }
+    foreach (array_keys(array_diff_key($expected, $examples)) as $id) {
+        fail(SELF_TEST . ": the `<!-- expect $id` comment names no example.");
+    }
+
+    $failed = 0;
+    foreach (measure($root, build_folder($root) . '/spec-self-test', $examples) as $id => $problems) {
+        $first = $examples[$id]['blocks'][0]['fence'];
+        $left = preg_replace_callback('~' . preg_quote(SELF_TEST, '~') . ':(\d+)~', static fn (array $m): string => 'line ' . ($m[1] - $first), $problems);
+        $missing = [];
+        foreach ($expected[$id] as $pattern) {
+            $found = array_key_first(array_filter($left, static fn (string $problem): bool => like($pattern, $problem)));
+            if ($found === null) {
+                $missing[] = $pattern;
+            } else {
+                unset($left[$found]);
+            }
+        }
+        if ($missing === [] && $left === []) {
+            echo "ok $id\n";
+            continue;
+        }
+        $failed++;
+        echo "FAIL $id (" . SELF_TEST . ":$first)\n";
+        foreach ($missing as $pattern) {
+            echo "  expected, and not reported: $pattern\n";
+        }
+        foreach ($left as $problem) {
+            echo "  reported, and not expected: $problem\n";
+        }
+    }
+    echo count($examples) - $failed . ' of ' . count($examples) . " self-test examples give the problems they expect.\n";
+
+    return $failed === 0 ? 0 : 1;
+}
+
+/** @return array<string, list<string>> the problems each `<!-- expect <id>` comment of $text lists, by id */
+function expectations(string $text): array
+{
+    $expected = [];
+    $lines = explode("\n", $text);
+    for ($i = 0, $count = count($lines); $i < $count; $i++) {
+        if (!preg_match('~^<!-- expect ([a-z0-9-]+)( -->)?$~', $lines[$i], $m)) {
+            continue;
+        }
+        $expected[$m[1]] = [];
+        while (!isset($m[2]) && ++$i < $count && $lines[$i] !== '-->') {
+            $expected[$m[1]][] = $lines[$i];
+        }
+    }
+
+    return $expected;
+}
+
+/** The folder this machine's build writes to. */
+function build_folder(string $root): string
+{
+    return "$root/sharp/build/" . strtolower(php_uname('s')) . '-' . php_uname('m');
+}
+
+/**
+ * Compiles every example that isn't ignored in a project folder under $work, with the harness, and runs those whose
+ * lines claim a value or a throw. Returns the problems found for each example, by id.
+ *
+ * @return array<string, list<string>>
+ */
+function measure(string $root, string $work, array $examples): array
+{
     $mago = getenv('TEST_MAGO_EXECUTABLE');
     if ($mago === false || !is_executable($mago)) {
         fail('TEST_MAGO_EXECUTABLE names no mago. Run sharp/bin/test --spec, which installs the pinned one.');
     }
-    $build = "$root/sharp/build/" . strtolower(php_uname('s')) . '-' . php_uname('m');
-    $work = "$build/spec";
     remove($work);
     mkdir($work, 0777, true);
     $harness = harness_files($root);
@@ -1009,7 +1154,6 @@ function check(string $root): int
         fail("the harness in sharp/harness/ does not compile:\n" . implode("\n", $errors ?: [trim($stderr)]));
     }
 
-    $examples = examples($root);
     $reads = [];
     $jobs = [];
     $projects = [];
@@ -1055,7 +1199,7 @@ function check(string $root): int
                 }
             }
         }
-        $results[$id] = ['problems' => array_values(array_unique($problems))];
+        $results[$id] = array_values(array_unique($problems));
 
         $runs_here = false;
         foreach ($example['blocks'] as $b => $block) {
@@ -1064,7 +1208,7 @@ function check(string $root): int
                     || (in_array($line['expect']['kind'], RUNTIME, true) && runs($block, $line));
             }
         }
-        if ($runs_here && $results[$id]['problems'] === []) {
+        if ($runs_here && $results[$id] === []) {
             foreach (variants($example, $reads[$id]) as $v => $variant) {
                 foreach ($example['blocks'] as $b => $block) {
                     foreach ($reads[$id][$b] as $i => $line) {
@@ -1091,7 +1235,7 @@ function check(string $root): int
         foreach ($list as [$folder, $files]) {
             [$stdout, $stderr, $status] = $run_compiles[$folder];
             if ($status !== 0) {
-                $results[$id]['problems'][] = 'the run, with every compile error line left out, does not compile: '
+                $results[$id][] = 'the run, with every compile error line left out, does not compile: '
                     . implode(' ', array_column(compile_errors($stdout), 'message')) . trim(substr($stderr, -300));
                 continue;
             }
@@ -1103,57 +1247,12 @@ function check(string $root): int
         $id = basename(dirname($folder));
         $outcomes = is_file("$folder/outcomes") ? file_get_contents("$folder/outcomes") : '';
         if ($status !== 0) {
-            $results[$id]['problems'][] = "the run stopped with status $status: " . trim(substr($stdout . $stderr, -600));
+            $results[$id][] = "the run stopped with status $status: " . trim(substr($stdout . $stderr, -600));
         }
-        array_push($results[$id]['problems'], ...check_run($examples[$id], $reads[$id], $outcomes));
+        array_push($results[$id], ...check_run($examples[$id], $reads[$id], $outcomes));
     }
 
-    $failing = [];
-    foreach ($results as $id => $result) {
-        if ($result['problems'] !== []) {
-            $block = $examples[$id]['blocks'][0];
-            echo "FAIL {$examples[$id]['section']} $id ($block[document]:$block[fence])\n";
-            $shown = [];
-            foreach ($result['problems'] as $problem) {
-                $shown[strtok($problem, ' ')] ??= $problem;
-            }
-            foreach (array_slice($shown, 0, 8) as $problem) {
-                echo "  $problem\n";
-            }
-            if (count($shown) > 8) {
-                echo '  and problems on ' . (count($shown) - 8) . " more lines\n";
-            }
-            $failing[] = "{$examples[$id]['section']}\t$id";
-        }
-    }
-    sort($failing, SORT_NATURAL);
-    $list = implode('', array_map(static fn (string $line): string => "$line\n", $failing));
-    file_put_contents("$build/spec-results", $list);
-    $checked = count($results);
-    $ignored = count($examples) - $checked;
-    echo "Checked $checked examples, ignored $ignored, and " . count($failing) . " fail.\n";
-
-    $listed = is_file("$root/" . BASELINE) ? file_get_contents("$root/" . BASELINE) : '';
-    if ($listed === $list) {
-        return 0;
-    }
-    $before = parse_list($listed);
-    $after = parse_list($list);
-    foreach ($after as $id => $section) {
-        if (!isset($before[$id])) {
-            echo "$id fails and is not in " . BASELINE . ".\n";
-        } elseif ($before[$id] !== $section) {
-            echo "$id is listed under $before[$id] and is now under $section.\n";
-        }
-    }
-    foreach ($before as $id => $section) {
-        if (!isset($after[$id])) {
-            echo "$id passes and is still in " . BASELINE . ".\n";
-        }
-    }
-    fwrite(STDERR, 'The examples that fail differ from ' . BASELINE . '. Write the new list with: cp ' . substr("$build/spec-results", strlen("$root/")) . ' ' . BASELINE . "\n");
-
-    return 1;
+    return $results;
 }
 
 /** @return array<string, string> the section of each listed example, by id */

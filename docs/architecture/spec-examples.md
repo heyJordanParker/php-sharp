@@ -174,8 +174,8 @@ A value is a number, `true`, `false`, `null`, a quoted string, or a balanced `[�
 **The text after `compile error:` is not compared.** The spec writes it for the reader, and most of it is a paraphrase, such as "int is not bool" for the checker's "`if` takes a `bool`, but this is `int`." Comparing it would fail examples whose checker is right. What a message says is guard 2's job, the message rules in mago-sharp. The check still refuses four wrong reasons:
 
 - **A refusal is not the error the spec means.** An error whose message holds "not supported yet" never satisfies a `compile error` line. It says the feature is missing, not that the rule holds.
-- **A missing class is not the error the spec means either.** mago's `non-existent-class-like` error, such as "Cannot find class, interface, enum, or type alias `App\Mailer`", never satisfies a `compile error` line. It says the setup lacks a name.
-- **A parse error satisfies only a `parse error` line.** That is a parse error mago reports as "Parse error encountered during parsing …", which says the parser could not read the line. A message the parser writes to name a PHP# rule, such as "PHP# has no `echo`: write `printf` or `fwrite`.", satisfies a `compile error` line.
+- **A missing class is not the error the spec means either, unless the line names it.** mago's `non-existent-class-like` error, such as "Cannot find class, interface, enum, or type alias `App\Mailer`", says the setup lacks a name, so it satisfies a `compile error` line only when that line writes the missing name itself, outside a string. So `public void refresh() on OrderPayed { … }   // compile error: there is no event OrderPayed` passes on the error that `OrderPayed` is missing, and a missing name written on another line still fails as missing setup. mago quotes the missing name last in the message, and the check reads that name.
+- **A parse error satisfies only a `parse error` line.** That is a parse error mago reports as "Parse error encountered during parsing …", which says the parser could not read the line. A message the parser writes to name a PHP# rule, such as "A PHP# parameter needs a type, as in `int extra`.", satisfies a `compile error` line.
 - **Every error must belong to a line that expects one.** An error belongs to the line its primary span starts on. An error on a line with no annotation, or with prose, moves to a `compile error` line only when three things hold:
   - mago reports it for a whole construct at the construct's first line. `MOVES` in `sharp/bin/spec` lists those errors: `match-not-exhaustive`, `rejected-nullable-parameter`, and "A `match` needs a `default` arm.", matched by its message because its code is the generic `semantics`. A new one joins the list in a spec PR.
   - the `compile error` line sits inside the brackets the error's line opens, a `{` that starts the next line included.
@@ -223,7 +223,9 @@ README	readme-cart
 
 `sharp/bin/test --spec` runs `sharp/bin/spec` after the suite, as `--census` runs `sharp/bin/census`, with the engine and the `mago` that `sharp/bin/test` already installed. `LINUX` adds `--spec` to its `Test PHP#` step, so `CI_PASSED` covers it. This main check compares the list with what the examples do.
 
-`CHANGES` treats `docs/spec.md` and `README.md` as code, so a pull request that changes only the spec still runs `LINUX`.
+**The checker tests itself first.** `sharp/bin/test --spec` runs `sharp/bin/spec --self-test` before the examples. It checks the examples of `sharp/spec-self-test.md`, one for each rule `check_compile`, `check_run` and the annotation reader apply, and fails unless each gives exactly the problems the `<!-- expect <id>` comment after it lists. Most of those examples break their rule on purpose, so the problems they expect are the rule at work, and each fails when its rule is switched off. An expect comment counts lines from the example's first fence, as `line 2`, so a row above can grow, and `…` matches any text, so a re-pin that rewords a message keeps the row. The file sits outside the guarded folders, because a re-pin that turns a refusal it uses into a real error changes that row in the same pull request.
+
+`CHANGES` treats `docs/spec.md`, `README.md` and `sharp/spec-self-test.md` as code, so a pull request that changes only one of them still runs `LINUX`.
 
 **The base branch runs the guard.** A `pull_request` workflow runs the pull request's own copy of its file, so a pull request could change or delete a step that judges it. `.github/workflows/completes.yml` runs on `pull_request_target` instead, which runs the file as the base branch has it. It has two jobs, `SPEC_GUARD` and `COMPLETES`. Each one:
 
@@ -306,9 +308,10 @@ Guarded folders are marked `(guarded)`.
 ```text
 sharp/
 ├── bin/                  # (guarded)
-│   ├── spec              # new: PHP, like census. Checks every example, compares with a base (--base), or reads Completes: (--completes)
-│   └── test              # --spec runs sharp/bin/spec after the suite
+│   ├── spec              # new: PHP, like census. Checks every example, compares with a base (--base), reads Completes: (--completes), or tests its own rules (--self-test)
+│   └── test              # --spec runs sharp/bin/spec --self-test, then sharp/bin/spec, after the suite
 ├── baseline/spec         # new: the examples that fail today, the v1 meter
+├── spec-self-test.md     # one example for each rule sharp/bin/spec applies, with the problems it must report
 ├── docker/               # (guarded)
 │   ├── Dockerfile        # installs elan, for the law examples
 │   └── run               # ELAN_HOME and XDG_CACHE_HOME under sharp/build/
@@ -321,7 +324,7 @@ sharp/README.md           # documents --spec, the list, SPEC_GUARD and COMPLETES
 docs/how-we-work.md       # a PR that completes a section says Completes: §N
 .github/                  # (guarded)
 └── workflows/
-    ├── sharp.yml         # CHANGES counts the spec as code, LINUX runs --spec
+    ├── sharp.yml         # CHANGES counts the spec and the self-test as code, LINUX runs --spec
     └── completes.yml     # new: Spec guard, on pull_request_target: the base's --base (SPEC_GUARD) and --completes (COMPLETES)
 ```
 

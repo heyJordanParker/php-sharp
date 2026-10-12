@@ -1,6 +1,6 @@
 namespace App;
 
-public class Tenant
+public class Account
 {
     public string currency { get; set; } = "USD";
     public bool active { get; set; } = true;

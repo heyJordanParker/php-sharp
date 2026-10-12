@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   # CI_PASSED is the one required check, so the workflow always runs, and LINUX, MACOS and
-  # PLAIN_PHP skip a change to documentation alone. docs/spec.md and README.md count as code,
-  # because LINUX compiles and runs their examples.
+  # PLAIN_PHP skip a change to documentation alone. docs/spec.md, README.md and
+  # sharp/spec-self-test.md count as code, because LINUX compiles and runs their examples.
   CHANGES:
     runs-on: ubuntu-24.04
     outputs:
@@ -35,7 +35,7 @@ jobs:
           git diff --name-only --no-renames "$BASE" HEAD > "$RUNNER_TEMP/changed"
           while read -r file; do
             case "$file" in
-              docs/spec.md|README.md) echo code=true >> "$GITHUB_OUTPUT"; break ;;
+              docs/spec.md|README.md|sharp/spec-self-test.md) echo code=true >> "$GITHUB_OUTPUT"; break ;;
               .circleci/*|.github/CODEOWNERS|.github/ISSUE_TEMPLATE/*|*.md|*.rst|docs/*) ;;
               EXTENSIONS|LICENSE|NEWS|UPGRADING|UPGRADING.INTERNALS) ;;
               *) echo code=true >> "$GITHUB_OUTPUT"; break ;;
