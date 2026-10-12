@@ -6156,6 +6156,10 @@ static zend_vm_opcode_handler_t zend_jit_trace(zend_jit_trace_rec *trace_buffer,
 						    || (opline->op2.num & ZEND_FETCH_CLASS_MASK) == ZEND_FETCH_CLASS_PARENT))))) {
 							break;
 						}
+						/* The VM makes the Sharp\Collection receiver of a PHP# method call, see ZEND_SHARP_OPERATOR. */
+						if (opline->extended_value & ZEND_SHARP_OPERATOR) {
+							break;
+						}
 						if (!zend_jit_fetch_static_prop(&ctx, opline, op_array)) {
 							goto jit_failure;
 						}

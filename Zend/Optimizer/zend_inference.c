@@ -3883,6 +3883,13 @@ static zend_always_inline zend_result _zend_update_type_info(
 					tmp |= MAY_BE_UNDEF;
 				}
 			}
+			if (opline->opcode == ZEND_FETCH_STATIC_PROP_R
+					&& (opline->extended_value & ZEND_SHARP_OPERATOR)
+					&& (tmp & MAY_BE_ARRAY)) {
+				/* The receiver of a PHP# method call: an array becomes a Sharp\Collection. */
+				tmp |= MAY_BE_OBJECT | MAY_BE_RC1 | MAY_BE_RCN;
+				ce = NULL;
+			}
 			UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
 			if (ce) {
 				UPDATE_SSA_OBJ_TYPE(ce, 1, ssa_op->result_def);
