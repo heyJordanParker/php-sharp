@@ -1,10 +1,24 @@
 # Slice 13: Events
 
-Spec section 15, with the parts of the sections it leans on: section 29 (the effect `Events`), section 32 (the container that creates each listener's object), sections 11 and 14 (the type argument and the lambda of `Events.on<T>`), and sections 22 and 23 (a type declared inside a class). v1 plan Slice 13. This note is the design only. team-lead approves it before anyone builds.
+Spec section 15, with the parts of the sections it leans on: section 29 (the effect `Events`), section 32 (the container that creates each listener's object), sections 11 and 14 (the type argument and the lambda of `Events.on<T>`), and section 23 (a class's full name, and `.` as member access). v1 plan Slice 13. This note is the design only. team-lead approves it before anyone builds.
+
+## Jordan's ruling: nothing nests
+
+**Every type, events and interfaces included, is declared at file level in a namespace, in its own file** (specimen ruling 3, round 3, 2026-10-12). `app/Store/OrderPaid.sharp` declares `public event OrderPaid(int orderId, Money amount) : OrderEvent;`, and `app/Store/OrderEvent.sharp` declares the interface its family shares. A type declared inside a class, an interface, an enum, a trait or a module is one parse error that names its owner: "A class can't declare a type inside it: declare `Paid` in its own file."
+
+Spec section 23 already says a class can't share its full name with a namespace, and `.` in code is always member access. So `new Order.Paid(…)` can only call `Order`'s named constructor `Paid`, which is mago-sharp #161's work, and a dotted name in a type position is not PHP#.
+
+The ruling changes the scope of these PRs:
+
+- **mago-sharp PR 1 (#162) shrinks.** It keeps `event` at file level, `extern event` with or without `uses`, get-only interface properties and their checks, and the nested-type refusal. It drops the nested event and interface, the binder's nested-first lookup, dotted types, the dotted `new X.Y` resolution and the nested lowering.
+- **mago-sharp PR 3 (`on`) shrinks.** An `on` clause lists plain type names, and an unknown name is the existing "Cannot find type" error. The "`Order` has no event `Payed`" message goes.
+- **php-sharp PR A shrinks.** `sharp/composer/autoload.php` needs no nested-type branch, because each event is its own class in its own file.
+- **The spec-files PR changes shape.** The harness declares `OrderEvent`, `OrderPaid` and `OrderRefunded` in three files of their own, and the `emit-forms` template marker is no longer needed.
+- **mago-sharp PR 2 (`emit`), PR 4 (`Events.on<T>`) and php-sharp PRs B and C keep their scope.** Only their example names change.
 
 ## The answer first
 
-**No part of section 15 exists.** Every form is a parse error or a misleading error on mago-sharp `master`, and none compiles silently:
+**No part of section 15 exists.** Every form is a parse error or a misleading error on mago-sharp `master` at `b5827b3a9`, and none compiles silently:
 
 - `public event Paid(int orderId, Money amount);` at file level is a parse error. Inside a class it parses as an abstract method named `Paid` that returns a type named `event`: "Non-Abstract method `Parcel.Lost` must have a concrete body."
 - An `interface` inside a class, a dotted type such as `Order.Paid e`, `emit`, the `on` clause and `extern event` are all parse errors.
@@ -16,39 +30,39 @@ Spec section 15, with the parts of the sections it leans on: section 29 (the eff
 
 **Each construct lowers to PHP the engine already runs, plus one engine function:**
 
-- An event is a `final` PHP class whose constructor promotes `public readonly` properties. A type declared inside `Order` is the PHP class `App\Order\Paid`.
+- An event is a `final` PHP class whose constructor promotes `public readonly` properties. `app/Store/OrderPaid.sharp` is the PHP class `App\Store\OrderPaid`, as every class in its own file is.
 - `emit e;` is a call of `\Sharp\Internal\emit($e)`, the one function the engine adds. Plain PHP calls it too.
 - An `on` clause adds nothing to its class. `mago compile` writes every listener into one table, `.sharp/listeners.php`, and `Sharp\Internal\emit` reads it.
 - `Events.on<T>(f)` returns a `Sharp\Listening` handle whose destructor stops the listener.
 
-**Guard 1.** Of section 15's 7 entries in `sharp/baseline/spec`, php-sharp PR A removes `standalone-event` and `extern-event` outright. It removes `listeners`, `listener-errors`, `emit-forms` and `event-declarations` once the spec-files changes in "Rulings needed outside this Slice" land. PR B removes `scoped-listener` after its errata. Section 29's `emit-effect` leaves with PR A once section 29's `uses` on a method declaration, task #468's default `public` and the harness's `Order` events land. No PR of this Slice can write `Completes: §15` before all 7 are gone.
+**Guard 1.** Of section 15's 7 entries in `sharp/baseline/spec`, php-sharp PR A removes `standalone-event` and `extern-event` outright. It removes `listeners`, `listener-errors`, `emit-forms` and `event-declarations` once the spec-files changes in "Rulings needed outside this Slice" land. PR B removes `scoped-listener` after its errata. Section 29's `emit-effect` leaves with PR A once section 29's `uses` on a method declaration, task #468's default `public` and the harness's `OrderEvent` and `OrderPaid` files land. No PR of this Slice can write `Completes: §15` before all 7 are gone.
 
 ## Decisions team-lead approves
 
-1. **A type declared inside a class is a PHP class named under its outer class.** `Order.Paid` is `App\Order\Paid`, and `Order.Event` is `App\Order\Event`, as spec section 22 names an interface's default bodies `<Interface>\Defaults`. Section 23's rule that a class cannot share its full name with a namespace already makes `app/Order.sharp` beside an `app/Order/` folder a compile error, so no source file can claim `App\Order\Paid`. The bridge emits each nested type as a sibling declaration after its class, named `Order\Paid` under the file's `namespace`. `zend_compile_class_decl` prefixes it to `App\Order\Paid`, because `zend_assert_valid_class_name` checks only reserved names (read in `Zend/zend_compile.c`, not run: no engine is built in slot 3). PHP itself has no nested types, and Kotlin and Java name `Order$Paid` the same way on the JVM.
-2. **`emit e;` lowers to `\Sharp\Internal\emit($e);`.** Architecture's rule puts runtime machinery that plain PHP can see, and PHP# code never writes, under `Sharp\Internal`. PHP# raises only with `emit`, so `Sharp.Events` gets no `emit` method and there is one spelling.
-3. **`mago compile` writes one listener table, `.sharp/listeners.php`.** It is a PHP file returning every listener in a fixed order, each with the types its `on` clause lists and whether it takes the event:
+Decisions 1 (nested-type naming) and 6 (autoload through the outer class) of the approved note are gone, because each event is its own class in its own file. The rest keep their text and take new numbers.
+
+1. **`emit e;` lowers to `\Sharp\Internal\emit($e);`.** Architecture's rule puts runtime machinery that plain PHP can see, and PHP# code never writes, under `Sharp\Internal`. PHP# raises only with `emit`, so `Sharp.Events` gets no `emit` method and there is one spelling.
+2. **`mago compile` writes one listener table, `.sharp/listeners.php`.** It is a PHP file returning every listener in a fixed order, each with the types its `on` clause lists and whether it takes the event:
 
    ```php
    <?php
 
    return [
        ['App\OrderNotices', 'alert', ['Illuminate\Queue\Events\JobFailed'], true],
-       ['App\OrderNotices', 'audit', ['App\Order\Event'], true],
-       ['App\OrderNotices', 'refresh', ['App\Order\Paid'], false],
-       ['App\OrderNotices', 'send', ['App\Order\Paid', 'App\Order\Refunded'], true],
-       ['App\Receipts', 'deliver', ['App\Order\Paid'], true],
+       ['App\OrderNotices', 'audit', ['App\OrderEvent'], true],
+       ['App\OrderNotices', 'refresh', ['App\OrderPaid'], false],
+       ['App\OrderNotices', 'send', ['App\OrderPaid', 'App\OrderRefunded'], true],
+       ['App\Receipts', 'deliver', ['App\OrderPaid'], true],
    ];
    ```
 
    opcache keeps it in shared memory, so a request reads no file. Laravel's `php artisan event:cache` writes `bootstrap/cache/events.php` the same way, and Symfony compiles its listeners into its container. `mago compile` already deletes every other file in `.sharp/`, and it keeps this one.
    - Rejected: a table inside each event's `.sharpc` file. An interface listener and an `extern event` have no event file to hold it, and a new listener file would have to make every event's file stale.
    - Rejected: listeners that register when their class loads. A listener class is autoloaded only when something names it, so it would never register, which is why Laravel needs explicit registration or its discovery cache.
-4. **`Sharp\Internal\emit` is engine code in `ext/sharp/sharp.c`,** as `Sharp\Collection` and `Sharp\Environment` are. It finds `.sharp/` as the engine finds it for a source file (spec section 27), walking up from the file that declares the event's class, so an `extern event` in `vendor/` finds the project's table. It includes the table once per request through `zend_compile_file`, so opcache serves it. For each event class it keeps, for the request, the listeners whose listed types the event is an `instanceof`, in table order. That is the one lookup path, the way a PSR-14 `ListenerProviderInterface::getListenersForEvent` matches by class and interface.
-5. **Until section 32's container lands, the engine creates a listener's object with `new`,** and the checker refuses a listener class whose main constructor takes parameters as "not supported yet". Section 32 says the container builds every class through its main constructor, `on` listeners included. php-sharp PR C swaps `new` for the container with no change to any accepted program.
-6. **The Composer package autoloads a nested type through its outer class.** `sharp/composer/autoload.php` finds no `app/Order/Paid.sharp` for `App\Order\Paid`, so it loads `App\Order` and returns. That covers plain PHP naming `\App\Order\Paid` before anything loaded `Order`. `Plugin::dumpClassMap` adds no entry for nested types, since the outer class's entry serves them.
-7. **`extern event JobFailed;` is that class's one `extern` declaration.** `ExternMetadata` gains `event: bool`, and a second `extern` naming `JobFailed` is the existing "at most one `extern` declaration" error. Without `uses` it declares the class pure, as every `extern` without `uses` does.
-8. **`emit` records a new `Effect::Emit(event class)` in its body's `EffectSummary`,** which `is_outside` matches against `Sharp\Events`. `Impurity::describe` gains the arms "emits `Order.Paid`, which has the effect `Events`" and "reaches `StoreCheckout.complete`, which emits `Order.Paid` with the effect `Events`". The effect is `Events` whatever the listeners do: decision 049 chose `Events` to stand for the listeners, so their own effects never reach the code that emits.
+3. **`Sharp\Internal\emit` is engine code in `ext/sharp/sharp.c`,** as `Sharp\Collection` and `Sharp\Environment` are. It finds `.sharp/` as the engine finds it for a source file (spec section 27), walking up from the file that declares the event's class, so an `extern event` in `vendor/` finds the project's table. It includes the table once per request through `zend_compile_file`, so opcache serves it. For each event class it keeps, for the request, the listeners whose listed types the event is an `instanceof`, in table order. That is the one lookup path, the way a PSR-14 `ListenerProviderInterface::getListenersForEvent` matches by class and interface.
+4. **Until section 32's container lands, the engine creates a listener's object with `new`,** and the checker refuses a listener class whose main constructor takes parameters as "not supported yet". Section 32 says the container builds every class through its main constructor, `on` listeners included. php-sharp PR C swaps `new` for the container with no change to any accepted program.
+5. **`extern event JobFailed;` is that class's one `extern` declaration.** `ExternMetadata` gains `event: bool`, and a second `extern` naming `JobFailed` is the existing "at most one `extern` declaration" error. Without `uses` it declares the class pure, as every `extern` without `uses` does. With `uses`, as `extern event JobFailed uses Database;`, it gives the class those effects, as `extern JobFailed uses Database;` does (Jordan's ruling on question 2). Creating a `JobFailed` then has the effect `Database`, through the existing `extern_of` in `crates/analyzer/src/effects/summary.rs`.
+6. **`emit` records a new `Effect::Emit` in its body's `EffectSummary`,** which `is_outside` matches against `Sharp\Events`. It carries no payload, because the effect's cause already holds the event's class. `Impurity::describe` gains the arms "emits `OrderPaid`, which has the effect `Events`" and "reaches `StoreCheckout.complete`, which emits `OrderPaid` with the effect `Events`". The effect is `Events` whatever the listeners do: decision 049 chose `Events` to stand for the listeners, so their own effects never reach the code that emits.
 
 ## Standard-library choices the spec leaves open
 
@@ -58,8 +72,8 @@ decision 066 makes the dispatcher's API team-lead's (php-sharp #56). Each item i
 2. **An exception from a listener leaves `emit` at once, and the remaining listeners do not run.** Precedent: PSR-14 requires it ("An Exception or Error thrown by a Listener MUST block the execution of any further Listeners" and "MUST be allowed to propagate back up to the Emitter"), and C#'s multicast delegates, Laravel and Symfony all behave this way. Spec section 31 makes an exception a bug that fails loudly. Rejected: MediatR's `TaskWhenAllPublisher`, which runs every handler and throws an `AggregateException`.
 3. **An `emit` inside a listener runs its own listeners at once, before the outer `emit` continues,** as every synchronous dispatcher does.
 4. **Each `emit` runs the listeners that existed when it started.** A scoped listener started or stopped during an `emit` takes effect at the next one. Precedent: C# delegates are immutable, so `+=` inside a handler never changes the running invocation list.
-5. **A listener runs once per `emit`,** even when several of its listed types match, as `send(…) on Order.Paid, Order.Event` would. The table holds each listener once, so this needs no extra rule.
-6. **A listener's object is created for each call** (decision 5), as Laravel's dispatcher resolves a listener class from its container on every dispatch. Section 32's Slice decides the container's lifetime for a class no module binds, and must keep this one or refuse a listener that keeps state between events.
+5. **A listener runs once per `emit`,** even when several of its listed types match, as `send(…) on OrderPaid, OrderEvent` would. The table holds each listener once, so this needs no extra rule.
+6. **A listener's object is created for each call** (decision 4), as Laravel's dispatcher resolves a listener class from its container on every dispatch. Section 32's Slice decides the container's lifetime for a class no module binds, and must keep this one or refuse a listener that keeps state between events.
 7. **`Events.on<TEvent>` and its handle:**
 
    ```csharp
@@ -96,51 +110,24 @@ decision 066 makes the dispatcher's API team-lead's (php-sharp #56). Each item i
 
 The checker enforces each one with the message shown. team-lead rules, and brings any it rejects to Jordan.
 
-1. **`emit` takes a value whose type is an event,** declared with `event` or `extern event`: "`emit` takes an event, and `Money` is not one." An interface type such as `Order.Event` is refused the same way, so the checker never accepts a value plain PHP could fill with a non-event.
+1. **`emit` takes a value whose type is an event,** declared with `event` or `extern event`: "`emit` takes an event, and `Money` is not one." An interface type such as `OrderEvent` is refused the same way, so the checker never accepts a value plain PHP could fill with a non-event.
 2. **An `on` clause names events, or interfaces that at least one event implements.** "`Money` is not an event." and "No event implements `Countable`, so `refresh` never runs." Decision 049 rejected startup registration because "a forgotten line silently never runs", and a listener that nothing can reach is the same failure.
 3. **A listener is an instance method that returns `void`, in a class that is neither abstract nor generic:** "A listener runs on an object, so `refresh` cannot be `static`.", "A listener returns nothing, and `refresh` returns `int`.", "`Notices` is abstract, so the container cannot create it to run `refresh`." A generic class is refused because nothing would fix its type arguments.
 4. **A listener may be `private`.** The engine calls it, and the analyzer counts an `on` method as used. Precedent: VB.NET's `Handles`, decision 049's chosen precedent, is idiomatic on a `Private Sub`.
 5. **An event takes only `public`, and declares no body.** Its header lists interfaces only, and the class it lowers to is `final`. A family of events shares an interface, as spec section 15 shows, so no event extends another. Precedent: Kotlin's data classes are final.
-6. **Inside a class, a type name resolves to the class's nested type first,** so `new Paid(…)` in `Order` is `Order.Paid` even beside a top-level `App.Paid`. Precedent: C# looks up a nested type before the namespace and its `using` directives.
-7. **Only `event` and `interface` declarations nest in a class.** A nested `class`, `enum` or `struct` is "not supported yet" until Jordan rules on question 3.
+6. **Nothing nests.** A type declared inside a class, an interface, an enum, a trait or a module is one parse error over the whole type, which names its owner and the type: "A class can't declare a type inside it: declare `Paid` in its own file." The owner parses on without it. This is Jordan's ruling 3, not a rule the Slice chose.
 
-## Spec syntax questions for Jordan
+## Jordan's rulings on the spec syntax questions
 
-team-lead brings these to Jordan. The Slice builds the proposal meanwhile.
-
-1. **`new Order.Paid(…)` and a named constructor read the same.** Spec section 9.1 writes `new Artifact.fromJson(json)`, and section 15 writes `new Order.Paid(order.id, order.total)`. Proposal: `new X.Y(…)` creates the nested type `Y` when `X` declares one, and calls the named constructor `Y` otherwise. A class that declares both with one name is a compile error, "`Order` declares both an event and a named constructor named `Paid`.", as section 14.3 forbids a method and a field with one name.
-2. **Can `extern event` carry `uses`?** Section 29 says each plain PHP class has one `extern` declaration and an `extern` without `uses` declares it pure, so `extern event JobFailed;` also declares `JobFailed` pure. Proposal: `extern event JobFailed uses Database;` is valid, and states both.
-3. **Which types nest in a class?** Section 15 nests events and their interface "the way C# nests types". Proposal: only `event` and `interface` in v1, and every other nested type refused as "not supported yet".
+1. **`new Order.Paid(…)` against a named constructor.** Jordan first picked the nested type, then ruled that nothing nests. Spec section 23 says a class can't share its full name with a namespace, and `.` in code is always member access, so `new Order.Paid(…)` can only call `Order`'s named constructor `Paid`. That is mago-sharp #161's work, and this Slice adds no `new X.Y` resolution and no "both a type and a named constructor" error.
+2. **`extern event` carries `uses`.** "sure", following section 29's own `extern … uses`. `extern event JobFailed uses Database;` gives the plain PHP class `JobFailed` the effect `Database` (decision 5).
+3. **Nothing nests.** Every type, events and interfaces included, is declared at file level in a namespace, in its own file. Jordan: "We care about the final usage of the language, its capabilities & CONSUMERS basically, not which code is easier to implement." His CS0542 ruling, a nested type named like its class, no longer applies.
 
 ## Rulings needed outside this Slice
 
-1. **`emit-forms` cannot pass as marked.** `sharp/bin/spec` matches the setup line `public event Paid(int orderId, Money amount);` against `TYPE_DECLARATION` and moves it out of `Order` to file level (the generated `app/Paid.sharp` declares `App.Paid` above `class Order`). `Order.Paid` then names nothing. Proposal, a template marker in a spec PR:
-
-   ```diff
-   -<!-- example emit-forms: statements in Order
-   -public int id { get; } = 1;
-   -public Money total { get; } = new Money(500, "USD");
-   -public event Paid(int orderId, Money amount);
-   -Order order = this;
-   --->
-   +<!-- example emit-forms
-   +public class Order
-   +{
-   +    public int id { get; } = 1;
-   +    public Money total { get; } = new Money(500, "USD");
-   +    public event Paid(int orderId, Money amount);
-   +
-   +    public void run()
-   +    {
-   +        Order order = this;
-   +        …
-   +    }
-   +}
-   +-->
-   ```
-
+1. **`emit-forms` needs no template marker.** `sharp/bin/spec` matches the setup line `public event Paid(int orderId, Money amount);` against `TYPE_DECLARATION` and moves it to file level in its own generated file, which is now exactly where an event belongs. The marker the approved note proposed only kept a nested event nested, so it is withdrawn.
 2. **The harness needs four changes** (`sharp/harness/`, a spec file):
-   - `app/Order.sharp` gains `public interface Event { int orderId { get; } }`, `public event Paid(int orderId, int amount) : Event;` and `public event Refunded(int orderId, int amount) : Event;`. The amount is `int` because the harness `Order.total` is `int`, and section 29's `emit-effect` passes `order.total`. Making `Order.total` a `Money` everywhere would break the sections that use it as a number, such as section 21's `order.total + 1`.
+   - `app/OrderEvent.sharp` declares `public interface OrderEvent { public int orderId { get; } }`. `app/OrderPaid.sharp` declares `public event OrderPaid(int orderId, int amount) : OrderEvent;`, and `app/OrderRefunded.sharp` declares `public event OrderRefunded(int orderId, int amount) : OrderEvent;`. Each type is in its own file. The amount is `int` because the harness `Order.total` is `int`, and section 29's `emit-effect` passes `order.total`. Making `Order.total` a `Money` everywhere would break the sections that use it as a number, such as section 21's `order.total + 1`.
    - `app/Stubs/Laravel.sharp` declares `extern event JobFailed;`, so `listeners`'s `alert(JobFailed e) on JobFailed` names an event.
    - `app/Logger.sharp` declares `public class Logger { }`. `listener-errors` writes `Logger logger`, and a missing class never satisfies a `compile error` line.
    - `app/Imports/RowImported.sharp` declares `public event RowImported(int row);`, for `scoped-listener`.
@@ -148,7 +135,7 @@ team-lead brings these to Jordan. The Slice builds the proposal meanwhile.
    - `event-declarations` declares its own `Order`, which replaces the harness's, and reads `this.id` and `this.total` that it never declares. It needs `public int id { get; }` and `public Money total { get; }` in the example's `Order`.
    - `scoped-listener` names `RowImported` in namespace `App` with no import. It needs `import App.Imports.RowImported;`.
 4. **Cross-slice order:**
-   - An interface property is "This class member is not supported yet in PHP#." on `master`, and an interface member without `public` is "Interface virtual property `Tracked.shipmentId` must be declared public." (task #468). `Order.Event { int orderId { get; } }` needs both. Proposal: PR 1 adds get-only interface properties, which PHP 8.4 runs as `public int $orderId { get; }`, and #468 lands its default-public rule before php-sharp PR A.
+   - An interface property is "This class member is not supported yet in PHP#." on `master`, and an interface member without `public` is "Interface virtual property `Tracked.shipmentId` must be declared public." (task #468). A spec example that writes `interface OrderEvent { int orderId { get; } }` needs both. PR 1 adds get-only interface properties, which PHP 8.4 runs as `public int $orderId { get; }`, and #468 lands its default-public rule before php-sharp PR A. The harness writes `public`, so it needs only PR 1.
    - Section 29's `emit-effect` writes `void complete(Order order) uses Events;` in an interface, which is a parse error on `master` ("Expected one of `LeftBrace`, found `Identifier`", the same as `effectful-declarations`). It leaves the baseline when section 29's Slice parses `uses` on a method declaration, and when #468 makes that interface method `public` by default.
    - Section 32's container comes before php-sharp PR C.
 
@@ -169,19 +156,21 @@ compile() { env -u FORCE_COLOR XDG_CACHE_HOME=$P/cache MAGO_REPORTING_FORMAT=ema
 
 `compile` runs printed every probe line quoted below. `Tracked.sharp` ran once without `public` and once with it. A run with `MAGO_REPORTING_FORMAT=json`, read by `$P/issues.php`, gave each parse error's note. The last run ended with `Compiled 85 PHP# files into .sharp/. 10 PHP# files were refused`, and `Hooks.sharp` and `Unused.sharp` were among the compiled.
 
-**PHP's own behavior ran** on Homebrew PHP 8.5.1, `$P/php-behavior.php`: the PHP the bridge would emit for `Order.Event` and `Order.Paid`, and a destructor handle. Its output is quoted where a rule uses it.
+**PHP's own behavior ran** on Homebrew PHP 8.5.1, `$P/php-behavior.php`: the PHP the bridge would emit for an event and its interface, under the nested names the approved note proposed, and a destructor handle. Its output is quoted where a rule uses it, and the engine run below repeats it under file-level names.
 
-**The engine part of each state is read from code.** No PHP# engine is built in slot 3.
+**The engine part of each state is read from code,** except the run below. No PHP# engine is built in slot 3.
+
+**mago-sharp #162 after Jordan's ruling ran on a second probe project,** `$P/ws-r3`, with the `mago` built from `feat/slice-events` at `41982e195` in `/Users/jordan/Developer/sharp-worktrees/3/mago-sharp-pr1`. It holds `app/Shop/OrderEvent.sharp`, `app/Shop/OrderPaid.sharp`, `app/Shop/Order.sharp`, `app/Shop/Failure.sharp`, `app/Stubs/Queue.sharp` (`extern event JobFailed uses Database;`) and the plain PHP `src/JobFailed.php`, plus `app/Shop/Nested.sharp` for the refusal. Its compiled files ran on the PHP# engine built in slot 7, `/Users/jordan/Developer/sharp-worktrees/7/php-sharp/sharp/build/darwin-arm64/sapi/cli/php`, through `$P/ws-r3/run.php`.
 
 # Every rule of section 15, its state and its mechanism
 
 The states are **parse error**, **misread** (it parses as something else and fails for that reason), **missing** (it parses, and the name does not exist) and **works**.
 
-## An event type, declared inside the class that raises it
+## An event type, declared at file level in its own file
 
-"`public event Paid(int orderId, Money amount);` inside `Order` declares `Order.Paid`, a class whose parameters become get-only properties."
+An event is a class whose parameters become get-only properties, declared at file level in its own file (Jordan's ruling 3). `app/Store/OrderPaid.sharp` declares `public event OrderPaid(int orderId, Money amount) : OrderEvent;`.
 
-Misread. `app/Events/Parcel.sharp`:
+On `master`, misread inside a class and a parse error at file level. `app/Events/Parcel.sharp`:
 
 ```csharp
 namespace App.Events;
@@ -213,28 +202,35 @@ docs/spec.md:1239 expects no error, and the checker reports: Parse error encount
 and problems on 2 more lines
 ```
 
-- PHP it lowers to, a sibling of `Order` in the file's namespace:
+`standalone-event`, an event on its own in a file, printed
+
+```text
+docs/spec.md:1252 expects no error, and the checker reports: Parse error encountered during parsing Expected one of `Class`, found `Identifier`
+```
+
+On #162, `$P/ws-r3` compiles `OrderPaid.sharp` and `Order.sharp`, which creates `new OrderPaid(orderId, amount: 2)` and reads `paid.amount + paid.orderId`.
+
+- PHP it lowers to, under the file's `namespace App\Store`:
 
   ```php
-  final class Order\Paid implements \App\Order\Event
+  final class OrderPaid implements \App\Store\OrderEvent
   {
       public function __construct(public readonly int $orderId, public readonly \App\Money $amount) {}
   }
   ```
 
-  The declaration name `Order\Paid` comes from the bridge. PHP's grammar has no such form, and `zend_compile_class_decl` prefixes it to `App\Order\Paid` (decision 1).
-- PHP's behavior, run: `$paid->orderId = 8` threw `Error: Cannot modify readonly property App\Order\Paid::$orderId`, and `class_exists('App\Order')` and `class_exists('App\Order\Paid')` were both `true` in one file. A get-only auto-property already lowers to `readonly` (`is_readonly` in `crates/sharp-bridge/src/lower.rs`).
+- The engine's behavior, run through `$P/ws-r3/run.php`: `get_class` printed `App\Shop\OrderPaid`, `instanceof App\Shop\OrderEvent` and `ReflectionClass::isFinal()` were both `true`, `amountOf` printed `9`, and `$paid->orderId = 1` threw `Cannot modify readonly property App\Shop\OrderPaid::$orderId`. A get-only auto-property already lowers to `readonly` (`is_readonly` in `crates/sharp-bridge/src/lower.rs`).
 - Mechanism:
-  - Syntax: a CST `Event` (keyword, name, parameter list, optional `Inheritance`, terminator), a `ClassLikeMember::Event` and a `Statement::Event`. The parser reads `event` as a keyword only in `.sharp` files, where it starts a declaration. `composer/src/Sdk/Syntax/NodeKind.php` regenerates with `scripts/regen-sdk-node-kinds.php`.
-  - Semantics: `check_slice` allows `Event`. `check_declarations` refuses a modifier other than `public`, a body, and a header naming a class.
-  - Codex: the scanner records an event as a final class-like with a promoted constructor and an `event` flag on its `ClassLikeMetadata`, so every other check reads it as the class it lowers to.
-  - Bridge: `Lowering::event` emits the class, and `Lowering::class` emits each nested type after its class.
+  - Syntax: a CST `Event` (keyword, name, parameter list, optional `Inheritance`, terminator) and a `Statement::Event`. The parser reads `event` as a keyword only in `.sharp` files, where it starts a declaration. `composer/src/Sdk/Syntax/NodeKind.php` regenerates with `scripts/regen-sdk-node-kinds.php`.
+  - Semantics: `check_slice` allows `Event` at file level. It refuses a modifier other than `public`, a body, and a header naming a class.
+  - Codex: the scanner records an event as a final class-like with a promoted constructor and an `event` flag on its `ClassLikeMetadata`, so every other check reads it as the class it lowers to. `Plugin::declaredClass` already matches `app/Store/OrderPaid.sharp` to `App\Store\OrderPaid`, so the class map needs no change.
+  - Bridge: `Lowering::event` emits the class.
 
-## An interface its events share, declared beside them
+## An interface its events share, in its own file
 
-"an interface its events share is declared beside them, as `Order.Event` is, the way C# nests types."
+A family of events shares an interface, declared at file level in its own file, as `app/Store/OrderEvent.sharp` declares `OrderEvent`.
 
-Parse error. `app/Events/Shipment.sharp`, `public class Shipment { public interface Event { int shipmentId { get; } } }`, printed `Expected one of …, found `Interface`` (8 parse errors in all). At file level the interface parses, and its property is refused:
+On `master`, a parse error inside a class: `app/Events/Shipment.sharp`, `public class Shipment { public interface Event { int shipmentId { get; } } }`, printed `Expected one of …, found `Interface`` (8 parse errors in all). At file level the interface parses, and its property is refused:
 
 ```text
 app/Events/Tracked.sharp:3:28:error - semantics: Interface virtual property `Tracked.shipmentId` must be declared public.
@@ -243,40 +239,30 @@ app/Events/Tracked.sharp:3:28:error - semantics: This class member is not suppor
 
 and with `public` written, only "This class member is not supported yet in PHP#." remains.
 
-- PHP it lowers to: `interface Order\Event { public int $orderId { get; } }`, a sibling of `Order`. PHP's behavior, run: a `final class` with `public readonly int $orderId` implements it, and `class_implements($paid)` is `["App\Order\Event"]`.
-- Mechanism: `ClassLikeMember::Interface` holds the existing `Interface` CST. A get-only interface property is cross-slice item 4.
+- PHP it lowers to: `interface OrderEvent { public int $orderId { get; } }`. The engine's behavior, run above: `OrderPaid`'s `public readonly int $orderId` implements it.
+- Mechanism: a get-only interface property is cross-slice item 4. The analyzer refuses a class or an event whose property does not fit the interface's, as the engine refuses to load it: not `public`, `static`, or of another type, where a get-only property may take a narrower type.
 
-## A dotted name names a nested type
+## A type declared inside another is refused
 
-"`emit new Order.Paid(order.id, order.total); // anywhere else`" and `public void deliver(Order.Paid e) on Order.Paid { … }`.
-
-Parse error in a type, and misread after `new`. `app/Events/Reader.sharp`, `public void take(Parcel.Lost e) { }`, printed `Expected one of `Variable`, found `Dot`` and 11 more parse errors on its two lines. `app/Events/Maker.sharp`, `const lost = new Parcel.Lost(7);`, printed
+Nothing nests (language rule 6). On #162, `$P/ws-r3`'s `app/Shop/Nested.sharp` declares `public event Refunded(int orderId) : OrderEvent;` and `public interface Placed { }` inside `class Nested`, and printed
 
 ```text
-app/Events/Maker.sharp:7:26:error - parse: A named constructor is not supported yet in PHP#.
+app/Shop/Nested.sharp:5:5:error - parse: A class can't declare a type inside it: declare `Refunded` in its own file.
+app/Shop/Nested.sharp:7:5:error - parse: A class can't declare a type inside it: declare `Placed` in its own file.
 ```
 
-- PHP it lowers to: `\App\Order\Paid`, with `ZEND_NAME_FQ`, in every position a class name takes.
-- Mechanism: the type-hint parser reads a dotted identifier in a `.sharp` file, as `extern`'s target already does. The binder in `crates/names/src/internal/walker.rs` resolves `Order.Paid` through `Order`'s resolution, and resolves a bare name inside a class to its nested type first (language rule 6). The analyzer reports `Order.Payed` as "`Order` has no event `Payed`.". Spec question 1 decides `new X.Y(…)`.
+- Mechanism: `parse_sharp_member_with_attributes_and_modifiers` parses an `event`, `interface`, `class`, `enum` or `trait` inside a class-like whole, so the owner parses on, and returns `ParseError::NestedTypeInSharp` over it. The parser's `State::members_of` names the owner, `A class`, `An interface`, `An enum`, `A trait` or `A module`, so the message is true inside each.
+- A dotted name is no type. `new Order.Paid(…)` calls `Order`'s named constructor `Paid`, which is "A named constructor is not supported yet in PHP#." until mago-sharp #161, as on `master`. `app/Events/Maker.sharp`, `const lost = new Parcel.Lost(7);`, printed that on `master`:
 
-## A standalone event in its own file
-
-"An event that no single class owns is declared on its own, in its own file."
-
-Parse error. `standalone-event` printed
-
-```text
-docs/spec.md:1252 expects no error, and the checker reports: Parse error encountered during parsing Expected one of `Class`, found `Identifier`
-```
-
-- PHP it lowers to: `final class RowImported { public function __construct(public readonly int $row) {} }` under `namespace App\Imports`.
-- Mechanism: `Statement::Event`, as above. `Plugin::declaredClass` already matches `app/Imports/RowImported.sharp` to `App\Imports\RowImported`, so the class map needs no change.
+  ```text
+  app/Events/Maker.sharp:7:26:error - parse: A named constructor is not supported yet in PHP#.
+  ```
 
 ## `emit` raises an event, and any code may raise any event type
 
 "`emit` raises an event. Any code may raise any event type", "the default dispatcher runs listeners immediately, before `emit` returns".
 
-Parse error. `emit-forms`, as `sharp/bin/spec` builds it (ruling 1):
+Parse error. `emit-forms`, as `sharp/bin/spec` builds it:
 
 ```text
 line 2 of the generated app/Paid.sharp, from the marker's setup or wrapper: Parse error encountered during parsing Expected one of `Class`, found `Identifier`
@@ -284,13 +270,13 @@ docs/spec.md:1264 expects no error, and the checker reports: Parse error encount
 docs/spec.md:1265 expects no error, and the checker reports: Parse error encountered during parsing Expected one of `Semicolon`, `CloseTag`, found `New`
 ```
 
-Its one "not supported yet" in the baseline is `new Order.Paid(…)` read as a named constructor (`app/Paid.sharp:11:10:error - parse: A named constructor is not supported yet in PHP#.`). `app/Events/Raiser.sharp`, `emit amount;` with `Money amount`, printed `Expected one of `Semicolon`, `CloseTag`, found `Identifier``.
+Its one "not supported yet" in the baseline is the spec's `new Order.Paid(…)` read as a named constructor (`app/Paid.sharp:11:10:error - parse: A named constructor is not supported yet in PHP#.`), which Jordan's ruling makes `new OrderPaid(…)`. `app/Events/Raiser.sharp`, `emit amount;` with `Money amount`, printed `Expected one of `Semicolon`, `CloseTag`, found `Identifier``.
 
-- PHP it lowers to: `\Sharp\Internal\emit(new \App\Order\Paid($this->id, $this->total));`.
-- The engine's `Sharp\Internal\emit(object $event): void` (decision 4) collects the event's listeners and the scoped listeners that match, snapshots them (choice 4), and runs each in order: it creates the listener's object, and calls the method with the event when the table says it takes one. Until php-sharp PR C, it runs them itself. After it, it hands them to the bound `Dispatcher` as functions.
+- PHP it lowers to: `\Sharp\Internal\emit(new \App\OrderPaid($this->id, $this->total));`.
+- The engine's `Sharp\Internal\emit(object $event): void` (decision 3) collects the event's listeners and the scoped listeners that match, snapshots them (choice 4), and runs each in order: it creates the listener's object, and calls the method with the event when the table says it takes one. Until php-sharp PR C, it runs them itself. After it, it hands them to the bound `Dispatcher` as functions.
 - Mechanism:
   - Syntax: a CST `Emit` statement, `emit <expression>;`, in `.sharp` files.
-  - Analyzer: the operand's type must be an event (language rule 1). `Effect::Emit` joins the body's summary (decision 8).
+  - Analyzer: the operand's type must be an event (language rule 1). `Effect::Emit` joins the body's summary (decision 6).
   - Bridge: `Lowering::statement` lowers `Emit` to the call.
   - Lean: a law that reaches an `emit` is refused for the effect `Events` before `crates/sharp-lean` translates it, so the translator needs no arm.
 
@@ -306,8 +292,16 @@ docs/spec.md:1277 expects no error, and the checker reports: Parse error encount
 
 `extern event` parses `event` as the extern's target, then finds `JobFailed`.
 
+On #162, `$P/ws-r3`'s `extern event JobFailed uses Database;` compiles, and gives the plain PHP class its effect. A getter that creates one printed
+
+```text
+app/Shop/Failure.sharp:7:30:error - impure-getter: Getter `last` calls `JobFailed`, which has the effect `Database`. Getters must be pure.
+```
+
+and a method that creates one compiles, and the engine ran it: `get_class` printed `Queue\JobFailed`.
+
 - PHP it lowers to: nothing, as every `extern` (`Statement::Extern` in `Lowering::file_statement`).
-- Mechanism: `Extern` gains `event: Option<Keyword>`, and `ExternMetadata` gains `event: bool` (decision 7). An `on` clause and `emit` accept the class.
+- Mechanism: `Extern` gains `event: Option<Keyword>`, and `ExternMetadata` gains `event: bool` (decision 5). The scanner records `uses` as for any class-level `extern`, and `extern_of` gives every call on the class, `new` included, its effects. An `on` clause and `emit` accept the class.
 - What reaches a PHP# listener: an `emit` of it in PHP#, and plain PHP calling `\Sharp\Internal\emit($jobFailed)`. Laravel's own `event(new JobFailed(…))` reaches PHP# listeners only through an adapter that forwards it ("Found outside the Slice").
 
 ## Listening with an `on` clause
@@ -326,9 +320,9 @@ docs/spec.md:1292 expects no error, and the checker reports: Parse error encount
 
 and `app/Events/Listener.sharp`, `public void refresh() on Money { }`, printed `Expected one of `LeftBrace`, found `Identifier``.
 
-- PHP it lowers to: the method alone, `public function refresh(): void { … }`. The clause becomes one row of `.sharp/listeners.php` (decision 3).
+- PHP it lowers to: the method alone, `public function refresh(): void { … }`. The clause becomes one row of `.sharp/listeners.php` (decision 2).
 - Mechanism:
-  - Syntax: `Method` gains `on: Option<On>`, a keyword and a comma-separated list of identifiers, after the return type and before the body or `=>`.
+  - Syntax: `Method` gains `on: Option<On>`, a keyword and a comma-separated list of type names, after the return type and before the body or `=>`. Each name is a bare or imported type, as every type is, so a dotted name is refused as it is in any other type position.
   - Codex: `FunctionLikeMetadata` gains `listens: Vec<Word>`, the full names the clause lists.
   - Analyzer: `check_listener`, a new file `crates/analyzer/src/statement/class_like/listener.rs` beside `override_attribute.rs`, checks the clause (the rules below).
   - Orchestrator and command: `IncrementalAnalysisService::listeners` returns every method with a non-empty `listens`, sorted (choice 1), and `CompileCommand::execute` writes the table and spares it from the folder's clean-up.
@@ -339,14 +333,14 @@ and `app/Events/Listener.sharp`, `public void refresh() on Money { }`, printed `
 
 Missing: section 32's container does not exist (`module` parses only laws, `ModuleMember::Law`).
 
-- Until php-sharp PR C: `new` on a class whose main constructor takes no parameters (decision 5). A listener class whose constructor takes parameters is "A listener whose class takes constructor parameters is not supported yet in PHP#."
+- Until php-sharp PR C: `new` on a class whose main constructor takes no parameters (decision 4). A listener class whose constructor takes parameters is "A listener whose class takes constructor parameters is not supported yet in PHP#."
 - After it: the container builds the object, as it builds any class.
 
 ## A listener on an interface hears every event that implements it
 
-Parse error, as `listeners`'s `audit(Order.Event e) on Order.Event` shows above.
+Parse error, as `listeners`'s interface listener, `audit`, shows above.
 
-- The engine matches each listed type with `instanceof`, so an interface needs nothing more (decision 4).
+- The engine matches each listed type with `instanceof`, so an interface needs nothing more (decision 3).
 - The checker requires at least one event to implement a listed interface (language rule 2).
 
 ## `mago compile` finds every `on` at build time, and refuses a bad one
@@ -362,11 +356,11 @@ docs/spec.md:1302 expects a compile error, and the checker reports: Parse error 
 line 7 of the generated app/Example.sharp, from the marker's setup or wrapper: Parse error encountered during parsing Unexpected token `RightBrace`
 ```
 
-The new errors, each with its code:
+The errors, each with its code, written with the file-level names Jordan's ruling gives the spec's examples:
 
-- `Order.Refunded is not an Order.Paid`: `invalid-event` "`send` takes an `Order.Paid`, and it listens to `Order.Refunded`, which is not one." with the help "Take a type every listed event implements, such as `Order.Event`, or take no parameter." The help names the most specific interface every listed event implements, and drops "such as …" when there is none. A test row compiles `send(Order.Event e) on Order.Paid, Order.Refunded`.
-- `Order has no event Payed`: `invalid-event` "`Order` has no event `Payed`." with the help "Its events are `Paid` and `Refunded`."
-- `a listener takes only the event`: `invalid-event` "A listener takes only its event, and `log` also takes `logger`." with the help "A listener gets everything else through its class's constructor." The help quotes no code, because a listener class with constructor parameters waits for section 32.
+- A parameter the listed events don't share: `invalid-event` "`send` takes an `OrderPaid`, and it listens to `OrderRefunded`, which is not one." with the help "Take a type every listed event implements, such as `OrderEvent`, or take no parameter." The help names the most specific interface every listed event implements, and drops "such as …" when there is none. A test row compiles `send(OrderEvent e) on OrderPaid, OrderRefunded`.
+- A wrong event name, as `on OrderPayed`: the existing `non-existent-class-like` "Cannot find type `OrderPayed`.", as any unknown type in a `.sharp` file. Nothing nests, so no class lists "its events", and the approved note's "`Order` has no event `Payed`." goes.
+- A listener that takes more than its event: `invalid-event` "A listener takes only its event, and `log` also takes `logger`." with the help "A listener gets everything else through its class's constructor." The help quotes no code, because a listener class with constructor parameters waits for section 32.
 
 `invalid-event` is one new issue code for every rule of this Slice: the `on` clause, a listener's shape, an event's declaration and `emit`'s operand, as `invalid-argument` covers every wrong argument. Every message names PHP# types as PHP# writes them, and none cites a section.
 
@@ -399,7 +393,7 @@ docs/spec.md:2894 expects no error, and the checker reports: Parse error encount
 docs/spec.md:2899 expects no error, and the checker reports: Parse error encountered during parsing Expected one of `Semicolon`, `CloseTag`, found `New`
 ```
 
-- Mechanism: decision 8. A getter, a law or a pure function type that reaches an `emit` is refused through the existing `effects/check.rs`, as one that reaches `file_put_contents` is. `uses Events` on a method declaration is section 29's (cross-slice item 4).
+- Mechanism: decision 6. A getter, a law or a pure function type that reaches an `emit` is refused through the existing `effects/check.rs`, as one that reaches `file_put_contents` is. `uses Events` on a method declaration is section 29's (cross-slice item 4).
 
 ## The default dispatcher, and replacing it
 
@@ -412,11 +406,10 @@ Missing: nothing dispatches.
 
 # What a plain PHP caller sees
 
-- **An event is an ordinary PHP class.** `new \App\Order\Paid(7, $money)` creates one, `$paid->orderId` reads it, a write throws `Error`, and `$paid instanceof \App\Order\Event` is `true` (run above). Laravel's `Event::listen(\App\Order\Paid::class, …)` names it as it names any class.
+- **An event is an ordinary PHP class in its own file.** `new \App\Store\OrderPaid(7, $money)` creates one, `$paid->orderId` reads it, a write throws `Error`, and `$paid instanceof \App\Store\OrderEvent` is `true` (run above). Laravel's `Event::listen(\App\Store\OrderPaid::class, …)` names it as it names any class, and the Composer package autoloads it as any class.
 - **Plain PHP raises with `\Sharp\Internal\emit($event)`.** It runs the same listeners `emit` runs, before it returns. It throws `TypeError` for a non-object, and runs nothing for an object no listener lists.
 - **Plain PHP writes no `on`.** It listens through a dispatcher an adapter binds, after php-sharp PR C.
 - **`.sharp/listeners.php` is readable PHP.** An adapter can read it to know which `extern event` classes to forward from Laravel.
-- **`\App\Order\Paid` autoloads before `\App\Order`** (decision 6).
 
 # Public names this Slice adds or changes
 
@@ -424,27 +417,28 @@ team-lead approves these. Everything not in this tree is tactical.
 
 ```text
 mago-sharp
-├── crates/syntax/src/cst/cst/
-│   ├── event.rs                         <- new: Event, `event Name(parameters) : Interfaces;`
-│   ├── emit.rs                          <- new: Emit, `emit <expression>;`
-│   ├── class_like/member.rs             <- ClassLikeMember gains Event and Interface
-│   ├── class_like/method.rs             <- Method gains on: Option<On>; On is the keyword and its listed names
-│   ├── extern.rs                        <- Extern gains event: Option<Keyword>
-│   └── statement.rs                     <- Statement gains Event and Emit
+├── crates/syntax/src/
+│   ├── cst/cst/
+│   │   ├── event.rs                     <- new: Event, `event Name(parameters) : Interfaces;`
+│   │   ├── emit.rs                      <- new: Emit, `emit <expression>;`
+│   │   ├── class_like/method.rs         <- Method gains on: Option<On>; On is the keyword and its listed names
+│   │   ├── extern.rs                    <- Extern gains event: Option<Keyword>
+│   │   └── statement.rs                 <- Statement gains Event and Emit
+│   ├── error.rs                         <- ParseError gains NestedTypeInSharp(owner, name, span)
+│   └── parser/mod.rs                    <- State gains members_of, the class-like whose members the parser reads
 ├── composer/src/Sdk/Syntax/NodeKind.php <- regenerated
 ├── crates/codex/src/metadata/
 │   ├── class_like.rs                    <- an `event` flag
 │   ├── function_like.rs                 <- listens: Vec<Word>
 │   └── extern.rs                        <- ExternMetadata gains event: bool
-├── crates/names/src/internal/walker.rs  <- a dotted type resolves through its outer class; a nested type wins inside its class
 ├── crates/analyzer/src/
 │   ├── statement/class_like/listener.rs <- new: check_listener
-│   ├── effects/mod.rs                   <- Effect::Emit(Word); Impurity::describe gains its two arms
+│   ├── effects/mod.rs                   <- Effect::Emit; Impurity::describe gains its two arms
 │   └── code.rs                          <- IssueCode::InvalidEvent, `invalid-event`
 ├── crates/orchestrator/src/service/incremental_analysis/compile.rs
 │                                        <- IncrementalAnalysisService::listeners
 ├── src/commands/compile.rs              <- writes .sharp/listeners.php and keeps it in the clean-up
-├── crates/sharp-bridge/src/lower.rs     <- Lowering::event; nested types after their class; Emit to \Sharp\Internal\emit
+├── crates/sharp-bridge/src/lower.rs     <- Lowering::event; Emit to \Sharp\Internal\emit
 └── crates/prelude/assets/extensions/sharp.php
                                          <- Sharp\Listening and Sharp\Internal\listen, for the checker (PR 4);
                                             a Sharp\Internal call outside the standard library is refused
@@ -454,7 +448,6 @@ php-sharp
 │                                        <- function Sharp\Internal\emit(object $event): void (PR A)
 │                                           function Sharp\Internal\listen(string $class, \Closure $listener): Sharp\Listening (PR B)
 │                                           final class Sharp\Listening, no methods, a destructor (PR B)
-├── sharp/composer/autoload.php          <- a nested type loads through its outer class (PR A)
 ├── sharp/composer/library/Sharp/
 │   ├── Events.sharp                     <- new: static class Events, on<TEvent>(…) (PR B)
 │   ├── Dispatcher.sharp                 <- new: interface Dispatcher (PR C)
@@ -483,19 +476,21 @@ The names, each with the slate it was picked from:
 
 Each PR ends in something a developer runs. mago-sharp PRs 1 to 3 and php-sharp PR A need no generics and land now. PR 4 and PR B wait for generics. PR C waits for section 32.
 
-1. **mago-sharp: event types and nested types.** `Event` at file level and in a class, a nested `interface`, dotted types and their binding, `extern event`, get-only interface properties (cross-slice item 4), language rules 5 to 7, and the bridge's lowering of each.
-   - Run: `compile` compiles `Parcel.sharp`, `Shipped.sharp`, `Shipment.sharp`, `Reader.sharp` and `extern-event`'s `Laravel.sharp`, and `Maker.sharp` once Jordan answers question 1.
-2. **mago-sharp: `emit`.** The `Emit` statement, language rule 1, `Effect::Emit`, and its lowering. Follows PR 1.
-   - Run: `compile` refuses `Raiser.sharp` with "`emit` takes an event, and `Money` is not one.", compiles `emit new Parcel.Lost(7);`, and refuses a getter that emits with "emits `Parcel.Lost`, which has the effect `Events`".
-3. **mago-sharp: `on` listeners.** The clause, `check_listener` with language rules 2 to 4, the three spec errors and the interim refusal of constructor parameters, `listens`, and `.sharp/listeners.php`. Follows PR 1, and is independent of PR 2.
+1. **mago-sharp #162: event types.** `Event` at file level, `extern event` with or without `uses`, get-only interface properties and the checks that a class or an event fits them (cross-slice item 4), language rules 5 and 6, and the bridge's lowering. Jordan's ruling shrank it: no nested event or interface, no dotted type and no `new X.Y` resolution.
+   - Run: `compile` compiles `$P/ws-r3`'s `OrderEvent.sharp`, `OrderPaid.sharp`, `Order.sharp`, `Failure.sharp` and `Queue.sharp`, refuses `Nested.sharp`'s two nested types, and refuses a getter that creates a `JobFailed` for the effect `Database`.
+2. **mago-sharp: `emit`.** The `Emit` statement, language rule 1, `Effect::Emit`, and its lowering. Follows PR 1. Its scope holds, and its examples name file-level events.
+   - Run: `compile` refuses `Raiser.sharp` with "`emit` takes an event, and `Money` is not one.", compiles `emit new OrderPaid(7);`, and refuses a getter that emits with "emits `OrderPaid`, which has the effect `Events`".
+3. **mago-sharp: `on` listeners.** The clause, `check_listener` with language rules 2 to 4, the spec's errors and the interim refusal of constructor parameters, `listens`, and `.sharp/listeners.php`. Follows PR 1, and is independent of PR 2. Jordan's ruling shrank it: its names are plain type names, and a wrong one is the existing "Cannot find type" error.
    - Run: `compile` compiles `listeners` and writes its four rows, and refuses each `listener-errors` line with its message.
 4. **mago-sharp: `Events.on<T>`.** `Sharp\Listening` in the prelude, and `[NoDiscard]` reported for a dropped handle. Follows #152 and R3c.
    - Run: `compile` compiles `scoped-listener` with its errata, and refuses `Events.on<RowImported>(e => { });` as a statement.
 
 php-sharp:
 
-- **A: the engine runs events.** Pin mago-sharp PRs 1 to 3. `Sharp\Internal\emit`, the table, `new` for listener objects, the nested-type autoload, the engine tests, and `sharp/baseline/spec` losing `standalone-event` and `extern-event`, plus `listeners`, `listener-errors`, `emit-forms` and `event-declarations` once their spec-files changes land, through the `cp` command a run prints.
+- **A: the engine runs events.** Pin mago-sharp PRs 1 to 3. `Sharp\Internal\emit`, the table, `new` for listener objects, the engine tests, and `sharp/baseline/spec` losing `standalone-event` and `extern-event`, plus `listeners`, `listener-errors`, `emit-forms` and `event-declarations` once their spec-files changes land, through the `cp` command a run prints.
   - Run: `sharp/bin/test Zend/tests/sharp/events.phpt` passes, and `sharp/bin/test --spec` passes with the shorter list.
+  - Jordan's ruling shrank it: `sharp/composer/autoload.php` needs no nested-type branch.
+- **The spec-files PR** lands the harness's three event files, `Logger` and `RowImported`, and the stub's `extern event JobFailed;`. Jordan's ruling changed its shape: no `emit-forms` template marker, and three files where the approved note nested types in `app/Order.sharp`.
 - **B: scoped listeners.** Pin PR 4. `Sharp.Events`, `Sharp\Internal\listen`, `Sharp\Listening`, their tests, and `scoped-listener` leaving the list. Follows php-sharp #102 and R3c.
 - **C: the replaceable dispatcher.** `Sharp.Dispatcher`, `Sharp.ImmediateDispatcher`, and listener objects from the container. Follows section 32's container.
 
@@ -507,32 +502,30 @@ Each test proves one rule of section 15 and fails on a real bug in it, with its 
 
 **mago-sharp, `crates/syntax/tests/sharp.rs`:**
 
-- `an_event_declares_its_parameters_and_its_interfaces`: rows for a file-level event, an event in a class, one with `: Event`, one with two interfaces, and one with no parameters.
-- `emit_raises_the_expression_after_it`: `emit new Paid(…)`, `emit e`, and `emit` as a plain PHP function name in a `.php` file, which stays a call.
-- `an_on_clause_lists_events_after_the_return_type`: one event, two events, dotted names, a block body and an `=>` body.
+- `an_event_declares_its_parameters_and_its_interfaces`: rows for file-level events, one with `: OrderEvent`, one with two interfaces, one with no parameters, and one named with a word PHP reserves.
+- `a_type_declared_inside_another_is_one_error_and_its_owner_parses_on`: an event, an interface, a class, an enum and a trait inside a class, and a type inside an interface, an enum, a trait and a module, each naming its owner.
+- `emit_raises_the_expression_after_it`: `emit new OrderPaid(…)`, `emit e`, and `emit` as a plain PHP function name in a `.php` file, which stays a call.
+- `an_on_clause_lists_events_after_the_return_type`: one event, two events, a block body and an `=>` body.
 - `extern_declares_a_class_a_method_or_a_function_and_its_effects` grows rows for `extern event JobFailed;` and `extern event JobFailed uses Database;`.
-- `a_dotted_type_names_a_nested_type`: a parameter, a return type, `new`, and an `on` clause.
-
-**mago-sharp, `crates/names/tests/binder.rs`:**
-
-- `a_nested_type_resolves_inside_its_class_first`: `Paid` in `Order` beside a top-level `App.Paid`, `Order.Paid` in another class, and `Order.Paid` through an import of `Order`.
 
 **mago-sharp, `crates/semantics/tests/sharp.rs`:**
 
-- `an_event_takes_only_public_and_no_body`: `private event`, `static event`, a body, and a header naming a class.
-- `only_events_and_interfaces_nest_in_a_class`: a nested `class`, `enum` and `struct` are not supported yet.
+- `an_event_takes_only_public_and_its_parameters_are_its_properties`: `private event`, `static event`, a parameter's modifier, accessors or `...`, and a name PHP reserves are refused.
+- `an_extern_event_names_a_class`: `extern event JobFailed;` and `extern event JobQueued uses Database;` are accepted, and `extern event Carbon.now;` is refused.
 
 **mago-sharp, `crates/analyzer/tests/sharp.rs`:**
 
-- `an_event_is_a_class_whose_parameters_are_get_only_properties`: a read compiles, a write is refused, and `new` with a wrong argument is refused.
-- `emit_takes_an_event`: a nested event, a standalone event and an `extern event` compile; `Money` and `Order.Event` are refused.
-- `a_listener_names_events_and_takes_one_parameter_they_share`: the spec's four listeners compile; its three errors; the help's `Order.Event` fix compiles; `static`, a non-`void` return, an abstract class, a generic class, a class that is not an event, an interface no event implements, and a constructor with parameters are each refused; a `private` listener compiles and is not unused.
+- `an_event_is_a_final_class_whose_parameters_are_get_only_properties`: a read compiles, a write is refused, `new` with a wrong argument is refused, and a class that extends an event is refused.
+- `an_event_header_names_interfaces_and_an_event_is_declared_once`: a header naming a class is refused, and an event that shares its full name with another event, an interface or a class is refused.
+- `an_event_or_a_class_gives_every_property_its_interfaces_state`: a missing property, one of the wrong type, a `private` one and a `static` one are refused, and a narrower get-only type compiles.
+- `an_extern_event_gives_its_class_the_effects_it_lists`: a getter that creates the class compiles without `uses`, and is refused for `Database` with it.
+- `emit_takes_an_event`: a file-level event and an `extern event` compile; `Money` and `OrderEvent` are refused.
+- `a_listener_names_events_and_takes_one_parameter_they_share`: the spec's four listeners compile; its errors; the help's `OrderEvent` fix compiles; `static`, a non-`void` return, an abstract class, a generic class, a class that is not an event, an interface no event implements, and a constructor with parameters are each refused; a `private` listener compiles and is not unused.
 - `emit_has_the_effect_events`: a getter and a law that emit are refused naming `Events`; a lambda that emits fits `Function<void() uses Events>` and is refused by `Function<void()>`; a getter that reaches an emitting method in another file names the path.
-- `a_class_cannot_declare_an_event_and_a_named_constructor_with_one_name`, once Jordan answers question 1.
 
 **mago-sharp, `crates/sharp-bridge/tests/lower.rs`:**
 
-- One test per lowering form: an event as a `final` class with `readonly` promoted parameters; a nested event and a nested interface as siblings named `Order\Paid` and `Order\Event`; `emit` as the call; a listener method with no trace of its clause; `extern event` lowering to nothing.
+- One test per lowering form: an event as a `final` class with `readonly` promoted parameters and an interface with a `get` hook; `emit` as the call; a listener method with no trace of its clause; `extern event` lowering to nothing.
 
 **mago-sharp, `tests/sharp.rs`:**
 
@@ -542,13 +535,12 @@ Each test proves one rule of section 15 and fails on a real bug in it, with its 
 
 - `emit` runs every listener before it returns; an interface listener hears every event that implements it; a listener listed twice runs once; listeners run in table order; a listener without a parameter runs; a `private` listener runs.
 - An exception from a listener leaves `emit`, and the next listener does not run; an `emit` inside a listener runs its listeners first.
-- Plain PHP: `\Sharp\Internal\emit` reaches PHP# listeners, an `extern event` raised from plain PHP reaches them (php-sharp #56's "Done when"), `\App\Order\Paid` autoloads before `\App\Order`, and its properties are read-only.
+- Plain PHP: `\Sharp\Internal\emit` reaches PHP# listeners, an `extern event` raised from plain PHP reaches them (php-sharp #56's "Done when"), and an event's properties are read-only.
 - PR B adds: a scoped listener stops when its function returns and when an exception leaves it, and one started during an `emit` hears only the next.
 
 # What the Slice refuses as "not supported yet", and why
 
 - **A listener whose class takes constructor parameters.** Section 32's container creates them, and it does not exist yet.
-- **A nested `class`, `enum` or `struct`.** The spec nests only events and their interface, and question 3 asks for the rest.
 - **`Events.on<T>` until #152 and R3c,** where it is "Method `Events.on` does not exist." as today, not a new refusal.
 - **Replacing the dispatcher until section 32.** `Dispatcher` does not exist until php-sharp PR C, so no program names it.
 
