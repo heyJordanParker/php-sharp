@@ -42,7 +42,7 @@ Jordan's answers, through team-lead's Queue 3 and Queue 4:
 12. **Question 4, "yes, obviously":** generic structs are allowed and land with generics R3c, so `struct Box<T>` is refused whole until then.
 13. **Question 5, "sure":** `initializer-shorthand` declares its own struct. Example errata are team-lead's from now on.
 
-team-lead's Queue 5 to Queue 10:
+team-lead's Queue 5 to Queue 11:
 
 14. **`MetadataFlags::REQUIRED` means only "must be set at creation":** a property written `required`, or, in a struct, one with no initial value that is not a main-constructor parameter. Each constructor records the properties it definitely assigns on every path (`MethodMetadata::assigned_properties`), as C#'s definite assignment and Swift's definite initialization do, and a helper call doesn't count. At each `new`, the required set minus what that constructor assigns must be named by the initializer. A named constructor's set is its own plus the main constructor's it chains to.
 15. **`parse` checks types through generics R3c's engine walk, `sharp_type_accepts`,** one call per parameter with a problem collector. Its own work stays keys, `[Key]` renames, defaults, missing keys and nested structs through their own `parse`. This replaces decision 5's per-type checks and ruling 5's cross-slice order.
@@ -51,6 +51,7 @@ team-lead's Queue 5 to Queue 10:
 18. **`Sharp\Struct`, `Sharp\Map::key` and `Sharp\Map::readKey` are approved,** with three conditions: only a lowered struct implements `Sharp\Struct`, as only an enum implements `UnitEnum`; `readKey` builds only a struct, checks each property's type and limits nesting as `json_decode` does; and one encoder serves every key position.
 19. **The php-sharp PR adds the harness's `Username` and `OrderRow`,** one type per file, because only a Mago that parses `struct` compiles them. This replaces ruling 6's spec PR.
 20. **R3c's walk signature is fixed, and `parse` lowers to it:** generated PHP calls `\Sharp\Internal\accepts(string $type, mixed &$value, string $path, array &$problems): bool` once per parameter, with the type text for the calling frame and the input key as the path. The walk writes the problem text, so `InvalidFields.expected` has no caller and is deleted. The walk takes only a struct object where a struct is expected, so `parse` reads each nested struct through its own `parse` with the extended path first, then checks the result through the walk.
+21. **Queue 10 is accepted, with three rulings.** A problem names a class by its full dotted name, as `expected App.S.Address`, as every PHP# engine message does. A union of structs is tried in the order the source writes it, as serde's untagged enums try their variants. The bridge keeps one writer of decision 72's type text: when #152 merges, its `type_text` replaces this Slice's in the same commit.
 
 ## Decisions
 
@@ -72,7 +73,7 @@ team-lead's Queue 5 to Queue 10:
    - Measured on Homebrew PHP 8.5.1 with opcache, 1,000,000 creations, two runs: a main constructor took 221 and 240 ns, an initializer through the closure 755 and 631 ns, `this with { … }` inside the class 625 and 548 ns, and `p with { … }` through the closure 601 and 659 ns. The closure costs about what `clone` with an array costs. A scoped write opcode would remove it later, as a Speed item.
    - Rejected: a generated public method that writes the properties. Plain PHP could call it on an existing struct and change it.
 5. **`parse` and `tryParse` are generated per struct by the bridge,** from the parameter types typed compilation hands it, as serde's derive and kotlinx.serialization's compiler plugin generate a reader per type. Each field's type check is one call of R3c's walk, `\Sharp\Internal\accepts` (ruling 20), with the field's type text and its key as the path. `parse` collects every bad field, then throws one `Sharp\InvalidFields`. `tryParse` catches it and returns null. The generated code needs no runtime type registry and no hidden member.
-   - Before the walk, `parse` builds what the walk takes only as an object. A backed enum case comes from its backing value through `tryFrom`. A nested struct comes from a `Map` or an object through its own `parse`, element by element inside a `List`, `Set` or `Map`. Its problems move under the outer path, as `addresses[1].city`, and the walk's own problem at that path is then dropped. A union of several structs takes the first that builds, and moves no inner problems.
+   - Before the walk, `parse` builds what the walk takes only as an object. A backed enum case comes from its backing value through `tryFrom`. A nested struct comes from a `Map` or an object through its own `parse`, element by element inside a `List`, `Set` or `Map`. Its problems move under the outer path, as `addresses[1].city`, and the walk's own problem at that path is then dropped. A union of several structs takes the first that builds, in the order the source writes them (ruling 21), and moves no inner problems. The checker's union holds its members sorted, so `parse` reads the order from the field's written type.
    - After the walk accepts a value, each `Set` in it holds its elements under their keys, through `\Sharp\Set::from`.
    - The type text is decision 72's, written by `Types::type_text` in the bridge: a class by its full dotted name, union members sorted, `T?` and `(A|B)?`. #152 has its own `type_text` for every type. This one covers the types a struct's `parse` reads, and the two become one where #152 merges.
    - Rejected: a library reader that interprets a type descriptor at runtime, as Valinor reads types by reflection. It needs each parameter's PHP# type at runtime, which only R3c gives, and a descriptor each struct publishes for nested structs.
@@ -369,12 +370,13 @@ app/Probe/Request.sharp:5 non-existent-attribute-class: Attribute class `Key` no
   }
   ```
 
-  Run on the slot 8 engine, compiled by the slot 9 Mago at `0d1f411a6`, with `\Sharp\Internal\accepts` written in PHP from R3c's note until R3c's engine code exists, and `RenewRequest` widened with a nested `Address?`, a `List<Address>`, a `Map<Status, int>`, an `Address|Point` and a `List<Set<int>>`:
+  Run on the slot 8 engine, compiled by the slot 9 Mago at `3360fa63a`, with `\Sharp\Internal\accepts` written in PHP from R3c's note until R3c's engine code exists, and `RenewRequest` widened with a nested `Address?`, a `List<Address>`, a `Map<Status, int>`, an `Address|Point`, a `(Point|Address)?`, a `Map<string, Point|Address>` and a `List<Set<int>>`:
 
   ```text
   parse(["customerId" => "abc"]): Sharp\InvalidFields: customerId: expected int, got string 'abc'; plan_code: missing; …
   every bad field: …; home.city: expected string, got int 4; addresses[1].city: expected string, got int 4; addresses[2]: expected App.S.Address, got string 'x'; prices["gone"]: key expected App.S.Status, got string 'gone'; …; place: expected App.S.Address|App.S.Point, got Map; seen[0]: expected App.S.Status, got string 'nope'; groups[0][0]: expected int, got float 1.5; …
   a good payload: home and addresses[0] built as Address, status Paid, amount 2.0, place ["x" => 4] built as Point, seen and each groups element held under their keys, retries 3
+  ["city" => "Oslo", "x" => 1], which fits both: Address|Point built an Address; (Point|Address)? and each value of Map<string, Point|Address> built a Point
   tryParse on a bad payload: null
   ```
 
