@@ -41,7 +41,6 @@
 §14.2	lambdas
 §14.4	leave-on-null
 §15	emit-forms
-§15	event-beside-class
 §15	event-declarations
 §15	extern-event
 §15	extern-event-effects
@@ -51,7 +50,6 @@
 §15	standalone-event
 §16	initializer-shorthand
 §17	braces
-§19	operators
 §20	enum-data-cases
 §20	enum-shapes
 §20.1	sealed-interfaces

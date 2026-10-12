@@ -1340,27 +1340,7 @@ Money total = new Money(500, "USD");
 emit new OrderPaid(order.id, total);             // runs every listener for OrderPaid
 ```
 
-**`new Order.Paid(…)` always calls `Order`'s named constructor `Paid`** (section 9.1), because code names a type only by its imported short name (section 23). A type `Paid` in the namespace `App.Order` beside the class `App.Order` is a compile error, because a class cannot share its full name with a namespace (section 23):
-
-<!-- example event-beside-class -->
-```csharp
-// app/Order.sharp
-namespace App;
-
-public class Order
-{
-    public Order(public int id { get; }) { }
-    public Order.Paid(int id) : this(id) { }
-}
-```
-
-<!-- example event-beside-class -->
-```csharp
-// app/Order/Paid.sharp
-namespace App.Order;                             // compile error: App.Order is the class Order, so it can't also be a namespace
-
-public event Paid(int orderId);
-```
+**`new Order.Paid(…)` always calls `Order`'s named constructor `Paid`** (section 9.1), because `.` in code is always member access, and a type `App.Order.Paid` beside the class `App.Order` is already a compile error, because a class cannot share its full name with a namespace (section 23).
 
 **Plain PHP events:** `extern event` marks a plain PHP class, such as a Laravel event, as an event, so PHP# code can listen to it:
 
@@ -1607,7 +1587,7 @@ Cart otherCart = new Cart();
 ```csharp
 public abstract class DatabaseEntity
 {
-    public int id { get; }
+    public int id { get; set; } = 1;
     public static bool operator ==(DatabaseEntity a, DatabaseEntity b) => a.id == b.id;
     public int hash() => this.id;
 }
@@ -2843,7 +2823,6 @@ theorem receiptMatchesRefunds : App.Tenant.Store.Module.receiptMatchesRefunds :=
 - **A law's generated Lean statement is named by its class's full name and the law's name,** as in `App.Shared.Money.addKeepsCurrency`. A module law's is named by its namespace, `Module` and the law's name, as in `App.Tenant.Store.Module.receiptMatchesRefunds`.
 - **When a class or module has a law and no Lean file, the checker creates the file.** For each new law, it appends a proof found by Lean's automatic steps (`simp`, `omega`, `decide`), or a marked gap when none is found. It never rewrites a proof that exists.
 - **A law without a proof, a gap, or a proof whose law was deleted is a compile error that names it.**
-- **A structure rule is a Lean definition with the `@[rule]` attribute,** as in `@[rule] def importsOnly : Rule := .importsOnly [Billing.Money, Shared]`, the way Lean marks a simp lemma with `@[simp]`.
 - **A rule lives with the namespace it constrains.** "Shared never reaches Tenant" goes in `app/Shared/Module.lean`. A rule about the whole application goes in `app/Module.lean`.
 - **Names match exactly.** Translated code keeps its PHP# names in Lean, with no prefix.
 - **A failed rule is reported on the code that breaks it,** such as the offending `import` line, not only as a failed theorem.
