@@ -1,0 +1,6 @@
+namespace App.Tenant.Store;
+
+public static class Refunds
+{
+    public static int remaining(int paid, int refunded) => paid - refunded;
+}

@@ -31,10 +31,10 @@ Named arguments use `label: "Name"`, the same "name: value" form used everywhere
 Variables have no `$`. A local is declared with `let`, which can be reassigned, or `const`, which cannot. The meanings match TypeScript.
 
 <!-- example inferred-locals: statements
-private Tenant tenant = new Tenant();
+private Account account = new Account();
 -->
 ```ts
-const currency = this.tenant.currency;
+const currency = this.account.currency;
 let total = 0;
 ```
 
@@ -344,16 +344,16 @@ die("Prune failed");                                     // compile error: write
 A constructor is named after its class. A parameter with an access modifier declares a member, and the parameter spells out which kind:
 
 - **`private Planner planner`** declares a field.
-- **`public Tenant tenant { get; }`** declares a property. A `public` parameter without accessor braces is a compile error, just as a public field is.
+- **`public Account account { get; }`** declares a property. A `public` parameter without accessor braces is a compile error, just as a public field is.
 - **A parameter with no modifier** is an ordinary parameter.
 
 <!-- example parameter-members: members in StoreService -->
 ```csharp
 public StoreService(
     private Planner planner,
-    [Field(label: "Tenant")] public Tenant tenant { get; } via Tracked,
+    [Field(label: "Account")] public Account account { get; } via Tracked,
 ) {
-    if (!tenant.active) { throw new InactiveTenant(tenant); }
+    if (!account.active) { throw new InactiveAccount(account); }
 }
 ```
 
@@ -1203,7 +1203,7 @@ A function type is written as `Function<ReturnType(ParameterTypes)>`, in the sam
 ```csharp
 Function<Money?(readonly Line, string)> priceOf
 Function<void(Order)>? onPaid = null
-public Function<bool(Order)> eligibleFor(Tenant tenant)
+public Function<bool(Order)> eligibleFor(Account account)
 ```
 
 ### 14.2 Lambdas
@@ -1513,10 +1513,10 @@ public struct Amount
 ```
 
 <!-- example initializer-shorthand: statements
-Tenant tenant = new Tenant();
+Account account = new Account();
 -->
 ```csharp
-const currency = tenant.currency;
+const currency = account.currency;
 Amount price = new Amount { value: 500, currency };     // short for currency: currency
 ```
 
