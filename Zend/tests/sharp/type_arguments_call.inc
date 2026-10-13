@@ -77,6 +77,8 @@ foreach ([1, 2] as $round) {
     // enters as a `Class<PaginatedList<Order>>`.
     $pages = Repository::orderPages();
     var_dump($pages, $pages === 'App\PaginatedList', $pages === Repository::sharedPages());
+    // PHP#'s `==` tells the two apart where plain PHP's `===` above does not.
+    echo implode(', ', array_map(fn (bool $same) => var_export($same, true), Repository::sameTypes())), "\n";
     echo shown(Repository::paged($pages)), ', ', shown(Repository::sharedPaged()), ', ',
         shown(Repository::orderPaged(Repository::sharedPages())), "\n";
     echo shown($inspection->listed()), ', ', $inspection->remade(8)::class, ' ', $inspection->remade(8)->id, ', ',

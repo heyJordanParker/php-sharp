@@ -42,6 +42,7 @@ Cannot read the type arguments of the class a lambda is written in from an objec
 string(17) "App\PaginatedList"
 bool(true)
 bool(true)
+false, true, true, true, false
 App\PaginatedList<App.Order>, App\PaginatedList<App.SharedOrder>, App\PaginatedList<App.Order>
 App\PaginatedList<App.Order>, App\Order 8, 82
 8, 8, 1, 0
@@ -89,6 +90,7 @@ Cannot read the type arguments of the class a lambda is written in from an objec
 string(17) "App\PaginatedList"
 bool(true)
 bool(true)
+false, true, true, true, false
 App\PaginatedList<App.Order>, App\PaginatedList<App.SharedOrder>, App\PaginatedList<App.Order>
 App\PaginatedList<App.Order>, App\Order 8, 82
 8, 8, 2, 0

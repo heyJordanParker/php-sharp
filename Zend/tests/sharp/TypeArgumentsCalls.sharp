@@ -156,6 +156,16 @@ public class Repository
 
     public static Class<PaginatedList<SharedOrder>> sharedPages() => typeof(PaginatedList<SharedOrder>);
 
+    // `==` compares two class values by their whole type, type arguments included, as C# compares two `Type`s, and a
+    // search of class values compares each one so.
+    public static List<bool> sameTypes() => [typeof(PaginatedList<Order>) == typeof(PaginatedList<SharedOrder>), typeof(PaginatedList<Order>) == Repository.orderPages(), typeof(Order) == typeof(Order), typeof(PaginatedList<Order>) != typeof(PaginatedList<SharedOrder>), Repository.holdsType(typeof(PaginatedList<SharedOrder>))];
+
+    public static bool holdsType(Class<PaginatedList<SharedOrder>> type)
+    {
+        List<Any> types = [typeof(PaginatedList<Order>)];
+        return types.contains(type);
+    }
+
     public static PaginatedList<Order> paged(Class<PaginatedList<Order>> type) => new (type)([]);
 
     public static PaginatedList<T> pagedAs<T : DatabaseEntity>(Class<PaginatedList<T>> type) => new (type)([]);

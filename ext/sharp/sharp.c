@@ -3359,6 +3359,31 @@ ZEND_FUNCTION(Sharp_Internal_statics)
 	RETURN_COPY(entry);
 }
 
+/* Spec section 25: PHP# compares two class values with `\Sharp\Internal\equals($value, $other)`, by the whole type, as
+ * C# compares two Type objects, so `typeof(Box<Order>) == typeof(Box<Invoice>)` is false. A class value with type
+ * arguments is the interned class name sharp_class_values knows it by, so it equals only a class value of the same type
+ * arguments, though its text is the bare class name. Any other two values compare as `===` compares them. */
+ZEND_FUNCTION(Sharp_Internal_equals)
+{
+	zval *value, *other;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ZVAL(value)
+		Z_PARAM_ZVAL(other)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (Z_TYPE_P(value) != IS_STRING || Z_TYPE_P(other) != IS_STRING) {
+		RETURN_BOOL(zend_is_identical(value, other));
+	}
+	const sharp_type *type = sharp_class_value_type(Z_STR_P(value));
+	const sharp_type *other_type = sharp_class_value_type(Z_STR_P(other));
+	if (type || other_type) {
+		RETURN_BOOL(sharp_type_equals(type, other_type));
+	}
+
+	RETURN_BOOL(zend_string_equals(Z_STR_P(value), Z_STR_P(other)));
+}
+
 /* Throws the Error for the type arguments of a frame that ZEND_SHARP_TYPE_ARGS could not spell. */
 static ZEND_COLD void sharp_type_list_unknown_error(void)
 {
