@@ -2,7 +2,8 @@
 
 function compile_project(string $name, array $files): string
 {
-    $root = sys_get_temp_dir() . "/sharp-test-$name";
+    // The process ID keeps two test runs on one machine out of each other's projects.
+    $root = sys_get_temp_dir() . "/sharp-test-$name-" . getmypid();
     remove_project($root);
     mkdir($root);
     $root = realpath($root);

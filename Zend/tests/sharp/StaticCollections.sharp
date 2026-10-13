@@ -4,9 +4,9 @@ class Log
 {
     private static List<string> events = [];
 
-    public static void note(string event)
+    public static void note(string entry)
     {
-        Log.events.add(event);
+        Log.events.add(entry);
     }
 
     public static List<string> seen() => Log.events;
@@ -39,7 +39,7 @@ class Archive
     public static Map<string, int> sell(string name)
     {
         Archive.stock = ["tea": 3, "pie": 7];
-        Archive.stock.delete(name);
+        Archive.stock.remove(name);
         return Archive.stock;
     }
 

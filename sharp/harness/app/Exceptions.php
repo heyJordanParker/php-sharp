@@ -31,6 +31,6 @@ final class UnknownElement extends SpecException
 {
 }
 
-final class InactiveTenant extends SpecException
+final class InactiveAccount extends SpecException
 {
 }
