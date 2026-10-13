@@ -564,7 +564,7 @@ Point origin = new Point { x: 0 };    // compile error: y has no initial value, 
 
 `with` copies an object or a struct and sets the listed properties through their `init` or `set` accessors. The original is unchanged.
 
-**A struct keys a `Map` by its whole value when every field has `==`,** with nothing declared, as Swift's `Hashable` structs, Rust's `Hash` derive, C#'s record structs, Java's records, Kotlin's data classes and Go's structs are. It is the general rule for keys (section 12): a struct whose every field has `==` has `==` and `hash()` (section 19). Two structs are one key when they are `==`. Plain PHP sees a generated key text. A struct gets JSON key text only from its `toString()`, so `Json.encode` of a `Map` keyed by a struct without `toString()` is a compile error, as Jackson writes a key through `toString` and serde and Go refuse a key that is not text.
+**A struct keys a `Map` by its whole value when every field has `==`,** with nothing declared, as Swift's `Hashable` structs, Rust's `Hash` derive, C#'s record structs, Java's records, Kotlin's data classes and Go's structs are. It is the general rule for keys (section 12): a struct whose every field has `==` has `==` and `hash()` (section 19). Two structs are one key when they are `==`. A struct gets JSON key text only from its `toString()`, so `Json.encode` of a `Map` keyed by a struct without `toString()` is a compile error, as Jackson writes a key through `toString` and serde and Go refuse a key that is not text.
 
 **Every struct has a static `parse`,** which reads a `Map<string, Any?>` or an object's public properties and throws one error that lists every bad field, and a static `tryParse`, which gives null instead. The names follow `Int.parse` and `Int.tryParse` (section 24). Every class gets both the same way.
 
@@ -617,7 +617,6 @@ OrderRecord record = OrderRecord.parse(row);   // a class parses the same way: i
 
 **Generics are reified.** The running program knows every type argument.
 
-- Reflection shows an object's type arguments: plain PHP reads them with `ReflectionObject::getTypeArguments()`, as C#'s `Type.GetGenericArguments()` does. A `ReflectionType` shows PHP's own type, so `getName()` stays what dependency injection containers and proxy generators read.
 - `page is PaginatedList<Order>` is checked while the code runs.
 - A value of the wrong type throws a `TypeError` where it enters PHP# from plain PHP. Section 12 lists where a value enters. An `int` where PHP# expects a `float` does not throw: it becomes a `float` (section 24).
 
@@ -961,7 +960,6 @@ for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is a 
 **Map keys:** anything with `==` and `hash()` (section 19) keys a `Map` and joins a `Set`, as in Swift, Rust, Java and Kotlin.
 
 - A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type, as in `const [Status status, int n]`, stays allowed. An inferred `Map`, such as a `groupBy` result, gives its keys back the same way.
-- Plain PHP receives an enum key's backing value, and a generated key text for any other key.
 
 <!-- example enum-map-keys -->
 ```csharp
@@ -1230,8 +1228,6 @@ public void show(readonly Model model) { … }   // compile error: Model is a pl
 render cannot call order.totalIn: order is readonly.
 totalIn does not change Order, so declare it `totalIn(string currency) readonly`.
 ```
-
-`readonly` is enforced by the checker. The engine sees ordinary methods, so plain PHP callers are not checked.
 
 **Fields, properties and classes use `{ get; }`, not `readonly`.** A get-only property already cannot be reassigned. `readonly` on a field, a promoted constructor parameter or a class is a compile error that names `{ get; }`:
 
@@ -2777,7 +2773,7 @@ Ids.identity(5);                                // compile error: 5 is not an ob
 
 ## 25. Referring to classes
 
-**`typeof(X)`** is typed `Class<X>`, and plain PHP receives the class-name string. It works on every type parameter, a method's included, because every type argument reaches the running program (section 11). PHP's `Order::class` is removed.
+**`typeof(X)`** is typed `Class<X>`. It works on every type parameter, a method's included, because every type argument reaches the running program (section 11). PHP's `Order::class` is removed.
 
 <!-- example typeof-types
 public class Example
@@ -2815,7 +2811,7 @@ public TItem blank<TItem>()
 }
 ```
 
-**`typeof` takes a type only. `Class.of(value)` gives an object's class,** as Swift's `type(of:)` and Python's `type()` do. For a value of type `T`, it is typed `Class<T>` and holds the object's runtime class, which may be a subclass of `T`. Plain PHP receives the class-name string.
+**`typeof` takes a type only. `Class.of(value)` gives an object's class,** as Swift's `type(of:)` and Python's `type()` do. For a value of type `T`, it is typed `Class<T>` and holds the object's runtime class, which may be a subclass of `T`.
 
 <!-- example typeof-values: statements
 import Illuminate.Support.Facades.Log;
@@ -2825,7 +2821,7 @@ int id = 1;
 ```csharp
 Class<Order> type = Class.of(order);            // compiles: order's runtime class, which may be a subclass of Order
 const fresh = new (type)(id);                   // compiles: a new object of that class
-Log.info("saved", ["class": Class.of(order)]);  // compiles; runs: plain PHP receives the class-name string
+Log.info("saved", ["class": Class.of(order)]);  // compiles
 typeof(order);                                  // compile error: typeof takes a type; write Class.of(order)
 ```
 
@@ -3083,13 +3079,11 @@ public class Reports
 }
 
 const here = __FILE__;                                           // compile error: write Position.current().file
-Log.info("charged", ["class": typeof(Order)]);                   // compiles: replaces __CLASS__, and plain PHP receives "App\Store\Order"
+Log.info("charged", ["class": typeof(Order)]);                   // compiles: replaces __CLASS__
 ```
 
 - `Position.current()` in a body gives the position where it is written.
 - As a parameter's default, `Position.current()` gives the caller's position, as C++20's `std::source_location::current()` and Swift's `#file` defaults do.
-- A plain PHP caller gets the position where the parameter is declared, because PHP# does not compile plain PHP's calls.
-
 **A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. A pragma, `mago.toml`'s `ignore` or the baseline can hide a warning, never an error.
 
 **`vendor/bin/mago compile` compiles the project.** It checks every `.sharp` file, vendor packages included. It also creates a missing `.lean` file beside a class that has a law (section 28.1), and never rewrites an existing one.
@@ -3333,7 +3327,8 @@ The standard library's ten effect classes, listed above, are `foreign` classes. 
 
 - `string? variable(string name)` reads an environment variable, or gives null when it is not set.
 - `List<string> arguments { get; }` holds the command-line arguments, starting with the script's name.
-- `string currentDirectory { get; }` is the directory the process runs in.
+- `string currentDirectory()` reads the directory the process runs in on every call, as Go's `os.Getwd()` and Rust's `env::current_dir()` do.
+- `void changeDirectory(string path)` changes the directory the process runs in.
 - `string require(string name)` reads an environment variable, and throws `ValueError` when it is not set, with the message `Environment.require: the environment variable "NAME" is not set`. A module binding calls it on the `Environment` it takes as a parameter (section 32), as ASP.NET Core's `IConfiguration` is a service.
 
 <!-- example environment -->
