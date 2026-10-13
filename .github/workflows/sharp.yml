@@ -175,6 +175,23 @@ jobs:
         run: |
           git fetch "$GITHUB_WORKSPACE" refs/heads/composer
           git push origin "FETCH_HEAD:$GITHUB_REF"
+      - name: Split sharp/mago
+        run: |
+          "$RUNNER_TEMP/splitsh-lite" --prefix=sharp/mago --target=refs/heads/mago
+      - name: git checkout heyJordanParker/mago-sharp
+        uses: actions/checkout@v6
+        with:
+          repository: heyJordanParker/mago-sharp
+          ssh-key: ${{ secrets.MAGO_SHARP_DEPLOY_KEY }}
+          path: sharp/build/mago-sharp
+          fetch-depth: 0
+      # splitsh-lite starts the split at the commit that added sharp/mago, so it shares no history with the
+      # repository's commits from before the move, and the push replaces them. The branch archive keeps them.
+      - name: Push the split
+        working-directory: sharp/build/mago-sharp
+        run: |
+          git fetch "$GITHUB_WORKSPACE" refs/heads/mago
+          git push --force origin "FETCH_HEAD:$GITHUB_REF"
   IMAGE:
     if: github.ref_type == 'tag'
     needs: [LINUX, MACOS]

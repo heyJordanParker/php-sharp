@@ -4,7 +4,9 @@
 
 ## History
 
-`git subtree add` brought mago-sharp's `master` into `sharp/mago/` with its whole history, at mago-sharp commit `9339e1f7e`. So `git log -- sharp/mago` and `git blame` reach every mago-sharp and upstream Mago commit. The fork left upstream at Mago `1.51.0`.
+`git subtree add` brought mago-sharp into `sharp/mago/` with its whole history, at mago-sharp commit `625c278f8`, the commit php-sharp's engine ran then. So `git log -- sharp/mago` and `git blame` reach every mago-sharp and upstream Mago commit. The fork left upstream at Mago `1.51.0`. The mago-sharp commits merged after `625c278f8` come in through the subtree pulls below.
+
+`heyJordanParker/mago-sharp` is now a read-only mirror. On every push to `master` and every `v*` tag, the `COMPOSER` job in `.github/workflows/sharp.yml` splits `sharp/mago/` with `splitsh-lite` and pushes it there with the `MAGO_SHARP_DEPLOY_KEY` deploy key, as it splits `sharp/composer/` into `heyJordanParker/php-sharp-composer`. Packagist reads `heyjordanparker/mago-sharp` from the mirror. The split starts at the commit that added `sharp/mago/`, so it shares no history with the mirror's commits from before the move. The push replaces them, and the mirror's `archive` branch keeps them, so every pinned commit stays fetchable.
 
 ## What builds from it
 
@@ -24,6 +26,28 @@ git subtree pull --prefix=sharp/mago https://github.com/carthage-software/mago.g
 ```
 
 The fork shares upstream's history, so git merges from the last upstream commit the fork took and conflicts only where the fork changed the same lines. A file the fork deleted and upstream changed, such as `SPONSORS.md` or a workflow under `sharp/mago/.github/`, stays deleted: resolve it with `git rm`. A change to upstream's `ci.yml` that PHP# needs goes into `.github/workflows/mago.yml` by hand. Nothing is filed upstream.
+
+## Moving an open engine pull request off its pin
+
+An open php-sharp pull request that pins a mago-sharp commit merges `origin/master`, and replaces its re-pin with one pull of its pinned commit. Its `ext/sharp/sharp_unit.h` then becomes the header the pulled bridge writes, as the last section says.
+
+```sh
+git subtree pull --prefix=sharp/mago https://github.com/heyJordanParker/mago-sharp.git <its pinned commit> -m "Merge mago-sharp <its pinned commit> into sharp/mago"
+```
+
+The pull reports a modify/delete conflict on `sharp/mago/.github/actions/setup-lean/action.yml` and `sharp/mago/.github/workflows/ci.yml`. `.github/workflows/mago.yml` and `.github/actions/setup-lean/` already carry mago-sharp `master`'s versions, so `git rm` both files.
+
+They land in this order, because each pinned commit holds the ones before it on mago-sharp `master`:
+
+1. #114, `feat/collection-engine`, pulls `a9f18829acd18e1bb91b38428547859808bf1d0f`. It holds the pins of #110 and #113.
+2. #110, `feat/slice-constructors`, and #113, `feat/slice-verification`, pin `c3a2b5af8` and `b9ffc3c5e`, which #114's pull already brought. They only merge `origin/master`.
+3. #115, #102 and #118 pin commits of mago-sharp branches that never merged, `feat/extensions`, `feat/slice-generics` and `feat/foreign-classes`. They move over by subtree merge of that branch, as the next section says.
+
+Then one pull request pulls the rest of mago-sharp's old `master`, which the mirror's `archive` branch keeps, and the open mago-sharp pull requests move over by subtree merge:
+
+```sh
+git subtree pull --prefix=sharp/mago https://github.com/heyJordanParker/mago-sharp.git archive -m "Merge mago-sharp's last master into sharp/mago"
+```
 
 ## Moving an open mago-sharp branch
 
