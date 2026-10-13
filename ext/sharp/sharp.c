@@ -417,6 +417,30 @@ static bool sharp_text_fits(const sharp_unit_header *header, sharp_str text)
 	return (uint64_t) text.offset + text.len <= header->texts_size;
 }
 
+/* Whether the folder of the file at path holds a file of exactly its name, case included. A disk that ignores case,
+ * as macOS's does by default, opens environment.php for Environment.php. Linux does not, so an input is there only under
+ * its exact name, as the bridge's unit::stamp stamps it. */
+static bool sharp_folder_holds_name(const zend_string *path)
+{
+	size_t folder = sharp_parent(ZSTR_VAL(path), ZSTR_LEN(path));
+	const char *name = ZSTR_VAL(path) + folder + 1;
+	size_t name_length = ZSTR_LEN(path) - folder - 1;
+	zend_string *folder_path = zend_string_init(ZSTR_VAL(path), folder, 0);
+	DIR *directory = VCWD_OPENDIR(ZSTR_VAL(folder_path));
+	struct dirent *entry;
+	bool holds = false;
+
+	while (!holds && directory && (entry = readdir(directory))) {
+		holds = strlen(entry->d_name) == name_length && memcmp(entry->d_name, name, name_length) == 0;
+	}
+	if (directory) {
+		closedir(directory);
+	}
+	zend_string_release(folder_path);
+
+	return holds;
+}
+
 static bool sharp_input_current(const sharp_compiled *compiled, const sharp_input *input)
 {
 	static const uint8_t absent[16] = {0};
@@ -428,7 +452,8 @@ static bool sharp_input_current(const sharp_compiled *compiled, const sharp_inpu
 	bool current;
 
 	if (input->size == 0 && memcmp(input->hash, absent, sizeof(absent)) == 0) {
-		current = !stamp->exists;
+		/* A file that opens under another case of the name is not there, so the input stays absent. */
+		current = !stamp->exists || !sharp_folder_holds_name(path);
 	} else if (!stamp->exists) {
 		current = false;
 	} else if (!stamp->hashed && stamp->size == input->size && stamp->mtime_ns == input->mtime_ns) {
