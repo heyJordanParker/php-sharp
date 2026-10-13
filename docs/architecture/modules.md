@@ -155,7 +155,7 @@ sharp/composer/
 sharp/phpunit/                          new: a PHP# test class under real PHPUnit, in one process, in a separate
                                         process and with process isolation, which sharp/bin/test --phpunit runs
 sharp/bin/test                          --phpunit
-sharp/docker/                           the image installs composer
+sharp/docker/                           the image installs composer, php-xml and unzip
 Zend/tests/sharp/
 ├── Container.inc                       the app the container tests build, with the library's module
 ├── container_resolution.phpt           each kind of binding, nested namespaces
