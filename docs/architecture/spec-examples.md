@@ -1,6 +1,6 @@
 # Spec examples
 
-`docs/spec.md` is the definition of PHP# v1, and `README.md` shows its first example. Every rule comes with code annotated `// compiles`, `// compile error: …`, `// throws …` or the value a line gives. `sharp/bin/spec` compiles every one of those blocks with the pinned `mago`, runs the ones that claim a runtime result on the engine, and compares each annotated line with its annotation.
+`docs/spec.md` is the definition of PHP# v1, and `README.md` shows its first example. Every rule comes with code annotated `// compiles`, `// compile error: …`, `// throws …` or the value a line gives. `sharp/bin/spec` compiles every one of those blocks with the `mago` built from `sharp/mago/`, runs the ones that claim a runtime result on the engine, and compares each annotated line with its annotation.
 
 The examples that fail today are listed in `sharp/baseline/spec/`, one empty file each. Their count is the v1 meter: v1 is done when the folder is gone. CI keeps the list honest: an example that passes leaves it, an example off it passes, and an example the base already checked never joins it.
 
@@ -171,7 +171,7 @@ A value is a number, `true`, `false`, `null`, a quoted string, or a balanced `[�
 
 **Every line is checked, annotated or not.** A line with no annotation, or with prose, must compile with no error. A `compile error` line must get one. The check is the whole block, so a block the checker can't read fails on its first line.
 
-**The text after `compile error:` is not compared.** The spec writes it for the reader, and most of it is a paraphrase, such as "int is not bool" for the checker's "`if` takes a `bool`, but this is `int`." Comparing it would fail examples whose checker is right. What a message says is guard 2's job, the message rules in mago-sharp. The check still refuses four wrong reasons:
+**The text after `compile error:` is not compared.** The spec writes it for the reader, and most of it is a paraphrase, such as "int is not bool" for the checker's "`if` takes a `bool`, but this is `int`." Comparing it would fail examples whose checker is right. What a message says is guard 2's job, the message rules in `sharp/mago/`. The check still refuses four wrong reasons:
 
 - **A refusal is not the error the spec means.** An error whose message holds "not supported yet" never satisfies a `compile error` line. It says the feature is missing, not that the rule holds.
 - **A missing class is not the error the spec means either, unless the line names it.** mago's `non-existent-class-like` error, such as "Cannot find class, interface, enum, or type alias `App\Mailer`", says the setup lacks a name, so it satisfies a `compile error` line only when that line writes the missing name itself, outside a string. So `public void refresh() on OrderPayed { … }   // compile error: there is no event OrderPayed` passes on the error that `OrderPayed` is missing, and a missing name written on another line still fails as missing setup. mago quotes the missing name last in the message, and the check reads that name.
@@ -218,7 +218,7 @@ sharp/baseline/spec/
 
 `sharp/bin/spec` fails on a file that is not empty, on a path that is not `<section>/<id>`, and on an id listed under two sections.
 
-**The list records which examples fail, not how,** as test262's expected-failure lists do in V8 and SpiderMonkey. A listed example may change its errors, so a checker that turns a parse error into a named "not supported yet" refusal passes, and so does a Mago re-pin that does the same. The list doesn't notice a listed example getting worse. mago-sharp's and php-sharp's own tests cover the rules those examples use.
+**The list records which examples fail, not how,** as test262's expected-failure lists do in V8 and SpiderMonkey. A listed example may change its errors, so a checker that turns a parse error into a named "not supported yet" refusal passes, and so does a later change to `sharp/mago/` that does the same. The list doesn't notice a listed example getting worse. Mago's own tests and `Zend/tests/sharp/` cover the rules those examples use.
 
 `sharp/bin/spec` fails when the list differs from what the examples do, and prints the commands that make it match: `git rm -q sharp/baseline/spec/<section>/<id>` for an example that passes, and `mkdir -p` and `touch` for one that fails. An example that fails prints every line that differs from its annotation, with the checker's message or the value it gave.
 
@@ -226,9 +226,9 @@ sharp/baseline/spec/
 
 ## CI
 
-`sharp/bin/test --spec` runs `sharp/bin/spec` after the suite, as `--census` runs `sharp/bin/census`, with the engine and the `mago` that `sharp/bin/test` already installed. `LINUX` adds `--spec` to its `Test PHP#` step, so `CI_PASSED` covers it. This main check compares the list with what the examples do.
+`sharp/bin/test --spec` runs `sharp/bin/spec` after the suite, as `--census` runs `sharp/bin/census`, with the engine and the `mago` that `sharp/bin/test` already built from `sharp/mago/`. `LINUX` adds `--spec` to its `Test PHP#` step, so `CI_PASSED` covers it. This main check compares the list with what the examples do.
 
-**The checker tests itself first.** `sharp/bin/test --spec` runs `sharp/bin/spec --self-test` before the examples. It checks the examples of `sharp/spec-self-test.md`, one for each rule `check_compile`, `check_run` and the annotation reader apply, and fails unless each gives exactly the problems the `<!-- expect <id>` comment after it lists. Most of those examples break their rule on purpose, so the problems they expect are the rule at work, and each fails when its rule is switched off. An expect comment counts lines from the example's first fence, as `line 2`, so a row above can grow, and `…` matches any text, so a re-pin that rewords a message keeps the row. The file sits outside the guarded folders, because a re-pin that turns a refusal it uses into a real error changes that row in the same pull request.
+**The checker tests itself first.** `sharp/bin/test --spec` runs `sharp/bin/spec --self-test` before the examples. It checks the examples of `sharp/spec-self-test.md`, one for each rule `check_compile`, `check_run` and the annotation reader apply, and fails unless each gives exactly the problems the `<!-- expect <id>` comment after it lists. Most of those examples break their rule on purpose, so the problems they expect are the rule at work, and each fails when its rule is switched off. An expect comment counts lines from the example's first fence, as `line 2`, so a row above can grow, and `…` matches any text, so a checker change that rewords a message keeps the row. The file is not guarded, because a checker change that turns a refusal it uses into a real error changes that row in the same pull request.
 
 `CHANGES` treats `docs/spec.md`, `README.md` and `sharp/spec-self-test.md` as code, so a pull request that changes only one of them still runs `LINUX`.
 
@@ -300,7 +300,7 @@ CI fails in each of the four cases:
 
 ## Runtime
 
-Measured on an Apple M-series Mac with the pinned `mago` at `449377ad4` and a debug build of the engine, on a prototype project of 25 PHP# files: the README's `Cart`, a `Line`, one example class and the 22 standard library files.
+Measured on an Apple M-series Mac with `mago` at mago-sharp commit `449377ad4`, before Mago moved into `sharp/mago/`, and a debug build of the engine, on a prototype project of 25 PHP# files: the README's `Cart`, a `Line`, one example class and the 22 standard library files.
 
 - **One `mago compile`:** 0.24 to 0.45 seconds, most of it starting threads.
 - **Four at once with `MAGO_THREADS=1`:** 0.18 seconds for all four.
