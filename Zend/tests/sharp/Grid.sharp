@@ -158,6 +158,30 @@ class Grid
         return [this.lines, this.lines[9]?.remove(1), this.lines[9]?.contains(1), this.lines[9]?.count()];
     }
 
+    public static List<Any?> otherSkips(List<List<int>> grid, List<Map<string, int>> maps, List<Set<int>> sets)
+    {
+        grid[9]?.insert(0, 1);
+        sets[9]?.add(1);
+        sets[9]?.clear();
+        return [
+            grid, grid[9]?.indexOf(1), grid[9]?.last(), grid[9]?.entries(),
+            maps, maps[9]?.remove("a"), maps[9]?.has("a"),
+            sets, sets[9]?.remove(1), sets[9]?.contains(1),
+        ];
+    }
+
+    public static void nestedAdd(List<List<List<int>>> cube) { cube[9][0]?.add(1); }
+
+    public static void nestedClear(List<List<List<int>>> cube) { cube[9][0]?.clear(); }
+
+    public static void nestedRemove(List<List<List<int>>> cube) { cube[9][0]?.remove(1); }
+
+    public static int? nestedCount(List<List<List<int>>> cube) => cube[9][0]?.count();
+
+    public static bool? nestedContains(List<List<List<int>>> cube) => cube[9][0]?.contains(1);
+
+    public static Any? nestedEntries(List<List<List<int>>> cube) => cube[9][0]?.entries();
+
     public List<List<int>> rowsMissing(int row)
     {
         this.rows[row].add(7);

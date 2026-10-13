@@ -14,8 +14,10 @@ class Point
     {
         this.near = points;
         this.far = points;
-        return [points[0]?.x, points[5]?.x, this.near[5]?.x, this.far[0]?.x, this.far[5]?.x];
+        return [points[0]?.x, points[5]?.x, this.near[5]?.x, this.far[0]?.x, this.far[5]?.x, points[0]?.doubled(), points[5]?.doubled()];
     }
+
+    public int doubled() => this.x * 2;
 
     public static List<Point> moved(List<Point> points, int row)
     {

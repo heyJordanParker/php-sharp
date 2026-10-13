@@ -3118,6 +3118,12 @@ static zend_op *zend_delayed_compile_dim(znode *result, zend_ast *ast, uint32_t 
 	}
 
 	opline = zend_delayed_emit_op(result, ZEND_FETCH_DIM_R, &var_node, &dim_node);
+	/* The bridge marks the List index directly before `?.` with ZEND_DIM_IS, so a missing index reads
+	 * as null and `?.` skips, as spec section 12 handles a read with `?.`. Its container stays a bare
+	 * PHP# read, so `cube[9][0]?.x` still throws on `cube[9]`. */
+	if (type == BP_VAR_R && (ast->attr & ZEND_DIM_SHARP) && (ast->attr & ZEND_DIM_IS)) {
+		type = BP_VAR_IS;
+	}
 	zend_adjust_for_fetch_type(opline, result, type);
 	if (by_ref) {
 		opline->extended_value = ZEND_FETCH_DIM_REF;

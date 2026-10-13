@@ -31,6 +31,7 @@ for ($round = 0; $round < 100; $round++) {
     $grid = new Demo\Grid();
     attempt(fn () => $grid->spareSkipped());
     attempt(fn () => [$grid->linesSkipped(), $grid->writes]);
+    attempt(fn () => Demo\Grid::otherSkips([[1]], [['a' => 1]], [[1 => 1]]));
     // An element a plain PHP ArrayAccess object gives is a collection of its own.
     attempt(fn () => Demo\Grid::doubled(new Lib\RowSet([[1, 2]])));
     // An index that runs something runs once.
@@ -42,6 +43,13 @@ for ($round = 0; $round < 100; $round++) {
     attempt(fn () => (new Demo\Grid())->rowsMissing(9));
     $grid = new Demo\Grid();
     attempt(fn () => [$grid->tableMissing(9), $grid->writes]);
+    // Only the index directly before ?. reads quietly, so a missing index before it throws, whatever the method.
+    attempt(fn () => Demo\Grid::nestedAdd([[[1]]]));
+    attempt(fn () => Demo\Grid::nestedClear([[[1]]]));
+    attempt(fn () => Demo\Grid::nestedRemove([[[1]]]));
+    attempt(fn () => Demo\Grid::nestedCount([[[1]]]));
+    attempt(fn () => Demo\Grid::nestedContains([[[1]]]));
+    attempt(fn () => Demo\Grid::nestedEntries([[[1]]]));
     // An element that is an object is the object, so a change to it sticks, and a missing index throws.
     attempt(fn () => Demo\Point::moved([new Demo\Point()], 0)[0]->x);
     attempt(fn () => Demo\Point::moved([new Demo\Point()], 5));
