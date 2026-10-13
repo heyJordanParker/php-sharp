@@ -52,11 +52,12 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	zval compile_command_report;
 	zval arguments;
 	/* Spec section 32: Sharp\Container's bindings, under "namespace id" a list of the modules that bind it, each a
-	 * list of its rows, an environment module before its base module; the folders whose modules it read; each test
-	 * file's module, under each class the file declares, and the one of the test that runs now, or NULL; the
-	 * services a singleton or a scoped binding keeps, by binding row; and the bindings and classes it is building,
-	 * to refuse a cycle. */
+	 * list of its rows, the base modules' and the environment modules' apart; the folders whose modules it read;
+	 * each test file's module, under each class the file declares, and the one of the test that runs now, or NULL;
+	 * the services a singleton or a scoped binding keeps, by binding row; and the bindings and classes it is
+	 * building, to refuse a cycle. */
 	HashTable container_bindings;
+	HashTable container_environment;
 	HashTable container_folders;
 	HashTable container_tests;
 	HashTable *container_test;
@@ -1677,7 +1678,7 @@ ZEND_METHOD(Sharp_Environment, require)
  * .NET's IServiceProvider does, and resolves them as the checker does. Each binding row is [namespace, service id,
  * class it serves or null, lifetime, value]. PHP# creates only the services a module binds. A class's services
  * resolve from the modules of its namespace, then of each namespace above it, and the standard library's module
- * serves the root namespace. The first module with a binding wins: the module of the test that runs now, then an
+ * serves the root namespace. The first module with a binding wins: the module of the test that runs now, or else an
  * environment module, then the base module. In one module a binding for the class wins over one for any class. */
 
 /* The key the bindings of id in the namespace's first length bytes are kept under. */
@@ -1708,9 +1709,9 @@ static void sharp_container_group(HashTable *rows, HashTable *module)
 	} ZEND_HASH_FOREACH_END();
 }
 
-/* Adds the module whose file is at path, if one is: under each namespace and service id, a list of its rows after
- * those of the modules read before it. */
-static void sharp_container_read(const char *path)
+/* Adds the module whose file is at path, if one is, to bindings: under each namespace and service id, a list of its
+ * rows after those of the modules read before it. */
+static void sharp_container_read(const char *path, HashTable *bindings)
 {
 	zend_stat_t status = {0};
 	if (VCWD_STAT(path, &status) != 0) {
@@ -1744,11 +1745,11 @@ static void sharp_container_read(const char *path)
 	zend_string *key;
 	zval *list;
 	ZEND_HASH_FOREACH_STR_KEY_VAL(&module, key, list) {
-		zval *modules = zend_hash_find(&SHARP_G(container_bindings), key);
+		zval *modules = zend_hash_find(bindings, key);
 		if (!modules) {
 			zval empty;
 			array_init(&empty);
-			modules = zend_hash_add_new(&SHARP_G(container_bindings), key, &empty);
+			modules = zend_hash_add_new(bindings, key, &empty);
 		}
 		Z_ADDREF_P(list);
 		zend_hash_next_index_insert_new(Z_ARRVAL_P(modules), list);
@@ -1757,7 +1758,7 @@ static void sharp_container_read(const char *path)
 }
 
 /* Reads the modules of file's folder and of each folder above it up to its project's root, once each: a folder's
- * Module.<SHARP_ENV>.sharp before its Module.sharp, so the environment module comes first. */
+ * Module.<SHARP_ENV>.sharp among the environment modules, and its Module.sharp among the base modules. */
 static void sharp_container_read_folders(const zend_string *file)
 {
 	size_t root;
@@ -1773,10 +1774,10 @@ static void sharp_container_read_folders(const zend_string *file)
 		char module[MAXPATHLEN];
 		if (environment && ZSTR_LEN(environment) > 0) {
 			snprintf(module, sizeof(module), "%.*s/Module.%s.sharp", (int) folder, path, ZSTR_VAL(environment));
-			sharp_container_read(module);
+			sharp_container_read(module, &SHARP_G(container_environment));
 		}
 		snprintf(module, sizeof(module), "%.*s/Module.sharp", (int) folder, path);
-		sharp_container_read(module);
+		sharp_container_read(module, &SHARP_G(container_bindings));
 		if (folder == root) {
 			break;
 		}
@@ -1812,7 +1813,25 @@ static zval *sharp_container_row(zval *list, const zend_class_entry *requester)
 	return any;
 }
 
-/* The binding row that serves id to requester, a class of namespace or NULL, or NULL when no module binds it. */
+/* The row of the first of modules, a list of modules' rows of a service or NULL, that serves requester, or NULL. */
+static zval *sharp_container_first_row(zval *modules, const zend_class_entry *requester)
+{
+	zval *list, *row;
+	if (modules) {
+		ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(modules), list) {
+			row = sharp_container_row(list, requester);
+			if (row) {
+				return row;
+			}
+		} ZEND_HASH_FOREACH_END();
+	}
+
+	return NULL;
+}
+
+/* The binding row that serves id to requester, a class of namespace or NULL, or NULL when no module binds it. While a
+ * test runs, its module replaces the environment modules, as the checker checks a test module over the base modules
+ * alone. */
 static zval *sharp_container_binding(const zend_string *id, const zend_string *namespace, const zend_class_entry *requester)
 {
 	size_t length = ZSTR_LEN(namespace);
@@ -1820,20 +1839,18 @@ static zval *sharp_container_binding(const zend_string *id, const zend_string *n
 	while (true) {
 		zend_string *key = sharp_container_key(namespace, length, id);
 		zval *test = SHARP_G(container_test) ? zend_hash_find(SHARP_G(container_test), key) : NULL;
+		zval *environment = SHARP_G(container_test) ? NULL : zend_hash_find(&SHARP_G(container_environment), key);
 		zval *modules = zend_hash_find(&SHARP_G(container_bindings), key);
 		zend_string_release(key);
 		zval *row = test ? sharp_container_row(test, requester) : NULL;
+		if (!row) {
+			row = sharp_container_first_row(environment, requester);
+		}
+		if (!row) {
+			row = sharp_container_first_row(modules, requester);
+		}
 		if (row) {
 			return row;
-		}
-		zval *list;
-		if (modules) {
-			ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(modules), list) {
-				row = sharp_container_row(list, requester);
-				if (row) {
-					return row;
-				}
-			} ZEND_HASH_FOREACH_END();
 		}
 
 		if (length == 0) {
@@ -2100,7 +2117,7 @@ ZEND_FUNCTION(Sharp_Internal_readModule)
 		zend_throw_error(NULL, "Sharp\\Internal\\readModule: no module file at %s", ZSTR_VAL(path));
 		RETURN_THROWS();
 	}
-	sharp_container_read(ZSTR_VAL(path));
+	sharp_container_read(ZSTR_VAL(path), &SHARP_G(container_bindings));
 }
 
 /* Spec section 32: a test file's module, the rows bindings holds, applies while a test of a class of classes runs.
@@ -2335,6 +2352,7 @@ static PHP_RINIT_FUNCTION(sharp)
 	ZVAL_UNDEF(&SHARP_G(compile_command_report));
 	/* Spec section 32: the request is the host's scope, as each CLI run is. */
 	zend_hash_init(&SHARP_G(container_bindings), 8, NULL, ZVAL_PTR_DTOR, false);
+	zend_hash_init(&SHARP_G(container_environment), 8, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(container_folders), 8, NULL, NULL, false);
 	zend_hash_init(&SHARP_G(container_tests), 8, NULL, ZVAL_PTR_DTOR, false);
 	SHARP_G(container_test) = NULL;
@@ -2372,6 +2390,7 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 	zend_hash_destroy(&SHARP_G(container_request_scope));
 	zend_hash_destroy(&SHARP_G(container_singletons));
 	zend_hash_destroy(&SHARP_G(container_bindings));
+	zend_hash_destroy(&SHARP_G(container_environment));
 	zend_hash_destroy(&SHARP_G(container_folders));
 	SHARP_G(container_test) = NULL;
 	zend_hash_destroy(&SHARP_G(container_tests));

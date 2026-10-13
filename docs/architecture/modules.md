@@ -85,7 +85,7 @@ A service's id is its PHP# type in lowercase, as codex's `service_id` writes it 
 `Sharp\Container` resolves a service the way the checker does:
 
 - Before it builds a class, it reads the modules of the class's folder and of each folder above it, up to the project root that holds `.sharp/`, once per request.
-- With `SHARP_ENV` set, it reads the `Module.<SHARP_ENV>.sharp` beside each `Module.sharp` first, so the environment module wins.
+- With `SHARP_ENV` set, it also reads the `Module.<SHARP_ENV>.sharp` beside each `Module.sharp`, and the environment module wins outside a test.
 - The standard library's `autoload.php` reads the library's module once per request, through `Sharp\Internal\readModule`.
 - It builds only what a binding binds. It builds a bound class through its constructor and calls a binding's closure. Either way, it fills each parameter with the service its `Service` attribute, or else its class, names. It reads the parameters from the function's own argument information, with no reflection.
 - It keeps each `singleton` for the request and each `scoped` service for the current scope. A `transient` service is built every time.
@@ -102,7 +102,7 @@ final class Container
 }
 ```
 
-**Tests.** A test file's module applies while a test of a class the file declares runs, as Spring applies a test class's own `@TestConfiguration`. The test needs no code. The standard library's PHPUnit extension, `Sharp\PhpUnit\Extension`, calls `Sharp\Internal\startTest($class)` before PHPUnit sets a test up and `Sharp\Internal\endTest()` after it finishes. While a test runs, its module comes before every other module, and each test builds its services again. A project registers the extension in `phpunit.xml` as `<bootstrap class="Sharp\PhpUnit\Extension"/>`.
+**Tests.** A test file's module applies while a test of a class the file declares runs, as Spring applies a test class's own `@TestConfiguration`. The test needs no code. The standard library's PHPUnit extension, `Sharp\PhpUnit\Extension`, calls `Sharp\Internal\startTest($class)` before PHPUnit sets a test up and `Sharp\Internal\endTest()` after it finishes. While a test runs, its module comes before the base modules and the environment modules don't apply, even with `SHARP_ENV` set, so a test runs exactly the set of services the checker checks. Each test builds its services again. A project registers the extension in `phpunit.xml` as `<bootstrap class="Sharp\PhpUnit\Extension"/>`.
 
 **PSR-11.** `Sharp\Psr\Container` implements `Psr\Container\ContainerInterface` over `Sharp\Container`, and throws `Sharp\Psr\NotFoundException` for an id no module binds. The engine can't implement an interface Composer loads after it starts, so the adapter is PHP, and the Composer package requires `psr/container`.
 
@@ -143,6 +143,7 @@ Zend/tests/sharp/
 ├── container_lifetimes.phpt            singleton, scoped, scope(), transient
 ├── container_refusals.phpt             missing service, unbound concrete class, cycle, untyped parameter
 ├── container_test_module.phpt          new: a test file's module while its test runs
+├── container_test_environment.phpt     new: no environment module while a test runs
 ├── container_phpunit.phpt              new: the PHPUnit extension
 ├── container_psr.phpt                  new: the PSR-11 adapter
 ├── library_autoload.inc                the package holds the library's module
