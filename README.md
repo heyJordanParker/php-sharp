@@ -2,7 +2,7 @@
 
 PHP# is a typed language with C#-shaped syntax that runs on PHP's engine and calls plain PHP freely, as Kotlin runs on the JVM and calls Java. An app moves to PHP# one file at a time.
 
-The checker, a fork of [Mago](https://github.com/heyJordanParker/mago-sharp), type-checks PHP and PHP# files together. The engine runs the same Mago front end, so both read every `.sharp` file the same way.
+The checker, a fork of [Mago](sharp/mago/) in this repository, type-checks PHP and PHP# files together. The engine runs the same Mago front end, so both read every `.sharp` file the same way.
 
 ## Principles
 
