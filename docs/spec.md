@@ -2994,21 +2994,40 @@ import App.Shared.Text.TextExtensions;
 
 title.slug();
 title.isBlank;
+TextExtensions.slug(title);         // the same call, written through the class, as in C#
 ```
 
-- **An extension applies only in files that import its class, and in the files of its own namespace,** as Kotlin's do in their package. One in the file's own namespace shadows a default extension of the same name (section 23).
-- **An extension is chosen from the type the line shows,** as in C# and Kotlin. A member that type declares wins over an extension of the same name. A member a subclass declares never makes an extension a compile error:
+- **An extension applies only in files that import its class, and in the files of its own namespace,** as Kotlin's do in their package. An extension the file imports, or one its own namespace declares, shadows a default extension of the same name, as a class does (section 23).
+- **An extension member named like a member its type, or a class above it, already declares is a compile error where the extension is written,** because it can never run, as Swift refuses an `invalid redeclaration`. On a union receiver, such as `Order|string`, it is an error only when every type of the union declares the member, because otherwise the extension runs on the rest:
+
+<!-- example extension-hidden-member -->
+```csharp
+// app/Billing/OrderNames.sharp
+namespace App.Billing;
+
+import App.Order;
+
+public static class OrderNames
+{
+    extension(Order order)
+    {
+        public string label() => "order";   // compile error: Order already declares label(), so this extension member never runs
+    }
+}
+```
+
+- **An extension is chosen from the type the line shows,** as in C# and Kotlin. A member a subclass declares never makes an extension a compile error:
 
 <!-- example extension-static-choice: statements -->
 ```csharp
-import App.Billing.OrderLabels;     // extension(Order order) { public string label() => …; }
+import App.Billing.OrderLabels;     // extension(Order order) { public string caption() => …; }
 
-Order order = new RushOrder();      // RushOrder : Order declares its own label()
-order.label();                      // compiles: the line shows an Order, so OrderLabels runs
+Order order = new RushOrder();      // RushOrder : Order declares its own caption()
+order.caption();                    // compiles: the line shows an Order, so OrderLabels runs
 ```
 
 - **Extensions can only reach the type's public members,** so access rules still hold.
-- **The receiver's type picks among the extensions with one name that apply in a file,** as in C# and Kotlin:
+- **The receiver's type picks among the extensions with one name that apply in a file,** as in C# and Kotlin. When several fit, the one whose receiver type is the most specific runs, so an extension on `RushOrder` wins over one on `Order` for a `RushOrder`. Two that fit where neither receiver type is inside the other are a compile error:
 
 <!-- example extension-overloads: statements
 List<Line> lines = [new Line()];

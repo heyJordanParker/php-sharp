@@ -1,0 +1,11 @@
+namespace Demo.Audits;
+
+import Lib.AuditedWallet;
+
+public static class AuditExtensions
+{
+    extension(AuditedWallet wallet)
+    {
+        public string rank() => "audited";
+    }
+}
