@@ -185,15 +185,20 @@ jobs:
           ssh-key: ${{ secrets.MAGO_SHARP_DEPLOY_KEY }}
           path: sharp/build/mago-sharp
           fetch-depth: 0
-      # splitsh-lite starts the split at the commit that added sharp/mago, so it shares no history with the
-      # repository's commits from before the move, and the push replaces them. The branch archive keeps them.
-      # git subtree split would keep that history, but it walks all of Mago's history in shell recursion and
-      # took more than 8 minutes without finishing.
+      # The push never forces, so a mistake can't rewind the published package. splitsh-lite starts the split at
+      # the commit that added sharp/mago, so a branch the mirror had before the move isn't in the split, and its
+      # push is skipped until that branch is rewritten once. git subtree split would keep that history, but it
+      # walks all of Mago's history in shell recursion and took more than 8 minutes without finishing.
       - name: Push the split
         working-directory: sharp/build/mago-sharp
         run: |
           git fetch "$GITHUB_WORKSPACE" refs/heads/mago
-          git push --force origin "FETCH_HEAD:$GITHUB_REF"
+          if [[ $GITHUB_REF_TYPE == branch ]] && git rev-parse -q --verify "origin/$GITHUB_REF_NAME" > /dev/null \
+            && ! git merge-base --is-ancestor "origin/$GITHUB_REF_NAME" FETCH_HEAD; then
+            echo "::warning::The split of sharp/mago does not contain heyJordanParker/mago-sharp's $GITHUB_REF_NAME, so pushing it would rewrite that branch. The push is skipped."
+            exit 0
+          fi
+          git push origin "FETCH_HEAD:$GITHUB_REF"
   IMAGE:
     if: github.ref_type == 'tag'
     needs: [LINUX, MACOS]
