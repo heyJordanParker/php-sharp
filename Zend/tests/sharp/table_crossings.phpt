@@ -1,5 +1,5 @@
 --TEST--
-A Map or a Set crosses to plain PHP as an object: built from an array, read back as one, and encoded as JSON
+A Map or a Set crosses to plain PHP as an object: built from an array, read back as one, read through ArrayAccess, and encoded as JSON
 --FILE--
 <?php
 use Sharp\Map;
@@ -14,6 +14,20 @@ enum Size: string
 enum Tone
 {
     case Warm;
+}
+
+// A key whose hash() throws, as PHP#'s operator == with hash() lowers to.
+final class Flaky
+{
+    public static function op_Equality(mixed $a, mixed $b): bool
+    {
+        return true;
+    }
+
+    public function hash(): int
+    {
+        throw new RuntimeException('no hash');
+    }
 }
 
 function attempt(callable $call): string
@@ -59,6 +73,20 @@ $rows = [
         $map = new Map(['a', 0, 'b', null]);
         return [isset($map['a']), empty($map['a']), isset($map['b']), isset($map['c']), isset(new Set([0])[0]), empty(new Set([0])[0])];
     },
+    'ArrayAccess, as the index runs' => fn () => [
+        new Map() instanceof ArrayAccess,
+        new Set() instanceof ArrayAccess,
+        new Map(['a', 1])->offsetGet('a'),
+        new Map(['a', 1])->offsetGet('b'),
+        new Map(['a', 1, 'b', null])->offsetExists('a'),
+        new Map(['a', 1, 'b', null])->offsetExists('b'),
+        new Set(['x'])->offsetExists('x'),
+        new Set(['x'])->offsetExists('y'),
+    ],
+    'a Set offsetGet has no index' => fn () => new Set(['a'])->offsetGet('a'),
+    'offsetExists passes on what hash() throws' => fn () => new Map()->offsetExists(new Flaky()),
+    'offsetSet refuses a call' => fn () => new Map()->offsetSet('a', 1),
+    'offsetUnset refuses a call' => fn () => new Set(['a'])->offsetUnset('a'),
     'a loop by reference' => function () {
         foreach (new Map(['a', 1]) as &$value) {
         }
@@ -110,6 +138,11 @@ a Set has no index: Error: A Set has no index: test for an element with isset($s
 a Set adds with []: Error: A Set adds an element with $set[] = $element
 a Map write needs a key: Error: A Map write needs a key
 isset and empty: [true,true,false,false,true,true]
+ArrayAccess, as the index runs: [true,true,1,null,true,false,true,false]
+a Set offsetGet has no index: Error: A Set has no index: test for an element with isset($set[$element])
+offsetExists passes on what hash() throws: RuntimeException: no hash
+offsetSet refuses a call: Error: A Sharp\Map is written through its index, which copies a shared one first
+offsetUnset refuses a call: Error: A Sharp\Set is written through its index, which copies a shared one first
 a loop by reference: Error: A Map can't be looped over by reference
 no dynamic property: Error: Cannot create dynamic property Sharp\Map::$extra
 not serializable: Exception: Serialization of 'Sharp\Map' is not allowed

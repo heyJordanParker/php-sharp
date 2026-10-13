@@ -454,15 +454,18 @@ Both classes are `final` and internal, and implement `ArrayAccess`, `IteratorAgg
 
 ```php
 $plans["pro"];            // offsetGet: the value, or null when the key is missing (section 12's TValue?)
-$plans["pro"] = $plan;    // offsetSet: inserts or replaces, after separating a shared Map
-unset($plans["pro"]);     // offsetUnset: removes, after separating
+$plans["pro"] = $plan;    // the index write: inserts or replaces, after separating a shared Map
+unset($plans["pro"]);     // the index unset: removes, after separating
 isset($plans["pro"]);     // offsetExists: true when the key is present and its value is not null, as for an array
-$tags[] = "vip";          // a Set's offsetSet with no index adds the element
-unset($tags["vip"]);      // a Set's offsetUnset removes the element
+$tags[] = "vip";          // a Set's index write with no index adds the element
+unset($tags["vip"]);      // a Set's index unset removes the element
 foreach ($plans as $key => $value) { }   // the stored key itself, an object included, in insertion order
 count($plans);
 json_encode($plans);      // a Map is a JSON object, {} when empty; a Set is a JSON array
+$plans->offsetSet("pro", $plan);   // throws Error: a method call has no holder to separate into (question 4)
 ```
+
+The index runs through the object's own handlers, as `WeakMap`'s does, so a write separates a shared `Map` first. `offsetGet` and `offsetExists` run as the index reads do. `offsetSet` and `offsetUnset` throw, because a write through a method call would reach every holder of a shared `Map`.
 
 `toArray()` gives a PHP array when every key is an `int` or a `string`, and throws `ValueError` otherwise (ruling 22). A `Map`'s `keys()` and `values()`, and a `Set`'s `toList()`, give `List`s, so a PHP array.
 

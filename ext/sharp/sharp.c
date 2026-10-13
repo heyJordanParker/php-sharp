@@ -2359,6 +2359,23 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Table_list, 0, 0, IS_ARRAY, 0)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Table_offsetExists, 0, 1, _IS_BOOL, 0)
+	ZEND_ARG_TYPE_INFO(0, offset, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Table_offsetGet, 0, 1, IS_MIXED, 0)
+	ZEND_ARG_TYPE_INFO(0, offset, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Table_offsetSet, 0, 2, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, offset, IS_MIXED, 0)
+	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Table_offsetUnset, 0, 1, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, offset, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
+
 
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Sharp_Map_from, 0, 1, Sharp\\Map, 0)
 	ZEND_ARG_TYPE_INFO(0, entries, IS_ARRAY, 0)
@@ -2378,6 +2395,62 @@ ZEND_METHOD(Sharp_Table, count)
 	ZEND_PARSE_PARAMETERS_NONE();
 
 	RETURN_LONG(sharp_table_of(Z_OBJ_P(ZEND_THIS))->size);
+}
+
+/* ArrayAccess's reads, which run as the index does: $map[$key] and isset($map[$key]), $set[$element] and
+ * isset($set[$element]). */
+ZEND_METHOD(Sharp_Table, offsetExists)
+{
+	zval *offset;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(offset)
+	ZEND_PARSE_PARAMETERS_END();
+
+	bool exists = sharp_table_has_dimension(Z_OBJ_P(ZEND_THIS), offset, 0);
+	if (EG(exception)) {
+		RETURN_THROWS();
+	}
+	RETURN_BOOL(exists);
+}
+
+ZEND_METHOD(Sharp_Table, offsetGet)
+{
+	zval *offset;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(offset)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_table_read_dimension(Z_OBJ_P(ZEND_THIS), offset, BP_VAR_R, return_value)) {
+		RETURN_THROWS();
+	}
+}
+
+/* ArrayAccess's writes refuse a call. A Map and a Set are values: the index opcodes copy a shared one into the holder
+ * they write through before the write, and a method call has no holder to copy into, so its write would reach every
+ * holder of the shared one. */
+ZEND_METHOD(Sharp_Table, offsetSet)
+{
+	zval *offset, *value;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ZVAL(offset)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_throw_error(NULL, "A %s is written through its index, which copies a shared one first", ZSTR_VAL(Z_OBJCE_P(ZEND_THIS)->name));
+}
+
+ZEND_METHOD(Sharp_Table, offsetUnset)
+{
+	zval *offset;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(offset)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_throw_error(NULL, "A %s is written through its index, which copies a shared one first", ZSTR_VAL(Z_OBJCE_P(ZEND_THIS)->name));
 }
 
 /* The text JSON writes for a key: an int, a string or a backed enum case's value. NULL after a JsonException for any
@@ -2583,6 +2656,10 @@ static const zend_function_entry class_Sharp_Map_methods[] = {
 	ZEND_RAW_FENTRY("toArray", zim_Sharp_Table_toArray, arginfo_class_Sharp_Table_list, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_ME(Sharp_Map, keys, arginfo_class_Sharp_Table_list, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Map, values, arginfo_class_Sharp_Table_list, ZEND_ACC_PUBLIC)
+	ZEND_RAW_FENTRY("offsetExists", zim_Sharp_Table_offsetExists, arginfo_class_Sharp_Table_offsetExists, ZEND_ACC_PUBLIC, NULL, NULL)
+	ZEND_RAW_FENTRY("offsetGet", zim_Sharp_Table_offsetGet, arginfo_class_Sharp_Table_offsetGet, ZEND_ACC_PUBLIC, NULL, NULL)
+	ZEND_RAW_FENTRY("offsetSet", zim_Sharp_Table_offsetSet, arginfo_class_Sharp_Table_offsetSet, ZEND_ACC_PUBLIC, NULL, NULL)
+	ZEND_RAW_FENTRY("offsetUnset", zim_Sharp_Table_offsetUnset, arginfo_class_Sharp_Table_offsetUnset, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_FE_END
 };
 
@@ -2593,10 +2670,15 @@ static const zend_function_entry class_Sharp_Set_methods[] = {
 	ZEND_RAW_FENTRY("jsonSerialize", zim_Sharp_Table_jsonSerialize, arginfo_class_Sharp_Table_jsonSerialize, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_RAW_FENTRY("toArray", zim_Sharp_Table_toArray, arginfo_class_Sharp_Table_list, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_ME(Sharp_Set, toList, arginfo_class_Sharp_Table_list, ZEND_ACC_PUBLIC)
+	ZEND_RAW_FENTRY("offsetExists", zim_Sharp_Table_offsetExists, arginfo_class_Sharp_Table_offsetExists, ZEND_ACC_PUBLIC, NULL, NULL)
+	ZEND_RAW_FENTRY("offsetGet", zim_Sharp_Table_offsetGet, arginfo_class_Sharp_Table_offsetGet, ZEND_ACC_PUBLIC, NULL, NULL)
+	ZEND_RAW_FENTRY("offsetSet", zim_Sharp_Table_offsetSet, arginfo_class_Sharp_Table_offsetSet, ZEND_ACC_PUBLIC, NULL, NULL)
+	ZEND_RAW_FENTRY("offsetUnset", zim_Sharp_Table_offsetUnset, arginfo_class_Sharp_Table_offsetUnset, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_FE_END
 };
 
-/* As WeakMap does, the class implements IteratorAggregate and loops through its own get_iterator. */
+/* As WeakMap does, the class implements ArrayAccess and IteratorAggregate through its own handlers: the index runs
+ * through read_dimension and the others, and a loop through get_iterator. */
 static zend_class_entry *register_class_Sharp_Table(const char *name, const zend_function_entry *methods)
 {
 	zend_class_entry ce;
@@ -2604,7 +2686,7 @@ static zend_class_entry *register_class_Sharp_Table(const char *name, const zend
 	INIT_CLASS_ENTRY_EX(ce, name, strlen(name), methods);
 	zend_class_entry *registered = zend_register_internal_class_with_flags(&ce, NULL,
 		ZEND_ACC_FINAL | ZEND_ACC_NO_DYNAMIC_PROPERTIES | ZEND_ACC_NOT_SERIALIZABLE);
-	zend_class_implements(registered, 3, zend_ce_aggregate, zend_ce_countable, php_json_serializable_ce);
+	zend_class_implements(registered, 4, zend_ce_arrayaccess, zend_ce_aggregate, zend_ce_countable, php_json_serializable_ce);
 	registered->create_object = sharp_table_create;
 	registered->get_iterator = sharp_table_get_iterator;
 	registered->default_object_handlers = &sharp_table_handlers;
