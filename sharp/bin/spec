@@ -2,7 +2,7 @@
 <?php
 // Checks every csharp, ts and php block of README.md and docs/spec.md against its annotations, as
 // docs/architecture/spec-examples.md describes, and fails when the examples that fail differ from sharp/baseline/spec.
-// sharp/bin/test --spec runs it on the built engine, with the pinned mago in TEST_MAGO_EXECUTABLE.
+// sharp/bin/test --spec runs it on the built engine, with sharp/bin/test's mago in TEST_MAGO_EXECUTABLE.
 //
 // With --base <commit>, it instead compares sharp/baseline/spec and the examples with that commit. The SPEC_GUARD job
 // runs the base commit's copy of this script on the pull request's merge commit, so a pull request's own files never
@@ -1059,7 +1059,7 @@ function check(string $root): int
  * Checks SELF_TEST. Each of its examples shows one rule that check_compile, check_run or the annotation reader applies,
  * and the `<!-- expect <id>` comment after it lists every problem the check must report for it, one per line, or none.
  * There a location reads `line <n>`, counted from the example's first fence, so a row above can grow, and `…` matches
- * any text, so a message mago words differently after a re-pin keeps the row.
+ * any text, so a message a later mago words differently keeps the row.
  */
 function self_test(string $root): int
 {
@@ -1139,7 +1139,7 @@ function measure(string $root, string $work, array $examples): array
 {
     $mago = getenv('TEST_MAGO_EXECUTABLE');
     if ($mago === false || !is_executable($mago)) {
-        fail('TEST_MAGO_EXECUTABLE names no mago. Run sharp/bin/test --spec, which installs the pinned one.');
+        fail('TEST_MAGO_EXECUTABLE names no mago. Run sharp/bin/test --spec, which provides it.');
     }
     remove($work);
     mkdir($work, 0777, true);
