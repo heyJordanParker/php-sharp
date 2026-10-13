@@ -30,6 +30,7 @@ class Grid
             this.writes = this.writes + 1;
         }
     } = [[1, 2], [3]];
+    public List<List<int>?> spare { get; set; } = [[1], null];
     public List<List<int>?> lines
     {
         get => field;
@@ -130,24 +131,43 @@ class Grid
         return this.table;
     }
 
-    public static List<List<int>?> maybeAdded(List<List<int>?> grid)
+    public static List<Any?> skipped(List<List<int>?> grid)
     {
         grid[0]?.add(5);
         grid[1]?.add(6);
-        return grid;
+        grid[9]?.add(7);
+        grid[9]?.clear();
+        return [grid, grid[9]?.remove(1), grid[9]?.contains(1), grid[9]?.count()];
     }
 
-    public static List<List<int>> surelyAdded(List<List<int>> grid, int row)
+    public List<Any?> spareSkipped()
     {
-        grid[row]?.insert(0, 4);
-        return grid;
+        this.spare[0]?.add(5);
+        this.spare[1]?.add(6);
+        this.spare[9]?.add(7);
+        this.spare[9]?.clear();
+        return [this.spare, this.spare[9]?.remove(1), this.spare[9]?.contains(1), this.spare[9]?.count()];
     }
 
-    public List<List<int>?> linesAdded()
+    public List<Any?> linesSkipped()
     {
         this.lines[0]?.add(5);
         this.lines[1]?.add(6);
-        return this.lines;
+        this.lines[9]?.add(7);
+        this.lines[9]?.clear();
+        return [this.lines, this.lines[9]?.remove(1), this.lines[9]?.contains(1), this.lines[9]?.count()];
+    }
+
+    public List<List<int>> rowsMissing(int row)
+    {
+        this.rows[row].add(7);
+        return this.rows;
+    }
+
+    public List<List<int>> tableMissing(int row)
+    {
+        this.table[row].add(7);
+        return this.table;
     }
 
     public static List<int> doubled(RowSet rows) => rows[0].map(n => n * 2);
