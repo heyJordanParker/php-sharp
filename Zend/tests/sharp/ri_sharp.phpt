@@ -1,18 +1,14 @@
 --TEST--
-php --ri sharp prints the PHP# version and the Mago commit ext/sharp/sharp_unit.h was generated at
+php --ri sharp prints the PHP# version
 --FILE--
 <?php
 
-preg_match('/^#define SHARP_MAGO_COMMIT "([0-9a-f]{40})"$/m', file_get_contents(__DIR__ . '/../../../ext/sharp/sharp_unit.h'), $match);
-
-$info = shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n --ri sharp');
-echo str_replace($match[1], '<the Mago commit in sharp_unit.h>', $info);
+echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n --ri sharp');
 ?>
 --EXPECT--
 sharp
 
 Version => 0.3.1
-Mago commit => <the Mago commit in sharp_unit.h>
 
 Directive => Local Value => Master Value
 sharp.compile_command => no value => no value
