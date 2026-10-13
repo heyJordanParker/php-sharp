@@ -2,7 +2,7 @@
 
 ## Decision
 
-A `Map` key is `int`, `string`, a backed enum, or any struct, by its whole value, with nothing declared. `counts[status]` runs as `$counts[$status->value]`. Two structs are one key when they are `==`. A struct that holds a class instance, at any depth, can't key a `Map`. A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, with the type written or not. Plain PHP receives an enum key's backing value and a generated key text for a struct key. A struct gets JSON key text only from its `toString()`, so `Json.encode` of a `Map` keyed by a struct without `toString()` is a compile error. `keys()` and `entries()` on such a `Map` are not specified yet.
+A `Map` key is `int`, `string`, a backed enum, or any struct, by its whole value, with nothing declared. A `Map` keeps each key as itself and finds it by its `==` and `hash()`, so `counts[status]` runs as `$counts[$status]`. Two structs are one key when they are `==`. A struct that holds a class instance, at any depth, can't key a `Map`. A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, with the type written or not. Plain PHP receives the `Map` itself, or a PHP array where its parameter's declared type names `array`, and a `Map` keyed by an object is refused there. A struct gets JSON key text only from its `toString()`, so `Json.encode` of a `Map` keyed by a struct without `toString()` is a compile error. `keys()` and `entries()` on such a `Map` are not specified yet.
 
 ## Options
 
