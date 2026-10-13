@@ -22,12 +22,12 @@ attempt(fn () => Tally::largest());
 ?>
 --EXPECTF--
 sized
+Checks\Tally::sizes(): Argument #1 ($sizes) must be of type List<int>, array given: [1] expected int, got string 'a', called in %s on line %d
 Checks\Tally::sizes(): Argument #1 ($sizes) must be of type List<int>, array given, called in %s on line %d
-Checks\Tally::sizes(): Argument #1 ($sizes) must be of type List<int>, array given, called in %s on line %d
-Checks\Tally::sizes(): Argument #2 ($prices) must be of type Map<string, float>, array given, called in %s on line %d
-Checks\Tally::sizes(): Argument #3 ($tags) must be of type Set<string>, array given, called in %s on line %d
-Checks\Tally::rows(): Argument #1 ($rows) must be of type List<List<int>>, array given, called in %s on line %d
+Checks\Tally::sizes(): Argument #2 ($prices) must be of type Map<string, float>, array given: ["vip"] expected float, got string 'cheap', called in %s on line %d
+Checks\Tally::sizes(): Argument #3 ($tags) must be of type Set<string>, array given: ["a"] expected string, got int 7, called in %s on line %d
+Checks\Tally::rows(): Argument #1 ($rows) must be of type List<List<int>>, array given: [1][1] expected int, got string 'x', called in %s on line %d
 float(1)
 int(1)
 7
-Lib\Pager::sizes(): Return value must be of type List<int>, array returned
+Lib\Pager::sizes(): Return value must be of type List<int>, array returned: [1] expected int, got string 'seven'

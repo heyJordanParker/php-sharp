@@ -19,4 +19,4 @@ attempt(fn () => unserialize(str_replace('a:0:{}', 'a:1:{i:0;s:1:"x";}', seriali
 bool(true)
 Cannot assign App.Box<Checks.Customer> to property Checks\Rack::$own of type App.Box<App.Order>?
 Cannot take a reference to `Checks\Rack::$own`: its type depends on the object's type arguments
-Cannot assign array to property Checks\Tally::$amounts of type List<float>
+Cannot assign array to property Checks\Tally::$amounts of type List<float>: [0] expected float, got string 'x'

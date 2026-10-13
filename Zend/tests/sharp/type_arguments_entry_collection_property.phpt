@@ -22,4 +22,4 @@ attempt(function () use ($tally) {
 --EXPECT--
 [2.5]
 [1.0,2.5]
-Cannot assign array to property Checks\Tally::$amounts of type List<float>
+Cannot assign array to property Checks\Tally::$amounts of type List<float>: [1] expected float, got string 'x'

@@ -58,7 +58,7 @@ array(2) {
   ["Closed"]=>
   int(4)
 }
-TypeError: Demo\Headcount::byName(): Argument #1 ($counts) must be of type Map<Lib.Standing, int>, array given, called in %s on line %d in EnumKeys.sharp on line 67
+TypeError: Demo\Headcount::byName(): Argument #1 ($counts) must be of type Map<Lib.Standing, int>, array given: ["missing"] key expected Lib.Standing, got string 'missing', called in %s on line %d in EnumKeys.sharp on line 67
 array(2) {
   [0]=>
   string(1) "5"

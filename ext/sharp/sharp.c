@@ -3718,21 +3718,57 @@ static ZEND_COLD void sharp_value_type_text(smart_str *given, const zval *value)
 	smart_str_0(given);
 }
 
-/* Throws the TypeError PHP's own parameter check throws, with the PHP# type text expected and the value's type given. */
+/* The first element of the array `value` that is not of `type`, as the walk that refused `value` finds it, for a
+ * TypeError to name: `: [1] expected Probe.Order, got object Probe.Invoice`. Empty for any other value, and for an array
+ * whose bad value is the array itself, which the TypeError already names. */
+static ZEND_COLD zend_string *sharp_first_problem(const sharp_type *type, const zval *value)
+{
+	smart_str text = {0};
+	if (Z_TYPE_P(value) != IS_ARRAY) {
+		return smart_str_extract(&text);
+	}
+
+	zval problems;
+	array_init(&problems);
+	sharp_type_problems found = {&problems, {0}};
+	sharp_type_holds(type, value, true, &found);
+	smart_str_free(&found.path);
+
+	zend_string *path;
+	zval *problem;
+	ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL(problems), path, problem) {
+		if (path && ZSTR_LEN(path)) {
+			smart_str_appends(&text, ": ");
+			smart_str_append(&text, path);
+			smart_str_appendc(&text, ' ');
+			smart_str_append(&text, Z_STR_P(problem));
+		}
+		break;
+	} ZEND_HASH_FOREACH_END();
+	zval_ptr_dtor(&problems);
+
+	return smart_str_extract(&text);
+}
+
+/* Throws the TypeError PHP's own parameter check throws, with the PHP# type text expected, the value's type given and
+ * the first bad element of an array. */
 static ZEND_COLD void sharp_type_argument_error(
 	const zend_execute_data *execute_data, uint32_t number, const sharp_type *expected, const zval *value)
 {
 	smart_str given = {0};
 	sharp_value_type_text(&given, value);
+	zend_string *problem = sharp_first_problem(expected, value);
 
 	const zend_execute_data *caller = EX(prev_execute_data);
 	if (caller && caller->func && ZEND_USER_CODE(caller->func->common.type)) {
-		zend_argument_type_error(number, "must be of type %s, %s given, called in %s on line %d",
-			ZSTR_VAL(expected->text), ZSTR_VAL(given.s), ZSTR_VAL(caller->func->op_array.filename),
-			caller->opline->lineno);
+		zend_argument_type_error(number, "must be of type %s, %s given%s, called in %s on line %d",
+			ZSTR_VAL(expected->text), ZSTR_VAL(given.s), ZSTR_VAL(problem),
+			ZSTR_VAL(caller->func->op_array.filename), caller->opline->lineno);
 	} else {
-		zend_argument_type_error(number, "must be of type %s, %s given", ZSTR_VAL(expected->text), ZSTR_VAL(given.s));
+		zend_argument_type_error(number, "must be of type %s, %s given%s", ZSTR_VAL(expected->text), ZSTR_VAL(given.s),
+			ZSTR_VAL(problem));
 	}
+	zend_string_release(problem);
 	smart_str_free(&given);
 }
 
@@ -3775,8 +3811,10 @@ bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval 
 			/* Worded as PHP's TypeError for a function's return value. */
 			smart_str given = {0};
 			sharp_value_type_text(&given, value);
-			zend_type_error("%s: Return value must be of type %s, %s returned",
-				Z_STRVAL_P(text + 1), ZSTR_VAL(type->text), ZSTR_VAL(given.s));
+			zend_string *problem = sharp_first_problem(type, value);
+			zend_type_error("%s: Return value must be of type %s, %s returned%s",
+				Z_STRVAL_P(text + 1), ZSTR_VAL(type->text), ZSTR_VAL(given.s), ZSTR_VAL(problem));
+			zend_string_release(problem);
 			smart_str_free(&given);
 		}
 		return false;
@@ -3824,9 +3862,11 @@ bool sharp_property_accepts(const zend_property_info *info, zval *value, zend_ob
 	if (!EG(exception)) {
 		smart_str given = {0};
 		sharp_value_type_text(&given, value);
-		zend_type_error("Cannot assign %s to %sproperty %s::$%s of type %s", ZSTR_VAL(given.s),
+		zend_string *problem = sharp_first_problem(type, value);
+		zend_type_error("Cannot assign %s to %sproperty %s::$%s of type %s%s", ZSTR_VAL(given.s),
 			reference ? "reference held by " : "", ZSTR_VAL(info->ce->name), zend_get_unmangled_property_name(info->name),
-			ZSTR_VAL(type->text));
+			ZSTR_VAL(type->text), ZSTR_VAL(problem));
+		zend_string_release(problem);
 		smart_str_free(&given);
 	}
 

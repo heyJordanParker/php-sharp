@@ -39,7 +39,7 @@ App\Pair
 App\PaginatedList::paired(): Argument #1 ($item) must be of type App.Order, Checks.Customer given, called in %s on line %d
 Checks\Pages::take(): Argument #1 ($page) must be of type App.PaginatedList<App.Order>, App.PaginatedList<Checks.Customer> given, called in %s on line %d
 Checks\Pages::take(): Argument #1 ($page) must be of type App.PaginatedList<App.Order>, App.PaginatedList<Checks.Customer> given
-Checks\Pages::relay(): Argument #1 ($pages) must be of type List<App.PaginatedList<App.Order>>, array given, called in %s on line %d
+Checks\Pages::relay(): Argument #1 ($pages) must be of type List<App.PaginatedList<App.Order>>, array given: [0] expected App.PaginatedList<App.Order>, got object App.PaginatedList<Checks.Customer>, called in %s on line %d
 Checks\Paged
 Checks\Purse
 Checks\Purse

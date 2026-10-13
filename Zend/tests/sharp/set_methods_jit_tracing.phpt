@@ -129,7 +129,7 @@ array(7) {
   [6]=>
   bool(true)
 }
-TypeError: Demo\Tagged::strings(): Argument #1 ($tags) must be of type Set<string>, array given, called in %s on line %d in Sets.sharp on line 18
+TypeError: Demo\Tagged::strings(): Argument #1 ($tags) must be of type Set<string>, array given: [0] expected string, got float 1.5, called in %s on line %d in Sets.sharp on line 18
 array(2) {
   [3]=>
   int(3)
