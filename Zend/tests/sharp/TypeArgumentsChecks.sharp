@@ -34,6 +34,23 @@ public class Pages
     public static Page<Box<Order>> boxedOrders() => new Page<Box<Order>>();
 
     public static int count<T>(Page<Box<T>> page) => 1;
+
+    public static Function<string(PaginatedList<Order>)> taker() => (PaginatedList<Order> page) => "took";
+}
+
+public event Paged(PaginatedList<Order> page);
+
+public class Ledger
+{
+    public Ledger(public int count { get; })
+    {
+    }
+
+    public Ledger.of(PaginatedList<Order> page) : this(1)
+    {
+    }
+
+    public static Ledger operator +(Ledger ledger, PaginatedList<Order> page) => ledger;
 }
 
 public class Page<T>

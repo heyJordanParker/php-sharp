@@ -2747,20 +2747,23 @@ bool sharp_type_accepts(const sharp_type *type, const zval *value)
 	return true;
 }
 
-/* The type a TypeError gives `value`: PHP's name for it and, for an object of a generic class, its dotted class name and
- * type arguments. */
+/* The type a TypeError gives `value`, as PHP# writes the expected type: an object's dotted class name, with the type
+ * arguments of a generic class's object, and PHP's name for any other value. */
 static ZEND_COLD void sharp_value_type_text(smart_str *given, const zval *value)
 {
-	const sharp_type *arguments = Z_TYPE_P(value) == IS_OBJECT ? sharp_type_arguments(Z_OBJ_P(value)) : NULL;
-	if (arguments) {
+	if (Z_TYPE_P(value) == IS_OBJECT) {
 		const zend_string *name = Z_OBJCE_P(value)->name;
 
 		for (size_t i = 0; i < ZSTR_LEN(name); i++) {
 			smart_str_appendc(given, ZSTR_VAL(name)[i] == '\\' ? '.' : ZSTR_VAL(name)[i]);
 		}
-		smart_str_appendc(given, '<');
-		smart_str_append(given, arguments->text);
-		smart_str_appendc(given, '>');
+
+		const sharp_type *arguments = sharp_type_arguments(Z_OBJ_P(value));
+		if (arguments) {
+			smart_str_appendc(given, '<');
+			smart_str_append(given, arguments->text);
+			smart_str_appendc(given, '>');
+		}
 	} else {
 		smart_str_appends(given, zend_zval_value_name(value));
 	}
@@ -2838,7 +2841,7 @@ void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *tex
 	}
 }
 
-bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval *text, void **cache)
+bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval *text, void **cache, bool is_set_hook)
 {
 	const sharp_type *expected = sharp_type_list_of_frame(text,
 		Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, true, EX(func)->common.scope, cache);
@@ -2849,11 +2852,16 @@ bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval 
 	const sharp_type *type = expected->members[0];
 	if (!sharp_type_accepts(type, value)) {
 		if (!EG(exception)) {
-			/* Worded as PHP's TypeError for a typed property. */
+			/* Worded as PHP's TypeError for a typed property, or for a function's return value. */
 			smart_str given = {0};
 			sharp_value_type_text(&given, value);
-			zend_type_error("Cannot assign %s to %s of type %s",
-				ZSTR_VAL(given.s), Z_STRVAL_P(text + 1), ZSTR_VAL(type->text));
+			if (is_set_hook) {
+				zend_type_error("Cannot assign %s to %s of type %s",
+					ZSTR_VAL(given.s), Z_STRVAL_P(text + 1), ZSTR_VAL(type->text));
+			} else {
+				zend_type_error("%s: Return value must be of type %s, %s returned",
+					Z_STRVAL_P(text + 1), ZSTR_VAL(type->text), ZSTR_VAL(given.s));
+			}
 			smart_str_free(&given);
 		}
 		return false;

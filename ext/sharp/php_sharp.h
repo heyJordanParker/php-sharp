@@ -103,9 +103,10 @@ bool sharp_type_accepts(const sharp_type *type, const zval *value);
 void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *text, void **cache);
 
 /* Whether `value` is of the one type the type text list `text` spells, spelled for the frame `execute_data` runs as
- * sharp_type_check_arguments spells it. Throws PHP's TypeError, naming what takes the value as the literal after `text`
- * names it, when not. An int it accepts for a float becomes a float. */
-bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval *text, void **cache);
+ * sharp_type_check_arguments spells it. Throws PHP's TypeError when not, naming what takes the value as the literal after
+ * `text` names it: worded as a typed property's when `is_set_hook`, and as a function's return value otherwise, since
+ * the value is a plain PHP call's result. An int it accepts for a float becomes a float. */
+bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval *text, void **cache, bool is_set_hook);
 
 /* Whether the property `info`, whose sharp_type is set, takes `value`, an object of its PHP class, as PHP checks a typed
  * property on every write: its type arguments must be the type's own. A write from a .sharp file is never checked, as a

@@ -6221,7 +6221,8 @@ ZEND_VM_HANDLER(213, ZEND_SHARP_VERIFY_TYPE_ARGS, TMPVAR|CV, CONST, CACHE_SLOT)
 			|| !writer || !writer->func || !ZEND_USER_CODE(writer->func->type)
 			|| !sharp_is_sharp_file(writer->func->op_array.filename))
 		&& !sharp_type_verify(execute_data, result, RT_CONSTANT(opline, opline->op2),
-			CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_VERIFY_SET_HOOK))) {
+			CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_VERIFY_SET_HOOK),
+				opline->extended_value & ZEND_SHARP_VERIFY_SET_HOOK)) {
 		zval_ptr_dtor_nogc(result);
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
