@@ -1,5 +1,5 @@
 --TEST--
-PHP# extension members run as static calls with the receiver first: name.trim() runs as trim($name) without the library loaded, and on an open class a plain PHP subclass's own public method or property runs instead, while a protected one, __call and __get leave the extension to run
+PHP# extension members run as static calls with the receiver first: name.trim() runs as trim($name) without the library loaded, and on an open class a plain PHP subclass's own public method or property runs instead, while a protected one, __call and __get leave the extension to run, as does a receiver that is no object
 --FILE--
 <?php
 namespace Demo;
@@ -54,6 +54,7 @@ for ($run = 0; $run < 2; $run++) {
     foreach ([new Wallet(5), new Wallet(0), new AuditedWallet(5), new HookedWallet(5), new HiddenWallet(5), new MagicWallet(0)] as $wallet) {
         echo get_class($wallet), ': ', WalletReport::describe($wallet, '  ada '), "\n";
     }
+    echo WalletReport::label('ada'), ' ', WalletReport::label(new Wallet(1)), "\n";
 }
 var_dump(class_exists('Sharp\Text\Text', false));
 ?>
@@ -64,10 +65,12 @@ Demo\AuditedWallet: ada! 102 103 empty
 Demo\HookedWallet: ada! 7 8 empty
 Demo\HiddenWallet: ada! 7 8 full
 Demo\MagicWallet: ada! 2 3 empty
+ada wallet
 Lib\Wallet: ada! 7 8 full
 Lib\Wallet: ada! 2 3 empty
 Demo\AuditedWallet: ada! 102 103 empty
 Demo\HookedWallet: ada! 7 8 empty
 Demo\HiddenWallet: ada! 7 8 full
 Demo\MagicWallet: ada! 2 3 empty
+ada wallet
 bool(false)

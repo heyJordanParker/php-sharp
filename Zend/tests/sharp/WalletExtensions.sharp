@@ -15,4 +15,9 @@ public static class WalletExtensions
     {
         public string shout() => text + "!";
     }
+
+    extension(Wallet|string owner)
+    {
+        public string label => owner is string ? owner : "wallet";
+    }
 }

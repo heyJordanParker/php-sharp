@@ -8,4 +8,6 @@ public class WalletReport
     public static string describe(Wallet wallet, string name)
         => name.trim().shout() + " " + (string) wallet.total(2) + " " + (string) wallet.total(extra: 3) + " "
             + (wallet.isEmpty ? "empty" : "full");
+
+    public static string label(Wallet|string owner) => owner.label;
 }

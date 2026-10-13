@@ -1505,10 +1505,11 @@ static ZEND_FUNCTION(Sharp_Internal_requireNative)
  * computed property, and the call's arguments, as \Sharp\Internal\extension($order, 'App\Totals', 'total', false, 2).
  * A public method, or for a computed property a public property, that the receiver's class declares by that name
  * runs instead, as it does in PHP. A class's __call and __get declare no member, so the extension runs in their
- * place. Any other receiver runs the extension's static method, with the receiver first. */
+ * place. Any other receiver, an object without that member or a value that is no object, runs the extension's
+ * static method, with the receiver first. */
 static ZEND_FUNCTION(Sharp_Internal_extension)
 {
-	zend_object *receiver;
+	zval *receiver;
 	zend_string *class_name, *member;
 	bool property;
 	zval *arguments = NULL;
@@ -1516,29 +1517,30 @@ static ZEND_FUNCTION(Sharp_Internal_extension)
 	HashTable *named = NULL;
 
 	ZEND_PARSE_PARAMETERS_START(4, -1)
-		Z_PARAM_OBJ(receiver)
+		Z_PARAM_ZVAL(receiver)
 		Z_PARAM_STR(class_name)
 		Z_PARAM_STR(member)
 		Z_PARAM_BOOL(property)
 		Z_PARAM_VARIADIC_WITH_NAMED(arguments, argument_count, named)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (property) {
-		const zend_property_info *declared = zend_hash_find_ptr(&receiver->ce->properties_info, member);
+	zend_object *object = Z_TYPE_P(receiver) == IS_OBJECT ? Z_OBJ_P(receiver) : NULL;
+	if (object && property) {
+		const zend_property_info *declared = zend_hash_find_ptr(&object->ce->properties_info, member);
 		if (declared && (declared->flags & (ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)) == ZEND_ACC_PUBLIC) {
 			zval rv;
-			zval *value = zend_read_property_ex(receiver->ce, receiver, member, false, &rv);
+			zval *value = zend_read_property_ex(object->ce, object, member, false, &rv);
 			RETVAL_COPY_DEREF(value);
 			if (value == &rv) {
 				zval_ptr_dtor(&rv);
 			}
 			return;
 		}
-	} else {
-		zend_function *declared = zend_hash_find_ptr_lc(&receiver->ce->function_table, member);
+	} else if (object) {
+		zend_function *declared = zend_hash_find_ptr_lc(&object->ce->function_table, member);
 		if (declared && (declared->common.fn_flags & ZEND_ACC_PUBLIC)) {
-			zend_object *object = (declared->common.fn_flags & ZEND_ACC_STATIC) ? NULL : receiver;
-			zend_call_known_function(declared, object, receiver->ce, return_value, argument_count, arguments, named);
+			zend_object *instance = (declared->common.fn_flags & ZEND_ACC_STATIC) ? NULL : object;
+			zend_call_known_function(declared, instance, object->ce, return_value, argument_count, arguments, named);
 			return;
 		}
 	}
@@ -1551,7 +1553,7 @@ static ZEND_FUNCTION(Sharp_Internal_extension)
 	}
 
 	zval *values = safe_emalloc(argument_count + 1, sizeof(zval), 0);
-	ZVAL_OBJ(&values[0], receiver);
+	ZVAL_COPY_VALUE(&values[0], receiver);
 	if (argument_count) {
 		memcpy(&values[1], arguments, argument_count * sizeof(zval));
 	}
