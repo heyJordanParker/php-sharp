@@ -1023,35 +1023,34 @@ function check(string $root): int
             if (count($shown) > 8) {
                 echo '  and problems on ' . (count($shown) - 8) . " more lines\n";
             }
-            $failing[] = "{$examples[$id]['section']}\t$id";
+            $failing[$id] = $examples[$id]['section'];
         }
     }
-    sort($failing, SORT_NATURAL);
-    $list = implode('', array_map(static fn (string $line): string => "$line\n", $failing));
-    file_put_contents("$build/spec-results", $list);
     $checked = count($results);
     $ignored = count($examples) - $checked;
     echo "Checked $checked examples, ignored $ignored, and " . count($failing) . " fail.\n";
 
-    $listed = is_file("$root/" . BASELINE) ? file_get_contents("$root/" . BASELINE) : '';
-    if ($listed === $list) {
+    $listed = listed($root);
+    $commands = [];
+    foreach ($failing as $id => $section) {
+        if (($listed[$id] ?? null) !== $section) {
+            echo isset($listed[$id]) ? "$id is listed under $listed[$id] and is now under $section.\n" : "$id fails and is not in " . BASELINE . ".\n";
+            $commands[] = 'mkdir -p ' . BASELINE . "/$section && touch " . BASELINE . "/$section/$id";
+        }
+    }
+    foreach ($listed as $id => $section) {
+        if (($failing[$id] ?? null) !== $section) {
+            if (!isset($failing[$id])) {
+                echo "$id passes and is still in " . BASELINE . ".\n";
+            }
+            $commands[] = 'git rm -q ' . BASELINE . "/$section/$id";
+        }
+    }
+    if ($commands === []) {
         return 0;
     }
-    $before = parse_list($listed);
-    $after = parse_list($list);
-    foreach ($after as $id => $section) {
-        if (!isset($before[$id])) {
-            echo "$id fails and is not in " . BASELINE . ".\n";
-        } elseif ($before[$id] !== $section) {
-            echo "$id is listed under $before[$id] and is now under $section.\n";
-        }
-    }
-    foreach ($before as $id => $section) {
-        if (!isset($after[$id])) {
-            echo "$id passes and is still in " . BASELINE . ".\n";
-        }
-    }
-    fwrite(STDERR, 'The examples that fail differ from ' . BASELINE . '. Write the new list with: cp ' . substr("$build/spec-results", strlen("$root/")) . ' ' . BASELINE . "\n");
+    sort($commands, SORT_NATURAL);
+    fwrite(STDERR, 'The examples that fail differ from ' . BASELINE . ". Write the new list with:\n" . implode("\n", $commands) . "\n");
 
     return 1;
 }
@@ -1255,31 +1254,13 @@ function measure(string $root, string $work, array $examples): array
     return $results;
 }
 
-/** @return array<string, string> the section of each listed example, by id */
-function parse_list(string $text): array
-{
-    $entries = [];
-    foreach (array_filter(explode("\n", $text)) as $line) {
-        $fields = explode("\t", $line);
-        if (count($fields) !== 2) {
-            fail(BASELINE . " holds `$line`, and each line is `<section>\t<id>`.");
-        }
-        $entries[$fields[1]] = $fields[0];
-    }
-
-    return $entries;
-}
-
 /**
  * @return array<string, string> the section of each example sharp/baseline/spec lists, by id, in the working tree or at
- * commit $at. The list becomes a folder with one empty file `<section>/<id>` per failing example, so pull requests that
- * list different examples never edit the same file. A base that still has the file of `<section>\t<id>` lines reads too.
+ * commit $at. The list is a folder with one empty file `<section>/<id>` per failing example, so pull requests that list
+ * different examples never edit the same file.
  */
 function listed(string $root, ?string $at = null): array
 {
-    if ($at === null ? is_file("$root/" . BASELINE) : git_status($root, 'cat-file', '-t', "$at:" . BASELINE)[0] === "blob\n") {
-        return parse_list($at === null ? file_get_contents("$root/" . BASELINE) : git($root, 'show', "$at:" . BASELINE));
-    }
     if ($at !== null) {
         $paths = array_filter(explode("\0", git($root, 'ls-tree', '-r', '-z', '--name-only', $at, '--', BASELINE . '/')));
     } elseif (is_dir("$root/" . BASELINE)) {
@@ -1356,10 +1337,6 @@ function compare_with_base(string $root, string $base): int
     if (git_status($root, 'cat-file', '-e', "$base^{commit}")[1] !== 0) {
         fail("$base is no commit in this repository. Fetch it first.");
     }
-    if (git_status($root, 'cat-file', '-e', "$base:" . BASELINE)[1] !== 0) {
-        echo BASELINE . " does not exist at $base, so there is nothing to compare.\n";
-        return 0;
-    }
     refuse_links($root);
     $before = listed($root, $base);
     $after = listed($root);
@@ -1371,7 +1348,7 @@ function compare_with_base(string $root, string $base): int
     // Without -z, git quotes a path that holds a non-ASCII byte, and the quoted path matches no GUARDED folder.
     $changed_files = array_filter(explode("\0", git($root, 'diff', '--name-only', '--no-renames', '-z', $base)));
     // Markdown other than the documents never runs, so it changes no result and may change beside a guarded file.
-    $outside = array_values(array_filter($changed_files, static fn (string $file): bool => !in_array($file, [...DOCUMENTS, BASELINE], true)
+    $outside = array_values(array_filter($changed_files, static fn (string $file): bool => !in_array($file, DOCUMENTS, true)
         && !str_starts_with($file, BASELINE . '/') && !guarded($file) && !str_ends_with($file, '.md')));
     $problems = [];
 
