@@ -30,6 +30,9 @@ namespace {
         attempt(fn () => Demo\Headcount::byName(['missing' => 1]));
         // PHP stores the key "5" as the int 5, and PHP# reads it back as the string "5".
         attempt(fn () => Demo\Headcount::skus(['5' => 1, 'tea' => 2, 'pie' => 0]));
+        // groupBy keyed by a backed enum: plain PHP sees the backing values, and a loop reads back the cases.
+        attempt(fn () => Demo\Headcount::grouped([1, 2, 3]));
+        attempt(fn () => Demo\Headcount::groupNames([1, 2, 3]));
         $output = ob_get_clean();
     }
 

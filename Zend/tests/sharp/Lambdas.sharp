@@ -50,7 +50,7 @@ class Lambdas
             implode(",", numbers.sortedBy(n => -n)),
             implode(",", groups["odd"] ?? []),
             implode(",", array_keys(labels.associateBy(label => label))),
-            implode(",", array_keys(prices.filterValues(price => price < 100))),
+            implode(",", array_keys(prices.filter(price => price < 100))),
             implode(",", prices.filter(price => price < 100)),
             implode(",", prices.map(price => price * 2)),
         ];
