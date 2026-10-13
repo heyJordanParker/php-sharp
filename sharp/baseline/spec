@@ -1,7 +1,12 @@
+§2	keyword-case
+§2	keyword-members
 §2	keyword-names
+§5	interface-members
 §6	field-and-property
 §6	initial-values
 §6	nullable-members
+§6	static-initial-values
+§6.1	plain-php-property-override
 §6.2	change-observers
 §6.3	property-references
 §6.4	property-behaviors
@@ -9,7 +14,7 @@
 §7	method-declarations
 §7	variadic-parameters
 §8	standard-library-calls
-§9	parameter-members
+§9	parameter-member-limits
 §9.1	constructor-call-this
 §9.1	named-constructors
 §9.1	set-once
@@ -32,6 +37,7 @@
 §12	map-string-keys
 §12	natural-remove
 §12	nullable-map-values
+§12	set-variable-arguments
 §12	yield
 §13	readonly-fields
 §13	readonly-positions
@@ -49,16 +55,23 @@
 §15	standalone-event
 §16	initializer-shorthand
 §17	braces
+§17	map-values
+§18	template-to-string
 §19	operators
+§19	struct-equality
 §20	enum-data-cases
 §20	enum-shapes
 §20.1	sealed-interfaces
 §21	is-and-as
 §21	match-forms
+§21	pattern-locals
 §21	property-patterns
+§21	type-tests
 §22	interface-defaults
 §22	plain-php-traits
 §23	import-rename
+§23	library-functions
+§23	own-namespace-shadows
 §23	standard-library-import
 §24	array-object-replacements
 §24	int-to-float
@@ -67,6 +80,7 @@
 §24	nullable-unions
 §24	object-type
 §25	class-members
+§25	class-value-equality
 §25	class-values
 §25	generic-class-values
 §25	required-constructors
@@ -75,6 +89,7 @@
 §25	typeof-types
 §25	typeof-values
 §26	extension-overloads
+§26	extension-static-choice
 §26	extensions
 §27	one-type-per-file
 §27	position
@@ -91,7 +106,6 @@
 §31	result-enum
 §31	try-propagation
 §32	environment-module
-§32	factory
 §32	missing-service
 §32	module-errors
 §32	module-services
