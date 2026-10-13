@@ -39,7 +39,7 @@ The pull reports a modify/delete conflict on `sharp/mago/.github/actions/setup-l
 
 They land in this order, because each pinned commit holds the ones before it on mago-sharp `master`:
 
-1. #114, `feat/collection-engine`, pulls `a9f18829acd18e1bb91b38428547859808bf1d0f`. It holds the pins of #110 and #113.
+1. #114, `feat/collection-engine`, pulls `164ef442d79a01bd34d9e3b5d86bd9be6b7e0ac8`, the merge of mago-sharp #176, past its pin `a9f18829a`. Its tests of a change after `?.` on a `List` index need #176. It holds the pins of #110 and #113.
 2. #110, `feat/slice-constructors`, and #113, `feat/slice-verification`, pin `c3a2b5af8` and `b9ffc3c5e`, which #114's pull already brought. They only merge `origin/master`.
 3. #115, #102 and #118 pin commits of mago-sharp branches that never merged, `feat/extensions`, `feat/slice-generics` and `feat/foreign-classes`. They move over by subtree merge of that branch, as the next section says.
 
