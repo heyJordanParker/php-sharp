@@ -6,9 +6,10 @@ extern zend_module_entry sharp_module_entry;
 
 #define PHP_SHARP_VERSION "0.3.1"
 
-/* The VM makes the Sharp\Collection receiver of a PHP# method call on an array with these, see
- * ZEND_SHARP_OPERATOR in Zend/zend_compile.h. The receiver may point at a local of the calling frame,
- * so a backtrace never hands it out as a frame's object. */
+/* The VM makes the Sharp\Collection receiver of a PHP# method call on a collection with these, see
+ * ZEND_SHARP_OPERATOR in Zend/zend_compile.h: an array, a List, or a Sharp\Map or Sharp\Set object, see
+ * SHARP_IS_COLLECTION. The receiver may point at a local of the calling frame, so a backtrace never
+ * hands it out as a frame's object. */
 extern zend_class_entry *sharp_ce_collection;
 void sharp_collection_of_local(zval *result, zval *local);
 void sharp_collection_of_value(zval *result, zval *value);
@@ -21,6 +22,28 @@ extern zend_class_entry *sharp_ce_map;
 extern zend_class_entry *sharp_ce_set;
 void sharp_separate(zval *holder);
 
+#define SHARP_IS_TABLE(value) \
+	(Z_TYPE_P(value) == IS_OBJECT && (Z_OBJCE_P(value) == sharp_ce_map || Z_OBJCE_P(value) == sharp_ce_set))
+#define SHARP_IS_COLLECTION(value) (Z_TYPE_P(value) == IS_ARRAY || SHARP_IS_TABLE(value))
+
+/* Whether a value the optimizer or the JIT knows of type and class ce, ce one of its parents when is_instanceof, may be
+ * a Sharp\Map or a Sharp\Set, which a PHP# method call's receiver turns into a Sharp\Collection. */
+static zend_always_inline bool sharp_may_be_table(uint32_t type, const zend_class_entry *ce, bool is_instanceof)
+{
+	if (!(type & MAY_BE_OBJECT)) {
+		return false;
+	}
+	if (!ce) {
+		return true;
+	}
+	if (!is_instanceof) {
+		return ce == sharp_ce_map || ce == sharp_ce_set;
+	}
+
+	return instanceof_function(sharp_ce_map, ce) || instanceof_function(sharp_ce_set, ce);
+}
+
+/* The holder holds an object. */
 #define SHARP_SEPARATE(holder) do { \
 	if (UNEXPECTED((Z_OBJCE_P(holder) == sharp_ce_map || Z_OBJCE_P(holder) == sharp_ce_set) \
 			&& GC_REFCOUNT(Z_OBJ_P(holder)) > 1)) { \

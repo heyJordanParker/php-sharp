@@ -14,7 +14,7 @@ class Roster
         return [
             implode(",", ranked),
             implode(",", tens),
-            implode(",", kept),
+            implode(",", kept.map(n => n)),
             (string) (busy.get(Standing.Active) ?? 0),
             (string) (busy.get(Standing.Closed) ?? 0),
             (string) (members.get(Standing.Active) ?? 0),

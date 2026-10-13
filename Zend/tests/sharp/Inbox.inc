@@ -3,7 +3,7 @@
 class Inbox
 {
     private mixed $first = "none";
-    private array $saved = [];
+    private \Sharp\Map $saved;
 
     public function read(string $key): mixed { return \Demo\Settings::get($key); }
 

@@ -14,78 +14,158 @@ require __DIR__ . '/enum_keys.inc';
 ?>
 --EXPECT--
 jit on
-array(1) {
-  ["active"]=>
-  int(2)
+object(Sharp\Map)#7 (1) {
+  [0]=>
+  array(2) {
+    [0]=>
+    enum(Lib\Standing::Active)
+    [1]=>
+    int(2)
+  }
 }
-array(1) {
-  ["active"]=>
-  int(0)
+object(Sharp\Map)#2 (1) {
+  [0]=>
+  array(2) {
+    [0]=>
+    enum(Lib\Standing::Active)
+    [1]=>
+    int(0)
+  }
 }
-array(1) {
-  ["closed"]=>
-  int(3)
+object(Sharp\Map)#11 (1) {
+  [0]=>
+  array(2) {
+    [0]=>
+    enum(Lib\Standing::Closed)
+    [1]=>
+    int(3)
+  }
 }
-array(1) {
-  ["active"]=>
-  int(1)
-}
-array(1) {
-  ["closed"]=>
-  int(2)
-}
-array(1) {
-  ["active"]=>
-  int(0)
-}
-array(2) {
-  [1]=>
-  string(5) "small"
-  [2]=>
-  string(5) "large"
-}
-array(1) {
-  [5]=>
-  int(5)
-}
-int(3)
-NULL
-array(1) {
-  ["closed"]=>
-  int(4)
-}
-array(1) {
-  ["closed"]=>
-  array(1) {
-    [2]=>
+object(Sharp\Map)#11 (1) {
+  [0]=>
+  array(2) {
+    [0]=>
+    enum(Lib\Standing::Active)
+    [1]=>
     int(1)
   }
 }
-array(2) {
-  ["Active"]=>
-  int(3)
-  ["Closed"]=>
-  int(4)
+object(Sharp\Map)#11 (1) {
+  [0]=>
+  array(2) {
+    [0]=>
+    enum(Lib\Standing::Closed)
+    [1]=>
+    int(2)
+  }
 }
-ValueError: "missing" is not a valid backing value for enum Lib\Standing in EnumKeys.sharp on line 70
+object(Sharp\Map)#11 (1) {
+  [0]=>
+  array(2) {
+    [0]=>
+    enum(Lib\Standing::Active)
+    [1]=>
+    int(0)
+  }
+}
+object(Sharp\Map)#11 (2) {
+  [0]=>
+  array(2) {
+    [0]=>
+    enum(Lib\Size::Small)
+    [1]=>
+    string(5) "small"
+  }
+  [1]=>
+  array(2) {
+    [0]=>
+    enum(Lib\Size::Large)
+    [1]=>
+    string(5) "large"
+  }
+}
+object(Sharp\Map)#11 (1) {
+  [0]=>
+  array(2) {
+    [0]=>
+    enum(Lib\Code::Five)
+    [1]=>
+    int(5)
+  }
+}
+int(3)
+NULL
+object(Sharp\Map)#11 (1) {
+  [0]=>
+  array(2) {
+    [0]=>
+    enum(Lib\Standing::Closed)
+    [1]=>
+    int(4)
+  }
+}
+object(Sharp\Map)#11 (1) {
+  [0]=>
+  array(2) {
+    [0]=>
+    enum(Lib\Standing::Closed)
+    [1]=>
+    object(Sharp\Map)#14 (1) {
+      [0]=>
+      array(2) {
+        [0]=>
+        enum(Lib\Size::Large)
+        [1]=>
+        int(1)
+      }
+    }
+  }
+}
+object(Sharp\Map)#14 (2) {
+  [0]=>
+  array(2) {
+    [0]=>
+    string(6) "Active"
+    [1]=>
+    int(3)
+  }
+  [1]=>
+  array(2) {
+    [0]=>
+    string(6) "Closed"
+    [1]=>
+    int(4)
+  }
+}
+ValueError: "missing" is not a valid backing value for enum Lib\Standing in EnumKeys.sharp on line 67
 array(2) {
   [0]=>
   string(1) "5"
   [1]=>
   string(3) "tea"
 }
-array(2) {
-  ["active"]=>
-  array(1) {
-    [0]=>
-    int(1)
-  }
-  ["closed"]=>
+object(Sharp\Map)#11 (2) {
+  [0]=>
   array(2) {
     [0]=>
-    int(2)
+    enum(Lib\Standing::Active)
     [1]=>
-    int(3)
+    array(1) {
+      [0]=>
+      int(1)
+    }
+  }
+  [1]=>
+  array(2) {
+    [0]=>
+    enum(Lib\Standing::Closed)
+    [1]=>
+    array(2) {
+      [0]=>
+      int(2)
+      [1]=>
+      int(3)
+    }
   }
 }
 array(2) {

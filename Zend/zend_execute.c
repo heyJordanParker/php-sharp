@@ -2498,7 +2498,8 @@ static zend_always_inline HashTable *zend_get_target_symbol_table(int fetch_type
 	return ht;
 }
 
-/* A PHP# index read throws OutOfRangeException where PHP warns about a missing key. The compiler
+/* A PHP# List index read throws OutOfRangeException where PHP warns about a missing index. A Map is an
+ * object, whose index reads null for a missing key (spec section 12). The compiler
  * marks the read's FETCH_DIM_R or FETCH_DIM_FUNC_ARG with ZEND_SHARP_OPERATOR, and only a miss
  * reads the mark, from the opline the VM and the JIT save before they report the miss. */
 static ZEND_COLD bool zend_is_sharp_index_read(void)

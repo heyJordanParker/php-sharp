@@ -1,0 +1,28 @@
+namespace Demo;
+
+class Tallies
+{
+    private Map<string, int> counts = [:];
+    private Set<string> seen = ["start"];
+    private static Map<string, int> totals = [:];
+
+    public Map<string, int> count(string name)
+    {
+        this.counts[name] = (this.counts[name] ?? 0) + 1;
+        return this.counts;
+    }
+
+    public Set<string> see(string name)
+    {
+        this.seen.add(name);
+        return this.seen;
+    }
+
+    public static Map<string, int> started() => Tallies.totals;
+
+    public static Map<string, int> without(string name)
+    {
+        Tallies.totals.remove(name);
+        return Tallies.totals;
+    }
+}

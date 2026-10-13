@@ -40,8 +40,8 @@ class Lambdas
         return \implode(",", \array_map(fn ($read) => $read(), $marks));
     }
 
-    public static function pipeline(array $numbers, array $prices): array
-    {
+    public static function pipeline(array $numbers, \Sharp\Map|array $prices): array { $prices = \is_array($prices) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [(string) $key, $value], \array_keys($prices), $prices))) : $prices; // PHP# makes the array a Map, its keys strings
+
         $odd = ((object) $numbers)->filter(fn ($n) => $n % 2 === 1);
         $labels = ((object) $odd)->map(fn ($n) => (string) ($n * 10));
         $groups = ((object) $numbers)->groupBy(fn ($n) => $n % 2 === 0 ? "even" : "odd");
@@ -49,9 +49,9 @@ class Lambdas
             \implode(",", $labels),
             \implode(",", ((object) $numbers)->sortedBy(fn ($n) => -$n)),
             \implode(",", $groups["odd"] ?? []),
-            \implode(",", \array_keys(((object) $labels)->associateBy(fn ($label) => $label))),
-            \implode(",", \array_keys(((object) $prices)->filterValues(fn ($price) => $price < 100))),
-            \implode(",", ((object) $prices)->filterValues(fn ($price) => $price < 100)),
+            \implode(",", \array_keys(\iterator_to_array(((object) $labels)->associateBy(fn ($label) => $label)))), // PHP# passes plain PHP the Map's array
+            \implode(",", \array_keys(\iterator_to_array(((object) $prices)->filter(fn ($price) => $price < 100)))),
+            \implode(",", \iterator_to_array(((object) $prices)->filter(fn ($price) => $price < 100))),
             \implode(",", ((object) $prices)->map(fn ($price) => $price * 2)),
         ];
     }

@@ -1,0 +1,34 @@
+namespace Demo;
+
+class Crossings
+{
+    public static List<string> outward(Map<string, int> prices, Set<string> tags)
+    {
+        return [
+            array_keys_of(prices),
+            array_keys_of(tags),
+            documented_keys_of(prices),
+            type_of_mixed(prices),
+            type_of_untyped(prices),
+            type_of_iterable(tags),
+        ];
+    }
+
+    public static Map<string, int> written(Map<string, int> prices)
+    {
+        write_array(prices);
+        write_mixed(prices);
+        return prices;
+    }
+
+    public static Map<string, int> local()
+    {
+        Map<string, int> prices = price_list();
+        prices["jam"] = 5;
+        return prices;
+    }
+
+    public static Map<string, int> returned() => price_list();
+
+    public static Map<string, int> received(Map<string, int> counts) => counts;
+}

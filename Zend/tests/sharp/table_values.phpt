@@ -20,36 +20,36 @@ function write(Map $prices): Map
 // Each row changes a copy and prints the original, then the copy.
 $rows = [
     'assign' => function () {
-        $prices = Map::of(['tea', 3]);
+        $prices = new Map(['tea', 3]);
         $copy = $prices;
         $copy['tea'] = 4;
         return [$prices, $copy];
     },
     'plain PHP function' => function () {
-        $prices = Map::of(['tea', 3]);
+        $prices = new Map(['tea', 3]);
         $written = write($prices);
         return [$prices, $written];
     },
     'compound assign' => function () {
-        $prices = Map::of(['tea', 3]);
+        $prices = new Map(['tea', 3]);
         $copy = $prices;
         $copy['tea'] += 2;
         return [$prices, $copy];
     },
     'unset' => function () {
-        $prices = Map::of(['tea', 3]);
+        $prices = new Map(['tea', 3]);
         $copy = $prices;
         unset($copy['tea']);
         return [$prices, $copy];
     },
     'append' => function () {
-        $tags = Set::from(['a']);
+        $tags = new Set(['a']);
         $copy = $tags;
         $copy[] = 'b';
         return [$tags, $copy];
     },
     'nested write' => function () {
-        $lists = Map::of(['a', [1]]);
+        $lists = new Map(['a', [1]]);
         $copy = $lists;
         $copy['a'][] = 2;
         $copy['b'][] = 3;
@@ -57,25 +57,25 @@ $rows = [
     },
     'property' => function () {
         $holder = new Holder();
-        $holder->prices = Map::of(['tea', 3]);
+        $holder->prices = new Map(['tea', 3]);
         $kept = $holder->prices;
         $holder->prices['tea'] = 4;
         return [$kept, $holder->prices];
     },
     'static property' => function () {
-        Holder::$shared = Map::of(['tea', 3]);
+        Holder::$shared = new Map(['tea', 3]);
         $kept = Holder::$shared;
         Holder::$shared['tea'] = 4;
         return [$kept, Holder::$shared];
     },
     'write in a loop' => function () {
-        $prices = Map::of(['tea', 3, 'jam', 5]);
+        $prices = new Map(['tea', 3, 'jam', 5]);
         $seen = [];
         foreach ($prices as $name => $price) {
             $prices['bun'] = 1;
             $seen[] = $name;
         }
-        return [Set::from($seen), $prices];
+        return [new Set($seen), $prices];
     },
 ];
 

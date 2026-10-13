@@ -1,10 +1,10 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: abf6c17e498ca33bd99f153a5c300c96591314bd */
+ * Stub hash: e383c80b42ce9152b80c5c0470861ca158aecf79 */
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Sharp_Collection___construct, 0, 0, 0)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_add, 0, 1, IS_VOID, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_add, 0, 1, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
 
@@ -20,29 +20,39 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_removeAt,
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_get, 0, 1, IS_MIXED, 0)
-	ZEND_ARG_TYPE_MASK(0, key, MAY_BE_LONG|MAY_BE_STRING, NULL)
+	ZEND_ARG_TYPE_INFO(0, key, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_entries, 0, 0, IS_ARRAY, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Sharp_Collection_entries, 0, 0, Sharp\\Map, 0)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_delete, 0, 1, IS_VOID, 0)
-	ZEND_ARG_TYPE_MASK(0, key, MAY_BE_LONG|MAY_BE_STRING, NULL)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_has, 0, 1, _IS_BOOL, 0)
+	ZEND_ARG_TYPE_INFO(0, key, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
+
+#define arginfo_class_Sharp_Collection_contains arginfo_class_Sharp_Collection_add
+
+#define arginfo_class_Sharp_Collection_remove arginfo_class_Sharp_Collection_add
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_put, 0, 2, IS_MIXED, 0)
-	ZEND_ARG_TYPE_MASK(0, key, MAY_BE_LONG|MAY_BE_STRING, NULL)
+	ZEND_ARG_TYPE_INFO(0, key, IS_MIXED, 0)
 	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_clear, 0, 0, IS_VOID, 0)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_filter, 0, 1, IS_ARRAY, 0)
-	ZEND_ARG_OBJ_INFO(0, predicate, Closure, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_count, 0, 0, IS_LONG, 0)
 ZEND_END_ARG_INFO()
 
-#define arginfo_class_Sharp_Collection_filterValues arginfo_class_Sharp_Collection_filter
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_keys, 0, 0, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
+#define arginfo_class_Sharp_Collection_toList arginfo_class_Sharp_Collection_keys
+
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_TYPE_MASK_EX(arginfo_class_Sharp_Collection_filter, 0, 1, Sharp\\Map|Sharp\\Set, MAY_BE_ARRAY)
+	ZEND_ARG_OBJ_INFO(0, predicate, Closure, 0)
+ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_map, 0, 1, IS_ARRAY, 0)
 	ZEND_ARG_OBJ_INFO(0, transform, Closure, 0)
@@ -60,7 +70,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_any, 0, 1
 	ZEND_ARG_OBJ_INFO(0, predicate, Closure, 0)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_groupBy, 0, 1, IS_ARRAY, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Sharp_Collection_groupBy, 0, 1, Sharp\\Map, 0)
 	ZEND_ARG_OBJ_INFO(0, key, Closure, 0)
 ZEND_END_ARG_INFO()
 
@@ -90,11 +100,15 @@ ZEND_METHOD(Sharp_Collection, insert);
 ZEND_METHOD(Sharp_Collection, removeAt);
 ZEND_METHOD(Sharp_Collection, get);
 ZEND_METHOD(Sharp_Collection, entries);
-ZEND_METHOD(Sharp_Collection, delete);
+ZEND_METHOD(Sharp_Collection, has);
+ZEND_METHOD(Sharp_Collection, contains);
+ZEND_METHOD(Sharp_Collection, remove);
 ZEND_METHOD(Sharp_Collection, put);
 ZEND_METHOD(Sharp_Collection, clear);
+ZEND_METHOD(Sharp_Collection, count);
+ZEND_METHOD(Sharp_Collection, keys);
+ZEND_METHOD(Sharp_Collection, toList);
 ZEND_METHOD(Sharp_Collection, filter);
-ZEND_METHOD(Sharp_Collection, filterValues);
 ZEND_METHOD(Sharp_Collection, map);
 ZEND_METHOD(Sharp_Collection, sumOf);
 ZEND_METHOD(Sharp_Collection, first);
@@ -114,11 +128,15 @@ static const zend_function_entry class_Sharp_Collection_methods[] = {
 	ZEND_ME(Sharp_Collection, removeAt, arginfo_class_Sharp_Collection_removeAt, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, get, arginfo_class_Sharp_Collection_get, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, entries, arginfo_class_Sharp_Collection_entries, ZEND_ACC_PUBLIC)
-	ZEND_ME(Sharp_Collection, delete, arginfo_class_Sharp_Collection_delete, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Collection, has, arginfo_class_Sharp_Collection_has, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Collection, contains, arginfo_class_Sharp_Collection_contains, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Collection, remove, arginfo_class_Sharp_Collection_remove, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, put, arginfo_class_Sharp_Collection_put, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, clear, arginfo_class_Sharp_Collection_clear, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Collection, count, arginfo_class_Sharp_Collection_count, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Collection, keys, arginfo_class_Sharp_Collection_keys, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Collection, toList, arginfo_class_Sharp_Collection_toList, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, filter, arginfo_class_Sharp_Collection_filter, ZEND_ACC_PUBLIC)
-	ZEND_ME(Sharp_Collection, filterValues, arginfo_class_Sharp_Collection_filterValues, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, map, arginfo_class_Sharp_Collection_map, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, sumOf, arginfo_class_Sharp_Collection_sumOf, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, first, arginfo_class_Sharp_Collection_first, ZEND_ACC_PUBLIC)

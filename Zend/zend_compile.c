@@ -8910,6 +8910,8 @@ static void zend_compile_property_hooks(
 	}
 }
 
+static void zend_property_default_to_zval(zval *result, zend_ast **ast_ptr);
+
 static void zend_compile_prop_decl(zend_ast *ast, zend_ast *type_ast, uint32_t flags, zend_ast *attr_ast) /* {{{ */
 {
 	zend_ast_list *list = zend_ast_get_list(ast);
@@ -8991,7 +8993,7 @@ static void zend_compile_prop_decl(zend_ast *ast, zend_ast *type_ast, uint32_t f
 		}
 
 		if (*value_ast_ptr) {
-			zend_const_expr_to_zval(&value_zv, value_ast_ptr, /* allow_dynamic */ false);
+			zend_property_default_to_zval(&value_zv, value_ast_ptr);
 
 			if (ZEND_TYPE_IS_SET(type) && !Z_CONSTANT(value_zv)
 					&& !zend_is_valid_default_value(type, &value_zv)) {
@@ -11676,7 +11678,29 @@ static void zend_compile_const_expr_args(zend_ast **ast_ptr)
 typedef struct {
 	/* Whether the value of this expression may differ on each evaluation. */
 	bool allow_dynamic;
+	/* Whether it is a property default, where a .sharp file may create a Sharp\Map or a Sharp\Set. */
+	bool property_default;
 } const_expr_context;
+
+/* A PHP# Map or Set literal lowers to `new \Sharp\Map([...])` or `new \Sharp\Set([...])`, so a .sharp file's property
+ * default may create one of those two, and no other object. PHP evaluates the default once, at the class's first use,
+ * and every object of the class starts with that one object, which sharp_separate copies before any write, so sharing
+ * it changes nothing another holder sees. */
+static bool zend_is_sharp_collection_default(const zend_ast *ast, const const_expr_context *ctx)
+{
+	const zend_ast *class_ast = ast->child[0];
+	const zend_string *file = CG(compiled_filename);
+
+	if (!ctx->property_default || class_ast->kind != ZEND_AST_ZVAL || class_ast->attr != ZEND_NAME_FQ
+			|| Z_TYPE_P(zend_ast_get_zval((zend_ast *) class_ast)) != IS_STRING) {
+		return false;
+	}
+	const zend_string *class_name = zend_ast_get_str((zend_ast *) class_ast);
+
+	return (zend_string_equals_literal_ci(class_name, "Sharp\\Map") || zend_string_equals_literal_ci(class_name, "Sharp\\Set"))
+		&& file && ZSTR_LEN(file) > strlen(".sharp")
+		&& memcmp(ZSTR_VAL(file) + ZSTR_LEN(file) - strlen(".sharp"), ".sharp", strlen(".sharp")) == 0;
+}
 
 static void zend_compile_const_expr(zend_ast **ast_ptr, void *context) /* {{{ */
 {
@@ -11710,7 +11734,7 @@ static void zend_compile_const_expr(zend_ast **ast_ptr, void *context) /* {{{ */
 			}
 			break;
 		case ZEND_AST_NEW:
-			if (!ctx->allow_dynamic) {
+			if (!ctx->allow_dynamic && !zend_is_sharp_collection_default(ast, ctx)) {
 				zend_error_noreturn(E_COMPILE_ERROR,
 					"New expressions are not supported in this context");
 			}
@@ -11733,11 +11757,8 @@ static void zend_compile_const_expr(zend_ast **ast_ptr, void *context) /* {{{ */
 }
 /* }}} */
 
-void zend_const_expr_to_zval(zval *result, zend_ast **ast_ptr, bool allow_dynamic) /* {{{ */
+static void zend_const_expr_to_zval_in(zval *result, zend_ast **ast_ptr, const_expr_context context)
 {
-	const_expr_context context;
-	context.allow_dynamic = allow_dynamic;
-
 	zend_eval_const_expr(ast_ptr);
 	zend_compile_const_expr(ast_ptr, &context);
 	if ((*ast_ptr)->kind != ZEND_AST_ZVAL) {
@@ -11749,7 +11770,17 @@ void zend_const_expr_to_zval(zval *result, zend_ast **ast_ptr, bool allow_dynami
 	}
 	ZVAL_COPY(result, zend_ast_get_zval(*ast_ptr));
 }
+
+void zend_const_expr_to_zval(zval *result, zend_ast **ast_ptr, bool allow_dynamic) /* {{{ */
+{
+	zend_const_expr_to_zval_in(result, ast_ptr, (const_expr_context) { .allow_dynamic = allow_dynamic });
+}
 /* }}} */
+
+static void zend_property_default_to_zval(zval *result, zend_ast **ast_ptr)
+{
+	zend_const_expr_to_zval_in(result, ast_ptr, (const_expr_context) { .property_default = true });
+}
 
 /* Same as compile_stmt, but with early binding */
 void zend_compile_top_stmt(zend_ast *ast) /* {{{ */

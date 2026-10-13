@@ -1947,7 +1947,7 @@ ZEND_VM_INLINE_HELPER(zend_fetch_static_prop_helper, ANY, ANY, int type)
 ZEND_VM_C_LABEL(copy_deref):
 		ZVAL_COPY_DEREF(EX_VAR(opline->result.var), prop);
 		if (type == BP_VAR_R && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)
-		 && Z_TYPE_P(EX_VAR(opline->result.var)) == IS_ARRAY) {
+		 && SHARP_IS_COLLECTION(EX_VAR(opline->result.var))) {
 			sharp_collection_of_static_property(EX_VAR(opline->result.var), prop, prop_info);
 		}
 	} else {
@@ -2301,7 +2301,7 @@ ZEND_VM_C_LABEL(fetch_obj_r_copy):
 		}
 		if (OP2_TYPE == IS_CONST && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 ZEND_VM_C_LABEL(fetch_obj_r_sharp):
-			if (Z_TYPE_P(EX_VAR(opline->result.var)) == IS_ARRAY) {
+			if (SHARP_IS_COLLECTION(EX_VAR(opline->result.var))) {
 				sharp_collection_of_property(EX_VAR(opline->result.var), zobj, Z_STR_P(GET_OP2_ZVAL_PTR(BP_VAR_R)), cache_slot);
 			}
 		}
@@ -6608,7 +6608,7 @@ ZEND_VM_COLD_CONST_HANDLER(51, ZEND_CAST, CONST|TMP|VAR|CV, ANY, TYPE)
 			zval *value = expr;
 
 			ZVAL_DEREF(value);
-			if (Z_TYPE_P(value) != IS_ARRAY) {
+			if (!SHARP_IS_COLLECTION(value)) {
 				ZVAL_COPY(result, value);
 			} else if (OP1_TYPE == IS_CV) {
 				sharp_collection_of_local(result, expr);

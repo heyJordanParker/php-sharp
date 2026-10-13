@@ -26,25 +26,25 @@ function attempt(callable $call): string
 }
 
 $rows = [
-    'of, a later key replaces' => fn () => Map::of(['a', 1, 'b', 2, 'a', 3]),
-    'of, an odd list' => fn () => Map::of(['a', 1, 'b']),
-    'of, keys and values not a list' => fn () => Map::of(['a' => 1]),
+    'new Map, a later key replaces' => fn () => new Map(['a', 1, 'b', 2, 'a', 3]),
+    'new Map, an odd list' => fn () => new Map(['a', 1, 'b']),
+    'new Map, keys and values not a list' => fn () => new Map(['a' => 1]),
     'from, PHP\'s keys' => fn () => Map::from(['5' => 1, 'x' => 2, 7 => 3]),
-    'Set from, each element once' => fn () => Set::from(['a', 'b', 'a', 1, 1.0]),
-    'toArray' => fn () => Map::of([1, 'a', 'b', 'c'])->toArray(),
-    'toArray, a key no array holds' => fn () => Map::of([Tone::Warm, 1])->toArray(),
-    'Set toArray' => fn () => Set::from(['a', 'b'])->toArray(),
-    'keys, the stored keys' => fn () => array_map(fn ($key) => $key->name, Map::of([Tone::Warm, 1])->keys()),
-    'values' => fn () => Map::of(['a', 1, 'b', 2])->values(),
-    'toList' => fn () => Set::from(['b', 'a'])->toList(),
-    'count' => fn () => [count(Map::of(['a', 1])), count(new Set()), Set::from([1, 2])->count()],
+    'new Set, each element once' => fn () => new Set(['a', 'b', 'a', 1, 1.0]),
+    'toArray' => fn () => new Map([1, 'a', 'b', 'c'])->toArray(),
+    'toArray, a key no array holds' => fn () => new Map([Tone::Warm, 1])->toArray(),
+    'Set toArray' => fn () => new Set(['a', 'b'])->toArray(),
+    'keys, the stored keys' => fn () => array_map(fn ($key) => $key->name, new Map([Tone::Warm, 1])->keys()),
+    'values' => fn () => new Map(['a', 1, 'b', 2])->values(),
+    'toList' => fn () => new Set(['b', 'a'])->toList(),
+    'count' => fn () => [count(new Map(['a', 1])), count(new Set()), new Set([1, 2])->count()],
     'an empty Map is an object' => fn () => new Map(),
     'an empty Set is a list' => fn () => new Set(),
-    'a backed enum key' => fn () => Map::of([Size::Small, 1, Size::Large, 2]),
-    'a key JSON has no text for' => fn () => Map::of([Tone::Warm, 1]),
-    'a float key' => fn () => Map::of([1.5, 1]),
-    '== regardless of order' => fn () => [Map::of(['a', 1, 'b', 2]) == Map::of(['b', 2, 'a', 1]), Map::of(['a', 1]) == Map::of(['a', 2]), Set::from([1]) == Map::of([1, null])],
-    'a Set has no index' => fn () => Set::from(['a'])['a'],
+    'a backed enum key' => fn () => new Map([Size::Small, 1, Size::Large, 2]),
+    'a key JSON has no text for' => fn () => new Map([Tone::Warm, 1]),
+    'a float key' => fn () => new Map([1.5, 1]),
+    '== regardless of order' => fn () => [new Map(['a', 1, 'b', 2]) == new Map(['b', 2, 'a', 1]), new Map(['a', 1]) == new Map(['a', 2]), new Set([1]) == new Map([1, null])],
+    'a Set has no index' => fn () => new Set(['a'])['a'],
     'a Set adds with []' => function () {
         $set = new Set();
         $set['a'] = true;
@@ -56,11 +56,11 @@ $rows = [
         return $map;
     },
     'isset and empty' => function () {
-        $map = Map::of(['a', 0, 'b', null]);
-        return [isset($map['a']), empty($map['a']), isset($map['b']), isset($map['c']), isset(Set::from([0])[0]), empty(Set::from([0])[0])];
+        $map = new Map(['a', 0, 'b', null]);
+        return [isset($map['a']), empty($map['a']), isset($map['b']), isset($map['c']), isset(new Set([0])[0]), empty(new Set([0])[0])];
     },
     'a loop by reference' => function () {
-        foreach (Map::of(['a', 1]) as &$value) {
+        foreach (new Map(['a', 1]) as &$value) {
         }
     },
     'no dynamic property' => function () {
@@ -69,7 +69,7 @@ $rows = [
     },
     'not serializable' => fn () => serialize(new Map()),
     'a clone is equal and apart' => function () {
-        $map = Map::of(['a', 1]);
+        $map = new Map(['a', 1]);
         $copy = clone $map;
         $copy['b'] = 2;
         return [$map, $copy];
@@ -82,17 +82,17 @@ for ($round = 0; $round < 100; $round++) {
     foreach ($rows as $name => $row) {
         echo $name, ': ', attempt($row), "\n";
     }
-    var_dump(Map::of([Tone::Warm, [1]]), Set::from(['a']));
+    var_dump(new Map([Tone::Warm, [1]]), new Set(['a']));
     $output = ob_get_clean();
 }
 echo $output;
 ?>
 --EXPECTF--
-of, a later key replaces: {"a":3,"b":2}
-of, an odd list: ValueError: Sharp\Map::of(): Argument #1 ($keysAndValues) must be a list of keys each followed by its value
-of, keys and values not a list: ValueError: Sharp\Map::of(): Argument #1 ($keysAndValues) must be a list of keys each followed by its value
+new Map, a later key replaces: {"a":3,"b":2}
+new Map, an odd list: ValueError: Sharp\Map::__construct(): Argument #1 ($keysAndValues) must be a list of keys each followed by its value
+new Map, keys and values not a list: ValueError: Sharp\Map::__construct(): Argument #1 ($keysAndValues) must be a list of keys each followed by its value
 from, PHP's keys: {"5":1,"x":2,"7":3}
-Set from, each element once: ["a","b",1]
+new Set, each element once: ["a","b",1]
 toArray: {"1":"a","b":"c"}
 toArray, a key no array holds: ValueError: A PHP array key is an int or a string, and this Map holds a key of type Tone
 Set toArray: ["a","b"]

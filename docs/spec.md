@@ -482,7 +482,7 @@ Point origin = new Point { x: 0 };    // compile error: y has no initial value, 
 
 `with` copies an object or a struct and sets the listed properties through their `init` or `set` accessors. The original is unchanged.
 
-**Any struct is a `Map` key by its whole value,** with nothing declared, as Swift's `Hashable` structs, Rust's `Hash` derive, C#'s record structs, Java's records, Kotlin's data classes and Go's structs are. Two structs are one key when they are `==` (section 19). A struct that holds a class instance, at any depth, can't key a `Map`, as Rust's `HashMap` needs every field to be `Hash` and Swift's `Dictionary` needs every field to be `Hashable`. Plain PHP sees a generated key text. A struct gets JSON key text only from its `toString()`, so `Json.encode` of a `Map` keyed by a struct without `toString()` is a compile error, as Jackson writes a key through `toString` and serde and Go refuse a key that is not text.
+**Any struct is a `Map` key by its whole value,** with nothing declared, as Swift's `Hashable` structs, Rust's `Hash` derive, C#'s record structs, Java's records, Kotlin's data classes and Go's structs are. Two structs are one key when they are `==` (section 19). A struct that holds a class instance, at any depth, can't key a `Map`, as Rust's `HashMap` needs every field to be `Hash` and Swift's `Dictionary` needs every field to be `Hashable`. Plain PHP reading the `Map` sees the struct itself as the key. A struct gets JSON key text only from its `toString()`, so `Json.encode` of a `Map` keyed by a struct without `toString()` is a compile error, as Jackson writes a key through `toString` and serde and Go refuse a key that is not text.
 
 **Every struct has a static `parse`,** which reads a `Map<string, Any?>` or an object's public properties and throws one error that lists every bad field, and a static `tryParse`, which gives null instead. The names follow `Int.parse` and `Int.tryParse` (section 24). Classes do not get them.
 
@@ -656,7 +656,8 @@ PHP# has three collection types: `List<T>`, `Map<TKey, TValue>` and `Set<T>`.
 
 - They are values, as structs (section 10) and PHP's own arrays are. Assigning or passing a collection copies it only when one side later writes to it.
 - A `Map`'s key is an `int`, a `string`, a backed enum, or a struct (see **Map keys** below).
-- `List` and `Map` both run as plain PHP arrays. The engine knows which one it compiles from the checker's types (section 27), so each operation does what it naturally means on that kind of collection.
+- A `List` runs as a plain PHP array. A `Map` and a `Set` run as the engine's `Sharp\Map` and `Sharp\Set` objects, which keep each key as it was stored.
+- Plain PHP receives a `Map` or a `Set` itself, or a PHP array where its parameter's declared type names `array` (see **Map keys** below).
 
 <!-- example copy-on-write: statements
 List<Line> a = [new Line()];
@@ -866,7 +867,7 @@ limits.has("pro");           // true
 limits.has("team");          // false
 ```
 
-**A key read back out of a `Map<string, TValue>` is a `string`.** PHP stores an all-digit string key, such as `"5"`, as the int `5`. The engine knows the key type (section 27), so it hands the key back as `"5"`. Plain PHP reading the same array still sees `5`. This covers the key of `for (const [key, value] of map)` and of `keys()`.
+**A key read back out of a `Map<string, TValue>` is a `string`.** A `Map` keeps each key as it was stored, so the key `"5"` reads back as `"5"`, in PHP# and in plain PHP. A PHP array stores an all-digit string key, such as `"5"`, as the int `5`. So a PHP array that enters a `Map<string, TValue>` has each such key turned back into its `string`, and the PHP array a plain PHP `array` parameter receives holds `5`. This covers the key of `for (const [key, value] of map)` and of `keys()`.
 
 <!-- example map-string-keys: statements
 Map<string, int> stock = ["5": 1, "sku-2": 2];
@@ -881,9 +882,9 @@ for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is a 
 
 **Map keys:** a key is `int`, `string`, a backed enum (section 20), or a struct by its whole value (section 10).
 
-- `counts[status]` runs as `$counts[$status->value]`.
+- `counts[status]` runs as `$counts[$status]`: the `Map` keeps the case itself as the key.
 - A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type, as in `const [Status status, int n]`, stays allowed. An inferred `Map`, such as a `groupBy` result, gives its keys back the same way, because the checker's types reach the running program (section 27).
-- Plain PHP receives an enum key's backing value, and a generated key text for a struct key.
+- Plain PHP receives the `Map` itself, or a PHP array where its parameter's declared type names `array`. A PHP array's keys are `int` or `string`, so passing a `Map` keyed by a backed enum or a struct to such a parameter is a compile error that names the parameter and the key type. `counts.count()` counts any `Map`, where PHP's `count(counts)` takes only one keyed by `int` or `string`.
 
 <!-- example enum-map-keys -->
 ```csharp
@@ -915,7 +916,7 @@ public class OrderStats
     {
         Map<Status, int> counts = [:];
         for (const order of orders) {
-            counts[order.status] = (counts[order.status] ?? 0) + 1;   // runs as $counts[$order->status->value]
+            counts[order.status] = (counts[order.status] ?? 0) + 1;   // runs as $counts[$order->status]
         }
         return counts;
     }

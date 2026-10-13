@@ -16,24 +16,24 @@ function keys(Map|Set $table): string
 
 $rows = [
     'a replaced value keeps its place' => function () {
-        $map = Map::of(['a', 1, 'b', 2, 'c', 3]);
+        $map = new Map(['a', 1, 'b', 2, 'c', 3]);
         $map['a'] = 9;
         return keys($map) . ' ' . $map['a'];
     },
     'a removed key comes back last' => function () {
-        $map = Map::of(['a', 1, 'b', 2, 'c', 3]);
+        $map = new Map(['a', 1, 'b', 2, 'c', 3]);
         unset($map['a']);
         $map['a'] = 4;
         return keys($map);
     },
     'removing the last keys' => function () {
-        $map = Map::of(['a', 1, 'b', 2, 'c', 3]);
+        $map = new Map(['a', 1, 'b', 2, 'c', 3]);
         unset($map['c'], $map['b']);
         $map['d'] = 4;
         return keys($map) . ' ' . count($map);
     },
     'removing a missing key' => function () {
-        $map = Map::of(['a', 1]);
+        $map = new Map(['a', 1]);
         unset($map['z']);
         return keys($map) . ' ' . count($map);
     },
@@ -70,7 +70,7 @@ $rows = [
         $map['last'] = 1;
         return keys($map) . ' ' . count($map) . ' ' . (memory_get_usage() - $before < 1024 ? 'small' : 'grew');
     },
-    'a Set keeps its first order' => fn () => keys(Set::from([3, 1, 3, 2, 1])),
+    'a Set keeps its first order' => fn () => keys(new Set([3, 1, 3, 2, 1])),
 ];
 
 // Each round runs every row, so the JIT variants compile them before the last round, whose output is printed.

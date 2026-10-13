@@ -116,9 +116,33 @@ array(7) {
   [6]=>
   bool(true)
 }
-TypeError: Sharp\Set::from(): Argument #1 ($values) must hold only int, string, backed enum or struct values, float given in Sets.sharp on line 18
-array(2) {
+array(9) {
+  [0]=>
+  bool(true)
+  [1]=>
+  bool(false)
+  [2]=>
+  bool(false)
   [3]=>
+  bool(false)
+  [4]=>
+  bool(false)
+  [5]=>
+  bool(false)
+  [6]=>
+  int(2)
+  [7]=>
+  array(2) {
+    [0]=>
+    float(1.5)
+    [1]=>
+    string(3) "vip"
+  }
+  [8]=>
+  string(8) "1.5;vip;"
+}
+object(Sharp\Set)#12 (2) {
+  [0]=>
   int(3)
   [1]=>
   int(1)
@@ -161,8 +185,8 @@ array(13) {
     int(9)
   }
 }
-array(1) {
-  ["vip"]=>
+object(Sharp\Set)#13 (1) {
+  [0]=>
   string(3) "vip"
 }
 array(9) {
@@ -215,10 +239,10 @@ array(9) {
   [8]=>
   NULL
 }
-array(2) {
-  ["b"]=>
+object(Sharp\Set)#11 (2) {
+  [0]=>
   string(1) "b"
-  ["a"]=>
+  [1]=>
   string(1) "a"
 }
 array(3) {
@@ -243,40 +267,46 @@ array(3) {
   [2]=>
   bool(true)
 }
-array(3) {
-  ["b"]=>
-  string(1) "b"
-  ["a"]=>
-  string(1) "a"
-  [7]=>
-  string(1) "7"
-}
-array(2) {
+object(Sharp\Set)#19 (4) {
   [0]=>
-  array(2) {
-    [3]=>
-    int(3)
-    [1]=>
-    int(1)
-  }
+  string(1) "b"
   [1]=>
-  bool(true)
+  string(1) "a"
+  [2]=>
+  string(1) "7"
+  [3]=>
+  int(7)
 }
-array(2) {
-  ["closed"]=>
+object(Sharp\Set)#19 (2) {
+  [0]=>
+  int(3)
+  [1]=>
+  int(1)
+}
+object(Sharp\Set)#19 (2) {
+  [0]=>
   enum(Lib\Standing::Closed)
-  ["active"]=>
+  [1]=>
   enum(Lib\Standing::Active)
 }
-array(2) {
-  [2]=>
+object(Sharp\Set)#19 (2) {
+  [0]=>
   enum(Lib\Size::Large)
-  [5]=>
+  [1]=>
   enum(Lib\Code::Five)
 }
-array(1) {
-  ["x"]=>
+object(Sharp\Set)#19 (1) {
+  [0]=>
   string(1) "x"
 }
-TypeError: Sharp\Set::from(): Argument #1 ($values) must hold only int, string, backed enum or struct values, null given in set_methods.inc on line 43
-TypeError: Sharp\Set::from(): Argument #1 ($values) must hold only int, string, backed enum or struct values, stdClass given in set_methods.inc on line 44
+object(Sharp\Set)#19 (2) {
+  [0]=>
+  string(1) "x"
+  [1]=>
+  NULL
+}
+object(Sharp\Set)#19 (1) {
+  [0]=>
+  object(stdClass)#13 (0) {
+  }
+}

@@ -106,8 +106,8 @@ $rows = [
     'a chain of equal hashes' => fn () => held([new Clash(1), 'a', new Clash(2), 'b', new Clash(3), 'c', new Clash(2), 'd']),
     'an object without ==' => fn () => held([$plain, 'a', new Plain(), 'b', $plain, 'c']),
     'a List' => fn () => held([[1, 2], 'a', [1, 2.0], 'b', [2, 1], 'c']),
-    'a Map, regardless of order' => fn () => held([Map::of([1, 'x', 2, 'y']), 'a', Map::of([2, 'y', 1, 'x']), 'b']),
-    'a Set, regardless of order' => fn () => held([Set::from([1, 2]), 'a', Set::from([2, 1]), 'b', Set::from([1]), 'c']),
+    'a Map, regardless of order' => fn () => held([new Map([1, 'x', 2, 'y']), 'a', new Map([2, 'y', 1, 'x']), 'b']),
+    'a Set, regardless of order' => fn () => held([new Set([1, 2]), 'a', new Set([2, 1]), 'b', new Set([1]), 'c']),
 ];
 
 // Each round runs every row, so the JIT variants compile them before the last round, whose output is printed.
@@ -117,20 +117,20 @@ for ($round = 0; $round < 100; $round++) {
         echo $name, ': ', $row(), "\n";
     }
     // Each Clash goes in at the head of the one chain, so removing 2 unlinks a middle bucket and removing 1 the last.
-    $chain = Map::of([new Clash(1), 'a', new Clash(2), 'b', new Clash(3), 'c']);
+    $chain = new Map([new Clash(1), 'a', new Clash(2), 'b', new Clash(3), 'c']);
     unset($chain[new Clash(2)]);
     echo 'a removal inside a chain: ', $chain[new Clash(1)], $chain[new Clash(3)], var_export($chain[new Clash(2)], true);
     unset($chain[new Clash(1)]);
     echo ' ', $chain[new Clash(3)], var_export($chain[new Clash(1)], true), ' ', count($chain), "\n";
-    $counted = Map::of([new Counted(1), 'a', new Counted(9), 'b']);
+    $counted = new Map([new Counted(1), 'a', new Counted(9), 'b']);
     Counted::$compared = 0;
     echo 'a key under another hash is never compared: ', $counted[new Counted(1)], ' ', Counted::$compared;
-    $counted = Map::of([[new Counted(1)], 'a', [new Counted(2)], 'b']);
+    $counted = new Map([[new Counted(1)], 'a', [new Counted(2)], 'b']);
     Counted::$compared = 0;
     echo ', in a List: ', $counted[[new Counted(1)]], ' ', Counted::$compared, "\n";
-    $set = Set::from([5, 5.0, '5', Tone::Warm, Tone::Warm]);
+    $set = new Set([5, 5.0, '5', Tone::Warm, Tone::Warm]);
     echo 'a Set: ', count($set), ' ', var_export(isset($set[5.0]), true), ' ', var_export(isset($set['6']), true), "\n";
-    $prices = Map::of([new Cents(5, 'first'), 'tea']);
+    $prices = new Map([new Cents(5, 'first'), 'tea']);
     echo 'a read: ', $prices[new Cents(5, 'other')], ' ', var_export($prices[new Cents(6, 'none')], true), "\n";
     try {
         $prices[[1, fopen('php://memory', 'r')]] = 'x';

@@ -28,6 +28,7 @@
 #include "Zend/zend_closures.h"
 #include "Zend/zend_ini.h"
 #include "Zend/zend_observer.h"
+#include "ext/sharp/php_sharp.h"
 #include "zend_smart_str.h"
 #include "jit/zend_jit.h"
 
@@ -698,11 +699,11 @@ static zend_property_info* zend_get_known_static_property_info(const zend_op_arr
 	return NULL;
 }
 
-/* The receiver of a PHP# method call on an array becomes a Sharp\Collection, which only the VM makes,
- * see ZEND_SHARP_OPERATOR. The fetch of a property or a static property stays inline when the declared
- * type of the property rules out an array, found as zend_jit_fetch_obj() and zend_jit_fetch_static_prop()
- * find the property. */
-static bool zend_jit_sharp_receiver_may_be_array(const zend_op_array *op_array, const zend_op *opline,
+/* The receiver of a PHP# method call on an array, a Sharp\Map or a Sharp\Set becomes a Sharp\Collection, which only
+ * the VM makes, see ZEND_SHARP_OPERATOR. The fetch of a property or a static property stays inline when the declared
+ * type of the property rules out all three, found as zend_jit_fetch_obj() and zend_jit_fetch_static_prop() find the
+ * property. A class the type names that is not loaded yet may be either. */
+static bool zend_jit_sharp_receiver_may_be_collection(const zend_op_array *op_array, const zend_op *opline,
 	zend_class_entry *ce, bool on_this, zend_class_entry *trace_ce)
 {
 	zend_property_info *prop_info;
@@ -721,9 +722,35 @@ static bool zend_jit_sharp_receiver_may_be_array(const zend_op_array *op_array, 
 		}
 	}
 
-	return !prop_info
-		|| !ZEND_TYPE_IS_SET(prop_info->type)
-		|| (ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_ARRAY);
+	if (!prop_info
+	 || !ZEND_TYPE_IS_SET(prop_info->type)
+	 || (ZEND_TYPE_FULL_MASK(prop_info->type) & (MAY_BE_ARRAY|MAY_BE_OBJECT))) {
+		return 1;
+	}
+
+	const zend_type *single;
+	ZEND_TYPE_FOREACH(prop_info->type, single) {
+		if (ZEND_TYPE_HAS_NAME(*single)) {
+			zend_class_entry *named = zend_lookup_class_ex(ZEND_TYPE_NAME(*single), NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+			if (!named || sharp_may_be_table(MAY_BE_OBJECT, named, true)) {
+				return 1;
+			}
+		}
+	} ZEND_TYPE_FOREACH_END();
+
+	return 0;
+}
+
+/* Whether the receiver a ZEND_CAST of a PHP# method call reads may be a Sharp\Map or a Sharp\Set, from the class the
+ * inference gives it, so only the VM's handler can make its Sharp\Collection. */
+static bool zend_jit_sharp_receiver_may_be_table(const zend_ssa *ssa, const zend_ssa_op *ssa_op)
+{
+	if (!ssa->var_info || ssa_op->op1_use < 0) {
+		return 1;
+	}
+	const zend_ssa_var_info *info = &ssa->var_info[ssa_op->op1_use];
+
+	return sharp_may_be_table(info->type, info->ce, info->is_instanceof);
 }
 
 static bool zend_may_be_dynamic_property(zend_class_entry *ce, zend_string *member, bool on_this, const zend_op_array *op_array)
@@ -2131,9 +2158,10 @@ static int zend_jit(const zend_op_array *op_array, zend_ssa *ssa, const zend_op 
 						goto done;
 					case ZEND_CAST:
 						/* The receiver of a PHP# method call passes through as ZEND_QM_ASSIGN copies it,
-						 * unless it may be an array. */
+						 * unless it may be an array, a Sharp\Map or a Sharp\Set. */
 						if (opline->extended_value != (IS_OBJECT | ZEND_SHARP_OPERATOR)
-						 || (OP1_INFO() & MAY_BE_ARRAY)) {
+						 || (OP1_INFO() & MAY_BE_ARRAY)
+						 || zend_jit_sharp_receiver_may_be_table(ssa, ssa_op)) {
 							break;
 						}
 						ZEND_FALLTHROUGH;
@@ -2562,7 +2590,7 @@ static int zend_jit(const zend_op_array *op_array, zend_ssa *ssa, const zend_op 
 							break;
 						}
 						if (opline->opcode == ZEND_FETCH_OBJ_R
-						 && zend_jit_sharp_receiver_may_be_array(op_array, opline, ce, on_this, NULL)) {
+						 && zend_jit_sharp_receiver_may_be_collection(op_array, opline, ce, on_this, NULL)) {
 							break;
 						}
 						if (opline->opcode == ZEND_FETCH_OBJ_FUNC_ARG) {
@@ -2605,7 +2633,7 @@ static int zend_jit(const zend_op_array *op_array, zend_ssa *ssa, const zend_op 
 							break;
 						}
 						if (opline->opcode == ZEND_FETCH_STATIC_PROP_R
-						 && zend_jit_sharp_receiver_may_be_array(op_array, opline, NULL, 0, NULL)) {
+						 && zend_jit_sharp_receiver_may_be_collection(op_array, opline, NULL, 0, NULL)) {
 							break;
 						}
 						if (!zend_jit_fetch_static_prop(&ctx, opline, op_array)) {

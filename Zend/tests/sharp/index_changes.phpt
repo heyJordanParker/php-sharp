@@ -71,28 +71,43 @@ array(2) {
 }
 array(2) {
   [0]=>
-  array(2) {
-    [1]=>
+  object(Sharp\Set)#10 (2) {
+    [0]=>
     int(1)
-    [4]=>
+    [1]=>
     int(4)
   }
   [1]=>
-  array(0) {
+  object(Sharp\Set)#8 (0) {
   }
 }
 array(2) {
   [0]=>
-  array(1) {
-    ["d"]=>
-    int(4)
+  object(Sharp\Map)#10 (1) {
+    [0]=>
+    array(2) {
+      [0]=>
+      string(1) "d"
+      [1]=>
+      int(4)
+    }
   }
   [1]=>
-  array(2) {
-    ["b"]=>
-    int(2)
-    ["c"]=>
-    int(3)
+  object(Sharp\Map)#7 (2) {
+    [0]=>
+    array(2) {
+      [0]=>
+      string(1) "b"
+      [1]=>
+      int(2)
+    }
+    [1]=>
+    array(2) {
+      [0]=>
+      string(1) "c"
+      [1]=>
+      int(3)
+    }
   }
 }
 array(2) {
@@ -113,9 +128,14 @@ array(2) {
   [0]=>
   array(1) {
     [0]=>
-    array(1) {
-      ["b"]=>
-      int(2)
+    object(Sharp\Map)#10 (1) {
+      [0]=>
+      array(2) {
+        [0]=>
+        string(1) "b"
+        [1]=>
+        int(2)
+      }
     }
   }
   [1]=>
@@ -123,13 +143,28 @@ array(2) {
 }
 array(2) {
   [0]=>
-  array(3) {
-    ["a"]=>
-    int(1)
-    ["c"]=>
-    int(3)
-    ["d"]=>
-    int(4)
+  object(Sharp\Map)#7 (3) {
+    [0]=>
+    array(2) {
+      [0]=>
+      string(1) "a"
+      [1]=>
+      int(1)
+    }
+    [1]=>
+    array(2) {
+      [0]=>
+      string(1) "c"
+      [1]=>
+      int(3)
+    }
+    [2]=>
+    array(2) {
+      [0]=>
+      string(1) "d"
+      [1]=>
+      int(4)
+    }
   }
   [1]=>
   int(2)
@@ -232,9 +267,14 @@ array(10) {
   [4]=>
   array(1) {
     [0]=>
-    array(1) {
-      ["a"]=>
-      int(1)
+    object(Sharp\Map)#10 (1) {
+      [0]=>
+      array(2) {
+        [0]=>
+        string(1) "a"
+        [1]=>
+        int(1)
+      }
     }
   }
   [5]=>
@@ -244,8 +284,8 @@ array(10) {
   [7]=>
   array(1) {
     [0]=>
-    array(1) {
-      [1]=>
+    object(Sharp\Set)#8 (1) {
+      [0]=>
       int(1)
     }
   }
