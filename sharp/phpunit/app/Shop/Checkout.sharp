@@ -1,0 +1,10 @@
+namespace App.Shop;
+
+import App.Mail.Mailer;
+
+public class Checkout
+{
+    public Checkout(private Mailer mailer) { }
+
+    public Mailer usedMailer() => this.mailer;
+}

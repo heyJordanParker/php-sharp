@@ -1502,7 +1502,7 @@ import Illuminate.Queue.Events.JobFailed;
 extern event JobFailed uses Database;            // an event, and a call into JobFailed has the effect Database
 ```
 
-**Listening:** a trailing `on` clause after a method's parameters lists the events the method listens to, for as long as the app runs. The method takes zero parameters, or one parameter whose type every listed event shares. It takes no other parameter, and no parameter is implicit. The namespace's `Module.sharp` container creates the object each listener runs on.
+**Listening:** a trailing `on` clause after a method's parameters lists the events the method listens to, for as long as the app runs. The method takes zero parameters, or one parameter whose type every listed event shares. It takes no other parameter, and no parameter is implicit. PHP# creates a new object for every event and passes its constructor's services from the module of its namespace. A listener's class needs no binding.
 
 <!-- example listeners
 import Illuminate.Queue.Events.JobFailed;
@@ -3627,11 +3627,12 @@ module
     singleton Mailer for SendReceipt = QueueMailer;                            // SendReceipt gets a QueueMailer instead
     singleton List<PriceRule> = [TaxRule, DiscountRule];                       // a class that takes a List<PriceRule> gets both
     singleton RedisStore(Environment environment) = new RedisStore(environment.require("REDIS_URL"));   // a foreign object, created here as its singleton lifetime decides
+    transient SendReceipt = SendReceipt;                                       // a class binds to itself, so PHP# creates it
 }
 ```
 
-- **A binding's value is a class or one expression.** A class, such as `SmtpMailer`, is built through its main constructor (section 9.1).
-- **A binding names the services it needs as parameters, and its value is one expression over them,** as Dagger's `@Provides` methods do. The container passes each parameter the service bound to its type, so `RedisStore` above gets the app's `Environment`.
+- **A binding's value is a class or one expression.** A class, such as `SmtpMailer`, is built through its main constructor (section 9.1). A class binds to itself to be created, as `SendReceipt` does.
+- **A binding names the services it needs as parameters, and its value is one expression over them,** as Dagger's `@Provides` methods do. The container passes each parameter the service bound to its type, so `RedisStore` above gets the app's `Environment`, which the standard library's module binds for every namespace. An expression is for a value no binding gives, such as `RedisStore`'s URL.
 - **A module stays declarative:** one expression per binding, and no statements, loops or methods.
 - **A `foreign` object is created in a module binding** (section 29). The binding's lifetime decides how often one is created, and it reaches classes only through constructors.
 - **A module also states the laws that span its classes** (section 28).
@@ -3640,16 +3641,34 @@ module
 
 A binding's expression runs each time its lifetime needs a new service, so a choice made while the app runs is one expression:
 
-<!-- example scoped-binding -->
+<!-- example scoped-binding
+namespace App.Shop;
+
+import App.Flags.FeatureFlags;
+import App.Mail.Mailer;
+import App.Mail.QueueMailer;
+import App.Mail.SmtpMailer;
+-->
 ```csharp
+// app/Shop/Module.sharp
 module
 {
+    singleton FeatureFlags = FeatureFlags;
+    transient QueueMailer = QueueMailer;
+    transient SmtpMailer = SmtpMailer;
     scoped Mailer(FeatureFlags flags, QueueMailer queue, SmtpMailer smtp) = flags.enabled("queue-mail") ? queue : smtp;   // runs once per request, job or command
 }
 ```
 
-<!-- example module-errors: alone -->
+<!-- example module-errors: alone
+namespace App.Shop;
+
+import App.Mail.Mailer;
+import App.Mail.SmtpMailer;
+import App.Pricing.TaxRule;
+-->
 ```csharp
+// app/Shop/Module.sharp
 module
 {
     let fallback = new SmtpMailer();   // compile error: a module holds no statements; give a binding one expression
@@ -3657,10 +3676,10 @@ module
 }
 ```
 
-**A nested folder's module overrides its parent's services.** A test or environment module overrides with `module : App.Shop { … }`, and the compiler checks every environment's set of services.
+**A nested folder's module overrides its parent's services.** A test or environment module overrides with `module : App.Shop { … }`, and the compiler checks every environment's set of services: the base modules under all of that environment's modules at once.
 
 - **An environment module is `Module.<Environment>.sharp`** beside the `Module.sharp` it overrides, such as `Module.Production.sharp`. `SHARP_ENV` picks it, as `ASPNETCORE_ENVIRONMENT` picks ASP.NET Core's `appsettings.Production.json`.
-- **A test module is declared in the test file that uses it,** with the same header, as NestJS's testing module is.
+- **A test module is declared in the test file that uses it,** with the same header, as NestJS's testing module is. While a test of that file runs, its services are the test module's over the base modules, with no environment module, which is the set the compiler checks.
 
 <!-- example environment-module -->
 ```csharp
@@ -3692,15 +3711,34 @@ module : App.Shop
 public class CheckoutTest { … }
 ```
 
-**A missing or mistyped service is a compile error.** The container builds every class through its main constructor (section 9.1), including `on` listeners (section 15). Every binding parameter and every constructor parameter needs a binding.
+**A missing or mistyped service is a compile error.** PHP# creates the classes a module binds and the classes that declare an `on` method (section 15), each through its main constructor (section 9.1). Every parameter of their constructors, and every binding parameter, needs a binding in the module of its namespace or of a namespace above it. The compiler checks every such class, whether or not another class takes it. A class no module binds is ordinary code, created with `new`, such as `Money`.
 
-<!-- example missing-service
-import App.Mail.Mailer;
--->
+<!-- example missing-service -->
 ```csharp
+// app/Shop/Checkout.sharp
+namespace App.Shop;
+
+import App.Mail.Mailer;
+import App.PaymentGateway;
+
 public class Checkout
 {
-    public Checkout(private Mailer mailer, private PaymentGateway gateway) { }   // compile error when no module binds PaymentGateway
+    public Checkout(private Mailer mailer, private PaymentGateway gateway) { }
+}
+```
+
+<!-- example missing-service
+namespace App.Shop;
+
+import App.Mail.Mailer;
+import App.Mail.SmtpMailer;
+-->
+```csharp
+// app/Shop/Module.sharp
+module
+{
+    singleton Mailer = SmtpMailer;
+    transient Checkout = Checkout;   // compile error: Checkout needs a PaymentGateway, and no module binds one
 }
 ```
 

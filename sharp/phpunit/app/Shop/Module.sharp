@@ -1,0 +1,10 @@
+namespace App.Shop;
+
+import App.Mail.Mailer;
+import App.Mail.SmtpMailer;
+
+module
+{
+    singleton Mailer = SmtpMailer;
+    transient Checkout = Checkout;
+}
