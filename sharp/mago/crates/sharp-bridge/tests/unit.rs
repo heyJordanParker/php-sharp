@@ -331,6 +331,7 @@ fn stamp_gives_the_size_and_hash_of_a_file_and_none_where_no_file_is() {
     assert_eq!(stamped.hash, source_hash(SOURCE.as_bytes()));
     assert_ne!(stamped.mtime_ns, 0);
     assert_eq!(stamp(directory.path(), b"app/Missing.sharp").unwrap(), None);
+    assert_eq!(stamp(directory.path(), b"missing/Report.sharp").unwrap(), None, "a missing folder holds nothing");
     assert_eq!(
         stamp(directory.path(), b"app/report.sharp").unwrap(),
         None,
