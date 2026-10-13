@@ -55,35 +55,30 @@ if [[ ! -x "$php" ]]; then
   exit 1
 fi
 
-mago_commit="$(sed -n 's/^#define SHARP_MAGO_COMMIT "\([0-9a-f]\{40\}\)"$/\1/p' "$root/ext/sharp/sharp_unit.h")"
-if [[ -z "$mago_commit" ]]; then
-  echo "ext/sharp/sharp_unit.h defines no SHARP_MAGO_COMMIT." >&2
-  exit 1
-fi
 version="$(sed -n 's/^#define PHP_SHARP_VERSION "\(.*\)"$/\1/p' "$root/ext/sharp/php_sharp.h")"
-engine="$("$php" -n --ri sharp)"
-engine_version="$(sed -n 's/^Version => //p' <<<"$engine")"
-engine_mago_commit="$(sed -n 's/^Mago commit => //p' <<<"$engine")"
-if [[ "$engine_version" != "$version" || "$engine_mago_commit" != "$mago_commit" ]]; then
-  echo "The built engine is $engine_version at Mago ${engine_mago_commit:0:9}, but the tree is $version at Mago ${mago_commit:0:9}. Run sharp/bin/build." >&2
+engine_version="$("$php" -n --ri sharp | sed -n 's/^Version => //p')"
+if [[ "$engine_version" != "$version" ]]; then
+  echo "The built engine is $engine_version, but the tree is $version. Run sharp/bin/build." >&2
   exit 1
 fi
-cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
-PATH="$(dirname "$cargo"):$PATH" "$cargo" install --quiet --locked --git https://github.com/heyJordanParker/mago-sharp --rev "$mago_commit" --root "$build_dir/mago" mago
-mago="$build_dir/mago/bin/mago"
 
-echo "== mago compile, at the Mago commit in ext/sharp/sharp_unit.h"
+jobs="${CARGO_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN)}"
+if [[ " ${MAKEFLAGS:-}" =~ [[:space:]](-j[[:space:]]*|--jobs=)([0-9]+) ]]; then
+  jobs="${BASH_REMATCH[2]}"
+fi
+
+cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
+PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --release --jobs "$jobs" \
+  --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$build_dir/mago" --bin mago
+mago="$build_dir/mago/release/mago"
+
+echo "== mago compile, built from sharp/mago"
 if ! "$mago" --no-version-check --colors never --workspace "$root" --config "$root/Zend/tests/sharp/mago.toml" compile; then
   echo "mago compile refused a PHP# test fixture, and the engine runs only compiled files." >&2
   exit 1
 fi
 
 export TEST_MAGO_EXECUTABLE="$mago"
-
-jobs="${CARGO_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN)}"
-if [[ " ${MAKEFLAGS:-}" =~ [[:space:]](-j[[:space:]]*|--jobs=)([0-9]+) ]]; then
-  jobs="${BASH_REMATCH[2]}"
-fi
 
 export SKIP_IO_CAPTURE_TESTS=1
 export STACK_LIMIT_DEFAULTS_CHECK=1
