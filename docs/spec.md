@@ -374,6 +374,25 @@ Math.max(0, ...prices);  // into the standard library too. The 0 gives max a val
 - Only a `List` spreads into a call. Spreading a `Map` into a call is a compile error (section 12).
 - An override of a plain PHP method declared with `...` declares that parameter with `...` too.
 
+**A statement that can never run is a compile error,** as Java's "unreachable statement" and Zig's "unreachable code" are. A statement after `return`, `throw`, `global.exit(…)`, `break` or `continue` in the same block never runs, and neither does one after an `if` whose every branch ends the block. The error names the line that ends the block, and says to delete the statement or move it above that line.
+
+<!-- example unreachable-statements: members -->
+```csharp
+public int total(List<int> prices)
+{
+    int sum = 0;
+    for (const price of prices) {
+        if (price < 0) {
+            continue;
+            sum -= price;                     // compile error: continue ends the block, so this never runs
+        }
+        sum += price;
+    }
+    return sum;
+    sum = 0;                                  // compile error: return ends the block, so this never runs
+}
+```
+
 ## 8. Functions
 
 There are no top-level functions. Shared code lives in static methods on a class.
@@ -418,8 +437,8 @@ public class Prune
 echo "Pruned";                                               // compile error: write console.write(text)
 print "Pruned";                                              // compile error: write console.write(text)
 printf("Pruned");                                            // compile error: write console.write(text)
-exit(1);                                                     // compile error: write process.exit(1)
-die("Prune failed");                                         // compile error: write the message with console.writeError, then process.exit(1)
+public void stop() { exit(1); }                              // compile error: write process.exit(1)
+public void fail() { die("Prune failed"); }                  // compile error: write the message with console.writeError, then process.exit(1)
 ```
 
 - Exiting skips every `finally` block, as Java's `System.exit` and C#'s `Environment.Exit` do.
@@ -2608,9 +2627,9 @@ int b = 3;
 -->
 ```csharp
 let area = side ** 2;        // int
-return 2 ** -1;              // compile error: `2 ** -1` is an `int` raised to a negative power, which throws: write `2.0 ** -1`
-return a ** b;               // int. Throws ArithmeticError at runtime when b < 0
-return 2.0 ** -1;            // 0.5
+2 ** -1                      // compile error: `2 ** -1` is an `int` raised to a negative power, which throws: write `2.0 ** -1`
+a ** b                       // int. Throws ArithmeticError at runtime when b < 0
+2.0 ** -1                    // 0.5
 ```
 
 **`/` on two integers truncates toward zero,** as in C#. `/` with a `float` operand stays float division.

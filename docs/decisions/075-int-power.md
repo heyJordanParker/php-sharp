@@ -14,9 +14,9 @@ The type of `int ** int`:
 
 ```csharp
 let area = side ** 2;        // int
-return 2 ** -1;              // compile error: `2 ** -1` is an `int` raised to a negative power, which throws: write `2.0 ** -1`
-return a ** b;               // int. Throws ArithmeticError at runtime when b < 0
-return 2.0 ** -1;            // 0.5
+2 ** -1                      // compile error: `2 ** -1` is an `int` raised to a negative power, which throws: write `2.0 ** -1`
+a ** b                       // int. Throws ArithmeticError at runtime when b < 0
+2.0 ** -1                    // 0.5
 ```
 
 `10 ** decimals` is an `int`, as the code reads. A negative exponent has no `int` result, so it throws instead of turning the `int` into a `float`, which is the change section 24 already refuses for an overflow. A reader who wants a fraction writes the `float` on the line.
@@ -25,8 +25,8 @@ return 2.0 ** -1;            // 0.5
 
 ```csharp
 let area = side ** 2;        // float
-return 2 ** -1;              // 0.5
-return a ** b;               // float
+2 ** -1                      // 0.5
+a ** b                       // float
 ```
 
 Every whole-number power, such as `10 ** decimals`, needs a conversion back to `int`. A `float` holds integers exactly only up to 2^53, so a large power loses digits before the conversion.
@@ -35,8 +35,8 @@ Every whole-number power, such as `10 ** decimals`, needs a conversion back to `
 
 ```csharp
 let area = side ** 2;        // int
-return 2 ** -1;              // float: 0.5
-return a ** b;               // int|float: the sign of b is unknown
+2 ** -1                      // float: 0.5
+a ** b                       // int|float: the sign of b is unknown
 ```
 
 The type depends on a value. Most exponents are not literals, so most powers are `int|float`, and every caller narrows the result before it uses it.
