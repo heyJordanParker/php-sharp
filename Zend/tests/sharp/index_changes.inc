@@ -45,6 +45,8 @@ for ($round = 0; $round < 100; $round++) {
     // An element that is an object is the object, so a change to it sticks, and a missing index throws.
     attempt(fn () => Demo\Point::moved([new Demo\Point()], 0)[0]->x);
     attempt(fn () => Demo\Point::moved([new Demo\Point()], 5));
+    // A property read after ?. gives null for a missing index, on a local, a property and a hooked property.
+    attempt(fn () => (new Demo\Point())->read([new Demo\Point()]));
     $output = ob_get_clean();
 }
 
