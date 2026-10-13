@@ -2815,7 +2815,7 @@ public TItem blank<TItem>()
 }
 ```
 
-**`typeof(value)` gives an object's class.** For a value of type `T`, it is typed `Class<T>` and holds the object's runtime class, which may be a subclass of `T`. Plain PHP receives the class-name string. It replaces PHP's `$order::class` and `get_class($order)`.
+**`typeof` takes a type only. `Class.of(value)` gives an object's class,** as Swift's `type(of:)` and Python's `type()` do. For a value of type `T`, it is typed `Class<T>` and holds the object's runtime class, which may be a subclass of `T`. Plain PHP receives the class-name string.
 
 <!-- example typeof-values: statements
 import Illuminate.Support.Facades.Log;
@@ -2823,14 +2823,13 @@ Order order = new Order();
 int id = 1;
 -->
 ```csharp
-Class<Order> type = typeof(order);              // compiles: order's runtime class, which may be a subclass of Order
+Class<Order> type = Class.of(order);            // compiles: order's runtime class, which may be a subclass of Order
 const fresh = new (type)(id);                   // compiles: a new object of that class
-Log.info("saved", ["class": typeof(order)]);    // compiles; runs: plain PHP receives the class-name string
+Log.info("saved", ["class": Class.of(order)]);  // compiles; runs: plain PHP receives the class-name string
+typeof(order);                                  // compile error: typeof takes a type; write Class.of(order)
 ```
 
-- **A bare name inside `typeof` is a local's value when a local with that name is in scope, and a type otherwise,** the same rule pattern matching uses (section 21).
-
-**A class value works wherever a class name works.** `typeof` gives one, and a `Class<T>` field, parameter or local holds one:
+**A class value works wherever a class name works.** `typeof` and `Class.of` give one, and a `Class<T>` field, parameter or local holds one:
 
 <!-- example class-values -->
 ```csharp
