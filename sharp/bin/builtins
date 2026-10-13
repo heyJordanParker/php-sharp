@@ -12,26 +12,31 @@ const STUBS_SHA256 = '609c8dc1f27596f29c723700d9dff379602adb31c6b6dc16ca8027ad77
 const PHP_VERSION_ID_TARGET = 80500;
 
 // Each function's effects are the ones of the first rule whose extension and name pattern match it, written as they
-// follow `uses`, and null is pure. A function that reads the clock, the environment or a file only when an argument is
-// left out has that effect, as `date` has Clock. A handle can be a terminal or a file, so `fwrite`, `fputs`, `fprintf`,
-// `vfprintf` and `fgets` have both Console and Files, and every other function on a handle has Files.
+// follow `uses`, and null is pure. A function that reads the clock, the environment or a file, or prints, only when an
+// argument is left out has that effect, as `date` has Clock and `imagepng` has Console. A handle can be a terminal or a
+// file, so the functions that read or write through one, such as `fwrite` and `fgets`, have both Console and Files, and
+// every other function on a handle, such as `fflush`, has Files. A function that prints a file, such as `readfile`, has
+// both too.
 const RULES = [
     ['Zend', '~^(die|exit)$~', 'Process'],
     ['Zend', '~^gc_~', 'Process'],
     ['Zend', '~^(trigger_error|user_error)$~', 'Console'],
+    ['Zend', '~^debug_print_backtrace$~', 'Console'],
     ['Zend', '~^(class_alias|define|error_reporting|extension_loaded|get_error_handler|get_exception_handler|get_extension_funcs|get_included_files|get_loaded_extensions|get_required_files|get_resources|restore_error_handler|restore_exception_handler|set_error_handler|set_exception_handler|zend_thread_id)$~', 'Environment'],
     ['Zend', '~~', null],
 
     ['standard', '~^(mail)$~', 'Mail'],
     ['standard', '~^(array_rand|password_hash|shuffle|str_shuffle)$~', 'Random'],
     ['standard', '~^(gettimeofday|hrtime|microtime|sleep|time_nanosleep|time_sleep_until|uniqid|usleep)$~', 'Clock'],
-    ['standard', '~^(exec|getmygid|getmyinode|getmypid|getmyuid|getrusage|memory_get_peak_usage|memory_get_usage|memory_reset_peak_usage|passthru|pclose|popen|proc_\w+|register_shutdown_function|register_tick_function|set_time_limit|shell_exec|sys_getloadavg|system|unregister_tick_function)$~', 'Process'],
+    ['standard', '~^(passthru|system)$~', 'Console, Process'],
+    ['standard', '~^(exec|getmygid|getmyinode|getmypid|getmyuid|getrusage|memory_get_peak_usage|memory_get_usage|memory_reset_peak_usage|pclose|popen|proc_\w+|register_shutdown_function|register_tick_function|set_time_limit|shell_exec|sys_getloadavg|unregister_tick_function)$~', 'Process'],
     ['standard', '~^(dns_\w+|checkdnsrr|fsockopen|get_headers|gethostbyaddr|gethostbyname|gethostbynamel|getmxrr|http_clear_last_response_headers|http_get_last_response_headers|pfsockopen|stream_socket_\w+)$~', 'Http'],
-    ['standard', '~^(fgets|fprintf|fputs|fwrite|vfprintf)$~', 'Console, Files'],
+    ['standard', '~^(fgetc|fgetcsv|fgets|fprintf|fputcsv|fputs|fread|fscanf|fwrite|vfprintf)$~', 'Console, Files'],
+    ['standard', '~^(fpassthru|highlight_file|readfile|show_source)$~', 'Console, Files'],
     ['standard', '~^(ob_\w+|connection_aborted|connection_status|debug_zval_dump|flush|header|header_register_callback|header_remove|headers_list|headers_sent|highlight_string|http_response_code|ignore_user_abort|output_add_rewrite_var|output_reset_rewrite_vars|phpcredits|phpinfo|print_r|printf|request_parse_body|sapi_windows_\w+|setcookie|setrawcookie|var_dump|var_export|vprintf)$~', 'Console'],
     ['standard', '~^(ini_parse_quantity)$~', null],
     ['standard', '~^(ini_\w+|assert_options|chdir|chroot|config_get_hash|dl|error_clear_last|error_get_last|get_cfg_var|get_current_user|get_include_path|getcwd|getenv|gethostname|getopt|getprotobyname|getprotobynumber|getservbyname|getservbyport|localeconv|net_get_interfaces|nl_langinfo|php_ini_loaded_file|php_ini_scanned_files|php_sapi_name|php_uname|phpversion|putenv|set_include_path|setlocale|strcoll)$~', 'Environment'],
-    ['standard', '~^(file\w*|stream_\w+|chgrp|chmod|chown|clearstatcache|closedir|closelog|copy|dir|disk_free_space|disk_total_space|diskfreespace|error_log|fclose|fdatasync|feof|fflush|fgetc|fgetcsv|flock|fopen|fpassthru|fputcsv|fread|fscanf|fseek|fstat|fsync|ftell|ftok|ftruncate|get_browser|get_meta_tags|getimagesize|getlastmod|glob|highlight_file|iptcembed|is_dir|is_executable|is_file|is_link|is_readable|is_uploaded_file|is_writable|is_writeable|lchgrp|lchown|link|linkinfo|lstat|md5_file|mkdir|move_uploaded_file|opendir|openlog|parse_ini_file|php_strip_whitespace|readdir|readfile|readlink|realpath|realpath_cache_get|realpath_cache_size|rename|rewind|rewinddir|rmdir|scandir|set_file_buffer|sha1_file|show_source|socket_get_status|socket_set_blocking|socket_set_timeout|stat|symlink|sys_get_temp_dir|syslog|tempnam|tmpfile|touch|umask|unlink)$~', 'Files'],
+    ['standard', '~^(file\w*|stream_\w+|chgrp|chmod|chown|clearstatcache|closedir|closelog|copy|dir|disk_free_space|disk_total_space|diskfreespace|error_log|fclose|fdatasync|feof|fflush|flock|fopen|fseek|fstat|fsync|ftell|ftok|ftruncate|get_browser|get_meta_tags|getimagesize|getlastmod|glob|iptcembed|is_dir|is_executable|is_file|is_link|is_readable|is_uploaded_file|is_writable|is_writeable|lchgrp|lchown|link|linkinfo|lstat|md5_file|mkdir|move_uploaded_file|opendir|openlog|parse_ini_file|php_strip_whitespace|readdir|readlink|realpath|realpath_cache_get|realpath_cache_size|rename|rewind|rewinddir|rmdir|scandir|set_file_buffer|sha1_file|socket_get_status|socket_set_blocking|socket_set_timeout|stat|symlink|sys_get_temp_dir|syslog|tempnam|tmpfile|touch|umask|unlink)$~', 'Files'],
     ['standard', '~~', null],
 
     ['date', '~^(date_default_timezone_get|date_default_timezone_set)$~', 'Environment'],
@@ -73,7 +78,8 @@ const RULES = [
 
     ['gd', '~^(imagegrabscreen|imagegrabwindow)$~', 'Console'],
     ['gd', '~^(imagecreatefromstring)$~', null],
-    ['gd', '~^(imageavif|imagebmp|imagecreatefrom\w+|imageftbbox|imagefttext|imagegd|imagegd2|imagegif|imagejpeg|imageloadfont|imagepng|imagettfbbox|imagettftext|imagewbmp|imagewebp|imagexbm)$~', 'Files'],
+    ['gd', '~^(imageavif|imagebmp|imagegd|imagegd2|imagegif|imagejpeg|imagepng|imagewbmp|imagewebp|imagexbm)$~', 'Console, Files'],
+    ['gd', '~^(imagecreatefrom\w+|imageftbbox|imagefttext|imageloadfont|imagettfbbox|imagettftext)$~', 'Files'],
     ['gd', '~~', null],
 
     ['gettext', '~~', 'Environment'],
@@ -160,7 +166,8 @@ const RULES = [
     ['zip', '~~', 'Files'],
 
     ['zlib', '~^(ob_gzhandler|zlib_get_coding_type)$~', 'Console'],
-    ['zlib', '~^(gzclose|gzeof|gzfile|gzgetc|gzgets|gzopen|gzpassthru|gzputs|gzread|gzrewind|gzseek|gztell|gzwrite|readgzfile)$~', 'Files'],
+    ['zlib', '~^(gzpassthru|readgzfile)$~', 'Console, Files'],
+    ['zlib', '~^(gzclose|gzeof|gzfile|gzgetc|gzgets|gzopen|gzputs|gzread|gzrewind|gzseek|gztell|gzwrite)$~', 'Files'],
     ['zlib', '~~', null],
 
     ['sapi', '~^(apache_getenv|apache_get_modules|apache_get_version|apache_setenv)$~', 'Environment'],
@@ -173,15 +180,18 @@ const ROWS = [
     ['Zend', 'exit', 'Process'],
     ['Zend', 'gc_collect_cycles', 'Process'],
     ['Zend', 'trigger_error', 'Console'],
+    ['Zend', 'debug_print_backtrace', 'Console'],
     ['Zend', 'set_error_handler', 'Environment'],
     ['Zend', 'strlen', null],
 
     ['standard', 'mail', 'Mail'],
     ['standard', 'shuffle', 'Random'],
     ['standard', 'microtime', 'Clock'],
+    ['standard', 'system', 'Console, Process'],
     ['standard', 'proc_open', 'Process'],
     ['standard', 'stream_socket_client', 'Http'],
     ['standard', 'fwrite', 'Console, Files'],
+    ['standard', 'readfile', 'Console, Files'],
     ['standard', 'printf', 'Console'],
     ['standard', 'ini_parse_quantity', null],
     ['standard', 'getenv', 'Environment'],
@@ -227,7 +237,8 @@ const ROWS = [
 
     ['gd', 'imagegrabscreen', 'Console'],
     ['gd', 'imagecreatefromstring', null],
-    ['gd', 'imagepng', 'Files'],
+    ['gd', 'imagepng', 'Console, Files'],
+    ['gd', 'imagecreatefrompng', 'Files'],
     ['gd', 'imagecreatetruecolor', null],
 
     ['gettext', 'gettext', 'Environment'],
@@ -314,6 +325,7 @@ const ROWS = [
     ['zip', 'zip_open', 'Files'],
 
     ['zlib', 'ob_gzhandler', 'Console'],
+    ['zlib', 'readgzfile', 'Console, Files'],
     ['zlib', 'gzopen', 'Files'],
     ['zlib', 'gzcompress', null],
 
@@ -416,8 +428,12 @@ function stubs(string $root): string
     if (is_dir($folder)) {
         return $folder;
     }
+    // A fresh checkout has no sharp/build, and curl cannot write the archive without it.
+    if (!is_dir(dirname($folder)) && !mkdir(dirname($folder), 0777, true)) {
+        fail('cannot create ' . dirname($folder) . '.');
+    }
     $archive = "$folder.tar.gz";
-    $url = 'https://codeload.github.com/phpstan/php-8-stubs/tar.gz/refs/tags/' . STUBS_VERSION;
+    $url ='https://codeload.github.com/phpstan/php-8-stubs/tar.gz/refs/tags/' . STUBS_VERSION;
     foreach ([['curl', '-sSfL', '-o', $archive, $url], ['tar', '-xzf', $archive, '-C', dirname($folder)]] as $command) {
         if ($command[0] === 'tar' && hash_file('sha256', $archive) !== STUBS_SHA256) {
             fail("$url does not have the SHA-256 " . STUBS_SHA256 . '.');

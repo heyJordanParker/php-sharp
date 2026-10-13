@@ -2,9 +2,9 @@
 
 ## Decision
 
-A statement that can never run is a compile error. That covers every form that ends a block: a statement after `return`, `throw`, `global.exit(…)`, `break` or `continue` in the same block, one after an `if` whose every branch ends the block, one after a loop that never ends, and a block after a condition that never finishes.
+A statement that can never run is a compile error. That covers every form that ends a block: a statement after `return`, `throw`, `global.exit(…)`, `break` or `continue` in the same block, one after an `if` whose every branch ends the block, one after a loop that never ends, such as a `do` whose body ends the block with no `break` or `continue`, and a block after a condition that never finishes.
 
-The checker refuses the first statement of the block that never runs, once per block, as Java does. The error names the line of the statement that ends the block, and says to delete the statement or move it above that line. A `.php` file keeps PHP's rule, where such code compiles.
+The checker refuses the first statement of the block that never runs, once per block, as Java does. The error names the line of the statement that ends the block, and says to delete the statement or move it above that line. A condition of an `if` or a `for … of` that never finishes is refused at the condition, which the error says to write as its own statement in place of the `if` or the `for`. A `.php` file keeps PHP's rule, where such code compiles.
 
 ## Options
 
