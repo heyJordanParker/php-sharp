@@ -1,0 +1,21 @@
+namespace Demo;
+
+public class Ids
+{
+    public static int identity(Object value) => spl_object_id(value);
+
+    public static Object? either(Object? first, Object fallback) => first ?? fallback;
+
+    public static string describe(Object source)
+    {
+        if (source is Ticket ticket) {
+            return ticket.code();
+        }
+        return "other";
+    }
+}
+
+public class Ticket
+{
+    public string code() => "T7";
+}

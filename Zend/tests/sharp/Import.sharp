@@ -1,0 +1,54 @@
+namespace Demo;
+
+import SplFileObject;
+
+public class Import
+{
+    public Import(private List<Row> pending, private Row latest)
+    {
+    }
+
+    public static Iterable<List<string>> rows(string path)
+    {
+        const file = new SplFileObject(path);
+        while (!file.eof()) {
+            const text = rtrim(file.fgets());
+            if (text !== "") {
+                yield explode(",", text);
+            }
+        }
+    }
+
+    public Iterable<Row> all()
+    {
+        yield ...this.pending;
+        yield this.latest;
+    }
+
+    public static int fields(Iterable<List<string>> rows)
+    {
+        let total = 0;
+        for (const row of rows) {
+            total += count(row);
+        }
+        return total;
+    }
+
+    public static string last(Iterable<Row> rows)
+    {
+        let found = "";
+        for (const row of rows) {
+            found = row.number;
+        }
+        return found;
+    }
+
+    public string lastPending() => Import.last(this.pending);
+}
+
+public class Row
+{
+    public Row(public string number { get; })
+    {
+    }
+}

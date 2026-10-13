@@ -29,6 +29,9 @@ $fixtures = [
     'Interop' => null,
     'Lambdas' => null,
     'Checkout' => null,
+    'Ids' => null,
+    'Shipment' => null,
+    'Import' => null,
 ];
 
 foreach ($fixtures as $fixture => $library) {
@@ -101,3 +104,6 @@ Lambdas: different opcodes and lines in 36 op arrays, same signatures in 1 class
   .php   L0099 0009 VERIFY_RETURN_TYPE
   .php   L0099 0010 RETURN null
 Checkout: same opcodes and lines in 10 op arrays, same signatures in 1 classes
+Ids: same opcodes and lines in 5 op arrays, same signatures in 2 classes
+Shipment: same opcodes and lines in 4 op arrays, same signatures in 1 classes
+Import: same opcodes and lines in 8 op arrays, same signatures in 2 classes

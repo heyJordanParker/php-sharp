@@ -1,0 +1,14 @@
+namespace Demo;
+
+public class Shipment
+{
+    public string kind() => typeof(this);
+
+    public static string classOf(Shipment shipment) => typeof(shipment);
+
+    public static string heldClass(Shipment shipment)
+    {
+        const held = shipment;
+        return typeof(held);
+    }
+}
