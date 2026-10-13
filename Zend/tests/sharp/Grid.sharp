@@ -1,0 +1,204 @@
+namespace Demo;
+
+import Lib.RowSet;
+
+class Grid
+{
+    public List<List<int>> rows { get; set; } = [[1, 2], [3]];
+    public int writes { get; private set; } = 0;
+    public List<Map<string, int>> tallies
+    {
+        get => field;
+        set {
+            field = value;
+            this.writes = this.writes + 1;
+        }
+    } = [["a": 1]];
+    public Map<string, int> totals
+    {
+        get => field;
+        set {
+            field = value;
+            this.writes = this.writes + 1;
+        }
+    } = ["a": 1];
+    public List<List<int>> table
+    {
+        get => field;
+        set {
+            field = value;
+            this.writes = this.writes + 1;
+        }
+    } = [[1, 2], [3]];
+    public List<List<int>?> spare { get; set; } = [[1], null];
+    public List<List<int>?> lines
+    {
+        get => field;
+        set {
+            field = value;
+            this.writes = this.writes + 1;
+        }
+    } = [[1], null];
+    private int calls = 0;
+
+    public static List<List<int>> changed(List<List<int>> grid)
+    {
+        grid[0].add(5);
+        grid[1].insert(0, 7);
+        grid[0].remove(1);
+        grid[1].set(0, 8);
+        return grid;
+    }
+
+    public static List<List<int>> cleared(List<List<int>> grid, int row)
+    {
+        grid[row].clear();
+        return grid;
+    }
+
+    public static List<List<int>> kept(List<List<int>> grid)
+    {
+        List<List<int>> copy = grid;
+        grid[0].add(grid[0].count());
+        return [copy[0], grid[0]];
+    }
+
+    public static List<List<List<int>>> deep(List<List<List<int>>> cube)
+    {
+        cube[1][0].add(3);
+        return cube;
+    }
+
+    public static List<Set<int>> sets(List<Set<int>> sets)
+    {
+        sets[0].add(4);
+        sets[1].remove(2);
+        return sets;
+    }
+
+    public static List<Map<string, int>> maps(List<Map<string, int>> maps)
+    {
+        maps[0].remove("a");
+        maps[1]["c"] = 3;
+        maps[1]["b"] ??= 9;
+        maps[0]["d"] ??= 4;
+        return maps;
+    }
+
+    public List<List<int>> held()
+    {
+        this.rows[0].add(9);
+        this.rows[1].clear();
+        return this.rows;
+    }
+
+    public List<Map<string, int>> hooked()
+    {
+        this.tallies[0]["b"] = 2;
+        this.tallies[0].remove("a");
+        return this.tallies;
+    }
+
+    public Map<string, int> totalled()
+    {
+        this.totals["c"] = 3;
+        this.totals["a"] ??= 9;
+        this.totals["d"] ??= 4;
+        return this.totals;
+    }
+
+    public List<List<int>> once(List<List<int>> grid)
+    {
+        grid[this.next()].remove(2);
+        return grid;
+    }
+
+    public static List<List<int>> missing(List<List<int>> grid, int row)
+    {
+        grid[row].add(1);
+        return grid;
+    }
+
+    public static List<Map<string, int>> missingWrite(List<Map<string, int>> maps, int row)
+    {
+        maps[row]["c"] = 3;
+        return maps;
+    }
+
+    public List<List<int>> emptied()
+    {
+        this.table[0].clear();
+        return this.table;
+    }
+
+    public static List<Any?> skipped(List<List<int>?> grid)
+    {
+        grid[0]?.add(5);
+        grid[1]?.add(6);
+        grid[9]?.add(7);
+        grid[9]?.clear();
+        return [grid, grid[9]?.remove(1), grid[9]?.contains(1), grid[9]?.count()];
+    }
+
+    public List<Any?> spareSkipped()
+    {
+        this.spare[0]?.add(5);
+        this.spare[1]?.add(6);
+        this.spare[9]?.add(7);
+        this.spare[9]?.clear();
+        return [this.spare, this.spare[9]?.remove(1), this.spare[9]?.contains(1), this.spare[9]?.count()];
+    }
+
+    public List<Any?> linesSkipped()
+    {
+        this.lines[0]?.add(5);
+        this.lines[1]?.add(6);
+        this.lines[9]?.add(7);
+        this.lines[9]?.clear();
+        return [this.lines, this.lines[9]?.remove(1), this.lines[9]?.contains(1), this.lines[9]?.count()];
+    }
+
+    public static List<Any?> otherSkips(List<List<int>> grid, List<Map<string, int>> maps, List<Set<int>> sets)
+    {
+        grid[9]?.insert(0, 1);
+        sets[9]?.add(1);
+        sets[9]?.clear();
+        return [
+            grid, grid[9]?.indexOf(1), grid[9]?.last(), grid[9]?.entries(),
+            maps, maps[9]?.remove("a"), maps[9]?.has("a"),
+            sets, sets[9]?.remove(1), sets[9]?.contains(1),
+        ];
+    }
+
+    public static void nestedAdd(List<List<List<int>>> cube) { cube[9][0]?.add(1); }
+
+    public static void nestedClear(List<List<List<int>>> cube) { cube[9][0]?.clear(); }
+
+    public static void nestedRemove(List<List<List<int>>> cube) { cube[9][0]?.remove(1); }
+
+    public static int? nestedCount(List<List<List<int>>> cube) => cube[9][0]?.count();
+
+    public static bool? nestedContains(List<List<List<int>>> cube) => cube[9][0]?.contains(1);
+
+    public static Any? nestedEntries(List<List<List<int>>> cube) => cube[9][0]?.entries();
+
+    public List<List<int>> rowsMissing(int row)
+    {
+        this.rows[row].add(7);
+        return this.rows;
+    }
+
+    public List<List<int>> tableMissing(int row)
+    {
+        this.table[row].add(7);
+        return this.table;
+    }
+
+    public static List<int> doubled(RowSet rows) => rows[0].map(n => n * 2);
+
+    private int next()
+    {
+        this.calls = this.calls + 1;
+        return this.calls - 1;
+    }
+}
