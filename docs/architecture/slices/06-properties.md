@@ -219,6 +219,61 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 - **The bridge, static:** PHP has no hooks on a static property. The value is held in a hidden static, or in #121's singleton store (question 11), behind a hidden static method `plan#lazy`. Every PHP# read of `StaticLazy.plan` lowers to a call of that method. Decision 3's static computed properties and accessor bodies use the same read lowering, without the keeping.
 - **Engine:** `Lazy.sharp` and `lazy.phpt`: the body runs once, a changed input does not recompute, a throw keeps nothing, and a `static lazy` runs once per request.
 
+# Queue 1: team-lead's answers, and what they needed checked
+
+team-lead accepted this note and answered questions 1 to 6, 9, 10, the parts of 11 that are not purity, and 12. Questions 7, 8, 11's purity and 13 went to Jordan, and their parts wait. Decisions 1 to 6 are approved, line 447 included. Found item 1 is fixed in this PR.
+
+## Question 2: `new List<Tag>()`
+
+Section 12 makes a collection with a literal, under "**Literals:**" on line 816, and names no constructor for `List`, `Map` or `Set` anywhere. It does not refuse `new List<…>()` in words either. The checker's `List` (`crates/prelude/assets/extensions/sharp.php`) declares no constructor, and #102 adds none. A sweep of `docs/spec.md` and `README.md` for `new List<`, `new Map<` and `new Set<` finds line 207 and nothing else. So line 207 becomes `public List<Tag> tags { get; set; } = [];`, the form line 788 already writes for `Order.lines`.
+
+## Question 4: what PHP runs on a redeclared plain PHP property
+
+Stock PHP 8.5.1 ran each form a PHP# override can lower to, over a parent with a constructor that reads the property and a method that writes it. The scripts are `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-properties/php-hooks/forms.php` and `set-levels.php`.
+
+| Form | Lowers from | Typed parent | Untyped parent |
+|---|---|---|---|
+| `protected $table = "orders";` | `{ get; set; }` | Runs | Runs, with the type dropped (decision 028) |
+| `protected ?string $table` over an untyped parent | a written type kept | | Fatal: "Type of C::$table must be omitted to match the parent definition" |
+| `{ get => …; }` and `{ set => …; }` hooks | accessor bodies, observers, `via` | Runs: the parent's constructor and its own writes go through the hooks | Runs |
+| `protected readonly ?string $table;` | `{ get; }` | Fatal: "Cannot redeclare non-readonly property TypedParent::$table as readonly" | Fatal, the same |
+| `protected protected(set)` on a protected parent | `init`, `protected set` | Runs: PHP drops a set level equal to the property's | Fatal: "Property with asymmetric visibility … must have type" |
+| `public protected(set)` and `protected private(set)` | `init` on a public parent, any narrower `set` | Fatal: "Set access level of C::$timestamps must be omitted (as in class PublicTyped)" | Fatal: "must have type" |
+
+So an override of a plain PHP property supports, as forms PHP runs:
+
+- `{ get; set; }`, with or without accessor bodies, observers or `via`, typed or untyped.
+- `{ get; init; }` and `{ get; protected set; }` only where the level equals the property's, which the bridge already drops (`accessor_flags`).
+
+Two forms can't run as they lower today, and they are reported here before any refusal:
+
+- **`{ get; }`**: PHP refuses `readonly` over a non-`readonly` parent, typed or untyped. It could run as a backed property with a `get` hook and no `readonly` (`typed-public-get-hook-only` runs). But the plain PHP parent's own code then writes it after the constructor, as Eloquent's `Model` does, so "set once" would not hold.
+- **A `set` or `init` narrower than the property**: PHP refuses a set level the parent's property does not have, typed or untyped.
+
+Proposed: both are the analyzer's error at the override, naming the parent: "`Model.table` is settable, so its override has `set`." and "`Model.timestamps` is set at `public`, so its override's `set` is too."
+
+# Section 5: `internal`
+
+Question 1's answer: section 5's `internal` is built whole in this PR, once team-lead approves this part. Every line of section 5 about `internal`, observed with the probes in `app/Tenant/` of the scratch project:
+
+| Line | Rule | Today | Mechanism |
+|---|---|---|---|
+| 157 | `internal` reaches its namespace and every namespace below it | Refused everywhere: "This modifier is not supported yet in PHP#." on a member, a parameter, a declaration and an accessor (`internal_is_not_supported_yet`, and `InternalSet` at line 197) | Semantics lifts the refusal. The analyzer's member visibility check (`crates/analyzer/src/visibility/mod.rs`) gains a reach: the caller's namespace is the member's namespace or one below it. The bridge lowers `internal` to PHP's `public`, and `internal set` to no set level, because PHP has no namespace visibility. The rule is the checker's alone |
+| 157 | `internal` is the default for classes | Silently accepted: `Hidden`, `class Hidden` with no modifier in `App.Tenant.Store`, is used from `App.Tenant.Other` (`SiblingUse`) with no error | The analyzer refuses a reference to a class, interface, enum or struct from outside its reach, wherever a type name is resolved: `new`, a type, `import`, a static access, `is`, `as`, `typeof` |
+| 160 | A file's namespace matches its path | Silently accepted: `app/Tenant/Other/Mismatch.sharp` declares `namespace App.Tenant.Store;` and compiles | Semantics compares the file's `namespace` line with the PSR-4 folder Composer maps it to, which the compiler already reads for a law's Lean module name |
+| 161 | A test folder may declare the namespace it tests, which gives it `internal` access | Not checked: `Tests/Tenant/HiddenTest.sharp` declares `App.Tenant.Store` and compiles, because nothing is checked | Line 160's check accepts a file in a test folder declaring any namespace. Proposed: a test folder is one Composer's `autoload-dev` maps, which is how a Composer project marks its tests. The spec does not define it, and #121 defines only a test file (one holding a test module). This is for team-lead to approve |
+| 162 | A member is never more visible than its class | Not checked, because no class is narrower than `public` today | The analyzer's reach of a member is the narrower of its own and its class's, as C#'s effective accessibility is |
+| 164 | Too narrow is a compile error at the caller | Works for `private` and `protected`. None for `internal` | Line 157's check, with the caller's namespace in the message: "`Hidden` is internal to `App.Tenant.Store`, and `App.Tenant.Other` is outside it." |
+| 165 | Too wide is a warning, for example a `public` member nothing outside its namespace uses | None: `Wide.unusedOutside` is `public` and used only in its class, and `mago analyze` reports nothing | The analyzer's unused-member pass (`statement/class_like/unused_members.rs`) records, per member, whether a use comes from outside its namespace, and warns on a `public` one with none. The warning counts uses across the whole project, so it runs in the same project-wide pass that reports an unused member |
+| 166 | There is no named reach, such as `internal(App\Tenant)` | Refused with 8 generic "Parse error encountered during parsing" (`NamedReach`) | A named parse error at the `(`: "`internal` takes no namespace: move the shared helper to the parent namespace." |
+| 183 | An interface member is as visible as its interface | Not checked (`InternalInterface` with no modifier is unreachable by no rule) | Line 162's effective reach, for interface members too |
+| 184 | Interface members are exempt from the too-wide warning | Holds trivially today | Line 165's warning skips interface members |
+
+What `internal` changes for code that compiles today:
+
+- **Every class with no modifier becomes `internal`.** A `.sharp` class written `class X` and used from a sibling namespace stops compiling. That is the spec's rule, and it is the risk of this part: the PR runs every engine fixture and every spec example through it, and reports each one it refuses.
+- **Plain PHP is unchanged.** A `.php` file's references are never checked against `internal`, because PHP has no namespace visibility and plain PHP is not checked.
+
 # Public names this Slice adds or changes
 
 team-lead approves these. Everything not in this tree is tactical.
