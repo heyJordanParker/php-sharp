@@ -8,9 +8,9 @@ class Roster
     {
         const ranked = members.sortedBy(n => -n);
         const tens = members.map(n => n * 10);
-        const busy = members.filterValues(n => n > 1);
+        const busy = members.filter(n => n > 1);
         const kept = members.filter(n => n >= (members.get(Standing.Active) ?? 0));
-        members.delete(Standing.Closed);
+        members.remove(Standing.Closed);
         return [
             implode(",", ranked),
             implode(",", tens),

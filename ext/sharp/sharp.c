@@ -731,14 +731,18 @@ static zend_object_handlers sharp_collection_handlers;
  * array where it lives: a local, a plain property or a static property through its slot, and a
  * property with hooks, or one the caller may not write in place, through write_property with a
  * changed copy. A static property the caller may not set keeps a copy, and a change throws as an
- * assignment to it does. A value that lives nowhere is a copy. It exists only as the $this of that
- * one call. */
+ * assignment to it does. A value that lives nowhere is a copy. An element of a List, read by index
+ * from the collection that holds it, lives at that index there, so it changes through that
+ * collection, as `grid[0].add(5)` does (spec section 12). It exists only as the $this of that one
+ * call, or as the collection an element was read from. */
 typedef struct {
 	zval *slot;
 	zend_object *owner;
 	zend_string *property;
 	const zend_property_info *static_property;
 	const zend_class_entry *scope;
+	zend_object *container;
+	zval index;
 	zval value;
 	zend_object std;
 } sharp_collection;
@@ -764,8 +768,10 @@ static void sharp_collection_clear(sharp_collection *collection)
 {
 	zend_object *owner = collection->owner;
 	zend_string *property = collection->property;
-	zval value;
+	zend_object *container = collection->container;
+	zval index, value;
 
+	ZVAL_COPY_VALUE(&index, &collection->index);
 	ZVAL_COPY_VALUE(&value, &collection->value);
 	memset(collection, 0, XtOffsetOf(sharp_collection, std));
 	if (owner) {
@@ -774,6 +780,10 @@ static void sharp_collection_clear(sharp_collection *collection)
 	if (property) {
 		zend_string_release(property);
 	}
+	if (container) {
+		OBJ_RELEASE(container);
+	}
+	zval_ptr_dtor(&index);
 	zval_ptr_dtor(&value);
 }
 
@@ -875,11 +885,50 @@ void sharp_collection_of_static_property(zval *result, zval *slot, const zend_pr
 	}
 }
 
-/* Plain PHP code may unset a property between the fetch and the call. */
-static zval *sharp_collection_array(sharp_collection *collection)
+/* The key a Map method or an index takes: an int or a string. */
+static bool sharp_collection_key(zval *key, zend_string **string_key, zend_long *long_key)
 {
-	zval *array = collection->slot ? collection->slot : &collection->value;
+	if (Z_TYPE_P(key) == IS_LONG) {
+		*string_key = NULL;
+		*long_key = Z_LVAL_P(key);
+		return true;
+	}
+	if (Z_TYPE_P(key) == IS_STRING) {
+		*string_key = Z_STR_P(key);
+		return true;
+	}
 
+	zend_argument_type_error(1, "must be of type string|int, %s given", zend_zval_value_name(key));
+	return false;
+}
+
+/* The element at index. For a missing key it is NULL after throwing OutOfRangeException, as a PHP#
+ * index read does, or NULL alone when quiet, as a `?.` read is (spec section 12). */
+static zval *sharp_collection_element(HashTable *array, zval *index, bool quiet)
+{
+	zend_string *string_key;
+	zend_long long_key;
+
+	if (!sharp_collection_key(index, &string_key, &long_key)) {
+		return NULL;
+	}
+	zval *element = string_key ? zend_symtable_find(array, string_key) : zend_hash_index_find(array, long_key);
+	if (!element && !quiet) {
+		if (string_key) {
+			zend_throw_exception_ex(spl_ce_OutOfRangeException, 0, "Undefined array key \"%s\"", ZSTR_VAL(string_key));
+		} else {
+			zend_throw_exception_ex(spl_ce_OutOfRangeException, 0, "Undefined array key " ZEND_LONG_FMT, long_key);
+		}
+		return NULL;
+	}
+
+	return element;
+}
+
+/* Plain PHP code may unset a property between the fetch and the call, and a function an argument
+ * runs may remove the element an element collection was read from. */
+static zval *sharp_collection_checked(zval *array)
+{
 	ZVAL_DEREF(array);
 	if (UNEXPECTED(Z_TYPE_P(array) != IS_ARRAY)) {
 		zend_throw_error(NULL, "Cannot call %s() on a collection that was unset", get_active_function_name());
@@ -889,9 +938,39 @@ static zval *sharp_collection_array(sharp_collection *collection)
 	return array;
 }
 
+static HashTable *sharp_collection_change(sharp_collection *collection);
+
+/* The array the collection reads. An element collection reads it from its container each time, so
+ * it holds no copy that would make the element shared when it changes. */
+static zval *sharp_collection_array(sharp_collection *collection)
+{
+	if (!collection->container) {
+		return sharp_collection_checked(collection->slot ? collection->slot : &collection->value);
+	}
+
+	zval *container = sharp_collection_array(sharp_collection_from(collection->container));
+	zval *element = container ? sharp_collection_element(Z_ARRVAL_P(container), &collection->index, false) : NULL;
+
+	return element ? sharp_collection_checked(element) : NULL;
+}
+
+/* Where a change writes the array: what sharp_collection_array reads, but for an element collection
+ * the element inside its container's changed array, so a change separates every array it is in. */
+static zval *sharp_collection_place(sharp_collection *collection)
+{
+	if (!collection->container) {
+		return sharp_collection_array(collection);
+	}
+
+	HashTable *container = sharp_collection_change(sharp_collection_from(collection->container));
+	zval *element = container ? sharp_collection_element(container, &collection->index, false) : NULL;
+
+	return element ? sharp_collection_checked(element) : NULL;
+}
+
 static HashTable *sharp_collection_change(sharp_collection *collection)
 {
-	zval *array = sharp_collection_array(collection);
+	zval *array = sharp_collection_place(collection);
 
 	if (!array) {
 		return NULL;
@@ -902,9 +981,13 @@ static HashTable *sharp_collection_change(sharp_collection *collection)
 }
 
 /* Runs a property's set hook once with the changed array, in the caller's scope, or throws for a
- * static property the caller may not set. */
+ * static property the caller may not set. An element collection writes back what holds it. */
 static void sharp_collection_write_back(sharp_collection *collection)
 {
+	if (collection->container) {
+		sharp_collection_write_back(sharp_collection_from(collection->container));
+		return;
+	}
 	if (!collection->property && !collection->static_property) {
 		return;
 	}
@@ -975,21 +1058,89 @@ ZEND_METHOD(Sharp_Collection, set)
 	zval_ptr_dtor(&old);
 }
 
-/* The key a Map method takes: an int or a string. */
-static bool sharp_collection_key(zval *key, zend_string **string_key, zend_long *long_key)
+/* Replaces the list at array with a renumbered copy: value goes in at index, or, with no value, the
+ * element at index leaves. A List's keys are its positions. The old list is released last, so a
+ * destructor an element runs sees the changed list. */
+static void sharp_collection_renumber(sharp_collection *collection, zend_long index, zval *value)
 {
-	if (Z_TYPE_P(key) == IS_LONG) {
-		*string_key = NULL;
-		*long_key = Z_LVAL_P(key);
-		return true;
+	zval *array = sharp_collection_place(collection);
+	if (!array) {
+		return;
 	}
-	if (Z_TYPE_P(key) == IS_STRING) {
-		*string_key = Z_STR_P(key);
-		return true;
+	HashTable *elements = Z_ARRVAL_P(array);
+	zval changed, old;
+	zval *element;
+	zend_long position = 0;
+
+	array_init_size(&changed, zend_hash_num_elements(elements) + (value ? 1 : 0));
+	ZEND_HASH_FOREACH_VAL(elements, element) {
+		if (position == index && value) {
+			Z_TRY_ADDREF_P(value);
+			zend_hash_next_index_insert_new(Z_ARRVAL(changed), value);
+		}
+		if (position != index || value) {
+			Z_TRY_ADDREF_P(element);
+			zend_hash_next_index_insert_new(Z_ARRVAL(changed), element);
+		}
+		position++;
+	} ZEND_HASH_FOREACH_END();
+	if (position == index && value) {
+		Z_TRY_ADDREF_P(value);
+		zend_hash_next_index_insert_new(Z_ARRVAL(changed), value);
 	}
 
-	zend_argument_type_error(1, "must be of type string|int, %s given", zend_zval_value_name(key));
-	return false;
+	ZVAL_COPY_VALUE(&old, array);
+	ZVAL_COPY_VALUE(array, &changed);
+	sharp_collection_write_back(collection);
+	zval_ptr_dtor(&old);
+}
+
+/* Kotlin's add(index, element): value goes in at index, from 0 to the count, and the elements from
+ * index on move up one. Outside that range it throws as set does past the end. */
+ZEND_METHOD(Sharp_Collection, insert)
+{
+	zend_long index;
+	zval *value;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_LONG(index)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	sharp_collection *collection = sharp_collection_from(Z_OBJ_P(ZEND_THIS));
+	zval *array = sharp_collection_array(collection);
+	if (!array) {
+		RETURN_THROWS();
+	}
+	if (index < 0 || index > (zend_long) zend_hash_num_elements(Z_ARRVAL_P(array))) {
+		zend_throw_exception_ex(spl_ce_OutOfRangeException, 0, "Undefined array key " ZEND_LONG_FMT, index);
+		RETURN_THROWS();
+	}
+
+	sharp_collection_renumber(collection, index, value);
+}
+
+/* Removes the element at index and renumbers the list. A List's remove(value) finds the index and
+ * calls it, so the list keeps its keys 0 to n-1, where delete would leave a gap. */
+ZEND_METHOD(Sharp_Collection, removeAt)
+{
+	zend_long index;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_LONG(index)
+	ZEND_PARSE_PARAMETERS_END();
+
+	sharp_collection *collection = sharp_collection_from(Z_OBJ_P(ZEND_THIS));
+	zval *array = sharp_collection_array(collection);
+	if (!array) {
+		RETURN_THROWS();
+	}
+	if (!zend_hash_index_exists(Z_ARRVAL_P(array), index)) {
+		zend_throw_exception_ex(spl_ce_OutOfRangeException, 0, "Undefined array key " ZEND_LONG_FMT, index);
+		RETURN_THROWS();
+	}
+
+	sharp_collection_renumber(collection, index, NULL);
 }
 
 ZEND_METHOD(Sharp_Collection, get)
@@ -1064,6 +1215,93 @@ ZEND_METHOD(Sharp_Collection, delete)
 		zend_hash_index_del(changed, long_key);
 	}
 	sharp_collection_write_back(collection);
+}
+
+/* `map[key] = value` and a Set's add on an element of a List, which only the element collection
+ * writes where the List stores it: inserts or replaces the element under key, and gives value. The
+ * old element is released last, so a destructor it runs sees the changed collection. */
+ZEND_METHOD(Sharp_Collection, put)
+{
+	zval *key, *value;
+	zend_string *string_key;
+	zend_long long_key;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ZVAL(key)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_collection_key(key, &string_key, &long_key)) {
+		RETURN_THROWS();
+	}
+
+	sharp_collection *collection = sharp_collection_from(Z_OBJ_P(ZEND_THIS));
+	HashTable *changed = sharp_collection_change(collection);
+	if (!changed) {
+		RETURN_THROWS();
+	}
+	zval *element = string_key ? zend_symtable_find(changed, string_key) : zend_hash_index_find(changed, long_key);
+	zval old;
+	ZVAL_UNDEF(&old);
+	if (element) {
+		ZVAL_COPY_VALUE(&old, element);
+		ZVAL_COPY(element, value);
+	} else {
+		Z_TRY_ADDREF_P(value);
+		if (string_key) {
+			zend_symtable_add_new(changed, string_key, value);
+		} else {
+			zend_hash_index_add_new(changed, long_key, value);
+		}
+	}
+	sharp_collection_write_back(collection);
+	zval_ptr_dtor(&old);
+
+	RETURN_COPY(value);
+}
+
+/* A List's or a Set's clear on an element of a List, which only the element collection writes where
+ * the List stores it. The old elements are released last. */
+ZEND_METHOD(Sharp_Collection, clear)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	sharp_collection *collection = sharp_collection_from(Z_OBJ_P(ZEND_THIS));
+	zval *array = sharp_collection_place(collection);
+	if (!array) {
+		RETURN_THROWS();
+	}
+	zval old;
+	ZVAL_COPY_VALUE(&old, array);
+	ZVAL_EMPTY_ARRAY(array);
+	sharp_collection_write_back(collection);
+	zval_ptr_dtor(&old);
+}
+
+/* A PHP# method call on an index of a List reads the element through the collection that holds it,
+ * as `grid[0].add(5)` does. An element that PHP stores as an array becomes a collection that changes
+ * it at that index, and any other element is read as it is. A missing index throws as a PHP# index
+ * read does, and reads as null before `?.`, whose index FETCH_DIM_IS reads, so the call is skipped. */
+static zval *sharp_collection_read_dimension(zend_object *object, zval *offset, int type, zval *rv)
+{
+	zval *array = sharp_collection_array(sharp_collection_from(object));
+	ZVAL_DEREF(offset);
+	zval *element = array ? sharp_collection_element(Z_ARRVAL_P(array), offset, type == BP_VAR_IS) : NULL;
+	if (!element) {
+		return &EG(uninitialized_zval);
+	}
+
+	ZVAL_DEREF(element);
+	if (Z_TYPE_P(element) != IS_ARRAY) {
+		ZVAL_COPY(rv, element);
+		return rv;
+	}
+	sharp_collection *collection = sharp_collection_new(rv);
+	GC_ADDREF(object);
+	collection->container = object;
+	ZVAL_COPY(&collection->index, offset);
+
+	return rv;
 }
 
 /* The array a method that takes a function reads, held while the function runs, since the function
@@ -1280,12 +1518,17 @@ ZEND_METHOD(Sharp_Collection, any)
 	RETURN_BOOL(element != NULL);
 }
 
-/* The slot of a map under the key a function gave, which spec section 12 makes an int or a string. A
- * string of digits is the int key, as in any PHP array. */
+/* The slot of a map under the key a function gave, which spec section 12 makes an int, a string or a
+ * backed enum case. A case goes in under its backing value, as a Map index stores it, and a string of
+ * digits is the int key, as in any PHP array. */
 static zval *sharp_collection_key_slot(HashTable *map, zval *key)
 {
 	zend_ulong index;
 
+	if (Z_TYPE_P(key) == IS_OBJECT && (Z_OBJCE_P(key)->ce_flags & ZEND_ACC_ENUM)
+		&& Z_OBJCE_P(key)->enum_backing_type != IS_UNDEF) {
+		key = zend_enum_fetch_case_value(Z_OBJ_P(key));
+	}
 	switch (Z_TYPE_P(key)) {
 		case IS_LONG:
 			return zend_hash_index_lookup(map, Z_LVAL_P(key));
@@ -1656,6 +1899,7 @@ static PHP_MINIT_FUNCTION(sharp)
 	sharp_collection_handlers.dtor_obj = sharp_collection_release;
 	sharp_collection_handlers.free_obj = sharp_collection_free;
 	sharp_collection_handlers.clone_obj = NULL;
+	sharp_collection_handlers.read_dimension = sharp_collection_read_dimension;
 	sharp_ce_collection->default_object_handlers = &sharp_collection_handlers;
 
 	register_class_Sharp_Position();
