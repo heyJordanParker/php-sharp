@@ -193,7 +193,6 @@ A value is a number, `true`, `false`, `null`, a quoted string, or a balanced `[â
 
 - PHP# classes, such as `App.Order`, `App.Line`, `App.Money` and `App.Store.Line`.
 - Plain PHP stubs for what the spec calls plain PHP, such as `Illuminate\Database\Eloquent\Model`, Laravel's facades and `Stripe\StripeClient`.
-- Plain PHP functions the spec calls by a bare name, `charge`, `deliver` and `render`, in `app/functions.php`, which the run loads before the example.
 - `App.Elided`, the exception `â€¦` throws, and `App.Outcome`, the plain PHP class a run records values and throws with.
 
 A block's own variables, such as `lines` or `p`, are its setup lines, next to the block, because each block needs different ones.

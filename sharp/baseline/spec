@@ -13,6 +13,7 @@
 §6.5	lazy-property
 §7	method-declarations
 §7	variadic-parameters
+§8	output-and-exit
 §8	standard-library-calls
 §9	parameter-member-limits
 §9.1	constructor-call-this
@@ -70,7 +71,6 @@
 §22	interface-defaults
 §22	plain-php-traits
 §23	import-rename
-§23	library-functions
 §23	own-namespace-shadows
 §23	standard-library-import
 §24	array-object-replacements

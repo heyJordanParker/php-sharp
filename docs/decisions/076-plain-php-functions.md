@@ -1,0 +1,74 @@
+# 76. Calling plain PHP functions
+
+## Decision
+
+A plain PHP function is called through its namespace, as a member. After `import Vendor.Pdf;`, the call is `Pdf.render(html)`. A function in PHP's root namespace is called as `global.now()`. Calling a function by its bare name, and importing a single function, are compile errors. `extern` names a function the same way, as `extern Pdf.render uses Files;` and `extern global.now uses Clock;`.
+
+The error for a bare call names the standard library member that does the same work, such as `name.trim()` for `trim(name)`. One table in the checker maps each PHP function to that member, and also covers the syntax PHP# removed, such as `echo`. A function with no member gets `global.name(…)` in its message, and a function with a member gets its row in the pull request that ships the member.
+
+The standard library calls PHP the same way, with no exemption. This replaces decision 40's "Once the standard library wraps a PHP function, calling that function from `.sharp` code outside the standard library is a compile error that names the method. Functions not wrapped yet stay callable", and the `[Replaces]` attribute that marked which standard library method wraps which function.
+
+PHP#'s Composer package ships an `extern global.name` declaration for each PHP 8.5 built-in function, as decision 43 requires. `sharp/bin/builtins` writes them from PHPStan's php-8-stubs, and its rules give each function one effect, or none, by its extension and its name. A plain PHP library gets no shipped declaration, so a project declares it.
+
+## Options
+
+### Chosen: every call names its namespace, and the checker's table names the replacement
+
+```csharp
+// app/Invoices/Printer.sharp
+namespace App.Invoices;
+
+import Vendor.Pdf;
+
+public class Printer
+{
+    public string print(string html) => Pdf.render(html);            // compiles: the function is called through its namespace
+    public int size(string html) => global.strlen(html);              // compiles: a root function goes through global
+    public string draft(string html) => render(html);                 // compile error: write Pdf.render(…)
+    public string label(string name) => trim(name);                   // compile error: write name.trim()
+}
+```
+
+Every call outside the current class reads `Name.member(…)`, so a reader tells a plain PHP function from a method of the class without looking anything up. The message for a bare call is the same before and after the standard library grows a member, apart from the member it names.
+
+### Rejected: `[Replaces]` on the standard library method that wraps a function
+
+```csharp
+public static class Text
+{
+    [Replaces("strtoupper")]                                         // not PHP#: the attribute marks the wrap
+    public static string upper(this string text) => strtoupper(text);  // the library calls the function bare
+}
+
+public class Label
+{
+    public string title(string name) => strtoupper(name);            // compile error: write name.upper()
+    public string pad(string name) => str_pad(name, 10);             // compiles: nothing wraps str_pad yet
+}
+```
+
+A bare call compiles or fails depending on whether some standard library method wraps the function yet, so each new wrap breaks code that compiled before. The standard library needs an exemption to call the functions it wraps. Each wrap carries an attribute line, and the checker re-reads every standard library file whenever one changes.
+
+### Rejected: importing a single function
+
+```csharp
+import Vendor.Pdf.render;                                            // not PHP#: PHP's `use function`
+
+public class Printer
+{
+    public string print(string html) => render(html);                // reads like a method of Printer
+}
+```
+
+The call reads like a method of the class or a local function value. Only the import line, far from the call, tells them apart.
+
+## Precedent
+
+- **Chosen:** Go, which calls a package's functions as `pdf.Render(html)`. Python after `import pdf`. Java calling Kotlin's top-level functions through their file's class, and C# calling F# modules. C#'s `global::`, which names the root namespace.
+- **Rejected:** PHP's `use function` and Kotlin's import of a single top-level function.
+
+## Spec
+
+- [Section 8, Functions](../spec.md#8-functions)
+- [Section 23, Namespaces and imports](../spec.md#23-namespaces-and-imports)
+- [Section 29, Effects](../spec.md#29-effects)

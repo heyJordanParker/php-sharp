@@ -394,7 +394,8 @@ public class Receipt
 }
 ```
 
-- **Every PHP built-in function is a standard library method,** so calling one by its bare name from `.sharp` code outside the standard library is a compile error that names the method. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
+- **Every PHP built-in function is a standard library method,** so calling one by its bare name from `.sharp` code is a compile error that names the method. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
+- **A built-in the standard library has no method for is called through PHP's root namespace,** as `global.levenshtein(a, b)` (section 23), and the standard library calls PHP the same way.
 
 **Output and exit go through the standard library.** `echo` and `print` are removed, and output goes through `Console` (section 29). `die` is removed, because `die("…")` prints its message and exits with status 0, which reports success. Exiting goes through `Process`.
 
@@ -402,19 +403,23 @@ public class Receipt
 ```csharp
 public class Prune
 {
-    public static void run(int pruned, bool failed)
+    public Prune(private Console console, private Process process) { }
+
+    public void run(int pruned, bool failed)
     {
         if (failed) {
-            fwrite(STDERR, "Prune failed" + PHP_EOL);    // compiles: the message goes to STDERR
-            exit(1);                                     // compiles: ends the process with status 1
+            this.console.writeError("Prune failed");         // compiles: the message goes to standard error
+            this.process.exit(1);                            // compiles: ends the process with status 1
         }
-        printf("Pruned %d carts" + PHP_EOL, pruned);     // compiles
+        this.console.writeLine(`Pruned ${pruned} carts`);    // compiles
     }
 }
 
-echo "Pruned";                                           // compile error: write printf or fwrite
-print "Pruned";                                          // compile error: write printf or fwrite
-die("Prune failed");                                     // compile error: write the message to STDERR, then exit(1)
+echo "Pruned";                                               // compile error: write console.write(text)
+print "Pruned";                                              // compile error: write console.write(text)
+printf("Pruned");                                            // compile error: write console.write(text)
+exit(1);                                                     // compile error: write process.exit(1)
+die("Prune failed");                                         // compile error: write the message with console.writeError, then process.exit(1)
 ```
 
 - Exiting skips every `finally` block, as Java's `System.exit` and C#'s `Environment.Exit` do.
@@ -3248,11 +3253,32 @@ extern StripeClient uses Http;
 - **A declaration file is an ordinary `.sharp` file.** Its `namespace` line matches its path, as section 5 requires.
 - **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, `extern Carbon.now uses Clock;`, `extern Pdf.render uses Files;` for a function after `import Vendor.Pdf;`, or `extern global.now uses Clock;` for a function in PHP's root namespace (section 23).
 - **An `extern` that names no effect declares the class, method or function pure,** as in `extern BigDecimal;`.
+
+<!-- example extern-functions -->
+```php
+namespace Vendor\Pdf;
+
+function render(string $html): string { return $html; }
+```
+
+<!-- example extern-functions -->
+```csharp
+// app/Stubs/Functions.sharp
+namespace App.Stubs;
+
+import Vendor.Pdf;
+
+extern Pdf.render uses Files;        // compiles: Pdf.render(html) has the effect Files
+extern global.now uses Clock;        // compiles: global.now() has the effect Clock
+extern now uses Clock;               // compile error: name the function through its namespace, as in global.now
+```
+
 - **Each class, method or function has at most one `extern` declaration in the whole project.** A second one is a compile error, as declaring a class twice is.
 - **A call to plain PHP with an `extern` declaration has that effect,** so it fits a `uses` that names it: `StripeClient.charges().create(…)` fits `uses Http`.
 - **An object a declared plain PHP call returns carries that call's effect,** so `StripeClient.charges()` returns an object with `Http`, and calling it fits `uses Http`. An `extern` on the returned class itself wins over the inherited effect.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way.
+- **PHP's own built-in functions come declared.** PHP#'s Composer package ships an `extern global.…` declaration for each one, so `global.levenshtein(a, b)` is pure and `global.fopen(path, "r")` has `Files`.
 
 **The standard library's ten effect classes replace PHP's built-ins for their effects:**
 
@@ -3287,8 +3313,10 @@ namespace App;
 
 public class Visitor
 {
+    public Visitor(private Files files) { }
+
     public string greet(string name) => "Hello, " + name.trim();    // pure: trim is a standard-library method
-    public void remember(string token) { file_put_contents("seen.txt", token); }   // has Files
+    public void remember(string token) { this.files.write("seen.txt", token); }   // has Files
 }
 ```
 
@@ -3299,9 +3327,11 @@ namespace App;
 
 public class FileFormatter : Formatter
 {
+    public FileFormatter(private Files files) { }
+
     public string format(string name)
     {
-        file_put_contents("seen.txt", name);                        // compile error: format must be pure, and file_put_contents has the effect Files
+        this.files.write("seen.txt", name);                         // compile error: format must be pure, and files.write has the effect Files
         return name;
     }
 }
