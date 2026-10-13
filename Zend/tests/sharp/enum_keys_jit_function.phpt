@@ -67,14 +67,34 @@ array(2) {
   ["Closed"]=>
   int(4)
 }
-TypeError: Demo\Headcount::byName(): Argument #1 ($counts) must be of type Map<Lib.Standing, int>, array given, called in %s on line %d in EnumKeys.sharp on line 66
+TypeError: Demo\Headcount::byName(): Argument #1 ($counts) must be of type Map<Lib.Standing, int>, array given, called in %s on line %d in EnumKeys.sharp on line 67
 array(2) {
   [0]=>
   string(1) "5"
   [1]=>
   string(3) "tea"
 }
-TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 41
+array(2) {
+  ["active"]=>
+  array(1) {
+    [0]=>
+    int(1)
+  }
+  ["closed"]=>
+  array(2) {
+    [0]=>
+    int(2)
+    [1]=>
+    int(3)
+  }
+}
+array(2) {
+  [0]=>
+  string(6) "Active"
+  [1]=>
+  string(6) "Closed"
+}
 TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 44
-TypeError: Cannot access offset of type Lib\Size on array in enum_keys.inc on line 45
-TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 46
+TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 47
+TypeError: Cannot access offset of type Lib\Size on array in enum_keys.inc on line 48
+TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 49

@@ -258,13 +258,15 @@ Site: same opcodes and lines in 13 op arrays, same signatures in 3 classes
 Collections: same opcodes and lines in 7 op arrays, same signatures in 2 classes
   check  Demo\Cart::fill string("List<Demo.Item>")
   check  Demo\Cart::withPrices string("List<int>, List<int>")
-EnumKeys: same opcodes and lines in 12 op arrays, same signatures in 1 classes
+EnumKeys: same opcodes and lines in 16 op arrays, same signatures in 1 classes
   check  Demo\Headcount::count string("Map<Lib.Standing, int>, Any?")
   check  Demo\Headcount::ensure string("Map<Lib.Standing, int>, Any?")
   check  Demo\Headcount::lookup string("Map<Lib.Standing, int>, Any?")
   check  Demo\Headcount::without string("Map<Lib.Standing, int>, Any?")
   check  Demo\Headcount::byName string("Map<Lib.Standing, int>")
   check  Demo\Headcount::skus string("Map<string, int>")
+  check  Demo\Headcount::grouped string("List<int>")
+  check  Demo\Headcount::groupNames string("List<int>")
 Interop: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Lambdas: same opcodes and lines in 35 op arrays, same signatures in 1 classes
   check  Demo\Lambdas::doubled string("List<int>, Any?")

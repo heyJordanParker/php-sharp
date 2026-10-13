@@ -26,10 +26,13 @@ namespace {
         attempt(fn () => Demo\Headcount::without(['active' => 3, 'closed' => 4], Standing::Active));
         attempt(fn () => Demo\Headcount::nest(Standing::Closed, Size::Large));
         attempt(fn () => Demo\Headcount::byName(['active' => 3, 'closed' => 4]));
-        // Collections handed in from plain PHP are not element-checked yet, so a key that is no case fails here.
+        // A key that is no case fails the Map's check where plain PHP hands it in.
         attempt(fn () => Demo\Headcount::byName(['missing' => 1]));
         // PHP stores the key "5" as the int 5, and PHP# reads it back as the string "5".
         attempt(fn () => Demo\Headcount::skus(['5' => 1, 'tea' => 2, 'pie' => 0]));
+        // groupBy keyed by a backed enum: plain PHP sees the backing values, and a loop reads back the cases.
+        attempt(fn () => Demo\Headcount::grouped([1, 2, 3]));
+        attempt(fn () => Demo\Headcount::groupNames([1, 2, 3]));
         $output = ob_get_clean();
     }
 
