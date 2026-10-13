@@ -12,9 +12,9 @@ class Roster
         const kept = members.filter(n => n >= (members.get(Standing.Active) ?? 0));
         members.delete(Standing.Closed);
         return [
-            implode(",", ranked),
-            implode(",", tens),
-            implode(",", kept),
+            global.implode(",", ranked),
+            global.implode(",", tens),
+            global.implode(",", kept),
             (string) (busy.get(Standing.Active) ?? 0),
             (string) (busy.get(Standing.Closed) ?? 0),
             (string) (members.get(Standing.Active) ?? 0),

@@ -22,7 +22,7 @@ class Lambdas
 
     public static List<int> doubled(List<int> numbers, int by)
     {
-        return array_map(n => n * by, numbers);
+        return global.array_map(n => n * by, numbers);
     }
 
     public static string passes(int times)
@@ -37,7 +37,7 @@ class Lambdas
             marks.add(() => seen);
             times -= 1;
         }
-        return implode(",", array_map(read => read(), marks));
+        return global.implode(",", global.array_map(read => read(), marks));
     }
 
     public static List<string> pipeline(List<int> numbers, Map<string, int> prices)
@@ -46,13 +46,13 @@ class Lambdas
         const labels = odd.map(n => (string) (n * 10));
         const groups = numbers.groupBy(n => n % 2 == 0 ? "even" : "odd");
         return [
-            implode(",", labels),
-            implode(",", numbers.sortedBy(n => -n)),
-            implode(",", groups["odd"] ?? []),
-            implode(",", array_keys(labels.associateBy(label => label))),
-            implode(",", array_keys(prices.filterValues(price => price < 100))),
-            implode(",", prices.filter(price => price < 100)),
-            implode(",", prices.map(price => price * 2)),
+            global.implode(",", labels),
+            global.implode(",", numbers.sortedBy(n => -n)),
+            global.implode(",", groups["odd"] ?? []),
+            global.implode(",", global.array_keys(labels.associateBy(label => label))),
+            global.implode(",", global.array_keys(prices.filterValues(price => price < 100))),
+            global.implode(",", prices.filter(price => price < 100)),
+            global.implode(",", prices.map(price => price * 2)),
         ];
     }
 
@@ -81,10 +81,10 @@ class Lambdas
             seen.add(n);
             return true;
         });
-        const grown = count(seen);
-        const size = () => count(seen);
+        const grown = global.count(seen);
+        const size = () => global.count(seen);
         seen.add(0);
-        return [count(kept), grown, size()];
+        return [global.count(kept), grown, size()];
     }
 
     public int nested(int extra)
