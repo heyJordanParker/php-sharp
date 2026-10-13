@@ -14,8 +14,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
   cancel-in-progress: true
 jobs:
-  # CI_PASSED is the one required check, so the workflow always runs, and LINUX, MACOS and
-  # PLAIN_PHP skip a change to documentation alone. docs/spec.md, README.md and
+  # CI_PASSED is this workflow's one required check, so the workflow always runs, and LINUX and
+  # MACOS skip a change to documentation alone. docs/spec.md, README.md and
   # sharp/spec-self-test.md count as code, because LINUX compiles and runs their examples.
   CHANGES:
     runs-on: ubuntu-24.04
@@ -52,7 +52,7 @@ jobs:
       - name: Keep local sources out of Cargo.lock
         run: |
           if git grep -nE '(path|git)\+file://' -- '*Cargo.lock'; then
-            echo "::error::A committed Cargo.lock names a local source. Keep the [patch] in the untracked ext/sharp/.cargo/config.toml."
+            echo "::error::A committed Cargo.lock names a local source. Keep a [patch] in an untracked .cargo/config.toml."
             exit 1
           fi
       - name: Rust cache
@@ -61,21 +61,20 @@ jobs:
           path: |
             sharp/build/cargo
             sharp/build/rustup
-          key: SHARP_LINUX_RUST-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock') }}
-      - name: Pinned Mago commit
-        id: mago
-        run: sed -n 's/^#define SHARP_MAGO_COMMIT "\(.*\)"$/rev=\1/p' ext/sharp/sharp_unit.h >> "$GITHUB_OUTPUT"
+          key: SHARP_LINUX_RUST-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
+      # sharp/bin/test builds mago from sharp/mago into sharp/build/<os>-<arch>/mago. The cache keeps the
+      # dependencies' build, and cargo rebuilds Mago's own crates.
       - name: Mago cache
         uses: actions/cache@v5
         with:
           path: sharp/build/*/mago
-          key: SHARP_LINUX_MAGO-${{ steps.mago.outputs.rev }}
+          key: SHARP_LINUX_MAGO-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.lock') }}
       - name: Build
         run: sharp/bin/build --linux
       - name: Test PHP#
         run: sharp/bin/test --linux --opcache --repeat --passes --census --spec --differential
-      - name: Check the standard library with the checker the differential built
-        run: sharp/docker/run sh -c '"sharp/build/linux-$(uname -m)/mago/bin/mago" --colors never --workspace sharp/composer analyze --minimum-fail-level note'
+      - name: Check the standard library with the checker sharp/bin/test built
+        run: sharp/docker/run sh -c '"sharp/build/linux-$(uname -m)/mago/release/mago" --colors never --workspace sharp/composer analyze --minimum-fail-level note'
       - name: Test upstream
         run: sharp/bin/test --linux --upstream --opcache
       - name: Verify generated files are up to date
@@ -92,14 +91,10 @@ jobs:
         run: |
           sharp/docker/run sharp/bin/native
           git diff --exit-code ext/sharp/sharp_native.h sharp/composer/native.php
-      - name: Verify ext/sharp/sharp_unit.h, with its sharp_kind, SHARP_T_ tokens and SHARP_UNIT_ABI, is the header the pinned Mago commit generates from Zend/zend_ast.h and Zend/zend_language_parser.h
+      - name: Verify ext/sharp/sharp_unit.h, with its sharp_kind, SHARP_T_ tokens and SHARP_UNIT_ABI, is the header sharp/mago generates from Zend/zend_ast.h and Zend/zend_language_parser.h
         run: |
-          mago=sharp/build/mago-source
-          git init --quiet "$mago"
-          git -C "$mago" fetch --quiet --depth=1 https://github.com/heyJordanParker/mago-sharp "${{ steps.mago.outputs.rev }}"
-          git -C "$mago" checkout --quiet FETCH_HEAD
-          sharp/docker/run php "$mago/scripts/regen-sharp-kinds.php" Zend/zend_ast.h Zend/zend_language_parser.h | diff -u "$mago/crates/sharp-bridge/src/kind.rs" -
-          sharp/docker/run sh -c 'cargo="$(cd ext/sharp && rustup which cargo)" && cd "$1" && PATH="$(dirname "$cargo"):$PATH" "$cargo" build --locked -p mago-sharp-bridge --message-format=json' sh "$mago" > "$RUNNER_TEMP/build.json"
+          sharp/docker/run php sharp/mago/scripts/regen-sharp-kinds.php Zend/zend_ast.h Zend/zend_language_parser.h | diff -u sharp/mago/crates/sharp-bridge/src/kind.rs -
+          sharp/docker/run sh -c 'cargo="$(cd ext/sharp && rustup which cargo)" && PATH="$(dirname "$cargo"):$PATH" "$cargo" build --locked --release --manifest-path sharp/mago/Cargo.toml --target-dir "sharp/build/linux-$(uname -m)/mago" -p mago-sharp-bridge --message-format=json' > "$RUNNER_TEMP/build.json"
           header="$(jq -r 'select(.reason == "build-script-executed" and (.package_id | contains("mago-sharp-bridge"))) | .out_dir | ltrimstr("/src/")' "$RUNNER_TEMP/build.json")/sharp_unit.h"
           diff -u ext/sharp/sharp_unit.h "$header"
   MACOS:
@@ -127,85 +122,33 @@ jobs:
         uses: ./.github/actions/ccache
         with:
           name: SHARP_MACOS
-      - name: Pinned Mago commit
-        id: mago
-        run: sed -n 's/^#define SHARP_MAGO_COMMIT "\(.*\)"$/rev=\1/p' ext/sharp/sharp_unit.h >> "$GITHUB_OUTPUT"
       - name: Mago cache
         uses: actions/cache@v5
         with:
           path: sharp/build/*/mago
-          key: SHARP_MACOS_MAGO-${{ steps.mago.outputs.rev }}
+          key: SHARP_MACOS_MAGO-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.lock') }}
       - name: Build
         run: sharp/bin/build
       - name: Test PHP#
         run: sharp/bin/test --opcache --repeat --passes --census --differential
       - name: Test upstream
         run: sharp/bin/test --upstream --opcache
-  PLAIN_PHP:
-    needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    steps:
-      - name: git checkout
-        uses: actions/checkout@v6
-      - name: brew
-        if: runner.os == 'macOS'
-        run: brew install php composer
-      - name: Run mago from Composer on plain PHP, with php-sharp-composer from sharp/composer
-        run: |
-          php -v
-          mkdir -p "$RUNNER_TEMP/project/src/App"
-          cd "$RUNNER_TEMP/project"
-          cat > composer.json <<JSON
-          {
-              "repositories": [{ "type": "path", "url": "$GITHUB_WORKSPACE/sharp/composer" }],
-              "autoload": { "psr-4": { "App\\\\": "src/App/" } },
-              "config": { "allow-plugins": { "heyjordanparker/php-sharp-composer": true } }
-          }
-          JSON
-          cat > mago.toml <<'TOML'
-          [source]
-          paths = ["src"]
-          extensions = ["sharp"]
-          TOML
-          cat > src/App/Counter.sharp <<'SHARP'
-          namespace App;
-
-          class Counter
-          {
-              private int count = 0;
-
-              public int add(int amount)
-              {
-                  this.count += amount;
-                  return this.count;
-              }
-          }
-          SHARP
-          composer require --no-interaction heyjordanparker/php-sharp-composer:@dev
-          composer require --no-interaction --dev heyjordanparker/mago-sharp:^0.3
-          vendor/bin/mago analyze
-          vendor/bin/mago compile
-  # The one required check. A matrix job skipped by its `if` reports one check under the job's
-  # name, not one per platform, so CI_PASSED stands in for every job it needs. It fails when any
-  # of them failed or was cancelled.
+  # This workflow's one required check. A job skipped by its `if` reports one check under the job's
+  # name, so CI_PASSED stands in for every job it needs. It fails when any of them failed or was
+  # cancelled. mago.yml's ci-passed is the other required check, and its plain-php job runs mago
+  # from Composer on plain PHP.
   CI_PASSED:
     if: always()
-    needs: [CHANGES, LINUX, MACOS, PLAIN_PHP]
+    needs: [CHANGES, LINUX, MACOS]
     runs-on: ubuntu-24.04
     steps:
       - name: Every job passed, or skipped a change to documentation alone
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # release/v1
         with:
-          allowed-skips: LINUX, MACOS, PLAIN_PHP
+          allowed-skips: LINUX, MACOS
           jobs: ${{ toJSON(needs) }}
   COMPOSER:
-    needs: [LINUX, MACOS, PLAIN_PHP]
+    needs: [LINUX, MACOS]
     if: ${{ !failure() && !cancelled() && github.event_name == 'push' }}
     runs-on: ubuntu-24.04
     concurrency: composer-${{ github.ref }}
