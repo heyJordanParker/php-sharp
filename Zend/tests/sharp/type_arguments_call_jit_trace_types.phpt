@@ -6,8 +6,9 @@ opcache
 <?php
 // The trace dump prints each operand type the tracer recorded after a `;`. The type arguments a generic call's op1, a
 // NEW's op2, a ZEND_SHARP_TYPE_ARGS's op1 and a BIND_LEXICAL's op2 hold are no PHP type, so none may print one.
-$run = 'require ' . var_export(__DIR__ . '/type_arguments_call.inc', true) . ';'
+$run = 'require ' . var_export(__DIR__ . '/type_arguments_calls.inc', true) . ';'
     . ' foreach ([1, 2] as $round) {'
+    . ' Calls\Repository::wrapped(new Calls\SharpWrapper(), new App\Order(1));'
     . ' Calls\Repository::orderLater(new App\Order(1))();'
     . ' Calls\Repository::orderHeld(new App\Order(1))();'
     . ' }';
