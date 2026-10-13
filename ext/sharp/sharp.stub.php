@@ -16,11 +16,19 @@ final class Collection
 
     public function set(int $index, mixed $value): void {}
 
+    public function insert(int $index, mixed $value): void {}
+
+    public function removeAt(int $index): void {}
+
     public function get(int|string $key): mixed {}
 
     public function entries(): array {}
 
     public function delete(int|string $key): void {}
+
+    public function put(int|string $key, mixed $value): mixed {}
+
+    public function clear(): void {}
 
     public function filter(\Closure $predicate): array {}
 

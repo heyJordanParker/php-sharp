@@ -86,9 +86,9 @@ line 1 expects a compile error, and the checker accepts it
 
 A "not supported yet" refusal never satisfies a `compile error` line, because it says the feature is missing:
 
-<!-- example refusal: statements -->
+<!-- example refusal: members -->
 ```csharp
-if (true) return;   // compile error: write the braces
+public static int total { get => 1; }   // compile error: a static property has no accessor body
 ```
 <!-- expect refusal
 line 1 expects a compile error, and the checker reports: …not supported yet…
