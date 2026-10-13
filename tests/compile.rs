@@ -987,7 +987,7 @@ fn a_law_that_calls_an_interface_method_is_refused() {
         let root = directory.path();
         let expected: Vec<String> = calls
             .iter()
-            .map(|at| format!("{file}:{at}:error - unmodeled-construct: Law {law}. Mago does not translate interface methods to Lean, because an implementation can have effects."))
+            .map(|at| format!("{file}:{at}:error - unmodeled-construct: Law {law}. Mago does not translate interface methods to Lean, because the implementation that runs is chosen at run time."))
             .collect();
 
         let output = compile_without_lean(root);
