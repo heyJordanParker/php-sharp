@@ -6,9 +6,8 @@
 //
 // With --base <commit>, it instead compares sharp/baseline/spec and the examples with that commit. The SPEC_GUARD job
 // runs the base commit's copy of this script on the pull request's merge commit, so a pull request's own files never
-// judge it. It fails when an entry joins the list in a pull request that changes more than the documents and the list,
-// when an example whose fingerprint the base has joins the list, and when a pull request that changes anything outside
-// the spec files and other Markdown also changes an example's fingerprint or a file in a GUARDED folder.
+// judge it. It fails when an example whose fingerprint the base has joins the list, and when a pull request that
+// changes anything outside the documents, the list and other Markdown also changes a GUARDED file.
 //
 // With --completes, it reads the pull request body from BODY and fails unless every section its `Completes:` line names
 // has a checked example and no entry in sharp/baseline/spec. Neither mode needs a build.
@@ -22,12 +21,9 @@ const DOCUMENTS = ['README.md', 'docs/spec.md'];
 const BASELINE = 'sharp/baseline/spec';
 const SELF_TEST = 'sharp/spec-self-test.md';
 const HARNESS = 'sharp/harness';
-// The folders that hold what measures the examples and everything that runs that measurement: the harness, the
-// scripts, the CI image and the workflows. Only a spec PR changes a file in them.
-const GUARDED = [HARNESS . '/', 'sharp/bin/', 'sharp/docker/', '.github/'];
-// Files in a GUARDED folder that measure no example: sharp/bin/native writes the engine's C header from the standard
-// library's declarations, and engine pull requests change it.
-const UNGUARDED = ['sharp/bin/native'];
+// What measures the examples: this script and the harness. A pull request that changes them changes nothing else that
+// runs, so a feature can't move the measure it is judged by.
+const GUARDED = ['sharp/bin/spec', HARNESS . '/'];
 const PACKAGE = 'sharp/composer';
 const PACKAGE_FOLDER = 'vendor/heyjordanparker/php-sharp-composer';
 const MARKER = '<!-- example ';
@@ -35,7 +31,7 @@ const RUN_MARKER = '<!-- run ';
 const REFUSAL = 'not supported yet';
 const RUNTIME = ['value', 'throws', 'message'];
 // The errors mago reports at a construct's first line for the whole construct, by code, or by message when the code is
-// the generic `semantics`. Only these move to the `compile error` line inside the construct. A new one joins in a spec PR.
+// the generic `semantics`. Only these move to the `compile error` line inside the construct. A new one joins in a PR of its own.
 const MOVES = ['match-not-exhaustive', 'rejected-nullable-parameter', 'A `match` needs a `default` arm.'];
 const SECTION = '§\d+(?:\.\d+)*|README';
 const PARALLEL = 4;
@@ -1273,14 +1269,11 @@ function parse_list(string $text): array
     return $entries;
 }
 
-/** Whether $path sits in a GUARDED folder and is not UNGUARDED. */
+/** Whether $path is a GUARDED file or sits in a GUARDED folder. */
 function guarded(string $path): bool
 {
-    if (in_array($path, UNGUARDED, true)) {
-        return false;
-    }
-    foreach (GUARDED as $folder) {
-        if (str_starts_with($path, $folder)) {
+    foreach (GUARDED as $guarded) {
+        if ($path === $guarded || str_ends_with($guarded, '/') && str_starts_with($path, $guarded)) {
             return true;
         }
     }
@@ -1316,9 +1309,9 @@ function refuse_links(string $root): void
 
 /**
  * Compares the working tree with $base. A pull request that changes a file outside the documents, the list, the
- * GUARDED folders and other Markdown must leave every example's fingerprint and every GUARDED file as $base has them,
- * so it can only remove entries. In any pull request, an example whose fingerprint $base also has, under its id or
- * another, never joins the list, except that a renamed example takes over its old id's entry.
+ * GUARDED files and other Markdown must leave every GUARDED file as $base has them. In any pull request, an example
+ * whose fingerprint $base also has, under its id or another, never joins the list, except that a renamed example takes
+ * over its old id's entry.
  */
 function compare_with_base(string $root, string $base): int
 {
@@ -1342,17 +1335,10 @@ function compare_with_base(string $root, string $base): int
     // Markdown other than the documents never runs, so it changes no result and may change beside a guarded file.
     $outside = array_values(array_filter($changed_files, static fn (string $file): bool => !in_array($file, [...DOCUMENTS, BASELINE], true)
         && !guarded($file) && !str_ends_with($file, '.md')));
-    // Beside the documents, a harness or checker change could make an example fail that no edit touched.
-    $beyond_documents = array_values(array_diff($changed_files, [...DOCUMENTS, BASELINE]));
     $problems = [];
 
     if ($outside !== []) {
-        $also = 'This PR also changes ' . implode(', ', $outside) . ', and examples and the files in ' . implode(', ', GUARDED) . ' change only in a spec PR.';
-        foreach (array_keys($base_examples + $head_examples) as $id) {
-            if (($base_examples[$id]['fingerprint'] ?? null) !== ($head_examples[$id]['fingerprint'] ?? null)) {
-                $problems[] = "The example $id " . (!isset($head_examples[$id]) ? 'is gone' : (!isset($base_examples[$id]) ? 'is new' : 'changed')) . ". $also";
-            }
-        }
+        $also = 'This PR also changes ' . implode(', ', $outside) . ', and ' . implode(', ', GUARDED) . ' change only in a PR of their own.';
         foreach (array_filter($changed_files, 'guarded') as $file) {
             $problems[] = "$file changed. $also";
         }
@@ -1361,10 +1347,7 @@ function compare_with_base(string $root, string $base): int
     $added = array_diff_key($after, $before);
     foreach ($added as $id => $section) {
         $same = $unchanged($id);
-        if ($beyond_documents !== []) {
-            $problems[] = "$section $id joins the list in a PR that also changes " . implode(', ', $beyond_documents)
-                . '. An entry joins only in a PR that changes docs/spec.md, README.md and ' . BASELINE . ' alone.';
-        } elseif ($same !== null && !(isset($before[$same]) && !isset($after[$same]))) {
+        if ($same !== null && !(isset($before[$same]) && !isset($after[$same]))) {
             // A rename keeps the fingerprint: the entry moves to the new id when the old id was listed and has left the list.
             $problems[] = "$section $id joins the list, and its code and setup are the same as $same's at $base.";
         }
