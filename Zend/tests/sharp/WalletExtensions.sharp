@@ -9,6 +9,8 @@ public static class WalletExtensions
         public int total(int extra) => wallet.balance + extra;
 
         public bool isEmpty => wallet.balance == 0;
+
+        public string rank() => "wallet";
     }
 
     extension(string text)
