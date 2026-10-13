@@ -1,6 +1,6 @@
 # PHP#
 
-PHP# is a typed dialect of PHP with C#-shaped syntax. A `.sharp` file compiles to the same engine as a `.php` file, so the two call each other freely, and an app moves to PHP# one file at a time.
+PHP# is a typed language with C#-shaped syntax that runs on PHP's engine and calls plain PHP freely, as Kotlin runs on the JVM and calls Java. An app moves to PHP# one file at a time.
 
 The checker, a fork of [Mago](https://github.com/heyJordanParker/mago-sharp), type-checks PHP and PHP# files together. The engine runs the same Mago front end, so both read every `.sharp` file the same way.
 
