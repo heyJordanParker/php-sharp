@@ -97,6 +97,58 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --locked --all-targets
 
+  # sharp/mago/.gitattributes leaves Mago's sources out of git archive, and so out of php-sharp's own tag archives.
+  source_archive:
+    name: Create source code archives
+    runs-on: ubuntu-latest
+    needs: crate_metadata
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Create source archives
+        id: source_package
+        run: |
+          VERSION="${{ needs.crate_metadata.outputs.version }}"
+
+          STAGING="${{ env.CICD_INTERMEDIATES_DIR }}/source"
+          mkdir -p "${STAGING}"
+          rsync -a . "${STAGING}/mago-${VERSION}/"
+          TAR_NAME="mago-${VERSION}-source.tar.gz"
+          tar -czf "${STAGING}/${TAR_NAME}" -C "${STAGING}" "mago-${VERSION}"
+          echo "TAR_NAME=${TAR_NAME}" >> "$GITHUB_OUTPUT"
+          echo "TAR_PATH=${STAGING}/${TAR_NAME}" >> "$GITHUB_OUTPUT"
+          ZIP_NAME="mago-${VERSION}-source.zip"
+          cd "${STAGING}"
+          zip -r "${ZIP_NAME}" "mago-${VERSION}"
+          cd -
+          echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_OUTPUT"
+          echo "ZIP_PATH=${STAGING}/${ZIP_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate artifact attestation (source tar.gz)
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: ${{ steps.source_package.outputs.TAR_PATH }}
+
+      - name: Generate artifact attestation (source zip)
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: ${{ steps.source_package.outputs.ZIP_PATH }}
+
+      - name: "Artifact upload: source tar.gz"
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.source_package.outputs.TAR_NAME }}
+          path: ${{ steps.source_package.outputs.TAR_PATH }}
+          if-no-files-found: error
+
+      - name: "Artifact upload: source zip"
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.source_package.outputs.ZIP_NAME }}
+          path: ${{ steps.source_package.outputs.ZIP_PATH }}
+          if-no-files-found: error
+
   build:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
@@ -383,7 +435,7 @@ jobs:
   release:
     name: Publish the release
     runs-on: ubuntu-latest
-    needs: [crate_metadata, min_version, build]
+    needs: [crate_metadata, min_version, source_archive, build]
     defaults:
       run:
         working-directory: .
@@ -402,6 +454,8 @@ jobs:
         shell: bash
         run: |
           sort > expected-assets.txt <<EOF
+          mago-${VERSION}-source.tar.gz
+          mago-${VERSION}-source.zip
           mago-${VERSION}-wasm.tar.gz
           mago-${VERSION}-aarch64-apple-darwin.tar.gz
           mago-${VERSION}-x86_64-apple-darwin.tar.gz
