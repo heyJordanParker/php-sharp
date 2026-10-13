@@ -60,6 +60,7 @@
 §21	is-and-as
 §21	match-forms
 §21	property-patterns
+§21	type-tests
 §22	interface-defaults
 §22	plain-php-traits
 §23	import-rename

@@ -2106,6 +2106,24 @@ Circle circle = this.next();
 if (circle is Square) { … }            // compile error: This pattern never matches the value it tests.
 ```
 
+**Every type answers `is`, `as` and `match` the same way, function types included,** as in C#, Swift and Go. `value is Function<int(int)>` tests the function's parameter and result types while the code runs, as `value is List<int>` tests the list's elements. A test whose type the value's source never declares is a compile error that says the type is unknown, such as a function-type test on a `Closure` that a plain PHP library returns with no parameter or result types:
+
+<!-- example type-tests -->
+```php
+class Legacy
+{
+    public static function doubler(): Closure { return fn($x) => $x * 2; }
+}
+```
+
+<!-- example type-tests: statements -->
+```csharp
+Any? doubled = (int x) => x * 2;
+doubled is Function<int(int)>;               // true
+doubled is Function<string(string)>;         // false: the parameter and result types differ
+Legacy.doubler() is Function<int(int)>;      // compile error: the type of Legacy.doubler()'s function is unknown
+```
+
 **Boolean operators:** `&&`, `||` and `!` exist only in expressions. PHP's `and`, `or` and `xor` operators are removed, so `=` can no longer bind before `and`.
 
 **Conditions are `bool`.** `if`, `while`, `do … while`, `for`, `? :`, `&&`, `||`, `!` and `match`'s `when` take a `bool`. Any other type is a compile error, so PHP's truthiness never applies:
