@@ -4,8 +4,7 @@ require __DIR__ . '/project.inc';
 
 // An app whose modules bind each lifetime and each kind of value, with an environment module and a nested namespace's
 // module that overrides its parent's, beside the standard library's module, as a Composer project holds it.
-// container_project compiles it with $files, reads the library's module as the library's autoloader does, loads each
-// class from its folder, and returns the project's folder.
+// container_project compiles it with $files, loads it with container_load, and returns the project's folder.
 function container_project(string $name, array $files = []): string
 {
     $library = 'vendor/heyjordanparker/php-sharp-composer';
@@ -13,15 +12,22 @@ function container_project(string $name, array $files = []): string
         "$library/composer.json" => '{"name": "heyjordanparker/php-sharp-composer"}',
         "$library/library/Sharp/Module.sharp" => file_get_contents(dirname(__DIR__, 3) . '/sharp/composer/library/Sharp/Module.sharp'),
     ]);
-    Sharp\Internal\readModule("$root/$library/library/Sharp/Module.sharp");
+    container_load($root);
+
+    return $root;
+}
+
+// Reads the library's module of the project at $root as the library's autoloader does, and loads each class from its
+// folder.
+function container_load(string $root): void
+{
+    Sharp\Internal\readModule("$root/vendor/heyjordanparker/php-sharp-composer/library/Sharp/Module.sharp");
     spl_autoload_register(function (string $class) use ($root): void {
         $path = "$root/" . lcfirst(str_replace('\\', '/', $class)) . '.sharp';
         if (is_file($path)) {
             require $path;
         }
     });
-
-    return $root;
 }
 
 const CONTAINER_APP = [

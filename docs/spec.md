@@ -3657,7 +3657,7 @@ module
 }
 ```
 
-**A nested folder's module overrides its parent's services.** A test or environment module overrides with `module : App.Shop { … }`, and the compiler checks every environment's set of services.
+**A nested folder's module overrides its parent's services.** A test or environment module overrides with `module : App.Shop { … }`, and the compiler checks every environment's set of services: the base modules under all of that environment's modules at once.
 
 - **An environment module is `Module.<Environment>.sharp`** beside the `Module.sharp` it overrides, such as `Module.Production.sharp`. `SHARP_ENV` picks it, as `ASPNETCORE_ENVIRONMENT` picks ASP.NET Core's `appsettings.Production.json`.
 - **A test module is declared in the test file that uses it,** with the same header, as NestJS's testing module is. While a test of that file runs, its services are the test module's over the base modules, with no environment module, which is the set the compiler checks.

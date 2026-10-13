@@ -97,6 +97,10 @@ final class Container
     public static function scope(\Closure $run): mixed {}
 }
 
+final class ContainerError extends \Error
+{
+}
+
 namespace Sharp\Internal;
 
 function readModule(string $path): void {}

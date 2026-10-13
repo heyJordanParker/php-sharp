@@ -58,7 +58,7 @@ The checker walks the graph from each binding through bindings only, since every
 - a cycle, naming each class on it;
 - a `scoped` service a `singleton` holds, which .NET's scope validation calls a captive dependency.
 
-It walks the graph once for the base modules. It walks it again for each environment module and each test module, over the base bindings that module changes, and reports there only what that module changed.
+It walks the graph once for the base modules. It walks it again for each environment, as one set: the base modules under every `Module.<Environment>.sharp` of that environment, as the engine reads them all at once. It walks it again for each test module, over the base modules alone. Each environment or test module file reports, at one of its own bindings, only what its bindings take part in.
 
 ## Compiler
 
@@ -76,7 +76,19 @@ return [
 ];
 ```
 
-The standard library's table names the root namespace, `''`. A test file's module is a call instead, `\Sharp\Internal\testModule(['App\Shop\CheckoutTest'], [ /* its rows */ ]);`, naming each class the file declares.
+The standard library's table names the root namespace, `''`. A test file's module is a call instead, `\Sharp\Internal\testModule(['App\Shop\CheckoutTest'], [ /* its rows */ ]);`, naming each class the file declares, even when the module binds nothing. Each of those classes also gets two methods, which PHPUnit runs around each of its tests in its own process and in a child one:
+
+```php
+#[\PHPUnit\Framework\Attributes\Before(PHP_INT_MAX)]      // before every other Before method and setUp
+public function __sharpStartTest(): void { \Sharp\Internal\startTest(static::class); }
+
+#[\PHPUnit\Framework\Attributes\After(PHP_INT_MIN)]       // after every other After method and tearDown
+public function __sharpEndTest(): void { \Sharp\Internal\endTest(); }
+```
+
+PHP# refuses a member name that starts with `__`, so no member a test declares can take these names.
+
+A compiled file whose check resolves services through modules lists their files among its inputs, so the engine refuses it after one is edited, added or deleted. A module file, a test file's module and a listener's file list the `Module.sharp` of their own folder, of each folder of a class their check reads, and of each folder above those, up to the root, with no file at most of them. An environment module also lists its environment's `Module.<Environment>.sharp` of each of those folders.
 
 A service's id is its PHP# type in lowercase, as codex's `service_id` writes it for the analyzer, the table and the attribute alike. PHP runs a `List` or a `Map` as an array, so a constructor or binding parameter that holds a collection of objects carries `#[\Sharp\Internal\Service('list<app\pricing\pricerule>')]`. Every other parameter's service is its PHP type.
 
@@ -84,12 +96,12 @@ A service's id is its PHP# type in lowercase, as codex's `service_id` writes it 
 
 `Sharp\Container` resolves a service the way the checker does:
 
-- Before it builds a class, it reads the modules of the class's folder and of each folder above it, up to the project root that holds `.sharp/`, once per request.
+- Before it builds a class, it reads the modules of the class's folder and of each folder above it, up to the project root that holds `.sharp/`. It reads each module file once per request, and stops at a module that throws as it loads, which it reads again the next time.
 - With `SHARP_ENV` set, it also reads the `Module.<SHARP_ENV>.sharp` beside each `Module.sharp`, and the environment module wins outside a test.
 - The standard library's `autoload.php` reads the library's module once per request, through `Sharp\Internal\readModule`.
 - It builds only what a binding binds. It builds a bound class through its constructor and calls a binding's closure. Either way, it fills each parameter with the service its `Service` attribute, or else its class, names. It reads the parameters from the function's own argument information, with no reflection.
 - It keeps each `singleton` for the request and each `scoped` service for the current scope. A `transient` service is built every time.
-- It throws an `Error` that names the service no module binds, the class that needs itself, or the parameter with no class type.
+- It throws its own failures as `Sharp\ContainerError`, which extends `Error`: the service no module binds, the class that needs itself, the parameter with no class type, or the bound class that isn't there. It throws a constructor's own exception unchanged, and the request goes on.
 
 The request is the scope, as each CLI run is. A long-running host runs each unit of work in `Sharp\Container::scope(fn)`.
 
@@ -100,11 +112,13 @@ final class Container
     public function has(string $id): bool { }                   // whether a module binds $id
     public static function scope(\Closure $run): mixed { }      // runs $run in a new scope and returns its result
 }
+
+final class ContainerError extends \Error { }                  // a failure of the container itself
 ```
 
-**Tests.** A test file's module applies while a test of a class the file declares runs, as Spring applies a test class's own `@TestConfiguration`. The test needs no code. The standard library's PHPUnit extension, `Sharp\PhpUnit\Extension`, calls `Sharp\Internal\startTest($class)` before PHPUnit sets a test up and `Sharp\Internal\endTest()` after it finishes. While a test runs, its module comes before the base modules and the environment modules don't apply, even with `SHARP_ENV` set, so a test runs exactly the set of services the checker checks. Each test builds its services again. A project registers the extension in `phpunit.xml` as `<bootstrap class="Sharp\PhpUnit\Extension"/>`.
+**Tests.** A test file's module applies while a test of a class the file declares runs, as Spring applies a test class's own `@TestConfiguration`. The test needs no code, and the project adds nothing to `phpunit.xml`. The class's `__sharpStartTest` calls `Sharp\Internal\startTest($class)` before PHPUnit sets a test up, and its `__sharpEndTest` calls `Sharp\Internal\endTest()` after the test finishes, in PHPUnit's own process and in the child process of `#[RunInSeparateProcess]` or `processIsolation`. While a test runs, its module comes before the base modules and the environment modules don't apply, even with `SHARP_ENV` set, so a test runs exactly the set of services the checker checks. Each test builds its services again.
 
-**PSR-11.** `Sharp\Psr\Container` implements `Psr\Container\ContainerInterface` over `Sharp\Container`, and throws `Sharp\Psr\NotFoundException` for an id no module binds. The engine can't implement an interface Composer loads after it starts, so the adapter is PHP, and the Composer package requires `psr/container`.
+**PSR-11.** `Sharp\Psr\Container` implements `Psr\Container\ContainerInterface` over `Sharp\Container`. It throws `Sharp\Psr\NotFoundException` for an id no module binds, and `Sharp\Psr\ContainerException`, with the engine's `Sharp\ContainerError` as its previous, for a service the container can't build. A constructor's own exception passes through unchanged. The engine can't implement an interface Composer loads after it starts, so the adapter is PHP, and the Composer package requires `psr/container`.
 
 `Environment.require(name)` gives a variable a binding needs, and throws `ValueError` when it is not set.
 
@@ -123,29 +137,31 @@ sharp/mago/crates/
 ├── analyzer/src/statement/class_like/listener.rs   a listener's constructor takes services
 ├── analyzer/src/statement/return.rs    a binding expression's wrong type names the binding
 ├── prelude/assets/extensions/sharp.php Environment.require
-└── sharp-bridge/src/lower.rs           a module file's binding table, a test file's testModule call, the Service attribute
+├── orchestrator/src/service/incremental_analysis/compile.rs   a compiled file's module files among its inputs
+└── sharp-bridge/src/lower.rs           a module file's binding table, a test file's testModule call and its classes'
+                                        __sharpStartTest and __sharpEndTest, the Service attribute
 ext/sharp/
-├── sharp.c                             Sharp\Container, Sharp\Internal\{readModule, testModule, startTest, endTest},
-│                                       and Environment.require
+├── sharp.c                             Sharp\Container, Sharp\ContainerError,
+│                                       Sharp\Internal\{readModule, testModule, startTest, endTest}, Environment.require
 ├── sharp.stub.php                      their public signatures
 └── sharp_arginfo.h                     generated from sharp.stub.php
 sharp/composer/
-├── composer.json                       requires psr/container; maps Sharp\Psr\ and Sharp\PhpUnit\ to src/
+├── composer.json                       requires psr/container; maps Sharp\Psr\ to src/Psr/
 ├── autoload.php                        reads the library's module
 ├── library/Sharp/Module.sharp          new: binds Environment for every namespace
 ├── src/Psr/Container.php               new: Sharp\Psr\Container, PSR-11 over Sharp\Container
-├── src/Psr/NotFoundException.php       new: PSR-11's not-found error
-└── src/PhpUnit/Extension.php           new: starts and ends each test for the container
+├── src/Psr/ContainerException.php      new: PSR-11's error for a service the container can't build
+└── src/Psr/NotFoundException.php       new: PSR-11's not-found error
 Zend/tests/sharp/
 ├── Container.inc                       the app the container tests build, with the library's module
 ├── container_resolution.phpt           each kind of binding, nested namespaces
 ├── container_environment.phpt          SHARP_ENV's module first
 ├── container_lifetimes.phpt            singleton, scoped, scope(), transient
-├── container_refusals.phpt             missing service, unbound concrete class, cycle, untyped parameter
+├── container_refusals.phpt             each Sharp\ContainerError, a constructor that throws, a module that won't load
 ├── container_test_module.phpt          new: a test file's module while its test runs
 ├── container_test_environment.phpt     new: no environment module while a test runs
-├── container_phpunit.phpt              new: the PHPUnit extension
-├── container_psr.phpt                  new: the PSR-11 adapter
+├── container_phpunit.phpt              new: the methods PHPUnit runs around a test, in this process and a child one
+├── container_psr.phpt                  new: the PSR-11 adapter and its errors
 ├── library_autoload.inc                the package holds the library's module
 ├── environment.phpt                    Environment.require
 └── project.inc                         a test project's files may sit in folders
