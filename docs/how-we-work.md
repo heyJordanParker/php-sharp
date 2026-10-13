@@ -23,7 +23,7 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 
 ## Worktree slots
 
-- The pool has 7 slots, `~/Developer/sharp-worktrees/1` to `~/Developer/sharp-worktrees/7`. Each slot holds a `mago-sharp` worktree and a `php-sharp` worktree.
+- The pool has 7 slots, `~/Developer/sharp-worktrees/1` to `~/Developer/sharp-worktrees/7`. Each slot holds a `php-sharp` worktree, with Mago in its `sharp/mago/`.
 - Cass names a free slot in every task file.
 - Cass creates the task's branch from `origin/master` in the slot before the builder starts. The builder builds in that slot's own build folders.
 - After its PR merges, the builder leaves no uncommitted files, and Cass detaches the slot at the new `origin/master`. The build folders stay, so the next task rebuilds only what changed.
@@ -41,7 +41,7 @@ A feature PR changes the spec, its examples, `sharp/baseline/spec` and the code 
 
 New example-marker or run-comment syntax lands in `sharp/bin/spec` one PR before the examples use it, because `SPEC_GUARD` reads a PR's spec with the base's checker.
 
-A mago-sharp PR merges before the php-sharp PR that pins it. The builder then re-pins the php-sharp PR once, to the mago-sharp merge commit.
+One feature is one PR: the checker in `sharp/mago/`, the engine, the standard library, the spec and their tests change together, and every CI gate runs on it.
 
 Master requires CI to pass. It doesn't require a branch to include the latest master. CI runs on master after every merge, and a red master is fixed before anything else merges.
 
@@ -58,8 +58,8 @@ A mistake that no check can catch yet goes in `docs/architecture/guards.md`, wit
 
 - CI runs every PHP# engine test 22 times, on Linux and on macOS: plain PHP, three runs with cached bytecode, each of PHP's 16 optimizer passes on its own, and both JIT compilers. A PR can't merge until all 22 pass on both. A PR that changes only documentation skips them, and GitHub counts the skipped `LINUX` and `MACOS` checks as passing.
 - A builder runs only these locally, and leaves the other runs to CI:
-  - In php-sharp: `sharp/bin/test`, the run without opcache.
-  - In mago-sharp: `cargo test --workspace --locked`, `cargo clippy --workspace --all-features -- -D warnings` and `cargo fmt --all -- --check`.
+  - `sharp/bin/test`, the run without opcache. It builds `mago` from `sharp/mago/` first.
+  - In `sharp/mago/`: `cargo test --workspace --locked`, `cargo clippy --workspace --all-targets --all-features -- -D warnings` and `cargo fmt --all -- --check`.
 
 ## Platforms
 
