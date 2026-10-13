@@ -1,6 +1,6 @@
 # PHP# language specification
 
-PHP# is a per-file dialect of PHP. A PHP# file compiles to the same engine as plain PHP, so the two call each other freely. This file is the single source of truth for PHP# syntax and rules.
+PHP# is a language that runs on PHP's engine and calls plain PHP freely, as Kotlin runs on the JVM and calls Java. This file is the single source of truth for PHP# syntax and rules.
 
 [decisions/](decisions/) records why each rule was chosen.
 
@@ -50,7 +50,7 @@ const plan = this.plan();   // type inferred, cannot be reassigned
 const Plan plan = …;        // type written, cannot be reassigned
 ```
 
-**A PHP keyword that PHP# doesn't use is a plain name,** so `empty`, `list` and `print` can name a local. Every keyword PHP# uses stays reserved, such as `let`, `match` and `emit`:
+**A PHP# keyword, such as `let`, `match` or `emit`, can't name a local. Every other word can,** such as `empty`, `list` and `print`:
 
 <!-- example keyword-names: statements -->
 ```csharp
@@ -58,6 +58,46 @@ const list = [1, 2, 3];     // compiles: PHP# has no list keyword
 let empty = true;           // compiles
 const print = "draft";      // compiles
 const match = 1;            // compile error: match is a PHP# keyword
+```
+
+**Any word, PHP# keywords included, names a method or a property with no mark,** as in JavaScript and TypeScript, because a member's name is written only after `.` or where it is declared. Locals, parameters, `catch` variables and pattern variables can't take a keyword's name:
+
+<!-- example keyword-members -->
+```csharp
+// app/Rule.sharp
+namespace App;
+
+public class Rule
+{
+    public bool match(string text) => text != "";   // compiles: a keyword names a method
+    public string event { get; } = "paid";          // compiles: and a property
+}
+```
+
+<!-- example keyword-members: statements
+Rule rule = new Rule();
+-->
+```csharp
+rule.match("paid");                                 // true
+rule.event;                                         // "paid"
+const event = "paid";                               // compile error: a local can't take a keyword's name
+```
+
+**PHP# keywords are lowercase only,** as in C#, Java, Kotlin, Swift, TypeScript, Go and Rust. `Self` (section 25) is the one capitalized keyword, as it is in Rust and Swift. A capitalized keyword is an ordinary name, so `class Event` and `class Struct` are valid. Where no such name exists, as for `TRUE` or `Return`, the error suggests the lowercase keyword:
+
+<!-- example keyword-case -->
+```csharp
+// app/Struct.sharp
+namespace App;
+
+public class Struct { … }       // compiles: struct is a keyword, and Struct is a name
+```
+
+<!-- example keyword-case: statements -->
+```csharp
+const paid = true;              // compiles
+const shipped = TRUE;           // compile error: no name TRUE exists; did you mean true?
+Return;                         // compile error: no name Return exists; did you mean the keyword return?
 ```
 
 - In a class, `const` declares a constant. It is never reassigned, and its value is known before the code runs.
@@ -112,7 +152,7 @@ Checkout.maximum;
 
 | Modifier | Who can reach it |
 |---|---|
-| `private` | this class. This is the default for members. |
+| `private` | this class. This is the default for members outside an interface. |
 | `protected` | this class and its subclasses, in any namespace |
 | `internal` | this namespace and every namespace below it. This is the default for classes. |
 | `public` | everyone |
@@ -125,11 +165,29 @@ Checkout.maximum;
   - Too wide is a warning, for example a `public` member that nothing outside its namespace uses.
 - **There is no named reach,** such as `internal(App\Tenant)`. A helper shared by sibling namespaces moves to their parent namespace.
 
+**An interface member is always public, so it takes no access modifier.** Writing one, `public` included, is a compile error, as in TypeScript, Swift and Go:
+
+<!-- example interface-members -->
+```csharp
+// app/Notifier.sharp
+namespace App;
+
+public interface Notifier
+{
+    string channel { get; }                 // compiles: public, as every interface member is
+    void send(string message);              // compiles
+    public void flush();                    // compile error: an interface member is always public, so write it with no access modifier
+}
+```
+
+- **An interface member is as visible as its interface,** so an `internal` interface's members reach only what the interface reaches, as C#'s effective accessibility does.
+- **Interface members are exempt from the too-wide warning,** because they have no narrower form.
+
 ## 6. Fields and properties
 
 Fields and properties are separate concepts.
 
-- **A field is storage.** It can only be `private` or `protected`. A field with no modifier is `private`. There are no public fields, except an override of a plain PHP parent's `public` property (section 6.1).
+- **A field is storage.** It can only be `private` or `protected`. A field with no modifier is `private`. There are no public fields.
 - **A property is the API.** It has `get` and `set` accessors, and each accessor carries its own access level.
 
 <!-- example field-and-property: members -->
@@ -149,16 +207,41 @@ public int views { get; private set; } = 0;                     // auto-property
 public List<Tag> tags { get; set; } = new List<Tag>();
 ```
 
-A constant initial value is stored as the member's default. Any other value is set at the start of the constructor, in the order the members are declared.
+Initial values run before the parent's constructor, in the order the members are declared, and can't read `this`, as in C#.
 
-**A `T?` field or settable auto-property with no initial value starts as null,** as in C# and Swift. A get-only `T?` property in the class body with no initial value is a compile error. The error names both fixes: an initial value, or a `set` accessor.
+**A `T?` field or settable auto-property with no initial value starts as null,** as in C# and Swift. A get-only `T?` property is set once, by its initial value or by the constructor, like every other get-only property.
 
-<!-- example nullable-members: members alone -->
+**A get-only property with no initial value must be set on every path through the main constructor,** nullable or not, as Swift's `let` and Kotlin's `val` must be. Otherwise it is a compile error that names both fixes: an initial value, or setting it in the constructor.
+
+<!-- example nullable-members -->
 ```csharp
-private int? total;                      // compiles: starts as null
-public string? nickname { get; set; }    // compiles: starts as null
-public string? note { get; }             // compile error: give note an initial value, or a set accessor
-public string? note { get; } = null;     // compiles
+// app/Profile.sharp
+namespace App;
+
+public class Profile
+{
+    private int? total;                      // compiles: starts as null
+    public string? nickname { get; set; }    // compiles: starts as null
+    public string? note { get; }             // compiles: the constructor sets it once
+    public string? memo { get; } = null;     // compiles: the initial value sets it once
+    public string? handle { get; }           // compile error: give handle an initial value, or set it on every path through the constructor
+
+    public Profile(string? note, bool claimed)
+    {
+        this.note = note;
+        if (claimed) { this.handle = "taken"; }
+    }
+}
+```
+
+**A static field or property that isn't `T?` needs an initial value.** No constructor sets it, so the error names both fixes: an initial value, or `T?`.
+
+<!-- example static-initial-values: members -->
+```csharp
+private static int hits = 0;                     // compiles
+private static int misses;                       // compile error: give misses an initial value, or make it int?
+public static string? region { get; set; }       // compiles: starts as null
+public static string label { get; set; }         // compile error: give label an initial value, or make it string?
 ```
 
 ### 6.1 Property features
@@ -175,7 +258,7 @@ PHP# has all of C#'s property features:
 - properties in interfaces, abstract properties, and overrides
 - Reflection that tells fields from properties
 
-**A class can override a plain PHP parent's property** with `override`, and it writes the type like every PHP# field. Eloquent's `$table`, `$fillable` and `$timestamps` are overridden this way:
+**A class overrides a plain PHP parent's property with a property** marked `override`, and it writes the type like every PHP# property. Eloquent's `$table`, `$fillable` and `$timestamps` are overridden this way:
 
 <!-- example plain-php-property-override: alone -->
 ```csharp
@@ -185,24 +268,24 @@ import Illuminate.Database.Eloquent.Model;
 
 public class Order : Model
 {
-    protected override string? table = "orders";                   // compiles: fits Model's @var string|null
-    protected override List<string> fillable = ["number", "total"]; // compiles
-    protected override List<string> with = ["customer"];            // compiles
-    public override bool timestamps = false;                        // compiles
+    protected override string? table { get; set; } = "orders";                    // compiles: fits Model's @var string|null
+    protected override List<string> fillable { get; set; } = ["number", "total"]; // compiles
+    protected override List<string> with { get; set; } = ["customer"];            // compiles
+    public override bool timestamps { get; set; } = false;                        // compiles
 
-    protected override table = "orders";                            // compile error: write the type
-    public override List<string> fillable = ["number"];             // compile error: fillable is protected in Model
-    protected override string? table = 5;                           // compile error: 5 is not string?
-    protected override int timestamps = 0;                          // compile error: Model's timestamps is bool
-    protected override List<string> fillable = this.columns();      // compile error: Model's constructor reads fillable
-                                                                    // before Order's code runs, so the value must be constant
-    protected string table = "orders";                              // compile error: Model declares table; write override
+    protected override table { get; set; } = "orders";                            // compile error: write the type
+    public override List<string> fillable { get; set; } = ["number"];             // compile error: fillable is protected in Model
+    protected override string? table { get; set; } = 5;                           // compile error: 5 is not string?
+    protected override int timestamps { get; set; } = 0;                          // compile error: Model's timestamps is bool
+    protected override List<string> fillable { get; set; } = this.columns();      // compile error: an initial value can't read this
+    public override bool timestamps = false;                                      // compile error: PHP# has no public fields; write a property
+    protected string? table { get; set; } = "orders";                             // compile error: Model declares table; write override
 }
 ```
 
 - **The written type must fit the parent's.** When PHP declares the parent's property with no type, the written type must be assignable to the parent's `@var` type, or to anything when there is no `@var`. The engine drops the written type when the class links, because PHP refuses a typed redeclaration there. When PHP declares the parent's property with a type, the written type must equal it, because PHP checks property types for invariance when the class links. The engine keeps it.
 - **The access level is written and must match the parent's.** It is `public` when the parent's property is, as `timestamps` is in `Model`.
-- **The value must be constant.** Section 6 sets any other initial value at the start of the constructor, and the parent's constructor may already have read it, as Eloquent's does.
+- **The initial value runs before the parent's constructor and can't read `this`** (section 6), so a parent's constructor that reads the property, as Eloquent's does, sees it.
 - **A PHP# parent's field is overridden the same way,** measured against that field. A PHP# parent's property with accessor bodies is overridden as a property, as the list above says.
 
 ### 6.2 Change observers
@@ -246,7 +329,7 @@ public string name { get; set; } via Trimmed, Tracked;
 
 ### 6.5 `lazy`
 
-`lazy` is a modifier, not a behavior. A lazy property computes its value on the first read, then keeps it and never recomputes it. `static lazy` computes once per process.
+`lazy` is a modifier, not a behavior. A lazy property computes its value on the first read, then keeps it and never recomputes it. `static lazy` computes once for the host's app lifetime, the lifetime of a `singleton` (section 32).
 
 <!-- example lazy-property: members
 private Planner planner = new Planner();
@@ -304,18 +387,16 @@ import Sharp.Math.Math;
 
 public class Receipt
 {
-    public string label(string name) => name.trim();                        // compiles: runs as trim($name)
+    public string label(string name) => name.trim();                        // compiles
     public int larger(int a, int b) => Math.max(a, b);                      // compiles
     public string body(Map<string, Any> payload) => Json.encode(payload);   // compiles
     public string raw(string name) => trim(name);                           // compile error: write name.trim()
 }
 ```
 
-- **The compiler inlines a standard-library method whose body is one call,** as the .NET and JVM JITs and rustc inline small methods. So `name.trim()` runs as `trim($name)`, and no keyword marks the method.
-- **Once the standard library wraps a PHP function, calling that function from `.sharp` code outside the standard library is a compile error that names the method.**
-- **PHP functions the standard library does not wrap yet stay callable,** and so do plain PHP functions, such as Laravel's `now()`. Section 29 covers their effects.
+- **Every PHP built-in function is a standard library method,** so calling one by its bare name from `.sharp` code outside the standard library is a compile error that names the method. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
 
-**Output and exit are function calls.** `echo` and `print` are removed, and output goes through `printf` or `fwrite`. `die` is removed, because `die("…")` prints its message and exits with status 0, which reports success. `exit(code)` stays, as PHP 8.4's built-in function.
+**Output and exit go through the standard library.** `echo` and `print` are removed, and output goes through `Console` (section 29). `die` is removed, because `die("…")` prints its message and exits with status 0, which reports success. Exiting goes through `Process`.
 
 <!-- example output-and-exit: statements -->
 ```csharp
@@ -336,8 +417,8 @@ print "Pruned";                                          // compile error: write
 die("Prune failed");                                     // compile error: write the message to STDERR, then exit(1)
 ```
 
-- `exit` skips every `finally` block, as Java's `System.exit` and C#'s `Environment.Exit` do.
-- Printing has the effect `Console`, and `exit` has the effect `Process` (section 29), as Koka's `console` effect marks printing.
+- Exiting skips every `finally` block, as Java's `System.exit` and C#'s `Environment.Exit` do.
+- Printing has the effect `Console`, and exiting has the effect `Process` (section 29), as Koka's `console` effect marks printing.
 
 ## 9. Constructors
 
@@ -351,20 +432,21 @@ A constructor is named after its class. A parameter with an access modifier decl
 ```csharp
 public StoreService(
     private Planner planner,
-    [Field(label: "Account")] public Account account { get; } via Tracked,
+    [Field(label: "Account")] public Account account { get; private set; },
 ) {
     if (!account.active) { throw new InactiveAccount(account); }
 }
 ```
 
-A member declared on a parameter supports everything the same declaration supports in the class body:
+**A member declared on a parameter takes access levels and attributes only,** as TypeScript's and Kotlin's parameter properties do: an access modifier, an accessor list with an access level for each accessor, such as `{ get; private set; }`, and attributes. Accessor bodies, `willSet`, `didSet`, `via`, `lazy`, computed properties and `static` go on a member in the class body:
 
-- attributes
-- accessor bodies and a separate access level for each accessor
-- `willSet` and `didSet`
-- `via` behaviors
-
-`lazy`, computed properties and `static` are not allowed on a parameter, because each of those has no incoming value to receive.
+<!-- example parameter-member-limits: members in Ledger -->
+```csharp
+public Ledger(
+    public Money balance { get; } via Tracked,                     // compile error: declare balance in the class body to give it via
+    public string name { get; set => field = value.trim(); },      // compile error: declare name in the class body to give it an accessor body
+) { }
+```
 
 **A constructor marked `required`** is one that `new Self(…)` can call on the class and on every subclass. Section 25 gives its rules.
 
@@ -482,9 +564,9 @@ Point origin = new Point { x: 0 };    // compile error: y has no initial value, 
 
 `with` copies an object or a struct and sets the listed properties through their `init` or `set` accessors. The original is unchanged.
 
-**Any struct is a `Map` key by its whole value,** with nothing declared, as Swift's `Hashable` structs, Rust's `Hash` derive, C#'s record structs, Java's records, Kotlin's data classes and Go's structs are. Two structs are one key when they are `==` (section 19). A struct that holds a class instance, at any depth, can't key a `Map`, as Rust's `HashMap` needs every field to be `Hash` and Swift's `Dictionary` needs every field to be `Hashable`. Plain PHP sees a generated key text. A struct gets JSON key text only from its `toString()`, so `Json.encode` of a `Map` keyed by a struct without `toString()` is a compile error, as Jackson writes a key through `toString` and serde and Go refuse a key that is not text.
+**A struct keys a `Map` by its whole value when every field has `==`,** with nothing declared, as Swift's `Hashable` structs, Rust's `Hash` derive, C#'s record structs, Java's records, Kotlin's data classes and Go's structs are. It is the general rule for keys (section 12): a struct whose every field has `==` has `==` and `hash()` (section 19). Two structs are one key when they are `==`. A struct gets JSON key text only from its `toString()`, so `Json.encode` of a `Map` keyed by a struct without `toString()` is a compile error, as Jackson writes a key through `toString` and serde and Go refuse a key that is not text.
 
-**Every struct has a static `parse`,** which reads a `Map<string, Any?>` or an object's public properties and throws one error that lists every bad field, and a static `tryParse`, which gives null instead. The names follow `Int.parse` and `Int.tryParse` (section 24). Classes do not get them.
+**Every struct has a static `parse`,** which reads a `Map<string, Any?>` or an object's public properties and throws one error that lists every bad field, and a static `tryParse`, which gives null instead. The names follow `Int.parse` and `Int.tryParse` (section 24). Every class gets both the same way.
 
 <!-- example struct-parse: statements
 Map<string, Any?> payload = ["customerId": "abc"];
@@ -522,14 +604,19 @@ public struct OrderRow
 }
 
 OrderRow order = OrderRow.parse(row);   // row is a plain PHP object from a database query; throws: "id: expected int, got string 'abc'"
+
+public class OrderRecord
+{
+    public OrderRecord(public int id { get; }, public string number { get; }) { }
+}
+
+OrderRecord record = OrderRecord.parse(row);   // a class parses the same way: its main constructor's parameters, then every property an initializer may set
 ```
 
 ## 11. Generics
 
 **Generics are reified.** The running program knows every type argument.
 
-- Reflection shows `PaginatedList<Order>`.
-- Plain PHP reads an object's type arguments with `ReflectionObject::getTypeArguments()`, as C#'s `Type.GetGenericArguments()` does. A class value reaches plain PHP as a plain class-name string (section 25), so it carries none.
 - `page is PaginatedList<Order>` is checked while the code runs.
 - A value of the wrong type throws a `TypeError` where it enters PHP# from plain PHP. Section 12 lists where a value enters. An `int` where PHP# expects a `float` does not throw: it becomes a `float` (section 24).
 
@@ -545,13 +632,16 @@ public class Counter<T>
 
 Counter<Order>.count += 1;
 Counter<User>.count;                                     // 0: Counter<User> has its own count
+Counter.count;                                           // compile error: name the type argument, as in Counter<Order>.count
 ```
+
+A static member names its type arguments: `Counter<Order>.count`. A bare `Counter.count` names none and is a compile error.
 
 **Writing type arguments:**
 
 - **`new` always names them:** `new PaginatedList<Order>(…)`, or names a class value that carries them, as in `new (pages)()` (section 25).
 - **A generic method call fixes them** from the arguments it receives, or from the declared type its result goes into. A type argument that neither fixes is a compile error, as in C#'s error CS0411 and in Swift.
-- **Plain PHP generics,** declared with PHPDoc's `@template`, keep their fallback.
+- **A plain PHP generic class,** declared with PHPDoc's `@template`, takes type arguments in PHP# code, as in `Collection<Order>`. The checker checks them, but the object carries none while the code runs, as Java's erased generics do. So a type test against one, such as `x is Collection<Order>`, is a compile error that says the type argument is unknown while the code runs (section 21).
 
 <!-- example generic-method-inference: statements alone
 Cache cache = new Cache();
@@ -588,7 +678,7 @@ public class Report
 }
 ```
 
-**Every type argument is carried at runtime, written or inferred.** The checker's types reach the running program (section 27), so a generic method can use a type parameter that its call inferred:
+**Every type argument is carried at runtime, written or inferred,** so a generic method can use a type parameter that its call inferred:
 
 <!-- example inferred-type-arguments: statements
 Inbox inbox = new Inbox();
@@ -654,9 +744,8 @@ There is no variance at the point of use, such as Java's `? extends T`.
 
 PHP# has three collection types: `List<T>`, `Map<TKey, TValue>` and `Set<T>`.
 
-- They are values, as structs (section 10) and PHP's own arrays are. Assigning or passing a collection copies it only when one side later writes to it.
-- A `Map`'s key is an `int`, a `string`, a backed enum, or a struct (see **Map keys** below).
-- `List` and `Map` both run as plain PHP arrays. The engine knows which one it compiles from the checker's types (section 27), so each operation does what it naturally means on that kind of collection.
+- They are values, as structs (section 10) and Swift's `Array`, `Dictionary` and `Set` are. Assigning or passing a collection copies it only when one side later writes to it.
+- A `Map`'s key is any type with `==` and `hash()` (see **Map keys** below).
 
 <!-- example copy-on-write: statements
 List<Line> a = [new Line()];
@@ -785,23 +874,12 @@ image.resize(...options);                                 // compile error: only
 - A literal cannot spread a `List` and a `Map` together.
 - Only a `List` spreads into a call (section 7).
 
-**PHP's spread renumbers int keys, and PHP# does not.** A `Map<string, TValue>` stores an all-digit key such as `"5"` as the int `5`, so PHP's spread renumbers it:
+**Indexing:**
 
-<!-- example php-spread-renumbers: statements -->
-```php
-$defaults = ["5" => 10, "pro" => 20];
-$overrides = ["5" => 30];
-[...$defaults, ...$overrides];             // [0 => 10, "pro" => 20, 1 => 30]: the "5" key is gone
-array_replace($defaults, $overrides);      // ["5" => 30, "pro" => 20]: what PHP# runs for a Map spread
-```
-
-A `Map` keeps its keys (decision 26), and the engine knows which collection a spread holds (section 27), so a `Map` spread runs as `array_replace` and every key survives.
-
-**Indexing has one meaning on every collection:**
-
-- A bare read, `x[i]`, throws `OutOfRangeException` when the index or key is missing.
-- `x[k] = v` inserts or replaces a key. It is `Map`-only, so `lines[0] = line` is a compile error that names `set`.
-- `set(i, v)` replaces a `List` element, and throws `OutOfRangeException` past the end. Appending is `add`.
+- A `List` read, `x[i]`, throws `OutOfRangeException` when the index is missing, whatever follows it, as in Kotlin, Swift and C#. `x.getOrNull(i)` is the safe read, as in Kotlin, so `x[i] ?? fallback` is a compile error that names `getOrNull`.
+- A `Map` read, `x[key]`, gives `TValue?`, null when the key is missing, as in Kotlin and Swift.
+- `x[i] = v` on a `List` replaces the element at `i`, and throws `OutOfRangeException` past the end. Appending is `add`.
+- `x[key] = v` on a `Map` inserts or replaces the key.
 - A `List` index is an `int`. Any wider index, such as `int|string` or `Any`, is a compile error. A negative index is never in a `List`, so `items[-1]` throws `OutOfRangeException`, and the last item is `items.last()`, as in Kotlin.
 
 <!-- example index-rules: statements
@@ -814,15 +892,16 @@ int|string id = 1;
 -->
 ```csharp
 const first = lines[0];       // throws OutOfRangeException when lines is empty
-lines.set(0, line);           // throws OutOfRangeException when lines is empty
-lines[0] = line;              // compile error: write lines.set(0, line)
+lines[0] = line;              // replaces the element at 0, and throws OutOfRangeException when lines is empty
 plans["pro"] = pro;           // inserts or replaces
 items[-1];                    // throws OutOfRangeException: write items.last()
 items.last();                 // the last item
+items.getOrNull(5);           // null: index 5 is missing
+items[5] ?? 0;                // compile error: a List read throws when the index is missing; write items.getOrNull(5) ?? 0
 items[id];                    // compile error when id is int|string: a List index is an int
 ```
 
-**A `List` index is a place,** as a Rust `Vec` index and a Go slice index are, so a change through it changes the element the list stores: `grid[0].add(5)` adds to the list at index 0. **A change through a `Map` index is a compile error,** as Go refuses `m[k].x = 5`, because a `Map` read is a copy:
+**A `List` index is a place,** as a Rust `Vec` index and a Go slice index are, so a changing method called through it changes the element the list stores: `grid[0].add(5)` adds to the list at index 0. A struct's fields never change (section 10), so `points[0].x = 5` stays a compile error. **A change through a `Map` index is a compile error,** as Go refuses `m[k].x = 5`, because a `Map` read is a copy:
 
 <!-- example index-changes: statements
 List<List<int>> grid = [[1, 2], [3]];
@@ -837,21 +916,20 @@ counts.add(5);
 stock["sku-1"] = counts;                      // stores the changed list back
 ```
 
-**A `Map` read is handled where it is read,** with `??`, `?.`, `is`, `as`, `match` or `get`. A bare `Map` read is a compile error that names `??` and `get`:
+**A `Map` read gives `TValue?`, so it is handled where it is read,** with `??`, `?.`, `is`, `as`, `match` or `get`. A `Map` read used as a `TValue` is a compile error that names `??` and `get`:
 
 <!-- example map-reads: statements alone
 string plan = "pro";
+private void charge(int price) { }
 -->
 ```csharp
 Map<string, int> prices = ["basic": 900, "pro": 2900];
 int price = prices["pro"];                                  // compile error: handle a missing "pro" with ??, or read it with get
 int price = prices["pro"] ?? 0;                             // compiles: 0 when "pro" is missing
 int price = prices[plan] ?? throw new UnknownPlan(plan);    // compiles: throws when plan is missing
-if (prices[plan] is int price) { charge(price); }           // compiles: runs only when plan is present
+if (prices[plan] is int price) { this.charge(price); }      // compiles: runs only when plan is present
 int? maybe = prices.get(plan);                              // compiles: null when plan is missing
 ```
-
-The same holds for a `List` index: when the index is missing, `if (lines[i] is Line line)` does not run its block, `lines[i] as Line` gives null, and a `match` on `lines[i]` takes its `null` or `default` arm.
 
 Data with fixed keys is a class, so a `Map` holds keys that come from outside, where a missing key is normal.
 
@@ -866,7 +944,7 @@ limits.has("pro");           // true
 limits.has("team");          // false
 ```
 
-**A key read back out of a `Map<string, TValue>` is a `string`.** PHP stores an all-digit string key, such as `"5"`, as the int `5`. The engine knows the key type (section 27), so it hands the key back as `"5"`. Plain PHP reading the same array still sees `5`. This covers the key of `for (const [key, value] of map)` and of `keys()`.
+**A key read back out of a `Map<string, TValue>` is a `string`,** an all-digit key such as `"5"` included. This covers the key of `for (const [key, value] of map)` and of `keys()`.
 
 <!-- example map-string-keys: statements
 Map<string, int> stock = ["5": 1, "sku-2": 2];
@@ -879,11 +957,9 @@ for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is a 
 }
 ```
 
-**Map keys:** a key is `int`, `string`, a backed enum (section 20), or a struct by its whole value (section 10).
+**Map keys:** anything with `==` and `hash()` (section 19) keys a `Map` and joins a `Set`, as in Swift, Rust, Java and Kotlin.
 
-- `counts[status]` runs as `$counts[$status->value]`.
-- A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type, as in `const [Status status, int n]`, stays allowed. An inferred `Map`, such as a `groupBy` result, gives its keys back the same way, because the checker's types reach the running program (section 27).
-- Plain PHP receives an enum key's backing value, and a generated key text for a struct key.
+- A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type, as in `const [Status status, int n]`, stays allowed. An inferred `Map`, such as a `groupBy` result, gives its keys back the same way.
 
 <!-- example enum-map-keys -->
 ```csharp
@@ -915,7 +991,7 @@ public class OrderStats
     {
         Map<Status, int> counts = [:];
         for (const order of orders) {
-            counts[order.status] = (counts[order.status] ?? 0) + 1;   // runs as $counts[$order->status->value]
+            counts[order.status] = (counts[order.status] ?? 0) + 1;
         }
         return counts;
     }
@@ -938,18 +1014,26 @@ List<Order> orders = [new Order()];
 ```csharp
 for (const [status, n] of stats.countByStatus(orders)) { … }   // compiles: status arrives as a Status, with no type written
 for (const [status, group] of orders.groupBy(o => o.status)) { … }   // compiles: an inferred Map's keys arrive as Status too
-Map<Username, Order> byUser = [:];                               // compiles: a struct keys a Map by its whole value
+Map<Username, Order> byUser = [:];                               // compiles: a struct whose every field has == keys a Map by its whole value
 ```
 
-**A list passed where a `Set` or a tuple is expected becomes one.** The receiving parameter converts it on arrival, as PHP already converts arguments to a parameter's type:
+**Only a literal takes its collection type from where it lands.** A list literal passed where a `Set` or a tuple is expected becomes one. A `List` variable passed there is a compile error, and where a `Set` is expected the error names `toSet()`:
 
 <!-- example set-arguments: statements in Tags -->
 ```csharp
 public static void apply(Set<string> tags) { … }
-Tags.apply(["vip", "new"]);                      // arrives as a Set
+Tags.apply(["vip", "new"]);                      // compiles: the literal becomes a Set
 ```
 
-**Methods** follow Kotlin's names. These are TypeScript's names plus the helpers TypeScript lacks:
+<!-- example set-variable-arguments: statements in Tags
+List<string> picked = ["vip"];
+-->
+```csharp
+public static void apply(Set<string> tags) { … }
+Tags.apply(picked);                              // compile error: a List is not a Set; write picked.toSet()
+```
+
+**Methods** follow Kotlin's collection names:
 
 <!-- example collection-read-methods: statements
 List<Line> lines = [new Line()];
@@ -981,7 +1065,6 @@ Plan pro = new Plan();
 ```csharp
 lines.add(line);
 lines.insert(0, line);
-lines.set(0, line);
 lines.remove(line);           // by value: the first equal element, and true when one was removed
 lines.clear();
 plans["pro"] = pro;
@@ -1010,7 +1093,7 @@ plans.filter(p => p.active);          // Map<string, Plan>, keys kept
 
 The complete method list is specified with the standard library.
 
-**`Iterable<T>` is anything a loop can read,** and it compiles to PHP's `iterable`. `List<T>` and `Set<T>` are `Iterable<T>`, and a `Map<TKey, TValue>` is an `Iterable<TValue>` of its values (section 17):
+**`Iterable<T>` is anything a loop can read,** and it compiles to PHP's `iterable`. `List<T>` and `Set<T>` are `Iterable<T>`. A `Map<TKey, TValue>` is an `Iterable<[TKey, TValue]>` of its entries, and `values()` gives its values (section 17):
 
 <!-- example iterables: statements
 OrderReport report = new OrderReport();
@@ -1106,15 +1189,14 @@ public readonly Customer buyer() readonly         // both
 
 - property `get` accessors
 - methods marked `readonly`
-- any plain PHP method
 
-Setters and unmarked PHP# methods are compile errors. Any plain PHP method can be called through a `readonly` value, because PHP# checks PHP# code only, as Kotlin's platform types leave a Java value unchecked:
+Setters and unmarked methods are compile errors. **`readonly` holds only types PHP# checks,** so a plain PHP class under `readonly` is a compile error:
 
 <!-- example readonly-values: members -->
 ```csharp
 import Illuminate.Database.Eloquent.Model;
 
-public class Order : Model
+public class Order
 {
     public string number { get; set; }
     public Money totalIn(string currency) readonly { … }
@@ -1127,8 +1209,9 @@ public void render(readonly Order order)
     order.totalIn("USD");      // compiles: totalIn is marked readonly
     order.markPaid();          // compile error: markPaid is not marked readonly
     order.number = "A-1";      // compile error: order is readonly
-    order.save();              // compiles: save is a plain PHP method of Model, which PHP# does not check
 }
+
+public void show(readonly Model model) { … }   // compile error: Model is a plain PHP class, which PHP# does not check
 ```
 
 **Readonly reaches everything read through it.** A property read through a `readonly` value is also `readonly`, so `order.lines` is readonly when `order` is.
@@ -1145,8 +1228,6 @@ public void render(readonly Order order)
 render cannot call order.totalIn: order is readonly.
 totalIn does not change Order, so declare it `totalIn(string currency) readonly`.
 ```
-
-`readonly` is enforced by the checker. The engine sees ordinary methods, so plain PHP callers are not checked.
 
 **Fields, properties and classes use `{ get; }`, not `readonly`.** A get-only property already cannot be reassigned. `readonly` on a field, a promoted constructor parameter or a class is a compile error that names `{ get; }`:
 
@@ -1272,7 +1353,7 @@ private Function<int(int)> discount;
 int paid = this.discount(price);       // calls the function in discount, since there is no discount method
 ```
 
-The field or property is read after the arguments run, which differs from C#. An argument that replaces `discount` changes which function runs.
+The field or property is read before the arguments run, as in Java, C#, TypeScript and Rust. An argument that replaces `discount` doesn't change which function runs.
 
 ### 14.4 Null operators
 
@@ -1285,6 +1366,7 @@ The field or property is read after the arguments run, which differs from C#. An
 <!-- example leave-on-null: members
 private Map<string, int> prices = [:];
 private Map<int, Customer> customers = [:];
+private void charge(Customer customer, int price) { }
 -->
 ```csharp
 public void renewAll(List<int> customerIds, string plan)
@@ -1292,7 +1374,7 @@ public void renewAll(List<int> customerIds, string plan)
     int price = this.prices[plan] ?? return;                // no such plan: nothing to renew
     for (const id of customerIds) {
         Customer customer = this.customers[id] ?? continue; // skip ids with no customer
-        charge(customer, price);
+        this.charge(customer, price);
     }
 }
 ```
@@ -1300,7 +1382,6 @@ public void renewAll(List<int> customerIds, string plan)
 **A `?` or a null check that cannot matter is a compile error,** because it misstates the code. Section 24 gives the rule for `?`.
 
 - a null check, `?.` or `??` on a value whose type has no `?`
-- a nullable parameter that the method rejects on every path. The type drops the `?`, and the caller checks.
 - a nullable return type on a method that never returns null
 
 <!-- example needless-null-checks: members
@@ -1312,16 +1393,12 @@ public void renew(Customer customer, Plan plan)
     if (customer != null) { … }                     // compile error: customer is Customer, so it can never be null
     int price = plan.price ?? 0;                     // compile error: plan.price is int, so ?? never applies
 }
-public void notify(Customer? customer)
-{
-    Customer c = customer ?? throw new NotFound();   // compile error: notify rejects null on every path; declare it Customer and check at the caller
-}
 public Customer? current() { return this.customer; } // compile error: current never returns null, so its type is Customer
 ```
 
 ## 15. Events
 
-An event says that something happened, such as an order being paid. `emit` raises it, and every listener for it runs. `vendor/bin/mago compile` finds every listener at build time (section 27), so nothing is wired by hand.
+An event says that something happened, such as an order being paid. `emit` raises it, and every listener for it runs. Nothing is wired by hand.
 
 <!-- example event-declarations -->
 ```csharp
@@ -1399,7 +1476,7 @@ Money total = new Money(500, "USD");
 emit new OrderPaid(order.id, total);             // runs every listener for OrderPaid
 ```
 
-**`new Order.Paid(…)` always calls `Order`'s named constructor `Paid`** (section 9.1), because `.` in code is always member access, and a type `App.Order.Paid` beside the class `App.Order` is already a compile error, because a class cannot share its full name with a namespace (section 23).
+**`new Order.Paid(…)` always calls `Order`'s named constructor `Paid`** (section 9.1). `.` in code is always member access, and a class can't share its full name with a namespace (section 23), so a type `App.Order.Paid` can't exist beside the class `App.Order`. The named constructor is the only reading.
 
 **Plain PHP events:** `extern event` marks a plain PHP class, such as a Laravel event, as an event, so PHP# code can listen to it:
 
@@ -1444,7 +1521,7 @@ public class OrderNotices
 ```
 
 - **A listener on an interface hears every event that implements it.**
-- **`vendor/bin/mago compile` finds every `on` at build time.** A wrong event name, or a parameter type the listed events don't share, is a compile error:
+- **Every `on` is checked before the code runs.** A wrong event name, or a parameter type the listed events don't share, is a compile error:
 
 <!-- example listener-errors: members
 public event OrderPaid(int orderId, Money amount);
@@ -1548,12 +1625,19 @@ Map<string, Plan> plans = ["pro": new Plan()];
 -->
 ```csharp
 for (const line of lines) { … }
-for (const plan of plans) { … }                  // a Map's values
-for (const [key, plan] of plans) { … }
+for (const [key, plan] of plans) { … }           // each entry of a Map is a [key, value] tuple
+for (const entry of plans) { … }                 // entry is a [string, Plan] tuple
 for (const [i, line] of lines.entries()) { … }
 ```
 
-A loop over a `Map` whose key is an enum or a struct gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type stays allowed (section 12).
+<!-- example map-values: statements
+Map<string, Plan> plans = ["pro": new Plan()];
+-->
+```csharp
+for (const plan of plans.values()) { … }         // a Map's values
+```
+
+**A loop over a `Map` gives each entry as a `[key, value]` tuple, and `values()` gives the values,** as Swift's, Kotlin's, Rust's and C#'s loops over a dictionary do. The key arrives as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type stays allowed (section 12).
 
 **A `const` loop variable can have its type written,** as in `for (const [Status status, int n] of counts)`. `let` with a written type is a parse error, because a typed local is written without `let` (section 2). A written `string` key over a `Map<string, TValue>` reads back as a `string`.
 
@@ -1592,7 +1676,7 @@ while (!done) done = true;      // compile error: write the body in braces, as i
 
 **Joining:** `+` joins strings. Joining a string with a number is a compile error, so `"1" + 1` cannot produce `"11"`. `+` in plain PHP files keeps its PHP meaning.
 
-`+` decides what to do when it runs, as in JavaScript. Two strings join, two numbers add, and an object with `operator +` (section 19) calls it.
+What `+` does is chosen from the operand types the checker sees, as C# and Kotlin resolve operators. Two strings join, two numbers add, and an object with `operator +` (section 19) calls it.
 
 <!-- example string-joining: statements
 Order order = new Order();
@@ -1614,7 +1698,7 @@ const html = `
 `;
 ```
 
-A template's `${expr}` accepts `int`, `float`, `string` and `bool`. A `bool` prints `true` or `false`. Every other type is a compile error, "A template shows `int`, `float`, `string` or `bool`, and `Status` is none of them.", with the offending type's name in place of `Status`. A literal or narrowed type counts as its base type, so `1|2` is an `int`. A union of two of them, such as `int|string`, is none of the four and is refused. A nullable value such as `int?` is refused until it is checked (section 24), and the same error names `int?`.
+A template's `${expr}` accepts `int`, `float`, `string`, `bool`, and any type that declares `string toString()`, as Rust's `format!` takes any `Display` type. A `bool` prints `true` or `false`, and any other type prints what its `toString()` returns. Every other type is a compile error, "A template shows `int`, `float`, `string`, `bool` or a type that declares `toString()`, and `Status` is none of them.", with the offending type's name in place of `Status`. A literal or narrowed type counts as its base type, so `1|2` is an `int`. A union of two of them, such as `int|string`, is none of them and is refused. A nullable value such as `int?` is refused until it is checked (section 24), and the same error names `int?`.
 
 <!-- example template-types: statements
 int count = 3;
@@ -1626,9 +1710,27 @@ Order order = new Order();
 ```csharp
 const a = `Total: ${count}`;   // int: "Total: 3"
 const b = `Paid: ${isPaid}`;   // bool: "Paid: true"
-const c = `Status: ${status}`; // enum case: compile error
-const d = `Items: ${items}`;   // List<int>: compile error
-const e = `Order: ${order}`;   // class Order: compile error
+const c = `Status: ${status}`; // compile error: Status declares no toString()
+const d = `Items: ${items}`;   // compile error: List<int> declares no toString()
+const e = `Order: ${order}`;   // compile error: Order declares no toString()
+```
+
+<!-- example template-to-string -->
+```csharp
+// app/Sku.sharp
+namespace App;
+
+public class Sku
+{
+    public Sku(public string code { get; }) { }
+    public string toString() => this.code;
+}
+```
+
+<!-- example template-to-string: statements -->
+```csharp
+const sku = new Sku("A-12");
+const label = `Sku: ${sku}`;   // Sku declares toString(): "Sku: A-12"
 ```
 
 A plain PHP file keeps PHP's own interpolation.
@@ -1639,13 +1741,16 @@ PHP's backtick shell execution is removed. `shell_exec()` stays.
 
 ## 19. Equality, comparison and operators
 
-**`==` exists only where the type declares it:**
+**`==` exists only where the type has it:**
 
-- **Structs, enums, strings, numbers and collections** compare by value with `==`, with no code.
+- **Strings, numbers, enums and class values** (section 25) compare by value with `==`, with no code.
+- **A struct or a collection gets `==` with no code when every field or element has `==`,** and it compares each field or element with that one's own `==`, as Swift, Rust and Go do. A struct with a field that has no `==` has no `==` either.
+- **Any type may declare `operator ==` with `hash()`,** a struct as well as a class, and the declared one replaces the one a struct gets with no code.
 - **A class** compares with `==` only if it or a parent declares `operator ==`. Otherwise `==` on it is a compile error.
+- **A function has no `==`,** so `==` between two function values is a compile error.
 - **`Any?`** compared with `==` against a struct, enum, string, number or collection compares by value, and is false when the types differ.
 - **`===`** is true only for the same object. It works on classes only, and cannot be overridden.
-- **`Set`** hashes a struct, enum, string, number or collection by its value, and an object by its class's `hash()`.
+- **`Set`** hashes a struct, enum, string, number or collection by its value, and an object by its class's `hash()`. A struct that declares `hash()` is hashed by it.
 
 **Operators** are declared once on a type and inherited by its subclasses:
 
@@ -1687,6 +1792,30 @@ Cart otherCart = new Cart();
 order == sameOrderLoadedAgain;   // Order inherits DatabaseEntity's ==, so this compares ids
 cart == otherCart;               // compile error: Cart declares no ==
 cart === cart;                   // true: the same object
+```
+
+A struct declares `==` the same way, and replaces the one it gets with no code:
+
+<!-- example struct-equality -->
+```csharp
+// app/Email.sharp
+namespace App;
+
+public struct Email
+{
+    public string address { get; init; }
+    public static bool operator ==(Email a, Email b) => a.address.trim() == b.address.trim();
+    public int hash() { … }
+}
+```
+
+<!-- example struct-equality: statements -->
+```csharp
+Email typed = new Email { address: "ada@example.com " };
+Email stored = new Email { address: "ada@example.com" };
+typed == stored;                 // true: Email's own == ignores the trailing space
+const twice = (int x) => x * 2;
+twice == twice;                  // compile error: a function has no ==
 ```
 
 - **Overloadable operators:** `+ - * / % **`, unary `-`, `==` and `<=>`. No other operator can be overloaded.
@@ -1755,7 +1884,7 @@ const mask = 1 << count;                      // throws ArithmeticError when cou
 | `&&` | left | same |
 | `\|\|` | left | same |
 | `??` | right | same |
-| `? :` | none | same. Nesting without parentheses is a compile error (section 21) |
+| `? :` | right | **differs:** PHP refuses nesting without parentheses (section 21) |
 | `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `**=`, `??=`, `&=`, `\|=`, `^=`, `<<=`, `>>=` | right | same, without `.=` |
 | lambda `=>`, `throw` | right | the lambda is PHP#'s. `throw` is as in PHP 8 |
 
@@ -1765,7 +1894,7 @@ PHP's `and`, `xor` and `or` do not exist (section 21).
 
 ## 20. Enums
 
-Plain enums keep PHP's shape:
+An enum can give each case a raw value, as Swift's raw-value enums do:
 
 <!-- example backed-enum -->
 ```csharp
@@ -1810,7 +1939,7 @@ return PaymentResult.Declined(reason: "card expired");
 
 An enum has exactly one of two shapes:
 
-- **Backed:** every case has a value, as in `case None = "none"`, and no case carries data. This is PHP's backed enum.
+- **Backed:** every case has a value, as in `case None = "none"`, and no case carries data.
 - **Not backed:** any mix of plain cases and cases that carry data.
 
 <!-- example enum-shapes -->
@@ -1826,7 +1955,7 @@ public enum CheckoutState
 A case with a value and a case with data in one enum is a compile error. Swift enforces the same rule.
 
 - **Each case is its own type,** so a method can take `PaymentResult.Paid` alone.
-- **At runtime,** each case is a real class, so Reflection and the Schema see it.
+- **At runtime,** each case is a real class, so Reflection sees it.
 - **The checker** rejects a `match` over the enum that misses a case.
 
 ### 20.1 Sealed interfaces
@@ -1863,6 +1992,7 @@ Use an enum when the cases are small data. Use a sealed interface when each case
 import Illuminate.Support.Facades.Log;
 PaymentResult result = PaymentResult.Declined(reason: "card expired");
 Order order = new Order();
+private void deliver(Order order) { }
 -->
 ```csharp
 const message = match (result) {
@@ -1874,7 +2004,7 @@ const message = match (result) {
 
 match (result) {
     PaymentResult.Paid(string transactionId) => {
-        deliver(order);
+        this.deliver(order);
         Log.info(transactionId);
     },
     default => {},
@@ -1908,14 +2038,15 @@ string size = match (n) {
 
 | Pattern | Example |
 |---|---|
-| value | `200 =>` |
+| constant | `200 =>`, `Status.Paid =>` |
 | comparison | `< 1000 =>`, `>= 1000 and < 10000 =>` |
 | case unpacked by position | `PaymentResult.Paid(string transactionId) =>` |
 | whole case, named | `PaymentResult.Paid p =>` |
 | properties | `{ status: 200, body: string body } =>` |
 | list | `[] =>`, `[Line only] =>`, `[Line first, ...List<Line> rest] =>` |
 
-- **A pattern creates a variable** only through a typed declaration, such as `string transactionId`. A bare name is a local's value when a local with that name is in scope, and a type otherwise.
+- **A pattern takes types and constants only,** such as `Circle`, `200` or `Status.Paid`, as in C#. A local's value is compared in `when`.
+- **A pattern creates a variable** only through a typed declaration, such as `string transactionId`.
 - **`and`, `or` and `not`** combine patterns. They exist only inside patterns.
 - **`when` adds a condition** to an arm. The condition is an ordinary expression.
 
@@ -1925,8 +2056,19 @@ Any? value = 10;
 ```csharp
 const limit = 10;
 const label = match (value) {          // value is Any?
-    limit => "at the limit",           // compares value with the local limit's value, 10
-    Circle => "a circle",              // no local is named Circle, so this tests the type
+    int n when n == limit => "at the limit",   // compares value with the local limit's value, 10, in when
+    Circle => "a circle",                      // a bare name in a pattern is a type
+    default => "other",
+};
+```
+
+<!-- example pattern-locals: statements
+Any? value = 10;
+-->
+```csharp
+const limit = 10;
+const label = match (value) {
+    limit => "at the limit",                   // compile error: limit is a local; compare its value in when
     default => "other",
 };
 ```
@@ -1935,12 +2077,12 @@ const label = match (value) {          // value is Any?
 
 <!-- example property-patterns: statements
 Response response = new Response();
-Any? event = new Paid();
+Any? payment = new Paid();
 -->
 ```csharp
 if (response is { status: 200 }) { … }                          // ignores headers, body and the rest
 if (response is { status: 200, body: { type: "json" } }) { … }  // nests into a property that is itself an object
-if (event is Paid { amount: > 1000 } big) { … }                 // tests the type and one property, and binds big
+if (payment is Paid { amount: > 1000 } big) { … }               // tests the type and one property, and binds big
 ```
 
 **`is` and `as`:**
@@ -1960,10 +2102,11 @@ const paid = result as PaymentResult.Paid ?? throw new NotPaid(result);
 
 <!-- example narrowing: statements
 Any? entity = new Page();
+private void render(string key) { }
 -->
 ```csharp
 if (entity is HasDesign) {
-    render(entity.designKey());  // entity counts as HasDesign here
+    this.render(entity.designKey());  // entity counts as HasDesign here
 }
 ```
 
@@ -1990,13 +2133,14 @@ circle.radius;                         // compile error: `circle` exists only wh
 
 <!-- example is-not-scope: members
 private Map<string, int> prices = [:];
+private Receipt charge(int orderId, int price) => new Receipt();
 -->
 ```csharp
 public Receipt checkout(Map<string, Any?> payload, string plan)
 {
     if (payload["orderId"] is not int orderId) { throw new BadPayload("orderId"); }
     if (this.prices[plan] is not int price) { return Receipt.unknownPlan(plan); }
-    return charge(orderId, price);                          // orderId and price are both known here
+    return this.charge(orderId, price);                     // orderId and price are both known here
 }
 ```
 
@@ -2037,6 +2181,24 @@ Circle circle = this.next();
 if (circle is Square) { … }            // compile error: This pattern never matches the value it tests.
 ```
 
+**Every type answers `is`, `as` and `match` the same way, function types included,** as in C#, Swift and Go. `value is Function<int(int)>` tests the function's parameter and result types while the code runs, as `value is List<int>` tests the list's elements. A test whose type the value's source never declares is a compile error that says the type is unknown, such as a function-type test on a `Closure` that a plain PHP library returns with no parameter or result types:
+
+<!-- example type-tests -->
+```php
+class Legacy
+{
+    public static function doubler(): Closure { return fn($x) => $x * 2; }
+}
+```
+
+<!-- example type-tests: statements -->
+```csharp
+Any? doubled = (int x) => x * 2;
+doubled is Function<int(int)>;               // true
+doubled is Function<string(string)>;         // false: the parameter and result types differ
+Legacy.doubler() is Function<int(int)>;      // compile error: the type of Legacy.doubler()'s function is unknown
+```
+
 **Boolean operators:** `&&`, `||` and `!` exist only in expressions. PHP's `and`, `or` and `xor` operators are removed, so `=` can no longer bind before `and`.
 
 **Conditions are `bool`.** `if`, `while`, `do … while`, `for`, `? :`, `&&`, `||`, `!` and `match`'s `when` take a `bool`. Any other type is a compile error, so PHP's truthiness never applies:
@@ -2052,7 +2214,7 @@ if (items.count() > 0) { … }
 **The ternary** `c ? a : b` gives `a` when `c` is true, and `b` otherwise.
 
 - PHP's two-operand `a ?: b` does not exist. `??` covers null (section 14.4).
-- `a ? b : c ? d : e` is a compile error, as in PHP 8. Parentheses say which nesting is meant: `a ? b : (c ? d : e)`.
+- `a ? b : c ? d : e` means `a ? b : (c ? d : e)`, as in C#, Java, TypeScript, Swift and Dart.
 
 ## 22. Inheritance
 
@@ -2253,15 +2415,71 @@ namespace App.Tenant.Store;
 import App.Shared.Schema.Entities.DatabaseEntity;
 ```
 
-**Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always a class, or a plain PHP function that an `extern` declares (section 29). A full class name inside code is a compile error that names the import to add. A module header names a namespace, as the `namespace` line does, so `module : App.Shop` compiles (section 32).
+**Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always a class, or the namespace of a plain PHP library's functions. A full class name inside code is a compile error that names the import to add. A module header names a namespace, as the `namespace` line does, so `module : App.Shop` compiles (section 32).
+
+**A plain PHP library's function is called through its namespace, as a member,** as Go calls a package's functions, as Python does after `import pdf`, as Java calls Kotlin's top-level functions and as C# calls F# modules. After `import Vendor.Pdf;`, the call is `Pdf.render(html)`. A function in PHP's root namespace is called as `global.now()`, as C#'s `global::` names the root. Importing a single function, or calling a function by its bare name, is a compile error, so every call outside the current class reads `Name.member(…)`:
+
+<!-- example library-functions -->
+```php
+namespace Vendor\Pdf;
+
+function render(string $html): string { return $html; }
+```
+
+<!-- example library-functions -->
+```csharp
+// app/Invoices/Printer.sharp
+namespace App.Invoices;
+
+import Vendor.Pdf;
+
+public class Printer
+{
+    public string print(string html) => Pdf.render(html);     // compiles: the function is called through its namespace
+    public string draft(string html) => render(html);         // compile error: call it through its namespace, as in Pdf.render(html)
+}
+```
+
+<!-- example library-functions -->
+```csharp
+// app/Invoices/Draft.sharp
+namespace App.Invoices;
+
+import Vendor.Pdf.render;                                     // compile error: import the namespace Vendor.Pdf, and call Pdf.render
+
+public class Draft { }
+```
 
 **An import never carries `uses`,** because a library's effect lives in its one `extern` declaration (section 29).
 
 **The standard library lives under one root, `Sharp`,** with the standard library namespaces `Sharp.Text`, `Sharp.Math`, `Sharp.Json`, `Sharp.IO`, `Sharp.Time`, `Sharp.Net` and `Sharp.Data`, as .NET has `System.*` and Rust has `std::*`.
 
-**Only `Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports under the same name shadows the default one.
+**Only `Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin:
 
-**A static class in a standard library namespace needs one import line,** and the import's last part is the class, as for any import:
+<!-- example own-namespace-shadows -->
+```csharp
+// app/Shop/Environment.sharp
+namespace App.Shop;
+
+public class Environment
+{
+    public static string stage() => "production";
+}
+```
+
+<!-- example own-namespace-shadows -->
+```csharp
+// app/Shop/Release.sharp
+namespace App.Shop;
+
+public class Release
+{
+    public string stage() => Environment.stage();                   // compiles: Environment is App.Shop.Environment, with no import
+    public string? region(Environment environment) => environment.variable("AWS_REGION");   // compile error: App.Shop.Environment declares no variable
+}
+```
+
+**A static class in a standard library namespace needs one import line,** and the import's last part is the class, as for any class:
 
 <!-- example standard-library-import: statements
 Map<string, Any> payload = ["id": 1];
@@ -2339,7 +2557,7 @@ namespace App.Billing;
 public event InvoicePaid(int invoiceId, Money amount);         // event
 ```
 
-Mago warns on a `.sharp` name that breaks the rule, through its existing naming lint rules and in their message shape, as in `method-name`'s "Method name `TotalIn` should be in camel case."
+A name that breaks the rule is a warning, as in "Method name `TotalIn` should be in camel case."
 
 **A type holds null only when it is written with `?`,** for parameters, return types, properties and locals alike: `Customer?` may hold null, and `Customer` never does. Section 14.4 lists the compile errors for a `?` or a null check that cannot matter.
 
@@ -2370,7 +2588,7 @@ public User find(int|string id)
 
 <!-- example nullable-unions: members -->
 ```csharp
-public (int|string)? find((int|string)? id)   // compiles: runs as PHP's int|string|null
+public (int|string)? find((int|string)? id)   // compiles
 public int|string|null find2()                 // compile error: write (int|string)?
 ```
 
@@ -2402,7 +2620,7 @@ return 2.0 ** -1;            // 0.5
 - Division by zero throws `DivisionByZeroError`.
 - `PHP_INT_MIN / -1` throws `ArithmeticError`, because the result overflows.
 - `/=` follows the same rules.
-- Like `+` (section 18), `/` chooses when it runs, from the types of its operands.
+- Like `+` (section 18), what `/` does is chosen from the operand types the checker sees.
 
 **An `int` where a `float` is expected is a compile error in PHP# code,** wherever a value lands, such as an assignment, an argument, a return, a property write, a list or map element, or a generic `T` that is `float`, as in `Cell<float>`.
 
@@ -2448,8 +2666,9 @@ float price = 9.99;
 Any? user = new User();
 -->
 ```csharp
-const qty = Int.parse(request.input("qty"));         // int, throws on "abc" and on "12abc"
-const maybe = Int.tryParse(request.input("qty"));    // int?, null on "abc"
+string text = request.input("qty") as string ?? ""; // an Any? is checked as a string first
+const qty = Int.parse(text);                         // int, throws on "abc" and on "12abc"
+const maybe = Int.tryParse(text);                    // int?, null on "abc"
 const cents = (int)(price * 100);                    // truncates toward zero
 const admin = user as Admin;                         // Admin?, null if user is not one
 const flag = request.input("flag") == "1";           // replaces (bool)
@@ -2457,8 +2676,8 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 
 - `(int)` and `(float)` convert between `int` and `float`. `(string)` converts a number to a `string`.
 - `(int)` truncates a `float` toward zero. A `float` too large for an `int`, or NaN, throws `ArithmeticError`.
-- A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take `Any?`, and throw on anything that is not a string holding only a number, such as `"abc"`, `"12abc"` or `null`.
-- `Int.tryParse(s)` and `Float.tryParse(s)` take `Any?` too, and give null where `parse` throws.
+- A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take a `string`, as C#'s `int.Parse(string)` and Kotlin's `String.toInt()` do, and throw on a string that holds anything but a number, such as `"abc"` or `"12abc"`. An `Any?` is checked with `as string` first.
+- `Int.tryParse(s)` and `Float.tryParse(s)` take a `string` too, and give null where `parse` throws.
 - A class or an interface narrows only with `as`, which gives null, or with `as … ?? throw` (section 21).
 - PHP# has no user-defined conversion operators, such as C#'s `implicit operator`. A type converts only through a property or method it declares, such as `username.value`.
 - `(bool)`, `(array)` and `(object)` do not exist. Conditions are `bool` (section 21), so a comparison such as `request.input("flag") == "1"` replaces `(bool)`. `(array)` and `(object)` are compile errors that name their replacements, shown below.
@@ -2469,21 +2688,16 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 <!-- example array-object-replacements: statements
 import Sharp.Json.Json;
 Object row = Rows.withId(1);
-string|List<string> value = "vip";
-List<int>|List<List<int>> numbers = [1, 2];
 string email = "ada@example.com";
 -->
 ```csharp
 OrderRow order = OrderRow.parse(row);             // replaces (array)row: a struct reads an object's public properties (section 10)
-List<string> tags = List.wrap(value);             // replaces (array)value, where value is string|List<string>
-List<List<int>> rows = List.wrap(numbers);        // compile error: T is List<int>, itself a list; write numbers is List<int> one ? [one] : numbers
 Map<string, Any> payload = ["id": 1, "email": email];
 string json = Json.encode(payload);               // {"id":1,"email":"…"}: replaces json_encode((object)[…])
-const data = (array)row;                          // compile error: write OrderRow.parse(row) for an object, or List.wrap(row) for a value
+const data = (array)row;                          // compile error: write OrderRow.parse(row)
 const point = (object)["x": 1];                   // compile error: write a Map literal, or a struct
 ```
 
-- **`List.wrap(T|List<T> value)`** gives a `List<T>`: the list itself, or a list holding the one value. The checker refuses `wrap` when `T` could itself be a list, and its error names the `is` form, `value is T one ? [one] : value`.
 - **A JSON object** is a `Map` literal for a one-off payload, and a declared struct for a shape that repeats.
 - **`Json.encode` encodes by the value's PHP# type, as far as the type is written,** so there a `Map` is a JSON object and a `List` is a JSON array, even when empty, and even when a `Map`'s keys run from 0 to n. PHP's own `json_encode` sees a plain array, so it gives `[]` for an empty `Map`.
 - **Below an `Any`, a value encodes as PHP sees it,** because an array carries no mark that says `List` or `Map` (decision 26). Any list-shaped array there, such as an empty `Map` or a `Map<int, V>` with keys 0 to n, encodes as a JSON array. To keep a `Map` a JSON object, write its type or use a struct.
@@ -2559,7 +2773,7 @@ Ids.identity(5);                                // compile error: 5 is not an ob
 
 ## 25. Referring to classes
 
-**`typeof(X)`** is typed `Class<X>`, and plain PHP receives the class-name string. It works on every type parameter, a method's included, because every type argument reaches the running program (section 11). PHP's `Order::class` is removed.
+**`typeof(X)`** is typed `Class<X>`. It works on every type parameter, a method's included, because every type argument reaches the running program (section 11). PHP's `Order::class` is removed.
 
 <!-- example typeof-types
 public class Example
@@ -2597,7 +2811,7 @@ public TItem blank<TItem>()
 }
 ```
 
-**`typeof(value)` gives an object's class.** For a value of type `T`, it is typed `Class<T>` and holds the object's runtime class, which may be a subclass of `T`. Plain PHP receives the class-name string. It replaces PHP's `$order::class` and `get_class($order)`.
+**`typeof` takes a type only. `Class.of(value)` gives an object's class,** as Swift's `type(of:)` and Python's `type()` do. For a value of type `T`, it is typed `Class<T>` and holds the object's runtime class, which may be a subclass of `T`.
 
 <!-- example typeof-values: statements
 import Illuminate.Support.Facades.Log;
@@ -2605,14 +2819,13 @@ Order order = new Order();
 int id = 1;
 -->
 ```csharp
-Class<Order> type = typeof(order);              // compiles: order's runtime class, which may be a subclass of Order
+Class<Order> type = Class.of(order);            // compiles: order's runtime class, which may be a subclass of Order
 const fresh = new (type)(id);                   // compiles: a new object of that class
-Log.info("saved", ["class": typeof(order)]);    // compiles; runs: plain PHP receives the class-name string
+Log.info("saved", ["class": Class.of(order)]);  // compiles
+typeof(order);                                  // compile error: typeof takes a type; write Class.of(order)
 ```
 
-- **A bare name inside `typeof` is a local's value when a local with that name is in scope, and a type otherwise,** the same rule pattern matching uses (section 21).
-
-**A class value works wherever a class name works.** `typeof` gives one, and a `Class<T>` field, parameter or local holds one:
+**A class value works wherever a class name works.** `typeof` and `Class.of` give one, and a `Class<T>` field, parameter or local holds one:
 
 <!-- example class-values -->
 ```csharp
@@ -2656,21 +2869,18 @@ public class FormBuilder
 - **`new (type)(…)`** creates an object from a class value. The parentheses around `type` mark it as an expression, not a class name. It needs a `required` constructor, as `new Self(…)` does. For a plain PHP class, such as `Class<Model>`, the checker checks the call against that class's own constructor.
 - **A static call through a class value,** such as `type.defaultTag()` or `type.find(id)`, calls the static on the class the value holds.
 - **`Class`'s own members win,** such as `attributes`. A class cannot declare a static named like one of them, as in TypeScript's error 2699.
-- **A class value's type need not be written.** `const type = …` holds a `Class<Element>`, because the checker's types reach the running program (section 27).
-- **A property named by a variable stays refused.** PHP's `$order->$column` has no PHP# form, and `order.getAttribute(column)` replaces it.
+- **A class value's type need not be written.** `const type = …` holds a `Class<Element>`.
+- **A property named by a variable has no form.**
 
 <!-- example class-members: statements
 Class<Element> type = typeof(FormElement);
 string kind = "form";
 string key = "signup";
-OrderModel order = new OrderModel();
-string column = "total";
 -->
 ```csharp
 type.attributes<Listen>();                       // Class's own method
 public static string attributes() => "";         // compile error: attributes is a member of Class
 new (kind)(key);                                 // compile error: kind is a string, not a Class
-order.getAttribute(column);                      // compiles: Eloquent's API replaces $order->$column
 ```
 
 **A class value of a generic class can carry its type arguments or leave them out,** as in C#. `typeof(PaginatedList<Order>)` is a `Class<PaginatedList<Order>>`, and `new (pages)()` creates a `PaginatedList<Order>`. A `Class<PaginatedList>` leaves them out, so `new` names them: `new (any)<Order>()`. `new (any)()` on an open generic class is a compile error.
@@ -2688,6 +2898,17 @@ public class Pages
     public PaginatedList<Order> ofOrders(Class<PaginatedList> any) => new (any)<Order>();   // compiles: a PaginatedList<Order>
     public Any open(Class<PaginatedList> any) => new (any)();                              // compile error: PaginatedList is generic, so new names its type arguments
 }
+```
+
+**Two class values are equal when they name the same class with the same type arguments,** as in C#, so `typeof(Box<Order>) == typeof(Box<Invoice>)` is false:
+
+<!-- example class-value-equality: statements
+public class Box<T> { }
+public class Invoice { }
+-->
+```csharp
+typeof(Box<Order>) == typeof(Box<Order>);       // true
+typeof(Box<Order>) == typeof(Box<Invoice>);     // false: the same class with other type arguments
 ```
 
 **`Self`** means the class a static method was actually called on. It replaces PHP's `static`. PHP's `self` is removed: to mean the declaring class, write its name.
@@ -2775,11 +2996,19 @@ title.slug();
 title.isBlank;
 ```
 
-- **An extension applies in files that import its class, or in its class's own namespace.**
-- **A member the receiver's type declares or inherits wins,** and an extension of that name is a compile error.
-- **Otherwise the extension applies, chosen from the type the code shows,** even on an object of a subclass with its own member of that name.
+- **An extension applies only in files that import its class, and in the files of its own namespace,** as Kotlin's do in their package. One in the file's own namespace shadows a default extension of the same name (section 23).
+- **An extension is chosen from the type the line shows,** as in C# and Kotlin. A member that type declares wins over an extension of the same name. A member a subclass declares never makes an extension a compile error:
+
+<!-- example extension-static-choice: statements -->
+```csharp
+import App.Billing.OrderLabels;     // extension(Order order) { public string label() => …; }
+
+Order order = new RushOrder();      // RushOrder : Order declares its own label()
+order.label();                      // compiles: the line shows an Order, so OrderLabels runs
+```
+
 - **Extensions can only reach the type's public members,** so access rules still hold.
-- **The receiver's type picks among imported extensions with one name,** as in C# and Kotlin:
+- **The receiver's type picks among the extensions with one name that apply in a file,** as in C# and Kotlin:
 
 <!-- example extension-overloads: statements
 List<Line> lines = [new Line()];
@@ -2808,7 +3037,7 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 
 The extension is **`.sharp`**, as in `StoreService.sharp`.
 
-**A `.sharp` file declares one type, named like the file,** as Composer's PSR-4 autoloader loads one class per file. Every type, events and interfaces included, sits at file level in the namespace its folder names (section 5), so a reader finds a type by its namespace and its file, as in PHP. A second type in a file is a compile error:
+**A `.sharp` file that declares a type declares one, named like the file,** as Java allows one public top-level class per file. Every type, events and interfaces included, sits at file level in the namespace its folder names (section 5), so a reader finds a type by its namespace and its file. A second type in a file is a compile error. An `extern` declaration file (section 29) and a `Module.sharp` file (section 32) hold no type, so the rule doesn't cover them:
 
 <!-- example one-type-per-file -->
 ```csharp
@@ -2850,47 +3079,24 @@ public class Reports
 }
 
 const here = __FILE__;                                           // compile error: write Position.current().file
-Log.info("charged", ["class": typeof(Order)]);                   // compiles: replaces __CLASS__, and plain PHP receives "App\Store\Order"
+Log.info("charged", ["class": typeof(Order)]);                   // compiles: replaces __CLASS__
 ```
 
 - `Position.current()` in a body gives the position where it is written.
 - As a parameter's default, `Position.current()` gives the caller's position, as C++20's `std::source_location::current()` and Swift's `#file` defaults do.
-- A plain PHP caller gets the position where the parameter is declared, because PHP# does not compile plain PHP's calls.
+**A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. A pragma, `mago.toml`'s `ignore` or the baseline can hide a warning, never an error.
 
-**A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. A pragma, `mago.toml`'s `ignore` or the baseline can hide a warning, never an error. The checker's types reach the running program, inferred ones too, so generic code (section 11), loops over enum-keyed maps (section 12) and class values (section 25) work without a written type.
+**`vendor/bin/mago compile` compiles the project.** It checks every `.sharp` file, vendor packages included. It also creates a missing `.lean` file beside a class that has a law (section 28.1), and never rewrites an existing one.
 
-**`vendor/bin/mago compile` compiles the project.** It checks every `.sharp` file, vendor packages included, and writes each accepted file as a `.sharpc` file into one `.sharp/` folder at the project root. The folder mirrors the source paths:
-
-```text
-project/
-├── app/Orders/Order.sharp
-├── app/Orders/LegacyExport.php             <- plain PHP: never compiled, runs as today
-├── vendor/acme/money/src/Money.sharp       <- vendor is never written to
-└── .sharp/                                 <- generated by mago compile; add it to .gitignore
-    ├── app/Orders/Order.sharpc
-    └── vendor/acme/money/src/Money.sharpc
-```
-
-- **`mago compile` writes `.sharp/`, and it also creates a missing `.lean` file beside a class that has a law** (section 28.1). It never rewrites an existing one.
-- **The engine finds `.sharp/`** by walking up from the source file, as git finds `.git`. Nothing needs configuring.
-- **The engine runs a `.sharp` file only from its current `.sharpc` file.** A missing, stale or mismatched one is refused, and the refusal names the fix:
+- **A `.sharp` file that isn't compiled, or is out of date, is refused,** and the refusal names the fix:
 
 ```text
 app/Orders/Order.sharp isn't compiled. Run vendor/bin/mago compile.
 app/Orders/Order.sharp is out of date (app/Shared/Money.sharp changed). Run vendor/bin/mago compile.
 app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mago-sharp release that matches this engine.
-
-app/Orders/Order.sharp has 1 error:
-line 12: Invalid return type for method `Order.total`: expected `int`, but found `string`.
-
-app/Orders/Order.sharp has 3 errors:
-line 12: Invalid return type for method `Order.total`: expected `int`, but found `string`.
-line 19: …
-line 31: …
 ```
 
-- **In development,** the `php.ini` setting `sharp.compile_command` lets the engine compile a stale file on demand before it runs, instead of refusing it. When the checker refuses the file it just compiled, the refusal lists every error in the file in line order, each on its own line with its line number.
-- **A deploy** runs `vendor/bin/mago compile` and ships `.sharp/` with the code.
+- **A deploy** runs `vendor/bin/mago compile` before the code runs.
 - **A type error, or a broken structure rule (section 28), stops the file from running.** So does a law without a proof, a gap, or a proof whose law was deleted, each a compile error that names it.
 - **A rule that reads the whole project's structure can lag in development** until the next full compile. At deploy, `mago compile` checks every rule exactly.
 
@@ -3015,7 +3221,7 @@ theorem receiptMatchesRefunds : App.Tenant.Store.Module.receiptMatchesRefunds :=
 
 An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities, which Scala 3, Effekt and Pony also use. It also records every call into plain PHP, whose effect an `extern` declaration states, and every `emit`, which raises an event and has the effect `Events` (section 15).
 
-**Any PHP# code may call plain PHP,** including Laravel's facades, helpers and model methods, and PHP's built-in functions the standard library does not wrap yet (section 8). Most libraries are plain PHP, so this is how PHP# code uses them.
+**Any PHP# code may call plain PHP,** such as a library's classes, facades and models. Most libraries are plain PHP, so this is how PHP# code uses them. PHP's own built-in functions are the exception: the standard library replaces them (section 8).
 
 <!-- example plain-php-calls -->
 ```csharp
@@ -3040,16 +3246,28 @@ extern StripeClient uses Http;
 ```
 
 - **A declaration file is an ordinary `.sharp` file.** Its `namespace` line matches its path, as section 5 requires.
-- **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, or `extern Carbon.now uses Clock;` and `extern now uses Clock;` as PHP#'s package ships them.
+- **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, `extern Carbon.now uses Clock;`, `extern Pdf.render uses Files;` for a function after `import Vendor.Pdf;`, or `extern global.now uses Clock;` for a function in PHP's root namespace (section 23).
 - **An `extern` that names no effect declares the class, method or function pure,** as in `extern BigDecimal;`.
 - **Each class, method or function has at most one `extern` declaration in the whole project.** A second one is a compile error, as declaring a class twice is.
 - **A call to plain PHP with an `extern` declaration has that effect,** so it fits a `uses` that names it: `StripeClient.charges().create(…)` fits `uses Http`.
-- **An object a declared plain PHP call returns carries that call's effect,** so `StripeClient.charges()` returns an object with `Http`, and calling it fits `uses Http`. An `extern` on the returned class itself wins over the inherited effect. Kotlin treats Java's return values the same way.
+- **An object a declared plain PHP call returns carries that call's effect,** so `StripeClient.charges()` returns an object with `Http`, and calling it fits `uses Http`. An `extern` on the returned class itself wins over the inherited effect.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
-- **PHP#'s Composer package ships the declarations for PHP's built-in functions and for Laravel.** Among PHP's built-ins, PDO is `Database`, curl is `Http`, `printf` and `fwrite` to `STDOUT` or `STDERR` are `Console`, `file_put_contents` and every other file function are `Files`, `exit` is `Process`, `time()` is `Clock`, `random_int` is `Random`, and `getenv()` and PHP's other environment built-ins are `Environment`. Every other built-in function is declared with its own effect, or as pure. In Laravel, Eloquent and `DB` are `Database`, the `Http` facade is `Http`, `Cache` is `Cache`, `Mail` is `Mail`, and `now()` and Carbon's clock reads are `Clock`.
-- **A project declares its own libraries,** conventionally in `app/Stubs`.
+- **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way.
 
-**Every built-in function has a declaration, so its effect is always known.** `Console` covers standard output and standard error, which includes `printf` and `fwrite(STDOUT, …)` or `fwrite(STDERR, …)`. `Files` covers every other file. `Process` covers `exit`.
+**The standard library's ten effect classes replace PHP's built-ins for their effects:**
+
+- `Database` replaces PDO.
+- `Http` replaces curl.
+- `Files` replaces every file function outside standard output and standard error.
+- `Console` replaces printing to standard output and standard error.
+- `Process` replaces `exit`.
+- `Clock` replaces `time()`.
+- `Random` replaces `random_int`.
+- `Cache` replaces the APCu functions.
+- `Mail` replaces `mail()`.
+- `Environment` replaces `getenv()` and PHP's other environment functions.
+
+Calling a replaced function directly is a compile error that names the method (section 8). **A PHP built-in class, such as `PDO` or `DateTime`, is refused the same way,** and the error names the standard library type that replaces it, such as `Database` or `Date`.
 
 <!-- example pure-interface -->
 ```csharp
@@ -3089,22 +3307,6 @@ public class FileFormatter : Formatter
 }
 ```
 
-**`extern` means "implemented outside PHP#",** as C#'s `extern` does. An `extern` declaration names plain PHP, as above. An `extern` method in the standard library has a native body:
-
-<!-- example native-body: ignore the standard library's own source, which a project may not declare -->
-```csharp
-// in the standard library's Sharp.Json
-public static class Json
-{
-    public static extern Map<string, Any?> decode(string json);   // compiles: the engine holds the body
-}
-```
-
-- **A native body is compiled into the PHP# engine,** as PHP's own built-in functions are. It is written in Rust, behind a C interface.
-- **Only the standard library declares native bodies.** In a project, `public static extern string slug(string title);` is a compile error.
-- **One generator writes the C header from the `.sharp` declarations,** so the declaration and the Rust code have one signature.
-- **The engine refuses to start if a declared native body is missing.**
-
 **A `foreign` class turns an effect into an object** that code holds and passes on, such as a fake in tests. It is optional. Its methods call plain PHP, like any other code. Code that holds a `foreign` object has that effect by name, which `uses` can declare.
 
 <!-- example foreign-class -->
@@ -3117,16 +3319,17 @@ public foreign class RedisStore
 }
 ```
 
-The standard library ships `Database`, `Http`, `Files`, `Console`, `Process`, `Clock`, `Random`, `Cache`, `Mail` and `Environment`. A project declares its own `foreign` classes the same way.
+The standard library's ten effect classes, listed above, are `foreign` classes. A project declares its own `foreign` classes the same way.
 
 **`Events` is the effect of `emit`** (section 15). It is the one standard effect that is not a `foreign` class: a method has it when its body emits, and no object carries it.
 
-**PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS` are compile errors that read "PHP# has no superglobals; take a Request". Request data arrives as an object, such as a framework's `Request`. The process environment arrives as `Environment`, a standard `foreign` class like `Clock` and `Random`:
+**PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS` are compile errors. For the environment and the command-line arguments, the error names `Environment`. For request data, it names a parameter that takes it. The process environment arrives as `Environment`, a standard `foreign` class like `Clock` and `Random`:
 
 - `string? variable(string name)` reads an environment variable, or gives null when it is not set.
 - `List<string> arguments { get; }` holds the command-line arguments, starting with the script's name.
-- `string currentDirectory { get; }` is the directory the process runs in.
-- `static string require(string name)` reads an environment variable, and stops the app at startup when it is not set. A module calls it as `Environment.require("NAME")` (section 32).
+- `string currentDirectory()` reads the directory the process runs in on every call, as Go's `os.Getwd()` and Rust's `env::current_dir()` do.
+- `void changeDirectory(string path)` changes the directory the process runs in.
+- `string require(string name)` reads an environment variable, and throws `ValueError` when it is not set, with the message `Environment.require: the environment variable "NAME" is not set`. A module binding calls it on the `Environment` it takes as a parameter (section 32), as ASP.NET Core's `IConfiguration` is a service.
 
 <!-- example environment -->
 ```csharp
@@ -3151,8 +3354,8 @@ import Illuminate.Http.Request;
 
 public class CheckoutController
 {
-    public string host(Request request) => request.getHost();   // compiles: replaces $_SERVER["HTTP_HOST"]
-    public string origin() => _SERVER["HTTP_HOST"];             // compile error: PHP# has no superglobals; take a Request
+    public string host(Request request) => request.getHost();   // compiles: the request arrives as a parameter
+    public string origin() => _SERVER["HTTP_HOST"];             // compile error: take the request data as a parameter
 }
 ```
 <!-- run environment
@@ -3172,7 +3375,7 @@ public class TenantCache
 ```
 
 - **A class's effects** are the `foreign` classes it holds, directly or through its fields, the effects of the plain PHP its methods call, and the events its methods emit. The checker works them out from field and constructor types and from method bodies. Nothing is written down.
-- **A `foreign` object** is created in a module (section 32), as often as its binding's lifetime decides, and handed down through constructors. Creating one anywhere else, or storing one in a static, is a compile error.
+- **A `foreign` object** is created in a module binding (section 32), as often as its binding's lifetime decides, and handed down through constructors. Creating one anywhere else, or storing one in a static, is a compile error.
 
 **Pure code** reaches no `foreign` object, emits no event, calls no plain PHP unless an `extern` declares it pure, and changes nothing it was given (section 13). Getters must be pure. Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
 
@@ -3300,7 +3503,7 @@ The standard library's collection methods (section 12) are declared this way, so
 
 ## 30. Tuples
 
-A tuple groups a fixed number of typed, named values without declaring a class. It uses TypeScript's brackets. Each element is declared type first, as everywhere in PHP#.
+A tuple groups a fixed number of typed values without declaring a class. It uses TypeScript's brackets. Each element is declared type first, as everywhere in PHP#.
 
 <!-- example tuples: statements
 Money total = new Money(500, "USD");
@@ -3313,10 +3516,13 @@ public [Money total, int count, Date since] summarize() { return [total, count, 
 const [total, count, since] = order.summarize();     // unpack
 const summary = order.summarize();
 summary.total;                                        // read by name, as in C#
+
+public [Money, int] totals() { return [total, count]; }   // compiles: element names are optional
+const [money, items] = order.totals();                    // unpack an unnamed tuple
 ```
 
 - **A tuple can have any number of elements.** The checker suggests a struct past four.
-- **Names are required in a tuple type.** `[Money, int]` is a compile error.
+- **Names are optional in a tuple type,** as in TypeScript, C# and Swift. `[Money, int]` compiles.
 - **A list literal becomes a tuple** when the declared type is a tuple.
 - **Map entries are tuples:** `for (const [key, plan] of plans)`.
 
@@ -3329,15 +3535,15 @@ An expected failure, such as a declined card, is returned as a value. An excepti
 public enum Result<T, TError : Error>
 {
     case Ok(T value);
-    case Error(TError error);
+    case Err(TError error);                       // Err beside the Error interface, as Rust's Result::Err sits beside its Error trait
 }
 
-public Result<Order, PaymentError> charge(Cart cart) { … return Result.Error(PaymentError.Declined(reason)); }
+public Result<Order, PaymentError> charge(Cart cart) { … return Result.Err(PaymentError.Declined(reason)); }
 ```
 
 `Result` is an ordinary enum with data from the standard library, so `match`, `is` and the exhaustive-case check work on it unchanged.
 
-**`try` passes a failure up to the caller.** If the call returns `Error`, the enclosing method returns that same `Error` immediately. Otherwise `try` gives the `Ok` value. Zig and Swift use `try` the same way.
+**`try` passes a failure up to the caller.** If the call returns `Err`, the enclosing method returns that same `Err` immediately. Otherwise `try` gives the `Ok` value. Zig and Swift use `try` the same way.
 
 <!-- example try-propagation: members
 private CheckoutGateway gateway = new CheckoutGateway();
@@ -3401,41 +3607,25 @@ module
     singleton Mailer = SmtpMailer;                                             // every class that takes a Mailer gets the SmtpMailer
     singleton Mailer for SendReceipt = QueueMailer;                            // SendReceipt gets a QueueMailer instead
     singleton List<PriceRule> = [TaxRule, DiscountRule];                       // a class that takes a List<PriceRule> gets both
-    singleton RedisStore = new RedisStore(Environment.require("REDIS_URL"));   // a foreign object, created here as its singleton lifetime decides
+    singleton RedisStore(Environment environment) = new RedisStore(environment.require("REDIS_URL"));   // a foreign object, created here as its singleton lifetime decides
 }
 ```
 
-- **A service is built only by a constructor call** whose arguments are constants, configuration values or other services. A module holds no statements, branches, loops or methods. A choice made while the app runs goes in a class that implements `Factory<T>`, which the module binds.
-- **`Environment.require("NAME")` is a static method** (section 29). It returns a `string`, and stops the app at startup when the value is missing.
-- **A module is where `foreign` objects are created** (section 29). The binding's lifetime decides how often one is created, and it reaches classes only through constructors.
+- **A binding's value is a class or one expression.** A class, such as `SmtpMailer`, is built through its main constructor (section 9.1).
+- **A binding names the services it needs as parameters, and its value is one expression over them,** as Dagger's `@Provides` methods do. The container passes each parameter the service bound to its type, so `RedisStore` above gets the app's `Environment`.
+- **A module stays declarative:** one expression per binding, and no statements, loops or methods.
+- **A `foreign` object is created in a module binding** (section 29). The binding's lifetime decides how often one is created, and it reaches classes only through constructors.
 - **A module also states the laws that span its classes** (section 28).
 
-**A `scoped` lifetime is one HTTP request, one queued job or one console command run.** The host starts and ends each scope, and the `php-sharp/laravel` adapter does that for Laravel, as ASP.NET Core does for each request. Under PHP-FPM, `singleton` and `scoped` behave the same. They differ in long-running workers.
+**The host defines each lifetime, as ASP.NET Core's host does.** A `singleton` lives as long as the host runs the app. A `scoped` binding lives for one scope, which the host starts and ends, such as one HTTP request, one queued job or one console command run. A `transient` binding is created each time a class needs one.
 
-**`Factory<T>` is `public interface Factory<T> { T create(); }`.** Binding a class that implements `Factory<Mailer>` to `Mailer` makes the container call `create()` each time the binding's lifetime needs a new `Mailer`, as Spring's `FactoryBean<T>` does:
-
-<!-- example factory -->
-```csharp
-// app/Shop/MailerFactory.sharp
-namespace App.Shop;
-
-import App.Mail.Mailer;
-import App.Mail.SmtpMailer;
-import App.Mail.QueueMailer;
-import App.Flags.FeatureFlags;
-
-public class MailerFactory : Factory<Mailer>
-{
-    public MailerFactory(private FeatureFlags flags, private SmtpMailer smtp, private QueueMailer queue) { }
-    public Mailer create() => this.flags.enabled("queue-mail") ? this.queue : this.smtp;   // the choice is made while the app runs
-}
-```
+A binding's expression runs each time its lifetime needs a new service, so a choice made while the app runs is one expression:
 
 <!-- example scoped-binding -->
 ```csharp
 module
 {
-    scoped Mailer = MailerFactory;                                             // create() runs once per request, job or command
+    scoped Mailer(FeatureFlags flags, QueueMailer queue, SmtpMailer smtp) = flags.enabled("queue-mail") ? queue : smtp;   // runs once per request, job or command
 }
 ```
 
@@ -3443,14 +3633,14 @@ module
 ```csharp
 module
 {
-    singleton Mailer = Environment.require("MAILER") == "queue" ? new QueueMailer() : new SmtpMailer();   // compile error: a service is built only by a constructor call; a choice made while the app runs goes in a Factory<Mailer>
-    singleton Mailer = TaxRule;                                                                           // compile error: TaxRule is not a Mailer
+    let fallback = new SmtpMailer();   // compile error: a module holds no statements; give a binding one expression
+    singleton Mailer = TaxRule;        // compile error: TaxRule is not a Mailer
 }
 ```
 
 **A nested folder's module overrides its parent's services.** A test or environment module overrides with `module : App.Shop { … }`, and the compiler checks every environment's set of services.
 
-- **An environment module is `Module.<Environment>.sharp`** beside the `Module.sharp` it overrides, such as `Module.Production.sharp`. `APP_ENV` picks it, as it picks ASP.NET Core's `appsettings.Production.json`.
+- **An environment module is `Module.<Environment>.sharp`** beside the `Module.sharp` it overrides, such as `Module.Production.sharp`. `SHARP_ENV` picks it, as `ASPNETCORE_ENVIRONMENT` picks ASP.NET Core's `appsettings.Production.json`.
 - **A test module is declared in the test file that uses it,** with the same header, as NestJS's testing module is.
 
 <!-- example environment-module -->
@@ -3483,7 +3673,7 @@ module : App.Shop
 public class CheckoutTest { … }
 ```
 
-**A missing or mistyped service is a compile error.** The container builds every class through its main constructor (section 9.1), including `on` listeners (section 15).
+**A missing or mistyped service is a compile error.** The container builds every class through its main constructor (section 9.1), including `on` listeners (section 15). Every binding parameter and every constructor parameter needs a binding.
 
 <!-- example missing-service
 import App.Mail.Mailer;
@@ -3495,7 +3685,7 @@ public class Checkout
 }
 ```
 
-**The container implements PSR-11.** The optional package `php-sharp/laravel` makes Laravel's container ask PHP#'s container for every PHP# class. The language never depends on Laravel.
+**The container implements PSR-11,** so any framework's container can ask PHP#'s container for a PHP# class. The language never depends on a framework.
 
 ## Undecided, in order
 
