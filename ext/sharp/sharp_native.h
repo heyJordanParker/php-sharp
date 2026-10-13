@@ -13,11 +13,20 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_requireNative, 0,
 	ZEND_ARG_TYPE_INFO(0, version, IS_STRING, 0)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_extension, 0, 4, IS_MIXED, 0)
+	ZEND_ARG_TYPE_INFO(0, receiver, IS_OBJECT, 0)
+	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, member, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, property, _IS_BOOL, 0)
+	ZEND_ARG_VARIADIC_TYPE_INFO(0, arguments, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_Text_Text_slug, 0, 1, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, title, IS_STRING, 0)
 ZEND_END_ARG_INFO()
 
 static ZEND_FUNCTION(Sharp_Internal_requireNative);
+static ZEND_FUNCTION(Sharp_Internal_extension);
 
 static ZEND_FUNCTION(Sharp_Internal_Text_Text_slug)
 {
@@ -34,6 +43,7 @@ static ZEND_FUNCTION(Sharp_Internal_Text_Text_slug)
 
 static const zend_function_entry sharp_native_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "requireNative"), zif_Sharp_Internal_requireNative, arginfo_Sharp_Internal_requireNative, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "extension"), zif_Sharp_Internal_extension, arginfo_Sharp_Internal_extension, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal\\Text\\Text", "slug"), zif_Sharp_Internal_Text_Text_slug, arginfo_Sharp_Internal_Text_Text_slug, 0, NULL, NULL)
 	ZEND_FE_END
 };

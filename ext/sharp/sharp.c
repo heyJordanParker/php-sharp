@@ -1500,6 +1500,65 @@ static ZEND_FUNCTION(Sharp_Internal_requireNative)
 		PHP_SHARP_VERSION " has. Install the same PHP# version of both.", ZSTR_VAL(version));
 }
 
+/* Spec section 26: the member an extension adds, read or called on a receiver whose class a plain PHP subclass can
+ * extend. A compiled call passes the receiver, the extension's static class, the member's name, whether it is a
+ * computed property, and the call's arguments, as \Sharp\Internal\extension($order, 'App\Totals', 'total', false, 2).
+ * A public method, or for a computed property a public property, that the receiver's class declares by that name
+ * runs instead, as it does in PHP. A class's __call and __get declare no member, so the extension runs in their
+ * place. Any other receiver runs the extension's static method, with the receiver first. */
+static ZEND_FUNCTION(Sharp_Internal_extension)
+{
+	zend_object *receiver;
+	zend_string *class_name, *member;
+	bool property;
+	zval *arguments = NULL;
+	uint32_t argument_count = 0;
+	HashTable *named = NULL;
+
+	ZEND_PARSE_PARAMETERS_START(4, -1)
+		Z_PARAM_OBJ(receiver)
+		Z_PARAM_STR(class_name)
+		Z_PARAM_STR(member)
+		Z_PARAM_BOOL(property)
+		Z_PARAM_VARIADIC_WITH_NAMED(arguments, argument_count, named)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (property) {
+		const zend_property_info *declared = zend_hash_find_ptr(&receiver->ce->properties_info, member);
+		if (declared && (declared->flags & (ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)) == ZEND_ACC_PUBLIC) {
+			zval rv;
+			zval *value = zend_read_property_ex(receiver->ce, receiver, member, false, &rv);
+			RETVAL_COPY_DEREF(value);
+			if (value == &rv) {
+				zval_ptr_dtor(&rv);
+			}
+			return;
+		}
+	} else {
+		zend_function *declared = zend_hash_find_ptr_lc(&receiver->ce->function_table, member);
+		if (declared && (declared->common.fn_flags & ZEND_ACC_PUBLIC)) {
+			zend_object *object = (declared->common.fn_flags & ZEND_ACC_STATIC) ? NULL : receiver;
+			zend_call_known_function(declared, object, receiver->ce, return_value, argument_count, arguments, named);
+			return;
+		}
+	}
+
+	zend_class_entry *extension = zend_lookup_class(class_name);
+	zend_function *method = extension ? zend_hash_find_ptr_lc(&extension->function_table, member) : NULL;
+	if (!method) {
+		zend_throw_error(NULL, "Call to undefined method %s::%s()", ZSTR_VAL(class_name), ZSTR_VAL(member));
+		RETURN_THROWS();
+	}
+
+	zval *values = safe_emalloc(argument_count + 1, sizeof(zval), 0);
+	ZVAL_OBJ(&values[0], receiver);
+	if (argument_count) {
+		memcpy(&values[1], arguments, argument_count * sizeof(zval));
+	}
+	zend_call_known_function(method, NULL, extension, return_value, argument_count + 1, values, named);
+	efree(values);
+}
+
 ZEND_METHOD(Sharp_Position, __construct)
 {
 	zend_string *file, *function;
