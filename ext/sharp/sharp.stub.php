@@ -73,3 +73,9 @@ final class Environment
 
     public function variable(string $name): ?string {}
 }
+
+namespace Sharp\Internal;
+
+function accepts(string $type, mixed &$value, string $path, array &$problems): bool {}
+
+function &statics(string $class, string $key): array {}

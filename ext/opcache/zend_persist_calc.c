@@ -536,6 +536,9 @@ void zend_persist_class_entry_calc(zend_class_entry *ce)
 		if (ce->info.user.sharp_header) {
 			ADD_INTERNED_STRING(ce->info.user.sharp_header);
 		}
+		if (ce->info.user.sharp_variance) {
+			ADD_INTERNED_STRING(ce->info.user.sharp_variance);
+		}
 
 		if (ZCG(accel_directives).save_comments && ce->doc_comment) {
 			ADD_STRING(ce->doc_comment);

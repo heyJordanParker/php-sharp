@@ -228,11 +228,13 @@ struct _zend_class_entry {
 			zend_string *filename;
 			uint32_t line_start;
 			uint32_t line_end;
-			/* PHP#: a PHP# class-like's metadata, both type texts, see ext/sharp/php_sharp.h. sharp_bounds is the
-			 * bounds of its type parameters, or NULL when it declares none. sharp_header is the type arguments its
-			 * header gives each generic parent and interface, or NULL. */
+			/* PHP#: a PHP# class-like's metadata, see ext/sharp/php_sharp.h. sharp_bounds is the type text of the
+			 * bounds of its type parameters, or NULL when it declares none. sharp_header is the type text of the type
+			 * arguments its header gives each generic parent and interface, or NULL. sharp_variance is one `+`
+			 * (`out`), `-` (`in`) or `=` per type parameter, or NULL when none has `in` or `out`. */
 			zend_string *sharp_bounds;
 			zend_string *sharp_header;
+			zend_string *sharp_variance;
 		} user;
 		struct {
 			const struct _zend_function_entry *builtin_functions;

@@ -428,6 +428,8 @@ bool zend_optimizer_update_op2_const(zend_op_array *op_array,
 	switch (opline->opcode) {
 		case ZEND_ASSIGN_REF:
 		case ZEND_FAST_CALL:
+		/* PHP#'s TMP op2 of a NEW holds what it creates, which no constant stands for, see ZEND_FETCH_CLASS_SHARP_TYPE. */
+		case ZEND_NEW:
 			return 0;
 		case ZEND_FETCH_CLASS:
 		case ZEND_INSTANCEOF:

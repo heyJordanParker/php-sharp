@@ -3434,6 +3434,13 @@ static zend_always_inline zend_result _zend_update_type_info(
 			UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
 			COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->result_def);
 			break;
+		case ZEND_SHARP_IS_TYPE:
+			UPDATE_SSA_TYPE(MAY_BE_FALSE|MAY_BE_TRUE, ssa_op->result_def);
+			break;
+		case ZEND_SHARP_TYPE_OF:
+			/* An interned class name or type text, as ZEND_FETCH_CLASS_NAME gives. */
+			UPDATE_SSA_TYPE(MAY_BE_STRING|MAY_BE_RCN, ssa_op->result_def);
+			break;
 		case ZEND_NEW:
 			tmp = MAY_BE_RC1|MAY_BE_RCN|MAY_BE_OBJECT;
 			ce = zend_optimizer_get_class_entry_from_op1(script, op_array, opline);

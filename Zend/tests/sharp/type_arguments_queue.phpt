@@ -76,7 +76,7 @@ spl_autoload_register(static function (string $class): void {
     }
 });
 $shared = new stdClass();
-$run = unserialize(str_replace('s:10:"Any?, Any?"', 's:13:"App.Late, int"', serialize([new App\Pair(1, 2), $shared, $shared])));
+$run = unserialize(str_replace('s:10:"Any?, Any?"', 's:14:"int, App.Late?"', serialize([new App\Pair(1, null), $shared, $shared])));
 echo implode(', ', arguments($run[0])), ' ', var_export($run[1] === $run[2], true), "\n";
 
 echo "an object plain PHP creates has its intersection bound as its type argument\n";
@@ -151,7 +151,7 @@ true true changed
 unserialize resolves each class a type argument names, as it resolves an object's class
 App.Order, int true
 App\Pair
-App.Late, int true
+int, App.Late? true
 an object plain PHP creates has its intersection bound as its type argument
 O:10:"App\Report":2:{s:5:"items";a:0:{}s:14:"\0<sharp>\0types";s:34:"App.DatabaseEntity & App.Shareable";}
 App.DatabaseEntity & App.Shareable true

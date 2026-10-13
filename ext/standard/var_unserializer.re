@@ -628,6 +628,10 @@ static zend_always_inline int process_nested_object_data(UNSERIALIZE_PARAMETER, 
 		(*var_hash)->cur_depth++;
 	}
 
+	/* PHP#: a PHP# property's type may name the class's type parameters, which the object's type arguments, read after
+	 * its properties, spell. */
+	uint32_t sharp_typed = 0;
+
 	while (elements-- > 0) {
 		zval key, *data;
 		zend_property_info *info = NULL;
@@ -748,11 +752,13 @@ second_try:
 		}
 
 		if (UNEXPECTED(info)) {
-			if (!zend_verify_prop_assignable_by_ref(info, data, /* strict */ 1)) {
+			if (!zend_verify_prop_assignable_by_ref(info, data, /* strict */ 1)
+					|| UNEXPECTED(Z_ISREF_P(data) && sharp_property_refuses_reference(info))) {
 				zval_ptr_dtor(data);
 				ZVAL_UNDEF(data);
 				goto failure;
 			}
+			sharp_typed |= info->flags & ZEND_ACC_SHARP_TYPED;
 
 			if (Z_ISREF_P(data)) {
 				ZEND_REF_ADD_TYPE_SOURCE(Z_REF_P(data), info);
@@ -772,6 +778,10 @@ second_try:
 			(*p)--;
 			goto failure;
 		}
+	}
+
+	if (UNEXPECTED(sharp_typed) && !sharp_object_open_properties_accept(obj)) {
+		goto failure;
 	}
 
 	if (var_hash) {
@@ -975,6 +985,9 @@ static int php_var_unserialize_internal(UNSERIALIZE_PARAMETER)
 		zend_property_info *info = NULL;
 		if ((*var_hash)->ref_props) {
 			info = zend_hash_index_find_ptr((*var_hash)->ref_props, (uintptr_t) rval_ref);
+		}
+		if (info && UNEXPECTED(sharp_property_refuses_reference(info))) {
+			return 0;
 		}
 		ZVAL_NEW_REF(rval_ref, rval_ref);
 		if (info) {

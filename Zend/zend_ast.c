@@ -2583,10 +2583,32 @@ simple_list:
 			}
 			break;
 		case ZEND_AST_SHARP_TYPE_ARGS:
+			if (!ast->child[0]->child[0]) {
+				/* PHP#: `new TItem(…)`, which names no class, written with the type text, as `new X(…)` writes a
+				 * class. */
+				smart_str_appends(str, "new ");
+				smart_str_append(str, zend_ast_get_str(ast->child[1]));
+				smart_str_appendc(str, '(');
+				zend_ast_export_ex(str, ast->child[0]->child[1], 0, indent);
+				smart_str_appendc(str, ')');
+				break;
+			}
+			ZEND_FALLTHROUGH;
 		case ZEND_AST_VERIFY_TYPE_ARGS:
 			/* PHP#: a `new` whose type arguments, or a value whose check, PHP has no syntax for, as in the message of
 			 * an assert(). */
 			zend_ast_export_ex(str, ast->child[0], priority, indent);
+			break;
+		case ZEND_AST_SHARP_IS_TYPE:
+			/* PHP#: a test of type arguments, written with the type text, as `instanceof` writes a class. */
+			zend_ast_export_ex(str, ast->child[0], 0, indent);
+			smart_str_appends(str, " instanceof ");
+			smart_str_append(str, zend_ast_get_str(ast->child[1]));
+			break;
+		case ZEND_AST_SHARP_TYPE_OF:
+			/* PHP#: the class value of a type argument, written with the type text, as `X::class` writes a class's. */
+			smart_str_append(str, zend_ast_get_str(ast->child[0]));
+			smart_str_appends(str, "::class");
 			break;
 		case ZEND_AST_INSTANCEOF:
 			zend_ast_export_ex(str, ast->child[0], 0, indent);

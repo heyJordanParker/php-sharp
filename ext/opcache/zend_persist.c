@@ -1060,6 +1060,9 @@ zend_class_entry *zend_persist_class_entry(zend_class_entry *orig_ce)
 		if (ce->info.user.sharp_header) {
 			zend_accel_store_interned_string(ce->info.user.sharp_header);
 		}
+		if (ce->info.user.sharp_variance) {
+			zend_accel_store_interned_string(ce->info.user.sharp_variance);
+		}
 
 		if (ce->doc_comment) {
 			if (ZCG(accel_directives).save_comments) {

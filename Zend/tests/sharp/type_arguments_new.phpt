@@ -1,5 +1,5 @@
 --TEST--
-new of a generic PHP# class gives the object its type arguments before its constructor runs, clone copies them, and an object plain PHP creates has its class's bounds
+new of a generic PHP# class gives the object its type arguments before its constructor runs, a named constructor's too, clone copies them, and an object plain PHP creates has its class's bounds
 --FILE--
 <?php
 require __DIR__ . '/type_arguments.inc';
@@ -19,6 +19,14 @@ var_dump(arguments(new stdClass()));
 // Box declares no constructor, and ListMaker's parent Maker declares none.
 var_dump(arguments(Queue::box()));
 var_dump(arguments(Queue::listMaker()));
+
+echo "a named constructor\n";
+// It gives the object the type arguments its new names, or this's in a method of the class, and the object plain PHP
+// creates through it has its class's bounds.
+echo implode(', ', arguments(Queue::flippedPair())), "\n";
+echo implode(', ', arguments(Queue::pair()->flippedOver())), "\n";
+echo implode(', ', arguments(Queue::pair()->flippedOver()->flippedOver())), "\n";
+echo implode(', ', arguments(App\Pair::flipped(1, 2))), "\n";
 
 echo "an object plain PHP creates\n";
 var_dump(arguments(new App\PaginatedList([])));
@@ -126,11 +134,13 @@ var_dump($class->isUninitializedLazyObject($ghost));
 echo "the constructor\n";
 // PaginatedList's constructor hands this to Lib\Witness::see before it returns.
 Lib\Witness::$look = static function (object $object): void {
-    echo get_class($object), ': ', implode(', ', arguments($object)), "\n";
+    echo rtrim(get_class($object) . ': ' . implode(', ', arguments($object))), "\n";
 };
 Queue::orders();
 Queue::entities()->copy();
 Queue::page();
+// A named constructor's body runs on the object its new created, which already has its type arguments.
+Queue::flippedPair();
 Lib\Witness::$look = null;
 ?>
 --EXPECTF--
@@ -167,6 +177,11 @@ array(1) {
   [0]=>
   string(3) "int"
 }
+a named constructor
+App.Order, int
+int, App.Order
+App.Order, int
+Any?, Any?
 an object plain PHP creates
 array(1) {
   [0]=>
@@ -263,3 +278,4 @@ App\PaginatedList: App.Order
 App\PaginatedList: App.DatabaseEntity
 App\PaginatedList: App.DatabaseEntity
 App\OrderPage:
+App\Pair: App.Order, int
