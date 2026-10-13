@@ -44,7 +44,7 @@ Section 12 says "A `List` index is a place, as a Rust `Vec` index and a Go slice
 3. **A write into a `Map` a hooked property holds is a `put` on the property.** PHP gives no reference to a hooked property, so `this.totals["c"] = 3` lowers to `$this->totals->put('c', 3)`, and its `set` hook runs. A property without hooks keeps PHP's write, so its opcodes match the PHP twin's.
 4. **`clear` on a `List` element is `Sharp\Collection::clear`.** `grid[0].clear()` lowers to `$grid[0]->clear()`, which empties the element and writes it back. A `clear` on a local, a field or a property stays `$place = []`.
 5. **A missing index throws `OutOfRangeException`,** as a bare read does, and leaves no gap. That covers a method through the index (`grid[5].add(1)`), a `clear`, a write into a `Map` element (`maps[2]["c"] = 3`), and a property written through the index (`points[5].x = 5`, `+=` and `++`). `zend_delayed_compile_prop` reads a PHP# index whose property is written, so `FETCH_DIM_R` with `ZEND_SHARP_OPERATOR` throws, where PHP's `FETCH_DIM_W` would add null at the key.
-6. **After `?.`, a change through a `List` index reaches the stored element, and `?.` skips only a null element.** `rows[0]?.add(5)` lowers to `$rows[0]?->add(5)`, the index itself, not a copy. A null element skips the call. A missing index throws `OutOfRangeException`, as every `List` read does. A method that changes nothing, such as `rows[0]?.entries()`, keeps `($rows[0] ?? null)?->entries()`.
+6. **After `?.`, a change through a `List` index reaches the stored element, and a null element or a missing index skips the call.** Spec line 840 says "A `Map` read is handled where it is read, with `??`, `?.`, `is`, `as`, `match` or `get`", and line 854 says "The same holds for a `List` index". So a `List` index read with `?.` treats a missing index as null, and only a bare read throws (rule 5). `rows[0]?.add(5)` lowers to `$rows[0]?->add(5)`, the index itself, not a copy. The bridge marks that index with `ZEND_DIM_IS`, the mark php-src gives an index `??` reads. `zend_compile_sharp_receiver` then emits `FETCH_DIM_IS`, and `sharp_collection_read_dimension` gives null for a missing index under `BP_VAR_IS`, which the call's `JMP_NULL` skips. The rule holds whichever path the method takes. A method the bridge inlines, such as `rows[9]?.clear()`, `rows[9]?.remove(1)`, `rows[9]?.contains(1)` or `rows[9]?.count()`, tests `($rows[9] ?? null) === null` first. Any other method that changes nothing, such as `rows[0]?.entries()`, keeps `($rows[0] ?? null)?->entries()`.
 7. **A change through a `Map` index is a compile error,** as Go refuses `m[k].x = 5`, because a `Map` read is a copy. Section 12's `index-changes` example annotates `stock["sku-1"]?.add(5);` as a compile error, and the checker refuses it.
 8. **An element a plain PHP `ArrayAccess` object gives is a collection of its own.** `rows[0].map(…)` on such an object casts the array `offsetGet` gives to a `Sharp\Collection`, as master does. The change does not reach the object, which owns its own storage.
 
@@ -448,7 +448,9 @@ mago-sharp
                                                     collection_call's arms keyed by (collection, method);
                                                     key_read_back takes a lowered key, for loops and keys();
                                                     element_write puts into a Map element of a List or of a
-                                                    hooked property; changes_list_element keeps the index after ?.
+                                                    hooked property; changes_list_element keeps the index after ?.,
+                                                    and null_safe_index marks it ZEND_DIM_IS; read_collection
+                                                    tests an inlined ?. call's List index with ?? null
 
 php-sharp
 ├── ext/sharp/sharp.stub.php, sharp_arginfo.h, sharp.c
@@ -456,10 +458,12 @@ php-sharp
 │                                                   removeAt(int $index): void, put(mixed $key, mixed $value): mixed
 │                                                   and clear(): void added; element collections and
 │                                                   sharp_collection_place reach a List element;
-│                                                   sharp_collection_key_slot stores a backed enum case's value
+│                                                   sharp_collection_key_slot stores a backed enum case's value;
+│                                                   sharp_collection_read_dimension gives null for a missing
+│                                                   index under BP_VAR_IS
 ├── Zend/zend_compile.c                          <- zend_compile_sharp_receiver reads an index receiver through its
-│                                                   container; zend_delayed_compile_prop reads a written property's
-│                                                   PHP# index
+│                                                   container, with FETCH_DIM_IS for a ZEND_DIM_IS index;
+│                                                   zend_delayed_compile_prop reads a written property's PHP# index
 ├── Zend/tests/sharp/Grid.sharp, Point.sharp, index_changes.{inc,phpt}, harness/RowSet.inc
 │                                                <- every change through a List index (ruling 7)
 ├── Zend/tests/sharp/CollectionMethods.sharp, collection_methods.{inc,phpt}, collection_methods_jit_*.phpt
@@ -478,7 +482,8 @@ the PHP the bridge emits
 ├── $c->insert($i, $v)                                              <- insert
 ├── $c = []                                                         <- clear
 ├── $c[$i]->clear(), $c[$i]->put($k, $v), $c[$i]->add($v)          <- a change through a List index
-├── $c[$i]?->add($v)                                                <- a change after ?. on a List index
+├── $c[$i]?->add($v)                                                <- a change after ?. on a List index, $i marked
+│                                                                      ZEND_DIM_IS, so a missing index skips
 ├── ($c === [] ? throw new \OutOfRangeException('The list is empty.') : \array_last($c))   <- last
 ├── \array_key_exists($k, $c)                                       <- has
 ├── \array_keys($c), \array_map(\strval(...) | \E::from(...), \array_keys($c))   <- keys
@@ -533,7 +538,7 @@ Each test proves one rule of section 12 and fails on a real bug in it, with its 
 
 - `CollectionMethods.sharp`, `collection_methods.inc`, `collection_methods.phpt` and its two JIT variants: each method on a local, on a parameter whose caller's copy stays unchanged, and on a property with a `set` accessor, which writes back through `set`; `insert` at `count()` appends and past it throws; `last()` of `[]` throws "The list is empty."; `remove` of an absent value is `false`; `indexOf` of an absent value is `null`; `contains` and `remove` on a `List<Money>` run `op_Equality`; `has` tells a stored null from a missing key; `keys()` gives `"5"`; a `Map`'s `filter` keeps its keys; `remove` by a backed enum key.
 - `EnumKeys.sharp` and `EnumKeys.inc`: a `groupBy` keyed by `Status`, read back as `Status` in an untyped loop, and seen by plain PHP keyed by the backing values.
-- `Grid.sharp`, `Point.sharp`, `index_changes.inc` and `index_changes.phpt`: each rule of ruling 7. That is `add`, `insert`, `remove`, `set` and `clear` through an index; a copy that shares the list left as it was; a nested index; a `Set`'s `add` and `remove`; a `Map` element's `remove`, write and `??=`; through a property, and through a hooked property, counting its `set` hook's runs, for `put` and `clear`; an index that runs code, once; a missing index for a method, a `clear`, a write and a property write, each `OutOfRangeException`; a change after `?.` on a local, a nullable element and a hooked property, and through a missing index; and `map` on an element of a plain PHP `ArrayAccess` holder.
+- `Grid.sharp`, `Point.sharp`, `index_changes.inc` and `index_changes.phpt`: each rule of ruling 7. That is `add`, `insert`, `remove`, `set` and `clear` through an index; a copy that shares the list left as it was; a nested index; a `Set`'s `add` and `remove`; a `Map` element's `remove`, write and `??=`; through a property, and through a hooked property, counting its `set` hook's runs, for `put` and `clear`; an index that runs code, once; a missing index for a method, a `clear`, a write and a property write, each `OutOfRangeException`, and a bare `rows[9].add(7)` on a property and a hooked property; after `?.` on a local, a property and a hooked property, a change that reaches the stored element, and a null element and a missing index that skip `add`, `clear`, `remove`, `contains` and `count` without running the `set` hook; and `map` on an element of a plain PHP `ArrayAccess` holder.
 
 # What the Slice refuses as "not supported yet", and why
 
