@@ -35,7 +35,7 @@ public foreign class Environment
 
     public void changeDirectory(string path);        // maps chdir. RuntimeException when the directory can't be entered.
 
-    public static string require(string name);       // the variable's value. ValueError when it is not set.
+    public string require(string name);              // the variable's value. ValueError when it is not set.
 
     private static extern List<string> commandLine(); // the native body behind arguments, in ext/sharp
 }

@@ -2,7 +2,7 @@
 
 ## Decision
 
-Each namespace folder may hold `Module.sharp`, a `module { … }` declaration with no name, because the folder names it. It declares services with `singleton`, `scoped` and `transient`. A service is built only by a constructor call whose arguments are constants, configuration values or other services. A module holds no statements, branches, loops or methods. A choice made while the app runs goes in a class implementing `Factory<T>`, which is `public interface Factory<T> { T create(); }`. Binding a class that implements `Factory<Mailer>` to `Mailer`, as in `scoped Mailer = MailerFactory;`, makes the container call `create()` each time the binding's lifetime needs a new `Mailer`. `Environment.require("NAME")` is a static method. It returns a `string` and stops the app at startup when the value is missing.
+Each namespace folder may hold `Module.sharp`, a `module { … }` declaration with no name, because the folder names it. It declares services with `singleton`, `scoped` and `transient`. A service is built only by a constructor call whose arguments are constants, configuration values or other services. A module holds no statements, branches, loops or methods. A choice made while the app runs goes in a class implementing `Factory<T>`, which is `public interface Factory<T> { T create(); }`. Binding a class that implements `Factory<Mailer>` to `Mailer`, as in `scoped Mailer = MailerFactory;`, makes the container call `create()` each time the binding's lifetime needs a new `Mailer`. `environment.require("NAME")` is a method of the `Environment` a binding takes as a parameter. It returns a `string` and stops the app at startup when the value is missing.
 
 A `scoped` lifetime is one HTTP request, one queued job or one console command run. The host starts and ends each scope, and the `php-sharp/laravel` adapter does that for Laravel. Under PHP-FPM, `singleton` and `scoped` behave the same, and they differ in long-running workers.
 
@@ -31,7 +31,7 @@ module
     singleton Mailer = SmtpMailer;                                             // compiles
     singleton Mailer for SendReceipt = QueueMailer;                            // compiles: SendReceipt gets a QueueMailer
     singleton List<PriceRule> = [TaxRule, DiscountRule];                       // compiles
-    singleton RedisStore = new RedisStore(Environment.require("REDIS_URL"));   // compiles; stops the app at startup when REDIS_URL is missing
+    singleton RedisStore(Environment environment) = new RedisStore(environment.require("REDIS_URL"));   // compiles; stops the app at startup when REDIS_URL is missing
 }
 ```
 
@@ -91,7 +91,7 @@ public class Main
 {
     public static void start()
     {
-        const redis = new RedisStore(Environment.require("REDIS_URL"));
+        const redis = new RedisStore(new Environment().require("REDIS_URL"));
         const checkout = new Checkout(new SmtpMailer(), new StripeGateway(redis));   // every class is created here
     }
 }

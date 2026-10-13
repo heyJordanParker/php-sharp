@@ -29,9 +29,9 @@ try {
 }
 var_dump(getcwd() === $start);
 
-var_dump(Sharp\Environment::require('SHARP_REGION'));
+var_dump($environment->require('SHARP_REGION'));
 try {
-    Sharp\Environment::require('SHARP_UNSET_REGION');
+    $environment->require('SHARP_UNSET_REGION');
 } catch (ValueError $e) {
     echo $e->getMessage(), "\n";
 }
