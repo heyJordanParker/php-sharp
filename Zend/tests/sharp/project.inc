@@ -8,6 +8,7 @@ function compile_project(string $name, array $files): string
     $root = realpath($root);
     file_put_contents("$root/mago.toml", "[source]\npaths = [\".\"]\nextensions = [\"sharp\"]\n");
     foreach ($files as $path => $contents) {
+        is_dir(dirname("$root/$path")) || mkdir(dirname("$root/$path"), recursive: true);
         file_put_contents("$root/$path", $contents);
     }
     run_mago($root);

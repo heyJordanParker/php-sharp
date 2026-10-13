@@ -72,4 +72,19 @@ final class Environment
     public function __construct() {}
 
     public function variable(string $name): ?string {}
+
+    public function require(string $name): string {}
+}
+
+/**
+ * @strict-properties
+ * @not-serializable
+ */
+final class Container
+{
+    public function get(string $id): mixed {}
+
+    public function has(string $id): bool {}
+
+    public static function scope(\Closure $run): mixed {}
 }

@@ -3621,16 +3621,31 @@ module
 
 A binding's expression runs each time its lifetime needs a new service, so a choice made while the app runs is one expression:
 
-<!-- example scoped-binding -->
+<!-- example scoped-binding
+namespace App.Shop;
+
+import App.Flags.FeatureFlags;
+import App.Mail.Mailer;
+import App.Mail.QueueMailer;
+import App.Mail.SmtpMailer;
+-->
 ```csharp
+// app/Shop/Module.sharp
 module
 {
     scoped Mailer(FeatureFlags flags, QueueMailer queue, SmtpMailer smtp) = flags.enabled("queue-mail") ? queue : smtp;   // runs once per request, job or command
 }
 ```
 
-<!-- example module-errors: alone -->
+<!-- example module-errors: alone
+namespace App.Shop;
+
+import App.Mail.Mailer;
+import App.Mail.SmtpMailer;
+import App.Pricing.TaxRule;
+-->
 ```csharp
+// app/Shop/Module.sharp
 module
 {
     let fallback = new SmtpMailer();   // compile error: a module holds no statements; give a binding one expression

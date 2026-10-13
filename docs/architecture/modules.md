@@ -42,57 +42,59 @@ The analyzer checks each binding where it is written:
 
 ### The service graph
 
-A class gets each service from the module of its own namespace, then from each parent namespace's module in turn. The nearest binding wins. A binding's own parameters resolve from the module that holds it. A binding with `for` serves only the class it names.
+A class gets each service from the modules of its own namespace, then from each parent namespace's modules in turn. The first module with a binding wins. An environment or test module comes before the base module of its namespace, and in one module a binding `for` the class comes before one for any class. A binding's own parameters resolve from the namespace of the module that holds it.
 
-When nothing binds a parameter's type, a concrete PHP# class is built through its main constructor, and the standard library's foreign classes, such as `Environment`, come from the host.
+When nothing binds a parameter's type, a concrete class is built through its constructor each time. An interface or abstract class needs a binding.
 
-The checker walks the graph from its starting classes and reports, at the parameter that needs it:
+The checker walks the graph from each binding and reports, at the binding:
 
-- a missing service;
-- a cycle;
-- a `scoped` or `transient` service held by a `singleton`, which .NET's scope validation calls a captive dependency.
+- a constructor parameter that only a binding can build and no module binds;
+- a cycle, naming each class on it;
+- a `scoped` service a `singleton` holds, which .NET's scope validation calls a captive dependency.
 
-It walks the graph once for the base modules, and once more for each environment module and each test module, each over the bindings it overrides.
-
-The starting classes wait on a ruling. The proposal is every class a binding names, every binding parameter, and every `on` listener.
+It walks the graph once for the base modules. It walks it again for each environment module and each test module, over the base bindings that module changes, and reports there only what that module changed.
 
 ## Compiler
 
-Each module file compiles to a `.sharpc` that returns its binding table. No class is declared for it, since the container finds a module by its folder:
+A file whose modules bind services returns their binding table, after any class a test file declares beside its module. A module of laws alone returns nothing:
 
 ```php
 return [
-    ['App\Mail\Mailer', null, Sharp\Container::SINGLETON, 'App\Mail\SmtpMailer'],
-    ['App\Mail\Mailer', 'App\Shop\SendReceipt', Sharp\Container::SINGLETON, 'App\Mail\QueueMailer'],
-    ['List<App\Pricing\PriceRule>', null, Sharp\Container::SINGLETON, ['App\Pricing\TaxRule', 'App\Pricing\DiscountRule']],
-    ['App\Cache\RedisStore', null, Sharp\Container::SINGLETON,
+    // namespace served, service id, class a `for` names or null, lifetime, value
+    ['app\shop', 'app\mail\mailer', null, 'singleton', 'App\Mail\SmtpMailer'],
+    ['app\shop', 'app\mail\mailer', 'App\Shop\SendReceipt', 'singleton', 'App\Mail\QueueMailer'],
+    ['app\shop', 'list<app\pricing\pricerule>', null, 'singleton', ['App\Pricing\TaxRule', 'App\Pricing\DiscountRule']],
+    ['app\shop', 'app\cache\redisstore', null, 'singleton',
         static fn (\Sharp\Environment $environment) => new \App\Cache\RedisStore($environment->require('REDIS_URL'))],
 ];
 ```
 
-A service's id is its full PHP# type. PHP runs a `List` as an array, so a constructor or binding parameter whose PHP type drops its type arguments carries `#[\Sharp\Internal\Service('List<App\Pricing\PriceRule>')]`.
+A service's id is its PHP# type in lowercase, as codex's `service_id` writes it for the analyzer, the table and the attribute alike. PHP runs a `List` or a `Map` as an array, so a constructor or binding parameter that holds a collection of objects carries `#[\Sharp\Internal\Service('list<app\pricing\pricerule>')]`. Every other parameter's service is its PHP type.
 
 ## Engine
 
 `Sharp\Container` resolves a service the way the checker does:
 
-- It walks the requesting class's folder up to the project root and includes each `Module.sharp` it finds, once per process.
-- With `SHARP_ENV` set, it also includes the `Module.<SHARP_ENV>.sharp` beside each one, whose bindings win.
-- It builds a class through its constructor and calls a binding's closure. Either way, it fills each parameter with the service its type, or its `Service` attribute, names.
-- It keeps each `singleton` for the process and each `scoped` service for the current scope. A `transient` service is built every time.
+- Before it builds a class, it reads the modules of the class's folder and of each folder above it, up to the project root that holds `.sharp/`, once per request.
+- With `SHARP_ENV` set, it reads the `Module.<SHARP_ENV>.sharp` beside each `Module.sharp` first, so the environment module wins.
+- It builds a class through its constructor and calls a binding's closure. Either way, it fills each parameter with the service its `Service` attribute, or else its class, names. It reads the parameters from the function's own argument information, with no reflection.
+- It keeps each `singleton` for the request and each `scoped` service for the current scope. A `transient` service and an unbound class are built every time.
+- It throws an `Error` that names the service no module binds, the class that needs itself, or the parameter with no class type.
 
-The engine starts one scope for each request and for each CLI run. A long-running host runs each unit of work in `Sharp\Container::scope(fn)`.
+The request is the scope, as each CLI run is. A long-running host runs each unit of work in `Sharp\Container::scope(fn)`.
 
 ```php
 final class Container
 {
-    public function get(string $id): object { }                 // the service $id names, as PSR-11's get does
-    public function has(string $id): bool { }                   // whether the container can build $id
-    public static function scope(\Closure $run): mixed { }      // runs $run in a scope of its own
+    public function get(string $id): mixed { }                  // the service $id names, as PSR-11's get does
+    public function has(string $id): bool { }                   // whether a module binds $id or it is a concrete class
+    public static function scope(\Closure $run): mixed { }      // runs $run in a new scope and returns its result
 }
 ```
 
-The standard library's `Sharp\Psr\Container` implements `Psr\Container\ContainerInterface` over it, so any framework's container can ask for a PHP# class.
+`Environment.require(name)` gives a variable a binding needs, and throws `ValueError` when it is not set.
+
+How a test module is picked at run time, how a host reaches the container, and the PSR-11 adapter wait on rulings.
 
 ## Files
 
@@ -102,19 +104,27 @@ sharp/mago/crates/
 ├── syntax/src/parser/internal/module.rs   parses bindings and the parent header
 ├── names/src/internal/walker.rs        resolves a binding's service, classes and `for`
 ├── semantics/src/internal/checker/sharp.rs   placement of base, environment and test modules
-├── codex/src/metadata/binding.rs       new: BindingMetadata
+├── codex/src/metadata/module.rs        ModuleMetadata, BindingMetadata, service_id
 ├── codex/src/scanner/class_like.rs     registers each module's bindings
-├── analyzer/src/statement/module.rs    new: checks each binding
-├── analyzer/src/services.rs            new: the service graph: missing services, cycles, captive dependencies
-└── sharp-bridge/src/lower.rs           lowers a module file to its binding table
+├── analyzer/src/statement/module.rs    each binding, and the service graph: missing services, cycles, captive dependencies
+├── analyzer/src/statement/return.rs    a binding expression's wrong type names the binding
+├── prelude/assets/extensions/sharp.php Environment.require
+└── sharp-bridge/src/lower.rs           a module file's binding table, and the Service attribute
 ext/sharp/
-├── sharp.c                             Sharp\Container: tables, lifetimes, scopes, SHARP_ENV
-└── sharp.stub.php                      Sharp\Container's public methods
-sharp/composer/
-└── src/Psr/Container.php               new: Sharp\Psr\Container, the PSR-11 adapter
+├── sharp.c                             Sharp\Container, and Environment.require
+├── sharp.stub.php                      their public methods
+└── sharp_arginfo.h                     generated from sharp.stub.php
+Zend/tests/sharp/
+├── Container.inc                       new: the app the container tests build
+├── container_resolution.phpt           new: each kind of binding, nested namespaces
+├── container_environment.phpt          new: SHARP_ENV's module first
+├── container_lifetimes.phpt            new: singleton, scoped, scope(), transient
+├── container_refusals.phpt             new: missing service, cycle, untyped parameter
+├── environment.phpt                    Environment.require
+└── project.inc                         a test project's files may sit in folders
 docs/
-├── spec.md                             untouched: section 32 is final
-├── decisions/056-modules.md            matches the spec: binding parameters, no Factory<T>, SHARP_ENV
+├── spec.md                             scoped-binding and module-errors name their Module.sharp
+├── decisions/056-modules.md            unchanged: it matches section 32
 └── architecture/modules.md             this note
-sharp/baseline/spec                     drops module-law and every section 32 example
+sharp/baseline/spec                     drops module-law, state-machine-law and every section 32 example
 ```
