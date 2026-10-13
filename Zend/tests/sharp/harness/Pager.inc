@@ -12,9 +12,17 @@ final class Pager
 {
     public static ?PaginatedList $next = null;
 
+    public static array $sizes = [];
+
     /** @return PaginatedList<\App\Order> */
     public static function orders(): PaginatedList
     {
         return self::$next;
+    }
+
+    /** @return list<int> */
+    public static function sizes(): array
+    {
+        return self::$sizes;
     }
 }

@@ -717,7 +717,7 @@ void zend_optimizer_compact_literals(zend_op_array *op_array, zend_optimizer_ctx
 					break;
 				case ZEND_SHARP_VERIFY_TYPE_ARGS:
 					// op2 type text, spelled with the class and type arguments of this
-					opline->extended_value = cache_size | (opline->extended_value & ZEND_SHARP_VERIFY_SET_HOOK);
+					opline->extended_value = cache_size;
 					cache_size += 4 * sizeof(void *);
 					break;
 				case ZEND_CATCH:

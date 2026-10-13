@@ -1126,7 +1126,7 @@ typed_property:
 				ZVAL_COPY_VALUE(&tmp, value);
 				// Increase refcount to prevent object from being released in __toString()
 				GC_ADDREF(zobj);
-				bool type_matched = zend_verify_property_type(prop_info, &tmp, property_uses_strict_types());
+				bool type_matched = zend_verify_object_property_type(prop_info, &tmp, property_uses_strict_types(), zobj);
 				if (UNEXPECTED(GC_DELREF(zobj) == 0)) {
 					zend_object_released_while_assigning_to_property_error(prop_info);
 					zend_objects_store_del(zobj);
@@ -2155,7 +2155,8 @@ ZEND_API zval *zend_std_get_static_property_with_info(zend_class_entry *ce, zend
 		}
 	}
 
-	if (UNEXPECTED((property_info->flags & ZEND_ACC_STATIC) == 0)) {
+	/* PHP#: no code names the static that keeps a generic class's own statics, see ZEND_ACC_SHARP_HIDDEN. */
+	if (UNEXPECTED((property_info->flags & (ZEND_ACC_STATIC|ZEND_ACC_SHARP_HIDDEN)) != ZEND_ACC_STATIC)) {
 undeclared_property:
 		if (type != BP_VAR_IS) {
 			zend_throw_error(NULL, "Access to undeclared static property %s::$%s", ZSTR_VAL(ce->name), ZSTR_VAL(property_name));

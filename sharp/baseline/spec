@@ -13,8 +13,6 @@
 §10	struct-changes
 §10	struct-parse
 §10	struct-parse-object
-§11	generic-statics
-§11	inferred-type-arguments
 §11	raw-generic-objects
 §11	type-parameter-bounds
 §12	collection-write-methods
@@ -56,7 +54,6 @@
 §24	nullable-unions
 §24	object-type
 §25	class-members
-§25	class-values
 §25	generic-class-values
 §25	required-constructors
 §25	self-return

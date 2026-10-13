@@ -1,8 +1,8 @@
 --TEST--
-Reflection, get_class_vars, property_exists and property access never reach a PHP# object's type arguments, and refuse to name them
+Reflection, get_class_vars, property_exists and property access never reach a PHP# object's type arguments or a generic class's static fields, and refuse to name them
 --FILE--
 <?php
-require __DIR__ . '/type_arguments.inc';
+require __DIR__ . '/type_arguments_calls.inc';
 
 $slot = "\0<sharp>\0types";
 $orders = App\Queue::orders();
@@ -41,6 +41,26 @@ try {
 }
 var_dump(isset($orders->$slot));
 var_dump(arguments($orders));
+
+echo "A generic class's static fields\n";
+$statics = "\0<sharp>\0statics";
+$counter = new ReflectionClass(Calls\Counter::class);
+Calls\Counter::track(new App\Order(1));
+var_dump($counter->getStaticProperties(), get_class_vars(Calls\Counter::class));
+var_dump(array_map(static fn (ReflectionProperty $property): string => $property->name, $counter->getProperties()));
+var_dump($counter->hasProperty($statics), property_exists(Calls\Counter::class, $statics));
+try {
+    $counter->getStaticPropertyValue($statics);
+} catch (ReflectionException $e) {
+    echo str_replace("\0", '\0', $e->getMessage()), "\n";
+}
+foreach (['count', $statics] as $name) {
+    try {
+        var_dump(Calls\Counter::$$name);
+    } catch (Error $e) {
+        echo str_replace("\0", '\0', $e->getMessage()), "\n";
+    }
+}
 ?>
 --EXPECT--
 Reflection
@@ -73,3 +93,15 @@ array(1) {
   [0]=>
   string(9) "App.Order"
 }
+A generic class's static fields
+array(0) {
+}
+array(0) {
+}
+array(0) {
+}
+bool(false)
+bool(false)
+Property Calls\Counter::$\0<sharp>\0statics does not exist
+Access to undeclared static property Calls\Counter::$count
+Access to undeclared static property Calls\Counter::$

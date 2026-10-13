@@ -4298,7 +4298,8 @@ ZEND_METHOD(ReflectionClass, getStaticProperties)
 		     prop_info->ce != ce)) {
 			continue;
 		}
-		if ((prop_info->flags & ZEND_ACC_STATIC) == 0) {
+		/* PHP#: a generic class's hidden static store is no static property. */
+		if ((prop_info->flags & (ZEND_ACC_STATIC|ZEND_ACC_SHARP_HIDDEN)) != ZEND_ACC_STATIC) {
 			continue;
 		}
 
@@ -4403,7 +4404,7 @@ ZEND_METHOD(ReflectionClass, setStaticPropertyValue)
 		}
 	}
 
-	if (ZEND_TYPE_IS_SET(prop_info->type) && !zend_verify_property_type(prop_info, value, 0)) {
+	if (ZEND_TYPE_IS_SET(prop_info->type) && !zend_verify_object_property_type(prop_info, value, 0, NULL)) {
 		return;
 	}
 

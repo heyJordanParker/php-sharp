@@ -6016,7 +6016,8 @@ ZEND_VM_C_LABEL(case_double):
 }
 
 /* PHP#: a TMP op2 holds the type arguments ZEND_SHARP_TYPE_ARGS gave the new object, see ZEND_AST_SHARP_TYPE_ARGS.
- * Its class then comes from FETCH_CLASS, so op2 never holds a cache slot. */
+ * Its class then comes from FETCH_CLASS, so op2 never holds a cache slot. With ZEND_FETCH_CLASS_SHARP_TYPE, it holds
+ * what the object is created from instead. */
 ZEND_VM_HANDLER(68, ZEND_NEW, UNUSED|CLASS_FETCH|CONST|VAR, UNUSED|CACHE_SLOT|TMP, NUM)
 {
 	USE_OPLINE
@@ -6024,10 +6025,20 @@ ZEND_VM_HANDLER(68, ZEND_NEW, UNUSED|CLASS_FETCH|CONST|VAR, UNUSED|CACHE_SLOT|TM
 	zend_function *constructor;
 	zend_class_entry *ce;
 	zend_execute_data *call;
+	const sharp_type *arguments = NULL;
 
 	SAVE_OPLINE();
 	ZEND_ASSERT(OP1_TYPE != IS_CONST || OP2_TYPE == IS_UNUSED);
-	if (OP1_TYPE == IS_CONST) {
+	if (OP1_TYPE == IS_UNUSED && OP2_TYPE == IS_TMP_VAR && opline->op1.num == ZEND_FETCH_CLASS_SHARP_TYPE) {
+		/* PHP#: `new TItem(…)` creates its type argument, and `new (type)(…)` the class a class value names, each
+		 * with its own type arguments. */
+		ce = sharp_new_class(EX_VAR(opline->op2.var), &arguments);
+		FREE_OP2();
+		if (UNEXPECTED(ce == NULL)) {
+			ZVAL_UNDEF(EX_VAR(opline->result.var));
+			HANDLE_EXCEPTION();
+		}
+	} else if (OP1_TYPE == IS_CONST) {
 		ce = CACHED_PTR(opline->op2.num);
 		if (UNEXPECTED(ce == NULL)) {
 			ce = zend_fetch_class_by_name(Z_STR_P(RT_CONSTANT(opline, opline->op1)), Z_STR_P(RT_CONSTANT(opline, opline->op1) + 1), ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
@@ -6043,12 +6054,13 @@ ZEND_VM_HANDLER(68, ZEND_NEW, UNUSED|CLASS_FETCH|CONST|VAR, UNUSED|CACHE_SLOT|TM
 			ZVAL_UNDEF(EX_VAR(opline->result.var));
 			HANDLE_EXCEPTION();
 		}
+		arguments = OP2_TYPE == IS_TMP_VAR ? Z_PTR_P(EX_VAR(opline->op2.var)) : NULL;
 	} else {
 		ce = Z_CE_P(EX_VAR(opline->op1.var));
+		arguments = OP2_TYPE == IS_TMP_VAR ? Z_PTR_P(EX_VAR(opline->op2.var)) : NULL;
 	}
 
 	result = EX_VAR(opline->result.var);
-	const sharp_type *arguments = OP2_TYPE == IS_TMP_VAR ? Z_PTR_P(EX_VAR(opline->op2.var)) : NULL;
 	if (arguments && UNEXPECTED(!sharp_class_takes(ce, arguments))) {
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
@@ -6204,28 +6216,54 @@ ZEND_VM_HANDLER(212, ZEND_SHARP_RECV_TYPE_ARGS, CONST|UNUSED, CONST|UNUSED, CACH
 
 /* PHP#: gives the value op1 holds on in its TMP result once it is of the type its CONST op2 spells, as
  * ZEND_SHARP_RECV_TYPE_ARGS checks an argument, an int as a float where the type takes one. The literal after the text
- * names what takes the value. A value of the wrong type throws a TypeError. ZEND_SHARP_VERIFY_SET_HOOK marks a set
- * hook's value, which a write from a .sharp file never checks, since the checker proved it (ruling G.2). Four cache
- * slots follow the text. */
+ * names what takes the value. A value of the wrong type throws a TypeError. Four cache slots follow the text. */
 ZEND_VM_HANDLER(213, ZEND_SHARP_VERIFY_TYPE_ARGS, TMPVAR|CV, CONST, CACHE_SLOT)
 {
 	USE_OPLINE
 	zval *value, *result = EX_VAR(opline->result.var);
-	const zend_execute_data *writer = EX(prev_execute_data);
 
 	SAVE_OPLINE();
 	value = GET_OP1_ZVAL_PTR(BP_VAR_R);
 	ZVAL_COPY_DEREF(result, value);
 	FREE_OP1();
-	if ((!(opline->extended_value & ZEND_SHARP_VERIFY_SET_HOOK)
-			|| !writer || !writer->func || !ZEND_USER_CODE(writer->func->type)
-			|| !sharp_is_sharp_file(writer->func->op_array.filename))
-		&& !sharp_type_verify(execute_data, result, RT_CONSTANT(opline, opline->op2),
-			CACHE_ADDR(opline->extended_value & ~ZEND_SHARP_VERIFY_SET_HOOK))) {
+	if (!sharp_type_verify(execute_data, result, RT_CONSTANT(opline, opline->op2), CACHE_ADDR(opline->extended_value))) {
 		zval_ptr_dtor_nogc(result);
 		ZVAL_UNDEF(result);
 		HANDLE_EXCEPTION();
 	}
+	ZEND_VM_NEXT_OPCODE();
+}
+
+/* PHP#: whether the value op1 holds is of the type the IS_PTR list in the TMP op2 holds, which ZEND_SHARP_TYPE_ARGS
+ * spelled for the frame, as `value is T` tests it. */
+ZEND_VM_HANDLER(214, ZEND_SHARP_IS_TYPE, CONST|TMPVAR|CV, TMP)
+{
+	USE_OPLINE
+	zval *value;
+	bool is;
+
+	SAVE_OPLINE();
+	value = GET_OP1_ZVAL_PTR(BP_VAR_R);
+	is = sharp_type_list_holds(Z_PTR_P(EX_VAR(opline->op2.var)), value);
+	FREE_OP1();
+	ZVAL_BOOL(EX_VAR(opline->result.var), is);
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+}
+
+/* PHP#: the class value of the type the IS_PTR list in the TMP op1 holds, which ZEND_SHARP_TYPE_ARGS spelled for the
+ * frame, as `typeof(T)` gives it. */
+ZEND_VM_HANDLER(215, ZEND_SHARP_TYPE_OF, TMP, UNUSED)
+{
+	USE_OPLINE
+	zend_string *class_value;
+
+	SAVE_OPLINE();
+	class_value = sharp_type_list_class_value(Z_PTR_P(EX_VAR(opline->op1.var)), opline->extended_value == ZEND_SHARP_TYPE_OF_LIST);
+	if (UNEXPECTED(class_value == NULL)) {
+		ZVAL_UNDEF(EX_VAR(opline->result.var));
+		HANDLE_EXCEPTION();
+	}
+	ZVAL_INTERNED_STR(EX_VAR(opline->result.var), class_value);
 	ZEND_VM_NEXT_OPCODE();
 }
 
@@ -6755,6 +6793,8 @@ ZEND_VM_COLD_CONST_HANDLER(51, ZEND_CAST, CONST|TMP|VAR|CV, ANY, TYPE)
 				ZVAL_COPY(result, value);
 			} else if (OP1_TYPE == IS_CV) {
 				sharp_collection_of_local(result, expr);
+			} else if (Z_ISREF_P(expr)) {
+				sharp_collection_of_reference(result, expr);
 			} else {
 				sharp_collection_of_value(result, value);
 			}
@@ -7594,6 +7634,10 @@ ZEND_VM_HANDLER(126, ZEND_FE_FETCH_RW, VAR, ANY, JMP_ADDR)
 										zend_throw_error(NULL,
 											"Cannot acquire reference to readonly property %s::$%s",
 											ZSTR_VAL(prop_info->ce->name), ZSTR_VAL(p->key));
+										UNDEF_RESULT();
+										HANDLE_EXCEPTION();
+									}
+									if (UNEXPECTED(sharp_property_refuses_reference(prop_info))) {
 										UNDEF_RESULT();
 										HANDLE_EXCEPTION();
 									}

@@ -19,6 +19,7 @@
 #include "zend_closures.h"
 #include "zend_enum.h"
 #include "zend_exceptions.h"
+#include "zend_interfaces.h"
 #include "zend_language_parser.h"
 #include "zend_smart_str.h"
 #include "zend_system_id.h"
@@ -53,6 +54,8 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	/* The types and argument lists first read from input this request, NULL until there is one. See sharp_types. */
 	HashTable *request_types;
 	HashTable *request_type_lists;
+	/* The class values of request_types, NULL until there is one. See sharp_class_values. */
+	HashTable *request_class_values;
 	/* The lists sharp_type_list_of_frame spelled this request, keyed by a sharp_type_spelling, NULL until there is one. */
 	HashTable *request_spelled_lists;
 ZEND_END_MODULE_GLOBALS(sharp)
@@ -733,7 +736,8 @@ zend_class_entry *sharp_ce_collection;
 static zend_object_handlers sharp_collection_handlers;
 
 /* The receiver of a PHP# method call on a List or Map, which PHP stores as an array. It changes the
- * array where it lives: a local, a plain property or a static property through its slot, and a
+ * array where it lives: a local, a plain property or a static property through its slot, an array
+ * bound to a reference through the reference it holds, and a
  * property with hooks, or one the caller may not write in place, through write_property with a
  * changed copy. A static property the caller may not set keeps a copy, and a change throws as an
  * assignment to it does. A value that lives nowhere is a copy. It exists only as the $this of that
@@ -837,6 +841,13 @@ void sharp_collection_of_local(zval *result, zval *local)
 void sharp_collection_of_value(zval *result, zval *value)
 {
 	ZVAL_COPY_DEREF(&sharp_collection_new(result)->value, value);
+}
+
+/* A reference, such as the one a generic class's static field is bound to by
+ * Sharp\Internal\statics, keeps the array where it lives, so a change reaches it. */
+void sharp_collection_of_reference(zval *result, zval *reference)
+{
+	ZVAL_COPY(&sharp_collection_new(result)->value, reference);
 }
 
 /* result holds the array read from the property, and the caller's frame is still the current one. */
@@ -1543,9 +1554,14 @@ ZEND_METHOD(Sharp_Position, __construct)
  * reads the process's table, then the request's, so a type is one pointer either way. */
 
 zend_string *sharp_type_arguments_key;
+zend_string *sharp_statics_key;
 
 static HashTable sharp_types;
 static HashTable sharp_type_lists;
+/* Each class with type arguments in sharp_types, keyed by the address of its interned class name, which is its class
+ * value, so `new (type)(…)` finds the type arguments back from the very string `typeof` gave. Plain PHP sees the class
+ * name, and any other string with that name is no key, so it names the class without type arguments. */
+static HashTable sharp_class_values;
 #ifdef ZTS
 static MUTEX_T sharp_types_lock;
 # define SHARP_TYPES_LOCK() tsrm_mutex_lock(sharp_types_lock)
@@ -1559,9 +1575,13 @@ static MUTEX_T sharp_types_lock;
 static const struct {
 	const char *name;
 	uint32_t arity;
+	sharp_built_in built_in;
 } sharp_built_in_types[] = {
-	{"int", 0}, {"float", 0}, {"bool", 0}, {"string", 0}, {"void", 0}, {"null", 0}, {"Any", 0}, {"Object", 0},
-	{"List", 1}, {"Map", 2}, {"Set", 1}, {"Iterable", 1}, {"Class", 1},
+	{"int", 0, SHARP_BUILT_IN_INT}, {"float", 0, SHARP_BUILT_IN_FLOAT}, {"bool", 0, SHARP_BUILT_IN_BOOL},
+	{"string", 0, SHARP_BUILT_IN_STRING}, {"void", 0, SHARP_BUILT_IN_VOID}, {"null", 0, SHARP_BUILT_IN_NULL},
+	{"Any", 0, SHARP_BUILT_IN_ANY}, {"Object", 0, SHARP_BUILT_IN_OBJECT}, {"List", 1, SHARP_BUILT_IN_LIST},
+	{"Map", 2, SHARP_BUILT_IN_MAP}, {"Set", 1, SHARP_BUILT_IN_SET}, {"Iterable", 1, SHARP_BUILT_IN_ITERABLE},
+	{"Class", 1, SHARP_BUILT_IN_CLASS},
 };
 
 /* A type as its text spells it, before it is interned. */
@@ -1679,17 +1699,25 @@ static bool sharp_type_node_is(const sharp_type_node *node, const char *text)
 	return node->length == strlen(text) && memcmp(node->text, text, node->length) == 0;
 }
 
-/* The number of type arguments the built-in type the `length` bytes at `name` name takes, -1 when they name a
- * class. */
-static int sharp_type_built_in_arity(const char *name, size_t length)
+/* The index in sharp_built_in_types of the built-in type the `length` bytes at `name` name, -1 when they name a class. */
+static int sharp_type_built_in_index(const char *name, size_t length)
 {
 	for (size_t i = 0; i < sizeof(sharp_built_in_types) / sizeof(*sharp_built_in_types); i++) {
 		if (strlen(sharp_built_in_types[i].name) == length && memcmp(sharp_built_in_types[i].name, name, length) == 0) {
-			return (int) sharp_built_in_types[i].arity;
+			return (int) i;
 		}
 	}
 
 	return -1;
+}
+
+/* The number of type arguments the built-in type the `length` bytes at `name` name takes, -1 when they name a
+ * class. */
+static int sharp_type_built_in_arity(const char *name, size_t length)
+{
+	int index = sharp_type_built_in_index(name, length);
+
+	return index < 0 ? -1 : (int) sharp_built_in_types[index].arity;
 }
 
 /* Whether `token` comes next. */
@@ -1770,8 +1798,18 @@ static const sharp_type *sharp_type_intern(const sharp_type_node *node, bool fro
 		type->class_name = sharp_type_string(sharp_type_class_name(node->name, node->name_length, persistent), persistent);
 	}
 	type->kind = node->kind;
+	type->built_in = SHARP_BUILT_IN_NONE;
+	if (node->kind == SHARP_TYPE_NAMED && !node->name) {
+		/* A built-in type's name is its text before its type arguments. */
+		const char *open = memchr(node->text, '<', node->length);
+		int index = sharp_type_built_in_index(node->text, open ? (size_t) (open - node->text) : node->length);
+		if (index >= 0) {
+			type->built_in = sharp_built_in_types[index].built_in;
+		}
+	}
 	type->count = node->count;
 	memcpy(type->members, members, node->count * sizeof(*members));
+	bool is_class_value = type->class_name && type->count;
 
 	if (!persistent) {
 		HashTable **request = list ? &SHARP_G(request_type_lists) : &SHARP_G(request_types);
@@ -1781,6 +1819,13 @@ static const sharp_type *sharp_type_intern(const sharp_type_node *node, bool fro
 			zend_hash_init(*request, 8, NULL, sharp_type_free, false);
 		}
 		zend_hash_add_new_ptr(*request, type->text, type);
+		if (is_class_value) {
+			if (!SHARP_G(request_class_values)) {
+				ALLOC_HASHTABLE(SHARP_G(request_class_values));
+				zend_hash_init(SHARP_G(request_class_values), 8, NULL, NULL, false);
+			}
+			zend_hash_index_add_new_ptr(SHARP_G(request_class_values), (zend_ulong) (uintptr_t) type->class_name, type);
+		}
 
 		return type;
 	}
@@ -1791,6 +1836,9 @@ static const sharp_type *sharp_type_intern(const sharp_type_node *node, bool fro
 	found = zend_hash_find_ptr(table, type->text);
 	if (!found) {
 		zend_hash_add_new_ptr(table, type->text, type);
+		if (is_class_value) {
+			zend_hash_index_add_new_ptr(&sharp_class_values, (zend_ulong) (uintptr_t) type->class_name, type);
+		}
 	}
 	SHARP_TYPES_UNLOCK();
 	if (found) {
@@ -2607,6 +2655,44 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 	return substituted;
 }
 
+/* The class `node`, a SHARP_TYPE_NAMED type, names, once loaded, or NULL for a built-in type. */
+static zend_class_entry *sharp_type_node_class(sharp_type_node *node)
+{
+	if (!node->ce && node->name) {
+		zend_string *name = sharp_type_class_name(node->name, node->name_length, false);
+		node->ce = zend_lookup_class_ex(name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+		zend_string_release_ex(name, false);
+	}
+
+	return node->ce;
+}
+
+/* The variance of the type parameter at `index` of `ce`, a class-like: `+` for `out`, `-` for `in` and `=` for neither,
+ * which a plain PHP class's type parameters have. */
+static char sharp_class_variance(const zend_class_entry *ce, uint32_t index)
+{
+	const zend_string *variance = sharp_class_is_sharp(ce) ? ce->info.user.sharp_variance : NULL;
+
+	return variance && index < ZSTR_LEN(variance) ? ZSTR_VAL(variance)[index] : '=';
+}
+
+static bool sharp_type_fits(sharp_type_node *type, sharp_type_node *bound, sharp_type_reader *reader);
+
+/* Whether `given`, a type argument for a type parameter of `variance`, is one the type argument `wanted` takes, spec
+ * section 11.1: `wanted` itself, or for `out` a type within it, and for `in` a type it is within. */
+static bool sharp_type_argument_fits(
+	sharp_type_node *given, sharp_type_node *wanted, char variance, sharp_type_reader *reader)
+{
+	switch (variance) {
+		case '+':
+			return sharp_type_fits(given, wanted, reader);
+		case '-':
+			return sharp_type_fits(wanted, given, reader);
+		default:
+			return given->length == wanted->length && memcmp(given->text, wanted->text, given->length) == 0;
+	}
+}
+
 /* Whether `given`, a type argument an object holds, matches `expected`: SHARP_TYPE_UNRESOLVED matches any type at any
  * depth, and every other type only itself, a written `Any?` too. */
 static bool sharp_type_argument_matches(const sharp_type *expected, const sharp_type_node *given)
@@ -2631,6 +2717,45 @@ static bool sharp_type_argument_matches(const sharp_type *expected, const sharp_
 	uint32_t i = 0;
 	for (const sharp_type_node *member = given->first; member; member = member->next, i++) {
 		if (!sharp_type_argument_matches(expected->members[i], member)) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+/* Whether `given`, a type argument an object holds for a type parameter of `variance`, is one `expected` takes: one
+ * sharp_type_argument_matches matches, or one sharp_type_argument_fits takes for `out` or `in`, spec section 11.1. */
+static bool sharp_type_argument_takes(
+	const sharp_type *expected, sharp_type_node *given, char variance, sharp_type_reader *reader)
+{
+	if (sharp_type_argument_matches(expected, given)) {
+		return true;
+	}
+	if (variance == '=') {
+		return false;
+	}
+
+	/* A text with SHARP_TYPE_UNRESOLVED in it reads as no type, so only sharp_type_argument_matches takes a value for it. */
+	sharp_type_reader text = sharp_type_reader_of(ZSTR_VAL(expected->text), ZSTR_LEN(expected->text), reader->arena);
+	sharp_type_node *wanted = sharp_type_read(&text);
+	reader->arena = text.arena;
+
+	return wanted && text.at == text.end && sharp_type_argument_fits(given, wanted, variance, reader);
+}
+
+/* Whether `given`, with `arguments` for its type parameters, a list or a class type, gives `ce`, a class it is or extends
+ * or implements, type arguments that each take `type`'s own, as sharp_type_argument_takes takes them. */
+static bool sharp_type_arguments_take(const zend_class_entry *given, sharp_type_node *arguments,
+	const zend_class_entry *ce, const sharp_type *type, sharp_type_reader *reader)
+{
+	const sharp_type_node *of_ce = sharp_type_node_ancestor(given, arguments, ce, reader);
+	if (!of_ce || of_ce->count != type->count) {
+		return false;
+	}
+	uint32_t i = 0;
+	for (sharp_type_node *argument = of_ce->first; argument; argument = argument->next, i++) {
+		if (!sharp_type_argument_takes(type->members[i], argument, sharp_class_variance(ce, i), reader)) {
 			return false;
 		}
 	}
@@ -2675,37 +2800,318 @@ static bool sharp_object_is(zend_object *object, const sharp_type *type)
 		return true;
 	}
 	sharp_type_reader reader = sharp_type_reader_of(NULL, 0, zend_arena_create(1024));
-	const sharp_type_node *given =
-		sharp_type_node_ancestor(object->ce, sharp_type_node_list(own ? own->text : NULL, &reader), ce, &reader);
-	bool is = given && given->count == type->count;
-	uint32_t i = 0;
-	for (const sharp_type_node *argument = is ? given->first : NULL; argument; argument = argument->next, i++) {
-		if (!sharp_type_argument_matches(type->members[i], argument)) {
-			is = false;
-			break;
-		}
-	}
+	bool is = sharp_type_arguments_take(object->ce, sharp_type_node_list(own ? own->text : NULL, &reader), ce, type, &reader);
 	zend_arena_destroy(reader.arena);
 
 	return is;
 }
 
-bool sharp_type_accepts(const sharp_type *type, const zval *value)
+/* The class with type arguments whose class value is `value`, or NULL for any other string, see sharp_class_values. */
+static const sharp_type *sharp_class_value_type(const zend_string *value)
+{
+	if (!ZSTR_IS_INTERNED(value)) {
+		return NULL;
+	}
+	zend_ulong address = (zend_ulong) (uintptr_t) value;
+
+	SHARP_TYPES_LOCK();
+	const sharp_type *type = zend_hash_index_find_ptr(&sharp_class_values, address);
+	SHARP_TYPES_UNLOCK();
+	if (!type && SHARP_G(request_class_values)) {
+		type = zend_hash_index_find_ptr(SHARP_G(request_class_values), address);
+	}
+
+	return type;
+}
+
+/* Whether the string `value` is a class value of `Class<type>`, spec section 11: it names `type`'s class or a class that
+ * extends or implements it, and the type arguments it carries give that class type arguments `type` takes. A class name
+ * plain PHP writes carries none, so it gives its class's bounds, as an object plain PHP creates does. A `Class` of a type
+ * that is no class, such as `typeof(TItem)` of an `int`, takes any string. */
+static bool sharp_class_value_is(const zval *value, const sharp_type *type)
+{
+	if (Z_TYPE_P(value) != IS_STRING) {
+		return false;
+	}
+	if (type->kind != SHARP_TYPE_NAMED || !type->class_name) {
+		return true;
+	}
+
+	/* An autoloader runs here, and can throw. Its exception stands for the check. */
+	zend_class_entry *given = zend_lookup_class(Z_STR_P(value));
+	zend_class_entry *ce = given ? zend_lookup_class_ex(type->class_name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD) : NULL;
+	if (!ce || !instanceof_function(given, ce)) {
+		return false;
+	}
+	if (!type->count || !sharp_class_is_sharp(ce) || !ce->info.user.sharp_bounds) {
+		return true;
+	}
+
+	sharp_type_reader reader = sharp_type_reader_of(NULL, 0, zend_arena_create(1024));
+	const sharp_type *carried = sharp_class_value_type(Z_STR_P(value));
+	sharp_type_node *arguments;
+	if (carried) {
+		sharp_type_reader text = sharp_type_reader_of(ZSTR_VAL(carried->text), ZSTR_LEN(carried->text), reader.arena);
+		arguments = sharp_type_read(&text);
+		reader.arena = text.arena;
+	} else {
+		arguments = sharp_type_node_list(sharp_class_is_sharp(given) ? given->info.user.sharp_bounds : NULL, &reader);
+	}
+	bool is = sharp_type_arguments_take(given, arguments, ce, type, &reader);
+	zend_arena_destroy(reader.arena);
+
+	return is;
+}
+
+/* Appends an object's class as PHP# writes it, `App.Order`, with its type arguments when its class is generic,
+ * `App.Box<int>`. */
+static void sharp_object_text(smart_str *text, zend_object *object)
+{
+	const zend_string *name = object->ce->name;
+	for (size_t i = 0; i < ZSTR_LEN(name); i++) {
+		smart_str_appendc(text, ZSTR_VAL(name)[i] == '\\' ? '.' : ZSTR_VAL(name)[i]);
+	}
+
+	const sharp_type *arguments = sharp_type_arguments(object);
+	if (arguments) {
+		smart_str_appendc(text, '<');
+		smart_str_append(text, arguments->text);
+		smart_str_appendc(text, '>');
+	}
+}
+
+/* The longest string a problem quotes, in bytes. */
+#define SHARP_QUOTED_STRING_LENGTH 40
+
+/* Appends a value as a problem shows it: `null`, `bool true`, `int 5`, `float 1.5`, `string 'abc'` cut after
+ * SHARP_QUOTED_STRING_LENGTH bytes, `List` or `Map` for an array, `object App.Order`. */
+static ZEND_COLD void sharp_value_text(smart_str *text, const zval *value)
+{
+	switch (Z_TYPE_P(value)) {
+		case IS_NULL:
+			smart_str_appends(text, "null");
+			return;
+		case IS_FALSE:
+		case IS_TRUE:
+			smart_str_appends(text, Z_TYPE_P(value) == IS_TRUE ? "bool true" : "bool false");
+			return;
+		case IS_LONG:
+			smart_str_appends(text, "int ");
+			smart_str_append_long(text, Z_LVAL_P(value));
+			return;
+		case IS_DOUBLE:
+			smart_str_appends(text, "float ");
+			smart_str_append_double(text, Z_DVAL_P(value), (int) PG(serialize_precision), false);
+			return;
+		case IS_STRING:
+			smart_str_appends(text, "string '");
+			smart_str_appendl(text, Z_STRVAL_P(value), MIN(Z_STRLEN_P(value), SHARP_QUOTED_STRING_LENGTH));
+			smart_str_appends(text, Z_STRLEN_P(value) > SHARP_QUOTED_STRING_LENGTH ? "…'" : "'");
+			return;
+		case IS_ARRAY:
+			smart_str_appends(text, zend_array_is_list(Z_ARRVAL_P(value)) ? "List" : "Map");
+			return;
+		case IS_OBJECT:
+			smart_str_appends(text, "object ");
+			sharp_object_text(text, Z_OBJ_P(value));
+			return;
+		default:
+			smart_str_appends(text, zend_zval_value_name(value));
+	}
+}
+
+/* Adds the problem of `value`, which is not of `type`, at the path the walk is at: `<prefix>expected <type>, got
+ * <value>`. */
+static ZEND_COLD void sharp_type_problem(
+	sharp_type_problems *problems, const char *prefix, const sharp_type *type, const zval *value)
+{
+	smart_str problem = {0};
+	smart_str_appends(&problem, prefix);
+	smart_str_appends(&problem, "expected ");
+	smart_str_append(&problem, type->text);
+	smart_str_appends(&problem, ", got ");
+	sharp_value_text(&problem, value);
+	smart_str_0(&problem);
+
+	zval text;
+	ZVAL_STR(&text, problem.s);
+	/* The walk keeps changing the path, so the array keeps a copy of it. */
+	const zend_string *path = problems->path.s ? problems->path.s : ZSTR_EMPTY_ALLOC();
+	zend_symtable_str_update(Z_ARRVAL_P(problems->problems), ZSTR_VAL(path), ZSTR_LEN(path), &text);
+}
+
+/* The type of the elements of the collection `type`, or NULL when `type` is no collection whose elements are checked.
+ * A `Map`'s elements are its values. */
+static const sharp_type *sharp_type_elements(const sharp_type *type)
+{
+	switch (type->built_in) {
+		case SHARP_BUILT_IN_MAP:
+			return type->members[1];
+		case SHARP_BUILT_IN_LIST:
+		case SHARP_BUILT_IN_SET:
+		case SHARP_BUILT_IN_ITERABLE:
+			return type->members[0];
+		default:
+			return NULL;
+	}
+}
+
+/* The collection whose elements the array `value` is walked by when it is of `type`, so each bad element is a problem at
+ * its own path: `type` itself, the member of `T?`, or the one collection a union has. NULL for any other type, whose
+ * problem is the value's own. */
+static const sharp_type *sharp_type_walked(const sharp_type *type, const zval *value)
+{
+	if (Z_TYPE_P(value) != IS_ARRAY) {
+		return NULL;
+	}
+	switch (type->kind) {
+		case SHARP_TYPE_NAMED:
+			return sharp_type_elements(type) ? type : NULL;
+		case SHARP_TYPE_NULLABLE:
+			return sharp_type_walked(type->members[0], value);
+		case SHARP_TYPE_UNION: {
+			const sharp_type *walked = NULL;
+			for (uint32_t i = 0; i < type->count; i++) {
+				const sharp_type *member = sharp_type_walked(type->members[i], value);
+				if (member && walked) {
+					return NULL;
+				}
+				walked = member ? member : walked;
+			}
+			return walked;
+		}
+		default:
+			return NULL;
+	}
+}
+
+static bool sharp_type_holds(const sharp_type *type, const zval *value, bool int_as_float, sharp_type_problems *problems);
+
+/* Whether `key`, or the int `index` when `key` is NULL, is a key of a `Map` whose keys are of `type`. PHP stores the key
+ * `"5"` as the int 5, so a `string` key type takes every key, and a `Map` keyed by a backed enum holds each case's
+ * backing value. */
+static bool sharp_type_holds_key(const sharp_type *type, zend_ulong index, zend_string *key)
+{
+	if (type->built_in == SHARP_BUILT_IN_STRING) {
+		return true;
+	}
+
+	zend_class_entry *ce = type->class_name
+		? zend_lookup_class_ex(type->class_name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD) : NULL;
+	if (ce && (ce->ce_flags & ZEND_ACC_ENUM) && ce->enum_backing_type != IS_UNDEF) {
+		zend_object *found = NULL;
+		if (ce->enum_backing_type == IS_LONG) {
+			return !key && zend_enum_get_case_by_value(&found, ce, (zend_long) index, NULL, true) == SUCCESS && found;
+		}
+		zend_string *text = key ? zend_string_copy(key) : zend_long_to_str((zend_long) index);
+		bool is = zend_enum_get_case_by_value(&found, ce, 0, text, true) == SUCCESS && found;
+		zend_string_release(text);
+
+		return is;
+	}
+
+	zval value;
+	if (key) {
+		ZVAL_STR(&value, key);
+	} else {
+		ZVAL_LONG(&value, (zend_long) index);
+	}
+
+	return sharp_type_holds(type, &value, false, NULL);
+}
+
+/* Whether the array `value` is of the collection `type`, each element checked by sharp_type_holds. */
+static bool sharp_type_collection_holds(
+	const sharp_type *type, const zval *value, bool int_as_float, sharp_type_problems *problems)
+{
+	if (type->built_in == SHARP_BUILT_IN_LIST && !zend_array_is_list(Z_ARRVAL_P(value))) {
+		if (problems) {
+			sharp_type_problem(problems, "", type, value);
+		}
+		return false;
+	}
+
+	const sharp_type *keys = type->built_in == SHARP_BUILT_IN_MAP ? type->members[0] : NULL;
+	const sharp_type *elements = sharp_type_elements(type);
+	bool holds = true;
+	zend_ulong index;
+	zend_string *key;
+	zval *element;
+	ZEND_HASH_FOREACH_KEY_VAL(Z_ARRVAL_P(value), index, key, element) {
+		size_t length = 0;
+		if (problems) {
+			length = problems->path.s ? ZSTR_LEN(problems->path.s) : 0;
+			if (key) {
+				smart_str_appends(&problems->path, "[\"");
+				smart_str_append(&problems->path, key);
+				smart_str_appends(&problems->path, "\"]");
+			} else {
+				smart_str_appendc(&problems->path, '[');
+				smart_str_append_long(&problems->path, (zend_long) index);
+				smart_str_appendc(&problems->path, ']');
+			}
+		}
+
+		if (keys && !sharp_type_holds_key(keys, index, key)) {
+			holds = false;
+			if (problems) {
+				zval given;
+				if (key) {
+					ZVAL_STR(&given, key);
+				} else {
+					ZVAL_LONG(&given, (zend_long) index);
+				}
+				sharp_type_problem(problems, "key ", keys, &given);
+			}
+		}
+		if ((holds || problems) && !sharp_type_holds(elements, element, int_as_float, problems)) {
+			holds = false;
+		}
+
+		if (problems) {
+			ZSTR_LEN(problems->path.s) = length;
+		}
+		if (UNEXPECTED(EG(exception)) || (!holds && !problems)) {
+			break;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return holds;
+}
+
+/* Whether `value` is of `type`, as sharp_type_accepts decides, with an int of `float` only when `int_as_float`. With
+ * `problems`, it adds a problem for each bad value: an element of a collection at its own path, any other value at the
+ * path the walk is at. */
+static bool sharp_type_holds(const sharp_type *type, const zval *value, bool int_as_float, sharp_type_problems *problems)
 {
 	ZVAL_DEREF(value);
+	if (problems) {
+		const sharp_type *walked = sharp_type_walked(type, value);
+		if (walked) {
+			return sharp_type_collection_holds(walked, value, int_as_float, problems);
+		}
+		if (sharp_type_holds(type, value, int_as_float, NULL)) {
+			return true;
+		}
+		if (!EG(exception)) {
+			sharp_type_problem(problems, "", type, value);
+		}
+		return false;
+	}
+
 	switch (type->kind) {
 		case SHARP_TYPE_NULLABLE:
-			return Z_TYPE_P(value) == IS_NULL || sharp_type_accepts(type->members[0], value);
+			return Z_TYPE_P(value) == IS_NULL || sharp_type_holds(type->members[0], value, int_as_float, NULL);
 		case SHARP_TYPE_UNION:
 			for (uint32_t i = 0; i < type->count; i++) {
-				if (sharp_type_accepts(type->members[i], value)) {
+				if (sharp_type_holds(type->members[i], value, int_as_float, NULL)) {
 					return true;
 				}
 			}
 			return false;
 		case SHARP_TYPE_INTERSECTION:
 			for (uint32_t i = 0; i < type->count; i++) {
-				if (!sharp_type_accepts(type->members[i], value)) {
+				if (!sharp_type_holds(type->members[i], value, int_as_float, NULL)) {
 					return false;
 				}
 			}
@@ -2720,46 +3126,322 @@ bool sharp_type_accepts(const sharp_type *type, const zval *value)
 	if (type->class_name) {
 		return Z_TYPE_P(value) == IS_OBJECT && sharp_object_is(Z_OBJ_P(value), type);
 	}
+	switch (type->built_in) {
+		case SHARP_BUILT_IN_INT:
+			return Z_TYPE_P(value) == IS_LONG;
+		case SHARP_BUILT_IN_FLOAT:
+			return Z_TYPE_P(value) == IS_DOUBLE || (int_as_float && Z_TYPE_P(value) == IS_LONG);
+		case SHARP_BUILT_IN_BOOL:
+			return Z_TYPE_P(value) == IS_TRUE || Z_TYPE_P(value) == IS_FALSE;
+		case SHARP_BUILT_IN_STRING:
+			return Z_TYPE_P(value) == IS_STRING;
+		case SHARP_BUILT_IN_NULL:
+			return Z_TYPE_P(value) == IS_NULL;
+		case SHARP_BUILT_IN_ANY:
+			return Z_TYPE_P(value) != IS_NULL;
+		case SHARP_BUILT_IN_OBJECT:
+			return Z_TYPE_P(value) == IS_OBJECT;
+		case SHARP_BUILT_IN_LIST:
+		case SHARP_BUILT_IN_MAP:
+		case SHARP_BUILT_IN_SET:
+			return Z_TYPE_P(value) == IS_ARRAY && sharp_type_collection_holds(type, value, int_as_float, NULL);
+		case SHARP_BUILT_IN_ITERABLE:
+			if (Z_TYPE_P(value) == IS_ARRAY) {
+				return sharp_type_collection_holds(type, value, int_as_float, NULL);
+			}
+			return Z_TYPE_P(value) == IS_OBJECT && instanceof_function(Z_OBJCE_P(value), zend_ce_traversable);
+		case SHARP_BUILT_IN_CLASS:
+			return sharp_class_value_is(value, type->members[0]);
+		default:
+			return true;
+	}
+}
 
-	const zend_string *name = type->text;
-	if (zend_string_equals_literal(name, "int")) {
-		return Z_TYPE_P(value) == IS_LONG;
+/* The member of `type` an int in `value` is converted by once sharp_type_holds took `value` with ints as floats: the type
+ * itself, the member of `T?` for a value that is not null, and the first member of a union that holds the value with
+ * ints as floats when none holds it without, as PHP picks a union member for an argument. NULL when nothing converts. */
+static const sharp_type *sharp_type_converting(const sharp_type *type, const zval *value)
+{
+	switch (type->kind) {
+		case SHARP_TYPE_NAMED:
+			return type->class_name ? NULL : type;
+		case SHARP_TYPE_NULLABLE:
+			return Z_TYPE_P(value) == IS_NULL ? NULL : sharp_type_converting(type->members[0], value);
+		case SHARP_TYPE_UNION:
+			for (uint32_t i = 0; i < type->count; i++) {
+				if (sharp_type_holds(type->members[i], value, false, NULL)) {
+					return NULL;
+				}
+			}
+			for (uint32_t i = 0; i < type->count; i++) {
+				if (sharp_type_holds(type->members[i], value, true, NULL)) {
+					return sharp_type_converting(type->members[i], value);
+				}
+			}
+			return NULL;
+		default:
+			return NULL;
 	}
-	if (zend_string_equals_literal(name, "float")) {
-		return Z_TYPE_P(value) == IS_DOUBLE || Z_TYPE_P(value) == IS_LONG;
+}
+
+/* Whether converting `value` by `type` changes an int in it into a float. */
+static bool sharp_type_changes(const sharp_type *type, const zval *value)
+{
+	ZVAL_DEREF(value);
+	type = sharp_type_converting(type, value);
+	if (!type) {
+		return false;
 	}
-	if (zend_string_equals_literal(name, "bool")) {
-		return Z_TYPE_P(value) == IS_TRUE || Z_TYPE_P(value) == IS_FALSE;
+	if (Z_TYPE_P(value) == IS_LONG) {
+		return type->built_in == SHARP_BUILT_IN_FLOAT;
 	}
-	if (zend_string_equals_literal(name, "string")) {
-		return Z_TYPE_P(value) == IS_STRING;
+
+	const sharp_type *elements = sharp_type_elements(type);
+	if (!elements || Z_TYPE_P(value) != IS_ARRAY) {
+		return false;
 	}
-	if (zend_string_equals_literal(name, "null")) {
-		return Z_TYPE_P(value) == IS_NULL;
+	zval *element;
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(value), element) {
+		if (sharp_type_changes(elements, element)) {
+			return true;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return false;
+}
+
+/* Turns each int in `value` that `type` takes as a float into that float. An array is separated only when an int in it
+ * changes. */
+static void sharp_type_convert(const sharp_type *type, zval *value)
+{
+	if (!sharp_type_changes(type, value)) {
+		return;
 	}
-	if (zend_string_equals_literal(name, "Any")) {
-		return Z_TYPE_P(value) != IS_NULL;
+	ZVAL_DEREF(value);
+	if (Z_TYPE_P(value) == IS_LONG) {
+		ZVAL_DOUBLE(value, (double) Z_LVAL_P(value));
+		return;
 	}
-	if (zend_string_equals_literal(name, "Object")) {
-		return Z_TYPE_P(value) == IS_OBJECT;
+
+	const sharp_type *elements = sharp_type_elements(sharp_type_converting(type, value));
+	zval *element;
+	SEPARATE_ARRAY(value);
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(value), element) {
+		sharp_type_convert(elements, element);
+	} ZEND_HASH_FOREACH_END();
+}
+
+bool sharp_type_accepts(const sharp_type *type, zval *value, sharp_type_problems *problems)
+{
+	/* A value that holds without converting an int is taken in one walk. */
+	if (sharp_type_holds(type, value, false, NULL)) {
+		return !EG(exception);
 	}
+	if (UNEXPECTED(EG(exception)) || !sharp_type_holds(type, value, true, problems) || UNEXPECTED(EG(exception))) {
+		return false;
+	}
+	sharp_type_convert(type, value);
 
 	return true;
 }
 
-/* The type a TypeError gives `value`: PHP's name for it and, for an object of a generic class, its dotted class name and
- * type arguments. */
+/* The type arguments of the generic method `frame` runs, which it keeps in its hidden local, or NULL. */
+static const sharp_type *sharp_frame_method_type_arguments(const zend_execute_data *frame)
+{
+	const zend_op_array *op_array = &frame->func->op_array;
+	for (int i = 0; i < op_array->last_var; i++) {
+		if (sharp_is_type_arguments_key(op_array->vars[i])) {
+			const zval *local = ZEND_CALL_VAR_NUM(frame, i);
+
+			return Z_TYPE_P(local) == IS_PTR ? Z_PTR_P(local) : NULL;
+		}
+	}
+
+	return NULL;
+}
+
+/* Spec section 10: a struct's generated parse checks each parameter with the walk, as `\Sharp\Internal\accepts($type,
+ * $value, $path, $problems)`. The type text is spelled for the user code that calls it, as ZEND_SHARP_VERIFY_TYPE_ARGS
+ * spells its own, so a generic struct's parse can pass `List<$0>` or `List<#0>`. */
+ZEND_FUNCTION(Sharp_Internal_accepts)
+{
+	zend_string *type;
+	zval *value, *problems;
+	zend_string *path;
+
+	ZEND_PARSE_PARAMETERS_START(4, 4)
+		Z_PARAM_STR(type)
+		Z_PARAM_ZVAL(value)
+		Z_PARAM_STR(path)
+		Z_PARAM_ARRAY_EX(problems, 0, 1)
+	ZEND_PARSE_PARAMETERS_END();
+
+	const zend_execute_data *caller = EX(prev_execute_data);
+	bool is_user_code = caller && caller->func && ZEND_USER_CODE(caller->func->type);
+	zend_object *object = is_user_code && Z_TYPE(caller->This) == IS_OBJECT ? Z_OBJ(caller->This) : NULL;
+	const sharp_type *method = is_user_code ? sharp_frame_method_type_arguments(caller) : NULL;
+
+	sharp_type_reader reader = sharp_type_reader_of(ZSTR_VAL(type), ZSTR_LEN(type), zend_arena_create(1024));
+	const sharp_type_node *read = sharp_type_read_list(&reader);
+	bool is_one_type = read && read->count == 1 && reader.at == reader.end;
+	uint32_t names = reader.names;
+	zend_arena_destroy(reader.arena);
+	if (!is_one_type) {
+		zend_argument_value_error(1, "must be one PHP# type");
+		RETURN_THROWS();
+	}
+	if (((names & SHARP_TYPE_NAMES_THIS) && !object) || ((names & SHARP_TYPE_NAMES_METHOD) && !method)) {
+		zend_argument_value_error(1, "must name only type parameters the calling code has type arguments for");
+		RETURN_THROWS();
+	}
+
+	/* The text is a literal of the calling code, interned as code's literals are, which the list spelled for it keys. */
+	zval text;
+	ZVAL_INTERNED_STR(&text, ZSTR_IS_INTERNED(type) ? type : zend_new_interned_string(zend_string_copy(type)));
+	void *cache[4] = {NULL};
+	const sharp_type *list = sharp_type_list_of_frame(
+		&text, object, method, false, is_user_code ? caller->func->common.scope : NULL, cache);
+	if (!list) {
+		if (!EG(exception)) {
+			zend_argument_value_error(1, "must name only type parameters the calling code has type arguments for");
+		}
+		RETURN_THROWS();
+	}
+
+	sharp_type_problems found = {problems, {0}};
+	smart_str_append(&found.path, path);
+	bool accepts = sharp_type_accepts(list->members[0], value, &found);
+	smart_str_free(&found.path);
+	if (UNEXPECTED(EG(exception))) {
+		RETURN_THROWS();
+	}
+
+	RETURN_BOOL(accepts);
+}
+
+/* Spec section 11: each type argument of a generic class has its own statics, which PHP# reads and writes as
+ * `\Sharp\Internal\statics(Counter::class, 'App.Order')['count']`. Returns by reference the entry of the class's hidden
+ * static sharp_statics_key for the type argument text `key`, so every write is PHP's own array write. The entry starts
+ * as a copy of the defaults under the key "", as C# runs a closed type's static initializer on its first use. */
+ZEND_FUNCTION(Sharp_Internal_statics)
+{
+	zend_class_entry *ce = NULL;
+	zend_string *key;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_CLASS(ce)
+		Z_PARAM_STR(key)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, sharp_statics_key);
+	if (!info || info->ce != ce || !(info->flags & ZEND_ACC_SHARP_HIDDEN)) {
+		zend_argument_value_error(1, "must be a generic PHP# class that declares static fields");
+		RETURN_THROWS();
+	}
+	if (UNEXPECTED(!(ce->ce_flags & ZEND_ACC_CONSTANTS_UPDATED)) && zend_update_class_constants(ce) != SUCCESS) {
+		RETURN_THROWS();
+	}
+	if (UNEXPECTED(CE_STATIC_MEMBERS(ce) == NULL)) {
+		zend_class_init_statics(ce);
+	}
+
+	zval *store = CE_STATIC_MEMBERS(ce) + info->offset;
+	ZVAL_DEINDIRECT(store);
+	SEPARATE_ARRAY(store);
+	zval *entry = zend_hash_find(Z_ARRVAL_P(store), key);
+	if (!entry) {
+		zval defaults;
+		ZVAL_COPY(&defaults, zend_hash_find_known_hash(Z_ARRVAL_P(store), ZSTR_EMPTY_ALLOC()));
+		entry = zend_hash_add_new(Z_ARRVAL_P(store), key, &defaults);
+	}
+
+	ZVAL_MAKE_REF(entry);
+	RETURN_COPY(entry);
+}
+
+/* Throws the Error for the type arguments of a frame that ZEND_SHARP_TYPE_ARGS could not spell. */
+static ZEND_COLD void sharp_type_list_unknown_error(void)
+{
+	zend_throw_error(NULL, "Cannot read the type arguments of the class a lambda is written in from an object of another class");
+}
+
+bool sharp_type_list_holds(const sharp_type *list, const zval *value)
+{
+	if (UNEXPECTED(!list)) {
+		sharp_type_list_unknown_error();
+		return false;
+	}
+
+	/* A lazy proxy's initializer runs to read its type arguments, and can throw. */
+	return sharp_type_holds(list->members[0], value, false, NULL) && !EG(exception);
+}
+
+zend_string *sharp_type_list_class_value(const sharp_type *list, bool whole)
+{
+	if (UNEXPECTED(!list)) {
+		sharp_type_list_unknown_error();
+		return NULL;
+	}
+	if (whole) {
+		return list->text;
+	}
+	const sharp_type *type = list->members[0];
+
+	return type->class_name ? type->class_name : type->text;
+}
+
+zend_class_entry *sharp_new_class(const zval *created, const sharp_type **arguments)
+{
+	const sharp_type *type;
+
+	if (Z_TYPE_P(created) == IS_STRING) {
+		type = sharp_class_value_type(Z_STR_P(created));
+		if (!type) {
+			*arguments = NULL;
+
+			return zend_fetch_class(Z_STR_P(created), ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
+		}
+	} else if (Z_TYPE_P(created) == IS_PTR) {
+		const sharp_type *list = Z_PTR_P(created);
+		if (UNEXPECTED(!list)) {
+			sharp_type_list_unknown_error();
+			return NULL;
+		}
+		type = list->members[0];
+	} else {
+		zend_throw_error(NULL, "Class name must be a valid object or a string");
+		return NULL;
+	}
+	if (UNEXPECTED(type->kind != SHARP_TYPE_NAMED || !type->class_name)) {
+		zend_throw_error(NULL, "Cannot create %s with new, because it is not a class", ZSTR_VAL(type->text));
+		return NULL;
+	}
+
+	zend_class_entry *ce = zend_fetch_class_by_name(type->class_name, NULL, ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
+	if (UNEXPECTED(!ce)) {
+		return NULL;
+	}
+
+	/* The text of a class with type arguments is its dotted name, then its type arguments' text between `<` and `>`. */
+	*arguments = NULL;
+	const char *open = memchr(ZSTR_VAL(type->text), '<', ZSTR_LEN(type->text));
+	if (open) {
+		*arguments = sharp_type_list(open + 1, ZSTR_VAL(type->text) + ZSTR_LEN(type->text) - open - 2);
+	}
+
+	return ce;
+}
+
+/* The type a TypeError gives `value`: PHP's name for it, for an object of a generic class its dotted class name and type
+ * arguments, and for a class value with type arguments its `Class` type. */
 static ZEND_COLD void sharp_value_type_text(smart_str *given, const zval *value)
 {
-	const sharp_type *arguments = Z_TYPE_P(value) == IS_OBJECT ? sharp_type_arguments(Z_OBJ_P(value)) : NULL;
-	if (arguments) {
-		const zend_string *name = Z_OBJCE_P(value)->name;
-
-		for (size_t i = 0; i < ZSTR_LEN(name); i++) {
-			smart_str_appendc(given, ZSTR_VAL(name)[i] == '\\' ? '.' : ZSTR_VAL(name)[i]);
-		}
-		smart_str_appendc(given, '<');
-		smart_str_append(given, arguments->text);
+	const sharp_type *carried = Z_TYPE_P(value) == IS_STRING ? sharp_class_value_type(Z_STR_P(value)) : NULL;
+	if (Z_TYPE_P(value) == IS_OBJECT && sharp_type_arguments(Z_OBJ_P(value))) {
+		sharp_object_text(given, Z_OBJ_P(value));
+	} else if (carried) {
+		smart_str_appends(given, "Class<");
+		smart_str_append(given, carried->text);
 		smart_str_appendc(given, '>');
 	} else {
 		smart_str_appends(given, zend_zval_value_name(value));
@@ -2785,28 +3467,6 @@ static ZEND_COLD void sharp_type_argument_error(
 	smart_str_free(&given);
 }
 
-/* Whether a parameter of `type` takes an int as a float, as PHP's own parameter does: `float`, `float?`, or a union with
- * `float` and no `int`. */
-static bool sharp_type_takes_int_as_float(const sharp_type *type)
-{
-	if (type->kind == SHARP_TYPE_NULLABLE) {
-		type = type->members[0];
-	}
-	if (type->kind != SHARP_TYPE_UNION) {
-		return type->kind == SHARP_TYPE_NAMED && zend_string_equals_literal(type->text, "float");
-	}
-
-	bool takes_float = false;
-	for (uint32_t i = 0; i < type->count; i++) {
-		if (zend_string_equals_literal(type->members[i]->text, "int")) {
-			return false;
-		}
-		takes_float |= zend_string_equals_literal(type->members[i]->text, "float");
-	}
-
-	return takes_float;
-}
-
 void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *text, void **cache)
 {
 	/* Only a call from plain PHP is checked, and it gives the method no type arguments. */
@@ -2823,17 +3483,11 @@ void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *tex
 
 		/* A PHP# parameter is never by reference, and every call derefs a by-value argument. */
 		ZEND_ASSERT(!Z_ISREF_P(value));
-		if (!sharp_type_accepts(expected->members[i], value)) {
+		if (!sharp_type_accepts(expected->members[i], value, NULL)) {
 			if (!EG(exception)) {
 				sharp_type_argument_error(execute_data, i + 1, expected->members[i], value);
 			}
 			return;
-		}
-		if (UNEXPECTED(EG(exception))) {
-			return;
-		}
-		if (Z_TYPE_P(value) == IS_LONG && sharp_type_takes_int_as_float(expected->members[i])) {
-			ZVAL_DOUBLE(value, (double) Z_LVAL_P(value));
 		}
 	}
 }
@@ -2847,7 +3501,7 @@ bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval 
 	}
 
 	const sharp_type *type = expected->members[0];
-	if (!sharp_type_accepts(type, value)) {
+	if (!sharp_type_accepts(type, value, NULL)) {
 		if (!EG(exception)) {
 			/* Worded as PHP's TypeError for a typed property. */
 			smart_str given = {0};
@@ -2858,51 +3512,94 @@ bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval 
 		}
 		return false;
 	}
-	if (UNEXPECTED(EG(exception))) {
-		return false;
-	}
-	if (Z_TYPE_P(value) == IS_LONG && sharp_type_takes_int_as_float(type)) {
-		ZVAL_DOUBLE(value, (double) Z_LVAL_P(value));
-	}
 
 	return true;
 }
 
-bool sharp_property_accepts(const zend_property_info *info, const zval *value)
+/* Whether the PHP# type of the property `info` names a type parameter of its class, which only an object spells. */
+static bool sharp_property_is_open(const zend_property_info *info)
 {
+	return info->sharp_type && memchr(ZSTR_VAL(info->sharp_type), '$', ZSTR_LEN(info->sharp_type));
+}
+
+bool sharp_property_accepts(const zend_property_info *info, zval *value, zend_object *object, bool reference)
+{
+	/* A hook writes its own property's storage for the code that set the property. */
 	const zend_execute_data *writer = EG(current_execute_data);
+	if (writer && writer->func && writer->func->common.prop_info
+			&& writer->func->common.prop_info->prototype == info->prototype) {
+		writer = writer->prev_execute_data;
+	}
 	if (writer && writer->func && ZEND_USER_CODE(writer->func->type)
 			&& sharp_is_sharp_file(writer->func->op_array.filename)) {
 		return true;
 	}
+	if (!object && sharp_property_is_open(info)) {
+		return true;
+	}
 
-	/* The type is closed, since no static member names a type parameter, so code spells it once for the process. */
-	const sharp_type *type = sharp_type_list(ZSTR_VAL(info->sharp_type), ZSTR_LEN(info->sharp_type))->members[0];
+	/* The text is interned where the property is declared, and each check spells it for the object's class and type
+	 * arguments once a request. */
+	zval text;
+	ZVAL_INTERNED_STR(&text, info->sharp_type);
+	void *cache[4] = {NULL};
+	const sharp_type *list = sharp_type_list_of_frame(&text, object, NULL, true, info->ce, cache);
+	if (!list) {
+		return false;
+	}
 
-	/* A lazy proxy's initializer runs to read its type arguments, and can throw. */
-	return sharp_type_accepts(type, value) && !EG(exception);
+	const sharp_type *type = list->members[0];
+	if (sharp_type_accepts(type, value, NULL)) {
+		return true;
+	}
+	if (!EG(exception)) {
+		smart_str given = {0};
+		sharp_value_type_text(&given, value);
+		zend_type_error("Cannot assign %s to %sproperty %s::$%s of type %s", ZSTR_VAL(given.s),
+			reference ? "reference held by " : "", ZSTR_VAL(info->ce->name), zend_get_unmangled_property_name(info->name),
+			ZSTR_VAL(type->text));
+		smart_str_free(&given);
+	}
+
+	return false;
 }
 
-ZEND_COLD void sharp_property_type_error(const zend_property_info *info, const zval *value, bool reference)
+bool sharp_property_refuses_reference(const zend_property_info *info)
 {
-	smart_str given = {0};
-	sharp_value_type_text(&given, value);
-	zend_type_error("Cannot assign %s to %sproperty %s::$%s of type %s", ZSTR_VAL(given.s),
-		reference ? "reference held by " : "", ZSTR_VAL(info->ce->name), zend_get_unmangled_property_name(info->name),
-		ZSTR_VAL(info->sharp_type));
-	smart_str_free(&given);
+	if (!sharp_property_is_open(info)) {
+		return false;
+	}
+
+	zend_throw_error(NULL, "Cannot take a reference to `%s::$%s`: its type depends on the object's type arguments",
+		ZSTR_VAL(info->ce->name), zend_get_unmangled_property_name(info->name));
+
+	return true;
+}
+
+bool sharp_object_open_properties_accept(zend_object *object)
+{
+	for (uint32_t i = 0; i < object->ce->default_properties_count; i++) {
+		zend_property_info *info = object->ce->properties_info_table[i];
+		zval *slot = OBJ_PROP_NUM(object, i);
+		if (info && sharp_property_is_open(info) && Z_TYPE_P(slot) != IS_UNDEF
+				&& !sharp_property_accepts(info, slot, object, false)) {
+			return false;
+		}
+	}
+
+	return true;
 }
 
 static bool sharp_type_arguments_fit(
 	const sharp_type_node *arguments, const zend_class_entry *ce, sharp_type_reader *reader);
 
 /* Whether `type` is within `bound`: `Any?` holds every type, `Any` every type but null, a class its subclasses, a class
- * with type arguments each subclass whose header gives it those, an intersection what each of its classes holds, and
- * any other bound only itself. A union is within a bound when each of its members is, and an intersection when one of
- * its classes is. */
-static bool sharp_type_fits(sharp_type_node *type, const sharp_type *bound, sharp_type_reader *reader)
+ * with type arguments each subclass whose header gives it type arguments its own take, an intersection what each of its
+ * classes holds, and any other bound only itself. A union is within a bound when each of its members is, and an
+ * intersection when one of its classes is. */
+static bool sharp_type_fits(sharp_type_node *type, sharp_type_node *bound, sharp_type_reader *reader)
 {
-	if (zend_string_equals_literal(bound->text, "Any?")) {
+	if (sharp_type_node_is(bound, "Any?")) {
 		return true;
 	}
 	if (type->kind == SHARP_TYPE_UNION) {
@@ -2916,11 +3613,11 @@ static bool sharp_type_fits(sharp_type_node *type, const sharp_type *bound, shar
 	}
 	if (bound->kind == SHARP_TYPE_NULLABLE) {
 		return sharp_type_node_is(type, "null")
-			|| sharp_type_fits(type->kind == SHARP_TYPE_NULLABLE ? type->first : type, bound->members[0], reader);
+			|| sharp_type_fits(type->kind == SHARP_TYPE_NULLABLE ? type->first : type, bound->first, reader);
 	}
 	if (bound->kind == SHARP_TYPE_UNION) {
-		for (uint32_t i = 0; i < bound->count; i++) {
-			if (sharp_type_fits(type, bound->members[i], reader)) {
+		for (sharp_type_node *member = bound->first; member; member = member->next) {
+			if (sharp_type_fits(type, member, reader)) {
 				return true;
 			}
 		}
@@ -2928,15 +3625,15 @@ static bool sharp_type_fits(sharp_type_node *type, const sharp_type *bound, shar
 		return false;
 	}
 	if (bound->kind == SHARP_TYPE_INTERSECTION) {
-		for (uint32_t i = 0; i < bound->count; i++) {
-			if (!sharp_type_fits(type, bound->members[i], reader)) {
+		for (sharp_type_node *member = bound->first; member; member = member->next) {
+			if (!sharp_type_fits(type, member, reader)) {
 				return false;
 			}
 		}
 
 		return true;
 	}
-	if (zend_string_equals_literal(bound->text, "Any")) {
+	if (sharp_type_node_is(bound, "Any")) {
 		return type->kind != SHARP_TYPE_NULLABLE && !sharp_type_node_is(type, "null");
 	}
 	if (type->kind == SHARP_TYPE_INTERSECTION) {
@@ -2948,27 +3645,28 @@ static bool sharp_type_fits(sharp_type_node *type, const sharp_type *bound, shar
 
 		return false;
 	}
-	if (!bound->class_name) {
-		return zend_string_equals_cstr(bound->text, type->text, type->length);
+	if (bound->kind != SHARP_TYPE_NAMED || !bound->name) {
+		return sharp_type_argument_fits(type, bound, '=', reader);
 	}
 
 	/* A loaded class has loaded each class it extends or implements. */
-	zend_class_entry *ce = zend_lookup_class_ex(bound->class_name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
-	if (!type->ce || !ce || !instanceof_function(type->ce, ce)) {
+	zend_class_entry *ce = sharp_type_node_class(bound);
+	if (type->kind != SHARP_TYPE_NAMED || !sharp_type_node_class(type) || !ce || !instanceof_function(type->ce, ce)) {
 		return false;
 	}
 	if (!bound->count) {
 		return true;
 	}
 
-	/* The type arguments must be the bound's own, so `IntBox : Box<int>` is within `Box<int>`. */
+	/* The type arguments must be ones the bound's take, so `IntBox : Box<int>` is within `Box<int>`. */
 	const sharp_type_node *given = sharp_type_node_ancestor(type->ce, type, ce, reader);
 	if (!given || given->count != bound->count) {
 		return false;
 	}
 	uint32_t i = 0;
-	for (const sharp_type_node *argument = given->first; argument; argument = argument->next) {
-		if (!zend_string_equals_cstr(bound->members[i++]->text, argument->text, argument->length)) {
+	sharp_type_node *wanted = bound->first;
+	for (sharp_type_node *argument = given->first; argument; argument = argument->next, wanted = wanted->next) {
+		if (!sharp_type_argument_fits(argument, wanted, sharp_class_variance(ce, i++), reader)) {
 			return false;
 		}
 	}
@@ -3018,16 +3716,17 @@ static bool sharp_type_arguments_fit(
 		return true;
 	}
 
-	const sharp_type *bounds = sharp_class_bounds(ce);
-	if (!bounds) {
+	if (!ce->info.user.sharp_bounds) {
 		return arguments->count == 0;
 	}
+
+	sharp_type_node *bounds = sharp_type_node_list(ce->info.user.sharp_bounds, reader);
 	if (arguments->count != bounds->count) {
 		return false;
 	}
-	uint32_t i = 0;
-	for (sharp_type_node *argument = arguments->first; argument; argument = argument->next) {
-		if (!sharp_type_fits(argument, bounds->members[i++], reader)) {
+	sharp_type_node *bound = bounds->first;
+	for (sharp_type_node *argument = arguments->first; argument; argument = argument->next, bound = bound->next) {
+		if (!sharp_type_fits(argument, bound, reader)) {
 			return false;
 		}
 	}
@@ -3284,6 +3983,8 @@ static zend_class_entry *register_class_Sharp_Set(void)
 static PHP_MINIT_FUNCTION(sharp)
 {
 	REGISTER_INI_ENTRIES();
+	/* The module's own table is sharp_native_functions, which sharp/bin/native writes; sharp.stub.php declares the rest. */
+	zend_register_functions(NULL, ext_functions, NULL, MODULE_PERSISTENT);
 	sharp_ce_collection = register_class_Sharp_Collection();
 	sharp_ce_collection->create_object = sharp_collection_create;
 	memcpy(&sharp_collection_handlers, &std_object_handlers, sizeof(zend_object_handlers));
@@ -3309,8 +4010,10 @@ static PHP_MINIT_FUNCTION(sharp)
 	zend_add_system_entropy("sharp", "SHARP_BUILD_ID", SHARP_BUILD_ID, sizeof(SHARP_BUILD_ID) - 1);
 
 	sharp_type_arguments_key = zend_string_init_interned("\0<sharp>\0types", sizeof("\0<sharp>\0types") - 1, true);
+	sharp_statics_key = zend_string_init_interned("\0<sharp>\0statics", sizeof("\0<sharp>\0statics") - 1, true);
 	zend_hash_init(&sharp_types, 64, NULL, sharp_type_free, true);
 	zend_hash_init(&sharp_type_lists, 64, NULL, sharp_type_free, true);
+	zend_hash_init(&sharp_class_values, 8, NULL, NULL, true);
 #ifdef ZTS
 	sharp_types_lock = tsrm_mutex_alloc();
 #endif
@@ -3325,6 +4028,7 @@ static PHP_MINIT_FUNCTION(sharp)
 static PHP_MSHUTDOWN_FUNCTION(sharp)
 {
 	UNREGISTER_INI_ENTRIES();
+	zend_hash_destroy(&sharp_class_values);
 	zend_hash_destroy(&sharp_type_lists);
 	zend_hash_destroy(&sharp_types);
 #ifdef ZTS
@@ -3387,6 +4091,7 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 static ZEND_MODULE_POST_ZEND_DEACTIVATE_D(sharp)
 {
 	sharp_type_request_table_free(&SHARP_G(request_spelled_lists));
+	sharp_type_request_table_free(&SHARP_G(request_class_values));
 	sharp_type_request_table_free(&SHARP_G(request_type_lists));
 	sharp_type_request_table_free(&SHARP_G(request_types));
 

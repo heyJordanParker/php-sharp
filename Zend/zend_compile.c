@@ -5506,6 +5506,24 @@ static uint32_t zend_add_sharp_open_type_text(zend_ast *text_ast)
 	return zend_add_literal_string(&text);
 }
 
+/* The PHP type `type_ast` of a property or a promoted parameter. A ZEND_AST_SHARP_TYPE_ARGS wraps the PHP type of one
+ * whose PHP# type a write from plain PHP checks, with the type text, which may name the class's type parameters as `$i`,
+ * interned into `sharp_type`. A closed text is checked here. */
+static zend_ast *zend_sharp_property_type(zend_ast *type_ast, zend_string **sharp_type)
+{
+	if (!type_ast || type_ast->kind != ZEND_AST_SHARP_TYPE_ARGS) {
+		return type_ast;
+	}
+
+	zend_string *text = zend_ast_get_str(type_ast->child[1]);
+	if (!sharp_type_list_names(ZSTR_VAL(text), ZSTR_LEN(text))) {
+		zend_sharp_type_text(type_ast->child[1]);
+	}
+	*sharp_type = zend_new_interned_string(zend_string_copy(text));
+
+	return type_ast->child[0];
+}
+
 /* Emits the ZEND_SHARP_TYPE_ARGS that resolves the type arguments `text_ast` spells into `result`, or this's when
  * `text_ast` is NULL, as `new Self` gives them. */
 static void zend_compile_sharp_type_args(znode *result, zend_ast *text_ast)
@@ -5556,13 +5574,34 @@ static void zend_compile_sharp_verify_type_args(znode *result, zend_ast *ast)
 	opline->op2.constant = zend_add_sharp_open_type_text(ast->child[1]);
 	zend_string *target = zend_string_copy(zend_ast_get_str(ast->child[2]));
 	zend_add_literal_string(&target);
-	opline->extended_value = zend_alloc_cache_slots(4) | (ast->attr ? ZEND_SHARP_VERIFY_SET_HOOK : 0);
+	opline->extended_value = zend_alloc_cache_slots(4);
 
 	zend_string *text = zend_ast_get_str(ast->child[1]);
 	if (sharp_type_list_names(ZSTR_VAL(text), ZSTR_LEN(text)) & SHARP_TYPE_NAMES_THIS) {
 		/* A text that names `$i` reads this's type arguments, so a closure around it keeps its this. */
 		CG(active_op_array)->fn_flags |= ZEND_ACC_USES_THIS;
 	}
+}
+
+/* Emits the ZEND_SHARP_IS_TYPE that tests the value a ZEND_AST_SHARP_IS_TYPE holds against the type its text spells,
+ * which a ZEND_SHARP_TYPE_ARGS spells for the frame first, as it spells a `new`'s type arguments. */
+static void zend_compile_sharp_is_type(znode *result, zend_ast *ast)
+{
+	znode value_node, type_node;
+
+	zend_compile_expr(&value_node, ast->child[0]);
+	zend_compile_sharp_type_args(&type_node, ast->child[1]);
+	zend_emit_op_tmp(result, ZEND_SHARP_IS_TYPE, &value_node, &type_node);
+}
+
+/* Emits the ZEND_SHARP_TYPE_OF that gives the class value of the type a ZEND_AST_SHARP_TYPE_OF's text spells, or with
+ * ZEND_SHARP_TYPE_OF_LIST the text of the whole list, which a ZEND_SHARP_TYPE_ARGS spells for the frame first. */
+static void zend_compile_sharp_type_of(znode *result, zend_ast *ast)
+{
+	znode type_node;
+
+	zend_compile_sharp_type_args(&type_node, ast->child[0]);
+	zend_emit_op_tmp(result, ZEND_SHARP_TYPE_OF, &type_node, NULL)->extended_value = ast->attr;
 }
 
 /* Emits the ZEND_SHARP_RECV_TYPE_ARGS of a PHP# method. With `bounds_ast`, it gives a generic method its own type
@@ -5588,7 +5627,9 @@ static void zend_compile_sharp_recv_type_args(zend_ast *bounds_ast, zend_ast *pa
 	opline->extended_value = zend_alloc_cache_slots(4 * ((bounds_ast != NULL) + (parameters_ast != NULL)));
 }
 
-/* `type_args_ast` is the ZEND_AST_SHARP_TYPE_ARGS around a PHP# `new`, or NULL. */
+/* `type_args_ast` is the ZEND_AST_SHARP_TYPE_ARGS around a PHP# `new`, or NULL. A PHP# `new TItem(…)` names no class:
+ * its type text spells the type it creates. A PHP# `new (type)(…)` without type arguments creates the class a class
+ * value holds, with those the value carries, so the value goes to NEW in its TMP op2. A constant one names its class. */
 static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_ast) /* {{{ */
 {
 	zend_ast *class_ast = ast->child[0];
@@ -5596,6 +5637,33 @@ static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_a
 
 	znode class_node, type_args_node, ctor_result;
 	zend_op *opline;
+
+	if (!class_ast || ast->attr == ZEND_SHARP_NEW_CLASS_VALUE) {
+		if (class_ast) {
+			ZEND_ASSERT(!type_args_ast);
+			zend_compile_expr(&class_node, class_ast);
+		} else {
+			ZEND_ASSERT(type_args_ast && type_args_ast->child[1]);
+			zend_compile_sharp_type_args(&class_node, type_args_ast->child[1]);
+		}
+		if (class_node.op_type == IS_CONST) {
+			opline = zend_emit_op(result, ZEND_NEW, NULL, NULL);
+			opline->op1_type = IS_CONST;
+			opline->op1.constant = zend_add_class_name_literal(Z_STR(class_node.u.constant));
+			opline->op2.num = zend_alloc_cache_slot();
+		} else {
+			if (class_node.op_type != IS_TMP_VAR) {
+				znode value_node = class_node;
+				zend_emit_op_tmp(&class_node, ZEND_QM_ASSIGN, &value_node, NULL);
+			}
+			opline = zend_emit_op(result, ZEND_NEW, NULL, &class_node);
+			opline->op1.num = ZEND_FETCH_CLASS_SHARP_TYPE;
+		}
+
+		zend_compile_call_common(&ctor_result, args_ast, NULL, ast->lineno);
+		zend_do_free(&ctor_result);
+		return;
+	}
 
 	if (class_ast->kind == ZEND_AST_CLASS) {
 		/* anon class declaration */
@@ -5640,16 +5708,20 @@ static void zend_compile_new(znode *result, zend_ast *ast, zend_ast *type_args_a
 }
 /* }}} */
 
-/* A ZEND_AST_SHARP_TYPE_ARGS in the member list of a PHP# class-like holds its metadata: the type arguments its header
- * gives each generic parent and interface, and the bounds of its type parameters, each a type text or NULL. A generic
+/* A ZEND_AST_SHARP_CLASS_METADATA in the member list of a PHP# class-like holds its metadata: the type arguments its
+ * header gives each generic parent and interface, the bounds of its type parameters, and their variance. A generic
  * class also declares from it the slot its objects keep their type arguments in, null until the object has some. */
 static void zend_compile_sharp_class_metadata(zend_ast *ast)
 {
 	zend_class_entry *ce = CG(active_class_entry);
 	zend_ast *header_ast = ast->child[0];
 	zend_ast *bounds_ast = ast->child[1];
+	zend_ast *variance_ast = ast->child[2];
 
 	ZEND_ASSERT(ce && ce->type == ZEND_USER_CLASS);
+	if (variance_ast) {
+		ce->info.user.sharp_variance = zend_string_copy(zend_ast_get_str(variance_ast));
+	}
 	if (header_ast) {
 		zend_string *header = zend_ast_get_str(header_ast);
 
@@ -8022,7 +8094,8 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 	const uint32_t promotion_flags = ZEND_ACC_PPP_MASK | ZEND_ACC_PPP_SET_MASK | ZEND_ACC_READONLY | ZEND_ACC_FINAL;
 	for (i = 0; i < list->children; ++i) {
 		zend_ast *param_ast = list->child[i];
-		zend_ast *type_ast = param_ast->child[0];
+		zend_string *sharp_type = NULL;
+		zend_ast *type_ast = zend_sharp_property_type(param_ast->child[0], &sharp_type);
 		zend_ast *var_ast = param_ast->child[1];
 		zend_ast **default_ast_ptr = &param_ast->child[2];
 		zend_ast *attributes_ast = param_ast->child[3];
@@ -8228,6 +8301,10 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 				scope, name, &default_value,
 				property_flags | (zend_property_is_virtual(scope, name, hooks_ast, property_flags) ? ZEND_ACC_VIRTUAL : 0) | ZEND_ACC_PROMOTED,
 				doc_comment, type);
+			if (sharp_type) {
+				prop->sharp_type = sharp_type;
+				prop->flags |= ZEND_ACC_SHARP_TYPED;
+			}
 			if (hooks_ast) {
 				zend_ast_list *hooks = zend_ast_get_list(hooks_ast);
 				zend_compile_property_hooks(prop, name, type_ast, hooks);
@@ -9215,6 +9292,7 @@ static void zend_compile_prop_decl(zend_ast *ast, zend_ast *type_ast, uint32_t f
 		info = zend_declare_typed_property(ce, name, &value_zv, flags, doc_comment, type);
 		if (sharp_type) {
 			info->sharp_type = zend_string_copy(sharp_type);
+			info->flags |= ZEND_ACC_SHARP_TYPED;
 		}
 
 		if (hooks_ast) {
@@ -9237,18 +9315,10 @@ static void zend_compile_prop_decl(zend_ast *ast, zend_ast *type_ast, uint32_t f
 
 static void zend_compile_prop_group(zend_ast *ast) /* {{{ */
 {
-	zend_ast *type_ast = ast->child[0];
 	zend_ast *prop_ast = ast->child[1];
 	zend_ast *attr_ast = ast->child[2];
 	zend_string *sharp_type = NULL;
-
-	/* PHP#: the type arguments of a property's type, which every write from plain PHP checks, wrap the type. The type
-	 * of a static member names no type parameter, so the text is closed. */
-	if (type_ast && type_ast->kind == ZEND_AST_SHARP_TYPE_ARGS) {
-		sharp_type = zend_new_interned_string(zend_string_copy(zend_sharp_type_text(type_ast->child[1])));
-		ZEND_ASSERT(!sharp_type_list_names(ZSTR_VAL(sharp_type), ZSTR_LEN(sharp_type)));
-		type_ast = type_ast->child[0];
-	}
+	zend_ast *type_ast = zend_sharp_property_type(ast->child[0], &sharp_type);
 
 	zend_compile_prop_decl(prop_ast, type_ast, ast->attr, attr_ast, sharp_type);
 	if (sharp_type) {
@@ -9582,6 +9652,7 @@ static void zend_compile_class_decl(znode *result, zend_ast *ast, bool toplevel)
 	ce->info.user.line_end = decl->end_lineno;
 	ce->info.user.sharp_bounds = NULL;
 	ce->info.user.sharp_header = NULL;
+	ce->info.user.sharp_variance = NULL;
 
 	if (decl->doc_comment) {
 		ce->doc_comment = zend_string_copy(decl->doc_comment);
@@ -12050,7 +12121,7 @@ static void zend_compile_stmt(zend_ast *ast) /* {{{ */
 		case ZEND_AST_PROP_GROUP:
 			zend_compile_prop_group(ast);
 			break;
-		case ZEND_AST_SHARP_TYPE_ARGS:
+		case ZEND_AST_SHARP_CLASS_METADATA:
 			zend_compile_sharp_class_metadata(ast);
 			break;
 		case ZEND_AST_CLASS_CONST_GROUP:
@@ -12141,6 +12212,12 @@ static void zend_compile_expr_inner(znode *result, zend_ast *ast) /* {{{ */
 			return;
 		case ZEND_AST_VERIFY_TYPE_ARGS:
 			zend_compile_sharp_verify_type_args(result, ast);
+			return;
+		case ZEND_AST_SHARP_IS_TYPE:
+			zend_compile_sharp_is_type(result, ast);
+			return;
+		case ZEND_AST_SHARP_TYPE_OF:
+			zend_compile_sharp_type_of(result, ast);
 			return;
 		case ZEND_AST_ASSIGN_OP:
 			zend_compile_compound_assign(result, ast);

@@ -348,6 +348,9 @@ ZEND_API void destroy_zend_class(zval *zv)
 				if (ce->info.user.sharp_header) {
 					zend_string_release_ex(ce->info.user.sharp_header, 0);
 				}
+				if (ce->info.user.sharp_variance) {
+					zend_string_release_ex(ce->info.user.sharp_variance, 0);
+				}
 
 				if (ce->doc_comment) {
 					zend_string_release_ex(ce->doc_comment, 0);

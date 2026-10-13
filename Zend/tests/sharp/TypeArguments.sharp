@@ -6,13 +6,16 @@ import Lib.Witness;
 extern Witness.see;
 public abstract class DatabaseEntity
 {
-    public DatabaseEntity(public int id { get; })
+    public const int LIMIT = 10;
+
+    public required DatabaseEntity(public int id { get; })
     {
     }
 }
 
 public class Order : DatabaseEntity
 {
+    public const int LIMIT = 20;
 }
 
 public class PaginatedList<TItem : DatabaseEntity>
@@ -52,6 +55,13 @@ public class Pair<TKey, TValue>
     public Pair(public TKey key { get; }, public TValue value { get; })
     {
     }
+
+    public Pair.flipped(TValue value, TKey key) : this(key, value)
+    {
+        Witness.see(this);
+    }
+
+    public Pair<TValue, TKey> flippedOver() => new Pair<TValue, TKey>.flipped(this.key, this.value);
 
     public Pair<TValue, TKey?> swapped() => new Pair<TValue, TKey?>(this.value, this.key);
 
@@ -170,6 +180,8 @@ public class Queue
     public static PaginatedList<DatabaseEntity> entities() => new PaginatedList<DatabaseEntity>([]);
 
     public static Pair<Order, int> pair() => new Pair<Order, int>(new Order(2), 3);
+
+    public static Pair<Order, int> flippedPair() => new Pair<Order, int>.flipped(3, new Order(2));
 
     public static OrderPage page() => new OrderPage([]);
 

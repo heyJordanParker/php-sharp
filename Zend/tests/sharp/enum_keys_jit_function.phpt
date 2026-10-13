@@ -12,7 +12,7 @@ opcache.jit_buffer_size=32M
 echo 'jit ', opcache_get_status()['jit']['on'] ? 'on' : 'off', "\n";
 require __DIR__ . '/enum_keys.inc';
 ?>
---EXPECT--
+--EXPECTF--
 jit on
 array(1) {
   ["active"]=>
@@ -67,7 +67,7 @@ array(2) {
   ["Closed"]=>
   int(4)
 }
-ValueError: "missing" is not a valid backing value for enum Lib\Standing in EnumKeys.sharp on line 69
+TypeError: Demo\Headcount::byName(): Argument #1 ($counts) must be of type Map<Lib.Standing, int>, array given, called in %s on line %d in EnumKeys.sharp on line 66
 array(2) {
   [0]=>
   string(1) "5"

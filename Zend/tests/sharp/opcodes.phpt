@@ -18,6 +18,40 @@ function compiled(string $file, string $prelude): string
     return str_replace($file, '<file>', $opcodes . $dump . $classes);
 }
 
+/**
+ * `$listing` without the one opcode PHP# adds on purpose: a SHARP_RECV_TYPE_ARGS with no result, which checks the
+ * parameters of a call from plain PHP that its PHP twin's types can't check. Each op array loses it and counts one
+ * line less, and every op number after it, in an op line, a jump, a live range or a try block, is one lower. Each check lands in
+ * `$checks` by its op array, once for both listings.
+ */
+function without_checks(string $listing, array &$checks): string
+{
+    $lines = explode("\n", $listing);
+    $header = -1;
+    $dropped = [];
+    $renumber = static function (array $op) use (&$dropped): string {
+        return sprintf('%04d', (int) $op[0] - count(array_filter($dropped, static fn (int $at): bool => $at < (int) $op[0])));
+    };
+    $kept = [];
+    foreach ($lines as $index => $line) {
+        if (preg_match('~^(\S.*):$~', $line, $name) && preg_match('~^ {5}; \(lines=~', $lines[$index + 1] ?? '')) {
+            $header = count($kept) + 1;
+            $dropped = [];
+            $op_array = $name[1];
+        } elseif ($header >= 0 && preg_match('~^(?:L\d{4} )?(\d{4}) SHARP_RECV_TYPE_ARGS (.*)$~', $line, $check)) {
+            $dropped[] = (int) $check[1];
+            $checks[$op_array] = $check[2];
+            $kept[$header] = preg_replace_callback('~lines=(\d+)~', static fn (array $count): string => 'lines=' . ($count[1] - 1), $kept[$header]);
+            continue;
+        } elseif ($dropped && preg_match('~^(?:L\d{4} )?\d{4} |^ +(?:\d+: )?\d{4}[ ,]~', $line)) {
+            $line = preg_replace_callback('~(?<![\w(])\d{4}(?![\w)])~', $renumber, $line);
+        }
+        $kept[] = $line;
+    }
+
+    return implode("\n", $kept);
+}
+
 // Each fixture names the libraries its classes link against.
 $fixtures = [
     'Calc' => null,
@@ -84,7 +118,8 @@ $user_class = '/(?:Class|Enum) \[ <user> /';
 
 foreach ($fixtures as $fixture => $library) {
     $prelude = implode('', array_map(static fn (string $file): string => 'require ' . var_export(__DIR__ . "/$file", true) . ';', (array) $library));
-    $sharp = compiled(__DIR__ . "/$fixture.sharp", $prelude);
+    $checks = [];
+    $sharp = without_checks(compiled(__DIR__ . "/$fixture.sharp", $prelude), $checks);
     $php = compiled(__DIR__ . "/$fixture.inc", $prelude);
     // An op array either listing prints counts once: phpdbg prints abstract methods, and the dump prints hooks.
     preg_match_all('~^(\S.*):\n {5}; \(lines=~m', $sharp, $op_arrays);
@@ -92,6 +127,9 @@ foreach ($fixtures as $fixture => $library) {
         count(array_unique($op_arrays[1])), ' op arrays, ',
         preg_match_all($user_class, $sharp) === preg_match_all($user_class, $php) ? 'same' : 'different',
         ' signatures in ', preg_match_all($user_class, $sharp), " classes\n";
+    foreach ($checks as $op_array => $text) {
+        echo '  check  ', $op_array, ' ', $text, "\n";
+    }
 
     // A difference PHP# makes on purpose is pinned line by line below, so any other one fails.
     $sharp_lines = explode("\n", $sharp);
@@ -103,11 +141,107 @@ foreach ($fixtures as $fixture => $library) {
         echo '  .php   ', $line, "\n";
     }
 }
+
+// Dropping the checks hides no other opcode: one more beside a check still differs from the twin.
+$checks = [];
+$twin = "Demo\\run:\n     ; (lines=2, args=1, vars=1, tmps=0)\n0000 CV0(\$a) = RECV 1\n0001 JMP 0001";
+$checked = "Demo\\run:\n     ; (lines=3, args=1, vars=1, tmps=0)\n0000 CV0(\$a) = RECV 1\n0001 SHARP_RECV_TYPE_ARGS string(\"List<int>\")\n0002 JMP 0002";
+$added = "Demo\\run:\n     ; (lines=4, args=1, vars=1, tmps=0)\n0000 CV0(\$a) = RECV 1\n0001 SHARP_RECV_TYPE_ARGS string(\"List<int>\")\n0002 NOP\n0003 JMP 0003";
+echo 'a check: ', without_checks($checked, $checks) === $twin ? 'same' : 'different', "\n";
+echo 'a check and another opcode: ', without_checks($added, $checks) === $twin ? 'same' : 'different', "\n";
 ?>
 --EXPECT--
 Calc: same opcodes and lines in 4 op arrays, same signatures in 1 classes
 Nulls: same opcodes and lines in 13 op arrays, same signatures in 1 classes
-ControlFlow: same opcodes and lines in 6 op arrays, same signatures in 1 classes
+ControlFlow: different opcodes and lines in 6 op arrays, same signatures in 1 classes
+  .sharp      ; (lines=25, args=1, vars=4, tmps=13)
+  .sharp L0061 0004 T6 = SHARP_VERIFY_TYPE_ARGS V5 string("Map<int, int>")
+  .sharp L0061 0005 V7 = FE_RESET_R T6 0010
+  .sharp L0061 0006 FE_FETCH_R V7 CV2($price) 0010
+  .sharp L0062 0007 T8 = MUL CV2($price) CV0($factor)
+  .sharp L0062 0008 ASSIGN_OP (ADD) CV1($total) T8
+  .sharp L0061 0009 JMP 0006
+  .sharp L0061 0010 FE_FREE V7
+  .sharp L0064 0011 INIT_STATIC_METHOD_CALL 0 string("Demo\\Prices") string("all")
+  .sharp L0064 0012 V10 = DO_FCALL
+  .sharp L0064 0013 T11 = SHARP_VERIFY_TYPE_ARGS V10 string("Map<int, int>")
+  .sharp L0064 0014 V12 = FE_RESET_R T11 0020
+  .sharp L0064 0015 T13 = FE_FETCH_R V12 CV2($price) 0020
+  .sharp L0064 0016 ASSIGN CV3($slot) T13
+  .sharp L0065 0017 ASSIGN_OP (ADD) CV1($total) CV3($slot)
+  .sharp L0066 0018 ASSIGN CV2($price) int(0)
+  .sharp L0064 0019 JMP 0015
+  .sharp L0064 0020 FE_FREE V12
+  .sharp L0068 0021 VERIFY_RETURN_TYPE CV1($total)
+  .sharp L0068 0022 RETURN CV1($total)
+  .sharp L0069 0023 VERIFY_RETURN_TYPE
+  .sharp L0069 0024 RETURN null
+  .sharp      ; (lines=25, args=1, vars=4, tmps=13)
+  .sharp 0004 T6 = SHARP_VERIFY_TYPE_ARGS V5 string("Map<int, int>")
+  .sharp 0005 V7 = FE_RESET_R T6 0010
+  .sharp 0006 FE_FETCH_R V7 CV2($price) 0010
+  .sharp 0007 T8 = MUL CV2($price) CV0($factor)
+  .sharp 0008 ASSIGN_OP (ADD) CV1($total) T8
+  .sharp 0009 JMP 0006
+  .sharp 0010 FE_FREE V7
+  .sharp 0011 INIT_STATIC_METHOD_CALL 0 string("Demo\\Prices") string("all")
+  .sharp 0012 V10 = DO_FCALL
+  .sharp 0013 T11 = SHARP_VERIFY_TYPE_ARGS V10 string("Map<int, int>")
+  .sharp 0014 V12 = FE_RESET_R T11 0020
+  .sharp 0015 T13 = FE_FETCH_R V12 CV2($price) 0020
+  .sharp 0016 ASSIGN CV3($slot) T13
+  .sharp 0017 ASSIGN_OP (ADD) CV1($total) CV3($slot)
+  .sharp 0018 ASSIGN CV2($price) int(0)
+  .sharp 0019 JMP 0015
+  .sharp 0020 FE_FREE V12
+  .sharp 0021 VERIFY_RETURN_TYPE CV1($total)
+  .sharp 0022 RETURN CV1($total)
+  .sharp 0023 VERIFY_RETURN_TYPE
+  .sharp 0024 RETURN null
+  .sharp      7: 0006 - 0010 (loop)
+  .sharp      12: 0015 - 0020 (loop)
+  .php        ; (lines=23, args=1, vars=4, tmps=11)
+  .php   L0061 0004 V6 = FE_RESET_R V5 0009
+  .php   L0061 0005 FE_FETCH_R V6 CV2($price) 0009
+  .php   L0062 0006 T7 = MUL CV2($price) CV0($factor)
+  .php   L0062 0007 ASSIGN_OP (ADD) CV1($total) T7
+  .php   L0061 0008 JMP 0005
+  .php   L0061 0009 FE_FREE V6
+  .php   L0064 0010 INIT_STATIC_METHOD_CALL 0 string("Demo\\Prices") string("all")
+  .php   L0064 0011 V9 = DO_FCALL
+  .php   L0064 0012 V10 = FE_RESET_R V9 0018
+  .php   L0064 0013 T11 = FE_FETCH_R V10 CV2($price) 0018
+  .php   L0064 0014 ASSIGN CV3($slot) T11
+  .php   L0065 0015 ASSIGN_OP (ADD) CV1($total) CV3($slot)
+  .php   L0066 0016 ASSIGN CV2($price) int(0)
+  .php   L0064 0017 JMP 0013
+  .php   L0064 0018 FE_FREE V10
+  .php   L0068 0019 VERIFY_RETURN_TYPE CV1($total)
+  .php   L0068 0020 RETURN CV1($total)
+  .php   L0069 0021 VERIFY_RETURN_TYPE
+  .php   L0069 0022 RETURN null
+  .php        ; (lines=23, args=1, vars=4, tmps=11)
+  .php   0004 V6 = FE_RESET_R V5 0009
+  .php   0005 FE_FETCH_R V6 CV2($price) 0009
+  .php   0006 T7 = MUL CV2($price) CV0($factor)
+  .php   0007 ASSIGN_OP (ADD) CV1($total) T7
+  .php   0008 JMP 0005
+  .php   0009 FE_FREE V6
+  .php   0010 INIT_STATIC_METHOD_CALL 0 string("Demo\\Prices") string("all")
+  .php   0011 V9 = DO_FCALL
+  .php   0012 V10 = FE_RESET_R V9 0018
+  .php   0013 T11 = FE_FETCH_R V10 CV2($price) 0018
+  .php   0014 ASSIGN CV3($slot) T11
+  .php   0015 ASSIGN_OP (ADD) CV1($total) CV3($slot)
+  .php   0016 ASSIGN CV2($price) int(0)
+  .php   0017 JMP 0013
+  .php   0018 FE_FREE V10
+  .php   0019 VERIFY_RETURN_TYPE CV1($total)
+  .php   0020 RETURN CV1($total)
+  .php   0021 VERIFY_RETURN_TYPE
+  .php   0022 RETURN null
+  .php        6: 0005 - 0009 (loop)
+  .php        10: 0013 - 0018 (loop)
 Order: same opcodes and lines in 4 op arrays, same signatures in 2 classes
 Product: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Expressions: same opcodes and lines in 8 op arrays, same signatures in 1 classes
@@ -122,17 +256,152 @@ Shapes: same opcodes and lines in 5 op arrays, same signatures in 2 classes
 Members: same opcodes and lines in 10 op arrays, same signatures in 1 classes
 Site: same opcodes and lines in 13 op arrays, same signatures in 3 classes
 Collections: same opcodes and lines in 7 op arrays, same signatures in 2 classes
+  check  Demo\Cart::fill string("List<Demo.Item>")
+  check  Demo\Cart::withPrices string("List<int>, List<int>")
 EnumKeys: same opcodes and lines in 12 op arrays, same signatures in 1 classes
+  check  Demo\Headcount::count string("Map<Lib.Standing, int>, Any?")
+  check  Demo\Headcount::ensure string("Map<Lib.Standing, int>, Any?")
+  check  Demo\Headcount::lookup string("Map<Lib.Standing, int>, Any?")
+  check  Demo\Headcount::without string("Map<Lib.Standing, int>, Any?")
+  check  Demo\Headcount::byName string("Map<Lib.Standing, int>")
+  check  Demo\Headcount::skus string("Map<string, int>")
 Interop: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Lambdas: same opcodes and lines in 35 op arrays, same signatures in 1 classes
-Cashier: same opcodes and lines in 8 op arrays, same signatures in 1 classes
+  check  Demo\Lambdas::doubled string("List<int>, Any?")
+  check  Demo\Lambdas::pipeline string("List<int>, Map<string, int>")
+  check  Demo\Lambdas::total string("List<int>")
+  check  Demo\Lambdas::failures string("List<int>")
+  check  Demo\Lambdas::captured string("List<int>")
+  check  Demo\Lambdas::scaled string("List<int>")
+Cashier: different opcodes and lines in 8 op arrays, same signatures in 1 classes
+  check  Demo\Cashier::receipt string("List<int>, Any?, Any?")
+  .sharp      ; (lines=61, args=3, vars=7, tmps=30)
+  .sharp L0022 0035 T24 = SHARP_VERIFY_TYPE_ARGS V23 string("List<int>")
+  .sharp L0022 0036 ASSIGN CV6($recorded) T24
+  .sharp L0024 0037 T26 = CAST (object) CV4($paid)
+  .sharp L0024 0038 INIT_METHOD_CALL 1 T26 string("map")
+  .sharp L0024 0039 INIT_METHOD_CALL 0 THIS string("format")
+  .sharp L0024 0040 T27 = CALLABLE_CONVERT
+  .sharp L0024 0041 SEND_VAL_EX T27 1
+  .sharp L0024 0042 V28 = DO_FCALL
+  .sharp L0024 0043 T29 = FRAMELESS_ICALL_2(implode) string(",") V28
+  .sharp L0024 0044 T30 = INIT_ARRAY 5 (packed) T29 NEXT
+  .sharp L0025 0045 T31 = CAST (string) CV5($total)
+  .sharp L0025 0046 T30 = ADD_ARRAY_ELEMENT T31 NEXT
+  .sharp L0026 0047 T32 = CAST (string) CV3($count)
+  .sharp L0026 0048 T30 = ADD_ARRAY_ELEMENT T32 NEXT
+  .sharp L0027 0049 T33 = FRAMELESS_ICALL_2(implode) string(",") CV6($recorded)
+  .sharp L0027 0050 T30 = ADD_ARRAY_ELEMENT T33 NEXT
+  .sharp L0028 0051 T34 = FETCH_OBJ_R CV2($ledger) string("scale")
+  .sharp L0028 0052 INIT_DYNAMIC_CALL 1 T34
+  .sharp L0028 0053 SEND_VAR_EX CV5($total) 1
+  .sharp L0028 0054 V35 = DO_FCALL
+  .sharp L0028 0055 T36 = CAST (string) V35
+  .sharp L0028 0056 T30 = ADD_ARRAY_ELEMENT T36 NEXT
+  .sharp L0028 0057 VERIFY_RETURN_TYPE T30
+  .sharp L0028 0058 RETURN T30
+  .sharp L0030 0059 VERIFY_RETURN_TYPE
+  .sharp L0030 0060 RETURN null
+  .sharp      ; (lines=61, args=3, vars=7, tmps=30)
+  .sharp 0035 T24 = SHARP_VERIFY_TYPE_ARGS V23 string("List<int>")
+  .sharp 0036 ASSIGN CV6($recorded) T24
+  .sharp 0037 T26 = CAST (object) CV4($paid)
+  .sharp 0038 INIT_METHOD_CALL 1 T26 string("map")
+  .sharp 0039 INIT_METHOD_CALL 0 THIS string("format")
+  .sharp 0040 T27 = CALLABLE_CONVERT
+  .sharp 0041 SEND_VAL_EX T27 1
+  .sharp 0042 V28 = DO_FCALL
+  .sharp 0043 T29 = FRAMELESS_ICALL_2(implode) string(",") V28
+  .sharp 0044 T30 = INIT_ARRAY 5 (packed) T29 NEXT
+  .sharp 0045 T31 = CAST (string) CV5($total)
+  .sharp 0046 T30 = ADD_ARRAY_ELEMENT T31 NEXT
+  .sharp 0047 T32 = CAST (string) CV3($count)
+  .sharp 0048 T30 = ADD_ARRAY_ELEMENT T32 NEXT
+  .sharp 0049 T33 = FRAMELESS_ICALL_2(implode) string(",") CV6($recorded)
+  .sharp 0050 T30 = ADD_ARRAY_ELEMENT T33 NEXT
+  .sharp 0051 T34 = FETCH_OBJ_R CV2($ledger) string("scale")
+  .sharp 0052 INIT_DYNAMIC_CALL 1 T34
+  .sharp 0053 SEND_VAR_EX CV5($total) 1
+  .sharp 0054 V35 = DO_FCALL
+  .sharp 0055 T36 = CAST (string) V35
+  .sharp 0056 T30 = ADD_ARRAY_ELEMENT T36 NEXT
+  .sharp 0057 VERIFY_RETURN_TYPE T30
+  .sharp 0058 RETURN T30
+  .sharp 0059 VERIFY_RETURN_TYPE
+  .sharp 0060 RETURN null
+  .sharp      30: 0045 - 0058 (tmp/var)
+  .php        ; (lines=60, args=3, vars=7, tmps=29)
+  .php   L0022 0035 ASSIGN CV6($recorded) V23
+  .php   L0024 0036 T25 = CAST (object) CV4($paid)
+  .php   L0024 0037 INIT_METHOD_CALL 1 T25 string("map")
+  .php   L0024 0038 INIT_METHOD_CALL 0 THIS string("format")
+  .php   L0024 0039 T26 = CALLABLE_CONVERT
+  .php   L0024 0040 SEND_VAL_EX T26 1
+  .php   L0024 0041 V27 = DO_FCALL
+  .php   L0024 0042 T28 = FRAMELESS_ICALL_2(implode) string(",") V27
+  .php   L0024 0043 T29 = INIT_ARRAY 5 (packed) T28 NEXT
+  .php   L0025 0044 T30 = CAST (string) CV5($total)
+  .php   L0025 0045 T29 = ADD_ARRAY_ELEMENT T30 NEXT
+  .php   L0026 0046 T31 = CAST (string) CV3($count)
+  .php   L0026 0047 T29 = ADD_ARRAY_ELEMENT T31 NEXT
+  .php   L0027 0048 T32 = FRAMELESS_ICALL_2(implode) string(",") CV6($recorded)
+  .php   L0027 0049 T29 = ADD_ARRAY_ELEMENT T32 NEXT
+  .php   L0028 0050 T33 = FETCH_OBJ_R CV2($ledger) string("scale")
+  .php   L0028 0051 INIT_DYNAMIC_CALL 1 T33
+  .php   L0028 0052 SEND_VAR_EX CV5($total) 1
+  .php   L0028 0053 V34 = DO_FCALL
+  .php   L0028 0054 T35 = CAST (string) V34
+  .php   L0028 0055 T29 = ADD_ARRAY_ELEMENT T35 NEXT
+  .php   L0028 0056 VERIFY_RETURN_TYPE T29
+  .php   L0028 0057 RETURN T29
+  .php   L0030 0058 VERIFY_RETURN_TYPE
+  .php   L0030 0059 RETURN null
+  .php        ; (lines=60, args=3, vars=7, tmps=29)
+  .php   0035 ASSIGN CV6($recorded) V23
+  .php   0036 T25 = CAST (object) CV4($paid)
+  .php   0037 INIT_METHOD_CALL 1 T25 string("map")
+  .php   0038 INIT_METHOD_CALL 0 THIS string("format")
+  .php   0039 T26 = CALLABLE_CONVERT
+  .php   0040 SEND_VAL_EX T26 1
+  .php   0041 V27 = DO_FCALL
+  .php   0042 T28 = FRAMELESS_ICALL_2(implode) string(",") V27
+  .php   0043 T29 = INIT_ARRAY 5 (packed) T28 NEXT
+  .php   0044 T30 = CAST (string) CV5($total)
+  .php   0045 T29 = ADD_ARRAY_ELEMENT T30 NEXT
+  .php   0046 T31 = CAST (string) CV3($count)
+  .php   0047 T29 = ADD_ARRAY_ELEMENT T31 NEXT
+  .php   0048 T32 = FRAMELESS_ICALL_2(implode) string(",") CV6($recorded)
+  .php   0049 T29 = ADD_ARRAY_ELEMENT T32 NEXT
+  .php   0050 T33 = FETCH_OBJ_R CV2($ledger) string("scale")
+  .php   0051 INIT_DYNAMIC_CALL 1 T33
+  .php   0052 SEND_VAR_EX CV5($total) 1
+  .php   0053 V34 = DO_FCALL
+  .php   0054 T35 = CAST (string) V34
+  .php   0055 T29 = ADD_ARRAY_ELEMENT T35 NEXT
+  .php   0056 VERIFY_RETURN_TYPE T29
+  .php   0057 RETURN T29
+  .php   0058 VERIFY_RETURN_TYPE
+  .php   0059 RETURN null
+  .php        29: 0044 - 0057 (tmp/var)
 Roster: same opcodes and lines in 6 op arrays, same signatures in 1 classes
+  check  Demo\Roster::report string("Map<Lib.Standing, int>")
 Sets: same opcodes and lines in 26 op arrays, same signatures in 1 classes
+  check  Demo\Tagged::__construct string("Set<int>, Set<string>")
+  check  Demo\Tagged::strings string("Set<string>")
+  check  Demo\Tagged::reads string("Set<string>")
+  check  Demo\Tagged::missing string("Set<string>")
+  check  Demo\Tagged::ints string("Set<int>")
+  check  Demo\Tagged::cases string("Set<Lib.Standing>")
+  check  Demo\Tagged::once string("Set<string>?")
+  check  Demo\Tagged::lambdas string("List<string>")
+  check  Demo\Tagged::groups string("Set<string>")
+  check  Demo\Tagged::maybe string("Set<string>?")
 Store: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 RushOrders: same opcodes and lines in 2 op arrays, same signatures in 2 classes
 TypedOrders: same opcodes and lines in 2 op arrays, same signatures in 2 classes
 Permalink: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 Library: same opcodes and lines in 19 op arrays, same signatures in 1 classes
+  check  Demo\Library::query string("Map<string, Any?>")
 Inbox: same opcodes and lines in 9 op arrays, same signatures in 1 classes
 Patterns: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Signatures: same opcodes and lines in 11 op arrays, same signatures in 1 classes
@@ -142,8 +411,16 @@ Exits: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 Positions: same opcodes and lines in 5 op arrays, same signatures in 1 classes
 Deploy: same opcodes and lines in 7 op arrays, same signatures in 1 classes
 Tags: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+  check  Demo\Tags::of string("List<string>|string")
 PhpForms: same opcodes and lines in 15 op arrays, same signatures in 1 classes
+  check  Demo\PhpForms::tags string("List<string>|string")
 Generics: different opcodes and lines in 33 op arrays, same signatures in 10 classes
+  check  Paging\OrderQuery::__construct string("List<Paging.Order>")
+  check  Paging\PaginatedList::__construct string("List<$0>")
+  check  Paging\Feed::__construct string("List<$0>")
+  check  Paging\Validator::validate string("$0")
+  check  Paging\Catalog::newest string("Paging.Feed<Paging.Order>")
+  check  Paging\Catalog::check string("Paging.Validator<Paging.DatabaseEntity>, Any?")
   .sharp      ; (lines=14, args=1, vars=2, tmps=6)
   .sharp L0055 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity")
   .sharp L0055 0002 V2 = FETCH_CLASS (exception) string("Paging\\PaginatedList")
@@ -158,9 +435,6 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp L0055 0011 RETURN V4
   .sharp L0055 0012 VERIFY_RETURN_TYPE
   .sharp L0055 0013 RETURN null
-  .sharp L0071 0001 SHARP_RECV_TYPE_ARGS string("$0")
-  .sharp L0071 0002 VERIFY_RETURN_TYPE
-  .sharp L0071 0003 RETURN null
   .sharp      ; (lines=16, args=2, vars=4, tmps=3)
   .sharp L0089 0002 CV2($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity")
   .sharp L0091 0003 V4 = FE_RESET_R CV0($items) 0012
@@ -240,16 +514,6 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp L0126 0012 RETURN T4
   .sharp L0126 0013 VERIFY_RETURN_TYPE
   .sharp L0126 0014 RETURN null
-  .sharp      ; (lines=10, args=1, vars=1, tmps=3)
-  .sharp L0130 0001 SHARP_RECV_TYPE_ARGS string("Paging.Feed<Paging.Order>")
-  .sharp L0130 0002 T1 = CAST (object) CV0($feed)
-  .sharp L0130 0003 INIT_METHOD_CALL 0 T1 string("next")
-  .sharp L0130 0004 V2 = DO_FCALL
-  .sharp L0130 0005 T3 = FETCH_OBJ_R V2 string("id")
-  .sharp L0130 0006 VERIFY_RETURN_TYPE T3
-  .sharp L0130 0007 RETURN T3
-  .sharp L0130 0008 VERIFY_RETURN_TYPE
-  .sharp L0130 0009 RETURN null
   .sharp      ; (lines=14, args=0, vars=0, tmps=6)
   .sharp L0132 0001 V0 = FETCH_CLASS (exception) string("Paging\\Feed")
   .sharp L0132 0002 T1 = SHARP_TYPE_ARGS string("Paging.Order")
@@ -264,16 +528,6 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp L0132 0011 RETURN V5
   .sharp L0132 0012 VERIFY_RETURN_TYPE
   .sharp L0132 0013 RETURN null
-  .sharp      ; (lines=11, args=2, vars=2, tmps=2)
-  .sharp L0134 0002 SHARP_RECV_TYPE_ARGS string("Paging.Validator<Paging.DatabaseEntity>, Any?")
-  .sharp L0134 0003 T2 = CAST (object) CV0($validator)
-  .sharp L0134 0004 INIT_METHOD_CALL 1 T2 string("validate")
-  .sharp L0134 0005 SEND_VAR_EX CV1($order) 1
-  .sharp L0134 0006 V3 = DO_FCALL
-  .sharp L0134 0007 VERIFY_RETURN_TYPE V3
-  .sharp L0134 0008 RETURN V3
-  .sharp L0134 0009 VERIFY_RETURN_TYPE
-  .sharp L0134 0010 RETURN null
   .sharp      ; (lines=14, args=0, vars=0, tmps=7)
   .sharp L0138 0007 T4 = SHARP_TYPE_ARGS string("Paging.Order")
   .sharp L0138 0008 V5 = DO_FCALL T4
@@ -377,14 +631,6 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp 0012 RETURN T4
   .sharp      2: 0007 - 0008 (tmp/var)
   .sharp      4: 0011 - 0012 (tmp/var)
-  .sharp      ; (lines=10, args=1, vars=1, tmps=3)
-  .sharp 0001 SHARP_RECV_TYPE_ARGS string("Paging.Feed<Paging.Order>")
-  .sharp 0002 T1 = CAST (object) CV0($feed)
-  .sharp 0003 INIT_METHOD_CALL 0 T1 string("next")
-  .sharp 0004 V2 = DO_FCALL
-  .sharp 0005 T3 = FETCH_OBJ_R V2 string("id")
-  .sharp 0006 VERIFY_RETURN_TYPE T3
-  .sharp 0007 RETURN T3
   .sharp      ; (lines=14, args=0, vars=0, tmps=6)
   .sharp 0001 V0 = FETCH_CLASS (exception) string("Paging\\Feed")
   .sharp 0002 T1 = SHARP_TYPE_ARGS string("Paging.Order")
@@ -396,15 +642,6 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp 0011 RETURN V5
   .sharp      2: 0004 - 0008 (new)
   .sharp      5: 0010 - 0011 (tmp/var)
-  .sharp      ; (lines=11, args=2, vars=2, tmps=2)
-  .sharp 0002 SHARP_RECV_TYPE_ARGS string("Paging.Validator<Paging.DatabaseEntity>, Any?")
-  .sharp 0003 T2 = CAST (object) CV0($validator)
-  .sharp 0004 INIT_METHOD_CALL 1 T2 string("validate")
-  .sharp 0005 SEND_VAR_EX CV1($order) 1
-  .sharp 0006 V3 = DO_FCALL
-  .sharp 0007 VERIFY_RETURN_TYPE V3
-  .sharp 0008 RETURN V3
-  .sharp      3: 0007 - 0008 (tmp/var)
   .sharp      ; (lines=14, args=0, vars=0, tmps=7)
   .sharp 0007 T4 = SHARP_TYPE_ARGS string("Paging.Order")
   .sharp 0008 V5 = DO_FCALL T4
@@ -429,9 +666,6 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php   L0055 0008 RETURN V1
   .php   L0055 0009 VERIFY_RETURN_TYPE
   .php   L0055 0010 RETURN null
-  .php        ; (lines=3, args=1, vars=1, tmps=0)
-  .php   L0071 0001 VERIFY_RETURN_TYPE
-  .php   L0071 0002 RETURN null
   .php        ; (lines=15, args=2, vars=3, tmps=3)
   .php   L0091 0002 V3 = FE_RESET_R CV0($items) 0011
   .php   L0091 0003 FE_FETCH_R V3 CV2($item) 0011
@@ -502,14 +736,6 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php   L0126 0011 RETURN T3
   .php   L0126 0012 VERIFY_RETURN_TYPE
   .php   L0126 0013 RETURN null
-  .php   L0130 0001 T1 = CAST (object) CV0($feed)
-  .php   L0130 0002 INIT_METHOD_CALL 0 T1 string("next")
-  .php   L0130 0003 V2 = DO_FCALL
-  .php   L0130 0004 T3 = FETCH_OBJ_R V2 string("id")
-  .php   L0130 0005 VERIFY_RETURN_TYPE T3
-  .php   L0130 0006 RETURN T3
-  .php   L0130 0007 VERIFY_RETURN_TYPE
-  .php   L0130 0008 RETURN null
   .php        ; (lines=12, args=0, vars=0, tmps=4)
   .php   L0132 0001 V0 = NEW 1 string("Paging\\Feed")
   .php   L0132 0002 INIT_STATIC_METHOD_CALL 0 string("Paging\\Catalog") string("orders")
@@ -522,15 +748,6 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php   L0132 0009 RETURN V3
   .php   L0132 0010 VERIFY_RETURN_TYPE
   .php   L0132 0011 RETURN null
-  .php        ; (lines=10, args=2, vars=2, tmps=2)
-  .php   L0134 0002 T2 = CAST (object) CV0($validator)
-  .php   L0134 0003 INIT_METHOD_CALL 1 T2 string("validate")
-  .php   L0134 0004 SEND_VAR_EX CV1($order) 1
-  .php   L0134 0005 V3 = DO_FCALL
-  .php   L0134 0006 VERIFY_RETURN_TYPE V3
-  .php   L0134 0007 RETURN V3
-  .php   L0134 0008 VERIFY_RETURN_TYPE
-  .php   L0134 0009 RETURN null
   .php   L0138 0007 V4 = DO_FCALL
   .php   L0138 0008 T5 = FETCH_OBJ_R V4 string("id")
   .php   L0138 0009 VERIFY_RETURN_TYPE T5
@@ -548,6 +765,7 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php   0003 INIT_METHOD_CALL 0 T2 string("rows")
   .php   0007 VERIFY_RETURN_TYPE V1
   .php   0008 RETURN V1
+  .php   0009 VERIFY_RETURN_TYPE
   .php        1: 0002 - 0007 (new)
   .php        1: 0007 - 0008 (tmp/var)
   .php        ; (lines=15, args=2, vars=3, tmps=3)
@@ -569,7 +787,6 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php        ; (lines=8, args=1, vars=1, tmps=2)
   .php   0001 T1 = CAST (object) CV0($item)
   .php   0002 INIT_METHOD_CALL 0 T1 string("link")
-  .php   0003 V2 = DO_FCALL
   .php   0004 VERIFY_RETURN_TYPE V2
   .php   0005 RETURN V2
   .php   0000 V0 = NEW 1 string("Paging\\PaginatedList")
@@ -604,10 +821,6 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php   0011 RETURN T3
   .php        1: 0006 - 0007 (tmp/var)
   .php        3: 0010 - 0011 (tmp/var)
-  .php   0001 T1 = CAST (object) CV0($feed)
-  .php   0002 INIT_METHOD_CALL 0 T1 string("next")
-  .php   0003 V2 = DO_FCALL
-  .php   0004 T3 = FETCH_OBJ_R V2 string("id")
   .php        ; (lines=12, args=0, vars=0, tmps=4)
   .php   0001 V0 = NEW 1 string("Paging\\Feed")
   .php   0002 INIT_STATIC_METHOD_CALL 0 string("Paging\\Catalog") string("orders")
@@ -620,13 +833,6 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php   0009 RETURN V3
   .php        0: 0002 - 0006 (new)
   .php        3: 0008 - 0009 (tmp/var)
-  .php        ; (lines=10, args=2, vars=2, tmps=2)
-  .php   0002 T2 = CAST (object) CV0($validator)
-  .php   0003 INIT_METHOD_CALL 1 T2 string("validate")
-  .php   0004 SEND_VAR_EX CV1($order) 1
-  .php   0005 V3 = DO_FCALL
-  .php   0006 VERIFY_RETURN_TYPE V3
-  .php   0007 RETURN V3
   .php   0008 V5 = DO_FCALL
   .php   0009 VERIFY_RETURN_TYPE V5
   .php   0010 RETURN V5
@@ -662,3 +868,9 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php       /** @param Feed<Order> $feed */
   .php       /** @param Validator<DatabaseEntity> $validator */
 Operators: same opcodes and lines in 72 op arrays, same signatures in 9 classes
+  check  Billing\Operators::byPrice string("List<Billing.Line>")
+  check  Billing\Operators::byCode string("List<string>")
+  check  Billing\Operators::checkout string("Map<string, Any?>, Any?, Map<string, Any?>")
+  check  Billing\Grade::ranked string("List<Billing.Grade>")
+a check: same
+a check and another opcode: different
