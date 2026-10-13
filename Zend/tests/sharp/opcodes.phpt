@@ -394,6 +394,8 @@ Sets: same opcodes and lines in 26 op arrays, same signatures in 1 classes
   check  Demo\Tagged::cases string("Set<Lib.Standing>")
   check  Demo\Tagged::once string("Set<string>?")
   check  Demo\Tagged::lambdas string("List<string>")
+  check  {closure:Demo\Tagged::lambdas():95} string("Set<string>")
+  check  {closure:Demo\Tagged::lambdas():96} string("Set<string>")
   check  Demo\Tagged::groups string("Set<string>")
   check  Demo\Tagged::maybe string("Set<string>?")
 Store: same opcodes and lines in 3 op arrays, same signatures in 1 classes
