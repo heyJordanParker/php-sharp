@@ -1,0 +1,70 @@
+namespace Demo;
+
+import Exception;
+import Lib.Report;
+
+class SalesReport : Report
+{
+    public SalesReport(int id) : super(id) { }
+}
+
+class Manifest
+{
+    public Manifest(public string name { get; }) { }
+
+    public static Manifest parse(string json) => new Manifest(json.trim());
+}
+
+class Entity
+{
+    public Entity(public string name { get; }) { }
+
+    public virtual string describe() => "entity " + this.name;
+}
+
+class Artifact : Entity
+{
+    public string seen { get; set; } = "";
+
+    public Artifact(public Manifest manifest { get; }) : super(manifest.name) { }
+
+    public override string describe() => "artifact " + this.name;
+
+    [Retry(times: 2)]
+    public Artifact.fromJson(string json) : this(Manifest.parse(json))
+    {
+        this.seen = super.describe();
+    }
+
+    public static Artifact load(string json) => new Artifact.fromJson(json);
+}
+
+class Tenant
+{
+    public bool active { get; set; } = true;
+}
+
+class InactiveTenant : Exception
+{
+    public InactiveTenant(public Tenant tenant { get; }) : super("The tenant is inactive.") { }
+}
+
+class Gate
+{
+    public Gate(public Tenant tenant { get; })
+    {
+        if (!tenant.active) {
+            throw new InactiveTenant(tenant);
+        }
+    }
+}
+
+class Label
+{
+    public Label(public string text { get; init; }) { }
+
+    public Label.shouting(string text) : this(text)
+    {
+        this.text = strtoupper(text);
+    }
+}

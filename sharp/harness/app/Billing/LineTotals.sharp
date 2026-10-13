@@ -1,0 +1,13 @@
+namespace App.Billing;
+
+import App.Elided;
+import App.Line;
+import App.Money;
+
+public static class LineTotals
+{
+    extension(List<Line> lines)
+    {
+        public Money total() => throw new Elided();
+    }
+}
