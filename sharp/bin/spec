@@ -2,13 +2,12 @@
 <?php
 // Checks every csharp, ts and php block of README.md and docs/spec.md against its annotations, as
 // docs/architecture/spec-examples.md describes, and fails when the examples that fail differ from sharp/baseline/spec.
-// sharp/bin/test --spec runs it on the built engine, with the pinned mago in TEST_MAGO_EXECUTABLE.
+// sharp/bin/test --spec runs it on the built engine, with sharp/bin/test's mago in TEST_MAGO_EXECUTABLE.
 //
 // With --base <commit>, it instead compares sharp/baseline/spec and the examples with that commit. The SPEC_GUARD job
 // runs the base commit's copy of this script on the pull request's merge commit, so a pull request's own files never
-// judge it. It fails when an entry joins the list in a pull request that changes more than the documents and the list,
-// when an example whose fingerprint the base has joins the list, and when a pull request that changes anything outside
-// the spec files and other Markdown also changes an example's fingerprint or a file in a GUARDED folder.
+// judge it. It fails when an example whose fingerprint the base has joins the list, and when a pull request that
+// changes anything outside the documents, the list and other Markdown also changes a GUARDED file.
 //
 // With --completes, it reads the pull request body from BODY and fails unless every section its `Completes:` line names
 // has a checked example and no entry in sharp/baseline/spec. Neither mode needs a build.
@@ -22,12 +21,10 @@ const DOCUMENTS = ['README.md', 'docs/spec.md'];
 const BASELINE = 'sharp/baseline/spec';
 const SELF_TEST = 'sharp/spec-self-test.md';
 const HARNESS = 'sharp/harness';
-// The folders that hold what measures the examples and everything that runs that measurement: the harness, the
-// scripts, the CI image and the workflows. Only a spec PR changes a file in them.
-const GUARDED = [HARNESS . '/', 'sharp/bin/', 'sharp/docker/', '.github/'];
-// Files in a GUARDED folder that measure no example: sharp/bin/native writes the engine's C header from the standard
-// library's declarations, and engine pull requests change it.
-const UNGUARDED = ['sharp/bin/native'];
+// What measures an example: this script. A pull request that changes it changes nothing else that runs, so a feature
+// can't move the measure it is judged by. Feature pull requests add harness classes, so the harness is not guarded:
+// the pull request body lists a harness change, and its review checks that no stub makes an example pass falsely.
+const GUARDED = ['sharp/bin/spec'];
 const PACKAGE = 'sharp/composer';
 const PACKAGE_FOLDER = 'vendor/heyjordanparker/php-sharp-composer';
 const MARKER = '<!-- example ';
@@ -35,7 +32,7 @@ const RUN_MARKER = '<!-- run ';
 const REFUSAL = 'not supported yet';
 const RUNTIME = ['value', 'throws', 'message'];
 // The errors mago reports at a construct's first line for the whole construct, by code, or by message when the code is
-// the generic `semantics`. Only these move to the `compile error` line inside the construct. A new one joins in a spec PR.
+// the generic `semantics`. Only these move to the `compile error` line inside the construct. A new one joins in a PR of its own.
 const MOVES = ['match-not-exhaustive', 'rejected-nullable-parameter', 'A `match` needs a `default` arm.'];
 const SECTION = '§\d+(?:\.\d+)*|README';
 const PARALLEL = 4;
@@ -1026,35 +1023,34 @@ function check(string $root): int
             if (count($shown) > 8) {
                 echo '  and problems on ' . (count($shown) - 8) . " more lines\n";
             }
-            $failing[] = "{$examples[$id]['section']}\t$id";
+            $failing[$id] = $examples[$id]['section'];
         }
     }
-    sort($failing, SORT_NATURAL);
-    $list = implode('', array_map(static fn (string $line): string => "$line\n", $failing));
-    file_put_contents("$build/spec-results", $list);
     $checked = count($results);
     $ignored = count($examples) - $checked;
     echo "Checked $checked examples, ignored $ignored, and " . count($failing) . " fail.\n";
 
-    $listed = is_file("$root/" . BASELINE) ? file_get_contents("$root/" . BASELINE) : '';
-    if ($listed === $list) {
+    $listed = listed($root);
+    $commands = [];
+    foreach ($failing as $id => $section) {
+        if (($listed[$id] ?? null) !== $section) {
+            echo isset($listed[$id]) ? "$id is listed under $listed[$id] and is now under $section.\n" : "$id fails and is not in " . BASELINE . ".\n";
+            $commands[] = 'mkdir -p ' . BASELINE . "/$section && touch " . BASELINE . "/$section/$id";
+        }
+    }
+    foreach ($listed as $id => $section) {
+        if (($failing[$id] ?? null) !== $section) {
+            if (!isset($failing[$id])) {
+                echo "$id passes and is still in " . BASELINE . ".\n";
+            }
+            $commands[] = 'git rm -q ' . BASELINE . "/$section/$id";
+        }
+    }
+    if ($commands === []) {
         return 0;
     }
-    $before = parse_list($listed);
-    $after = parse_list($list);
-    foreach ($after as $id => $section) {
-        if (!isset($before[$id])) {
-            echo "$id fails and is not in " . BASELINE . ".\n";
-        } elseif ($before[$id] !== $section) {
-            echo "$id is listed under $before[$id] and is now under $section.\n";
-        }
-    }
-    foreach ($before as $id => $section) {
-        if (!isset($after[$id])) {
-            echo "$id passes and is still in " . BASELINE . ".\n";
-        }
-    }
-    fwrite(STDERR, 'The examples that fail differ from ' . BASELINE . '. Write the new list with: cp ' . substr("$build/spec-results", strlen("$root/")) . ' ' . BASELINE . "\n");
+    sort($commands, SORT_NATURAL);
+    fwrite(STDERR, 'The examples that fail differ from ' . BASELINE . ". Write the new list with:\n" . implode("\n", $commands) . "\n");
 
     return 1;
 }
@@ -1063,7 +1059,7 @@ function check(string $root): int
  * Checks SELF_TEST. Each of its examples shows one rule that check_compile, check_run or the annotation reader applies,
  * and the `<!-- expect <id>` comment after it lists every problem the check must report for it, one per line, or none.
  * There a location reads `line <n>`, counted from the example's first fence, so a row above can grow, and `…` matches
- * any text, so a message mago words differently after a re-pin keeps the row.
+ * any text, so a message a later mago words differently keeps the row.
  */
 function self_test(string $root): int
 {
@@ -1143,7 +1139,7 @@ function measure(string $root, string $work, array $examples): array
 {
     $mago = getenv('TEST_MAGO_EXECUTABLE');
     if ($mago === false || !is_executable($mago)) {
-        fail('TEST_MAGO_EXECUTABLE names no mago. Run sharp/bin/test --spec, which installs the pinned one.');
+        fail('TEST_MAGO_EXECUTABLE names no mago. Run sharp/bin/test --spec, which provides it.');
     }
     remove($work);
     mkdir($work, 0777, true);
@@ -1258,29 +1254,45 @@ function measure(string $root, string $work, array $examples): array
     return $results;
 }
 
-/** @return array<string, string> the section of each listed example, by id */
-function parse_list(string $text): array
+/**
+ * @return array<string, string> the section of each example sharp/baseline/spec lists, by id, in the working tree or at
+ * commit $at. The list is a folder with one empty file `<section>/<id>` per failing example, so pull requests that list
+ * different examples never edit the same file.
+ */
+function listed(string $root, ?string $at = null): array
 {
-    $entries = [];
-    foreach (array_filter(explode("\n", $text)) as $line) {
-        $fields = explode("\t", $line);
-        if (count($fields) !== 2) {
-            fail(BASELINE . " holds `$line`, and each line is `<section>\t<id>`.");
+    if ($at !== null) {
+        $paths = array_filter(explode("\0", git($root, 'ls-tree', '-r', '-z', '--name-only', $at, '--', BASELINE . '/')));
+    } elseif (is_dir("$root/" . BASELINE)) {
+        $paths = [];
+        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator("$root/" . BASELINE, FilesystemIterator::SKIP_DOTS)) as $file) {
+            if ($file->getSize() !== 0) {
+                fail(substr($file->getPathname(), strlen("$root/")) . ' is not empty. A listed example is an empty file.');
+            }
+            $paths[] = substr($file->getPathname(), strlen("$root/"));
         }
-        $entries[$fields[1]] = $fields[0];
+    } else {
+        $paths = [];
+    }
+    $entries = [];
+    foreach ($paths as $path) {
+        if (!preg_match('~^' . preg_quote(BASELINE, '~') . '/(' . SECTION . ')/([a-z0-9-]+)$~u', $path, $m)) {
+            fail("$path is not a `<section>/<example id>` file, such as " . BASELINE . '/§6.1/map-reads.');
+        }
+        if (isset($entries[$m[2]])) {
+            fail("$m[2] is listed under both {$entries[$m[2]]} and $m[1].");
+        }
+        $entries[$m[2]] = $m[1];
     }
 
     return $entries;
 }
 
-/** Whether $path sits in a GUARDED folder and is not UNGUARDED. */
+/** Whether $path is a GUARDED file or sits in a GUARDED folder. */
 function guarded(string $path): bool
 {
-    if (in_array($path, UNGUARDED, true)) {
-        return false;
-    }
-    foreach (GUARDED as $folder) {
-        if (str_starts_with($path, $folder)) {
+    foreach (GUARDED as $guarded) {
+        if ($path === $guarded || str_ends_with($guarded, '/') && str_starts_with($path, $guarded)) {
             return true;
         }
     }
@@ -1297,7 +1309,7 @@ function refuse_links(string $root): void
 {
     $read = [...DOCUMENTS, BASELINE];
     $watched = [...$read, ...GUARDED];
-    $refused = static fn (string $path): bool => in_array($path, $read, true) || guarded($path)
+    $refused = static fn (string $path): bool => in_array($path, $read, true) || str_starts_with($path, BASELINE . '/') || guarded($path)
         || array_filter($watched, static fn (string $kept): bool => str_starts_with($kept, "$path/")) !== [];
     foreach (array_filter(explode("\0", git($root, 'ls-files', '-s', '-z'))) as $entry) {
         [$mode, $path] = [strtok($entry, ' '), substr($entry, strpos($entry, "\t") + 1)];
@@ -1316,22 +1328,18 @@ function refuse_links(string $root): void
 
 /**
  * Compares the working tree with $base. A pull request that changes a file outside the documents, the list, the
- * GUARDED folders and other Markdown must leave every example's fingerprint and every GUARDED file as $base has them,
- * so it can only remove entries. In any pull request, an example whose fingerprint $base also has, under its id or
- * another, never joins the list, except that a renamed example takes over its old id's entry.
+ * GUARDED files and other Markdown must leave every GUARDED file as $base has them. In any pull request, an example
+ * whose fingerprint $base also has, under its id or another, never joins the list, except that a renamed example takes
+ * over its old id's entry.
  */
 function compare_with_base(string $root, string $base): int
 {
     if (git_status($root, 'cat-file', '-e', "$base^{commit}")[1] !== 0) {
         fail("$base is no commit in this repository. Fetch it first.");
     }
-    if (git_status($root, 'cat-file', '-e', "$base:" . BASELINE)[1] !== 0) {
-        echo BASELINE . " does not exist at $base, so there is nothing to compare.\n";
-        return 0;
-    }
     refuse_links($root);
-    $before = parse_list(git($root, 'show', "$base:" . BASELINE));
-    $after = parse_list(file_get_contents("$root/" . BASELINE));
+    $before = listed($root, $base);
+    $after = listed($root);
     $head_examples = examples($root);
     $base_examples = examples($root, $base);
     $base_fingerprints = array_column($base_examples, 'id', 'fingerprint');
@@ -1340,19 +1348,12 @@ function compare_with_base(string $root, string $base): int
     // Without -z, git quotes a path that holds a non-ASCII byte, and the quoted path matches no GUARDED folder.
     $changed_files = array_filter(explode("\0", git($root, 'diff', '--name-only', '--no-renames', '-z', $base)));
     // Markdown other than the documents never runs, so it changes no result and may change beside a guarded file.
-    $outside = array_values(array_filter($changed_files, static fn (string $file): bool => !in_array($file, [...DOCUMENTS, BASELINE], true)
-        && !guarded($file) && !str_ends_with($file, '.md')));
-    // Beside the documents, a harness or checker change could make an example fail that no edit touched.
-    $beyond_documents = array_values(array_diff($changed_files, [...DOCUMENTS, BASELINE]));
+    $outside = array_values(array_filter($changed_files, static fn (string $file): bool => !in_array($file, DOCUMENTS, true)
+        && !str_starts_with($file, BASELINE . '/') && !guarded($file) && !str_ends_with($file, '.md')));
     $problems = [];
 
     if ($outside !== []) {
-        $also = 'This PR also changes ' . implode(', ', $outside) . ', and examples and the files in ' . implode(', ', GUARDED) . ' change only in a spec PR.';
-        foreach (array_keys($base_examples + $head_examples) as $id) {
-            if (($base_examples[$id]['fingerprint'] ?? null) !== ($head_examples[$id]['fingerprint'] ?? null)) {
-                $problems[] = "The example $id " . (!isset($head_examples[$id]) ? 'is gone' : (!isset($base_examples[$id]) ? 'is new' : 'changed')) . ". $also";
-            }
-        }
+        $also = 'This PR also changes ' . implode(', ', $outside) . ', and ' . implode(', ', GUARDED) . ' change only in a PR of their own.';
         foreach (array_filter($changed_files, 'guarded') as $file) {
             $problems[] = "$file changed. $also";
         }
@@ -1361,10 +1362,7 @@ function compare_with_base(string $root, string $base): int
     $added = array_diff_key($after, $before);
     foreach ($added as $id => $section) {
         $same = $unchanged($id);
-        if ($beyond_documents !== []) {
-            $problems[] = "$section $id joins the list in a PR that also changes " . implode(', ', $beyond_documents)
-                . '. An entry joins only in a PR that changes docs/spec.md, README.md and ' . BASELINE . ' alone.';
-        } elseif ($same !== null && !(isset($before[$same]) && !isset($after[$same]))) {
+        if ($same !== null && !(isset($before[$same]) && !isset($after[$same]))) {
             // A rename keeps the fingerprint: the entry moves to the new id when the old id was listed and has left the list.
             $problems[] = "$section $id joins the list, and its code and setup are the same as $same's at $base.";
         }
@@ -1415,7 +1413,7 @@ function completes(string $root, string $body): int
 
     $within = static fn (string $section, string $claim): bool => $section === $claim || str_starts_with($section, "$claim.");
     $examples = array_filter(examples($root), static fn (array $example): bool => $example['ignore'] === null);
-    $listed = parse_list(file_get_contents("$root/" . BASELINE));
+    $listed = listed($root);
     $failed = false;
     foreach (array_unique($sections) as $claim) {
         $checked = array_filter($examples, static fn (array $example): bool => $within($example['section'], $claim));
