@@ -2,7 +2,7 @@
 
 `docs/spec.md` is the definition of PHP# v1, and `README.md` shows its first example. Every rule comes with code annotated `// compiles`, `// compile error: …`, `// throws …` or the value a line gives. `sharp/bin/spec` compiles every one of those blocks with the pinned `mago`, runs the ones that claim a runtime result on the engine, and compares each annotated line with its annotation.
 
-The examples that fail today are listed in `sharp/baseline/spec`. Its length is the v1 meter: v1 is done when the file is empty. CI keeps the list honest and lets it only shrink, except in a pull request that changes the spec and nothing else.
+The examples that fail today are listed in `sharp/baseline/spec/`, one empty file each. Their count is the v1 meter: v1 is done when the folder is gone. CI keeps the list honest: an example that passes leaves it, an example off it passes, and an example the base already checked never joins it.
 
 ## Precedents
 
@@ -204,20 +204,25 @@ A block's own variables, such as `lines` or `p`, are its setup lines, next to th
 
 ## The list
 
-`sharp/baseline/spec` follows `sharp/baseline/darwin` and `sharp/baseline/linux`: one tab-separated line per example that fails, in natural order, with no header.
+`sharp/baseline/spec/` holds one empty file per example that fails, at `<section>/<id>`. towncrier keeps changelog entries the same way, one news fragment per file, so pull requests that list or fix different examples never edit the same file and never conflict.
 
 ```text
-README	readme-cart
-§6	nullable-members
-§12	iterables
+sharp/baseline/spec/
+├── README/readme-cart
+├── §6/nullable-members
+└── §12/iterables
 ```
 
 - **The section** is the heading the block sits under, as in `§6.1`, or `README`.
 - **The id** is the marker's. A line number would change on every spec edit.
 
+`sharp/bin/spec` fails on a file that is not empty, on a path that is not `<section>/<id>`, and on an id listed under two sections.
+
 **The list records which examples fail, not how,** as test262's expected-failure lists do in V8 and SpiderMonkey. A listed example may change its errors, so a checker that turns a parse error into a named "not supported yet" refusal passes, and so does a Mago re-pin that does the same. The list doesn't notice a listed example getting worse. mago-sharp's and php-sharp's own tests cover the rules those examples use.
 
-`sharp/bin/spec` fails when the list differs from what the examples do, and prints the `cp` command that writes the new list, as `sharp/bin/test --upstream` does for its baseline. An example that fails prints every line that differs from its annotation, with the checker's message or the value it gave.
+`sharp/bin/spec` fails when the list differs from what the examples do, and prints the commands that make it match: `git rm -q sharp/baseline/spec/<section>/<id>` for an example that passes, and `mkdir -p` and `touch` for one that fails. An example that fails prints every line that differs from its annotation, with the checker's message or the value it gave.
+
+**An open pull request that edited the old one-file list** converts once, when it merges master. git reports a modify/delete conflict on the file `sharp/baseline/spec`. Resolve it with `git rm sharp/baseline/spec`, then run `sharp/bin/test --spec` and the commands it prints: they delete the files of the examples the pull request fixed and add the files of examples it lists.
 
 ## CI
 
@@ -245,9 +250,9 @@ No file of the pull request runs, which is what makes `pull_request_target` safe
           php "$RUNNER_TEMP/spec" --base "$BASE"
 ```
 
-`SPEC_GUARD` runs `--base`. It reads `sharp/baseline/spec`, `docs/spec.md` and `README.md` at the base with `git show`, and from the merge commit's checkout. It lists the changed files with `git diff --name-only --no-renames -z`. With `--no-renames`, as `CHANGES` uses, a renamed file shows its old path too, so a guarded file can't move unseen. With `-z`, git doesn't quote a path that holds a non-ASCII byte, so a path such as `sharp/baseline/spec/§6.1/map-reads` still matches. The base must be a commit in the repository, and any git call that fails fails the check.
+`SPEC_GUARD` runs `--base`. It reads `docs/spec.md` and `README.md` at the base with `git show` and lists `sharp/baseline/spec/` there with `git ls-tree`, and it reads all three from the merge commit's checkout. It lists the changed files with `git diff --name-only --no-renames -z`. With `--no-renames`, as `CHANGES` uses, a renamed file shows its old path too, so a guarded file can't move unseen. With `-z`, git doesn't quote a path that holds a non-ASCII byte, so a path such as `sharp/baseline/spec/§6.1/map-reads` still matches. The base must be a commit in the repository, and any git call that fails fails the check.
 
-**The guard reads no symbolic link.** Before it reads anything, each job fails when the pull request's tree holds a symbolic link at `docs/spec.md`, `README.md`, `sharp/baseline/spec` or a guarded file, anywhere in `sharp/baseline/spec/`, or at a folder above any of them. It checks both git's mode `120000` in `git ls-files -s` and `is_link()` on the checkout. A link could point to a file outside the checkout, and the job's log is public, so the message names the link's path and never its target. Only a commit that has no `sharp/baseline/spec` reads as "nothing to compare". The checker finds the repository from its own folder, and from the working directory when it runs outside a repository, as the copy in `$RUNNER_TEMP` does.
+**The guard reads no symbolic link.** Before it reads anything, each job fails when the pull request's tree holds a symbolic link at `docs/spec.md`, `README.md`, `sharp/baseline/spec` or a guarded file, anywhere in `sharp/baseline/spec/`, or at a folder above any of them. It checks both git's mode `120000` in `git ls-files -s` and `is_link()` on the checkout. A link could point to a file outside the checkout, and the job's log is public, so the message names the link's path and never its target. A commit with no `sharp/baseline/spec/` lists no example. The checker finds the repository from its own folder, and from the working directory when it runs outside a repository, as the copy in `$RUNNER_TEMP` does.
 
 `SPEC_GUARD` and `COMPLETES` join the `master merge gate` ruleset after this lands. Until then a pull request's guard runs only from a base that has this workflow, so this pull request, whose base has none, proves the guard locally.
 
@@ -312,7 +317,7 @@ sharp/
 ├── bin/
 │   ├── spec              # (guarded) new: PHP, like census. Checks every example, compares with a base (--base), reads Completes: (--completes), or tests its own rules (--self-test)
 │   └── test              # --spec runs sharp/bin/spec --self-test, then sharp/bin/spec, after the suite
-├── baseline/spec         # new: the examples that fail today, the v1 meter
+├── baseline/spec/        # new: one empty file per example that fails today, the v1 meter
 ├── spec-self-test.md     # one example for each rule sharp/bin/spec applies, with the problems it must report
 ├── docker/
 │   ├── Dockerfile        # installs elan, for the law examples
