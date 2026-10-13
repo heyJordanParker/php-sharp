@@ -5,7 +5,7 @@ import InvalidArgumentException;
 class Product
 {
     public string sku { get; set; } = "";
-    public string name { get => field; set => field = trim(value); } = "";
+    public string name { get => field; set => field = value.trim(); } = "";
     public int price
     {
         get;
@@ -48,7 +48,7 @@ class Address
 {
     protected string region { get => strtoupper(field); }
 
-    public Address(public string city { get; set => field = ucfirst(trim(value)); }, string region)
+    public Address(public string city { get; set => field = ucfirst(value.trim()); }, string region)
     {
         this.region = region;
     }
