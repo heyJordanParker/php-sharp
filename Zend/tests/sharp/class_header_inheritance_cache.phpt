@@ -21,6 +21,12 @@ php_cli_server_start(<<<PHP
     \$interfaces = class_implements(\$card);
     ksort(\$interfaces);
     echo get_parent_class(\$card), ' ', implode(',', \$interfaces), ' ', \$card->copy()->link(), "\n";
+    require $dir . '/harness/Model.inc';
+    require $dir . '/Traits.sharp';
+    foreach ([new Demo\Article(), new Demo\Guide()] as \$object) {
+        echo get_parent_class(\$object), ' ', implode(',', class_uses(\$object)), ' ',
+            implode(',', (new ReflectionClass(\$object))->getTraitNames()), ' ', \$object->link(), "\n";
+    }
     PHP, null, ['-d', 'opcache.enable=1', '-d', 'opcache.enable_cli=1']);
 
 for ($i = 0; $i < 3; $i++) {
@@ -30,7 +36,13 @@ for ($i = 0; $i < 3; $i++) {
 --EXPECT--
 Lib\Entity Demo\Linkable,Lib\Named 7
 Lib\Shelf Demo\Linkable,Lib\Named /card
+Lib\Model Lib\HasSlug Lib\HasSlug /articles/intro
+Demo\Article   /articles/setup
 Lib\Entity Demo\Linkable,Lib\Named 7
 Lib\Shelf Demo\Linkable,Lib\Named /card
+Lib\Model Lib\HasSlug Lib\HasSlug /articles/intro
+Demo\Article   /articles/setup
 Lib\Entity Demo\Linkable,Lib\Named 7
 Lib\Shelf Demo\Linkable,Lib\Named /card
+Lib\Model Lib\HasSlug Lib\HasSlug /articles/intro
+Demo\Article   /articles/setup

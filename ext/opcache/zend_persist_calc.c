@@ -521,6 +521,10 @@ void zend_persist_class_entry_calc(zend_class_entry *ce)
 		}
 
 		if (ce->ce_flags & ZEND_ACC_CACHED) {
+			/* A PHP# class header's trait names are the linked class's own, even when opcache caches it. */
+			if ((ce->ce_flags & ZEND_ACC_PARENT_IN_INTERFACES) && ce->num_traits) {
+				ADD_SIZE(sizeof(zend_class_name) * ce->num_traits);
+			}
 			return;
 		}
 

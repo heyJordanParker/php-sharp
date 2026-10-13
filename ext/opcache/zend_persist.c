@@ -1043,6 +1043,10 @@ zend_class_entry *zend_persist_class_entry(zend_class_entry *orig_ce)
 		}
 
 		if (ce->ce_flags & ZEND_ACC_CACHED) {
+			/* A PHP# class header's trait names are the linked class's own, even when opcache caches it. */
+			if ((ce->ce_flags & ZEND_ACC_PARENT_IN_INTERFACES) && ce->num_traits) {
+				ce->trait_names = zend_shared_memdup_free(ce->trait_names, sizeof(zend_class_name) * ce->num_traits);
+			}
 			return ce;
 		}
 

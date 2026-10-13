@@ -3498,73 +3498,104 @@ static zend_class_entry *zend_lazy_class_load(const zend_class_entry *pce)
 		} while (0)
 #endif
 
-/* A PHP# class header names a trait, or a name that does not exist. */
-static ZEND_COLD void zend_sharp_throw_not_inheritable(const zend_class_entry *ce, const zend_string *name)
+/* A PHP# class header lowers into the interface list, so it names the class's parent, traits and interfaces in
+ * any order. Sorts the header's classes in `entries` into the order PHP links them, the order the inheritance
+ * cache then keys on: the traits, then the interfaces, then the parent. Keeps them in header order in the next
+ * `ce->num_interfaces` entries, for zend_sharp_sort_header_names. A deprecated header trait is reported as `use`
+ * reports it. Throws for a second class. */
+static bool zend_sharp_sort_header(const zend_class_entry *ce, zend_class_entry **entries, uint32_t *num_traits, uint32_t *num_interfaces)
 {
-	zend_throw_error(NULL, "Class %s cannot inherit from %s, which is neither a class nor an interface",
-		ZSTR_VAL(ce->name), ZSTR_VAL(name));
-}
+	zend_class_entry **header = entries + ce->num_interfaces;
+	zend_class_entry *parent = NULL;
+	uint32_t i, traits = 0, trait = 0, interface;
 
-/* A PHP# class header lowers into the interface list, so the class's parent, if any, is the one entry of
- * `interfaces` that is not an interface. Moves it to the end, the order the inheritance cache then keys on,
- * and sets `parent_index` to its place in the header, or to the interface count when the header names no
- * class. Throws for a second class, or for a trait. */
-static bool zend_sharp_find_parent(const zend_class_entry *ce, zend_class_entry **interfaces, uint32_t *parent_index)
-{
-	*parent_index = ce->num_interfaces;
-	for (uint32_t i = 0; i < ce->num_interfaces; i++) {
-		const zend_class_entry *iface = interfaces[i];
-		if (iface->ce_flags & ZEND_ACC_INTERFACE) {
+	ZEND_ASSERT(!ce->num_traits);
+	memcpy(header, entries, sizeof(zend_class_entry *) * ce->num_interfaces);
+
+	for (i = 0; i < ce->num_interfaces; i++) {
+		zend_class_entry *entry = header[i];
+		if (entry->ce_flags & ZEND_ACC_INTERFACE) {
 			continue;
 		}
-		if (iface->ce_flags & ZEND_ACC_TRAIT) {
-			zend_sharp_throw_not_inheritable(ce, iface->name);
-			return false;
+		if (entry->ce_flags & ZEND_ACC_TRAIT) {
+			if (UNEXPECTED(entry->ce_flags & ZEND_ACC_DEPRECATED)) {
+				zend_use_of_deprecated_trait(entry, ce->name);
+				if (UNEXPECTED(EG(exception))) {
+					return false;
+				}
+			}
+			traits++;
+			continue;
 		}
-		if (*parent_index != ce->num_interfaces) {
+		if (parent) {
 			zend_throw_error(NULL, "Class %s cannot extend both %s and %s",
-				ZSTR_VAL(ce->name), ZSTR_VAL(interfaces[*parent_index]->name), ZSTR_VAL(iface->name));
+				ZSTR_VAL(ce->name), ZSTR_VAL(parent->name), ZSTR_VAL(entry->name));
 			return false;
 		}
-		*parent_index = i;
+		parent = entry;
 	}
 
-	if (*parent_index != ce->num_interfaces) {
-		zend_class_entry *parent = interfaces[*parent_index];
-		memmove(interfaces + *parent_index, interfaces + *parent_index + 1,
-			sizeof(zend_class_entry *) * (ce->num_interfaces - *parent_index - 1));
-		interfaces[ce->num_interfaces - 1] = parent;
+	interface = traits;
+	for (i = 0; i < ce->num_interfaces; i++) {
+		zend_class_entry *entry = header[i];
+		if (entry->ce_flags & ZEND_ACC_INTERFACE) {
+			entries[interface++] = entry;
+		} else if (entry->ce_flags & ZEND_ACC_TRAIT) {
+			entries[trait++] = entry;
+		}
+	}
+	*num_traits = traits;
+	*num_interfaces = interface - traits;
+	if (parent) {
+		entries[ce->num_interfaces - 1] = parent;
 	}
 
 	return true;
 }
 
-/* Turns the parent a PHP# header names among the interfaces into the class's parent name. A cached class
- * shares its names with opcache, so it takes a reference to the parent name and a copy of the others. */
-static void zend_sharp_move_parent_name(zend_class_entry *ce, uint32_t parent_index)
+/* Sorts a PHP# header's names the way zend_sharp_sort_header sorted its classes, which `header` holds in header
+ * order: into the trait names, the interface names and the parent name. A cached class shares its names with
+ * opcache, so it takes references to the names it keeps and a copy of the interface names. The trait names
+ * outlive linking, so they are the class's own even when opcache caches it, as the interfaces it links are:
+ * opcache persists them and destroy_zend_class frees them. */
+static void zend_sharp_sort_header_names(zend_class_entry *ce, zend_class_entry *const *header, uint32_t num_traits, uint32_t num_interfaces)
 {
 	zend_class_name *names = ce->interface_names;
-	uint32_t num_interfaces = ce->num_interfaces - 1;
+	bool cached = ce->ce_flags & ZEND_ACC_CACHED;
+	zend_class_name *trait_names = NULL;
+	zend_class_name *interface_names = NULL;
+	uint32_t traits = 0, interfaces = 0;
 
-	if (ce->ce_flags & ZEND_ACC_CACHED) {
-		ce->parent_name = zend_string_copy(names[parent_index].name);
-		ce->interface_names = NULL;
-		if (num_interfaces) {
-			ce->interface_names = zend_arena_alloc(&CG(arena), sizeof(zend_class_name) * num_interfaces);
-			memcpy(ce->interface_names, names, sizeof(zend_class_name) * parent_index);
-			memcpy(ce->interface_names + parent_index, names + parent_index + 1,
-				sizeof(zend_class_name) * (num_interfaces - parent_index));
-		}
-	} else {
-		ce->parent_name = names[parent_index].name;
-		zend_string_release_ex(names[parent_index].lc_name, 0);
-		memmove(names + parent_index, names + parent_index + 1, sizeof(zend_class_name) * (num_interfaces - parent_index));
-		if (!num_interfaces) {
-			efree(names);
-			ce->interface_names = NULL;
+	if (num_traits) {
+		trait_names = emalloc(sizeof(zend_class_name) * num_traits);
+	}
+	if (num_interfaces) {
+		interface_names = cached ? zend_arena_alloc(&CG(arena), sizeof(zend_class_name) * num_interfaces) : names;
+	}
+
+	for (uint32_t i = 0; i < ce->num_interfaces; i++) {
+		if (header[i]->ce_flags & ZEND_ACC_INTERFACE) {
+			interface_names[interfaces++] = names[i];
+		} else if (header[i]->ce_flags & ZEND_ACC_TRAIT) {
+			trait_names[traits++] = names[i];
+			if (cached) {
+				zend_string_addref(names[i].name);
+				zend_string_addref(names[i].lc_name);
+			}
+		} else if (cached) {
+			ce->parent_name = zend_string_copy(names[i].name);
+		} else {
+			ce->parent_name = names[i].name;
+			zend_string_release_ex(names[i].lc_name, 0);
 		}
 	}
 
+	if (!cached && !num_interfaces) {
+		efree(names);
+	}
+	ce->trait_names = trait_names;
+	ce->num_traits = num_traits;
+	ce->interface_names = interface_names;
 	ce->num_interfaces = num_interfaces;
 }
 
@@ -3597,7 +3628,9 @@ ZEND_API zend_class_entry *zend_do_link_class(zend_class_entry *ce, zend_string 
 	}
 
 	if (ce->num_traits || ce->num_interfaces) {
-		traits_and_interfaces = do_alloca(sizeof(zend_class_entry*) * (ce->num_traits + ce->num_interfaces), use_heap);
+		/* A PHP# header also keeps its classes in header order, after the sorted ones. */
+		uint32_t num_header = (ce->ce_flags & ZEND_ACC_PARENT_IN_INTERFACES) ? ce->num_interfaces : 0;
+		traits_and_interfaces = do_alloca(sizeof(zend_class_entry*) * (ce->num_traits + ce->num_interfaces + num_header), use_heap);
 
 		for (i = 0; i < ce->num_traits; i++) {
 			zend_class_entry *trait = zend_fetch_class_by_name(ce->trait_names[i].name,
@@ -3643,7 +3676,8 @@ ZEND_API zend_class_entry *zend_do_link_class(zend_class_entry *ce, zend_string 
 				ZEND_FETCH_CLASS_ALLOW_NEARLY_LINKED | ZEND_FETCH_CLASS_EXCEPTION);
 			if (!iface) {
 				if ((ce->ce_flags & ZEND_ACC_PARENT_IN_INTERFACES) && !EG(exception)) {
-					zend_sharp_throw_not_inheritable(ce, ce->interface_names[i].name);
+					zend_throw_error(NULL, "Class %s cannot inherit from %s, which is neither a class, an interface nor a trait",
+						ZSTR_VAL(ce->name), ZSTR_VAL(ce->interface_names[i].name));
 				}
 				check_unrecoverable_load_failure(ce);
 				free_alloca(traits_and_interfaces, use_heap);
@@ -3656,15 +3690,15 @@ ZEND_API zend_class_entry *zend_do_link_class(zend_class_entry *ce, zend_string 
 		}
 	}
 
-	uint32_t parent_index = ce->num_interfaces;
+	uint32_t header_traits = 0, header_interfaces = ce->num_interfaces;
 	if (ce->ce_flags & ZEND_ACC_PARENT_IN_INTERFACES) {
-		if (!zend_sharp_find_parent(ce, traits_and_interfaces + ce->num_traits, &parent_index)) {
+		if (!zend_sharp_sort_header(ce, traits_and_interfaces, &header_traits, &header_interfaces)) {
 			check_unrecoverable_load_failure(ce);
 			free_alloca(traits_and_interfaces, use_heap);
 			return NULL;
 		}
-		if (parent_index != ce->num_interfaces) {
-			parent = traits_and_interfaces[ce->num_traits + ce->num_interfaces - 1];
+		if (header_traits + header_interfaces != ce->num_interfaces) {
+			parent = traits_and_interfaces[ce->num_interfaces - 1];
 		}
 	}
 
@@ -3715,8 +3749,8 @@ ZEND_API zend_class_entry *zend_do_link_class(zend_class_entry *ce, zend_string 
 			Z_CE_P(zv) = ce;
 		}
 
-		if (parent_index != ce->num_interfaces) {
-			zend_sharp_move_parent_name(ce, parent_index);
+		if (header_interfaces != ce->num_interfaces) {
+			zend_sharp_sort_header_names(ce, traits_and_interfaces + ce->num_interfaces, header_traits, header_interfaces);
 		}
 
 		if (CG(unlinked_uses)) {

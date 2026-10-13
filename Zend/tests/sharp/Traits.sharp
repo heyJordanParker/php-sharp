@@ -1,0 +1,35 @@
+namespace Demo;
+
+import Lib.HasSlug;
+import Lib.Model;
+
+public interface Linked
+{
+    string link();
+}
+
+public class Article : Model, HasSlug, Linked
+{
+    public string link()
+    {
+        return this.path();
+    }
+
+    public string name()
+    {
+        return this.slug;
+    }
+}
+
+public class Guide : Article
+{
+    public Guide()
+    {
+        this.slug = "setup";
+    }
+
+    public string topic()
+    {
+        return this.slug;
+    }
+}

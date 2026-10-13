@@ -364,6 +364,9 @@ ZEND_API void destroy_zend_class(zval *zv)
 				if (ce->num_traits > 0) {
 					_destroy_zend_class_traits_info(ce);
 				}
+			} else if ((ce->ce_flags & ZEND_ACC_PARENT_IN_INTERFACES) && ce->num_traits > 0) {
+				/* A PHP# class header's trait names are the linked class's own, even when opcache caches it. */
+				_destroy_zend_class_traits_info(ce);
 			}
 
 			if (ce->default_properties_table) {

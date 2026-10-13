@@ -2,6 +2,6 @@ namespace Demo;
 
 import Lib.Mixin;
 
-public class Blend : Mixin
+public interface Blend : Mixin
 {
 }
