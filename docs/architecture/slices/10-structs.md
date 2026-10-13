@@ -53,6 +53,12 @@ team-lead's Queue 5 to Queue 11:
 20. **R3c's walk signature is fixed, and `parse` lowers to it:** generated PHP calls `\Sharp\Internal\accepts(string $type, mixed &$value, string $path, array &$problems): bool` once per parameter, with the type text for the calling frame and the input key as the path. The walk writes the problem text, so `InvalidFields.expected` has no caller and is deleted. The walk takes only a struct object where a struct is expected, so `parse` reads each nested struct through its own `parse` with the extended path first, then checks the result through the walk.
 21. **Queue 10 is accepted, with three rulings.** A problem names a class by its full dotted name, as `expected App.S.Address`, as every PHP# engine message does. A union of structs is tried in the order the source writes it, as serde's untagged enums try their variants. The bridge keeps one writer of decision 72's type text: when #152 merges, its `type_text` replaces this Slice's in the same commit.
 
+team-lead's Queue 17 to Queue 22, with Jordan's rulings:
+
+22. **A `Map` and a `Set` are engine objects, and a `List` stays a PHP array** (Jordan: what plain PHP receives is not part of PHP#, "just make sure OUR type safety & functionality doesn't suffer"). Lookup is `hash()`, then `==` within the bucket, for every key kind. A `Map` keeps the key objects it stores, and `keys()`, the loop and `has` give back the stored key itself. The key text goes: `sharp_struct_key`, `Sharp\Map::key`, `Sharp\Map::readKey` and the bridge's key lowering for them. The table starts from php-ds v1.8.0 (MIT, its notice kept). Section 10 and the key path ship as one php-sharp PR, once mago-sharp moves into php-sharp under `sharp/mago`.
+23. **Copy at the write when the object is shared** (option B), as Swift's `isKnownUniquelyReferenced` and PHP's `SEPARATE_ARRAY` do. Section 12's value rule and section 13's local copy stay as written. The separation lives in the opcodes, so plain PHP's `$map[$k] = $v` separates too.
+24. **Queue 17: any type declares `operator ==` with `hash()`, structs included.** The declared pair replaces a struct's automatic `==`, and a `Set` and a `Map` key use it. **Queue 18: a PHP# class gets `parse` and `tryParse` as a struct does.** Both landed in mago-sharp `39192aa56`, with five decisions team-lead approved as made: an inherited declared `parse` wins, a static class gets no `parse`, a promoted property is read once through its parameter, an `Object` or `Iterable` field is refused at the call, and a struct that declares its own `parse` gets no generated one.
+
 ## Decisions
 
 1. **A struct is its own CST node, `Struct`,** as `Event` and `Enum` are: attributes, modifiers, the contextual keyword `struct`, its name, an optional `Inheritance` of interfaces, and class members. `struct` is a keyword only where `struct`, a name and `:` or `{` follow, so a local named `struct` stays a name, as `is_at_event` does for `event`.
@@ -77,12 +83,18 @@ team-lead's Queue 5 to Queue 11:
    - After the walk accepts a value, each `Set` in it holds its elements under their keys, through `\Sharp\Set::from`.
    - The type text is decision 72's, written by `Types::type_text` in the bridge: a class by its full dotted name, union members sorted, `T?` and `(A|B)?`. #152 has its own `type_text` for every type. This one covers the types a struct's `parse` reads, and the two become one where #152 merges.
    - Rejected: a library reader that interprets a type descriptor at runtime, as Valinor reads types by reflection. It needs each parameter's PHP# type at runtime, which only R3c gives, and a descriptor each struct publishes for nested structs.
-6. **Any struct keys a `Map` by its whole value, stored as a key text the engine writes** (ruling 9, replacing the backed key). `counts[point]` stores `\Sharp\Map::key($point)`, as `stored_key` stores a backed enum's `->value`, and a loop reads `\Sharp\Map::readKey($key)`, as `key_read_back` reads `Status::from($key)`. A `Set` of structs holds each struct under the same text, through `\Sharp\Set::from`.
+6. **Replaced by decisions 8 and 9 (ruling 22): a `Map` and a `Set` hold their keys as values, so no key text exists.** What follows records the design ruling 22 replaced. **Any struct keys a `Map` by its whole value, stored as a key text the engine writes** (ruling 9, replacing the backed key). `counts[point]` stores `\Sharp\Map::key($point)`, as `stored_key` stores a backed enum's `->value`, and a loop reads `\Sharp\Map::readKey($key)`, as `key_read_back` reads `Status::from($key)`. A `Set` of structs holds each struct under the same text, through `\Sharp\Set::from`.
    - The codex's `get_backing_key_type` gives a struct key the type `string`, its text, so every rule that reads a key type (comparators, template inference, array access) takes a struct with no further arm.
    - Two structs are one key exactly when their `==` calls them equal, because the text holds every property with its own value rules: a nested struct by its text, a `Map` and a `Set` in key order, and `-0.0` as `0.0`.
    - The bridge gives each struct `\Sharp\Struct`, so the engine writes a text only for an object PHP# created as a struct.
    - Rejected: a generated `hash()` per struct, as Swift synthesizes `Hashable`. A PHP array keys by `int` or `string` only, so a hash still needs a text, and a hash collision needs a second lookup by `==`. The text is the hash and the equality in one.
 7. **A value pattern compares with section 19's `==`,** so `match (point) { origin => … }` matches an equal struct. `php_shape` writes `==` where it writes `===` today (`crates/syntax/src/utils/pattern.rs`), and the bridge lowers that `==` from the checker's types, which give `===` for every scalar and enum.
+8. **A `Map` and a `Set` are engine objects, `Sharp\Map` and `Sharp\Set`, each holding a hash table copied from php-ds v1.8.0** (ruling 22). A key is found by its hash, then by PHP#'s `==` within the bucket, so any type with `==` and `hash()` keys a `Map` and joins a `Set`. "Map and Set as engine objects" below gives the mechanism.
+   - Rejected: interning equal keys into one shared object. A `Map`'s `keys()` would give back an object some other `Map` stored, a class key has identity, and the store grows until the request ends (team-lead's Queue 19).
+   - Rejected: buckets of `[key, value]` pairs inside a PHP array, under a hash text. A `string` key equal to a pair's hash text and the pair's key share one slot, and generic code can't tell a pair from a value.
+9. **A shared `Map` or `Set` is copied at the write, into the holder the write goes through** (ruling 23), as PHP separates a shared array and as Swift's `Array` and `Dictionary` copy when `isKnownUniquelyReferenced` is false. Assigning or passing one adds a reference and copies nothing.
+   - Rejected: shared objects, as Java's, C#'s and php-ds's maps are. Section 12's `let b = a; b.add(line)` would change `a`, and section 13's local copy would change its owner.
+   - Rejected: a copy the bridge writes at every assignment and argument. A value typed `Any`, and one from plain PHP, would still share.
 
 ## Standard-library choices the spec leaves open
 
@@ -420,6 +432,114 @@ Each line ran on the slot 7 engine through `lowered.php`.
 - **Read a `Map` keyed by structs:** each key is its key text, a string. `Sharp\Map::readKey($key)` gives the struct back, and `Sharp\Map::key($struct)` gives the text for a lookup. `Sharp\Map::key(new stdClass())` throws `TypeError: … must be of type Sharp\Struct, stdClass given`.
 - **Implement `Sharp\Struct`: no.** A plain PHP class that names it stops with "Non-struct class Fake cannot implement interface Sharp\Struct", so the encoder never meets a class it could recurse through forever.
 
+# Map and Set as engine objects
+
+Rulings 22 and 23, with decisions 8 and 9. A `List` stays a PHP array, and everything below is about `Map` and `Set` only.
+
+## The answer first
+
+**A `Map` is a `Sharp\Map` object, and a `Set` is a `Sharp\Set` object.** Each holds a hash table copied from php-ds v1.8.0's `src/ds/ds_htable.c`: buckets in insertion order, collision chains through a separate lookup array, and a rehash that doubles the capacity. A lookup hashes the key, walks that hash's chain, and compares each candidate with PHP#'s `==`. Two unequal keys with one hash share a chain and stay two keys.
+
+**Today a `Map` is a PHP array, and both rulings change it.**
+
+- A struct key is stored as its key text, `\Sharp\Map::key($point)`, and read back through `\Sharp\Map::readKey`. After the change it is stored as the struct itself, and the key text code is deleted.
+- A backed enum key is stored as its `->value`, and the bridge reads it back through `Status::from`. After the change it is stored as the case.
+- A `Map<string, …>` key `"5"` is stored by PHP as the int `5`, and the bridge casts it back. After the change it stays the string `"5"`.
+
+**Assigning or passing a `Map` adds a reference. The write copies** (decision 9). Before an index write, an `unset`, or a PHP# method that changes the collection, the engine checks the object's reference count. When another holder shares it, the engine copies the table into a new object and stores that in the holder the write goes through. Plain PHP's `$map[$k] = $v` runs through the same opcodes, so it separates too.
+
+## The class shape
+
+Both classes are `final` and internal, and implement `ArrayAccess`, `IteratorAggregate`, `Countable` and `JsonSerializable`, as php-ds's `Map` and `Set` do through `php_map_ce.c`, `php_set_ce.c` and `php_collection_ce.c`. Plain PHP reaches a `Map` through those interfaces only:
+
+```php
+$plans["pro"];            // offsetGet: the value, or null when the key is missing (section 12's TValue?)
+$plans["pro"] = $plan;    // offsetSet: inserts or replaces, after separating a shared Map
+unset($plans["pro"]);     // offsetUnset: removes, after separating
+isset($plans["pro"]);     // offsetExists: true when the key is present and its value is not null, as for an array
+$tags[] = "vip";          // a Set's offsetSet with no index adds the element
+unset($tags["vip"]);      // a Set's offsetUnset removes the element
+foreach ($plans as $key => $value) { }   // the stored key itself, an object included, in insertion order
+count($plans);
+json_encode($plans);      // a Map is a JSON object, {} when empty; a Set is a JSON array
+```
+
+`toArray()` gives a PHP array when every key is an `int` or a `string`, and throws `ValueError` otherwise (ruling 22). A `Map`'s `keys()` and `values()`, and a `Set`'s `toList()`, give `List`s, so a PHP array.
+
+PHP#'s changing methods, `Map.remove`, `Set.add`, `Set.remove` and `Set.clear`, are not methods of the classes. They run on the collection receiver the engine already builds for every PHP# method call, `Sharp\Collection`, which knows the receiver's holder. The holder is a local's slot, a plain property's slot, a hooked property through its `set`, or a static property. So a change reaches the holder through the path section 12's "changes through the property's `set`" already runs, and plain PHP has no way to change a `Map` except the opcodes that separate.
+
+**`Sharp\Map::of(array $keysAndValues)`** builds a `Map` from a flat list, key then value, for a literal. **`Sharp\Map::from(array $entries)`** and **`Sharp\Set::from(array $values)`** turn a PHP array into the object where a value from plain PHP enters PHP#. `Set::from` already exists and returns an array today. It will return a `Set`.
+
+## Equality and hashing for each key kind
+
+Two keys are one key exactly when PHP#'s `==` (section 19) calls them equal. Each kind hashes so that equal keys hash alike:
+
+- **`int`:** its value.
+- **`float`:** `-0.0` and `0.0` are one key. A float with no fraction hashes as the `int` it equals, because section 19's `==` calls `5 == 5.0` true, so `5` and `5.0` are one key in a `Map<int|float, …>`. `NAN` is never equal to itself, so each `NAN` key stays a separate entry, as in Swift and Java's `HashMap` with `Double.NaN` keys.
+- **`string`:** its bytes. `"5"` and `5` are different keys, because section 19 never calls a string equal to an int.
+- **`bool` and `null`:** a fixed hash each.
+- **An enum case:** the case. An enum case is a single object, so `==` is identity.
+- **A struct with no declared pair:** a hash built from its fields' hashes in declaration order, and equality through its generated `op_Equality`, which compares each field with its own `==`.
+- **A struct or class that declares `operator ==` with `hash()`:** its `hash()`, and its `op_Equality`. A `hash()` result folds to 32 bits as php-ds folds a `Hashable`'s.
+- **A `List` held in a struct key:** its elements' hashes in order. **A `Map` or a `Set` held in one:** its entries' hashes combined without regard to order, so two equal `Map`s in different orders hash alike.
+
+php-ds compares with `zend_is_identical` and calls a `Hashable`'s `equals()`. The copy calls PHP#'s `==` instead. A `hash()` or `==` that throws leaves the table unchanged and the exception propagates. A class key whose fields change after it is stored is lost to lookups, as in Java and Swift. A struct never changes, so only a class with a declared pair can do this.
+
+## Copy at the write
+
+One engine function, `sharp_separate(zval *holder)`, runs before each write. When the holder holds a `Sharp\Map` or `Sharp\Set` whose reference count is above 1, it clones the table into a new object and puts that object in the holder. `ZVAL_DEREF` makes it work through a PHP reference, as `SEPARATE_ARRAY` does. It runs in:
+
+- `ZEND_ASSIGN_DIM`, `ZEND_ASSIGN_DIM_OP`, `ZEND_FETCH_DIM_W`, `ZEND_FETCH_DIM_RW` and `ZEND_UNSET_DIM`, in the branch for an object container, before `zend_assign_to_object_dim`, `zend_binary_assign_op_obj_dim`, `zend_fetch_dimension_address_W` and `zend_fetch_dimension_address_RW` and `unset_dimension` reach the handlers.
+- The JIT's `zend_jit_assign_dim_helper` and `zend_jit_assign_dim_op_helper`, which take the holder's pointer. The JIT sends `ZEND_UNSET_DIM` on an object to the VM handler. That is unconfirmed until the tests run in both JIT modes.
+- `sharp_collection_change`, which today runs `SEPARATE_ARRAY` for a changing PHP# method, and which then also writes back through a hooked property's `set`, unchanged.
+
+A loop holds a reference to the object while it reads it, so a write inside the loop separates the holder, and the loop reads the entries it started with, as a loop over a PHP array does.
+
+## What the bridge lowers differently
+
+- A `Map` literal lowers to `\Sharp\Map::of([$k1, $v1, $k2, $v2])`. A spread puts the other `Map`'s entries in place, so a later key replaces an earlier one, and `array_replace` goes. An empty `[:]` lowers to `new \Sharp\Map()`.
+- A `Set` literal lowers to `\Sharp\Set::from([...])`, as today.
+- An index read, `??`, `is` and `as` run through `offsetGet` and `offsetExists`, with PHP's own `$map[$k] ?? $x`.
+- An index write runs through `offsetSet`, with PHP's own `$map[$k] = $v`.
+- A loop lowers to `foreach ($map as $k => $v)` and gives each key as stored. `stored_key` and `key_read_back` go, for a struct, a backed enum and an all-digit string alike.
+- `has`, `get`, `keys()`, `values()`, `count()`, `remove`, `filter` and the other methods run on `Sharp\Collection` as today. A method that returns a `Map`, such as `filter` on a `Map`, `groupBy` and `associateBy`, returns a `Sharp\Map`, so `groupBy`'s template bound `G of array-key` widens to any key with `==` and `hash()`.
+- A parameter, a typed property and a typed assignment that takes a value from plain PHP accept a `Sharp\Map`, or a PHP array they turn into one through `Sharp\Map::from`, as `Lowering::set_parameters` does for a `Set` today. The PHP type is `\Sharp\Map|array`.
+- `==` on two `Map`s calls the engine's own comparison, without regard to order. The `\array_all` lowering stays for a `List`.
+
+## What the engine deletes
+
+- `sharp_struct_key` and the whole key text encoder and reader, `sharp_key_write` to `sharp_key_read`.
+- `Sharp\Map::key`, `Sharp\Map::readKey`, `sharp_set_key`, and the struct arm of `sharp_collection_key_slot`.
+- `struct_keys.phpt`'s round-trip and refusal rows, which test the text. Its key rows stay, rewritten against the objects.
+- `zend_undefined_index`'s PHP# path for a `Map`. A missing `Map` key reads as null now, and that path stays for a `List` index only.
+
+## Done when
+
+Every section 10 example, and every `Map` and `Set` example of section 12, compiles, refuses or runs as annotated, in all four opcache modes. The rows include:
+
+- keys of a struct with a function field that declares `==` and `hash()`
+- two unequal keys with the same `hash()`
+- a removal, and a key stored again after its removal
+- the loop's order
+- a `Map` that a plain PHP function writes to, which leaves the PHP# caller's `Map` unchanged (ruling 23)
+
+Every existing collection test keeps passing. Eighteen engine fixtures use a `Map` or a `Set`: `BinaryCalls`, `CollectionMethods`, `Collections`, `Deadlines`, `EnumKeys`, `Inbox`, `IndexRead`, `Lambdas`, `Library`, `Operators`, `RegexCalls`, `Roster`, `Route`, `Sets`, `StaticCollections`, `StructKeys`, `Structs` and `UrlCalls`. A `.phpt` that prints what plain PHP sees changes from an array to the object, and the PR body names each one.
+
+## Order and dependencies
+
+- **php-sharp's `feat/collection-engine`, in review, changes 286 lines of `ext/sharp/sharp.c`,** including `sharp_collection_key_slot` and `index_changes.phpt`. This work rewrites the same functions, so it builds on that branch once it merges.
+- **Task #539** (the `List` index write, `getOrNull`, and only a literal taking its collection type) stays its own work. Its `Map` parts move here: a `Map` read gives `TValue?`, the loop gives entries, `values()`, and any key with `==` and `hash()`.
+- **Generics R3c's walk, `\Sharp\Internal\accepts`,** checks a `Map<K, V>` and a `Set<T>`. It must read the objects, so the generics builder learns the class shape from this note before R3c's php-sharp PR merges.
+- **The one-repository PR** moves mago-sharp under `sharp/mago`. This work's bridge half lands in slot 9's branch first, then joins slot 8's with `git subtree merge --prefix=sharp/mago`, as that PR's docs give, and one php-sharp PR holds all of it.
+- **Mago's view of a PHP# `Map` from a `.php` file** changes from `array<K, V>` to `Sharp\Map`. Plain PHP that never touches PHP# is unchanged, so the `.php` comparison stays byte-identical.
+
+## Questions for team-lead
+
+1. **`5` and `5.0` are one key**, because section 19's `==` calls them equal. Proposed: yes, as Swift's `AnyHashable` treats `5` and `5.0` as one key.
+2. **`json_encode` of a `Map` with a key that is no `int`, `string` or backed enum** throws `JsonException`: "A JSON object key is text, and `App\Spot` is not." A backed enum key encodes as its value. Proposed: yes, until the JSON Slice's `toString` rule (Queue 4) lands.
+3. **A PHP array from plain PHP is accepted where a `Map` or `Set` is expected, and turned into the object at the crossing.** Proposed: yes, as `Set::from` already does for a `Set` parameter, so Laravel code that passes an array keeps working.
+4. **Plain PHP gets no changing methods on a `Map` or `Set`,** only the index opcodes, `unset` and `$set[] = $x`. Proposed: yes, because a method called through a temporary has no holder to separate into, and a change through it would leak into every holder.
+
 # Public names this Slice adds or changes
 
 team-lead approves these. Everything not in this tree is tactical.
@@ -453,16 +573,25 @@ mago-sharp
 │   ├── expression/binary/comparison.rs   <- === on a struct refused
 │   └── code.rs                           <- IssueCode::InvalidStruct, `invalid-struct`;
 │                                            IssueCode::MissingRequiredProperty, `missing-required-property`
-└── crates/sharp-bridge/src/lower.rs      <- Lowering::r#struct, with, object_initializer, parse; a struct key
-                                             through \Sharp\Map::key and \Sharp\Map::readKey
+└── crates/sharp-bridge/src/lower.rs      <- Lowering::r#struct, with, object_initializer, parse; a Map literal
+                                             through \Sharp\Map::of, a Map parameter through \Sharp\Map::from,
+                                             and stored_key and key_read_back deleted (ruling 22)
 
 php-sharp
 ├── sharp/composer/library/Sharp/
 │   ├── Key.sharp                         <- new: the attribute, `[Key("plan_code")]`
 │   └── InvalidFields.sharp               <- new: InvalidFields : ValueError, with its fields
-├── ext/sharp/sharp.c                     <- interface Sharp\Struct; final class Sharp\Map with
-│                                            key(Sharp\Struct $struct): string and readKey(string $text): Sharp\Struct;
-│                                            the struct arm of sharp_collection_key_slot and Sharp\Set::from
+├── ext/sharp/sharp.c                     <- interface Sharp\Struct; final classes Sharp\Map and Sharp\Set, each
+│                                            ArrayAccess, IteratorAggregate, Countable and JsonSerializable, with
+│                                            toArray(); Sharp\Map::of(array $keysAndValues), Sharp\Map::from(array $entries),
+│                                            keys() and values(); Sharp\Set::from(array $values) and toList();
+│                                            sharp_separate; the key text, key() and readKey() deleted (ruling 22)
+├── ext/sharp/sharp_table.c, sharp_table.h
+│                                         <- new: php-ds v1.8.0's ds_htable, its MIT notice kept, cut to the
+│                                            buckets, chains, rehash, lookup, put, remove, clone and iteration,
+│                                            with PHP#'s == and hashing
+├── Zend/zend_vm_def.h, zend_vm_execute.h, ext/opcache/jit/zend_jit_helpers.c
+│                                         <- sharp_separate before an object container's index write and unset
 ├── Zend/tests/sharp/Spot.sharp, Tone.sharp, Route.sharp, StructKeys.sharp, struct_keys.inc,
 │   struct_keys.phpt, struct_marker.phpt, Stamp.sharp, Structs.sharp, structs.inc, structs.phpt, struct_parse.phpt
 │                                         <- new, the engine's tests
@@ -472,6 +601,13 @@ php-sharp
 ```
 
 Not added: no `sharp_kind`, no opcode, no crate, no `.sharpc` format change, no `ce_flags` bit, and no engine change to the class compiler.
+
+The names ruling 22 adds, each with the slate it was picked from:
+
+- `sharp_table.c`: PHP#'s table, named by its job. Also considered: `ds_htable.c`, php-ds's own name, which suggests the whole of php-ds is vendored.
+- `Sharp\Map::of`: a literal's entries, as Kotlin's `mapOf` and Java's `Map.of`. Also considered: `fromPairs`, `literal`.
+- `Sharp\Map::from`: a PHP array crossing in, beside the existing `Sharp\Set::from`. Also considered: `fromArray`, `wrap` (`Sharp\List::wrap` returns an array as it is and puts any other value in a one-element list, which is a different job).
+- `sharp_separate`: PHP's word for the same act, as in `SEPARATE_ARRAY`. Also considered: `sharp_unshare`, `sharp_copy_on_write`.
 
 The names, each with the slate it was picked from:
 
