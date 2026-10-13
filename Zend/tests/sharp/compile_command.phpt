@@ -70,7 +70,7 @@ refusal(["$root/Broken.sharp", "$root/Torn.sharp"], ['sharp.compile_command' => 
 echo file_get_contents("$root/unreported.log");
 
 // A file with no .sharp/ folder above it has no project to compile, so the command doesn't run.
-$unrooted = sys_get_temp_dir() . '/sharp-test-compile-command-unrooted';
+$unrooted = sys_get_temp_dir() . '/sharp-test-compile-command-unrooted-' . getmypid();
 remove_project($unrooted);
 mkdir($unrooted);
 file_put_contents("$unrooted/Shop.sharp", SHOP);
@@ -100,5 +100,5 @@ run
 CompileError: Broken.sharp isn't compiled. Run vendor/bin/mago compile.
 CompileError: Torn.sharp isn't compiled. Run vendor/bin/mago compile.
 run
-CompileError: /%s/sharp-test-compile-command-unrooted/Shop.sharp isn't compiled. Run vendor/bin/mago compile.
+CompileError: /%s/sharp-test-compile-command-unrooted-%d/Shop.sharp isn't compiled. Run vendor/bin/mago compile.
 bool(false)

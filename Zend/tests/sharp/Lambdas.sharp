@@ -50,7 +50,7 @@ class Lambdas
             global.implode(",", numbers.sortedBy(n => -n)),
             global.implode(",", groups["odd"] ?? []),
             global.implode(",", global.array_keys(labels.associateBy(label => label))),
-            global.implode(",", global.array_keys(prices.filterValues(price => price < 100))),
+            global.implode(",", global.array_keys(prices.filter(price => price < 100))),
             global.implode(",", prices.filter(price => price < 100)),
             global.implode(",", prices.map(price => price * 2)),
         ];

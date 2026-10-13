@@ -32,6 +32,8 @@ bool(false)
 OutOfRangeException: Undefined array key 2 in IndexRead.sharp on line 36
 int(4)
 NULL
+int(2)
+NULL
 int(3)
 OutOfRangeException: Undefined array key "closed" in IndexRead.sharp on line 46
 TypeError: Cannot access offset of type Lib\Standing on array in IndexRead.sharp on line 46

@@ -21,7 +21,7 @@ class Pantry
 
     public static Map<string, int> drop(Map<string, int> stock, string name)
     {
-        stock.delete(name);
+        stock.remove(name);
         return stock;
     }
 
@@ -58,7 +58,7 @@ class Pantry
     public Map<string, int> restock(string name)
     {
         this.sizes.add(global.count(this.sizes));
-        this.stock.delete(name);
+        this.stock.remove(name);
         return this.stock;
     }
 
@@ -115,6 +115,87 @@ class Pantry
     {
         return this.sizes.count();
     }
+
+    public static List<int> inserted(List<int> sizes, int index, int size)
+    {
+        sizes.insert(index, size);
+        return sizes;
+    }
+
+    public static bool removes(List<int> sizes, int size)
+    {
+        return sizes.remove(size);
+    }
+
+    public static List<int> removed(List<int> sizes, int size)
+    {
+        sizes.remove(size);
+        return sizes;
+    }
+
+    public static List<int> cleared(List<int> sizes)
+    {
+        sizes.clear();
+        return sizes;
+    }
+
+    public static List<int> reordered()
+    {
+        List<int> sizes = [1, 2, 3];
+        sizes.insert(1, 9);
+        sizes.remove(2);
+        return sizes;
+    }
+
+    public static void front(Basket basket, int size)
+    {
+        basket.lines.insert(0, size);
+    }
+
+    public static bool take(Basket basket, int size)
+    {
+        return basket.lines.remove(size);
+    }
+
+    public static void empty(Basket basket)
+    {
+        basket.lines.clear();
+    }
+
+    public static int last(List<int> sizes)
+    {
+        return sizes.last();
+    }
+
+    public static int? position(List<int> sizes, int size)
+    {
+        return sizes.indexOf(size);
+    }
+
+    public static bool holds(List<int> sizes, int size)
+    {
+        return sizes.contains(size);
+    }
+
+    public static bool has(Map<string, int?> limits, string name)
+    {
+        return limits.has(name);
+    }
+
+    public static List<string> names(Map<string, int> stock)
+    {
+        return stock.keys();
+    }
+
+    public static Map<string, int> cheap(Map<string, int> prices)
+    {
+        return prices.filter(price => price < 100);
+    }
+
+    public static bool sold(Map<string, int> stock, string name)
+    {
+        return stock.remove(name);
+    }
 }
 
 class Tray
@@ -159,5 +240,27 @@ class Link
     public static string label(Link link, Countable items)
     {
         return `${link.plus(1).value} of ${items.count()}`;
+    }
+}
+
+class Coin
+{
+    public Coin(public int cents { get; })
+    {
+    }
+
+    public static bool operator ==(Coin a, Coin b) => a.cents == b.cents;
+
+    public int hash() => this.cents;
+
+    public static bool held(List<Coin> coins, int cents)
+    {
+        return coins.contains(new Coin(cents));
+    }
+
+    public static List<int> spent(List<Coin> coins, int cents)
+    {
+        coins.remove(new Coin(cents));
+        return coins.map(coin => coin.cents);
     }
 }
