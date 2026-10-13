@@ -50,7 +50,7 @@ const plan = this.plan();   // type inferred, cannot be reassigned
 const Plan plan = …;        // type written, cannot be reassigned
 ```
 
-**A PHP keyword that PHP# doesn't use is a plain name,** so `empty`, `list` and `print` can name a local. Every keyword PHP# uses stays reserved, such as `let`, `match` and `emit`:
+**A PHP keyword that PHP# doesn't use is a plain name,** so `empty`, `list` and `print` can name a local. A local can't take the name of a keyword PHP# uses, such as `let`, `match` and `emit`:
 
 <!-- example keyword-names: statements -->
 ```csharp
@@ -58,6 +58,46 @@ const list = [1, 2, 3];     // compiles: PHP# has no list keyword
 let empty = true;           // compiles
 const print = "draft";      // compiles
 const match = 1;            // compile error: match is a PHP# keyword
+```
+
+**Any word, PHP# keywords included, names a method or a property with no mark,** as in JavaScript and TypeScript, because a member's name is written only after `.` or where it is declared. Locals, parameters, `catch` variables and pattern variables can't take a keyword's name:
+
+<!-- example keyword-members -->
+```csharp
+// app/Rule.sharp
+namespace App;
+
+public class Rule
+{
+    public bool match(string text) => text != "";   // compiles: a keyword names a method
+    public string event { get; } = "paid";          // compiles: and a property
+}
+```
+
+<!-- example keyword-members: statements
+Rule rule = new Rule();
+-->
+```csharp
+rule.match("paid");                                 // true
+rule.event;                                         // "paid"
+const event = "paid";                               // compile error: a local can't take a keyword's name
+```
+
+**PHP# keywords are lowercase only,** as in C#, Java, Kotlin, Swift, TypeScript, Go and Rust. `Self` (section 25) is the one capitalized keyword, as it is in Rust and Swift. `TRUE` or `Return` is a compile error that names the lowercase keyword, so `class Event` and `class Struct` are valid names:
+
+<!-- example keyword-case -->
+```csharp
+// app/Struct.sharp
+namespace App;
+
+public class Struct { … }       // compiles: struct is a keyword, and Struct is a name
+```
+
+<!-- example keyword-case: statements -->
+```csharp
+const paid = true;              // compiles
+const shipped = TRUE;           // compile error: write true in lowercase
+Return;                         // compile error: write the keyword return in lowercase
 ```
 
 - In a class, `const` declares a constant. It is never reassigned, and its value is known before the code runs.
@@ -112,7 +152,7 @@ Checkout.maximum;
 
 | Modifier | Who can reach it |
 |---|---|
-| `private` | this class. This is the default for members. |
+| `private` | this class. This is the default for members outside an interface. |
 | `protected` | this class and its subclasses, in any namespace |
 | `internal` | this namespace and every namespace below it. This is the default for classes. |
 | `public` | everyone |
@@ -124,6 +164,24 @@ Checkout.maximum;
   - Too narrow is a compile error at the caller.
   - Too wide is a warning, for example a `public` member that nothing outside its namespace uses.
 - **There is no named reach,** such as `internal(App\Tenant)`. A helper shared by sibling namespaces moves to their parent namespace.
+
+**An interface member is always public, so it takes no access modifier.** Writing one, `public` included, is a compile error, as in TypeScript, Swift and Go:
+
+<!-- example interface-members -->
+```csharp
+// app/Notifier.sharp
+namespace App;
+
+public interface Notifier
+{
+    string channel { get; }                 // compiles: public, as every interface member is
+    void send(string message);              // compiles
+    public void flush();                    // compile error: an interface member is always public, so write it with no access modifier
+}
+```
+
+- **An interface member is as visible as its interface,** so an `internal` interface's members reach only what the interface reaches, as C#'s effective accessibility does.
+- **Interface members are exempt from the too-wide warning,** because they have no narrower form.
 
 ## 6. Fields and properties
 
@@ -159,6 +217,16 @@ private int? total;                      // compiles: starts as null
 public string? nickname { get; set; }    // compiles: starts as null
 public string? note { get; }             // compile error: give note an initial value, or a set accessor
 public string? note { get; } = null;     // compiles
+```
+
+**A static field or property that isn't `T?` needs an initial value.** No constructor sets it, so the error names both fixes: an initial value, or `T?`.
+
+<!-- example static-initial-values: members -->
+```csharp
+private static int hits = 0;                     // compiles
+private static int misses;                       // compile error: give misses an initial value, or make it int?
+public static string? region { get; set; }       // compiles: starts as null
+public static string label { get; set; }         // compile error: give label an initial value, or make it string?
 ```
 
 ### 6.1 Property features
@@ -312,10 +380,9 @@ public class Receipt
 ```
 
 - **The compiler inlines a standard-library method whose body is one call,** as the .NET and JVM JITs and rustc inline small methods. So `name.trim()` runs as `trim($name)`, and no keyword marks the method.
-- **Once the standard library wraps a PHP function, calling that function from `.sharp` code outside the standard library is a compile error that names the method.**
-- **PHP functions the standard library does not wrap yet stay callable,** and so do plain PHP functions, such as Laravel's `now()`. Section 29 covers their effects.
+- **Every PHP built-in function is a standard library method,** so calling one by its bare name from `.sharp` code outside the standard library is a compile error that names the method. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
 
-**Output and exit are function calls.** `echo` and `print` are removed, and output goes through `printf` or `fwrite`. `die` is removed, because `die("…")` prints its message and exits with status 0, which reports success. `exit(code)` stays, as PHP 8.4's built-in function.
+**Output and exit go through the standard library.** `echo` and `print` are removed, and output goes through `Console` (section 29). `die` is removed, because `die("…")` prints its message and exits with status 0, which reports success. Exiting goes through `Process`.
 
 <!-- example output-and-exit: statements -->
 ```csharp
@@ -336,8 +403,8 @@ print "Pruned";                                          // compile error: write
 die("Prune failed");                                     // compile error: write the message to STDERR, then exit(1)
 ```
 
-- `exit` skips every `finally` block, as Java's `System.exit` and C#'s `Environment.Exit` do.
-- Printing has the effect `Console`, and `exit` has the effect `Process` (section 29), as Koka's `console` effect marks printing.
+- Exiting skips every `finally` block, as Java's `System.exit` and C#'s `Environment.Exit` do.
+- Printing has the effect `Console`, and exiting has the effect `Process` (section 29), as Koka's `console` effect marks printing.
 
 ## 9. Constructors
 
@@ -528,8 +595,7 @@ OrderRow order = OrderRow.parse(row);   // row is a plain PHP object from a data
 
 **Generics are reified.** The running program knows every type argument.
 
-- Reflection shows `PaginatedList<Order>`.
-- Plain PHP reads an object's type arguments with `ReflectionObject::getTypeArguments()`, as C#'s `Type.GetGenericArguments()` does. A class value reaches plain PHP as a plain class-name string (section 25), so it carries none.
+- Reflection shows an object's type arguments: plain PHP reads them with `ReflectionObject::getTypeArguments()`, as C#'s `Type.GetGenericArguments()` does. A `ReflectionType` shows PHP's own type, so `getName()` stays what dependency injection containers and proxy generators read.
 - `page is PaginatedList<Order>` is checked while the code runs.
 - A value of the wrong type throws a `TypeError` where it enters PHP# from plain PHP. Section 12 lists where a value enters. An `int` where PHP# expects a `float` does not throw: it becomes a `float` (section 24).
 
@@ -545,7 +611,10 @@ public class Counter<T>
 
 Counter<Order>.count += 1;
 Counter<User>.count;                                     // 0: Counter<User> has its own count
+Counter.count;                                           // compile error: name the type argument, as in Counter<Order>.count
 ```
+
+A static member names its type arguments: `Counter<Order>.count`. A bare `Counter.count` names none and is a compile error.
 
 **Writing type arguments:**
 
@@ -851,7 +920,7 @@ if (prices[plan] is int price) { charge(price); }           // compiles: runs on
 int? maybe = prices.get(plan);                              // compiles: null when plan is missing
 ```
 
-The same holds for a `List` index: when the index is missing, `if (lines[i] is Line line)` does not run its block, `lines[i] as Line` gives null, and a `match` on `lines[i]` takes its `null` or `default` arm.
+The same holds for a `List` index: when the index is missing, `lines[i] ?? fallback` gives the fallback, `lines[i]?.add(x)` skips the call, `if (lines[i] is Line line)` does not run its block, `lines[i] as Line` gives null, and a `match` on `lines[i]` takes its `null` or `default` arm.
 
 Data with fixed keys is a class, so a `Map` holds keys that come from outside, where a missing key is normal.
 
@@ -1641,7 +1710,7 @@ PHP's backtick shell execution is removed. `shell_exec()` stays.
 
 **`==` exists only where the type declares it:**
 
-- **Structs, enums, strings, numbers and collections** compare by value with `==`, with no code.
+- **Structs, enums, strings, numbers, collections and class values** (section 25) compare by value with `==`, with no code.
 - **A class** compares with `==` only if it or a parent declares `operator ==`. Otherwise `==` on it is a compile error.
 - **`Any?`** compared with `==` against a struct, enum, string, number or collection compares by value, and is false when the types differ.
 - **`===`** is true only for the same object. It works on classes only, and cannot be overridden.
@@ -1935,12 +2004,12 @@ const label = match (value) {          // value is Any?
 
 <!-- example property-patterns: statements
 Response response = new Response();
-Any? event = new Paid();
+Any? payment = new Paid();
 -->
 ```csharp
 if (response is { status: 200 }) { … }                          // ignores headers, body and the rest
 if (response is { status: 200, body: { type: "json" } }) { … }  // nests into a property that is itself an object
-if (event is Paid { amount: > 1000 } big) { … }                 // tests the type and one property, and binds big
+if (payment is Paid { amount: > 1000 } big) { … }               // tests the type and one property, and binds big
 ```
 
 **`is` and `as`:**
@@ -2259,7 +2328,30 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 
 **The standard library lives under one root, `Sharp`,** with the standard library namespaces `Sharp.Text`, `Sharp.Math`, `Sharp.Json`, `Sharp.IO`, `Sharp.Time`, `Sharp.Net` and `Sharp.Data`, as .NET has `System.*` and Rust has `std::*`.
 
-**Only `Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports under the same name shadows the default one.
+**Only `Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin:
+
+<!-- example own-namespace-shadows -->
+```csharp
+// app/Shop/Environment.sharp
+namespace App.Shop;
+
+public class Environment
+{
+    public static string stage() => "production";
+}
+```
+
+<!-- example own-namespace-shadows -->
+```csharp
+// app/Shop/Release.sharp
+namespace App.Shop;
+
+public class Release
+{
+    public string stage() => Environment.stage();                   // compiles: Environment is App.Shop.Environment, with no import
+    public string region() => Environment.require("AWS_REGION");    // compile error: App.Shop.Environment declares no require
+}
+```
 
 **A static class in a standard library namespace needs one import line,** and the import's last part is the class, as for any import:
 
@@ -2690,6 +2782,17 @@ public class Pages
 }
 ```
 
+**Two class values are equal when they name the same class with the same type arguments,** as in C#, so `typeof(Box<Order>) == typeof(Box<Invoice>)` is false:
+
+<!-- example class-value-equality: statements
+public class Box<T> { }
+public class Invoice { }
+-->
+```csharp
+typeof(Box<Order>) == typeof(Box<Order>);       // true
+typeof(Box<Order>) == typeof(Box<Invoice>);     // false: the same class with other type arguments
+```
+
 **`Self`** means the class a static method was actually called on. It replaces PHP's `static`. PHP's `self` is removed: to mean the declaring class, write its name.
 
 <!-- example self-return: statements
@@ -2775,11 +2878,11 @@ title.slug();
 title.isBlank;
 ```
 
-- **An extension applies only in files that import its class.**
+- **An extension applies only in files that import its class, and in the files of its own namespace,** as Kotlin's do in their package. One in the file's own namespace shadows a default extension of the same name (section 23).
 - **An extension cannot hide a real member.** If the type, or any class derived from it, has a member with that name, the extension is a compile error.
-- **When the code runs, a real member wins,** and otherwise the extension imported in that file is called. The checker's rule above guarantees the two never compete.
+- **When the code runs, a real member wins,** and otherwise the extension that applies in that file is called. The checker's rule above guarantees the two never compete.
 - **Extensions can only reach the type's public members,** so access rules still hold.
-- **The receiver's type picks among imported extensions with one name,** as in C# and Kotlin:
+- **The receiver's type picks among the extensions with one name that apply in a file,** as in C# and Kotlin:
 
 <!-- example extension-overloads: statements
 List<Line> lines = [new Line()];
@@ -3015,7 +3118,7 @@ theorem receiptMatchesRefunds : App.Tenant.Store.Module.receiptMatchesRefunds :=
 
 An effect is anything a method does beyond computing its result: database, network, files, clock, randomness, mail. PHP# tracks effects through the objects a class holds, a model called object capabilities, which Scala 3, Effekt and Pony also use. It also records every call into plain PHP, whose effect an `extern` declaration states, and every `emit`, which raises an event and has the effect `Events` (section 15).
 
-**Any PHP# code may call plain PHP,** including Laravel's facades, helpers and model methods, and PHP's built-in functions the standard library does not wrap yet (section 8). Most libraries are plain PHP, so this is how PHP# code uses them.
+**Any PHP# code may call plain PHP,** such as a library's classes, facades and models. Most libraries are plain PHP, so this is how PHP# code uses them. PHP's own built-in functions are the exception: the standard library replaces them (section 8).
 
 <!-- example plain-php-calls -->
 ```csharp
@@ -3040,16 +3143,15 @@ extern StripeClient uses Http;
 ```
 
 - **A declaration file is an ordinary `.sharp` file.** Its `namespace` line matches its path, as section 5 requires.
-- **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, or `extern Carbon.now uses Clock;` and `extern now uses Clock;` as PHP#'s package ships them.
+- **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, `extern Carbon.now uses Clock;` or `extern now uses Clock;`.
 - **An `extern` that names no effect declares the class, method or function pure,** as in `extern BigDecimal;`.
 - **Each class, method or function has at most one `extern` declaration in the whole project.** A second one is a compile error, as declaring a class twice is.
 - **A call to plain PHP with an `extern` declaration has that effect,** so it fits a `uses` that names it: `StripeClient.charges().create(…)` fits `uses Http`.
 - **An object a declared plain PHP call returns carries that call's effect,** so `StripeClient.charges()` returns an object with `Http`, and calling it fits `uses Http`. An `extern` on the returned class itself wins over the inherited effect. Kotlin treats Java's return values the same way.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
-- **PHP#'s Composer package ships the declarations for PHP's built-in functions and for Laravel.** Among PHP's built-ins, PDO is `Database`, curl is `Http`, `printf` and `fwrite` to `STDOUT` or `STDERR` are `Console`, `file_put_contents` and every other file function are `Files`, `exit` is `Process`, `time()` is `Clock`, `random_int` is `Random`, and `getenv()` and PHP's other environment built-ins are `Environment`. Every other built-in function is declared with its own effect, or as pure. In Laravel, Eloquent and `DB` are `Database`, the `Http` facade is `Http`, `Cache` is `Cache`, `Mail` is `Mail`, and `now()` and Carbon's clock reads are `Clock`.
-- **A project declares its own libraries,** conventionally in `app/Stubs`.
+- **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way.
 
-**Every built-in function has a declaration, so its effect is always known.** `Console` covers standard output and standard error, which includes `printf` and `fwrite(STDOUT, …)` or `fwrite(STDERR, …)`. `Files` covers every other file. `Process` covers `exit`.
+**The standard library's effect classes replace PHP's built-in functions for their effects,** so calling one of those functions directly is a compile error that names the method (section 8). `Database` replaces PDO, `Http` replaces curl, `Console` replaces printing to standard output and standard error, `Files` replaces every other file function, `Process` replaces `exit`, `Clock` replaces `time()`, `Random` replaces `random_int`, `Mail` replaces `mail()`, and `Environment` replaces `getenv()` and PHP's other environment functions.
 
 <!-- example pure-interface -->
 ```csharp
@@ -3093,16 +3195,16 @@ public class FileFormatter : Formatter
 
 <!-- example native-body: ignore the standard library's own source, which a project may not declare -->
 ```csharp
-// in the standard library's Sharp.Json
-public static class Json
+// in the standard library's Sharp.Text
+public static class Text
 {
-    public static extern Map<string, Any?> decode(string json);   // compiles: the engine holds the body
+    public static extern string slug(string title);   // compiles: the engine holds the body
 }
 ```
 
-- **A native body is compiled into the PHP# engine,** as PHP's own built-in functions are. It is written in Rust, behind a C interface.
-- **Only the standard library declares native bodies.** In a project, `public static extern string slug(string title);` is a compile error.
-- **One generator writes the C header from the `.sharp` declarations,** so the declaration and the Rust code have one signature.
+- **A native body is compiled into the PHP# engine behind a C interface,** as PHP's own built-in functions are.
+- **Only the standard library declares native bodies.** In a project, the same `public static extern string slug(string title);` is a compile error.
+- **One generator writes the C header from the `.sharp` declarations,** so the declaration and the native body have one signature.
 - **The engine refuses to start if a declared native body is missing.**
 
 **A `foreign` class turns an effect into an object** that code holds and passes on, such as a fake in tests. It is optional. Its methods call plain PHP, like any other code. Code that holds a `foreign` object has that effect by name, which `uses` can declare.
@@ -3117,7 +3219,7 @@ public foreign class RedisStore
 }
 ```
 
-The standard library ships `Database`, `Http`, `Files`, `Console`, `Process`, `Clock`, `Random`, `Cache`, `Mail` and `Environment`. A project declares its own `foreign` classes the same way.
+The standard library ships `Database`, `Http`, `Files`, `Console`, `Process`, `Clock`, `Random`, `Cache`, `Mail` and `Environment`, and each replaces PHP's built-in functions for its effect. A project declares its own `foreign` classes the same way.
 
 **`Events` is the effect of `emit`** (section 15). It is the one standard effect that is not a `foreign` class: a method has it when its body emits, and no object carries it.
 
@@ -3410,7 +3512,7 @@ module
 - **A module is where `foreign` objects are created** (section 29). The binding's lifetime decides how often one is created, and it reaches classes only through constructors.
 - **A module also states the laws that span its classes** (section 28).
 
-**A `scoped` lifetime is one HTTP request, one queued job or one console command run.** The host starts and ends each scope, and the `php-sharp/laravel` adapter does that for Laravel, as ASP.NET Core does for each request. Under PHP-FPM, `singleton` and `scoped` behave the same. They differ in long-running workers.
+**A `scoped` lifetime is one HTTP request, one queued job or one console command run.** The host starts and ends each scope, as ASP.NET Core does for each request. Under PHP-FPM, `singleton` and `scoped` behave the same. They differ in long-running workers.
 
 **`Factory<T>` is `public interface Factory<T> { T create(); }`.** Binding a class that implements `Factory<Mailer>` to `Mailer` makes the container call `create()` each time the binding's lifetime needs a new `Mailer`, as Spring's `FactoryBean<T>` does:
 
@@ -3495,7 +3597,7 @@ public class Checkout
 }
 ```
 
-**The container implements PSR-11.** The optional package `php-sharp/laravel` makes Laravel's container ask PHP#'s container for every PHP# class. The language never depends on Laravel.
+**The container implements PSR-11,** so any framework's container can ask PHP#'s container for a PHP# class. The language never depends on a framework.
 
 ## Undecided, in order
 

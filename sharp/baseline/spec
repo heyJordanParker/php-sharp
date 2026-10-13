@@ -1,7 +1,11 @@
+§2	keyword-case
+§2	keyword-members
 §2	keyword-names
+§5	interface-members
 §6	field-and-property
 §6	initial-values
 §6	nullable-members
+§6	static-initial-values
 §6.2	change-observers
 §6.3	property-references
 §6.4	property-behaviors
@@ -59,6 +63,7 @@
 §22	interface-defaults
 §22	plain-php-traits
 §23	import-rename
+§23	own-namespace-shadows
 §23	standard-library-import
 §24	array-object-replacements
 §24	int-to-float
@@ -67,6 +72,7 @@
 §24	nullable-unions
 §24	object-type
 §25	class-members
+§25	class-value-equality
 §25	class-values
 §25	generic-class-values
 §25	required-constructors
