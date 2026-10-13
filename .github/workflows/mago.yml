@@ -367,6 +367,10 @@ jobs:
       - name: Every line the pull request adds is covered
         working-directory: .
         run: |
+          if ! git cat-file -e HEAD^1:sharp/mago; then
+            echo "sharp/mago does not exist at the base, so no Mago line is new to it."
+            exit 0
+          fi
           pipx run --spec diff-cover==10.6.0 diff-cover sharp/mago/reachable.info \
             --compare-branch HEAD^1 \
             --include 'sharp/mago/crates/analyzer/src/**' 'sharp/mago/crates/semantics/src/**' 'sharp/mago/crates/sharp-bridge/src/**' \
