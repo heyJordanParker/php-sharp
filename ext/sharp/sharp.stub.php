@@ -56,20 +56,3 @@ final class Position
 
     public function __construct(string $file, int $line, int $column, string $function) {}
 }
-
-/**
- * @strict-properties
- * @not-serializable
- */
-final class Environment
-{
-    /** @virtual */
-    public array $arguments;
-
-    /** @virtual */
-    public string $currentDirectory;
-
-    public function __construct() {}
-
-    public function variable(string $name): ?string {}
-}

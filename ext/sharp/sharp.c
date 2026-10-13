@@ -1527,112 +1527,11 @@ ZEND_METHOD(Sharp_Position, __construct)
 	zend_update_property_str(position->ce, position, ZEND_STRL("function"), function);
 }
 
-static zend_object_handlers sharp_environment_handlers;
-
-static bool sharp_environment_is_property(const zend_string *name)
+/* The native body of `Sharp.Environment.commandLine`: the command-line arguments as PHP's `$argv` holds them, starting
+ * with the script's name. Only the SAPI holds them, so this body is C behind the prototype sharp/bin/native writes. */
+void sharp_native_Environment_commandLine(zval *result)
 {
-	return zend_string_equals_literal(name, "arguments") || zend_string_equals_literal(name, "currentDirectory");
-}
-
-static bool sharp_environment_read(const zend_string *name, zval *result)
-{
-	if (zend_string_equals_literal(name, "arguments")) {
-		ZVAL_COPY(result, &SHARP_G(arguments));
-		return true;
-	}
-
-	char directory[MAXPATHLEN];
-	if (!VCWD_GETCWD(directory, MAXPATHLEN)) {
-		zend_throw_error(NULL, "Cannot read the current directory: %s", strerror(errno));
-		return false;
-	}
-	ZVAL_STRING(result, directory);
-
-	return true;
-}
-
-static zval *sharp_environment_read_property(zend_object *object, zend_string *name, int type, void **cache_slot, zval *rv)
-{
-	if (!sharp_environment_is_property(name)) {
-		return zend_std_read_property(object, name, type, cache_slot, rv);
-	}
-	if (type == BP_VAR_W || type == BP_VAR_RW || type == BP_VAR_UNSET) {
-		zend_throw_error(NULL, "Indirect modification of %s::$%s is not allowed", ZSTR_VAL(object->ce->name), ZSTR_VAL(name));
-		return &EG(uninitialized_zval);
-	}
-
-	return sharp_environment_read(name, rv) ? rv : &EG(uninitialized_zval);
-}
-
-static zval *sharp_environment_write_property(zend_object *object, zend_string *name, zval *value, void **cache_slot)
-{
-	if (!sharp_environment_is_property(name)) {
-		return zend_std_write_property(object, name, value, cache_slot);
-	}
-	zend_throw_error(NULL, "Property %s::$%s is read-only", ZSTR_VAL(object->ce->name), ZSTR_VAL(name));
-
-	return &EG(error_zval);
-}
-
-static zval *sharp_environment_get_property_ptr_ptr(zend_object *object, zend_string *name, int type, void **cache_slot)
-{
-	return NULL;
-}
-
-static int sharp_environment_has_property(zend_object *object, zend_string *name, int check_empty, void **cache_slot)
-{
-	if (!sharp_environment_is_property(name)) {
-		return zend_std_has_property(object, name, check_empty, cache_slot);
-	}
-	if (check_empty != ZEND_PROPERTY_NOT_EMPTY) {
-		return true;
-	}
-
-	zval value;
-	if (!sharp_environment_read(name, &value)) {
-		return false;
-	}
-	bool is_true = zend_is_true(&value);
-	zval_ptr_dtor(&value);
-
-	return is_true;
-}
-
-static void sharp_environment_unset_property(zend_object *object, zend_string *name, void **cache_slot)
-{
-	if (!sharp_environment_is_property(name)) {
-		zend_std_unset_property(object, name, cache_slot);
-		return;
-	}
-	zend_throw_error(NULL, "Cannot unset hooked property %s::$%s", ZSTR_VAL(object->ce->name), ZSTR_VAL(name));
-}
-
-ZEND_METHOD(Sharp_Environment, __construct)
-{
-	ZEND_PARSE_PARAMETERS_NONE();
-}
-
-ZEND_METHOD(Sharp_Environment, variable)
-{
-	char *name;
-	size_t name_length;
-
-	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_STRING(name, name_length)
-	ZEND_PARSE_PARAMETERS_END();
-
-	char *sapi_value = sapi_getenv(name, name_length);
-	if (sapi_value) {
-		RETVAL_STRING(sapi_value);
-		efree(sapi_value);
-		return;
-	}
-
-	zend_string *value = php_getenv(name, name_length);
-	if (!value) {
-		RETURN_NULL();
-	}
-	RETURN_STR(value);
+	ZVAL_COPY(result, &SHARP_G(arguments));
 }
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_List_wrap, 0, 1, IS_ARRAY, 0)
@@ -1763,15 +1662,6 @@ static PHP_MINIT_FUNCTION(sharp)
 	register_class_Sharp_List();
 	register_class_Sharp_Set();
 
-	zend_class_entry *environment = register_class_Sharp_Environment();
-	memcpy(&sharp_environment_handlers, &std_object_handlers, sizeof(zend_object_handlers));
-	sharp_environment_handlers.read_property = sharp_environment_read_property;
-	sharp_environment_handlers.write_property = sharp_environment_write_property;
-	sharp_environment_handlers.get_property_ptr_ptr = sharp_environment_get_property_ptr_ptr;
-	sharp_environment_handlers.has_property = sharp_environment_has_property;
-	sharp_environment_handlers.unset_property = sharp_environment_unset_property;
-	environment->default_object_handlers = &sharp_environment_handlers;
-
 	zend_add_system_entropy("sharp", "SHARP_BUILD_ID", SHARP_BUILD_ID, sizeof(SHARP_BUILD_ID) - 1);
 
 	sharp_next_compile_file = zend_compile_file;
@@ -1804,6 +1694,7 @@ static PHP_RINIT_FUNCTION(sharp)
 	zend_hash_init(&SHARP_G(request_stamps), 8, NULL, sharp_free_stamp, false);
 	ZVAL_UNDEF(&SHARP_G(compile_command_report));
 
+	/* The CLI names the script in argv[0] only while the request starts, as PHP's $argv does. */
 	zval *arguments = &SHARP_G(arguments);
 
 	array_init_size(arguments, SG(request_info).argc);
