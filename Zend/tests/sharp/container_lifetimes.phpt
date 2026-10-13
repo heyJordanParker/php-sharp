@@ -1,5 +1,5 @@
 --TEST--
-Sharp\Container keeps a singleton for the request, a scoped service for its scope, which is the request until Container::scope starts another, and builds a transient service and an unbound class each time
+Sharp\Container keeps a singleton for the request, a scoped service for its scope, which is the request until Container::scope starts another, and builds a transient service each time
 --FILE--
 <?php
 require __DIR__ . '/Container.inc';
@@ -17,7 +17,6 @@ echo "singleton for another namespace: ", var_export($first->usedGreeting() === 
 echo "scoped: ", var_export($first->usedVisit() === $second->usedVisit(), true), "\n";
 echo "scoped in another scope: ", var_export($first->usedVisit() === $scoped->usedVisit(), true), "\n";
 echo "transient: ", var_export($first->usedStamp() === $second->usedStamp(), true), "\n";
-echo "unbound class: ", var_export($first === $second, true), "\n";
 echo "scope returns: ", Sharp\Container::scope(fn () => 'done'), "\n";
 ?>
 --EXPECT--
@@ -27,5 +26,4 @@ singleton for another namespace: true
 scoped: true
 scoped in another scope: false
 transient: false
-unbound class: false
 scope returns: done

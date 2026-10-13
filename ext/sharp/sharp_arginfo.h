@@ -1,5 +1,21 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: b9f4c13f00aef158a2c309c40656c09ac3b546be */
+ * Stub hash: afeb3b52fb611395208675d0c645564d45b92541 */
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_readModule, 0, 1, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, path, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_testModule, 0, 2, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, classes, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, bindings, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_startTest, 0, 1, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_endTest, 0, 0, IS_VOID, 0)
+ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Sharp_Collection___construct, 0, 0, 0)
 ZEND_END_ARG_INFO()
@@ -85,6 +101,10 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Container_scope, 0, 
 	ZEND_ARG_OBJ_INFO(0, run, Closure, 0)
 ZEND_END_ARG_INFO()
 
+ZEND_FUNCTION(Sharp_Internal_readModule);
+ZEND_FUNCTION(Sharp_Internal_testModule);
+ZEND_FUNCTION(Sharp_Internal_startTest);
+ZEND_FUNCTION(Sharp_Internal_endTest);
 ZEND_METHOD(Sharp_Collection, __construct);
 ZEND_METHOD(Sharp_Collection, add);
 ZEND_METHOD(Sharp_Collection, set);
@@ -107,6 +127,14 @@ ZEND_METHOD(Sharp_Environment, require);
 ZEND_METHOD(Sharp_Container, get);
 ZEND_METHOD(Sharp_Container, has);
 ZEND_METHOD(Sharp_Container, scope);
+
+static const zend_function_entry ext_functions[] = {
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "readModule"), zif_Sharp_Internal_readModule, arginfo_Sharp_Internal_readModule, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "testModule"), zif_Sharp_Internal_testModule, arginfo_Sharp_Internal_testModule, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "startTest"), zif_Sharp_Internal_startTest, arginfo_Sharp_Internal_startTest, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "endTest"), zif_Sharp_Internal_endTest, arginfo_Sharp_Internal_endTest, 0, NULL, NULL)
+	ZEND_FE_END
+};
 
 static const zend_function_entry class_Sharp_Collection_methods[] = {
 	ZEND_ME(Sharp_Collection, __construct, arginfo_class_Sharp_Collection___construct, ZEND_ACC_PRIVATE)

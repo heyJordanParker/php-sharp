@@ -88,3 +88,13 @@ final class Container
 
     public static function scope(\Closure $run): mixed {}
 }
+
+namespace Sharp\Internal;
+
+function readModule(string $path): void {}
+
+function testModule(array $classes, array $bindings): void {}
+
+function startTest(string $class): void {}
+
+function endTest(): void {}

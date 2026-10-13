@@ -3,16 +3,25 @@
 require __DIR__ . '/project.inc';
 
 // An app whose modules bind each lifetime and each kind of value, with an environment module and a nested namespace's
-// module that overrides its parent's. container_project compiles it and loads each class from its folder.
-function container_project(string $name): void
+// module that overrides its parent's, beside the standard library's module, as a Composer project holds it.
+// container_project compiles it with $files, reads the library's module as the library's autoloader does, loads each
+// class from its folder, and returns the project's folder.
+function container_project(string $name, array $files = []): string
 {
-    $root = compile_project($name, CONTAINER_APP);
+    $library = 'vendor/heyjordanparker/php-sharp-composer';
+    $root = compile_project($name, CONTAINER_APP + $files + [
+        "$library/composer.json" => '{"name": "heyjordanparker/php-sharp-composer"}',
+        "$library/library/Sharp/Module.sharp" => file_get_contents(dirname(__DIR__, 3) . '/sharp/composer/library/Sharp/Module.sharp'),
+    ]);
+    Sharp\Internal\readModule("$root/$library/library/Sharp/Module.sharp");
     spl_autoload_register(function (string $class) use ($root): void {
         $path = "$root/" . lcfirst(str_replace('\\', '/', $class)) . '.sharp';
         if (is_file($path)) {
             require $path;
         }
     });
+
+    return $root;
 }
 
 const CONTAINER_APP = [
@@ -90,6 +99,8 @@ module
     singleton Greeting(Environment environment) = new Greeting(environment.variable("SHARP_GREETING") ?? "none");
     scoped Visit = Visit;
     transient Stamp = Stamp;
+    transient Checkout = Checkout;
+    transient SendReceipt = SendReceipt;
 }
 SHARP,
     'app/Shop/Module.Production.sharp' => <<<'SHARP'
@@ -169,6 +180,7 @@ import App.Mail.QueueMailer;
 module
 {
     singleton Mailer = QueueMailer;
+    transient Panel = Panel;
 }
 SHARP,
     'app/Shop/Admin/Panel.sharp' => <<<'SHARP'

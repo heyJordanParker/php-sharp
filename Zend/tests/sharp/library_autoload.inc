@@ -1,6 +1,6 @@
 <?php
 // php library_autoload.inc <engine|changed|missing> <psr4|classmap> <version|absent> <class> [composer]: requires
-// sharp/composer/autoload.php beside a native.php that is the engine's own, one with another SHARP_NATIVE and the same
+// sharp/composer/autoload.php beside the library's Module.sharp, compiled, and a native.php that is the engine's own, one with another SHARP_NATIVE and the same
 // native bodies, or one that also declares Text.missing, with Sharp\ and a project's App\Clock found by PSR-4 or by an
 // authoritative class map, and Composer reporting the package at that version or not installed, then uses
 // Sharp\Text\Text or App\Clock. With composer, Composer itself requires autoload.php, as it does to load a plugin.
@@ -78,7 +78,9 @@ namespace {
     $package = sys_get_temp_dir() . "/sharp_library_autoload_{$native}_{$layout}_{$version}_" . strtr($class, '\\', '_') . '_' . ($argv[5] ?? 'app');
     @mkdir("$package/vendor/composer", 0777, true);
     @mkdir("$package/src/App", 0777, true);
+    @mkdir("$package/library/Sharp", 0777, true);
     copy("$root/sharp/composer/autoload.php", "$package/autoload.php");
+    copy("$root/sharp/composer/library/Sharp/Module.sharp", "$package/library/Sharp/Module.sharp");
     if ($native === 'engine') {
         copy("$root/sharp/composer/native.php", "$package/native.php");
     } else {
@@ -86,7 +88,7 @@ namespace {
         file_put_contents("$package/native.php", '<?php return ' . var_export(['fingerprint' => '0123456789abcdef0123456789abcdef', 'bodies' => $bodies], true) . ';');
     }
     file_put_contents("$package/src/App/Clock.sharp", "namespace App;\n\npublic class Clock\n{\n    public string now() => \"noon\";\n}\n");
-    file_put_contents("$package/mago.toml", "[source]\npaths = [\"src\"]\nextensions = [\"sharp\"]\n");
+    file_put_contents("$package/mago.toml", "[source]\npaths = [\"src\", \"library\"]\nextensions = [\"sharp\"]\n");
     run_mago($package);
 
     $library = "$root/sharp/composer/library/Sharp";

@@ -6,7 +6,7 @@ Each namespace folder may hold `Module.sharp`, a `module { … }` declaration wi
 
 A `scoped` lifetime is one HTTP request, one queued job or one console command run. The host starts and ends each scope, and the `php-sharp/laravel` adapter does that for Laravel. Under PHP-FPM, `singleton` and `scoped` behave the same, and they differ in long-running workers.
 
-A nested folder's module overrides its parent's services. A test or environment module overrides with `module : App.Shop { … }`, a header that names a namespace, as the `namespace` line does. An environment module is `Module.<Environment>.sharp` beside the `Module.sharp` it overrides, such as `Module.Production.sharp`, and `SHARP_ENV` picks it. A test module is declared in the test file that uses it, with the same header. The compiler checks every environment's set of services. A missing or mistyped service is a compile error. The container builds every class through its main constructor, including `on` listeners. It implements PSR-11, and the optional package `php-sharp/laravel` makes Laravel's container ask PHP#'s container for every PHP# class. The language never depends on Laravel.
+A nested folder's module overrides its parent's services. A test or environment module overrides with `module : App.Shop { … }`, a header that names a namespace, as the `namespace` line does. An environment module is `Module.<Environment>.sharp` beside the `Module.sharp` it overrides, such as `Module.Production.sharp`, and `SHARP_ENV` picks it. A test module is declared in the test file that uses it, with the same header. The compiler checks every environment's set of services. A missing or mistyped service is a compile error. PHP# creates the classes a module binds and the classes that declare an `on` method, each through its main constructor, as NestJS, ASP.NET Core, Angular and Guice with `requireExplicitBindings()` create only what is registered. A concrete class binds to itself, as `transient Checkout = Checkout;`. Every parameter of those constructors and of every binding needs a binding, and the compiler checks every such class whether or not another class takes it. A class no module binds is ordinary code, created with `new`. A listener's class needs no binding: PHP# creates a new one for every event and passes its constructor's services from the module of its namespace. The standard library's module binds `Environment` for every namespace. The container implements PSR-11, and the optional package `php-sharp/laravel` makes Laravel's container ask PHP#'s container for every PHP# class. The language never depends on Laravel.
 
 A module is where `foreign` objects are created. This replaces "created once, where the app starts". The binding's lifetime decides how often a `foreign` object is created, and it reaches classes only through constructors. `Module` is a reserved file name.
 
@@ -32,11 +32,12 @@ module
     singleton Mailer for SendReceipt = QueueMailer;                            // compiles: SendReceipt gets a QueueMailer
     singleton List<PriceRule> = [TaxRule, DiscountRule];                       // compiles
     singleton RedisStore(Environment environment) = new RedisStore(environment.require("REDIS_URL"));   // compiles: a foreign object, created here
+    transient SendReceipt = SendReceipt;                                       // compiles: a class binds to itself, so PHP# creates it
 }
 ```
 
 ```csharp
-// in a module
+// in a module that binds FeatureFlags, QueueMailer and SmtpMailer
 scoped Mailer(FeatureFlags flags, QueueMailer queue, SmtpMailer smtp) = flags.enabled("queue-mail") ? queue : smtp;   // compiles: runs once per request, job or command
 ```
 
@@ -55,13 +56,25 @@ module : App.Shop
 ```
 
 ```csharp
+// app/Shop/Checkout.sharp
 public class Checkout
 {
-    public Checkout(private Mailer mailer, private PaymentGateway gateway) { }   // compile error when no module binds PaymentGateway
+    public Checkout(private Mailer mailer, private PaymentGateway gateway) { }
+}
+
+// app/Shop/Module.sharp
+module
+{
+    singleton Mailer = SmtpMailer;
+    transient Checkout = Checkout;   // compile error: Checkout needs a PaymentGateway, and no module binds one
 }
 ```
 
 Each folder states what its classes get, next to the classes. The compiler sees every binding and every constructor, so a missing service fails the build, not a request.
+
+### Rejected: the container builds any concrete class it is asked for
+
+A class no module binds would be built through its constructor, as .NET's `ActivatorUtilities` and Laravel's container do. The compiler would then have to decide which classes the container builds, so a class created with `new`, such as `Money`, could be refused for a constructor parameter no container fills. Two hybrids of this were tried and rejected as incoherent. Only bound classes and listeners are created, so the set the compiler checks is the set the container builds.
 
 ### Rejected: runtime resolution by type, with registration at startup
 
@@ -115,6 +128,7 @@ Attributes are for consumers, such as an app's own `[Retry]`, never for the core
 ## Precedent
 
 - **Chosen:** NestJS modules for the per-folder structure and overrides, and Dagger for the compile-time check.
+- **Chosen, only bound classes:** NestJS, ASP.NET Core, Angular, and Guice with `requireExplicitBindings()`.
 - **Chosen, binding parameters:** Dagger's `@Provides` methods.
 - **Chosen, `scoped`:** ASP.NET Core's per-request scope.
 - **Chosen, environment and test modules:** ASP.NET Core's `appsettings.Production.json`, and NestJS's testing module.
