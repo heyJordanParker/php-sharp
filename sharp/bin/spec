@@ -25,6 +25,9 @@ const HARNESS = 'sharp/harness';
 // The folders that hold what measures the examples and everything that runs that measurement: the harness, the
 // scripts, the CI image and the workflows. Only a spec PR changes a file in them.
 const GUARDED = [HARNESS . '/', 'sharp/bin/', 'sharp/docker/', '.github/'];
+// Files in a GUARDED folder that measure no example: sharp/bin/native writes the engine's C header from the standard
+// library's declarations, and engine pull requests change it.
+const UNGUARDED = ['sharp/bin/native'];
 const PACKAGE = 'sharp/composer';
 const PACKAGE_FOLDER = 'vendor/heyjordanparker/php-sharp-composer';
 const MARKER = '<!-- example ';
@@ -1270,9 +1273,12 @@ function parse_list(string $text): array
     return $entries;
 }
 
-/** Whether $path sits in a GUARDED folder. */
+/** Whether $path sits in a GUARDED folder and is not UNGUARDED. */
 function guarded(string $path): bool
 {
+    if (in_array($path, UNGUARDED, true)) {
+        return false;
+    }
     foreach (GUARDED as $folder) {
         if (str_starts_with($path, $folder)) {
             return true;
