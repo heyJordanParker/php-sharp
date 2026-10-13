@@ -75,7 +75,7 @@ namespace {
     [, $native, $layout, $version, $class] = $argv;
     Composer\InstalledVersions::$version = $version === 'absent' ? null : $version;
     $root = dirname(__DIR__, 3);
-    $package = sys_get_temp_dir() . "/sharp_library_autoload_{$native}_{$layout}_{$version}_" . strtr($class, '\\', '_') . '_' . ($argv[5] ?? 'app');
+    $package = sys_get_temp_dir() . "/sharp_library_autoload_{$native}_{$layout}_{$version}_" . strtr($class, '\\', '_') . '_' . ($argv[5] ?? 'app') . '_' . getmypid();
     @mkdir("$package/vendor/composer", 0777, true);
     @mkdir("$package/src/App", 0777, true);
     @mkdir("$package/library/Sharp", 0777, true);

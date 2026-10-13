@@ -109,8 +109,125 @@ NULL
 int(4)
 NULL
 string(6) "2 of 2"
+array(3) {
+  [0]=>
+  int(9)
+  [1]=>
+  int(1)
+  [2]=>
+  int(2)
+}
+array(3) {
+  [0]=>
+  int(1)
+  [1]=>
+  int(2)
+  [2]=>
+  int(9)
+}
+OutOfRangeException: Undefined array key 3 in CollectionMethods.sharp on line 121
+OutOfRangeException: Undefined array key -1 in CollectionMethods.sharp on line 121
+bool(true)
+bool(false)
+array(3) {
+  [0]=>
+  int(1)
+  [1]=>
+  int(2)
+  [2]=>
+  int(1)
+}
+array(2) {
+  [0]=>
+  int(2)
+  [1]=>
+  int(1)
+}
+array(0) {
+}
+array(3) {
+  [0]=>
+  int(1)
+  [1]=>
+  int(9)
+  [2]=>
+  int(3)
+}
+array(2) {
+  [0]=>
+  array(3) {
+    [0]=>
+    int(1)
+    [1]=>
+    int(3)
+    [2]=>
+    int(4)
+  }
+  [1]=>
+  int(2)
+}
+array(3) {
+  [0]=>
+  bool(true)
+  [1]=>
+  array(2) {
+    [0]=>
+    int(1)
+    [1]=>
+    int(4)
+  }
+  [2]=>
+  int(3)
+}
+array(3) {
+  [0]=>
+  bool(false)
+  [1]=>
+  array(2) {
+    [0]=>
+    int(1)
+    [1]=>
+    int(4)
+  }
+  [2]=>
+  int(3)
+}
+array(2) {
+  [0]=>
+  array(0) {
+  }
+  [1]=>
+  int(4)
+}
+int(5)
+OutOfRangeException: The list is empty. in CollectionMethods.sharp on line 167
+int(1)
+NULL
+bool(true)
+bool(false)
+bool(true)
+bool(false)
+array(2) {
+  [0]=>
+  string(1) "5"
+  [1]=>
+  string(3) "tea"
+}
+array(2) {
+  ["tea"]=>
+  int(3)
+  ["pie"]=>
+  int(7)
+}
+bool(true)
+bool(false)
+bool(true)
+array(1) {
+  [0]=>
+  int(7)
+}
 NULL
 DivisionByZeroError: Modulo by zero in CollectionMethods.sharp on line 79
 NULL
-Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 65
-ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 66
+Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 103
+ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 104

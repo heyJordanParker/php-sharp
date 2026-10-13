@@ -4,7 +4,7 @@ sharp/bin/native writes the same native interface on every run, and an edited Ru
 <?php
 require __DIR__ . '/native_generator.inc';
 
-$copy = sys_get_temp_dir() . '/sharp_native_generator';
+$copy = sys_get_temp_dir() . '/sharp_native_generator_' . getmypid();
 native_generator_remove($copy);
 native_generator_copy($copy);
 $header = "$copy/ext/sharp/sharp_native.h";
