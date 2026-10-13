@@ -187,6 +187,8 @@ jobs:
           fetch-depth: 0
       # splitsh-lite starts the split at the commit that added sharp/mago, so it shares no history with the
       # repository's commits from before the move, and the push replaces them. The branch archive keeps them.
+      # git subtree split would keep that history, but it walks all of Mago's history in shell recursion and
+      # took more than 8 minutes without finishing.
       - name: Push the split
         working-directory: sharp/build/mago-sharp
         run: |
