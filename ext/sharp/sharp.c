@@ -2,6 +2,7 @@
 # include <config.h>
 #endif
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/wait.h>
@@ -30,6 +31,8 @@
 
 #define SHARP_FILE_EXTENSION ".sharp"
 #define SHARP_COMPILED_FOLDER ".sharp"
+/* How the path of an input that stands for the .sharp files of its folder ends: the bridge's unit::SOURCE_LISTING. */
+#define SHARP_SOURCE_LISTING "/*.sharp"
 
 #define SHARP_KIND_IS_ZEND_KIND(kind) \
 	ZEND_STATIC_ASSERT((zend_ast_kind) SHARP_AST_##kind == ZEND_AST_##kind, "SHARP_AST_" #kind " differs from ZEND_AST_" #kind);
@@ -265,16 +268,69 @@ static void sharp_free_stamp(zval *stamp)
 	efree(Z_PTR_P(stamp));
 }
 
+static int sharp_compare_names(Bucket *a, Bucket *b)
+{
+	return zend_binary_strcmp(ZSTR_VAL(a->key), ZSTR_LEN(a->key), ZSTR_VAL(b->key), ZSTR_LEN(b->key));
+}
+
+/* Stamps the listing of the folder that ends at length, as the bridge's unit::stamp does: the names of its regular files
+ * whose name ends in .sharp, each followed by a newline, in byte order. A folder that can't be opened lists nothing. */
+static void sharp_stamp_listing(const char *path, size_t length, sharp_stamp *stamp)
+{
+	zend_string *folder = zend_string_init(path, length, 0), *name;
+	PHP_XXH3_128_CTX context = {0};
+	HashTable names;
+	DIR *directory = VCWD_OPENDIR(ZSTR_VAL(folder));
+	struct dirent *entry;
+
+	zend_hash_init(&names, 8, NULL, NULL, 0);
+	while (directory && (entry = readdir(directory))) {
+		size_t name_length = strlen(entry->d_name);
+		zend_stat_t status;
+		zend_string *file;
+
+		if (name_length <= sizeof(SHARP_FILE_EXTENSION) - 1
+				|| memcmp(entry->d_name + name_length - (sizeof(SHARP_FILE_EXTENSION) - 1), SHARP_FILE_EXTENSION, sizeof(SHARP_FILE_EXTENSION) - 1) != 0) {
+			continue;
+		}
+		file = zend_string_concat2(ZSTR_VAL(folder), ZSTR_LEN(folder), entry->d_name, name_length);
+		if (VCWD_STAT(ZSTR_VAL(file), &status) == 0 && S_ISREG(status.st_mode)) {
+			zend_hash_str_add_empty_element(&names, entry->d_name, name_length);
+		}
+		zend_string_release(file);
+	}
+	if (directory) {
+		closedir(directory);
+	}
+	zend_hash_sort(&names, sharp_compare_names, false);
+
+	PHP_XXH3_128_Init(&context, NULL);
+	ZEND_HASH_FOREACH_STR_KEY(&names, name) {
+		PHP_XXH3_128_Update(&context, (const unsigned char *) ZSTR_VAL(name), ZSTR_LEN(name));
+		PHP_XXH3_128_Update(&context, (const unsigned char *) "\n", 1);
+		stamp->size += ZSTR_LEN(name) + 1;
+	} ZEND_HASH_FOREACH_END();
+	PHP_XXH3_128_Final(stamp->hash, &context);
+	stamp->exists = true;
+	stamp->hashed = true;
+
+	zend_hash_destroy(&names);
+	zend_string_release(folder);
+}
+
 static sharp_stamp *sharp_stamp_of(zend_string *path)
 {
 	sharp_stamp *stamp = zend_hash_find_ptr(&SHARP_G(request_stamps), path);
 	sharp_stamp fresh = {0};
 	zend_stat_t status;
+	size_t listing = sizeof(SHARP_SOURCE_LISTING) - 1;
 
 	if (stamp) {
 		return stamp;
 	}
-	if (VCWD_STAT(ZSTR_VAL(path), &status) == 0 && S_ISREG(status.st_mode)) {
+	if (ZSTR_LEN(path) >= listing && memcmp(ZSTR_VAL(path) + ZSTR_LEN(path) - listing, SHARP_SOURCE_LISTING, listing) == 0) {
+		sharp_stamp_listing(ZSTR_VAL(path), ZSTR_LEN(path) - listing + 1, &fresh);
+	} else if (VCWD_STAT(ZSTR_VAL(path), &status) == 0 && S_ISREG(status.st_mode)) {
 		fresh.exists = true;
 		fresh.size = (uint64_t) status.st_size;
 		fresh.mtime_ns = sharp_mtime_ns(&status);
@@ -375,7 +431,7 @@ static bool sharp_input_current(const sharp_compiled *compiled, const sharp_inpu
 		current = !stamp->exists;
 	} else if (!stamp->exists) {
 		current = false;
-	} else if (stamp->size == input->size && stamp->mtime_ns == input->mtime_ns) {
+	} else if (!stamp->hashed && stamp->size == input->size && stamp->mtime_ns == input->mtime_ns) {
 		current = true;
 	} else {
 		if (!stamp->hashed) {
