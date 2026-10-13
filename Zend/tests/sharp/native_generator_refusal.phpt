@@ -4,7 +4,7 @@ sharp/bin/native refuses an extern declaration it cannot read, naming its file a
 <?php
 require __DIR__ . '/native_generator.inc';
 
-$copy = sys_get_temp_dir() . '/sharp_native_generator_refusal';
+$copy = sys_get_temp_dir() . '/sharp_native_generator_refusal_' . getmypid();
 native_generator_remove($copy);
 native_generator_copy($copy);
 file_put_contents("$copy/sharp/composer/library/Sharp/Text/Join.sharp", <<<'SHARP'

@@ -2,7 +2,7 @@
 
 ## Decision
 
-"Undecided, in order" lists no standard library APIs. The standard library is specified with the library itself, by the team lead. No section holds an **Open** heading for a standard library API either. Sections 12, 15 and 28.1 state the capability, and the library specifies `keys()` and `entries()`, the dispatcher (php-sharp #56) and the structure facts (php-sharp #53).
+"Undecided, in order" lists no standard library APIs. The standard library is specified with the library itself. No section holds an **Open** heading for a standard library API either. Sections 12, 15 and 28.1 state the capability, and the library specifies `keys()` and `entries()`, the dispatcher (php-sharp #56) and the structure facts (php-sharp #53).
 
 ## Options
 
@@ -11,7 +11,7 @@
 ```text
 ## Undecided, in order
 
-None. The standard library is specified with the library itself, by the team lead.
+None. The standard library is specified with the library itself.
 ```
 
 "Undecided, in order" holds the questions that wait on the Architect. The standard library's APIs have their own owner, so the list names none of them.

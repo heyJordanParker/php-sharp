@@ -1,0 +1,29 @@
+namespace Demo;
+
+class Point
+{
+    public int x { get; set; } = 0;
+    public List<Point> near { get; set; } = [];
+    public List<Point> far
+    {
+        get => field;
+        set => field = value;
+    } = [];
+
+    public List<int?> read(List<Point> points)
+    {
+        this.near = points;
+        this.far = points;
+        return [points[0]?.x, points[5]?.x, this.near[5]?.x, this.far[0]?.x, this.far[5]?.x, points[0]?.doubled(), points[5]?.doubled()];
+    }
+
+    public int doubled() => this.x * 2;
+
+    public static List<Point> moved(List<Point> points, int row)
+    {
+        points[row].x = 5;
+        points[row].x += 2;
+        points[row].x++;
+        return points;
+    }
+}
