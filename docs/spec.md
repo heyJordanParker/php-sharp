@@ -2775,9 +2775,9 @@ title.slug();
 title.isBlank;
 ```
 
-- **An extension applies only in files that import its class.**
-- **An extension cannot hide a real member.** If the type, or any class derived from it, has a member with that name, the extension is a compile error.
-- **When the code runs, a real member wins,** and otherwise the extension imported in that file is called. The checker's rule above guarantees the two never compete.
+- **An extension applies in files that import its class, or in its class's own namespace.**
+- **A member the receiver's type declares or inherits wins,** and an extension of that name is a compile error.
+- **Otherwise the extension applies, chosen from the type the code shows,** even on an object of a subclass with its own member of that name.
 - **Extensions can only reach the type's public members,** so access rules still hold.
 - **The receiver's type picks among imported extensions with one name,** as in C# and Kotlin:
 

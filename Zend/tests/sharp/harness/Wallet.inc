@@ -8,3 +8,13 @@ class Wallet
     {
     }
 }
+
+class AuditedWallet extends Wallet
+{
+    public bool $isEmpty = true;
+
+    public function total(int $extra): int
+    {
+        return 100 + $extra;
+    }
+}

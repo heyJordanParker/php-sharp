@@ -1,6 +1,7 @@
 namespace Demo;
 
 import Demo.Wallets.WalletExtensions;
+import Lib.AuditedWallet;
 import Lib.Wallet;
 
 public class WalletReport
@@ -10,4 +11,6 @@ public class WalletReport
             + (wallet.isEmpty ? "empty" : "full");
 
     public static string label(Wallet|string owner) => owner.label;
+
+    public static string audited(AuditedWallet wallet) => (string) wallet.total(2) + " " + (wallet.isEmpty ? "empty" : "full");
 }
