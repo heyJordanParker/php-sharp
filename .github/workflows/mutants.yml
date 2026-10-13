@@ -1,0 +1,117 @@
+name: Mutants
+
+# Every pull request's builder proves each new test fails with its code removed, and the reviewer checks those
+# proofs, so mutants runs on master instead of on every pull request: on each merge, against the merge's diff,
+# and nightly, against the last day's diff. It reports surviving mutants and never blocks a merge.
+on:
+  push:
+    branches: [master]
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+env:
+  # The code whose mutants mutants tests, and so the list mutants-plan shards.
+  MUTANTS_FILES: crates/{analyzer,semantics,sharp-bridge}/src/**
+
+defaults:
+  run:
+    working-directory: sharp/mago
+
+jobs:
+  # Lists the diff's mutants, so mutants runs them in shards of 6, on at most 8 runners. A mutant takes about
+  # 2 minutes against every test, so a shard of 6 takes about 15.
+  mutants-plan:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    outputs:
+      base: ${{ steps.base.outputs.base }}
+      shards: ${{ steps.plan.outputs.shards }}
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: tree:0
+
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants@27.1.0
+
+      - name: The commit the diff starts from
+        id: base
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            base="$BEFORE"
+          else
+            base=$(git rev-list -1 --first-parent --before="1 day ago" HEAD)
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+
+      - name: Plan the shards
+        id: plan
+        env:
+          BASE: ${{ steps.base.outputs.base }}
+        run: |
+          git diff --relative "$BASE" HEAD > master.diff
+          cargo mutants --list --in-diff master.diff --workspace --file "$MUTANTS_FILES" > mutants.txt
+          count=$(wc -l < mutants.txt)
+          shards=$(( (count + 5) / 6 ))
+          shards=$(( shards > 8 ? 8 : shards ))
+          echo "$count mutants in $shards shards"
+          echo "shards=$(jq -cn --argjson n "$shards" '[range($n)]')" >> "$GITHUB_OUTPUT"
+
+  # A surviving mutant is a line some test runs but no test checks, and each one shows as an annotation.
+  mutants:
+    needs: mutants-plan
+    if: needs.mutants-plan.outputs.shards != '[]'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.mutants-plan.outputs.shards) }}
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: tree:0
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - name: cache rust toolchain
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sharp/mago
+          key: ${{ runner.os }}-rust-mutants
+          cache-on-failure: true
+
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants@27.1.0
+
+      - name: Test the diff's mutants
+        env:
+          BASE: ${{ needs.mutants-plan.outputs.base }}
+        run: |
+          git diff --relative "$BASE" HEAD > master.diff
+          cargo mutants --in-place --in-diff master.diff --workspace --file "$MUTANTS_FILES" \
+            --shard "${{ matrix.shard }}/${{ strategy.job-total }}" --baseline skip --timeout 300 --caught --unviable \
+            --test-package mago-analyzer --test-package mago-semantics --test-package mago-sharp-bridge \
+            --cargo-arg=--locked --cargo-arg=--tests
