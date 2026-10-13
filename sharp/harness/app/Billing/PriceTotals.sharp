@@ -1,0 +1,12 @@
+namespace App.Billing;
+
+import App.Elided;
+import App.Money;
+
+public static class PriceTotals
+{
+    extension(Map<string, Money> prices)
+    {
+        public Money total() => throw new Elided();
+    }
+}

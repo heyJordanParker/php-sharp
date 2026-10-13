@@ -1,0 +1,22 @@
+namespace Demo;
+
+import Demo.Audits.AuditExtensions;
+import Demo.Wallets.WalletExtensions;
+import Lib.AuditedWallet;
+import Lib.Wallet;
+
+public class WalletReport
+{
+    public static string describe(Wallet wallet, string name)
+        => name.trim().shout() + " " + (string) wallet.total(2) + " " + (string) wallet.total(extra: 3) + " "
+            + (wallet.isEmpty ? "empty" : "full");
+
+    public static string label(Wallet|string owner) => owner.label;
+
+    public static string audited(AuditedWallet wallet) => (string) wallet.total(2) + " " + (wallet.isEmpty ? "empty" : "full");
+
+    public static string direct(Wallet wallet)
+        => (string) WalletExtensions.total(wallet, 4) + " " + (WalletExtensions.isEmpty(wallet) ? "empty" : "full");
+
+    public static string ranks(Wallet wallet, AuditedWallet audited) => wallet.rank() + " " + audited.rank();
+}

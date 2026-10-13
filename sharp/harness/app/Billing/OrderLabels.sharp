@@ -1,0 +1,11 @@
+namespace App.Billing;
+
+import App.Order;
+
+public static class OrderLabels
+{
+    extension(Order order)
+    {
+        public string caption() => "order";
+    }
+}
