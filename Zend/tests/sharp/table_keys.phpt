@@ -65,6 +65,45 @@ final class Counted
     }
 }
 
+// Two sibling classes that inherit one declared ==, and a third that declares its own with the same body.
+abstract class Party
+{
+    public function __construct(public int $id) {}
+
+    public static function op_Equality(mixed $a, mixed $b): bool
+    {
+        return $a->id === $b->id;
+    }
+
+    public function hash(): int
+    {
+        return $this->id;
+    }
+}
+
+final class Guest extends Party
+{
+}
+
+final class Host extends Party
+{
+}
+
+final class Stranger
+{
+    public function __construct(public int $id) {}
+
+    public static function op_Equality(mixed $a, mixed $b): bool
+    {
+        return $a->id === $b->id;
+    }
+
+    public function hash(): int
+    {
+        return $this->id;
+    }
+}
+
 final class Plain
 {
 }
@@ -103,6 +142,8 @@ $rows = [
     'an enum case' => fn () => held([Tone::Warm, 'a', Tone::Cool, 'b', Tone::Warm, 'c']),
     'a declared ==' => fn () => held([new Cents(5, 'first'), 'a', new Cents(5, 'second'), 'b', new Cents(6, 'third'), 'c']),
     'a struct, by its whole value' => fn () => held([new Spot(1, 2), 'a', new Spot(1, 2), 'b', new Spot(2, 1), 'c']),
+    'siblings share the == they inherit' => fn () => held([new Guest(1), 'a', new Host(1), 'b', new Host(2), 'c']),
+    'an unrelated class with its own ==' => fn () => held([new Guest(1), 'a', new Stranger(1), 'b']),
     'a chain of equal hashes' => fn () => held([new Clash(1), 'a', new Clash(2), 'b', new Clash(3), 'c', new Clash(2), 'd']),
     'an object without ==' => fn () => held([$plain, 'a', new Plain(), 'b', $plain, 'c']),
     'a List' => fn () => held([[1, 2], 'a', [1, 2.0], 'b', [2, 1], 'c']),
@@ -150,6 +191,8 @@ true, false and null: true => d, false => b, NULL => c, 1 => e
 an enum case: Warm => c, Cool => b
 a declared ==: Cents{"amount":5,"label":"first"} => b, Cents{"amount":6,"label":"third"} => c
 a struct, by its whole value: Demo\Spot{"x":1,"y":2} => b, Demo\Spot{"x":2,"y":1} => c
+siblings share the == they inherit: Guest{"id":1} => b, Host{"id":2} => c
+an unrelated class with its own ==: Guest{"id":1} => a, Stranger{"id":1} => b
 a chain of equal hashes: Clash{"id":1} => a, Clash{"id":2} => d, Clash{"id":3} => c
 an object without ==: Plain[] => c, Plain[] => b
 a List: array (

@@ -3589,7 +3589,9 @@ static zend_always_inline void zend_fetch_property_address(zval *result, zval *c
 						 * Similar as with magic __get() allow them, but return the value as a copy
 						 * to make sure no actual modification is possible. */
 						ZEND_ASSERT(type == BP_VAR_W || type == BP_VAR_RW || type == BP_VAR_UNSET);
-						if (Z_TYPE_P(ptr) == IS_OBJECT) {
+						/* A PHP# Map or Set is a value, so a write through it would change the property, as for an
+						 * array. */
+						if (Z_TYPE_P(ptr) == IS_OBJECT && !SHARP_IS_TABLE(ptr)) {
 							ZVAL_COPY(result, ptr);
 						} else {
 							if (prop_info->flags & ZEND_ACC_READONLY) {

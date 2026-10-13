@@ -31,4 +31,30 @@ class Crossings
     public static Map<string, int> returned() => price_list();
 
     public static Map<string, int> received(Map<string, int> counts) => counts;
+
+    public static List<string> objects(Map<string, int> prices, Set<string> tags)
+    {
+        return [
+            count_of_countable(prices),
+            count_of_traversable(tags),
+            json_of(prices),
+            type_of_object(tags),
+            count_of_map(prices),
+        ];
+    }
+
+    public static string counted(Map<string, int> prices)
+    {
+        const counter = array_counter();
+        return counter(prices);
+    }
+
+    public static string applied(Function<string(Map<string, int>)> each, Map<string, int> prices) => each(prices);
+
+    public static List<string> named(Map<string|Level, int> counts) => [`${counts.count()}`, `${counts["5"] ?? -1}`, `${counts.has("5")}`];
+}
+
+public enum Level : string
+{
+    case Low = "low";
 }

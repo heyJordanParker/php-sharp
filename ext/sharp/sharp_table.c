@@ -444,8 +444,13 @@ bool sharp_equal(zval *a, zval *b, bool *equal)
 				return true;
 			}
 			if (left->ce != right->ce && !instanceof_function(right->ce, left->ce) && !instanceof_function(left->ce, right->ce)) {
-				*equal = false;
-				return true;
+				/* Two sibling classes compare by the operator == both inherit, the one PHP#'s == between them runs. */
+				zend_function *ours = sharp_method(left->ce, "op_equality", strlen("op_equality"));
+				zend_function *theirs = sharp_method(right->ce, "op_equality", strlen("op_equality"));
+				if (!ours || !theirs || ours->common.scope != theirs->common.scope) {
+					*equal = false;
+					return true;
+				}
 			}
 			if (left->ce == sharp_ce_map || left->ce == sharp_ce_set) {
 				return sharp_equal_tables(left, right, equal);

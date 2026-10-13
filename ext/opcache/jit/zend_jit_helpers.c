@@ -2001,6 +2001,14 @@ static void ZEND_FASTCALL zend_jit_verify_return_slow(zval *arg, const zend_op_a
 	}
 }
 
+/* Whether a W, RW or UNSET fetch of a property plain PHP can't write gives a copy of the object it holds, as the VM's
+ * zend_fetch_property_address does. A PHP# Map or Set is a value, so a write through it would change the property, as
+ * for an array, and the fetch raises the array's error instead. */
+static bool ZEND_FASTCALL zend_jit_fetch_obj_w_copies(zval *property)
+{
+	return Z_TYPE_P(property) == IS_OBJECT && !SHARP_IS_TABLE(property);
+}
+
 static void ZEND_FASTCALL zend_jit_fetch_obj_r_slow(zend_object *zobj)
 {
 	zval *retval;
