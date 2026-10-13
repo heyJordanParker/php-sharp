@@ -21,9 +21,10 @@ const DOCUMENTS = ['README.md', 'docs/spec.md'];
 const BASELINE = 'sharp/baseline/spec';
 const SELF_TEST = 'sharp/spec-self-test.md';
 const HARNESS = 'sharp/harness';
-// What measures the examples: this script and the harness. A pull request that changes them changes nothing else that
-// runs, so a feature can't move the measure it is judged by.
-const GUARDED = ['sharp/bin/spec', HARNESS . '/'];
+// What measures an example: this script. A pull request that changes it changes nothing else that runs, so a feature
+// can't move the measure it is judged by. Feature pull requests add harness classes, so the harness is not guarded:
+// the pull request body lists a harness change, and its review checks that no stub makes an example pass falsely.
+const GUARDED = ['sharp/bin/spec'];
 const PACKAGE = 'sharp/composer';
 const PACKAGE_FOLDER = 'vendor/heyjordanparker/php-sharp-composer';
 const MARKER = '<!-- example ';
@@ -1269,6 +1270,43 @@ function parse_list(string $text): array
     return $entries;
 }
 
+/**
+ * @return array<string, string> the section of each example sharp/baseline/spec lists, by id, in the working tree or at
+ * commit $at. The list becomes a folder with one empty file `<section>/<id>` per failing example, so pull requests that
+ * list different examples never edit the same file. A base that still has the file of `<section>\t<id>` lines reads too.
+ */
+function listed(string $root, ?string $at = null): array
+{
+    if ($at === null ? is_file("$root/" . BASELINE) : git_status($root, 'cat-file', '-t', "$at:" . BASELINE)[0] === "blob\n") {
+        return parse_list($at === null ? file_get_contents("$root/" . BASELINE) : git($root, 'show', "$at:" . BASELINE));
+    }
+    if ($at !== null) {
+        $paths = array_filter(explode("\0", git($root, 'ls-tree', '-r', '-z', '--name-only', $at, '--', BASELINE . '/')));
+    } elseif (is_dir("$root/" . BASELINE)) {
+        $paths = [];
+        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator("$root/" . BASELINE, FilesystemIterator::SKIP_DOTS)) as $file) {
+            if ($file->getSize() !== 0) {
+                fail(substr($file->getPathname(), strlen("$root/")) . ' is not empty. A listed example is an empty file.');
+            }
+            $paths[] = substr($file->getPathname(), strlen("$root/"));
+        }
+    } else {
+        $paths = [];
+    }
+    $entries = [];
+    foreach ($paths as $path) {
+        if (!preg_match('~^' . preg_quote(BASELINE, '~') . '/(' . SECTION . ')/([a-z0-9-]+)$~u', $path, $m)) {
+            fail("$path is not a `<section>/<example id>` file, such as " . BASELINE . '/§6.1/map-reads.');
+        }
+        if (isset($entries[$m[2]])) {
+            fail("$m[2] is listed under both {$entries[$m[2]]} and $m[1].");
+        }
+        $entries[$m[2]] = $m[1];
+    }
+
+    return $entries;
+}
+
 /** Whether $path is a GUARDED file or sits in a GUARDED folder. */
 function guarded(string $path): bool
 {
@@ -1290,7 +1328,7 @@ function refuse_links(string $root): void
 {
     $read = [...DOCUMENTS, BASELINE];
     $watched = [...$read, ...GUARDED];
-    $refused = static fn (string $path): bool => in_array($path, $read, true) || guarded($path)
+    $refused = static fn (string $path): bool => in_array($path, $read, true) || str_starts_with($path, BASELINE . '/') || guarded($path)
         || array_filter($watched, static fn (string $kept): bool => str_starts_with($kept, "$path/")) !== [];
     foreach (array_filter(explode("\0", git($root, 'ls-files', '-s', '-z'))) as $entry) {
         [$mode, $path] = [strtok($entry, ' '), substr($entry, strpos($entry, "\t") + 1)];
@@ -1323,8 +1361,8 @@ function compare_with_base(string $root, string $base): int
         return 0;
     }
     refuse_links($root);
-    $before = parse_list(git($root, 'show', "$base:" . BASELINE));
-    $after = parse_list(file_get_contents("$root/" . BASELINE));
+    $before = listed($root, $base);
+    $after = listed($root);
     $head_examples = examples($root);
     $base_examples = examples($root, $base);
     $base_fingerprints = array_column($base_examples, 'id', 'fingerprint');
@@ -1334,7 +1372,7 @@ function compare_with_base(string $root, string $base): int
     $changed_files = array_filter(explode("\0", git($root, 'diff', '--name-only', '--no-renames', '-z', $base)));
     // Markdown other than the documents never runs, so it changes no result and may change beside a guarded file.
     $outside = array_values(array_filter($changed_files, static fn (string $file): bool => !in_array($file, [...DOCUMENTS, BASELINE], true)
-        && !guarded($file) && !str_ends_with($file, '.md')));
+        && !str_starts_with($file, BASELINE . '/') && !guarded($file) && !str_ends_with($file, '.md')));
     $problems = [];
 
     if ($outside !== []) {
@@ -1398,7 +1436,7 @@ function completes(string $root, string $body): int
 
     $within = static fn (string $section, string $claim): bool => $section === $claim || str_starts_with($section, "$claim.");
     $examples = array_filter(examples($root), static fn (array $example): bool => $example['ignore'] === null);
-    $listed = parse_list(file_get_contents("$root/" . BASELINE));
+    $listed = listed($root);
     $failed = false;
     foreach (array_unique($sections) as $claim) {
         $checked = array_filter($examples, static fn (array $example): bool => $within($example['section'], $claim));

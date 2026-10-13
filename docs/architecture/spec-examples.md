@@ -245,9 +245,9 @@ No file of the pull request runs, which is what makes `pull_request_target` safe
           php "$RUNNER_TEMP/spec" --base "$BASE"
 ```
 
-`SPEC_GUARD` runs `--base`. It reads `sharp/baseline/spec`, `docs/spec.md` and `README.md` at the base with `git show`, and from the merge commit's checkout. It lists the changed files with `git diff --name-only --no-renames -z`. With `--no-renames`, as `CHANGES` uses, a renamed file shows its old path too, so a guarded file can't leave its folder unseen. With `-z`, git doesn't quote a path that holds a non-ASCII byte, so `sharp/harness/app/fünctions.php` still matches its folder. The base must be a commit in the repository, and any git call that fails fails the check.
+`SPEC_GUARD` runs `--base`. It reads `sharp/baseline/spec`, `docs/spec.md` and `README.md` at the base with `git show`, and from the merge commit's checkout. It lists the changed files with `git diff --name-only --no-renames -z`. With `--no-renames`, as `CHANGES` uses, a renamed file shows its old path too, so a guarded file can't move unseen. With `-z`, git doesn't quote a path that holds a non-ASCII byte, so a path such as `sharp/baseline/spec/§6.1/map-reads` still matches. The base must be a commit in the repository, and any git call that fails fails the check.
 
-**The guard reads no symbolic link.** Before it reads anything, each job fails when the pull request's tree holds a symbolic link at `docs/spec.md`, `README.md`, `sharp/baseline/spec` or a guarded file, anywhere in `sharp/harness/`, or at a folder above any of them. It checks both git's mode `120000` in `git ls-files -s` and `is_link()` on the checkout. A link could point to a file outside the checkout, and the job's log is public, so the message names the link's path and never its target. Only a commit that has no `sharp/baseline/spec` reads as "nothing to compare". The checker finds the repository from its own folder, and from the working directory when it runs outside a repository, as the copy in `$RUNNER_TEMP` does.
+**The guard reads no symbolic link.** Before it reads anything, each job fails when the pull request's tree holds a symbolic link at `docs/spec.md`, `README.md`, `sharp/baseline/spec` or a guarded file, anywhere in `sharp/baseline/spec/`, or at a folder above any of them. It checks both git's mode `120000` in `git ls-files -s` and `is_link()` on the checkout. A link could point to a file outside the checkout, and the job's log is public, so the message names the link's path and never its target. Only a commit that has no `sharp/baseline/spec` reads as "nothing to compare". The checker finds the repository from its own folder, and from the working directory when it runs outside a repository, as the copy in `$RUNNER_TEMP` does.
 
 `SPEC_GUARD` and `COMPLETES` join the `master merge gate` ruleset after this lands. Until then a pull request's guard runs only from a base that has this workflow, so this pull request, whose base has none, proves the guard locally.
 
@@ -285,7 +285,9 @@ CI fails in each of the four cases:
 
 **A feature PR changes the spec with its code.** One pull request changes the language's rules in `docs/spec.md`, their examples, `sharp/baseline/spec`, the checker and the engine. The list still has to name exactly the examples that fail, so the ratchet holds: a passing example leaves the list, and an example off the list passes.
 
-**A PR that changes the measure changes nothing else.** The measure is what `GUARDED` lists in `sharp/bin/spec`: `sharp/bin/spec` itself and `sharp/harness/`, the classes and stubs every example compiles against. A pull request that changes any other file, Markdown aside, leaves them as the base has them, so a feature can't move the measure it is judged by. The guard matches `sharp/harness/` as a whole folder, so a file added there is guarded too. Markdown never runs, so a Markdown file, such as this note, may change beside a guarded file. A new example that needs a new harness class lands in two pull requests: the class first, then the example.
+**A PR that changes the measure changes nothing else.** The measure is `sharp/bin/spec`, the one file `GUARDED` lists. A pull request that changes any other file, Markdown and `sharp/baseline/spec` aside, leaves it as the base has it, so a feature can't move the measure it is judged by. Markdown never runs, so a Markdown file, such as this note, may change beside it.
+
+**A harness change is reviewed, not guarded.** A feature adds the harness classes and stubs its examples compile against, such as the `Username` struct the structs examples use, so `sharp/harness/` changes in feature pull requests. The pull request body lists every harness file it adds or changes, and its review checks that no stub makes an example pass falsely, such as a stub that returns the value a line claims instead of running the code that gives it.
 
 **One fingerprint covers the whole example,** all but its id: its section, and every block's marker line, setup, fence language, code and run comment. A moved example, a renumbered heading, a changed fence language, shape, `alone`, `in <Class>` or `ignore` all change it. A renamed example keeps it. Case 3 matches it across ids, so an unchanged example can't fail and join the list, even under a renumbered heading. A pull request may rename a listed example: the new id takes the entry when the base listed the old id and the head no longer does.
 
@@ -315,7 +317,7 @@ sharp/
 ├── docker/
 │   ├── Dockerfile        # installs elan, for the law examples
 │   └── run               # ELAN_HOME and XDG_CACHE_HOME under sharp/build/
-└── harness/              # (guarded) new: the classes and plain PHP stubs the examples share
+└── harness/              # new: the classes and plain PHP stubs the examples share, reviewed in every pull request that changes them
 docs/
 ├── spec.md               # a marker above every csharp, ts and php block
 └── architecture/spec-examples.md
