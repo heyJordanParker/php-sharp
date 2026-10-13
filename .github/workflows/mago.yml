@@ -1,0 +1,397 @@
+name: Mago
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_call:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: sharp/mago
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        rust: [stable, nightly]
+        exclude:
+          - { os: macos-latest, rust: nightly }
+
+    runs-on: ${{ matrix.os }}
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+
+      - name: cache rust toolchain
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sharp/mago
+          key: ${{ runner.os }}-rust-${{ matrix.rust }}
+          shared-key: ${{ runner.os }}-rust-${{ matrix.rust }}
+          cache-on-failure: true
+
+      - name: Install PHP
+        uses: shivammathur/setup-php@master
+        with:
+          php-version: "8.3"
+          tools: "composer:v2"
+
+      - name: Install composer dependencies
+        run: composer install
+
+      - name: Install just
+        uses: extractions/setup-just@v4
+
+      - name: Install elan and Lean
+        uses: ./.github/actions/setup-lean
+
+      - name: Test PHP SDK
+        run: just test-sdk
+
+      - name: cargo check
+        if: matrix.os == 'macos-latest'
+        run: cargo check --workspace --locked
+
+      # Workspace builds merge features, so only a build of the bridge alone shows what php links.
+      - name: cargo check the PHP# bridge alone
+        if: matrix.os == 'macos-latest'
+        run: cargo check -p mago-sharp-bridge --locked
+
+      - name: keep the file watcher out of the PHP# bridge
+        if: matrix.os == 'macos-latest'
+        run: |
+          if output=$(cargo tree -p mago-sharp-bridge -e normal -i notify --locked 2>&1); then
+            echo "$output"
+            echo "::error::mago-sharp-bridge depends on notify, so php would link a file watcher"
+            exit 1
+          fi
+          echo "$output" | grep -q "did not match any packages"
+
+      - name: Verify the PHP SDK's NodeKind is generated from the syntax tree
+        if: matrix.os == 'macos-latest'
+        run: |
+          php scripts/regen-sdk-node-kinds.php
+          git diff --exit-code composer/src/Sdk/Syntax/NodeKind.php
+
+      - name: cargo fmt
+        if: matrix.os == 'macos-latest'
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace --locked
+
+      - name: cargo test (property)
+        if: matrix.rust == 'stable' && matrix.os == 'ubuntu-latest'
+        run: cargo test -p mago-codex --features property-tests --locked
+
+      # Linux builds the release binary here because plain-php and the steps below run it. macOS builds
+      # its own in release-build, alongside the tests instead of after them.
+      - name: cargo build
+        if: matrix.rust == 'stable' && matrix.os == 'ubuntu-latest'
+        run: cargo build --release --locked
+
+      - name: Upload the release binary for plain-php
+        if: matrix.rust == 'stable' && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mago-${{ runner.os }}
+          path: sharp/mago/target/release/mago
+          if-no-files-found: error
+
+      - name: Validate composer code format
+        if: matrix.rust == 'stable' && matrix.os == 'ubuntu-latest'
+        run: ./target/release/mago format --dry-run
+
+      - name: Lint composer code
+        if: matrix.rust == 'stable' && matrix.os == 'ubuntu-latest'
+        run: ./target/release/mago lint --reporting-format=github
+
+      - name: Analyze composer code
+        if: matrix.rust == 'stable' && matrix.os == 'ubuntu-latest'
+        run: ./target/release/mago analyze --reporting-format=github
+
+  release-build:
+    runs-on: macos-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - name: cache rust toolchain
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sharp/mago
+          key: ${{ runner.os }}-rust-release
+          cache-on-failure: true
+
+      - name: cargo build
+        run: cargo build --release --locked
+
+      - name: Upload the release binary for plain-php
+        uses: actions/upload-artifact@v4
+        with:
+          name: mago-${{ runner.os }}
+          path: sharp/mago/target/release/mago
+          if-no-files-found: error
+
+  wasm-build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+
+      - name: cache rust toolchain
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sharp/mago
+          key: ${{ runner.os }}-rust-wasm
+          cache-on-failure: true
+
+      - name: Cache wasm-pack
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-pack
+          key: wasm-pack-0.13.1-${{ runner.os }}
+
+      - name: Install wasm-pack and build WASM
+        run: |
+          if ! command -v wasm-pack &>/dev/null; then
+            cargo install wasm-pack --version 0.13.1 --locked
+          fi
+          cd crates/wasm
+          wasm-pack build -d pkg --release
+
+      - name: check the files release.yml packs
+        run: |
+          for file in mago_wasm.d.ts mago_wasm.js mago_wasm_bg.js mago_wasm_bg.wasm package.json; do
+            test -f "crates/wasm/pkg/$file" || { echo "::error::wasm-pack wrote no crates/wasm/pkg/$file"; exit 1; }
+          done
+
+  # Installs heyjordanparker/mago-sharp from what git archive ships, the way Packagist ships it, and
+  # heyjordanparker/php-sharp-composer from sharp/composer, on the runner's own PHP. Then runs mago on a
+  # one-class .sharp project with the binary the job before built.
+  plain-php:
+    needs: [build-and-test, release-build]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: brew
+        if: runner.os == 'macOS'
+        run: brew install php composer
+
+      - name: Download the release binary
+        uses: actions/download-artifact@v4
+        with:
+          name: mago-${{ runner.os }}
+          path: ${{ runner.temp }}/mago
+
+      - name: Run mago from Composer on plain PHP
+        run: |
+          php -v
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "mago") | .version')
+          package="$RUNNER_TEMP/mago-sharp-package"
+          project="$RUNNER_TEMP/project"
+          mkdir -p "$package" "$project/src/App"
+          git archive HEAD | tar -x -C "$package"
+          cd "$project"
+          cat > composer.json <<JSON
+          {
+              "repositories": [
+                  { "type": "path", "url": "$GITHUB_WORKSPACE/sharp/composer" },
+                  {
+                      "type": "path",
+                      "url": "$package",
+                      "options": {"symlink": false, "versions": {"heyjordanparker/mago-sharp": "$version"}}
+                  }
+              ],
+              "autoload": { "psr-4": { "App\\\\": "src/App/" } },
+              "config": { "allow-plugins": { "heyjordanparker/php-sharp-composer": true } }
+          }
+          JSON
+          cat > mago.toml <<'TOML'
+          [source]
+          paths = ["src"]
+          extensions = ["sharp"]
+          TOML
+          cat > src/App/Counter.sharp <<'SHARP'
+          namespace App;
+
+          class Counter
+          {
+              private int count = 0;
+
+              public int add(int amount)
+              {
+                  this.count += amount;
+                  return this.count;
+              }
+          }
+          SHARP
+          composer require --no-interaction heyjordanparker/php-sharp-composer:@dev
+          composer require --no-interaction --dev "heyjordanparker/mago-sharp:$version"
+          binary_dir="vendor/heyjordanparker/mago-sharp/composer/bin/$version/mago-$version-$(rustc -vV | sed -n 's/^host: //p')"
+          mkdir -p "$binary_dir"
+          install -m 755 "$RUNNER_TEMP/mago/mago" "$binary_dir/mago"
+          output=$(vendor/bin/mago --version 2>&1)
+          echo "$output"
+          test "$output" = "mago $version"
+          vendor/bin/mago analyze
+          vendor/bin/mago compile
+
+  typos-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install typos
+        uses: taiki-e/install-action@v2
+        with:
+          tool: typos
+
+      - name: Search for misspellings
+        run: typos
+
+  # Nightly, because only nightly honours #[coverage(off)], cargo-llvm-cov's way to exclude code that cannot run by design.
+  patch-coverage:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      # The pull request's merge commit and its first parent, the base it merges into.
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: llvm-tools-preview
+
+      - name: cache rust toolchain
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sharp/mago
+          key: ${{ runner.os }}-rust-coverage
+          cache-on-failure: true
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov@0.9.1
+
+      # Every test of the three packages, because their code is shared with plain PHP and the PHP tests cover that part.
+      - name: Measure the tests' coverage
+        run: cargo llvm-cov --locked -p mago-analyzer -p mago-semantics -p mago-sharp-bridge --lcov --output-path lcov.info
+
+      # As coverage.py's exclude_lines leaves out `raise NotImplementedError`: an impossible arm is an unreachable!(…)
+      # call, which no test can run. Unlike coverage.py, a line is left out only when nothing before the call runs:
+      # nothing, a match arm's pattern without an `if` guard, `{`, `else {`, `||` or `.unwrap_or_else(||`. So
+      # `let kind = self.kind_of(call).unwrap_or_else(|| unreachable!(…));` still needs a test of `kind_of`.
+      # cargo-llvm-cov has no line exclusion, so its lcov loses the line's records: DA, and FN, which diff-cover reads
+      # as the line of a closure such as `|| unreachable!(…)`.
+      - name: Leave out the lines that only call unreachable!
+        run: |
+          awk '
+            function impossible(line,   prefix, pattern) {
+              prefix = substr(line, 1, index(line, "unreachable!(") - 1)
+              gsub(/^[ \t]+|[ \t]+$/, "", prefix)
+              if (prefix == "" || prefix ~ /^(\{|(\} )?else \{|\|\||\.unwrap_or_else\(\|\|)$/) return 1
+              if (prefix !~ /=>$/) return 0
+              pattern = substr(prefix, 1, length(prefix) - 2)
+              gsub(/\.\.=/, "", pattern)
+              return pattern !~ /[={;]/ && pattern !~ /(^|[^A-Za-z0-9_])if([^A-Za-z0-9_]|$)/
+            }
+            /^SF:/ { delete unreachable; file = substr($0, 4); for (n = 1; (getline line < file) > 0; n++) if (index(line, "unreachable!(") && impossible(line)) unreachable[n]; close(file) }
+            /^(DA|FN):/ { split(substr($0, 4), record, ","); if (record[1] in unreachable) next }
+            { print }
+          ' lcov.info > reachable.info
+
+      # From the repository root, where diff-cover's git paths and the lcov's source paths meet.
+      - name: Every line the pull request adds is covered
+        working-directory: .
+        run: |
+          if ! git cat-file -e HEAD^1:sharp/mago; then
+            echo "sharp/mago does not exist at the base, so no Mago line is new to it."
+            exit 0
+          fi
+          pipx run --spec diff-cover==10.6.0 diff-cover sharp/mago/reachable.info \
+            --compare-branch HEAD^1 \
+            --include 'sharp/mago/crates/analyzer/src/**' 'sharp/mago/crates/semantics/src/**' 'sharp/mago/crates/sharp-bridge/src/**' \
+            --format github-annotations:error \
+            --fail-under 100 || {
+            echo "::error::A test must run every line above. Mark a function that cannot run by design with #[cfg_attr(coverage_nightly, coverage(off))], and write an impossible arm as unreachable!(…) with its reason, on a line where nothing else runs."
+            exit 1
+          }
+
+  # The one required check of this workflow: it passes only when every job above passed, so a job
+  # added later blocks merges without a change to the repository's rules.
+  ci-passed:
+    if: always()
+    needs: [build-and-test, release-build, wasm-build, plain-php, typos-check, patch-coverage]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Every job passed
+        uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # release/v1
+        with:
+          allowed-skips: ${{ github.event_name != 'pull_request' && 'patch-coverage' || '' }}
+          jobs: ${{ toJSON(needs) }}
