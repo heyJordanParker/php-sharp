@@ -1254,6 +1254,7 @@ ZEND_VM_C_LABEL(assign_dim_op_new_array):
 		}
 
 		if (EXPECTED(Z_TYPE_P(container) == IS_OBJECT)) {
+			SHARP_SEPARATE(container);
 			zend_object *obj = Z_OBJ_P(container);
 
 			dim = GET_OP2_ZVAL_PTR_UNDEF(BP_VAR_R);
@@ -2810,6 +2811,7 @@ ZEND_VM_C_LABEL(try_assign_dim_array):
 			}
 		}
 		if (EXPECTED(Z_TYPE_P(object_ptr) == IS_OBJECT)) {
+			SHARP_SEPARATE(object_ptr);
 			zend_object *obj = Z_OBJ_P(object_ptr);
 
 			GC_ADDREF(obj);
@@ -6923,6 +6925,7 @@ ZEND_VM_C_LABEL(num_index_dim):
 			if (OP2_TYPE == IS_CONST && Z_EXTRA_P(offset) == ZEND_EXTRA_VALUE) {
 				offset++;
 			}
+			SHARP_SEPARATE(container);
 			Z_OBJ_HT_P(container)->unset_dimension(Z_OBJ_P(container), offset);
 		} else if (UNEXPECTED(Z_TYPE_P(container) == IS_STRING)) {
 			zend_throw_error(NULL, "Cannot unset string offsets");

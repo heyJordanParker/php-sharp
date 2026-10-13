@@ -19,6 +19,7 @@
 #include "Zend/zend_portability.h"
 #include "Zend/zend_types.h"
 #include "Zend/zend_API.h"
+#include "ext/sharp/php_sharp.h"
 
 static ZEND_COLD void undef_result_after_exception(void) {
 	const zend_op *opline = EG(opline_before_exception);
@@ -1526,6 +1527,7 @@ static zend_always_inline void ZEND_FASTCALL zend_jit_fetch_dim_obj_helper(zval 
 	zval *retval;
 
 	if (EXPECTED(Z_TYPE_P(object_ptr) == IS_OBJECT)) {
+		SHARP_SEPARATE(object_ptr);
 		zend_object *obj = Z_OBJ_P(object_ptr);
 
 		GC_ADDREF(obj);
@@ -1631,6 +1633,7 @@ static void ZEND_FASTCALL zend_jit_fetch_dim_obj_rw_helper(zval *object_ptr, zva
 static void ZEND_FASTCALL zend_jit_assign_dim_helper(zval *object_ptr, zval *dim, zval *value, zval *result)
 {
 	if (EXPECTED(Z_TYPE_P(object_ptr) == IS_OBJECT)) {
+		SHARP_SEPARATE(object_ptr);
 		zend_object *obj = Z_OBJ_P(object_ptr);
 
 		GC_ADDREF(obj);
@@ -1722,6 +1725,7 @@ static void ZEND_FASTCALL zend_jit_assign_dim_helper(zval *object_ptr, zval *dim
 static void ZEND_FASTCALL zend_jit_assign_dim_op_helper(zval *container, zval *dim, zval *value, binary_op_type binary_op)
 {
 	if (EXPECTED(Z_TYPE_P(container) == IS_OBJECT)) {
+		SHARP_SEPARATE(container);
 		zend_object *obj = Z_OBJ_P(container);
 		zval *z;
 		zval rv, res;

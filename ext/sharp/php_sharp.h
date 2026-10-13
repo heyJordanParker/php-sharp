@@ -15,4 +15,17 @@ void sharp_collection_of_value(zval *result, zval *value);
 void sharp_collection_of_property(zval *result, zend_object *object, zend_string *name, void **cache_slot);
 void sharp_collection_of_static_property(zval *result, zval *slot, const zend_property_info *info);
 
+/* Spec section 12: a Map and a Set are values, so the VM and the JIT copy a shared one into the holder an index
+ * write or unset goes through, as SEPARATE_ARRAY copies a shared array. */
+extern zend_class_entry *sharp_ce_map;
+extern zend_class_entry *sharp_ce_set;
+void sharp_separate(zval *holder);
+
+#define SHARP_SEPARATE(holder) do { \
+	if (UNEXPECTED((Z_OBJCE_P(holder) == sharp_ce_map || Z_OBJCE_P(holder) == sharp_ce_set) \
+			&& GC_REFCOUNT(Z_OBJ_P(holder)) > 1)) { \
+		sharp_separate(holder); \
+	} \
+} while (0)
+
 #endif
