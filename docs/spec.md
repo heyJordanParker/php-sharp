@@ -204,7 +204,7 @@ public string slug => Str.slug(this.name);                      // computed
 ```csharp
 Map<string, Plan> cache = [:];                                  // field
 public int views { get; private set; } = 0;                     // auto-property
-public List<Tag> tags { get; set; } = new List<Tag>();
+public List<Tag> tags { get; set; } = [];
 ```
 
 Initial values run before the parent's constructor, in the order the members are declared, and can't read `this`, as in C#.
