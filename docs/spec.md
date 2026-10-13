@@ -31,10 +31,10 @@ Named arguments use `label: "Name"`, the same "name: value" form used everywhere
 Variables have no `$`. A local is declared with `let`, which can be reassigned, or `const`, which cannot. The meanings match TypeScript.
 
 <!-- example inferred-locals: statements
-private Tenant tenant = new Tenant();
+private Account account = new Account();
 -->
 ```ts
-const currency = this.tenant.currency;
+const currency = this.account.currency;
 let total = 0;
 ```
 
@@ -344,16 +344,16 @@ die("Prune failed");                                     // compile error: write
 A constructor is named after its class. A parameter with an access modifier declares a member, and the parameter spells out which kind:
 
 - **`private Planner planner`** declares a field.
-- **`public Tenant tenant { get; }`** declares a property. A `public` parameter without accessor braces is a compile error, just as a public field is.
+- **`public Account account { get; }`** declares a property. A `public` parameter without accessor braces is a compile error, just as a public field is.
 - **A parameter with no modifier** is an ordinary parameter.
 
 <!-- example parameter-members: members in StoreService -->
 ```csharp
 public StoreService(
     private Planner planner,
-    [Field(label: "Tenant")] public Tenant tenant { get; } via Tracked,
+    [Field(label: "Account")] public Account account { get; } via Tracked,
 ) {
-    if (!tenant.active) { throw new InactiveTenant(tenant); }
+    if (!account.active) { throw new InactiveAccount(account); }
 }
 ```
 
@@ -447,7 +447,8 @@ A `struct` is a value type.
 - **`readonly struct` is a compile error,** because every struct is already read-only.
 - **`==` compares values.** `===` works on classes only (section 19).
 - **A struct cannot inherit or be inherited,** but it can implement interfaces.
-- **A struct has no default value.** Every `required` property must be set when one is created.
+- **A struct has no default value.** Every property or field without an initial value must be set when the struct is created, and `= null` makes a nullable one optional, as in Rust, Swift, Kotlin and TypeScript.
+- **A struct can be generic,** as in `public struct Pair<TFirst, TSecond>`, with the type parameters of section 11.
 
 <!-- example struct-changes -->
 ```csharp
@@ -476,19 +477,12 @@ Point p = new Point { x: 1, y: 2 };
 ```csharp
 Point q = p.moved(1, 0);              // compiles: q is a changed copy, and p is unchanged
 p.x = 5;                              // compile error: a struct never changes; return a changed copy from a method, such as moved
+Point origin = new Point { x: 0 };    // compile error: y has no initial value, so set it when the Point is created
 ```
 
 `with` copies an object or a struct and sets the listed properties through their `init` or `set` accessors. The original is unchanged.
 
-**A struct can declare a backing value** with the header an enum uses (section 20). `public struct Username : string` has a `string` backing value, so it can be a `Map` key (section 12).
-
-<!-- example struct-backing-value -->
-```csharp
-public struct Username : string
-{
-    public Username(public string value { get; }) { }
-}
-```
+**Any struct is a `Map` key by its whole value,** with nothing declared, as Swift's `Hashable` structs, Rust's `Hash` derive, C#'s record structs, Java's records, Kotlin's data classes and Go's structs are. Two structs are one key when they are `==` (section 19). A struct that holds a class instance, at any depth, can't key a `Map`, as Rust's `HashMap` needs every field to be `Hash` and Swift's `Dictionary` needs every field to be `Hashable`. Plain PHP sees a generated key text. A struct gets JSON key text only from its `toString()`, so `Json.encode` of a `Map` keyed by a struct without `toString()` is a compile error, as Jackson writes a key through `toString` and serde and Go refuse a key that is not text.
 
 **Every struct has a static `parse`,** which reads a `Map<string, Any?>` or an object's public properties and throws one error that lists every bad field, and a static `tryParse`, which gives null instead. The names follow `Int.parse` and `Int.tryParse` (section 24). Classes do not get them.
 
@@ -509,7 +503,7 @@ RenewRequest request = RenewRequest.parse(payload);     // throws: "customerId: 
 RenewRequest? maybe = RenewRequest.tryParse(payload);   // null on any bad field
 ```
 
-- The keys are the parameter names of the main constructor (section 9.1).
+- The keys are the parameter names of the main constructor (section 9.1), then every property an object initializer may set, as C#'s `System.Text.Json` reads a record.
 - `[Key("plan_code")]` renames the key a parameter reads.
 - A nested struct parses the same way.
 - A `List` checks each element.
@@ -666,7 +660,7 @@ There is no variance at the point of use, such as Java's `? extends T`.
 PHP# has three collection types: `List<T>`, `Map<TKey, TValue>` and `Set<T>`.
 
 - They are values, as structs (section 10) and PHP's own arrays are. Assigning or passing a collection copies it only when one side later writes to it.
-- A `Map`'s key is an `int`, a `string`, or a type with an `int` or `string` backing value (see **Map keys** below).
+- A `Map`'s key is an `int`, a `string`, a backed enum, or a struct (see **Map keys** below).
 - `List` and `Map` both run as plain PHP arrays. The engine knows which one it compiles from the checker's types (section 27), so each operation does what it naturally means on that kind of collection.
 
 <!-- example copy-on-write: statements
@@ -890,11 +884,11 @@ for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is a 
 }
 ```
 
-**Map keys:** a key is `int`, `string`, or any type with an `int` or `string` backing value. A backed enum is one (section 20). `public struct Username : string` declares one, with the same header an enum uses (section 10).
+**Map keys:** a key is `int`, `string`, a backed enum (section 20), or a struct by its whole value (section 10).
 
 - `counts[status]` runs as `$counts[$status->value]`.
 - A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type, as in `const [Status status, int n]`, stays allowed. An inferred `Map`, such as a `groupBy` result, gives its keys back the same way, because the checker's types reach the running program (section 27).
-- Plain PHP receives the backing values.
+- Plain PHP receives an enum key's backing value, and a generated key text for a struct key.
 
 <!-- example enum-map-keys -->
 ```csharp
@@ -949,7 +943,7 @@ List<Order> orders = [new Order()];
 ```csharp
 for (const [status, n] of stats.countByStatus(orders)) { … }   // compiles: status arrives as a Status, with no type written
 for (const [status, group] of orders.groupBy(o => o.status)) { … }   // compiles: an inferred Map's keys arrive as Status too
-Map<Username, Order> byUser = [:];                               // keyed by username.value
+Map<Username, Order> byUser = [:];                               // compiles: a struct keys a Map by its whole value
 ```
 
 **A list passed where a `Set` or a tuple is expected becomes one.** The receiving parameter converts it on arrival, as PHP already converts arguments to a parameter's type:
@@ -1214,7 +1208,7 @@ A function type is written as `Function<ReturnType(ParameterTypes)>`, in the sam
 ```csharp
 Function<Money?(readonly Line, string)> priceOf
 Function<void(Order)>? onPaid = null
-public Function<bool(Order)> eligibleFor(Tenant tenant)
+public Function<bool(Order)> eligibleFor(Account account)
 ```
 
 ### 14.2 Lambdas
@@ -1511,12 +1505,24 @@ new Artifact.fromJson(json: raw)
 
 When a variable has the same name as the property, the value can be left out:
 
+<!-- example initializer-shorthand -->
+```csharp
+// app/Amount.sharp
+namespace App;
+
+public struct Amount
+{
+    public int value { get; init; }
+    public string currency { get; init; }
+}
+```
+
 <!-- example initializer-shorthand: statements
-Tenant tenant = new Tenant();
+Account account = new Account();
 -->
 ```csharp
-const currency = tenant.currency;
-new Money { amount: 500, currency }      // short for currency: currency
+const currency = account.currency;
+Amount price = new Amount { value: 500, currency };     // short for currency: currency
 ```
 
 **Any parameter can be named at a call,** including a call into plain PHP. An override keeps every parameter name of the method it overrides (section 22), so a name means the same parameter on every class.
@@ -1552,7 +1558,7 @@ for (const [key, plan] of plans) { … }
 for (const [i, line] of lines.entries()) { … }
 ```
 
-A loop over a `Map` whose key has a backing value gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type stays allowed (section 12).
+A loop over a `Map` whose key is an enum or a struct gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type stays allowed (section 12).
 
 **A `const` loop variable can have its type written,** as in `for (const [Status status, int n] of counts)`. `let` with a written type is a parse error, because a typed local is written without `let` (section 2). A written `string` key over a `Map<string, TValue>` reads back as a `string`.
 
@@ -3499,4 +3505,4 @@ public class Checkout
 
 ## Undecided, in order
 
-None. The standard library is specified with the library itself, by the team lead.
+None. The standard library is specified with the library itself.

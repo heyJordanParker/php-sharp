@@ -9,7 +9,6 @@
 §7	variadic-parameters
 §8	standard-library-calls
 §9	parameter-members
-§10	struct-backing-value
 §10	struct-changes
 §10	struct-parse
 §10	struct-parse-object
