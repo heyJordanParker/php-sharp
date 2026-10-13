@@ -1,6 +1,6 @@
 # 63. The effects of printing and `exit`
 
-Superseded in part by [decision 76](076-plain-php-functions.md): a bare call such as `printf(…)`, `fwrite(…)` or `exit(1)` below is a compile error, and the call is written `global.printf(…)`. `global.fwrite` has both `Console` and `Files`, because the handle it takes can be a terminal or a file.
+Superseded in part by [decision 76](076-plain-php-functions.md): a bare call such as `printf(…)`, `fwrite(…)` or `exit(1)` below is a compile error, and the call is written `global.printf(…)`. A bare `STDERR` or `PHP_EOL` is a compile error too, and the constant is written `global.STDERR`. `global.fwrite` has both `Console` and `Files`, because the handle it takes can be a terminal or a file.
 
 ## Decision
 

@@ -122,7 +122,7 @@ Members: same opcodes and lines in 10 op arrays, same signatures in 1 classes
 Site: same opcodes and lines in 13 op arrays, same signatures in 3 classes
 Collections: same opcodes and lines in 7 op arrays, same signatures in 2 classes
 EnumKeys: same opcodes and lines in 16 op arrays, same signatures in 1 classes
-Interop: same opcodes and lines in 3 op arrays, same signatures in 1 classes
+Interop: same opcodes and lines in 5 op arrays, same signatures in 1 classes
 Lambdas: same opcodes and lines in 35 op arrays, same signatures in 1 classes
 Cashier: same opcodes and lines in 8 op arrays, same signatures in 1 classes
 Roster: same opcodes and lines in 6 op arrays, same signatures in 1 classes

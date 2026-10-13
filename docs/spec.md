@@ -415,6 +415,7 @@ public class Receipt
 
 - **Every PHP built-in function is a standard library method,** so calling one by its bare name from `.sharp` code is a compile error that names the method. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
 - **A built-in the standard library has no method for is called through PHP's root namespace,** as `global.levenshtein(a, b)` (section 23), and the standard library calls PHP the same way.
+- **PHP's constants are read through its root namespace too,** as `global.PHP_EOL` (section 23). A bare `PHP_EOL` is a compile error, because a bare uppercase name is always the code's own constant.
 
 **Output and exit go through the standard library.** `echo` and `print` are removed, and output goes through `Console` (section 29). `die` is removed, because `die("…")` prints its message and exits with status 0, which reports success. Exiting goes through `Process`.
 
@@ -2439,7 +2440,7 @@ namespace App.Tenant.Store;
 import App.Shared.Schema.Entities.DatabaseEntity;
 ```
 
-**Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always a class, or the namespace of a plain PHP library's functions. A full class name inside code is a compile error that names the import to add. A module header names a namespace, as the `namespace` line does, so `module : App.Shop` compiles (section 32).
+**Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always a class, or the namespace of a plain PHP library's functions and constants. A full class name inside code is a compile error that names the import to add. A module header names a namespace, as the `namespace` line does, so `module : App.Shop` compiles (section 32).
 
 **A plain PHP library's function is called through its namespace, as a member,** as Go calls a package's functions, as Python does after `import pdf`, as Java calls Kotlin's top-level functions and as C# calls F# modules. After `import Vendor.Pdf;`, the call is `Pdf.render(html)`. A function in PHP's root namespace is called as `global.now()`, as C#'s `global::` names the root. Importing a single function, or calling a function by its bare name, is a compile error, so every call outside the current class reads `Name.member(…)`:
 
@@ -2472,6 +2473,31 @@ namespace App.Invoices;
 import Vendor.Pdf.render;                                     // compile error: import the namespace Vendor.Pdf, and call Pdf.render
 
 public class Draft { }
+```
+
+**A plain PHP constant is read through its namespace the same way.** `global.PHP_EOL` reads PHP's constant, and `Pdf.DEFAULT_DPI` reads the library's after `import Vendor.Pdf;`. A bare uppercase name is always the code's own constant, so a bare PHP constant such as `PHP_EOL` is a compile error that says to write `global.PHP_EOL`:
+
+<!-- example library-constants -->
+```php
+namespace Vendor\Pdf;
+
+const DEFAULT_DPI = 300;
+```
+
+<!-- example library-constants -->
+```csharp
+// app/Invoices/Layout.sharp
+namespace App.Invoices;
+
+import Vendor.Pdf;
+
+public class Layout
+{
+    public string line(string text) => text + global.PHP_EOL;     // compiles: PHP's constant is read through global
+    public int largest() => global.PHP_INT_MAX;                   // compiles
+    public int dpi() => Pdf.DEFAULT_DPI;                          // compiles: the library's constant is read through its namespace
+    public string bare(string text) => text + PHP_EOL;            // compile error: write global.PHP_EOL
+}
 ```
 
 **An import never carries `uses`,** because a library's effect lives in its one `extern` declaration (section 29).
@@ -2642,7 +2668,7 @@ a ** b                       // int. Throws ArithmeticError at runtime when b < 
 ```
 
 - Division by zero throws `DivisionByZeroError`.
-- `PHP_INT_MIN / -1` throws `ArithmeticError`, because the result overflows.
+- `global.PHP_INT_MIN / -1` throws `ArithmeticError`, because the result overflows.
 - `/=` follows the same rules.
 - Like `+` (section 18), what `/` does is chosen from the operand types the checker sees.
 

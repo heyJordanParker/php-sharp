@@ -4,6 +4,8 @@
 
 A plain PHP function is called through its namespace, as a member. After `import Vendor.Pdf;`, the call is `Pdf.render(html)`. A function in PHP's root namespace is called as `global.now()`. Calling a function by its bare name, and importing a single function, are compile errors. `extern` names a function the same way, as `extern Pdf.render uses Files;` and `extern global.now uses Clock;`.
 
+A plain PHP constant is read through its namespace the same way. `global.PHP_EOL`, `global.PHP_INT_MAX` and `global.STDERR` read PHP's root constants, and `Pdf.DEFAULT_DPI` reads the library's after `import Vendor.Pdf;`. A bare uppercase name is always the code's own constant, so a bare PHP constant such as `PHP_EOL` is a compile error that says to write `global.PHP_EOL`.
+
 The error for a bare call names the standard library member that does the same work, such as `name.trim()` for `trim(name)`. One table in the checker maps each PHP function to that member, and also covers the syntax PHP# removed, such as `echo`. A function with no member gets `global.name(…)` in its message, and a function with a member gets its row in the pull request that ships the member.
 
 The standard library calls PHP the same way, with no exemption. This replaces decision 40's "Once the standard library wraps a PHP function, calling that function from `.sharp` code outside the standard library is a compile error that names the method. Functions not wrapped yet stay callable", and the `[Replaces]` attribute that marked which standard library method wraps which function.
@@ -26,10 +28,14 @@ public class Printer
     public int size(string html) => global.strlen(html);              // compiles: a root function goes through global
     public string draft(string html) => render(html);                 // compile error: write Pdf.render(…)
     public string label(string name) => trim(name);                   // compile error: write name.trim()
+    public string line(string text) => text + global.PHP_EOL;         // compiles: a root constant goes through global
+    public int largest() => global.PHP_INT_MAX;                       // compiles
+    public int dpi() => Pdf.DEFAULT_DPI;                              // compiles: the library's constant goes through its namespace
+    public string bare(string text) => text + PHP_EOL;                // compile error: write global.PHP_EOL
 }
 ```
 
-Every call outside the current class reads `Name.member(…)`, so a reader tells a plain PHP function from a method of the class without looking anything up. The message for a bare call is the same before and after the standard library grows a member, apart from the member it names.
+Every call outside the current class reads `Name.member(…)`, so a reader tells a plain PHP function from a method of the class without looking anything up. A constant reads the same way, so a bare uppercase name is always the code's own constant, never one PHP falls back to. The message for a bare call is the same before and after the standard library grows a member, apart from the member it names.
 
 ### Rejected: `[Replaces]` on the standard library method that wraps a function
 

@@ -13,3 +13,7 @@ namespace Demo {
         return "ships for {$cents} cents";
     }
 }
+
+namespace Lib\Shipping {
+    const FREE_ABOVE = 5000;
+}

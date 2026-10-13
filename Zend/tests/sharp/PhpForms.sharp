@@ -8,12 +8,12 @@ public class PhpForms
 
     public void report(int pruned)
     {
-        global.printf("Pruned %d carts" + PHP_EOL, pruned);
+        global.printf("Pruned %d carts" + global.PHP_EOL, pruned);
     }
 
     public void warn(string message)
     {
-        global.fwrite(STDERR, message + PHP_EOL);
+        global.fwrite(global.STDERR, message + global.PHP_EOL);
     }
 
     public void fail(string message, int code)
