@@ -15,11 +15,19 @@ var_dump($deploy->variable('SHARP_REGION'), $deploy->variable('SHARP_UNSET_REGIO
 var_dump($deploy->arguments() === $argv);
 echo implode(' ', array_slice($deploy->arguments(), 1)), ' ', $deploy->target(), "\n";
 
+$environment = new Sharp\Environment();
 $start = $deploy->folder();
 var_dump($start === getcwd());
-chdir(__DIR__ . '/harness');
-var_dump($deploy->folder() === $start, Demo\Deploy::create()->folder() === __DIR__ . '/harness');
-chdir($start);
+$environment->changeDirectory(__DIR__ . '/harness');
+var_dump($deploy->folder() === __DIR__ . '/harness', getcwd() === __DIR__ . '/harness');
+$environment->changeDirectory($start);
+var_dump($deploy->folder() === $start);
+try {
+    $environment->changeDirectory(__DIR__ . '/missing');
+} catch (RuntimeException $e) {
+    echo get_class($e), ': ', str_replace(__DIR__, '<dir>', $e->getMessage()), "\n";
+}
+var_dump(getcwd() === $start);
 
 var_dump(Sharp\Environment::require('SHARP_REGION'));
 try {
@@ -33,7 +41,6 @@ $code = 'require ' . var_export(__DIR__ . '/../../../sharp/composer/library/Shar
     . ' try { Demo\Deploy::create()->target(); } catch (OutOfRangeException $e) { echo get_class($e), "\n"; }';
 echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' ' . getenv('TEST_PHP_EXTRA_ARGS') . ' -r ' . escapeshellarg($code) . ' 2>&1');
 
-$environment = new Sharp\Environment();
 try {
     $environment->arguments = [];
 } catch (Error $e) {
@@ -45,7 +52,7 @@ try {
     echo $e->getMessage(), "\n";
 }
 try {
-    unset($environment->currentDirectory);
+    unset($environment->arguments);
 } catch (Error $e) {
     echo $e->getMessage(), "\n";
 }
@@ -58,9 +65,12 @@ production --force production
 bool(true)
 bool(true)
 bool(true)
+bool(true)
+RuntimeException: Environment.changeDirectory: the directory "<dir>/missing" cannot be entered
+bool(true)
 string(9) "eu-west-1"
 Environment.require: the environment variable "SHARP_UNSET_REGION" is not set
 OutOfRangeException
 Cannot modify readonly property Sharp\Environment::$arguments
 Cannot indirectly modify readonly property Sharp\Environment::$arguments
-Cannot unset readonly property Sharp\Environment::$currentDirectory
+Cannot unset readonly property Sharp\Environment::$arguments
