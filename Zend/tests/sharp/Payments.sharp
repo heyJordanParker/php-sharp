@@ -1,0 +1,14 @@
+namespace Demo;
+
+public class Payments
+{
+    public PaymentResult decline(string reason) => PaymentResult.Declined(reason: reason);
+
+    public PaymentResult pay(string id) => PaymentResult.Paid(id);
+
+    public string settle(PaymentResult.Paid paid) => paid.transactionId;
+
+    public CheckoutState open() => CheckoutState.Open;
+
+    public CheckoutState paying() => CheckoutState.Paying(gateway: "stripe");
+}

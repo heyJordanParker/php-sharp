@@ -1,5 +1,5 @@
 --TEST--
-A standard library whose native bodies match the engine's boots when autoload.php is required, declares no class until one is used, and loads a .sharp class of any namespace through PSR-4 or the class map
+A standard library whose native bodies match the engine's boots when autoload.php is required, declares no class until one is used, and loads a .sharp class of any namespace through PSR-4 or the class map, a case of an enum that carries data through its enum's file
 --FILE--
 <?php
 foreach ([
@@ -7,6 +7,8 @@ foreach ([
     ['classmap', 'Sharp\Text\Text'],
     ['psr4', 'App\Clock'],
     ['classmap', 'App\Clock'],
+    ['psr4', 'App\Tick\Now'],
+    ['classmap', 'App\Tick\Now'],
 ] as [$layout, $class]) {
     echo "== $layout, $class\n";
     echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n ' . escapeshellarg(__DIR__ . '/library_autoload.inc') . " engine $layout 0.1.0 " . escapeshellarg($class) . ' 2>&1');
@@ -29,3 +31,11 @@ noon
 booted, with no library class declared
 class map handed to Composer: []
 noon
+== psr4, App\Tick\Now
+booted, with no library class declared
+class map handed to Composer: []
+noon, with its enum
+== classmap, App\Tick\Now
+booted, with no library class declared
+class map handed to Composer: []
+noon, with its enum

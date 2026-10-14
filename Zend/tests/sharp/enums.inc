@@ -8,8 +8,14 @@ require __DIR__ . '/Suit.sharp';
 require __DIR__ . '/Rank.sharp';
 require __DIR__ . '/Shipment.sharp';
 require __DIR__ . '/Task.sharp';
+require __DIR__ . '/PaymentResult.sharp';
+require __DIR__ . '/CheckoutState.sharp';
+require __DIR__ . '/Payments.sharp';
 
+use Demo\CheckoutState;
 use Demo\HasLabel;
+use Demo\PaymentResult;
+use Demo\Payments;
 use Demo\Rank;
 use Demo\Shipment;
 use Demo\Stage;
@@ -29,6 +35,7 @@ function failure(callable $run): string
 for ($round = 0; $round < 100; $round++) {
     $shipment = new Shipment(Stage::from('a'));
     $task = new Task(2);
+    $payments = new Payments();
     $results = [
         Stage::from('a')->label(),
         Stage::from('p') instanceof BackedEnum,
@@ -67,6 +74,21 @@ for ($round = 0; $round < 100; $round++) {
         $task->rank(),
         Task::parse(1),
         Task::parse(9),
+        $payments->decline('card expired')->reason,
+        $payments->decline('card expired') instanceof PaymentResult,
+        $payments->settle($payments->pay('tx_1')),
+        failure(fn() => $payments->settle($payments->decline('card expired'))),
+        $payments->pay('tx_2')->label(),
+        $payments->open() === CheckoutState\Open::instance(),
+        $payments->open()->isOpen(),
+        $payments->paying()->isOpen(),
+        $payments->paying()->attempt,
+        (new ReflectionClass(PaymentResult\Paid::class))->getParentClass()->getName(),
+        (new ReflectionClass(PaymentResult::class))->isAbstract(),
+        (new ReflectionClass(PaymentResult\Paid::class))->isFinal(),
+        new PaymentResult\RequiresAction('https://bank.test') instanceof PaymentResult,
+        failure(fn() => new CheckoutState\Open()),
+        failure(fn() => $payments->pay('tx_3')->transactionId = 'tx_4'),
     ];
 }
 
