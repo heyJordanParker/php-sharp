@@ -22,6 +22,7 @@
 #include "zend_enum.h"
 #include "zend_exceptions.h"
 #include "zend_language_parser.h"
+#include "zend_observer.h"
 #include "zend_smart_str.h"
 #include "zend_system_id.h"
 #include "php_sharp.h"
@@ -2054,6 +2055,24 @@ static void sharp_container_group(HashTable *rows, HashTable *module)
 	} ZEND_HASH_FOREACH_END();
 }
 
+/* Runs a module file's op_array for the rows it returns, as zend_execute does, but in a symbol table of its own.
+ * zend_execute would give the PHP code that called the engine a symbol table, which a tracing-JIT frame never frees. */
+static void sharp_container_execute(zend_op_array *op_array, zval *rows)
+{
+	HashTable symbols;
+	zend_execute_data *execute_data;
+
+	zend_hash_init(&symbols, 8, NULL, ZVAL_PTR_DTOR, false);
+	execute_data = zend_vm_stack_push_call_frame(ZEND_CALL_TOP_CODE | ZEND_CALL_HAS_SYMBOL_TABLE,
+		(zend_function *) op_array, 0, NULL);
+	execute_data->symbol_table = &symbols;
+	zend_init_code_execute_data(execute_data, op_array, rows);
+	ZEND_OBSERVER_FCALL_BEGIN(execute_data);
+	zend_execute_ex(execute_data);
+	zend_vm_stack_free_call_frame(execute_data);
+	zend_hash_destroy(&symbols);
+}
+
 /* Adds the module whose file is at path, if one is, to bindings once: under each namespace and service id, a list of
  * its rows after those of the modules read before it. A module that throws as it loads is read again next time. */
 static void sharp_container_read(const char *path, HashTable *bindings)
@@ -2071,8 +2090,10 @@ static void sharp_container_read(const char *path, HashTable *bindings)
 		zend_stream_init_filename(&handle, path);
 		zend_op_array *op_array = zend_compile_file(&handle, ZEND_REQUIRE);
 		zend_destroy_file_handle(&handle);
+		if (op_array && !EG(exception)) {
+			sharp_container_execute(op_array, &rows);
+		}
 		if (op_array) {
-			zend_execute(op_array, &rows);
 			zend_destroy_static_vars(op_array);
 			destroy_op_array(op_array);
 			efree_size(op_array, sizeof(zend_op_array));
