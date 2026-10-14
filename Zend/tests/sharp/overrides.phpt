@@ -31,6 +31,16 @@ echo $table->hasType() ? 'typed' : 'untyped', ', ', count($table->getAttributes(
 $person = new Overrides\Person('Ada');
 echo $person->name, ' ', $person instanceof Overrides\Named ? 'named' : 'not named', "\n";
 
+// The interface states `name` get-only, and `Account` gives it with a narrower `set` of its own.
+$account = new Overrides\Account();
+$account->rename('Bo');
+echo $account->name, "\n";
+try {
+    $account->name = 'Cy';
+} catch (Error $error) {
+    echo $error->getMessage(), "\n";
+}
+
 // An interface states `size` with `set`, and a write through the interface reaches the class's property.
 echo Overrides\Box::grow(new Overrides\Box()), ' ';
 $size = new ReflectionProperty(Overrides\Sized::class, 'size');
@@ -48,4 +58,6 @@ orders fills | orders
 rush_orders
 untyped, 1 Override
 Ada named
+Bo
+Cannot modify private(set) property Overrides\Account::$name from global scope
 2 set

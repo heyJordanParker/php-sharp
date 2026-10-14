@@ -39,6 +39,16 @@ public class Person : Named
     public Person(public string name { get; }) { }
 }
 
+public class Account : Named
+{
+    public string name { get; private set; } = "new";
+
+    public void rename(string name)
+    {
+        this.name = name;
+    }
+}
+
 public interface Sized
 {
     int size { get; set; }
