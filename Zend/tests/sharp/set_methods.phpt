@@ -4,7 +4,7 @@ A PHP# Set holds each element once in its first order, under its key, wherever i
 <?php
 require __DIR__ . '/set_methods.inc';
 ?>
---EXPECT--
+--EXPECTF--
 array(9) {
   [0]=>
   bool(true)
@@ -116,7 +116,7 @@ array(7) {
   [6]=>
   bool(true)
 }
-TypeError: Sharp\Set::from(): Argument #1 ($values) must hold only int, string or backed enum values, float given in Sets.sharp on line 18
+TypeError: Demo\Tagged::strings(): Argument #1 ($tags) must be of type Set<string>, array given: [0] expected string, got float 1.5, called in %s on line %d in Sets.sharp on line 18
 array(2) {
   [3]=>
   int(3)

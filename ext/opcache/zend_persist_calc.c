@@ -404,6 +404,9 @@ static void zend_persist_property_info_calc(zend_property_info *prop)
 	if (ZCG(accel_directives).save_comments && prop->doc_comment) {
 		ADD_STRING(prop->doc_comment);
 	}
+	if (prop->sharp_type) {
+		ADD_INTERNED_STRING(prop->sharp_type);
+	}
 	if (prop->attributes) {
 		zend_persist_attributes_calc(prop->attributes);
 	}
@@ -526,6 +529,15 @@ void zend_persist_class_entry_calc(zend_class_entry *ce)
 
 		if (ce->info.user.filename) {
 			ADD_STRING(ce->info.user.filename);
+		}
+		if (ce->info.user.sharp_bounds) {
+			ADD_INTERNED_STRING(ce->info.user.sharp_bounds);
+		}
+		if (ce->info.user.sharp_header) {
+			ADD_INTERNED_STRING(ce->info.user.sharp_header);
+		}
+		if (ce->info.user.sharp_variance) {
+			ADD_INTERNED_STRING(ce->info.user.sharp_variance);
 		}
 
 		if (ZCG(accel_directives).save_comments && ce->doc_comment) {

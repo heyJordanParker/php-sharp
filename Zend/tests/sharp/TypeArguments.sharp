@@ -1,0 +1,193 @@
+namespace App;
+
+import Lib.Sleeper;
+import Lib.Snapshot;
+import Lib.Witness;
+extern Witness.see;
+public abstract class DatabaseEntity
+{
+    public const int LIMIT = 10;
+
+    public required DatabaseEntity(public int id { get; })
+    {
+    }
+}
+
+public class Order : DatabaseEntity
+{
+    public const int LIMIT = 20;
+}
+
+public class PaginatedList<TItem : DatabaseEntity>
+{
+    public required PaginatedList(public List<TItem> items { get; })
+    {
+        Witness.see(this);
+    }
+
+    public Self copy() => new Self(this.items);
+
+    public PaginatedList<TItem> copyLater()
+    {
+        const Function<PaginatedList<TItem>()> make = () => new Self(this.items);
+        return make();
+    }
+
+    public Function<PaginatedList<TItem>()> maker() => () => new Self([]);
+
+    public Pair<TItem, List<TItem>?> paired(TItem item) => new Pair<TItem, List<TItem>?>(item, null);
+
+    public Box<T> boxed<T>(T item) => new Box<T>();
+
+    public Function<PaginatedList<TItem>()> emptied() => () => new PaginatedList<TItem>([]);
+
+    public Function<Function<PaginatedList<TItem>()>()> makerLater() => () => () => new Self([]);
+
+    public Function<Function<PaginatedList<TItem>()>()> emptiedLater() => () => () => new PaginatedList<TItem>([]);
+}
+
+public class OrderPage : PaginatedList<Order>
+{
+}
+
+public class Pair<TKey, TValue>
+{
+    public Pair(public TKey key { get; }, public TValue value { get; })
+    {
+    }
+
+    public Pair.flipped(TValue value, TKey key) : this(key, value)
+    {
+        Witness.see(this);
+    }
+
+    public Pair<TValue, TKey> flippedOver() => new Pair<TValue, TKey>.flipped(this.key, this.value);
+
+    public Pair<TValue, TKey?> swapped() => new Pair<TValue, TKey?>(this.value, this.key);
+
+    public Pair<TKey|int, TValue> widened() => new Pair<TKey|int, TValue>(this.key, this.value);
+
+    public Function<Box<TValue>()> boxer() => () => new Box<TValue>();
+}
+
+public interface Shareable
+{
+    string share();
+}
+
+public class SharedOrder : DatabaseEntity, Shareable
+{
+    public string share() => `shared ${this.id}`;
+}
+
+public class Report<TItem : DatabaseEntity & Shareable>
+{
+    public Report(public List<TItem> items { get; })
+    {
+    }
+}
+
+public class Ledger<TEntry : DatabaseEntity> : Snapshot
+{
+    public Ledger(public List<TEntry> entries { get; })
+    {
+    }
+}
+
+public class Journal<TEntry : DatabaseEntity> : Sleeper
+{
+    public Journal(public List<TEntry> entries { get; }, public int pages { get; })
+    {
+    }
+}
+
+public class Node<T>
+{
+    public Node<List<T>> deeper() => new Node<List<T>>();
+}
+
+public interface Query<TItem : DatabaseEntity>
+{
+}
+
+public class Box<T>
+{
+}
+
+public class Picker
+{
+    public Box<T> pick<T>(T item) => new Box<T>();
+}
+
+public class IntBox : Box<int>
+{
+}
+
+public class StringBox : Box<string>
+{
+}
+
+public class Holder<TBox : Box<int>>
+{
+}
+
+public class Maker<T>
+{
+    public int made { get; set; } = 0;
+
+    public Box<T> make() => new Box<T>();
+}
+
+public class OrderMaker : Maker<Order>
+{
+}
+
+public class ListMaker<T> : Maker<List<T>>
+{
+}
+
+public class Labeled<TLabel, T> : Maker<T>
+{
+    public Box<T> inner() => new Box<T>();
+}
+
+public class Queue
+{
+    public static Maker<Order> maker() => new Maker<Order>();
+
+    public static Maker<int> intMaker() => new Maker<int>();
+
+    public static Box<int> box() => new Box<int>();
+
+    public static Box<Query<Order>> queryBox() => new Box<Query<Order>>();
+
+    public static Holder<IntBox> holder() => new Holder<IntBox>();
+
+    public static OrderMaker orderMaker() => new OrderMaker();
+
+    public static ListMaker<int> listMaker() => new ListMaker<int>();
+
+    public static Node<int> intNode() => new Node<int>();
+
+    public static Node<string> stringNode() => new Node<string>();
+
+    public static Node<float> floatNode() => new Node<float>();
+
+    public static Node<bool> boolNode() => new Node<bool>();
+
+    public static PaginatedList<Order> orders() => new PaginatedList<Order>([]);
+
+    public static PaginatedList<DatabaseEntity> entities() => new PaginatedList<DatabaseEntity>([]);
+
+    public static Pair<Order, int> pair() => new Pair<Order, int>(new Order(2), 3);
+
+    public static Pair<Order, int> flippedPair() => new Pair<Order, int>.flipped(3, new Order(2));
+
+    public static OrderPage page() => new OrderPage([]);
+
+    public static Ledger<Order> ledger() => new Ledger<Order>([]);
+
+    public static Journal<Order> journal() => new Journal<Order>([], 4);
+
+    public static Report<SharedOrder> report() => new Report<SharedOrder>([]);
+}
