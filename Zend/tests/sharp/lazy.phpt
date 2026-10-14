@@ -1,5 +1,5 @@
 --TEST--
-PHP# lazy keeps the value of its first read, even when its inputs change, keeps nothing when the body throws, and keeps null for a nullable one
+PHP# lazy keeps the value of its first read, even when its inputs change, keeps nothing when the body throws, keeps null for a nullable one, and runs a body with an effect once
 --FILE--
 <?php
 require __DIR__ . '/Lazy.sharp';
@@ -31,6 +31,10 @@ try {
 } catch (Error $error) {
     echo $error->getMessage(), "\n";
 }
+
+// The body changes `Loads`' count, an effect, and the second read keeps the first value without running it again.
+$plan = new Lazy\Plan();
+echo $plan->stamp, ' ', $plan->stamp, ' ', Lazy\Loads::seen(), "\n";
 ?>
 --EXPECT--
 6
@@ -41,3 +45,4 @@ Modulo by zero
 NULL
 NULL
 Cannot modify private(set) property Lazy\Plan::$doubled from global scope
+1 1 1

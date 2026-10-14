@@ -52,9 +52,9 @@ Each question is about syntax or meaning. The recommendation is mine, and the bu
     - The property keeps its own storage. A behavior sees neither the object nor the property's name.
     - PHP# creates each behavior with `new Trimmed()` once per object, while the object is created. Ruling 3 says PHP# creates only classes a module binds or that declare an `on` listener. Is a behavior a third kind? Recommended: yes, and a behavior takes no constructor arguments in v1.
     - `via` goes on an auto-property with `get` and `set` and no bodies. It is an error with observers, `lazy`, `static` or in an interface.
-    - A behavior's `get` is a getter, so it is pure (section 29).
+    - A behavior's `get` is a getter, so it never writes `this` (section 6.1).
 11. **Lines 332 to 342, `lazy`.**
-    - Is a lazy body held to "Getters must be pure" (line 3399)? Loading from a database is the common reason for `lazy`, and line 342 says the body "may read anything". Recommended: yes, it is a getter. A lazy load from the database is a method.
+    - Jordan's ruling: a `lazy` body may have any effect, and a read carries it. "Getters must be pure." is gone from section 29: a `get` body has any effect but never writes `this`, checked as a method marked `readonly` (`getters_never_write_this`, `getter-writes-this`). The kept value is the language's write.
     - Recommended form: only `lazy T name => expr;`. `lazy` with accessors or an initial value is an error.
     - If the body throws, nothing is kept and the next read runs it again, as Kotlin's `lazy` does.
     - `static lazy` lives "the lifetime of a `singleton` (section 32)". #121 makes a singleton live for the request. Recommended: a `static lazy` value is kept where #121 keeps singletons, so the two lifetimes are equal by construction. This needs #121. The other option is a PHP static, equal under PHP-FPM and different in a worker that serves many requests.
@@ -109,7 +109,7 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 | 191 | A property has `get` and `set`, each with its own level | Works for `private set` and `protected set`. Refused on `get`: `GetAccess`, "This accessor is not supported yet" | Question 7: a named error on `get` | `check_accessors` |
 | 196 | `public int views { get; private set; }` | Works (`Views`). Reading before a write throws at runtime (question 13) | None new | |
 | 197 | `{ get; internal set => field = value.trim(); }` | Refused: `InternalSet`, "This accessor is not supported yet" at `internal` | Question 1: built with section 5's `internal`, so the `field-and-property` example passes | |
-| 198 | `public string slug => Str.slug(this.name);` | Refused: `PureGetter`, "Getter `slug` calls `Str.slug`, which has no `extern` declaration. Getters must be pure." | Harness `app/Stubs/Str.sharp` (decision 2) | Section 29's `extern` |
+| 198 | `public string slug => Str.slug(this.name);` | Refused: `PureGetter`, "Getter `slug` calls `Str.slug`, which has no `extern` declaration. Getters must be pure." | Harness `app/Stubs/Str.sharp` (decision 2). Since Jordan's ruling on question 11 a getter may call it without one | Section 29's `extern` |
 
 ## Section 6: initial values
 
@@ -219,7 +219,7 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 | 342 | Computed once, even if its inputs change | No | The bridge keeps the first value | |
 
 - **Semantics:** `lazy` only on a computed property (question 11). It is no longer "not supported yet" outside a parameter. The parameter's error from the constructors Slice stays.
-- **Analyzer:** the body is a `get` body, so `getters_must_be_pure` covers it, unless question 11 says otherwise.
+- **Analyzer:** the body is a `get` body, so `getters_never_write_this` covers it, and a read carries its effects.
 - **The bridge, instance:** `public private(set) \App\Plan $plan { get => $this->plan ??= <body>; }`, a backed property whose `get` hook fills its own storage once. A `lazy T?` keeps a hidden `plan#lazy` flag beside it, because `??=` would run the body again after `null`.
 - **The bridge, static:** PHP has no hooks on a static property. The value is held in a hidden static, or in #121's singleton store (question 11), behind a hidden static method `plan#lazy`. Every PHP# read of `StaticLazy.plan` lowers to a call of that method. Decision 3's static computed properties and accessor bodies use the same read lowering, without the keeping.
 - **Engine:** `Lazy.sharp` and `lazy.phpt`: the body runs once, a changed input does not recompute, a throw keeps nothing, and a `static lazy` runs once per request.

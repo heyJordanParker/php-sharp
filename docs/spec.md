@@ -258,6 +258,18 @@ PHP# has all of C#'s property features:
 - properties in interfaces, abstract properties, and overrides
 - Reflection that tells fields from properties
 
+**A `get` body may run anything, but it never writes `this`.** It is checked as a method marked `readonly` (section 13). A read may query the database or read the clock, and it carries the body's effects (section 29). Writing a field of `this`, or calling a method on `this` that writes one, is a compile error that names the write. A `lazy` property still keeps its computed value (section 6.5), because that write is the language's, not the body's.
+
+<!-- example getter-writes: members
+private int reads = 0;
+public int count() { this.reads = this.reads + 1; return this.reads; }
+-->
+```csharp
+public int next => this.reads + 1;                                              // compiles: it reads this
+public int bumped { get { this.reads = this.reads + 1; return this.reads; } }  // compile error: a getter never writes this, and bumped writes reads
+public int counted => this.count();                                             // compile error: count writes reads, and a getter never writes this
+```
+
 **A class overrides a plain PHP parent's property with a property** marked `override`, and it writes the type like every PHP# property. Eloquent's `$table`, `$fillable` and `$timestamps` are overridden this way:
 
 <!-- example plain-php-property-override: alone -->
@@ -342,7 +354,7 @@ private int id = 1;
 public lazy Plan plan => this.planner.plan(this.id);
 ```
 
-A `lazy` body may read anything, including properties that can change later. The value is computed once and kept, even if those inputs change, as in Swift and Kotlin. A value that must follow its inputs is a plain computed property (`=> expr`).
+A `lazy` body may have any effect, such as a database query, and reading the property carries the body's effects (section 29). Like every `get` body, it never writes `this` (section 6.1). It may read properties that can change later. The value is computed once and kept, even if those inputs change, as in Swift and Kotlin. A value that must follow its inputs is a plain computed property (`=> expr`).
 
 ## 7. Methods
 
@@ -3399,7 +3411,7 @@ public class TenantCache
 - **A class's effects** are the `foreign` classes it holds, directly or through its fields, the effects of the plain PHP its methods call, and the events its methods emit. The checker works them out from field and constructor types and from method bodies. Nothing is written down.
 - **A `foreign` object** is created in a module binding (section 32), as often as its binding's lifetime decides, and handed down through constructors. Creating one anywhere else, or storing one in a static, is a compile error.
 
-**Pure code** reaches no `foreign` object, emits no event, calls no plain PHP unless an `extern` declares it pure, and changes nothing it was given (section 13). Getters must be pure. Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
+**Pure code** reaches no `foreign` object, emits no event, calls no plain PHP unless an `extern` declares it pure, and changes nothing it was given (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
 
 **Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types. Every implementation is held to what the declaration allows:
 
