@@ -249,7 +249,7 @@ EnumKeys: different opcodes and lines in 22 op arrays, same signatures in 1 clas
   .php   0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
   .php       Property [ private Sharp\Map $counts ]
   .php       Property [ private Sharp\Map $seeded ]
-Interop: same opcodes and lines in 3 op arrays, same signatures in 1 classes
+Interop: same opcodes and lines in 5 op arrays, same signatures in 1 classes
 Lambdas: different opcodes and lines in 36 op arrays, same signatures in 1 classes
   .sharp L0043 0000 CV0($key#1) = RECV 1
   .sharp L0043 0001 CV1($value#2) = RECV 2

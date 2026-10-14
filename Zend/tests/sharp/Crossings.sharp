@@ -7,47 +7,47 @@ class Crossings
     public static List<string> outward(Map<string, int> prices, Set<string> tags)
     {
         return [
-            array_keys_of(prices),
-            array_keys_of(tags),
-            documented_keys_of(prices),
-            type_of_mixed(prices),
-            type_of_untyped(prices),
-            type_of_iterable(tags),
+            global.array_keys_of(prices),
+            global.array_keys_of(tags),
+            global.documented_keys_of(prices),
+            global.type_of_mixed(prices),
+            global.type_of_untyped(prices),
+            global.type_of_iterable(tags),
         ];
     }
 
     public static Map<string, int> written(Map<string, int> prices)
     {
-        write_array(prices);
-        write_mixed(prices);
+        global.write_array(prices);
+        global.write_mixed(prices);
         return prices;
     }
 
     public static Map<string, int> local()
     {
-        Map<string, int> prices = price_list();
+        Map<string, int> prices = global.price_list();
         prices["jam"] = 5;
         return prices;
     }
 
-    public static Map<string, int> returned() => price_list();
+    public static Map<string, int> returned() => global.price_list();
 
     public static Map<string, int> received(Map<string, int> counts) => counts;
 
     public static List<string> objects(Map<string, int> prices, Set<string> tags)
     {
         return [
-            count_of_countable(prices),
-            count_of_traversable(tags),
-            json_of(prices),
-            type_of_object(tags),
-            count_of_map(prices),
+            global.count_of_countable(prices),
+            global.count_of_traversable(tags),
+            global.json_of(prices),
+            global.type_of_object(tags),
+            global.count_of_map(prices),
         ];
     }
 
     public static string counted(Map<string, int> prices)
     {
-        const counter = array_counter();
+        const counter = global.array_counter();
         return counter(prices);
     }
 
