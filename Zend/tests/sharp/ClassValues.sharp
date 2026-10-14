@@ -1,7 +1,22 @@
 namespace Classes;
 
+import Attribute;
 import Lib.Factory;
 
+[Attribute]
+public class Listen
+{
+    public Listen(public string topic { get; }) { }
+}
+
+[Attribute]
+public class Loud : Listen
+{
+    public Loud(string topic) : super(topic) { }
+}
+
+[Listen("badges")]
+[Loud("shiny")]
 public class Badge
 {
     public required Badge() { }
@@ -44,6 +59,10 @@ public class ClassValues
     }
 
     public static Badge made() => Factory.make(typeof(GoldBadge));
+
+    public static List<string> topics(Class<Badge> type) => type.attributes<Listen>().map(listen => listen.topic);
+
+    public static int loud() => typeof(Badge).attributes<Loud>().count();
 
     public static Badge remade(Badge badge) => Factory.make(Class.of(badge));
 }

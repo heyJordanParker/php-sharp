@@ -28,8 +28,10 @@ The Slice is one php-sharp pull request. It builds the parts that need nothing f
    - `LocalInTypeOf`: names the one construct, so a second user needs a second variant.
    - `ValueInTypeOf`: "value" is wider than the one case the binder sees, a local.
    - `TypeOfLocal`: reads as "the type of a local", the opposite of the error.
-3. **`Class`'s own members are a default standard library extension on `Class<T>`,** decision 040's rule for a built-in type's members, as `Sharp.Text`'s `extension(string text)` gives `name.trim()`. Its body is PHP# over PHP's reflection, so neither the bridge nor the engine changes: the bridge already lowers an extension call before it lowers a class value's static call (`method_call` in `crates/sharp-bridge/src/lower.rs`). The analyzer's class value dispatch, `class_value_classes` in `crates/analyzer/src/expression/access/mod.rs` and its call twin in `crates/analyzer/src/expression/call/mod.rs`, looks for that extension's member before the held class's static, which is "`Class`'s own members win". Ruling 1 fixes the one member, `attributes<TAttribute>()`.
-4. **A PHP# class may not declare a static named like a member of `Class`,** TypeScript's error 2699. The analyzer checks it in `crates/analyzer/src/statement/class_like/mod.rs`, reading the member names from the extension in decision 3, so the list lives in one place: "`attributes` is a member of `Class`, so `type.attributes` on a class value never reaches this static. Rename it."
+3. **`Class`'s own members are a default standard library extension on `Class<T>`,** decision 040's rule for a built-in type's members, as `Sharp.Text`'s `extension(string text)` gives `name.trim()`. It is `extension<T>(Class<T> type)` in `sharp/composer/library/Sharp/ClassMembers.sharp`, imported by default as every class directly in `Sharp` is. Its body is PHP# over PHP's reflection, so the engine doesn't change, and the bridge already lowers an extension call before a class value's static call (`method_call` in `crates/sharp-bridge/src/lower.rs`). `class_value_static_classes` in `crates/analyzer/src/expression/access/mod.rs`, which the class value branches of a read and a call take, leaves out a member of `Class`, so the access resolves that extension instead of the held class's static: "`Class`'s own members win". `is_class_member` in `crates/analyzer/src/resolver/extension.rs` decides it: a member a standard library extension adds to a class value receiver. Ruling 1 fixes the one member, `attributes<TAttribute>()`.
+   - The extension needs a block type parameter, so Jordan ruled that an extension block declares its own type parameters, as C# 14 does: `extension<TItem>(List<TItem> items)`. The parser reads them after `extension`. The binder scopes them over the receiver and every member. `MethodParts` puts them before each member's own, so the static method a member runs as is generic in both, and the scanner, the HIR and the bridge read it as any generic method. `fits` infers them from the receiver before it compares, so a `Pair<int, Order>` fits `Pair<TLeft, TRight>` and a `List<int>` misses `TEntity : DatabaseEntity`. A call's written type arguments fill only the member's own (`seed_extension_type_arguments`), and the lowered call carries all of them. Semantics refuses a block type parameter its receiver doesn't use, as C#'s CS9295 does, a member type parameter that reuses a block's name, and `in` or `out` on a block's. The fingerprint hashes them. Spec section 26 states the rule with the `generic-extensions` and `extension-unused-type-parameter` examples.
+   - The class's name, by `/naming`: `ClassMembers`, since the spec calls `attributes` "`Class`'s own members". Runner-up `ClassValues`. `Classes` was left out because a user namespace `Classes` would meet a class every file imports.
+4. **A PHP# class may not declare a static named like a member of `Class`,** TypeScript's error 2699. `report_statics_named_like_class_members` in `crates/analyzer/src/statement/class_like/mod.rs` reads the member names through `is_class_member`, so the list lives in one place: "`attributes` is a member of `Class`, so `type.attributes` on a class value never reaches this static. Rename it."
 5. **The `required` rule speaks section 25's words.** `report_signature_compatibility_issue` in `crates/analyzer/src/statement/class_like/mod.rs` already gets the constructor mismatch through Mago's consistent constructor flag, which the scanner sets for `required` and `merge.rs` passes to every PHP# subclass. For a PHP# constructor below a `required` one, `report_required_constructor_mismatch` reports the two bullets of spec line 2941 and 2942 instead of upstream's text, and keeps upstream's issue code:
    - "`Reordered`'s constructor must start with `Row row`, as `DatabaseEntity`'s does, so `new Self(row)` can call it." It is the message when a leading parameter is missing, renamed or of another type.
    - "`Invoice`'s constructor adds `clock` with no default, so `new Self(row)` cannot call it: give `clock` a default."
@@ -126,7 +128,7 @@ The states are **works**, **refused** (rejected, with its message), **silently a
 | 2869 | for a plain PHP class, the call is checked against its own constructor | missing | works: `new (type)(1, 2)` on a `Class<Model>` is "Too many arguments provided for method `Model.__construct`." (`PlainClassValues.sharp:9`) | #102 | |
 | 2883 | `new (kind)(key)` on a `string` is a compile error | missing: refused only as "This expression is not supported yet in PHP#." (`NewThrough.sharp:21`) | works: "`kind` is a `string`, not a `Class`: `new (…)` creates an object from a class value." | #102 | |
 | 2870 | a static call through a class value calls the static of the class it holds | works through `typeof` and a local, engine included. Missing through a `Map` element, because `Class<Element>` is refused | works | #102 | `analyze_class_value_member`, `class_value` in the bridge |
-| 2871 | `Class`'s own members win | missing: `type.attributes()` is "Method `Order.attributes` does not exist." (`TypeOfTypes.sharp:19`) | missing, the same | Slice, decision 3, ruling 1 | extensions (#115), `class_value_classes` |
+| 2871 | `Class`'s own members win | missing: `type.attributes()` is "Method `Order.attributes` does not exist." (`TypeOfTypes.sharp:19`) | missing, the same. An extension block could not name `Class<T>`: `extension<T>(…)` was a parse error and `extension(Class<T> type)` "Cannot find type `T`." | Slice, decision 3, ruling 1, and Jordan's ruling for a block's type parameters | extensions (#115), `class_value_classes` |
 | 2871 | a class cannot declare a static named like one of them | silently accepted: `public static string attributes() => "";` compiles (`StaticNamedLikeClass.sharp:5`) | silently accepted | Slice, decision 4, rulings 1 and 2 | the class member checks in `statement/class_like/mod.rs` |
 | 2872 | a class value's type need not be written | works for `const type = typeof(Order); type.defaultTag();` (`TypeOfTypes.sharp:12`). Missing for `this.elements[kind] ?? throw …` | works | #102 | |
 | 2873 | a property named by a variable has no form | works: `order.(column)` is a parse error (`PropertyByVariable.sharp:7`), and a `.sharp` file has no `$` variables | the same | nothing to build | |
@@ -169,27 +171,39 @@ A class value is a `string` in PHP# code on master and on #102: `public string a
 ```text
 sharp/mago/crates/
 ├── names/src/
-│   ├── binding.rs                       BindingError::LocalAsType { name, local }          (decision 2)
-│   ├── internal/walker.rs               walk_in_type_of: a local in scope is the error     (decision 2)
+│   ├── binding.rs                       BindingError::LocalAsType { name, local };
+│   │                                    MethodParts: a block's type parameters first       (decisions 2, 3)
+│   ├── internal/walker.rs               walk_in_type_of: a local in scope is the error;
+│   │                                    an extension block scopes its type parameters      (decisions 2, 3)
 │   └── lib.rs                           default_class: Sharp\Class beside Sharp\List        (decision 1)
 ├── prelude/assets/extensions/sharp.php  final class Class { of }, after final class List   (decision 1)
 ├── semantics/src/internal/checker/
 │   └── sharp.rs                         check_binding_errors: LocalAsType's message;
-│                                        check_self_type: a Self local                      (decisions 2, 7)
+│                                        check_self_type: a Self local;
+│                                        check_extension_type_parameters                    (decisions 2, 3, 7)
 ├── syntax/src/
+│   ├── cst/cst/class_like/extension.rs  Extension.type_parameters                          (decision 3)
+│   ├── cst/node.rs, walker/mod.rs       visit and walk them                                (decision 3)
 │   ├── error.rs                         ParseError::ClassNameConstantInSharp               (decision 7)
-│   └── parser/internal/                 Self read as a local's type; `Order::class`        (decision 7)
+│   └── parser/internal/                 Self read as a local's type; `Order::class`;
+│                                        `extension<T>(…)`                                  (decisions 3, 7)
+├── fingerprint/src/class_like/mod.rs    an extension block's type parameters               (decision 3)
 ├── hir/src/lower/error/mod.rs           the new parse error is an unexpected token          (decision 7)
 ├── analyzer/src/
-│   ├── expression/access/mod.rs         a class value's member: Class's own first          (decision 3)
-│   ├── expression/call/mod.rs           the same for a call                                (decision 3)
+│   ├── expression/access/mod.rs         class_value_static_classes: Class's own first      (decision 3)
+│   ├── expression/call/mod.rs           the same for a call; a call's written type
+│   │                                    arguments reach an extension member                (decision 3)
+│   ├── invocation/template_result.rs    seed_extension_type_arguments                      (decision 3)
+│   ├── resolver/extension.rs            fits infers a block's type parameters;
+│   │                                    is_class_member                                    (decisions 3, 4)
 │   ├── expression/instantiation.rs      new (typeof(Loose))(…) needs required too          (ruling 3)
 │   └── statement/class_like/mod.rs      a static named like a member of Class;
 │                                        report_required_constructor_mismatch               (decisions 4, 5)
+├── sharp-bridge/src/lower.rs, types.rs  a generic extension call carries its type arguments (decision 3)
 ├── sharp-bridge/tests/lower.rs          Class.of lowers to \Sharp\Class::of
 └── each crate's tests/                  one test per rule, forms as rows
 sharp/composer/library/Sharp/
-└── (named after the merge).sharp        NEW: extension on Class<T> with attributes          (decision 3)
+└── ClassMembers.sharp                   NEW: extension<T>(Class<T> type) with attributes   (decision 3)
 ext/sharp/
 └── sharp.c                              Sharp\Class::of, beside Sharp\List::wrap           (decision 1)
 Zend/tests/sharp/
@@ -198,6 +212,8 @@ Zend/tests/sharp/
 ├── class_of.phpt                        NEW: Class.of gives the runtime class, with its type
 │                                        arguments, equal to typeof(Crate<Badge>)
 ├── class_value_to_plain_php.phpt        NEW: plain PHP takes a class value as its name
+├── class_attributes.phpt                NEW: type.attributes<Listen>() runs, subclasses of
+│                                        the attribute included, the class's own only
 ├── harness/Factory.inc                  NEW: a plain PHP factory that takes a class name
 └── self_return.phpt, SelfReturn.sharp   NEW: new Self(…) and Self.m() create and call the
                                          subclass, below a required constructor
@@ -207,17 +223,18 @@ sharp/harness/app/
 └── PaginatedList.sharp                  NEW, after #102                                    (decision 6)
 docs/
 ├── spec.md                              self-return: its hidden Order, and ruling 4's
-│                                        body; required-constructors: a template marker
+│                                        body; required-constructors: a template marker;
+│                                        section 26: an extension block's type parameters
 ├── decisions/041-typeof-value.md        Class.of(value)                                    (decision 8)
 └── architecture/slices/25-class-values.md   this note
 sharp/baseline/spec/§25/                 all nine entries leave
 ```
 
-The bridge does not change. A static call on `Sharp\Class` lowers as any static call, and an extension call already lowers before a class value's static call.
+A static call on `Sharp\Class` lowers as any static call, and an extension call already lowers before a class value's static call. The bridge's one change is that a generic extension member's call ends with its type arguments.
 
 # Build order
 
 1. **On master. Built.** Decisions 2, 5, 7 and 8. Decision 1 for an object without type arguments: the prelude's `Class`, `default_class`, and `Sharp\Class::of` returning the object's class name. Decision 6's `Element` and `Order`, and the spec's setup with ruling 4. `self-return` and `required-constructors` pass and leave `sharp/baseline/spec/§25/`.
 2. **Merge `origin/master` once #102 lands. Built.** `typeof-type-parameters` and `typeof-values` pass and leave `sharp/baseline/spec/§25/`.
-3. **On the merge.** Built: decision 1 for an object with type arguments, which reads #102's type arguments, ruling 3, decision 6's `PaginatedList`, and a `Class<Badge>` parameter passed to plain PHP. `generic-class-values` passes and leaves the list. Left: decisions 3 and 4, then `typeof-types` and `class-members` leave the list.
+3. **On the merge.** Built: decision 1 for an object with type arguments, which reads #102's type arguments, ruling 3, decision 6's `PaginatedList`, and a `Class<Badge>` parameter passed to plain PHP. `generic-class-values` passes and leaves the list. Then, on Jordan's ruling, extension blocks with type parameters, and on them decisions 3 and 4: `typeof-types` and `class-members` pass, and `sharp/baseline/spec/§25/` is empty.
 4. **Verify.** `sharp/bin/spec` shows every section 25 example passing, and `sharp/bin/spec --completes` passes on a body with `Completes: §25`. The engine tests this Slice adds or changes pass under `sharp/bin/test --opcache --repeat --passes`. `mago analyze` over a plain PHP corpus prints the same lines before and after, as #102 measured it, since the prelude gains a class only PHP# code names.
