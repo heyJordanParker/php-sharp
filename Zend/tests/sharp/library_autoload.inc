@@ -1,6 +1,6 @@
 <?php
 // php library_autoload.inc <engine|changed|missing> <psr4|classmap> <version|absent> <class> [composer]: requires
-// sharp/composer/autoload.php beside the library's Module.sharp and the dispatcher it binds, compiled, and a native.php that is the engine's own, one with another SHARP_NATIVE and the same
+// sharp/composer/autoload.php beside the library's composer.json, its Module.sharp and the Environment and Dispatcher it binds, compiled, and a native.php that is the engine's own, one with another SHARP_NATIVE and the same
 // native bodies, or one that also declares Text.missing, with Sharp\ and a project's App\Clock found by PSR-4 or by an
 // authoritative class map, and Composer reporting the package at that version or not installed, then uses
 // Sharp\Text\Text or App\Clock. With composer, Composer itself requires autoload.php, as it does to load a plugin.
@@ -80,8 +80,9 @@ namespace {
     @mkdir("$package/src/App", 0777, true);
     @mkdir("$package/library/Sharp", 0777, true);
     copy("$root/sharp/composer/autoload.php", "$package/autoload.php");
-    foreach (['Module', 'Dispatcher', 'ImmediateDispatcher'] as $file) {
-        copy("$root/sharp/composer/library/Sharp/$file.sharp", "$package/library/Sharp/$file.sharp");
+    file_put_contents("$package/composer.json", '{"name": "heyjordanparker/php-sharp-composer"}');
+    foreach (['Module', 'Environment', 'Dispatcher', 'ImmediateDispatcher'] as $library) {
+        copy("$root/sharp/composer/library/Sharp/$library.sharp", "$package/library/Sharp/$library.sharp");
     }
     if ($native === 'engine') {
         copy("$root/sharp/composer/native.php", "$package/native.php");

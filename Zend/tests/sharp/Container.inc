@@ -3,33 +3,34 @@
 require __DIR__ . '/project.inc';
 
 // An app whose modules bind each lifetime and each kind of value, with an environment module and a nested namespace's
-// module that overrides its parent's, beside the standard library's module, as a Composer project holds it.
-// container_project compiles it with $files, loads it with container_load, and returns the project's folder.
+// module that overrides its parent's, beside the standard library's module and the Environment and Dispatcher it binds,
+// as a Composer project holds them. container_project compiles it with $files, loads it with container_load, and
+// returns the project's folder.
 function container_project(string $name, array $files = []): string
 {
-    $library = [];
-    foreach (['Module', 'Dispatcher', 'ImmediateDispatcher'] as $file) {
-        $library[CONTAINER_LIBRARY . "/library/Sharp/$file.sharp"] = file_get_contents(dirname(__DIR__, 3) . "/sharp/composer/library/Sharp/$file.sharp");
+    $library = 'vendor/heyjordanparker/php-sharp-composer';
+    $source = dirname(__DIR__, 3) . '/sharp/composer/library/Sharp';
+    $classes = [];
+    foreach (['Module', 'Environment', 'Dispatcher', 'ImmediateDispatcher'] as $class) {
+        $classes["$library/library/Sharp/$class.sharp"] = file_get_contents("$source/$class.sharp");
     }
-    $root = compile_project($name, CONTAINER_APP + $files + $library + [
-        CONTAINER_LIBRARY . '/composer.json' => '{"name": "heyjordanparker/php-sharp-composer"}',
+    $root = compile_project($name, CONTAINER_APP + $files + $classes + [
+        "$library/composer.json" => '{"name": "heyjordanparker/php-sharp-composer"}',
     ]);
     container_load($root);
 
     return $root;
 }
 
-const CONTAINER_LIBRARY = 'vendor/heyjordanparker/php-sharp-composer';
-
 // Reads the library's module of the project at $root as the library's autoloader does, and loads each class from its
-// folder, and each standard library class from the library's.
+// folder, a class of Sharp from the library's.
 function container_load(string $root): void
 {
-    Sharp\Internal\readModule("$root/" . CONTAINER_LIBRARY . '/library/Sharp/Module.sharp');
-    spl_autoload_register(function (string $class) use ($root): void {
-        $path = str_starts_with($class, 'Sharp\\')
-            ? "$root/" . CONTAINER_LIBRARY . '/library/' . str_replace('\\', '/', $class) . '.sharp'
-            : "$root/" . lcfirst(str_replace('\\', '/', $class)) . '.sharp';
+    $library = "$root/vendor/heyjordanparker/php-sharp-composer/library";
+    Sharp\Internal\readModule("$library/Sharp/Module.sharp");
+    spl_autoload_register(function (string $class) use ($root, $library): void {
+        $file = str_replace('\\', '/', $class) . '.sharp';
+        $path = str_starts_with($class, 'Sharp\\') ? "$library/$file" : "$root/" . lcfirst($file);
         if (is_file($path)) {
             require $path;
         }
