@@ -14,9 +14,28 @@ public class GoldBadge : Badge
     public static override string tag() => "gold";
 }
 
+public class Crate<TItem>
+{
+    public required Crate() { }
+}
+
 public class ClassValues
 {
     public static string of(Badge badge) => Class.of(badge);
+
+    public static Crate<Badge> crate() => new Crate<Badge>();
+
+    public static bool sameAsTypeof(Crate<Badge> crate) => Class.of(crate) == typeof(Crate<Badge>);
+
+    public static bool otherThanTypeof(Crate<Badge> crate) => Class.of(crate) == typeof(Crate<GoldBadge>);
+
+    public static bool remadeKeepsTypeArguments(Crate<Badge> crate)
+    {
+        const again = new (Class.of(crate))();
+        return Class.of(again) == typeof(Crate<Badge>);
+    }
+
+    public static Badge fromValue(Class<Badge> type) => Factory.make(type);
 
     public static string tagOf(Badge badge)
     {

@@ -9,8 +9,10 @@ require __DIR__ . '/ClassValues.sharp';
 var_dump(get_class(Classes\ClassValues::made()));
 var_dump(get_class(Classes\ClassValues::remade(new Classes\GoldBadge())));
 var_dump(get_class(Classes\ClassValues::remade(new Classes\Badge())));
+var_dump(get_class(Classes\ClassValues::fromValue(Classes\GoldBadge::class)));
 ?>
 --EXPECT--
 string(17) "Classes\GoldBadge"
 string(17) "Classes\GoldBadge"
 string(13) "Classes\Badge"
+string(17) "Classes\GoldBadge"

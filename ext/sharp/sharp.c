@@ -4742,7 +4742,9 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Class_of, 0, 1, IS_S
 ZEND_END_ARG_INFO()
 
 /* Spec section 25: the class of the object a value holds, which may be a subclass of its type. A class value is its
- * class name, so plain PHP receives it as the name it takes. */
+ * class name, so plain PHP receives it as the name it takes. An object of a generic class gives the interned class
+ * value of its class with the object's type arguments, the one `typeof(Box<Order>)` gives, so `==` and `new (…)()`
+ * read them. */
 ZEND_METHOD(Sharp_Class, of)
 {
 	zend_object *value;
@@ -4751,7 +4753,23 @@ ZEND_METHOD(Sharp_Class, of)
 		Z_PARAM_OBJ(value)
 	ZEND_PARSE_PARAMETERS_END();
 
-	RETURN_STR_COPY(value->ce->name);
+	/* A lazy proxy's initializer runs to read its type arguments, and can throw. */
+	const sharp_type *arguments = sharp_type_arguments(value);
+	if (UNEXPECTED(EG(exception))) {
+		RETURN_THROWS();
+	}
+	if (!arguments) {
+		RETURN_STR_COPY(value->ce->name);
+	}
+
+	smart_str text = {0};
+	sharp_object_text(&text, value);
+	smart_str_0(&text);
+	const sharp_type *type = sharp_type_list(ZSTR_VAL(text.s), ZSTR_LEN(text.s));
+	smart_str_free(&text);
+	ZEND_ASSERT(type != NULL);
+
+	RETURN_STR_COPY(sharp_type_list_class_value(type, false));
 }
 
 static const zend_function_entry class_Sharp_Class_methods[] = {
