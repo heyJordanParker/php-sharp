@@ -2438,6 +2438,37 @@ static zend_class_entry *register_class_Sharp_List(void)
 	return zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES);
 }
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Class_of, 0, 1, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, value, IS_OBJECT, 0)
+ZEND_END_ARG_INFO()
+
+/* Spec section 25: the class of the object a value holds, which may be a subclass of its type. A class value is its
+ * class name, so plain PHP receives it as the name it takes. */
+ZEND_METHOD(Sharp_Class, of)
+{
+	zend_object *value;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJ(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	RETURN_STR_COPY(value->ce->name);
+}
+
+static const zend_function_entry class_Sharp_Class_methods[] = {
+	ZEND_ME(Sharp_Class, of, arginfo_class_Sharp_Class_of, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_FE_END
+};
+
+static zend_class_entry *register_class_Sharp_Class(void)
+{
+	zend_class_entry ce;
+
+	INIT_NS_CLASS_ENTRY(ce, "Sharp", "Class", class_Sharp_Class_methods);
+
+	return zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES);
+}
+
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Set_from, 0, 1, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, values, IS_ARRAY, 0)
 ZEND_END_ARG_INFO()
@@ -2531,6 +2562,7 @@ static PHP_MINIT_FUNCTION(sharp)
 
 	register_class_Sharp_Position();
 	register_class_Sharp_List();
+	register_class_Sharp_Class();
 	register_class_Sharp_Set();
 
 	register_class_Sharp_Container();

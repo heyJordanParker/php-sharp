@@ -1,0 +1,30 @@
+namespace Classes;
+
+import Lib.Factory;
+
+public class Badge
+{
+    public required Badge() { }
+
+    public static virtual string tag() => "badge";
+}
+
+public class GoldBadge : Badge
+{
+    public static override string tag() => "gold";
+}
+
+public class ClassValues
+{
+    public static string of(Badge badge) => Class.of(badge);
+
+    public static string tagOf(Badge badge)
+    {
+        const type = Class.of(badge);
+        return type.tag();
+    }
+
+    public static Badge made() => Factory.make(typeof(GoldBadge));
+
+    public static Badge remade(Badge badge) => Factory.make(Class.of(badge));
+}
