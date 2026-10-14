@@ -1252,6 +1252,42 @@ public void show(readonly Model model) { … }   // compile error: Model is a pl
 
 **A `readonly` method is checked as if `this` were a `readonly` value.** Inside it, `this` cannot be written, and only other `readonly` methods can be called on it.
 
+**A method's `readonly` is its last clause,** after `on` and `uses`, because it talks about the `this` inside the body. Anywhere else it is a compile error that says to write it last:
+
+<!-- example readonly-last-clause -->
+```csharp
+// app/Quotes.sharp
+namespace App;
+
+public interface Quotes
+{
+    Money quote(Cart cart) uses Http readonly;   // compiles: readonly is the last clause
+    Money price(Cart cart) readonly uses Http;   // compile error: write readonly last
+}
+```
+
+**Operators, `hash()` and `toString()` are readonly by definition.** The language runs them on readonly values with no marker, so a body that changes an operand or `this` is a compile error:
+
+<!-- example readonly-by-definition -->
+```csharp
+// app/Points.sharp
+namespace App;
+
+public class Points
+{
+    public int count { get; set; } = 0;
+
+    public static Points operator +(Points a, Points b)
+    {
+        a.count += b.count;                       // compile error: an operator's operands are readonly
+        return new Points();
+    }
+
+    public int hash() => this.count++;            // compile error: hash() is readonly
+    public string toString() => "points";         // compiles
+}
+```
+
 **A missing marker is a compile error that names the fix:**
 
 ```text

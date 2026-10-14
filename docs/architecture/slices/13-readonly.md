@@ -15,11 +15,17 @@ Readonly is a checker rule. The bridge erases both marks, so the engine runs the
 
 When the Slice lands, `sharp/baseline/spec/§13/` loses `readonly-fields`, `readonly-positions` and `readonly-values`, and the PR writes `Completes: §13`. The same marks also let `lambdas` (§14.2) and possibly `function-types` (§14.1) pass, because their only refusal today is `readonly` on a lambda parameter and in a function type.
 
-Seven questions below need team-lead's answer before the build, because each is a rule users write that section 13 does not state. The biggest is question 1: whether a readonly value may be passed or assigned where the type has no `readonly`. Without that rule, `save(order)` hands a readonly order to code that changes it.
+Seven questions below were rules users write that section 13 did not state. Each is ruled, and the build follows the rulings.
 
-## Questions for team-lead
+## Rulings
 
-Each has the spec line it comes from, a proposal with its precedent, and the other choice. The note writes the proposal everywhere below.
+team-lead ruled questions 1, 3, 4, 6 and 7 as proposed. Jordan ruled questions 2 and 5:
+
+- **Question 2:** operators, `hash()` and `toString()` are readonly by definition. They run on readonly values with no marker, and a body that changes an operand or `this` is a compile error. Section 13 states the rule with an example.
+- **Question 5:** the method's `readonly` is always its last clause, after `uses` and after `on`, as in `Money quote(Cart cart) uses Http readonly;` and `public void refresh() on OrderPaid readonly { … }`. Any other position is a compile error that says to write `readonly` last. Section 13 states the order with an example.
+- **A `get` body never writes `this`** (the properties Slice builds it), so a read through a readonly value is always allowed.
+
+The questions as asked follow, each with its spec line, the proposal and the other choice.
 
 1. **A readonly value where the type has no `readonly`.** Line 1175: "Before a type, it makes that value readonly." The spec never says whether `readonly Order` fits `Order`. Proposal: a compile error that names the fix, for an argument, a return, an assignment to a property, a field or a typed local, an element given to a collection, and a plain PHP parameter. C++ refuses a `const T&` where `T&` is expected ("discards qualifiers"), D's `const(T)` does not convert to `T`, TypeScript's `ReadonlyArray<T>` is not assignable to `T[]`, and Rust's `&T` is not a `&mut T`. Line 1185 already assumes it: `public readonly Customer buyer() readonly` returns `this.owner`, which is readonly inside a readonly method, so its return type needs `readonly`. The other choice: readonly is one step deep, and `Order copy = order; copy.markPaid();` compiles.
 2. **The members the language calls for the user.** Lines 1188 to 1191: "Through a `readonly` value, only reading is allowed: property `get` accessors, methods marked `readonly`." `lines.contains(line)` on a `List<readonly Line>` runs `operator ==`, a `Set` or a `Map` key runs `hash()`, and a template runs `toString()`. Proposal: `operator ==`, `<=>`, the arithmetic operators, `hash()` and `toString()` are readonly by definition, and their bodies are checked so. Rust's `PartialEq::eq`, `Hash::hash` and `Display::fmt` all take `&self`. The other choice: the user marks them, so the harness writes `operator ==(readonly Line a, readonly Line b)` and `hash() readonly`.
@@ -148,21 +154,21 @@ The states are **missing** (no code holds the rule), **refused** (an error says 
 
 - `parse_type_hint` reads `readonly` followed by a type as `Hint::Readonly(ReadonlyHint { readonly, hint })`, as it reads `?` into `NullableHint`. `readonly readonly Order` is a parse error.
 - The modifier parser stops at `readonly` when a type follows it, so `private readonly Money total;`, `public readonly Money due` and `render(readonly Order order)` all reach `parse_type_hint`. Before `class`, `struct`, `abstract`, `final` or another modifier, `readonly` stays a modifier, so `public readonly class Receipt` parses as today.
-- `parse_sharp_member_with_attributes_and_modifiers` reads `readonly` after the parameter list into `Method::readonly: Option<Keyword>`, before `on` and `uses` (question 5). An interface method and an abstract method take it too.
+- `parse_sharp_member_with_attributes_and_modifiers` reads `readonly` after the parameter list into `Method::readonly: Option<Keyword>`, as the last clause, after `on` and `uses` (question 5). One written before `on` or `uses` is the parse error `ReadonlyNotLastInSharp`, which names the last place. An interface method and an abstract method take it too.
 - Every `match` on `Hint` gains an arm: `Hint::Readonly` is its inner hint. These are the formatter (which prints `readonly ` and the hint), the fingerprint, the guard, three linter rules, `hir`, `sharp-lean`, `missing_type_hints`, the walker, `Node::visit_children` and `HasSpan`.
 
 ## The checker: semantics
 
 `crates/semantics/src/internal/checker/sharp.rs` decides where each mark is allowed, before any type is known:
 
-- `ReadonlyHint` is allowed on a parameter, a lambda parameter, a method's return type, a computed property's type and a function type's parameter or return. Each position of question 4 is refused as "not supported yet" until team-lead rules, and is built in this PR once he does.
+- `ReadonlyHint` is allowed on a parameter, a lambda parameter, a method's return type, a computed property's type, a typed local, a type argument, a function type's parameter or return, and an extension's receiver (question 4).
 - On a field, a stored property or a parameter that declares a member, `ReadonlyHint` gets the `{ get; }` message (lines 1241 and 1252). On a class, `Modifier::Readonly` does (line 1272).
-- `Method::readonly` on a static method, a constructor, a named constructor, an operator or an extern method is an error: "A static method has no `this` to keep readonly." Line 1176 gives the marker to `this`, so it needs no ruling.
-- `readonly readonly`, and `readonly` before `void`, `Self` in a static method or `Any` (question 4), are errors.
+- `Method::readonly` on a static method, a constructor, an enum method or an extension member is an error that says why it can't matter, as "A static method has no `this` to keep readonly: remove `readonly`." So is `readonly` after `hash()` or `toString()`, and before an operator's operand, which question 2 makes readonly by definition.
+- `readonly readonly`, `readonly` before `int`, `float`, `bool`, `string`, `void` or `Any`, and `is readonly Order` are errors (question 4). The analyzer refuses `readonly` before an enum or a plain PHP class, which semantics cannot tell apart from a PHP# class.
 
 ## The checker: types
 
-**The flag.** `TNamedObject` gains `is_readonly: bool`, false by default. `union_from_hint` in `crates/codex/src/scanner/ttype.rs` builds a `ReadonlyHint` as its inner type made readonly. A type made readonly has the flag on every named object in it, through nullable, union, `List`, `Map` and `Set` element types and type arguments. A function type keeps its own parameter and return types, because a function value is never written. `get_id` writes the flag first, as `readonly App\Order`, so a message shows the type as the user wrote it.
+**The flag.** `TNamedObject` gains `is_readonly: bool`, false by default, and so does `TReference::Symbol`, the class name a type holds until the codebase resolves it, which hands the flag to the object it becomes. `union_from_hint` in `crates/codex/src/scanner/ttype.rs` builds a `ReadonlyHint` as its inner type made readonly. A type made readonly has the flag on every named object in it, through nullable, union, `List`, `Map` and `Set` element types and type arguments. A function type keeps its own parameter and return types, because a function value is never written. `get_id` writes the flag first, as `readonly App\Order`, so a message shows the type as the user wrote it.
 
 **Keeping it.** Every place that builds a named object from another one keeps the flag:
 
@@ -225,7 +231,7 @@ The bridge erases both marks. The engine runs the PHP it runs today, so `ext/sha
 The PR body lists each one.
 
 - `sharp/harness/app/Product.sharp`: `public readonly Money? priceIn(string currency) readonly => this.price;`. Section 14.2's `lambdas` calls `line.product.priceIn(currency)` on a `readonly Line`. Its only error today is the refusal of `readonly` on the lambda parameter, so with this line it can pass.
-- With question 2 answered "the user marks them", `Line`'s and `Money`'s `operator ==` and `hash()` gain `readonly` on their parameters and after `hash()`.
+- Question 2 makes operators, `hash()` and `toString()` readonly by definition, so `Line`'s and `Money`'s `operator ==` and `hash()` need no change.
 
 # The tests
 
