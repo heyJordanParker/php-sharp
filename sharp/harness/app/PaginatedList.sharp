@@ -1,0 +1,6 @@
+namespace App;
+
+public class PaginatedList<TItem : DatabaseEntity>
+{
+    public required PaginatedList(List<TItem> rows = []) { }
+}
