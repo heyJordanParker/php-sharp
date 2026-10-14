@@ -80,6 +80,25 @@ final class Environment
     public function __construct() {}
 
     public function variable(string $name): ?string {}
+
+    public function require(string $name): string {}
+}
+
+/**
+ * @strict-properties
+ * @not-serializable
+ */
+final class Container
+{
+    public function get(string $id): mixed {}
+
+    public function has(string $id): bool {}
+
+    public static function scope(\Closure $run): mixed {}
+}
+
+final class ContainerError extends \Error
+{
 }
 
 namespace Sharp\Internal;
@@ -89,3 +108,11 @@ function accepts(string $type, mixed &$value, string $path, array &$problems): b
 function &statics(string $class, string $key): array {}
 
 function equals(mixed $value, mixed $other): bool {}
+
+function readModule(string $path): void {}
+
+function testModule(array $classes, array $bindings): void {}
+
+function startTest(string $class): void {}
+
+function endTest(): void {}
