@@ -85,4 +85,12 @@ class Patterns
 
         return $total;
     }
+
+    public function big(\Demo\Figure $shape): float
+    {
+        if (($big = $shape) instanceof \Demo\Circle && (${'match#1'} = $big->radius) > 10.0) {
+            return $big->radius;
+        }
+        return $shape instanceof \Demo\Square && (${'match#1'} = $shape->side) === 0.0 ? -1.0 : 0.0;
+    }
 }

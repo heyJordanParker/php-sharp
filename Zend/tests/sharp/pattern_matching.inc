@@ -35,6 +35,9 @@ for ($round = 0; $round < 100; $round++) {
         $patterns->state(Status::Archived),
         $patterns->closed(Status::Closed),
         $patterns->closed(null),
+        $patterns->big(new Circle(11.0)),
+        $patterns->big(new Circle(1.0)),
+        $patterns->big(new Square(0.0)),
     ];
 }
 

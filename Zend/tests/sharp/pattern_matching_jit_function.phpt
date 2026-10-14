@@ -39,3 +39,6 @@ string(4) "open"
 string(4) "done"
 int(2)
 int(0)
+float(11)
+float(0)
+float(-1)
