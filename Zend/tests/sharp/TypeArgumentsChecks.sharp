@@ -156,6 +156,10 @@ public class Tally
 
     public static int rows(List<List<int>> rows) => rows.count();
 
+    public static string|bool ordered(Map<string, Order> orders, Set<int> ids) => global.json_encode(orders.keys());
+
+    public static string|bool counted(Map<string?, int> counts) => global.json_encode(counts.keys());
+
     public static float first(List<float> amounts) => amounts[0];
 
     public static int largest() => global.max(Pager.sizes());

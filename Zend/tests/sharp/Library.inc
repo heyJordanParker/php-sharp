@@ -51,7 +51,7 @@ class Library
 
     public static function zones(): int { return \count(\array_values(\timezone_identifiers_list())); }
 
-    public static function query(array $values): string { return \http_build_query($values); }
+    public static function query(\Sharp\Map|array $values): string { $values = \is_array($values) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [(string) $key, $value], \array_keys($values), $values))) : $values; return \Sharp\Net\Url::buildQuery($values); } // a form whose parameter is a Map is called, as the method makes plain PHP's array a Map
 
     public static function isEmail(string $address): bool { return \Sharp\Net\Email::isValid($address); }
 
