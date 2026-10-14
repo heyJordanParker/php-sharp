@@ -1,5 +1,7 @@
 namespace Demo;
 
+import ArrayCounter;
+
 class Crossings
 {
     public static List<string> outward(Map<string, int> prices, Set<string> tags)
@@ -46,6 +48,12 @@ class Crossings
     public static string counted(Map<string, int> prices)
     {
         const counter = array_counter();
+        return counter(prices);
+    }
+
+    public static string invoked(Map<string, int> prices)
+    {
+        const counter = new ArrayCounter();
         return counter(prices);
     }
 

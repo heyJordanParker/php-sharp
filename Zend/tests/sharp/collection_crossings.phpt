@@ -29,6 +29,7 @@ for ($round = 0; $round < 100; $round++) {
     echo 'a PHP array into a Map<string, int> parameter: ', show(Crossings::received(['5' => 1, 'x' => 2])), "\n";
     echo implode("\n", Crossings::objects(new Map(['tea', 3, '5', 1]), new Set(['a', 'b']))), "\n";
     echo 'a plain PHP closure a local holds: ', Crossings::counted(new Map(['a', 1, 'b', 2])), "\n";
+    echo 'a plain PHP object a local holds: ', Crossings::invoked(new Map(['a', 1, 'b', 2])), "\n";
     echo 'a PHP# function type passes the object: ', Crossings::applied(fn ($values) => get_debug_type($values), new Map(['a', 1])), "\n";
     echo 'a PHP array into a Map<string|Level, int> parameter: ', json_encode(Crossings::named(['5' => 1])), "\n";
     $output = ob_get_clean();
@@ -52,5 +53,6 @@ Sharp\Map {"tea":3,"5":1}
 Sharp\Set
 Sharp\Map 2
 a plain PHP closure a local holds: array 2
+a plain PHP object a local holds: array 2
 a PHP# function type passes the object: Sharp\Map
 a PHP array into a Map<string|Level, int> parameter: ["1","1","true"]
