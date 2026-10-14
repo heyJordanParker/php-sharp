@@ -1,5 +1,7 @@
 <?php declare(strict_types=1); namespace Demo;
 
+use Lib\Shipping;
+
 class Interop
 {
     public static function shipping(int $cents): string
@@ -11,4 +13,8 @@ class Interop
     {
         return \shipping_label($cents * 2, currency: $currency);
     }
+
+    public static function freeAbove(): int { return \Lib\Shipping\FREE_ABOVE; }
+
+    public static function largest(): int { return \PHP_INT_MAX; }
 }

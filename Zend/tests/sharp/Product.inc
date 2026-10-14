@@ -9,7 +9,7 @@ use Lib\Field;
 class Product
 {
     #[Field] private int $stock = 0;
-    #[Field(label: "Name", limit: PHP_INT_MAX)] public string $name = "";
+    #[Field(label: "Name", limit: \PHP_INT_MAX)] public string $name = "";
 
     public function __construct(#[Field(label: null)] public readonly int $id, #[Field] int $start = 1)
     {

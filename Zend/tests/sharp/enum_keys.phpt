@@ -4,7 +4,7 @@ PHP# stores a backed enum key in a Map as its value, and plain PHP keeps refusin
 <?php
 require __DIR__ . '/enum_keys.inc';
 ?>
---EXPECT--
+--EXPECTF--
 array(1) {
   ["active"]=>
   int(2)
@@ -58,7 +58,7 @@ array(2) {
   ["Closed"]=>
   int(4)
 }
-ValueError: "missing" is not a valid backing value for enum Lib\Standing in EnumKeys.sharp on line 70
+TypeError: Demo\Headcount::byName(): Argument #1 ($counts) must be of type Map<Lib.Standing, int>, array given: ["missing"] key expected Lib.Standing, got string 'missing', called in %s on line %d in EnumKeys.sharp on line 67
 array(2) {
   [0]=>
   string(1) "5"

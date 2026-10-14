@@ -374,6 +374,25 @@ Math.max(0, ...prices);  // into the standard library too. The 0 gives max a val
 - Only a `List` spreads into a call. Spreading a `Map` into a call is a compile error (section 12).
 - An override of a plain PHP method declared with `...` declares that parameter with `...` too.
 
+**A statement that can never run is a compile error,** as Java's "unreachable statement" and Zig's "unreachable code" are. A statement after `return`, `throw`, `global.exit(…)`, `break` or `continue` in the same block never runs, and neither does one after an `if` whose every branch ends the block, or after a loop that never ends, such as a `do` whose body ends the block. The error names the line that ends the block, and says to delete the statement or move it above that line. The block of an `if` or a `for … of` whose condition never finishes, as `if (global.exit(1))`, never runs either, and the error says to write the condition as its own statement in place of the `if` or the `for`.
+
+<!-- example unreachable-statements: members -->
+```csharp
+public int total(List<int> prices)
+{
+    int sum = 0;
+    for (const price of prices) {
+        if (price < 0) {
+            continue;
+            sum -= price;                     // compile error: continue ends the block, so this never runs
+        }
+        sum += price;
+    }
+    return sum;
+    sum = 0;                                  // compile error: return ends the block, so this never runs
+}
+```
+
 ## 8. Functions
 
 There are no top-level functions. Shared code lives in static methods on a class.
@@ -394,7 +413,9 @@ public class Receipt
 }
 ```
 
-- **Every PHP built-in function is a standard library method,** so calling one by its bare name from `.sharp` code outside the standard library is a compile error that names the method. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
+- **Every PHP built-in function is a standard library method,** so calling one by its bare name from `.sharp` code is a compile error that names the method. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
+- **A built-in the standard library has no method for is called through PHP's root namespace,** as `global.levenshtein(a, b)` (section 23), and the standard library calls PHP the same way.
+- **PHP's constants are read through its root namespace too,** as `global.PHP_EOL` (section 23). A bare `PHP_EOL` is a compile error, because a bare uppercase name is always the code's own constant.
 
 **Output and exit go through the standard library.** `echo` and `print` are removed, and output goes through `Console` (section 29). `die` is removed, because `die("…")` prints its message and exits with status 0, which reports success. Exiting goes through `Process`.
 
@@ -402,19 +423,23 @@ public class Receipt
 ```csharp
 public class Prune
 {
-    public static void run(int pruned, bool failed)
+    public Prune(private Console console, private Process process) { }
+
+    public void run(int pruned, bool failed)
     {
         if (failed) {
-            fwrite(STDERR, "Prune failed" + PHP_EOL);    // compiles: the message goes to STDERR
-            exit(1);                                     // compiles: ends the process with status 1
+            this.console.writeError("Prune failed");         // compiles: the message goes to standard error
+            this.process.exit(1);                            // compiles: ends the process with status 1
         }
-        printf("Pruned %d carts" + PHP_EOL, pruned);     // compiles
+        this.console.writeLine(`Pruned ${pruned} carts`);    // compiles
     }
 }
 
-echo "Pruned";                                           // compile error: write printf or fwrite
-print "Pruned";                                          // compile error: write printf or fwrite
-die("Prune failed");                                     // compile error: write the message to STDERR, then exit(1)
+echo "Pruned";                                               // compile error: write console.write(text)
+print "Pruned";                                              // compile error: write console.write(text)
+printf("Pruned");                                            // compile error: write console.write(text)
+public void stop() { exit(1); }                              // compile error: write process.exit(1)
+public void fail() { die("Prune failed"); }                  // compile error: write the message with console.writeError, then process.exit(1)
 ```
 
 - Exiting skips every `finally` block, as Java's `System.exit` and C#'s `Environment.Exit` do.
@@ -639,7 +664,8 @@ A static member names its type arguments: `Counter<Order>.count`. A bare `Counte
 
 **Writing type arguments:**
 
-- **`new` always names them:** `new PaginatedList<Order>(…)`, or names a class value that carries them, as in `new (pages)()` (section 25).
+- **`new` always names them:** `new PaginatedList<Order>(…)`, or names a class value that carries them, as in `new (pages)()` (section 25). `new Self(…)` names none, because `Self` is the class with its own type parameters.
+- **A type names them too:** `PaginatedList<Order> page`. `Class<PaginatedList>` is the one exception: a class type names the class itself.
 - **A generic method call fixes them** from the arguments it receives, or from the declared type its result goes into. A type argument that neither fixes is a compile error, as in C#'s error CS0411 and in Swift.
 - **A plain PHP generic class,** declared with PHPDoc's `@template`, takes type arguments in PHP# code, as in `Collection<Order>`. The checker checks them, but the object carries none while the code runs, as Java's erased generics do. So a type test against one, such as `x is Collection<Order>`, is a compile error that says the type argument is unknown while the code runs (section 21).
 
@@ -701,6 +727,9 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 - **Names start with `T`:** `TItem`, `TKey`.
 - **The bound is written inline:** `<TItem : DatabaseEntity>`.
 - **Several bounds use `&`:** `<TItem : DatabaseEntity & Shareable>`.
+- **A type parameter with no bound may hold `null`,** so it is bounded by `Any?`.
+- **A generic class can't implement PHP's `Serializable`,** and the error points to `__serialize` and `__unserialize`.
+- **A class value with type arguments can't be a `Map` key,** because `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` share the plain class name.
 
 <!-- example type-parameter-bounds: members -->
 ```csharp
@@ -730,6 +759,7 @@ Variance is declared on the type parameter. Classes and interfaces can both decl
 - **No marker:** the type is invariant, and neither substitution is allowed.
 
 The checker enforces the marker on every member. A member that breaks it is a compile error on that member's line.
+A private member may break the marker, and is then reachable only through `this`.
 
 When a missing marker blocks a substitution, the error names the marker to add:
 
@@ -2435,7 +2465,7 @@ namespace App.Tenant.Store;
 import App.Shared.Schema.Entities.DatabaseEntity;
 ```
 
-**Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always a class, or the namespace of a plain PHP library's functions. A full class name inside code is a compile error that names the import to add. A module header names a namespace, as the `namespace` line does, so `module : App.Shop` compiles (section 32).
+**Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always a class, or the namespace of a plain PHP library's functions and constants. A full class name inside code is a compile error that names the import to add. A module header names a namespace, as the `namespace` line does, so `module : App.Shop` compiles (section 32).
 
 **A plain PHP library's function is called through its namespace, as a member,** as Go calls a package's functions, as Python does after `import pdf`, as Java calls Kotlin's top-level functions and as C# calls F# modules. After `import Vendor.Pdf;`, the call is `Pdf.render(html)`. A function in PHP's root namespace is called as `global.now()`, as C#'s `global::` names the root. Importing a single function, or calling a function by its bare name, is a compile error, so every call outside the current class reads `Name.member(…)`:
 
@@ -2468,6 +2498,31 @@ namespace App.Invoices;
 import Vendor.Pdf.render;                                     // compile error: import the namespace Vendor.Pdf, and call Pdf.render
 
 public class Draft { }
+```
+
+**A plain PHP constant is read through its namespace the same way.** `global.PHP_EOL` reads PHP's constant, and `Pdf.DEFAULT_DPI` reads the library's after `import Vendor.Pdf;`. A bare uppercase name is always the code's own constant, so a bare PHP constant such as `PHP_EOL` is a compile error that says to write `global.PHP_EOL`:
+
+<!-- example library-constants -->
+```php
+namespace Vendor\Pdf;
+
+const DEFAULT_DPI = 300;
+```
+
+<!-- example library-constants -->
+```csharp
+// app/Invoices/Layout.sharp
+namespace App.Invoices;
+
+import Vendor.Pdf;
+
+public class Layout
+{
+    public string line(string text) => text + global.PHP_EOL;     // compiles: PHP's constant is read through global
+    public int largest() => global.PHP_INT_MAX;                   // compiles
+    public int dpi() => Pdf.DEFAULT_DPI;                          // compiles: the library's constant is read through its namespace
+    public string bare(string text) => text + PHP_EOL;            // compile error: write global.PHP_EOL
+}
 ```
 
 **An import never carries `uses`,** because a library's effect lives in its one `extern` declaration (section 29).
@@ -2602,6 +2657,7 @@ public User find(int|string id)
 ```
 
 - `is` narrows a union (section 21). After a branch that tested one type and returned, the code below it sees the types left.
+- `List`, `Map` and `Set` can't share a union, because they share PHP's one array kind and the literal rules need to know which one a place holds.
 - Alternatives that belong to the domain stay enums (section 20) and sealed interfaces (section 20.1).
 
 **A union that holds null is written `(int|string)?`,** with the same `?` as any other type. `int|string|null` is a compile error that names `(int|string)?`.
@@ -2623,9 +2679,9 @@ int b = 3;
 -->
 ```csharp
 let area = side ** 2;        // int
-return 2 ** -1;              // compile error: `2 ** -1` is an `int` raised to a negative power, which throws: write `2.0 ** -1`
-return a ** b;               // int. Throws ArithmeticError at runtime when b < 0
-return 2.0 ** -1;            // 0.5
+2 ** -1                      // compile error: `2 ** -1` is an `int` raised to a negative power, which throws: write `2.0 ** -1`
+a ** b                       // int. Throws ArithmeticError at runtime when b < 0
+2.0 ** -1                    // 0.5
 ```
 
 **`/` on two integers truncates toward zero,** as in C#. `/` with a `float` operand stays float division.
@@ -2638,7 +2694,7 @@ return 2.0 ** -1;            // 0.5
 ```
 
 - Division by zero throws `DivisionByZeroError`.
-- `PHP_INT_MIN / -1` throws `ArithmeticError`, because the result overflows.
+- `global.PHP_INT_MIN / -1` throws `ArithmeticError`, because the result overflows.
 - `/=` follows the same rules.
 - Like `+` (section 18), what `/` does is chosen from the operand types the checker sees.
 
@@ -3287,11 +3343,32 @@ extern StripeClient uses Http;
 - **A declaration file is an ordinary `.sharp` file.** Its `namespace` line matches its path, as section 5 requires.
 - **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, `extern Carbon.now uses Clock;`, `extern Pdf.render uses Files;` for a function after `import Vendor.Pdf;`, or `extern global.now uses Clock;` for a function in PHP's root namespace (section 23).
 - **An `extern` that names no effect declares the class, method or function pure,** as in `extern BigDecimal;`.
+
+<!-- example extern-functions -->
+```php
+namespace Vendor\Pdf;
+
+function render(string $html): string { return $html; }
+```
+
+<!-- example extern-functions -->
+```csharp
+// app/Stubs/Functions.sharp
+namespace App.Stubs;
+
+import Vendor.Pdf;
+
+extern Pdf.render uses Files;        // compiles: Pdf.render(html) has the effect Files
+extern global.now uses Clock;        // compiles: global.now() has the effect Clock
+extern now uses Clock;               // compile error: name the function through its namespace, as in global.now
+```
+
 - **Each class, method or function has at most one `extern` declaration in the whole project.** A second one is a compile error, as declaring a class twice is.
 - **A call to plain PHP with an `extern` declaration has that effect,** so it fits a `uses` that names it: `StripeClient.charges().create(…)` fits `uses Http`.
 - **An object a declared plain PHP call returns carries that call's effect,** so `StripeClient.charges()` returns an object with `Http`, and calling it fits `uses Http`. An `extern` on the returned class itself wins over the inherited effect.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way.
+- **PHP's own built-in functions come declared.** PHP#'s Composer package ships an `extern global.…` declaration for each one, so `global.levenshtein(a, b)` is pure and `global.fopen(path, "r")` has `Files`.
 
 **The standard library's ten effect classes replace PHP's built-ins for their effects:**
 
@@ -3326,8 +3403,10 @@ namespace App;
 
 public class Visitor
 {
+    public Visitor(private Files files) { }
+
     public string greet(string name) => "Hello, " + name.trim();    // pure: trim is a standard-library method
-    public void remember(string token) { file_put_contents("seen.txt", token); }   // has Files
+    public void remember(string token) { this.files.write("seen.txt", token); }   // has Files
 }
 ```
 
@@ -3338,9 +3417,11 @@ namespace App;
 
 public class FileFormatter : Formatter
 {
+    public FileFormatter(private Files files) { }
+
     public string format(string name)
     {
-        file_put_contents("seen.txt", name);                        // compile error: format must be pure, and file_put_contents has the effect Files
+        this.files.write("seen.txt", name);                         // compile error: format must be pure, and files.write has the effect Files
         return name;
     }
 }
@@ -3537,6 +3618,8 @@ public Charge charge(Cart cart, Function<Cart(Cart)> prepare) uses prepare => th
 ```
 
 The standard library's collection methods (section 12) are declared this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
+
+**Plain PHP can run any function it is given,** as `global.array_map(f, list)` and `global.usort(list, f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => global.time()` to `global.call_user_func` has the effect `Clock`.
 
 **Code with a body writes no `uses` except `uses f`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function its `uses f` names, and its body and declaration show all four. The checker works out each method's effects, and the editor displays them.
 

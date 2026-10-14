@@ -292,6 +292,6 @@ public struct Duration(int nanoseconds)
 
     public static Duration ofMilliseconds(int milliseconds); // as .NET TimeSpan.FromMilliseconds
 
-    public int seconds => intdiv(this.nanoseconds, 1_000_000_000);   // whole seconds
+    public int seconds => this.nanoseconds / 1_000_000_000;   // whole seconds
 }
 ```

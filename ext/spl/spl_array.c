@@ -29,6 +29,7 @@
 #include "spl_array_arginfo.h"
 #include "spl_exceptions.h"
 #include "spl_functions.h" /* For spl_set_private_debug_info_property() */
+#include "ext/sharp/php_sharp.h"
 
 /* Defined later in the file */
 PHPAPI zend_class_entry  *spl_ce_ArrayIterator;
@@ -1589,6 +1590,9 @@ static zval *spl_array_it_get_current_data(zend_object_iterator *iter) /* {{{ */
 				zend_throw_error(NULL,
 					"Cannot acquire reference to readonly property %s::$%s",
 					ZSTR_VAL(prop_info->ce->name), ZSTR_VAL(key));
+				return NULL;
+			}
+			if (UNEXPECTED(sharp_property_refuses_reference(prop_info))) {
 				return NULL;
 			}
 			ZVAL_NEW_REF(data, data);

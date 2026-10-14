@@ -5,9 +5,9 @@ class Exits
     public static void stop(int code)
     {
         try {
-            exit(code);
+            global.exit(code);
         } finally {
-            printf("finally\n");
+            global.printf("finally\n");
         }
     }
 }

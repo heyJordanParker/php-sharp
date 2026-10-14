@@ -10133,7 +10133,9 @@ static int zend_jit_do_fcall(zend_jit_ctx *jit, const zend_op *opline, const zen
 	ir_ref rx, func_ref = IR_UNUSED, if_user = IR_UNUSED, user_path = IR_UNUSED;
 
 	prev_opline = opline - 1;
-	while (prev_opline->opcode == ZEND_EXT_FCALL_BEGIN || prev_opline->opcode == ZEND_TICKS) {
+	/* A PHP# generic call spells its type arguments right before the call op. */
+	while (prev_opline->opcode == ZEND_EXT_FCALL_BEGIN || prev_opline->opcode == ZEND_TICKS
+			|| prev_opline->opcode == ZEND_SHARP_TYPE_ARGS) {
 		prev_opline--;
 	}
 	if (prev_opline->opcode == ZEND_SEND_UNPACK || prev_opline->opcode == ZEND_SEND_ARRAY ||
@@ -14566,6 +14568,8 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 				ir_END_list(end_inputs);
 				ir_IF_FALSE(if_has_prop_info);
 			} else if (flags == ZEND_FETCH_REF) {
+				/* PHP# refuses a reference to a property whose type names its class's type parameters. */
+				jit_SET_EX_OPLINE(jit, opline);
 				ir_CALL_3(IR_VOID, ir_CONST_FC_FUNC(zend_jit_create_typed_ref),
 					prop_ref,
 					prop_info_ref,
@@ -14676,6 +14680,7 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 					ref = ir_LOAD_A(ir_ADD_OFFSET(ref, offsetof(zend_class_entry, properties_info_table)));
 					ref = ir_LOAD_A(ir_ADD_OFFSET(ref, prop_info_offset));
 				}
+				jit_SET_EX_OPLINE(jit, opline);
 				ir_CALL_3(IR_VOID, ir_CONST_FC_FUNC(zend_jit_create_typed_ref),
 					prop_ref,
 					ref,

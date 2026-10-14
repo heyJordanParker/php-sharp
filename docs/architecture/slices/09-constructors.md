@@ -124,7 +124,7 @@ class TrailingComma
 
 class AccessorParameter
 {
-    public AccessorParameter(public string name { get; private set => field = trim(value); }) { }
+    public AccessorParameter(public string name { get; private set => field = value.trim(); }) { }
 }
 ```
 
@@ -184,7 +184,7 @@ After the Slice the example compiles once `via Tracked` is removed. With `via`, 
 
 - **Attributes.** Works (`AttributedParameter`). The engine runs it in `Zend/tests/sharp/Product.sharp` (`[Field(label: null)] public int id { get; }`).
   - Mechanism: none new. `Lowering::attributes` on the parameter.
-- **Accessor bodies and a separate access level for each accessor.** Works (`AccessorParameter`). The engine runs both: `Zend/tests/sharp/Accessors.sharp` (`public string city { get; set => field = ucfirst(trim(value)); }`) and `Zend/tests/sharp/Ticket.sharp` (`public int seats { get; protected set; }`).
+- **Accessor bodies and a separate access level for each accessor.** Works (`AccessorParameter`). The engine runs both: `Zend/tests/sharp/Accessors.sharp` (`public string city { get; set => field = global.ucfirst(value.trim()); }`) and `Zend/tests/sharp/Ticket.sharp` (`public int seats { get; protected set; }`).
   - Mechanism: none new. `check_accessors` and `Lowering::hooks` serve a parameter and a class-body property alike.
 - **`willSet` and `didSet`.** Refused, the same on a parameter and in the class body, so the parity holds. `app/Observers.sharp`, `public Observers(public string name { get; set; didSet => this.touch(); }) { }`, printed `app/Observers.sharp:5:53:error - semantics: This accessor is not supported yet in PHP#.`, and `app/BodyParity.sharp`'s class-body `didSet` printed the same at `5:36`.
   - Mechanism: none in this Slice. Section 6.2 builds observers in `check_accessors` and `Lowering::hooks`, which both places share, so a parameter gets them with no extra work.
@@ -287,7 +287,7 @@ namespace Demo;
 
 class Base { public Base(public Row row { get; }) { } }
 class Child : Base { public Child(Row row) { } }
-class Inherits : Base { private string label = strtoupper("x"); }
+class Inherits : Base { private string label = global.strtoupper("x"); }
 
 class NoSuperUse
 {

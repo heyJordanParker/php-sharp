@@ -8,18 +8,18 @@ public class PhpForms
 
     public void report(int pruned)
     {
-        printf("Pruned %d carts" + PHP_EOL, pruned);
+        global.printf("Pruned %d carts" + global.PHP_EOL, pruned);
     }
 
     public void warn(string message)
     {
-        fwrite(STDERR, message + PHP_EOL);
+        global.fwrite(global.STDERR, message + global.PHP_EOL);
     }
 
     public void fail(string message, int code)
     {
         this.warn(message);
-        exit(code);
+        global.exit(code);
     }
 
     public string setting(string name) => this.environment.variable(name) ?? "unset";

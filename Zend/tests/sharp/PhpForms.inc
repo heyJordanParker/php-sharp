@@ -8,12 +8,12 @@ class PhpForms
 
     public function report(int $pruned): void
     {
-        \printf("Pruned %d carts" . PHP_EOL, $pruned);
+        \printf("Pruned %d carts" . \PHP_EOL, $pruned);
     }
 
     public function warn(string $message): void
     {
-        \fwrite(STDERR, $message . PHP_EOL);
+        \fwrite(\STDERR, $message . \PHP_EOL);
     }
 
     public function fail(string $message, int $code): void

@@ -106,6 +106,12 @@ final class Listener
     private function hear(object $event): void {}
 }
 
+function accepts(string $type, mixed &$value, string $path, array &$problems): bool {}
+
+function &statics(string $class, string $key): array {}
+
+function equals(mixed $value, mixed $other): bool {}
+
 function readModule(string $path): void {}
 
 function testModule(array $classes, array $bindings): void {}
