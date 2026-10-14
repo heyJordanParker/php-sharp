@@ -84,3 +84,6 @@ string(18) "Declined: no funds"
 string(8) "Redirect"
 bool(true)
 bool(false)
+string(4) "paid"
+string(8) "no funds"
+string(17) "https://bank.test"

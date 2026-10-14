@@ -95,6 +95,9 @@ for ($round = 0; $round < 100; $round++) {
         $payments->describe(new PaymentResult\RequiresAction('https://bank.test')),
         $payments->waiting($payments->open()),
         $payments->waiting($payments->paying()),
+        $payments->outcome($payments->pay('tx_5')),
+        $payments->outcome($payments->decline('no funds')),
+        $payments->outcome(new PaymentResult\RequiresAction('https://bank.test')),
     ];
 }
 

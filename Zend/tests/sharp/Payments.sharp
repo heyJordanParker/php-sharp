@@ -20,4 +20,10 @@ public class Payments
     };
 
     public bool waiting(CheckoutState state) => state is CheckoutState.Open;
+
+    public string outcome(PaymentResult result) => match (result) {
+        PaymentResult.Paid p => "paid",
+        PaymentResult.Declined(string reason) => reason,
+        PaymentResult.RequiresAction(string redirect) => redirect,
+    };
 }
