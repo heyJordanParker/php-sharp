@@ -22,6 +22,10 @@ public class Badge
     public required Badge() { }
 
     public static virtual string tag() => "badge";
+
+    public static Class<Badge> own() => typeof(Self);
+
+    public static string ownTag() => typeof(Self).tag();
 }
 
 public class GoldBadge : Badge
@@ -36,7 +40,15 @@ public class Crate<TItem>
 
 public class ClassValues
 {
+    private Class<Badge> kept = typeof(GoldBadge);
+
+    public string keptTag() => this.kept.tag();
+
     public static string of(Badge badge) => Class.of(badge);
+
+    public static string directTag(Badge badge) => Class.of(badge).tag();
+
+    public static List<Any> types() => [typeof(int), typeof(List<Badge>), typeof(Map<string, int>), typeof(Set<int>)];
 
     public static Crate<Badge> crate() => new Crate<Badge>();
 

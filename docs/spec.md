@@ -727,6 +727,7 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 - **Names start with `T`:** `TItem`, `TKey`.
 - **The bound is written inline:** `<TItem : DatabaseEntity>`.
 - **Several bounds use `&`:** `<TItem : DatabaseEntity & Shareable>`.
+- **`Object` bounds a type parameter to any object,** `<TValue : Object>`, as C#'s `where T : class` and TypeScript's `T extends object` do. It is a bound alone.
 - **A type parameter with no bound may hold `null`,** so it is bounded by `Any?`.
 - **A generic class can't implement PHP's `Serializable`,** and the error points to `__serialize` and `__unserialize`.
 - **A class value with type arguments can't be a `Map` key,** because `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` share the plain class name.
@@ -735,6 +736,7 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 ```csharp
 public class PaginatedList<TItem : DatabaseEntity> { … }
 public PaginatedList<TItem> list<TItem : DatabaseEntity>(Query<TItem> query) { … }
+public TValue keep<TValue : Object>(TValue value) => value;
 ```
 
 **`Self` on a receiver typed by a type parameter is that type parameter** (section 25). In `TBox refill<TBox : Box<int>>(TBox box)`, `box.withValue(5)` returns a `TBox`, not `Box<int>`, as Rust's `t.clone()` on a `T: Clone` returns a `T`:
@@ -2828,7 +2830,7 @@ Ids.identity(5);                                // compile error: 5 is not an ob
 
 ## 25. Referring to classes
 
-**`typeof(X)`** is typed `Class<X>`. It works on every type parameter, a method's included, because every type argument reaches the running program (section 11). PHP's `Order::class` is removed.
+**`typeof(X)`** is typed `Class<X>`, for any one type `X`, as C#'s `typeof` is. It works on every type parameter, a method's included, because every type argument reaches the running program (section 11). PHP's `Order::class` is removed.
 
 <!-- example typeof-types
 public class Example
@@ -2843,6 +2845,10 @@ public class Example
 Class<Order> type = typeof(Order);
 type.attributes<Listen>();
 typeof(TItem);
+typeof(int);                    // the class value of int
+typeof(List<Order>);            // the class value of a list of orders
+typeof(Map<string, int>);
+typeof(Self);                   // the class run was called on
 ```
 
 **`typeof(TItem)` works for any type argument, including `int`,** as C#'s `typeof(T)` does. It is a `Class<TItem>`, which can create objects, only when `TItem`'s bound is a class:
@@ -2923,7 +2929,8 @@ public class FormBuilder
 
 - **`new (type)(…)`** creates an object from a class value. The parentheses around `type` mark it as an expression, not a class name. It needs a `required` constructor, as `new Self(…)` does. For a plain PHP class, such as `Class<Model>`, the checker checks the call against that class's own constructor.
 - **A static call through a class value,** such as `type.defaultTag()` or `type.find(id)`, calls the static on the class the value holds.
-- **`Class`'s own members win,** such as `attributes`. A class cannot declare a static named like one of them, as in TypeScript's error 2699.
+- **`Class`'s own members win,** such as `attributes`. A class cannot declare a static named like one of them, as in TypeScript's error 2699. Only the standard library adds members to `Class`, so an extension of `Class<T>` elsewhere is a compile error.
+- **`attributes<TAttribute : Object>()` reads attributes, which are objects,** so `attributes<int>()` is a compile error.
 - **A class value's type need not be written.** `const type = …` holds a `Class<Element>`.
 - **A property named by a variable has no form.**
 
@@ -2934,6 +2941,7 @@ string key = "signup";
 -->
 ```csharp
 type.attributes<Listen>();                       // Class's own method
+type.attributes<int>();                          // compile error: int is not an Object
 public static string attributes() => "";         // compile error: attributes is a member of Class
 new (kind)(key);                                 // compile error: kind is a string, not a Class
 ```
@@ -2990,7 +2998,7 @@ const order = Order.fromSchema(value, caller);   // typed as Order
 
 `Self` replaces the C# workaround of passing a class to itself, as in `class Order : Entity<Order>`.
 
-`Self` is written only as a return type, and in bodies as `new Self(…)` and `Self.m()`. A `Self` parameter is a compile error, because a subclass would accept any parent:
+`Self` is written only as a return type, and in bodies as `new Self(…)`, `Self.m()` and `typeof(Self)`, the class value of the class the method was called on, which replaces PHP's `static::class`. A `Self` parameter is a compile error, because a subclass would accept any parent:
 
 <!-- example self-parameter: members -->
 ```csharp

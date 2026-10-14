@@ -1,5 +1,5 @@
 --TEST--
-PHP# Class.of(value) gives the class of the object a value holds, a subclass included, with its type arguments
+PHP# Class.of(value) gives the class of the object a value holds, a subclass included, with its type arguments, and typeof gives the class value of any type
 --FILE--
 <?php
 
@@ -10,6 +10,10 @@ $gold = new Classes\GoldBadge();
 var_dump(Classes\ClassValues::of($gold));
 var_dump(Classes\ClassValues::of(new Classes\Badge()));
 var_dump(Classes\ClassValues::tagOf($gold));
+var_dump(Classes\ClassValues::directTag($gold));
+var_dump((new Classes\ClassValues())->keptTag());
+var_dump(Classes\GoldBadge::own(), Classes\Badge::own(), Classes\GoldBadge::ownTag());
+var_dump(Classes\ClassValues::types());
 $crate = Classes\ClassValues::crate();
 var_dump(Classes\ClassValues::sameAsTypeof($crate));
 var_dump(Classes\ClassValues::otherThanTypeof($crate));
@@ -27,6 +31,21 @@ try {
 string(17) "Classes\GoldBadge"
 string(13) "Classes\Badge"
 string(4) "gold"
+string(4) "gold"
+string(4) "gold"
+string(17) "Classes\GoldBadge"
+string(13) "Classes\Badge"
+string(4) "gold"
+array(4) {
+  [0]=>
+  string(3) "int"
+  [1]=>
+  string(19) "List<Classes.Badge>"
+  [2]=>
+  string(16) "Map<string, int>"
+  [3]=>
+  string(8) "Set<int>"
+}
 bool(true)
 bool(false)
 bool(true)
