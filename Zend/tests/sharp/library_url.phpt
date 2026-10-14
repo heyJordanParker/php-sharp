@@ -19,14 +19,24 @@ string(5) "a b&c"
 string(46) "q=php+sharp&page=2&tags%5B0%5D=a&tags%5B1%5D=b"
 bool(true)
 bool(false)
-array(2) {
-  ["a"]=>
-  string(1) "1"
-  ["b"]=>
+object(Sharp\Map)#1 (2) {
+  [0]=>
   array(2) {
     [0]=>
-    string(1) "2"
+    string(1) "a"
     [1]=>
-    string(1) "3"
+    string(1) "1"
+  }
+  [1]=>
+  array(2) {
+    [0]=>
+    string(1) "b"
+    [1]=>
+    array(2) {
+      [0]=>
+      string(1) "2"
+      [1]=>
+      string(1) "3"
+    }
   }
 }

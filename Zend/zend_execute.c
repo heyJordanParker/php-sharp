@@ -1052,6 +1052,12 @@ static zend_always_inline bool i_zend_check_property_type(const zend_property_in
 		return 1;
 	}
 
+	/* A PHP array written to a PHP# Map or Set property crosses into the object, in strict mode too, as a parameter
+	 * does. */
+	if (ZEND_TYPE_IS_COMPLEX(info->type) && Z_TYPE_P(property) == IS_ARRAY) {
+		return sharp_cross_property(info, property);
+	}
+
 	uint32_t type_mask = ZEND_TYPE_FULL_MASK(info->type);
 	ZEND_ASSERT(!(type_mask & (MAY_BE_CALLABLE|MAY_BE_STATIC|MAY_BE_NEVER|MAY_BE_VOID)));
 	return zend_verify_scalar_type_hint(type_mask, property, strict, 0);
@@ -2516,7 +2522,8 @@ static zend_always_inline HashTable *zend_get_target_symbol_table(int fetch_type
 	return ht;
 }
 
-/* A PHP# index read throws OutOfRangeException where PHP warns about a missing key. The compiler
+/* A PHP# List index read throws OutOfRangeException where PHP warns about a missing index. A Map is an
+ * object, whose index reads null for a missing key (spec section 12). The compiler
  * marks the read's FETCH_DIM_R or FETCH_DIM_FUNC_ARG with ZEND_SHARP_OPERATOR, and only a miss
  * reads the mark, from the opline the VM and the JIT save before they report the miss. */
 static ZEND_COLD bool zend_is_sharp_index_read(void)
@@ -2998,6 +3005,7 @@ fetch_from_array:
 		}
 		ZVAL_UNDEF(result);
 	} else if (EXPECTED(Z_TYPE_P(container) == IS_OBJECT)) {
+		SHARP_SEPARATE(container);
 		zend_object *obj = Z_OBJ_P(container);
 		GC_ADDREF(obj);
 		if (ZEND_CONST_COND(dim_type == IS_CV, dim != NULL) && UNEXPECTED(Z_TYPE_P(dim) == IS_UNDEF)) {
@@ -3609,7 +3617,9 @@ static zend_always_inline void zend_fetch_property_address(zval *result, zval *c
 						 * Similar as with magic __get() allow them, but return the value as a copy
 						 * to make sure no actual modification is possible. */
 						ZEND_ASSERT(type == BP_VAR_W || type == BP_VAR_RW || type == BP_VAR_UNSET);
-						if (Z_TYPE_P(ptr) == IS_OBJECT) {
+						/* A PHP# Map or Set is a value, so a write through it would change the property, as for an
+						 * array. */
+						if (Z_TYPE_P(ptr) == IS_OBJECT && !SHARP_IS_TABLE(ptr)) {
 							ZVAL_COPY(result, ptr);
 						} else {
 							if (prop_info->flags & ZEND_ACC_READONLY) {
@@ -3989,6 +3999,11 @@ static zend_always_inline int i_zend_verify_type_assignable_zval(
 		return 1;
 	}
 
+	/* A PHP array crosses into a PHP# Map or Set property, in strict mode too, as zend_coerce_for_property does. */
+	if (ZEND_TYPE_IS_COMPLEX(type) && zv_type == IS_ARRAY && sharp_crosses_property(info)) {
+		return -1;
+	}
+
 	type_mask = ZEND_TYPE_FULL_MASK(type);
 	ZEND_ASSERT(!(type_mask & (MAY_BE_CALLABLE|MAY_BE_STATIC)));
 
@@ -4015,6 +4030,16 @@ static zend_always_inline int i_zend_verify_type_assignable_zval(
 	return -1;
 }
 
+/* Coerces zv as an assignment to prop does: a scalar to its type, or a PHP array into a PHP# Map or Set. */
+static bool zend_coerce_for_property(const zend_property_info *prop, zval *zv)
+{
+	if (Z_TYPE_P(zv) == IS_ARRAY) {
+		return sharp_cross_property(prop, zv);
+	}
+
+	return zend_verify_weak_scalar_type_hint(ZEND_TYPE_FULL_MASK(prop->type), zv);
+}
+
 ZEND_API bool ZEND_FASTCALL zend_verify_ref_assignable_zval(zend_reference *ref, zval *zv, bool strict)
 {
 	const zend_property_info *prop;
@@ -4039,8 +4064,7 @@ type_error:
 			if (!first_prop) {
 				first_prop = prop;
 				ZVAL_COPY(&coerced_value, zv);
-				if (!zend_verify_weak_scalar_type_hint(
-						ZEND_TYPE_FULL_MASK(prop->type), &coerced_value)) {
+				if (!zend_coerce_for_property(prop, &coerced_value)) {
 					goto type_error;
 				}
 			} else if (Z_ISUNDEF(coerced_value)) {
@@ -4050,7 +4074,7 @@ type_error:
 			} else {
 				zval tmp;
 				ZVAL_COPY(&tmp, zv);
-				if (!zend_verify_weak_scalar_type_hint(ZEND_TYPE_FULL_MASK(prop->type), &tmp)) {
+				if (!zend_coerce_for_property(prop, &tmp)) {
 					zval_ptr_dtor(&tmp);
 					goto type_error;
 				}

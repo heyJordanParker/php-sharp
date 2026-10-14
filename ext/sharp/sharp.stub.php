@@ -12,7 +12,7 @@ final class Collection
 {
     private function __construct() {}
 
-    public function add(mixed $value): void {}
+    public function add(mixed $value): bool {}
 
     public function set(int $index, mixed $value): void {}
 
@@ -20,19 +20,27 @@ final class Collection
 
     public function removeAt(int $index): void {}
 
-    public function get(int|string $key): mixed {}
+    public function get(mixed $key): mixed {}
 
-    public function entries(): array {}
+    public function entries(): Map {}
 
-    public function delete(int|string $key): void {}
+    public function has(mixed $key): bool {}
 
-    public function put(int|string $key, mixed $value): mixed {}
+    public function contains(mixed $value): bool {}
+
+    public function remove(mixed $value): bool {}
+
+    public function put(mixed $key, mixed $value): mixed {}
 
     public function clear(): void {}
 
-    public function filter(\Closure $predicate): array {}
+    public function count(): int {}
 
-    public function filterValues(\Closure $predicate): array {}
+    public function keys(): array {}
+
+    public function toList(): array {}
+
+    public function filter(\Closure $predicate): Map|Set|array {}
 
     public function map(\Closure $transform): array {}
 
@@ -42,9 +50,9 @@ final class Collection
 
     public function any(\Closure $predicate): bool {}
 
-    public function groupBy(\Closure $key): array {}
+    public function groupBy(\Closure $key): Map {}
 
-    public function associateBy(\Closure $key): array {}
+    public function associateBy(\Closure $key): Map {}
 
     public function sortedBy(\Closure $selector): array {}
 }
