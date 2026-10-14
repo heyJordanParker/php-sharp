@@ -14,7 +14,7 @@ interface Shareable
 
 class Order extends DatabaseEntity implements Shareable
 {
-    public function link(): string { return \sprintf("/orders/%d", $this->id); }
+    public function link(): string { return "/orders/{$this->id}"; }
 }
 /** @template TItem */
 interface Query

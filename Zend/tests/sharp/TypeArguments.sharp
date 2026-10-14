@@ -77,7 +77,7 @@ public interface Shareable
 
 public class SharedOrder : DatabaseEntity, Shareable
 {
-    public string share() => sprintf("shared %d", this.id);
+    public string share() => `shared ${this.id}`;
 }
 
 public class Report<TItem : DatabaseEntity & Shareable>

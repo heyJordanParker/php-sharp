@@ -14,7 +14,7 @@ public interface Shareable
 
 public class Order : DatabaseEntity, Shareable
 {
-    public string link() => sprintf("/orders/%d", this.id);
+    public string link() => `/orders/${this.id}`;
 }
 
 public interface Query<TItem>

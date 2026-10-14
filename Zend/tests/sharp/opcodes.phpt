@@ -793,6 +793,9 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php   0002 INIT_METHOD_CALL 0 T1 string("link")
   .php   0004 VERIFY_RETURN_TYPE V2
   .php   0005 RETURN V2
+  .php   0006 VERIFY_RETURN_TYPE
+  .php   0007 RETURN null
+  .php        2: 0004 - 0005 (tmp/var)
   .php   0000 V0 = NEW 1 string("Paging\\PaginatedList")
   .php        ; (lines=19, args=0, vars=0, tmps=10)
   .php   0010 V6 = DO_FCALL
