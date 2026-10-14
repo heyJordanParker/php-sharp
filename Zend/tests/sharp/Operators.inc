@@ -262,8 +262,8 @@ class Operators
         return $area;
     }
 
-    public function checkout(array $payload, string $plan, array $prices): \Billing\Receipt
-    {
+    public function checkout(\Sharp\Map|array $payload, string $plan, \Sharp\Map|array $prices): \Billing\Receipt { $payload = \is_array($payload) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [(string) $key, $value], \array_keys($payload), $payload))) : $payload; $prices = \is_array($prices) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [(string) $key, $value], \array_keys($prices), $prices))) : $prices; // PHP# makes each array a Map, its keys strings
+
         if (!\is_int($orderId = ((object) $payload)->get("orderId"))) { throw new \Billing\BadPayload("orderId"); }
         if (!\is_int($price = ((object) $prices)->get($plan))) { return \Billing\Receipt::unknownPlan($plan); }
         return $this->charge($orderId, $price);

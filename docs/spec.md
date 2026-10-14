@@ -589,7 +589,7 @@ Point origin = new Point { x: 0 };    // compile error: y has no initial value, 
 
 `with` copies an object or a struct and sets the listed properties through their `init` or `set` accessors. The original is unchanged.
 
-**A struct keys a `Map` by its whole value when every field has `==`,** with nothing declared, as Swift's `Hashable` structs, Rust's `Hash` derive, C#'s record structs, Java's records, Kotlin's data classes and Go's structs are. It is the general rule for keys (section 12): a struct whose every field has `==` has `==` and `hash()` (section 19). Two structs are one key when they are `==`. A struct gets JSON key text only from its `toString()`, so `Json.encode` of a `Map` keyed by a struct without `toString()` is a compile error, as Jackson writes a key through `toString` and serde and Go refuse a key that is not text.
+**A struct keys a `Map` when every field has `==`, by its whole value with nothing declared, or when it declares `==` with `hash()`, by that pair,** as Swift's `Hashable` structs, Rust's `Hash` derive, C#'s record structs, Java's records, Kotlin's data classes and Go's structs are. It is the general rule for keys (section 12): a struct whose every field has `==` has `==` and `hash()`, and a struct with a field that has none, such as a function, declares both (section 19). Two structs are one key when they are `==`. A struct gets JSON key text only from its `toString()`, so `Json.encode` of a `Map` keyed by a struct without `toString()` is a compile error, as Jackson writes a key through `toString` and serde and Go refuse a key that is not text.
 
 **Every struct has a static `parse`,** which reads a `Map<string, Any?>` or an object's public properties and throws one error that lists every bad field, and a static `tryParse`, which gives null instead. The names follow `Int.parse` and `Int.tryParse` (section 24). Every class gets both the same way.
 
@@ -990,6 +990,7 @@ for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is a 
 **Map keys:** anything with `==` and `hash()` (section 19) keys a `Map` and joins a `Set`, as in Swift, Rust, Java and Kotlin.
 
 - A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type, as in `const [Status status, int n]`, stays allowed. An inferred `Map`, such as a `groupBy` result, gives its keys back the same way.
+- Plain PHP receives the `Map` itself, or a PHP array where its parameter's declared type names `array`. A PHP array's keys are `int` or `string`, so passing a `Map` keyed by anything else to such a parameter is a compile error that names the parameter and the key type. `counts.count()` counts any `Map`, where PHP's `global.count(counts)` takes only one keyed by `int` or `string`.
 
 <!-- example enum-map-keys -->
 ```csharp
@@ -1461,8 +1462,7 @@ namespace App;
 
 public class Order
 {
-    public int id { get; }
-    public Money total { get; }
+    public Order(public int id { get; }, public Money total { get; }) { }
 
     public void markPaid()
     {
@@ -2755,8 +2755,7 @@ const point = (object)["x": 1];                   // compile error: write a Map 
 ```
 
 - **A JSON object** is a `Map` literal for a one-off payload, and a declared struct for a shape that repeats.
-- **`Json.encode` encodes by the value's PHP# type, as far as the type is written,** so there a `Map` is a JSON object and a `List` is a JSON array, even when empty, and even when a `Map`'s keys run from 0 to n. PHP's own `json_encode` sees a plain array, so it gives `[]` for an empty `Map`.
-- **Below an `Any`, a value encodes as PHP sees it,** because an array carries no mark that says `List` or `Map` (decision 26). Any list-shaped array there, such as an empty `Map` or a `Map<int, V>` with keys 0 to n, encodes as a JSON array. To keep a `Map` a JSON object, write its type or use a struct.
+- **`Json.encode` encodes by the value's PHP# type,** so a `Map` is a JSON object and a `List` is a JSON array wherever it is, below an `Any` too, even when empty, and even when a `Map`'s keys run from 0 to n. A `Map` is an object the engine tells apart from a `List` (section 12).
 
 <!-- example json-encoding: statements
 import Sharp.Json.Json;
@@ -2767,9 +2766,9 @@ Json.encode(none);                                // {}
 List<int> empty = [];
 Json.encode(empty);                               // []
 Map<string, Any> loose = ["counts": none];
-Json.encode(loose);                               // {"counts":[]}: counts sits below Any
-Map<string, Map<string, int>> typed = ["counts": none];
-Json.encode(typed);                               // {"counts":{}}: the type is written
+Json.encode(loose);                               // {"counts":{}}: an empty Map below Any is still an object
+Map<string, Any> listed = ["counts": empty];
+Json.encode(listed);                              // {"counts":[]}: an empty List below Any is still an array
 ```
 
 **`Any` holds a value of any type except null. `Any?` also allows null.** A value of type `Any` must be checked with `is`, `as` or `match` before it can be used:

@@ -1,0 +1,8 @@
+namespace Demo;
+
+class Wraps
+{
+    public static List<Map<string, int>> counts(Map<string, int> counts) => List.wrap(counts);
+
+    public static List<Set<string>> marks(Set<string> marks) => List.wrap(marks);
+}

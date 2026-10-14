@@ -78,10 +78,10 @@ class EntityValidator implements Validator
 
 class Store
 {
-    /** @var array<string, DatabaseEntity> */
-    private array $saved = [];
-    /** @var array<string, class-string<DatabaseEntity>> */
-    private array $kinds = ["order" => Order::class];
+    /** @var \Sharp\Map<string, DatabaseEntity> */
+    #[\Sharp\Crossing(['map', 'string', null])] private \Sharp\Map $saved;
+    /** @var \Sharp\Map<string, class-string<DatabaseEntity>> */
+    #[\Sharp\Crossing(['map', 'string', null])] private \Sharp\Map $kinds;
 
     /** @template TItem of DatabaseEntity
      *  @param list<TItem> $items
