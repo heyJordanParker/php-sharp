@@ -7,7 +7,7 @@ class Signatures
 
     public Signatures(private int|string id, int ...values)
     {
-        if (count(values) > 0) {
+        if (global.count(values) > 0) {
             this.id = Signatures.sum(...values);
         }
     }
@@ -64,7 +64,7 @@ class Signatures
 
     public static int spread(int first, int ...values)
     {
-        return Signatures.sum(first, ...values) + max(first, ...values);
+        return Signatures.sum(first, ...values) + global.max(first, ...values);
     }
 
     public static int|string made(int ...values)

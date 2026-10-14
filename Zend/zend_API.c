@@ -1728,7 +1728,7 @@ ZEND_API void object_properties_init_ex(zend_object *object, HashTable *properti
 					zval tmp;
 
 					ZVAL_COPY_VALUE(&tmp, prop);
-					if (UNEXPECTED(!zend_verify_property_type(property_info, &tmp, 0))) {
+					if (UNEXPECTED(!zend_verify_object_property_type(property_info, &tmp, 0, object))) {
 						continue;
 					}
 					ZVAL_COPY_VALUE(slot, &tmp);
@@ -4629,6 +4629,7 @@ skip_property_storage:
 	property_info->hooks = NULL;
 	property_info->ce = ce;
 	property_info->type = type;
+	property_info->sharp_type = NULL;
 
 	if (is_persistent_class(ce)) {
 		zend_normalize_internal_type(&property_info->type);
@@ -5085,7 +5086,7 @@ ZEND_API zend_result zend_update_static_property_ex(zend_class_entry *scope, zen
 	Z_TRY_ADDREF_P(value);
 	if (ZEND_TYPE_IS_SET(prop_info->type)) {
 		ZVAL_COPY_VALUE(&tmp, value);
-		if (!zend_verify_property_type(prop_info, &tmp, /* strict */ 0)) {
+		if (!zend_verify_object_property_type(prop_info, &tmp, /* strict */ 0, NULL)) {
 			Z_TRY_DELREF_P(value);
 			return FAILURE;
 		}

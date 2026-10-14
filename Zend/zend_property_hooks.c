@@ -21,6 +21,7 @@
 #include "zend_hash.h"
 #include "zend_lazy_objects.h"
 #include "zend_property_hooks.h"
+#include "ext/sharp/php_sharp.h"
 
 typedef struct {
 	zend_object_iterator it;
@@ -78,7 +79,8 @@ static zend_array *zho_build_properties_ex(zend_object *zobj, bool check_access,
 
 		zend_property_info *prop_info;
 		ZEND_HASH_MAP_FOREACH_PTR(&pce->properties_info, prop_info) {
-			if (prop_info->flags & ZEND_ACC_STATIC) {
+			/* PHP#: the slot that keeps an object's type arguments is never one of its properties. */
+			if (prop_info->flags & (ZEND_ACC_STATIC|ZEND_ACC_SHARP_HIDDEN)) {
 				continue;
 			}
 			zend_string *property_name = prop_info->name;
@@ -198,6 +200,9 @@ static void zho_declared_it_fetch_current(zend_object_iterator *iter)
 				zend_throw_error(NULL,
 					"Cannot acquire reference to readonly property %s::$%s",
 					ZSTR_VAL(prop_info->ce->name), zend_get_unmangled_property_name(prop_info->name));
+				return;
+			}
+			if (UNEXPECTED(sharp_property_refuses_reference(prop_info))) {
 				return;
 			}
 			ZVAL_MAKE_REF(property);
