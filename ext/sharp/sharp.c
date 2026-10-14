@@ -17,6 +17,7 @@
 #include "ext/spl/spl_exceptions.h"
 #include "ext/standard/basic_functions.h"
 #include "ext/standard/info.h"
+#include "zend_attributes.h"
 #include "zend_closures.h"
 #include "zend_enum.h"
 #include "zend_exceptions.h"
@@ -2110,6 +2111,145 @@ void sharp_separate(zval *holder)
 	OBJ_RELEASE(shared);
 }
 
+/* The key a Map takes for the key PHP holds under index or name, as the plan's key says: the key as it is, a string
+ * for an all-digit one PHP holds as an int, or the case of the backed enum the plan names. */
+static bool sharp_crossed_key(zval *key, const zval *plan_key, zend_ulong index, zend_string *name)
+{
+	if (Z_TYPE_P(plan_key) != IS_STRING) {
+		if (name) {
+			ZVAL_STR_COPY(key, name);
+		} else {
+			ZVAL_LONG(key, (zend_long) index);
+		}
+		return true;
+	}
+	if (zend_string_equals_literal(Z_STR_P(plan_key), "string")) {
+		ZVAL_STR(key, name ? zend_string_copy(name) : zend_long_to_str((zend_long) index));
+		return true;
+	}
+
+	zend_class_entry *backed = zend_lookup_class(Z_STR_P(plan_key));
+	if (!backed) {
+		return false;
+	}
+	if (name && backed->enum_backing_type == IS_LONG) {
+		zend_type_error("%s::from(): Argument #1 ($value) must be of type int, string given", ZSTR_VAL(backed->name));
+		return false;
+	}
+	zend_object *found;
+	zend_string *text = name ? zend_string_copy(name) : NULL;
+	if (!name && backed->enum_backing_type == IS_STRING) {
+		text = zend_long_to_str((zend_long) index);
+	}
+	zend_result result = zend_enum_get_case_by_value(&found, backed, (zend_long) index, text, false);
+	if (text) {
+		zend_string_release(text);
+	}
+	if (result == FAILURE) {
+		return false;
+	}
+	ZVAL_OBJ_COPY(key, found);
+
+	return true;
+}
+
+/* The value a PHP array crosses into, as `plan` describes the PHP# type it enters: ['map', key, values],
+ * ['set', elements] or ['list', elements], each inner plan null when that part holds no Map or Set. A value that is
+ * not a PHP array is the object already, as the bridge's own crossing leaves it. */
+static bool sharp_crossed(zval *result, zval *value, const zval *plan)
+{
+	if (Z_TYPE_P(value) != IS_ARRAY || Z_TYPE_P(plan) != IS_ARRAY) {
+		ZVAL_COPY(result, value);
+		return true;
+	}
+
+	HashTable *parts = Z_ARRVAL_P(plan);
+	const zval *kind = zend_hash_index_find(parts, 0);
+	ZEND_ASSERT(kind && Z_TYPE_P(kind) == IS_STRING);
+	const zval *inner = zend_hash_index_find(parts, zend_hash_num_elements(parts) - 1);
+	HashTable *entries = Z_ARRVAL_P(value);
+	zend_ulong index;
+	zend_string *name;
+	zval *element, crossed, key;
+
+	if (zend_string_equals_literal(Z_STR_P(kind), "list")) {
+		array_init_size(result, zend_hash_num_elements(entries));
+		ZEND_HASH_FOREACH_KEY_VAL(entries, index, name, element) {
+			if (!sharp_crossed(&crossed, element, inner)) {
+				zval_ptr_dtor(result);
+				return false;
+			}
+			if (name) {
+				zend_hash_update(Z_ARRVAL_P(result), name, &crossed);
+			} else {
+				zend_hash_index_update(Z_ARRVAL_P(result), index, &crossed);
+			}
+		} ZEND_HASH_FOREACH_END();
+		return true;
+	}
+
+	bool is_set = zend_string_equals_literal(Z_STR_P(kind), "set");
+	sharp_table_object *table =
+		sharp_table_object_create(is_set ? sharp_ce_set : sharp_ce_map, zend_hash_num_elements(entries));
+	ZVAL_OBJ(result, &table->std);
+	ZEND_HASH_FOREACH_KEY_VAL(entries, index, name, element) {
+		if (!sharp_crossed(&crossed, element, inner)) {
+			zval_ptr_dtor(result);
+			return false;
+		}
+		bool put;
+		if (is_set) {
+			zval null;
+			ZVAL_NULL(&null);
+			put = sharp_table_put(&table->table, &crossed, &null);
+		} else {
+			put = sharp_crossed_key(&key, zend_hash_index_find(parts, 1), index, name);
+			if (put) {
+				put = sharp_table_put(&table->table, &key, &crossed);
+				zval_ptr_dtor(&key);
+			}
+		}
+		zval_ptr_dtor(&crossed);
+		if (!put) {
+			zval_ptr_dtor(result);
+			return false;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return true;
+}
+
+static zend_attribute *sharp_crossing_of(const zend_property_info *info)
+{
+	return info->attributes
+		? zend_get_attribute_str(info->attributes, "sharp\\crossing", sizeof("sharp\\crossing") - 1)
+		: NULL;
+}
+
+bool sharp_crosses_property(const zend_property_info *info)
+{
+	return sharp_crossing_of(info) != NULL;
+}
+
+bool sharp_cross_property(const zend_property_info *info, zval *value)
+{
+	zend_attribute *crossing = sharp_crossing_of(info);
+	zval plan, crossed;
+	if (!crossing || zend_get_attribute_value(&plan, crossing, 0, info->ce) == FAILURE) {
+		return false;
+	}
+
+	bool is_crossed = sharp_crossed(&crossed, value, &plan);
+	zval_ptr_dtor(&plan);
+	if (!is_crossed) {
+		return false;
+	}
+	zval_ptr_dtor(value);
+	ZVAL_COPY_VALUE(value, &crossed);
+
+	return true;
+}
+
 static HashTable *sharp_table_get_gc(zend_object *object, zval **table, int *n)
 {
 	zend_get_gc_buffer *buffer = zend_get_gc_buffer_create();
@@ -2724,6 +2864,48 @@ static zend_class_entry *register_class_Sharp_Struct(void)
 	return interface;
 }
 
+/* #[\Sharp\Crossing(plan)], which the bridge puts on each property PHP# declares a Map or a Set: the plan
+ * sharp_cross_property crosses a PHP array plain PHP writes there by. */
+ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Sharp_Crossing___construct, 0, 0, 1)
+	ZEND_ARG_TYPE_INFO(0, plan, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_METHOD(Sharp_Crossing, __construct)
+{
+	zval *plan;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ARRAY(plan)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_update_property(Z_OBJCE_P(ZEND_THIS), Z_OBJ_P(ZEND_THIS), "plan", sizeof("plan") - 1, plan);
+}
+
+static const zend_function_entry class_Sharp_Crossing_methods[] = {
+	ZEND_ME(Sharp_Crossing, __construct, arginfo_class_Sharp_Crossing___construct, ZEND_ACC_PUBLIC)
+	ZEND_FE_END
+};
+
+static void register_class_Sharp_Crossing(void)
+{
+	zend_class_entry ce;
+
+	INIT_NS_CLASS_ENTRY(ce, "Sharp", "Crossing", class_Sharp_Crossing_methods);
+	zend_class_entry *crossing = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL);
+
+	zval undefined;
+	ZVAL_UNDEF(&undefined);
+	zend_string *plan = zend_string_init_interned("plan", sizeof("plan") - 1, true);
+	zend_declare_typed_property(crossing, plan, &undefined, ZEND_ACC_PUBLIC | ZEND_ACC_READONLY, NULL,
+		(zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_ARRAY));
+	zend_string_release(plan);
+
+	zend_string *attribute_name = zend_string_init_interned("Attribute", sizeof("Attribute") - 1, true);
+	zend_attribute *attribute = zend_add_class_attribute(crossing, attribute_name, 1);
+	zend_string_release(attribute_name);
+	ZVAL_LONG(&attribute->args[0].value, ZEND_ATTRIBUTE_TARGET_PROPERTY);
+}
+
 static PHP_MINIT_FUNCTION(sharp)
 {
 	REGISTER_INI_ENTRIES();
@@ -2741,6 +2923,7 @@ static PHP_MINIT_FUNCTION(sharp)
 	register_class_Sharp_List();
 	sharp_ce_struct = register_class_Sharp_Struct();
 	register_sharp_tables();
+	register_class_Sharp_Crossing();
 
 	zend_class_entry *environment = register_class_Sharp_Environment();
 	memcpy(&sharp_environment_handlers, &std_object_handlers, sizeof(zend_object_handlers));

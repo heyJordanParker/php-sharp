@@ -506,7 +506,8 @@ A loop holds a reference to the object while it reads it, so a write inside the 
 - An index write runs through `offsetSet`, with PHP's own `$map[$k] = $v`.
 - A loop lowers to `foreach ($map as $k => $v)` and gives each key as stored. `stored_key` and `key_read_back` go, for a struct, a backed enum and an all-digit string alike.
 - `has`, `get`, `keys()`, `values()`, `count()`, `remove`, `filter` and the other methods run on `Sharp\Collection` as today. A method that returns a `Map`, such as `filter` on a `Map`, `groupBy` and `associateBy`, returns a `Sharp\Map`, so `groupBy`'s template bound `G of array-key` widens to any key with `==` and `hash()`.
-- A parameter, a typed property and a typed assignment that takes a value from plain PHP accept a `Sharp\Map`, or a PHP array they turn into one through `Sharp\Map::from`, as `Lowering::set_parameters` does for a `Set` today. The PHP type is `\Sharp\Map|array`.
+- A parameter, a property's `set` body and a typed assignment that takes a value from plain PHP accept a `Sharp\Map`, or a PHP array they turn into one through `Sharp\Map::from`, as `Lowering::set_parameters` does for a `Set` today. The PHP type is `\Sharp\Map|array`.
+- A property keeps the type `\Sharp\Map` or `\Sharp\Set`, so an index write through it stays a plain write. Section 12 lists a plain PHP write to it as a crossing, so the bridge gives it `#[\Sharp\Crossing(plan)]`, and the engine turns a PHP array written there into the object where it checks every typed property write, instance and static, as it coerces a scalar. The plan mirrors the bridge's own crossing: `['map', key, values]`, `['set', elements]` or `['list', elements]`, with the key null, `'string'` for an all-digit key back as its `string`, or the backed enum whose case each backing value is. A `List<Map<…>>` property is a PHP `array`, which never fails the type check, so its inner arrays stay arrays.
 - `==` on two `Map`s calls the engine's own comparison, without regard to order. The `\array_all` lowering stays for a `List`.
 
 ## What the engine deletes
@@ -588,7 +589,11 @@ php-sharp
 │                                            ArrayAccess, IteratorAggregate, Countable and JsonSerializable, with
 │                                            toArray(); Sharp\Map::of(array $keysAndValues), Sharp\Map::from(array $entries),
 │                                            keys() and values(); Sharp\Set::from(array $values) and toList();
-│                                            sharp_separate; the key text, key() and readKey() deleted (ruling 22)
+│                                            sharp_separate; the key text, key() and readKey() deleted (ruling 22);
+│                                            the attribute Sharp\Crossing, sharp_cross_property and
+│                                            sharp_crosses_property
+├── Zend/zend_execute.c                   <- a PHP array written to a property with #[\Sharp\Crossing] crosses
+│                                            where the property's type is checked, a typed reference's too
 ├── ext/sharp/sharp_table.c, sharp_table.h
 │                                         <- new: php-ds v1.8.0's ds_htable, its MIT notice kept, cut to the
 │                                            buckets, chains, rehash, lookup, put, remove, clone and iteration,
@@ -611,6 +616,8 @@ The names ruling 22 adds, each with the slate it was picked from:
 - `Sharp\Map::of`: a literal's entries, as Kotlin's `mapOf` and Java's `Map.of`. Also considered: `fromPairs`, `literal`.
 - `Sharp\Map::from`: a PHP array crossing in, beside the existing `Sharp\Set::from`. Also considered: `fromArray`, `wrap` (`Sharp\List::wrap` returns an array as it is and puts any other value in a one-element list, which is a different job).
 - `sharp_separate`: PHP's word for the same act, as in `SEPARATE_ARRAY`. Also considered: `sharp_unshare`, `sharp_copy_on_write`.
+- `Sharp\Crossing`: section 12's word for where plain PHP's value enters PHP#, and the bridge's (`crossed`, `crossing_type`). Also considered: `Holds`, `Declared`, `Converts`, `FromArray`, `Type` (too generic).
+- `sharp_cross_property` and `sharp_crosses_property`: the act and the question, beside `sharp_separate`. Also considered: `sharp_coerce_property`, PHP's word for a scalar's conversion.
 
 The names, each with the slate it was picked from:
 

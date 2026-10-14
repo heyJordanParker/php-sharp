@@ -5,7 +5,7 @@ use SplFixedArray;
 class Cart
 {
     public private(set) array $items = [];
-    private \Sharp\Map $counts;
+    #[\Sharp\Crossing(['map', 'string', null])] private \Sharp\Map $counts;
 
     public function fill(array $extra): int
     {

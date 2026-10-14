@@ -5,13 +5,13 @@ use Lib\Standing;
 
 class Tagged
 {
-    public \Sharp\Set $tags;
-    public \Sharp\Set $states { get => $this->states; set { $this->writes += 1; $this->states = $value; } }
+    #[\Sharp\Crossing(['set', null])] public \Sharp\Set $tags;
+    #[\Sharp\Crossing(['set', null])] public \Sharp\Set $states { get => $this->states; set(\Sharp\Set|array $value) { $value = \is_array($value) ? new \Sharp\Set($value) : $value; $this->writes += 1; $this->states = $value; } } // PHP# makes the PHP array plain PHP writes a Set
     public private(set) int $writes = 0;
-    private \Sharp\Set $sizes;
+    #[\Sharp\Crossing(['set', null])] private \Sharp\Set $sizes;
     private int $calls = 0;
 
-    public \Sharp\Set $ids; public readonly \Sharp\Set $labels; public function __construct(\Sharp\Set|array $ids, \Sharp\Set|array $labels) { $this->ids = \is_array($ids) ? new \Sharp\Set($ids) : $ids; $this->labels = \is_array($labels) ? new \Sharp\Set($labels) : $labels; // PHP# declares each promoted Set and makes it a Set
+    #[\Sharp\Crossing(['set', null])] public \Sharp\Set $ids; #[\Sharp\Crossing(['set', null])] public readonly \Sharp\Set $labels; public function __construct(\Sharp\Set|array $ids, \Sharp\Set|array $labels) { $this->ids = \is_array($ids) ? new \Sharp\Set($ids) : $ids; $this->labels = \is_array($labels) ? new \Sharp\Set($labels) : $labels; // PHP# declares each promoted Set and makes it a Set
 
     }
 

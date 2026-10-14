@@ -1432,8 +1432,7 @@ namespace App;
 
 public class Order
 {
-    public int id { get; }
-    public Money total { get; }
+    public Order(public int id { get; }, public Money total { get; }) { }
 
     public void markPaid()
     {

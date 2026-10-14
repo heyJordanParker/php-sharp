@@ -48,14 +48,15 @@ Json.encode(bookings);                              // compile error: Slot decla
 
 A JSON object's key is text, and a struct has no single text of its own. `toString()` names it, so the text a reader sees is the one the code chose.
 
-### Chosen: an enum key is its backing value
+### Chosen: a key is stored as itself
 
 ```csharp
 Map<Status, int> counts = [:];
-counts[status] = 1;                                 // compiles; runs: $counts[$status->value] = 1
+counts[status] = 1;                                 // compiles; runs: $counts[$status] = 1, the Sharp\Map holds the Status case
+Map<string, int> stock = ["5": 1];                  // compiles; "5" stays a string, where a PHP array holds the int 5
 ```
 
-Plain PHP receives the same array it would build by hand.
+A `Map` runs as a `Sharp\Map` object, which keeps each key as itself and finds it by its `==` and `hash()`. An enum key stays its case, an all-digit string stays a string, and a struct key stays the struct. Plain PHP receives the `Sharp\Map` itself, or a PHP array of backing values and strings where its parameter names `array`. A PHP array plain PHP passes or writes back crosses into the `Map`, each backing value made its case and each key of a `string` key type made a string again.
 
 ### Chosen: a key arrives as its type, from the checker's types
 
@@ -66,7 +67,7 @@ const byStatus = orders.groupBy(o => o.status);              // Map<Status, List
 for (const [status, group] of byStatus) { … }                // compiles; status arrives as a Status
 ```
 
-The stored key is only its value, such as `"open"`. The checker's types reach the running program (decision 29), inferred ones too, so the engine turns the value back into a `Status` for a declared `Map` and an inferred one alike.
+The `Map` stores the case itself, so a loop gives it back as it was stored, for a declared `Map` and an inferred one alike, with no conversion.
 
 ### Rejected: a struct declares a backing value with the enum header
 
@@ -149,7 +150,7 @@ Every read and write converts by hand, and a key read back loses its type.
 - **Chosen, a struct keys by its whole value:** Swift's `Hashable` structs, Rust's `#[derive(Hash, Eq)]`, C#'s record structs, Java's records, Kotlin's data classes and Go's comparable structs.
 - **Chosen, a class instance can't key by value:** Rust's `HashMap`, which needs every field to be `Hash`, and Swift's `Dictionary`, which needs every field to be `Hashable`.
 - **Chosen, JSON key text from `toString()`:** Jackson, which writes a map key through `toString()`. serde and Go's `encoding/json` refuse a key that is not text.
-- **Chosen, an enum key is its backing value:** Swift, whose enums with raw values convert both ways through `rawValue` and `init?(rawValue:)`. Hack, whose enums are their backing values when the code runs, so `dict<Status, int>` works.
+- **Chosen, a key is stored as itself:** Swift's `Dictionary`, Kotlin's and Java's `HashMap`, and Rust's `HashMap`, which each keep a key as the value it is and find it by its equality and hash.
 - **Chosen, no conversion operators:** Kotlin, Swift and Rust, which have none.
 - **Rejected, a user-defined conversion operator:** C#'s `implicit operator`.
 - **Rejected, keys limited to `int|string`:** PHP's own arrays, which refuse an enum or an object as a key.

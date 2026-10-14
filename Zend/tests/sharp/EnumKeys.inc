@@ -6,8 +6,8 @@ use Lib\Standing;
 
 class Headcount
 {
-    private \Sharp\Map $counts;
-    private \Sharp\Map $seeded;
+    #[\Sharp\Crossing(['map', 'Lib\Standing', null])] private \Sharp\Map $counts;
+    #[\Sharp\Crossing(['map', 'Lib\Standing', null])] private \Sharp\Map $seeded;
 
     public function seededCounts(): \Sharp\Map
     {

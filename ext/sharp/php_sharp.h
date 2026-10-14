@@ -22,6 +22,12 @@ extern zend_class_entry *sharp_ce_map;
 extern zend_class_entry *sharp_ce_set;
 void sharp_separate(zval *holder);
 
+/* Spec section 12: a PHP array plain PHP writes to a property PHP# declares a Map or a Set crosses into that object, as
+ * the property's #[\Sharp\Crossing] plans it, where the engine coerces a value for a typed property. Returns whether
+ * it did. sharp_crosses_property says whether the property has such a plan. */
+bool sharp_crosses_property(const zend_property_info *info);
+bool sharp_cross_property(const zend_property_info *info, zval *value);
+
 #define SHARP_IS_TABLE(value) \
 	(Z_TYPE_P(value) == IS_OBJECT && (Z_OBJCE_P(value) == sharp_ce_map || Z_OBJCE_P(value) == sharp_ce_set))
 #define SHARP_IS_COLLECTION(value) (Z_TYPE_P(value) == IS_ARRAY || SHARP_IS_TABLE(value))
