@@ -147,7 +147,8 @@ ext/sharp/
 ├── sharp.stub.php                      their public signatures
 └── sharp_arginfo.h                     generated from sharp.stub.php
 sharp/composer/
-├── composer.json                       requires psr/container; maps Sharp\Psr\ to src/Psr/
+├── composer.json                       requires psr/container, and psr/event-dispatcher for slices/15-events.md;
+│                                       maps Sharp\Psr\ to src/Psr/
 ├── autoload.php                        reads the library's module
 ├── library/Sharp/Module.sharp          new: binds Environment and Dispatcher for every namespace
 ├── src/Psr/Container.php               new: Sharp\Psr\Container, PSR-11 over Sharp\Container

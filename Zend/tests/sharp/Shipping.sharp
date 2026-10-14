@@ -2,8 +2,11 @@ namespace Shop;
 
 public class Shipping
 {
+    public static List<Shipping> made { get; set; } = [];
+
     public void ship(OrderPaid e) on OrderPaid
     {
+        Shipping.made.add(this);
         OrderNotices.heard.add(`ship ${e.orderId}`);
     }
 

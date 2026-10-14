@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: e4eecd19ba74e0a85b7b5896f7d6bd27c86d3b4d */
+ * Stub hash: 2390716261fa15acd2af4be587600cc294b35d3f */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_readModule, 0, 1, IS_VOID, 0)
 	ZEND_ARG_TYPE_INFO(0, path, IS_STRING, 0)
@@ -18,6 +18,10 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_endTest, 0, 0, IS
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_emit, 0, 1, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, event, IS_OBJECT, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_listenersFor, 0, 1, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, event, IS_OBJECT, 0)
 ZEND_END_ARG_INFO()
 
@@ -119,11 +123,14 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_class_Sharp_Internal_Listener_run arginfo_Sharp_Internal_endTest
 
+#define arginfo_class_Sharp_Internal_Listener_hear arginfo_Sharp_Internal_emit
+
 ZEND_FUNCTION(Sharp_Internal_readModule);
 ZEND_FUNCTION(Sharp_Internal_testModule);
 ZEND_FUNCTION(Sharp_Internal_startTest);
 ZEND_FUNCTION(Sharp_Internal_endTest);
 ZEND_FUNCTION(Sharp_Internal_emit);
+ZEND_FUNCTION(Sharp_Internal_listenersFor);
 ZEND_FUNCTION(Sharp_Internal_listen);
 ZEND_METHOD(Sharp_Collection, __construct);
 ZEND_METHOD(Sharp_Collection, add);
@@ -151,6 +158,7 @@ ZEND_METHOD(Sharp_Container, scope);
 ZEND_METHOD(Sharp_Listening, __construct);
 ZEND_METHOD(Sharp_Internal_Listener, __construct);
 ZEND_METHOD(Sharp_Internal_Listener, run);
+ZEND_METHOD(Sharp_Internal_Listener, hear);
 
 static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "readModule"), zif_Sharp_Internal_readModule, arginfo_Sharp_Internal_readModule, 0, NULL, NULL)
@@ -158,6 +166,7 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "startTest"), zif_Sharp_Internal_startTest, arginfo_Sharp_Internal_startTest, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "endTest"), zif_Sharp_Internal_endTest, arginfo_Sharp_Internal_endTest, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "emit"), zif_Sharp_Internal_emit, arginfo_Sharp_Internal_emit, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "listenersFor"), zif_Sharp_Internal_listenersFor, arginfo_Sharp_Internal_listenersFor, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "listen"), zif_Sharp_Internal_listen, arginfo_Sharp_Internal_listen, 0, NULL, NULL)
 	ZEND_FE_END
 };
@@ -205,6 +214,7 @@ static const zend_function_entry class_Sharp_Listening_methods[] = {
 static const zend_function_entry class_Sharp_Internal_Listener_methods[] = {
 	ZEND_ME(Sharp_Internal_Listener, __construct, arginfo_class_Sharp_Internal_Listener___construct, ZEND_ACC_PRIVATE)
 	ZEND_ME(Sharp_Internal_Listener, run, arginfo_class_Sharp_Internal_Listener_run, ZEND_ACC_PRIVATE)
+	ZEND_ME(Sharp_Internal_Listener, hear, arginfo_class_Sharp_Internal_Listener_hear, ZEND_ACC_PRIVATE)
 	ZEND_FE_END
 };
 

@@ -102,6 +102,8 @@ final class Listener
     private function __construct() {}
 
     private function run(): void {}
+
+    private function hear(object $event): void {}
 }
 
 function readModule(string $path): void {}
@@ -113,5 +115,7 @@ function startTest(string $class): void {}
 function endTest(): void {}
 
 function emit(object $event): void {}
+
+function listenersFor(object $event): array {}
 
 function listen(string $event, \Closure $listener): \Sharp\Listening {}
