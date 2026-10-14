@@ -108,4 +108,11 @@ class Patterns
         }
         return 0.0;
     }
+
+    public function ends(array $shapes): float { return match (true) {
+        \is_array($shapes) && \count($shapes) >= 2 && (${'match#1'} = $shapes[0]) instanceof \Demo\Circle && (${'match#2'} = $shapes[\count($shapes) - 1]) instanceof \Demo\Circle && \is_array($inner = \array_slice($shapes, 1, \count($shapes) - 2)) => -(float) \count($inner),
+        \is_array($shapes) && \count($shapes) >= 1 && ($last = $shapes[\count($shapes) - 1]) instanceof \Demo\Circle && \is_array($before = \array_slice($shapes, 0, \count($shapes) - 1)) => $last->radius + \count($before),
+        \is_array($shapes) && \count($shapes) >= 2 && ($first = $shapes[0]) instanceof \Demo\Square && ($last = $shapes[\count($shapes) - 1]) instanceof \Demo\Square => $first->side + $last->side,
+        default => 0.0,
+    }; }
 }

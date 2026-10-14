@@ -11,4 +11,13 @@ public class Payments
     public CheckoutState open() => CheckoutState.Open;
 
     public CheckoutState paying() => CheckoutState.Paying(gateway: "stripe");
+
+    public string describe(PaymentResult result) => match (result) {
+        PaymentResult.Paid(string transactionId) => `Paid ${transactionId}`,
+        PaymentResult.Declined { reason: "card expired" } => "Expired",
+        PaymentResult.Declined declined => `Declined: ${declined.reason}`,
+        default => "Redirect",
+    };
+
+    public bool waiting(CheckoutState state) => state is CheckoutState.Open;
 }

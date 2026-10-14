@@ -2043,9 +2043,10 @@ string size = match (n) {
 | case unpacked by position | `PaymentResult.Paid(string transactionId) =>` |
 | whole case, named | `PaymentResult.Paid p =>` |
 | properties | `{ status: 200, body: string body } =>` |
-| list | `[] =>`, `[Line only] =>`, `[Line first, ...List<Line> rest] =>` |
+| list | `[] =>`, `[Line only] =>`, `[Line first, ...List<Line> rest] =>`, `[...List<Line> before, Line last] =>`, `[Line first, ..., Line last] =>` |
 
 - **A pattern takes types and constants only,** such as `Circle`, `200` or `Status.Paid`, as in C#. A local's value is compared in `when`.
+- **A list pattern has at most one rest,** anywhere among its elements. `...List<Line> rest` takes the elements the other patterns leave, and a bare `...` skips them. A second rest is a compile error.
 - **A pattern creates a variable** only through a typed declaration, such as `string transactionId`.
 - **`and`, `or` and `not`** combine patterns. They exist only inside patterns.
 - **`when` adds a condition** to an arm. The condition is an ordinary expression.

@@ -89,6 +89,12 @@ for ($round = 0; $round < 100; $round++) {
         new PaymentResult\RequiresAction('https://bank.test') instanceof PaymentResult,
         failure(fn() => new CheckoutState\Open()),
         failure(fn() => $payments->pay('tx_3')->transactionId = 'tx_4'),
+        $payments->describe($payments->pay('tx_9')),
+        $payments->describe($payments->decline('card expired')),
+        $payments->describe($payments->decline('no funds')),
+        $payments->describe(new PaymentResult\RequiresAction('https://bank.test')),
+        $payments->waiting($payments->open()),
+        $payments->waiting($payments->paying()),
     ];
 }
 

@@ -133,7 +133,7 @@ TypedOrders: same opcodes and lines in 2 op arrays, same signatures in 2 classes
 Permalink: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 Library: same opcodes and lines in 19 op arrays, same signatures in 1 classes
 Inbox: same opcodes and lines in 9 op arrays, same signatures in 1 classes
-Patterns: same opcodes and lines in 14 op arrays, same signatures in 1 classes
+Patterns: same opcodes and lines in 15 op arrays, same signatures in 1 classes
 Signatures: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Accessors: same opcodes and lines in 15 op arrays, same signatures in 2 classes
 Parcel: same opcodes and lines in 3 op arrays, same signatures in 1 classes

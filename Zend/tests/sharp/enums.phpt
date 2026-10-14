@@ -78,3 +78,9 @@ bool(true)
 bool(true)
 string(79) "Error: Call to private Demo\CheckoutState\Open::__construct() from global scope"
 string(78) "Error: Cannot modify readonly property Demo\PaymentResult\Paid::$transactionId"
+string(9) "Paid tx_9"
+string(7) "Expired"
+string(18) "Declined: no funds"
+string(8) "Redirect"
+bool(true)
+bool(false)

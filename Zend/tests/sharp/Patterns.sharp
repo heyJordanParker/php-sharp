@@ -108,4 +108,11 @@ class Patterns
         }
         return 0.0;
     }
+
+    public float ends(List<Figure> shapes) => match (shapes) {
+        [Circle, ...List<Figure> inner, Circle] => -(float) inner.count(),
+        [...List<Figure> before, Circle last] => last.radius + before.count(),
+        [Square first, ..., Square last] => first.side + last.side,
+        default => 0.0,
+    };
 }
