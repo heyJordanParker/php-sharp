@@ -47,12 +47,12 @@ for ($round = 0; $round < 100; $round++) {
 
     try {
         $larder->ripeness = ['rotten' => 1];
-    } catch (ValueError $e) {
+    } catch (TypeError $e) {
         echo 'a value no case backs: ', $e->getMessage(), ', kept ', json_encode($larder->ripeness), "\n";
     }
     try {
         $larder->crates = ['box' => [['ripe' => 1], ['rotten' => 1]]];
-    } catch (ValueError $e) {
+    } catch (TypeError $e) {
         echo 'a nested value no case backs: ', $e->getMessage(), ', kept ', json_encode($larder->crates), "\n";
     }
     try {
@@ -76,7 +76,7 @@ index writes: [{"5":1,"sku":2,"6":6},["5","tag","new"],{"5":5,"7":7},["5","new"]
 through a reference: Sharp\Map {"8":8}
 assigned by reference: Sharp\Map Sharp\Map
 through reflection: Sharp\Map {"10":10}
-a value no case backs: "rotten" is not a valid backing value for enum Demo\Ripeness, kept {"ripe":3}
-a nested value no case backs: "rotten" is not a valid backing value for enum Demo\Ripeness, kept {"box":[{"ripe":7}]}
-a string key of an int-backed enum: Demo\Aisle::from(): Argument #1 ($value) must be of type int, string given
-a string: Cannot assign string to property Demo\Larder::$stock of type Sharp\Map
+a value no case backs: Cannot assign array to property Demo\Larder::$ripeness of type Map<Demo.Ripeness, int>: ["rotten"] key expected Demo.Ripeness, got string 'rotten', kept {"ripe":3}
+a nested value no case backs: Cannot assign array to property Demo\Larder::$crates of type Map<string, List<Map<Demo.Ripeness, int>>>: ["box"][1]["rotten"] key expected Demo.Ripeness, got string 'rotten', kept {"box":[{"ripe":7}]}
+a string key of an int-backed enum: Cannot assign array to property Demo\Larder::$aisles of type Map<Demo.Aisle, int>: ["first"] key expected Demo.Aisle, got string 'first'
+a string: Cannot assign string to property Demo\Larder::$stock of type Map<string, int>

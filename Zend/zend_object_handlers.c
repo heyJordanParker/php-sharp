@@ -394,7 +394,15 @@ dynamic:
 	property_info = (zend_property_info*)Z_PTR_P(zv);
 	flags = property_info->flags;
 
-	if (flags & (ZEND_ACC_CHANGED|ZEND_ACC_PRIVATE|ZEND_ACC_PROTECTED)) {
+	if (flags & (ZEND_ACC_CHANGED|ZEND_ACC_PRIVATE|ZEND_ACC_PROTECTED|ZEND_ACC_SHARP_HIDDEN)) {
+		/* PHP#: no code names the slot that keeps an object's type arguments, see ZEND_ACC_SHARP_HIDDEN. */
+		if (UNEXPECTED(flags & ZEND_ACC_SHARP_HIDDEN)) {
+			if (!silent) {
+				zend_bad_property_name();
+			}
+			return ZEND_WRONG_PROPERTY_OFFSET;
+		}
+
 		const zend_class_entry *scope = get_fake_or_executed_scope();
 
 		if (property_info->ce != scope) {
@@ -494,7 +502,15 @@ dynamic:
 	property_info = (zend_property_info*)Z_PTR_P(zv);
 	flags = property_info->flags;
 
-	if (flags & (ZEND_ACC_CHANGED|ZEND_ACC_PRIVATE|ZEND_ACC_PROTECTED)) {
+	if (flags & (ZEND_ACC_CHANGED|ZEND_ACC_PRIVATE|ZEND_ACC_PROTECTED|ZEND_ACC_SHARP_HIDDEN)) {
+		/* PHP#: no code names the slot that keeps an object's type arguments, see ZEND_ACC_SHARP_HIDDEN. */
+		if (UNEXPECTED(flags & ZEND_ACC_SHARP_HIDDEN)) {
+			if (!silent) {
+				zend_bad_property_name();
+			}
+			return ZEND_WRONG_PROPERTY_INFO;
+		}
+
 		const zend_class_entry *scope = get_fake_or_executed_scope();
 		if (property_info->ce != scope) {
 			if (flags & ZEND_ACC_CHANGED) {
@@ -1113,7 +1129,7 @@ typed_property:
 				ZVAL_COPY_VALUE(&tmp, value);
 				// Increase refcount to prevent object from being released in __toString()
 				GC_ADDREF(zobj);
-				bool type_matched = zend_verify_property_type(prop_info, &tmp, property_uses_strict_types());
+				bool type_matched = zend_verify_object_property_type(prop_info, &tmp, property_uses_strict_types(), zobj);
 				if (UNEXPECTED(GC_DELREF(zobj) == 0)) {
 					zend_object_released_while_assigning_to_property_error(prop_info);
 					zend_objects_store_del(zobj);
@@ -2142,7 +2158,8 @@ ZEND_API zval *zend_std_get_static_property_with_info(zend_class_entry *ce, zend
 		}
 	}
 
-	if (UNEXPECTED((property_info->flags & ZEND_ACC_STATIC) == 0)) {
+	/* PHP#: no code names the static that keeps a generic class's own statics, see ZEND_ACC_SHARP_HIDDEN. */
+	if (UNEXPECTED((property_info->flags & (ZEND_ACC_STATIC|ZEND_ACC_SHARP_HIDDEN)) != ZEND_ACC_STATIC)) {
 undeclared_property:
 		if (type != BP_VAR_IS) {
 			zend_throw_error(NULL, "Access to undeclared static property %s::$%s", ZSTR_VAL(ce->name), ZSTR_VAL(property_name));
@@ -2283,6 +2300,10 @@ ZEND_API int zend_std_compare_objects(zval *o1, zval *o2) /* {{{ */
 	}
 	if (zobj1->ce != zobj2->ce) {
 		return ZEND_UNCOMPARABLE; /* different classes */
+	}
+	/* PHP#: objects with different type arguments are uncomparable too. */
+	if (!sharp_type_equals(sharp_type_arguments(zobj1), sharp_type_arguments(zobj2))) {
+		return ZEND_UNCOMPARABLE;
 	}
 	if (!zobj1->properties && !zobj2->properties
 			&& !zend_object_is_lazy(zobj1) && !zend_object_is_lazy(zobj2)) {

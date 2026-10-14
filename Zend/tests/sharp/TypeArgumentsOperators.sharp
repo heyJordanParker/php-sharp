@@ -1,0 +1,17 @@
+namespace Operators;
+
+public class Money
+{
+    public Money(public int cents { get; })
+    {
+    }
+
+    public static Money operator +(Money a, Money b) => new Money(a.cents + b.cents);
+}
+
+public class Ledger
+{
+    public static Money sum<T : Money>(T a, T b) => a + b;
+
+    public static int total(Money a, Money b) => Ledger.sum<Money>(a, b).cents;
+}

@@ -16,7 +16,7 @@ opcache.jit_hot_side_exit=1
 echo 'jit ', opcache_get_status()['jit']['on'] ? 'on' : 'off', "\n";
 require __DIR__ . '/set_methods.inc';
 ?>
---EXPECT--
+--EXPECTF--
 jit on
 array(9) {
   [0]=>
@@ -129,32 +129,8 @@ array(7) {
   [6]=>
   bool(true)
 }
-array(9) {
-  [0]=>
-  bool(true)
-  [1]=>
-  bool(false)
-  [2]=>
-  bool(false)
-  [3]=>
-  bool(false)
-  [4]=>
-  bool(false)
-  [5]=>
-  bool(false)
-  [6]=>
-  int(2)
-  [7]=>
-  array(2) {
-    [0]=>
-    float(1.5)
-    [1]=>
-    string(3) "vip"
-  }
-  [8]=>
-  string(8) "1.5;vip;"
-}
-object(Sharp\Set)#12 (2) {
+TypeError: Demo\Tagged::strings(): Argument #1 ($tags) must be of type Set<string>, array given: [0] expected string, got float 1.5, called in %s on line %d in Sets.sharp on line 18
+object(Sharp\Set)#14 (2) {
   [0]=>
   int(3)
   [1]=>

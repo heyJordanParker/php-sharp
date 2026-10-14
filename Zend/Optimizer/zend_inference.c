@@ -3416,6 +3416,35 @@ static zend_always_inline zend_result _zend_update_type_info(
 				COPY_SSA_OBJ_TYPE(ssa_op->op2_use, ssa_op->result_def);
 			}
 			break;
+		case ZEND_SHARP_TYPE_ARGS:
+		case ZEND_SHARP_RECV_TYPE_ARGS:
+			/* The IS_PTR to an interned type argument list, no zend_class_entry, see the inference mask in the
+			 * design of PHP# reified generics. */
+			UPDATE_SSA_TYPE(MAY_BE_CLASS, ssa_op->result_def);
+			UPDATE_SSA_OBJ_TYPE(NULL, 0, ssa_op->result_def);
+			break;
+		case ZEND_SHARP_VERIFY_TYPE_ARGS:
+			/* op1's value, dereferenced, and a float where an int becomes one. */
+			tmp = t1 & ~(MAY_BE_UNDEF|MAY_BE_REF);
+			if (t1 & MAY_BE_UNDEF) {
+				tmp |= MAY_BE_NULL;
+			}
+			if (t1 & MAY_BE_LONG) {
+				tmp |= MAY_BE_DOUBLE;
+			}
+			if (t1 & (MAY_BE_RC1|MAY_BE_RCN|MAY_BE_REF)) {
+				tmp |= MAY_BE_RC1|MAY_BE_RCN;
+			}
+			UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
+			COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->result_def);
+			break;
+		case ZEND_SHARP_IS_TYPE:
+			UPDATE_SSA_TYPE(MAY_BE_FALSE|MAY_BE_TRUE, ssa_op->result_def);
+			break;
+		case ZEND_SHARP_TYPE_OF:
+			/* An interned class name or type text, as ZEND_FETCH_CLASS_NAME gives. */
+			UPDATE_SSA_TYPE(MAY_BE_STRING|MAY_BE_RCN, ssa_op->result_def);
+			break;
 		case ZEND_NEW:
 			tmp = MAY_BE_RC1|MAY_BE_RCN|MAY_BE_OBJECT;
 			ce = zend_optimizer_get_class_entry_from_op1(script, op_array, opline);
@@ -5089,6 +5118,10 @@ ZEND_API bool zend_may_throw_ex(const zend_op *opline, const zend_ssa_op *ssa_op
 		case ZEND_JMP_NULL:
 		case ZEND_JMP_FRAMELESS:
 			return 0;
+		case ZEND_SHARP_TYPE_ARGS:
+			/* Reading this's type arguments runs a lazy proxy's initializer. */
+			return opline->op2_type == IS_UNUSED || opline->op1_type != IS_UNUSED
+				|| opline->op1.num == ZEND_SHARP_TYPE_ARGS_OPEN;
 		case ZEND_IS_IDENTICAL:
 		case ZEND_IS_NOT_IDENTICAL:
 		case ZEND_CASE_STRICT:

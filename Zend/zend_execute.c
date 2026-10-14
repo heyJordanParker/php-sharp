@@ -584,7 +584,8 @@ static inline void zend_assign_to_variable_reference(zval *variable_ptr, zval *v
 
 static zend_never_inline zval* zend_assign_to_typed_property_reference(zend_property_info *prop_info, zval *prop, zval *value_ptr, zend_refcounted **garbage_ptr EXECUTE_DATA_DC)
 {
-	if (!zend_verify_prop_assignable_by_ref(prop_info, value_ptr, EX_USES_STRICT_TYPES())) {
+	if (sharp_property_refuses_reference(prop_info)
+			|| !zend_verify_prop_assignable_by_ref(prop_info, value_ptr, EX_USES_STRICT_TYPES())) {
 		return &EG(uninitialized_zval);
 	}
 	if (Z_ISREF_P(prop)) {
@@ -1076,6 +1077,23 @@ ZEND_API bool zend_never_inline zend_verify_property_type(const zend_property_in
 	return i_zend_verify_property_type(info, property, strict);
 }
 
+ZEND_API bool zend_never_inline zend_verify_object_property_type(const zend_property_info *info, zval *property, bool strict, zend_object *object) {
+	if (UNEXPECTED(info->flags & ZEND_ACC_SHARP_TYPED)) {
+		return sharp_property_accepts(info, property, object, false);
+	}
+	return zend_verify_property_type(info, property, strict);
+}
+
+/* zend_verify_property_type for a write to the property slot `slot`, which a PHP# property checks with its object only
+ * after the flag test a plain PHP property fails. */
+static zend_always_inline bool i_zend_verify_slot_property_type(const zend_property_info *info, zval *property, bool strict, zval *slot)
+{
+	if (UNEXPECTED(info->flags & ZEND_ACC_SHARP_TYPED)) {
+		return sharp_property_accepts(info, property, zend_property_slot_object(info, slot), false);
+	}
+	return i_zend_verify_property_type(info, property, strict);
+}
+
 static zend_never_inline zval* zend_assign_to_typed_prop(const zend_property_info *info, zval *property_val, zval *value, zend_refcounted **garbage_ptr EXECUTE_DATA_DC)
 {
 	zval tmp;
@@ -1094,7 +1112,7 @@ static zend_never_inline zval* zend_assign_to_typed_prop(const zend_property_inf
 	ZVAL_DEREF(value);
 	ZVAL_COPY(&tmp, value);
 
-	if (UNEXPECTED(!i_zend_verify_property_type(info, &tmp, EX_USES_STRICT_TYPES()))) {
+	if (UNEXPECTED(!i_zend_verify_slot_property_type(info, &tmp, EX_USES_STRICT_TYPES(), property_val))) {
 		zval_ptr_dtor(&tmp);
 		return &EG(uninitialized_zval);
 	}
@@ -1728,7 +1746,7 @@ static zend_never_inline void zend_binary_assign_op_typed_prop(const zend_proper
 	}
 
 	zend_binary_op(&z_copy, zptr, value OPLINE_CC);
-	if (EXPECTED(zend_verify_property_type(prop_info, &z_copy, EX_USES_STRICT_TYPES()))) {
+	if (EXPECTED(i_zend_verify_slot_property_type(prop_info, &z_copy, EX_USES_STRICT_TYPES(), zptr))) {
 		zval_ptr_dtor(zptr);
 		ZVAL_COPY_VALUE(zptr, &z_copy);
 	} else {
@@ -2298,7 +2316,7 @@ static void zend_incdec_typed_prop(zend_property_info *prop_info, zval *var_ptr,
 			zend_long val = zend_throw_incdec_prop_error(prop_info OPLINE_CC);
 			ZVAL_LONG(var_ptr, val);
 		}
-	} else if (UNEXPECTED(!zend_verify_property_type(prop_info, var_ptr, EX_USES_STRICT_TYPES()))) {
+	} else if (UNEXPECTED(!i_zend_verify_slot_property_type(prop_info, var_ptr, EX_USES_STRICT_TYPES(), var_ptr))) {
 		zval_ptr_dtor(var_ptr);
 		ZVAL_COPY_VALUE(var_ptr, copy);
 		ZVAL_UNDEF(copy);
@@ -3520,6 +3538,10 @@ static zend_never_inline bool zend_handle_fetch_obj_flags(
 				if (!prop_info) {
 					break;
 				}
+				if (sharp_property_refuses_reference(prop_info)) {
+					if (result) ZVAL_ERROR(result);
+					return 0;
+				}
 				if (Z_TYPE_P(ptr) == IS_UNDEF) {
 					if (!ZEND_TYPE_ALLOW_NULL(prop_info->type)) {
 						zend_throw_access_uninit_prop_by_ref_error(prop_info);
@@ -3923,6 +3945,11 @@ ZEND_API ZEND_COLD void zend_throw_ref_type_error_type(const zend_property_info 
 }
 
 ZEND_API ZEND_COLD void zend_throw_ref_type_error_zval(const zend_property_info *prop, const zval *zv) {
+	/* PHP#: the property's own check threw the TypeError, which names the type it spelled. */
+	if (UNEXPECTED(prop->flags & ZEND_ACC_SHARP_TYPED)) {
+		return;
+	}
+
 	zend_string *type_str = zend_type_to_string(prop->type);
 	zend_type_error("Cannot assign %s to reference held by property %s::$%s of type %s",
 		zend_zval_value_name(zv),
@@ -3949,12 +3976,19 @@ ZEND_API ZEND_COLD void zend_throw_conflicting_coercion_error(const zend_propert
 	zend_string_release(type2_str);
 }
 
-/* 1: valid, 0: invalid, -1: may be valid after type coercion */
+/* 1: valid, 0: invalid, -1: may be valid after type coercion. PHP#: a property with a PHP# type converts `zv` in
+ * place where its type takes an int as a float, and throws its own TypeError for 0, for a write to a reference the
+ * property holds when `reference` holds. No reference holds a property whose type names its class's type parameters,
+ * so the type needs no object. */
 static zend_always_inline int i_zend_verify_type_assignable_zval(
-		const zend_property_info *info, const zval *zv, bool strict) {
+		const zend_property_info *info, zval *zv, bool strict, bool reference) {
 	zend_type type = info->type;
 	uint32_t type_mask;
 	uint8_t zv_type = Z_TYPE_P(zv);
+
+	if (UNEXPECTED(info->flags & ZEND_ACC_SHARP_TYPED)) {
+		return sharp_property_accepts(info, zv, NULL, reference);
+	}
 
 	if (EXPECTED(ZEND_TYPE_CONTAINS_CODE(type, zv_type))) {
 		return 1;
@@ -4018,7 +4052,7 @@ ZEND_API bool ZEND_FASTCALL zend_verify_ref_assignable_zval(zend_reference *ref,
 
 	ZEND_ASSERT(Z_TYPE_P(zv) != IS_REFERENCE);
 	ZEND_REF_FOREACH_TYPE_SOURCES(ref, prop) {
-		int result = i_zend_verify_type_assignable_zval(prop, zv, strict);
+		int result = i_zend_verify_type_assignable_zval(prop, zv, strict, true);
 		if (result == 0) {
 type_error:
 			zend_throw_ref_type_error_zval(prop, zv);
@@ -4131,7 +4165,7 @@ ZEND_API bool ZEND_FASTCALL zend_verify_prop_assignable_by_ref_ex(const zend_pro
 		int result;
 
 		val = Z_REFVAL_P(val);
-		result = i_zend_verify_type_assignable_zval(prop_info, val, strict);
+		result = i_zend_verify_type_assignable_zval(prop_info, val, strict, false);
 		if (result > 0) {
 			return 1;
 		}
@@ -4151,6 +4185,11 @@ ZEND_API bool ZEND_FASTCALL zend_verify_prop_assignable_by_ref_ex(const zend_pro
 		}
 	} else {
 		ZVAL_DEREF(val);
+		/* PHP#: the check throws its own TypeError. A type that names the class's type parameters takes any value
+		 * here, so unserialize checks it once it has read the object's type arguments. */
+		if (UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_TYPED)) {
+			return sharp_property_accepts(prop_info, val, NULL, false);
+		}
 		if (i_zend_check_property_type(prop_info, val, strict)) {
 			return 1;
 		}

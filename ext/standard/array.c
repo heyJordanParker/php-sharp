@@ -36,6 +36,7 @@
 #include "zend_bitset.h"
 #include "zend_exceptions.h"
 #include "ext/random/php_random.h"
+#include "ext/sharp/php_sharp.h"
 #include "zend_frameless_function.h"
 
 /* {{{ defines */
@@ -1511,6 +1512,10 @@ static zend_result php_array_walk(
 				zend_property_info *prop_info =
 					zend_get_typed_property_info_for_slot(Z_OBJ_P(array), zv);
 				if (prop_info) {
+					if (UNEXPECTED(sharp_property_refuses_reference(prop_info))) {
+						result = FAILURE;
+						break;
+					}
 					ZVAL_NEW_REF(zv, zv);
 					ZEND_REF_ADD_TYPE_SOURCE(Z_REF_P(zv), prop_info);
 				}

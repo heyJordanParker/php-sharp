@@ -30,6 +30,7 @@
 #include "Zend/zend_observer.h"
 #include "ext/sharp/php_sharp.h"
 #include "zend_smart_str.h"
+#include "ext/sharp/php_sharp.h"
 #include "jit/zend_jit.h"
 
 #ifdef HAVE_JIT

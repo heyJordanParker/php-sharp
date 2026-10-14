@@ -664,7 +664,8 @@ A static member names its type arguments: `Counter<Order>.count`. A bare `Counte
 
 **Writing type arguments:**
 
-- **`new` always names them:** `new PaginatedList<Order>(…)`, or names a class value that carries them, as in `new (pages)()` (section 25).
+- **`new` always names them:** `new PaginatedList<Order>(…)`, or names a class value that carries them, as in `new (pages)()` (section 25). `new Self(…)` names none, because `Self` is the class with its own type parameters.
+- **A type names them too:** `PaginatedList<Order> page`. `Class<PaginatedList>` is the one exception: a class type names the class itself.
 - **A generic method call fixes them** from the arguments it receives, or from the declared type its result goes into. A type argument that neither fixes is a compile error, as in C#'s error CS0411 and in Swift.
 - **A plain PHP generic class,** declared with PHPDoc's `@template`, takes type arguments in PHP# code, as in `Collection<Order>`. The checker checks them, but the object carries none while the code runs, as Java's erased generics do. So a type test against one, such as `x is Collection<Order>`, is a compile error that says the type argument is unknown while the code runs (section 21).
 
@@ -726,6 +727,9 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 - **Names start with `T`:** `TItem`, `TKey`.
 - **The bound is written inline:** `<TItem : DatabaseEntity>`.
 - **Several bounds use `&`:** `<TItem : DatabaseEntity & Shareable>`.
+- **A type parameter with no bound may hold `null`,** so it is bounded by `Any?`.
+- **A generic class can't implement PHP's `Serializable`,** and the error points to `__serialize` and `__unserialize`.
+- **A class value with type arguments can't be a `Map` key,** because `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` share the plain class name.
 
 <!-- example type-parameter-bounds: members -->
 ```csharp
@@ -755,6 +759,7 @@ Variance is declared on the type parameter. Classes and interfaces can both decl
 - **No marker:** the type is invariant, and neither substitution is allowed.
 
 The checker enforces the marker on every member. A member that breaks it is a compile error on that member's line.
+A private member may break the marker, and is then reachable only through `this`.
 
 When a missing marker blocks a substitution, the error names the marker to add:
 
@@ -2632,6 +2637,7 @@ public User find(int|string id)
 ```
 
 - `is` narrows a union (section 21). After a branch that tested one type and returned, the code below it sees the types left.
+- `List`, `Map` and `Set` can't share a union, because they share PHP's one array kind and the literal rules need to know which one a place holds.
 - Alternatives that belong to the domain stay enums (section 20) and sealed interfaces (section 20.1).
 
 **A union that holds null is written `(int|string)?`,** with the same `?` as any other type. `int|string|null` is a compile error that names `(int|string)?`.

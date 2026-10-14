@@ -1,0 +1,226 @@
+namespace Checks;
+
+import App.Box;
+import App.DatabaseEntity;
+import App.Order;
+import App.PaginatedList;
+import Lib.Holder;
+import Lib.Pager;
+
+public class Customer : DatabaseEntity
+{
+}
+
+public class Pages
+{
+    public static PaginatedList<Customer> customers() => new PaginatedList<Customer>([]);
+
+    public static string take(PaginatedList<Order> page) => "took";
+
+    public static string open(Box<Any?> box) => "opened";
+
+    public static string keep(Holder<Order> holder) => "kept";
+
+    public static string relay(List<PaginatedList<Order>> pages) => Pages.take(pages[0]);
+
+    public static Cell<float> floats() => new Cell<float>(0.5);
+
+    public static Cell<float?> nullableFloats() => new Cell<float?>(null);
+
+    public static Cell<float|string> floatsOrStrings() => new Cell<float|string>("none");
+
+    public static bool two(Cell<float> cell) => cell.get() == 2.0;
+
+    public static Page<Box<Order>> boxedOrders() => new Page<Box<Order>>();
+
+    public static int count<T>(Page<Box<T>> page) => 1;
+
+    public static Function<string(PaginatedList<Order>)> taker() => (PaginatedList<Order> page) => "took";
+
+    public static string read(Feed<DatabaseEntity> feed) => "read";
+
+    public static string nested(Feed<Feed<DatabaseEntity>> feeds) => "nested";
+
+    public static string drain(Sink<Order> sink) => "drained";
+
+    public static bool fed(Any value) => value is Feed<DatabaseEntity>;
+
+    public static Stream<Order> orders() => new Stream<Order>();
+
+    public static Stream<Customer> customerStream() => new Stream<Customer>();
+
+    public static Stream<Feed<Order>> streams() => new Stream<Feed<Order>>();
+
+    public static Drain<DatabaseEntity> entities() => new Drain<DatabaseEntity>();
+
+    public static Drain<Customer> customerDrain() => new Drain<Customer>();
+}
+
+public interface Feed<out TItem>
+{
+    TItem? next();
+}
+
+public interface Sink<in TItem>
+{
+    void put(TItem item);
+}
+
+public class Stream<out TItem> : Feed<TItem>
+{
+    public TItem? next() => null;
+}
+
+public class Drain<in TItem> : Sink<TItem>
+{
+    public void put(TItem item)
+    {
+    }
+}
+
+public event Paged(PaginatedList<Order> page);
+
+public class Purse
+{
+    public Purse(public int count { get; })
+    {
+    }
+
+    public Purse.of(PaginatedList<Order> page) : this(1)
+    {
+    }
+
+    public static Purse operator +(Purse purse, PaginatedList<Order> page) => purse;
+}
+
+public class Page<T>
+{
+}
+
+public class Shelf
+{
+    public PaginatedList<Order>? page { get; set; }
+
+    public static PaginatedList<Order>? latest { get; set; }
+
+    protected static PaginatedList<Order>? kept;
+
+    public static string keepBoth(PaginatedList<Order> page)
+    {
+        Shelf.latest = page;
+        Shelf.kept = page;
+
+        return "kept both";
+    }
+
+    public static string read()
+    {
+        PaginatedList<Order> page = Pager.orders();
+        page = Pager.orders();
+
+        return "read";
+    }
+
+    public static string untyped()
+    {
+        let page = Pager.orders();
+
+        return "untyped";
+    }
+
+    public static string passed() => Pages.take(Pager.orders());
+
+    public static PaginatedList<Order> given() => Pager.orders();
+
+    public string stored()
+    {
+        this.page = Pager.orders();
+
+        return "stored";
+    }
+
+    public static Shelf filled()
+    {
+        Shelf shelf = new Shelf();
+        shelf.page = new PaginatedList<Order>([]);
+
+        return shelf;
+    }
+}
+
+public class Tally
+{
+    public List<float> amounts { get; set; } = [];
+
+    public static string sizes(List<int> sizes, Map<string, float> prices, Set<string> tags) => "sized";
+
+    public static int rows(List<List<int>> rows) => rows.count();
+
+    public static string|bool ordered(Map<string, Order> orders, Set<int> ids) => global.json_encode(orders.keys());
+
+    public static string|bool counted(Map<string?, int> counts) => global.json_encode(counts.keys());
+
+    public static float first(List<float> amounts) => amounts[0];
+
+    public static int largest() => global.max(Pager.sizes());
+
+    public static string kind(Any? value) => match (value) {
+        List<int> numbers => "ints",
+        Map<string, float> prices => "prices",
+        default => "other",
+    };
+
+    public static bool floats(Any? value) => value is List<float>;
+
+    public static List<int>? kept(Any? value) => value as List<int>;
+
+    public static string sort(Any? value) => match (value) {
+        int|string scalar => "scalar",
+        List<int>|Order entry => "entry",
+        default => "other",
+    };
+
+    public static bool present(Any? value) => value is Any;
+
+    public static bool scalar(Any? value) => value is int|string;
+
+    public static Any taken(Any? value) => value as Any ?? "none";
+
+    public static (int|string)? narrowed(Any? value) => value as int|string;
+}
+
+public class Rack<TItem>
+{
+    public Box<TItem>? own { get; set; }
+
+    public List<TItem> items { get; set; } = [];
+
+    public static Rack<Order> orders() => new Rack<Order>();
+
+    public static Box<Order> box() => new Box<Order>();
+
+    public static Box<Customer> customerBox() => new Box<Customer>();
+}
+
+public class Ledger<TItem>
+{
+    public Box<TItem>? first { get; set; }
+
+    public Box<TItem>? kept { get; set => field = value; }
+
+    public static Ledger<Order> orders() => new Ledger<Order>();
+}
+
+public class Cell<T>
+{
+    public Cell(private T value)
+    {
+    }
+
+    public void put(T value)
+    {
+        this.value = value;
+    }
+
+    public T get() => this.value;
+}
