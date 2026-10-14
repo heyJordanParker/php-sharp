@@ -177,7 +177,7 @@ The states are **missing** (no code holds the rule), **refused** (an error says 
 - Template inference keeps it, because the flag is part of the atom: `lines.first(…)` on a `List<readonly Line>` gives `readonly Line`, and a lambda's `l` in `lines.map(l => …)` is `readonly Line`.
 - The expander keeps it when it replaces `Self` or a template.
 
-**The comparator ignores the flag,** so a plain PHP file that reads a PHP# readonly return type analyzes as today. Question 1's check runs only in a `.sharp` file, at the four sites that compare a value with a declared type: an argument, a `return`, a property or field assignment and a typed local. It reports the code each site reports today for a type that does not fit: `invalid-argument`, `invalid-return-statement`, `invalid-property-assignment-value` and `invalid-local-assignment-value`. The message names the fix, as in "Argument 1 of save is readonly, and save takes `Order`: declare it `save(readonly Order order)`." A plain PHP parameter gets "PHP# cannot check that save does not change it."
+**The comparator ignores the flag,** and `get_php_received_type`, the type plain PHP receives from a PHP# declaration, drops it, so a plain PHP file that reads a PHP# readonly type analyzes and words its messages as today. Question 1's check, `TUnion::drops_readonly_of`, runs only in a `.sharp` file, at the four sites that compare a value with a declared type: an argument, a spread's elements, a `return`, a property or field assignment and a typed local. One predicate, `TAtomic::is_readonly_value`, says what is readonly: a readonly object, or a value of `readonly T`, whose bound is readonly. It also keeps a narrowed value readonly. A type parameter not written `readonly` takes no readonly value: a method's own type parameter is compared as it is declared, and a class's as the receiver fills it. A function value fits a function type only when `TCallableSignature::drops_readonly_of` finds no loss: its parameters are compared in reverse, and its return forward. It reports the code each site reports today for a type that does not fit: `invalid-argument`, `invalid-return-statement`, `invalid-property-assignment-value` and `invalid-local-assignment-value`. The message names the fix, as in "Argument 1 of save is readonly, and save takes `Order`: declare it `save(readonly Order order)`." A plain PHP parameter gets "PHP# cannot check that save does not change it."
 
 **The reads and writes.** `resolve_instance_properties` in `crates/analyzer/src/resolver/property.rs` resolves both a read and a write of `object.name`:
 
@@ -188,7 +188,9 @@ The states are **missing** (no code holds the rule), **refused** (an error says 
 
 **`this`.** `get_this_type` gives `this` the flag in a method whose metadata has `MetadataFlags::READONLY`, and in the bodies question 2 makes readonly. A lambda in such a method sees the same `this`. A static property is not `this`, so a readonly method may still change one: readonly is not pure.
 
-**Plain PHP under readonly** (lines 1193 and 1214). The analyzer reports `readonly` on a type whose class is not PHP#, at the hint, using the class's `is_sharp()` flag. A PHP# class that extends a plain PHP class is PHP#, so `readonly Order` with `Order : Model` is allowed, and an inherited plain PHP method is unmarked (question 7).
+**The calls a readonly value makes run through one check,** `check_call_through_readonly`: a call, a method value, which runs its method, and a call that a plain PHP class's `__call` runs. An extension member's receiver is checked as its argument, and the message names the call and `extension(readonly Order order)`. An operator is marked by the scanner with `MetadataFlags::OPERATOR`, and `int hash()` and `string toString()` with no parameters with `MetadataFlags::READONLY`.
+
+**Plain PHP under readonly** (lines 1193 and 1214). `crates/analyzer/src/readonly_types.rs` reports `readonly` on a type that reaches a class that is not PHP#, at its top or in a type argument, using the class's `is_sharp()` flag, and `readonly` on a type that holds no PHP# object: an enum, a struct, a function type, or a collection of them. A PHP# class that extends a plain PHP class is PHP#, so `readonly Order` with `Order : Model` is allowed, and an inherited plain PHP method is unmarked (question 7).
 
 ## Messages
 
@@ -325,12 +327,19 @@ sharp/
         │   └── tests/sharp.rs
         ├── codex/
         │   ├── src/ttype/atomic/object/named.rs    + TNamedObject::is_readonly, in get_id
-        │   ├── src/ttype/union.rs              + to_readonly
+        │   ├── src/ttype/union.rs              + to_readonly, without_readonly, drops_readonly_of
+        │   ├── src/ttype/atomic/mod.rs         + TAtomic::is_readonly_value
+        │   ├── src/ttype/atomic/callable/mod.rs    + TCallableSignature::drops_readonly_of, DroppedReadonly
+        │   ├── src/ttype/mod.rs                get_php_received_type drops the flag
         │   ├── src/ttype/combiner.rs           keeps the flag per class name
         │   ├── src/ttype/expander.rs           keeps the flag
+        │   ├── src/metadata/flags.rs           + MetadataFlags::OPERATOR
         │   ├── src/scanner/ttype.rs            ReadonlyHint to a readonly type
+        │   ├── src/scanner/mod.rs              an operator gets MetadataFlags::OPERATOR
         │   └── src/scanner/function_like.rs    Method::readonly to MetadataFlags::READONLY
+        ├── names/src/binding.rs                + MethodParts::is_hash_or_to_string, sharp_operator_symbol
         ├── analyzer/
+        │   ├── src/readonly_types.rs           new: plain PHP under readonly, and a readonly that can't matter
         │   ├── src/code.rs                     + missing-readonly-marker (and regen-analyzer-issue-codes.php)
         │   ├── src/resolver/property.rs        a read gives readonly; a write is refused
         │   ├── src/resolver/method.rs          an unmarked call is recorded
