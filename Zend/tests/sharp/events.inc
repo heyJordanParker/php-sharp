@@ -1,5 +1,15 @@
 <?php
 
+// The standard library's module binds the dispatcher, as its autoloader reads it.
+$library = dirname(__DIR__, 3) . '/sharp/composer/library';
+Sharp\Internal\readModule("$library/Sharp/Module.sharp");
+spl_autoload_register(static function (string $class) use ($library): void {
+    $path = "$library/" . str_replace('\\', '/', $class) . '.sharp';
+    if (str_starts_with($class, 'Sharp\\') && is_file($path)) {
+        require $path;
+    }
+});
+
 require __DIR__ . '/harness/JobFailed.inc';
 require __DIR__ . '/OrderEvent.sharp';
 require __DIR__ . '/OrderPaid.sharp';

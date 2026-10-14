@@ -7,23 +7,29 @@ require __DIR__ . '/project.inc';
 // container_project compiles it with $files, loads it with container_load, and returns the project's folder.
 function container_project(string $name, array $files = []): string
 {
-    $library = 'vendor/heyjordanparker/php-sharp-composer';
-    $root = compile_project($name, CONTAINER_APP + $files + [
-        "$library/composer.json" => '{"name": "heyjordanparker/php-sharp-composer"}',
-        "$library/library/Sharp/Module.sharp" => file_get_contents(dirname(__DIR__, 3) . '/sharp/composer/library/Sharp/Module.sharp'),
+    $library = [];
+    foreach (['Module', 'Dispatcher', 'ImmediateDispatcher'] as $file) {
+        $library[CONTAINER_LIBRARY . "/library/Sharp/$file.sharp"] = file_get_contents(dirname(__DIR__, 3) . "/sharp/composer/library/Sharp/$file.sharp");
+    }
+    $root = compile_project($name, CONTAINER_APP + $files + $library + [
+        CONTAINER_LIBRARY . '/composer.json' => '{"name": "heyjordanparker/php-sharp-composer"}',
     ]);
     container_load($root);
 
     return $root;
 }
 
+const CONTAINER_LIBRARY = 'vendor/heyjordanparker/php-sharp-composer';
+
 // Reads the library's module of the project at $root as the library's autoloader does, and loads each class from its
-// folder.
+// folder, and each standard library class from the library's.
 function container_load(string $root): void
 {
-    Sharp\Internal\readModule("$root/vendor/heyjordanparker/php-sharp-composer/library/Sharp/Module.sharp");
+    Sharp\Internal\readModule("$root/" . CONTAINER_LIBRARY . '/library/Sharp/Module.sharp');
     spl_autoload_register(function (string $class) use ($root): void {
-        $path = "$root/" . lcfirst(str_replace('\\', '/', $class)) . '.sharp';
+        $path = str_starts_with($class, 'Sharp\\')
+            ? "$root/" . CONTAINER_LIBRARY . '/library/' . str_replace('\\', '/', $class) . '.sharp'
+            : "$root/" . lcfirst(str_replace('\\', '/', $class)) . '.sharp';
         if (is_file($path)) {
             require $path;
         }
