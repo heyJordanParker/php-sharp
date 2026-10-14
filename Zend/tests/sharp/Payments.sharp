@@ -26,4 +26,9 @@ public class Payments
         PaymentResult.Declined(string reason) => reason,
         PaymentResult.RequiresAction(string redirect) => redirect,
     };
+
+    public string interacted(Interaction interaction) => match (interaction) {
+        PopupInteraction popup => popup.name(),
+        ScrollInteraction scroll => `${scroll.name()} ${scroll.depth}`,
+    };
 }

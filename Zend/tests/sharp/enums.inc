@@ -10,12 +10,18 @@ require __DIR__ . '/Shipment.sharp';
 require __DIR__ . '/Task.sharp';
 require __DIR__ . '/PaymentResult.sharp';
 require __DIR__ . '/CheckoutState.sharp';
+require __DIR__ . '/Interaction.sharp';
+require __DIR__ . '/PopupInteraction.sharp';
+require __DIR__ . '/ScrollInteraction.sharp';
 require __DIR__ . '/Payments.sharp';
 
 use Demo\CheckoutState;
 use Demo\HasLabel;
+use Demo\Interaction;
 use Demo\PaymentResult;
 use Demo\Payments;
+use Demo\PopupInteraction;
+use Demo\ScrollInteraction;
 use Demo\Rank;
 use Demo\Shipment;
 use Demo\Stage;
@@ -98,6 +104,9 @@ for ($round = 0; $round < 100; $round++) {
         $payments->outcome($payments->pay('tx_5')),
         $payments->outcome($payments->decline('no funds')),
         $payments->outcome(new PaymentResult\RequiresAction('https://bank.test')),
+        $payments->interacted(new PopupInteraction()),
+        $payments->interacted(new ScrollInteraction()),
+        new ScrollInteraction() instanceof Interaction,
     ];
 }
 

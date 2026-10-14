@@ -100,3 +100,6 @@ bool(false)
 string(4) "paid"
 string(8) "no funds"
 string(17) "https://bank.test"
+string(5) "popup"
+string(8) "scroll 3"
+bool(true)

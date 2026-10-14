@@ -1,0 +1,8 @@
+namespace Demo;
+
+public class ScrollInteraction : Interaction
+{
+    public int depth { get; } = 3;
+
+    public string name() => "scroll";
+}
