@@ -113,6 +113,7 @@ $fixtures = [
     'PhpForms' => null,
     'Generics' => null,
     'Operators' => 'harness/Billing.inc',
+    'Traits' => 'harness/Traits.inc',
 ];
 $user_class = '/(?:Class|Enum) \[ <user> /';
 
@@ -879,5 +880,6 @@ Operators: same opcodes and lines in 72 op arrays, same signatures in 9 classes
   check  Billing\Operators::byCode string("List<string>")
   check  Billing\Operators::checkout string("Map<string, Any?>, Any?, Map<string, Any?>")
   check  Billing\Grade::ranked string("List<Billing.Grade>")
+Traits: same opcodes and lines in 6 op arrays, same signatures in 4 classes
 a check: same
 a check and another opcode: different

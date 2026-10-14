@@ -1,0 +1,47 @@
+namespace Demo;
+
+public interface HasDesign
+{
+    string designColumn { get; }
+
+    string designKey() => `design:${this.designColumn}`;
+
+    string designTitle();
+}
+
+public interface Described
+{
+    string describe() => "described";
+}
+
+public interface Told
+{
+    string describe() => "told";
+}
+
+public class Sheet : HasDesign
+{
+    public string designColumn => "sheet";
+
+    public string designTitle() => "Sheet";
+}
+
+public class Both : Described, Told
+{
+    public override string describe() => super<Described>.describe() + "+" + super<Told>.describe();
+}
+
+public enum Tone : Told
+{
+    case Calm;
+}
+
+public class Base
+{
+    public virtual string kind() => "base";
+}
+
+public class Sealed : Base
+{
+    public final override string kind() => "sealed";
+}
