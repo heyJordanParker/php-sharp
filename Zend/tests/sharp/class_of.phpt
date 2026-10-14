@@ -1,5 +1,5 @@
 --TEST--
-PHP# Class.of(value) gives the class of the object a value holds, a subclass included, with its type arguments, and typeof gives the class value of any type
+PHP# Class.of(value) gives the class of the object a value holds, a subclass included, with its type arguments, and typeof gives the class value of any type, a nullable or union type included
 --FILE--
 <?php
 
@@ -14,6 +14,13 @@ var_dump(Classes\ClassValues::directTag($gold));
 var_dump((new Classes\ClassValues())->keptTag());
 var_dump(Classes\GoldBadge::own(), Classes\Badge::own(), Classes\GoldBadge::ownTag());
 var_dump(Classes\ClassValues::types());
+var_dump(Classes\ClassValues::unions());
+var_dump(Classes\ClassValues::either(Classes\ClassValues::unions()[1]));
+try {
+    Classes\ClassValues::either([]);
+} catch (TypeError $error) {
+    echo $error->getMessage(), "\n";
+}
 $crate = Classes\ClassValues::crate();
 var_dump(Classes\ClassValues::sameAsTypeof($crate));
 var_dump(Classes\ClassValues::otherThanTypeof($crate));
@@ -27,7 +34,7 @@ try {
     echo $error->getMessage(), "\n";
 }
 ?>
---EXPECT--
+--EXPECTF--
 string(17) "Classes\GoldBadge"
 string(13) "Classes\Badge"
 string(4) "gold"
@@ -46,6 +53,16 @@ array(4) {
   [3]=>
   string(8) "Set<int>"
 }
+array(3) {
+  [0]=>
+  string(4) "int?"
+  [1]=>
+  string(10) "int|string"
+  [2]=>
+  string(20) "(Classes.Badge|int)?"
+}
+string(10) "int|string"
+Classes\ClassValues::either(): Argument #1 ($type) must be of type string, array given, called in %s on line %d
 bool(true)
 bool(false)
 bool(true)

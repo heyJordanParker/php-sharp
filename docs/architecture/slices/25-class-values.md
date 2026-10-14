@@ -59,6 +59,10 @@ The Slice is one php-sharp pull request. It builds the parts that need nothing f
        return new Self(row);
    }
    ```
+5. **A class value holds any one type, a nullable or union one included,** as C#'s `typeof(int?)` does, from the spec line "`typeof(X)` is typed `Class<X>`, for any one type `X`". `TClassLikeString::OfType`'s `constraint` in `crates/codex/src/ttype/atomic/scalar/class_like_string.rs` holds a `TUnion`, so `typeof(int|string)` is one `Class<int|string>`, as it runs as the one value `"int|string"`. `Class<X>` fits `Class<Y>` when `X` fits `Y` (`class_string_comparator`), so `Class<int>` fits `Class<int|string>` and not the reverse. PHP's `class-string<A|B>` still gives one class string per class, so plain PHP keeps its types.
+   - A written `Class<int>`, `Class<int?>` or `Class<int|string>` holds that type in a field, a parameter and a local (`union_from_hint` in `crates/codex/src/scanner/ttype.rs`). Its parameter is checked as PHP's `string`, as a `Class<int>` one already was, and a `Class<T>` parameter given a `Class<int|string>` infers `T` as `int|string`.
+   - `new (t)()` of one is "`t` is a `Class<int>`, and only a class's `Class` creates objects.", in `crates/analyzer/src/expression/instantiation.rs`.
+   - The extension SDK's `ClassLikeStringType` holds one `AtomicType`, so the analyzer's extension protocol sends a class value of several types as the `class-string` it is while the code runs.
 
 Also ruled: once `PaginatedList` exists, every annotated line of `generic-class-values` gives its own annotated result, each seen with a row.
 
@@ -115,7 +119,7 @@ The states are **works**, **refused** (rejected, with its message), **silently a
 
 | Spec line | Rule | Master | #102 | Mechanism | Reuses |
 |---|---|---|---|---|---|
-| 2776 | `typeof(X)` is typed `Class<X>` | missing: `Class<Order> type = typeof(Order);` is "This type is not supported yet in PHP#." (`TypeOfTypes.sharp:7`). `typeof(X)` itself works | works | #102 | `TypeOf`, `TClassLikeString` |
+| 2776 | `typeof(X)` is typed `Class<X>` | missing: `Class<Order> type = typeof(Order);` is "This type is not supported yet in PHP#." (`TypeOfTypes.sharp:7`). `typeof(X)` itself works | works for one type that is not nullable or a union, which is "This type is not supported yet in PHP#." | #102, and Slice for a nullable or union type and a written `Class` of any type, ruling 5 | `TypeOf`, `TClassLikeString` |
 | 2776 | it works on every type parameter, a method's included | missing: a generic method is a parse error (`Generic.sharp:5`) | works: `string name<TItem>() => typeof(TItem)` compiles | #102 | |
 | 2776 | PHP's `Order::class` is removed | refused: "`::` is PHP syntax: PHP# writes static access with `.`" (`PhpForms.sharp:5`) | the same | Slice, decision 7: the help names `typeof(Order)` | the parser's `::` refusal |
 | 2793 | `typeof(TItem)` works for any type argument, `int` included | missing: parse error | works | #102 | |

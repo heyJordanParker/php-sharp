@@ -50,6 +50,10 @@ public class ClassValues
 
     public static List<Any> types() => [typeof(int), typeof(List<Badge>), typeof(Map<string, int>), typeof(Set<int>)];
 
+    public static List<Any> unions() => [typeof(int?), typeof(string|int), typeof((Badge|int)?)];
+
+    public static Class<int|string> either(Class<int|string> type) => type;
+
     public static Crate<Badge> crate() => new Crate<Badge>();
 
     public static bool sameAsTypeof(Crate<Badge> crate) => Class.of(crate) == typeof(Crate<Badge>);

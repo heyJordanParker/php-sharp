@@ -2846,6 +2846,7 @@ Class<Order> type = typeof(Order);
 type.attributes<Listen>();
 typeof(TItem);
 typeof(int);                    // the class value of int
+typeof(int|string);             // the class value of int|string: a union is one type
 typeof(List<Order>);            // the class value of a list of orders
 typeof(Map<string, int>);
 typeof(Self);                   // the class run was called on
