@@ -1,0 +1,40 @@
+namespace Overrides;
+
+import Lib.Model;
+
+public abstract class Shape
+{
+    public abstract string kind { get; }
+    public virtual string label => "shape";
+    public virtual int sides { get; set; } = 0;
+    protected int corners = 0;
+
+    public string describe() => `${this.kind} ${this.label} ${this.sides}`;
+}
+
+public class Square : Shape
+{
+    public override string kind => "square";
+    public override string label => "four sides";
+    public override int sides { get => field; set => field = value < 0 ? 0 : value; } = 4;
+    protected override int corners { get; set; } = 4;
+
+    public int cornerCount() => this.corners;
+}
+
+public class Order : Model
+{
+    protected override string table { get; set => field = value.trim(); } = "orders";
+
+    public string tableName() => this.table;
+}
+
+public interface Named
+{
+    string name { get; }
+}
+
+public class Person : Named
+{
+    public Person(public string name { get; }) { }
+}

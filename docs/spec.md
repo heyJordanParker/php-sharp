@@ -280,13 +280,16 @@ public class Order : Model
     protected override List<string> fillable { get; set; } = this.columns();      // compile error: an initial value can't read this
     public override bool timestamps = false;                                      // compile error: PHP# has no public fields; write a property
     protected string? table { get; set; } = "orders";                             // compile error: Model declares table; write override
+    protected override string? table { get; } = "orders";                         // compile error: Model's own code writes table, so its override has set
+    public override bool timestamps { get; protected set; } = false;              // compile error: timestamps is set at public in Model
 }
 ```
 
 - **The written type must fit the parent's.** When PHP declares the parent's property with no type, the written type must be assignable to the parent's `@var` type, or to anything when there is no `@var`. The engine drops the written type when the class links, because PHP refuses a typed redeclaration there. When PHP declares the parent's property with a type, the written type must equal it, because PHP checks property types for invariance when the class links. The engine keeps it.
-- **The access level is written and must match the parent's.** It is `public` when the parent's property is, as `timestamps` is in `Model`.
+- **The access level is written and must match the parent's.** It is `public` when the parent's property is, as `timestamps` is in `Model`. The `set` keeps the parent's level too, so `timestamps { get; protected set; }` is an error.
+- **The override has `set`.** The parent's own code writes the property at any time, as Eloquent's `setTable` writes `table`, so a get-only override or one with `init` is an error. The override may give `get` and `set` bodies.
 - **The initial value runs before the parent's constructor and can't read `this`** (section 6), so a parent's constructor that reads the property, as Eloquent's does, sees it.
-- **A PHP# parent's field is overridden the same way,** measured against that field. A PHP# parent's property with accessor bodies is overridden as a property, as the list above says.
+- **A PHP# parent's `protected` field is overridden the same way,** by a property measured against that field. A PHP# property is closed unless it is `virtual` or `abstract`, as a method is (section 22), and a field has no `virtual`, so a `protected` field is always open.
 
 ### 6.2 Change observers
 
