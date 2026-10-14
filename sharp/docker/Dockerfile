@@ -6,13 +6,16 @@ RUN apt-get update \
       bison \
       build-essential \
       ca-certificates \
+      composer \
       curl \
       elan \
       git \
       php-cli \
+      php-xml \
       pkg-config \
       re2c \
       rustup \
+      unzip \
       libicu-dev \
       libonig-dev \
       libpq-dev \

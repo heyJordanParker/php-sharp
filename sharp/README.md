@@ -27,6 +27,7 @@ sharp/bin/test --passes         # also run with each optimizer pass alone, then 
 sharp/bin/test --census         # also check every write and comparison of a field that holds a PHP# mark
 sharp/bin/test --spec           # also compile and run every code example in docs/spec.md and README.md
 sharp/bin/test --differential   # also check that php -l compiles every Zend/tests/sharp/*.sharp file
+sharp/bin/test --phpunit        # also run the PHP# test class in sharp/phpunit/ under PHPUnit
 sharp/bin/test --upstream       # run Zend/tests, ext/reflection, ext/tokenizer and ext/opcache
 ```
 
@@ -36,13 +37,15 @@ The engine runs only `.sharpc` files that `mago compile` wrote. So before any te
 
 `--differential` checks that every `.sharp` fixture `mago compile` accepted makes `php -l` print nothing but "No syntax errors detected", so a compile warning or deprecation also fails the run.
 
+`--phpunit` installs `sharp/phpunit/`, a Composer project that requires `sharp/composer/` and the PHPUnit version its `composer.lock` pins, compiles it with the `mago` it built, and runs its tests with the engine under PHPUnit twice: in one process, and with `--process-isolation`. Its PHP# test class extends PHPUnit's `TestCase` and declares a test module, so the run fails when the test module does not apply in PHPUnit's process, in the child process of `#[RunInSeparateProcess]`, or before the test's own `Before` method. It needs `composer` on the path, which the `sharp/docker/` image installs.
+
 `--passes` runs the suite once per bit of `opcache.optimization_level` from pass 1 to pass 16, each pass alone, and then under `opcache.jit=tracing` and `opcache.jit=function`. Every run expects the output of the run without opcache, so a pass that drops a PHP# mark fails on its own run instead of hiding behind the other passes. A test whose output depends on the whole optimizer, such as a count of oplines the JIT left to the VM, sets `opcache.optimization_level=0x7FFEBFFF` in its `--INI--` section.
 
 `--census` runs `sharp/bin/census`. It reads the register of PHP# marks in `Zend/zend_compile.h` and fails on each line in `Zend/` and `ext/opcache/` that writes or compares a marked field of a marked opcode or AST kind without naming the mark, as the header of `sharp/bin/census` describes. A new mark goes in the register, beside the upstream flags of the same field and kind, with a `ZEND_STATIC_ASSERT` that fails the build when they overlap.
 
 `--linux` runs either command inside the Debian trixie image from `sharp/docker/`, for example `sharp/bin/build --linux` and `sharp/bin/test --linux --opcache`.
 
-Every PHP# feature must pass `sharp/bin/test --opcache --repeat --passes --census --spec --differential`. `sharp/bin/test` disables the JIT outside `--passes`.
+Every PHP# feature must pass `sharp/bin/test --opcache --repeat --passes --census --spec --differential --phpunit`. `sharp/bin/test` disables the JIT outside `--passes`.
 
 `sharp/bin/build` reruns `buildconf` and `configure` by itself when `configure.ac`, a `*.m4` file, a `Makefile.frag`, `build/Makefile.global`, `sharp/docker/Dockerfile` or `sharp/bin/build` changes.
 
@@ -86,7 +89,7 @@ brew install autoconf bison re2c pkgconf icu4c libiconv libpq libsodium libzip o
 
 ## CI
 
-`.github/workflows/sharp.yml` builds and tests on Linux in the `sharp/docker/` image and on `macos-latest`, for every push and pull request to `master` that changes more than documentation. The Linux job also fails when a generated file differs from the committed one, when `ext/sharp/sharp_unit.h` differs from the header `sharp/mago/` generates from `Zend/zend_ast.h`, or when `ext/sharp/Cargo.lock` or `sharp/mago/Cargo.lock` names a local `path+file://` or `git+file://` source.
+`.github/workflows/sharp.yml` builds and tests on Linux in the `sharp/docker/` image and on `macos-latest`, for every push and pull request to `master` that changes more than documentation. The Linux job runs `sharp/bin/test --phpunit` too, so a PHP# test class runs under real PHPUnit on every change. It also fails when a generated file differs from the committed one, when `ext/sharp/sharp_unit.h` differs from the header `sharp/mago/` generates from `Zend/zend_ast.h`, or when `ext/sharp/Cargo.lock` or `sharp/mago/Cargo.lock` names a local `path+file://` or `git+file://` source.
 
 `.github/workflows/mago.yml` runs Mago's own gates in `sharp/mago/` on every push and pull request: formatting, clippy and the workspace tests on Linux with stable and nightly Rust and on macOS with stable Rust, a release build, `typos`, and patch coverage. Its `plain-php` job runs on `ubuntu-latest` and `macos-latest` with the runner's own PHP. It installs `heyjordanparker/php-sharp-composer` from `sharp/composer/` and `heyjordanparker/mago-sharp` from `sharp/mago/`, with the `mago` that job built, then runs `mago analyze` and `mago compile` on a one-class `.sharp` project. Its `ci-passed` job passes when all of them pass.
 

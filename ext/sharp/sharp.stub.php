@@ -64,3 +64,30 @@ final class Position
 
     public function __construct(string $file, int $line, int $column, string $function) {}
 }
+
+/**
+ * @strict-properties
+ * @not-serializable
+ */
+final class Container
+{
+    public function get(string $id): mixed {}
+
+    public function has(string $id): bool {}
+
+    public static function scope(\Closure $run): mixed {}
+}
+
+final class ContainerError extends \Error
+{
+}
+
+namespace Sharp\Internal;
+
+function readModule(string $path): void {}
+
+function testModule(array $classes, array $bindings): void {}
+
+function startTest(string $class): void {}
+
+function endTest(): void {}

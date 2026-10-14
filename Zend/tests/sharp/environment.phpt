@@ -1,5 +1,5 @@
 --TEST--
-PHP# Environment reads the process's variables, command-line arguments and current directory
+PHP# Environment reads the process's variables, a variable that must be set, command-line arguments and current directory
 --ENV--
 SHARP_REGION=eu-west-1
 --ARGS--
