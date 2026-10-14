@@ -936,6 +936,73 @@ static void swap_live_range(zend_live_range *a, zend_live_range *b) {
 	b->end = tmp;
 }
 
+/* PHP#: a ZEND_SHARP_LEAVE frees each temporary live across it, then the return or jump of its statement runs: the
+ * finally blocks it calls and the loop variables it frees, then its RETURN or JMP. A live range that covers the
+ * ZEND_SHARP_LEAVE and outlives that RETURN or JMP is split in two. The part before ends at the ZEND_SHARP_LEAVE,
+ * which frees the ranges that end at it, and the part after starts past the RETURN or JMP, so an exception or a GC
+ * between them never reaches the freed temporary. A loop variable is not split: the return or jump frees it, or keeps
+ * it for the next iteration, as its statement does. */
+static void zend_sharp_split_leave_ranges(zend_op_array *op_array)
+{
+	for (uint32_t leave = 0; leave < op_array->last; leave++) {
+		if (op_array->opcodes[leave].opcode != ZEND_SHARP_LEAVE) {
+			continue;
+		}
+
+		uint32_t jump = leave + 1;
+		for (;;) {
+			const zend_op *opline = &op_array->opcodes[jump];
+			if (opline->opcode != ZEND_FAST_CALL
+			 && opline->opcode != ZEND_DISCARD_EXCEPTION
+			 && opline->opcode != ZEND_VERIFY_RETURN_TYPE
+			 && opline->opcode != ZEND_NOP
+			 && !((opline->opcode == ZEND_FREE || opline->opcode == ZEND_FE_FREE)
+				&& (opline->extended_value & ZEND_FREE_ON_RETURN))) {
+				break;
+			}
+			jump++;
+		}
+
+		for (uint32_t i = 0; i < op_array->last_live_range; i++) {
+			zend_live_range *range = &op_array->live_range[i];
+			if ((range->var & ZEND_LIVE_MASK) == ZEND_LIVE_LOOP
+			 || range->start > leave || range->end <= jump) {
+				continue;
+			}
+
+			/* The `??` whose right side is the leave defines its result only where it jumps past the leave. Its
+			 * QM_ASSIGN after the RETURN or JMP never runs, and once the optimizer drops it the range starts at
+			 * the `??`, though the leave's path holds no value: the range starts at the jump's target. */
+			const zend_op *def = &op_array->opcodes[range->start - 1];
+			if ((def->opcode == ZEND_COALESCE || def->opcode == ZEND_JMP_SET || def->opcode == ZEND_JMP_NULL)
+			 && def->result.var == (range->var & ~ZEND_LIVE_MASK)
+			 && OP_JMP_ADDR(def, def->op2) - op_array->opcodes > jump) {
+				range->start = OP_JMP_ADDR(def, def->op2) - op_array->opcodes;
+				if (range->start >= range->end) {
+					*range = op_array->live_range[--op_array->last_live_range];
+					i--;
+				}
+				continue;
+			}
+
+			/* The expression around the leave defines its temporaries before the `??`. */
+			ZEND_ASSERT(range->start < leave);
+			uint32_t var = range->var;
+			uint32_t end = range->end;
+			range->end = leave;
+			if (jump + 1 < end) {
+				op_array->last_live_range++;
+				op_array->live_range = erealloc(op_array->live_range,
+					sizeof(zend_live_range) * op_array->last_live_range);
+				range = &op_array->live_range[op_array->last_live_range - 1];
+				range->var = var;
+				range->start = jump + 1;
+				range->end = end;
+			}
+		}
+	}
+}
+
 static void zend_calc_live_ranges(
 		zend_op_array *op_array, zend_needs_live_range_cb needs_live_range) {
 	uint32_t opnum = op_array->last;
@@ -943,12 +1010,17 @@ static void zend_calc_live_ranges(
 	ALLOCA_FLAG(use_heap)
 	uint32_t var_offset = op_array->last_var;
 	uint32_t *last_use = do_alloca(sizeof(uint32_t) * op_array->T, use_heap);
+	bool has_sharp_leave = false;
 	memset(last_use, -1, sizeof(uint32_t) * op_array->T);
 
 	ZEND_ASSERT(!op_array->live_range);
 	while (opnum > 0) {
 		opnum--;
 		opline--;
+
+		if (opline->opcode == ZEND_SHARP_LEAVE) {
+			has_sharp_leave = true;
+		}
 
 		/* SEPARATE always redeclares its op1. For the purposes of live-ranges,
 		 * its declaration is irrelevant. Don't terminate the current live-range
@@ -1068,6 +1140,12 @@ static void zend_calc_live_ranges(
 			}
 			r1++;
 		}
+	}
+
+	if (has_sharp_leave) {
+		zend_sharp_split_leave_ranges(op_array);
+		zend_sort(op_array->live_range, op_array->last_live_range, sizeof(zend_live_range),
+			(compare_func_t) cmp_live_range, (swap_func_t) swap_live_range);
 	}
 
 	free_alloca(last_use, use_heap);

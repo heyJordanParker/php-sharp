@@ -27,7 +27,7 @@ When the Slice lands, every entry of §14.4, §20, §20.1 and §21 leaves `sharp
 ## Decisions team-lead approves
 
 1. **The branch carries #102 once #102 is on master.** Until then everything but rule 6 is built on master. When #102 merges, `feat/pattern-matching` merges `origin/feat/slice-generics` and builds rule 6 on `ZEND_SHARP_IS_TYPE` and its type walk.
-2. **`?? return`, `?? continue` and `?? break` stand wherever `?? throw` stands, and leave through a new engine opcode** (answer 2). The parser reads `return`, with its value when it has one, `continue` and `break` as the right side of `??`, into the new CST expression `Leave`. The analyzer analyzes `Leave` as it analyzes `throw`: its type is `never`, so `a ?? return` has `a`'s type without null. It also checks a `return`'s value against the method's return type and a `continue` or `break` against the loops around it, with the errors their statements get today. The bridge lowers `Leave` to the new zend AST kind `ZEND_AST_SHARP_LEAVE`. `zend_compile.c` compiles it as `ZEND_SHARP_LEAVE` followed by the `return`, `break` or `continue` the statement form compiles to. `ZEND_SHARP_LEAVE` frees the calls the expression has started and the temporaries it holds at that op, with the `cleanup_unfinished_calls` and `cleanup_live_vars` that exception unwinding runs, so `charge(order, prices[plan] ?? return)` leaves no half-built call behind. The block it starts sits out of line, after the function's code, inside the same `try` ranges, so the live ranges of the expression around it never cover it, and a `finally` still runs. The optimizer's CFG builder and both JITs learn the opcode, and `sharp/bin/test --passes` runs every pass alone on it.
+2. **`?? return`, `?? continue` and `?? break` stand wherever `?? throw` stands, and leave through a new engine opcode** (answer 2). The parser reads `return`, with its value when it has one, `continue` and `break` as the right side of `??`, into the new CST expression `Leave`, which holds the `Return`, `Continue` or `Break` statement it runs, without its `;`. Every check of those statements runs on it as it is: the semantic check's "must return a value" and "must not return a value", and the analyzer's return type check, its loop bookkeeping and its "Continue statement used outside of loop.". The analyzer types the leave `never`, so `a ?? return` has `a`'s type without null. The bridge lowers the statement in the place of the right side of `??`, as the RETURN, CONTINUE or BREAK node it lowers today, and `zend_compile.c` compiles those nodes in an expression as their statement with a `ZEND_SHARP_LEAVE` before its finally blocks and loop variables, so no new AST kind exists. `ZEND_SHARP_LEAVE` frees the calls the expression has started and the temporaries it holds, with the `cleanup_unfinished_calls` and `cleanup_live_vars` that exception unwinding runs, so `charge(order, prices[plan] ?? return)` leaves no half-built call behind. The statement's ops sit in place, inside the `try` ranges, so a `finally` runs and a `catch` sees a throwing return value. `zend_calc_live_ranges` splits each live range that covers the leave and outlives its RETURN or JMP, as php-src already splits a loop variable's range at an early return: the part before ends at `ZEND_SHARP_LEAVE`, which frees the ranges that end at it, and the part after starts past the RETURN or JMP, so no exception or GC there sees a freed temporary. Both JITs store a temporary whose range ends at `ZEND_SHARP_LEAVE`, and `sharp/bin/test --passes` runs every optimizer pass alone on it.
 3. **`f?.(x)` is the new CST call `Call::NullSafeFunction(NullSafeFunctionCall)`.** A new variant, not a flag on `FunctionCall`, so every exhaustive `match` on `Call` in the formatter, linter, analyzer and bridge must decide what it does with it, and none treats it as a plain call by accident. The analyzer types it as a call of the callee's non-null type, with a nullable result, and reports `redundant-nullsafe-operator` on a callee that is never null. The bridge lowers it through `Lowering::null_safe_chain`, the precedent of `f9f478332`: `($nullsafe#N = f) === null ? null : $nullsafe#N(x)`, a local callee read as itself, and the rest of the chain skipped on null.
 4. **A type pattern takes properties.** `TypePattern` gains `properties: Option<PropertiesPattern>`, between its `hint` and its `variable`, so `Paid { amount: > 1000 } big` is one pattern. `php_shape` tests the type on the named variable, or on the subject, and then each property on it, as the properties arm does today: `($big = x) instanceof Paid && $big->amount > 1000`. Decision 13 adds the positional fields of a case to the same node.
 5. **A list pattern is the new `Pattern::List(ListPattern)`.** Each element is any pattern, and a trailing `RestPattern`, `...List<Line> rest`, may end it (answer 3). Where else a rest may stand waits for Jordan's ruling. `php_shape` lowers it on a `List` subject to PHP on the array: `\count(s) === 1 && ($only = s[0]) instanceof Line`, and with a rest `\count(s) >= 1 && … && ($rest = \array_slice(s, 1)) !== null`. On a subject whose type is not a `List`, the first test is #102's `is List<T>`. The binder records `\count` and `\array_slice` as the names their spans call, as it records `is_int` today (`called_function`).
@@ -41,7 +41,7 @@ When the Slice lands, every entry of §14.4, §20, §20.1 and §21 leaves `sharp
 
 Decisions 12 to 17, for sections 20 and 20.1, are under "Sections 20 and 20.1".
 
-One new engine opcode, `ZEND_SHARP_LEAVE`, and its AST kind. One new issue code, `unknown-function-type`, beside the analyzer's other `unknown-…-type` codes. No new crate.
+One new engine opcode, `ZEND_SHARP_LEAVE`. One new issue code, `unknown-function-type`, beside the analyzer's other `unknown-…-type` codes. No new crate.
 
 ## Answers in force
 
@@ -214,7 +214,7 @@ docs/spec.md:1376 expects no error, and the checker reports: Parse error encount
 `LeaveReturn.sharp`, `LeaveLoop.sharp` and `LeaveReturnWrong.sharp` give the same parse error at `return`, `return -1`, `continue` and `break`.
 
 - **Mechanism (decision 2):** the parser reads the keyword after `??` in a `.sharp` file into `Expression::Leave`. It stands wherever `?? throw` stands (answer 2). The semantic check refuses a `return` whose value disagrees with the method's return type, with the messages `return` statements get today: "Method `ReturnShapes.run` with return type of `void` must not return a value." and "Method `ReturnShapes.price` with return type must return a value." (`ReturnShapes.sharp`). The analyzer types it `never`, reports `continue` outside a loop as it does today, "Continue statement used outside of loop.", and reports `redundant-null-coalesce` when `a` is never null.
-- **Engine:** `ZEND_AST_SHARP_LEAVE` and `ZEND_SHARP_LEAVE` (decision 2).
+- **Engine:** `ZEND_SHARP_LEAVE` and the live range split (decision 2).
 - **Reuses:** the analysis of `throw`, the return and loop checks, and the unwinding helpers of `zend_execute.c`.
 
 ## N4: `f?.(x)`
@@ -385,9 +385,10 @@ sharp/mago/crates/
 │   ├── src/                              <- the recorded read of an interface's implementer set (S4)
 │   └── tests/sharp.rs                    <- one test per rule, forms as rows (The tests, below)
 ├── sharp-bridge/
-│   ├── src/lower.rs                      <- NullSafeFunction through null_safe_chain; Leave as
-│   │                                        ZEND_AST_SHARP_LEAVE; a lambda's result type and effects in its
-│   │                                        type text; a data-case enum as an abstract class and its cases
+│   ├── src/lower.rs                      <- NullSafeFunction through null_safe_chain; Leave as its
+│   │                                        RETURN, CONTINUE or BREAK node; a lambda's result type and
+│   │                                        effects in its type text; a data-case enum as an abstract class
+│   │                                        and its cases
 │   └── tests/lower.rs                    <- one tree per new lowering; the `extra is limit` row removed
 └── formatter/, linter/, codex/, hir/, fingerprint/, sharp-lean/
                                           <- each exhaustive match on Call, Expression and Pattern takes the
@@ -395,15 +396,14 @@ sharp/mago/crates/
                                              as the forms they lower to
 
 ext/sharp/sharp.c                         <- sharp_type_holds: SHARP_TYPE_FUNCTION compares a closure's
-                                             signature and effects (on #102's type walk); the
-                                             ZEND_AST_SHARP_LEAVE translation
-ext/sharp/sharp_unit.h                    <- regenerated: SHARP_AST_SHARP_LEAVE
-Zend/zend_ast.h, Zend/zend_compile.c      <- ZEND_AST_SHARP_LEAVE compiled to ZEND_SHARP_LEAVE and its
-                                             out-of-line return, break or continue;
-                                             zend_compile_sharp_recv_type_args takes a lambda's result type
-Zend/zend_vm_def.h                        <- ZEND_SHARP_LEAVE: cleanup_unfinished_calls, cleanup_live_vars, jump
-Zend/Optimizer/zend_cfg.c, ext/opcache/jit/
-                                          <- ZEND_SHARP_LEAVE as a jump in the CFG and in both JITs
+                                             signature and effects (on #102's type walk)
+Zend/zend_compile.c                       <- a RETURN, BREAK or CONTINUE node in an expression compiled as
+                                             its statement with ZEND_SHARP_LEAVE before its finally blocks
+                                             and loop variables; zend_compile_sharp_recv_type_args takes a
+                                             lambda's result type
+Zend/zend_vm_def.h                        <- ZEND_SHARP_LEAVE: cleanup_unfinished_calls, cleanup_live_vars
+Zend/zend_opcode.c                        <- zend_calc_live_ranges splits each range a leave frees
+ext/opcache/jit/                          <- both JITs store a temporary whose range ends at ZEND_SHARP_LEAVE
 sharp/composer/
 ├── autoload.php                          <- a missing case class loads its enum's file
 └── src/Plugin.php                        <- the optimized class map lists each case class
@@ -412,17 +412,18 @@ docs/decisions/041-typeof-value.md        <- states the bare-name rule for typeo
 Zend/tests/sharp/
 ├── Patterns.sharp, Patterns.inc, pattern_matching.phpt, pattern_matching_jit_{function,tracing}.phpt
 │                                         <- rows: list patterns, a type with properties and a name
-├── Nulls.sharp, Nulls.inc, null_safe.phpt, null_coalesce.phpt
-│                                         <- rows: f?.(x) on a local, a property and a call; ?? return,
-│                                            ?? return value, ?? continue, ?? break
+├── Nulls.sharp, Nulls.inc, null_safe.phpt
+│                                         <- rows: f?.(x) on a local, a property and a call
 ├── Operators.sharp, Operators.inc        <- `limit =>` becomes `int n when n == limit`; `nested` gains a row
 │                                            without its parentheses
 ├── enums.inc, enums.phpt, enums_jit_{function,tracing}.phpt, and a data-case enum and a mixed enum
 │   beside Stage.sharp and Suit.sharp     <- rows: making each case, a case as a parameter type, a field
 │                                            read, Reflection on a case, a match over every case
 ├── autoload.phpt, library_autoload*.phpt <- rows: plain PHP's new PaymentResult\Paid(…) loads its enum
-├── a ?? return test file                 <- ?? return, continue and break inside a call's arguments, a
-│                                            template, a try with finally, in every opcache mode
+├── Leave.sharp, leave_on_null.inc, leave_on_null.phpt, leave_on_null_jit_{function,tracing}.phpt
+│                                         <- ?? return, continue and break inside a call's arguments, a
+│                                            template, a constructor's arguments, a try with finally or
+│                                            catch, and each other, in every opcache mode
 ├── opcodes.phpt                          <- each new form's opcodes equal its PHP twin's
 └── #102's type-test fixture              <- rows for Function<…> on a lambda, a method value and a plain
                                              PHP closure, true and false
@@ -433,14 +434,15 @@ docs/architecture/slices/21-pattern-matching.md   <- this note
 The PHP the bridge emits:
 
 ```text
-$price = $this->prices[$plan] ?? SHARP_LEAVE(return);                                  <- int price = this.prices[plan] ?? return;
-                                                                                          (ZEND_AST_SHARP_LEAVE: no PHP spelling)
+$price = $this->prices[$plan] ?? return;                                                <- int price = this.prices[plan] ?? return;
+                                                                                          (a RETURN node as the right side of ??: no
+                                                                                          PHP spelling)
 ($doubler === null ? null : $doubler(4))                                                 <- doubler?.(4), a local
 (($nullsafe#1 = $this->next()) === null ? null : $nullsafe#1(4))                         <- this.next()?.(4)
 ($big = $payment) instanceof \App\Paid && $big->amount > 1000                             <- payment is Paid { amount: > 1000 } big
-\count($lines) === 0                                                                      <- [] on a List
-\count($lines) >= 1 && ($first = $lines[0]) instanceof \App\Line && ($rest = \array_slice($lines, 1)) !== null
-                                                                                          <- [Line first, ...List<Line> rest]
+\is_array($lines) && \count($lines) === 0                                                 <- [] on a List
+\is_array($lines) && \count($lines) >= 1 && ($first = $lines[0]) instanceof \App\Line
+    && \is_array($rest = \array_slice($lines, 1))                                         <- [Line first, ...List<Line> rest]
 $a ? 1 : ($b ? 2 : 3)                                                                     <- a ? 1 : b ? 2 : 3
 new \App\PaymentResult\Declined(reason: 'card expired')                                   <- PaymentResult.Declined(reason: "card expired")
 ($p = $result) instanceof \App\PaymentResult\Paid && \is_string($transactionId = $p->transactionId)
@@ -451,7 +453,7 @@ new \App\PaymentResult\Declined(reason: 'card expired')                         
 
 team-lead approves these. Everything not here is tactical.
 
-- **`Expression::Leave(Leave { keyword, value })`**, the right side of `?? return`. Its callsite is `Expression::Throw(_) | Expression::Leave(_) => …` in the walker and the checker. The slate:
+- **`Expression::Leave(Leave)`**, the right side of `?? return`, with `Leave::{Return, Continue, Break}` holding the statement it runs. Its callsite is `Expression::Throw(_) | Expression::Leave(_) => …` in the walker and the checker. The slate:
   - `Leave` — the spec's own verb, "leave when `a` is null"; reads "the expression leaves". Recommended.
   - `Jump` — the compiler's view, control jumps elsewhere; a reader must know the term, and PHP has `goto`. Runner-up.
   - `EarlyExit` — decision 021's "leaving early"; removed, because `exit` is PHP's `Construct::Exit` in Mago.
@@ -461,9 +463,9 @@ team-lead approves these. Everything not here is tactical.
 - **`Call::NullSafeFunction(NullSafeFunctionCall { function, question_mark_dot, argument_list })`**, `f?.(x)`. It follows `Call::NullSafeMethod(NullSafeMethodCall)`, the convention of the enum it joins. The slate: `NullSafeFunction` (recommended), `OptionalFunction` (Swift's "optional chaining"; PHP# does not say "optional"), `FunctionIfPresent` (reads well; no sibling has that shape), `NullSafeInvocation` (removed: "invocation" is the analyzer's word for every call), `ConditionalFunction` (removed: `Conditional` is the ternary).
 - **`Pattern::List(ListPattern { left_bracket, elements, right_bracket })`**, with `ListPatternElement::{Pattern, Rest}`. It follows `TypePattern` and `PropertiesPattern`, and the spec's table calls it "list".
 - **`RestPattern { ellipsis, hint, variable }`**, `...List<Line> rest`. The slate: `RestPattern` (JavaScript's and TypeScript's "rest element" for `...` that collects; recommended), `SpreadPattern` (PHP#'s word for `...`, but a spread expands and this collects; runner-up), `SlicePattern` (C#'s `..`; PHP# says "slice" nowhere), `TailPattern` (removed if question 3 allows a rest in the middle), `RemainderPattern` (long; `%` is remainder in section 24).
-- **`TypePattern.properties: Option<PropertiesPattern>`**, a field on an existing node.
+- **`TypePattern.properties: Option<&PropertiesPattern>`**, a field on an existing node.
 - **`IssueCode::UnknownFunctionType`, `"unknown-function-type"`**, beside `unknown-iterator-type` and `unknown-match-subject-type`.
-- **`ZEND_AST_SHARP_LEAVE`, `SHARP_AST_SHARP_LEAVE` and the opcode `ZEND_SHARP_LEAVE`** (decision 2). They follow #102's `ZEND_AST_SHARP_IS_TYPE` and `ZEND_SHARP_IS_TYPE`, and the CST's `Leave`.
+- **The opcode `ZEND_SHARP_LEAVE`**, number 216 (decision 2). It follows #102's `ZEND_SHARP_IS_TYPE` and takes the number after #102's last, so neither renumbers when both land, and the CST's `Leave`.
 - **`EnumCaseItem::Data(EnumCaseDataItem { name, parameter_list })`**, beside `EnumCaseItem::Unit` and `EnumCaseItem::Backed`.
 - **`Interface.sealed: Option<Keyword>`** and **`TypePattern.fields`**, fields on existing nodes.
 - **`App\PaymentResult\Paid` and `CheckoutState\Open::instance()`**, what plain PHP sees of a case (question 6).

@@ -6616,12 +6616,13 @@ done:
 										/* further blocks will not be relevant... */
 										break;
 									} else if (op_num < range->end && var_num == (range->var & ~ZEND_LIVE_MASK)) {
-										/* check if opcodes in range may throw */
-										bool store_type = 0;
+										/* check if opcodes in range may throw, or if a PHP# ZEND_SHARP_LEAVE frees the
+										 * temporary where its range ends */
+										bool store_type = op_array->opcodes[range->end].opcode == ZEND_SHARP_LEAVE;
 										const zend_ssa_op *next_ssa_op = ssa_op + zend_jit_trace_op_len(opline);
 										const zend_jit_trace_rec *q = p + 1;
 
-										while (1) {
+										while (!store_type) {
 											if (q->op != ZEND_JIT_TRACE_VM) {
 												store_type = 1;
 												break;

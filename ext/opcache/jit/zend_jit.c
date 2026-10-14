@@ -1348,6 +1348,11 @@ static void zend_jit_allocate_registers(zend_jit_ctx *ctx, const zend_op_array *
 								/* further blocks will not be relevant... */
 								break;
 							} else if (op_num < range->end && var_num == (range->var & ~ZEND_LIVE_MASK)) {
+								/* PHP#: a ZEND_SHARP_LEAVE frees the temporaries whose ranges end at it. */
+								if (op_array->opcodes[range->end].opcode == ZEND_SHARP_LEAVE) {
+									ra[i].flags |= ZREG_STORE;
+									break;
+								}
 								/* check if opcodes in range may throw */
 								do {
 									if (zend_may_throw(op_array->opcodes + op_num, ssa->ops + op_num, op_array, ssa)) {

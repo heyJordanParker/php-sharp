@@ -5769,7 +5769,9 @@ static bool zend_has_finally(void) /* {{{ */
 }
 /* }}} */
 
-static void zend_compile_return(zend_ast *ast) /* {{{ */
+/* A `leave` is the right side of PHP#'s `a ?? return`: ZEND_SHARP_LEAVE frees what the expression around it holds once
+ * the value is ready, before the finally blocks and loop variables the return handles. */
+static void zend_compile_return(zend_ast *ast, bool leave) /* {{{ */
 {
 	zend_ast *expr_ast = ast->child[0];
 	bool is_generator = (CG(active_op_array)->fn_flags & ZEND_ACC_GENERATOR) != 0;
@@ -5808,6 +5810,10 @@ static void zend_compile_return(zend_ast *ast) /* {{{ */
 	if (!is_generator && (CG(active_op_array)->fn_flags & ZEND_ACC_HAS_RETURN_TYPE)) {
 		zend_emit_return_type_check(
 			expr_ast ? &expr_node : NULL, CG(active_op_array)->arg_info - 1, 0);
+	}
+
+	if (leave) {
+		zend_emit_op(NULL, ZEND_SHARP_LEAVE, NULL, NULL);
 	}
 
 	uint32_t opnum_before_finally = get_next_op_number();
@@ -5887,7 +5893,8 @@ static void zend_compile_throw(znode *result, zend_ast *ast) /* {{{ */
 }
 /* }}} */
 
-static void zend_compile_break_continue(zend_ast *ast) /* {{{ */
+/* A `leave` is the right side of PHP#'s `a ?? break` or `a ?? continue`, as in zend_compile_return. */
+static void zend_compile_break_continue(zend_ast *ast, bool leave) /* {{{ */
 {
 	zend_ast *depth_ast = ast->child[0];
 
@@ -5918,6 +5925,9 @@ static void zend_compile_break_continue(zend_ast *ast) /* {{{ */
 		zend_error_noreturn(E_COMPILE_ERROR, "'%s' not in the 'loop' or 'switch' context",
 			ast->kind == ZEND_AST_BREAK ? "break" : "continue");
 	} else {
+		if (leave) {
+			zend_emit_op(NULL, ZEND_SHARP_LEAVE, NULL, NULL);
+		}
 		if (!zend_handle_loops_and_finally_ex(depth, NULL)) {
 			zend_error_noreturn(E_COMPILE_ERROR, "Cannot '%s' " ZEND_LONG_FMT " level%s",
 				ast->kind == ZEND_AST_BREAK ? "break" : "continue",
@@ -11810,14 +11820,14 @@ static void zend_compile_stmt(zend_ast *ast) /* {{{ */
 			zend_compile_unset(ast);
 			break;
 		case ZEND_AST_RETURN:
-			zend_compile_return(ast);
+			zend_compile_return(ast, false);
 			break;
 		case ZEND_AST_ECHO:
 			zend_compile_echo(ast);
 			break;
 		case ZEND_AST_BREAK:
 		case ZEND_AST_CONTINUE:
-			zend_compile_break_continue(ast);
+			zend_compile_break_continue(ast, false);
 			break;
 		case ZEND_AST_GOTO:
 			zend_compile_goto(ast);
@@ -12032,6 +12042,19 @@ static void zend_compile_expr_inner(znode *result, zend_ast *ast) /* {{{ */
 			return;
 		case ZEND_AST_THROW:
 			zend_compile_throw(result, ast);
+			return;
+		/* PHP#: the right side of `a ?? return`, `a ?? continue` or `a ?? break`. PHP's parser never puts a
+		 * statement in an expression. */
+		case ZEND_AST_RETURN:
+			zend_compile_return(ast, true);
+			result->op_type = IS_CONST;
+			ZVAL_TRUE(&result->u.constant);
+			return;
+		case ZEND_AST_BREAK:
+		case ZEND_AST_CONTINUE:
+			zend_compile_break_continue(ast, true);
+			result->op_type = IS_CONST;
+			ZVAL_TRUE(&result->u.constant);
 			return;
 		case ZEND_AST_MATCH:
 			zend_compile_match(result, ast);
