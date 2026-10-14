@@ -1,0 +1,5 @@
+namespace App.Stubs;
+
+import Illuminate.Queue.Events.JobFailed;
+
+extern event JobFailed;

@@ -90,7 +90,27 @@ final class ContainerError extends \Error
 {
 }
 
+/**
+ * @strict-properties
+ * @not-serializable
+ */
+final class Listening
+{
+    private function __construct() {}
+}
+
 namespace Sharp\Internal;
+
+/**
+ * @strict-properties
+ * @not-serializable
+ */
+final class Listener
+{
+    private function __construct() {}
+
+    private function hear(object $event): void {}
+}
 
 function accepts(string $type, mixed &$value, string $path, array &$problems): bool {}
 
@@ -105,3 +125,9 @@ function testModule(array $classes, array $bindings): void {}
 function startTest(string $class): void {}
 
 function endTest(): void {}
+
+function emit(object $event): void {}
+
+function listenersFor(object $event): array {}
+
+function listen(string $event, \Closure $listener): \Sharp\Listening {}

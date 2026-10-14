@@ -5,5 +5,5 @@ public class Product
     public int id { get; set; } = 1;
     public Money? price { get; set; }
 
-    public Money? priceIn(string currency) => this.price;
+    public readonly Money? priceIn(string currency) readonly => this.price;
 }

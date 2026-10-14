@@ -1253,7 +1253,81 @@ public void show(readonly Model model) { … }   // compile error: Model is a pl
 - A copy in a local belongs to the local. After `let copy = order.lines`, `copy.add(line)` is allowed and leaves `order` unchanged.
 - The objects inside that copy stay readonly.
 
-**A `readonly` method is checked as if `this` were a `readonly` value.** Inside it, `this` cannot be written, and only other `readonly` methods can be called on it.
+**A readonly value never goes where a writable one is expected.** Passing, returning or storing it is a compile error that names the `readonly` to declare:
+
+<!-- example readonly-stays-readonly: members -->
+```csharp
+public Order give(readonly Order order) => order;   // compile error: declare the return type `readonly Order`
+```
+
+**A `readonly` method is checked as if `this` were a `readonly` value.** Inside it, `this` cannot be written, and only other `readonly` methods can be called on it. An override or an implementation of a `readonly` method is `readonly` too, so a call through a readonly value never runs a body that changes `this`:
+
+<!-- example readonly-overrides -->
+```csharp
+// app/Shape.sharp
+namespace App;
+
+public class Shape
+{
+    public virtual int area() readonly => 0;
+}
+```
+
+<!-- example readonly-overrides -->
+```csharp
+// app/Square.sharp
+namespace App;
+
+public class Square : Shape
+{
+    public override int area() => 1;   // compile error: Square.area overrides the readonly Shape.area, so declare it `area() readonly`
+}
+```
+
+**A `readonly` that can't matter is a compile error,** as a `?` that can't matter is: before a type whose value never changes, an `int`, a `string`, an enum, a struct, a function type or a collection of them, and in `is` or `as`:
+
+<!-- example readonly-cannot-matter: members -->
+```csharp
+public int count(readonly List<int> numbers) => 0;   // compile error: a List<int> never changes, so write List<int>
+```
+
+**A method's `readonly` is its last clause,** after `on` and `uses`, because it talks about the `this` inside the body. Anywhere else it is a compile error that says to write it last:
+
+<!-- example readonly-last-clause -->
+```csharp
+// app/Quotes.sharp
+namespace App;
+
+public interface Quotes
+{
+    Money quote(Cart cart) uses Http readonly;   // compiles: readonly is the last clause
+    Money price(Cart cart) readonly uses Http;   // compile error: write readonly last
+}
+```
+
+**Operators, `int hash()` and `string toString()` are readonly by definition.** The language runs them on readonly values with no marker, so a body that changes an operand or `this` is a compile error, and an operator that returns an operand declares its return type `readonly`:
+
+<!-- example readonly-by-definition -->
+```csharp
+// app/Points.sharp
+namespace App;
+
+public class Points
+{
+    public int count { get; set; } = 0;
+
+    public static Points operator +(Points a, Points b)
+    {
+        a.count += b.count;                       // compile error: an operator's operands are readonly
+        return new Points();
+    }
+
+    public static readonly Points operator -(Points a, Points b) => a;   // compiles: it returns a readonly operand
+
+    public int hash() => this.count++;            // compile error: hash() is readonly
+    public string toString() => "points";         // compiles
+}
+```
 
 **A missing marker is a compile error that names the fix:**
 
@@ -1589,6 +1663,56 @@ public class ImportScreen
 **Effects:** `emit` has the effect `Events` (section 29), so a method that emits shows `Events` among its effects, and code without a body allows it with `uses Events`.
 
 **Timing:** the default dispatcher runs listeners immediately, before `emit` returns. An app replaces the dispatcher once at startup, to run listeners later, after a save, with retries, or not at all in tests.
+
+The app's top module binds `Dispatcher`, its binding serves every `emit`, and a binding of it in any other module of the app is a compile error. A test module still replaces it:
+
+<!-- example one-dispatcher
+namespace App;
+
+import Sharp.Dispatcher;
+import Sharp.ImmediateDispatcher;
+-->
+```csharp
+// app/Module.sharp
+module
+{
+    singleton Dispatcher = ImmediateDispatcher;   // compiles: the app's dispatcher, for every emit
+}
+```
+
+<!-- example one-dispatcher
+namespace App.Shop;
+
+import Sharp.Dispatcher;
+import Sharp.ImmediateDispatcher;
+-->
+```csharp
+// app/Shop/Module.sharp
+module
+{
+    singleton Dispatcher = ImmediateDispatcher;   // compile error: only app/Module.sharp, the top module, binds Dispatcher
+}
+```
+
+**A plain PHP library's own events reach PHP# listeners through PSR-14.** PHP#'s `Sharp.Psr.ListenerProvider` offers every PHP# listener as a PSR-14 listener provider. One module binding gives it to a library whose dispatcher follows PSR-14, as any binding creates a service (section 32):
+
+<!-- example psr-listeners -->
+```csharp
+// app/Module.sharp
+namespace App;
+
+import Psr.EventDispatcher.EventDispatcherInterface;
+import Sharp.Psr.ListenerProvider;
+import Vendor.Events.EventDispatcher;
+
+module
+{
+    singleton EventDispatcherInterface = new EventDispatcher(new ListenerProvider());   // compiles: the library's dispatcher runs every PHP# listener
+}
+```
+
+- **Every event the library dispatches runs each `on` method and each listener `Events.on` started for it,** with nothing else written by hand. Each listener runs on a new object, as for `emit`, and the library's dispatcher decides when.
+- **A library with a dispatcher of its own kind needs one adapter package,** and PHP# ships none for any framework.
 
 ## 16. Naming a value
 
