@@ -67,6 +67,7 @@ The review's fixes, each with a test seen failing first:
 - With `sharp.compile_command` set, the table is read past opcache.
 - `Sharp\Listening` owns its listener's function and reports it to the cycle collector, so a handle kept in a property of the object its listener uses is collected with it, and the listener stops.
 - `namespace Sharp` and every namespace under it are refused outside the standard library, with `reserved-name-outside-library`.
+- Exactly one app module binds `Sharp.Dispatcher`, the top one, and spec section 15 says so with the example `one-dispatcher` (team-lead's Option A).
 - A dropped `Events.on` handle is reported in PHP# words. A table naming a class or method the code lacks says it is out of date. `Events.on(e => { })` gives one error. The prelude declares `listenersFor`, and `sharp/composer/mago.toml` analyzes `src/Psr/ListenerProvider.php`.
 
 Known follow-up, approved as its own pull request after this one: `write_project` in `sharp/bin/spec` copies all of `sharp/composer` into an example's project, as a Composer install does, and the harness's `Sharp/Psr/ListenerProvider.php` copy is deleted.
@@ -233,7 +234,8 @@ The parameter is `emitted`, because `event` is a PHP# keyword: "`event` is a PHP
   1. While a test runs, its test module's binding of `Sharp.Dispatcher`, whatever namespace the module's header names: `module : App.Shop { singleton Dispatcher = RecordingDispatcher; }` is "not at all in tests".
   2. Else the app's top module that binds it, which `mago compile` writes in the table as `'dispatcher' => ['app/Module.sharp', 'app']`. The engine reads that module and the modules above it, and resolves `Sharp.Dispatcher` from its namespace. "Once at startup" is `singleton Dispatcher = AfterCommitDispatcher;` in `app/Module.sharp`.
   3. Else the root namespace, which the standard library's module serves with `ImmediateDispatcher`.
-- **`mago compile` finds the app's top module** with `IncrementalAnalysisService::dispatcher_module` in `crates/orchestrator/src/service/incremental_analysis/compile.rs`: of the base and environment modules outside `vendor/` that bind `Sharp.Dispatcher`, the one whose namespace has the fewest parts, then the first by file name. A package's module in `vendor/` never replaces the app's dispatcher. The engine reads every module of that module's folder and of each folder above it, so an environment module there binds for its environment, as the container reads any service.
+- **Exactly one app module binds `Sharp.Dispatcher`, the top one,** as team-lead ruled: "An app replaces the dispatcher once at startup". `top_dispatcher_namespaces` in `crates/codex/src/metadata/module.rs` gives, of the base and environment modules outside `vendor/` that bind it, the namespaces with the fewest parts. The standard library's module, the one module of the root namespace, never counts, since on a disk that ignores case a project's `Vendor/` folder holds `vendor/`, as `sharp/bin/spec`'s project does with the harness's `Vendor/Events/`. `check_app_dispatcher` in `crates/analyzer/src/statement/module.rs` refuses every other app binding with `invalid-binding`, "Only `app/Module.sharp` binds `Dispatcher`: an app binds it once, in its top module.", and refuses each of two tied top namespaces, "This module and `admin/Module.sharp` each bind `Dispatcher`, and an app binds it once, in its top module.", never picking one by file name. An environment module of the top namespace binds it for its environment, and a test module and a package's module bind it freely.
+- **`mago compile` names that module** with `IncrementalAnalysisService::dispatcher_module` in `crates/orchestrator/src/service/incremental_analysis/compile.rs`: a module of the one top namespace that binds it, or none when no app module binds it or two namespaces tie. A package's module in `vendor/` never replaces the app's dispatcher. The engine reads every module of that module's folder and of each folder above it, so an environment module there binds for its environment, as the container reads any service.
   - Rejected: the emitting class's namespace, which decision 5 first chose. An event a PHP# package in `vendor/` emits resolved from the package's namespace, which no app module serves, so the app's dispatcher missed it.
   - Rejected: the event's namespace. An `extern event` lives in its vendor's namespace, such as `Illuminate\Queue\Events`, which no app module serves.
   - Rejected: each listener's namespace. A dispatcher would see an event once per listener and never one without listeners.
@@ -350,6 +352,7 @@ The note's choices, with the names each was picked over. team-lead approves them
 - `Sharp.ImmediateDispatcher`: the spec's "runs listeners immediately". Also considered: `SyncDispatcher`, `DefaultDispatcher`, which says nothing about what it does.
 - `'dispatcher'`, the table's key for the app's module that binds the dispatcher: the service it names. Also considered: `dispatcherModule`, `topModule`.
   - In mago, `DispatcherModule { file, namespace }` and `dispatcher_module()` on `IncrementalAnalysisService` and `Server`, beside `Listener` and `listeners()`.
+  - In codex, `top_dispatcher_namespaces(modules)`, which the analyzer's refusal and `dispatcher_module` share, and `BindingMetadata::binds_dispatcher()`. Also considered: `app_dispatcher_namespaces`, which leaves out that only the top ones count, and `dispatcher_owners`.
 
 # What changes
 
@@ -387,6 +390,7 @@ php-sharp (feat/events-engine)
 │   └── crates/
 │       ├── prelude/assets/extensions/sharp.php  <- Sharp\Listening, Sharp\Internal\listen and listenersFor
 │       ├── sharp-bridge/src/unit.rs, tests/unit.rs   <- a listing names its namespace folders
+│       ├── codex/src/metadata/module.rs   <- top_dispatcher_namespaces, BindingMetadata::binds_dispatcher
 │       ├── orchestrator/src/service/incremental_analysis/compile.rs   <- DispatcherModule, dispatcher_module
 │       ├── server/src/server.rs      <- dispatcher_module
 │       └── analyzer/
@@ -395,6 +399,7 @@ php-sharp (feat/events-engine)
 │           ├── src/statement/use_statement.rs, statement/mod.rs
 │           │                   <- check_internal_import: only the standard library imports Sharp.Internal;
 │           │                      report_standard_library_namespace; a dropped [NoDiscard] value in PHP# words
+│           ├── src/statement/module.rs   <- check_app_dispatcher: only the app's top module binds Dispatcher
 │           ├── src/statement/class_like/mod.rs   <- report_sharp_type_class_outside_library deleted
 │           ├── src/statement/class_like/listener.rs   <- check_events_on (ruling 1), and unheard_class, which
 │           │                                             it shares with the on clause
@@ -428,7 +433,8 @@ php-sharp (feat/events-engine)
 │   └── Container.inc, library_autoload.inc   <- copy the dispatcher's classes, and Container.inc Events
 └── docs/
     ├── spec.md                 <- section 15: a plain PHP library's own events reach PHP# listeners through PSR-14,
-    │                              with the example psr-listeners
+    │                              with the example psr-listeners; only the app's top module binds Dispatcher, with
+    │                              the example one-dispatcher
     └── architecture/
         ├── slices/15-events.md <- this note
         └── modules.md          <- the container builds each listener emit runs, its own symbol table;
@@ -444,7 +450,9 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 **mago:**
 
 - `tests/compile.rs`, `compile_writes_every_listener_of_an_accepted_file_in_order`: the table's text with its inputs, every PHP# file and every listing above it, and its rows, a refused file's rows gone, the table kept once no listener is left, and "Compiled 4 PHP# files" for four files. `compile_quotes_each_input_path_of_the_listener_table`: a folder named `it's\here`. Four tests that list `.sharp/` now find `listeners.php` in it.
-- `tests/compile.rs`, `compile_names_the_app_module_that_binds_the_dispatcher`: of `App` and `App.Shop` modules that bind it, `app/Module.sharp`; without it, `app/Shop/Module.sharp`; without either, `null`. With `dispatcher_module` returning none it failed.
+- `tests/compile.rs`, `compile_names_the_app_module_that_binds_the_dispatcher`: `app/Shop/Module.sharp` alone binds it and is named. With `app/Module.sharp` added, the compile refuses the `App.Shop` binding with "Only `app/Module.sharp` binds `Dispatcher`" and names `app/Module.sharp`. Without either, `null`. With `dispatcher_module` returning none it failed.
+- `crates/analyzer/tests/sharp.rs`, `only_the_apps_top_module_binds_the_dispatcher`: `App`'s module with `App.Shop`'s beside it, `App.Shop`'s alone, `App`'s environment module, a test module of `App.Shop` and a package's `Acme` module bind it with no error. `App.Shop`'s module under `App`'s is refused, and `App`'s and `Admin`'s are each refused. With `check_app_dispatcher` off, the `App.Shop` row gave no error, and with ties allowed, the `Admin` row gave none.
+- `tests/sharp.rs`, `analyze_never_takes_the_standard_library_module_for_the_app_dispatcher`: the library under `Vendor/` and `app/Module.sharp` binding `Dispatcher` analyze clean. Counting the root namespace, it gave "This module and `Vendor/heyjordanparker/php-sharp-composer/library/Sharp/Module.sharp` each bind `Dispatcher`".
 - `crates/sharp-bridge/tests/unit.rs`, `a_source_listing_stamps_the_names_of_the_sharp_files_and_namespace_folders_of_its_folder`: a new namespace folder changes the listing to `Billing/` and the files, and its removal restores it. A lowercase folder named like a source does not change it. With folders left out it failed.
 - `crates/analyzer/tests/sharp.rs`, `a_namespace_of_the_standard_library_in_a_project_file_is_a_reserved_name`: `namespace Sharp;` declaring `Bool` or `Int`, `namespace Sharp;` calling `Internal.listen` with no import, and `namespace Sharp.Internal;` are refused, and `namespace Sharpen;` is not. Before `report_standard_library_namespace`, the `Internal.listen` file and `Sharp.Internal` gave no issue. `an_extern_method_in_a_project_file_is_an_error_in_any_namespace` and mago's `tests/sharp.rs` now expect the namespace's error before an `extern` or `@` under `Sharp.Mine`.
 - `events_on_with_no_type_is_reported_once`: `Events.on(e => { })` gives only `missing-template-parameter`. It also gave `invalid-event` before.
@@ -466,5 +474,6 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 - `events_psr.phpt`: a plain PHP library's PSR-14 dispatcher, given `Sharp\Psr\ListenerProvider`, dispatches the `extern event` `Lib\JobFailed` and reaches `OrderNotices.alert`, and dispatches `OrderPaid` and reaches its five listeners in table order. `Shipping` is a new object for every event. A scoped listener runs after the table's, and not once its handle is gone. An event no listener hears gets no listeners. On the engine before the change it failed with "Call to undefined function Sharp\Internal\listenersFor()".
 - `events_fresh.phpt`: with `sharp.compile_command` set, a new listener file, a listener added to a listener's file, a deleted listener file, a listener in a new namespace folder and an `on` added to a class that had none and that nothing loads each make the next `emit` compile once, and nothing changed compiles nothing. Without the setting, a new listener file stays unheard. With only listener files as inputs and no folders in a listing, the last two stayed unheard.
 - `events_opcache.phpt`: in one process with opcache on, opcache holds the table, a listener file and a new class appear, and loading the class runs the compile before the first `emit`. The `emit` runs the new listener. Reading the table through opcache, it missed it.
+- `one-dispatcher` in section 15: `app/Module.sharp` binds `Dispatcher` and compiles, and `app/Shop/Module.sharp`'s binding is a compile error. On the mago before `check_app_dispatcher` it failed: "expects a compile error, and the checker accepts it".
 - `psr-listeners` in section 15 compiles in `sharp/bin/spec`. It failed before the harness held the provider, and fails again when the harness dispatcher takes another type.
 - `sharp/bin/spec` matches the shorter list, and `sharp/bin/spec --completes` on a body holding `Completes: §15` gives "§15: all 9 checked examples pass."

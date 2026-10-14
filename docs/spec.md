@@ -1588,6 +1588,36 @@ public class ImportScreen
 
 **Timing:** the default dispatcher runs listeners immediately, before `emit` returns. An app replaces the dispatcher once at startup, to run listeners later, after a save, with retries, or not at all in tests.
 
+The app's top module binds `Dispatcher`, its binding serves every `emit`, and a binding of it in any other module of the app is a compile error. A test module still replaces it:
+
+<!-- example one-dispatcher
+namespace App;
+
+import Sharp.Dispatcher;
+import Sharp.ImmediateDispatcher;
+-->
+```csharp
+// app/Module.sharp
+module
+{
+    singleton Dispatcher = ImmediateDispatcher;   // compiles: the app's dispatcher, for every emit
+}
+```
+
+<!-- example one-dispatcher
+namespace App.Shop;
+
+import Sharp.Dispatcher;
+import Sharp.ImmediateDispatcher;
+-->
+```csharp
+// app/Shop/Module.sharp
+module
+{
+    singleton Dispatcher = ImmediateDispatcher;   // compile error: only app/Module.sharp, the top module, binds Dispatcher
+}
+```
+
 **A plain PHP library's own events reach PHP# listeners through PSR-14.** PHP#'s `Sharp.Psr.ListenerProvider` offers every PHP# listener as a PSR-14 listener provider. One module binding gives it to a library whose dispatcher follows PSR-14, as any binding creates a service (section 32):
 
 <!-- example psr-listeners -->
