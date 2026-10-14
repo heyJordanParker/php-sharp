@@ -93,4 +93,19 @@ class Patterns
         }
         return $shape instanceof \Demo\Square && (${'match#1'} = $shape->side) === 0.0 ? -1.0 : 0.0;
     }
+
+    public function lines(array $shapes): int { return match (true) {
+        \is_array($shapes) && \count($shapes) === 0 => 0,
+        \is_array($shapes) && \count($shapes) === 1 && (${'match#1'} = $shapes[0]) instanceof \Demo\Circle => 1,
+        \is_array($shapes) && \count($shapes) >= 1 && ((${'match#2'} = $shapes[0]) instanceof \Demo\Square && (${'match#3'} = ${'match#2'}->side) > 1.0) && \is_array($rest = \array_slice($shapes, 1)) => 2 + \count($rest),
+        default => -1,
+    }; }
+
+    public function head(?array $shapes): float
+    {
+        if (\is_array($shapes) && \count($shapes) >= 1 && ($first = $shapes[0]) instanceof \Demo\Circle && \is_array($others = \array_slice($shapes, 1)) && \count($others) === 0) {
+            return $first->radius;
+        }
+        return 0.0;
+    }
 }

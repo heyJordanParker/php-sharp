@@ -38,6 +38,15 @@ for ($round = 0; $round < 100; $round++) {
         $patterns->big(new Circle(11.0)),
         $patterns->big(new Circle(1.0)),
         $patterns->big(new Square(0.0)),
+        $patterns->lines([]),
+        $patterns->lines([new Circle(1.0)]),
+        $patterns->lines([new Square(2.0), new Circle(1.0), new Circle(3.0)]),
+        $patterns->lines([new Square(0.5), new Circle(1.0)]),
+        $patterns->lines([new Square(1.0)]),
+        $patterns->head([new Circle(7.0)]),
+        $patterns->head([new Circle(7.0), new Circle(1.0)]),
+        $patterns->head([]),
+        $patterns->head(null),
     ];
 }
 

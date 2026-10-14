@@ -93,4 +93,19 @@ class Patterns
         }
         return shape is Square { side: 0.0 } ? -1.0 : 0.0;
     }
+
+    public int lines(List<Figure> shapes) => match (shapes) {
+        [] => 0,
+        [Circle] => 1,
+        [Square { side: > 1.0 }, ...List<Figure> rest] => 2 + rest.count(),
+        default => -1,
+    };
+
+    public float head(List<Figure>? shapes)
+    {
+        if (shapes is [Circle first, ...List<Figure> others] && others.count() == 0) {
+            return first.radius;
+        }
+        return 0.0;
+    }
 }
