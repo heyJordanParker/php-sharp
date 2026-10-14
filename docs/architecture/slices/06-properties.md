@@ -191,6 +191,7 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 - **Analyzer:** `expression/name_of.rs` resolves the property on the class, refuses a missing or invisible one, and types the expression `string`.
 - **The bridge:** a string literal of the property's name.
 - **Engine:** a row in `name_of.phpt` passing it to a PHP# method that takes `string`.
+- **As built.** `nameof` names a field too, because team-lead's ruling makes it C#'s `nameof`, and the codex cannot tell a field from an auto-property without a new flag. A method is refused as "Property `Order.sum` does not exist.", and a property not readable at the call as "`Order.secret` is `private`, so `nameof` can't name it here." The expression is the literal string of the name, so `sharp-lean` translates it as that string, and a class law over it is proven.
 
 ## Section 6.4: reusable property behaviors
 
@@ -342,10 +343,11 @@ php-sharp
 │   ├── NameOf.sharp, name_of.phpt              <- added
 │   ├── Behaviors.sharp, behaviors.phpt         <- added
 │   ├── Lazy.sharp, lazy.phpt                   <- added
-│   └── Members.sharp, members.phpt             <- added: a get-only T? set by the constructor, a T? that starts as
+│   └── Overrides.sharp, overrides.phpt         <- added: a get-only T? set by the constructor, a T? that starts as
 │                                                  null, an interface property, an abstract property, a PHP#
 │                                                  property override, static computed and hooked properties, and
-│                                                  reflection
+│                                                  reflection. Named so because master's Members.sharp, which
+│                                                  class_members.inc and static_members.phpt load, holds the name
 ├── sharp/harness/app/Stubs/Str.sharp           <- added: extern Str;
 ├── sharp/harness/app/Trimmed.sharp             <- added
 ├── sharp/harness/app/Tracked.sharp             <- added
