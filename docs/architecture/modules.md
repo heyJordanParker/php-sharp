@@ -120,7 +120,7 @@ final class ContainerError extends \Error { }                  // a failure of t
 
 **PSR-11.** `Sharp\Psr\Container` implements `Psr\Container\ContainerInterface` over `Sharp\Container`. It throws `Sharp\Psr\NotFoundException` for an id no module binds, and `Sharp\Psr\ContainerException`, with the engine's `Sharp\ContainerError` as its previous, for a service the container can't build. A constructor's own exception passes through unchanged. The engine can't implement an interface Composer loads after it starts, so the adapter is PHP, and the Composer package requires `psr/container`.
 
-`Environment.require(name)` gives a variable a binding needs, and throws `ValueError` when it is not set.
+`environment.require(name)`, a method of the standard library's `foreign` class `Sharp\Environment`, gives a variable a binding needs, and throws `ValueError` when it is not set.
 
 ## Files
 
@@ -136,13 +136,12 @@ sharp/mago/crates/
 │                                       and the service graph: cycles, captive dependencies
 ├── analyzer/src/statement/class_like/listener.rs   a listener's constructor takes services
 ├── analyzer/src/statement/return.rs    a binding expression's wrong type names the binding
-├── prelude/assets/extensions/sharp.php Environment.require
 ├── orchestrator/src/service/incremental_analysis/compile.rs   a compiled file's module files among its inputs
 └── sharp-bridge/src/lower.rs           a module file's binding table, a test file's testModule call and its classes'
                                         __sharpStartTest and __sharpEndTest, the Service attribute
 ext/sharp/
 ├── sharp.c                             Sharp\Container, Sharp\ContainerError,
-│                                       Sharp\Internal\{readModule, testModule, startTest, endTest}, Environment.require
+│                                       Sharp\Internal\{readModule, testModule, startTest, endTest}
 ├── sharp.stub.php                      their public signatures
 └── sharp_arginfo.h                     generated from sharp.stub.php
 sharp/composer/

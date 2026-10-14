@@ -69,25 +69,6 @@ final class Position
  * @strict-properties
  * @not-serializable
  */
-final class Environment
-{
-    /** @virtual */
-    public array $arguments;
-
-    /** @virtual */
-    public string $currentDirectory;
-
-    public function __construct() {}
-
-    public function variable(string $name): ?string {}
-
-    public function require(string $name): string {}
-}
-
-/**
- * @strict-properties
- * @not-serializable
- */
 final class Container
 {
     public function get(string $id): mixed {}
