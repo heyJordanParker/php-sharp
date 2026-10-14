@@ -9,13 +9,14 @@ if (getenv('SKIP_SLOW_TESTS')) die('skip slow test');
 require __DIR__ . '/type_arguments.inc';
 
 if (($argv[1] ?? null) === 'unserialize') {
-    // Twenty thousand type texts no other request reads: Function types whose parameters spell a random number.
+    // Twenty thousand type texts no other request reads: Function types whose parameters spell a random number. Both
+    // parameter types are six bytes, so every request reads texts of one size, and only kept texts can grow its peak.
     $base = random_int(0, PHP_INT_MAX >> 32) << 32;
     $template = serialize(App\Queue::pair());
     for ($i = 0; $i < 20_000; $i++) {
         $parameters = [];
         for ($bit = 0, $number = $base | $i; $bit < 62; $bit++) {
-            $parameters[] = ($number >> $bit) & 1 ? 'string' : 'int';
+            $parameters[] = ($number >> $bit) & 1 ? 'string' : 'float?';
         }
         $text = 'Function<void(' . implode(', ', $parameters) . ')>, int';
         if (!unserialize(str_replace('s:14:"App.Order, int"', 's:' . strlen($text) . ':"' . $text . '"', $template))) {
