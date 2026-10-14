@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: fd645a0b0db39d94ca25b39ffe64d7f05bad6bea */
+ * Stub hash: 99b623b9389b0360f9e246ba0e3942d238194d68 */
 
 ZEND_BEGIN_ARG_WITH_TENTATIVE_RETURN_TYPE_INFO_EX(arginfo_class_Reflection_getModifierNames, 0, 1, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, modifiers, IS_LONG, 0)
@@ -434,6 +434,8 @@ ZEND_END_ARG_INFO()
 #define arginfo_class_ReflectionProperty_isAbstract arginfo_class_ReflectionFunctionAbstract_hasTentativeReturnType
 
 #define arginfo_class_ReflectionProperty_isVirtual arginfo_class_ReflectionFunctionAbstract_hasTentativeReturnType
+
+#define arginfo_class_ReflectionProperty_isField arginfo_class_ReflectionFunctionAbstract_hasTentativeReturnType
 
 #define arginfo_class_ReflectionProperty_isPromoted arginfo_class_ReflectionFunctionAbstract_hasTentativeReturnType
 
@@ -875,6 +877,7 @@ ZEND_METHOD(ReflectionProperty, isDefault);
 ZEND_METHOD(ReflectionProperty, isDynamic);
 ZEND_METHOD(ReflectionProperty, isAbstract);
 ZEND_METHOD(ReflectionProperty, isVirtual);
+ZEND_METHOD(ReflectionProperty, isField);
 ZEND_METHOD(ReflectionProperty, isPromoted);
 ZEND_METHOD(ReflectionProperty, getModifiers);
 ZEND_METHOD(ReflectionProperty, getDeclaringClass);
@@ -1178,6 +1181,7 @@ static const zend_function_entry class_ReflectionProperty_methods[] = {
 	ZEND_ME(ReflectionProperty, isDynamic, arginfo_class_ReflectionProperty_isDynamic, ZEND_ACC_PUBLIC)
 	ZEND_ME(ReflectionProperty, isAbstract, arginfo_class_ReflectionProperty_isAbstract, ZEND_ACC_PUBLIC)
 	ZEND_ME(ReflectionProperty, isVirtual, arginfo_class_ReflectionProperty_isVirtual, ZEND_ACC_PUBLIC)
+	ZEND_ME(ReflectionProperty, isField, arginfo_class_ReflectionProperty_isField, ZEND_ACC_PUBLIC)
 	ZEND_ME(ReflectionProperty, isPromoted, arginfo_class_ReflectionProperty_isPromoted, ZEND_ACC_PUBLIC)
 	ZEND_ME(ReflectionProperty, getModifiers, arginfo_class_ReflectionProperty_getModifiers, ZEND_ACC_PUBLIC)
 	ZEND_ME(ReflectionProperty, getDeclaringClass, arginfo_class_ReflectionProperty_getDeclaringClass, ZEND_ACC_PUBLIC)

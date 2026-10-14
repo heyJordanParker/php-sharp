@@ -140,7 +140,7 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 | 258 | Properties in interfaces | Works in the checker (`Named`, `Person`). The bridge lowers them (`Lowering::interface_property`). No engine test | An engine row | |
 | 258 | Abstract properties | Refused: `AbstractShape`, "This modifier is not supported yet" at `abstract` | Semantics accepts `abstract` on a property with bodiless accessors in an abstract class. The bridge writes PHP's `abstract public string $kind { get; }` | The analyzer's `unimplemented-abstract-property-hook` for a concrete subclass |
 | 258 | Overrides | Refused: `Square`, "Overriding a property is not supported yet". Silently accepted: `Hexagon` redeclares `Shape.title` with no `override` | Questions 3 and 5. See the override section below | `check_class_like_properties`, `check_override_modifier_on_fields` |
-| 259 | Reflection tells fields from properties | No: both run as PHP properties | Question 6 | |
+| 259 | Reflection tells fields from properties | No: both run as PHP properties | Question 6: `ReflectionProperty::isField()` reads `ZEND_ACC_FIELD`, which the bridge sets on each field | |
 
 ### Section 6.1: overriding a plain PHP parent's property
 
@@ -352,8 +352,10 @@ php-sharp
 ├── docs/architecture/slices/06-properties.md   <- this note
 ├── docs/decisions/028-plain-php-property-override.md   <- the property form (question 3)
 ├── docs/spec.md                                <- errata team-lead rules on (questions 1, 2, 13)
-├── ext/reflection/php_reflection.c             <- ReflectionProperty::isField, if question 6 is A
-├── Zend/zend_compile.h                         <- a property flag bit for a field, if question 6 is A
+├── ext/reflection/php_reflection.c, .stub.php  <- ReflectionProperty::isField(): bool, beside isVirtual
+├── Zend/zend_compile.h                         <- ZEND_ACC_FIELD (1 << 13), a property flag the bridge sets on
+│                                                  each field, a promoted one included
+├── Zend/zend_compile.c                         <- a promoted parameter keeps ZEND_ACC_FIELD
 ├── Zend/tests/sharp/
 │   ├── Store.sharp, RushOrders.sharp, TypedOrders.sharp   <- the property form (decision 5)
 │   ├── Observers.sharp, observers.phpt         <- added
@@ -385,6 +387,8 @@ The names, each with the slate it was picked from:
 - `MetadataFlags::LAZY`: the modifier's own word.
 - `check_override_modifier_on_properties`: the function it was, for every property.
 - `name#via0` and `plan#lazy`: hidden names, after `this#1`. Also considered: `name#behavior0`, `plan#value`.
+- `ZEND_ACC_FIELD` and `isField`: the spec's word, beside `ZEND_ACC_VIRTUAL` and `isVirtual`. Also considered:
+  `ZEND_ACC_SHARP_FIELD`, `isStorage`.
 - `FolderNamespace`: what the folder says about the namespace. Also considered: `PathNamespace`, `Psr4Namespace`.
 - `NamedReachInSharp`: the spec's "named reach", beside `UntypedPropertyInSharp`. Also considered: `InternalWithNamespace`.
 - `internal-access`: the modifier and the act, as `private` access is reported. Also considered: `internal-reach`.

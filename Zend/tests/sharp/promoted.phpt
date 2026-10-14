@@ -1,5 +1,5 @@
 --TEST--
-PHP# constructor parameters with an access modifier declare fields and properties
+PHP# constructor parameters with an access modifier declare fields and properties, which reflection tells apart
 --FILE--
 <?php
 
@@ -14,7 +14,7 @@ foreach ((new ReflectionClass(Demo\Ticket::class))->getProperties() as $property
         default => '',
     };
     echo $property->isPrivate() ? 'private' : 'public', $set, ' ', $property->getType(), ' ', $property->getName(),
-        $property->isPromoted() ? ' promoted' : '', "\n";
+        $property->isPromoted() ? ' promoted' : '', $property->isField() ? ' field' : '', "\n";
 }
 
 $ticket = new Demo\Ticket(10, 'A1', 3, 2);
@@ -27,7 +27,7 @@ try {
 }
 ?>
 --EXPECT--
-private int price promoted
+private int price promoted field
 public readonly string code promoted
 public protected(set) int seats promoted
 A1 3 24

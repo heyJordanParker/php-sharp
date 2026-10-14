@@ -7851,7 +7851,8 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 		}
 	}
 
-	const uint32_t promotion_flags = ZEND_ACC_PPP_MASK | ZEND_ACC_PPP_SET_MASK | ZEND_ACC_READONLY | ZEND_ACC_FINAL;
+	const uint32_t promotion_flags =
+		ZEND_ACC_PPP_MASK | ZEND_ACC_PPP_SET_MASK | ZEND_ACC_READONLY | ZEND_ACC_FINAL | ZEND_ACC_FIELD;
 	for (i = 0; i < list->children; ++i) {
 		zend_ast *param_ast = list->child[i];
 		zend_ast *type_ast = param_ast->child[0];

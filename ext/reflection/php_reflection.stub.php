@@ -531,6 +531,8 @@ class ReflectionProperty implements Reflector
 
     public function isVirtual(): bool {}
 
+    public function isField(): bool {}
+
     public function isPromoted(): bool {}
 
     /** @tentative-return-type */

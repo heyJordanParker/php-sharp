@@ -261,7 +261,7 @@ typedef struct _zend_oparray_context {
 /* has #[\Override] attribute                             |     |     |     */
 #define ZEND_ACC_OVERRIDE                (1 << 28) /*     |  X  |  X  |     */
 /*                                                        |     |     |     */
-/* Property Flags (unused: 13-27,29...)                   |     |     |     */
+/* Property Flags (unused: 14-27,29...)                   |     |     |     */
 /* ===========                                            |     |     |     */
 /*                                                        |     |     |     */
 /* Promoted property / parameter                          |     |     |     */
@@ -274,6 +274,9 @@ typedef struct _zend_oparray_context {
 #define ZEND_ACC_PUBLIC_SET              (1 << 10) /*     |     |  X  |     */
 #define ZEND_ACC_PROTECTED_SET           (1 << 11) /*     |     |  X  |     */
 #define ZEND_ACC_PRIVATE_SET             (1 << 12) /*     |     |  X  |     */
+/*                                                        |     |     |     */
+/* PHP# field: storage, not a property (spec section 6)   |     |     |     */
+#define ZEND_ACC_FIELD                   (1 << 13) /*     |     |  X  |     */
 /*                                                        |     |     |     */
 /* Class Flags (unused: 31)                               |     |     |     */
 /* ===========                                            |     |     |     */

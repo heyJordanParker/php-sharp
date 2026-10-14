@@ -6002,6 +6002,13 @@ ZEND_METHOD(ReflectionProperty, isVirtual)
 	_property_check_flag(INTERNAL_FUNCTION_PARAM_PASSTHRU, ZEND_ACC_VIRTUAL);
 }
 
+/* {{{ Returns whether this property is a PHP# field, which is storage, and not a property */
+ZEND_METHOD(ReflectionProperty, isField)
+{
+	_property_check_flag(INTERNAL_FUNCTION_PARAM_PASSTHRU, ZEND_ACC_FIELD);
+}
+/* }}} */
+
 static void _property_check_dynamic(INTERNAL_FUNCTION_PARAMETERS, bool dynamic_true)
 {
 	reflection_object *intern;
