@@ -108,7 +108,7 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 |---|---|---|---|---|
 | 191 | A property has `get` and `set`, each with its own level | Works for `private set` and `protected set`. Refused on `get`: `GetAccess`, "This accessor is not supported yet" | Question 7: a named error on `get` | `check_accessors` |
 | 196 | `public int views { get; private set; }` | Works (`Views`). Reading before a write throws at runtime (question 13) | None new | |
-| 197 | `{ get; internal set => field = value.trim(); }` | Refused: `InternalSet`, "This accessor is not supported yet" at `internal` | Question 1 | |
+| 197 | `{ get; internal set => field = value.trim(); }` | Refused: `InternalSet`, "This accessor is not supported yet" at `internal` | Question 1: built with section 5's `internal`, so the `field-and-property` example passes | |
 | 198 | `public string slug => Str.slug(this.name);` | Refused: `PureGetter`, "Getter `slug` calls `Str.slug`, which has no `extern` declaration. Getters must be pure." | Harness `app/Stubs/Str.sharp` (decision 2) | Section 29's `extern` |
 
 ## Section 6: initial values
@@ -269,14 +269,14 @@ Question 1's answer: section 5's `internal` is built whole in this PR, once team
 | 161 | A test folder may declare the namespace it tests, which gives it `internal` access | Not checked: `Tests/Tenant/HiddenTest.sharp` declares `App.Tenant.Store` and compiles, because nothing is checked | Line 160's check accepts a file in a test folder declaring any namespace. Proposed: a test folder is one Composer's `autoload-dev` maps, which is how a Composer project marks its tests. The spec does not define it, and #121 defines only a test file (one holding a test module). This is for team-lead to approve |
 | 162 | A member is never more visible than its class | Not checked, because no class is narrower than `public` today | The analyzer's reach of a member is the narrower of its own and its class's, as C#'s effective accessibility is |
 | 164 | Too narrow is a compile error at the caller | Works for `private` and `protected`. None for `internal` | Line 157's check, with the caller's namespace in the message: "`Hidden` is internal to `App.Tenant.Store`, and `App.Tenant.Other` is outside it." |
-| 165 | Too wide is a warning, for example a `public` member nothing outside its namespace uses | None: `Wide.unusedOutside` is `public` and used only in its class, and `mago analyze` reports nothing | The analyzer's unused-member pass (`statement/class_like/unused_members.rs`) records, per member, whether a use comes from outside its namespace, and warns on a `public` one with none. The warning counts uses across the whole project, so it runs in the same project-wide pass that reports an unused member |
+| 165 | Too wide is a warning, for example a `public` member nothing outside its namespace uses | None: `Wide.unusedOutside` is `public` and used only in its class, and `mago analyze` reports nothing | `too_wide_members` in `statement/class_like/unused_members.rs` warns on a `public` member that nothing outside its namespace and the ones below it uses, its own class's uses and a member nothing uses included. It reads every file's uses, so it runs once after `Effects::solve`, in `IncrementalAnalysisService::run_analyzer_selective` and `AnalysisService::oneshot`. Which packages it runs in waits for Jordan |
 | 166 | There is no named reach, such as `internal(App\Tenant)` | Refused with 8 generic "Parse error encountered during parsing" (`NamedReach`) | A named parse error at the `(`: "`internal` takes no namespace: move the shared helper to the parent namespace." |
 | 183 | An interface member is as visible as its interface | Not checked (`InternalInterface` with no modifier is unreachable by no rule) | Line 162's effective reach, for interface members too |
 | 184 | Interface members are exempt from the too-wide warning | Holds trivially today | Line 165's warning skips interface members |
 
 What `internal` changes for code that compiles today:
 
-- **Every class with no modifier becomes `internal`.** A `.sharp` class written `class X` and used from a sibling namespace stops compiling. That is the spec's rule, and it is the risk of this part: the PR runs every engine fixture and every spec example through it, and reports each one it refuses.
+- **Every class with no modifier becomes `internal`.** A `.sharp` class written `class X` and used from a sibling namespace stops compiling. That is the spec's rule, and it is the risk of this part. Every engine fixture, spec example, harness file and standard library file runs through it, and it refuses one: the bridge test fixture `Lib.Stamped` in `crates/sharp-bridge/tests/lower.rs`, which `App.Tenant` extends, so it is now `public`.
 - **Plain PHP is unchanged.** A `.php` file's references are never checked against `internal`, because PHP has no namespace visibility and plain PHP is not checked.
 
 # Public names this Slice adds or changes
@@ -294,8 +294,10 @@ sharp/mago/crates/
 │   ├── cst/cst/function_like/parameter.rs   <- FunctionLikeParameter gains `behaviors: Option<BehaviorList>`, so
 │   │                                           section 9's error points at it
 │   ├── cst/node.rs, walker/mod.rs           <- Node::NameOf, Node::BehaviorList
+│   ├── cst/cst/modifier.rs                  <- ModifierSequenceExt::contains_internal
 │   ├── token/mod.rs                         <- "nameof" joins SHARP_KEYWORDS (question 9)
-│   ├── error.rs                             <- ParseError::UntypedPropertyInSharp(Span), "write the type"
+│   ├── error.rs                             <- ParseError::UntypedPropertyInSharp(Span), "write the type";
+│   │                                           ParseError::NamedReachInSharp(Span), "`internal` takes no namespace"
 │   └── parser/internal/
 │       ├── name_of.rs                       <- added: is_at_name_of, parse_name_of
 │       └── class_like/property.rs           <- parse_optional_behavior_list replaces skip_via_clause
@@ -304,18 +306,31 @@ sharp/mago/crates/
 │                                               initial value rule and the field override error are added.
 │                                               is_slice_accessor: willSet and didSet. enter: lazy, abstract,
 │                                               virtual and section 9's parameter errors
+├── database/src/file.rs                     <- added: enum FolderNamespace { Namespace(Box<str>), Test }; File gains
+│                                               `folder_namespace: Option<FolderNamespace>`, which the loader sets
+│                                               from the nearest composer.json's PSR-4 folders
 ├── codex/src/
-│   ├── metadata/flags.rs                    <- MetadataFlags::LAZY: the bridge lowers a read of a static one
+│   ├── metadata/flags.rs                    <- MetadataFlags::LAZY: the bridge lowers a read of a static one;
+│   │                                           MetadataFlags::INTERNAL_SET for `internal set` and `internal init`.
+│   │                                           A PHP# class-like without `public` takes INTERNAL
 │   ├── metadata/property.rs                 <- PropertyMetadata::behaviors: the classes `via` names
 │   └── scanner/property.rs                  <- observers count into the `set` hook
 ├── analyzer/src/
-│   ├── code.rs                              <- IssueCode::InvalidPropertyBehavior ("invalid-property-behavior")
+│   ├── code.rs                              <- IssueCode::InvalidPropertyBehavior ("invalid-property-behavior"),
+│   │                                           IssueCode::InternalAccess ("internal-access", an error),
+│   │                                           IssueCode::TooWideMember ("too-wide-member", a warning)
+│   ├── lib.rs                               <- pub use of too_wide_members, the crate's first re-export
+│   ├── visibility/mod.rs                    <- the namespace reach of `internal`, checked at an import and at
+│   │                                           each member access
 │   ├── expression/name_of.rs                <- added: resolves `nameof`, types it `string`
 │   └── statement/class_like/
+│       ├── unused_members.rs                <- added: too_wide_members(codebase, references) -> IssueCollection
 │       ├── override_attribute.rs            <- check_override_modifier_on_fields becomes
 │       │                                       check_override_modifier_on_properties
 │       ├── mod.rs                           <- the untyped-parent "not supported yet" goes
 │       └── property.rs                      <- each `via` behavior fits the property's type
+├── orchestrator/src/service/                <- analysis.rs and incremental_analysis.rs call too_wide_members after
+│                                               Effects::solve
 ├── sharp-bridge/src/lower.rs                <- Lowering::hooks (observers, behaviors), Lowering::property (lazy,
 │                                               abstract, behavior slots), Lowering::name_of, the static member
 │                                               read of a lazy, computed or hooked static
@@ -329,7 +344,9 @@ the PHP the bridge emits
 ├── public private(set) \App\Plan $plan { get => $this->plan ??= <body>; }
 ├── private \App\Trimmed ${'name#via0'};     <- one per behavior, filled in the constructor
 ├── abstract public string $kind { get; }
-└── 'total'                                  <- nameof(Order.total)
+├── 'total'                                  <- nameof(Order.total)
+└── public int $views = 0;                   <- `internal` runs as public, `internal set` takes no set level, and
+                                                `internal init` takes protected(set), as every `init` does
 
 php-sharp
 ├── docs/architecture/slices/06-properties.md   <- this note
@@ -343,6 +360,7 @@ php-sharp
 │   ├── NameOf.sharp, name_of.phpt              <- added
 │   ├── Behaviors.sharp, behaviors.phpt         <- added
 │   ├── Lazy.sharp, lazy.phpt                   <- added
+│   ├── Reach.sharp, reach.phpt                 <- added: `internal` runs as public
 │   └── Overrides.sharp, overrides.phpt         <- added: a get-only T? set by the constructor, a T? that starts as
 │                                                  null, an interface property, an abstract property, a PHP#
 │                                                  property override, static computed and hooked properties, and
@@ -367,6 +385,10 @@ The names, each with the slate it was picked from:
 - `MetadataFlags::LAZY`: the modifier's own word.
 - `check_override_modifier_on_properties`: the function it was, for every property.
 - `name#via0` and `plan#lazy`: hidden names, after `this#1`. Also considered: `name#behavior0`, `plan#value`.
+- `FolderNamespace`: what the folder says about the namespace. Also considered: `PathNamespace`, `Psr4Namespace`.
+- `NamedReachInSharp`: the spec's "named reach", beside `UntypedPropertyInSharp`. Also considered: `InternalWithNamespace`.
+- `internal-access`: the modifier and the act, as `private` access is reported. Also considered: `internal-reach`.
+- `too-wide-member` and `too_wide_members`: the spec's "too wide". Also considered: `overly-public-member`.
 
 # The PR
 
