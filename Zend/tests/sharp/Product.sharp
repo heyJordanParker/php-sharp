@@ -9,7 +9,7 @@ import Lib.Field;
 class Product
 {
     [Field] private int stock = 0;
-    [Field(label: "Name", limit: PHP_INT_MAX)] public string name { get; set; } = "";
+    [Field(label: "Name", limit: global.PHP_INT_MAX)] public string name { get; set; } = "";
 
     public Product([Field(label: null)] public int id { get; }, [Field] int start = 1)
     {

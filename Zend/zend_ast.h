@@ -111,6 +111,8 @@ enum _zend_ast_kind {
 	ZEND_AST_BREAK,
 	ZEND_AST_CONTINUE,
 	ZEND_AST_PROPERTY_HOOK_SHORT_BODY,
+	/* PHP#: `typeof(T)` of a type parameter, the class value of the type child 0, a type text, spells. */
+	ZEND_AST_SHARP_TYPE_OF,
 
 	/* 2 child nodes */
 	ZEND_AST_DIM = 2 << ZEND_AST_NUM_CHILDREN_SHIFT,
@@ -154,6 +156,12 @@ enum _zend_ast_kind {
 	ZEND_AST_NAMED_ARG,
 	ZEND_AST_PARENT_PROPERTY_HOOK_CALL,
 	ZEND_AST_PIPE,
+	/* PHP#: the type arguments that child 1, a type text, gives child 0. In an expression child 0 is a
+	 * ZEND_AST_NEW, and a NULL text means $this's type arguments. As the type of a ZEND_AST_PROP_GROUP child 0
+	 * is the property's PHP type and the text its PHP# type, which every write from plain PHP checks. */
+	ZEND_AST_SHARP_TYPE_ARGS,
+	/* PHP#: whether child 0 is of the type child 1, a type text, spells, type arguments included. */
+	ZEND_AST_SHARP_IS_TYPE,
 
 	/* 3 child nodes */
 	ZEND_AST_METHOD_CALL = 3 << ZEND_AST_NUM_CHILDREN_SHIFT,
@@ -169,6 +177,14 @@ enum _zend_ast_kind {
 
 	// Pseudo node for initializing enums
 	ZEND_AST_CONST_ENUM_INIT,
+	/* PHP#: the value child 0 holds, checked against the type text child 1 spells. Child 2 names what takes the
+	 * value, as `local counter`. */
+	ZEND_AST_VERIFY_TYPE_ARGS,
+	/* PHP#: the metadata of a PHP# class-like, in its member list. Child 0 is the type arguments its header gives
+	 * each generic parent and interface, child 1 the bounds of its type parameters, which declares a class's
+	 * hidden type-argument slot, and child 2 their variance, one `+` (`out`), `-` (`in`) or `=` per type
+	 * parameter. Each is a text, or NULL when the class-like has none. */
+	ZEND_AST_SHARP_CLASS_METADATA,
 
 	/* 4 child nodes */
 	ZEND_AST_FOR = 4 << ZEND_AST_NUM_CHILDREN_SHIFT,
