@@ -28,6 +28,6 @@ class Deploy
 
     public function folder(): string
     {
-        return $this->environment->currentDirectory;
+        return $this->environment->currentDirectory();
     }
 }
