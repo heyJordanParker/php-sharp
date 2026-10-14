@@ -110,3 +110,5 @@ function testModule(array $classes, array $bindings): void {}
 function startTest(string $class): void {}
 
 function endTest(): void {}
+
+function emit(object $event): void {}

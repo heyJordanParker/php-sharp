@@ -1,0 +1,14 @@
+namespace Shop;
+
+public class Shipping
+{
+    public void ship(OrderPaid e) on OrderPaid
+    {
+        OrderNotices.heard.add(`ship ${e.orderId}`);
+    }
+
+    public void restock(OrderRefunded e) on OrderRefunded
+    {
+        OrderNotices.heard.add(`restock ${e.orderId}`);
+    }
+}
