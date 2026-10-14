@@ -1,0 +1,59 @@
+namespace Demo;
+
+class ClassKeys
+{
+    public static Map<Pass, int> scans()
+    {
+        Map<Pass, int> scans = [:];
+        scans[new Pass(7, "Ada")] = 1;
+        scans[new Pass(7, "Grace")] = (scans[new Pass(7, "Lin")] ?? 0) + 1;
+        scans[new Pass(8, "Ada")] = 1;
+        return scans;
+    }
+
+    public static List<string> holders(Map<Pass, int> scans)
+    {
+        List<string> holders = [];
+        for (const [pass, n] of scans) {
+            holders.add(pass.holder);
+        }
+        return holders;
+    }
+
+    public static List<int> read(Map<Pass, int> scans, Set<Pass> seen)
+    {
+        return [scans.count(), scans[new Pass(7, "Bo")] ?? 0, seen.count(), seen.contains(new Pass(8, "Bo")) ? 1 : 0];
+    }
+
+    public static Set<Pass> seen() => [new Pass(7, "Ada"), new Pass(7, "Grace"), new Pass(8, "Ada")];
+
+    public static List<string> siblings()
+    {
+        Ticketholder visitor = new Visitor(1);
+        Ticketholder courier = new Courier(1);
+        Map<Ticketholder, string> holders = [:];
+        holders[visitor] = "visitor";
+        holders[courier] = "courier";
+        Set<Ticketholder> seen = [visitor, courier];
+        return [`${visitor == courier}`, `${holders.count()}`, holders[visitor] ?? "", `${seen.count()}`];
+    }
+}
+
+public abstract class Ticketholder
+{
+    public Ticketholder(public int id { get; }) { }
+
+    public static bool operator ==(Ticketholder a, Ticketholder b) => a.id == b.id;
+
+    public int hash() => this.id;
+}
+
+public class Visitor : Ticketholder
+{
+    public Visitor(int id) : super(id) { }
+}
+
+public class Courier : Ticketholder
+{
+    public Courier(int id) : super(id) { }
+}

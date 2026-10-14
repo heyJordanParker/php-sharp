@@ -26,19 +26,34 @@ array(3) {
   [2]=>
   int(4)
 }
-array(1) {
-  [5]=>
-  int(7)
+object(Sharp\Map)#6 (1) {
+  [0]=>
+  array(2) {
+    [0]=>
+    string(1) "5"
+    [1]=>
+    int(7)
+  }
 }
 int(2)
 NULL
 int(7)
 NULL
-array(2) {
+object(Sharp\Map)#6 (2) {
   [0]=>
-  int(5)
+  array(2) {
+    [0]=>
+    int(0)
+    [1]=>
+    int(5)
+  }
   [1]=>
-  int(6)
+  array(2) {
+    [0]=>
+    int(1)
+    [1]=>
+    int(6)
+  }
 }
 array(2) {
   [0]=>
@@ -46,23 +61,38 @@ array(2) {
   [1]=>
   int(2)
 }
-array(1) {
+object(Sharp\Map)#6 (1) {
   [0]=>
   array(2) {
     [0]=>
-    int(1)
+    int(0)
     [1]=>
-    int(2)
+    array(2) {
+      [0]=>
+      int(1)
+      [1]=>
+      int(2)
+    }
   }
 }
 OutOfRangeException: Undefined array key 2 in CollectionMethods.sharp on line 55
-array(1) {
-  ["pie"]=>
-  int(7)
+object(Sharp\Map)#10 (1) {
+  [0]=>
+  array(2) {
+    [0]=>
+    string(3) "pie"
+    [1]=>
+    int(7)
+  }
 }
-array(1) {
-  ["pie"]=>
-  int(7)
+object(Sharp\Map)#10 (1) {
+  [0]=>
+  array(2) {
+    [0]=>
+    string(3) "pie"
+    [1]=>
+    int(7)
+  }
 }
 array(3) {
   [0]=>
@@ -213,11 +243,21 @@ array(2) {
   [1]=>
   string(3) "tea"
 }
-array(2) {
-  ["tea"]=>
-  int(3)
-  ["pie"]=>
-  int(7)
+object(Sharp\Map)#7 (2) {
+  [0]=>
+  array(2) {
+    [0]=>
+    string(3) "tea"
+    [1]=>
+    int(3)
+  }
+  [1]=>
+  array(2) {
+    [0]=>
+    string(3) "pie"
+    [1]=>
+    int(7)
+  }
 }
 bool(true)
 bool(false)

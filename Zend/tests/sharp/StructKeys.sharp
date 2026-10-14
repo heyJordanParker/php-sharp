@@ -1,0 +1,51 @@
+namespace Demo;
+
+import Lib.Standing;
+
+public class StructKeys
+{
+    public static Map<Spot, int> counts()
+    {
+        Map<Spot, int> counts = [:];
+        counts[new Spot(1, 2)] = 1;
+        counts[new Spot(1, 2)] = 2;
+        counts[new Spot(2, 1)] = 3;
+
+        return counts;
+    }
+
+    public static List<int> read(Map<Spot, int> counts)
+    {
+        List<int> read = [];
+        for (const [spot, count] of counts) {
+            read.add(spot.x * 10 + spot.y + count * 100);
+        }
+
+        return read;
+    }
+
+    public static Map<Spot, int> literal() => [new Spot(1, 2): 1, new Spot(1, 2): 2];
+
+    public static Set<Spot> spots() => [new Spot(1, 2), new Spot(1, 2), new Spot(3, 4)];
+
+    public static Route route(float length, Map<string, int> tolls) => new Route([new Spot(1, 2)], Standing.Active, Tone.Warm, length, tolls, "a \"quoted\"\n", true);
+
+    public static Map<Route, int> routes(Route first, Route second)
+    {
+        Map<Route, int> routes = [:];
+        routes[first] = 1;
+        routes[second] = 2;
+
+        return routes;
+    }
+
+    public static List<Route> keys(Map<Route, int> routes)
+    {
+        List<Route> keys = [];
+        for (const [route, count] of routes) {
+            keys.add(route);
+        }
+
+        return keys;
+    }
+}

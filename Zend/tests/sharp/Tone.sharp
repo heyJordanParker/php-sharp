@@ -1,0 +1,7 @@
+namespace Demo;
+
+public enum Tone
+{
+    case Warm;
+    case Cool;
+}

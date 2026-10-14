@@ -1,0 +1,6 @@
+namespace Demo;
+
+public struct Spot
+{
+    public Spot(public int x { get; }, public int y { get; }) { }
+}

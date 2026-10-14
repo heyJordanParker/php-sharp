@@ -1,0 +1,33 @@
+namespace Demo;
+
+import Lib.Standing;
+
+class MixedKeys
+{
+    public static Map<string|Standing, int> tally()
+    {
+        Map<string|Standing, int> tally = [:];
+        tally["active"] = 1;
+        tally[Standing.Active] = 2;
+        tally["active"] = (tally["active"] ?? 0) + 10;
+        return tally;
+    }
+
+    public static List<int> read(Map<string|Standing, int> tally)
+    {
+        return [tally.get("active") ?? 0, tally[Standing.Active] ?? 0, tally.keys().count(), tally.count()];
+    }
+
+    public static List<string> described(Map<string|Standing, int> tally)
+    {
+        List<string> lines = [];
+        for (const [key, n] of tally) {
+            if (key is Standing status) {
+                lines.add("the case " + status.name);
+            } else if (key is string text) {
+                lines.add("the string " + text);
+            }
+        }
+        return lines;
+    }
+}

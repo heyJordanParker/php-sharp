@@ -33,13 +33,12 @@ namespace {
 
     echo $output;
 
-    // Sharp\Set::from keeps each element's first place under its key, and gives a Set back as it is.
-    attempt(fn () => Sharp\Set::from(['b', 'a', 'b', '7', 7]));
-    $set = Sharp\Set::from([3, 1, 3]);
-    attempt(fn () => [$set, Sharp\Set::from($set) === $set]);
-    attempt(fn () => Sharp\Set::from([Lib\Standing::Closed, Lib\Standing::Active, Lib\Standing::Closed]));
-    attempt(fn () => Sharp\Set::from([Lib\Size::Large, Lib\Code::Five]));
-    attempt(fn () => Sharp\Set::from([1 => 'x']));
-    attempt(fn () => Sharp\Set::from(['x', null]));
-    attempt(fn () => Sharp\Set::from([new stdClass()]));
+    // new Sharp\Set keeps each element once, in its first place, whatever key the array holds it under.
+    attempt(fn () => new Sharp\Set(['b', 'a', 'b', '7', 7]));
+    attempt(fn () => new Sharp\Set([3, 1, 3]));
+    attempt(fn () => new Sharp\Set([Lib\Standing::Closed, Lib\Standing::Active, Lib\Standing::Closed]));
+    attempt(fn () => new Sharp\Set([Lib\Size::Large, Lib\Code::Five]));
+    attempt(fn () => new Sharp\Set([1 => 'x']));
+    attempt(fn () => new Sharp\Set(['x', null]));
+    attempt(fn () => new Sharp\Set([new stdClass()]));
 }

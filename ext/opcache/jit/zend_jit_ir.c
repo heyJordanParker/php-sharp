@@ -14536,7 +14536,7 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 
 			ir_MERGE_list(forbidden_inputs);
 
-			ir_ref if_prop_obj = jit_if_Z_TYPE(jit, prop_addr, IS_OBJECT);
+			ir_ref if_prop_obj = ir_IF(ir_CALL_1(IR_BOOL, ir_CONST_FC_FUNC(zend_jit_fetch_obj_w_copies), prop_ref));
 			ir_IF_TRUE(if_prop_obj);
 			ref = jit_Z_PTR(jit, prop_addr);
 			jit_GC_ADDREF(jit, ref);
@@ -14604,7 +14604,7 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 			ir_IF_TRUE(if_def);
 		}
 		if (opline->opcode == ZEND_FETCH_OBJ_W && (prop_info->flags & ZEND_ACC_READONLY)) {
-			ir_ref if_prop_obj = jit_if_Z_TYPE(jit, prop_addr, IS_OBJECT);
+			ir_ref if_prop_obj = ir_IF(ir_CALL_1(IR_BOOL, ir_CONST_FC_FUNC(zend_jit_fetch_obj_w_copies), prop_ref));
 			ir_IF_TRUE(if_prop_obj);
 			ir_ref ref = jit_Z_PTR(jit, prop_addr);
 			jit_GC_ADDREF(jit, ref);
@@ -14627,7 +14627,7 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 			ir_ref if_access = ir_IF(has_access);
 			ir_IF_FALSE_cold(if_access);
 
-			ir_ref if_prop_obj = jit_if_Z_TYPE(jit, prop_addr, IS_OBJECT);
+			ir_ref if_prop_obj = ir_IF(ir_CALL_1(IR_BOOL, ir_CONST_FC_FUNC(zend_jit_fetch_obj_w_copies), prop_ref));
 			ir_IF_TRUE(if_prop_obj);
 			ir_ref ref = jit_Z_PTR(jit, prop_addr);
 			jit_GC_ADDREF(jit, ref);

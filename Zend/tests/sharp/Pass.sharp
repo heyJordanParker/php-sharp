@@ -1,0 +1,10 @@
+namespace Demo;
+
+class Pass
+{
+    public Pass(public int number { get; }, public string holder { get; }) { }
+
+    public static bool operator ==(Pass a, Pass b) => a.number == b.number;
+
+    public int hash() => this.number;
+}

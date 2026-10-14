@@ -5,7 +5,7 @@ use SplFixedArray;
 class Cart
 {
     public private(set) array $items = [];
-    private array $counts = [];
+    #[\Sharp\Crossing(['map', 'string', null])] private \Sharp\Map $counts;
 
     public function fill(array $extra): int
     {
@@ -17,7 +17,7 @@ class Cart
         foreach ($this->items as $item) {
             $total += $item->cents;
         }
-        foreach ($this->counts as $name => $size) { $name = (string) $name; // PHP# reads the key back as a string
+        foreach ($this->counts as $name => $size) {
             if ($name === "items") {
                 $total += $size * 10;
             }
