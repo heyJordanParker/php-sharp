@@ -1,0 +1,29 @@
+namespace Shelf;
+
+public enum Order : string
+{
+    case Open = "open";
+    case Shipped = "shipped";
+}
+
+public class Box<T>
+{
+}
+
+public class Boxes
+{
+    public static Box<Set<int>> ints()
+    {
+        return new Box<Set<int>>();
+    }
+
+    public static Box<Set<Order>> orders()
+    {
+        return new Box<Set<Order>>();
+    }
+
+    public static int count(Box<Set<Order>> box, Set<Order> orders)
+    {
+        return orders.count();
+    }
+}

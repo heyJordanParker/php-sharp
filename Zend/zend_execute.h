@@ -591,7 +591,17 @@ ZEND_API bool zend_verify_class_constant_type(const zend_class_constant *c, cons
 ZEND_COLD void zend_verify_class_constant_type_error(const zend_class_constant *c, const zend_string *name, const zval *constant);
 
 ZEND_API bool zend_verify_property_type(const zend_property_info *info, zval *property, bool strict);
+/* PHP#: zend_verify_property_type for a write to the property of `object`, or NULL, which also checks a PHP# type. A
+ * PHP# type that names its class's type parameters is spelled for the object's type arguments, and takes any value
+ * with no object. The PHP# check throws its own TypeError. */
+ZEND_API bool zend_verify_object_property_type(const zend_property_info *info, zval *property, bool strict, zend_object *object);
 ZEND_COLD void zend_verify_property_type_error(const zend_property_info *info, const zval *property);
+
+/* PHP#: the object whose declared property `slot` is, or NULL for a static property. */
+static zend_always_inline zend_object *zend_property_slot_object(const zend_property_info *info, zval *slot)
+{
+	return (info->flags & ZEND_ACC_STATIC) ? NULL : (zend_object *) ((char *) slot - info->offset);
+}
 ZEND_COLD void zend_magic_get_property_type_inconsistency_error(const zend_property_info *info, const zval *property);
 
 #define ZEND_REF_ADD_TYPE_SOURCE(ref, source) \

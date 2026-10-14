@@ -39,6 +39,7 @@
 #include "zend_observer.h"
 #include "zend_call_stack.h"
 #include "zend_frameless_function.h"
+#include "ext/sharp/php_sharp.h"
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
 #endif
@@ -1849,7 +1850,9 @@ ZEND_API zend_array *zend_rebuild_symbol_table(void) /* {{{ */
 		zval *var = ZEND_CALL_VAR_NUM(ex, 0);
 
 		do {
-			_zend_hash_append_ind(symbol_table, *str, var);
+			if (EXPECTED(!sharp_is_type_arguments_key(*str))) {
+				_zend_hash_append_ind(symbol_table, *str, var);
+			}
 			str++;
 			var++;
 		} while (str != end);
@@ -1871,6 +1874,12 @@ ZEND_API void zend_attach_symbol_table(zend_execute_data *execute_data) /* {{{ *
 		zval *var = EX_VAR_NUM(0);
 
 		do {
+			if (UNEXPECTED(sharp_is_type_arguments_key(*str))) {
+				str++;
+				var++;
+				continue;
+			}
+
 			zval *zv = zend_hash_find_known_hash(ht, *str);
 
 			if (zv) {
@@ -1905,7 +1914,9 @@ ZEND_API void zend_detach_symbol_table(zend_execute_data *execute_data) /* {{{ *
 		zval *var = EX_VAR_NUM(0);
 
 		do {
-			if (Z_TYPE_P(var) == IS_UNDEF) {
+			if (UNEXPECTED(sharp_is_type_arguments_key(*str))) {
+				/* The hidden local stays in its CV. */
+			} else if (Z_TYPE_P(var) == IS_UNDEF) {
 				zend_hash_del(ht, *str);
 			} else {
 				zend_hash_update(ht, *str, var);
