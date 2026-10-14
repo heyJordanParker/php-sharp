@@ -72,7 +72,7 @@ jobs:
       - name: Build
         run: sharp/bin/build --linux
       - name: Test PHP#
-        run: sharp/bin/test --linux --opcache --repeat --passes --census --spec --differential
+        run: sharp/bin/test --linux --opcache --repeat --passes --census --spec --differential --phpunit
       - name: Check the standard library with the checker sharp/bin/test built
         run: sharp/docker/run sh -c '"sharp/build/linux-$(uname -m)/mago/release/mago" --colors never --workspace sharp/composer analyze --minimum-fail-level note'
       - name: Test upstream

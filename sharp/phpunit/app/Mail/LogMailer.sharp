@@ -1,0 +1,6 @@
+namespace App.Mail;
+
+public class LogMailer : Mailer
+{
+    public string name() => "log";
+}

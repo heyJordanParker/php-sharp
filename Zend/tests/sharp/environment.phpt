@@ -1,5 +1,5 @@
 --TEST--
-PHP# Environment reads the process's variables, command-line arguments and current directory
+PHP# Environment reads the process's variables, a variable that must be set, command-line arguments and current directory
 --ENV--
 SHARP_REGION=eu-west-1
 --ARGS--
@@ -22,6 +22,12 @@ chdir($start);
 var_dump($deploy->folder() === $start);
 
 $environment = new Sharp\Environment();
+var_dump($environment->require('SHARP_REGION'));
+try {
+    $environment->require('SHARP_UNSET_REGION');
+} catch (ValueError $e) {
+    echo $e->getMessage(), "\n";
+}
 try {
     $environment->arguments = [];
 } catch (Error $e) {
@@ -53,6 +59,8 @@ production --force production
 bool(true)
 bool(true)
 bool(true)
+string(9) "eu-west-1"
+Environment.require: the environment variable "SHARP_UNSET_REGION" is not set
 Property Sharp\Environment::$arguments is read-only
 Property Sharp\Environment::$currentDirectory is read-only
 Indirect modification of Sharp\Environment::$arguments is not allowed

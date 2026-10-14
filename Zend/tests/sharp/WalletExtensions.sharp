@@ -1,0 +1,25 @@
+namespace Demo.Wallets;
+
+import Lib.Wallet;
+
+public static class WalletExtensions
+{
+    extension(Wallet wallet)
+    {
+        public int total(int extra) => wallet.balance + extra;
+
+        public bool isEmpty => wallet.balance == 0;
+
+        public string rank() => "wallet";
+    }
+
+    extension(string text)
+    {
+        public string shout() => text + "!";
+    }
+
+    extension(Wallet|string owner)
+    {
+        public string label => owner is string ? owner : "wallet";
+    }
+}

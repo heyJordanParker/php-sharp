@@ -10,6 +10,7 @@ exec docker run --rm --init \
   --env RUSTUP_HOME=/src/sharp/build/rustup \
   --env ELAN_HOME=/src/sharp/build/elan \
   --env XDG_CACHE_HOME=/src/sharp/build/cache \
+  --env COMPOSER_HOME=/src/sharp/build/composer-home \
   --env MAKEFLAGS \
   --env CARGO_BUILD_JOBS \
   --volume "$root:/src" \

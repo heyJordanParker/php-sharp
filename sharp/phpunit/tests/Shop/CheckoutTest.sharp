@@ -1,0 +1,37 @@
+namespace Tests.Shop;
+
+import App.Mail.Mailer;
+import App.Mail.LogMailer;
+import PHPUnit.Framework.TestCase;
+import PHPUnit.Framework.Attributes.Before;
+import PHPUnit.Framework.Attributes.RunInSeparateProcess;
+import Tests.Probe;
+
+// The base module binds SmtpMailer. While a test of this file runs, its module binds LogMailer, in PHPUnit's own
+// process and in a child one, and before the test's own Before method, whatever that method's priority.
+module : App.Shop
+{
+    singleton Mailer = LogMailer;
+}
+
+public class CheckoutTest : TestCase
+{
+    [Before(priority: 10)]
+    public void prepare()
+    {
+        Probe.before = Probe.mailer();
+    }
+
+    public void testUsesTheTestModule()
+    {
+        TestCase.assertSame("log", Probe.before);
+        TestCase.assertSame("log", Probe.mailer());
+    }
+
+    [RunInSeparateProcess]
+    public void testUsesTheTestModuleInASeparateProcess()
+    {
+        TestCase.assertSame("log", Probe.before);
+        TestCase.assertSame("log", Probe.mailer());
+    }
+}

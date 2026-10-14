@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: sharp/bin/test [--linux] [--opcache] [--repeat] [--passes] [--census] [--spec] [--differential] [--upstream | paths...]" >&2
+  echo "usage: sharp/bin/test [--linux] [--opcache] [--repeat] [--passes] [--census] [--spec] [--differential] [--phpunit] [--upstream | paths...]" >&2
   exit 2
 }
 
@@ -14,6 +14,7 @@ passes=false
 census=false
 spec=false
 differential=false
+phpunit=false
 upstream=false
 tests=()
 container_command=(sharp/bin/test)
@@ -26,6 +27,7 @@ for arg in "$@"; do
     --census) census=true ;;
     --spec) spec=true ;;
     --differential) differential=true ;;
+    --phpunit) phpunit=true ;;
     --upstream) upstream=true ;;
     -*) usage ;;
     *) tests+=("$arg") ;;
@@ -182,6 +184,28 @@ check_differential() {
 
 if $differential; then
   check_differential
+fi
+
+# A PHP# test class runs with its file's test module under real PHPUnit, at the version sharp/phpunit/composer.lock
+# pins: in PHPUnit's own process, in the child process of #[RunInSeparateProcess], and with every test in a child.
+check_phpunit() {
+  local project="$root/sharp/phpunit" isolation
+  echo "== a PHP# test class under PHPUnit, in sharp/phpunit"
+  if ! composer install --no-interaction --no-progress --quiet --working-dir="$project" \
+    || ! "$mago" --no-version-check --colors never --workspace "$project" compile; then
+    failed+=("the PHPUnit fixture's install and compile")
+    return
+  fi
+  for isolation in "" --process-isolation; do
+    if ! "$php" -d opcache.jit=disable "$project/vendor/bin/phpunit" --configuration "$project/phpunit.xml" \
+      --testdox $isolation; then
+      failed+=("PHPUnit ${isolation:-in one process}")
+    fi
+  done
+}
+
+if $phpunit; then
+  check_phpunit
 fi
 
 if [[ ${#failed[@]} -gt 0 ]]; then
