@@ -49,7 +49,6 @@ use mago_syntax::cst::Enum;
 use mago_syntax::cst::EnumCase;
 use mago_syntax::cst::EnumCaseItem;
 use mago_syntax::cst::Event;
-use mago_syntax::cst::ExitConstruct;
 use mago_syntax::cst::Expression;
 use mago_syntax::cst::Extension;
 use mago_syntax::cst::For;
@@ -1994,8 +1993,8 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
                 function: Expression::Identifier(function),
                 argument_list,
             })) => {
-                // A local holds a function, so `f(x)` calls it as PHP's `$f($x)`, and any other name is the global
-                // function's.
+                // A local holds a function, so `f(x)` calls it as PHP's `$f($x)`. Any other name is the PHP function a
+                // pattern's PHP shape calls, such as `is_string`, since the checker refuses a bare call in code.
                 let function = match self.names.binding(function) {
                     Some(Binding::Local(_)) => self.variable(function.span(), function.value()),
                     _ => self.string(ZEND_NAME_FQ, self.line(function), function.value()),
@@ -2004,11 +2003,8 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
 
                 self.node(SHARP_AST_CALL, 0, line, &[function, arguments])
             }
-            Expression::Construct(Construct::Exit(ExitConstruct { arguments: Some(arguments), .. })) => {
-                let function = self.string(ZEND_NAME_FQ, line, b"exit");
-                let arguments = self.arguments(arguments, &[]);
-
-                self.node(SHARP_AST_CALL, 0, line, &[function, arguments])
+            Expression::Construct(Construct::Exit(_)) => {
+                unreachable!("the checker refuses a bare call of PHP's `exit`, spec section 23")
             }
             // `new Artifact.fromJson(…)` calls the static method the named constructor runs as, spec section 9.1.
             Expression::Instantiation(Instantiation {
@@ -2044,6 +2040,14 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
                 let arguments = self.arguments(arguments, &[]);
 
                 self.node(SHARP_AST_NEW, 0, line, &[class, arguments])
+            }
+            // `global.PHP_EOL` and `Pdf.DEFAULT_DPI` read the plain PHP constant the checker found, spec section 23.
+            Expression::Access(Access::Property(_))
+                if let Some(constant) = self.types.namespace_constant(expression) =>
+            {
+                let constant = self.string(ZEND_NAME_FQ, line, constant.as_bytes());
+
+                self.node(SHARP_AST_CONST, 0, line, &[constant])
             }
             // `Class.y`, and `y` read through a class value, is the fetch of the member the checker found on the class:
             // a constant or enum case, a static property, or a static method as a first-class callable.
@@ -3594,7 +3598,15 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
     /// `static`, except the standard library's `Position.current()`, which is the position it is written at. Any other
     /// `object.m()` is an instance call, or a call of the function in the property `m` when the checker found that
     /// property, as spec section 14 calls one. A call of a standard library method with an inline form runs that form.
+    /// `Pdf.render(html)` and `global.now()` call the plain PHP function the checker found, spec section 23.
     fn method_call(&mut self, expression: &Expression, call: &MethodCall) -> u32 {
+        if let Some(function) = self.types.namespace_function(expression) {
+            let line = self.line(call);
+            let function = self.string(ZEND_NAME_FQ, line, function.as_bytes());
+            let arguments = self.arguments(&call.argument_list, &[]);
+
+            return self.node(SHARP_AST_CALL, 0, line, &[function, arguments]);
+        }
         if let Some(class) = self.names.static_call_class(call)
             && is_current_position(self.names.get(&class.name), call)
         {

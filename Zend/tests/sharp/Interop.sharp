@@ -1,14 +1,20 @@
 namespace Demo;
 
+import Lib.Shipping;
+
 class Interop
 {
     public static string shipping(int cents)
     {
-        return shipping_label(cents);
+        return global.shipping_label(cents);
     }
 
     public static string shippingIn(string currency, int cents)
     {
-        return shipping_label(cents * 2, currency: currency);
+        return global.shipping_label(cents * 2, currency: currency);
     }
+
+    public static int freeAbove() => Shipping.FREE_ABOVE;
+
+    public static int largest() => global.PHP_INT_MAX;
 }

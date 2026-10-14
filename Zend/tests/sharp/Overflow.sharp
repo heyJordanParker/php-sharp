@@ -24,17 +24,17 @@ class Overflow
 
     public static int maxPlusOne()
     {
-        return PHP_INT_MAX + 1;
+        return global.PHP_INT_MAX + 1;
     }
 
     public static int minMinusOne()
     {
-        return PHP_INT_MIN - 1;
+        return global.PHP_INT_MIN - 1;
     }
 
     public static int maxTimesTwo()
     {
-        return PHP_INT_MAX * 2;
+        return global.PHP_INT_MAX * 2;
     }
 
     public static int literalPlusOne()
@@ -118,7 +118,7 @@ class Overflow
         return counter.value;
     }
 
-    public static int withDefault(int a = PHP_INT_MAX + 1)
+    public static int withDefault(int a = global.PHP_INT_MAX + 1)
     {
         return a;
     }
@@ -258,7 +258,7 @@ class Overflow
 
     public static int maxSquared()
     {
-        return PHP_INT_MAX ** 2;
+        return global.PHP_INT_MAX ** 2;
     }
 
     public static int powAssign(int a)

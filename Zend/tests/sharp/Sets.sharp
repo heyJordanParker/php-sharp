@@ -32,11 +32,11 @@ class Tagged
     {
         return [
             tags.filter(tag => tag != "vip").toList(),
-            tags.map(tag => strlen(tag)),
+            tags.map(tag => global.strlen(tag)),
             tags.any(tag => tag == "5"),
-            tags.first(tag => strlen(tag) > 2),
+            tags.first(tag => global.strlen(tag) > 2),
             tags.sortedBy(tag => tag),
-            implode(",", tags),
+            global.implode(",", tags),
         ];
     }
 

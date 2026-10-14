@@ -75,7 +75,7 @@ The spec writes `…` for code the reader doesn't need. `sharp/bin/spec` replace
 - A line holding only `…` is dropped.
 - Any other `…` becomes `throw new Elided()`.
 
-A line that ends a statement with no `;`, such as `7 / 2`, gets one, and a method signature with no body, such as `public void tag(string label = null)`, gets `{ … }`. A top-level statement that is a bare expression, such as `order == sameOrderLoadedAgain;`, runs as the argument of the call that records values, because the spec writes it to show what it gives, and PHP# refuses a statement with no effect. A top-level `return x;` under `statements`, such as `return 2.0 ** -1;`, runs the same way, since the `run` method returns nothing. Each rewrite keeps the line on its own line, so every line number the checker reports is the spec's.
+A line that ends a statement with no `;`, such as `7 / 2`, gets one, and a method signature with no body, such as `public void tag(string label = null)`, gets `{ … }`. A top-level statement that is a bare expression, such as `order == sameOrderLoadedAgain;`, runs as the argument of the call that records values, because the spec writes it to show what it gives, and PHP# refuses a statement with no effect. A top-level `return x;` under `statements`, such as `return PaymentResult.Declined(reason: "card expired");`, runs the same way, since the `run` method returns nothing. Each rewrite keeps the line on its own line, so every line number the checker reports is the spec's.
 
 ### Five blocks, five shapes
 
@@ -193,7 +193,6 @@ A value is a number, `true`, `false`, `null`, a quoted string, or a balanced `[�
 
 - PHP# classes, such as `App.Order`, `App.Line`, `App.Money` and `App.Store.Line`.
 - Plain PHP stubs for what the spec calls plain PHP, such as `Illuminate\Database\Eloquent\Model`, Laravel's facades and `Stripe\StripeClient`.
-- Plain PHP functions the spec calls by a bare name, `charge`, `deliver` and `render`, in `app/functions.php`, which the run loads before the example.
 - `App.Elided`, the exception `…` throws, and `App.Outcome`, the plain PHP class a run records values and throws with.
 
 A block's own variables, such as `lines` or `p`, are its setup lines, next to the block, because each block needs different ones.

@@ -49,7 +49,7 @@ class Library
 
     public static string day(int timestamp) => Date.format(timestamp, "Y-m-d");
 
-    public static int zones() => count(TimeZone.names());
+    public static int zones() => global.count(TimeZone.names());
 
     public static string query(Map<string, Any?> values) => Url.buildQuery(values);
 

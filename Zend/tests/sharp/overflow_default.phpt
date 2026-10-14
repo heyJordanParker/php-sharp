@@ -14,5 +14,5 @@ attempt(fn () => new Demo\Overflow());
 --EXPECT--
 int(5)
 ArithmeticError: Integer overflow in Overflow.sharp on line 121
-Parameter #0 [ <optional> int $a = Demo\PHP_INT_MAX + 1 ]
+Parameter #0 [ <optional> int $a = PHP_INT_MAX + 1 ]
 ArithmeticError: Integer overflow in Overflow.sharp on line 281
