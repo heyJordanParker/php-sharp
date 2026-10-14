@@ -1,5 +1,5 @@
 --TEST--
-With sharp.compile_command set, emit runs it when a listener's file changed, or a PHP# file joined or left a source folder, since mago compile wrote the listener table; without it, emit reads the table alone
+With sharp.compile_command set, emit runs it when a PHP# file changed, or a PHP# file or a namespace folder joined or left a source folder, since mago compile wrote the listener table; without it, emit reads the table alone
 --FILE--
 <?php
 require __DIR__ . '/Container.inc';
@@ -14,6 +14,15 @@ $root = container_project('events-fresh', [
             public static List<string> log { get; set; } = [];
 
             public void hear(Paid e) on Paid { Notices.log.add("hear"); }
+        }
+
+        SHARP,
+    'app/Fresh/Quiet.sharp' => <<<'SHARP'
+        namespace App.Fresh;
+
+        public class Quiet
+        {
+            public void record() { Notices.log.add("quiet"); }
         }
 
         SHARP,
@@ -60,6 +69,30 @@ unlink("$root/app/Fresh/Audit.sharp");
 echo 'a listener file deleted: ';
 request($root, $compile);
 
+mkdir("$root/app/Fresh/Billing");
+file_put_contents("$root/app/Fresh/Billing/Ledger.sharp", <<<'SHARP'
+    namespace App.Fresh.Billing;
+
+    import App.Fresh.Notices;
+    import App.Fresh.Paid;
+
+    public class Ledger
+    {
+        public void record() on Paid { Notices.log.add("ledger"); }
+    }
+
+    SHARP);
+echo 'a listener in a new namespace folder: ';
+request($root, $compile);
+
+file_put_contents("$root/app/Fresh/Quiet.sharp", str_replace(
+    'public void record() {',
+    'public void record() on Paid {',
+    file_get_contents("$root/app/Fresh/Quiet.sharp"),
+));
+echo 'an on clause added to a class that had none and that nothing loads: ';
+request($root, $compile);
+
 echo 'nothing changed since: ';
 request($root, $compile);
 remove_project($root);
@@ -70,4 +103,6 @@ a new listener file, without the compile command: hear; compiles: 0
 a new listener file, with it: audit, hear; compiles: 1
 a listener added to a listener's file: audit, hear, count; compiles: 2
 a listener file deleted: hear, count; compiles: 3
-nothing changed since: hear, count; compiles: 3
+a listener in a new namespace folder: ledger, hear, count; compiles: 4
+an on clause added to a class that had none and that nothing loads: ledger, hear, count, quiet; compiles: 5
+nothing changed since: ledger, hear, count, quiet; compiles: 5

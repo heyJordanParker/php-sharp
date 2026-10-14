@@ -14,6 +14,7 @@ one whose handle is gone runs nothing under a dispatcher that runs it later: tab
 a type no class has: table 9
 Events.on in PHP#, until its method returns: table 10, screen 10, table 11
 Events.on through an interface: table 12, any 12, table 13
+a handle in a property of the object its listener uses, until the collector collects both: table 14, kept 14, keeper destroyed, table 15
 a handle in a local, until its function returns: table 1, scoped 1, table 2
 until an exception leaves its function: table 3, caught boom
 a handle never stored: table 4
@@ -23,3 +24,4 @@ one whose handle is gone runs nothing under a dispatcher that runs it later: tab
 a type no class has: table 9
 Events.on in PHP#, until its method returns: table 10, screen 10, table 11
 Events.on through an interface: table 12, any 12, table 13
+a handle in a property of the object its listener uses, until the collector collects both: table 14, kept 14, keeper destroyed, table 15

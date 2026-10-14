@@ -311,7 +311,8 @@ static int sharp_compare_names(Bucket *a, Bucket *b)
 }
 
 /* Stamps the listing of the folder that ends at length, as the bridge's unit::stamp does: the names of its regular files
- * whose name ends in .sharp, each followed by a newline, in byte order. A folder that can't be opened lists nothing. */
+ * whose name ends in .sharp, and of its folders whose name starts with an uppercase letter, as a namespace part does,
+ * each with a / after it, each followed by a newline, in byte order. A folder that can't be opened lists nothing. */
 static void sharp_stamp_listing(const char *path, size_t length, sharp_stamp *stamp)
 {
 	zend_string *folder = zend_string_init(path, length, 0), *name;
@@ -323,16 +324,24 @@ static void sharp_stamp_listing(const char *path, size_t length, sharp_stamp *st
 	zend_hash_init(&names, 8, NULL, NULL, 0);
 	while (directory && (entry = readdir(directory))) {
 		size_t name_length = strlen(entry->d_name);
+		bool source = name_length > sizeof(SHARP_FILE_EXTENSION) - 1
+			&& memcmp(entry->d_name + name_length - (sizeof(SHARP_FILE_EXTENSION) - 1), SHARP_FILE_EXTENSION, sizeof(SHARP_FILE_EXTENSION) - 1) == 0;
 		zend_stat_t status;
 		zend_string *file;
 
-		if (name_length <= sizeof(SHARP_FILE_EXTENSION) - 1
-				|| memcmp(entry->d_name + name_length - (sizeof(SHARP_FILE_EXTENSION) - 1), SHARP_FILE_EXTENSION, sizeof(SHARP_FILE_EXTENSION) - 1) != 0) {
+		if (!source && !(entry->d_name[0] >= 'A' && entry->d_name[0] <= 'Z')) {
 			continue;
 		}
 		file = zend_string_concat2(ZSTR_VAL(folder), ZSTR_LEN(folder), entry->d_name, name_length);
-		if (VCWD_STAT(ZSTR_VAL(file), &status) == 0 && S_ISREG(status.st_mode)) {
-			zend_hash_str_add_empty_element(&names, entry->d_name, name_length);
+		if (VCWD_STAT(ZSTR_VAL(file), &status) == 0) {
+			if (source && S_ISREG(status.st_mode)) {
+				zend_hash_str_add_empty_element(&names, entry->d_name, name_length);
+			} else if (S_ISDIR(status.st_mode) && entry->d_name[0] >= 'A' && entry->d_name[0] <= 'Z') {
+				zend_string *subfolder = zend_string_concat2(entry->d_name, name_length, "/", 1);
+
+				zend_hash_add_empty_element(&names, subfolder);
+				zend_string_release(subfolder);
+			}
 		}
 		zend_string_release(file);
 	}
@@ -4964,18 +4973,16 @@ ZEND_FUNCTION(Sharp_Internal_endTest)
 	SHARP_G(container_test) = NULL;
 }
 
-/* Spec section 15: emit hands an event, and one function per listener of it, to the dispatcher a module binds for the
- * class that emits it. mago compile lists every listener an `on` clause declares in the listener table, and
- * Sharp\Internal\listen starts one for as long as its handle lives. Each function creates its listener's object
+/* Spec section 15: emit hands an event, and one function per listener of it, to the app's dispatcher. mago compile
+ * lists every listener an `on` clause declares in the listener table, and Sharp\Internal\listen starts one for as long
+ * as its handle lives. Each function takes the event, as PSR-14 calls a listener, and creates its listener's object
  * through the container when it runs, so every event gets a new one. */
 
 static zend_class_entry *sharp_ce_listener;
 static zend_class_entry *sharp_ce_listening;
 static zend_object_handlers sharp_listener_handlers;
 static zend_object_handlers sharp_listening_handlers;
-/* Sharp\Internal\Listener::run and ::hear, the functions a listener's closure calls: run on the event emit bound, and
- * hear on the event a PSR-14 dispatcher passes. */
-static zend_function *sharp_listener_run;
+/* Sharp\Internal\Listener::hear, the function each listener's closure calls. */
 static zend_function *sharp_listener_hear;
 
 /* Returns the element of a list at the index when it has the given type, or NULL. */
@@ -5014,14 +5021,17 @@ static bool sharp_listener_input_fits(const zval *input)
 		&& hash && Z_STRLEN_P(hash) == 32 && strspn(Z_STRVAL_P(hash), "0123456789abcdef") == 32;
 }
 
-/* Whether table is a table mago compile wrote: ['inputs' => [input, ...], 'listeners' => [row, ...]]. */
+/* Whether table is a table mago compile wrote: ['inputs' => [input, ...], 'listeners' => [row, ...], 'dispatcher' =>
+ * null or [the workspace-relative path of the app's module that binds the dispatcher, its namespace in lowercase]]. */
 static bool sharp_listener_table_fits(const zval *table)
 {
 	const zval *inputs = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "inputs", sizeof("inputs") - 1) : NULL;
 	const zval *listeners = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "listeners", sizeof("listeners") - 1) : NULL;
+	const zval *dispatcher = Z_TYPE_P(table) == IS_ARRAY ? zend_hash_str_find(Z_ARRVAL_P(table), "dispatcher", sizeof("dispatcher") - 1) : NULL;
 	const zval *element;
 
-	if (!inputs || Z_TYPE_P(inputs) != IS_ARRAY || !listeners || Z_TYPE_P(listeners) != IS_ARRAY) {
+	if (!inputs || Z_TYPE_P(inputs) != IS_ARRAY || !listeners || Z_TYPE_P(listeners) != IS_ARRAY || !dispatcher
+			|| (Z_TYPE_P(dispatcher) != IS_NULL && (!sharp_element(dispatcher, 0, IS_STRING) || !sharp_element(dispatcher, 1, IS_STRING)))) {
 		return false;
 	}
 	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(inputs), element) {
@@ -5100,34 +5110,38 @@ static void sharp_read_listener_table(zend_string *path, bool past_opcache, zval
 	}
 }
 
-/* The listeners of the listener table in the .sharp folder at the root, the first root_length bytes of path, read once
- * per request through zend_compile_file, so opcache serves it. A missing table lists none. With sharp.compile_command
- * set, a table whose inputs changed since mago compile wrote it makes the request run the command, as an out-of-date
- * compiled file does, and the table it writes is read instead. Throws and returns NULL when the table is damaged. */
+/* The listener table in the .sharp folder at the root, the first root_length bytes of path, read once per request
+ * through zend_compile_file, so opcache serves it. A missing table lists no listener and no dispatcher. With
+ * sharp.compile_command set, the table is read past opcache, since this request or an earlier one may have rewritten
+ * it, and a table whose inputs changed since mago compile wrote it makes the request run the command, as an
+ * out-of-date compiled file does, and the table it writes is read instead. Throws and returns NULL when the table is
+ * damaged. */
 static HashTable *sharp_listener_table(const char *path, size_t root_length)
 {
 	zend_string *table_path = zend_string_concat3(path, root_length, "/", 1, SHARP_LISTENER_TABLE, sizeof(SHARP_LISTENER_TABLE) - 1);
 	zval *known = zend_hash_find(&SHARP_G(listener_tables), table_path);
-	zval table, listeners;
+	bool developing = SHARP_G(compile_command) && *SHARP_G(compile_command);
+	zval table;
 
 	if (known) {
 		zend_string_release(table_path);
 		return Z_ARRVAL_P(known);
 	}
-	sharp_read_listener_table(table_path, false, &table);
-	if (!Z_ISUNDEF(table) && sharp_listener_table_fits(&table) && !EG(exception)
-			&& SHARP_G(compile_command) && *SHARP_G(compile_command) && Z_ISUNDEF(SHARP_G(compile_command_report))
-			&& !sharp_listener_inputs_current(path, root_length, &table)) {
+	sharp_read_listener_table(table_path, developing, &table);
+	if (!Z_ISUNDEF(table) && sharp_listener_table_fits(&table) && !EG(exception) && developing
+			&& Z_ISUNDEF(SHARP_G(compile_command_report)) && !sharp_listener_inputs_current(path, root_length, &table)) {
 		zval_ptr_dtor(&table);
 		sharp_run_compile_command(path, root_length);
 		sharp_read_listener_table(table_path, true, &table);
 	}
 	if (Z_ISUNDEF(table)) {
-		array_init(&listeners);
-	} else if (!EG(exception) && sharp_listener_table_fits(&table)) {
-		ZVAL_COPY(&listeners, zend_hash_str_find(Z_ARRVAL(table), "listeners", sizeof("listeners") - 1));
-		zval_ptr_dtor(&table);
-	} else {
+		zval none;
+
+		ZVAL_EMPTY_ARRAY(&none);
+		array_init(&table);
+		add_assoc_zval(&table, "listeners", &none);
+		add_assoc_null(&table, "dispatcher");
+	} else if (EG(exception) || !sharp_listener_table_fits(&table)) {
 		zval_ptr_dtor(&table);
 		zend_string_release(table_path);
 		if (!EG(exception)) {
@@ -5136,7 +5150,7 @@ static HashTable *sharp_listener_table(const char *path, size_t root_length)
 		return NULL;
 	}
 
-	known = zend_hash_add_new(&SHARP_G(listener_tables), table_path, &listeners);
+	known = zend_hash_add_new(&SHARP_G(listener_tables), table_path, &table);
 	zend_string_release(table_path);
 
 	return Z_ARRVAL_P(known);
@@ -5173,7 +5187,7 @@ static HashTable *sharp_listeners_of(zend_class_entry *event)
 			zval_ptr_dtor(&listeners);
 			return NULL;
 		}
-		ZEND_HASH_FOREACH_VAL(table, row) {
+		ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(zend_hash_str_find(table, "listeners", sizeof("listeners") - 1)), row) {
 			ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(sharp_element(row, 2, IS_ARRAY)), type) {
 				if (sharp_hears(event, Z_STR_P(type))) {
 					Z_TRY_ADDREF_P(row);
@@ -5187,10 +5201,25 @@ static HashTable *sharp_listeners_of(zend_class_entry *event)
 	return Z_ARRVAL_P(zend_hash_index_add_new(&SHARP_G(event_listeners), key, &listeners));
 }
 
-/* A Sharp\Internal\Listener runs one listener on one event: a row of the listener table, or the scoped listener of a
- * number, which runs only while its handle lives. */
+/* A Sharp\Listening is the handle of a scoped listener, which stops when the handle is destroyed. It owns the
+ * listener's function and reports it to the cycle collector, so a handle kept in a property of an object the function
+ * uses is collected with that object, and its listener stops. SHARP_G(scoped_listeners) points at each live handle by
+ * its number and holds no reference. */
 typedef struct {
-	zval event;
+	zend_ulong number;
+	zend_string *type;
+	zval function;
+	zend_object std;
+} sharp_listening;
+
+static sharp_listening *sharp_listening_from(zend_object *object)
+{
+	return (sharp_listening *) ((char *) object - XtOffsetOf(sharp_listening, std));
+}
+
+/* A Sharp\Internal\Listener runs one listener: a row of the listener table, or the scoped listener of a number, which
+ * runs only while its handle lives. */
+typedef struct {
 	zval row;
 	zend_ulong scoped;
 	zend_object std;
@@ -5205,7 +5234,6 @@ static zend_object *sharp_listener_create(zend_class_entry *ce)
 {
 	sharp_listener *listener = zend_object_alloc(sizeof(sharp_listener), ce);
 
-	ZVAL_UNDEF(&listener->event);
 	ZVAL_UNDEF(&listener->row);
 	listener->scoped = 0;
 	zend_object_std_init(&listener->std, ce);
@@ -5215,56 +5243,36 @@ static zend_object *sharp_listener_create(zend_class_entry *ce)
 
 static void sharp_listener_free(zend_object *object)
 {
-	sharp_listener *listener = sharp_listener_from(object);
-
-	zval_ptr_dtor(&listener->event);
-	zval_ptr_dtor(&listener->row);
+	zval_ptr_dtor(&sharp_listener_from(object)->row);
 	zend_object_std_dtor(object);
 }
 
-static HashTable *sharp_listener_gc(zend_object *object, zval **table, int *count)
-{
-	sharp_listener *listener = sharp_listener_from(object);
-	zend_get_gc_buffer *buffer = zend_get_gc_buffer_create();
-
-	zend_get_gc_buffer_add_zval(buffer, &listener->event);
-	zend_get_gc_buffer_add_zval(buffer, &listener->row);
-	zend_get_gc_buffer_use(buffer, table, count);
-
-	return NULL;
-}
-
-/* Adds to listeners the function that runs a listener: a row of the listener table, or the scoped listener numbered
- * scoped. With an event, the function takes no parameter and runs the listener on that event, as emit hands it to a
- * dispatcher. Without one, the function takes the event as its one parameter, as PSR-14 calls a listener. */
-static void sharp_add_listener(zval *listeners, zval *event, zval *row, zend_ulong scoped)
+/* Adds to listeners the function that runs a listener on the event it is given, as emit hands it to the dispatcher
+ * and PSR-14 calls it: a row of the listener table, or the scoped listener numbered scoped. */
+static void sharp_add_listener(zval *listeners, zval *row, zend_ulong scoped)
 {
 	zval object, function;
 	sharp_listener *listener;
 
 	object_init_ex(&object, sharp_ce_listener);
 	listener = sharp_listener_from(Z_OBJ(object));
-	if (event) {
-		ZVAL_COPY(&listener->event, event);
-	}
 	if (row) {
 		ZVAL_COPY(&listener->row, row);
 	}
 	listener->scoped = scoped;
-	zend_create_fake_closure(&function, event ? sharp_listener_run : sharp_listener_hear, sharp_ce_listener,
-		sharp_ce_listener, &object);
+	zend_create_fake_closure(&function, sharp_listener_hear, sharp_ce_listener, sharp_ce_listener, &object);
 	zval_ptr_dtor(&object);
 	zend_hash_next_index_insert_new(Z_ARRVAL_P(listeners), &function);
 }
 
-/* Fills listeners with one function per listener of the event, as sharp_add_listener makes them, bound to the event
- * when bound is true: the table's, in its order, then the scoped listeners, in the order they started. A listener
- * started or stopped later doesn't change the list, though a stopped one's function runs nothing. Throws and returns
- * false when the table is damaged. */
-static bool sharp_listeners_for(zval *event, bool bound, zval *listeners)
+/* Fills listeners with one function per listener of the event: the table's, in its order, then the scoped listeners,
+ * in the order they started. A listener started or stopped later doesn't change the list, though a stopped one's
+ * function runs nothing. Throws and returns false when the table is damaged. */
+static bool sharp_listeners_for(zval *event, zval *listeners)
 {
 	HashTable *rows = sharp_listeners_of(Z_OBJCE_P(event));
-	zval *row, *started;
+	zval *row;
+	sharp_listening *listening;
 	zend_ulong number;
 
 	if (!rows) {
@@ -5272,15 +5280,31 @@ static bool sharp_listeners_for(zval *event, bool bound, zval *listeners)
 	}
 	array_init(listeners);
 	ZEND_HASH_FOREACH_VAL(rows, row) {
-		sharp_add_listener(listeners, bound ? event : NULL, row, 0);
+		sharp_add_listener(listeners, row, 0);
 	} ZEND_HASH_FOREACH_END();
-	ZEND_HASH_FOREACH_NUM_KEY_VAL(&SHARP_G(scoped_listeners), number, started) {
-		if (sharp_hears(Z_OBJCE_P(event), Z_STR_P(zend_hash_index_find(Z_ARRVAL_P(started), 0)))) {
-			sharp_add_listener(listeners, bound ? event : NULL, NULL, number);
+	ZEND_HASH_FOREACH_NUM_KEY_PTR(&SHARP_G(scoped_listeners), number, listening) {
+		if (sharp_hears(Z_OBJCE_P(event), listening->type)) {
+			sharp_add_listener(listeners, NULL, number);
 		}
 	} ZEND_HASH_FOREACH_END();
 
 	return true;
+}
+
+/* Throws that the listener table names name, which the code no longer has, as an out-of-date compiled file does. */
+static void sharp_listener_table_out_of_date(const zend_string *name)
+{
+	zend_string *written = zend_string_dup(name, 0);
+
+	for (size_t i = 0; i < ZSTR_LEN(written); i++) {
+		if (ZSTR_VAL(written)[i] == '\\') {
+			ZSTR_VAL(written)[i] = '.';
+		}
+	}
+	zend_throw_exception_ex(zend_ce_compile_error, 0,
+		SHARP_LISTENER_TABLE " is out of date: it lists %s, which no longer exists. Run vendor/bin/mago compile.",
+		ZSTR_VAL(written));
+	zend_string_release(written);
 }
 
 /* Runs a listener on event. A table listener runs on a new object of its class, which the container builds with the
@@ -5289,17 +5313,17 @@ static bool sharp_listeners_for(zval *event, bool bound, zval *listeners)
 static void sharp_listener_call(sharp_listener *listener, zval *event)
 {
 	zend_class_entry *ce;
-	zend_string *name;
+	zend_string *class, *name;
 	zend_function *method;
 	zval object;
 
 	if (listener->scoped) {
-		zval *started = zend_hash_index_find(&SHARP_G(scoped_listeners), listener->scoped);
+		sharp_listening *listening = zend_hash_index_find_ptr(&SHARP_G(scoped_listeners), listener->scoped);
 		zval function, result;
 
-		if (started) {
+		if (listening) {
 			/* The listener may stop itself as it runs, so the call holds its function. */
-			ZVAL_COPY(&function, zend_hash_index_find(Z_ARRVAL_P(started), 1));
+			ZVAL_COPY(&function, &listening->function);
 			call_user_function(NULL, NULL, &function, &result, 1, event);
 			zval_ptr_dtor(&result);
 			zval_ptr_dtor(&function);
@@ -5310,14 +5334,21 @@ static void sharp_listener_call(sharp_listener *listener, zval *event)
 		return;
 	}
 
-	ce = zend_fetch_class_by_name(Z_STR_P(sharp_element(&listener->row, 0, IS_STRING)), NULL, ZEND_FETCH_CLASS_EXCEPTION);
+	class = Z_STR_P(sharp_element(&listener->row, 0, IS_STRING));
+	ce = zend_fetch_class_by_name(class, NULL, ZEND_FETCH_CLASS_SILENT);
 	if (!ce) {
+		if (!EG(exception)) {
+			sharp_listener_table_out_of_date(class);
+		}
 		return;
 	}
 	name = Z_STR_P(sharp_element(&listener->row, 1, IS_STRING));
 	method = zend_hash_find_ptr_lc(&ce->function_table, name);
 	if (!method) {
-		zend_undefined_method(ce, name);
+		zend_string *member = zend_string_concat3(ZSTR_VAL(ce->name), ZSTR_LEN(ce->name), "\\", 1, ZSTR_VAL(name), ZSTR_LEN(name));
+
+		sharp_listener_table_out_of_date(member);
+		zend_string_release(member);
 		return;
 	}
 	if (!sharp_container_build(ce, &object)) {
@@ -5326,15 +5357,6 @@ static void sharp_listener_call(sharp_listener *listener, zval *event)
 	zend_call_known_instance_method(method, Z_OBJ(object), NULL,
 		Z_TYPE_P(zend_hash_index_find(Z_ARRVAL(listener->row), 3)) == IS_TRUE ? 1 : 0, event);
 	zval_ptr_dtor(&object);
-}
-
-ZEND_METHOD(Sharp_Internal_Listener, run)
-{
-	sharp_listener *listener = sharp_listener_from(Z_OBJ_P(ZEND_THIS));
-
-	ZEND_PARSE_PARAMETERS_NONE();
-
-	sharp_listener_call(listener, &listener->event);
 }
 
 ZEND_METHOD(Sharp_Internal_Listener, hear)
@@ -5353,40 +5375,74 @@ ZEND_METHOD(Sharp_Internal_Listener, __construct)
 	ZEND_PARSE_PARAMETERS_NONE();
 }
 
-/* The dispatcher a module binds for scope, the class whose code emits, as scope resolves any service, or for the root
- * namespace when no class emits. */
-static bool sharp_dispatcher(zend_class_entry *scope, zval *dispatcher)
+/* The namespace whose binding of the dispatcher serves the whole app, as spec section 15's "An app replaces the
+ * dispatcher once at startup" says: the running test module's, whatever namespace its header names; else that of the
+ * app's top module that binds it, which mago compile writes in the listener table of the event's project, read here
+ * with the modules above it; else the root namespace, which the standard library's module serves. Returns NULL and
+ * throws when the table is damaged. */
+static zend_string *sharp_dispatcher_namespace(zend_class_entry *event)
 {
-	zend_string *id = zend_string_init("sharp\\dispatcher", sizeof("sharp\\dispatcher") - 1, 0);
-	zend_string *namespace = scope ? sharp_container_namespace(scope->name) : ZSTR_EMPTY_ALLOC();
-	bool found;
+	static const char id[] = " sharp\\dispatcher";
+	zend_string *key;
+	size_t root_length;
 
-	if (scope && scope->type == ZEND_USER_CLASS) {
-		sharp_container_read_folders(scope->info.user.filename);
+	if (SHARP_G(container_test)) {
+		ZEND_HASH_FOREACH_STR_KEY(SHARP_G(container_test), key) {
+			if (ZSTR_LEN(key) >= sizeof(id) - 1
+					&& memcmp(ZSTR_VAL(key) + ZSTR_LEN(key) - (sizeof(id) - 1), id, sizeof(id) - 1) == 0) {
+				return zend_string_init(ZSTR_VAL(key), ZSTR_LEN(key) - (sizeof(id) - 1), 0);
+			}
+		} ZEND_HASH_FOREACH_END();
 	}
-	found = !EG(exception) && sharp_container_service(id, namespace, scope, dispatcher);
-	zend_string_release(namespace);
-	zend_string_release(id);
+	if (event->type == ZEND_USER_CLASS && sharp_find_root(event->info.user.filename, &root_length)) {
+		HashTable *table = sharp_listener_table(ZSTR_VAL(event->info.user.filename), root_length);
+		zval *module;
 
-	return found;
+		if (!table) {
+			return NULL;
+		}
+		module = zend_hash_str_find(table, "dispatcher", sizeof("dispatcher") - 1);
+		if (Z_TYPE_P(module) == IS_ARRAY) {
+			zend_string *path = Z_STR_P(sharp_element(module, 0, IS_STRING));
+			zend_string *file = zend_string_concat3(ZSTR_VAL(event->info.user.filename), root_length, "/", 1,
+				ZSTR_VAL(path), ZSTR_LEN(path));
+
+			sharp_container_read_folders(file);
+			zend_string_release(file);
+
+			return EG(exception) ? NULL : zend_string_copy(Z_STR_P(sharp_element(module, 1, IS_STRING)));
+		}
+	}
+
+	return ZSTR_EMPTY_ALLOC();
 }
 
-/* emit hands the event to the dispatcher with one function per listener, each bound to the event. The dispatcher sees
- * every event, one no listener hears included. */
+/* emit hands the event to the app's dispatcher with one function per listener. The dispatcher sees every event, one
+ * no listener hears included, whoever emits it: an app class, a PHP# package in vendor/ or plain PHP. */
 ZEND_FUNCTION(Sharp_Internal_emit)
 {
-	zend_class_entry *scope = zend_get_executed_scope();
 	zval *event, listeners, dispatcher;
+	zend_string *id, *namespace;
+	bool found;
 
 	ZEND_PARSE_PARAMETERS_START(1, 1)
 		Z_PARAM_OBJECT(event)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (!sharp_listeners_for(event, true, &listeners)) {
+	if (!sharp_listeners_for(event, &listeners)) {
 		RETURN_THROWS();
 	}
+	namespace = sharp_dispatcher_namespace(Z_OBJCE_P(event));
+	if (!namespace) {
+		zval_ptr_dtor(&listeners);
+		RETURN_THROWS();
+	}
+	id = zend_string_init("Sharp\\Dispatcher", sizeof("Sharp\\Dispatcher") - 1, 0);
+	found = sharp_container_service(id, namespace, NULL, &dispatcher);
+	zend_string_release(id);
+	zend_string_release(namespace);
 
-	if (sharp_dispatcher(scope, &dispatcher)) {
+	if (found) {
 		zend_string *name = zend_string_init("dispatch", sizeof("dispatch") - 1, 0);
 		zend_function *dispatch = zend_hash_find_ptr_lc(&Z_OBJCE(dispatcher)->function_table, name);
 		zval arguments[2];
@@ -5404,8 +5460,8 @@ ZEND_FUNCTION(Sharp_Internal_emit)
 	zval_ptr_dtor(&listeners);
 }
 
-/* The listeners of an event for a PSR-14 dispatcher, which Sharp\Psr\ListenerProvider returns: one function per
- * listener, as emit hands them over, each taking the event as its one parameter. */
+/* The listeners of an event for a PSR-14 dispatcher, which Sharp\Psr\ListenerProvider returns: the functions emit
+ * hands its dispatcher. */
 ZEND_FUNCTION(Sharp_Internal_listenersFor)
 {
 	zval *event;
@@ -5414,20 +5470,9 @@ ZEND_FUNCTION(Sharp_Internal_listenersFor)
 		Z_PARAM_OBJECT(event)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (!sharp_listeners_for(event, false, return_value)) {
+	if (!sharp_listeners_for(event, return_value)) {
 		RETURN_THROWS();
 	}
-}
-
-/* A Sharp\Listening is the handle of a scoped listener, which stops when the handle is destroyed. */
-typedef struct {
-	zend_ulong number;
-	zend_object std;
-} sharp_listening;
-
-static sharp_listening *sharp_listening_from(zend_object *object)
-{
-	return (sharp_listening *) ((char *) object - XtOffsetOf(sharp_listening, std));
 }
 
 static zend_object *sharp_listening_create(zend_class_entry *ce)
@@ -5435,22 +5480,49 @@ static zend_object *sharp_listening_create(zend_class_entry *ce)
 	sharp_listening *listening = zend_object_alloc(sizeof(sharp_listening), ce);
 
 	listening->number = 0;
+	listening->type = NULL;
+	ZVAL_UNDEF(&listening->function);
 	zend_object_std_init(&listening->std, ce);
 
 	return &listening->std;
 }
 
-/* Stops the listener. The request destroys every object before its shutdown frees the scoped listeners. */
-static void sharp_listening_stop(zend_object *object)
+/* Stops the listener: the scoped listeners no longer reach it. */
+static void sharp_listening_stop(sharp_listening *listening)
+{
+	if (listening->number) {
+		zend_hash_index_del(&SHARP_G(scoped_listeners), listening->number);
+		listening->number = 0;
+	}
+}
+
+/* The handle's destructor stops its listener, when its last reference goes or the cycle collector collects it. */
+static void sharp_listening_destroy(zend_object *object)
+{
+	sharp_listening_stop(sharp_listening_from(object));
+	zend_objects_destroy_object(object);
+}
+
+/* A handle freed without its destructor, as at the end of a request, stops its listener too. */
+static void sharp_listening_free(zend_object *object)
 {
 	sharp_listening *listening = sharp_listening_from(object);
-	zend_ulong number = listening->number;
 
-	listening->number = 0;
-	if (number) {
-		zend_hash_index_del(&SHARP_G(scoped_listeners), number);
+	sharp_listening_stop(listening);
+	if (listening->type) {
+		zend_string_release(listening->type);
 	}
-	zend_objects_destroy_object(object);
+	zval_ptr_dtor(&listening->function);
+	zend_object_std_dtor(object);
+}
+
+static HashTable *sharp_listening_gc(zend_object *object, zval **table, int *count)
+{
+	/* The class declares no property, and @strict-properties allows no other. */
+	*table = &sharp_listening_from(object)->function;
+	*count = 1;
+
+	return NULL;
 }
 
 ZEND_METHOD(Sharp_Listening, __construct)
@@ -5463,23 +5535,20 @@ ZEND_METHOD(Sharp_Listening, __construct)
 ZEND_FUNCTION(Sharp_Internal_listen)
 {
 	zend_string *type;
-	zval *function, started;
-	zend_ulong number;
+	zval *function;
+	sharp_listening *listening;
 
 	ZEND_PARSE_PARAMETERS_START(2, 2)
 		Z_PARAM_STR(type)
 		Z_PARAM_OBJECT_OF_CLASS(function, zend_ce_closure)
 	ZEND_PARSE_PARAMETERS_END();
 
-	array_init_size(&started, 2);
-	add_next_index_str(&started, zend_string_copy(type));
-	Z_ADDREF_P(function);
-	add_next_index_zval(&started, function);
-	number = ++SHARP_G(next_scoped_listener);
-	zend_hash_index_add_new(&SHARP_G(scoped_listeners), number, &started);
-
 	object_init_ex(return_value, sharp_ce_listening);
-	sharp_listening_from(Z_OBJ_P(return_value))->number = number;
+	listening = sharp_listening_from(Z_OBJ_P(return_value));
+	listening->type = zend_string_copy(type);
+	ZVAL_COPY(&listening->function, function);
+	listening->number = ++SHARP_G(next_scoped_listener);
+	zend_hash_index_add_new_ptr(&SHARP_G(scoped_listeners), listening->number, listening);
 }
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_List_wrap, 0, 1, IS_ARRAY, 0)
@@ -6385,17 +6454,17 @@ static PHP_MINIT_FUNCTION(sharp)
 	memcpy(&sharp_listener_handlers, &std_object_handlers, sizeof(zend_object_handlers));
 	sharp_listener_handlers.offset = XtOffsetOf(sharp_listener, std);
 	sharp_listener_handlers.free_obj = sharp_listener_free;
-	sharp_listener_handlers.get_gc = sharp_listener_gc;
 	sharp_listener_handlers.clone_obj = NULL;
 	sharp_ce_listener->default_object_handlers = &sharp_listener_handlers;
-	sharp_listener_run = zend_hash_str_find_ptr(&sharp_ce_listener->function_table, "run", sizeof("run") - 1);
 	sharp_listener_hear = zend_hash_str_find_ptr(&sharp_ce_listener->function_table, "hear", sizeof("hear") - 1);
 
 	sharp_ce_listening = register_class_Sharp_Listening();
 	sharp_ce_listening->create_object = sharp_listening_create;
 	memcpy(&sharp_listening_handlers, &std_object_handlers, sizeof(zend_object_handlers));
 	sharp_listening_handlers.offset = XtOffsetOf(sharp_listening, std);
-	sharp_listening_handlers.dtor_obj = sharp_listening_stop;
+	sharp_listening_handlers.dtor_obj = sharp_listening_destroy;
+	sharp_listening_handlers.free_obj = sharp_listening_free;
+	sharp_listening_handlers.get_gc = sharp_listening_gc;
 	sharp_listening_handlers.clone_obj = NULL;
 	sharp_ce_listening->default_object_handlers = &sharp_listening_handlers;
 	/* The module's own table is sharp/bin/native's, so the stub's Sharp\Internal functions register here, as
@@ -6449,7 +6518,8 @@ static PHP_RINIT_FUNCTION(sharp)
 	zend_hash_init(&SHARP_G(request_stamps), 8, NULL, sharp_free_stamp, false);
 	zend_hash_init(&SHARP_G(listener_tables), 0, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(event_listeners), 0, NULL, ZVAL_PTR_DTOR, false);
-	zend_hash_init(&SHARP_G(scoped_listeners), 0, NULL, ZVAL_PTR_DTOR, false);
+	/* Each entry points at a live Sharp\Listening, which removes it when it stops, and holds no reference. */
+	zend_hash_init(&SHARP_G(scoped_listeners), 0, NULL, NULL, false);
 	SHARP_G(next_scoped_listener) = 0;
 	ZVAL_UNDEF(&SHARP_G(compile_command_report));
 	/* Spec section 32: the request is the host's scope, as each CLI run is. */
@@ -6500,6 +6570,11 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 	zend_hash_destroy(&SHARP_G(container_building));
 	zend_hash_destroy(&SHARP_G(listener_tables));
 	zend_hash_destroy(&SHARP_G(event_listeners));
+	/* A handle whose destructor didn't run, as after a fatal error, is freed after this, with no table to leave. */
+	sharp_listening *listening;
+	ZEND_HASH_FOREACH_PTR(&SHARP_G(scoped_listeners), listening) {
+		listening->number = 0;
+	} ZEND_HASH_FOREACH_END();
 	zend_hash_destroy(&SHARP_G(scoped_listeners));
 	zval_ptr_dtor(&SHARP_G(compile_command_report));
 	zval_ptr_dtor(&SHARP_G(arguments));

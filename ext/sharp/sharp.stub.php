@@ -109,8 +109,6 @@ final class Listener
 {
     private function __construct() {}
 
-    private function run(): void {}
-
     private function hear(object $event): void {}
 }
 

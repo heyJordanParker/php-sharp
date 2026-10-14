@@ -27,8 +27,8 @@ Error: Call to undefined function Sharp\Internal\emit()
 1. **Sequencing.** Build every part that needs neither #102 nor #118 now, on `feat/events-engine`. Merge `origin/master` once both land, then build `Events.on<T>`, and open the one pull request with `Completes: §15`. #118 has merged. Decision 6's correction adds #124, under "Listening for a while". Rejected: merging `feat/slice-generics` and `feat/foreign-classes` into this branch now, because the pull request would carry both diffs until they merge and every conflict would be resolved twice.
 2. **The engine creates each listener's object through #121's container,** `sharp_container_build(ce, &object)`, once per listener per event. That is the `transient` lifetime the spec and `docs/architecture/modules.md` state, with services from the modules of the listener's namespace, an environment module or a running test's module first.
 3. **A missing `.sharp/listeners.php` means no listeners.** #170's `mago compile` wrote the table only while a listener existed and deleted it after. `6970c355a8` threw `CompileError` for a missing table, which would break every project without a listener. A damaged table still throws that `CompileError`. Ruling 5 makes `mago compile` write the table in every project with a PHP# file, so a missing one now means the project has none.
-4. **The dispatcher is a standard library service, `Sharp.Dispatcher`, which a module binds,** and the engine hands it every `emit`. The standard library binds `ImmediateDispatcher`. The API is drawn under "The dispatcher".
-5. **`emit` resolves the dispatcher for the code that emits:** the class whose method called `emit`, through the container, as that class resolves any service. Drawn with its rejected options under "The dispatcher".
+4. **The dispatcher is a standard library service, `Sharp.Dispatcher`, which a module binds,** and the engine hands it every `emit`. The standard library binds `ImmediateDispatcher`. Corrected by team-lead after the review: `dispatch(Any emitted, List<Function<void(Any)>> listeners)` calls each `listener(emitted)`, so one closure kind serves `emit` and PSR-14. The API is drawn under "The dispatcher".
+5. **The dispatcher is one service for the whole app,** as the spec says: "An app replaces the dispatcher once at startup". Corrected by team-lead after the review, which found that resolving it from the emitting class's namespace missed every event a PHP# package in `vendor/` or plain PHP emits. `emit` resolves `Sharp.Dispatcher` from the app's top module that binds it, whoever emits, and a running test's module still replaces it. Drawn with how the top module is found under "The dispatcher".
 6. **`Events.on<T>` lowers to one engine call, and its handle is an engine object.** `Sharp\Internal\listen(string $event, \Closure $listener): \Sharp\Listening`, and `Sharp\Listening` stops the listener in its destructor. The standard library may call a `Sharp\Internal` function, and no other PHP# code may. Corrected by team-lead: `Sharp.Events` is `public static class Events`, with no modifier for effects. The spec says "`Events` is the effect of `emit`. It is the one standard effect that is not a `foreign` class: a method has it when its body emits, and no object carries it", so #118's handling of `Events` as an effect with no class stays. `on` gets the effect `Events` by inference from its body, because `listen` is declared `extern Internal.listen uses Events;`, the way every plain PHP function's effects are declared.
 7. **The harness gains two spec files.** `sharp/harness/app/Stubs/Laravel.sharp` declares `extern event JobFailed;`, and `sharp/harness/app/Imports/RowImported.sharp` declares `public event RowImported(int row);`. Each sits at the path its own spec example writes, so `extern-event` and `standalone-event` replace them with the same text.
 
@@ -40,13 +40,13 @@ team-lead ruled on the five questions the first version of this note asked, each
 2. **A new object for every event, whatever lifetime a module gives the listener's class,** as Jordan ruled. Spec: "PHP# creates a new object for every event and passes its constructor's services from the module of its namespace."
 3. **`Dispatcher.dispatch` may reach any effect, because the listeners it runs may.** Spec: "`emit` has the effect `Events`" and "An app replaces the dispatcher once at startup, to run listeners later, after a save, with retries".
 4. **A plain PHP library's own events reach PHP# listeners through PSR-14,** as Jordan ruled. PHP# offers its listeners as a PSR-14 listener provider, and builds no adapter for any framework. Drawn under "Plain PHP events through PSR-14", and section 15 of the spec now states the rule.
-5. **The table records its inputs, and the engine checks them only when `sharp.compile_command` is set.** Spec: "Nothing is wired by hand." The inputs are each source folder's listing, which a PHP# file joining or leaving the folder changes, and each file that declares a listener. An `on` added to a class that had none waits until that file loads, and a deploy's `mago compile` is exact.
+5. **The table records its inputs, and the engine checks them only when `sharp.compile_command` is set.** Spec: "Nothing is wired by hand." Corrected after the review, which found a listener in a new folder and an `on` added to a class nothing loads both unheard: the inputs are every PHP# file and the listing of its folder and of each folder above it, and a listing names a folder's namespace folders too. So any new or changed listener makes the next `emit` compile, and a deploy's `mago compile` is exact.
 
 ## What the branch holds
 
 Built and tested. #118, #124 and #102 merged into master and then into this branch:
 
-- `emit` hands the event and one function per listener to the `Sharp.Dispatcher` a module binds for the emitting class. Each function creates its listener's object through the container when it runs (ruling 2). `ImmediateDispatcher` is the standard library's binding.
+- `emit` hands the event and one function per listener to the app's `Sharp.Dispatcher`, whoever emits (decision 5). Each function takes the event and creates its listener's object through the container when it runs (ruling 2). `ImmediateDispatcher` is the standard library's binding.
 - `Sharp\Internal\listen` and `Sharp\Listening`, the engine half of `Events.on<T>`, tested from plain PHP.
 - The table's inputs and the development check (ruling 5). `mago compile` writes the table in every project with a PHP# file.
 - The container runs a module file in a symbol table of its own, which ended the tracing-JIT leak the first version of this note named as a risk.
@@ -59,6 +59,15 @@ Built and tested. #118, #124 and #102 merged into master and then into this bran
 - What only `Events.sharp` uses: the prelude's `Sharp\Internal\listen` and `Sharp\Listening`, and the refusal of `import Sharp.Internal;` outside the standard library, so PHP# code listens one way.
 - Ruling 1's refusal of `Events.on<T>` when `T` is not an event or an interface an event implements.
 - `scoped-listener` left `sharp/baseline/spec/`, and every section 15 example passes.
+
+The review's fixes, each with a test seen failing first:
+
+- The app's dispatcher serves every `emit` (decision 5), and `Dispatcher.dispatch` takes `List<Function<void(Any)>>` (decision 4).
+- Every PHP# file is an input of the table, and a listing names its namespace folders (ruling 5).
+- With `sharp.compile_command` set, the table is read past opcache.
+- `Sharp\Listening` owns its listener's function and reports it to the cycle collector, so a handle kept in a property of the object its listener uses is collected with it, and the listener stops.
+- `namespace Sharp` and every namespace under it are refused outside the standard library, with `reserved-name-outside-library`.
+- A dropped `Events.on` handle is reported in PHP# words. A table naming a class or method the code lacks says it is out of date. `Events.on(e => { })` gives one error. The prelude declares `listenersFor`, and `sharp/composer/mago.toml` analyzes `src/Psr/ListenerProvider.php`.
 
 Known follow-up, approved as its own pull request after this one: `write_project` in `sharp/bin/spec` copies all of `sharp/composer` into an example's project, as a Composer install does, and the harness's `Sharp/Psr/ListenerProvider.php` copy is deleted.
 
@@ -131,24 +140,40 @@ The table, as `mago compile` writes it:
 
 return [
     'inputs' => [
-        ['app/*.sharp', 67, 0, '5c73e5948a8589d496ffa4ca4f4a51a6'],
-        ['app/OrderNotices.sharp', 153, 1791940268341788484, '297e2f94dfdf895b91918498677ba11a'],
+        ['*.sharp', 0, 0, '99aa06d3014798d86001c324468d497f'],
+        ['app/*.sharp', 93, 0, 'a18a24ea6fd2f5b3f064ed26f8c4e443'],
+        ['app/AfterCommitDispatcher.sharp', 173, 1792001535371212248, 'b74c2fb0b4a36383e0fb6693b9be7f97'],
+        ['app/Module.sharp', 103, 1792001534314190208, 'e6fca0ed7f19ade42991cb3a0c8099e6'],
+        ['app/OrderEvent.sharp', 73, 1792001532747311544, '402cc7bc63a1c719f9195120bacbc534'],
+        ['app/OrderNotices.sharp', 153, 1792001532051738871, '297e2f94dfdf895b91918498677ba11a'],
+        ['app/OrderPaid.sharp', 66, 1792001533503708796, '7af9e91f1e56d4c22149f01cad7fbaf0'],
+        ['vendor/*.sharp', 0, 0, '99aa06d3014798d86001c324468d497f'],
+        ['vendor/heyjordanparker/*.sharp', 0, 0, '99aa06d3014798d86001c324468d497f'],
+        ['vendor/heyjordanparker/php-sharp-composer/*.sharp', 0, 0, '99aa06d3014798d86001c324468d497f'],
+        ['vendor/heyjordanparker/php-sharp-composer/library/*.sharp', 7, 0, 'dfe8f5ef6d07b54f90316c52f021483a'],
+        ['vendor/heyjordanparker/php-sharp-composer/library/Sharp/*.sharp', 17, 0, '39542a6e047403498ea08c43cf0dfe54'],
+        ['vendor/heyjordanparker/php-sharp-composer/library/Sharp/Dispatcher.sharp', 131, 1792001537678659931, 'afac426e86412dd0e5d96728a5736f45'],
     ],
     'listeners' => [
         ['App\OrderNotices', 'send', ['App\OrderPaid'], true],
         ['App\OrderNotices', 'refresh', ['App\OrderPaid', 'App\OrderEvent'], false],
     ],
+    'dispatcher' => ['app/Module.sharp', 'app'],
 ];
 ```
 
-- **Each input is a workspace-relative path, its size, its modification time in nanoseconds and its xxh3-128 hash,** stamped by the bridge's `unit::stamp`, the stamp a `.sharpc` file's inputs carry. A path ending in `*.sharp` is that folder's listing, as `unit::SOURCE_LISTING` defines it. The engine compares them with `sharp_stamp_current`, the one comparison a `.sharpc` file's inputs use too.
-- **Only with `sharp.compile_command` set,** the first `emit` of a request that reads the table compares its inputs, and on a change runs the command once, as an out-of-date compiled file does, then reads the table it wrote past opcache, which may keep the old one. Without the setting, the engine reads the table and nothing else.
+That is the table of a project with five files in `app/` and the library's `Dispatcher.sharp`, where `app/Module.sharp` binds `singleton Dispatcher = AfterCommitDispatcher;`. `library/*.sharp` is 7 bytes, `Sharp/` and its newline, the namespace folder below it.
+
+- **Each input is a workspace-relative path, its size, its modification time in nanoseconds and its xxh3-128 hash,** stamped by the bridge's `unit::stamp`, the stamp a `.sharpc` file's inputs carry. A path ending in `*.sharp` is that folder's listing, as `unit::SOURCE_LISTING` defines it: its `.sharp` files and its namespace folders, the folders whose name starts with an uppercase letter, each written with a `/`. The inputs are every PHP# file and the listing of its folder and of each folder above it, so a new listener anywhere, in a new folder or in a class that had none, changes an input. The engine compares them with `sharp_stamp_current`, the one comparison a `.sharpc` file's inputs use too.
+- **`dispatcher` is the app's module whose binding of `Sharp.Dispatcher` serves every `emit`,** as its path and its namespace, or `null` when no app module binds it. "The dispatcher" says how `mago compile` finds it.
+- **Only with `sharp.compile_command` set,** the table is read past opcache, since this request's compile or an earlier one may have rewritten it, and the first `emit` of a request compares its inputs, and on a change runs the command once, as an out-of-date compiled file does, then reads the table it wrote. Without the setting, the engine reads the table through opcache and nothing else.
+- **A row naming a class or method the code no longer has** throws "`.sharp/listeners.php` is out of date: it lists `App.Demo.Gone`, which no longer exists. Run vendor/bin/mago compile.", as an out-of-date compiled file does.
 - Precedent: Laravel's `php artisan event:cache` writes `bootstrap/cache/events.php` the same way, and PSR-14's `ListenerProviderInterface::getListenersForEvent` matches by class and interface.
 - **The table is not run, and neither is anything that would give the caller a symbol table.** `6970c355a8` measured why: code run from inside `emit` gives the calling frame a symbol table that a tracing-JIT frame never frees. `emit` reaches the container's `sharp_container_read`, which ran a module file with `zend_execute`. `events_scoped_jit_tracing.phpt` with `sharp/bin/test --repeat` leaked a 56-byte `HashTable` and its 320 bytes. `sharp_container_execute` now runs a module file in a symbol table of its own, for `emit` and `Container::get` alike.
 
 # How a listener's object is created
 
-A listener's function creates the object as the container creates a bound class, with no binding row. `6970c355a8` called `object_init_with_constructor(&listener, ce, 0, NULL, NULL)`. `Sharp\Internal\Listener::run` calls #121's `sharp_container_build` when the dispatcher calls the function:
+A listener's function creates the object as the container creates a bound class, with no binding row. `6970c355a8` called `object_init_with_constructor(&listener, ce, 0, NULL, NULL)`. `Sharp\Internal\Listener::hear` calls #121's `sharp_container_build` when the dispatcher calls the function:
 
 ```diff
 -		if (object_init_with_constructor(&listener, ce, 0, NULL, NULL) == FAILURE) {
@@ -169,7 +194,7 @@ namespace Sharp;
 
 public interface Dispatcher
 {
-    void dispatch(Any emitted, List<Function<void()>> listeners) uses Events;
+    void dispatch(Any emitted, List<Function<void(Any)>> listeners) uses Events;
 }
 ```
 
@@ -179,11 +204,11 @@ namespace Sharp;
 
 public class ImmediateDispatcher : Dispatcher
 {
-    public void dispatch(Any emitted, List<Function<void()>> listeners)
+    public void dispatch(Any emitted, List<Function<void(Any)>> listeners)
     {
         for (const listener of listeners)
         {
-            listener();
+            listener(emitted);
         }
     }
 }
@@ -201,15 +226,20 @@ The parameter is `emitted`, because `event` is a PHP# keyword: "`event` is a PHP
 ```
 
 - **`dispatch` runs once per `emit`, with the event and one function per listener,** even when no listener matches. So a recording dispatcher in a test sees every event, which #56 asks for.
-- **Each function runs one listener when called:** it creates the object through the container at that moment and calls the method, with the event when its row says it takes one. A dispatcher can call it later in the request, call it again to retry, or never call it. It cannot send one to a queue in another process, and the spec asks for none.
-  - Each function is a `\Closure` over the private `run` method of an engine object, `Sharp\Internal\Listener`, which holds the event and the listener's table row or scoped number. `Function<void()>` lowers to `\Closure`, and C makes a closure only over a function and an object.
+- **Each function runs one listener on the event it is given:** `listener(emitted)` creates the object through the container at that moment and calls the method, with the event when its row says it takes one. A dispatcher can call it later in the request, call it again to retry, or never call it. It cannot send one to a queue in another process, and the spec asks for none.
+  - Each function is a `\Closure` over the private `hear(object $event)` method of an engine object, `Sharp\Internal\Listener`, which holds the listener's table row or scoped number. `Function<void(Any)>` lowers to `\Closure`, and C makes a closure only over a function and an object. A PSR-14 dispatcher calls the same closures, so one kind serves both.
 - **An implementation of `dispatch` may reach any effect** (ruling 3): `runs_listeners` in `crates/analyzer/src/effects/mod.rs` keeps `unfit_implementations` from holding it to its declaration. `dispatch` declares `uses Events`, so code that calls it directly has the effect `emit` has.
-- **The engine resolves the dispatcher for the class whose method called `emit`,** with `zend_get_executed_scope()`, as that class resolves any service: its namespace's modules first, a `for` binding first. Plain PHP outside a class resolves from the root namespace, which the standard library's binding serves.
-  - "Once at startup" is a binding in the app's top `Module.sharp`, which every namespace under it reaches: `singleton Dispatcher = AfterCommitDispatcher;`.
-  - "Not at all in tests" is a test module: `module : App.Shop { singleton Dispatcher = RecordingDispatcher; }`, which applies while a test of that file's classes runs.
-  - Rejected: the event's namespace. An `extern event` lives in its vendor's namespace, such as `Illuminate\Queue\Events`, which no app module serves, so the app's dispatcher would never receive it.
+- **The dispatcher is one service for the whole app (decision 5),** so every `emit` reaches it, from an app class, a PHP# package in `vendor/` or plain PHP. `sharp_dispatcher_namespace` in `ext/sharp/sharp.c` picks the namespace whose binding serves:
+  1. While a test runs, its test module's binding of `Sharp.Dispatcher`, whatever namespace the module's header names: `module : App.Shop { singleton Dispatcher = RecordingDispatcher; }` is "not at all in tests".
+  2. Else the app's top module that binds it, which `mago compile` writes in the table as `'dispatcher' => ['app/Module.sharp', 'app']`. The engine reads that module and the modules above it, and resolves `Sharp.Dispatcher` from its namespace. "Once at startup" is `singleton Dispatcher = AfterCommitDispatcher;` in `app/Module.sharp`.
+  3. Else the root namespace, which the standard library's module serves with `ImmediateDispatcher`.
+- **`mago compile` finds the app's top module** with `IncrementalAnalysisService::dispatcher_module` in `crates/orchestrator/src/service/incremental_analysis/compile.rs`: of the base and environment modules outside `vendor/` that bind `Sharp.Dispatcher`, the one whose namespace has the fewest parts, then the first by file name. A package's module in `vendor/` never replaces the app's dispatcher. The engine reads every module of that module's folder and of each folder above it, so an environment module there binds for its environment, as the container reads any service.
+  - Rejected: the emitting class's namespace, which decision 5 first chose. An event a PHP# package in `vendor/` emits resolved from the package's namespace, which no app module serves, so the app's dispatcher missed it.
+  - Rejected: the event's namespace. An `extern event` lives in its vendor's namespace, such as `Illuminate\Queue\Events`, which no app module serves.
   - Rejected: each listener's namespace. A dispatcher would see an event once per listener and never one without listeners.
+  - Rejected: reading every module of the project at the first `emit` to find the top one. The engine reads modules folder by folder, from a class's file upward, and finding the top one means a scan of the project on every request. `mago compile` already knows every module.
 - **A scoped listener goes to the dispatcher too,** after the table's listeners, in the order the listeners started. Its function does nothing once its handle is gone, so a listener stops when its handle goes out of scope even under a dispatcher that runs it later.
+  - `Sharp\Listening` owns the listener's function and reports it from its `get_gc` handler, and the engine's list of scoped listeners points at each live handle with no reference. So a handle kept in a property of an object the listener uses forms a cycle the collector reclaims, and the listener stops with it. Before, the list held the function, the function held the object and the object held the handle, so the listener ran until the request ended.
 - **These stay as the approved note set them:** an exception from a listener leaves `emit` and the listeners after it don't run (PSR-14), an `emit` inside a listener runs its listeners first, and each `emit` runs the listeners that existed when it started.
 - Precedent: MediatR registers its `INotificationPublisher` in dependency injection, and Laravel binds `Illuminate\Contracts\Events\Dispatcher` in its container, which `Event::fake()` swaps.
 
@@ -257,7 +287,7 @@ A plain PHP bootstrap writes the same, `new EventDispatcher(new \Sharp\Psr\Liste
 - **The class is `Sharp\Psr\ListenerProvider`, a plain PHP adapter beside `Sharp\Psr\Container`,** for the reason that one gives: the engine can't implement an interface Composer loads after the engine starts. It has no constructor parameter, so a framework's container builds it with no configuration.
 - **`sharp/composer/composer.json` requires `psr/event-dispatcher` `^1.0`,** beside `psr/container` `^2.0`. `sharp/phpunit/composer.lock` locks `psr/event-dispatcher` 1.0.0, its only release.
 - **`Sharp\Internal\listenersFor(object $event): array` returns the listeners `emit` would hand the dispatcher,** in the same order: the table's, then the scoped ones in the order they started. `sharp_listeners_for` in `ext/sharp/sharp.c` builds both lists, so `emit` and the provider find listeners one way.
-- **Each function takes the event as its one parameter, as PSR-14 calls a listener.** It is a `\Closure` over the private `Sharp\Internal\Listener::hear(object $event)`, where `emit`'s are over `run()`, bound to the event. Both call `sharp_listener_call`, so a table listener still runs on a new object of its class from the container, with its namespace's services, for every event.
+- **Each function takes the event as its one parameter, as PSR-14 calls a listener.** It is the closure `emit` hands its dispatcher, over the private `Sharp\Internal\Listener::hear(object $event)`, so a table listener still runs on a new object of its class from the container, with its namespace's services, for every event.
 - **The library's dispatcher decides when listeners run, and stops them when its event says so.** A module's `Sharp.Dispatcher` serves only `emit`. A scoped listener whose handle is gone runs nothing, as under any dispatcher.
 - **Plain PHP that dispatches a PHP# event through PSR-14 reaches its listeners too,** since the provider finds listeners by the event's class, whoever declared it.
 - Precedent: the PSR-14 dispatchers of Yii (`yiisoft/event-dispatcher`) and Crell's Tukio take any `ListenerProviderInterface` in their constructor, and Tukio's `AggregateProvider` combines several. Laravel's dispatcher does not follow PSR-14, so it is the kind of library an adapter package covers.
@@ -297,8 +327,10 @@ public static class Events
   caught
   ```
 
-- **`[NoDiscard]`,** because `Events.on<RowImported>(…);` as a statement drops its handle at once and listens to nothing. `detect_unused_statement_expressions` reports it: "The return value of 'on' must be used." It reports a call written `Class::m()`, so `get_static_functionlike_id_from_call` in `crates/analyzer/src/utils/expression/mod.rs` now also reads PHP#'s `Class.m()`, through `static_call_class`, and every `[NoDiscard]` or `@must-use` static method a `.sharp` file calls is held to it. Precedent: Combine's `AnyCancellable` and Rust's `#[must_use]` guards.
+- **`[NoDiscard]`,** because `Events.on<RowImported>(…);` as a statement drops its handle at once and listens to nothing. `detect_unused_statement_expressions` reports it in PHP# words in a `.sharp` file: "The value `Events.on` returns must be used.", with the note "`[NoDiscard]` on `Events.on` says the value it returns matters." It reports a call written `Class::m()`, so `get_static_functionlike_id_from_call` in `crates/analyzer/src/utils/expression/mod.rs` now also reads PHP#'s `Class.m()`, through `static_call_class`, and every `[NoDiscard]` or `@must-use` static method a `.sharp` file calls is held to it. Precedent: Combine's `AnyCancellable` and Rust's `#[must_use]` guards.
 - **Only the standard library imports `Sharp.Internal`,** so PHP# code listens one way and emits only with `emit`. A full name in code is already refused (section 23), so the import is the one way in. `check_internal_import` in `crates/analyzer/src/statement/use_statement.rs` refuses it outside `is_standard_library` files with `internal-outside-library`: "`Sharp.Internal` holds the engine's functions, and only the standard library imports it.", with the help "Listen with `Events.on`, and raise an event with `emit`." The code is named as `native-body-outside-library`, `silence-outside-library` and `reserved-name-outside-library` are.
+- **Only the standard library declares code in `namespace Sharp` or a namespace under it.** A project file there would reach `Sharp.Internal` and the library's own classes with no import. `report_standard_library_namespace` in `crates/analyzer/src/statement/mod.rs` refuses the namespace statement with `reserved-name-outside-library`: "`Sharp.Mine` is a namespace of the standard library, and only the standard library declares code in it." It replaces the refusal of a project class named `Sharp\Int`, `Sharp\Float` or `Sharp\Bool`, which only that namespace can declare. A namespace that only starts with the letters, `Sharpen`, is the app's.
+- **`Events.on(e => { })` gives one error,** `missing-template-parameter`. A type argument neither written nor inferred is not checked as an event.
 - **Ruling 1:** `check_events_on` in `crates/analyzer/src/statement/class_like/listener.rs` reads the type argument a call of `Sharp\Events::on` runs with, written or inferred, and refuses a class that is not an event, an interface no event implements, and a built-in type, with the `on` clause's messages through `unheard_class`, which both share. A type parameter is the caller's to bound, so it passes, and a class that doesn't exist is reported once, where it is written.
 
 # Public names this Slice adds
@@ -308,14 +340,16 @@ The note's choices, with the names each was picked over. team-lead approves them
 - `Sharp\Internal\emit(object $event): void`: the keyword it lowers from, as #170 already writes it. Also considered: `dispatch`, `raise`, `publish`.
 - `Sharp\Internal\listen(string $event, \Closure $listener): \Sharp\Listening`: what the spec says the call starts, "starts a listener". Also considered: `subscribe`, `startListening`.
 - `Sharp.Listening`: the spec's own local, `const listening = …`. Also considered: `Subscription` (Rx), `Cancellable` (Combine), `ListenerHandle`.
-- `Sharp\Internal\Listener`, private constructor, private `run()`: the listener one function runs, engine machinery that plain PHP sees and PHP# code never names. Also considered: `Delivery`, `PendingListener`, `ListenerCall`.
-  - Its private `hear(object $event)`: the listener hears the event the PSR-14 dispatcher passes, where `run()` runs it on the one `emit` bound. Also considered: `runOn`, `handle`, which says nothing, and `__invoke`, which would make every `Listener` callable with or without an event.
+- `Sharp\Internal\Listener`, private constructor: the listener one function runs, engine machinery that plain PHP sees and PHP# code never names. Also considered: `Delivery`, `PendingListener`, `ListenerCall`.
+  - Its private `hear(object $event)`: the listener hears the event the dispatcher passes, `emit`'s or a PSR-14 one. Also considered: `run`, `handle`, which says nothing, and `__invoke`, which would make every `Listener` callable.
 - `Sharp\Psr\ListenerProvider`: PSR-14's own `ListenerProviderInterface` without `Interface`, as `Sharp\Psr\Container` is PSR-11's `ContainerInterface`. Also considered: `Listeners`, `Provider`, `EventListeners`.
 - `Sharp\Internal\listenersFor(object $event): array`: PSR-14's `getListenersForEvent`, read as "the listeners for this event". Also considered: `listeners`, `listenersOf`, as the engine's `sharp_listeners_of` names the table rows.
 - `Sharp.Events.on<TEvent>`: the spec's.
 - `internal-outside-library`, the issue code for `import Sharp.Internal;` outside the standard library: its siblings' form, `<what>-outside-library`. Also considered: `internal-import`, `engine-namespace-import`.
-- `Sharp.Dispatcher` and `dispatch(Any emitted, List<Function<void()>> listeners) uses Events`: the spec's word, "the default dispatcher". `emitted`, because `event` is a keyword. Also considered: `EventDispatcher` (PSR-14), `Publisher` (MediatR), `run` for the method, and `raised` or `e` for the parameter.
+- `Sharp.Dispatcher` and `dispatch(Any emitted, List<Function<void(Any)>> listeners) uses Events`: the spec's word, "the default dispatcher". `emitted`, because `event` is a keyword. Also considered: `EventDispatcher` (PSR-14), `Publisher` (MediatR), `run` for the method, and `raised` or `e` for the parameter.
 - `Sharp.ImmediateDispatcher`: the spec's "runs listeners immediately". Also considered: `SyncDispatcher`, `DefaultDispatcher`, which says nothing about what it does.
+- `'dispatcher'`, the table's key for the app's module that binds the dispatcher: the service it names. Also considered: `dispatcherModule`, `topModule`.
+  - In mago, `DispatcherModule { file, namespace }` and `dispatcher_module()` on `IncrementalAnalysisService` and `Server`, beside `Listener` and `listeners()`.
 
 # What changes
 
@@ -328,11 +362,15 @@ php-sharp (feat/events-engine)
 │   │                              Sharp\Internal\listenersFor
 │   ├── sharp_arginfo.h         <- regenerated
 │   └── sharp.c                 <- from 6970c355a8: the table read, the per-event filter, emit;
-│                                  new: the table's inputs and the development check, sharp_stamp_current,
-│                                  emit through the dispatcher, Listener::run and ::hear building through the container,
-│                                  listenersFor, listen and Sharp\Listening's destructor, sharp_container_execute
+│                                  new: the table's inputs and the development check, read past opcache while
+│                                  developing, sharp_stamp_current, a listing's namespace folders,
+│                                  emit through the app's dispatcher (sharp_dispatcher_namespace),
+│                                  Listener::hear building through the container, listenersFor, listen and
+│                                  Sharp\Listening, which owns its function and reports it to the cycle collector,
+│                                  sharp_container_execute
 ├── sharp/composer/
 │   ├── composer.json           <- requires psr/event-dispatcher
+│   ├── mago.toml               <- analyzes src/Psr/ListenerProvider.php, with the harness's PSR-14 interfaces
 │   ├── src/Psr/ListenerProvider.php   <- new: Sharp\Psr\ListenerProvider, PSR-14 over the engine's listeners
 │   └── library/Sharp/
 │       ├── Dispatcher.sharp    <- new: interface Dispatcher, dispatch uses Events
@@ -341,23 +379,29 @@ php-sharp (feat/events-engine)
 │       └── Module.sharp        <- binds Dispatcher to ImmediateDispatcher
 ├── sharp/phpunit/composer.lock <- locks psr/event-dispatcher 1.0.0
 ├── sharp/mago/
-│   ├── src/commands/compile.rs <- the table's inputs, written in every PHP# project; the compiled count
-│   │                              counts accepted files, not the table
-│   ├── tests/compile.rs        <- the table's text and quoted paths
+│   ├── src/commands/compile.rs <- the table's inputs and its dispatcher, written in every PHP# project; the
+│   │                              compiled count counts accepted files, not the table
+│   ├── tests/compile.rs        <- the table's text, quoted paths and dispatcher module
+│   ├── tests/sharp.rs          <- a project file under Sharp is refused for its namespace
 │   ├── scripts/regen-analyzer-issue-codes.php   <- internal-outside-library
 │   └── crates/
-│       ├── prelude/assets/extensions/sharp.php  <- Sharp\Listening and Sharp\Internal\listen, for the checker
+│       ├── prelude/assets/extensions/sharp.php  <- Sharp\Listening, Sharp\Internal\listen and listenersFor
+│       ├── sharp-bridge/src/unit.rs, tests/unit.rs   <- a listing names its namespace folders
+│       ├── orchestrator/src/service/incremental_analysis/compile.rs   <- DispatcherModule, dispatcher_module
+│       ├── server/src/server.rs      <- dispatcher_module
 │       └── analyzer/
 │           ├── src/code.rs     <- regenerated: InternalOutsideLibrary
 │           ├── src/effects/mod.rs   <- runs_listeners: a dispatcher may reach any effect
 │           ├── src/statement/use_statement.rs, statement/mod.rs
-│           │                   <- check_internal_import: only the standard library imports Sharp.Internal
+│           │                   <- check_internal_import: only the standard library imports Sharp.Internal;
+│           │                      report_standard_library_namespace; a dropped [NoDiscard] value in PHP# words
+│           ├── src/statement/class_like/mod.rs   <- report_sharp_type_class_outside_library deleted
 │           ├── src/statement/class_like/listener.rs   <- check_events_on (ruling 1), and unheard_class, which
 │           │                                             it shares with the on clause
 │           ├── src/expression/call/static_method_call.rs   <- runs check_events_on on a call of Events.on
 │           ├── src/utils/expression/mod.rs   <- a PHP# Class.m() call names its method, so [NoDiscard] holds
 │           └── tests/sharp.rs  <- the dispatcher's effects, code without a body that emits, Events.on's
-│                                  type, effect and dropped handle, the Sharp.Internal import
+│                                  type, effect and dropped handle, the Sharp.Internal import, the Sharp namespace
 ├── sharp/harness/
 │   ├── app/Stubs/Laravel.sharp <- new: extern event JobFailed;
 │   ├── app/Imports/RowImported.sharp   <- new: public event RowImported(int row);
@@ -371,13 +415,16 @@ php-sharp (feat/events-engine)
 │   │   events.phpt, events_jit_function.phpt, events_jit_tracing.phpt
 │   │                           <- from 6970c355a8; events.inc reads the library's module, and
 │   │                              Shipping keeps each object it ships from
-│   ├── events_table.phpt       <- a missing table runs nothing; a damaged table or input throws
+│   ├── events_table.phpt       <- a missing table runs nothing; a damaged table or input throws; an
+│   │                              out-of-date one says so
 │   ├── events_psr.phpt         <- new
 │   ├── events_container.phpt   <- new
 │   ├── events_dispatcher.phpt  <- new
 │   ├── events_fresh.phpt       <- new
+│   ├── events_opcache.phpt     <- new
 │   ├── events_scoped.inc, events_scoped.phpt, events_scoped_jit_function.phpt,
 │   │   events_scoped_jit_tracing.phpt   <- new, with PHP#'s Events.on
+│   ├── extension_inputs.phpt   <- its Sharp.Text extension sits in the vendored standard library
 │   └── Container.inc, library_autoload.inc   <- copy the dispatcher's classes, and Container.inc Events
 └── docs/
     ├── spec.md                 <- section 15: a plain PHP library's own events reach PHP# listeners through PSR-14,
@@ -396,10 +443,14 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 
 **mago:**
 
-- `tests/compile.rs`, `compile_writes_every_listener_of_an_accepted_file_in_order`: the table's text with its inputs and its rows, a refused file's rows gone, the table kept once no listener is left, and "Compiled 4 PHP# files" for four files. `compile_quotes_each_input_path_of_the_listener_table`: a folder named `it's\here`. Four tests that list `.sharp/` now find `listeners.php` in it.
+- `tests/compile.rs`, `compile_writes_every_listener_of_an_accepted_file_in_order`: the table's text with its inputs, every PHP# file and every listing above it, and its rows, a refused file's rows gone, the table kept once no listener is left, and "Compiled 4 PHP# files" for four files. `compile_quotes_each_input_path_of_the_listener_table`: a folder named `it's\here`. Four tests that list `.sharp/` now find `listeners.php` in it.
+- `tests/compile.rs`, `compile_names_the_app_module_that_binds_the_dispatcher`: of `App` and `App.Shop` modules that bind it, `app/Module.sharp`; without it, `app/Shop/Module.sharp`; without either, `null`. With `dispatcher_module` returning none it failed.
+- `crates/sharp-bridge/tests/unit.rs`, `a_source_listing_stamps_the_names_of_the_sharp_files_and_namespace_folders_of_its_folder`: a new namespace folder changes the listing to `Billing/` and the files, and its removal restores it. A lowercase folder named like a source does not change it. With folders left out it failed.
+- `crates/analyzer/tests/sharp.rs`, `a_namespace_of_the_standard_library_in_a_project_file_is_a_reserved_name`: `namespace Sharp;` declaring `Bool` or `Int`, `namespace Sharp;` calling `Internal.listen` with no import, and `namespace Sharp.Internal;` are refused, and `namespace Sharpen;` is not. Before `report_standard_library_namespace`, the `Internal.listen` file and `Sharp.Internal` gave no issue. `an_extern_method_in_a_project_file_is_an_error_in_any_namespace` and mago's `tests/sharp.rs` now expect the namespace's error before an `extern` or `@` under `Sharp.Mine`.
+- `events_on_with_no_type_is_reported_once`: `Events.on(e => { })` gives only `missing-template-parameter`. It also gave `invalid-event` before.
 - `crates/analyzer/tests/sharp.rs`, `events_on_takes_an_event_or_an_interface_an_event_implements`: `Events.sharp` analyzes clean, `Events.on<OrderPaid>` and `Events.on<OrderEvent>` compile, and `Money`, `int` and an interface no event implements are refused. A missing class gives only "Cannot find type", and `Events.on<TEvent>` inside a generic method passes. Before `check_events_on` each refused row gave no issue.
 - `events_on_has_the_effect_events`: a getter that calls `Events.on` is refused: "reaches `Events.on`, which calls `Internal.listen` with the effect `Events`".
-- `a_dropped_events_on_handle_is_reported`: `Events.on<OrderPaid>(e => { });` as a statement gives "The return value of 'on' must be used." Before the `Class.m()` case in `get_static_functionlike_id_from_call` it gave no issue.
+- `a_dropped_events_on_handle_is_reported`: `Events.on<OrderPaid>(e => { });` as a statement gives "The value `Events.on` returns must be used." with "`[NoDiscard]` on `Events.on` says the value it returns matters." Before the `Class.m()` case in `get_static_functionlike_id_from_call` it gave no issue, and before the PHP# wording it gave PHP's "The return value of 'on' must be used." `a_dropped_must_use_value_is_reported_in_php_sharp_words`: a plain PHP method marked `@must-use` and dropped in a `.sharp` file names `@must-use`.
 - `only_the_standard_library_imports_sharp_internal`: an app file's `import Sharp.Internal;` is refused, and the library's `Events.sharp` is not. Before `check_internal_import` the app file gave no issue.
 - `crates/analyzer/tests/sharp.rs`, `a_dispatcher_may_reach_any_effect_and_a_call_of_dispatch_has_the_effect_events`: an implementation of the library's `Dispatcher` calls `global.fetch`, which has `Http`, and compiles. The same method of another pure interface is refused. A getter that calls `dispatch` is refused for `Events`.
 - `crates/analyzer/tests/sharp.rs`, `code_without_a_body_allows_emit_with_uses_events`: an implementation that emits fits an interface or abstract method with `uses Events`, and is refused by a pure one and by `uses Mail`.
@@ -408,11 +459,12 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 **php-sharp, without opcache, with the opcache file cache, twice in one process, under each of the 16 optimizer passes alone, and under the function and tracing JIT:**
 
 - `events.phpt` and its JIT variants, from `6970c355a8`: every listener runs before `emit` returns, in table order, each once, through the standard library's dispatcher. An interface listener hears every event that implements it. A listener without a parameter, and a `private` one, run. An exception stops the rest. A nested `emit` runs first. Plain PHP's `\Sharp\Internal\emit` and an `extern event` reach PHP# listeners. A non-object is a `TypeError`.
-- `events_table.phpt`: a missing table runs nothing. A table that is not a list, one without its listeners, each damaged row and each damaged input throw "`.sharp/listeners.php` is damaged. Run vendor/bin/mago compile." A class or method the table names but the code lacks throws PHP's own error.
+- `events_table.phpt`: a missing table runs nothing. A table that is not a list, one without its listeners or its dispatcher, a dispatcher that is not a path and a namespace, each damaged row and each damaged input throw "`.sharp/listeners.php` is damaged. Run vendor/bin/mago compile." A class or method the table names but the code lacks throws "`.sharp/listeners.php` is out of date: it lists `App.Demo.Gone`, which no longer exists. Run vendor/bin/mago compile." Before, it threw PHP's `Class "App\Demo\Gone" not found`.
 - `events_container.phpt`: a listener's object is new for every event, while its `singleton` service is the same object and its `transient` one is new. A class a module binds as a `singleton` is still new for every event. A test module's binding fills the service while its test runs. A listener's constructor exception leaves `emit`.
-- `events_dispatcher.phpt`: plain PHP gets the standard library's dispatcher. An app module's dispatcher receives every event, one without listeners included, and runs nothing. One that runs the functions after `emit` returns, and one that retries a listener that threw. A test module's dispatcher while its test runs, and the app's again after.
-- `events_scoped.phpt` and its JIT variants: a scoped listener hears events until its function returns, and stops when an exception leaves it. A handle never stored stops at once. Scoped listeners run after the table's, in the order they started, one through an interface. One started during an `emit` hears only the next. One whose handle is gone runs nothing under a dispatcher that runs it later. A type no class has hears nothing. PHP#'s `Events.on<Paid>` and `Events.on<OrderEvent>` hear the events of their type until their method returns. Without `Events.sharp` in the project, the compile fails with "Method `Events.on` does not exist."
+- `events_dispatcher.phpt`: the app's top `app/Module.sharp` binds a recorder, which receives every event, one without listeners included, and runs nothing, whether an app class, plain PHP or a PHP# package in `vendor/` emits it. A test module's dispatcher that runs the functions after `emit` returns, and one of another namespace that retries a listener that threw, while each test runs, and the app's again after. With the table's module ignored, every row but the tests' ran the listeners at once.
+- `events_scoped.phpt` and its JIT variants: a scoped listener hears events until its function returns, and stops when an exception leaves it. A handle never stored stops at once. Scoped listeners run after the table's, in the order they started, one through an interface. One started during an `emit` hears only the next. One whose handle is gone runs nothing under a test's dispatcher that runs it later. A type no class has hears nothing. PHP#'s `Events.on<Paid>` and `Events.on<OrderEvent>` hear the events of their type until their method returns. A handle kept in a property of the object its listener uses stops when the collector collects them: "table 14, kept 14, keeper destroyed, table 15". With the function hidden from the collector, the listener kept running and the two leaked. Without `Events.sharp` in the project, the compile fails with "Method `Events.on` does not exist."
 - `events_psr.phpt`: a plain PHP library's PSR-14 dispatcher, given `Sharp\Psr\ListenerProvider`, dispatches the `extern event` `Lib\JobFailed` and reaches `OrderNotices.alert`, and dispatches `OrderPaid` and reaches its five listeners in table order. `Shipping` is a new object for every event. A scoped listener runs after the table's, and not once its handle is gone. An event no listener hears gets no listeners. On the engine before the change it failed with "Call to undefined function Sharp\Internal\listenersFor()".
-- `events_fresh.phpt`: with `sharp.compile_command` set, a new listener file, a listener added to a listener's file and a deleted listener file each make the next `emit` compile once, and nothing changed compiles nothing. Without the setting, a new listener file stays unheard.
+- `events_fresh.phpt`: with `sharp.compile_command` set, a new listener file, a listener added to a listener's file, a deleted listener file, a listener in a new namespace folder and an `on` added to a class that had none and that nothing loads each make the next `emit` compile once, and nothing changed compiles nothing. Without the setting, a new listener file stays unheard. With only listener files as inputs and no folders in a listing, the last two stayed unheard.
+- `events_opcache.phpt`: in one process with opcache on, opcache holds the table, a listener file and a new class appear, and loading the class runs the compile before the first `emit`. The `emit` runs the new listener. Reading the table through opcache, it missed it.
 - `psr-listeners` in section 15 compiles in `sharp/bin/spec`. It failed before the harness held the provider, and fails again when the harness dispatcher takes another type.
 - `sharp/bin/spec` matches the shorter list, and `sharp/bin/spec --completes` on a body holding `Completes: §15` gives "§15: all 9 checked examples pass."

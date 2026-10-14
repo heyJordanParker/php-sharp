@@ -47,18 +47,8 @@ container_project('events-scoped', [
             }
         }
         SHARP,
-    'app/Scoped/Later/Module.sharp' => <<<'SHARP'
-        namespace App.Scoped.Later;
-
-        import Sharp.Dispatcher;
-
-        module
-        {
-            singleton Dispatcher = Later;
-        }
-        SHARP,
-    'app/Scoped/Later/Later.sharp' => <<<'SHARP'
-        namespace App.Scoped.Later;
+    'app/Scoped/Later.sharp' => <<<'SHARP'
+        namespace App.Scoped;
 
         import Sharp.Dispatcher;
 
@@ -66,35 +56,49 @@ container_project('events-scoped', [
         {
             public static List<Function<void()>> pending { get; set; } = [];
 
-            public void dispatch(Any emitted, List<Function<void()>> listeners)
+            public void dispatch(Any emitted, List<Function<void(Any)>> listeners)
             {
                 for (const listener of listeners)
                 {
-                    Later.pending.add(listener);
+                    Later.pending.add(() => listener(emitted));
                 }
             }
 
             public static void flush()
             {
-                for (const listener of Later.pending)
+                for (const run of Later.pending)
                 {
-                    listener();
+                    run();
                 }
                 Later.pending = [];
             }
         }
         SHARP,
-    'app/Scoped/Later/Payer.sharp' => <<<'SHARP'
-        namespace App.Scoped.Later;
-
-        import App.Scoped.Paid;
-
-        public class Payer
-        {
-            public void pay(int orderId) { emit new Paid(orderId); }
-        }
-        SHARP,
 ]);
+Sharp\Internal\testModule(['Tests\LaterTest'], [['app', 'sharp\dispatcher', null, 'singleton', 'App\Scoped\Later']]);
+
+// Keeps its listener's handle in a property, and its listener uses it, so the two only go together.
+final class Keeper
+{
+    private Sharp\Listening $listening;
+
+    public function __construct()
+    {
+        $this->listening = Sharp\Internal\listen('App\Scoped\Paid', function (object $paid): void {
+            $this->hear($paid);
+        });
+    }
+
+    private function hear(object $paid): void
+    {
+        App\Scoped\Notices::$log[] = "kept $paid->orderId";
+    }
+
+    public function __destruct()
+    {
+        App\Scoped\Notices::$log[] = 'keeper destroyed';
+    }
+}
 
 // Starts a listener that logs its name and the order, on Paid or the type named.
 function listening(string $name, string $type = 'App\Scoped\Paid'): Sharp\Listening
@@ -165,10 +169,12 @@ for ($run = 0; $run < 2; $run++) {
         pay(7);
     });
     heard('one whose handle is gone runs nothing under a dispatcher that runs it later', function (): void {
+        Sharp\Internal\startTest('Tests\LaterTest');
         $later = listening('later');
-        (new App\Scoped\Later\Payer())->pay(8);
+        pay(8);
         $later = null;
-        App\Scoped\Later\Later::flush();
+        App\Scoped\Later::flush();
+        Sharp\Internal\endTest();
     });
     heard('a type no class has', function (): void {
         $ghost = listening('ghost', 'App\Scoped\Nothing');
@@ -181,5 +187,12 @@ for ($run = 0; $run < 2; $run++) {
     heard('Events.on through an interface', function (): void {
         (new App\Scoped\Screen())->watchEvery(12);
         pay(13);
+    });
+    heard('a handle in a property of the object its listener uses, until the collector collects both', function (): void {
+        $keeper = new Keeper();
+        pay(14);
+        $keeper = null;
+        gc_collect_cycles();
+        pay(15);
     });
 }

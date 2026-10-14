@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 17612b3598bebdfb16d1a35c41d990cd71b1c4cb */
+ * Stub hash: ab2a8aa6acb328039dfa2957a6c42a119b7458c7 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -148,8 +148,6 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_class_Sharp_Internal_Listener___construct arginfo_class_Sharp_Collection___construct
 
-#define arginfo_class_Sharp_Internal_Listener_run arginfo_Sharp_Internal_endTest
-
 #define arginfo_class_Sharp_Internal_Listener_hear arginfo_Sharp_Internal_emit
 
 ZEND_FUNCTION(Sharp_Internal_accepts);
@@ -191,7 +189,6 @@ ZEND_METHOD(Sharp_Container, has);
 ZEND_METHOD(Sharp_Container, scope);
 ZEND_METHOD(Sharp_Listening, __construct);
 ZEND_METHOD(Sharp_Internal_Listener, __construct);
-ZEND_METHOD(Sharp_Internal_Listener, run);
 ZEND_METHOD(Sharp_Internal_Listener, hear);
 
 static const zend_function_entry ext_functions[] = {
@@ -254,7 +251,6 @@ static const zend_function_entry class_Sharp_Listening_methods[] = {
 
 static const zend_function_entry class_Sharp_Internal_Listener_methods[] = {
 	ZEND_ME(Sharp_Internal_Listener, __construct, arginfo_class_Sharp_Internal_Listener___construct, ZEND_ACC_PRIVATE)
-	ZEND_ME(Sharp_Internal_Listener, run, arginfo_class_Sharp_Internal_Listener_run, ZEND_ACC_PRIVATE)
 	ZEND_ME(Sharp_Internal_Listener, hear, arginfo_class_Sharp_Internal_Listener_hear, ZEND_ACC_PRIVATE)
 	ZEND_FE_END
 };

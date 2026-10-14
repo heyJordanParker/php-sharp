@@ -1,5 +1,5 @@
 --TEST--
-emit runs nothing when mago compile wrote no listener table, and refuses a table mago compile did not write, as the engine refuses a damaged compiled file
+emit runs nothing when mago compile wrote no listener table, refuses a table mago compile did not write, as the engine refuses a damaged compiled file, and says a table that lists a listener the code no longer has is out of date
 --FILE--
 <?php
 require __DIR__ . '/Container.inc';
@@ -31,14 +31,16 @@ foreach ([
     'the compiled table' => $compiled,
     'no table' => null,
     'a table that is not a list' => '<?php return 1;',
-    'a table without its listeners' => "<?php return ['inputs' => []];",
-    'a row with three fields' => "<?php return ['inputs' => [], 'listeners' => [['App\\Demo\\Notices', 'hear', ['App\\Demo\\Paid']]]];",
-    'a listed type that is not a name' => "<?php return ['inputs' => [], 'listeners' => [['App\\Demo\\Notices', 'hear', [1], true]]];",
-    'a row that does not say whether the method takes the event' => "<?php return ['inputs' => [], 'listeners' => [['App\\Demo\\Notices', 'hear', ['App\\Demo\\Paid'], 1]]];",
+    'a table without its listeners' => "<?php return ['inputs' => [], 'dispatcher' => null];",
+    'a table without its dispatcher' => "<?php return ['inputs' => [], 'listeners' => []];",
+    'a dispatcher that is not a path and a namespace' => "<?php return ['inputs' => [], 'listeners' => [], 'dispatcher' => ['app/Module.sharp']];",
+    'a row with three fields' => "<?php return ['inputs' => [], 'listeners' => [['App\\Demo\\Notices', 'hear', ['App\\Demo\\Paid']]], 'dispatcher' => null];",
+    'a listed type that is not a name' => "<?php return ['inputs' => [], 'listeners' => [['App\\Demo\\Notices', 'hear', [1], true]], 'dispatcher' => null];",
+    'a row that does not say whether the method takes the event' => "<?php return ['inputs' => [], 'listeners' => [['App\\Demo\\Notices', 'hear', ['App\\Demo\\Paid'], 1]], 'dispatcher' => null];",
     'an input with three fields' => "<?php return ['inputs' => [['app/Demo/*.sharp', 1, 0]], " . $rows,
     'an input whose hash is not 32 hex digits' => "<?php return ['inputs' => [['app/Demo/*.sharp', 1, 0, 'abc']], " . $rows,
-    'a listener class that is gone' => $inputs . "'listeners' => [['App\\Demo\\Gone', 'hear', ['App\\Demo\\Paid'], true]]];",
-    'a listener method that is gone' => $inputs . "'listeners' => [['App\\Demo\\Notices', 'gone', ['App\\Demo\\Paid'], true]]];",
+    'a listener class that is gone' => $inputs . "'listeners' => [['App\\Demo\\Gone', 'hear', ['App\\Demo\\Paid'], true]], 'dispatcher' => null];",
+    'a listener method that is gone' => $inputs . "'listeners' => [['App\\Demo\\Notices', 'gone', ['App\\Demo\\Paid'], true]], 'dispatcher' => null];",
 ] as $name => $contents) {
     $contents === null ? unlink($table) : file_put_contents($table, $contents);
     echo $name, ': ';
@@ -55,10 +57,12 @@ the compiled table: heard 7
 no table: heard 0
 a table that is not a list: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
 a table without its listeners: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
+a table without its dispatcher: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
+a dispatcher that is not a path and a namespace: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
 a row with three fields: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
 a listed type that is not a name: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
 a row that does not say whether the method takes the event: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
 an input with three fields: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
 an input whose hash is not 32 hex digits: CompileError: .sharp/listeners.php is damaged. Run vendor/bin/mago compile.
-a listener class that is gone: Error: Class "App\Demo\Gone" not found
-a listener method that is gone: Error: Call to undefined method App\Demo\Notices::gone()
+a listener class that is gone: CompileError: .sharp/listeners.php is out of date: it lists App.Demo.Gone, which no longer exists. Run vendor/bin/mago compile.
+a listener method that is gone: CompileError: .sharp/listeners.php is out of date: it lists App.Demo.Notices.gone, which no longer exists. Run vendor/bin/mago compile.
