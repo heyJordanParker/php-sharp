@@ -3106,6 +3106,59 @@ lines.total();                      // compiles: lines is a List<Line>, so LineT
 prices.total();                     // compiles: prices is a Map<string, Money>, so PriceTotals runs
 ```
 
+- **An extension block can declare type parameters, as in C# 14,** so one block serves a receiver of any type argument, `extension<TItem>(List<TItem> items)`, within the type parameters' bounds (section 11). A call infers them from its receiver. A member's own type parameters come after the block's, and a call writes only those:
+
+<!-- example generic-extensions -->
+```csharp
+// app/Shared/Lists/ListExtensions.sharp
+namespace App.Shared.Lists;
+
+import App.DatabaseEntity;
+
+public static class ListExtensions
+{
+    extension<TItem>(List<TItem> items)
+    {
+        public bool holds(TItem wanted) => items.contains(wanted);
+        public List<TOut> mapped<TOut>(Function<TOut(TItem)> map) => items.map(map);
+    }
+
+    extension<TEntity : DatabaseEntity>(List<TEntity> rows)
+    {
+        public int saved => rows.count();
+    }
+}
+```
+
+<!-- example generic-extensions: statements
+List<Order> orders = [new Order()];
+List<string> names = ["spring"];
+-->
+```csharp
+import App.Shared.Lists.ListExtensions;
+
+orders.holds(new Order());              // compiles: TItem is Order, from orders
+orders.mapped<string>(o => "order");    // compiles: a List<string>, the call writes only TOut
+orders.saved;                           // compiles: an Order is a DatabaseEntity
+names.saved;                            // compile error: string is outside TEntity's bound, so List<string> has no saved
+```
+
+- **Each type parameter of an extension block appears in its receiver's type,** because the receiver is the only place a call infers it from, as C# requires:
+
+<!-- example extension-unused-type-parameter -->
+```csharp
+// app/Shared/Lists/Pairs.sharp
+namespace App.Shared.Lists;
+
+public static class Pairs
+{
+    extension<TItem, TOther>(List<TItem> items)    // compile error: the receiver List<TItem> doesn't use TOther
+    {
+        public int size() => items.count();
+    }
+}
+```
+
 ## 27. PHP# files
 
 A file's extension marks it as PHP#. The engine, Composer's autoloader, editors and the checker all choose the grammar from the filename.
