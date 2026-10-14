@@ -1,5 +1,7 @@
 # 40. The standard library's shape
 
+Superseded in part by [decision 76](076-plain-php-functions.md): every bare call of a PHP function is a compile error, and the standard library calls PHP through `global.` like any project.
+
 ## Decision
 
 The standard library lives under one root, `Sharp`, with the standard library namespaces `Sharp.Text`, `Sharp.Math`, `Sharp.Json`, `Sharp.IO`, `Sharp.Time`, `Sharp.Net` and `Sharp.Data`. Only `Sharp` is imported by default, together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`. A static class in a standard library namespace needs one import, such as `import Sharp.Json.Json;`.

@@ -267,7 +267,7 @@ EnumKeys: same opcodes and lines in 16 op arrays, same signatures in 1 classes
   check  Demo\Headcount::skus string("Map<string, int>")
   check  Demo\Headcount::grouped string("List<int>")
   check  Demo\Headcount::groupNames string("List<int>")
-Interop: same opcodes and lines in 3 op arrays, same signatures in 1 classes
+Interop: same opcodes and lines in 5 op arrays, same signatures in 1 classes
 Lambdas: same opcodes and lines in 35 op arrays, same signatures in 1 classes
   check  Demo\Lambdas::doubled string("List<int>, Any?")
   check  Demo\Lambdas::pipeline string("List<int>, Map<string, int>")

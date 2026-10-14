@@ -105,9 +105,9 @@ public class Store
 
     public string share<TItem : DatabaseEntity & Shareable>(TItem item) => item.link();
 
-    public void save(Class<DatabaseEntity> type, DatabaseEntity entity) => this.saved[sprintf("%s#%d", type, entity.id)] = entity;
+    public void save(Class<DatabaseEntity> type, DatabaseEntity entity) => this.saved[global.sprintf("%s#%d", type, entity.id)] = entity;
 
-    public DatabaseEntity? load(Class<DatabaseEntity> type, int id) => this.saved[sprintf("%s#%d", type, id)] ?? null;
+    public DatabaseEntity? load(Class<DatabaseEntity> type, int id) => this.saved[global.sprintf("%s#%d", type, id)] ?? null;
 
     public Class<DatabaseEntity> kind(string name) => this.kinds[name] ?? typeof(Order);
 }

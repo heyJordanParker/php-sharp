@@ -158,7 +158,7 @@ public class Tally
 
     public static float first(List<float> amounts) => amounts[0];
 
-    public static int largest() => max(Pager.sizes());
+    public static int largest() => global.max(Pager.sizes());
 
     public static string kind(Any? value) => match (value) {
         List<int> numbers => "ints",

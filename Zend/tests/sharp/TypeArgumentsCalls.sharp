@@ -72,7 +72,7 @@ public class Repository
         return true;
     }
 
-    public static Map<int|string, Any?> locals<T>(T item) => get_defined_vars();
+    public static Map<int|string, Any?> locals<T>(T item) => global.get_defined_vars();
 
     public static Box<Order> wrapped(Wrapper wrapper, Order order) => wrapper.wrap(order);
 
@@ -95,9 +95,9 @@ public class Repository
         try {
             throw thrown;
         } catch (Failure<int> numbers) {
-            return sprintf("numbers: %s", numbers.getMessage());
+            return global.sprintf("numbers: %s", numbers.getMessage());
         } catch (TError | Failure<string> failure) {
-            return sprintf("error: %s", failure.getMessage());
+            return global.sprintf("error: %s", failure.getMessage());
         }
     }
 

@@ -79,6 +79,8 @@ git archive HEAD | docker build -f sharp/docker/runtime/Dockerfile -t php-sharp 
 
 `sharp/composer/` is the Composer plugin `heyjordanparker/php-sharp-composer`. Composer's autoloader then tries `.sharp` after `.php` by the PSR-4 rules, the way it tries `.hh` on HHVM. Composer's class map scanner reads only `<?php` files, so on `composer dump-autoload --optimize` the plugin writes every `.sharp` file under a PSR-4 folder to `vendor/composer/autoload_sharp.php`, and the autoloader reads it. The package's autoloader includes every `.sharp` class itself, never Composer's, so on plain PHP the first one stops with "This project needs the PHP# engine" before its source can reach the output.
 
+`sharp/composer/library/Sharp/Builtins.sharp` gives each PHP built-in function its effect, as `extern global.fopen uses Files;`. `sharp/bin/builtins` writes it from PHPStan's php-8-stubs, at the version and SHA-256 it pins, for every PHP 8.5 function in PHP's root namespace that Mago's prelude in `sharp/mago/crates/prelude/` declares. `RULES` in the script maps each function to its effects, or to none, by its extension and name, and the run fails on a function no rule covers. `sharp/bin/builtins --self-test` checks that each rule gives the effect of its row in `ROWS`, and that removing the rule changes that row. The Linux job runs both and fails when the file differs from the committed one.
+
 `sharp/composer/` is the plugin's source of truth. Composer installs it from `heyJordanParker/php-sharp-composer`, a read-only split that CI rewrites from this folder's history, the way Symfony splits its components. Change the plugin here, never in the split.
 
 ## macOS dependencies

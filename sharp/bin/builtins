@@ -1,0 +1,496 @@
+#!/usr/bin/env php
+<?php
+// Writes sharp/composer/library/Sharp/Builtins.sharp: one `extern global.name` line for each function PHP 8.5 builds in
+// that Mago's prelude declares, with the effect RULES give it. PHPStan's php-8-stubs list the functions, and each stub's
+// folder names its extension. `--self-test` checks that every rule gives its row's effect, and that removing the rule
+// changes that row.
+
+declare(strict_types=1);
+
+const STUBS_VERSION = '0.4.43';
+const STUBS_SHA256 = '609c8dc1f27596f29c723700d9dff379602adb31c6b6dc16ca8027ad7724020f';
+const PHP_VERSION_ID_TARGET = 80500;
+
+// Each function's effects are the ones of the first rule whose extension and name pattern match it, written as they
+// follow `uses`, and null is pure. A function that reads the clock, the environment or a file, or prints, only when an
+// argument is left out has that effect, as `date` has Clock and `imagepng` has Console. A handle can be a terminal or a
+// file, so the functions that read or write through one, such as `fwrite` and `fgets`, have both Console and Files, and
+// every other function on a handle, such as `fflush`, has Files. A function that prints a file, such as `readfile`, has
+// both too.
+const RULES = [
+    ['Zend', '~^(die|exit)$~', 'Process'],
+    ['Zend', '~^gc_~', 'Process'],
+    ['Zend', '~^(trigger_error|user_error)$~', 'Console'],
+    ['Zend', '~^debug_print_backtrace$~', 'Console'],
+    ['Zend', '~^(class_alias|define|error_reporting|extension_loaded|get_error_handler|get_exception_handler|get_extension_funcs|get_included_files|get_loaded_extensions|get_required_files|get_resources|restore_error_handler|restore_exception_handler|set_error_handler|set_exception_handler|zend_thread_id)$~', 'Environment'],
+    ['Zend', '~~', null],
+
+    ['standard', '~^(mail)$~', 'Mail'],
+    ['standard', '~^(array_rand|password_hash|shuffle|str_shuffle)$~', 'Random'],
+    ['standard', '~^(gettimeofday|hrtime|microtime|sleep|time_nanosleep|time_sleep_until|uniqid|usleep)$~', 'Clock'],
+    ['standard', '~^(passthru|system)$~', 'Console, Process'],
+    ['standard', '~^(exec|getmygid|getmyinode|getmypid|getmyuid|getrusage|memory_get_peak_usage|memory_get_usage|memory_reset_peak_usage|pclose|popen|proc_\w+|register_shutdown_function|register_tick_function|set_time_limit|shell_exec|sys_getloadavg|unregister_tick_function)$~', 'Process'],
+    ['standard', '~^(dns_\w+|checkdnsrr|fsockopen|get_headers|gethostbyaddr|gethostbyname|gethostbynamel|getmxrr|http_clear_last_response_headers|http_get_last_response_headers|pfsockopen|stream_socket_\w+)$~', 'Http'],
+    ['standard', '~^(fgetc|fgetcsv|fgets|fprintf|fputcsv|fputs|fread|fscanf|fwrite|vfprintf)$~', 'Console, Files'],
+    ['standard', '~^(fpassthru|highlight_file|readfile|show_source)$~', 'Console, Files'],
+    ['standard', '~^(ob_\w+|connection_aborted|connection_status|debug_zval_dump|flush|header|header_register_callback|header_remove|headers_list|headers_sent|highlight_string|http_response_code|ignore_user_abort|output_add_rewrite_var|output_reset_rewrite_vars|phpcredits|phpinfo|print_r|printf|request_parse_body|sapi_windows_\w+|setcookie|setrawcookie|var_dump|var_export|vprintf)$~', 'Console'],
+    ['standard', '~^(ini_parse_quantity)$~', null],
+    ['standard', '~^(ini_\w+|assert_options|chdir|chroot|config_get_hash|dl|error_clear_last|error_get_last|get_cfg_var|get_current_user|get_include_path|getcwd|getenv|gethostname|getopt|getprotobyname|getprotobynumber|getservbyname|getservbyport|localeconv|net_get_interfaces|nl_langinfo|php_ini_loaded_file|php_ini_scanned_files|php_sapi_name|php_uname|phpversion|putenv|set_include_path|setlocale|strcoll)$~', 'Environment'],
+    ['standard', '~^(file\w*|stream_\w+|chgrp|chmod|chown|clearstatcache|closedir|closelog|copy|dir|disk_free_space|disk_total_space|diskfreespace|error_log|fclose|fdatasync|feof|fflush|flock|fopen|fseek|fstat|fsync|ftell|ftok|ftruncate|get_browser|get_meta_tags|getimagesize|getlastmod|glob|iptcembed|is_dir|is_executable|is_file|is_link|is_readable|is_uploaded_file|is_writable|is_writeable|lchgrp|lchown|link|linkinfo|lstat|md5_file|mkdir|move_uploaded_file|opendir|openlog|parse_ini_file|php_strip_whitespace|readdir|readlink|realpath|realpath_cache_get|realpath_cache_size|rename|rewind|rewinddir|rmdir|scandir|set_file_buffer|sha1_file|socket_get_status|socket_set_blocking|socket_set_timeout|stat|symlink|sys_get_temp_dir|syslog|tempnam|tmpfile|touch|umask|unlink)$~', 'Files'],
+    ['standard', '~~', null],
+
+    ['date', '~^(date_default_timezone_get|date_default_timezone_set)$~', 'Environment'],
+    ['date', '~^(date|date_create|date_create_from_format|date_create_immutable|date_create_immutable_from_format|getdate|gmdate|gmmktime|gmstrftime|idate|localtime|mktime|strftime|strtotime|time)$~', 'Clock'],
+    ['date', '~~', null],
+
+    ['random', '~^(getrandmax|mt_getrandmax)$~', null],
+    ['random', '~~', 'Random'],
+
+    ['bcmath', '~^bcscale$~', 'Environment'],
+    ['bcmath', '~~', null],
+
+    ['bz2', '~^(bzcompress|bzdecompress)$~', null],
+    ['bz2', '~~', 'Files'],
+
+    ['calendar', '~^(easter_date|easter_days|unixtojd)$~', 'Clock'],
+    ['calendar', '~~', null],
+
+    ['com_dotnet', '~^com_create_guid$~', 'Random'],
+    ['com_dotnet', '~^variant_~', null],
+    ['com_dotnet', '~~', 'Process'],
+
+    ['ctype', '~~', null],
+    ['curl', '~~', 'Http'],
+    ['dba', '~~', 'Database'],
+    ['dom', '~~', null],
+    ['enchant', '~~', 'Files'],
+
+    ['exif', '~^exif_tagname$~', null],
+    ['exif', '~~', 'Files'],
+
+    ['fileinfo', '~^(finfo_buffer|finfo_close|finfo_set_flags)$~', null],
+    ['fileinfo', '~~', 'Files'],
+
+    ['filter', '~^(filter_has_var|filter_input|filter_input_array)$~', 'Console'],
+    ['filter', '~~', null],
+
+    ['ftp', '~~', 'Http'],
+
+    ['gd', '~^(imagegrabscreen|imagegrabwindow)$~', 'Console'],
+    ['gd', '~^(imagecreatefromstring)$~', null],
+    ['gd', '~^(imageavif|imagebmp|imagegd|imagegd2|imagegif|imagejpeg|imagepng|imagewbmp|imagewebp|imagexbm)$~', 'Console, Files'],
+    ['gd', '~^(imagecreatefrom\w+|imageftbbox|imagefttext|imageloadfont|imagettfbbox|imagettftext)$~', 'Files'],
+    ['gd', '~~', null],
+
+    ['gettext', '~~', 'Environment'],
+
+    ['gmp', '~^gmp_random_~', 'Random'],
+    ['gmp', '~~', null],
+
+    ['hash', '~^(hash_file|hash_hmac_file|hash_update_file|hash_update_stream)$~', 'Files'],
+    ['hash', '~~', null],
+
+    ['iconv', '~^(iconv_get_encoding|iconv_set_encoding)$~', 'Environment'],
+    ['iconv', '~~', null],
+
+    ['imap', '~~', 'Mail'],
+
+    ['intl', '~^(intlcal_create_instance|intlcal_get_now|intlgregcal_create_instance)$~', 'Clock'],
+    ['intl', '~^(intltz_create_default|locale_get_default|locale_set_default)$~', 'Environment'],
+    ['intl', '~~', null],
+
+    ['json', '~~', null],
+    ['ldap', '~~', 'Http'],
+    ['libxml', '~~', 'Environment'],
+
+    ['mbstring', '~^mb_send_mail$~', 'Mail'],
+    ['mbstring', '~^(mb_http_input|mb_http_output|mb_output_handler)$~', 'Console'],
+    ['mbstring', '~^(mb_ereg_search\w*|mb_detect_order|mb_internal_encoding|mb_language|mb_regex_encoding|mb_regex_set_options|mb_substitute_character)$~', 'Environment'],
+    ['mbstring', '~~', null],
+
+    ['mysqli', '~~', 'Database'],
+    ['oci8', '~~', 'Database'],
+    ['odbc', '~~', 'Database'],
+    ['opcache', '~~', 'Cache'],
+
+    ['openssl', '~^(openssl_csr_new|openssl_csr_sign|openssl_password_hash|openssl_pkey_new|openssl_public_encrypt|openssl_random_pseudo_bytes|openssl_seal|openssl_sign|openssl_spki_new)$~', 'Random'],
+    ['openssl', '~^(openssl_\w+_export_to_file|openssl_cms_\w+|openssl_get_cert_locations|openssl_pkcs7_\w+)$~', 'Files'],
+    ['openssl', '~~', null],
+
+    ['pcntl', '~~', 'Process'],
+    ['pcre', '~~', null],
+    ['pdo', '~~', null],
+    ['pgsql', '~~', 'Database'],
+
+    ['posix', '~^(posix_errno|posix_get_last_error|posix_strerror)$~', null],
+    ['posix', '~^posix_times$~', 'Clock'],
+    ['posix', '~^(posix_access|posix_eaccess|posix_fpathconf|posix_mkfifo|posix_mknod|posix_pathconf)$~', 'Files'],
+    ['posix', '~^(posix_ctermid|posix_getcwd|posix_getgrgid|posix_getgrnam|posix_getlogin|posix_getpwnam|posix_getpwuid|posix_isatty|posix_sysconf|posix_ttyname|posix_uname)$~', 'Environment'],
+    ['posix', '~~', 'Process'],
+
+    ['pspell', '~~', 'Files'],
+    ['readline', '~~', 'Console'],
+    ['session', '~~', 'Cache'],
+    ['shmop', '~~', 'Cache'],
+
+    ['simplexml', '~^simplexml_load_file$~', 'Files'],
+    ['simplexml', '~~', null],
+
+    ['snmp', '~~', 'Http'],
+
+    ['soap', '~^use_soap_error_handler$~', 'Environment'],
+    ['soap', '~~', null],
+
+    ['sockets', '~~', 'Http'],
+
+    ['sodium', '~(_seed_keypair|_keypair_from_secretkey_and_publickey)$~', null],
+    ['sodium', '~(_keygen|_keypair|_random|^sodium_crypto_box_seal|^sodium_crypto_pwhash_scryptsalsa208sha256_str|^sodium_crypto_pwhash_str|^sodium_crypto_secretstream_xchacha20poly1305_init_push)$~', 'Random'],
+    ['sodium', '~~', null],
+
+    ['spl', '~^spl_autoload~', 'Environment'],
+    ['spl', '~~', null],
+
+    ['sysvmsg', '~~', 'Process'],
+    ['sysvsem', '~~', 'Process'],
+    ['sysvshm', '~~', 'Cache'],
+
+    ['tidy', '~^(tidy_parse_file|tidy_repair_file)$~', 'Files'],
+    ['tidy', '~~', null],
+
+    ['tokenizer', '~~', null],
+    ['xml', '~~', null],
+
+    ['xmlwriter', '~^(xmlwriter_flush|xmlwriter_open_uri)$~', 'Files'],
+    ['xmlwriter', '~~', null],
+
+    ['zip', '~~', 'Files'],
+
+    ['zlib', '~^(ob_gzhandler|zlib_get_coding_type)$~', 'Console'],
+    ['zlib', '~^(gzpassthru|readgzfile)$~', 'Console, Files'],
+    ['zlib', '~^(gzclose|gzeof|gzfile|gzgetc|gzgets|gzopen|gzputs|gzread|gzrewind|gzseek|gztell|gzwrite)$~', 'Files'],
+    ['zlib', '~~', null],
+
+    ['sapi', '~^(apache_getenv|apache_get_modules|apache_get_version|apache_setenv)$~', 'Environment'],
+    ['sapi', '~^(apache_child_terminate|cli_get_process_title|cli_set_process_title|fpm_get_status|phpdbg_\w+)$~', 'Process'],
+    ['sapi', '~~', 'Console'],
+];
+
+// One function per rule, which that rule classifies and no earlier one does.
+const ROWS = [
+    ['Zend', 'exit', 'Process'],
+    ['Zend', 'gc_collect_cycles', 'Process'],
+    ['Zend', 'trigger_error', 'Console'],
+    ['Zend', 'debug_print_backtrace', 'Console'],
+    ['Zend', 'set_error_handler', 'Environment'],
+    ['Zend', 'strlen', null],
+
+    ['standard', 'mail', 'Mail'],
+    ['standard', 'shuffle', 'Random'],
+    ['standard', 'microtime', 'Clock'],
+    ['standard', 'system', 'Console, Process'],
+    ['standard', 'proc_open', 'Process'],
+    ['standard', 'stream_socket_client', 'Http'],
+    ['standard', 'fwrite', 'Console, Files'],
+    ['standard', 'readfile', 'Console, Files'],
+    ['standard', 'printf', 'Console'],
+    ['standard', 'ini_parse_quantity', null],
+    ['standard', 'getenv', 'Environment'],
+    ['standard', 'file_put_contents', 'Files'],
+    ['standard', 'trim', null],
+
+    ['date', 'date_default_timezone_set', 'Environment'],
+    ['date', 'time', 'Clock'],
+    ['date', 'checkdate', null],
+
+    ['random', 'getrandmax', null],
+    ['random', 'random_int', 'Random'],
+
+    ['bcmath', 'bcscale', 'Environment'],
+    ['bcmath', 'bcadd', null],
+
+    ['bz2', 'bzcompress', null],
+    ['bz2', 'bzopen', 'Files'],
+
+    ['calendar', 'easter_date', 'Clock'],
+    ['calendar', 'cal_days_in_month', null],
+
+    ['com_dotnet', 'com_create_guid', 'Random'],
+    ['com_dotnet', 'variant_add', null],
+    ['com_dotnet', 'com_load_typelib', 'Process'],
+
+    ['ctype', 'ctype_digit', null],
+    ['curl', 'curl_exec', 'Http'],
+    ['dba', 'dba_open', 'Database'],
+    ['dom', 'dom_import_simplexml', null],
+    ['enchant', 'enchant_broker_init', 'Files'],
+
+    ['exif', 'exif_tagname', null],
+    ['exif', 'exif_read_data', 'Files'],
+
+    ['fileinfo', 'finfo_buffer', null],
+    ['fileinfo', 'finfo_open', 'Files'],
+
+    ['filter', 'filter_input', 'Console'],
+    ['filter', 'filter_var', null],
+
+    ['ftp', 'ftp_connect', 'Http'],
+
+    ['gd', 'imagegrabscreen', 'Console'],
+    ['gd', 'imagecreatefromstring', null],
+    ['gd', 'imagepng', 'Console, Files'],
+    ['gd', 'imagecreatefrompng', 'Files'],
+    ['gd', 'imagecreatetruecolor', null],
+
+    ['gettext', 'gettext', 'Environment'],
+
+    ['gmp', 'gmp_random_bits', 'Random'],
+    ['gmp', 'gmp_add', null],
+
+    ['hash', 'hash_file', 'Files'],
+    ['hash', 'hash', null],
+
+    ['iconv', 'iconv_set_encoding', 'Environment'],
+    ['iconv', 'iconv', null],
+
+    ['imap', 'imap_open', 'Mail'],
+
+    ['intl', 'intlcal_get_now', 'Clock'],
+    ['intl', 'locale_set_default', 'Environment'],
+    ['intl', 'normalizer_normalize', null],
+
+    ['json', 'json_encode', null],
+    ['ldap', 'ldap_connect', 'Http'],
+    ['libxml', 'libxml_use_internal_errors', 'Environment'],
+
+    ['mbstring', 'mb_send_mail', 'Mail'],
+    ['mbstring', 'mb_output_handler', 'Console'],
+    ['mbstring', 'mb_internal_encoding', 'Environment'],
+    ['mbstring', 'mb_strlen', null],
+
+    ['mysqli', 'mysqli_query', 'Database'],
+    ['oci8', 'oci_connect', 'Database'],
+    ['odbc', 'odbc_exec', 'Database'],
+    ['opcache', 'opcache_reset', 'Cache'],
+
+    ['openssl', 'openssl_random_pseudo_bytes', 'Random'],
+    ['openssl', 'openssl_pkcs7_sign', 'Files'],
+    ['openssl', 'openssl_decrypt', null],
+
+    ['pcntl', 'pcntl_fork', 'Process'],
+    ['pcre', 'preg_match', null],
+    ['pdo', 'pdo_drivers', null],
+    ['pgsql', 'pg_query', 'Database'],
+
+    ['posix', 'posix_strerror', null],
+    ['posix', 'posix_times', 'Clock'],
+    ['posix', 'posix_mkfifo', 'Files'],
+    ['posix', 'posix_uname', 'Environment'],
+    ['posix', 'posix_kill', 'Process'],
+
+    ['pspell', 'pspell_new', 'Files'],
+    ['readline', 'readline', 'Console'],
+    ['session', 'session_start', 'Cache'],
+    ['shmop', 'shmop_open', 'Cache'],
+
+    ['simplexml', 'simplexml_load_file', 'Files'],
+    ['simplexml', 'simplexml_load_string', null],
+
+    ['snmp', 'snmpget', 'Http'],
+
+    ['soap', 'use_soap_error_handler', 'Environment'],
+    ['soap', 'is_soap_fault', null],
+
+    ['sockets', 'socket_connect', 'Http'],
+
+    ['sodium', 'sodium_crypto_box_seed_keypair', null],
+    ['sodium', 'sodium_crypto_secretbox_keygen', 'Random'],
+    ['sodium', 'sodium_crypto_secretbox', null],
+
+    ['spl', 'spl_autoload_register', 'Environment'],
+    ['spl', 'iterator_to_array', null],
+
+    ['sysvmsg', 'msg_send', 'Process'],
+    ['sysvsem', 'sem_acquire', 'Process'],
+    ['sysvshm', 'shm_put_var', 'Cache'],
+
+    ['tidy', 'tidy_parse_file', 'Files'],
+    ['tidy', 'tidy_parse_string', null],
+
+    ['tokenizer', 'token_get_all', null],
+    ['xml', 'xml_parse', null],
+
+    ['xmlwriter', 'xmlwriter_open_uri', 'Files'],
+    ['xmlwriter', 'xmlwriter_open_memory', null],
+
+    ['zip', 'zip_open', 'Files'],
+
+    ['zlib', 'ob_gzhandler', 'Console'],
+    ['zlib', 'readgzfile', 'Console, Files'],
+    ['zlib', 'gzopen', 'Files'],
+    ['zlib', 'gzcompress', null],
+
+    ['sapi', 'apache_getenv', 'Environment'],
+    ['sapi', 'cli_set_process_title', 'Process'],
+    ['sapi', 'getallheaders', 'Console'],
+];
+
+const MISSING = 'no rule';
+
+function fail(string $message): never
+{
+    fwrite(STDERR, "sharp/bin/builtins: $message\n");
+    exit(1);
+}
+
+/** @param list<array{string, string, ?string}> $rules */
+function effect(array $rules, string $extension, string $function): ?string
+{
+    foreach ($rules as [$ruleExtension, $pattern, $effect]) {
+        if ($ruleExtension === $extension && preg_match($pattern, $function)) {
+            return $effect;
+        }
+    }
+
+    return MISSING;
+}
+
+function label(?string $effect): string
+{
+    return $effect ?? 'pure';
+}
+
+function selfTest(): never
+{
+    $problems = [];
+    foreach (ROWS as [$extension, $function, $expected]) {
+        $effect = effect(RULES, $extension, $function);
+        if ($effect !== $expected) {
+            $problems[] = "$extension $function gives " . label($effect) . ', not ' . label($expected) . '.';
+        }
+    }
+    foreach (RULES as $index => [$extension, $pattern]) {
+        $without = RULES;
+        unset($without[$index]);
+        $changed = array_filter(ROWS, static fn (array $row): bool => effect($without, $row[0], $row[1]) !== $row[2]);
+        if ($changed === []) {
+            $problems[] = "No row fails without the rule $extension $pattern.";
+        }
+    }
+    if ($problems !== []) {
+        fail(implode("\n", $problems));
+    }
+    echo 'Checked ', count(RULES), ' rules with ', count(ROWS), " rows.\n";
+    exit(0);
+}
+
+/**
+ * @return array<string, true> the lowercase names of the functions in PHP's root namespace that Mago's prelude declares.
+ * Mago reports `global.name` as missing for any other function, such as oci8's and imap's, so those get no line.
+ */
+function checkerFunctions(string $root): array
+{
+    $names = [];
+    foreach (glob("$root/sharp/mago/crates/prelude/assets/extensions/*.php") as $path) {
+        $tokens = array_values(array_filter(
+            PhpToken::tokenize(file_get_contents($path)),
+            static fn (PhpToken $token): bool => !$token->is([T_WHITESPACE, T_COMMENT, T_DOC_COMMENT]),
+        ));
+        [$namespace, $namespaceDepth, $depth] = ['', 0, 0];
+        foreach ($tokens as $index => $token) {
+            if ($token->is(T_NAMESPACE)) {
+                $name = $tokens[$index + 1]->is([T_STRING, T_NAME_QUALIFIED]) ? $tokens[$index + 1]->text : '';
+                $braced = $tokens[$index + ($name === '' ? 1 : 2)]->text === '{';
+                [$namespace, $namespaceDepth] = [$name, $braced ? $depth + 1 : 0];
+            } elseif ($token->text === '{') {
+                $depth++;
+            } elseif ($token->text === '}') {
+                $depth--;
+            } elseif ($token->is(T_FUNCTION) && $depth === $namespaceDepth && $namespace === '') {
+                // A keyword names a function too, as `exit` and `clone` do, so the name is any word, not only T_STRING.
+                $name = $tokens[$index + ($tokens[$index + 1]->text === '&' ? 2 : 1)]->text;
+                if (preg_match('~^\w+$~', $name)) {
+                    $names[strtolower($name)] = true;
+                }
+            }
+        }
+    }
+    if ($names === []) {
+        fail('sharp/mago/crates/prelude/assets/extensions declares no function.');
+    }
+
+    return $names;
+}
+
+/** Downloads the pinned php-8-stubs into sharp/build, once, and returns its folder. */
+function stubs(string $root): string
+{
+    $folder = "$root/sharp/build/php-8-stubs-" . STUBS_VERSION;
+    if (is_dir($folder)) {
+        return $folder;
+    }
+    // A fresh checkout has no sharp/build, and curl cannot write the archive without it.
+    if (!is_dir(dirname($folder)) && !mkdir(dirname($folder), 0777, true)) {
+        fail('cannot create ' . dirname($folder) . '.');
+    }
+    $archive = "$folder.tar.gz";
+    $url ='https://codeload.github.com/phpstan/php-8-stubs/tar.gz/refs/tags/' . STUBS_VERSION;
+    foreach ([['curl', '-sSfL', '-o', $archive, $url], ['tar', '-xzf', $archive, '-C', dirname($folder)]] as $command) {
+        if ($command[0] === 'tar' && hash_file('sha256', $archive) !== STUBS_SHA256) {
+            fail("$url does not have the SHA-256 " . STUBS_SHA256 . '.');
+        }
+        $process = proc_open($command, [STDIN, STDOUT, STDERR], $pipes);
+        if (proc_close($process) !== 0) {
+            fail(implode(' ', $command) . ' failed.');
+        }
+    }
+    unlink($archive);
+
+    return $folder;
+}
+
+if (($argv[1] ?? null) === '--self-test') {
+    selfTest();
+}
+
+$root = dirname(__DIR__, 2);
+$stubs = stubs($root);
+require "$stubs/Php8StubsMap.php";
+
+$checker = checkerFunctions($root);
+$lines = [];
+$unclassified = [];
+foreach ((new PHPStan\Php8StubsMap(PHP_VERSION_ID_TARGET))->functions as $lowercase => $path) {
+    if (!isset($checker[$lowercase])) {
+        continue;
+    }
+    $stub = file_get_contents("$stubs/$path");
+    // A function in a namespace, such as Dom\import_simplexml, is not in PHP's root namespace.
+    if (preg_match('~^namespace ~m', $stub)) {
+        continue;
+    }
+    if (!preg_match('~^function &?(\w+)\(~m', $stub, $match)) {
+        fail("$path declares no function.");
+    }
+    $function = $match[1];
+    $parts = explode('/', $path);
+    $extension = $parts[1] === 'ext' ? $parts[2] : $parts[1];
+    $effect = effect(RULES, $extension, $function);
+    if ($effect === MISSING) {
+        $unclassified[] = "$extension $function";
+        continue;
+    }
+    $lines[$function] = "extern global.$function" . ($effect === null ? '' : " uses $effect") . ';';
+}
+if ($unclassified !== []) {
+    fail("no rule classifies these functions. Add a rule and its row:\n" . implode("\n", $unclassified));
+}
+ksort($lines, SORT_STRING);
+
+$license = file_get_contents("$stubs/LICENSE");
+$notice = implode("\n", array_map(static fn (string $line): string => rtrim("// $line"), explode("\n", trim($license))));
+file_put_contents(
+    "$root/sharp/composer/library/Sharp/Builtins.sharp",
+    '// Generated by sharp/bin/builtins from PHPStan\'s php-8-stubs ' . STUBS_VERSION . " for PHP 8.5. Do not edit.\n"
+    . "// The list of functions comes from php-8-stubs, under this license:\n//\n$notice\n\nnamespace Sharp;\n\n"
+    . implode("\n", $lines) . "\n",
+);
