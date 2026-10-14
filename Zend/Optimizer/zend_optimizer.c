@@ -302,6 +302,10 @@ bool zend_optimizer_update_op1_const(zend_op_array *op_array,
 			zend_optimizer_add_literal_string(op_array, zend_string_tolower(Z_STR_P(val)));
 			break;
 		case ZEND_NEW:
+			/* PHP#: op2 holds the type arguments, so it has no room for a constant class's cache slot. */
+			if (opline->op2_type != IS_UNUSED) {
+				return 0;
+			}
 			REQUIRES_STRING(val);
 			drop_leading_backslash(val);
 			opline->op1.constant = zend_optimizer_add_literal(op_array, val);
@@ -424,6 +428,8 @@ bool zend_optimizer_update_op2_const(zend_op_array *op_array,
 	switch (opline->opcode) {
 		case ZEND_ASSIGN_REF:
 		case ZEND_FAST_CALL:
+		/* PHP#'s TMP op2 of a NEW holds what it creates, which no constant stands for, see ZEND_FETCH_CLASS_SHARP_TYPE. */
+		case ZEND_NEW:
 			return 0;
 		case ZEND_FETCH_CLASS:
 		case ZEND_INSTANCEOF:

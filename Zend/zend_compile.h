@@ -261,7 +261,7 @@ typedef struct _zend_oparray_context {
 /* has #[\Override] attribute                             |     |     |     */
 #define ZEND_ACC_OVERRIDE                (1 << 28) /*     |  X  |  X  |     */
 /*                                                        |     |     |     */
-/* Property Flags (unused: 13-27,29...)                   |     |     |     */
+/* Property Flags (unused: 15-27,29...)                   |     |     |     */
 /* ===========                                            |     |     |     */
 /*                                                        |     |     |     */
 /* Promoted property / parameter                          |     |     |     */
@@ -275,7 +275,14 @@ typedef struct _zend_oparray_context {
 #define ZEND_ACC_PROTECTED_SET           (1 << 11) /*     |     |  X  |     */
 #define ZEND_ACC_PRIVATE_SET             (1 << 12) /*     |     |  X  |     */
 /*                                                        |     |     |     */
-/* Class Flags (unused: 31)                               |     |     |     */
+/* PHP#: the hidden slot of an object's type arguments,   |     |     |     */
+/* which no view of the object shows, see ext/sharp       |     |     |     */
+#define ZEND_ACC_SHARP_HIDDEN            (1 << 13) /*     |     |  X  |     */
+/*                                                        |     |     |     */
+/* PHP#: the property has a PHP# type, its sharp_type     |     |     |     */
+#define ZEND_ACC_SHARP_TYPED             (1 << 14) /*     |     |  X  |     */
+/*                                                        |     |     |     */
+/* Class Flags (unused: none)                             |     |     |     */
 /* ===========                                            |     |     |     */
 /*                                                        |     |     |     */
 /* Special class types                                    |     |     |     */
@@ -340,6 +347,10 @@ typedef struct _zend_oparray_context {
 /*                                                        |     |     |     */
 /* Class cannot be serialized or unserialized             |     |     |     */
 #define ZEND_ACC_NOT_SERIALIZABLE        (1 << 29) /*  X  |     |     |     */
+/*                                                        |     |     |     */
+/* PHP#: the class declares the hidden slot of its        |     |     |     */
+/* objects' type arguments, see ext/sharp                 |     |     |     */
+#define ZEND_ACC_SHARP_GENERIC           (1U << 31) /* X  |     |     |     */
 /*                                                        |     |     |     */
 /* Function Flags (unused: 30)                            |     |     |     */
 /* ==============                                         |     |     |     */
@@ -464,6 +475,9 @@ typedef struct _zend_property_info {
 	zend_type type;
 	const zend_property_info *prototype;
 	zend_function **hooks;
+	/* PHP#: the type text of a PHP# property whose type has type arguments, which every write from plain PHP checks
+	 * beside PHP's own type, see ext/sharp/php_sharp.h, or NULL. */
+	zend_string *sharp_type;
 } zend_property_info;
 
 #define OBJ_PROP(obj, offset) \
@@ -1147,6 +1161,28 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  *
  * ZEND_METHOD_CALL_SHARP: a PHP# method call, set in ext/sharp for every method call.
  *   attr of ZEND_AST_METHOD_CALL, ZEND_AST_NULLSAFE_METHOD_CALL  upstream: none
+ *
+ * ZEND_SHARP_TYPE_ARGS: the type arguments of a PHP# `new`, in the TMP this opcode gives the ZEND_NEW
+ * right after it. The NEW's class is then never a CONST, whose cache slot upstream keeps in op2, and the
+ * NEW handler asserts it.
+ *   op2 of ZEND_NEW                                           upstream: UNUSED, the cache slot of a CONST op1
+ * It also gives a PHP# generic call the type arguments of the method it calls, in the TMP right before the call op,
+ * which the method's ZEND_SHARP_RECV_TYPE_ARGS reads through the caller's opline. Upstream never writes this operand,
+ * which init_op leaves IS_UNUSED.
+ *   op1 of ZEND_DO_FCALL, ZEND_DO_UCALL, ZEND_DO_FCALL_BY_NAME   upstream: UNUSED
+ *
+ * ZEND_ACC_SHARP_HIDDEN: the hidden slot an object of a generic PHP# class keeps its type arguments in, and the hidden
+ * static a generic PHP# class keeps each type argument's own statics in.
+ *   flags of zend_property_info                              upstream: the ZEND_ACC_* property flags
+ *
+ * ZEND_ACC_SHARP_TYPED: the property has a PHP# type, its sharp_type, which every write from plain PHP checks. A write
+ * tests this flag before it looks for the object, and the JIT's helpers test it with readonly and asymmetric visibility
+ * in one test, so a plain PHP property pays at most one bit test for the check.
+ *   flags of zend_property_info                               upstream: the ZEND_ACC_* property flags
+ *
+ * ZEND_ACC_SHARP_GENERIC: the class declares that hidden slot, so == and serialize read type arguments only
+ * from objects of such a class. Inheritance never copies it.
+ *   ce_flags of zend_class_entry                              upstream: the ZEND_ACC_* class flags
  */
 #define ZEND_SHARP_OPERATOR_SYNTAX	(1<<15)
 #define ZEND_SHARP_OPERATOR	(1<<30)
@@ -1169,11 +1205,49 @@ ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & UINT8_MAX),
 	"ZEND_SHARP_OPERATOR overlaps the type in the extended_value of ZEND_CAST");
 ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR & (ZEND_FETCH_DIM_REF|ZEND_FETCH_DIM_DIM|ZEND_FETCH_DIM_OBJ|ZEND_FETCH_DIM_INCDEC)),
 	"ZEND_SHARP_OPERATOR overlaps the ZEND_FETCH_DIM_* flags in the extended_value of ZEND_FETCH_DIM_R and ZEND_FETCH_DIM_FUNC_ARG");
+ZEND_STATIC_ASSERT(IS_UNUSED == 0,
+	"init_op leaves op1 of the ZEND_DO_*CALL opcodes IS_UNUSED only while IS_UNUSED is 0");
+ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_HIDDEN & (ZEND_ACC_PPP_MASK|ZEND_ACC_PPP_SET_MASK|ZEND_ACC_CHANGED|ZEND_ACC_STATIC
+		|ZEND_ACC_FINAL|ZEND_ACC_ABSTRACT|ZEND_ACC_READONLY|ZEND_ACC_PROMOTED|ZEND_ACC_VIRTUAL|ZEND_ACC_DEPRECATED
+		|ZEND_ACC_OVERRIDE)),
+	"ZEND_ACC_SHARP_HIDDEN overlaps a ZEND_ACC_* flag in the flags of zend_property_info");
+ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_TYPED & (ZEND_ACC_PPP_MASK|ZEND_ACC_PPP_SET_MASK|ZEND_ACC_CHANGED|ZEND_ACC_STATIC
+		|ZEND_ACC_FINAL|ZEND_ACC_ABSTRACT|ZEND_ACC_READONLY|ZEND_ACC_PROMOTED|ZEND_ACC_VIRTUAL|ZEND_ACC_DEPRECATED
+		|ZEND_ACC_OVERRIDE|ZEND_ACC_SHARP_HIDDEN)),
+	"ZEND_ACC_SHARP_TYPED overlaps a ZEND_ACC_* flag in the flags of zend_property_info");
+ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_GENERIC & (ZEND_ACC_INTERFACE|ZEND_ACC_TRAIT|ZEND_ACC_ANON_CLASS|ZEND_ACC_LINKED
+		|ZEND_ACC_IMPLICIT_ABSTRACT_CLASS|ZEND_ACC_FINAL|ZEND_ACC_EXPLICIT_ABSTRACT_CLASS|ZEND_ACC_IMMUTABLE
+		|ZEND_ACC_HAS_TYPE_HINTS|ZEND_ACC_TOP_LEVEL|ZEND_ACC_PRELOADED|ZEND_ACC_DEPRECATED|ZEND_ACC_CONSTANTS_UPDATED
+		|ZEND_ACC_NO_DYNAMIC_PROPERTIES|ZEND_HAS_STATIC_IN_METHODS|ZEND_ACC_ALLOW_DYNAMIC_PROPERTIES
+		|ZEND_ACC_READONLY_CLASS|ZEND_ACC_RESOLVED_PARENT|ZEND_ACC_RESOLVED_INTERFACES|ZEND_ACC_UNRESOLVED_VARIANCE
+		|ZEND_ACC_NEARLY_LINKED|ZEND_ACC_HAS_READONLY_PROPS|ZEND_ACC_CACHED|ZEND_ACC_CACHEABLE|ZEND_ACC_HAS_AST_CONSTANTS
+		|ZEND_ACC_HAS_AST_PROPERTIES|ZEND_ACC_HAS_AST_STATICS|ZEND_ACC_FILE_CACHED|ZEND_ACC_ENUM
+		|ZEND_ACC_NOT_SERIALIZABLE|ZEND_ACC_USE_GUARDS)),
+	"ZEND_ACC_SHARP_GENERIC overlaps a ZEND_ACC_* flag in the ce_flags of zend_class_entry");
 
 static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 {
 	return (ast->attr & ZEND_SHARP_OPERATOR_SYNTAX) ? ZEND_SHARP_OPERATOR : 0;
 }
+
+/* op1.num of a ZEND_SHARP_TYPE_ARGS whose CONST op2 is an open type text that writes only type parameters of the class
+ * it is written in, as `$` and its index. A text that also writes one of its method, as `#` and its index, takes the
+ * method's hidden local as its CV op1 instead. The class name literals after an open op2 name that class, which
+ * Closure::call() and Closure::bind() never change. Its five cache slots hold this's class, this's own type arguments,
+ * the method's type arguments, the list they spelled, and the class it is written in. */
+#define ZEND_SHARP_TYPE_ARGS_OPEN 1
+
+/* attr of a ZEND_AST_SHARP_TYPE_OF, and extended_value of its ZEND_SHARP_TYPE_OF, that gives the text of its whole type
+ * list, as `App.Order, int`, in place of the class value of its one type: the key of a generic class's own statics. */
+#define ZEND_SHARP_TYPE_OF_LIST 1
+
+/* op1.num of a ZEND_NEW whose UNUSED op1 names no class: the TMP op2 holds the list whose one type it creates, as
+ * PHP#'s `new TItem(…)` compiles, or the class value whose class it creates, as `new (type)(…)` compiles. Either gives
+ * the object its type arguments, see sharp_new_class. */
+#define ZEND_FETCH_CLASS_SHARP_TYPE 7
+
+/* attr of a ZEND_AST_NEW whose class is a PHP# class value, as in `new (type)(…)`, which names no type arguments. */
+#define ZEND_SHARP_NEW_CLASS_VALUE 1
 
 #define ZEND_LAST_CATCH			(1<<0)
 

@@ -438,6 +438,13 @@ class ReflectionClass implements Reflector
 class ReflectionObject extends ReflectionClass
 {
     public function __construct(object $object) {}
+
+    /**
+     * PHP#: the type arguments of an object of a generic PHP# class, one type text per type parameter of its class.
+     *
+     * @return list<string>
+     */
+    public function getTypeArguments(): array {}
 }
 
 enum PropertyHookType: string

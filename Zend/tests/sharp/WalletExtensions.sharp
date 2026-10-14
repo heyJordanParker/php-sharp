@@ -11,6 +11,8 @@ public static class WalletExtensions
         public bool isEmpty => wallet.balance == 0;
 
         public string rank() => "wallet";
+
+        public int counted(List<int> amounts) => wallet.balance + amounts.count();
     }
 
     extension(string text)
