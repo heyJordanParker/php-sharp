@@ -21,6 +21,8 @@ after the table, in the order they started, and through an interface: table 5, f
 one started during an emit hears only the next: table 6, starter 6, table 7, starter 7, late 7
 one whose handle is gone runs nothing under a dispatcher that runs it later: table 8
 a type no class has: table 9
+Events.on in PHP#, until its method returns: table 10, screen 10, table 11
+Events.on through an interface: table 12, any 12, table 13
 a handle in a local, until its function returns: table 1, scoped 1, table 2
 until an exception leaves its function: table 3, caught boom
 a handle never stored: table 4
@@ -28,3 +30,5 @@ after the table, in the order they started, and through an interface: table 5, f
 one started during an emit hears only the next: table 6, starter 6, table 7, starter 7, late 7
 one whose handle is gone runs nothing under a dispatcher that runs it later: table 8
 a type no class has: table 9
+Events.on in PHP#, until its method returns: table 10, screen 10, table 11
+Events.on through an interface: table 12, any 12, table 13

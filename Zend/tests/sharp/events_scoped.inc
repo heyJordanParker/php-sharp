@@ -29,6 +29,24 @@ container_project('events-scoped', [
             }
         }
         SHARP,
+    'app/Scoped/Screen.sharp' => <<<'SHARP'
+        namespace App.Scoped;
+
+        public class Screen
+        {
+            public void watch(int orderId)
+            {
+                const listening = Events.on<Paid>(e => Notices.log.add(`screen ${e.orderId}`));
+                emit new Paid(orderId);
+            }
+
+            public void watchEvery(int orderId)
+            {
+                const listening = Events.on<OrderEvent>(e => Notices.log.add(`any ${e.orderId}`));
+                emit new Paid(orderId);
+            }
+        }
+        SHARP,
     'app/Scoped/Later/Module.sharp' => <<<'SHARP'
         namespace App.Scoped.Later;
 
@@ -155,5 +173,13 @@ for ($run = 0; $run < 2; $run++) {
     heard('a type no class has', function (): void {
         $ghost = listening('ghost', 'App\Scoped\Nothing');
         pay(9);
+    });
+    heard('Events.on in PHP#, until its method returns', function (): void {
+        (new App\Scoped\Screen())->watch(10);
+        pay(11);
+    });
+    heard('Events.on through an interface', function (): void {
+        (new App\Scoped\Screen())->watchEvery(12);
+        pay(13);
     });
 }
