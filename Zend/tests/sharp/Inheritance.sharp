@@ -48,6 +48,18 @@ public class Sealed : Base
     public final override string kind() => "sealed";
 }
 
+public interface Keyed<TKey>
+{
+    TKey key();
+
+    List<TKey> keys() => [this.key(), this.key()];
+}
+
+public class Coded : Keyed<int>
+{
+    public int key() => 7;
+}
+
 public static class Seeder
 {
     public static bool owns(Any value) => value is Copies;
@@ -55,4 +67,6 @@ public static class Seeder
     public static string seed(Copies owner) => owner.copy();
 
     public static int count(List<Copies> owners) => owners.count();
+
+    public static int firstKey(Coded coded) => coded.keys()[0];
 }

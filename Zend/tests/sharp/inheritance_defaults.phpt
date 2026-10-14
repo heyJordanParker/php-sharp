@@ -21,6 +21,8 @@ final class LegacySheet implements Demo\HasDesign
 $sheet = new Demo\Sheet();
 var_dump($sheet->designKey(), (new LegacySheet())->designKey(), Demo\Tone::Calm->describe());
 var_dump((new Demo\Both())->describe());
+$coded = new Demo\Coded();
+var_dump($coded->keys(), Demo\Seeder::firstKey($coded));
 
 var_dump(
     (new ReflectionMethod(Demo\HasDesign::class, 'designKey'))->isAbstract(),
@@ -42,6 +44,13 @@ string(12) "design:sheet"
 string(13) "design:legacy"
 string(4) "told"
 string(14) "described+told"
+array(2) {
+  [0]=>
+  int(7)
+  [1]=>
+  int(7)
+}
+int(7)
 bool(true)
 bool(true)
 bool(false)
