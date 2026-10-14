@@ -24,8 +24,8 @@ Every input a class reads arrives through its constructor or its parameters, so 
 ### Rejected: no superglobals, and nothing added
 
 ```csharp
-public string region() => getenv("AWS_REGION") as string ?? "us-east-1";   // compiles; no signature shows the environment read
-public string target() => …;                                               // no typed way to read the script's arguments
+public string region() => global.getenv("AWS_REGION") as string ?? "us-east-1";   // compiles; no signature shows the environment read
+public string target() => …;                                                      // no typed way to read the script's arguments
 ```
 
 A script has no typed way to read its arguments, and environment reads stay invisible in signatures.

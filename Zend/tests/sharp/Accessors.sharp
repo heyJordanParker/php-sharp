@@ -18,7 +18,7 @@ class Product
             field = value;
         }
     } = 0;
-    public int stock { get; private set => field = max(0, value); } = 0;
+    public int stock { get; private set => field = global.max(0, value); } = 0;
     public List<string> tags
     {
         get => field;
@@ -26,7 +26,7 @@ class Product
         {
             field = [];
             for (const tag of value) {
-                field.add(strtolower(tag));
+                field.add(global.strtolower(tag));
             }
         }
     } = [];
@@ -46,15 +46,15 @@ class Product
 
 class Address
 {
-    protected string region { get => strtoupper(field); }
+    protected string region { get => global.strtoupper(field); }
 
-    public Address(public string city { get; set => field = ucfirst(value.trim()); }, string region)
+    public Address(public string city { get; set => field = global.ucfirst(value.trim()); }, string region)
     {
         this.region = region;
     }
 
     public string label()
     {
-        return sprintf("%s, %s", this.city, this.region);
+        return global.sprintf("%s, %s", this.city, this.region);
     }
 }
