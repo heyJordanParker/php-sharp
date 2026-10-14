@@ -1,0 +1,6 @@
+namespace App;
+
+public class RushOrder : Order
+{
+    public string caption() => "rush";
+}

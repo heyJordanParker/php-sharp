@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="vendor/autoload.php" colors="false" cacheResult="false" failOnRisky="true" failOnWarning="true">
+    <testsuites>
+        <testsuite name="fixture">
+            <directory suffix="Test.sharp">tests</directory>
+            <directory suffix="Test.php">tests</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>

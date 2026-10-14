@@ -28,6 +28,6 @@ class Deploy
 
     public string folder()
     {
-        return this.environment.currentDirectory;
+        return this.environment.currentDirectory();
     }
 }

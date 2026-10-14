@@ -2,6 +2,7 @@
 # include <config.h>
 #endif
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/wait.h>
@@ -16,6 +17,7 @@
 #include "ext/spl/spl_exceptions.h"
 #include "ext/standard/basic_functions.h"
 #include "ext/standard/info.h"
+#include "zend_attributes.h"
 #include "zend_closures.h"
 #include "zend_enum.h"
 #include "zend_exceptions.h"
@@ -30,6 +32,8 @@
 
 #define SHARP_FILE_EXTENSION ".sharp"
 #define SHARP_COMPILED_FOLDER ".sharp"
+/* How the path of an input that stands for the .sharp files of its folder ends: the bridge's unit::SOURCE_LISTING. */
+#define SHARP_SOURCE_LISTING "/*.sharp"
 
 #define SHARP_KIND_IS_ZEND_KIND(kind) \
 	ZEND_STATIC_ASSERT((zend_ast_kind) SHARP_AST_##kind == ZEND_AST_##kind, "SHARP_AST_" #kind " differs from ZEND_AST_" #kind);
@@ -50,6 +54,20 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	/* Undefined until the request runs its compile command, then the checker report the command printed, or null. */
 	zval compile_command_report;
 	zval arguments;
+	/* Spec section 32: Sharp\Container's bindings, under "namespace id" a list of the modules that bind it, each a
+	 * list of its rows, the base modules' and the environment modules' apart; the paths of the module files it read;
+	 * each test file's module, under each class the file declares, and the one of the test that runs now, or NULL;
+	 * the services a singleton or a scoped binding keeps, by binding row; and the bindings and classes it is
+	 * building, to refuse a cycle. */
+	HashTable container_bindings;
+	HashTable container_environment;
+	HashTable container_modules;
+	HashTable container_tests;
+	HashTable *container_test;
+	HashTable container_singletons;
+	HashTable container_request_scope;
+	HashTable *container_scope;
+	HashTable container_building;
 ZEND_END_MODULE_GLOBALS(sharp)
 
 ZEND_DECLARE_MODULE_GLOBALS(sharp)
@@ -265,16 +283,69 @@ static void sharp_free_stamp(zval *stamp)
 	efree(Z_PTR_P(stamp));
 }
 
+static int sharp_compare_names(Bucket *a, Bucket *b)
+{
+	return zend_binary_strcmp(ZSTR_VAL(a->key), ZSTR_LEN(a->key), ZSTR_VAL(b->key), ZSTR_LEN(b->key));
+}
+
+/* Stamps the listing of the folder that ends at length, as the bridge's unit::stamp does: the names of its regular files
+ * whose name ends in .sharp, each followed by a newline, in byte order. A folder that can't be opened lists nothing. */
+static void sharp_stamp_listing(const char *path, size_t length, sharp_stamp *stamp)
+{
+	zend_string *folder = zend_string_init(path, length, 0), *name;
+	PHP_XXH3_128_CTX context = {0};
+	HashTable names;
+	DIR *directory = VCWD_OPENDIR(ZSTR_VAL(folder));
+	struct dirent *entry;
+
+	zend_hash_init(&names, 8, NULL, NULL, 0);
+	while (directory && (entry = readdir(directory))) {
+		size_t name_length = strlen(entry->d_name);
+		zend_stat_t status;
+		zend_string *file;
+
+		if (name_length <= sizeof(SHARP_FILE_EXTENSION) - 1
+				|| memcmp(entry->d_name + name_length - (sizeof(SHARP_FILE_EXTENSION) - 1), SHARP_FILE_EXTENSION, sizeof(SHARP_FILE_EXTENSION) - 1) != 0) {
+			continue;
+		}
+		file = zend_string_concat2(ZSTR_VAL(folder), ZSTR_LEN(folder), entry->d_name, name_length);
+		if (VCWD_STAT(ZSTR_VAL(file), &status) == 0 && S_ISREG(status.st_mode)) {
+			zend_hash_str_add_empty_element(&names, entry->d_name, name_length);
+		}
+		zend_string_release(file);
+	}
+	if (directory) {
+		closedir(directory);
+	}
+	zend_hash_sort(&names, sharp_compare_names, false);
+
+	PHP_XXH3_128_Init(&context, NULL);
+	ZEND_HASH_FOREACH_STR_KEY(&names, name) {
+		PHP_XXH3_128_Update(&context, (const unsigned char *) ZSTR_VAL(name), ZSTR_LEN(name));
+		PHP_XXH3_128_Update(&context, (const unsigned char *) "\n", 1);
+		stamp->size += ZSTR_LEN(name) + 1;
+	} ZEND_HASH_FOREACH_END();
+	PHP_XXH3_128_Final(stamp->hash, &context);
+	stamp->exists = true;
+	stamp->hashed = true;
+
+	zend_hash_destroy(&names);
+	zend_string_release(folder);
+}
+
 static sharp_stamp *sharp_stamp_of(zend_string *path)
 {
 	sharp_stamp *stamp = zend_hash_find_ptr(&SHARP_G(request_stamps), path);
 	sharp_stamp fresh = {0};
 	zend_stat_t status;
+	size_t listing = sizeof(SHARP_SOURCE_LISTING) - 1;
 
 	if (stamp) {
 		return stamp;
 	}
-	if (VCWD_STAT(ZSTR_VAL(path), &status) == 0 && S_ISREG(status.st_mode)) {
+	if (ZSTR_LEN(path) >= listing && memcmp(ZSTR_VAL(path) + ZSTR_LEN(path) - listing, SHARP_SOURCE_LISTING, listing) == 0) {
+		sharp_stamp_listing(ZSTR_VAL(path), ZSTR_LEN(path) - listing + 1, &fresh);
+	} else if (VCWD_STAT(ZSTR_VAL(path), &status) == 0 && S_ISREG(status.st_mode)) {
 		fresh.exists = true;
 		fresh.size = (uint64_t) status.st_size;
 		fresh.mtime_ns = sharp_mtime_ns(&status);
@@ -361,6 +432,30 @@ static bool sharp_text_fits(const sharp_unit_header *header, sharp_str text)
 	return (uint64_t) text.offset + text.len <= header->texts_size;
 }
 
+/* Whether the folder of the file at path holds a file of exactly its name, case included. A disk that ignores case,
+ * as macOS's does by default, opens environment.php for Environment.php. Linux does not, so an input is there only under
+ * its exact name, as the bridge's unit::stamp stamps it. */
+static bool sharp_folder_holds_name(const zend_string *path)
+{
+	size_t folder = sharp_parent(ZSTR_VAL(path), ZSTR_LEN(path));
+	const char *name = ZSTR_VAL(path) + folder + 1;
+	size_t name_length = ZSTR_LEN(path) - folder - 1;
+	zend_string *folder_path = zend_string_init(ZSTR_VAL(path), folder, 0);
+	DIR *directory = VCWD_OPENDIR(ZSTR_VAL(folder_path));
+	struct dirent *entry;
+	bool holds = false;
+
+	while (!holds && directory && (entry = readdir(directory))) {
+		holds = strlen(entry->d_name) == name_length && memcmp(entry->d_name, name, name_length) == 0;
+	}
+	if (directory) {
+		closedir(directory);
+	}
+	zend_string_release(folder_path);
+
+	return holds;
+}
+
 static bool sharp_input_current(const sharp_compiled *compiled, const sharp_input *input)
 {
 	static const uint8_t absent[16] = {0};
@@ -372,10 +467,11 @@ static bool sharp_input_current(const sharp_compiled *compiled, const sharp_inpu
 	bool current;
 
 	if (input->size == 0 && memcmp(input->hash, absent, sizeof(absent)) == 0) {
-		current = !stamp->exists;
+		/* A file that opens under another case of the name is not there, so the input stays absent. */
+		current = !stamp->exists || !sharp_folder_holds_name(path);
 	} else if (!stamp->exists) {
 		current = false;
-	} else if (stamp->size == input->size && stamp->mtime_ns == input->mtime_ns) {
+	} else if (!stamp->hashed && stamp->size == input->size && stamp->mtime_ns == input->mtime_ns) {
 		current = true;
 	} else {
 		if (!stamp->hashed) {
@@ -1770,112 +1866,542 @@ ZEND_METHOD(Sharp_Position, __construct)
 	zend_update_property_str(position->ce, position, ZEND_STRL("function"), function);
 }
 
-static zend_object_handlers sharp_environment_handlers;
-
-static bool sharp_environment_is_property(const zend_string *name)
+/* The native body of `Sharp.Environment.commandLine`: the command-line arguments as PHP's `$argv` holds them, starting
+ * with the script's name. Only the SAPI holds them, so this body is C behind the prototype sharp/bin/native writes. */
+void sharp_native_Environment_commandLine(zval *result)
 {
-	return zend_string_equals_literal(name, "arguments") || zend_string_equals_literal(name, "currentDirectory");
+	ZVAL_COPY(result, &SHARP_G(arguments));
 }
 
-static bool sharp_environment_read(const zend_string *name, zval *result)
+/* The environment variable name, from the SAPI first as getenv() reads it, or NULL when it is not set. */
+static zend_string *sharp_environment_variable(const char *name, size_t name_length)
 {
-	if (zend_string_equals_literal(name, "arguments")) {
-		ZVAL_COPY(result, &SHARP_G(arguments));
-		return true;
+	char *sapi_value = sapi_getenv(name, name_length);
+	if (sapi_value) {
+		zend_string *value = zend_string_init(sapi_value, strlen(sapi_value), 0);
+		efree(sapi_value);
+		return value;
 	}
 
-	char directory[MAXPATHLEN];
-	if (!VCWD_GETCWD(directory, MAXPATHLEN)) {
-		zend_throw_error(NULL, "Cannot read the current directory: %s", strerror(errno));
-		return false;
+	return php_getenv(name, name_length);
+}
+
+/* Spec section 32: Sharp\Container builds the app's objects from the bindings its modules' files return, as
+ * .NET's IServiceProvider does, and resolves them as the checker does. Each binding row is [namespace, service id,
+ * class it serves or null, lifetime, value]. PHP# creates only the services a module binds. A class's services
+ * resolve from the modules of its namespace, then of each namespace above it, and the standard library's module
+ * serves the root namespace. The first module with a binding wins: the module of the test that runs now, or else an
+ * environment module, then the base module. In one module a binding for the class wins over one for any class.
+ * The container throws its own failures as Sharp\ContainerError, and a constructor's exception unchanged. */
+
+static zend_class_entry *sharp_ce_container_error;
+
+/* The key the bindings of id in the namespace's first length bytes are kept under. */
+static zend_string *sharp_container_key(const zend_string *namespace, size_t length, const zend_string *id)
+{
+	zend_string *key = zend_strpprintf(0, "%.*s %s", (int) length, ZSTR_VAL(namespace), ZSTR_VAL(id));
+	zend_str_tolower(ZSTR_VAL(key), ZSTR_LEN(key));
+
+	return key;
+}
+
+/* Adds rows, one module's binding rows, to module: under each namespace and service id, a list of its rows. */
+static void sharp_container_group(HashTable *rows, HashTable *module)
+{
+	zval *row;
+	ZEND_HASH_FOREACH_VAL(rows, row) {
+		zend_string *namespace = Z_STR_P(zend_hash_index_find(Z_ARRVAL_P(row), 0));
+		zend_string *key = sharp_container_key(namespace, ZSTR_LEN(namespace), Z_STR_P(zend_hash_index_find(Z_ARRVAL_P(row), 1)));
+		zval *list = zend_hash_find(module, key);
+		if (!list) {
+			zval empty;
+			array_init(&empty);
+			list = zend_hash_add_new(module, key, &empty);
+		}
+		Z_TRY_ADDREF_P(row);
+		zend_hash_next_index_insert_new(Z_ARRVAL_P(list), row);
+		zend_string_release(key);
+	} ZEND_HASH_FOREACH_END();
+}
+
+/* Adds the module whose file is at path, if one is, to bindings once: under each namespace and service id, a list of
+ * its rows after those of the modules read before it. A module that throws as it loads is read again next time. */
+static void sharp_container_read(const char *path, HashTable *bindings)
+{
+	size_t length = strlen(path);
+	if (zend_hash_str_exists(&SHARP_G(container_modules), path, length)) {
+		return;
 	}
-	ZVAL_STRING(result, directory);
+
+	zval rows;
+	ZVAL_UNDEF(&rows);
+	zend_stat_t status = {0};
+	if (VCWD_STAT(path, &status) == 0) {
+		zend_file_handle handle;
+		zend_stream_init_filename(&handle, path);
+		zend_op_array *op_array = zend_compile_file(&handle, ZEND_REQUIRE);
+		zend_destroy_file_handle(&handle);
+		if (op_array) {
+			zend_execute(op_array, &rows);
+			zend_destroy_static_vars(op_array);
+			destroy_op_array(op_array);
+			efree_size(op_array, sizeof(zend_op_array));
+		}
+	}
+	if (!EG(exception)) {
+		zend_hash_str_add_empty_element(&SHARP_G(container_modules), path, length);
+	}
+	if (EG(exception) || Z_TYPE(rows) != IS_ARRAY) {
+		zval_ptr_dtor(&rows);
+		return;
+	}
+
+	HashTable module;
+	zend_hash_init(&module, 8, NULL, ZVAL_PTR_DTOR, false);
+	sharp_container_group(Z_ARRVAL(rows), &module);
+	zval_ptr_dtor(&rows);
+
+	zend_string *key;
+	zval *list;
+	ZEND_HASH_FOREACH_STR_KEY_VAL(&module, key, list) {
+		zval *modules = zend_hash_find(bindings, key);
+		if (!modules) {
+			zval empty;
+			array_init(&empty);
+			modules = zend_hash_add_new(bindings, key, &empty);
+		}
+		Z_ADDREF_P(list);
+		zend_hash_next_index_insert_new(Z_ARRVAL_P(modules), list);
+	} ZEND_HASH_FOREACH_END();
+	zend_hash_destroy(&module);
+}
+
+/* Reads the modules of file's folder and of each folder above it up to its project's root: a folder's
+ * Module.<SHARP_ENV>.sharp among the environment modules, and its Module.sharp among the base modules. It stops at
+ * the first module that throws. */
+static void sharp_container_read_folders(const zend_string *file)
+{
+	size_t root;
+	if (!sharp_find_root(file, &root)) {
+		return;
+	}
+
+	zend_string *environment = sharp_environment_variable("SHARP_ENV", sizeof("SHARP_ENV") - 1);
+	const char *path = ZSTR_VAL(file);
+	for (size_t folder = sharp_parent(path, ZSTR_LEN(file)); folder >= root && !EG(exception);
+			folder = sharp_parent(path, folder)) {
+		char module[MAXPATHLEN];
+		if (environment && ZSTR_LEN(environment) > 0) {
+			snprintf(module, sizeof(module), "%.*s/Module.%s.sharp", (int) folder, path, ZSTR_VAL(environment));
+			sharp_container_read(module, &SHARP_G(container_environment));
+		}
+		snprintf(module, sizeof(module), "%.*s/Module.sharp", (int) folder, path);
+		if (!EG(exception)) {
+			sharp_container_read(module, &SHARP_G(container_bindings));
+		}
+		if (folder == root) {
+			break;
+		}
+	}
+
+	if (environment) {
+		zend_string_release(environment);
+	}
+}
+
+/* The namespace of the class or service named name. */
+static zend_string *sharp_container_namespace(const zend_string *name)
+{
+	const char *end = zend_memrchr(ZSTR_VAL(name), '\\', ZSTR_LEN(name));
+
+	return end ? zend_string_init(ZSTR_VAL(name), end - ZSTR_VAL(name), 0) : ZSTR_EMPTY_ALLOC();
+}
+
+/* The row of list, one module's rows of a service, that serves requester or NULL: a row for the class before a row
+ * for any class. */
+static zval *sharp_container_row(zval *list, const zend_class_entry *requester)
+{
+	zval *row, *any = NULL;
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(list), row) {
+		zval *target = zend_hash_index_find(Z_ARRVAL_P(row), 2);
+		if (Z_TYPE_P(target) == IS_NULL) {
+			any = any ? any : row;
+		} else if (requester && zend_string_equals_ci(Z_STR_P(target), requester->name)) {
+			return row;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return any;
+}
+
+/* The row of the first of modules, a list of modules' rows of a service or NULL, that serves requester, or NULL. */
+static zval *sharp_container_first_row(zval *modules, const zend_class_entry *requester)
+{
+	zval *list, *row;
+	if (modules) {
+		ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(modules), list) {
+			row = sharp_container_row(list, requester);
+			if (row) {
+				return row;
+			}
+		} ZEND_HASH_FOREACH_END();
+	}
+
+	return NULL;
+}
+
+/* The binding row that serves id to requester, a class of namespace or NULL, or NULL when no module binds it. While a
+ * test runs, its module replaces the environment modules, as the checker checks a test module over the base modules
+ * alone. */
+static zval *sharp_container_binding(const zend_string *id, const zend_string *namespace, const zend_class_entry *requester)
+{
+	size_t length = ZSTR_LEN(namespace);
+
+	while (true) {
+		zend_string *key = sharp_container_key(namespace, length, id);
+		zval *test = SHARP_G(container_test) ? zend_hash_find(SHARP_G(container_test), key) : NULL;
+		zval *environment = SHARP_G(container_test) ? NULL : zend_hash_find(&SHARP_G(container_environment), key);
+		zval *modules = zend_hash_find(&SHARP_G(container_bindings), key);
+		zend_string_release(key);
+		zval *row = test ? sharp_container_row(test, requester) : NULL;
+		if (!row) {
+			row = sharp_container_first_row(environment, requester);
+		}
+		if (!row) {
+			row = sharp_container_first_row(modules, requester);
+		}
+		if (row) {
+			return row;
+		}
+
+		if (length == 0) {
+			return NULL;
+		}
+		const char *end = zend_memrchr(ZSTR_VAL(namespace), '\\', length);
+		length = end ? (size_t) (end - ZSTR_VAL(namespace)) : 0;
+	}
+}
+
+static bool sharp_container_service(zend_string *id, const zend_string *namespace, const zend_class_entry *requester, zval *service);
+
+/* Fills arguments with the service of each parameter of function: the id its Sharp\Internal\Service attribute
+ * names, or its class. A parameter with neither ends the arguments when it is optional. On failure arguments is
+ * undefined. */
+static bool sharp_container_arguments(const zend_function *function, const zend_string *namespace, const zend_class_entry *requester, zval *arguments)
+{
+	array_init(arguments);
+	for (uint32_t i = 0; i < function->common.num_args; i++) {
+		zend_arg_info *argument = &function->common.arg_info[i];
+		zend_string *id = NULL;
+		zend_attribute *attribute = function->common.attributes
+			? zend_get_parameter_attribute_str(function->common.attributes, "sharp\\internal\\service", sizeof("sharp\\internal\\service") - 1, i)
+			: NULL;
+		zval named;
+		if (attribute && zend_get_attribute_value(&named, attribute, 0, function->common.scope) == SUCCESS) {
+			id = Z_STR(named);
+		} else if (ZEND_TYPE_HAS_NAME(argument->type)) {
+			id = zend_string_copy(ZEND_TYPE_NAME(argument->type));
+		} else if (i >= function->common.required_num_args) {
+			break;
+		} else {
+			zend_throw_error(sharp_ce_container_error, "The container can't fill parameter $%s of %s: give it a class type",
+				ZSTR_VAL(argument->name), requester ? ZSTR_VAL(requester->name) : "a binding");
+			zval_ptr_dtor(arguments);
+			ZVAL_UNDEF(arguments);
+			return false;
+		}
+
+		zval service;
+		bool built = sharp_container_service(id, namespace, requester, &service);
+		zend_string_release(id);
+		if (!built) {
+			zval_ptr_dtor(arguments);
+			ZVAL_UNDEF(arguments);
+			return false;
+		}
+		zend_hash_next_index_insert_new(Z_ARRVAL_P(arguments), &service);
+	}
 
 	return true;
 }
 
-static zval *sharp_environment_read_property(zend_object *object, zend_string *name, int type, void **cache_slot, zval *rv)
+/* Builds ce through its constructor, each parameter filled from the modules of its namespace. */
+static bool sharp_container_build(zend_class_entry *ce, zval *object)
 {
-	if (!sharp_environment_is_property(name)) {
-		return zend_std_read_property(object, name, type, cache_slot, rv);
+	if (!zend_hash_index_add_empty_element(&SHARP_G(container_building), (zend_ulong) (uintptr_t) ce)) {
+		zend_throw_error(sharp_ce_container_error, "%s needs itself, so the container can't build it", ZSTR_VAL(ce->name));
+		return false;
 	}
-	if (type == BP_VAR_W || type == BP_VAR_RW || type == BP_VAR_UNSET) {
-		zend_throw_error(NULL, "Indirect modification of %s::$%s is not allowed", ZSTR_VAL(object->ce->name), ZSTR_VAL(name));
-		return &EG(uninitialized_zval);
+	if (ce->type == ZEND_USER_CLASS) {
+		sharp_container_read_folders(ce->info.user.filename);
 	}
 
-	return sharp_environment_read(name, rv) ? rv : &EG(uninitialized_zval);
+	zval arguments;
+	ZVAL_UNDEF(&arguments);
+	bool built = true;
+	if (ce->constructor) {
+		zend_string *namespace = sharp_container_namespace(ce->name);
+		built = sharp_container_arguments(ce->constructor, namespace, ce, &arguments);
+		zend_string_release(namespace);
+	}
+	if (built && object_init_ex(object, ce) == SUCCESS) {
+		if (ce->constructor) {
+			zend_call_known_instance_method(ce->constructor, Z_OBJ_P(object), NULL,
+				zend_hash_num_elements(Z_ARRVAL(arguments)), Z_ARRVAL(arguments)->arPacked);
+		}
+		if (EG(exception)) {
+			zval_ptr_dtor(object);
+			ZVAL_NULL(object);
+			built = false;
+		}
+	} else {
+		built = false;
+	}
+
+	zval_ptr_dtor(&arguments);
+	zend_hash_index_del(&SHARP_G(container_building), (zend_ulong) (uintptr_t) ce);
+
+	return built;
 }
 
-static zval *sharp_environment_write_property(zend_object *object, zend_string *name, zval *value, void **cache_slot)
+/* Builds the class named name. */
+static bool sharp_container_build_named(zend_string *name, zval *object)
 {
-	if (!sharp_environment_is_property(name)) {
-		return zend_std_write_property(object, name, value, cache_slot);
+	zend_class_entry *ce = zend_lookup_class(name);
+	if (!ce) {
+		if (!EG(exception)) {
+			zend_throw_error(sharp_ce_container_error, "Class \"%s\" not found", ZSTR_VAL(name));
+		}
+		return false;
 	}
-	zend_throw_error(NULL, "Property %s::$%s is read-only", ZSTR_VAL(object->ce->name), ZSTR_VAL(name));
 
-	return &EG(error_zval);
+	return sharp_container_build(ce, object);
 }
 
-static zval *sharp_environment_get_property_ptr_ptr(zend_object *object, zend_string *name, int type, void **cache_slot)
+/* The service row binds: a class, a list of classes, or the result of its closure over its parameters, which
+ * resolve from the row's namespace. A singleton is kept for the request and a scoped service for the scope. */
+static bool sharp_container_bound(zval *row, zval *service)
 {
-	return NULL;
-}
-
-static int sharp_environment_has_property(zend_object *object, zend_string *name, int check_empty, void **cache_slot)
-{
-	if (!sharp_environment_is_property(name)) {
-		return zend_std_has_property(object, name, check_empty, cache_slot);
-	}
-	if (check_empty != ZEND_PROPERTY_NOT_EMPTY) {
+	zend_string *namespace = Z_STR_P(zend_hash_index_find(Z_ARRVAL_P(row), 0));
+	zend_string *lifetime = Z_STR_P(zend_hash_index_find(Z_ARRVAL_P(row), 3));
+	zval *value = zend_hash_index_find(Z_ARRVAL_P(row), 4);
+	zend_ulong key = (zend_ulong) (uintptr_t) Z_ARRVAL_P(row);
+	HashTable *kept = zend_string_equals_literal(lifetime, "singleton") ? &SHARP_G(container_singletons)
+		: zend_string_equals_literal(lifetime, "scoped") ? SHARP_G(container_scope)
+		: NULL;
+	zval *found = kept ? zend_hash_index_find(kept, key) : NULL;
+	if (found) {
+		ZVAL_COPY(service, found);
 		return true;
 	}
 
-	zval value;
-	if (!sharp_environment_read(name, &value)) {
+	if (!zend_hash_index_add_empty_element(&SHARP_G(container_building), key)) {
+		/* A class the row binds is named as it is written, and any other service by its id. */
+		zend_throw_error(sharp_ce_container_error, "%s needs itself, so the container can't build it",
+			Z_STRVAL_P(Z_TYPE_P(value) == IS_STRING ? value : zend_hash_index_find(Z_ARRVAL_P(row), 1)));
 		return false;
 	}
-	bool is_true = zend_is_true(&value);
-	zval_ptr_dtor(&value);
 
-	return is_true;
-}
-
-static void sharp_environment_unset_property(zend_object *object, zend_string *name, void **cache_slot)
-{
-	if (!sharp_environment_is_property(name)) {
-		zend_std_unset_property(object, name, cache_slot);
-		return;
+	bool built = true;
+	if (Z_TYPE_P(value) == IS_STRING) {
+		built = sharp_container_build_named(Z_STR_P(value), service);
+	} else if (Z_TYPE_P(value) == IS_ARRAY) {
+		array_init(service);
+		zval *class;
+		ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(value), class) {
+			zval object;
+			if (!sharp_container_build_named(Z_STR_P(class), &object)) {
+				built = false;
+				break;
+			}
+			zend_hash_next_index_insert_new(Z_ARRVAL_P(service), &object);
+		} ZEND_HASH_FOREACH_END();
+		if (!built) {
+			zval_ptr_dtor(service);
+			ZVAL_NULL(service);
+		}
+	} else {
+		zval arguments;
+		built = sharp_container_arguments(zend_get_closure_method_def(Z_OBJ_P(value)), namespace, NULL, &arguments);
+		if (built) {
+			built = call_user_function(NULL, NULL, value, service, zend_hash_num_elements(Z_ARRVAL(arguments)),
+				Z_ARRVAL(arguments)->arPacked) == SUCCESS && !EG(exception);
+			zval_ptr_dtor(&arguments);
+			if (!built) {
+				zval_ptr_dtor(service);
+				ZVAL_NULL(service);
+			}
+		}
 	}
-	zend_throw_error(NULL, "Cannot unset hooked property %s::$%s", ZSTR_VAL(object->ce->name), ZSTR_VAL(name));
+
+	zend_hash_index_del(&SHARP_G(container_building), key);
+	if (built && kept) {
+		Z_TRY_ADDREF_P(service);
+		zend_hash_index_add_new(kept, key, service);
+	}
+
+	return built;
 }
 
-ZEND_METHOD(Sharp_Environment, __construct)
+/* The service id names for requester, a class of namespace or NULL. */
+static bool sharp_container_service(zend_string *id, const zend_string *namespace, const zend_class_entry *requester, zval *service)
 {
-	ZEND_PARSE_PARAMETERS_NONE();
+	zval *row = sharp_container_binding(id, namespace, requester);
+	if (row) {
+		return sharp_container_bound(row, service);
+	}
+
+	if (!EG(exception)) {
+		zend_throw_error(sharp_ce_container_error, "No module binds %s%s%s", ZSTR_VAL(id), requester ? " for " : "",
+			requester ? ZSTR_VAL(requester->name) : "");
+	}
+
+	return false;
 }
 
-ZEND_METHOD(Sharp_Environment, variable)
+/* The id of the service named name, and its namespace, after reading the modules of its class's folders. */
+static zend_string *sharp_container_requested(zend_string *name, zend_string **namespace)
 {
-	char *name;
-	size_t name_length;
+	zend_string *id = ZSTR_LEN(name) > 0 && ZSTR_VAL(name)[0] == '\\'
+		? zend_string_init(ZSTR_VAL(name) + 1, ZSTR_LEN(name) - 1, 0)
+		: zend_string_copy(name);
+	zend_class_entry *ce = memchr(ZSTR_VAL(id), '<', ZSTR_LEN(id)) ? NULL : zend_lookup_class(id);
+	if (ce && ce->type == ZEND_USER_CLASS) {
+		sharp_container_read_folders(ce->info.user.filename);
+	}
+	*namespace = sharp_container_namespace(id);
+
+	return id;
+}
+
+ZEND_METHOD(Sharp_Container, get)
+{
+	zend_string *name;
 
 	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_STRING(name, name_length)
+		Z_PARAM_STR(name)
 	ZEND_PARSE_PARAMETERS_END();
 
-	char *sapi_value = sapi_getenv(name, name_length);
-	if (sapi_value) {
-		RETVAL_STRING(sapi_value);
-		efree(sapi_value);
-		return;
-	}
+	zend_string *namespace;
+	zend_string *id = sharp_container_requested(name, &namespace);
+	sharp_container_service(id, namespace, NULL, return_value);
+	zend_string_release(namespace);
+	zend_string_release(id);
+}
 
-	zend_string *value = php_getenv(name, name_length);
-	if (!value) {
-		RETURN_NULL();
+ZEND_METHOD(Sharp_Container, has)
+{
+	zend_string *name;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STR(name)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_string *namespace;
+	zend_string *id = sharp_container_requested(name, &namespace);
+	bool has = sharp_container_binding(id, namespace, NULL) != NULL;
+	zend_string_release(namespace);
+	zend_string_release(id);
+
+	RETURN_BOOL(has);
+}
+
+/* Spec section 32: calls run in a new scope, and releases the scoped services it built when run returns. */
+ZEND_METHOD(Sharp_Container, scope)
+{
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	HashTable *outer = SHARP_G(container_scope);
+	HashTable scope;
+	zend_hash_init(&scope, 8, NULL, ZVAL_PTR_DTOR, 0);
+	SHARP_G(container_scope) = &scope;
+
+	fci.retval = return_value;
+	zend_call_function(&fci, &fcc);
+
+	SHARP_G(container_scope) = outer;
+	zend_hash_destroy(&scope);
+}
+
+/* Spec section 32: the standard library's autoloader adds the library's module, whose file is at path, as the
+ * container adds the module of a folder. */
+ZEND_FUNCTION(Sharp_Internal_readModule)
+{
+	zend_string *path;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_PATH_STR(path)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_stat_t status = {0};
+	if (VCWD_STAT(ZSTR_VAL(path), &status) != 0) {
+		zend_throw_error(NULL, "Sharp\\Internal\\readModule: no module file at %s", ZSTR_VAL(path));
+		RETURN_THROWS();
 	}
-	RETURN_STR(value);
+	sharp_container_read(ZSTR_VAL(path), &SHARP_G(container_bindings));
+}
+
+/* Spec section 32: a test file's module, the rows bindings holds, applies while a test of a class of classes runs.
+ * The compiler calls this from the test file. */
+ZEND_FUNCTION(Sharp_Internal_testModule)
+{
+	HashTable *classes, *bindings;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ARRAY_HT(classes)
+		Z_PARAM_ARRAY_HT(bindings)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zval module;
+	array_init(&module);
+	sharp_container_group(bindings, Z_ARRVAL(module));
+	zval *class;
+	ZEND_HASH_FOREACH_VAL(classes, class) {
+		zend_string *name = zend_string_tolower(Z_STR_P(class));
+		Z_ADDREF(module);
+		zend_hash_update(&SHARP_G(container_tests), name, &module);
+		zend_string_release(name);
+	} ZEND_HASH_FOREACH_END();
+	zval_ptr_dtor(&module);
+}
+
+/* The container forgets every service it kept, so the next test builds its own. */
+static void sharp_container_forget(void)
+{
+	zend_hash_clean(&SHARP_G(container_singletons));
+	zend_hash_clean(&SHARP_G(container_request_scope));
+}
+
+/* Spec section 32: a test of class starts, so the container uses the module of class's test file before every
+ * other module, and builds every service again. The method the compiler gives each class of a test file, which
+ * PHPUnit runs before each of its tests, calls this. */
+ZEND_FUNCTION(Sharp_Internal_startTest)
+{
+	zend_string *class;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STR(class)
+	ZEND_PARSE_PARAMETERS_END();
+
+	sharp_container_forget();
+	zend_string *name = zend_string_tolower(class);
+	zval *module = zend_hash_find(&SHARP_G(container_tests), name);
+	zend_string_release(name);
+	SHARP_G(container_test) = module ? Z_ARRVAL_P(module) : NULL;
+}
+
+/* Spec section 32: the test that runs ends, so the container forgets its module and the services it built. */
+ZEND_FUNCTION(Sharp_Internal_endTest)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	sharp_container_forget();
+	SHARP_G(container_test) = NULL;
 }
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_List_wrap, 0, 1, IS_ARRAY, 0)
@@ -2007,14 +2533,11 @@ static PHP_MINIT_FUNCTION(sharp)
 	register_class_Sharp_List();
 	register_class_Sharp_Set();
 
-	zend_class_entry *environment = register_class_Sharp_Environment();
-	memcpy(&sharp_environment_handlers, &std_object_handlers, sizeof(zend_object_handlers));
-	sharp_environment_handlers.read_property = sharp_environment_read_property;
-	sharp_environment_handlers.write_property = sharp_environment_write_property;
-	sharp_environment_handlers.get_property_ptr_ptr = sharp_environment_get_property_ptr_ptr;
-	sharp_environment_handlers.has_property = sharp_environment_has_property;
-	sharp_environment_handlers.unset_property = sharp_environment_unset_property;
-	environment->default_object_handlers = &sharp_environment_handlers;
+	register_class_Sharp_Container();
+	sharp_ce_container_error = register_class_Sharp_ContainerError(zend_ce_error);
+	/* The module's own table is sharp/bin/native's, so the stub's Sharp\Internal functions register here, as
+	 * ext/zend_test registers its second table. */
+	zend_register_functions(NULL, ext_functions, NULL, type);
 
 	zend_add_system_entropy("sharp", "SHARP_BUILD_ID", SHARP_BUILD_ID, sizeof(SHARP_BUILD_ID) - 1);
 
@@ -2047,7 +2570,18 @@ static PHP_RINIT_FUNCTION(sharp)
 {
 	zend_hash_init(&SHARP_G(request_stamps), 8, NULL, sharp_free_stamp, false);
 	ZVAL_UNDEF(&SHARP_G(compile_command_report));
+	/* Spec section 32: the request is the host's scope, as each CLI run is. */
+	zend_hash_init(&SHARP_G(container_bindings), 8, NULL, ZVAL_PTR_DTOR, false);
+	zend_hash_init(&SHARP_G(container_environment), 8, NULL, ZVAL_PTR_DTOR, false);
+	zend_hash_init(&SHARP_G(container_modules), 8, NULL, NULL, false);
+	zend_hash_init(&SHARP_G(container_tests), 8, NULL, ZVAL_PTR_DTOR, false);
+	SHARP_G(container_test) = NULL;
+	zend_hash_init(&SHARP_G(container_singletons), 8, NULL, ZVAL_PTR_DTOR, false);
+	zend_hash_init(&SHARP_G(container_request_scope), 8, NULL, ZVAL_PTR_DTOR, false);
+	SHARP_G(container_scope) = &SHARP_G(container_request_scope);
+	zend_hash_init(&SHARP_G(container_building), 8, NULL, NULL, false);
 
+	/* The CLI names the script in argv[0] only while the request starts, as PHP's $argv does. */
 	zval *arguments = &SHARP_G(arguments);
 
 	array_init_size(arguments, SG(request_info).argc);
@@ -2074,6 +2608,14 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 		}
 	}
 	zend_hash_destroy(&SHARP_G(request_stamps));
+	zend_hash_destroy(&SHARP_G(container_request_scope));
+	zend_hash_destroy(&SHARP_G(container_singletons));
+	zend_hash_destroy(&SHARP_G(container_bindings));
+	zend_hash_destroy(&SHARP_G(container_environment));
+	zend_hash_destroy(&SHARP_G(container_modules));
+	SHARP_G(container_test) = NULL;
+	zend_hash_destroy(&SHARP_G(container_tests));
+	zend_hash_destroy(&SHARP_G(container_building));
 	zval_ptr_dtor(&SHARP_G(compile_command_report));
 	zval_ptr_dtor(&SHARP_G(arguments));
 	ZVAL_UNDEF(&SHARP_G(arguments));

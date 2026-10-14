@@ -26,7 +26,7 @@ public class PhpForms
 
     public string target() => this.environment.arguments[1];
 
-    public string folder() => this.environment.currentDirectory;
+    public string folder() => this.environment.currentDirectory();
 
     public string stubs() => Position.current().directory + "/stubs";
 

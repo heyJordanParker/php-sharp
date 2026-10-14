@@ -26,7 +26,7 @@ class PhpForms
 
     public function target(): string { return $this->environment->arguments[1]; }
 
-    public function folder(): string { return $this->environment->currentDirectory; }
+    public function folder(): string { return $this->environment->currentDirectory(); }
 
     public function stubs(): string { return (new \Sharp\Position(__FILE__, 31, 30, 'Demo.PhpForms.stubs'))->directory . "/stubs"; }
 

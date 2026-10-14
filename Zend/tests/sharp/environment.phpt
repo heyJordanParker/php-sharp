@@ -1,5 +1,5 @@
 --TEST--
-PHP# Environment reads the process's variables, command-line arguments and current directory
+PHP# Environment reads the process's variables, a variable that must be set, command-line arguments and current directory
 --ENV--
 SHARP_REGION=eu-west-1
 --ARGS--
@@ -7,6 +7,7 @@ production --force
 --FILE--
 <?php
 
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Environment.sharp';
 require __DIR__ . '/Deploy.sharp';
 
 $deploy = Demo\Deploy::create();
@@ -14,21 +15,34 @@ var_dump($deploy->variable('SHARP_REGION'), $deploy->variable('SHARP_UNSET_REGIO
 var_dump($deploy->arguments() === $argv);
 echo implode(' ', array_slice($deploy->arguments(), 1)), ' ', $deploy->target(), "\n";
 
+$environment = new Sharp\Environment();
 $start = $deploy->folder();
 var_dump($start === getcwd());
-chdir(__DIR__ . '/harness');
-var_dump($deploy->folder() === __DIR__ . '/harness');
-chdir($start);
+$environment->changeDirectory(__DIR__ . '/harness');
+var_dump($deploy->folder() === __DIR__ . '/harness', getcwd() === __DIR__ . '/harness');
+$environment->changeDirectory($start);
 var_dump($deploy->folder() === $start);
-
-$environment = new Sharp\Environment();
 try {
-    $environment->arguments = [];
-} catch (Error $e) {
+    $environment->changeDirectory(__DIR__ . '/missing');
+} catch (RuntimeException $e) {
+    echo get_class($e), ': ', str_replace(__DIR__, '<dir>', $e->getMessage()), "\n";
+}
+var_dump(getcwd() === $start);
+
+var_dump($environment->require('SHARP_REGION'));
+try {
+    $environment->require('SHARP_UNSET_REGION');
+} catch (ValueError $e) {
     echo $e->getMessage(), "\n";
 }
+
+$code = 'require ' . var_export(__DIR__ . '/../../../sharp/composer/library/Sharp/Environment.sharp', true) . ';'
+    . ' require ' . var_export(__DIR__ . '/Deploy.sharp', true) . ';'
+    . ' try { Demo\Deploy::create()->target(); } catch (OutOfRangeException $e) { echo get_class($e), "\n"; }';
+echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' ' . getenv('TEST_PHP_EXTRA_ARGS') . ' -r ' . escapeshellarg($code) . ' 2>&1');
+
 try {
-    $environment->currentDirectory = '/';
+    $environment->arguments = [];
 } catch (Error $e) {
     echo $e->getMessage(), "\n";
 }
@@ -38,12 +52,10 @@ try {
     echo $e->getMessage(), "\n";
 }
 try {
-    unset($environment->currentDirectory);
+    unset($environment->arguments);
 } catch (Error $e) {
     echo $e->getMessage(), "\n";
 }
-var_dump(isset($environment->arguments), empty($environment->currentDirectory), property_exists($environment, 'arguments'));
-var_dump((new ReflectionClass(Sharp\Environment::class))->isFinal());
 ?>
 --EXPECT--
 string(9) "eu-west-1"
@@ -53,11 +65,12 @@ production --force production
 bool(true)
 bool(true)
 bool(true)
-Property Sharp\Environment::$arguments is read-only
-Property Sharp\Environment::$currentDirectory is read-only
-Indirect modification of Sharp\Environment::$arguments is not allowed
-Cannot unset hooked property Sharp\Environment::$currentDirectory
 bool(true)
-bool(false)
+RuntimeException: Environment.changeDirectory: the directory "<dir>/missing" cannot be entered
 bool(true)
-bool(true)
+string(9) "eu-west-1"
+Environment.require: the environment variable "SHARP_UNSET_REGION" is not set
+OutOfRangeException
+Cannot modify readonly property Sharp\Environment::$arguments
+Cannot indirectly modify readonly property Sharp\Environment::$arguments
+Cannot unset readonly property Sharp\Environment::$arguments

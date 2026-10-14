@@ -69,15 +69,25 @@ final class Position
  * @strict-properties
  * @not-serializable
  */
-final class Environment
+final class Container
 {
-    /** @virtual */
-    public array $arguments;
+    public function get(string $id): mixed {}
 
-    /** @virtual */
-    public string $currentDirectory;
+    public function has(string $id): bool {}
 
-    public function __construct() {}
-
-    public function variable(string $name): ?string {}
+    public static function scope(\Closure $run): mixed {}
 }
+
+final class ContainerError extends \Error
+{
+}
+
+namespace Sharp\Internal;
+
+function readModule(string $path): void {}
+
+function testModule(array $classes, array $bindings): void {}
+
+function startTest(string $class): void {}
+
+function endTest(): void {}

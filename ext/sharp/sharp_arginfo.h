@@ -1,5 +1,21 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: abf6c17e498ca33bd99f153a5c300c96591314bd */
+ * Stub hash: aacac46cea24e59f296259d448d053ba1e77f658 */
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_readModule, 0, 1, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, path, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_testModule, 0, 2, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, classes, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, bindings, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_startTest, 0, 1, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_endTest, 0, 0, IS_VOID, 0)
+ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Sharp_Collection___construct, 0, 0, 0)
 ZEND_END_ARG_INFO()
@@ -35,8 +51,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_put, 0, 2
 	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_clear, 0, 0, IS_VOID, 0)
-ZEND_END_ARG_INFO()
+#define arginfo_class_Sharp_Collection_clear arginfo_Sharp_Internal_endTest
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_filter, 0, 1, IS_ARRAY, 0)
 	ZEND_ARG_OBJ_INFO(0, predicate, Closure, 0)
@@ -77,12 +92,22 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Sharp_Position___construct, 0, 0, 4)
 	ZEND_ARG_TYPE_INFO(0, function, IS_STRING, 0)
 ZEND_END_ARG_INFO()
 
-#define arginfo_class_Sharp_Environment___construct arginfo_class_Sharp_Collection___construct
-
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Environment_variable, 0, 1, IS_STRING, 1)
-	ZEND_ARG_TYPE_INFO(0, name, IS_STRING, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Container_get, 0, 1, IS_MIXED, 0)
+	ZEND_ARG_TYPE_INFO(0, id, IS_STRING, 0)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Container_has, 0, 1, _IS_BOOL, 0)
+	ZEND_ARG_TYPE_INFO(0, id, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Container_scope, 0, 1, IS_MIXED, 0)
+	ZEND_ARG_OBJ_INFO(0, run, Closure, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_FUNCTION(Sharp_Internal_readModule);
+ZEND_FUNCTION(Sharp_Internal_testModule);
+ZEND_FUNCTION(Sharp_Internal_startTest);
+ZEND_FUNCTION(Sharp_Internal_endTest);
 ZEND_METHOD(Sharp_Collection, __construct);
 ZEND_METHOD(Sharp_Collection, add);
 ZEND_METHOD(Sharp_Collection, set);
@@ -103,8 +128,17 @@ ZEND_METHOD(Sharp_Collection, groupBy);
 ZEND_METHOD(Sharp_Collection, associateBy);
 ZEND_METHOD(Sharp_Collection, sortedBy);
 ZEND_METHOD(Sharp_Position, __construct);
-ZEND_METHOD(Sharp_Environment, __construct);
-ZEND_METHOD(Sharp_Environment, variable);
+ZEND_METHOD(Sharp_Container, get);
+ZEND_METHOD(Sharp_Container, has);
+ZEND_METHOD(Sharp_Container, scope);
+
+static const zend_function_entry ext_functions[] = {
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "readModule"), zif_Sharp_Internal_readModule, arginfo_Sharp_Internal_readModule, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "testModule"), zif_Sharp_Internal_testModule, arginfo_Sharp_Internal_testModule, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "startTest"), zif_Sharp_Internal_startTest, arginfo_Sharp_Internal_startTest, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "endTest"), zif_Sharp_Internal_endTest, arginfo_Sharp_Internal_endTest, 0, NULL, NULL)
+	ZEND_FE_END
+};
 
 static const zend_function_entry class_Sharp_Collection_methods[] = {
 	ZEND_ME(Sharp_Collection, __construct, arginfo_class_Sharp_Collection___construct, ZEND_ACC_PRIVATE)
@@ -134,9 +168,10 @@ static const zend_function_entry class_Sharp_Position_methods[] = {
 	ZEND_FE_END
 };
 
-static const zend_function_entry class_Sharp_Environment_methods[] = {
-	ZEND_ME(Sharp_Environment, __construct, arginfo_class_Sharp_Environment___construct, ZEND_ACC_PUBLIC)
-	ZEND_ME(Sharp_Environment, variable, arginfo_class_Sharp_Environment_variable, ZEND_ACC_PUBLIC)
+static const zend_function_entry class_Sharp_Container_methods[] = {
+	ZEND_ME(Sharp_Container, get, arginfo_class_Sharp_Container_get, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Container, has, arginfo_class_Sharp_Container_has, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Container, scope, arginfo_class_Sharp_Container_scope, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
 	ZEND_FE_END
 };
 
@@ -184,24 +219,22 @@ static zend_class_entry *register_class_Sharp_Position(void)
 	return class_entry;
 }
 
-static zend_class_entry *register_class_Sharp_Environment(void)
+static zend_class_entry *register_class_Sharp_Container(void)
 {
 	zend_class_entry ce, *class_entry;
 
-	INIT_NS_CLASS_ENTRY(ce, "Sharp", "Environment", class_Sharp_Environment_methods);
+	INIT_NS_CLASS_ENTRY(ce, "Sharp", "Container", class_Sharp_Container_methods);
 	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES|ZEND_ACC_NOT_SERIALIZABLE);
 
-	zval property_arguments_default_value;
-	ZVAL_UNDEF(&property_arguments_default_value);
-	zend_string *property_arguments_name = zend_string_init("arguments", sizeof("arguments") - 1, 1);
-	zend_declare_typed_property(class_entry, property_arguments_name, &property_arguments_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_VIRTUAL, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_ARRAY));
-	zend_string_release(property_arguments_name);
+	return class_entry;
+}
 
-	zval property_currentDirectory_default_value;
-	ZVAL_UNDEF(&property_currentDirectory_default_value);
-	zend_string *property_currentDirectory_name = zend_string_init("currentDirectory", sizeof("currentDirectory") - 1, 1);
-	zend_declare_typed_property(class_entry, property_currentDirectory_name, &property_currentDirectory_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_VIRTUAL, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_STRING));
-	zend_string_release(property_currentDirectory_name);
+static zend_class_entry *register_class_Sharp_ContainerError(zend_class_entry *class_entry_Error)
+{
+	zend_class_entry ce, *class_entry;
+
+	INIT_NS_CLASS_ENTRY(ce, "Sharp", "ContainerError", NULL);
+	class_entry = zend_register_internal_class_with_flags(&ce, class_entry_Error, ZEND_ACC_FINAL);
 
 	return class_entry;
 }

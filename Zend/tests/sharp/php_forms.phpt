@@ -7,11 +7,13 @@ production --force
 --FILE--
 <?php
 
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Environment.sharp';
 require __DIR__ . '/PhpForms.sharp';
 
 $forms = new Demo\PhpForms(new Sharp\Environment());
 $forms->report(3);
-$code = 'require ' . var_export(__DIR__ . '/PhpForms.sharp', true) . '; (new Demo\PhpForms(new Sharp\Environment()))->warn("Prune failed");';
+$code = 'require ' . var_export(__DIR__ . '/../../../sharp/composer/library/Sharp/Environment.sharp', true) . ';'
+    . ' require ' . var_export(__DIR__ . '/PhpForms.sharp', true) . '; (new Demo\PhpForms(new Sharp\Environment()))->warn("Prune failed");';
 echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' ' . getenv('TEST_PHP_EXTRA_ARGS') . ' -r ' . escapeshellarg($code) . ' 2>&1 1>/dev/null');
 
 echo $forms->setting('SHARP_REGION'), ' ', $forms->setting('SHARP_UNSET_REGION'), "\n";

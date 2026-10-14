@@ -1,0 +1,32 @@
+{
+    "name": "heyjordanparker/php-sharp-phpunit-fixture",
+    "description": "A PHP# project whose test class runs under PHPUnit with its test module.",
+    "license": "PHP-3.01",
+    "require-dev": {
+        "heyjordanparker/php-sharp-composer": "*@dev",
+        "phpunit/phpunit": "11.5.57"
+    },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../composer",
+            "options": {
+                "symlink": false,
+                "versions": {
+                    "heyjordanparker/php-sharp-composer": "dev-master"
+                }
+            }
+        }
+    ],
+    "autoload-dev": {
+        "psr-4": {
+            "App\\": "app/",
+            "Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "heyjordanparker/php-sharp-composer": true
+        }
+    }
+}
