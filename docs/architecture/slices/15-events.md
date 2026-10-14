@@ -234,11 +234,25 @@ final class ListenerProvider implements ListenerProviderInterface
 }
 ```
 
-```php
-// an app's plain PHP bootstrap, with any PSR-14 dispatcher
-$dispatcher = new Dispatcher(new \Sharp\Psr\ListenerProvider());   // or added to an aggregate provider
-$dispatcher->dispatch(new JobFailed('mail'));                        // runs OrderNotices.alert on a new OrderNotices
+A PHP# app wires it with one module binding, as section 15's `psr-listeners` example writes it:
+
+```csharp
+// app/Module.sharp
+namespace App;
+
+import Psr.EventDispatcher.EventDispatcherInterface;
+import Sharp.Psr.ListenerProvider;
+import Vendor.Events.EventDispatcher;
+
+module
+{
+    singleton EventDispatcherInterface = new EventDispatcher(new ListenerProvider());   // the library's dispatcher, given every PHP# listener
+}
 ```
+
+A plain PHP bootstrap writes the same, `new EventDispatcher(new \Sharp\Psr\ListenerProvider())`, or adds the provider to an aggregate provider.
+
+- **`sharp/bin/spec` checks the example against harness stand-ins:** psr/event-dispatcher 1.0's two interfaces in `sharp/harness/Psr/EventDispatcher/`, `Vendor\Events\EventDispatcher`, a PSR-14 dispatcher in `sharp/harness/Vendor/Events/`, and a copy of `ListenerProvider.php` in `sharp/harness/Sharp/Psr/`. The copy is there because `write_project` in `sharp/bin/spec` copies only `sharp/composer/library/` into an example's project, and `sharp/bin/spec` is guarded, so this pull request can't change it. Without the copy the example fails with "Class `ListenerProvider` not found.", and with a dispatcher that takes `Countable` it fails with "expected `Countable`, but possibly received `ListenerProvider`".
 
 - **The class is `Sharp\Psr\ListenerProvider`, a plain PHP adapter beside `Sharp\Psr\Container`,** for the reason that one gives: the engine can't implement an interface Composer loads after the engine starts. It has no constructor parameter, so a framework's container builds it with no configuration.
 - **`sharp/composer/composer.json` requires `psr/event-dispatcher` `^1.0`,** beside `psr/container` `^2.0`. `sharp/phpunit/composer.lock` locks `psr/event-dispatcher` 1.0.0, its only release.
@@ -329,9 +343,13 @@ php-sharp (feat/events-engine)
 │   └── crates/analyzer/
 │       ├── src/effects/mod.rs  <- runs_listeners: a dispatcher may reach any effect
 │       └── tests/sharp.rs      <- the dispatcher's effects, code without a body that emits
-├── sharp/harness/app/
-│   ├── Stubs/Laravel.sharp     <- new: extern event JobFailed;
-│   └── Imports/RowImported.sharp   <- new: public event RowImported(int row);
+├── sharp/harness/
+│   ├── app/Stubs/Laravel.sharp <- new: extern event JobFailed;
+│   ├── app/Imports/RowImported.sharp   <- new: public event RowImported(int row);
+│   ├── Psr/EventDispatcher/EventDispatcherInterface.php, ListenerProviderInterface.php
+│   │                           <- new: psr/event-dispatcher 1.0's interfaces
+│   ├── Vendor/Events/EventDispatcher.php   <- new: a plain PHP library's PSR-14 dispatcher
+│   └── Sharp/Psr/ListenerProvider.php      <- new: a copy of sharp/composer/src/Psr/ListenerProvider.php
 ├── sharp/baseline/spec/§15/listeners   <- deleted
 ├── Zend/tests/sharp/
 │   ├── OrderEvent.sharp … Shipping.sharp, harness/JobFailed.inc, events.inc,
@@ -347,7 +365,8 @@ php-sharp (feat/events-engine)
 │   │   events_scoped_jit_tracing.phpt   <- new
 │   └── Container.inc, library_autoload.inc   <- copy the dispatcher's classes
 └── docs/
-    ├── spec.md                 <- section 15: a plain PHP library's own events reach PHP# listeners through PSR-14
+    ├── spec.md                 <- section 15: a plain PHP library's own events reach PHP# listeners through PSR-14,
+    │                              with the example psr-listeners
     └── architecture/
         ├── slices/15-events.md <- this note
         └── modules.md          <- the container builds each listener emit runs, its own symbol table;
@@ -388,4 +407,5 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 - `events_scoped.phpt` and its JIT variants: a scoped listener hears events until its function returns, and stops when an exception leaves it. A handle never stored stops at once. Scoped listeners run after the table's, in the order they started, one through an interface. One started during an `emit` hears only the next. One whose handle is gone runs nothing under a dispatcher that runs it later. A type no class has hears nothing.
 - `events_psr.phpt`: a plain PHP library's PSR-14 dispatcher, given `Sharp\Psr\ListenerProvider`, dispatches the `extern event` `Lib\JobFailed` and reaches `OrderNotices.alert`, and dispatches `OrderPaid` and reaches its five listeners in table order. `Shipping` is a new object for every event. A scoped listener runs after the table's, and not once its handle is gone. An event no listener hears gets no listeners. On the engine before the change it failed with "Call to undefined function Sharp\Internal\listenersFor()".
 - `events_fresh.phpt`: with `sharp.compile_command` set, a new listener file, a listener added to a listener's file and a deleted listener file each make the next `emit` compile once, and nothing changed compiles nothing. Without the setting, a new listener file stays unheard.
+- `psr-listeners` in section 15 compiles in `sharp/bin/spec`. It failed before the harness held the provider, and fails again when the harness dispatcher takes another type.
 - `sharp/bin/spec` matches the shorter list. `sharp/bin/spec --completes` on a body holding `Completes: §15` passes only after `scoped-listener` leaves the list.

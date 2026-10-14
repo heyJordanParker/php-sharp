@@ -1558,7 +1558,25 @@ public class ImportScreen
 
 **Timing:** the default dispatcher runs listeners immediately, before `emit` returns. An app replaces the dispatcher once at startup, to run listeners later, after a save, with retries, or not at all in tests.
 
-**A plain PHP library's own events reach PHP# listeners through PSR-14.** `Sharp\Psr\ListenerProvider` offers every PHP# listener as a PSR-14 listener provider. An app gives `new Sharp\Psr\ListenerProvider()` to a library whose dispatcher follows PSR-14, as it gives any provider, and every event that library dispatches runs each `on` method and each listener `Events.on` started for it, with nothing else written by hand. Each listener runs on a new object, as for `emit`, and the library's dispatcher decides when. A library with a dispatcher of its own kind needs one adapter package, and PHP# ships none for any framework.
+**A plain PHP library's own events reach PHP# listeners through PSR-14.** PHP#'s `Sharp.Psr.ListenerProvider` offers every PHP# listener as a PSR-14 listener provider. One module binding gives it to a library whose dispatcher follows PSR-14, as any binding creates a service (section 32):
+
+<!-- example psr-listeners -->
+```csharp
+// app/Module.sharp
+namespace App;
+
+import Psr.EventDispatcher.EventDispatcherInterface;
+import Sharp.Psr.ListenerProvider;
+import Vendor.Events.EventDispatcher;
+
+module
+{
+    singleton EventDispatcherInterface = new EventDispatcher(new ListenerProvider());   // compiles: the library's dispatcher runs every PHP# listener
+}
+```
+
+- **Every event the library dispatches runs each `on` method and each listener `Events.on` started for it,** with nothing else written by hand. Each listener runs on a new object, as for `emit`, and the library's dispatcher decides when.
+- **A library with a dispatcher of its own kind needs one adapter package,** and PHP# ships none for any framework.
 
 ## 16. Naming a value
 
