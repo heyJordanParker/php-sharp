@@ -54,6 +54,10 @@ public class ClassValues
 
     public static Class<int|string> either(Class<int|string> type) => type;
 
+    public static Class<int> exact(Class<int> type) => type;
+
+    public static Class<int|string> narrowed() => ClassValues.either(typeof(int));
+
     public static Crate<Badge> crate() => new Crate<Badge>();
 
     public static bool sameAsTypeof(Crate<Badge> crate) => Class.of(crate) == typeof(Crate<Badge>);

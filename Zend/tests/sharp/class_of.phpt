@@ -21,6 +21,20 @@ try {
 } catch (TypeError $error) {
     echo $error->getMessage(), "\n";
 }
+var_dump(Classes\ClassValues::exact('int'));
+var_dump(Classes\ClassValues::narrowed());
+foreach (['Classes\Badge', 'string|int', 'int'] as $given) {
+    try {
+        var_dump(Classes\ClassValues::either($given));
+    } catch (TypeError $error) {
+        echo $error->getMessage(), "\n";
+    }
+}
+try {
+    Classes\ClassValues::exact('Classes\Badge');
+} catch (TypeError $error) {
+    echo $error->getMessage(), "\n";
+}
 $crate = Classes\ClassValues::crate();
 var_dump(Classes\ClassValues::sameAsTypeof($crate));
 var_dump(Classes\ClassValues::otherThanTypeof($crate));
@@ -63,6 +77,12 @@ array(3) {
 }
 string(10) "int|string"
 Classes\ClassValues::either(): Argument #1 ($type) must be of type string, array given, called in %s on line %d
+string(3) "int"
+string(3) "int"
+Classes\ClassValues::either(): Argument #1 ($type) must be of type Class<int|string>, string given, called in %s on line %d
+Classes\ClassValues::either(): Argument #1 ($type) must be of type Class<int|string>, string given, called in %s on line %d
+Classes\ClassValues::either(): Argument #1 ($type) must be of type Class<int|string>, string given, called in %s on line %d
+Classes\ClassValues::exact(): Argument #1 ($type) must be of type Class<int>, string given, called in %s on line %d
 bool(true)
 bool(false)
 bool(true)

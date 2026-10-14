@@ -3344,14 +3344,22 @@ static const sharp_type *sharp_class_value_type(const zend_string *value)
 /* Whether the string `value` is a class value of `Class<type>`, spec section 11: it names `type`'s class or a class that
  * extends or implements it, and the type arguments it carries give that class type arguments `type` takes. A class name
  * plain PHP writes carries none, so it gives its class's bounds, as an object plain PHP creates does. A `Class` of a type
- * that is no class, such as `typeof(TItem)` of an `int`, takes any string. */
+ * that is no class, as `Class<int>` or `Class<int|string>`, takes only the text `typeof` gives that type, spec section 25,
+ * since `typeof(int|string)` is the string `int|string`. `Class<Any?>`, `Class<Object>` and a `Class` of a type parameter
+ * no type argument resolves take any string. */
 static bool sharp_class_value_is(const zval *value, const sharp_type *type)
 {
 	if (Z_TYPE_P(value) != IS_STRING) {
 		return false;
 	}
-	if (type->kind != SHARP_TYPE_NAMED || !type->class_name) {
+	const sharp_type *held = type->kind == SHARP_TYPE_NULLABLE ? type->members[0] : type;
+	if (held->kind == SHARP_TYPE_NAMED
+		&& (held->built_in == SHARP_BUILT_IN_ANY || held->built_in == SHARP_BUILT_IN_OBJECT
+			|| zend_string_equals_literal(held->text, SHARP_TYPE_UNRESOLVED))) {
 		return true;
+	}
+	if (type->kind != SHARP_TYPE_NAMED || !type->class_name) {
+		return zend_string_equals(Z_STR_P(value), type->text);
 	}
 
 	/* An autoloader runs here, and can throw. Its exception stands for the check. */
