@@ -1,6 +1,6 @@
-# Slice 21: Pattern matching and leaving on null
+# Slice 21: Pattern matching, enums with data, sealed interfaces and leaving on null
 
-Spec section 21 (pattern matching) and section 14.4 (null operators). This note is the design only. team-lead approves it before anyone builds.
+Spec section 21 (pattern matching), section 14.4 (null operators), section 20 (enums) and section 20.1 (sealed interfaces). team-lead approved the design of sections 21 and 14.4 at `ac74f1fec9`, with the answers recorded under "Answers in force". Sections 20 and 20.1 joined the Slice with those answers, and their design, under "Sections 20 and 20.1", waits for team-lead's approval before anyone builds it.
 
 ## The answer first
 
@@ -16,29 +16,59 @@ Nine rules do not hold. Each one is refused today except two, which are silently
 6. **A function type in `is`, `as` or an arm is refused** as "This type is not supported yet in PHP#." This fails `type-tests`.
 7. **`switch` and PHP's `and`, `or` and `xor` are refused as "not supported yet".** The spec removes them, so each must be an error that names its replacement.
 8. **`a ? b : c ? d : e` is refused with PHP's own error.** The spec says it means `a ? b : (c ? d : e)`.
-9. **An enum case pattern is refused** as "An enum case pattern is not supported yet in PHP#." This fails `match-forms` and `is-and-as`. Enum data cases are section 20, which is not built, so by the ruling in force this stays refused until the section 20 Slice.
+9. **An enum case pattern is refused** as "An enum case pattern is not supported yet in PHP#." This fails `match-forms` and `is-and-as`. Their every line matches a `PaymentResult` data case, so section 20 joined the Slice (answer 1).
+10. **An enum case that carries data is refused** as "A case that carries data is not supported yet in PHP#." This fails §20 `enum-data-cases` and `enum-shapes`.
+11. **`sealed interface` is a parse error** ("Expected one of `Class`, found `Identifier`"). This fails §20.1 `sealed-interfaces`.
 
-The Slice builds rules 1 to 8 in one PR across `sharp/mago/` and the engine. Rules 1 to 5, 7 and 8 need only the checker and the bridge: every form lowers to PHP the engine already runs. Rule 6 needs the engine, on top of the type test #102 adds. So the branch carries #102 and lands after it, as #123 carries #114.
+The Slice builds all eleven in one PR across `sharp/mago/`, the engine and the Composer package. Rules 3 to 5, 7 and 8 need only the checker and the bridge: every form lowers to PHP the engine already runs. Rule 1 needs a new engine opcode, because `?? return` stands wherever `?? throw` does (answer 2). Rule 6 needs the engine, on top of the type test #102 adds, so the branch merges `origin/feat/slice-generics` once #102 is on master. Rule 10 lowers each case to a PHP class, which the Composer package's autoloader finds through its enum's file.
 
-When the Slice lands, 4 entries leave `sharp/baseline/spec`: §14.4 `leave-on-null`, §21 `property-patterns`, §21 `pattern-locals` and §21 `type-tests`. §21 keeps `match-forms` and `is-and-as`, whose every line matches a `PaymentResult` data case. So the PR can write `Completes: §14.4`, and cannot write `Completes: §21` until section 20 lands. Question 1 asks team-lead to rule on that.
+When the Slice lands, every entry of §14.4, §20, §20.1 and §21 leaves `sharp/baseline/spec`, nine in all, and the PR writes `Completes: §14.4, §20, §20.1, §21`.
 
 ## Decisions team-lead approves
 
-1. **The branch carries #102 and lands after it.** `feat/pattern-matching` merges `origin/feat/slice-generics`, and its PR says it waits on #102, as #123 says it waits on #114. Rule 6 needs #102's `ZEND_SHARP_IS_TYPE` and its type walk.
-2. **`?? return`, `?? continue` and `?? break` run as PHP the analyzer and the bridge share.** The parser reads `return`, with its value when it has one, `continue` and `break` as the right side of `??`, into the new CST expression `Leave`. `php_shape` in `syntax/src/utils/pattern.rs` builds the PHP the statement runs as: `if (($leave#N = a) === null) { return …; }`, then the statement with `$leave#N` where `a ?? return` was. The analyzer narrows, checks the return value and checks the loop on that PHP, through `analyze_php_shape`, and the bridge lowers the same PHP, through `Lowering::pattern`. That is how `is`, `as` and `match` run today, so the code the analyzer checks is the code that runs. `php_shape`'s module doc grows from "pattern forms" to "the PHP# forms that run as other PHP".
+1. **The branch carries #102 once #102 is on master.** Until then everything but rule 6 is built on master. When #102 merges, `feat/pattern-matching` merges `origin/feat/slice-generics` and builds rule 6 on `ZEND_SHARP_IS_TYPE` and its type walk.
+2. **`?? return`, `?? continue` and `?? break` stand wherever `?? throw` stands, and leave through a new engine opcode** (answer 2). The parser reads `return`, with its value when it has one, `continue` and `break` as the right side of `??`, into the new CST expression `Leave`. The analyzer analyzes `Leave` as it analyzes `throw`: its type is `never`, so `a ?? return` has `a`'s type without null. It also checks a `return`'s value against the method's return type and a `continue` or `break` against the loops around it, with the errors their statements get today. The bridge lowers `Leave` to the new zend AST kind `ZEND_AST_SHARP_LEAVE`. `zend_compile.c` compiles it as `ZEND_SHARP_LEAVE` followed by the `return`, `break` or `continue` the statement form compiles to. `ZEND_SHARP_LEAVE` frees the calls the expression has started and the temporaries it holds at that op, with the `cleanup_unfinished_calls` and `cleanup_live_vars` that exception unwinding runs, so `charge(order, prices[plan] ?? return)` leaves no half-built call behind. The block it starts sits out of line, after the function's code, inside the same `try` ranges, so the live ranges of the expression around it never cover it, and a `finally` still runs. The optimizer's CFG builder and both JITs learn the opcode, and `sharp/bin/test --passes` runs every pass alone on it.
 3. **`f?.(x)` is the new CST call `Call::NullSafeFunction(NullSafeFunctionCall)`.** A new variant, not a flag on `FunctionCall`, so every exhaustive `match` on `Call` in the formatter, linter, analyzer and bridge must decide what it does with it, and none treats it as a plain call by accident. The analyzer types it as a call of the callee's non-null type, with a nullable result, and reports `redundant-nullsafe-operator` on a callee that is never null. The bridge lowers it through `Lowering::null_safe_chain`, the precedent of `f9f478332`: `($nullsafe#N = f) === null ? null : $nullsafe#N(x)`, a local callee read as itself, and the rest of the chain skipped on null.
-4. **A type pattern takes properties.** `TypePattern` gains `properties: Option<PropertiesPattern>`, between its `hint` and its `variable`, so `Paid { amount: > 1000 } big` is one pattern. `php_shape` tests the type on the named variable, or on the subject, and then each property on it, as the properties arm does today: `($big = x) instanceof Paid && $big->amount > 1000`. The section 20 Slice adds the positional fields of a case to the same node.
-5. **A list pattern is the new `Pattern::List(ListPattern)`.** Its elements are patterns, and at most one `RestPattern`, `...List<Line> rest`, as question 3 proposes. `php_shape` lowers it on a `List` subject to PHP on the array: `\count(s) === 1 && ($only = s[0]) instanceof Line`, and with a rest `\count(s) >= 1 && … && ($rest = \array_slice(s, 1)) !== null`. On a subject whose type is not a `List`, the first test is #102's `is List<T>`. The binder records `\count` and `\array_slice` as the names their spans call, as it records `is_int` today (`called_function`).
+4. **A type pattern takes properties.** `TypePattern` gains `properties: Option<PropertiesPattern>`, between its `hint` and its `variable`, so `Paid { amount: > 1000 } big` is one pattern. `php_shape` tests the type on the named variable, or on the subject, and then each property on it, as the properties arm does today: `($big = x) instanceof Paid && $big->amount > 1000`. Decision 13 adds the positional fields of a case to the same node.
+5. **A list pattern is the new `Pattern::List(ListPattern)`.** Each element is any pattern, and a trailing `RestPattern`, `...List<Line> rest`, may end it (answer 3). Where else a rest may stand waits for Jordan's ruling. `php_shape` lowers it on a `List` subject to PHP on the array: `\count(s) === 1 && ($only = s[0]) instanceof Line`, and with a rest `\count(s) >= 1 && … && ($rest = \array_slice(s, 1)) !== null`. On a subject whose type is not a `List`, the first test is #102's `is List<T>`. The binder records `\count` and `\array_slice` as the names their spans call, as it records `is_int` today (`called_function`).
 6. **A pattern takes types and constants only.** The semantic check refuses a type pattern whose bare name the binder binds to a local or a parameter, and a value or comparison pattern that reads a local, a parameter or `this`, with the spec's reason: "`limit` is a local: compare its value in `when`, as in `int n when n == limit`." The analyzer refuses `Class.y` when `y` is a static property, because only the codebase tells it from a constant. Reading (a) leaves the binder (`walk_in_type_pattern`), the CST doc of `TypePattern` and `php_shape`'s first `test` arm.
-7. **A function type is tested like any other type.** The semantic check accepts `Function<R(P…)>` in `is`, `as` and an arm. The engine's `sharp_type_holds`, which on #102 holds every value for `SHARP_TYPE_FUNCTION`, holds a `Closure` whose recorded signature matches, as question 4 rules. A lambda's parameter types are the ones #102's `ZEND_SHARP_RECV_TYPE_ARGS` already carries, and the bridge adds the lambda's result type, written or inferred, to that same type text. The analyzer refuses a test of a function whose source declares no signature, such as a plain PHP method returning `Closure`, with the new issue code `unknown-function-type`: "The type of `Legacy.doubler()`'s function is unknown: its source declares no parameter or result types."
+7. **A function type is tested like any other type.** The semantic check accepts `Function<R(P…)>` in `is`, `as` and an arm. The engine's `sharp_type_holds`, which on #102 holds every value for `SHARP_TYPE_FUNCTION`, holds a `Closure` that could be assigned to the tested type: the parameter, result and effect rules of assignment, nothing looser (answer 4). A lambda's parameter types are the ones #102's `ZEND_SHARP_RECV_TYPE_ARGS` already carries, and the bridge adds the lambda's result type, written or inferred, and its effects to that same type text. The analyzer refuses a test of a function whose source declares no signature, such as a plain PHP method returning `Closure`, with the new issue code `unknown-function-type`: "The type of `Legacy.doubler()`'s function is unknown: its source declares no parameter or result types."
 8. **`switch`, `and`, `or` and `xor` are errors that name their replacement,** as `?:` is today: "PHP# has no `switch`: write `match`." "PHP# has no `and`: write `&&`." "PHP# has no `or`: write `||`." "PHP# has no `xor`: write `!=` between two `bool`s." Each stops being "not supported yet", because the spec removes them.
 9. **The PHP# parser reads `?:` right-associatively,** as C#, Java, TypeScript, Swift and Dart do, so `a ? b : c ? d : e` is `a ? b : (c ? d : e)`. `check_conditional` loses its nested-condition arm, which a right-associative parse never reaches: a ternary as the condition of another is then always written in parentheses. A `.php` file parses as before. The bridge already lowers a conditional in the else branch, as `Operators.sharp`'s `nested` runs today with its parentheses written.
 
-No new crate, `sharp_kind` or engine opcode. One new issue code, `unknown-function-type`, beside the analyzer's other `unknown-…-type` codes.
+10. **A type pattern without a type takes no name** (answer 5). `Paid { amount: > 1000 }` compiles. `{ status: 200 } r` is a compile error: "A pattern creates a variable only through a typed declaration: write the type, as in `Response { status: 200 } r`." The parser reads the name, so the semantic check names it.
+11. **Decision 041 stops citing the pattern rule.** It states its bare-name rule for `typeof` alone.
 
-## Questions for team-lead
+Decisions 12 to 17, for sections 20 and 20.1, are under "Sections 20 and 20.1".
 
-Each one decides what a user writes or what it means. The Slice does not decide them. Each has a proposal, which the rest of the note assumes.
+One new engine opcode, `ZEND_SHARP_LEAVE`, and its AST kind. One new issue code, `unknown-function-type`, beside the analyzer's other `unknown-…-type` codes. No new crate.
+
+## Answers in force
+
+team-lead answered the five questions of `ac74f1fec9`:
+
+1. **`Completes:`** — the PR completes §21 and §14.4, so it builds sections 20 and 20.1 too, and adds `PaymentResult` to the harness. `Completes: §14.4, §20, §20.1, §21`.
+2. **`?? return`, `?? continue`, `?? break`** — they stand wherever `?? throw` stands, because the spec lists them as one form. The Slice builds the engine opcode that leaves mid-expression (decision 2).
+3. **List patterns** — each element is any pattern, because patterns compose. The trailing rest the table shows is built first. Where else a rest may stand is Jordan's ruling, which arrives in the Queue.
+4. **`is Function<…>`** — a value `is T` exactly when it could be assigned to `T`: the parameter, result and effect rules of assignment, nothing looser. A PHP# lambda's closure carries its effects for the engine to compare.
+5. **Names on a properties pattern** — `Paid { amount: > 1000 }` with no name compiles. `{ status: 200 } r` is a compile error that says to write the type (decision 10).
+
+Also: decision 041 is updated in this PR, and the branch merges `origin/feat/slice-generics` only once #102 is on master.
+
+## Questions for team-lead on sections 20 and 20.1
+
+Each decides what a user writes or what plain PHP sees. Each has a proposal, which the section 20 design assumes.
+
+6. **The PHP name of a case, and how plain PHP makes one.** Spec lines "Each case is its own type, so a method can take `PaymentResult.Paid` alone." and "At runtime, each case is a real class, so Reflection sees it."
+   - **Proposed:** `PaymentResult.Paid` in namespace `App` is the PHP class `App\PaymentResult\Paid`, a `final` subclass of the `abstract` class `App\PaymentResult`. That is the name PHP#'s own `.` already resolves `PaymentResult.Paid` to, as a type and in `is`. Plain PHP writes `new PaymentResult\Paid(transactionId: 'tx')`. A plain case of a mixed enum, `CheckoutState.Open`, is the one instance of `App\CheckoutState\Open`, which plain PHP reads as `CheckoutState\Open::instance()`. A class `Paid` in the namespace `App.PaymentResult`, in `app/PaymentResult/Paid.sharp`, is a compile error, because it would take the case's name.
+   - Kotlin's JVM name instead, one flat class per case such as `App\PaymentResult_Paid`, which no PHP# name resolves to.
+7. **`==` on two data cases.** Decision 012 says enums compare by value. Section 20 says nothing about `==`.
+   - **Proposed:** two data cases are `==` when they are the same case and every field is `==`, as two structs are. That is #123's struct `==` (`feat/slice-structs`, open), so this Slice reuses it once #123 is on master. Until then `==` on a data case is refused as "`==` on an enum case that carries data is not supported yet in PHP#.", never PHP's identity `===`. `==` on a plain or backed case stays `===`, as master runs it.
+   - Build field-by-field `==` for data cases in this Slice, a second equality path beside #123's.
+
+## Questions for team-lead, answered
+
+The questions of `ac74f1fec9`, kept for the record:
 
 1. **The PR cannot write `Completes: §21`.** Jordan's definition of done says the PR completes sections 21 and 14.4. The ruling in force says a pattern over an enum data case stays refused until the section 20 Slice. `match-forms` and `is-and-as` match nothing but `PaymentResult` data cases, so both stay listed, and `COMPLETES` fails a claim on a section that keeps an entry. The readings:
    - **Proposed:** the PR writes `Completes: §14.4`, builds every other §21 rule, and the section 20 PR writes `Completes: §21` when it builds the case patterns (spec lines "case unpacked by position" and "whole case, named") and the harness's `PaymentResult`.
@@ -56,9 +86,11 @@ Each one decides what a user writes or what it means. The Slice does not decide 
    - **Proposed:** both `{ status: 200 } response` and `Paid { amount: > 1000 }` are allowed, as C# allows `{ Status: 200 } r` and `Paid { Amount: > 1000 }`.
    - Only the two forms the spec writes.
 
-## The order #102 and section 20 set
+## The order #102 and #123 set
 
-Rulings in force: #102 (open) lands `is` and `match` on type arguments. Section 20's enum data cases and sealed interfaces are not built, and a pattern over them stays refused until that Slice.
+#102 (open) lands `is` and `match` on type arguments. #123 (open) lands struct `==`. Section 20 is now this Slice's.
+
+**Rules that depend on #123:** `==` on a data case (question 7).
 
 **Rules that depend on #102:**
 
@@ -67,12 +99,9 @@ Rulings in force: #102 (open) lands `is` and `match` on type arguments. Section 
 - "`as` to a collection type checks every element." #102 builds it whole: its `value as Map<string, float>?` walks the elements. This Slice adds nothing.
 - A list pattern on a subject that is not a `List`, which needs #102's `is List<T>` (decision 5). On a `List` subject it needs nothing from #102.
 
-**Rules that depend on section 20:**
+**Rules that depend on section 20, now built here:** "case unpacked by position" and "whole case, named" (`match-forms`, `is-and-as`), and `match` coverage of a sealed interface.
 
-- "case unpacked by position", `PaymentResult.Paid(string transactionId) =>`, and "whole case, named", `PaymentResult.Paid p =>`, with `as PaymentResult.Paid`. They fail `match-forms` and `is-and-as`.
-- "On a sealed interface, the same holds for its implementers (section 20.1)." A `match` over an interface without `default` refuses today with "A `match` needs a `default` arm.", so it is refused, not silently accepted.
-
-**Rules that depend on neither:** every other line, including rules 1 to 5, 7 and 8 of the answer above.
+**Rules that depend on neither:** every other line.
 
 ## Existing work, and how the Slice reuses it
 
@@ -111,7 +140,7 @@ The states are **works**, **refused** (an error that names the feature as missin
 | N3 | `a?.b` | works | none | `null_safe.phpt` |
 | N4 | `f?.(x)` calls `f` only when it is not null | refused: parse error | checker (parser, analyzer), bridge | `null_safe_chain` (decision 3) |
 | N5 | `a ?? throw …` | works | none | |
-| N6 | `a ?? return`, `?? continue`, `?? break`; `return` takes a value when the method returns one | refused: parse error | checker (parser, `php_shape`, semantic check), bridge | `php_shape`, `analyze_php_shape`, `Lowering::pattern` (decision 2) |
+| N6 | `a ?? return`, `?? continue`, `?? break`; `return` takes a value when the method returns one | refused: parse error | checker (parser, analyzer, semantic check), bridge, engine | the analysis of `throw`, exception unwinding's cleanup (decision 2) |
 | N7 | a null check, `?.` or `??` on a value whose type has no `?` is a compile error | works | none, and N4 and N6 inherit it | `redundant-comparison`, `redundant-nullsafe-operator`, `redundant-null-coalesce` |
 | N8 | a nullable return type on a method that never returns null is a compile error | works | none | `overly-wide-return-type` |
 | P1 | `match` is the only branching construct on a value; `switch` is removed | wrong error: "This statement is not supported yet in PHP#." | checker | the `?:` error's form (decision 8) |
@@ -184,9 +213,9 @@ docs/spec.md:1376 expects no error, and the checker reports: Parse error encount
 
 `LeaveReturn.sharp`, `LeaveLoop.sharp` and `LeaveReturnWrong.sharp` give the same parse error at `return`, `return -1`, `continue` and `break`.
 
-- **Mechanism (decision 2):** the parser reads the keyword after `??` in a `.sharp` file into `Expression::Leave`. The semantic check refuses it outside the places question 2 allows, a value after `continue` or `break` (the parser reads none), and a `return` whose value disagrees with the method's return type, with the messages `return` statements get today: "Method `ReturnShapes.run` with return type of `void` must not return a value." and "Method `ReturnShapes.price` with return type must return a value." (`ReturnShapes.sharp`). `php_shape` builds `if (($leave#N = a) === null) { return …; } $price = $leave#N;`. The analyzer then reports `continue` outside a loop as it does today, "Continue statement used outside of loop.", and `redundant-null-coalesce` when `a` is never null.
-- **Engine:** none. The bridge lowers the `if` and the hidden local as it lowers a `match` statement's `if`.
-- **Reuses:** `Shape`, `Subject` and the hidden variables of `php_shape`.
+- **Mechanism (decision 2):** the parser reads the keyword after `??` in a `.sharp` file into `Expression::Leave`. It stands wherever `?? throw` stands (answer 2). The semantic check refuses a `return` whose value disagrees with the method's return type, with the messages `return` statements get today: "Method `ReturnShapes.run` with return type of `void` must not return a value." and "Method `ReturnShapes.price` with return type must return a value." (`ReturnShapes.sharp`). The analyzer types it `never`, reports `continue` outside a loop as it does today, "Continue statement used outside of loop.", and reports `redundant-null-coalesce` when `a` is never null.
+- **Engine:** `ZEND_AST_SHARP_LEAVE` and `ZEND_SHARP_LEAVE` (decision 2).
+- **Reuses:** the analysis of `throw`, the return and loop checks, and the unwinding helpers of `zend_execute.c`.
 
 ## N4: `f?.(x)`
 
@@ -259,6 +288,58 @@ Wrong error. `BoolOps.sharp` printed "Unparenthesized `a ? b : c ? d : e` is not
 - **Mechanism (decision 9):** the parser, in a `.sharp` file only, parses the else branch of `?:` at the ternary's own precedence. `check_conditional`'s nested-condition arm goes. A plain PHP project parses as before.
 - **Engine:** none.
 
+# Sections 20 and 20.1
+
+Added by answer 1. team-lead approves this part before anyone builds it.
+
+## Their state on master
+
+The spec run printed:
+
+```text
+FAIL §20 enum-data-cases (docs/spec.md:1929)
+  docs/spec.md:1932 expects no error, and the checker reports: A case that carries data is not supported yet in PHP#. Not supported yet.
+  docs/spec.md:1933 … same, and 1934
+FAIL §20 enum-shapes (docs/spec.md:1946)
+  docs/spec.md:1950 expects no error, and the checker reports: A case that carries data is not supported yet in PHP#. Not supported yet.
+  docs/spec.md:1951 … same
+FAIL §20.1 sealed-interfaces (docs/spec.md:1966)
+  docs/spec.md:1970 expects no error, and the checker reports: Parse error encountered during parsing Expected one of `Class`, found `Identifier`
+```
+
+`backed-enum` and `enum-interfaces` pass.
+
+| Rule | Spec line | State on master | Mechanism | Reuses |
+|---|---|---|---|---|
+| E1 | an enum can give each case a raw value, `case None = "none"` | works | none | PHP enums, as master lowers them |
+| E2 | the header lists the backing type and the interfaces after `:` | works | none | |
+| E3 | an enum case can carry data; a closed set, every case declared in one block; `PaymentResult.Declined(reason: "card expired")` makes one | refused: "A case that carries data is not supported yet in PHP#." | checker (parser, codex, analyzer), bridge, Composer autoloader | `parse_function_like_parameter_list`, promoted constructor parameters (decision 12) |
+| E4 | backed: every case has a value, and no case carries data | works for a backed enum; a data case refused as E3 | checker | |
+| E5 | not backed: any mix of plain cases and cases that carry data | refused as E3 | checker, bridge | decision 12 |
+| E6 | a case with a value and a case with data in one enum is a compile error | wrong error: E3's "not supported yet" | checker | the semantic check of enum shapes |
+| E7 | each case is its own type, so a method can take `PaymentResult.Paid` alone | refused as E3 | checker (codex), bridge | PHP#'s `.` name resolution (question 6) |
+| E8 | at runtime each case is a real class, so Reflection sees it | refused as E3 | bridge, Composer autoloader | decision 12 |
+| E9 | the checker rejects a `match` over the enum that misses a case | works for a plain or backed enum; refused as E3 for data cases | checker (analyzer) | `permitted_inheritors`, `report_unhandled` (decision 14) |
+| E10 | case unpacked by position `PaymentResult.Paid(string transactionId) =>` (§21) | refused: "An enum case pattern is not supported yet in PHP#." | checker (parser, `php_shape`), bridge | `TypePattern`, decision 13 |
+| E11 | whole case, named `PaymentResult.Paid p =>`, and `as PaymentResult.Paid` (§21) | refused as E10 | checker | the type pattern and `as`, unchanged once E7 holds |
+| S1 | a `sealed interface` is a closed set of classes; its implementers sit in its namespace; the checker gathers the set from that namespace | refused: parse error | checker (parser, codex populator) | `permitted_inheritors` (decision 15) |
+| S2 | outside the namespace, implementing it is a compile error | refused as S1 | checker (analyzer) | `check_class_like_implements`'s `is_permitted_to_inherit` |
+| S3 | a `match` over it needs no `default`, as long as it handles every implementer (§21 too) | refused: "A `match` needs a `default` arm." | checker (semantic check, analyzer) | decision 14 |
+| S4 | adding an implementer makes every `match` that does not handle it a compile error | refused as S1 | checker (orchestrator) | the recorded reads of mago-sharp #46 (decision 16) |
+
+"Use an enum when the cases are small data. Use a sealed interface when each case is a full class with its own methods." is advice, and holds no rule.
+
+## Decisions team-lead approves
+
+12. **An enum with a data case lowers to classes.** A backed enum and an enum of plain cases stay PHP enums, as master runs them. An enum with a data case is an `abstract` PHP class, `App\PaymentResult`, holding the enum's interfaces, methods and constants, and each case is a `final` subclass whose fields are public `readonly` promoted constructor parameters, `App\PaymentResult\Paid(string $transactionId)` (question 6). A plain case of such an enum is a case class with no fields and one instance. `PaymentResult.Declined(reason: x)` lowers to `new \App\PaymentResult\Declined(reason: x)`, and `CheckoutState.Open` to `\App\CheckoutState\Open::instance()`. The parser reads `case Paid(string transactionId);` into `EnumCaseItem::Data`, where it now parses and drops the list. The codex scans the enum as that abstract class with the cases as its `permitted_inheritors`, and each case as a class of its own, so `d.reason` reads a property the analyzer knows.
+13. **A positional case pattern is a type pattern with fields.** `TypePattern` gains `fields: Option<…>`, the positions in parentheses, each any pattern (answer 3), beside the `properties` of decision 4. `php_shape` tests the case class with `instanceof`, then each position against the field declared there: `($p = x) instanceof \App\PaymentResult\Paid && \is_string($transactionId = $p->transactionId)`. Field names come from the declaration, so `php_shape`'s `is_local` callback grows into a small trait that also answers a case's field names. The analyzer's and the bridge's implementations answer from the codebase. A wrong count of positions is "`PaymentResult.Paid` has 1 field, and this pattern unpacks 2."
+14. **Coverage of a closed set reuses Mago's sealed classes.** A data-case enum's base and a sealed interface carry `permitted_inheritors`. After each arm without `when`, the negated `instanceof` subtracts that case through `simple_negated_assertion_reconciler`'s `subtract_object`, which already handles `@inheritors`. A subject left with no type is covered. The semantic check stops requiring `default` when every arm is a type or case pattern, and the analyzer then reports the cases left, "This `match` misses `PaymentResult.RequiresAction`.", with `match-not-exhaustive`, which `MOVES` already lists. On a subject that is not a closed set, it reports "A `match` needs a `default` arm." with the same code.
+15. **`sealed` is a modifier of an interface.** The CST's `Interface` gains `sealed: Option<Keyword>`. The codex populator, which sees the whole codebase, sets a sealed interface's `permitted_inheritors` to the classes of its namespace that implement it. A class elsewhere gets `check_class_like_implements`'s refusal, reworded for a `.sharp` file: "`App.Shop.Banner` cannot implement the sealed interface `App.Interaction`: its implementers sit in the namespace `App`." The interface lowers to a plain PHP interface, and the engine checks nothing at run time.
+16. **A new implementer re-checks every file that matches on its interface.** The analyzer records a read of the interface's implementer set wherever coverage reads it, through the recorded reads of mago-sharp #46, so a warm compile after adding `PopupInteraction.sharp` reports the `match` it leaves uncovered, as a cold compile does.
+17. **The Composer autoloader finds a case class through its enum's file.** `sharp/composer/autoload.php` tries the file of `App\PaymentResult` when `App\PaymentResult\Paid.sharp` does not exist, and `Plugin::dumpClassMap` adds each case class of an enum file to the optimized class map. Plain PHP's `new PaymentResult\Paid(…)` then loads it, as do Reflection and an `instanceof` after the enum's file loaded.
+
+The harness gains `sharp/harness/app/PaymentResult.sharp`, the enum of `enum-data-cases`, so `match-forms` and `is-and-as` compile against it.
+
 # What changes
 
 ```text
@@ -268,32 +349,45 @@ sharp/mago/crates/
 │   │                                        Pattern::List; TypePattern's doc loses reading (a)
 │   ├── src/cst/cst/call.rs               <- Call::NullSafeFunction(NullSafeFunctionCall); is_null_safe covers it
 │   ├── src/cst/cst/expression.rs         <- Expression::Leave(Leave): return, continue or break after ??
+│   ├── src/cst/cst/class_like/enum_case.rs
+│   │                                     <- EnumCaseItem::Data(EnumCaseDataItem): a case and its fields
+│   ├── src/cst/cst/class_like/mod.rs     <- Interface.sealed
+│   ├── src/parser/internal/class_like/   <- enum_case.rs keeps the data case's fields; `sealed interface`
 │   ├── src/cst/node.rs, src/walker/mod.rs
 │   │                                     <- the new nodes, walked in source order
-│   ├── src/parser/internal/pattern.rs    <- list patterns and a type's properties replace skip_balanced;
-│   │                                        skip_case_pattern stays for section 20
+│   ├── src/parser/internal/pattern.rs    <- list patterns, a type's properties and a case's fields replace
+│   │                                        skip_balanced, skip_case_pattern and is_at_case_with_data
 │   ├── src/parser/internal/expression.rs <- ?.( and the right side of ?? in a .sharp file; ?: right-associative
-│   ├── src/utils/pattern.rs              <- php_shape: list patterns, a type's properties, a statement holding
-│   │                                        Leave; reading (a) deleted; the module doc names every form
-│   └── tests/sharp.rs                    <- parse rows for each new form, and list_and_enum_case_patterns_are_
-│                                            not_supported_yet keeps only the enum case
-├── names/src/internal/walker.rs          <- pattern_variables: list elements, the rest and a type's properties;
-│                                            walk_in_type_pattern's doc loses reading (a)
+│   ├── src/utils/pattern.rs              <- php_shape: list patterns, a type's properties and fields;
+│   │                                        is_local grows into a trait that also gives a case's fields;
+│   │                                        reading (a) deleted
+│   └── tests/sharp.rs                    <- parse rows for each new form; list_and_enum_case_patterns_are_
+│                                            not_supported_yet becomes their parse test
+├── names/src/internal/walker.rs          <- pattern_variables: list elements, the rest, a type's properties
+│                                            and its fields; walk_in_type_pattern's doc loses reading (a)
+├── codex/
+│   ├── src/scanner/class_like.rs         <- a data-case enum as an abstract class, each case a final class,
+│   │                                        the cases its permitted_inheritors
+│   └── src/populator/                    <- a sealed interface's permitted_inheritors from its namespace
 ├── semantics/
-│   ├── src/internal/checker/sharp.rs     <- constants only (P15), Leave's places and values (N6),
-│   │                                        Function<…> in a pattern (P32), switch/and/or/xor (P1, P34),
-│   │                                        check_conditional's nested arm deleted (P38); the contract doc
-│   │                                        above `enter` restated
+│   ├── src/internal/checker/sharp.rs     <- constants only (P15), Leave's values (N6), Function<…> in a
+│   │                                        pattern (P32), switch/and/or/xor (P1, P34), check_conditional's
+│   │                                        nested arm deleted (P38), a name on an untyped properties
+│   │                                        pattern, enum shapes (E6), `default` left to the analyzer for
+│   │                                        type and case arms (S3); the contract doc above `enter` restated
 │   └── tests/sharp.rs                    <- rows move out of the "not supported yet" tests (The tests, below)
 ├── analyzer/
 │   ├── src/code.rs                       <- IssueCode::UnknownFunctionType, "unknown-function-type"
 │   ├── src/expression/call/              <- a NullSafeFunction call, typed on the callee without null
-│   ├── src/expression/mod.rs             <- analyze_php_shape takes a statement holding Leave
-│   ├── src/statement/mod.rs              <- a statement holding Leave analyzes its php_shape
+│   ├── src/expression/                   <- Leave typed never, with the return and loop checks; a data case
+│   │                                        made by `PaymentResult.Declined(…)`; coverage of a closed set
+│   ├── src/statement/class_like/mod.rs   <- the sealed-interface refusal in PHP#'s words
+│   ├── src/                              <- the recorded read of an interface's implementer set (S4)
 │   └── tests/sharp.rs                    <- one test per rule, forms as rows (The tests, below)
 ├── sharp-bridge/
-│   ├── src/lower.rs                      <- NullSafeFunction through null_safe_chain; a statement holding Leave
-│   │                                        through Lowering::pattern; a lambda's result type in its type text
+│   ├── src/lower.rs                      <- NullSafeFunction through null_safe_chain; Leave as
+│   │                                        ZEND_AST_SHARP_LEAVE; a lambda's result type and effects in its
+│   │                                        type text; a data-case enum as an abstract class and its cases
 │   └── tests/lower.rs                    <- one tree per new lowering; the `extra is limit` row removed
 └── formatter/, linter/, codex/, hir/, fingerprint/, sharp-lean/
                                           <- each exhaustive match on Call, Expression and Pattern takes the
@@ -301,8 +395,20 @@ sharp/mago/crates/
                                              as the forms they lower to
 
 ext/sharp/sharp.c                         <- sharp_type_holds: SHARP_TYPE_FUNCTION compares a closure's
-                                             signature (on #102's type walk)
-Zend/zend_compile.c                       <- zend_compile_sharp_recv_type_args takes a lambda's result type
+                                             signature and effects (on #102's type walk); the
+                                             ZEND_AST_SHARP_LEAVE translation
+ext/sharp/sharp_unit.h                    <- regenerated: SHARP_AST_SHARP_LEAVE
+Zend/zend_ast.h, Zend/zend_compile.c      <- ZEND_AST_SHARP_LEAVE compiled to ZEND_SHARP_LEAVE and its
+                                             out-of-line return, break or continue;
+                                             zend_compile_sharp_recv_type_args takes a lambda's result type
+Zend/zend_vm_def.h                        <- ZEND_SHARP_LEAVE: cleanup_unfinished_calls, cleanup_live_vars, jump
+Zend/Optimizer/zend_cfg.c, ext/opcache/jit/
+                                          <- ZEND_SHARP_LEAVE as a jump in the CFG and in both JITs
+sharp/composer/
+├── autoload.php                          <- a missing case class loads its enum's file
+└── src/Plugin.php                        <- the optimized class map lists each case class
+sharp/harness/app/PaymentResult.sharp     <- new: enum-data-cases' PaymentResult
+docs/decisions/041-typeof-value.md        <- states the bare-name rule for typeof alone
 Zend/tests/sharp/
 ├── Patterns.sharp, Patterns.inc, pattern_matching.phpt, pattern_matching_jit_{function,tracing}.phpt
 │                                         <- rows: list patterns, a type with properties and a name
@@ -311,18 +417,24 @@ Zend/tests/sharp/
 │                                            ?? return value, ?? continue, ?? break
 ├── Operators.sharp, Operators.inc        <- `limit =>` becomes `int n when n == limit`; `nested` gains a row
 │                                            without its parentheses
+├── enums.inc, enums.phpt, enums_jit_{function,tracing}.phpt, and a data-case enum and a mixed enum
+│   beside Stage.sharp and Suit.sharp     <- rows: making each case, a case as a parameter type, a field
+│                                            read, Reflection on a case, a match over every case
+├── autoload.phpt, library_autoload*.phpt <- rows: plain PHP's new PaymentResult\Paid(…) loads its enum
+├── a ?? return test file                 <- ?? return, continue and break inside a call's arguments, a
+│                                            template, a try with finally, in every opcache mode
 ├── opcodes.phpt                          <- each new form's opcodes equal its PHP twin's
 └── #102's type-test fixture              <- rows for Function<…> on a lambda, a method value and a plain
                                              PHP closure, true and false
-sharp/baseline/spec/                      <- §14.4/leave-on-null, §21/property-patterns, §21/pattern-locals and
-                                             §21/type-tests removed
+sharp/baseline/spec/                      <- every §14.4, §20, §20.1 and §21 entry removed, nine in all
 docs/architecture/slices/21-pattern-matching.md   <- this note
 ```
 
 The PHP the bridge emits:
 
 ```text
-if (($leave#1 = $this->prices[$plan] ?? null) === null) { return; } $price = $leave#1;   <- int price = this.prices[plan] ?? return;
+$price = $this->prices[$plan] ?? SHARP_LEAVE(return);                                  <- int price = this.prices[plan] ?? return;
+                                                                                          (ZEND_AST_SHARP_LEAVE: no PHP spelling)
 ($doubler === null ? null : $doubler(4))                                                 <- doubler?.(4), a local
 (($nullsafe#1 = $this->next()) === null ? null : $nullsafe#1(4))                         <- this.next()?.(4)
 ($big = $payment) instanceof \App\Paid && $big->amount > 1000                             <- payment is Paid { amount: > 1000 } big
@@ -330,6 +442,9 @@ if (($leave#1 = $this->prices[$plan] ?? null) === null) { return; } $price = $le
 \count($lines) >= 1 && ($first = $lines[0]) instanceof \App\Line && ($rest = \array_slice($lines, 1)) !== null
                                                                                           <- [Line first, ...List<Line> rest]
 $a ? 1 : ($b ? 2 : 3)                                                                     <- a ? 1 : b ? 2 : 3
+new \App\PaymentResult\Declined(reason: 'card expired')                                   <- PaymentResult.Declined(reason: "card expired")
+($p = $result) instanceof \App\PaymentResult\Paid && \is_string($transactionId = $p->transactionId)
+                                                                                          <- PaymentResult.Paid(string transactionId)
 ```
 
 # Public names this Slice adds or changes
@@ -348,19 +463,23 @@ team-lead approves these. Everything not here is tactical.
 - **`RestPattern { ellipsis, hint, variable }`**, `...List<Line> rest`. The slate: `RestPattern` (JavaScript's and TypeScript's "rest element" for `...` that collects; recommended), `SpreadPattern` (PHP#'s word for `...`, but a spread expands and this collects; runner-up), `SlicePattern` (C#'s `..`; PHP# says "slice" nowhere), `TailPattern` (removed if question 3 allows a rest in the middle), `RemainderPattern` (long; `%` is remainder in section 24).
 - **`TypePattern.properties: Option<PropertiesPattern>`**, a field on an existing node.
 - **`IssueCode::UnknownFunctionType`, `"unknown-function-type"`**, beside `unknown-iterator-type` and `unknown-match-subject-type`.
-- **`$leave#N`**, the hidden local of decision 2, beside `$match#N`, `$as#N` and `$nullsafe#N`. No PHP# source can name it.
+- **`ZEND_AST_SHARP_LEAVE`, `SHARP_AST_SHARP_LEAVE` and the opcode `ZEND_SHARP_LEAVE`** (decision 2). They follow #102's `ZEND_AST_SHARP_IS_TYPE` and `ZEND_SHARP_IS_TYPE`, and the CST's `Leave`.
+- **`EnumCaseItem::Data(EnumCaseDataItem { name, parameter_list })`**, beside `EnumCaseItem::Unit` and `EnumCaseItem::Backed`.
+- **`Interface.sealed: Option<Keyword>`** and **`TypePattern.fields`**, fields on existing nodes.
+- **`App\PaymentResult\Paid` and `CheckoutState\Open::instance()`**, what plain PHP sees of a case (question 6).
+- **`sharp/harness/app/PaymentResult.sharp`**, a new harness file.
 
-No new file, crate, `sharp_kind`, engine opcode or `Sharp\` class.
+No new crate or `Sharp\` class.
 
 # The tests
 
 Each test proves one rule and fails on a real bug in it, with its forms as rows. The existing test for a rule grows a row before a new test is added, and each is seen failing before its code lands.
 
-**`sharp/mago/crates/syntax/tests/sharp.rs`:** a parse test each for `Leave` (rows `?? return`, `?? return value`, `?? continue`, `?? break`, and `return` after anything but `??` staying a statement), `?.(` (rows on a local, a property, a call, and a `.php` file where it stays a parse error), a type with properties (with and without a name, nested), a list pattern (every question 3 form), and `?:` right-associative in `.sharp` and left-associative in `.php`.
+**`sharp/mago/crates/syntax/tests/sharp.rs`:** a parse test each for `Leave` (rows `?? return`, `?? return value`, `?? continue`, `?? break`, and `return` after anything but `??` staying a statement), `?.(` (rows on a local, a property, a call, and a `.php` file where it stays a parse error), a type with properties (with and without a name, nested), a list pattern (any pattern as an element, a trailing rest, and a rest elsewhere refused until Jordan's ruling), and `?:` right-associative in `.sharp` and left-associative in `.php`.
 
 **`sharp/mago/crates/analyzer/tests/sharp.rs`:**
 
-- `leave_on_null_leaves_the_method_or_the_loop` (new): rows for each keyword in each allowed place compile and type the local without null; `?? return 5` in a `void` method, `?? return` in an `int` method, `?? continue` outside a loop, a place question 2 refuses, and `?? return` on a value that is never null each get their error.
+- `leave_on_null_leaves_the_method_or_the_loop` (new): rows for each keyword in each allowed place compile and type the local without null; `?? return 5` in a `void` method, `?? return` in an `int` method, `?? continue` outside a loop, and `?? return` on a value that is never null each get their error.
 - `a_null_safe_call_calls_only_a_function_that_is_there` (new): `f?.(x)` types `int?` for a `Function<int(int)>?`, and `redundant-nullsafe-operator` for a `Function<int(int)>`.
 - `a_pattern_takes_constants_of_the_codebase_only` (new): a static property through its class is refused with P15's message; a class constant and an enum case through their class compile.
 - `a_type_with_properties_tests_both_and_binds` (new): `big` is `Paid` inside the `if` of `payment is Paid { amount: > 1000 } big`, its property test reads `Paid`'s `amount`, and an unknown property of `Paid` is `non-existent-property`.
@@ -379,15 +498,26 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 
 **Engine, `Zend/tests/sharp/`, in every opcache mode** (`sharp/bin/test --opcache --repeat --passes` on the files below): each new row of `Patterns`, `Nulls` and `Operators` runs and prints what its PHP twin prints, and `opcodes.phpt` shows equal opcodes. The function type rows run on the engine only, since PHP has no twin for the test.
 
+**Sections 20 and 20.1, in the same files:**
+
+- syntax: `case Paid(string transactionId);` parses into `EnumCaseItem::Data` and stays a parse error in a `.php` file; `sealed interface` parses, and `sealed class` stays refused.
+- semantics: `enum_shapes_are_backed_or_not` (new), with a value case beside a data case refused and every mix of plain and data cases compiling; `{ status: 200 } r` refused with answer 5's message.
+- analyzer: `a_data_case_is_a_type_of_its_own` (new): `PaymentResult.Declined(reason: x)` types `PaymentResult.Declined`, a method taking `PaymentResult.Paid` refuses a `Declined`, `d.reason` is `string`; `a_match_over_a_closed_set_needs_no_default` (new), rows for a data-case enum, a mixed enum and a sealed interface, each covered, each missing one case, and each with a `when` arm that does not count; `a_sealed_interface_is_implemented_only_in_its_namespace` (new); a positional pattern's wrong count of fields; `==` on a data case, by question 7.
+- orchestrator: a warm compile after adding an implementer reports the `match` it leaves uncovered, as a cold one does.
+- bridge: the abstract class, the case classes and their construction as trees.
+- engine: the rows listed in the file tree, and plain PHP's `new PaymentResult\Paid(…)` loading the enum through `sharp/composer/autoload.php`.
+
+**Answers 2, 4 and 5:** rows of `?? return`, `?? continue` and `?? break` as a call's argument, inside a template, inside a `try` with `finally`, and inside a loop's condition; a pure `Function<int(int)>` refusing a lambda with an effect; `Paid { amount: > 1000 }` compiling without a name.
+
 **Plain PHP:** every parser change is behind `dialect.is_sharp()`. `mago analyze` on a plain PHP project gives the same issues before and after, checked on `sharp/mago/crates/analyzer/tests/cases/` as #102 checks its corpus.
 
 # What the Slice refuses as "not supported yet", and why
 
-- **An enum case pattern,** "An enum case pattern is not supported yet in PHP#.", unchanged. Section 20 builds data cases.
-- **A `match` over a sealed interface without `default`,** "A `match` needs a `default` arm.", unchanged. Section 20.1 builds sealed interfaces.
+- **A rest anywhere but last in a list pattern,** until Jordan's ruling arrives (answer 3).
+- **`==` on a data case,** until #123 is on master, if team-lead takes question 7's proposal.
+- **A law that reads a data case's field** (section 28). `sharp-lean`'s `Translator::r#enum` writes an enum as a Lean `inductive` with one constructor per case, and gains each data case's fields as constructor arguments, `| Paid (transactionId : String)`. A law that reads `d.reason` is reported through `Body::unmodeled`, the path every construct the translation does not model takes today, with no new message. Section 28 has no example of one, so no entry moves.
 
 # Found outside the Slice
 
-- **Decision 041 says `typeof(name)` reads a bare name "the same rule pattern matching uses".** Decision 6 removes that rule from patterns, and `typeof` keeps it. The sentence becomes false when this Slice lands. Its owner rewords it to state the rule for `typeof` alone.
-- **The harness has no `PaymentResult`.** `match-forms` and `is-and-as` use it in their setup lines, and only section 20's `enum-data-cases` example declares it. The section 20 Slice adds it to `sharp/harness/`.
+- **A `match` statement over a closed set does nothing for a value outside it.** A plain PHP class can still implement a sealed interface, since the engine checks nothing at run time. A `match` expression then throws PHP's `UnhandledMatchError`, and a `match` statement, an `if` chain, runs no arm, as a `match` statement over a plain enum does on master.
 - **#102 accepts `as` to a nullable type,** as in its `value as Map<string, float>?`, while master's semantic check refuses "`x as T` to a type that is … nullable". Section 21 says nothing about it either way. #102's review owns it.
