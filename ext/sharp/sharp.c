@@ -3102,9 +3102,28 @@ static bool sharp_type_arguments_take(const zend_class_entry *given, sharp_type_
 	return true;
 }
 
-/* Whether `object` is an instance of the class `type` names whose type arguments for that class match `type`'s own, as
- * sharp_type_argument_matches matches them. Only a class PHP# declares with type parameters has type arguments to
- * compare: plain PHP's generics are erased. A loaded object's class has loaded each class it extends or implements. */
+/* Whether `ce` or a class it extends uses the trait `trait`, itself or through a trait it uses, as class_uses() lists
+ * them on each class up the chain. No object is instanceof a trait, and spec section 22 makes a plain PHP trait a type.
+ * A linked class has loaded each trait it uses. */
+static bool sharp_class_uses_trait(const zend_class_entry *ce, const zend_class_entry *trait)
+{
+	for (; ce; ce = ce->parent) {
+		for (uint32_t i = 0; i < ce->num_traits; i++) {
+			const zend_class_entry *used = zend_lookup_class_ex(
+				ce->trait_names[i].name, ce->trait_names[i].lc_name, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+			if (used && (used == trait || sharp_class_uses_trait(used, trait))) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+/* Whether `object` is an instance of the class `type` names, or uses the trait it names, whose type arguments for that
+ * class match `type`'s own, as sharp_type_argument_matches matches them. Only a class PHP# declares with type
+ * parameters has type arguments to compare: plain PHP's generics are erased. A loaded object's class has loaded each
+ * class it extends or implements. */
 static bool sharp_object_is(zend_object *object, const sharp_type *type)
 {
 	/* An object of the class itself holds its type arguments for that class, interned, so equal ones are one pointer. A
@@ -3126,7 +3145,13 @@ static bool sharp_object_is(zend_object *object, const sharp_type *type)
 	}
 
 	zend_class_entry *ce = zend_lookup_class_ex(type->class_name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
-	if (!ce || !instanceof_function(object->ce, ce)) {
+	if (!ce) {
+		return false;
+	}
+	if (ce->ce_flags & ZEND_ACC_TRAIT) {
+		return sharp_class_uses_trait(object->ce, ce);
+	}
+	if (!instanceof_function(object->ce, ce)) {
 		return false;
 	}
 	if (!type->count || !sharp_class_is_sharp(ce) || !ce->info.user.sharp_bounds) {

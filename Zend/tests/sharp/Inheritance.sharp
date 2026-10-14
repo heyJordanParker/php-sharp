@@ -1,5 +1,7 @@
 namespace Demo;
 
+import Lib.Copies;
+
 public interface HasDesign
 {
     string designColumn { get; }
@@ -44,4 +46,13 @@ public class Base
 public class Sealed : Base
 {
     public final override string kind() => "sealed";
+}
+
+public static class Seeder
+{
+    public static bool owns(Any value) => value is Copies;
+
+    public static string seed(Copies owner) => owner.copy();
+
+    public static int count(List<Copies> owners) => owners.count();
 }
