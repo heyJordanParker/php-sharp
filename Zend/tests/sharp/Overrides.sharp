@@ -38,3 +38,19 @@ public class Person : Named
 {
     public Person(public string name { get; }) { }
 }
+
+public interface Sized
+{
+    int size { get; set; }
+}
+
+public class Box : Sized
+{
+    public int size { get; set; } = 1;
+
+    public static int grow(Sized sized)
+    {
+        sized.size = sized.size * 2;
+        return sized.size;
+    }
+}

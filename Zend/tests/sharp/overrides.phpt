@@ -30,6 +30,11 @@ echo $table->hasType() ? 'typed' : 'untyped', ', ', count($table->getAttributes(
 
 $person = new Overrides\Person('Ada');
 echo $person->name, ' ', $person instanceof Overrides\Named ? 'named' : 'not named', "\n";
+
+// An interface states `size` with `set`, and a write through the interface reaches the class's property.
+echo Overrides\Box::grow(new Overrides\Box()), ' ';
+$size = new ReflectionProperty(Overrides\Sized::class, 'size');
+echo $size->hasHook(PropertyHookType::Set) ? 'set' : 'no set', "\n";
 ?>
 --EXPECT--
 square four sides 4
@@ -43,3 +48,4 @@ orders fills | orders
 rush_orders
 untyped, 1 Override
 Ada named
+2 set
