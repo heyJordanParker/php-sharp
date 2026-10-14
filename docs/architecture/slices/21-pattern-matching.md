@@ -519,7 +519,7 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 # What the Slice refuses as "not supported yet", and why
 
 - **`==` on a data case,** until #123 is on master, if team-lead takes question 7's proposal.
-- **A law that reads a data case's field** (section 28). `sharp-lean`'s `Translator::r#enum` writes an enum as a Lean `inductive` with one constructor per case, and gains each data case's fields as constructor arguments, `| Paid (transactionId : String)`. A law that reads `d.reason` is reported through `Body::unmodeled`, the path every construct the translation does not model takes today, with no new message. Section 28 has no example of one, so no entry moves.
+- **A law that reads a data case's field** (section 28). `sharp-lean`'s `Translator::r#enum` writes an enum as a Lean `inductive` with one constructor per case, and gains each data case's fields as constructor arguments, `| Paid (transactionId : String)`. `PaymentResult.Paid(x)` in a law is the constructor applied, `(App.PaymentResult.Paid x)`, and a plain case `CheckoutState.Open` is the constructor without fields. A law that reads `d.reason` is reported through `Body::unmodeled` as "the field PaymentResult.Declined.reason of a case". The compile step's namespace list for Lean leaves out the case classes, whose namespace is the enum's own name, which Lean declares as the `inductive`. Section 28 has no example of one, so no entry moves.
 
 # Found outside the Slice
 
