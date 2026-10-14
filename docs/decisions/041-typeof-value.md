@@ -2,7 +2,7 @@
 
 ## Decision
 
-`typeof` also takes a value. `typeof(order)` gives a `Class<Order>` that holds the object's runtime class, which may be a subclass of `Order`. A bare name inside `typeof` is a local's value when a local with that name is in scope, and a type otherwise, the same rule pattern matching uses. Plain PHP receives the class-name string. It replaces PHP's `$order::class` and `get_class($order)`.
+`typeof` also takes a value. `typeof(order)` gives a `Class<Order>` that holds the object's runtime class, which may be a subclass of `Order`. A bare name inside `typeof` is a local's value when a local with that name is in scope, and a type otherwise. Plain PHP receives the class-name string. It replaces PHP's `$order::class` and `get_class($order)`.
 
 ## Options
 

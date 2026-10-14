@@ -191,7 +191,7 @@ class Operators
     {
         $limit = 10;
         $label = match (true) {
-            $value === $limit => "at the limit",
+            \is_int($n = $value) and $n === $limit => "at the limit",
             $value instanceof \Billing\Circle => "a circle",
             default => "other",
         };

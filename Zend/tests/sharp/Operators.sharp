@@ -191,7 +191,7 @@ public class Operators
     {
         const limit = 10;
         const label = match (value) {
-            limit => "at the limit",
+            int n when n == limit => "at the limit",
             Circle => "a circle",
             default => "other",
         };
