@@ -1,5 +1,5 @@
 --TEST--
-PHP# chooses a value with the ternary, nested in parentheses
+PHP# chooses a value with the ternary, which nests to the right in its else branch and in parentheses in its condition
 --FILE--
 <?php
 

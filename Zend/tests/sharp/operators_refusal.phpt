@@ -108,8 +108,6 @@ public class Refusals
     public int ranked(Status a, Status b) => a <=> b;
 
     public bool shorter(List<int> lines, List<int> other) => lines < other;
-
-    public int nested(bool a, bool c, int b, int d, int e) => a ? b : c ? d : e;
 }
 
 SHARP);
@@ -117,7 +115,7 @@ refusal("$root/Refusals.sharp", ['sharp.compile_command' => escapeshellarg(geten
 remove_project($root);
 ?>
 --EXPECT--
-CompileError: Refusals.sharp has 18 errors:
+CompileError: Refusals.sharp has 17 errors:
 line 5: `Coupon` declares `operator ==` without `public int hash()`: declare it in `Coupon` or a parent, so equal values hash alike.
 line 10: `==` cannot compare `Cart` with `Cart`: `Cart` declares no `operator ==`.
 line 14: `if` takes a `bool`, but this is `int`.
@@ -135,4 +133,3 @@ line 92: `<` orders numbers, strings and classes that declare `operator <=>`, an
 line 94: `<` orders numbers, strings and classes that declare `operator <=>`, and `Status` is none of them.
 line 96: `<=>` orders numbers, strings and classes that declare `operator <=>`, and `Status` is none of them.
 line 98: `<` orders numbers, strings and classes that declare `operator <=>`, and `List<int>` is none of them.
-line 100: Unparenthesized `a ? b : c ? d : e` is not supported. Use either `(a ? b : c) ? d : e` or `a ? b : (c ? d : e)`.

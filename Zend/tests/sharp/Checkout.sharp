@@ -9,7 +9,7 @@ class Checkout
 
     public static string sign(int value)
     {
-        return value > 0 ? "positive" : (value < 0 ? "negative" : "zero");
+        return value > 0 ? "positive" : value < 0 ? "negative" : "zero";
     }
 
     public static string size(int count, bool wholesale)
