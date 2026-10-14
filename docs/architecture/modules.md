@@ -30,7 +30,7 @@ module : App.Shop                                              // parent header:
 - `Module.sharp` holds its folder's module, with no parent header.
 - `Module.<Environment>.sharp` holds an environment module. Its header names its own folder's namespace.
 - Any other file may hold a test module beside its classes. Its header names the module it overrides.
-- The standard library's `Sharp/Module.sharp` serves the root namespace, so its bindings reach every class after the class's own namespaces. It binds `Environment`.
+- The standard library's `Sharp/Module.sharp` serves the root namespace, so its bindings reach every class after the class's own namespaces. It binds `Environment` and `Dispatcher`.
 
 ### Each binding
 
@@ -99,7 +99,9 @@ A service's id is its PHP# type in lowercase, as codex's `service_id` writes it 
 - Before it builds a class, it reads the modules of the class's folder and of each folder above it, up to the project root that holds `.sharp/`. It reads each module file once per request, and stops at a module that throws as it loads, which it reads again the next time.
 - With `SHARP_ENV` set, it also reads the `Module.<SHARP_ENV>.sharp` beside each `Module.sharp`, and the environment module wins outside a test.
 - The standard library's `autoload.php` reads the library's module once per request, through `Sharp\Internal\readModule`.
-- It builds only what a binding binds. It builds a bound class through its constructor and calls a binding's closure. Either way, it fills each parameter with the service its `Service` attribute, or else its class, names. It reads the parameters from the function's own argument information, with no reflection.
+- It builds only what a binding binds, and the class of each listener `emit` runs, a new one for every event whatever lifetime a module gives it (spec section 15). It builds a class through its constructor and calls a binding's closure. Either way, it fills each parameter with the service its `Service` attribute, or else its class, names. It reads the parameters from the function's own argument information, with no reflection.
+- It runs a module file in a symbol table of its own. `zend_execute` would give the PHP code that called the engine one, which a tracing-JIT frame never frees, and `emit` and `Container::get` are both called from PHP code.
+- `emit` resolves `Sharp.Dispatcher` for the class whose code emits, as that class resolves any service. The standard library's module binds `ImmediateDispatcher`, so an app's or a test's module replaces it.
 - It keeps each `singleton` for the request and each `scoped` service for the current scope. A `transient` service is built every time.
 - It throws its own failures as `Sharp\ContainerError`, which extends `Error`: the service no module binds, the class that needs itself, the parameter with no class type, or the bound class that isn't there. It throws a constructor's own exception unchanged, and the request goes on.
 
@@ -148,7 +150,7 @@ ext/sharp/
 sharp/composer/
 ├── composer.json                       requires psr/container; maps Sharp\Psr\ to src/Psr/
 ├── autoload.php                        reads the library's module
-├── library/Sharp/Module.sharp          new: binds Environment for every namespace
+├── library/Sharp/Module.sharp          new: binds Environment and Dispatcher for every namespace
 ├── src/Psr/Container.php               new: Sharp\Psr\Container, PSR-11 over Sharp\Container
 ├── src/Psr/ContainerException.php      new: PSR-11's error for a service the container can't build
 └── src/Psr/NotFoundException.php       new: PSR-11's not-found error
