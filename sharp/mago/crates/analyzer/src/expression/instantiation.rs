@@ -908,6 +908,7 @@ where
         is_this: false,
         intersection_types: None,
         remapped_parameters: false,
+        is_readonly: false,
     }));
 
     // `new $className()` where `$className: class-string<T>` produces a `T`, not the constraint.

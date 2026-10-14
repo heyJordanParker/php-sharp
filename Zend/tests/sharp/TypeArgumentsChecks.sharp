@@ -90,7 +90,7 @@ public class Purse
     {
     }
 
-    public static Purse operator +(Purse purse, PaginatedList<Order> page) => purse;
+    public static Purse operator +(Purse purse, PaginatedList<Order> page) => new Purse(purse.count);
 }
 
 public class Page<T>
