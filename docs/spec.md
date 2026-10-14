@@ -2914,6 +2914,7 @@ typeof(Box<Order>) == typeof(Box<Invoice>);     // false: the same class with ot
 **`Self`** means the class a static method was actually called on. It replaces PHP's `static`. PHP's `self` is removed: to mean the declaring class, write its name.
 
 <!-- example self-return: statements
+public class Order : DatabaseEntity { public Order(Row row) : super(row) { } }
 Any value = 1;
 VerifiedUser caller = new VerifiedUser();
 -->
@@ -2921,7 +2922,12 @@ VerifiedUser caller = new VerifiedUser();
 public abstract class DatabaseEntity
 {
     public required DatabaseEntity(Row row) { … }
-    public static Self fromSchema(Any value, VerifiedUser caller) { … return new Self(row); }
+
+    public static Self fromSchema(Any value, VerifiedUser caller)
+    {
+        Row row = …;
+        return new Self(row);
+    }
 }
 
 const order = Order.fromSchema(value, caller);   // typed as Order
@@ -2941,7 +2947,10 @@ public bool same(Self other) { … }   // compile error: Self is a return type o
 - its leading parameters match the parameters of the `required` constructor
 - every parameter it adds has a default
 
-<!-- example required-constructors -->
+<!-- example required-constructors
+public abstract class DatabaseEntity { public required DatabaseEntity(Row row) { } }
+…
+-->
 ```csharp
 // app/Order.sharp
 namespace App;
