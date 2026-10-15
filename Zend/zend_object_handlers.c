@@ -33,6 +33,7 @@
 #include "zend_hash.h"
 #include "zend_property_hooks.h"
 #include "zend_observer.h"
+#include "Optimizer/zend_func_info.h"
 #include "ext/sharp/php_sharp.h"
 
 #define DEBUG_OBJECT_HANDLERS 0
@@ -774,7 +775,8 @@ try_again:
 		if (prop_info && UNEXPECTED(prop_info->flags & (ZEND_ACC_READONLY|ZEND_ACC_PPP_SET_MASK))
 		 && (type == BP_VAR_W || type == BP_VAR_RW || type == BP_VAR_UNSET)
 		 && ((prop_info->flags & ZEND_ACC_READONLY) || !zend_asymmetric_property_has_set_access(prop_info))) {
-			if (Z_TYPE_P(retval) == IS_OBJECT) {
+			/* A PHP# Map or Set is a value, so a write through it would change the property, as for an array. */
+			if (Z_TYPE_P(retval) == IS_OBJECT && !SHARP_IS_TABLE(retval)) {
 				/* For objects, W/RW/UNSET fetch modes might not actually modify object.
 				 * Similar as with magic __get() allow them, but return the value as a copy
 				 * to make sure no actual modification is possible. */
@@ -848,7 +850,8 @@ try_again:
 			}
 
 			if (UNEXPECTED(type == BP_VAR_W || type == BP_VAR_RW || type == BP_VAR_UNSET)) {
-				if (UNEXPECTED(Z_TYPE_P(retval) != IS_OBJECT)) {
+				/* A PHP# Map or Set is a value, so a write through it would change the property, as for an array. */
+				if (UNEXPECTED(Z_TYPE_P(retval) != IS_OBJECT || SHARP_IS_TABLE(retval))) {
 					zend_throw_error(NULL, "Indirect modification of %s::$%s is not allowed",
 						ZSTR_VAL(zobj->ce->name), ZSTR_VAL(name));
 					goto exit;
@@ -892,7 +895,7 @@ try_again:
 			retval = rv;
 			if (!Z_ISREF_P(rv)
 			 && (type == BP_VAR_W || type == BP_VAR_RW || type == BP_VAR_UNSET)
-			 && UNEXPECTED(Z_TYPE_P(rv) != IS_OBJECT)) {
+			 && UNEXPECTED(Z_TYPE_P(rv) != IS_OBJECT || SHARP_IS_TABLE(rv))) {
 				zend_throw_error(NULL, "Indirect modification of %s::$%s is not allowed",
 					ZSTR_VAL(ce->name), ZSTR_VAL(name));
 			}

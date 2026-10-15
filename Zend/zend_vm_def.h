@@ -1254,6 +1254,7 @@ ZEND_VM_C_LABEL(assign_dim_op_new_array):
 		}
 
 		if (EXPECTED(Z_TYPE_P(container) == IS_OBJECT)) {
+			SHARP_SEPARATE(container);
 			zend_object *obj = Z_OBJ_P(container);
 
 			dim = GET_OP2_ZVAL_PTR_UNDEF(BP_VAR_R);
@@ -1946,7 +1947,7 @@ ZEND_VM_INLINE_HELPER(zend_fetch_static_prop_helper, ANY, ANY, int type)
 ZEND_VM_C_LABEL(copy_deref):
 		ZVAL_COPY_DEREF(EX_VAR(opline->result.var), prop);
 		if (type == BP_VAR_R && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)
-		 && Z_TYPE_P(EX_VAR(opline->result.var)) == IS_ARRAY) {
+		 && SHARP_IS_COLLECTION(EX_VAR(opline->result.var))) {
 			sharp_collection_of_static_property(EX_VAR(opline->result.var), prop, prop_info);
 		}
 	} else {
@@ -2300,7 +2301,7 @@ ZEND_VM_C_LABEL(fetch_obj_r_copy):
 		}
 		if (OP2_TYPE == IS_CONST && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 ZEND_VM_C_LABEL(fetch_obj_r_sharp):
-			if (Z_TYPE_P(EX_VAR(opline->result.var)) == IS_ARRAY) {
+			if (SHARP_IS_COLLECTION(EX_VAR(opline->result.var))) {
 				sharp_collection_of_property(EX_VAR(opline->result.var), zobj, Z_STR_P(GET_OP2_ZVAL_PTR(BP_VAR_R)), cache_slot);
 			}
 		}
@@ -2810,6 +2811,7 @@ ZEND_VM_C_LABEL(try_assign_dim_array):
 			}
 		}
 		if (EXPECTED(Z_TYPE_P(object_ptr) == IS_OBJECT)) {
+			SHARP_SEPARATE(object_ptr);
 			zend_object *obj = Z_OBJ_P(object_ptr);
 
 			GC_ADDREF(obj);
@@ -6789,7 +6791,7 @@ ZEND_VM_COLD_CONST_HANDLER(51, ZEND_CAST, CONST|TMP|VAR|CV, ANY, TYPE)
 			zval *value = expr;
 
 			ZVAL_DEREF(value);
-			if (Z_TYPE_P(value) != IS_ARRAY) {
+			if (!SHARP_IS_COLLECTION(value)) {
 				ZVAL_COPY(result, value);
 			} else if (OP1_TYPE == IS_CV) {
 				sharp_collection_of_local(result, expr);
@@ -7108,6 +7110,7 @@ ZEND_VM_C_LABEL(num_index_dim):
 			if (OP2_TYPE == IS_CONST && Z_EXTRA_P(offset) == ZEND_EXTRA_VALUE) {
 				offset++;
 			}
+			SHARP_SEPARATE(container);
 			Z_OBJ_HT_P(container)->unset_dimension(Z_OBJ_P(container), offset);
 		} else if (UNEXPECTED(Z_TYPE_P(container) == IS_STRING)) {
 			zend_throw_error(NULL, "Cannot unset string offsets");

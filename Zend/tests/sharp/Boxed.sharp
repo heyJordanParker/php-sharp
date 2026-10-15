@@ -1,0 +1,6 @@
+namespace Demo;
+
+public struct Boxed
+{
+    public Boxed(public Any? value { get; }) { }
+}

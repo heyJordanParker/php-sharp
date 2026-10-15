@@ -1526,6 +1526,7 @@ static zend_always_inline void ZEND_FASTCALL zend_jit_fetch_dim_obj_helper(zval 
 	zval *retval;
 
 	if (EXPECTED(Z_TYPE_P(object_ptr) == IS_OBJECT)) {
+		SHARP_SEPARATE(object_ptr);
 		zend_object *obj = Z_OBJ_P(object_ptr);
 
 		GC_ADDREF(obj);
@@ -1631,6 +1632,7 @@ static void ZEND_FASTCALL zend_jit_fetch_dim_obj_rw_helper(zval *object_ptr, zva
 static void ZEND_FASTCALL zend_jit_assign_dim_helper(zval *object_ptr, zval *dim, zval *value, zval *result)
 {
 	if (EXPECTED(Z_TYPE_P(object_ptr) == IS_OBJECT)) {
+		SHARP_SEPARATE(object_ptr);
 		zend_object *obj = Z_OBJ_P(object_ptr);
 
 		GC_ADDREF(obj);
@@ -1722,6 +1724,7 @@ static void ZEND_FASTCALL zend_jit_assign_dim_helper(zval *object_ptr, zval *dim
 static void ZEND_FASTCALL zend_jit_assign_dim_op_helper(zval *container, zval *dim, zval *value, binary_op_type binary_op)
 {
 	if (EXPECTED(Z_TYPE_P(container) == IS_OBJECT)) {
+		SHARP_SEPARATE(container);
 		zend_object *obj = Z_OBJ_P(container);
 		zval *z;
 		zval rv, res;
@@ -1996,6 +1999,14 @@ static void ZEND_FASTCALL zend_jit_verify_return_slow(zval *arg, const zend_op_a
 			&arg_info->type, arg, /* ref */ NULL, /* is_return_type */ true))) {
 		zend_verify_return_error((zend_function*)op_array, arg);
 	}
+}
+
+/* Whether a W, RW or UNSET fetch of a property plain PHP can't write gives a copy of the object it holds, as the VM's
+ * zend_fetch_property_address does. A PHP# Map or Set is a value, so a write through it would change the property, as
+ * for an array, and the fetch raises the array's error instead. */
+static bool ZEND_FASTCALL zend_jit_fetch_obj_w_copies(zval *property)
+{
+	return Z_TYPE_P(property) == IS_OBJECT && !SHARP_IS_TABLE(property);
 }
 
 static void ZEND_FASTCALL zend_jit_fetch_obj_r_slow(zend_object *zobj)

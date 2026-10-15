@@ -9,6 +9,8 @@ public class Order : DatabaseEntity
     public Status status { get; set; } = Status.from("paid");
     public List<Line> lines { get; private set; } = [];
 
+    public required Order(int id = 1) { }
+
     public static OrderQuery query() => new OrderQuery();
 
     public void markPaid() { this.paid = true; }

@@ -10,10 +10,14 @@ const PLAIN = "namespace App;\n\npublic class Plain\n{\n    public static string
 const HELPERS = "namespace App;\n\npublic static class Helpers\n{\n    public static int one() => 1;\n}\n";
 const LOUD = "namespace App;\n\npublic static class Loud\n{\n    extension(string text)\n    {\n        public string shout() => \"loud\";\n    }\n}\n";
 
+const LIBRARY = 'vendor/heyjordanparker/php-sharp-composer';
+const WORDS_PATH = LIBRARY . '/library/Sharp/Text/Words.sharp';
+
 $root = compile_project('extension-inputs', []);
-mkdir("$root/Sharp/Text", recursive: true);
+mkdir("$root/" . dirname(WORDS_PATH), recursive: true);
 mkdir("$root/App");
-file_put_contents("$root/Sharp/Text/Words.sharp", WORDS);
+file_put_contents("$root/" . LIBRARY . '/composer.json', '{"name": "heyjordanparker/php-sharp-composer"}');
+file_put_contents("$root/" . WORDS_PATH, WORDS);
 file_put_contents("$root/App/Report.sharp", REPORT);
 file_put_contents("$root/App/Plain.sharp", PLAIN);
 file_put_contents("$root/App/Helpers.sharp", HELPERS);
@@ -36,19 +40,19 @@ function run(string $root, string $compile, array $files, string $class): void
 }
 
 echo "== as compiled\n";
-run($root, $compile, ['Sharp/Text/Words.sharp', 'App/Report.sharp'], 'App\Report');
+run($root, $compile, [WORDS_PATH, 'App/Report.sharp'], 'App\Report');
 
 echo "== a new file of the namespace declares a shadowing extension\n";
 file_put_contents("$root/App/Loud.sharp", LOUD);
-run($root, $compile, ['Sharp/Text/Words.sharp', 'App/Report.sharp', 'App/Loud.sharp'], 'App\Report');
+run($root, $compile, [WORDS_PATH, 'App/Report.sharp', 'App/Loud.sharp'], 'App\Report');
 
 echo "== the file is deleted\n";
 unlink("$root/App/Loud.sharp");
-run($root, $compile, ['Sharp/Text/Words.sharp', 'App/Report.sharp'], 'App\Report');
+run($root, $compile, [WORDS_PATH, 'App/Report.sharp'], 'App\Report');
 
 echo "== an existing file of the namespace gains the extension block\n";
 file_put_contents("$root/App/Helpers.sharp", str_replace("public static int one() => 1;", "public static int one() => 1;\n\n    extension(string text)\n    {\n        public string shout() => \"helper\";\n    }", HELPERS));
-run($root, $compile, ['Sharp/Text/Words.sharp', 'App/Report.sharp', 'App/Helpers.sharp'], 'App\Report');
+run($root, $compile, [WORDS_PATH, 'App/Report.sharp', 'App/Helpers.sharp'], 'App\Report');
 
 echo "== a file that calls no extension, after its folder gains a file\n";
 file_put_contents("$root/App/Extra.sharp", "namespace App;\n\npublic class Extra\n{\n}\n");

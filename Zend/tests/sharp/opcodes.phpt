@@ -15,7 +15,32 @@ function compiled(string $file, string $prelude): string
         . ' foreach (array_diff(get_declared_classes(), $declared) as $class) echo new ReflectionClass($class);'
     ) . ' 2>&1');
 
-    return str_replace($file, '<file>', $opcodes . $dump . $classes);
+    // A PHP# class that writes no parse or tryParse gets them on the line that declares it, where no twin can write a
+    // method. The parse tests run them, so the comparison leaves out each parse and tryParse on such a line.
+    $source = file($file);
+    $generated = static fn (string $first, string $last): bool
+        => $first === $last && preg_match('~\b(?:class|struct)\b~', $source[$first - 1]) === 1;
+    $left_out = [];
+    $listing = preg_replace_callback('~\n^(\S+)::(parse|tryParse):\n((?:[ \dLE].*\n)*)~m', static function (array $match) use ($generated, &$left_out): string {
+        preg_match('~:(\d+)-(\d+)$~m', $match[3], $lines);
+        if (!$generated($lines[1], $lines[2])) {
+            return $match[0];
+        }
+        $left_out[] = "$match[1]::$match[2]";
+
+        return '';
+    }, $opcodes . $dump);
+    $listing = preg_replace_callback('~^user class: (\S+)\n\d+ methods: (.*)$~m', static function (array $match) use ($left_out): string {
+        $methods = array_filter(explode(', ', $match[2]), static fn (string $method): bool
+            => $method !== '-' && !in_array("$match[1]::$method", $left_out, true));
+
+        return "user class: $match[1]\n" . count($methods) . ' methods: ' . ($methods ? implode(', ', $methods) : '-');
+    }, $listing);
+    $classes = preg_replace_callback('~^ {4}Method \[ <user[^\]]*> static public method (?:parse|tryParse) \] \{\n {6}@@ \S+ (\d+) - (\d+)\n.*?^ {4}\}\n~ms', static fn (array $match): string
+        => $generated($match[1], $match[2]) ? '' : $match[0], $classes);
+    $classes = preg_replace(['~(- Static methods )\[\d+\]~', '~\n\n+~'], ['$1[]', "\n"], $classes);
+
+    return str_replace($file, '<file>', $listing . $classes);
 }
 
 /**
@@ -255,10 +280,12 @@ Task: same opcodes and lines in 4 op arrays, same signatures in 1 classes
 Shapes: same opcodes and lines in 5 op arrays, same signatures in 2 classes
 Members: same opcodes and lines in 10 op arrays, same signatures in 1 classes
 Site: same opcodes and lines in 13 op arrays, same signatures in 3 classes
-Collections: same opcodes and lines in 7 op arrays, same signatures in 2 classes
+Collections: different opcodes and lines in 7 op arrays, same signatures in 2 classes
   check  Demo\Cart::fill string("List<Demo.Item>")
   check  Demo\Cart::withPrices string("List<int>, List<int>")
-EnumKeys: same opcodes and lines in 16 op arrays, same signatures in 1 classes
+  .sharp     Property [ private Sharp\Map $counts = new \Sharp\Map() ]
+  .php       Property [ private Sharp\Map $counts ]
+EnumKeys: different opcodes and lines in 22 op arrays, same signatures in 1 classes
   check  Demo\Headcount::count string("Map<Lib.Standing, int>, Any?")
   check  Demo\Headcount::ensure string("Map<Lib.Standing, int>, Any?")
   check  Demo\Headcount::lookup string("Map<Lib.Standing, int>, Any?")
@@ -267,14 +294,130 @@ EnumKeys: same opcodes and lines in 16 op arrays, same signatures in 1 classes
   check  Demo\Headcount::skus string("Map<string, int>")
   check  Demo\Headcount::grouped string("List<int>")
   check  Demo\Headcount::groupNames string("List<int>")
+  .sharp L0023 0000 CV0($key#1) = RECV 1
+  .sharp L0023 0001 CV1($value#2) = RECV 2
+  .sharp L0023 0003 T2 = CAST (string) CV0($key#1)
+  .sharp L0023 0007 T4 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp L0029 0000 CV0($key#1) = RECV 1
+  .sharp L0029 0001 CV1($value#2) = RECV 2
+  .sharp L0029 0003 T2 = CAST (string) CV0($key#1)
+  .sharp L0029 0007 T4 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp L0047 0000 CV0($key#1) = RECV 1
+  .sharp L0047 0001 CV1($value#2) = RECV 2
+  .sharp L0047 0003 T2 = CAST (string) CV0($key#1)
+  .sharp L0047 0007 T4 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp L0052 0000 CV0($key#1) = RECV 1
+  .sharp L0052 0001 CV1($value#2) = RECV 2
+  .sharp L0052 0003 T2 = CAST (string) CV0($key#1)
+  .sharp L0052 0007 T4 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp L0067 0000 CV0($key#1) = RECV 1
+  .sharp L0067 0001 CV1($value#2) = RECV 2
+  .sharp L0067 0003 T2 = CAST (string) CV0($key#1)
+  .sharp L0067 0007 T4 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp L0076 0000 CV0($key#1) = RECV 1
+  .sharp L0076 0001 CV1($value#2) = RECV 2
+  .sharp L0076 0002 T2 = CAST (string) CV0($key#1)
+  .sharp L0076 0004 T3 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp 0000 CV0($key#1) = RECV 1
+  .sharp 0001 CV1($value#2) = RECV 2
+  .sharp 0003 T2 = CAST (string) CV0($key#1)
+  .sharp 0007 T4 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp 0000 CV0($key#1) = RECV 1
+  .sharp 0001 CV1($value#2) = RECV 2
+  .sharp 0003 T2 = CAST (string) CV0($key#1)
+  .sharp 0007 T4 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp 0000 CV0($key#1) = RECV 1
+  .sharp 0001 CV1($value#2) = RECV 2
+  .sharp 0003 T2 = CAST (string) CV0($key#1)
+  .sharp 0007 T4 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp 0000 CV0($key#1) = RECV 1
+  .sharp 0001 CV1($value#2) = RECV 2
+  .sharp 0003 T2 = CAST (string) CV0($key#1)
+  .sharp 0007 T4 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp 0000 CV0($key#1) = RECV 1
+  .sharp 0001 CV1($value#2) = RECV 2
+  .sharp 0003 T2 = CAST (string) CV0($key#1)
+  .sharp 0007 T4 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp 0000 CV0($key#1) = RECV 1
+  .sharp 0001 CV1($value#2) = RECV 2
+  .sharp 0002 T2 = CAST (string) CV0($key#1)
+  .sharp 0004 T3 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp     Property [ private Sharp\Map $counts = new \Sharp\Map() ]
+  .sharp     Property [ private Sharp\Map $seeded = new \Sharp\Map([\Lib\Standing::Active, 0]) ]
+  .php   L0023 0000 CV0($key) = RECV 1
+  .php   L0023 0001 CV1($value) = RECV 2
+  .php   L0023 0003 T2 = CAST (string) CV0($key)
+  .php   L0023 0007 T4 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   L0029 0000 CV0($key) = RECV 1
+  .php   L0029 0001 CV1($value) = RECV 2
+  .php   L0029 0003 T2 = CAST (string) CV0($key)
+  .php   L0029 0007 T4 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   L0047 0000 CV0($key) = RECV 1
+  .php   L0047 0001 CV1($value) = RECV 2
+  .php   L0047 0003 T2 = CAST (string) CV0($key)
+  .php   L0047 0007 T4 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   L0052 0000 CV0($key) = RECV 1
+  .php   L0052 0001 CV1($value) = RECV 2
+  .php   L0052 0003 T2 = CAST (string) CV0($key)
+  .php   L0052 0007 T4 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   L0067 0000 CV0($key) = RECV 1
+  .php   L0067 0001 CV1($value) = RECV 2
+  .php   L0067 0003 T2 = CAST (string) CV0($key)
+  .php   L0067 0007 T4 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   L0076 0000 CV0($key) = RECV 1
+  .php   L0076 0001 CV1($value) = RECV 2
+  .php   L0076 0002 T2 = CAST (string) CV0($key)
+  .php   L0076 0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   0000 CV0($key) = RECV 1
+  .php   0001 CV1($value) = RECV 2
+  .php   0003 T2 = CAST (string) CV0($key)
+  .php   0007 T4 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   0000 CV0($key) = RECV 1
+  .php   0001 CV1($value) = RECV 2
+  .php   0003 T2 = CAST (string) CV0($key)
+  .php   0007 T4 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   0000 CV0($key) = RECV 1
+  .php   0001 CV1($value) = RECV 2
+  .php   0003 T2 = CAST (string) CV0($key)
+  .php   0007 T4 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   0000 CV0($key) = RECV 1
+  .php   0001 CV1($value) = RECV 2
+  .php   0003 T2 = CAST (string) CV0($key)
+  .php   0007 T4 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   0000 CV0($key) = RECV 1
+  .php   0001 CV1($value) = RECV 2
+  .php   0003 T2 = CAST (string) CV0($key)
+  .php   0007 T4 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   0000 CV0($key) = RECV 1
+  .php   0001 CV1($value) = RECV 2
+  .php   0002 T2 = CAST (string) CV0($key)
+  .php   0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php       Property [ private Sharp\Map $counts ]
+  .php       Property [ private Sharp\Map $seeded ]
 Interop: same opcodes and lines in 5 op arrays, same signatures in 1 classes
-Lambdas: same opcodes and lines in 35 op arrays, same signatures in 1 classes
+Lambdas: different opcodes and lines in 36 op arrays, same signatures in 1 classes
   check  Demo\Lambdas::doubled string("List<int>, Any?")
   check  Demo\Lambdas::pipeline string("List<int>, Map<string, int>")
   check  Demo\Lambdas::total string("List<int>")
   check  Demo\Lambdas::failures string("List<int>")
   check  Demo\Lambdas::captured string("List<int>")
   check  Demo\Lambdas::scaled string("List<int>")
+  .sharp L0043 0000 CV0($key#1) = RECV 1
+  .sharp L0043 0001 CV1($value#2) = RECV 2
+  .sharp L0043 0002 T2 = CAST (string) CV0($key#1)
+  .sharp L0043 0004 T3 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp 0000 CV0($key#1) = RECV 1
+  .sharp 0001 CV1($value#2) = RECV 2
+  .sharp 0002 T2 = CAST (string) CV0($key#1)
+  .sharp 0004 T3 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .php   L0043 0000 CV0($key) = RECV 1
+  .php   L0043 0001 CV1($value) = RECV 2
+  .php   L0043 0002 T2 = CAST (string) CV0($key)
+  .php   L0043 0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   0000 CV0($key) = RECV 1
+  .php   0001 CV1($value) = RECV 2
+  .php   0002 T2 = CAST (string) CV0($key)
+  .php   0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
 Cashier: different opcodes and lines in 8 op arrays, same signatures in 1 classes
   check  Demo\Cashier::receipt string("List<int>, Any?, Any?")
   .sharp      ; (lines=61, args=3, vars=7, tmps=30)
@@ -385,9 +528,25 @@ Cashier: different opcodes and lines in 8 op arrays, same signatures in 1 classe
   .php   0058 VERIFY_RETURN_TYPE
   .php   0059 RETURN null
   .php        29: 0044 - 0057 (tmp/var)
-Roster: same opcodes and lines in 6 op arrays, same signatures in 1 classes
+Roster: different opcodes and lines in 8 op arrays, same signatures in 1 classes
   check  Demo\Roster::report string("Map<Lib.Standing, int>")
-Sets: same opcodes and lines in 26 op arrays, same signatures in 1 classes
+  .sharp L0007 0000 CV0($key#1) = RECV 1
+  .sharp L0007 0001 CV1($value#2) = RECV 2
+  .sharp L0007 0003 T2 = CAST (string) CV0($key#1)
+  .sharp L0007 0007 T4 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp 0000 CV0($key#1) = RECV 1
+  .sharp 0001 CV1($value#2) = RECV 2
+  .sharp 0003 T2 = CAST (string) CV0($key#1)
+  .sharp 0007 T4 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .php   L0007 0000 CV0($key) = RECV 1
+  .php   L0007 0001 CV1($value) = RECV 2
+  .php   L0007 0003 T2 = CAST (string) CV0($key)
+  .php   L0007 0007 T4 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   0000 CV0($key) = RECV 1
+  .php   0001 CV1($value) = RECV 2
+  .php   0003 T2 = CAST (string) CV0($key)
+  .php   0007 T4 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+Sets: different opcodes and lines in 27 op arrays, same signatures in 1 classes
   check  Demo\Tagged::__construct string("Set<int>, Set<string>")
   check  Demo\Tagged::strings string("Set<string>")
   check  Demo\Tagged::reads string("Set<string>")
@@ -400,13 +559,69 @@ Sets: same opcodes and lines in 26 op arrays, same signatures in 1 classes
   check  {closure:Demo\Tagged::lambdas():96} string("Set<string>")
   check  Demo\Tagged::groups string("Set<string>")
   check  Demo\Tagged::maybe string("Set<string>?")
+  .sharp L0102 0000 CV0($collection#1) = RECV 1
+  .sharp L0102 0001 T1 = TYPE_CHECK (array) CV0($collection#1)
+  .sharp L0102 0004 SEND_VAR_EX CV0($collection#1) 1
+  .sharp L0102 0008 T4 = QM_ASSIGN CV0($collection#1)
+  .sharp L0111 0000 CV0($collection#1) = RECV 1
+  .sharp L0111 0001 T1 = TYPE_CHECK (array) CV0($collection#1)
+  .sharp L0111 0004 SEND_VAR_EX CV0($collection#1) 1
+  .sharp L0111 0008 T4 = QM_ASSIGN CV0($collection#1)
+  .sharp 0000 CV0($collection#1) = RECV 1
+  .sharp 0001 T1 = TYPE_CHECK (array) CV0($collection#1)
+  .sharp 0004 SEND_VAR_EX CV0($collection#1) 1
+  .sharp 0008 T4 = QM_ASSIGN CV0($collection#1)
+  .sharp 0000 CV0($collection#1) = RECV 1
+  .sharp 0001 T1 = TYPE_CHECK (array) CV0($collection#1)
+  .sharp 0004 SEND_VAR_EX CV0($collection#1) 1
+  .sharp 0008 T4 = QM_ASSIGN CV0($collection#1)
+  .sharp     Property [ public Sharp\Set $tags = new \Sharp\Set([0 => 'new']) ]
+  .sharp     Property [ public Sharp\Set $states = new \Sharp\Set([]) { get; set; } ]
+  .sharp     Property [ private Sharp\Set $sizes = new \Sharp\Set([]) ]
+  .php   L0102 0000 CV0($collection) = RECV 1
+  .php   L0102 0001 T1 = TYPE_CHECK (array) CV0($collection)
+  .php   L0102 0004 SEND_VAR_EX CV0($collection) 1
+  .php   L0102 0008 T4 = QM_ASSIGN CV0($collection)
+  .php   L0111 0000 CV0($collection) = RECV 1
+  .php   L0111 0001 T1 = TYPE_CHECK (array) CV0($collection)
+  .php   L0111 0004 SEND_VAR_EX CV0($collection) 1
+  .php   L0111 0008 T4 = QM_ASSIGN CV0($collection)
+  .php   0000 CV0($collection) = RECV 1
+  .php   0001 T1 = TYPE_CHECK (array) CV0($collection)
+  .php   0004 SEND_VAR_EX CV0($collection) 1
+  .php   0008 T4 = QM_ASSIGN CV0($collection)
+  .php   0000 CV0($collection) = RECV 1
+  .php   0001 T1 = TYPE_CHECK (array) CV0($collection)
+  .php   0004 SEND_VAR_EX CV0($collection) 1
+  .php   0008 T4 = QM_ASSIGN CV0($collection)
+  .php       Property [ public Sharp\Set $tags ]
+  .php       Property [ public Sharp\Set $states { get; set; } ]
+  .php       Property [ private Sharp\Set $sizes ]
 Store: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 RushOrders: same opcodes and lines in 2 op arrays, same signatures in 2 classes
 TypedOrders: same opcodes and lines in 2 op arrays, same signatures in 2 classes
 Permalink: same opcodes and lines in 2 op arrays, same signatures in 1 classes
-Library: same opcodes and lines in 19 op arrays, same signatures in 1 classes
+Library: different opcodes and lines in 20 op arrays, same signatures in 1 classes
   check  Demo\Library::query string("Map<string, Any?>")
-Inbox: same opcodes and lines in 9 op arrays, same signatures in 1 classes
+  .sharp L0054 0000 CV0($key#1) = RECV 1
+  .sharp L0054 0001 CV1($value#2) = RECV 2
+  .sharp L0054 0002 T2 = CAST (string) CV0($key#1)
+  .sharp L0054 0004 T3 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp 0000 CV0($key#1) = RECV 1
+  .sharp 0001 CV1($value#2) = RECV 2
+  .sharp 0002 T2 = CAST (string) CV0($key#1)
+  .sharp 0004 T3 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .php   L0054 0000 CV0($key) = RECV 1
+  .php   L0054 0001 CV1($value) = RECV 2
+  .php   L0054 0002 T2 = CAST (string) CV0($key)
+  .php   L0054 0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   0000 CV0($key) = RECV 1
+  .php   0001 CV1($value) = RECV 2
+  .php   0002 T2 = CAST (string) CV0($key)
+  .php   0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+Inbox: different opcodes and lines in 9 op arrays, same signatures in 1 classes
+  .sharp     Property [ private Sharp\Map $saved = new \Sharp\Map() ]
+  .php       Property [ private Sharp\Map $saved ]
 Patterns: same opcodes and lines in 15 op arrays, same signatures in 1 classes
   check  Demo\Patterns::lines string("List<Demo.Figure>")
   check  Demo\Patterns::head string("List<Demo.Figure>?")
@@ -662,6 +877,8 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .sharp 0010 VERIFY_RETURN_TYPE V6
   .sharp 0011 RETURN V6
   .sharp      6: 0010 - 0011 (tmp/var)
+  .sharp     Property [ private Sharp\Map $saved = new \Sharp\Map() ]
+  .sharp     Property [ private Sharp\Map $kinds = new \Sharp\Map([0 => 'order', 1 => 'Paging\\Order']) ]
   .php        ; (lines=11, args=1, vars=1, tmps=4)
   .php   L0055 0001 V1 = NEW 1 string("Paging\\PaginatedList")
   .php   L0055 0002 T2 = CAST (object) CV0($query)
@@ -864,8 +1081,10 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php       /** @template TItem of DatabaseEntity
   .php        *  @param list<TItem> $items
   .php        *  @return TItem|null */
-  .php       /** @var array<string, DatabaseEntity> */
-  .php       /** @var array<string, class-string<DatabaseEntity>> */
+  .php       /** @var \Sharp\Map<string, DatabaseEntity> */
+  .php       Property [ private Sharp\Map $saved ]
+  .php       /** @var \Sharp\Map<string, class-string<DatabaseEntity>> */
+  .php       Property [ private Sharp\Map $kinds ]
   .php       /** @template T
   .php        *  @param list<T> $items
   .php        *  @return T */
@@ -877,10 +1096,42 @@ Generics: different opcodes and lines in 33 op arrays, same signatures in 10 cla
   .php       /** @return list<Order> */
   .php       /** @param Feed<Order> $feed */
   .php       /** @param Validator<DatabaseEntity> $validator */
-Operators: same opcodes and lines in 72 op arrays, same signatures in 9 classes
+Operators: different opcodes and lines in 73 op arrays, same signatures in 9 classes
   check  Billing\Operators::byPrice string("List<Billing.Line>")
   check  Billing\Operators::byCode string("List<string>")
   check  Billing\Operators::checkout string("Map<string, Any?>, Any?, Map<string, Any?>")
   check  Billing\Grade::ranked string("List<Billing.Grade>")
+  .sharp L0265 0000 CV0($key#1) = RECV 1
+  .sharp L0265 0001 CV1($value#2) = RECV 2
+  .sharp L0265 0002 T2 = CAST (string) CV0($key#1)
+  .sharp L0265 0004 T3 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp L0265 0000 CV0($key#1) = RECV 1
+  .sharp L0265 0001 CV1($value#2) = RECV 2
+  .sharp L0265 0002 T2 = CAST (string) CV0($key#1)
+  .sharp L0265 0004 T3 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp 0000 CV0($key#1) = RECV 1
+  .sharp 0001 CV1($value#2) = RECV 2
+  .sharp 0002 T2 = CAST (string) CV0($key#1)
+  .sharp 0004 T3 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp 0000 CV0($key#1) = RECV 1
+  .sharp 0001 CV1($value#2) = RECV 2
+  .sharp 0002 T2 = CAST (string) CV0($key#1)
+  .sharp 0004 T3 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .php   L0265 0000 CV0($key) = RECV 1
+  .php   L0265 0001 CV1($value) = RECV 2
+  .php   L0265 0002 T2 = CAST (string) CV0($key)
+  .php   L0265 0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   L0265 0000 CV0($key) = RECV 1
+  .php   L0265 0001 CV1($value) = RECV 2
+  .php   L0265 0002 T2 = CAST (string) CV0($key)
+  .php   L0265 0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   0000 CV0($key) = RECV 1
+  .php   0001 CV1($value) = RECV 2
+  .php   0002 T2 = CAST (string) CV0($key)
+  .php   0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   0000 CV0($key) = RECV 1
+  .php   0001 CV1($value) = RECV 2
+  .php   0002 T2 = CAST (string) CV0($key)
+  .php   0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
 a check: same
 a check and another opcode: different

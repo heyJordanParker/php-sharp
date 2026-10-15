@@ -1,0 +1,6 @@
+namespace App;
+
+public struct OrderRow
+{
+    public OrderRow(public int id { get; }, public string number { get; }) { }
+}

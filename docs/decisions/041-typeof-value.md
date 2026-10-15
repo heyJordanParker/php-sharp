@@ -2,19 +2,29 @@
 
 ## Decision
 
-`typeof` also takes a value. `typeof(order)` gives a `Class<Order>` that holds the object's runtime class, which may be a subclass of `Order`. A bare name inside `typeof` is a local's value when a local with that name is in scope, and a type otherwise. Plain PHP receives the class-name string. It replaces PHP's `$order::class` and `get_class($order)`.
+`Class.of(value)` gives the class of the object a value holds. For a value of type `Order`, it is a `Class<Order>` that holds the object's runtime class, which may be a subclass of `Order`. `typeof` takes a type only, as a pattern does, so `typeof(order)` on a local is a compile error that names `Class.of(order)`. It replaces PHP's `$order::class` and `get_class($order)`.
 
 ## Options
 
-### Chosen: `typeof(value)`
+### Chosen: `Class.of(value)`
 
 ```csharp
-Class<Order> type = typeof(order);              // compiles: order's runtime class, which may be a subclass of Order
+Class<Order> type = Class.of(order);            // compiles: order's runtime class, which may be a subclass of Order
 const fresh = new (type)(id);                   // compiles: a new object of that class
-Log.info("saved", ["class": typeof(order)]);    // compiles; runs: plain PHP receives the class-name string
+Log.info("saved", ["class": Class.of(order)]);  // compiles
+typeof(order);                                  // compile error: typeof takes a type; write Class.of(order)
 ```
 
-One keyword gives a class, from a type name or from a value, and both forms give a `Class<T>`.
+`typeof` names a type and `Class.of` reads a value, so a bare name never means one or the other by what is in scope.
+
+### Rejected: `typeof(value)`
+
+```csharp
+Class<Order> type = typeof(order);              // would compile: order is a local, so typeof reads its value
+typeof(Order);                                  // the class Order, unless a local named Order is in scope
+```
+
+A bare name inside `typeof` would be a local's value when a local with that name is in scope, and a type otherwise. Jordan ruled that a pattern takes types and constants only, and `typeof` follows the same rule.
 
 ### Rejected: `getType()` on every object, as in C#
 
@@ -27,8 +37,9 @@ Plain PHP classes already declare their own `getType()`, such as nikic/php-parse
 
 ## Precedent
 
-- **Chosen:** Swift's `type(of:)`, TypeScript's `typeof x` and Python's `type(x)`.
-- **Rejected:** C#'s `GetType()`.
+- **Chosen:** Swift's `type(of:)` and Python's `type(x)`.
+- **Rejected, `typeof(value)`:** TypeScript's `typeof x`.
+- **Rejected, `getType()`:** C#'s `GetType()`.
 
 ## Spec
 

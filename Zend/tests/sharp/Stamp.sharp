@@ -1,0 +1,10 @@
+namespace Demo;
+
+public struct Stamp
+{
+    public Stamp(public string name { get; }, public int weight { get; init; }) { }
+
+    public string shown { get; init => field = value.trim(); } = "";
+
+    public Stamp heavier() => this with { weight: this.weight + 1 };
+}
