@@ -1,5 +1,5 @@
 --TEST--
-An app holds at most 65,536 run-time types: past the limit a new type text from unserialize fails as other bad input does, a new nested type throws, every type the app holds keeps working, and the next request starts empty
+An app holds at most 65,536 run-time types read from input: past the limit a new type text from unserialize fails as other bad input does, while a new type the program's own substitution makes and every type the app holds keep working, and the next request starts empty
 --SKIPIF--
 <?php
 if (getenv('SKIP_SLOW_TESTS')) die('skip slow test');
@@ -30,7 +30,7 @@ if (($argv[1] ?? null) === 'request') {
     echo get_class($read($text(0))), " still reads a text the app holds\n";
     var_dump($read($text(70_000)));
     try {
-        App\Queue::stringNode()->deeper();
+        echo get_class(App\Queue::stringNode()->deeper()), " still makes a new type the program spells\n";
     } catch (Error $error) {
         echo get_class($error), ': ', $error->getMessage(), "\n";
     }
@@ -53,7 +53,7 @@ App\Pair still reads a text the app holds
 
 Warning: unserialize(): Error at offset %d of %d bytes in %s on line %d
 bool(false)
-Error: The app already holds 65536 run-time types, its limit, so it cannot make <List<string>>
+App\Node still makes a new type the program spells
 App\Node still makes a type the app holds
 the next request, in the same process:
 a new text fails before 65,536 texts
@@ -61,5 +61,5 @@ App\Pair still reads a text the app holds
 
 Warning: unserialize(): Error at offset %d of %d bytes in %s on line %d
 bool(false)
-Error: The app already holds 65536 run-time types, its limit, so it cannot make <List<string>>
+App\Node still makes a new type the program spells
 App\Node still makes a type the app holds

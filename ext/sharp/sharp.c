@@ -65,12 +65,14 @@ typedef struct {
 	HashTable services;
 } sharp_scope;
 
-/* The scope a fiber started in and the scope it runs in now, in the reserved slot sharp_fiber_slot of its
- * zend_fiber_context. The request's main context has one too. */
+/* A fiber's scopes, in the reserved slot sharp_fiber_slot of its zend_fiber_context: the scope it started in, the scope
+ * it runs in now, and the bindings and classes it is building, to refuse a cycle. The request's main context has them
+ * too. A fiber may suspend in the middle of a build, so each fiber builds on its own. */
 typedef struct {
-	sharp_scope *start;
+	sharp_scope *started_in;
 	sharp_scope *current;
-} sharp_fiber_scope;
+	HashTable building;
+} sharp_fiber_scopes;
 
 ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	zend_object *spare_collections[SHARP_SPARE_COLLECTIONS];
@@ -90,6 +92,8 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	/* The types and argument lists first read from input this request, NULL until there is one. See sharp_types. */
 	HashTable *request_types;
 	HashTable *request_type_lists;
+	/* How many of them a text read from input made. See SHARP_TYPE_INPUT_LIMIT. */
+	uint32_t request_input_types;
 	/* The class values of request_types, NULL until there is one. See sharp_class_values. */
 	HashTable *request_class_values;
 	/* The lists sharp_type_list_of_frame spelled this request, keyed by a sharp_type_spelling, NULL until there is one. */
@@ -97,16 +101,15 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	/* Spec section 32: Sharp\Container's bindings, under "namespace id" a list of the modules that bind it, each a
 	 * list of its rows, the base modules' and the environment modules' apart; the paths of the module files it read;
 	 * each test file's module, under each class the file declares, and the one of the test that runs now, or NULL;
-	 * the services each singleton keeps, by binding row; the main context's scopes, whose start is the request's
-	 * scope; and the bindings and classes it is building, to refuse a cycle. */
+	 * the services each singleton keeps, by binding row; and the main context's scopes, which started in the request's
+	 * scope. */
 	HashTable container_bindings;
 	HashTable container_environment;
 	HashTable container_modules;
 	HashTable container_tests;
 	HashTable *container_test;
 	HashTable container_singletons;
-	sharp_fiber_scope container_main_scope;
-	HashTable container_building;
+	sharp_fiber_scopes container_main_scopes;
 ZEND_END_MODULE_GLOBALS(sharp)
 
 ZEND_DECLARE_MODULE_GLOBALS(sharp)
@@ -2090,12 +2093,21 @@ ZEND_METHOD(Sharp_Position, __construct)
  *
  * The PHP request is the app: one HTTP request under php-fpm, the whole worker under a long-running host. So the
  * request's tables keep the app's run-time types, as C# keeps each generic instantiation it makes at run time for the
- * process's life: the program bounds them, and a worker reuses them on its next request. Only input that invents new
- * type texts could grow them without limit, so they hold at most SHARP_TYPE_APP_LIMIT types. Past it, a new type from
- * input fails as other bad input does, and a substitution throws, while every type they hold keeps working. */
+ * process's life. The program bounds the types its own substitutions make, as in Node<List<T>>, and a worker reuses
+ * them on its next request. Only input that invents new type texts could grow the tables without limit, so they hold
+ * at most SHARP_TYPE_INPUT_LIMIT types read from input. Past it, a new type from input fails as other bad input does,
+ * while a substitution and every type they hold keep working. */
 
-/* The most types the request's two tables hold together. */
-#define SHARP_TYPE_APP_LIMIT 65536
+/* The most types the request's two tables hold that a text read from input made. */
+#define SHARP_TYPE_INPUT_LIMIT 65536
+
+/* Where the text of a type to intern comes from: code, which its source bounds, a substitution the program makes as it
+ * runs, which the program bounds, or input, which nothing bounds. */
+typedef enum {
+	SHARP_TYPE_FROM_CODE,
+	SHARP_TYPE_FROM_SUBSTITUTION,
+	SHARP_TYPE_FROM_INPUT,
+} sharp_type_source;
 
 zend_string *sharp_type_arguments_key;
 zend_string *sharp_statics_key;
@@ -2319,17 +2331,10 @@ static const sharp_type *sharp_type_find(bool list, const char *text, size_t len
 	return type;
 }
 
-/* How many types the request's two tables hold together. */
-static uint32_t sharp_type_request_count(void)
-{
-	return (SHARP_G(request_types) ? zend_hash_num_elements(SHARP_G(request_types)) : 0)
-		+ (SHARP_G(request_type_lists) ? zend_hash_num_elements(SHARP_G(request_type_lists)) : 0);
-}
-
 /* The interned type `node` spells. It lives for the process when code spells it and each member does too. NULL when it
- * is new, not spelled by code, and the request's tables already hold SHARP_TYPE_APP_LIMIT types. A type code spells
- * always interns, since the source bounds those. */
-static const sharp_type *sharp_type_intern(const sharp_type_node *node, bool from_code, zend_arena **arena)
+ * is new, read from input, and the request's tables already hold SHARP_TYPE_INPUT_LIMIT types input made. A type code
+ * or a substitution spells always interns, since the source and the program bound those. */
+static const sharp_type *sharp_type_intern(const sharp_type_node *node, sharp_type_source source, zend_arena **arena)
 {
 	bool list = node->kind == SHARP_TYPE_LIST;
 	const sharp_type *found = sharp_type_find(list, node->text, node->length);
@@ -2339,18 +2344,21 @@ static const sharp_type *sharp_type_intern(const sharp_type_node *node, bool fro
 	}
 
 	const sharp_type **members = zend_arena_alloc(arena, MAX(node->count, 1) * sizeof(*members));
-	bool persistent = from_code;
+	bool persistent = source == SHARP_TYPE_FROM_CODE;
 	uint32_t i = 0;
 	for (const sharp_type_node *member = node->first; member; member = member->next) {
-		members[i] = sharp_type_intern(member, from_code, arena);
+		members[i] = sharp_type_intern(member, source, arena);
 		if (!members[i]) {
 			return NULL;
 		}
 		persistent = persistent && sharp_type_is_persistent(members[i]);
 		i++;
 	}
-	if (!from_code && sharp_type_request_count() >= SHARP_TYPE_APP_LIMIT) {
-		return NULL;
+	if (source == SHARP_TYPE_FROM_INPUT) {
+		if (SHARP_G(request_input_types) >= SHARP_TYPE_INPUT_LIMIT) {
+			return NULL;
+		}
+		SHARP_G(request_input_types)++;
 	}
 
 	sharp_type *type = pemalloc(offsetof(sharp_type, members) + MAX(node->count, 1) * sizeof(sharp_type *), persistent);
@@ -2700,7 +2708,7 @@ const sharp_type *sharp_type_list(const char *text, size_t length)
 	sharp_type_reader reader = sharp_type_reader_of(text, length, zend_arena_create(1024));
 	sharp_type_node *arguments = sharp_type_read_list(&reader);
 	if (arguments && !reader.names) {
-		list = sharp_type_intern(arguments, true, &reader.arena);
+		list = sharp_type_intern(arguments, SHARP_TYPE_FROM_CODE, &reader.arena);
 	}
 	zend_arena_destroy(reader.arena);
 
@@ -3224,14 +3232,8 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 	 * Node<List<T>>, so a new one lives for the request. One code already spells is the process's, as is a closed text
 	 * code writes, and an open one that names no `$i` on a call that gives no type arguments, such as the wildcard a
 	 * plain PHP call checks against, which the text alone decides. */
-	substituted = sharp_type_intern(list, !reader.names || (!names_this && !method), &reader.arena);
-	if (!substituted) {
-		zend_throw_error(NULL, "The app already holds %d run-time types, its limit, so it cannot make <%.*s>",
-			SHARP_TYPE_APP_LIMIT, (int) list->length, list->text);
-		zend_arena_destroy(reader.arena);
-
-		return NULL;
-	}
+	substituted = sharp_type_intern(list,
+		!reader.names || (!names_this && !method) ? SHARP_TYPE_FROM_CODE : SHARP_TYPE_FROM_SUBSTITUTION, &reader.arena);
 	zend_arena_destroy(reader.arena);
 	if (!*spelled) {
 		ALLOC_HASHTABLE(*spelled);
@@ -4624,7 +4626,7 @@ zend_result sharp_type_arguments_unserialize(
 	const sharp_type *list = NULL;
 	if (arguments && !reader.names && sharp_type_node_accept(arguments, resolve, context, &reader)
 		&& sharp_type_arguments_fit(arguments, object->ce, &reader)) {
-		list = sharp_type_intern(arguments, false, &reader.arena);
+		list = sharp_type_intern(arguments, SHARP_TYPE_FROM_INPUT, &reader.arena);
 	}
 	zend_arena_destroy(reader.arena);
 
@@ -4666,7 +4668,7 @@ static zend_string *sharp_environment_variable(const char *name, size_t name_len
 
 static zend_class_entry *sharp_ce_container_error;
 
-/* The slot of each zend_fiber_context's reserved array that holds its sharp_fiber_scope. */
+/* The slot of each zend_fiber_context's reserved array that holds its sharp_fiber_scopes. */
 static int sharp_fiber_slot;
 
 static sharp_scope *sharp_scope_start(void)
@@ -4696,26 +4698,41 @@ static void sharp_scope_release(sharp_scope *scope)
 }
 
 /* The scopes of the fiber that runs now, or of the request's main context. */
-static sharp_fiber_scope *sharp_running_scope(void)
+static sharp_fiber_scopes *sharp_running_fiber_scopes(void)
 {
 	return EG(current_fiber_context)->reserved[sharp_fiber_slot];
+}
+
+/* Starts scopes in started_in, building nothing. */
+static void sharp_fiber_scopes_start(sharp_fiber_scopes *scopes, sharp_scope *started_in)
+{
+	scopes->started_in = scopes->current = started_in;
+	zend_hash_init(&scopes->building, 8, NULL, NULL, false);
+}
+
+/* Ends scopes: they let go of the scope they started in, and a build a suspended fiber never finished ends with them. */
+static void sharp_fiber_scopes_end(sharp_fiber_scopes *scopes)
+{
+	sharp_scope_release(scopes->started_in);
+	zend_hash_destroy(&scopes->building);
 }
 
 /* A fiber starts in the scope of the code that starts it, as .NET's AsyncLocal flows into the work it starts. */
 static void sharp_fiber_started(zend_fiber_context *context)
 {
-	sharp_fiber_scope *scopes = emalloc(sizeof(sharp_fiber_scope));
+	sharp_fiber_scopes *scopes = emalloc(sizeof(sharp_fiber_scopes));
+	sharp_scope *started_in = sharp_running_fiber_scopes()->current;
 
-	scopes->start = scopes->current = sharp_running_scope()->current;
-	scopes->start->references++;
+	started_in->references++;
+	sharp_fiber_scopes_start(scopes, started_in);
 	context->reserved[sharp_fiber_slot] = scopes;
 }
 
 static void sharp_fiber_destroyed(zend_fiber_context *context)
 {
-	sharp_fiber_scope *scopes = context->reserved[sharp_fiber_slot];
+	sharp_fiber_scopes *scopes = context->reserved[sharp_fiber_slot];
 
-	sharp_scope_release(scopes->start);
+	sharp_fiber_scopes_end(scopes);
 	efree(scopes);
 	context->reserved[sharp_fiber_slot] = NULL;
 }
@@ -4972,7 +4989,8 @@ static bool sharp_container_arguments(const zend_function *function, const zend_
 /* Builds ce through its constructor, each parameter filled from the modules of its namespace. */
 static bool sharp_container_build(zend_class_entry *ce, zval *object)
 {
-	if (!zend_hash_index_add_empty_element(&SHARP_G(container_building), (zend_ulong) (uintptr_t) ce)) {
+	HashTable *building = &sharp_running_fiber_scopes()->building;
+	if (!zend_hash_index_add_empty_element(building, (zend_ulong) (uintptr_t) ce)) {
 		zend_throw_error(sharp_ce_container_error, "%s needs itself, so the container can't build it", ZSTR_VAL(ce->name));
 		return false;
 	}
@@ -5003,7 +5021,7 @@ static bool sharp_container_build(zend_class_entry *ce, zval *object)
 	}
 
 	zval_ptr_dtor(&arguments);
-	zend_hash_index_del(&SHARP_G(container_building), (zend_ulong) (uintptr_t) ce);
+	zend_hash_index_del(building, (zend_ulong) (uintptr_t) ce);
 
 	return built;
 }
@@ -5038,7 +5056,7 @@ static bool sharp_container_bound(zval *row, zval *service)
 	if (zend_string_equals_literal(lifetime, "singleton")) {
 		kept = &SHARP_G(container_singletons);
 	} else if (zend_string_equals_literal(lifetime, "scoped")) {
-		scope = sharp_running_scope()->current;
+		scope = sharp_running_fiber_scopes()->current;
 		if (scope->ended) {
 			zend_throw_error(sharp_ce_container_error,
 				"The scope this code runs in has ended, so the container can't build the scoped %s", name);
@@ -5052,7 +5070,8 @@ static bool sharp_container_bound(zval *row, zval *service)
 		return true;
 	}
 
-	if (!zend_hash_index_add_empty_element(&SHARP_G(container_building), key)) {
+	HashTable *building = &sharp_running_fiber_scopes()->building;
+	if (!zend_hash_index_add_empty_element(building, key)) {
 		zend_throw_error(sharp_ce_container_error, "%s needs itself, so the container can't build it", name);
 		return false;
 	}
@@ -5089,11 +5108,18 @@ static bool sharp_container_bound(zval *row, zval *service)
 		}
 	}
 
-	zend_hash_index_del(&SHARP_G(container_building), key);
-	/* A fiber suspended while it built the service, and the scope it started in ended meanwhile, keeps nothing. */
+	zend_hash_index_del(building, key);
+	/* A fiber suspended while it built the service, and the scope it started in ended meanwhile, keeps nothing. Two
+	 * fibers that built one service at once each get the one kept first. */
 	if (built && kept && !(scope && scope->ended)) {
-		Z_TRY_ADDREF_P(service);
-		zend_hash_index_add_new(kept, key, service);
+		zval *first = zend_hash_index_find(kept, key);
+		if (first) {
+			zval_ptr_dtor(service);
+			ZVAL_COPY(service, first);
+		} else {
+			Z_TRY_ADDREF_P(service);
+			zend_hash_index_add_new(kept, key, service);
+		}
 	}
 
 	return built;
@@ -5173,7 +5199,7 @@ ZEND_FUNCTION(Sharp_Internal_runScoped)
 		Z_PARAM_FUNC(fci, fcc)
 	ZEND_PARSE_PARAMETERS_END();
 
-	sharp_fiber_scope *running = sharp_running_scope();
+	sharp_fiber_scopes *running = sharp_running_fiber_scopes();
 	sharp_scope *outer = running->current;
 	sharp_scope *scope = sharp_scope_start();
 	running->current = scope;
@@ -5270,7 +5296,7 @@ ZEND_FUNCTION(Sharp_Internal_keep)
 static void sharp_container_forget(void)
 {
 	zend_hash_clean(&SHARP_G(container_singletons));
-	zend_hash_clean(&SHARP_G(container_main_scope).start->services);
+	zend_hash_clean(&SHARP_G(container_main_scopes).started_in->services);
 }
 
 /* Spec section 32: a test of class starts, so the container uses the module of class's test file before every
@@ -6969,9 +6995,8 @@ static PHP_RINIT_FUNCTION(sharp)
 	SHARP_G(container_test) = NULL;
 	zend_hash_init(&SHARP_G(container_singletons), 8, NULL, ZVAL_PTR_DTOR, false);
 	/* Spec section 32: the request is the default scope, as each CLI run is. */
-	SHARP_G(container_main_scope).start = SHARP_G(container_main_scope).current = sharp_scope_start();
-	EG(main_fiber_context)->reserved[sharp_fiber_slot] = &SHARP_G(container_main_scope);
-	zend_hash_init(&SHARP_G(container_building), 8, NULL, NULL, false);
+	sharp_fiber_scopes_start(&SHARP_G(container_main_scopes), sharp_scope_start());
+	EG(main_fiber_context)->reserved[sharp_fiber_slot] = &SHARP_G(container_main_scopes);
 
 	/* The CLI names the script in argv[0] only while the request starts, as PHP's $argv does. */
 	zval *arguments = &SHARP_G(arguments);
@@ -7001,15 +7026,14 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 	}
 	zend_hash_destroy(&SHARP_G(request_stamps));
 	/* A fiber that is still to be freed keeps the request's scope, ended, until it is. */
-	sharp_scope_end(SHARP_G(container_main_scope).start);
-	sharp_scope_release(SHARP_G(container_main_scope).start);
+	sharp_scope_end(SHARP_G(container_main_scopes).started_in);
+	sharp_fiber_scopes_end(&SHARP_G(container_main_scopes));
 	zend_hash_destroy(&SHARP_G(container_singletons));
 	zend_hash_destroy(&SHARP_G(container_bindings));
 	zend_hash_destroy(&SHARP_G(container_environment));
 	zend_hash_destroy(&SHARP_G(container_modules));
 	SHARP_G(container_test) = NULL;
 	zend_hash_destroy(&SHARP_G(container_tests));
-	zend_hash_destroy(&SHARP_G(container_building));
 	zend_hash_destroy(&SHARP_G(listener_tables));
 	zend_hash_destroy(&SHARP_G(event_listeners));
 	/* A handle whose destructor didn't run, as after a fatal error, is freed after this, with no table to leave. */
@@ -7032,6 +7056,7 @@ static ZEND_MODULE_POST_ZEND_DEACTIVATE_D(sharp)
 	sharp_type_request_table_free(&SHARP_G(request_class_values));
 	sharp_type_request_table_free(&SHARP_G(request_type_lists));
 	sharp_type_request_table_free(&SHARP_G(request_types));
+	SHARP_G(request_input_types) = 0;
 
 	return SUCCESS;
 }

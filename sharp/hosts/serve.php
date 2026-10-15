@@ -13,6 +13,8 @@ function serve(\Sharp\Container $container, string $path): string
         '/types' => types(),
         // New type texts from input, until the app holds as many types as it keeps.
         '/flood' => flood(),
+        // A type the program spells that no request made before: input's limit leaves it working.
+        '/words' => 'words: ' . get_class(\App\Hosts\Box::words()) . "\n",
         default => "no such path: $path\n",
     };
 }

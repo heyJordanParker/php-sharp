@@ -81,6 +81,8 @@ requests() {
   fi
   echo "GET /flood"
   "$get" /flood
+  echo "GET /words"
+  "$get" /words
   echo "GET /types"
   last="$("$get" /types)"
   echo "${last%%$'\n'memory:*}"

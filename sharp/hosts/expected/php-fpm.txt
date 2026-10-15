@@ -13,6 +13,8 @@ types: the same after unserialize
 memory: the same after the 1,000th request as after the 2nd
 GET /flood
 flood: past the limit, a new type text fails
+GET /words
+words: App\Hosts\Box
 GET /types
 types: the same after unserialize
 GET /
