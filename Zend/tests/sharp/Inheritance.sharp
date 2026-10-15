@@ -9,6 +9,17 @@ public interface HasDesign
     string designKey() => `design:${this.designColumn}`;
 
     string designTitle();
+
+    string designTag => `tag:${this.designColumn}`;
+}
+
+public class Poster : HasDesign
+{
+    public string designColumn => "poster";
+
+    public string designTitle() => "Poster";
+
+    public override string designTag => "poster tag";
 }
 
 public interface Described
@@ -31,6 +42,11 @@ public class Sheet : HasDesign
 public class Both : Described, Told
 {
     public override string describe() => super<Described>.describe() + "+" + super<Told>.describe();
+}
+
+public class Repeater : Both
+{
+    public string repeat() => super<Told>.describe() + "!";
 }
 
 public enum Mood : Told
