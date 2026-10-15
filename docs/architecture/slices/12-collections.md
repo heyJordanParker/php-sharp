@@ -365,7 +365,7 @@ team-lead approves these. Everything not here is tactical.
 
 - **PHP# names, all from the spec:** `List.getOrNull(int index): T?`, `List.toSet(): Set<T>`, `Map.values(): List<TValue>`, `Iterable<T>` with `filter`, `map`, `take` and `toList`, `yield value;`, `yield ...other;`, and section 30's tuple types. Question 2 deletes `List.get` and `List.set`. Question 6 adds `string.parseCsv(): List<string>`.
 - **Engine names plain PHP can see:** the final class `Sharp\Sequence`, which plain PHP gets back where a PHP# `Iterable` it holds reaches it, and `Sharp\Collection::values()`. `Sharp\Collection` has a private constructor, and so does `Sharp\Sequence`.
-- **mago names:** the CST nodes `YieldSpread`, `TupleHint`, `TupleElementHint`, `LocalTarget` and `LocalUnpack`, with their `NodeKind.php` entries, `LocalDeclaration.target` in place of `LocalDeclaration.name`, codex's `TList.tuple_names` and `TIterable.holds_map_entries`, and the prelude class `Sharp\IterableMethods`, beside `Sharp\ListMethods`, `Sharp\MapMethods` and `Sharp\SetMethods`.
+- **mago names:** the CST nodes `YieldSpread`, `TupleHint`, `TupleElementHint`, `LocalTarget` and `LocalUnpack`, with their `NodeKind.php` entries, `ForOfTarget::Unpack` and its `ForOfUnpackTarget`, with the fields `first` and `second`, in place of `ForOfTarget::KeyValue` and `ForOfKeyValueTarget`, `LocalDeclaration.target` in place of `LocalDeclaration.name`, codex's `TList.tuple_names` and `TIterable.holds_map_entries`, and the prelude class `Sharp\IterableMethods`, beside `Sharp\ListMethods`, `Sharp\MapMethods` and `Sharp\SetMethods`.
 
 The slate for the engine class, called as `\Sharp\Sequence::from($orders)->filter($f)->take(100)->toList()`:
 
