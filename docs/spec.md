@@ -717,7 +717,7 @@ public class OrderRecord
     public OrderRecord(public int id { get; }, public string number { get; }) { }
 }
 
-OrderRecord record = OrderRecord.parse(row);   // a class parses the same way: its main constructor's parameters, then every property an initializer may set; throws: "id: expected int, got string 'abc'"
+OrderRecord record = OrderRecord.parse(row);   // a class parses the same way, by its main constructor's parameters, then every property an initializer may set; throws: "id: expected int, got string 'abc'"
 ```
 
 ## 11. Generics
