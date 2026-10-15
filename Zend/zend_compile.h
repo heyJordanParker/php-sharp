@@ -575,6 +575,11 @@ struct _zend_op_array {
 	 * referenced by index from opcodes. */
 	zend_op_array **dynamic_func_defs;
 
+	/* PHP#: the type text of a PHP# method's or lambda's whole type, `Function<R(P1, P2) uses E>`, which may name its
+	 * class's type parameters as `$i` and its own as `#i`, see ext/sharp/php_sharp.h, or NULL. A closure made from the
+	 * function copies it, and `is` tests a closure by it. */
+	zend_string *sharp_type;
+
 	void *reserved[ZEND_MAX_RESERVED_RESOURCES];
 };
 

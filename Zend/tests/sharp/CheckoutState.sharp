@@ -1,0 +1,9 @@
+namespace Demo;
+
+public enum CheckoutState
+{
+    case Open;
+    case Paying(string gateway, int attempt = 1);
+
+    public bool isOpen() => this == CheckoutState.Open;
+}

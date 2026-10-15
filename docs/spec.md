@@ -2198,6 +2198,7 @@ public enum CheckoutState
 A case with a value and a case with data in one enum is a compile error. Swift enforces the same rule.
 
 - **Each case is its own type,** so a method can take `PaymentResult.Paid` alone.
+- **Two cases are `==`** when they are the same case and each field is `==`, as two structs are (section 19). A case with a field that has no `==` gives its enum no `==`.
 - **At runtime,** each case is a real class, so Reflection sees it.
 - **The checker** rejects a `match` over the enum that misses a case.
 
@@ -2286,9 +2287,10 @@ string size = match (n) {
 | case unpacked by position | `PaymentResult.Paid(string transactionId) =>` |
 | whole case, named | `PaymentResult.Paid p =>` |
 | properties | `{ status: 200, body: string body } =>` |
-| list | `[] =>`, `[Line only] =>`, `[Line first, ...List<Line> rest] =>` |
+| list | `[] =>`, `[Line only] =>`, `[Line first, ...List<Line> rest] =>`, `[...List<Line> before, Line last] =>`, `[Line first, ..., Line last] =>` |
 
 - **A pattern takes types and constants only,** such as `Circle`, `200` or `Status.Paid`, as in C#. A local's value is compared in `when`.
+- **A list pattern has at most one rest,** anywhere among its elements. `...List<Line> rest` takes the elements the other patterns leave, and a bare `...` skips them. A second rest is a compile error.
 - **A pattern creates a variable** only through a typed declaration, such as `string transactionId`.
 - **`and`, `or` and `not`** combine patterns. They exist only inside patterns.
 - **`when` adds a condition** to an arm. The condition is an ordinary expression.
@@ -2430,7 +2432,7 @@ if (circle is Square) { … }            // compile error: This pattern never ma
 ```php
 class Legacy
 {
-    public static function doubler(): Closure { return fn($x) => $x * 2; }
+    public static function doubler(): \Closure { return fn($x) => $x * 2; }
 }
 ```
 

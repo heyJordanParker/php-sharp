@@ -227,6 +227,10 @@ static void zend_persist_op_array_calc_ex(zend_op_array *op_array)
 		}
 	}
 
+	if (op_array->sharp_type) {
+		ADD_INTERNED_STRING(op_array->sharp_type);
+	}
+
 	if (op_array->scope) {
 		if (zend_shared_alloc_get_xlat_entry(op_array->opcodes)) {
 			/* already stored */

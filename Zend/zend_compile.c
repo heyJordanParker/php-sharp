@@ -5532,10 +5532,11 @@ static uint32_t zend_add_sharp_open_type_text(zend_ast *text_ast)
 	return zend_add_literal_string(&text);
 }
 
-/* The PHP type `type_ast` of a property or a promoted parameter. A ZEND_AST_SHARP_TYPE_ARGS wraps the PHP type of one
- * whose PHP# type a write from plain PHP checks, with the type text, which may name the class's type parameters as `$i`,
- * interned into `sharp_type`. A closed text is checked here. */
-static zend_ast *zend_sharp_property_type(zend_ast *type_ast, zend_string **sharp_type)
+/* The PHP type `type_ast` of a property, a promoted parameter or a function's result. A ZEND_AST_SHARP_TYPE_ARGS wraps
+ * the PHP type of a property whose PHP# type a write from plain PHP checks, and the result type of a PHP# method or
+ * lambda, with the type text, the property's type or the function's whole type, which may name type parameters as `$i`
+ * and `#i`, interned into `sharp_type`. A closed text is checked here. */
+static zend_ast *zend_sharp_declared_type(zend_ast *type_ast, zend_string **sharp_type)
 {
 	if (!type_ast || type_ast->kind != ZEND_AST_SHARP_TYPE_ARGS) {
 		return type_ast;
@@ -6026,7 +6027,9 @@ static bool zend_has_finally(void) /* {{{ */
 }
 /* }}} */
 
-static void zend_compile_return(zend_ast *ast) /* {{{ */
+/* A `leave` is the right side of PHP#'s `a ?? return`: ZEND_SHARP_LEAVE frees what the expression around it holds once
+ * the value is ready, before the finally blocks and loop variables the return handles. */
+static void zend_compile_return(zend_ast *ast, bool leave) /* {{{ */
 {
 	zend_ast *expr_ast = ast->child[0];
 	bool is_generator = (CG(active_op_array)->fn_flags & ZEND_ACC_GENERATOR) != 0;
@@ -6065,6 +6068,10 @@ static void zend_compile_return(zend_ast *ast) /* {{{ */
 	if (!is_generator && (CG(active_op_array)->fn_flags & ZEND_ACC_HAS_RETURN_TYPE)) {
 		zend_emit_return_type_check(
 			expr_ast ? &expr_node : NULL, CG(active_op_array)->arg_info - 1, 0);
+	}
+
+	if (leave) {
+		zend_emit_op(NULL, ZEND_SHARP_LEAVE, NULL, NULL);
 	}
 
 	uint32_t opnum_before_finally = get_next_op_number();
@@ -6144,7 +6151,8 @@ static void zend_compile_throw(znode *result, zend_ast *ast) /* {{{ */
 }
 /* }}} */
 
-static void zend_compile_break_continue(zend_ast *ast) /* {{{ */
+/* A `leave` is the right side of PHP#'s `a ?? break` or `a ?? continue`, as in zend_compile_return. */
+static void zend_compile_break_continue(zend_ast *ast, bool leave) /* {{{ */
 {
 	zend_ast *depth_ast = ast->child[0];
 
@@ -6175,6 +6183,9 @@ static void zend_compile_break_continue(zend_ast *ast) /* {{{ */
 		zend_error_noreturn(E_COMPILE_ERROR, "'%s' not in the 'loop' or 'switch' context",
 			ast->kind == ZEND_AST_BREAK ? "break" : "continue");
 	} else {
+		if (leave) {
+			zend_emit_op(NULL, ZEND_SHARP_LEAVE, NULL, NULL);
+		}
 		if (!zend_handle_loops_and_finally_ex(depth, NULL)) {
 			zend_error_noreturn(E_COMPILE_ERROR, "Cannot '%s' " ZEND_LONG_FMT " level%s",
 				ast->kind == ZEND_AST_BREAK ? "break" : "continue",
@@ -8122,7 +8133,7 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 	for (i = 0; i < list->children; ++i) {
 		zend_ast *param_ast = list->child[i];
 		zend_string *sharp_type = NULL;
-		zend_ast *type_ast = zend_sharp_property_type(param_ast->child[0], &sharp_type);
+		zend_ast *type_ast = zend_sharp_declared_type(param_ast->child[0], &sharp_type);
 		zend_ast *var_ast = param_ast->child[1];
 		zend_ast **default_ast_ptr = &param_ast->child[2];
 		zend_ast *attributes_ast = param_ast->child[3];
@@ -8815,6 +8826,7 @@ static zend_op_array *zend_compile_func_decl_ex(
 	memset(&info, 0, sizeof(closure_info));
 
 	init_op_array(op_array, ZEND_USER_FUNCTION, INITIAL_OP_ARRAY_SIZE);
+	return_type_ast = zend_sharp_declared_type(return_type_ast, &op_array->sharp_type);
 
 	if (CG(compiler_options) & ZEND_COMPILE_PRELOAD) {
 		op_array->fn_flags |= ZEND_ACC_PRELOADED;
@@ -9349,7 +9361,7 @@ static void zend_compile_prop_group(zend_ast *ast) /* {{{ */
 	zend_ast *prop_ast = ast->child[1];
 	zend_ast *attr_ast = ast->child[2];
 	zend_string *sharp_type = NULL;
-	zend_ast *type_ast = zend_sharp_property_type(ast->child[0], &sharp_type);
+	zend_ast *type_ast = zend_sharp_declared_type(ast->child[0], &sharp_type);
 
 	zend_compile_prop_decl(prop_ast, type_ast, ast->attr, attr_ast, sharp_type);
 	if (sharp_type) {
@@ -12132,14 +12144,14 @@ static void zend_compile_stmt(zend_ast *ast) /* {{{ */
 			zend_compile_unset(ast);
 			break;
 		case ZEND_AST_RETURN:
-			zend_compile_return(ast);
+			zend_compile_return(ast, false);
 			break;
 		case ZEND_AST_ECHO:
 			zend_compile_echo(ast);
 			break;
 		case ZEND_AST_BREAK:
 		case ZEND_AST_CONTINUE:
-			zend_compile_break_continue(ast);
+			zend_compile_break_continue(ast, false);
 			break;
 		case ZEND_AST_GOTO:
 			zend_compile_goto(ast);
@@ -12369,6 +12381,19 @@ static void zend_compile_expr_inner(znode *result, zend_ast *ast) /* {{{ */
 			return;
 		case ZEND_AST_THROW:
 			zend_compile_throw(result, ast);
+			return;
+		/* PHP#: the right side of `a ?? return`, `a ?? continue` or `a ?? break`. PHP's parser never puts a
+		 * statement in an expression. */
+		case ZEND_AST_RETURN:
+			zend_compile_return(ast, true);
+			result->op_type = IS_CONST;
+			ZVAL_TRUE(&result->u.constant);
+			return;
+		case ZEND_AST_BREAK:
+		case ZEND_AST_CONTINUE:
+			zend_compile_break_continue(ast, true);
+			result->op_type = IS_CONST;
+			ZVAL_TRUE(&result->u.constant);
 			return;
 		case ZEND_AST_MATCH:
 			zend_compile_match(result, ast);

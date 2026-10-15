@@ -262,8 +262,8 @@ static bool sharp_hash_declared(zend_object *object, zend_function *method, uint
 	return true;
 }
 
-/* A struct with no declared pair hashes from its stored properties in declaration order, as its generated
- * op_Equality compares them. */
+/* A struct with no declared pair, or an enum case that carries data, hashes from its class and its stored
+ * properties in declaration order, as the generated op_Equality compares them. */
 static bool sharp_hash_struct(zend_object *object, uint32_t *hash)
 {
 	zend_property_info *info;

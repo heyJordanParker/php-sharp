@@ -76,3 +76,53 @@ enum(Demo\Priority::High)
 int(2)
 enum(Demo\Priority::Low)
 NULL
+string(12) "card expired"
+bool(true)
+string(4) "tx_1"
+string(%d) "TypeError: Demo\Payments::settle(): Argument #1 ($paid) must be of type Demo\PaymentResult\Paid, Demo\PaymentResult\Declined given, called in %s on line %d"
+string(7) "payment"
+bool(true)
+bool(true)
+bool(false)
+int(1)
+string(18) "Demo\PaymentResult"
+bool(true)
+bool(true)
+bool(true)
+string(79) "Error: Call to private Demo\CheckoutState\Open::__construct() from global scope"
+string(78) "Error: Cannot modify readonly property Demo\PaymentResult\Paid::$transactionId"
+string(9) "Paid tx_9"
+string(7) "Expired"
+string(18) "Declined: no funds"
+string(8) "Redirect"
+bool(true)
+bool(false)
+string(4) "paid"
+string(8) "no funds"
+string(17) "https://bank.test"
+bool(true)
+bool(false)
+bool(false)
+bool(false)
+bool(false)
+bool(false)
+bool(true)
+bool(true)
+bool(false)
+int(1)
+int(2)
+bool(true)
+bool(false)
+array(4) {
+  [0]=>
+  int(2)
+  [1]=>
+  int(2)
+  [2]=>
+  int(2)
+  [3]=>
+  int(1)
+}
+string(5) "popup"
+string(8) "scroll 3"
+bool(true)
