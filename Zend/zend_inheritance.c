@@ -771,6 +771,12 @@ static inheritance_status zend_do_perform_arg_type_hint_check(
 		return INHERITANCE_SUCCESS;
 	}
 
+	if (ZEND_ARG_IS_WIDENED(fe_arg_info)) {
+		/* A PHP# parameter that takes its type argument's type where the parent erases the type parameter: the
+		 * analysis proved every PHP# call passes that type, and a call from PHP is checked against it. */
+		return INHERITANCE_SUCCESS;
+	}
+
 	if (!ZEND_TYPE_IS_SET(proto_arg_info->type)) {
 		/* Child defines a type, but parent doesn't, violates LSP */
 		return INHERITANCE_ERROR;

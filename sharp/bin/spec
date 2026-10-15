@@ -632,15 +632,26 @@ function run_line(array $block, array $line): bool
         && !preg_match('~^(namespace|import)\b~', $first);
 }
 
-/** @return list<string> the full name of every type a file declares at its top level */
+/**
+ * @return list<string> the full name of every type a file declares at its top level, and of the trait of each PHP#
+ * interface's default bodies, `HasDesign\Defaults`, which the interface's file declares (spec section 22)
+ */
 function declared_names(string $contents, string $language): array
 {
     $namespace = preg_match('~^namespace ([\w.\\\\]+)~m', $contents, $m) ? str_replace('.', '\\', $m[1]) : '';
     preg_match_all($language === 'php'
-        ? '~^(?:(?:abstract|final|readonly)\s+)*(?:class|interface|trait|enum)\s+(\w+)~m'
-        : '~^(?:(?:public|private|protected|internal|abstract|final|sealed|static|readonly|foreign)\s+)*(?:class|struct|enum|interface|event|trait)\s+(\w+)~m', $contents, $found);
+        ? '~^(?:(?:abstract|final|readonly)\s+)*(class|interface|trait|enum)\s+(\w+)~m'
+        : '~^(?:(?:public|private|protected|internal|abstract|final|sealed|static|readonly|foreign)\s+)*(class|struct|enum|interface|event|trait)\s+(\w+)~m', $contents, $found, PREG_SET_ORDER);
 
-    return array_map(static fn (string $name): string => ltrim("$namespace\\$name", '\\'), $found[1]);
+    $names = [];
+    foreach ($found as [, $kind, $name]) {
+        $names[] = ltrim("$namespace\\$name", '\\');
+        if ($language === 'sharp' && $kind === 'interface') {
+            $names[] = ltrim("$namespace\\$name\\Defaults", '\\');
+        }
+    }
+
+    return $names;
 }
 
 /** @return array<string, list<string>> every harness file, by its path under sharp/harness/, with the names it declares */
@@ -855,7 +866,7 @@ function runner(string $folder, array $files, array $harness): string
 
     return "<?php\n"
         . '$classes = ' . var_export($classes, true) . ";\n"
-        . 'spl_autoload_register(static function (string $class) use ($classes): void { if (isset($classes[$class])) { require __DIR__ . "/" . $classes[$class]; } });' . "\n"
+        . 'spl_autoload_register(static function (string $class) use ($classes): void { if (isset($classes[$class])) { require_once __DIR__ . "/" . $classes[$class]; } });' . "\n"
         . (is_file("$folder/app/functions.php") ? "require __DIR__ . '/app/functions.php';\n" : '')
         . "try {\n    " . implode("\n    ", $entries) . "\n} catch (\\Throwable \$e) {\n    \\App\\Outcome::threw(-1, \$e);\n}\n";
 }

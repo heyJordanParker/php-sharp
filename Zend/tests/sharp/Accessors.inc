@@ -47,9 +47,11 @@ class Product
 class Address
 {
     protected string $region { get => \strtoupper($this->region); }
+    public string $city { set { $this->city = \ucfirst(\trim($value)); } }
 
-    public function __construct(public string $city { set { $this->city = \ucfirst(\trim($value)); } }, string $region)
+    public function __construct(string $city, string $region)
     {
+        $this->city = $city;
         $this->region = $region;
     }
 

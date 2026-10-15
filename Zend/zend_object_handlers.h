@@ -248,6 +248,7 @@ extern const ZEND_API zend_object_handlers std_object_handlers;
 #define ZEND_PROPERTY_EXISTS    0x2          /* Property exists */
 
 ZEND_API void zend_class_init_statics(zend_class_entry *ce);
+ZEND_API zend_result zend_class_init_sharp_statics(zend_class_entry *class_type);
 ZEND_API zend_function *zend_std_get_static_method(zend_class_entry *ce, zend_string *function_name_strval, const zval *key);
 ZEND_API zval *zend_std_get_static_property_with_info(zend_class_entry *ce, zend_string *property_name, int type, struct _zend_property_info **prop_info);
 ZEND_API zval *zend_std_get_static_property(zend_class_entry *ce, zend_string *property_name, int type);

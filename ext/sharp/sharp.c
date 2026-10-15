@@ -5137,6 +5137,39 @@ ZEND_FUNCTION(Sharp_Internal_testModule)
 	zval_ptr_dtor(&module);
 }
 
+/* Spec section 6.5: a `static lazy` property computes its value on its first read and keeps it for a singleton's
+ * lifetime, section 32, as the container keeps a singleton service, so a test's start and end forget it too. PHP#
+ * reads `Class.name` as `Class::{'name#get'}()`, which returns `\Sharp\Internal\keep('Class::name', static fn () =>
+ * body)`. The value is kept under the key `key` beside the singleton services. A throw in `compute` keeps nothing, so
+ * the next read runs it again. */
+ZEND_FUNCTION(Sharp_Internal_keep)
+{
+	zend_string *key;
+	zval *compute;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_STR(key)
+		Z_PARAM_OBJECT_OF_CLASS(compute, zend_ce_closure)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zval *kept = zend_hash_find(&SHARP_G(container_singletons), key);
+	if (kept) {
+		RETURN_COPY(kept);
+	}
+
+	zval value;
+	ZVAL_UNDEF(&value);
+	if (call_user_function(NULL, NULL, compute, &value, 0, NULL) != SUCCESS || EG(exception)) {
+		zval_ptr_dtor(&value);
+		RETURN_THROWS();
+	}
+
+	/* A body that read the property again kept a value already, and the outer read keeps its own. */
+	Z_TRY_ADDREF(value);
+	zend_hash_update(&SHARP_G(container_singletons), key, &value);
+	RETURN_COPY_VALUE(&value);
+}
+
 /* The container forgets every service it kept, so the next test builds its own. */
 static void sharp_container_forget(void)
 {
@@ -5169,6 +5202,63 @@ ZEND_FUNCTION(Sharp_Internal_endTest)
 
 	sharp_container_forget();
 	SHARP_G(container_test) = NULL;
+}
+
+/* Spec section 6.2: a property's observers run only once its object is fully built. The object is still being built
+ * while one of its constructors runs, a parent's included, and plain PHP's `new` runs them too. It is also being built
+ * while it carries IS_OBJ_SHARP_BUILDING: while Sharp\Internal\build runs a named constructor's body or an object
+ * initializer on it, and while clone() writes a `with` copy's new values. A method a constructor calls runs before the
+ * constructor returns, so the object is still being built. */
+ZEND_FUNCTION(Sharp_Internal_building)
+{
+	zend_object *object;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJ(object)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (OBJ_EXTRA_FLAGS(object) & IS_OBJ_SHARP_BUILDING) {
+		RETURN_TRUE;
+	}
+	for (const zend_execute_data *frame = EX(prev_execute_data); frame; frame = frame->prev_execute_data) {
+		if (frame->func
+		 && (frame->func->common.fn_flags & ZEND_ACC_CTOR)
+		 && (ZEND_CALL_INFO(frame) & ZEND_CALL_HAS_THIS)
+		 && Z_OBJ(frame->This) == object) {
+			RETURN_TRUE;
+		}
+	}
+
+	RETURN_FALSE;
+}
+
+/* Spec sections 6.2, 9.1 and 16: runs `body` on `object` as Closure::call does, with the arguments after it, while
+ * the object carries IS_OBJ_SHARP_BUILDING, so the writes of a named constructor's body or an object initializer run
+ * no observer. It puts back the mark it found, whether the body returns or throws, so an initializer inside a named
+ * constructor leaves the outer object marked until its own body ends. */
+ZEND_FUNCTION(Sharp_Internal_build)
+{
+	zend_object *object;
+	zend_object *body;
+	zval *arguments = NULL;
+	uint32_t count = 0;
+
+	ZEND_PARSE_PARAMETERS_START(2, -1)
+		Z_PARAM_OBJ(object)
+		Z_PARAM_OBJ_OF_CLASS(body, zend_ce_closure)
+		Z_PARAM_VARIADIC('*', arguments, count)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_function *call = zend_hash_str_find_ptr(&zend_ce_closure->function_table, ZEND_STRL("call"));
+	zval *parameters = safe_emalloc(count + 1, sizeof(zval), 0);
+	ZVAL_OBJ(&parameters[0], object);
+	memcpy(&parameters[1], arguments, count * sizeof(zval));
+
+	uint32_t found = OBJ_EXTRA_FLAGS(object) & IS_OBJ_SHARP_BUILDING;
+	OBJ_EXTRA_FLAGS(object) |= IS_OBJ_SHARP_BUILDING;
+	zend_call_known_function(call, body, zend_ce_closure, return_value, count + 1, parameters, NULL);
+	OBJ_EXTRA_FLAGS(object) = (OBJ_EXTRA_FLAGS(object) & ~IS_OBJ_SHARP_BUILDING) | found;
+	efree(parameters);
 }
 
 /* Spec section 15: emit hands an event, and one function per listener of it, to the app's dispatcher. mago compile
