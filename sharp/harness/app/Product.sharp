@@ -3,7 +3,7 @@ namespace App;
 public class Product
 {
     public int id { get; set; } = 1;
-    public Money? price { get; set; }
+    public Money? price { get; set; } = null;
 
     public readonly Money? priceIn(string currency) readonly => this.price;
 }

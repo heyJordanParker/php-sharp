@@ -261,7 +261,7 @@ typedef struct _zend_oparray_context {
 /* has #[\Override] attribute                             |     |     |     */
 #define ZEND_ACC_OVERRIDE                (1 << 28) /*     |  X  |  X  |     */
 /*                                                        |     |     |     */
-/* Property Flags (unused: 15-27,29...)                   |     |     |     */
+/* Property Flags (unused: 16-27,29...)                   |     |     |     */
 /* ===========                                            |     |     |     */
 /*                                                        |     |     |     */
 /* Promoted property / parameter                          |     |     |     */
@@ -281,6 +281,9 @@ typedef struct _zend_oparray_context {
 /*                                                        |     |     |     */
 /* PHP#: the property has a PHP# type, its sharp_type     |     |     |     */
 #define ZEND_ACC_SHARP_TYPED             (1 << 14) /*     |     |  X  |     */
+/*                                                        |     |     |     */
+/* PHP# field: storage, not a property (spec section 6)   |     |     |     */
+#define ZEND_ACC_FIELD                   (1 << 15) /*     |     |  X  |     */
 /*                                                        |     |     |     */
 /* Class Flags (unused: none)                             |     |     |     */
 /* ===========                                            |     |     |     */
@@ -1065,6 +1068,9 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
 /* These should not clash with ZEND_ACC_PPP_MASK and ZEND_ACC_PPP_SET_MASK */
 #define ZEND_PARAM_REF      (1<<3)
 #define ZEND_PARAM_VARIADIC (1<<4)
+/* A PHP# parameter that takes its type argument's type where the method it overrides erases that type parameter, as
+ * `handle(Order $item)` of a `Handler<Order>` whose `handle(T $item)` erases `T` to `mixed`. Set by ext/sharp. */
+#define ZEND_PARAM_WIDENED  (1<<6)
 
 #define ZEND_NAME_FQ       0
 #define ZEND_NAME_NOT_FQ   1
@@ -1273,6 +1279,8 @@ static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 #define _ZEND_IS_VARIADIC_BIT (1 << (_ZEND_TYPE_EXTRA_FLAGS_SHIFT + 2))
 #define _ZEND_IS_PROMOTED_BIT (1 << (_ZEND_TYPE_EXTRA_FLAGS_SHIFT + 3))
 #define _ZEND_IS_TENTATIVE_BIT (1 << (_ZEND_TYPE_EXTRA_FLAGS_SHIFT + 4))
+/* ZEND_PARAM_WIDENED: inheritance skips the parameter's variance check, and every call still checks its type. */
+#define _ZEND_IS_WIDENED_BIT (1 << (_ZEND_TYPE_EXTRA_FLAGS_SHIFT + 5))
 #define ZEND_ARG_SEND_MODE(arg_info) \
 	((ZEND_TYPE_FULL_MASK((arg_info)->type) >> _ZEND_SEND_MODE_SHIFT) & 3)
 #define ZEND_ARG_IS_VARIADIC(arg_info) \
@@ -1281,6 +1289,8 @@ static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 	((ZEND_TYPE_FULL_MASK((arg_info)->type) & _ZEND_IS_PROMOTED_BIT) != 0)
 #define ZEND_ARG_TYPE_IS_TENTATIVE(arg_info) \
 	((ZEND_TYPE_FULL_MASK((arg_info)->type) & _ZEND_IS_TENTATIVE_BIT) != 0)
+#define ZEND_ARG_IS_WIDENED(arg_info) \
+	((ZEND_TYPE_FULL_MASK((arg_info)->type) & _ZEND_IS_WIDENED_BIT) != 0)
 
 #define ZEND_DIM_IS					(1 << 0) /* isset fetch needed for null coalesce. Set in zend_compile.c for ZEND_AST_DIM nested within ZEND_AST_COALESCE. */
 #define ZEND_DIM_SHARP				(1 << 1) /* PHP# index read, see ZEND_SHARP_OPERATOR. Set in ext/sharp for every ZEND_AST_DIM. */

@@ -201,7 +201,7 @@ public class Counter<TItem>
 {
     public static int count { get; set; } = 0;
 
-    public static int? limit { get; set; }
+    public static int? limit { get; set; } = null;
 
     public static List<TItem> items { get; set; } = [];
 
@@ -261,7 +261,7 @@ public class Inspection<TItem : DatabaseEntity>
 
 public class Shelf
 {
-    public Class<PaginatedList<Order>>? pages { get; set; }
+    public Class<PaginatedList<Order>>? pages { get; set; } = null;
 
     public Shelf()
     {

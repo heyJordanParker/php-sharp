@@ -21,7 +21,7 @@ public class Larder
     public Map<string, Set<int>> shelves { get; set; } = [:];
     public Map<string, List<Map<Ripeness, int>>> crates { get; set; } = [:];
     public Map<Aisle, int> aisles { get; set; } = [:];
-    public Map<string, int>? spare { get; set; }
+    public Map<string, int>? spare { get; set; } = null;
     public Map<string, int> counted { get; set => field = value.filter(n => n > 0); } = [:];
     public static Map<string, int> shared { get; set; } = [:];
     public static Set<string> tags { get; set; } = [];

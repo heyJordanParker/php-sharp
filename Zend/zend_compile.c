@@ -8128,7 +8128,8 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 		}
 	}
 
-	const uint32_t promotion_flags = ZEND_ACC_PPP_MASK | ZEND_ACC_PPP_SET_MASK | ZEND_ACC_READONLY | ZEND_ACC_FINAL;
+	const uint32_t promotion_flags =
+		ZEND_ACC_PPP_MASK | ZEND_ACC_PPP_SET_MASK | ZEND_ACC_READONLY | ZEND_ACC_FINAL | ZEND_ACC_FIELD;
 	for (i = 0; i < list->children; ++i) {
 		zend_ast *param_ast = list->child[i];
 		zend_string *sharp_type = NULL;
@@ -8141,6 +8142,7 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 		zend_string *name = zval_make_interned_string(zend_ast_get_zval(var_ast));
 		bool is_ref = (param_ast->attr & ZEND_PARAM_REF) != 0;
 		bool is_variadic = (param_ast->attr & ZEND_PARAM_VARIADIC) != 0;
+		bool is_widened = (param_ast->attr & ZEND_PARAM_WIDENED) != 0;
 		uint32_t property_flags = param_ast->attr & promotion_flags;
 		bool is_promoted = property_flags || hooks_ast;
 
@@ -8267,7 +8269,8 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 		opline->op1.num = i + 1;
 
 		uint32_t arg_info_flags = _ZEND_ARG_INFO_FLAGS(is_ref, is_variadic, /* is_tentative */ 0)
-			| (is_promoted ? _ZEND_IS_PROMOTED_BIT : 0);
+			| (is_promoted ? _ZEND_IS_PROMOTED_BIT : 0)
+			| (is_widened ? _ZEND_IS_WIDENED_BIT : 0);
 		ZEND_TYPE_FULL_MASK(arg_info->type) |= arg_info_flags;
 		if (opcode == ZEND_RECV) {
 			opline->op2.num = type_ast ?

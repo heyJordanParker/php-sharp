@@ -297,6 +297,8 @@ ZEND_API zend_object *zend_objects_clone_obj_with(zend_object *old_object, const
 		const zend_class_entry *old_scope = EG(fake_scope);
 
 		EG(fake_scope) = scope;
+		/* PHP#: the copy is still being built while its new values are written, so they run no observer. */
+		OBJ_EXTRA_FLAGS(new_object) |= IS_OBJ_SHARP_BUILDING;
 
 		ZEND_HASH_FOREACH_KEY_VAL(properties, zend_ulong num_key, zend_string *key, zval *val) {
 			if (UNEXPECTED(Z_ISREF_P(val))) {
@@ -321,6 +323,7 @@ ZEND_API zend_object *zend_objects_clone_obj_with(zend_object *old_object, const
 			}
 		} ZEND_HASH_FOREACH_END();
 
+		OBJ_EXTRA_FLAGS(new_object) &= ~IS_OBJ_SHARP_BUILDING;
 		EG(fake_scope) = old_scope;
 
 		/* Lock readonly properties once more. */

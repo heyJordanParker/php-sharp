@@ -21,7 +21,7 @@ Attributes use square brackets and follow C#'s rules:
 <!-- example attribute-arguments: members -->
 ```csharp
 [Field(label: "Name", render: Render.Heading, searchable: true)]
-public string name { get; set; }
+public string name { get; set; } = "";
 ```
 
 Named arguments use `label: "Name"`, the same "name: value" form used everywhere in the language (section 16). C#'s `Label = "Name"` is not allowed.
@@ -157,12 +157,12 @@ Checkout.maximum;
 | `internal` | this namespace and every namespace below it. This is the default for classes. |
 | `public` | everyone |
 
-- **A namespace's inside is its folder.** A file's namespace must match its path, so no file can declare its way into a namespace.
+- **A namespace's inside is its folder.** A file's namespace must match its path, so no file can declare its way into a namespace. Each folder below the project's namespace root names a part of the namespace, so a folder whose name a namespace can't take, such as `it's`, is a compile error that asks to rename it.
 - **Tests:** test folders may declare the namespace they test, which gives them `internal` access.
 - **A member is never more visible than its class.**
 - **Visibility is checked both ways.**
   - Too narrow is a compile error at the caller.
-  - Too wide is a warning, for example a `public` member that nothing outside its namespace uses.
+  - Too wide is a warning, for example a `public` member that nothing outside its namespace uses. It runs in a project, a package whose `composer.json` says `"type": "project"`, because a library's members are used by the projects that install it, which the checker never sees. A constructor never warns: `new` calls it, so it reaches as far as its class.
 - **There is no named reach,** such as `internal(App\Tenant)`. A helper shared by sibling namespaces moves to their parent namespace.
 
 **An interface member is always public, so it takes no access modifier.** Writing one, `public` included, is a compile error, as in TypeScript, Swift and Go:
@@ -188,13 +188,13 @@ public interface Notifier
 Fields and properties are separate concepts.
 
 - **A field is storage.** It can only be `private` or `protected`. A field with no modifier is `private`. There are no public fields.
-- **A property is the API.** It has `get` and `set` accessors, and each accessor carries its own access level.
+- **A property is the API.** It has `get` and `set` accessors. `get` reads at the property's access level, and `set` may carry a narrower one of its own.
 
 <!-- example field-and-property: members -->
 ```csharp
 Map<string, Plan> cache = [:];                                  // field
-public int views { get; private set; }                          // auto-property
-public string name { get; internal set => field = value.trim(); }
+public int views { get; private set; } = 0;                     // auto-property
+public string name { get; internal set => field = value.trim(); } = "";
 public string slug => Str.slug(this.name);                      // computed
 ```
 
@@ -204,14 +204,22 @@ public string slug => Str.slug(this.name);                      // computed
 ```csharp
 Map<string, Plan> cache = [:];                                  // field
 public int views { get; private set; } = 0;                     // auto-property
-public List<Tag> tags { get; set; } = new List<Tag>();
+public List<Tag> tags { get; set; } = [];
 ```
 
 Initial values run before the parent's constructor, in the order the members are declared, and can't read `this`, as in C#.
 
-**A `T?` field or settable auto-property with no initial value starts as null,** as in C# and Swift. A get-only `T?` property is set once, by its initial value or by the constructor, like every other get-only property.
+**No code that can read the object runs before the object is built.** An initial value can't read `this`, it fills the storage without running a `set` body, constant or not, and observers wait until the constructor returns (section 6.2). Only a behavior's `set` processes an initial value, because a behavior never sees the object (section 6.4).
 
-**A get-only property with no initial value must be set on every path through the main constructor,** nullable or not, as Swift's `let` and Kotlin's `val` must be. Otherwise it is a compile error that names both fixes: an initial value, or setting it in the constructor.
+<!-- example initial-value-storage: members -->
+```csharp
+public string code { get; set => field = value.trim(); } = "  a  ";            // compiles: code starts as "  a  ", since set doesn't run
+public string label { get; set => field = value.trim(); } = global.strval(1);  // compiles: a computed initial value fills the storage too
+```
+
+**A member has no implicit starting value, `null` included.** A `T?` member writes `= null` like any other starting value, and PHP# has no default filler such as C#'s `default(T)`.
+
+**A field or a property with storage and no initial value must be set on every path through the main constructor,** as Swift's and Kotlin's stored properties must be. This holds for every one, settable or get-only, nullable or not, as it does for a struct. Otherwise it is a compile error that names both fixes: an initial value, or setting it in the constructor.
 
 <!-- example nullable-members -->
 ```csharp
@@ -220,28 +228,38 @@ namespace App;
 
 public class Profile
 {
-    private int? total;                      // compiles: starts as null
-    public string? nickname { get; set; }    // compiles: starts as null
+    private int? total = null;               // compiles: starts as null
+    private int? count;                      // compile error: give count an initial value, or set it on every path through the constructor
+    public string? nickname { get; set; }    // compile error: give nickname an initial value, or set it on every path through the constructor
     public string? note { get; }             // compiles: the constructor sets it once
     public string? memo { get; } = null;     // compiles: the initial value sets it once
     public string? handle { get; }           // compile error: give handle an initial value, or set it on every path through the constructor
+    public int level { get; set; }           // compiles: the constructor sets it
+    public int rank { get; set; }            // compile error: give rank an initial value, or set it on every path through the constructor
 
     public Profile(string? note, bool claimed)
     {
         this.note = note;
-        if (claimed) { this.handle = "taken"; }
+        this.level = 1;
+        if (claimed) { this.handle = "taken"; this.rank = 1; this.count = 1; this.nickname = "new"; }
     }
 }
 ```
 
-**A static field or property that isn't `T?` needs an initial value.** No constructor sets it, so the error names both fixes: an initial value, or `T?`.
+**A static field or property with storage needs an initial value, whatever its type.** No constructor sets it, so the error names that one fix.
+
+**A static's initial value runs once, when a request first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. A get-only static is set only by its initial value.
+
+**Plain PHP reaches a static with an accessor body, a computed body or an observer only through a method,** because PHP has no hooks on a static property. Reading or writing it directly from plain PHP is PHP's access error.
 
 <!-- example static-initial-values: members -->
 ```csharp
 private static int hits = 0;                     // compiles
-private static int misses;                       // compile error: give misses an initial value, or make it int?
-public static string? region { get; set; }       // compiles: starts as null
-public static string label { get; set; }         // compile error: give label an initial value, or make it string?
+private static int misses;                       // compile error: give misses an initial value
+public static string? region { get; set; } = null;   // compiles: starts as null
+public static string? zone { get; set; }         // compile error: give zone an initial value
+private static int started = global.time();      // compiles: runs once, when a request first uses the class's statics
+public static int limit { get; } = 10;           // compiles: get-only, set only by its initial value
 ```
 
 ### 6.1 Property features
@@ -249,7 +267,7 @@ public static string label { get; set; }         // compile error: give label an
 PHP# has all of C#'s property features:
 
 - auto-properties
-- a separate access level for each accessor
+- a separate, narrower access level for `set` and `init`
 - get-only properties, which are set in the constructor
 - `init`, which allows a set only while the object is being created
 - computed properties, written `=> expr`
@@ -257,6 +275,28 @@ PHP# has all of C#'s property features:
 - `required`, which the checker enforces wherever the object is created
 - properties in interfaces, abstract properties, and overrides
 - Reflection that tells fields from properties
+
+**Only `set` and `init` take an access level of their own,** narrower than the property's, as Swift's `private(set)` is. `get` reads at the property's level, so an access level on it is a compile error. A property read only inside its class is read through a method there.
+
+<!-- example access-on-get: members -->
+```csharp
+public int views { get; private set; } = 0;     // compiles: set is narrower than the property
+public int score { protected get; set; } = 0;   // compile error: only set and init take an access level; read score inside the class through a method
+```
+
+**A `get` body may have any effect but never writes `this`.** A read may query the database or read the clock, and it carries the body's effects (section 29). Writing a field of `this`, or calling a method on `this` that writes one, is a compile error that names the write. A `lazy` property still keeps its computed value (section 6.5), because that write is the language's, not the body's.
+
+A getter promises less than a method marked `readonly` (section 13): it may call a plain PHP method, and a PHP# method not marked `readonly` that writes nothing of `this`.
+
+<!-- example getter-writes: members
+private int reads = 0;
+public int count() { this.reads = this.reads + 1; return this.reads; }
+-->
+```csharp
+public int next => this.reads + 1;                                              // compiles: it reads this
+public int bumped { get { this.reads = this.reads + 1; return this.reads; } }  // compile error: a getter never writes this, and bumped writes reads
+public int counted => this.count();                                             // compile error: count writes reads, and a getter never writes this
+```
 
 **A class overrides a plain PHP parent's property with a property** marked `override`, and it writes the type like every PHP# property. Eloquent's `$table`, `$fillable` and `$timestamps` are overridden this way:
 
@@ -280,23 +320,33 @@ public class Order : Model
     protected override List<string> fillable { get; set; } = this.columns();      // compile error: an initial value can't read this
     public override bool timestamps = false;                                      // compile error: PHP# has no public fields; write a property
     protected string? table { get; set; } = "orders";                             // compile error: Model declares table; write override
+    protected override string? table { get; } = "orders";                         // compile error: Model's own code writes table, so its override has set
+    public override bool timestamps { get; protected set; } = false;              // compile error: timestamps is set at public in Model
 }
 ```
 
 - **The written type must fit the parent's.** When PHP declares the parent's property with no type, the written type must be assignable to the parent's `@var` type, or to anything when there is no `@var`. The engine drops the written type when the class links, because PHP refuses a typed redeclaration there. When PHP declares the parent's property with a type, the written type must equal it, because PHP checks property types for invariance when the class links. The engine keeps it.
-- **The access level is written and must match the parent's.** It is `public` when the parent's property is, as `timestamps` is in `Model`.
+- **The access level is written and must match the parent's.** It is `public` when the parent's property is, as `timestamps` is in `Model`. The `set` keeps the parent's level too, so `timestamps { get; protected set; }` is an error.
+- **The override has `set`.** The parent's own code writes the property at any time, as Eloquent's `setTable` writes `table`, so a get-only override or one with `init` is an error. The override may give `get` and `set` bodies.
 - **The initial value runs before the parent's constructor and can't read `this`** (section 6), so a parent's constructor that reads the property, as Eloquent's does, sees it.
-- **A PHP# parent's field is overridden the same way,** measured against that field. A PHP# parent's property with accessor bodies is overridden as a property, as the list above says.
+- **A PHP# parent's `protected` field is overridden the same way,** by a property measured against that field. A PHP# property is closed unless it is `virtual` or `abstract`, as a method is (section 22), and a field has no `virtual`, so a `protected` field is always open.
 
 ### 6.2 Change observers
 
 `willSet` runs before a write, and `didSet` runs after it.
 
+**Observers run only once the object is built,** on every write after its constructor and any object initializer have finished, and also when the value is unchanged. The initial value runs none, and neither does a write while a constructor, a named constructor or an object initializer runs, a method it calls included. `set` and `init` bodies still run for those writes. A `with` copy is a new object being built, so the values it is written with run none either. A static's initial value runs none, and every later write does. Both observers see `value`, the written value, and `field`, the stored one: `willSet` reads the value the write replaces, and `didSet` the value it stored. Beside a `set` body, the order is `willSet`, the `set` body, then `didSet`. An observer runs inside `set`, so a property with one needs `set`.
+
+**`willSet` cannot change or stop the write.** Writing `value` or returning in it is a compile error, and so is returning in a `set` body before `didSet`:
+
 <!-- example change-observers: members
 private void touch() { }
 -->
 ```csharp
-public string name { get; set; didSet => this.touch(); }
+public string name { get; set; didSet => this.touch(); } = "";    // compiles: didSet runs on each write once the object is built
+public int level { get; set; willSet { if (field != value) { this.touch(); } } } = 0;   // compiles: field is the value the write replaces
+public int total { get; set; willSet { value = 0; } } = 0;        // compile error: willSet cannot change value
+public int count { get; didSet => this.touch(); } = 0;            // compile error: didSet needs set
 ```
 
 ### 6.3 Typed property references
@@ -320,12 +370,30 @@ A clause after the property names its behaviors. It reads as "get/set via Trimme
 
 <!-- example property-behaviors: members -->
 ```csharp
-public string name { get; set; } via Trimmed, Tracked;
+public string name { get; set; } via Trimmed, Tracked = "";
 ```
 
-- A behavior is a class that implements `get` and `set` once.
-- The property forwards its accessors to one behavior instance per object, held in a hidden slot.
-- Several behaviors run in the order they are written, each one wrapping the next.
+A behavior implements `get` and `set` once, as a class that implements the standard library's `Behavior<T>` for the property's type:
+
+<!-- example behavior-class -->
+```csharp
+namespace App.Text;
+
+import Sharp.Behavior;
+
+public class Trimmed : Behavior<string>
+{
+    public string get(string value) => value;          // a read returns what is stored
+    public string set(string value) => value.trim();   // a write stores the trimmed text
+}
+```
+
+- A behavior is a class that implements `Behavior<T>` for the property's type, and its constructor takes no arguments. A behavior for another type, an interface, an abstract class, or a constructor that needs an argument is a compile error.
+- `via` names a type, so a generic behavior takes its type arguments as every type does (section 11): `via Logged<string>` creates each behavior as `new Logged<string>()`.
+- A behavior's `get` and `set` are the property's accessors. Each may have any effect, and a read or write of the property carries it (section 29). `set` may write the behavior's own fields, and `get` writes none, as no `get` body writes `this` (section 6.1).
+- `via` goes on an instance auto-property with `get; set;`. A property in an interface or an `abstract` one has no storage to run around, a static one has no object to keep behaviors in, and one with an accessor body already says how it reads and writes, so each is a compile error. A constructor parameter takes no `via`: declare the property in the class body.
+- Each object creates its own behaviors with `new` when it is constructed, before any initial value, and keeps each one in a hidden slot. A copy made with `with`, or with plain PHP's `clone`, creates its own too, so two objects never share a behavior's state.
+- A write runs each behavior's `set` in the order they are written, then stores the result. A read runs each behavior's `get` the other way, so the first behavior wraps the rest. The initial value is a write, so it runs through each `set`, which never sees the object (section 6).
 
 ### 6.5 `lazy`
 
@@ -339,7 +407,10 @@ private int id = 1;
 public lazy Plan plan => this.planner.plan(this.id);
 ```
 
-A `lazy` body may read anything, including properties that can change later. The value is computed once and kept, even if those inputs change, as in Swift and Kotlin. A value that must follow its inputs is a plain computed property (`=> expr`).
+A `lazy` body may have any effect, such as a database query, and reading the property carries the body's effects (section 29). Like every `get` body, it never writes `this` (section 6.1). It may read properties that can change later. The value is computed once and kept, even if those inputs change, as in Swift and Kotlin. A value that must follow its inputs is a plain computed property (`=> expr`).
+
+- **A body that throws keeps nothing,** so the next read runs it again, as Kotlin's `lazy` does.
+- **A copy made with `with` keeps no `lazy` value,** because it is a new value whose inputs may differ. Its first read computes each `lazy` property again, as Kotlin's `copy()` does.
 
 ## 7. Methods
 
@@ -463,7 +534,7 @@ public StoreService(
 }
 ```
 
-**A member declared on a parameter takes access levels and attributes only,** as TypeScript's and Kotlin's parameter properties do: an access modifier, an accessor list with an access level for each accessor, such as `{ get; private set; }`, and attributes. Accessor bodies, `willSet`, `didSet`, `via`, `lazy`, computed properties and `static` go on a member in the class body:
+**A member declared on a parameter takes access levels and attributes only,** as TypeScript's and Kotlin's parameter properties do: an access modifier, an accessor list whose `set` or `init` may take a narrower access level, such as `{ get; private set; }`, and attributes. Accessor bodies, `willSet`, `didSet`, `via`, `lazy`, computed properties and `static` go on a member in the class body:
 
 <!-- example parameter-member-limits: members in Ledger -->
 ```csharp
@@ -737,6 +808,32 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 public class PaginatedList<TItem : DatabaseEntity> { … }
 public PaginatedList<TItem> list<TItem : DatabaseEntity>(Query<TItem> query) { … }
 public TValue keep<TValue : Object>(TValue value) => value;
+```
+
+**A class that implements or extends a generic type takes its type argument's type,** as in C#, Java, Kotlin, TypeScript and Rust: `OrderHandler : Handler<Order>` writes `handle(Order item)`. A call from plain PHP still checks `item` against `Order` under the caller's `strict_types`, as every typed parameter is checked, and reflection reports `Order` as its type:
+
+<!-- example generic-implementation -->
+```csharp
+namespace App.Handlers;
+
+import App.Order;
+
+public interface Handler<T>
+{
+    void handle(T item);
+}
+
+public class OrderHandler : Handler<Order>
+{
+    public void handle(Order item) { }   // compiles: takes the type argument's type
+}
+```
+
+<!-- example generic-implementation: statements
+$handler = new App\Handlers\OrderHandler();
+-->
+```php
+$handler->handle("x");   // throws TypeError: handle takes an Order
 ```
 
 **`Self` on a receiver typed by a type parameter is that type parameter** (section 25). In `TBox refill<TBox : Box<int>>(TBox box)`, `box.withValue(5)` returns a `TBox`, not `Box<int>`, as Rust's `t.clone()` on a `T: Clone` returns a `T`:
@@ -1231,7 +1328,7 @@ import Illuminate.Database.Eloquent.Model;
 
 public class Order
 {
-    public string number { get; set; }
+    public string number { get; set; } = "";
     public Money totalIn(string currency) readonly { … }
     public void markPaid() { … }
 }
@@ -1389,7 +1486,7 @@ A function type is written as `Function<ReturnType(ParameterTypes)>`, in the sam
 
 <!-- example function-types: members -->
 ```csharp
-Function<Money?(readonly Line, string)> priceOf
+Function<Money?(readonly Line, string)> priceOf = (line, currency) => null
 Function<void(Order)>? onPaid = null
 public Function<bool(Order)> eligibleFor(Account account)
 ```
@@ -1456,7 +1553,7 @@ In a plain PHP class with both a property and a method of that name, the propert
 int price = 900;
 -->
 ```csharp
-private Function<int(int)> discount;
+private Function<int(int)> discount = (int amount) => amount - 100;
 int paid = this.discount(price);       // calls the function in discount, since there is no discount method
 ```
 
@@ -2722,7 +2819,7 @@ public class Invoice<TLine : Line>                             // type and type 
 {
     const MAX_LINES = 100;                                     // constant
     List<TLine> pendingLines = [];                             // field
-    public string dueDate { get; set; }                        // property
+    public string dueDate { get; set; } = "";                   // property
 
     public Money totalIn(string currency)                      // method and parameter
     {
@@ -3673,7 +3770,7 @@ public class TenantCache
 - **A class's effects** are the `foreign` classes it holds, directly or through its fields, the effects of the plain PHP its methods call, and the events its methods emit. The checker works them out from field and constructor types and from method bodies. Nothing is written down.
 - **A `foreign` object** is created in a module binding (section 32), as often as its binding's lifetime decides, and handed down through constructors. Creating one anywhere else, or storing one in a static, is a compile error.
 
-**Pure code** reaches no `foreign` object, emits no event, calls no plain PHP unless an `extern` declares it pure, and changes nothing it was given (section 13). Getters must be pure. Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
+**Pure code** reaches no `foreign` object, emits no event, calls no plain PHP unless an `extern` declares it pure, and changes nothing it was given (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
 
 **Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types. Every implementation is held to what the declaration allows:
 
@@ -3685,18 +3782,18 @@ public interface PaymentGateway
     Charge charge(Cart cart) uses Http;              // implementations may reach Http, nothing else
 }
 
-Function<Money(Offer)> priceOf                       // a pure function value
-Function<Charge(Cart) uses Http> charge              // may reach Http
+Function<Money(Offer)> priceOf = (offer) => Money.zero("USD");      // a pure function value
+Function<Charge(Cart) uses Http> charge = (cart) => new Charge();   // may reach Http
 ```
 
 **A function type lists its effects inside its brackets,** after the parameter types, wherever the type is written:
 
 <!-- example function-type-effects: members -->
 ```csharp
-Function<Charge(Cart) uses Http> charge;                        // compiles
-Function<Charge(Cart) uses Http>? fallback;                      // compiles
-Map<string, Function<Charge(Cart) uses Http, Mail>> handlers;    // compiles: Http and Mail are both effects
-Function<int(Function<int(int) uses Http>)> apply;               // compiles
+Function<Charge(Cart) uses Http> charge = (cart) => new Charge();          // compiles
+Function<Charge(Cart) uses Http>? fallback = null;                          // compiles
+Map<string, Function<Charge(Cart) uses Http, Mail>> handlers = [:];         // compiles: Http and Mail are both effects
+Function<int(Function<int(int) uses Http>)> apply = (step) => 0;            // compiles
 ```
 
 An implementation that calls plain PHP fits the declaration only through an `extern`:

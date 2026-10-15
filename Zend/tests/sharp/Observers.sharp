@@ -1,0 +1,69 @@
+namespace Observed;
+
+import RuntimeException;
+
+public class Account
+{
+    public int balance { get; set; willSet => global.printf("will %d from %d\n", value, field); didSet => global.printf("did %d\n", field); } = 1;
+    public string name { get; set { global.printf("set [%s]\n", value); field = global.trim(value); } didSet => global.printf("named %s\n", field); } = "  start  ";
+    public string note { get; set { global.printf("set note\n"); field = value; } } = global.str_repeat(" ", 2);
+    public static int opened { get; set; didSet => global.printf("opened %d\n", field); } = global.intdiv(4, 2);
+
+    public Account(string name)
+    {
+        global.printf("constructor [%s] [%s]\n", this.name, this.note);
+        this.name = name;
+        this.balance = 2;
+        this.audit();
+    }
+
+    public Account.opening(string name) : this(name)
+    {
+        this.balance = 7;
+    }
+
+    public void audit()
+    {
+        this.balance = this.balance + 1;
+    }
+
+    public void deposit(int amount)
+    {
+        this.balance = this.balance + amount;
+    }
+
+    public Account copied() => this with { balance: 9, name: "  copy  " };
+
+    public static int reopen()
+    {
+        Account.opened = Account.opened + 1;
+        return Account.opened;
+    }
+}
+
+public class Tally
+{
+    public int count { get; set; didSet => global.printf("count %d\n", field); } = 0;
+    private static Tally? kept = null;
+
+    public Tally() { }
+
+    // Keeps the object before its body throws, so a later write reaches it.
+    public Tally.failing() : this()
+    {
+        Tally.kept = this;
+        this.count = 5;
+        throw new RuntimeException("failed");
+    }
+
+    // An initializer inside a named constructor builds another object.
+    public Tally.paired() : this()
+    {
+        Tally.kept = new Tally { count: 2 };
+        this.count = 4;
+    }
+
+    public static Tally started() => new Tally { count: 3 };
+
+    public static Tally? last() => Tally.kept;
+}

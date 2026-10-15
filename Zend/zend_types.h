@@ -866,6 +866,10 @@ static zend_always_inline uint32_t zval_gc_info(uint32_t gc_type_info) {
 
 #define IS_OBJ_LAZY_UNINITIALIZED   (1U<<31) /* Virtual proxy or uninitialized Ghost */
 #define IS_OBJ_LAZY_PROXY           (1U<<30) /* Virtual proxy (may be initialized) */
+#define IS_OBJ_SHARP_BUILDING       (1U<<29) /* PHP#: still being built, so its writes run no observer: */
+                                             /* Sharp\Internal\build runs a named constructor's body or */
+                                             /* an object initializer on it, or clone() writes a `with` */
+                                             /* copy's new values */
 
 #define OBJ_EXTRA_FLAGS(obj)		((obj)->extra_flags)
 

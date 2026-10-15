@@ -1,0 +1,10 @@
+namespace App;
+
+import Sharp.Behavior;
+
+public class Trimmed : Behavior<string>
+{
+    public string get(string value) => value;
+
+    public string set(string value) => value.trim();
+}
