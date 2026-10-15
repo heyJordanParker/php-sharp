@@ -56,6 +56,17 @@ for ($round = 0; $round < 100; $round++) {
         $patterns->circles([new Square(1.0), new Circle(1.0), new Circle(2.0)]),
         $patterns->circles([new Square(1.0), new Circle(1.0), new Square(2.0)]),
         $patterns->circles([new Square(1.0)]),
+        $patterns->listed([]),
+        $patterns->listed([7]),
+        $patterns->listed(['a', 'b', 'c']),
+        $patterns->listed(['a', 1]),
+        $patterns->listed([1 => 5]),
+        $patterns->listed('text'),
+        $patterns->listed(new Circle(1.0)),
+        $patterns->rows([[], [3]]),
+        $patterns->rows([[], ['x']]),
+        $patterns->rows([[], 3]),
+        $patterns->rows([[], [1 => 3]]),
     ];
 }
 

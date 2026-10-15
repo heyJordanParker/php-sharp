@@ -622,7 +622,7 @@ Library: different opcodes and lines in 20 op arrays, same signatures in 1 class
 Inbox: different opcodes and lines in 9 op arrays, same signatures in 1 classes
   .sharp     Property [ private Sharp\Map $saved = new \Sharp\Map() ]
   .php       Property [ private Sharp\Map $saved ]
-Patterns: different opcodes and lines in 16 op arrays, same signatures in 1 classes
+Patterns: different opcodes and lines in 18 op arrays, same signatures in 1 classes
   check  Demo\Patterns::lines string("List<Demo.Figure>")
   check  Demo\Patterns::head string("List<Demo.Figure>?")
   check  Demo\Patterns::ends string("List<Demo.Figure>")
@@ -758,6 +758,93 @@ Patterns: different opcodes and lines in 16 op arrays, same signatures in 1 clas
   .sharp L0121 0029 RETURN T15
   .sharp L0122 0030 VERIFY_RETURN_TYPE
   .sharp L0122 0031 RETURN null
+  .sharp      ; (lines=59, args=1, vars=4, tmps=26)
+  .sharp L0125 0001 T5 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp L0125 0002 T6 = SHARP_IS_TYPE CV0($value) T5
+  .sharp L0125 0003 T6 = JMPZ_EX T6 0007
+  .sharp L0125 0004 T7 = COUNT CV0($value)
+  .sharp L0125 0005 T8 = IS_IDENTICAL T7 int(0)
+  .sharp L0125 0006 T6 = BOOL T8
+  .sharp L0125 0007 T4 = IS_IDENTICAL T6 bool(true)
+  .sharp L0125 0008 JMPNZ T4 0045
+  .sharp L0126 0009 T9 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp L0126 0010 T10 = SHARP_IS_TYPE CV0($value) T9
+  .sharp L0126 0011 T10 = JMPZ_EX T10 0015
+  .sharp L0126 0012 T11 = COUNT CV0($value)
+  .sharp L0126 0013 T12 = IS_IDENTICAL T11 int(1)
+  .sharp L0126 0014 T10 = BOOL T12
+  .sharp L0126 0015 T10 = JMPZ_EX T10 0020
+  .sharp L0126 0016 T13 = FETCH_DIM_R CV0($value) int(0)
+  .sharp L0126 0017 T14 = ASSIGN CV1($one) T13
+  .sharp L0126 0018 T15 = TYPE_CHECK (long) T14
+  .sharp L0126 0019 T10 = BOOL T15
+  .sharp L0126 0020 T4 = IS_IDENTICAL T10 bool(true)
+  .sharp L0126 0021 JMPNZ T4 0047
+  .sharp L0127 0022 T16 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp L0127 0023 T17 = SHARP_IS_TYPE CV0($value) T16
+  .sharp L0127 0024 T17 = JMPZ_EX T17 0028
+  .sharp L0127 0025 T18 = COUNT CV0($value)
+  .sharp L0127 0026 T19 = IS_SMALLER_OR_EQUAL int(1) T18
+  .sharp L0127 0027 T17 = BOOL T19
+  .sharp L0127 0028 T17 = JMPZ_EX T17 0033
+  .sharp L0127 0029 T20 = FETCH_DIM_R CV0($value) int(0)
+  .sharp L0127 0030 T21 = ASSIGN CV2($match#1) T20
+  .sharp L0127 0031 T22 = TYPE_CHECK (string) T21
+  .sharp L0127 0032 T17 = BOOL T22
+  .sharp L0127 0033 T17 = JMPZ_EX T17 0042
+  .sharp L0127 0034 INIT_FCALL 2 112 string("array_slice")
+  .sharp L0127 0035 SEND_VAR CV0($value) 1
+  .sharp L0127 0036 SEND_VAL int(1) 2
+  .sharp L0127 0037 V23 = DO_ICALL
+  .sharp L0127 0038 T24 = ASSIGN CV3($rest) V23
+  .sharp L0127 0039 T25 = SHARP_TYPE_ARGS string("List<string>")
+  .sharp L0127 0040 T26 = SHARP_IS_TYPE T24 T25
+  .sharp L0127 0041 T17 = BOOL T26
+  .sharp L0127 0042 T4 = IS_IDENTICAL T17 bool(true)
+  .sharp L0127 0043 JMPNZ T4 0049
+  .sharp L0127 0044 JMP 0053
+  .sharp L0125 0045 T27 = QM_ASSIGN int(0)
+  .sharp L0125 0046 JMP 0055
+  .sharp L0126 0047 T27 = QM_ASSIGN CV1($one)
+  .sharp L0126 0048 JMP 0055
+  .sharp L0127 0049 T28 = COUNT CV3($rest)
+  .sharp L0127 0050 T29 = ADD int(100) T28
+  .sharp L0127 0051 T27 = QM_ASSIGN T29
+  .sharp L0127 0052 JMP 0055
+  .sharp L0128 0053 T27 = QM_ASSIGN int(-1)
+  .sharp L0128 0054 JMP 0055
+  .sharp L0128 0055 VERIFY_RETURN_TYPE T27
+  .sharp L0128 0056 RETURN T27
+  .sharp L0129 0057 VERIFY_RETURN_TYPE
+  .sharp L0129 0058 RETURN null
+  .sharp      ; (lines=35, args=1, vars=4, tmps=18)
+  .sharp L0131 0006 T4 = JMPZ_EX T4 0016
+  .sharp L0131 0009 T9 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp L0131 0010 T10 = SHARP_IS_TYPE T8 T9
+  .sharp L0131 0011 T10 = JMPZ_EX T10 0015
+  .sharp L0131 0012 T11 = COUNT CV1($match#1)
+  .sharp L0131 0013 T12 = IS_IDENTICAL T11 int(0)
+  .sharp L0131 0014 T10 = BOOL T12
+  .sharp L0131 0015 T4 = BOOL T10
+  .sharp L0131 0016 T4 = JMPZ_EX T4 0031
+  .sharp L0131 0017 T13 = FETCH_DIM_R CV0($rows) int(1)
+  .sharp L0131 0018 T14 = ASSIGN CV2($match#2) T13
+  .sharp L0131 0019 T15 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp L0131 0020 T16 = SHARP_IS_TYPE T14 T15
+  .sharp L0131 0021 T16 = JMPZ_EX T16 0025
+  .sharp L0131 0022 T17 = COUNT CV2($match#2)
+  .sharp L0131 0023 T18 = IS_IDENTICAL T17 int(1)
+  .sharp L0131 0024 T16 = BOOL T18
+  .sharp L0131 0025 T16 = JMPZ_EX T16 0030
+  .sharp L0131 0026 T19 = FETCH_DIM_R CV2($match#2) int(0)
+  .sharp L0131 0027 T20 = ASSIGN CV3($match#3) T19
+  .sharp L0131 0028 T21 = TYPE_CHECK (long) T20
+  .sharp L0131 0029 T16 = BOOL T21
+  .sharp L0131 0030 T4 = BOOL T16
+  .sharp L0131 0031 VERIFY_RETURN_TYPE T4
+  .sharp L0131 0032 RETURN T4
+  .sharp L0131 0033 VERIFY_RETURN_TYPE
+  .sharp L0131 0034 RETURN null
   .sharp      ; (lines=61, args=1, vars=5, tmps=26)
   .sharp 0007 JMPNZ T5 0047
   .sharp 0019 JMPNZ T5 0049
@@ -898,6 +985,97 @@ Patterns: different opcodes and lines in 16 op arrays, same signatures in 1 clas
   .sharp 0031 RETURN null
   .sharp      11: 0017 - 0018 (tmp/var)
   .sharp      15: 0027 - 0029 (tmp/var)
+  .sharp      ; (lines=59, args=1, vars=4, tmps=26)
+  .sharp 0001 T5 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp 0002 T6 = SHARP_IS_TYPE CV0($value) T5
+  .sharp 0003 T6 = JMPZ_EX T6 0007
+  .sharp 0004 T7 = COUNT CV0($value)
+  .sharp 0005 T8 = IS_IDENTICAL T7 int(0)
+  .sharp 0006 T6 = BOOL T8
+  .sharp 0007 T4 = IS_IDENTICAL T6 bool(true)
+  .sharp 0008 JMPNZ T4 0045
+  .sharp 0009 T9 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp 0010 T10 = SHARP_IS_TYPE CV0($value) T9
+  .sharp 0011 T10 = JMPZ_EX T10 0015
+  .sharp 0012 T11 = COUNT CV0($value)
+  .sharp 0013 T12 = IS_IDENTICAL T11 int(1)
+  .sharp 0014 T10 = BOOL T12
+  .sharp 0015 T10 = JMPZ_EX T10 0020
+  .sharp 0016 T13 = FETCH_DIM_R CV0($value) int(0)
+  .sharp 0017 T14 = ASSIGN CV1($one) T13
+  .sharp 0018 T15 = TYPE_CHECK (long) T14
+  .sharp 0019 T10 = BOOL T15
+  .sharp 0020 T4 = IS_IDENTICAL T10 bool(true)
+  .sharp 0021 JMPNZ T4 0047
+  .sharp 0022 T16 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp 0023 T17 = SHARP_IS_TYPE CV0($value) T16
+  .sharp 0024 T17 = JMPZ_EX T17 0028
+  .sharp 0025 T18 = COUNT CV0($value)
+  .sharp 0026 T19 = IS_SMALLER_OR_EQUAL int(1) T18
+  .sharp 0027 T17 = BOOL T19
+  .sharp 0028 T17 = JMPZ_EX T17 0033
+  .sharp 0029 T20 = FETCH_DIM_R CV0($value) int(0)
+  .sharp 0030 T21 = ASSIGN CV2($match#1) T20
+  .sharp 0031 T22 = TYPE_CHECK (string) T21
+  .sharp 0032 T17 = BOOL T22
+  .sharp 0033 T17 = JMPZ_EX T17 0042
+  .sharp 0034 INIT_FCALL 2 112 string("array_slice")
+  .sharp 0035 SEND_VAR CV0($value) 1
+  .sharp 0036 SEND_VAL int(1) 2
+  .sharp 0037 V23 = DO_ICALL
+  .sharp 0038 T24 = ASSIGN CV3($rest) V23
+  .sharp 0039 T25 = SHARP_TYPE_ARGS string("List<string>")
+  .sharp 0040 T26 = SHARP_IS_TYPE T24 T25
+  .sharp 0041 T17 = BOOL T26
+  .sharp 0042 T4 = IS_IDENTICAL T17 bool(true)
+  .sharp 0043 JMPNZ T4 0049
+  .sharp 0044 JMP 0053
+  .sharp 0045 T27 = QM_ASSIGN int(0)
+  .sharp 0046 JMP 0055
+  .sharp 0047 T27 = QM_ASSIGN CV1($one)
+  .sharp 0048 JMP 0055
+  .sharp 0049 T28 = COUNT CV3($rest)
+  .sharp 0050 T29 = ADD int(100) T28
+  .sharp 0051 T27 = QM_ASSIGN T29
+  .sharp 0052 JMP 0055
+  .sharp 0053 T27 = QM_ASSIGN int(-1)
+  .sharp 0054 JMP 0055
+  .sharp 0055 VERIFY_RETURN_TYPE T27
+  .sharp 0056 RETURN T27
+  .sharp 0057 VERIFY_RETURN_TYPE
+  .sharp 0058 RETURN null
+  .sharp      24: 0039 - 0040 (tmp/var)
+  .sharp      27: 0054 - 0056 (tmp/var)
+  .sharp      ; (lines=35, args=1, vars=4, tmps=18)
+  .sharp 0006 T4 = JMPZ_EX T4 0016
+  .sharp 0009 T9 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp 0010 T10 = SHARP_IS_TYPE T8 T9
+  .sharp 0011 T10 = JMPZ_EX T10 0015
+  .sharp 0012 T11 = COUNT CV1($match#1)
+  .sharp 0013 T12 = IS_IDENTICAL T11 int(0)
+  .sharp 0014 T10 = BOOL T12
+  .sharp 0015 T4 = BOOL T10
+  .sharp 0016 T4 = JMPZ_EX T4 0031
+  .sharp 0017 T13 = FETCH_DIM_R CV0($rows) int(1)
+  .sharp 0018 T14 = ASSIGN CV2($match#2) T13
+  .sharp 0019 T15 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp 0020 T16 = SHARP_IS_TYPE T14 T15
+  .sharp 0021 T16 = JMPZ_EX T16 0025
+  .sharp 0022 T17 = COUNT CV2($match#2)
+  .sharp 0023 T18 = IS_IDENTICAL T17 int(1)
+  .sharp 0024 T16 = BOOL T18
+  .sharp 0025 T16 = JMPZ_EX T16 0030
+  .sharp 0026 T19 = FETCH_DIM_R CV2($match#2) int(0)
+  .sharp 0027 T20 = ASSIGN CV3($match#3) T19
+  .sharp 0028 T21 = TYPE_CHECK (long) T20
+  .sharp 0029 T16 = BOOL T21
+  .sharp 0030 T4 = BOOL T16
+  .sharp 0031 VERIFY_RETURN_TYPE T4
+  .sharp 0032 RETURN T4
+  .sharp 0033 VERIFY_RETURN_TYPE
+  .sharp 0034 RETURN null
+  .sharp      8: 0009 - 0010 (tmp/var)
+  .sharp      14: 0019 - 0020 (tmp/var)
   .php        ; (lines=60, args=1, vars=5, tmps=25)
   .php   L0098 0007 JMPNZ T5 0046
   .php   L0099 0019 JMPNZ T5 0048
@@ -1024,6 +1202,87 @@ Patterns: different opcodes and lines in 16 op arrays, same signatures in 1 clas
   .php   L0121 0028 RETURN T14
   .php   L0122 0029 VERIFY_RETURN_TYPE
   .php   L0122 0030 RETURN null
+  .php        ; (lines=55, args=1, vars=4, tmps=22)
+  .php   L0125 0001 T5 = TYPE_CHECK (array) CV0($value)
+  .php   L0125 0002 T5 = JMPZ_EX T5 0006
+  .php   L0125 0003 T6 = COUNT CV0($value)
+  .php   L0125 0004 T7 = IS_IDENTICAL T6 int(0)
+  .php   L0125 0005 T5 = BOOL T7
+  .php   L0125 0006 T4 = IS_IDENTICAL T5 bool(true)
+  .php   L0125 0007 JMPNZ T4 0041
+  .php   L0126 0008 T8 = TYPE_CHECK (array) CV0($value)
+  .php   L0126 0009 T8 = JMPZ_EX T8 0013
+  .php   L0126 0010 T9 = COUNT CV0($value)
+  .php   L0126 0011 T10 = IS_IDENTICAL T9 int(1)
+  .php   L0126 0012 T8 = BOOL T10
+  .php   L0126 0013 T8 = JMPZ_EX T8 0018
+  .php   L0126 0014 T11 = FETCH_DIM_R CV0($value) int(0)
+  .php   L0126 0015 T12 = ASSIGN CV1($one) T11
+  .php   L0126 0016 T13 = TYPE_CHECK (long) T12
+  .php   L0126 0017 T8 = BOOL T13
+  .php   L0126 0018 T4 = IS_IDENTICAL T8 bool(true)
+  .php   L0126 0019 JMPNZ T4 0043
+  .php   L0127 0020 T14 = TYPE_CHECK (array) CV0($value)
+  .php   L0127 0021 T14 = JMPZ_EX T14 0025
+  .php   L0127 0022 T15 = COUNT CV0($value)
+  .php   L0127 0023 T16 = IS_SMALLER_OR_EQUAL int(1) T15
+  .php   L0127 0024 T14 = BOOL T16
+  .php   L0127 0025 T14 = JMPZ_EX T14 0030
+  .php   L0127 0026 T17 = FETCH_DIM_R CV0($value) int(0)
+  .php   L0127 0027 T18 = ASSIGN CV2($match#1) T17
+  .php   L0127 0028 T19 = TYPE_CHECK (string) T18
+  .php   L0127 0029 T14 = BOOL T19
+  .php   L0127 0030 T14 = JMPZ_EX T14 0038
+  .php   L0127 0031 INIT_FCALL 2 112 string("array_slice")
+  .php   L0127 0032 SEND_VAR CV0($value) 1
+  .php   L0127 0033 SEND_VAL int(1) 2
+  .php   L0127 0034 V20 = DO_ICALL
+  .php   L0127 0035 T21 = ASSIGN CV3($rest) V20
+  .php   L0127 0036 T22 = TYPE_CHECK (array) T21
+  .php   L0127 0037 T14 = BOOL T22
+  .php   L0127 0038 T4 = IS_IDENTICAL T14 bool(true)
+  .php   L0127 0039 JMPNZ T4 0045
+  .php   L0127 0040 JMP 0049
+  .php   L0125 0041 T23 = QM_ASSIGN int(0)
+  .php   L0125 0042 JMP 0051
+  .php   L0126 0043 T23 = QM_ASSIGN CV1($one)
+  .php   L0126 0044 JMP 0051
+  .php   L0127 0045 T24 = COUNT CV3($rest)
+  .php   L0127 0046 T25 = ADD int(100) T24
+  .php   L0127 0047 T23 = QM_ASSIGN T25
+  .php   L0127 0048 JMP 0051
+  .php   L0128 0049 T23 = QM_ASSIGN int(-1)
+  .php   L0128 0050 JMP 0051
+  .php   L0128 0051 VERIFY_RETURN_TYPE T23
+  .php   L0128 0052 RETURN T23
+  .php   L0129 0053 VERIFY_RETURN_TYPE
+  .php   L0129 0054 RETURN null
+  .php        ; (lines=33, args=1, vars=4, tmps=16)
+  .php   L0131 0006 T4 = JMPZ_EX T4 0015
+  .php   L0131 0009 T9 = TYPE_CHECK (array) T8
+  .php   L0131 0010 T9 = JMPZ_EX T9 0014
+  .php   L0131 0011 T10 = COUNT CV1($match#1)
+  .php   L0131 0012 T11 = IS_IDENTICAL T10 int(0)
+  .php   L0131 0013 T9 = BOOL T11
+  .php   L0131 0014 T4 = BOOL T9
+  .php   L0131 0015 T4 = JMPZ_EX T4 0029
+  .php   L0131 0016 T12 = FETCH_DIM_R CV0($rows) int(1)
+  .php   L0131 0017 T13 = ASSIGN CV2($match#2) T12
+  .php   L0131 0018 T14 = TYPE_CHECK (array) T13
+  .php   L0131 0019 T14 = JMPZ_EX T14 0023
+  .php   L0131 0020 T15 = COUNT CV2($match#2)
+  .php   L0131 0021 T16 = IS_IDENTICAL T15 int(1)
+  .php   L0131 0022 T14 = BOOL T16
+  .php   L0131 0023 T14 = JMPZ_EX T14 0028
+  .php   L0131 0024 T17 = FETCH_DIM_R CV2($match#2) int(0)
+  .php   L0131 0025 T18 = ASSIGN CV3($match#3) T17
+  .php   L0131 0026 T19 = TYPE_CHECK (long) T18
+  .php   L0131 0027 T14 = BOOL T19
+  .php   L0131 0028 T4 = BOOL T14
+  .php   L0131 0029 VERIFY_RETURN_TYPE T4
+  .php   L0131 0030 RETURN T4
+  .php   L0131 0031 VERIFY_RETURN_TYPE
+  .php   L0131 0032 RETURN null
   .php        ; (lines=60, args=1, vars=5, tmps=25)
   .php   0007 JMPNZ T5 0046
   .php   0019 JMPNZ T5 0048
@@ -1154,6 +1413,88 @@ Patterns: different opcodes and lines in 16 op arrays, same signatures in 1 clas
   .php   0027 VERIFY_RETURN_TYPE T14
   .php   0028 RETURN T14
   .php        14: 0026 - 0028 (tmp/var)
+  .php        ; (lines=55, args=1, vars=4, tmps=22)
+  .php   0001 T5 = TYPE_CHECK (array) CV0($value)
+  .php   0002 T5 = JMPZ_EX T5 0006
+  .php   0003 T6 = COUNT CV0($value)
+  .php   0004 T7 = IS_IDENTICAL T6 int(0)
+  .php   0005 T5 = BOOL T7
+  .php   0006 T4 = IS_IDENTICAL T5 bool(true)
+  .php   0007 JMPNZ T4 0041
+  .php   0008 T8 = TYPE_CHECK (array) CV0($value)
+  .php   0009 T8 = JMPZ_EX T8 0013
+  .php   0010 T9 = COUNT CV0($value)
+  .php   0011 T10 = IS_IDENTICAL T9 int(1)
+  .php   0012 T8 = BOOL T10
+  .php   0013 T8 = JMPZ_EX T8 0018
+  .php   0014 T11 = FETCH_DIM_R CV0($value) int(0)
+  .php   0015 T12 = ASSIGN CV1($one) T11
+  .php   0016 T13 = TYPE_CHECK (long) T12
+  .php   0017 T8 = BOOL T13
+  .php   0018 T4 = IS_IDENTICAL T8 bool(true)
+  .php   0019 JMPNZ T4 0043
+  .php   0020 T14 = TYPE_CHECK (array) CV0($value)
+  .php   0021 T14 = JMPZ_EX T14 0025
+  .php   0022 T15 = COUNT CV0($value)
+  .php   0023 T16 = IS_SMALLER_OR_EQUAL int(1) T15
+  .php   0024 T14 = BOOL T16
+  .php   0025 T14 = JMPZ_EX T14 0030
+  .php   0026 T17 = FETCH_DIM_R CV0($value) int(0)
+  .php   0027 T18 = ASSIGN CV2($match#1) T17
+  .php   0028 T19 = TYPE_CHECK (string) T18
+  .php   0029 T14 = BOOL T19
+  .php   0030 T14 = JMPZ_EX T14 0038
+  .php   0031 INIT_FCALL 2 112 string("array_slice")
+  .php   0032 SEND_VAR CV0($value) 1
+  .php   0033 SEND_VAL int(1) 2
+  .php   0034 V20 = DO_ICALL
+  .php   0035 T21 = ASSIGN CV3($rest) V20
+  .php   0036 T22 = TYPE_CHECK (array) T21
+  .php   0037 T14 = BOOL T22
+  .php   0038 T4 = IS_IDENTICAL T14 bool(true)
+  .php   0039 JMPNZ T4 0045
+  .php   0040 JMP 0049
+  .php   0041 T23 = QM_ASSIGN int(0)
+  .php   0042 JMP 0051
+  .php   0043 T23 = QM_ASSIGN CV1($one)
+  .php   0044 JMP 0051
+  .php   0045 T24 = COUNT CV3($rest)
+  .php   0046 T25 = ADD int(100) T24
+  .php   0047 T23 = QM_ASSIGN T25
+  .php   0048 JMP 0051
+  .php   0049 T23 = QM_ASSIGN int(-1)
+  .php   0050 JMP 0051
+  .php   0051 VERIFY_RETURN_TYPE T23
+  .php   0052 RETURN T23
+  .php   0053 VERIFY_RETURN_TYPE
+  .php   0054 RETURN null
+  .php        23: 0050 - 0052 (tmp/var)
+  .php        ; (lines=33, args=1, vars=4, tmps=16)
+  .php   0006 T4 = JMPZ_EX T4 0015
+  .php   0009 T9 = TYPE_CHECK (array) T8
+  .php   0010 T9 = JMPZ_EX T9 0014
+  .php   0011 T10 = COUNT CV1($match#1)
+  .php   0012 T11 = IS_IDENTICAL T10 int(0)
+  .php   0013 T9 = BOOL T11
+  .php   0014 T4 = BOOL T9
+  .php   0015 T4 = JMPZ_EX T4 0029
+  .php   0016 T12 = FETCH_DIM_R CV0($rows) int(1)
+  .php   0017 T13 = ASSIGN CV2($match#2) T12
+  .php   0018 T14 = TYPE_CHECK (array) T13
+  .php   0019 T14 = JMPZ_EX T14 0023
+  .php   0020 T15 = COUNT CV2($match#2)
+  .php   0021 T16 = IS_IDENTICAL T15 int(1)
+  .php   0022 T14 = BOOL T16
+  .php   0023 T14 = JMPZ_EX T14 0028
+  .php   0024 T17 = FETCH_DIM_R CV2($match#2) int(0)
+  .php   0025 T18 = ASSIGN CV3($match#3) T17
+  .php   0026 T19 = TYPE_CHECK (long) T18
+  .php   0027 T14 = BOOL T19
+  .php   0028 T4 = BOOL T14
+  .php   0029 VERIFY_RETURN_TYPE T4
+  .php   0030 RETURN T4
+  .php   0031 VERIFY_RETURN_TYPE
+  .php   0032 RETURN null
 Signatures: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Accessors: same opcodes and lines in 15 op arrays, same signatures in 2 classes
 Parcel: same opcodes and lines in 3 op arrays, same signatures in 1 classes

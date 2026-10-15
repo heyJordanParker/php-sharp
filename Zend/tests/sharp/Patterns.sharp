@@ -120,4 +120,13 @@ class Patterns
         [Square, ...List<Circle> rest] => rest.count(),
         default => -1,
     };
+
+    public int listed(Any value) => match (value) {
+        [] => 0,
+        [int one] => one,
+        [string, ...List<string> rest] => 100 + rest.count(),
+        default => -1,
+    };
+
+    public bool rows(List<Any> rows) => rows is [[], [int]];
 }

@@ -120,4 +120,13 @@ class Patterns
         \is_array($shapes) && \count($shapes) >= 1 && (${'match#1'} = $shapes[0]) instanceof \Demo\Square && \is_array($rest = \array_slice($shapes, 1)) => \count($rest),
         default => -1,
     }; }
+
+    public function listed(mixed $value): int { return match (true) {
+        \is_array($value) && \count($value) === 0 => 0,
+        \is_array($value) && \count($value) === 1 && \is_int($one = $value[0]) => $one,
+        \is_array($value) && \count($value) >= 1 && \is_string(${'match#1'} = $value[0]) && \is_array($rest = \array_slice($value, 1)) => 100 + \count($rest),
+        default => -1,
+    }; }
+
+    public function rows(array $rows): bool { return \is_array($rows) && \count($rows) === 2 && (\is_array(${'match#1'} = $rows[0]) && \count(${'match#1'}) === 0) && (\is_array(${'match#2'} = $rows[1]) && \count(${'match#2'}) === 1 && \is_int(${'match#3'} = ${'match#2'}[0])); }
 }
