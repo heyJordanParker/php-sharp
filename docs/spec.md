@@ -716,7 +716,7 @@ public class OrderRecord
     public OrderRecord(public int id { get; }, public string number { get; }) { }
 }
 
-OrderRecord record = OrderRecord.parse(row);   // a class parses the same way: its main constructor's parameters, then every property an initializer may set
+OrderRecord record = OrderRecord.parse(row);   // a class parses the same way: its main constructor's parameters, then every property an initializer may set; throws: "id: expected int, got string 'abc'"
 ```
 
 ## 11. Generics
@@ -2987,7 +2987,7 @@ a ** b                       // int. Throws ArithmeticError at runtime when b < 
 
 **An `int` where a `float` is expected is a compile error in PHP# code,** wherever a value lands, such as an assignment, an argument, a return, a property write, a list or map element, or a generic `T` that is `float`, as in `Cell<float>`.
 
-<!-- example int-to-float: statements alone
+<!-- example int-to-float: statements alone 1-4,6
 int count = 3;
 int n = 2;
 -->
@@ -3120,8 +3120,8 @@ PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or
 ```csharp
 public class Ids
 {
-    public static int identity(Object value) => spl_object_id(value);   // compiles
-    public static int identityOf(Any value) => spl_object_id(value);    // compile error: Any may hold an int, and spl_object_id takes an object
+    public static int identity(Object value) => global.spl_object_id(value);   // compiles
+    public static int identityOf(Any value) => global.spl_object_id(value);    // compile error: Any may hold an int, and spl_object_id takes an object
 
     public static void sync(Object source)
     {

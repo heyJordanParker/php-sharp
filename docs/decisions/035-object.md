@@ -9,8 +9,8 @@
 ### Chosen: `Object`
 
 ```csharp
-public static int identity(Object value) => spl_object_id(value);   // compiles
-public static int identityOf(Any value) => spl_object_id(value);    // compile error: Any may hold an int, and spl_object_id takes an object
+public static int identity(Object value) => global.spl_object_id(value);   // compiles
+public static int identityOf(Any value) => global.spl_object_id(value);    // compile error: Any may hold an int, and spl_object_id takes an object
 Ids.identity(5);                                                    // compile error: 5 is not an object
 ```
 
@@ -19,7 +19,7 @@ It names the set PHP already checks when the code runs, so a signature tells pla
 ### Rejected: `AnyObject`
 
 ```csharp
-public static int identity(AnyObject value) => spl_object_id(value);   // not PHP#: Swift's name
+public static int identity(AnyObject value) => global.spl_object_id(value);   // not PHP#: Swift's name
 ```
 
 PHP developers already write `object`, and `AnyObject` is a new word for the same set.
