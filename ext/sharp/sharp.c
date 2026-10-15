@@ -3341,12 +3341,35 @@ static const sharp_type *sharp_class_value_type(const zend_string *value)
 	return type;
 }
 
+/* Whether the string `value` is a class value of `Class<type>`, for a `type` that is no class, spec section 25: the
+ * class value of a type that fits `type`, as the checker lets `Class<X>` fit `Class<Y>` when `X` fits `Y`, so a
+ * `Class<int|string>` takes `int`, `string` and `int|string`. The class value of such a type is the text `typeof` gives
+ * it, which reads only as typeof spells it, and that of a class is its name, `App\Order`, which reads as `App.Order`. */
+static bool sharp_class_value_fits(const zend_string *value, const sharp_type *type)
+{
+	zend_string *text = zend_string_init(ZSTR_VAL(value), ZSTR_LEN(value), false);
+	for (size_t i = 0; i < ZSTR_LEN(text); i++) {
+		if (ZSTR_VAL(text)[i] == '\\') {
+			ZSTR_VAL(text)[i] = '.';
+		}
+	}
+
+	sharp_type_reader reader = sharp_type_reader_of(ZSTR_VAL(text), ZSTR_LEN(text), zend_arena_create(1024));
+	reader.depth_left = SHARP_TYPE_INPUT_DEPTH;
+	sharp_type_node *given = sharp_type_read(&reader);
+	bool fits = given && reader.at == reader.end && !reader.names
+		&& sharp_type_argument_takes(type, given, '+', &reader);
+	zend_arena_destroy(reader.arena);
+	zend_string_release_ex(text, false);
+
+	return fits;
+}
+
 /* Whether the string `value` is a class value of `Class<type>`, spec section 11: it names `type`'s class or a class that
  * extends or implements it, and the type arguments it carries give that class type arguments `type` takes. A class name
  * plain PHP writes carries none, so it gives its class's bounds, as an object plain PHP creates does. A `Class` of a type
- * that is no class, as `Class<int>` or `Class<int|string>`, takes only the text `typeof` gives that type, spec section 25,
- * since `typeof(int|string)` is the string `int|string`. `Class<Any?>`, `Class<Object>` and a `Class` of a type parameter
- * no type argument resolves take any string. */
+ * that is no class, as `Class<int>` or `Class<int|string>`, takes what sharp_class_value_fits takes. `Class<Any?>`,
+ * `Class<Object>` and a `Class` of a type parameter no type argument resolves take any string. */
 static bool sharp_class_value_is(const zval *value, const sharp_type *type)
 {
 	if (Z_TYPE_P(value) != IS_STRING) {
@@ -3359,7 +3382,7 @@ static bool sharp_class_value_is(const zval *value, const sharp_type *type)
 		return true;
 	}
 	if (type->kind != SHARP_TYPE_NAMED || !type->class_name) {
-		return zend_string_equals(Z_STR_P(value), type->text);
+		return sharp_class_value_fits(Z_STR_P(value), type);
 	}
 
 	/* An autoloader runs here, and can throw. Its exception stands for the check. */

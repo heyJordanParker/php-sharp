@@ -23,9 +23,16 @@ try {
 }
 var_dump(Classes\ClassValues::exact('int'));
 var_dump(Classes\ClassValues::narrowed());
-foreach (['Classes\Badge', 'string|int', 'int'] as $given) {
+foreach (['int', 'string', 'int|string', 'Classes\Badge', 'float', 'string|int'] as $given) {
     try {
         var_dump(Classes\ClassValues::either($given));
+    } catch (TypeError $error) {
+        echo $error->getMessage(), "\n";
+    }
+}
+foreach (['Classes\GoldBadge', 'int', 'string'] as $given) {
+    try {
+        var_dump(Classes\ClassValues::badgeOrInt($given));
     } catch (TypeError $error) {
         echo $error->getMessage(), "\n";
     }
@@ -79,9 +86,15 @@ string(10) "int|string"
 Classes\ClassValues::either(): Argument #1 ($type) must be of type string, array given, called in %s on line %d
 string(3) "int"
 string(3) "int"
+string(3) "int"
+string(6) "string"
+string(10) "int|string"
 Classes\ClassValues::either(): Argument #1 ($type) must be of type Class<int|string>, string given, called in %s on line %d
 Classes\ClassValues::either(): Argument #1 ($type) must be of type Class<int|string>, string given, called in %s on line %d
 Classes\ClassValues::either(): Argument #1 ($type) must be of type Class<int|string>, string given, called in %s on line %d
+string(17) "Classes\GoldBadge"
+string(3) "int"
+Classes\ClassValues::badgeOrInt(): Argument #1 ($type) must be of type Class<(Classes.Badge|int)?>, string given, called in %s on line %d
 Classes\ClassValues::exact(): Argument #1 ($type) must be of type Class<int>, string given, called in %s on line %d
 bool(true)
 bool(false)

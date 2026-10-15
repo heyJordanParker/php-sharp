@@ -56,6 +56,8 @@ public class ClassValues
 
     public static Class<int> exact(Class<int> type) => type;
 
+    public static Class<(Badge|int)?> badgeOrInt(Class<(Badge|int)?> type) => type;
+
     public static Class<int|string> narrowed() => ClassValues.either(typeof(int));
 
     public static Crate<Badge> crate() => new Crate<Badge>();
