@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Serves sharp/hosts from php-fpm and from FrankenPHP's worker mode, and compares what each request prints with
+# sharp/hosts/expected/<host>.txt. php-fpm runs from the build sharp/bin/build makes, and FrankenPHP is built with Go
+# against the one sharp/bin/build --zts installs.
+usage() {
+  echo "usage: sharp/bin/hosts [--linux]" >&2
+  exit 2
+}
+
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+linux=false
+for arg in "$@"; do
+  case "$arg" in
+    --linux) linux=true ;;
+    *) usage ;;
+  esac
+done
+
+if $linux; then
+  exec "$root/sharp/docker/run" sharp/bin/hosts
+fi
+if [[ "$(uname -s)" != Linux ]]; then
+  echo "sharp/bin/hosts runs on Linux. Run sharp/bin/hosts --linux." >&2
+  exit 2
+fi
+
+build_dir="$root/sharp/build/linux-$(uname -m)"
+fpm="$build_dir/sapi/fpm/php-fpm"
+mago="$build_dir/mago/release/mago"
+install="$build_dir-zts/install"
+for needed in "$fpm:sharp/bin/build" "$mago:sharp/bin/test" "$install/bin/php-config:sharp/bin/build --zts"; do
+  if [[ ! -x "${needed%%:*}" ]]; then
+    echo "${needed%%:*} is missing. Run ${needed#*:} first." >&2
+    exit 1
+  fi
+done
+
+fixture="$root/sharp/hosts"
+composer install --no-interaction --no-progress --quiet --working-dir="$fixture"
+"$mago" --no-version-check --colors never --workspace "$fixture" compile
+
+# FrankenPHP v1.13.0's own build, as its go.sh runs it, without the modules that need C libraries the fixture doesn't
+# use.
+frankenphp="$build_dir-zts/frankenphp/frankenphp"
+if [[ ! -x "$frankenphp" || "$install/lib/libphp.so" -nt "$frankenphp" ]]; then
+  source="$build_dir-zts/frankenphp/source"
+  if [[ ! -d "$source" ]]; then
+    git clone --quiet --depth 1 --branch v1.13.0 https://github.com/php/frankenphp.git "$source"
+  fi
+  php_config="$install/bin/php-config"
+  # php-config names libphp's folder in neither flag, so the link and the binary's run-time search path name it. Go's
+  # build cache never reads the PHP headers a C file includes, so it lives in the build's folder and goes with it.
+  (cd "$source/caddy/frankenphp" \
+    && GOCACHE="$build_dir-zts/frankenphp/go-build" \
+      CGO_CFLAGS="$("$php_config" --includes)" \
+      CGO_LDFLAGS="-L$install/lib -Wl,-rpath,$install/lib $("$php_config" --ldflags) $("$php_config" --libs)" \
+      go build -tags nobadger,nomysql,nopgx,nowatcher,nobrotli -buildvcs=false -o "$frankenphp")
+fi
+
+# Each request prints its path and what the fixture answers. /types runs 1,000 times, and its memory line becomes
+# whether the memory after the 1,000th request is what it was after the 2nd.
+requests() {
+  local get="$1" path first second last
+  for path in / /; do
+    echo "GET $path"
+    "$get" "$path"
+  done
+  echo "GET /types, 1,000 times"
+  first="$("$get" /types)"
+  echo "${first%%$'\n'memory:*}"
+  second="$("$get" /types)"
+  for ((request = 3; request <= 1000; request++)); do
+    last="$("$get" /types)"
+  done
+  if [[ "${second##*memory: }" == "${last##*memory: }" ]]; then
+    echo "memory: the same after the 1,000th request as after the 2nd"
+  else
+    echo "memory: ${second##*memory: } after the 2nd request, ${last##*memory: } after the 1,000th"
+  fi
+  echo "GET /flood"
+  "$get" /flood
+  echo "GET /types"
+  last="$("$get" /types)"
+  echo "${last%%$'\n'memory:*}"
+  echo "GET /"
+  "$get" /
+}
+
+fpm_get() {
+  # cgi-fcgi prints the response's headers, a blank line, then its body.
+  SCRIPT_FILENAME="$fixture/public/index.php" REQUEST_METHOD=GET REQUEST_URI="$1" \
+    cgi-fcgi -bind -connect 127.0.0.1:9000 | tr -d '\r' | sed '1,/^$/d'
+}
+
+frankenphp_get() {
+  curl --silent --show-error --fail "http://127.0.0.1:8080$1"
+}
+
+# Waits for the host to listen, or fails when it exits or after 30 seconds. It asks for /types, which changes no line
+# the fixture prints.
+wait_for() {
+  for ((tenth = 0; tenth < 300; tenth++)); do
+    if "$@" > /dev/null 2>&1; then
+      return 0
+    fi
+    if ! kill -0 "$host_pid" 2> /dev/null; then
+      break
+    fi
+    sleep 0.1
+  done
+  echo "The host did not answer: $*" >&2
+  return 1
+}
+
+failed=()
+host_pid=
+trap '[[ -z "$host_pid" ]] || kill "$host_pid" 2> /dev/null || true' EXIT
+
+compare() {
+  local host="$1" output="$2"
+  if diff -u "$fixture/expected/$host.txt" <(echo "$output"); then
+    echo "== $host: every request printed what sharp/hosts/expected/$host.txt holds"
+  else
+    failed+=("$host")
+  fi
+}
+
+echo "== php-fpm"
+"$fpm" -n -y "$fixture/php-fpm.conf" &
+host_pid=$!
+wait_for fpm_get /types
+compare php-fpm "$(requests fpm_get)"
+kill "$host_pid"
+wait "$host_pid" 2> /dev/null || true
+host_pid=
+
+echo "== FrankenPHP, in worker mode"
+# Caddy keeps its state under these folders, which the build's folder holds.
+(cd "$fixture" \
+  && XDG_CONFIG_HOME="$build_dir-zts/frankenphp/config" XDG_DATA_HOME="$build_dir-zts/frankenphp/data" \
+    exec "$frankenphp" run --config Caddyfile) &
+host_pid=$!
+wait_for frankenphp_get /types
+compare frankenphp "$(requests frankenphp_get)"
+
+# The Caddyfile's second site runs four workers in one process, which share the engine's process-wide type tables.
+echo "== FrankenPHP, 400 requests over four workers, 32 at once"
+urls=()
+for ((request = 0; request < 400; request++)); do
+  urls+=(http://127.0.0.1:8081/types)
+done
+same="$(curl --silent --show-error --fail --parallel --parallel-max 32 "${urls[@]}" \
+  | grep -c '^types: the same after unserialize$' || true)"
+if [[ "$same" == 400 ]]; then
+  echo "== FrankenPHP's four workers: all 400 requests printed \"types: the same after unserialize\""
+else
+  echo "FrankenPHP's four workers: $same of 400 requests printed \"types: the same after unserialize\"" >&2
+  failed+=("FrankenPHP's four workers")
+fi
+
+if [[ ${#failed[@]} -gt 0 ]]; then
+  printf 'Failed: %s\n' "${failed[@]}" >&2
+  exit 1
+fi

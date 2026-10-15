@@ -1,3 +1,5 @@
+FROM public.ecr.aws/docker/library/golang:1.27-trixie AS golang
+
 FROM public.ecr.aws/docker/library/debian:trixie
 
 RUN apt-get update \
@@ -10,6 +12,7 @@ RUN apt-get update \
       curl \
       elan \
       git \
+      libfcgi-bin \
       php-cli \
       php-xml \
       pkg-config \
@@ -24,3 +27,9 @@ RUN apt-get update \
       libxml2-dev \
       libzip-dev \
  && rm -rf /var/lib/apt/lists/*
+
+# sharp/bin/hosts builds FrankenPHP with the Go its v1.13.0 release names, as sharp/docker/runtime/frankenphp.Dockerfile
+# does, and serves the fixture through php-fpm with libfcgi-bin's cgi-fcgi.
+COPY --from=golang /usr/local/go /usr/local/go
+ENV PATH=/usr/local/go/bin:$PATH \
+    GOTOOLCHAIN=local
