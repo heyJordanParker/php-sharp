@@ -1,6 +1,6 @@
 # Slice 12: Collections
 
-Spec section 12 (collections) and section 17's collection rules, with the section 5 rule one section 12 example needs and the section 30 rules the entries of a `Map` need. This note is the design only. team-lead approves it before anyone builds.
+Spec section 12 (collections) and section 17's collection rules, with the section 5 rule one section 12 example needs and the section 30 rules the entries of a `Map` need. team-lead approved this design with the answers each question records.
 
 ## The answer first
 
@@ -28,32 +28,39 @@ The Slice builds all of it in one PR across `sharp/mago/`, the engine and the st
 
 When the Slice lands, all six entries leave `sharp/baseline/spec`: §12 `index-rules`, `iterables`, `map-string-keys`, `set-variable-arguments` and `yield`, and §17 `map-values`. With question 1 answered as proposed, the §30 `tuples` entry leaves too, and the PR writes `Completes: §12, §17, §30`. Every error the spec run shows for `tuples` today is a tuple parse error, and a parse error hides the analysis of the rest of its file, so its other lines are unconfirmed until the parse is built.
 
-## Questions for team-lead
+## Questions team-lead answered
 
-Each decides what a user writes. Each has a proposal, which the rest of this note assumes.
+Each decides what a user writes. Each has its proposal and its answer, which the rest of this note follows.
 
 1. **A `Map`'s entries are tuples, and tuples do not exist yet.** Spec lines "`for (const entry of plans) { … } // entry is a [string, Plan] tuple`", "A `Map<TKey, TValue>` is an `Iterable<[TKey, TValue]>` of its entries" and "A list literal passed where a `Set` or a tuple is expected becomes one". Section 30's tuple types, literals and unpacking are parse errors today (§30 `tuples` is listed). Refusing `for (const entry of plans)` until then is not possible: `for-of` passes on master, and `SPEC_GUARD` fails a pull request that lists an example the base checked.
    - **Proposed:** the Slice builds section 30 whole, because a tuple a user cannot unpack or read is no use. A tuple type `[Money, int]` or `[Money total, int count]` is mago's sealed list shape, shown in messages as written. A list literal becomes a tuple where a tuple is declared. `const [a, b] = t` unpacks it, and `t.total` reads a named element. At run time a tuple is a PHP list. A single loop variable over a `Map` is the tuple `[TKey, TValue]`, and a `Map` that lands in an `Iterable<T>` place gives its entries. The PR writes `Completes: §12, §17, §30`.
    - Build only the `Map` entry: a single loop variable is typed `[TKey, TValue]`, and every tuple type, literal and unpacking stays a parse error until a section 30 Slice. `entry` can then only be passed on.
    - A section 30 Slice lands first, and this PR waits for it.
+   - **Answered: as proposed.** A tuple type is the CST's `TupleHint` of `TupleElementHint`s, and codex's `TList` of its element types with `tuple_names`. A local declaration's `target` is a `LocalTarget`, a name or a `LocalUnpack`. A PHP# `Iterable<T>` is a `TIterable` with `map_entries`, so a `Map` held as one gives `[TKey, TValue]`. The engine reads the type text `[A, B]`: a PHP list of exactly that length whose elements hold their types.
 2. **`List.get(i)` and `List.set(i, v)` stay as second names.** Spec lines "`x.getOrNull(i)` is the safe read" and "`x[i] = v` on a `List` replaces the element at `i`". Master has `get` and `set` on `List` from the old spec, which the spec no longer names anywhere. Section 12's other uses of `.get(` are on a `Map`.
    - **Proposed:** both are deleted, with no alias, as decision 5 of `12-collection-methods.md` deleted a `Map`'s interim `delete` and `filterValues`. Every use moves to `getOrNull` and the index write: the `.get(` and `.set(` calls of 10 engine test sources (21 calls, a `Map`'s `get` among them), and the mago tests. A `Map`'s `get` stays.
    - Keep both beside the spec's forms.
+   - **Answered: as proposed.**
 3. **`items[i] ?? fallback` where the element type is nullable.** Spec line "`x[i] ?? fallback` is a compile error that names `getOrNull`".
    - **Proposed:** a compile error for every element type, because the `??` reads as a guard against a missing index, which it never is. The help writes `items.getOrNull(i) ?? fallback`, which covers a missing index and a stored null alike.
    - Allowed on a `List<T?>`, where `??` handles a stored null, as Kotlin's `list[i] ?: 0` compiles on a `List<Int?>` and still throws on a missing index.
+   - **Answered: as proposed,** since the spec line covers every element type.
 4. **`?? continue` in a loop's own condition.** Spec line "`a ?? throw …`, `a ?? return`, `a ?? continue` and `a ?? break`: leave when `a` is null." Answer 2 of #131 lets it stand wherever `?? throw` stands. Observed: `while (this.next() ?? continue) { … }`, `do { … } while (this.next() ?? continue);` and `for (let i = 0; this.next() ?? continue; i++) { … }` each called `next()` 5 times for 2 passes, while `next()` gave null 3 times. So a source that stays null spins forever. `while (this.next() ?? break)` ended the loop at the first null.
    - **Proposed:** a compile error in the condition of the loop it would continue: "`?? continue` in a loop's condition runs the condition again until the value is not null: use `?? break` to end the loop, or test the value in the body." Section 17 gains that line. Rust refuses an unlabeled `continue` in a `while` condition (E0590). `?? break` there stays allowed.
    - Keep it, and section 17 gains a line that says it runs the condition again.
+   - **Answered: keep it.** Section 14.4 lets `?? continue` stand wherever `?? throw` stands, and it skips to the loop's next check, as `continue` does anywhere in the loop. Section 17 gains that line and the `continue-in-condition` example, with a row for `while`, `do` and `for`.
 5. **`is`, `as` and `match` on an `Iterable<T>`.** Spec lines "`as` to a collection type checks every element too" (section 12) and section 21's type tests. A lazy source can be checked only by reading it, and the engine's `sharp_type_holds` holds any `Traversable` for `Iterable<Order>` without reading it.
    - **Proposed:** `value is Iterable<Any?>` tests that the value is iterable. A test of `Iterable<T>` for any other `T` is a compile error: "`is Iterable<Order>` would read the source to check its elements: test `is Iterable<Any?>`, or hold it as an `Iterable<Order>`, which checks each element as it is read."
    - True for any `Traversable`, with an array's elements checked, as the engine does today.
+   - **Answered: a PHP# `Iterable` carries its element type,** as every PHP# generic does, following #131's "a plain PHP closure is never a `Function<…>`". `is Iterable<Order>` reads the carried type and no element, as C#'s reified `is IEnumerable<Order>` does: a PHP# generator's `Iterable<T>`, a check stage's `T`, a map stage's lambda return type, and every other stage its source's. A plain PHP `Traversable` is only an `Iterable<Any?>`. A collection is checked whole.
 6. **`string.parseCsv()`, which the `yield` example calls.** Spec line "`yield line.parseCsv(); // compiles: each row is a List<string>`" and "The complete method list is specified with the standard library."
    - **Proposed:** the standard library gains `public List<string> parseCsv()` in `Sharp.Text.Text`'s `extension(string text)` block, beside `trim()`. It runs `global.str_getcsv(text, ",", "\"", "")`, and a blank line gives `[""]`, because PHP gives `[null]` there.
    - A harness extension only, so the standard library gains no name the spec does not list.
+   - **Answered: as proposed.**
 7. **How far section 5's `private` default reaches in this Slice.** Spec line "`private`: this class. This is the default for members outside an interface." `map-string-keys` writes `void reserve(string sku, int count) { … }`. The checker refuses a method, a property, a constant and a named constructor without a modifier as "not supported yet".
    - **Proposed:** methods only, the one kind section 12 needs. PR #132 changes the property refusal, and §24 `naming-cases` holds the constant one.
    - Every member kind in one rule, since the spec states it once. It conflicts with #132 in `is_slice_property`.
+   - **Answered: methods only.** #132 owns properties, and §24 `naming-cases` owns constants.
 
 ## Decisions team-lead approves
 
@@ -69,9 +76,9 @@ Each decides what a user writes. Each has a proposal, which the rest of this not
    - `php_shape`'s `tested` keeps `x[k] ?? null` for a `Map` index only, so `is`, `as` and `match` read a `List` index bare.
    - So `rows[0]?.add(5)` on a `List<List<int>>` becomes section 14.4's needless null check, a compile error, and on a `List<List<int>?>` it skips a null element and throws on a missing index. A `Map` read keeps every quiet form.
 4. **`getOrNull` and `toSet` are inlined, and `values` runs on the engine.** `("List", "getOrNull")` and `("List", "toSet")` join `INLINED_COLLECTION_METHODS`, as `last` is there. `getOrNull(i)` lowers to `($list[$i] ?? null)`, and `toSet()` to `new \Sharp\Set($list)`, the form a `Set` literal takes. A `Map`'s `values()` runs on `Sharp\Collection::values`, beside `keys`, which `sharp_collection_keys` gives.
-5. **A `Set` parameter takes a `List` only as a literal.** `verify_argument_type` widens a `Set` parameter to a `List` of its elements (`arguments.rs:377`). It will do so only for a list literal argument. Every place that expects a `Set` and gets a `List`, an argument, a local, a return or a property, adds the help "write `picked.toSet()`".
-6. **A collection keys a `Map` and joins a `Set` when its elements have `==`,** as section 19 says. The checker's key rule accepts a `List`, `Map` or `Set` whose elements have `==` and a hash, and its message lists collections. The engine needs no change: `sharp_hash` already hashes an array by its elements in order and a `Map` or `Set` by its entries in any order, and `sharp_equal` compares them (`sharp_table.c`, lines 309 to 337 and `sharp_equal_arrays`), for a collection inside a struct key. A stored `Map` or `Set` key is shared, so a later write to the original separates the writer, and the key never changes.
-7. **A lazy plain PHP source is checked as it is read.** Every crossing runs through `sharp_type_accepts`, which already turns an `int` into a `float` in place. Its `Iterable` arm will put a `Sharp\Sequence` that checks each element against `T` in place of a `Traversable`, so a bad element throws `TypeError` at the loop that reads it. An array is checked whole, as today.
+5. **A `Set` place takes a `List` only as a literal.** `verify_argument_type` widens a `Set` parameter to a `List` of its elements (`arguments.rs:377`). It will do so only for a list literal argument. Every place that expects a `Set` and gets a `List` variable, an argument, a local, a return or a property, is the compile error "A `List` is not a `Set`: write `picked.toSet()`." Plain PHP may still pass a list to a PHP# `Set` parameter, which the method makes a `Set` before its body runs.
+6. **A collection keys a `Map` and joins a `Set` when its elements have `==`,** as section 19 says. The checker's key rule accepts a `List`, `Map` or `Set` whose every type argument has `==` and `hash()`, and its message names them. The engine needs no change: `sharp_hash` already hashes an array by its elements in order and a `Map` or `Set` by its entries in any order, and `sharp_equal` compares them (`sharp_table.c`, lines 309 to 337 and `sharp_equal_arrays`), for a collection inside a struct key. A stored `Map` or `Set` key is shared, so a later write to the original separates the writer, and the key never changes.
+7. **A lazy plain PHP source is checked as it is read.** Every crossing runs through `sharp_type_accepts`, which already turns an `int` into a `float` in place. Its `Iterable` arm will put a `Sharp\Sequence` that checks each element against `T` in place of a `Traversable`, so a bad element throws `TypeError` at the loop that reads it. An array, a `Sharp\Set` and a `Sharp\Map` are checked whole, and a `Sharp\Map` is then read through a `Sharp\Sequence` of its entries.
 8. **Section 5's default reaches methods** (question 7). `scan_method` gives a `.sharp` method without a modifier `Visibility::Private`, as `scan_properties` does (`property.rs:241`). The bridge gives it `ZEND_ACC_PRIVATE`, as `Lowering::property` does (`lower.rs:2699`). `is_slice_method` loses its refusal, and `Lowering::method` its `unreachable!`.
 9. **`=>` in a literal names its replacement.** "`EqualGreaterThan` is PHP syntax that PHP# does not have" will read "PHP# writes a `Map` entry as `key: value`: `=>` is the lambda arrow."
 10. **Decisions 026 and 033 match the spec.** 026 still says `lines[0] = line` is a compile error, names `set`, and has a `Map` loop give values. 033 still says a `Map` is an `Iterable<TValue>`.
@@ -198,7 +205,7 @@ The states are **works**, **refused** (an error that names the feature as missin
 | L12 | `while`, `do … while` and C's `for` keep their form | works | none | |
 | L13 | PHP's `foreach` is removed | works: "`foreach` is PHP syntax: PHP# loops over a collection with `for … of`" | none | |
 | L14 | every body is written in braces | works: `braces` passes | none | |
-| L15 | (no line) `?? continue` in a loop's condition | runs the condition again while the value is null | checker, and a spec line (question 4) | the `Leave` check of #131 |
+| L15 | (no line) `?? continue` in a loop's condition | runs the condition again while the value is null | a spec line (question 4) | the `Leave` check of #131 |
 
 ## The six failing examples
 
@@ -255,8 +262,10 @@ sharp/mago/crates/
 ├── syntax/
 │   ├── src/cst/cst/yield.rs              <- Yield::Spread(YieldSpread), ported
 │   ├── src/parser/internal/yield.rs      <- `yield ...expr` in a .sharp file, ported
-│   ├── src/parser/internal/type_hint.rs  <- a tuple type, `[Money, int]` and `[Money total, int count]` (Q1)
-│   ├── src/parser/internal/statement.rs  <- `const [a, b] = t` unpacks a tuple (Q1)
+│   ├── src/cst/cst/type_hint.rs, src/parser/internal/type_hint.rs
+│   │                                     <- TupleHint: `[Money, int]` and `[Money total, int count]` (Q1)
+│   ├── src/cst/cst/local_declaration.rs, src/parser/internal/local_declaration.rs, statement.rs
+│   │                                     <- LocalTarget: `const [a, b] = t` unpacks a tuple (Q1)
 │   ├── src/cst/node.rs, src/walker/mod.rs, src/utils/mod.rs
 │   │                                     <- the new nodes; yields found inside for-of and match, ported
 │   ├── src/utils/pattern.rs              <- tested: `?? null` on a Map index only (decision 3)
@@ -265,8 +274,9 @@ sharp/mago/crates/
 │                                            CHANGING_COLLECTION_METHODS loses "set" (Q2)
 ├── names/src/internal/walker.rs          <- the new nodes in each walk, ported
 ├── codex/
-│   ├── src/scanner/ttype.rs              <- Iterable<T>, ported; a tuple type as a sealed list shape (Q1)
+│   ├── src/scanner/ttype.rs              <- Iterable<T>, ported; a tuple type as a TList with tuple_names (Q1)
 │   ├── src/scanner/function_like.rs      <- scan_method: a .sharp method without a modifier is private (decision 8)
+│   ├── src/ttype/atomic/                 <- TList.tuple_names; TIterable.map_entries, PHP#'s Iterable<T> (Q1)
 │   └── src/ttype/comparator/             <- a List and a Set are contained by Iterable<T>; a Map by
 │                                            Iterable<[K, V]>
 ├── prelude/assets/extensions/sharp.php   <- ListMethods gains getOrNull(int): ?T and toSet(): Set<T>, loses get
@@ -275,8 +285,8 @@ sharp/mago/crates/
 ├── semantics/
 │   ├── src/internal/checker/sharp.rs     <- check_yield and check_iterator_returns, ported; is_slice_method
 │   │                                        loses the modifier refusal; the collection key rule takes a
-│   │                                        collection of keys with ==; `?? continue` in its loop's
-│   │                                        condition (Q4); `is Iterable<T>` (Q5)
+│   │                                        collection of keys with ==; a tuple past four elements
+│   │                                        suggests a struct, and holds no `void` (Q1)
 │   └── tests/sharp.rs                    <- rows for each
 ├── analyzer/
 │   ├── src/expression/yield.rs           <- each yielded value checked against T; `yield ...` named, ported
@@ -288,7 +298,10 @@ sharp/mago/crates/
 │   │                                        (decision 3)
 │   ├── src/invocation/arguments.rs       <- a Set parameter takes a List literal only; toSet() help (C34)
 │   ├── src/resolver/method.rs            <- an Iterable place resolves on IterableMethods, ported
-│   ├── src/statement/loop/mod.rs         <- a single loop variable over a Map is [TKey, TValue] (Q1)
+│   ├── src/resolver/property.rs          <- `summary.total` reads a tuple element by its name (Q1)
+│   ├── src/statement/mod.rs              <- `const [a, b] = t` gives each local its element type (Q1)
+│   ├── src/statement/loop/mod.rs         <- a single loop variable over a Map is [TKey, TValue]; `[a, b]`
+│   │                                        unpacks each two-element tuple of any other collection (Q1)
 │   ├── src/utils/names.rs                <- Iterable<T> and tuples in messages, ported
 │   └── tests/sharp.rs                    <- one test per rule, forms as rows
 └── sharp-bridge/
@@ -297,15 +310,20 @@ sharp/mago/crates/
     │                                        collection_call lowers getOrNull and toSet; YIELD, YIELD_FROM
     │                                        and the generator flag, ported; one \Sharp\Sequence::from per
     │                                        chain, ported; method() gives a missing modifier
-    │                                        ZEND_ACC_PRIVATE; a Map entry and a tuple as a PHP list (Q1)
-    ├── src/lower/types.rs                <- call_target finds the lazy operations, ported
+    │                                        ZEND_ACC_PRIVATE; a Map entry and a tuple as a PHP list, a
+    │                                        named element as its index, a Map in an Iterable place as
+    │                                        \Sharp\Sequence::from (Q1)
+    ├── src/lower/types.rs                <- call_target finds the lazy operations, ported; the type text
+    │                                        `[A, B]`
     └── tests/lower.rs                    <- one test per lowering form
 
 ext/sharp/
 ├── sharp.c                               <- Sharp\Sequence, ported; Sharp\Collection::values;
 │                                            sharp_type_accepts wraps a Traversable for Iterable<T> in a
 │                                            checking Sequence (decision 7); sharp_collection_read_dimension
-│                                            loses its BP_VAR_IS read
+│                                            loses its BP_VAR_IS read; the tuple type `[A, B]`; a Sequence
+│                                            reads a Sharp\Map's entries; carried Iterable types (Q5)
+├── php_sharp.h                           <- SHARP_TYPE_TUPLE (Q1)
 ├── sharp.stub.php, sharp_arginfo.h       <- Sharp\Sequence and Collection::values; regenerated
 └── sharp_unit.h                          <- regenerated by sharp-bridge/build.rs
 Zend/
@@ -313,13 +331,19 @@ Zend/
 │                                            ZEND_DIM_IS arms for a PHP# index
 └── tests/sharp/
     ├── sequence.inc, sequence.phpt, sequence_jit_function.phpt, sequence_jit_tracing.phpt   <- ported
-    ├── Import.sharp, Import.inc, yield.phpt                                                 <- ported
+    ├── Import.sharp, yield.phpt                                                             <- ported
     ├── Grid.sharp, IndexRead.sharp, Larder.sharp, Point.sharp, index_changes.{inc,phpt}     <- a missing index
     │                                     before ?. throws; the index write and +=, ++ and --
     ├── CollectionMethods.sharp, collection_methods.{inc,phpt}, collection_methods_jit_*.phpt
     │                                     <- getOrNull, toSet, values; get and set moved (Q2)
     ├── Crossings.sharp, collection_crossings.phpt
-    │                                     <- a lazy plain PHP source checked as it is read
+    │                                     <- a lazy plain PHP source checked as it is read; a PHP list
+    │                                        entering a tuple; a Map entering an Iterable as its entries
+    ├── Collections.sharp, Collections.inc, collections.phpt, opcodes.phpt
+    │                                     <- a tuple's named read, unpack and loop, with their PHP twin
+    ├── ControlFlow.sharp, ControlFlow.inc, Members.sharp, Members.inc, for_of.phpt, harness/Prices.inc
+    │                                     <- a loop over a Map reads its key and value; a value-only loop
+    │                                        reads a List
     ├── StructKeys.sharp, struct_keys.phpt
     │                                     <- a List, Map and Set key, two equal keys in two orders
     └── the other sources that call List get or set (Q2): EnumKeys, Inbox, MixedKeys, Operators, Roster,
@@ -327,7 +351,8 @@ Zend/
 sharp/composer/library/Sharp/Text/Text.sharp
                                           <- string.parseCsv() (Q6)
 docs/
-├── spec.md                               <- §17 gains the ?? continue line (Q4)
+├── spec.md                               <- §17 gains the ?? continue line (Q4); the index-rules write claim;
+│                                            the tuples example runs in Order and reads its fields with this.
 ├── decisions/026-collection-operations.md, 033-iterable.md
 │                                         <- match the spec (decision 10)
 └── architecture/slices/12-collections.md <- this note
@@ -341,7 +366,7 @@ team-lead approves these. Everything not here is tactical.
 
 - **PHP# names, all from the spec:** `List.getOrNull(int index): T?`, `List.toSet(): Set<T>`, `Map.values(): List<TValue>`, `Iterable<T>` with `filter`, `map`, `take` and `toList`, `yield value;`, `yield ...other;`, and section 30's tuple types. Question 2 deletes `List.get` and `List.set`. Question 6 adds `string.parseCsv(): List<string>`.
 - **Engine names plain PHP can see:** the final class `Sharp\Sequence`, which plain PHP gets back where a PHP# `Iterable` it holds reaches it, and `Sharp\Collection::values()`. `Sharp\Collection` has a private constructor, and so does `Sharp\Sequence`.
-- **mago names:** the CST node `YieldSpread` and its `NodeKind.php` entry, and the prelude class `Sharp\IterableMethods`, beside `Sharp\ListMethods`, `Sharp\MapMethods` and `Sharp\SetMethods`.
+- **mago names:** the CST nodes `YieldSpread`, `TupleHint`, `TupleElementHint`, `LocalTarget` and `LocalUnpack`, with their `NodeKind.php` entries, `LocalDeclaration.target` in place of `LocalDeclaration.name`, codex's `TList.tuple_names` and `TIterable.map_entries`, and the prelude class `Sharp\IterableMethods`, beside `Sharp\ListMethods`, `Sharp\MapMethods` and `Sharp\SetMethods`.
 
 The slate for the engine class, called as `\Sharp\Sequence::from($orders)->filter($f)->take(100)->toList()`:
 
@@ -368,7 +393,8 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 - C39 to C45, ported and grown: `Iterable` places, a `List`, a `Set` and a `Map` landing in one, `rows[0]` refused, the lazy operations' types, a plain PHP class keeping its methods.
 - C46 to C52, ported: `yield` in each place it stands and is refused, with each message.
 - Q1: a tuple type, literal, unpacking and named read, and a single loop variable over a `Map` typed `[TKey, TValue]`.
-- Q4 and Q5: `?? continue` in each loop's condition refused and in its body allowed; `is Iterable<Any?>` compiles and `is Iterable<Order>` is refused.
+- Q4: section 17's `continue-in-condition` example runs `?? continue` in the condition of a `while`, a `do` and a `for`, and counts the passes.
+- Q5: `is Iterable<Order>` reads the type a PHP# generator, a check stage and a map stage carry, and a plain PHP `Traversable` is only an `Iterable<Any?>`.
 - Rule 13: a method without a modifier is private, and a call from outside its class is refused.
 
 **mago, `crates/sharp-bridge/tests/lower.rs`:** one test per lowering form: the index write through `set` on each kind of place, with the index read once; `getOrNull`; `toSet`; `values`; a `List` index before `?.`, `is` and `as` read bare; `yield` and `yield ...`; one `\Sharp\Sequence::from` per chain; a private method; a tuple and a `Map` entry.
@@ -378,17 +404,19 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 - `index_changes`: a missing index before `?.`, `is` and `as` throws; a null element still skips; the index write replaces on a local, a property and a hooked property, whose `set` runs once, and throws past the end and at `-1`.
 - `collection_methods`: `getOrNull` past the end and at `-1`, `toSet` deduplicating, `values` in insertion order.
 - `sequence` and `yield`, ported: reads counted on 10000 rows, a source that fails, `toList` numbering, a body that runs only at the loop.
-- `collection_crossings`: a plain PHP generator held as an `Iterable<Order>` throws at its third element and not before.
+- `collection_crossings`: a plain PHP generator held as an `Iterable<Order>` throws at its third element and not before; a PHP list enters a tuple only at its length with its element types; a `Map` enters an `Iterable<[string, int]>` as its entries, from plain PHP and from PHP#.
+- `collections`: a tuple's named read, its unpack, and a loop that unpacks each tuple.
 - `struct_keys`: a `List`, a `Map` and a `Set` as keys, two equal `Map` keys written in two orders, and an original changed after it was stored.
 
-`sharp/bin/test --spec` then shows every section 12 and 17 example passing, and a plain PHP project's analysis stays byte-identical, because every change is in the `.sharp` dialect.
+`sharp/bin/test --spec` then shows every section 12, 17 and 30 example passing, and a plain PHP project's analysis stays byte-identical, because every change is in the `.sharp` dialect.
 
 # What the Slice refuses as "not supported yet", and why
 
-Nothing in sections 12 and 17. With question 1 answered another way, a tuple type and unpacking stay refused until section 30's Slice.
+Nothing in sections 12, 17 and 30.
 
 # Found outside the Slice
 
 - **Ruling 7.6 of `12-collection-methods.md` no longer holds.** Its source lines ("The same holds for a `List` index") left the spec in `cc3258a319`. Decision 3 deletes what it built, and that note's ruling stays as the record of why it was built.
 - **`sortedBy` refuses an enum key:** "`sortedBy` orders numbers, strings and classes that declare `operator <=>`, and `Status` is none of them." Section 19 decides whether an enum orders, not section 12.
 - **Section 5's default for properties, constants and named constructors** stays refused as "not supported yet" (question 7).
+- **A plain PHP `array` is a `Map<int|string, Any?>`,** so one loop variable over it is the entry `[int|string, Any?]`, as over any `Map`, and `for (const [i, item] of rows)` reads its keys and values. A plain PHP result documented `list<T>` is a `List<T>`, whose loop variable is each element.

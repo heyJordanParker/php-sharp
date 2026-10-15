@@ -1817,6 +1817,20 @@ These keep their C and PHP form:
 
 PHP's `foreach` is removed.
 
+**`?? continue` in a loop's own condition skips to the loop's next check,** as `continue` does anywhere in the loop (section 14.4). The condition runs again, so the body runs only for a value that is not null, and `?? break` ends the loop at the first null instead. A source that stays null keeps the loop running, as `while (true) { continue; }` does.
+
+<!-- example continue-in-condition: statements in Feed
+private int calls = 0;
+private bool? next() { this.calls += 1; return this.calls % 3 == 0 ? null : this.calls < 7; }
+let passes = 0;
+-->
+```csharp
+while (this.next() ?? continue) { passes += 1; }                // a null runs the condition again
+do { passes += 1; } while (this.next() ?? continue);
+for (let i = 0; this.next() ?? continue; i++) { passes += 1; }  // a null runs i++, then the condition
+passes;                                                          // 5
+```
+
 **The body of every `if`, `else`, `while`, `do` and `for` is written in braces,** as in Go, Rust and Swift, and as PSR-12 requires of PHP. A body without braces is a compile error:
 
 <!-- example braces: statements
