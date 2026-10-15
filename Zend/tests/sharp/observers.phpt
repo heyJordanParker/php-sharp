@@ -1,5 +1,5 @@
 --TEST--
-PHP# willSet and didSet run only once the object is built: after its constructor returns, on a method's write and plain PHP's, an unchanged value's included, and never on an initial value, a constructor's write, a named constructor's or a with copy's; an initial value fills the storage without the set body, which a write in the constructor runs
+PHP# willSet and didSet run only once the object is built: after its constructor and any object initializer finish, on a method's write and plain PHP's, an unchanged value's included, and never on an initial value, a constructor's write, a named constructor's, an object initializer's or a with copy's, even when a named constructor's body throws; an initial value fills the storage without the set body, which a write in the constructor runs
 --FILE--
 <?php
 
@@ -29,9 +29,29 @@ echo "copy\n";
 $copy = $account->copied();
 echo $copy->name, ' ', $copy->balance, ' ', $account->balance, "\n";
 
-// An object initializer writes once the constructor returned, so its write runs the observer.
+// The object is built once the constructor and its object initializer have finished, so the initializer's write runs
+// no observer, and a later write does.
 echo "initializer\n";
-echo Observed\Tally::started()->count, "\n";
+$started = Observed\Tally::started();
+echo $started->count, "\n";
+$started->count = 6;
+
+// A named constructor whose body throws puts back the mark it found, so a later write runs the observer.
+echo "throws\n";
+try {
+    Observed\Tally::failing();
+} catch (RuntimeException $e) {
+    echo $e->getMessage(), "\n";
+}
+Observed\Tally::last()->count = 7;
+
+// An initializer inside a named constructor builds its own object, and both are built once the named constructor
+// returns, so later writes of each run the observer.
+echo "paired\n";
+$paired = Observed\Tally::paired();
+echo $paired->count, ' ', Observed\Tally::last()->count, "\n";
+$paired->count = 8;
+Observed\Tally::last()->count = 9;
 
 // A static's initial value ran no observer, and a later write runs it.
 echo "static\n";
@@ -59,8 +79,15 @@ copy
 set [  copy  ]
 copy 9 6
 initializer
-count 3
 3
+count 6
+throws
+failed
+count 7
+paired
+4 2
+count 8
+count 9
 static
 opened 3
 3

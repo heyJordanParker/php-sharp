@@ -355,7 +355,7 @@ typedef struct _zend_oparray_context {
 /* objects' type arguments, see ext/sharp                 |     |     |     */
 #define ZEND_ACC_SHARP_GENERIC           (1U << 31) /* X  |     |     |     */
 /*                                                        |     |     |     */
-/* Function Flags (unused: none)                          |     |     |     */
+/* Function Flags (unused: 30)                            |     |     |     */
 /* ==============                                         |     |     |     */
 /*                                                        |     |     |     */
 /* Function returning by reference                        |     |     |     */
@@ -418,11 +418,6 @@ typedef struct _zend_oparray_context {
 /*                                                        |     |     |     */
 /* has #[\NoDiscard] attribute                            |     |     |     */
 #define ZEND_ACC_NODISCARD               (1 << 29) /*     |  X  |     |     */
-/*                                                        |     |     |     */
-/* PHP#: a named constructor's body, a closure that still |     |     |     */
-/* builds its $this, so its writes run no observer, see   |     |     |     */
-/* ext/sharp                                              |     |     |     */
-#define ZEND_ACC_SHARP_BUILDS            (1 << 30) /*     |  X  |     |     */
 /*                                                        |     |     |     */
 /* op_array uses strict mode types                        |     |     |     */
 #define ZEND_ACC_STRICT_TYPES            (1U << 31) /*    |  X  |     |     */

@@ -5180,9 +5180,10 @@ ZEND_FUNCTION(Sharp_Internal_endTest)
 }
 
 /* Spec section 6.2: a property's observers run only once its object is fully built. The object is still being built
- * while one of its constructors runs, a parent's included, while a named constructor's body runs on it as the closure
- * the bridge marks ZEND_ACC_SHARP_BUILDS, and while clone() writes a `with` copy's new values, IS_OBJ_SHARP_BUILDING.
- * A method a constructor calls runs before the constructor returns, so the object is still being built. */
+ * while one of its constructors runs, a parent's included, and plain PHP's `new` runs them too. It is also being built
+ * while it carries IS_OBJ_SHARP_BUILDING: while Sharp\Internal\build runs a named constructor's body or an object
+ * initializer on it, and while clone() writes a `with` copy's new values. A method a constructor calls runs before the
+ * constructor returns, so the object is still being built. */
 ZEND_FUNCTION(Sharp_Internal_building)
 {
 	zend_object *object;
@@ -5196,7 +5197,7 @@ ZEND_FUNCTION(Sharp_Internal_building)
 	}
 	for (const zend_execute_data *frame = EX(prev_execute_data); frame; frame = frame->prev_execute_data) {
 		if (frame->func
-		 && (frame->func->common.fn_flags & (ZEND_ACC_CTOR | ZEND_ACC_SHARP_BUILDS))
+		 && (frame->func->common.fn_flags & ZEND_ACC_CTOR)
 		 && (ZEND_CALL_INFO(frame) & ZEND_CALL_HAS_THIS)
 		 && Z_OBJ(frame->This) == object) {
 			RETURN_TRUE;
@@ -5204,6 +5205,35 @@ ZEND_FUNCTION(Sharp_Internal_building)
 	}
 
 	RETURN_FALSE;
+}
+
+/* Spec sections 6.2, 9.1 and 16: runs `body` on `object` as Closure::call does, with the arguments after it, while
+ * the object carries IS_OBJ_SHARP_BUILDING, so the writes of a named constructor's body or an object initializer run
+ * no observer. It puts back the mark it found, whether the body returns or throws, so an initializer inside a named
+ * constructor leaves the outer object marked until its own body ends. */
+ZEND_FUNCTION(Sharp_Internal_build)
+{
+	zend_object *object;
+	zend_object *body;
+	zval *arguments = NULL;
+	uint32_t count = 0;
+
+	ZEND_PARSE_PARAMETERS_START(2, -1)
+		Z_PARAM_OBJ(object)
+		Z_PARAM_OBJ_OF_CLASS(body, zend_ce_closure)
+		Z_PARAM_VARIADIC('*', arguments, count)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_function *call = zend_hash_str_find_ptr(&zend_ce_closure->function_table, ZEND_STRL("call"));
+	zval *parameters = safe_emalloc(count + 1, sizeof(zval), 0);
+	ZVAL_OBJ(&parameters[0], object);
+	memcpy(&parameters[1], arguments, count * sizeof(zval));
+
+	uint32_t found = OBJ_EXTRA_FLAGS(object) & IS_OBJ_SHARP_BUILDING;
+	OBJ_EXTRA_FLAGS(object) |= IS_OBJ_SHARP_BUILDING;
+	zend_call_known_function(call, body, zend_ce_closure, return_value, count + 1, parameters, NULL);
+	OBJ_EXTRA_FLAGS(object) = (OBJ_EXTRA_FLAGS(object) & ~IS_OBJ_SHARP_BUILDING) | found;
+	efree(parameters);
 }
 
 /* Spec section 15: emit hands an event, and one function per listener of it, to the app's dispatcher. mago compile

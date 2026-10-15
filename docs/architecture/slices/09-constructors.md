@@ -381,13 +381,13 @@ class Artifact
     public static function fromJson(string $json): \Demo\Artifact
     {
         ${'this#1'} = new \Demo\Artifact(\Demo\Manifest::parse($json));
-        (function ($json) {})->call(${'this#1'}, $json);
+        \Sharp\Internal\build(${'this#1'}, function ($json) {}, $json);
         return ${'this#1'};
     }
 }
 ```
 
-`${'this#1'}` is how PHP source spells the local the bridge names `this#1`. No PHP# local can have that name. The closure holds the named constructor's body, empty in this example, and `Closure::call` runs it with `$this` bound to the new object. A plain PHP caller writes `Artifact::fromJson($json)`. PHP# writes `new Artifact.fromJson(json)`, which lowers to the same static call.
+`${'this#1'}` is how PHP source spells the local the bridge names `this#1`. No PHP# local can have that name. The closure holds the named constructor's body, empty in this example, and `\Sharp\Internal\build` runs it with `$this` bound to the new object, as `Closure::call` does, while the object is still being built, so its writes run no observer (spec section 6.2, added by the properties slice). A plain PHP caller writes `Artifact::fromJson($json)`. PHP# writes `new Artifact.fromJson(json)`, which lowers to the same static call.
 
 **Reflection:**
 
@@ -453,7 +453,7 @@ the PHP the bridge emits
 ├── parent::__construct();                     <- the constructor made for initial values, when a constructor exists above
 ├── public static function name(…): \Class     <- a named constructor, with its written access level
 │     { ${'this#1'} = new \Class(…);
-│       (function (…) { body })->call(${'this#1'}, …);
+│       \Sharp\Internal\build(${'this#1'}, function (…) { body }, …);
 │       return ${'this#1'}; }
 ├── \Class::name(args)                         <- `new Class.name(args)`
 └── public protected(set) string $text;        <- `public string text { get; init; }` (PR 5)

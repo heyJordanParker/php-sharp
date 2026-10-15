@@ -70,11 +70,11 @@ team-lead's Queue 17 to Queue 22, with Jordan's rulings:
 4. **An object initializer and `with` share one write path,** a closure bound to the object, inside the class being created or copied and outside it alike:
 
    ```php
-   (function ($x, $y) { $this->x = $x; $this->y = $y; return $this; })->call(new \App\Point(), 1, 2)   // new Point { x: 1, y: 2 }
-   (function ($y) { return clone($this, ['y' => $y]); })->call($p, 9)                                  // p with { y: 9 }
+   \Sharp\Internal\build(new \App\Point(), function ($x, $y) { $this->x = $x; $this->y = $y; return $this; }, 1, 2)   // new Point { x: 1, y: 2 }
+   (function ($y) { return clone($this, ['y' => $y]); })->call($p, 9)                                               // p with { y: 9 }
    ```
 
-   The values are evaluated in the caller, as the arguments, so `this` in a value is the caller's. A write runs the `init` or `set` hook (run on the slot 7 engine).
+   The values are evaluated in the caller, as the arguments, so `this` in a value is the caller's. A write runs the `init` or `set` hook (run on the slot 7 engine). Since the properties slice, an initializer runs through `\Sharp\Internal\build`, which binds the closure as `Closure::call` does while the object is still being built, so its writes run no observer (spec section 6.2).
    - Built as one path. The note first proposed plain writes and `clone($x, [...])` inside the class, but an initializer's several writes after `new` are statements, and an initializer is an expression, so it needs the closure or a hidden local in every position. `this with { … }` through `clone` alone cost 625 and 548 ns, against 601 and 659 ns through the closure, so the second path would buy nothing measurable.
    - Measured on Homebrew PHP 8.5.1 with opcache, 1,000,000 creations, two runs: a main constructor took 221 and 240 ns, an initializer through the closure 755 and 631 ns, `this with { … }` inside the class 625 and 548 ns, and `p with { … }` through the closure 601 and 659 ns. The closure costs about what `clone` with an array costs. A scoped write opcode would remove it later, as a Speed item.
    - Rejected: a generated public method that writes the properties. Plain PHP could call it on an existing struct and change it.
