@@ -2085,8 +2085,17 @@ ZEND_METHOD(Sharp_Position, __construct)
  * lock is held only across a lookup or an insert, so an allocation that fails never leaves it held.
  *
  * The process's tables keep the types code spells, which its source bounds. A type first read from input, or holding
- * one, interns in the request's own tables instead and is freed with them, so input never grows a worker. A lookup
- * reads the process's table, then the request's, so a type is one pointer either way. */
+ * one, interns in the request's own tables instead and is freed with them. A lookup reads the process's table, then
+ * the request's, so a type is one pointer either way.
+ *
+ * The PHP request is the app: one HTTP request under php-fpm, the whole worker under a long-running host. So the
+ * request's tables keep the app's run-time types, as C# keeps each generic instantiation it makes at run time for the
+ * process's life: the program bounds them, and a worker reuses them on its next request. Only input that invents new
+ * type texts could grow them without limit, so they hold at most SHARP_TYPE_APP_LIMIT types. Past it, a new type from
+ * input fails as other bad input does, and a substitution throws, while every type they hold keeps working. */
+
+/* The most types the request's two tables hold together. */
+#define SHARP_TYPE_APP_LIMIT 65536
 
 zend_string *sharp_type_arguments_key;
 zend_string *sharp_statics_key;
@@ -2310,7 +2319,16 @@ static const sharp_type *sharp_type_find(bool list, const char *text, size_t len
 	return type;
 }
 
-/* The interned type `node` spells. It lives for the process when code spells it and each member does too. */
+/* How many types the request's two tables hold together. */
+static uint32_t sharp_type_request_count(void)
+{
+	return (SHARP_G(request_types) ? zend_hash_num_elements(SHARP_G(request_types)) : 0)
+		+ (SHARP_G(request_type_lists) ? zend_hash_num_elements(SHARP_G(request_type_lists)) : 0);
+}
+
+/* The interned type `node` spells. It lives for the process when code spells it and each member does too. NULL when it
+ * is new, not spelled by code, and the request's tables already hold SHARP_TYPE_APP_LIMIT types. A type code spells
+ * always interns, since the source bounds those. */
 static const sharp_type *sharp_type_intern(const sharp_type_node *node, bool from_code, zend_arena **arena)
 {
 	bool list = node->kind == SHARP_TYPE_LIST;
@@ -2325,8 +2343,14 @@ static const sharp_type *sharp_type_intern(const sharp_type_node *node, bool fro
 	uint32_t i = 0;
 	for (const sharp_type_node *member = node->first; member; member = member->next) {
 		members[i] = sharp_type_intern(member, from_code, arena);
+		if (!members[i]) {
+			return NULL;
+		}
 		persistent = persistent && sharp_type_is_persistent(members[i]);
 		i++;
+	}
+	if (!from_code && sharp_type_request_count() >= SHARP_TYPE_APP_LIMIT) {
+		return NULL;
 	}
 
 	sharp_type *type = pemalloc(offsetof(sharp_type, members) + MAX(node->count, 1) * sizeof(sharp_type *), persistent);
@@ -3201,6 +3225,13 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 	 * code writes, and an open one that names no `$i` on a call that gives no type arguments, such as the wildcard a
 	 * plain PHP call checks against, which the text alone decides. */
 	substituted = sharp_type_intern(list, !reader.names || (!names_this && !method), &reader.arena);
+	if (!substituted) {
+		zend_throw_error(NULL, "The app already holds %d run-time types, its limit, so it cannot make <%.*s>",
+			SHARP_TYPE_APP_LIMIT, (int) list->length, list->text);
+		zend_arena_destroy(reader.arena);
+
+		return NULL;
+	}
 	zend_arena_destroy(reader.arena);
 	if (!*spelled) {
 		ALLOC_HASHTABLE(*spelled);
