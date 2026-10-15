@@ -26,7 +26,7 @@ Each claim below ran on master `02c05cb5f1` in slot 3, or was read from the sour
 
 1. **A scope follows the fiber that runs in it,** as C#'s `AsyncLocal`, Node's `AsyncLocalStorage.run` and tokio's task-local `scope` do. A fiber started inside `Scope.run` belongs to that scope, and a fiber's own `Scope.run` is its own. Resolving a `scoped` service after its scope ended throws `Sharp\ContainerError`, as C# throws when a disposed scope is used. Section 32 states the rule with an example.
 2. **"A host that runs several workers runs one app in each."** FrankenPHP runs one PHP request per worker thread, and Octane on Swoole runs one per worker process, so each worker has its own statics and singletons.
-3. **A new decision, "Hosts", holds the rulings,** and decision 56 starts with "Superseded in part by decision N", as decisions 34, 40, 43 and 63 do for decision 76. Decision 56 names a `php-sharp/laravel` adapter, which PHP# no longer ships.
+3. **Decision 78, "Hosts", holds the rulings,** and decision 56 starts with "Superseded in part by decision 78", as decisions 34, 40, 43 and 63 do for decision 76. Decision 56 names a `php-sharp/laravel` adapter, which PHP# no longer ships.
 
 ## Decisions team-lead approved
 
@@ -42,7 +42,7 @@ Each claim below ran on master `02c05cb5f1` in slot 3, or was read from the sour
 6. **A `HOSTS` job runs the fixture on every code pull request,** and builds FrankenPHP against the engine CI already built, never a fresh engine build. The fixture lives in `sharp/hosts/`, and `sharp/bin/hosts` serves it from each host and compares what the requests print with `sharp/hosts/expected/`. `CI_PASSED` needs `HOSTS`. The pull request body reports its wall time. If it adds more than 10 minutes to the slowest job, it runs on tags and nightly instead.
 7. **The static's count is the one line that differs between the hosts.** Each request prints whether its `scoped` service is new, whether its two `singleton` reads are one object, and the static's count, which reads `1`, `2` under the worker and `1`, `1` under php-fpm.
 8. **The three process-wide intern tables stay, behind `sharp_types_lock`,** as the one process-wide mutable state, by design. Per-thread tables would intern each code type once per thread and lose the pointer equality `sharp_type_equals` takes for two persistent types.
-9. **A long-running host keeps its size, in this PR.** The engine interns a type first read from input, such as a type text `unserialize` reads, in the request's own tables, which `ZEND_MODULE_POST_ZEND_DEACTIVATE_D(sharp)` frees "so input never grows a worker" (`type_arguments_requests.phpt`). Under a worker the PHP request is the whole worker, so each new type text from input would stay until the worker exits. Each request type gets a refcount, and it is freed when nothing uses it. A row serves many requests with new type texts under the worker fixture, and memory stays flat.
+9. **An app holds at most 65,536 run-time types (Queue 4, which replaced a refcount per type).** The engine interns a type first read from input, such as a type text `unserialize` reads, in the request's own tables, which `ZEND_MODULE_POST_ZEND_DEACTIVATE_D(sharp)` frees at the end of the PHP request. Under a worker the PHP request is the whole worker, so they live as long as the app, as C# keeps each run-time generic instantiation for the process's life. The program bounds them. Input that invents new type texts is the one thing that could grow them, so past `SHARP_TYPE_APP_LIMIT` a new type text fails as `unserialize` fails on bad input, and each type held keeps working. Rows: 1,000 worker requests that use the same generic types, `unserialize` included, with memory flat after the first; and a request past the limit that gets the failure while later requests still work. The note in `slices/11-generics.md`, beside the type tables, states it.
 10. **The leak runs against master's engine first,** under the new image, before any fix, and the report holds its output.
 
 # Every rule, its state and its mechanism
@@ -109,7 +109,7 @@ public class Worker
 | `ext/sharp/sharp.c` | 4924 | "A singleton is kept for the request and a scoped service for the scope." | "A singleton is kept for as long as the app runs, and a scoped service for the scope." |
 | `ext/sharp/sharp.c` | 6838 | "Spec section 32: the request is the host's scope, as each CLI run is." | "Spec section 32: the request is the default scope, as each CLI run is." |
 | `Zend/tests/sharp/container_lifetimes.phpt` | 2 | "… a scoped service for its scope, which is the request until Container::scope starts another …" | Its `scope` rows move to `scope_run.phpt` |
-| `docs/decisions/056-modules.md` | 1 | | "Superseded in part by decision N", answer 3 |
+| `docs/decisions/056-modules.md` | 1 | | "Superseded in part by decision 78", answer 3 |
 
 `modules.md` line 99 and 101, "once per request", say how often the container reads a module file. That is once per PHP request, which is once per app, and they stay. Every other "request" in `docs/`, `sharp/` and `ext/sharp/` names an HTTP request or a pull request.
 
@@ -218,42 +218,61 @@ The engine will keep each scope on the heap with a refcount and an ended mark, a
 
 ```text
 docs/
-├── spec.md                                   section 6 lines 251 and 261; section 32's Scope.run rule and host-scope example
+├── spec.md                                   section 6 lines 251 and 261; section 32's Scope.run and fiber rules, and the
+│                                             host-scope and scope-fibers examples
 ├── v1.md                                     new: the v1 Goal
 ├── decisions/
-│   ├── 056-modules.md                        "Superseded in part by decision N" (answer 3)
-│   └── 0NN-hosts.md                          new (answer 3)
+│   ├── 056-modules.md                        "Superseded in part by decision 78" (answer 3)
+│   └── 078-hosts.md                          new (answer 3)
 └── architecture/
     ├── modules.md                            the lines above, Scope and runScoped in the API, the scope stack
     └── slices/
         ├── 06-properties.md                  lines 127 and 228
+        ├── 11-generics.md                    how long a run-time type lives, and the limit (decision 9)
         └── 32-hosts.md                       this note
 ext/sharp/
 ├── sharp.c                                   runScoped replaces Container::scope; sharp_scope; the fiber observers;
-│                                             RINIT and RSHUTDOWN; sharp_container_bound refuses an ended scope
+│                                             RINIT and RSHUTDOWN; sharp_container_bound refuses an ended scope;
+│                                             SHARP_TYPE_APP_LIMIT
+├── config.m4                                 libsharp.a in PHP_GLOBAL_OBJS, so libphp links it
 ├── sharp.stub.php                            runScoped in Sharp\Internal; Container loses scope
 └── sharp_arginfo.h                           generated from sharp.stub.php
 sharp/
 ├── composer/library/Sharp/Scope.sharp        new: Scope.run
 ├── mago/crates/
+│   ├── codex/                                USES_PARAMETER marks a parameter `uses` names
+│   ├── names/src/binding.rs                  which of a method's `uses` names are its parameters
 │   ├── prelude/assets/extensions/sharp.php   runScoped, with its @template
-│   ├── analyzer/src/effects/                 uses f, if decision 1 keeps it here
+│   ├── analyzer/src/invocation/analyzer.rs   a `uses f` argument may hold any effect
+│   ├── analyzer/src/effects/summary.rs       a call has the effects of the function passed as `uses f`
 │   └── analyzer/tests/sharp.rs               uses f rows; Scope.run's effects and type
-├── bin/build, bin/test                       --zts and the <os>-<arch>-zts build folder
+├── bin/build, bin/test                       --zts and the <os>-<arch>-zts build folder; php-fpm in every build
+├── docker/Dockerfile, docker/run             Go and cgi-fcgi for sharp/bin/hosts
 ├── docker/runtime/frankenphp.Dockerfile      new: the FrankenPHP image (decision 5)
-├── hosts/                                    new: the fixture app, worker.php, public/index.php, Caddyfile, expected/
-├── bin/hosts                                 new: builds both images and runs the fixture (decision 6)
-├── baseline/spec/§29/function-effects        deleted when uses f holds
-└── README.md                                 --zts, the FrankenPHP image, the HOSTS and LINUX_ZTS jobs
+├── harness/app/Jobs/                         new: Job and JobQueue, for the host-scope example
+├── hosts/                                    new: the fixture app, worker.php, public/index.php, Caddyfile,
+│                                             php-fpm.conf, expected/
+├── bin/hosts                                 new: builds FrankenPHP against the ZTS build and runs the fixture (decision 6)
+├── baseline/spec/§29/function-effects        deleted: uses f holds
+└── README.md                                 --zts, sharp/bin/hosts, the FrankenPHP image, the HOSTS and LINUX_ZTS jobs
 Zend/tests/sharp/
 ├── container_lifetimes.phpt                  its scope rows move out
-├── scope_run.phpt                            new: Scope.run from plain PHP: returns, throws, nests, a static and a
-│                                             static lazy across scopes, the default scope
+├── scope_run.phpt                            new: Scope.run from plain PHP and from PHP#: returns, throws, nests, a
+│                                             static and a static lazy across scopes, the default scope
 ├── scope_fibers.phpt                         new: answer 1's rows
-└── ScopeRun.sharp                            new: a PHP# caller of Scope.run
+└── type_arguments_limit.phpt                 new: the type limit, then a type held and a new code type still work
 .github/workflows/sharp.yml                   LINUX_ZTS, HOSTS, CI_PASSED needs both, IMAGE's matrix
-README.md                                     Runtime image names both images
+README.md                                     Runtime images names both images, and Scope.run
 ```
+
+# What the build found
+
+- **FrankenPHP could not link the engine.** `ext/sharp/config.m4` put `libsharp.a` in `EXTRA_LIBS`, which `php-config --libs` exports as a path inside the build tree, so every program that links `libphp` looked for the file there. It now goes in `PHP_GLOBAL_OBJS`, as `build/php.m4` adds the DTrace objects, so it links into each SAPI and `libphp`, and `php-config` no longer names it.
+- **The ZTS build needs `--disable-zend-signals`,** as docker-library's `zts` images build. FrankenPHP refuses to start on an engine built with Zend's own signal handling, and says to "recompile PHP with the `--disable-zend-signals` configuration option", because Go's runtime owns the process's signals. `sharp/bin/build` reconfigures without cleaning, so the change needed `--clean` once: objects built under the old `php_config.h` survived.
+- **Go's build cache never reads the PHP headers a cgo file includes.** After the engine's headers changed, `go build` reused the C objects it built against the old ones. `sharp/bin/hosts` keeps `GOCACHE` in the ZTS build's folder, so the cache goes with the build it was made from, and rebuilds FrankenPHP when `libphp.so` is newer than it.
+- **`uses f`:** the scanner marks each parameter a method's `uses` names with `USES_PARAMETER`. At a call, `invocation/analyzer.rs` compares an argument for such a parameter with the parameter's type minus its effects, so any function fits. `effects/summary.rs` gives the call the effects of the function passed there: a lambda's body, or a method value's method, whose `uses` counts for a method without a body and whose `extern` counts for plain PHP. A call of `f` inside the method adds nothing, since each call already carries it.
+- **CI builds each engine once.** `LINUX` keeps `php-fpm` and `mago` as the `hosts-nts` artifact, and `LINUX_ZTS` keeps the installed engine as `hosts-zts`. `HOSTS` downloads both, builds only FrankenPHP, with Go's module cache, and runs `sharp/bin/hosts --linux`.
+- **The fixture's rows,** as `sharp/hosts/expected/` holds them: two `/` requests, each with its own `scoped` `Visit`, one `singleton` `Counter`, and the static's count, `1` and `1` under php-fpm, `1` and `2` under the worker; 1,000 `/types` requests, which build generic types and `unserialize` one, with memory after the 1,000th equal to memory after the 2nd; a `/flood` request past the type limit, which gets the failure; then `/types` and `/` again, which still work. Four more workers then serve 400 `/types` requests, 32 at once, in one process.
 
 # Verification
 
