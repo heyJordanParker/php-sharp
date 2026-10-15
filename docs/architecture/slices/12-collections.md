@@ -91,10 +91,9 @@ Each is a proposal with its precedent. team-lead rules. The note writes the prop
 
 1. **`items[i] ??= v` on a `List` is the compile error of question 3,** because it reads `items[i] ?? …` first.
 2. **A method that yields cannot `return value;`** and ends with `return;`, as C#'s CS1622 says. The ported `check_iterator_returns` refuses it.
-3. **A lambda never yields,** and `yield` in one is "`yield` needs a method that returns `Iterable<T>`." A method returning `Iterable<T>?` may yield, since PHP compiles a generator of `?iterable`.
-4. **`toList()` numbers from 0,** whatever keys the source gives, as `Sharp\Sequence` does.
-5. **A lazy element that is wrong throws** `TypeError: …: Return value must be of type Iterable<App.Order>, …: [3] expected App.Order, got string 'x'` at the read, worded by `sharp_first_problem` as every crossing is.
-6. **`yield ...other` over a `Map` yields its entries,** as a loop over it does (question 1).
+3. **`toList()` numbers from 0,** whatever keys the source gives, as `Sharp\Sequence` does.
+4. **A lazy element that is wrong throws** `TypeError: …: Return value must be of type Iterable<App.Order>, …: [3] expected App.Order, got string 'x'` at the read, worded by `sharp_first_problem` as every crossing is.
+5. **`yield ...other` over a `Map` yields its entries,** as a loop over it does (question 1).
 
 ## Existing work, and how the Slice reuses it
 
