@@ -7,6 +7,8 @@ require __DIR__ . '/Container.inc';
 container_project('scope-run', ['app/Shop/Tally.sharp' => <<<'SHARP'
 namespace App.Shop;
 
+import Sharp.Scope;
+
 public class Tally
 {
     private static int count = 0;
@@ -21,6 +23,8 @@ public class Tally
     }
 
     public static int started() => Tally.first;
+
+    public static int bumpInScope() => Scope.run(() => Tally.bump());
 
     private static int compute()
     {
@@ -65,6 +69,7 @@ Sharp\Scope::run(fn () => App\Shop\Tally::bump());
 echo "a static keeps its value across scopes: ", Sharp\Scope::run(fn () => App\Shop\Tally::bump()), "\n";
 echo "a static lazy computes once across scopes: ", Sharp\Scope::run(fn () => App\Shop\Tally::started()), " ",
     Sharp\Scope::run(fn () => App\Shop\Tally::started()), "\n";
+echo "PHP# code gets what its body returns: ", App\Shop\Tally::bumpInScope(), "\n";
 echo "Container has no scope: ", var_export(method_exists('Sharp\Container', 'scope'), true), "\n";
 ?>
 --EXPECT--
@@ -82,4 +87,5 @@ the outer scope comes back after it: true
 a singleton is shared across scopes: true
 a static keeps its value across scopes: 2
 a static lazy computes once across scopes: 10 10
+PHP# code gets what its body returns: 3
 Container has no scope: false
