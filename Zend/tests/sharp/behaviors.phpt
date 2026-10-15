@@ -26,6 +26,10 @@ echo $copy->name, ' ', $first->name, "\n";
 $cloned = clone $first;
 $cloned->name = 'eve';
 echo $cloned->name, ' ', $first->name, "\n";
+
+// A generic behavior is created with its type argument, and runs as any behavior does.
+$first->level = 4;
+echo $first->level, "\n";
 ?>
 --EXPECT--
 #1|X#1
@@ -33,3 +37,4 @@ ada#2|BO#2
 cy#2 ada#2
 dee#1 ada#2
 eve#1 ada#2
+4
