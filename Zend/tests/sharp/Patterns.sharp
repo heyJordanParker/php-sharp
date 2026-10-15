@@ -115,4 +115,9 @@ class Patterns
         [Square first, ..., Square last] => first.side + last.side,
         default => 0.0,
     };
+
+    public int circles(List<Figure> shapes) => match (shapes) {
+        [Square, ...List<Circle> rest] => rest.count(),
+        default => -1,
+    };
 }

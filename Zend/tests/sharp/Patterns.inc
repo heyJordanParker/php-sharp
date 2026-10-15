@@ -115,4 +115,9 @@ class Patterns
         \is_array($shapes) && \count($shapes) >= 2 && ($first = $shapes[0]) instanceof \Demo\Square && ($last = $shapes[\count($shapes) - 1]) instanceof \Demo\Square => $first->side + $last->side,
         default => 0.0,
     }; }
+
+    public function circles(array $shapes): int { return match (true) {
+        \is_array($shapes) && \count($shapes) >= 1 && (${'match#1'} = $shapes[0]) instanceof \Demo\Square && \is_array($rest = \array_slice($shapes, 1)) => \count($rest),
+        default => -1,
+    }; }
 }

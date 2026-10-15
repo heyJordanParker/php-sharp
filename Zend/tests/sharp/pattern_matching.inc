@@ -53,6 +53,9 @@ for ($round = 0; $round < 100; $round++) {
         $patterns->ends([new Square(1.0), new Circle(9.0), new Square(3.0)]),
         $patterns->ends([new Square(4.0)]),
         $patterns->ends([]),
+        $patterns->circles([new Square(1.0), new Circle(1.0), new Circle(2.0)]),
+        $patterns->circles([new Square(1.0), new Circle(1.0), new Square(2.0)]),
+        $patterns->circles([new Square(1.0)]),
     ];
 }
 
