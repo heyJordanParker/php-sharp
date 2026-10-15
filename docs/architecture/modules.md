@@ -105,7 +105,7 @@ A service's id is its PHP# type in lowercase, as codex's `service_id` writes it 
 - It keeps each `singleton` for as long as the app runs and each `scoped` service for the scope the running fiber runs in. A `transient` service is built every time.
 - It throws its own failures as `Sharp\ContainerError`, which extends `Error`: the service no module binds, the class that needs itself, the parameter with no class type, or the bound class that isn't there. It throws a constructor's own exception unchanged, and the request goes on.
 
-The request is the default scope, as each CLI run is. A long-running host runs each unit of work in the standard library's `Scope.run`, which plain PHP calls as `\Sharp\Scope::run(fn () => …)` (spec section 32). A scope is a refcounted table with an ended mark. Each fiber context holds the scope it started in and the one it runs in, in a reserved slot the fiber observers fill, so a fiber started inside a scope belongs to it, and a `scoped` service resolved after its scope ended throws `Sharp\ContainerError`.
+The request is the default scope, as each CLI run is. A long-running host runs each unit of work in the standard library's `Scope.run`, which plain PHP calls as `\Sharp\Scope::run(fn () => …)` (spec section 32). A scope is a refcounted table with an ended mark. Each fiber context holds the scope it started in, the one it runs in and the services it is building, in a reserved slot the fiber observers fill, so a fiber started inside a scope belongs to it, and a `scoped` service resolved after its scope ended throws `Sharp\ContainerError`.
 
 ```php
 final class Container
@@ -170,6 +170,7 @@ Zend/tests/sharp/
 ├── container_lifetimes.phpt            singleton, scoped, transient
 ├── scope_run.phpt                      Scope.run: a scope per body, its end, a throw, nesting, statics
 ├── scope_fibers.phpt                   a scope follows the fiber that runs in it
+├── scope_fibers_building.phpt          each fiber builds its own services, a suspended one included
 ├── container_refusals.phpt             each Sharp\ContainerError, a constructor that throws, a module that won't load
 ├── container_test_module.phpt          new: a test file's module while its test runs
 ├── container_test_environment.phpt     new: no environment module while a test runs
