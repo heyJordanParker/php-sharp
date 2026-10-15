@@ -3,6 +3,7 @@ PHP# yield produces an Iterable<T> lazily: yield value, yield ...other, a body t
 --FILE--
 <?php
 
+require __DIR__ . '/harness/Arrays.inc';
 require __DIR__ . '/Import.sharp';
 
 $path = tempnam(sys_get_temp_dir(), 'sharp_yield');
@@ -42,6 +43,13 @@ foreach ($repeated as $row) {
 }
 // A finished generator's frame is gone, so it carries no type.
 var_dump(Demo\Import::holdsRows($repeated));
+// A generator whose body calls plain PHP carries the type it yields, and so does a map stage whose lambda calls plain
+// PHP, though neither has a function type, whose effects plain PHP leaves unknown. The test reads neither.
+$printed = $import->printed();
+var_dump(Demo\Import::holdsRows($printed), Demo\Import::holdsTexts($printed), Demo\Import::holdsInts($import->lengths()));
+// An extension method yields as a method of its class does, and its generator carries the type it yields.
+echo implode(',', Demo\Import::spelled('ab')), "\n";
+var_dump(Demo\Import::holdsTexts(Demo\Words::letters('ab')), Demo\Import::holdsInts(Demo\Words::letters('ab')));
 
 unlink($path);
 ?>
@@ -67,4 +75,10 @@ bool(false)
 bool(false)
 R1
 R1
+bool(false)
+bool(true)
+bool(false)
+bool(true)
+ab,AB
+bool(true)
 bool(false)

@@ -5016,10 +5016,11 @@ static bool sharp_type_fits(sharp_type_node *type, sharp_type_node *bound, sharp
 	return true;
 }
 
-/* The function type the PHP# function `func` declares, spec section 21, spelled for `object`, its `this`, and `method`,
- * the type arguments of its own type parameters. NULL for a plain PHP function, for a method that declares no function
- * type, and for one whose type names a type parameter it has no type argument for. */
-static const sharp_type *sharp_function_type(const zend_function *func, zend_object *object, const sharp_type *method)
+/* The type the PHP# function `func` carries, spelled for `object`, its `this`, and `method`, the type arguments of its
+ * own type parameters: its function type, spec section 21, or its result type when no function type can say its
+ * effects, as for one that calls plain PHP no `extern` declares. NULL for a plain PHP function, for a method that
+ * carries no type, and for one whose type names a type parameter it has no type argument for. */
+static const sharp_type *sharp_function_carried(const zend_function *func, zend_object *object, const sharp_type *method)
 {
 	if (func->type != ZEND_USER_FUNCTION || !func->op_array.sharp_type) {
 		return NULL;
@@ -5033,12 +5034,24 @@ static const sharp_type *sharp_function_type(const zend_function *func, zend_obj
 	void *cache[4] = {NULL};
 	const sharp_type *own = sharp_type_list_of_frame(&text, object, method, false, func->common.scope, cache);
 
-	return own && own->members[0]->kind == SHARP_TYPE_FUNCTION ? own->members[0] : NULL;
+	return own ? own->members[0] : NULL;
 }
 
-/* The function type the closure `value` declares, as sharp_function_type spells it for the object the closure is bound
- * to and the method type arguments it captured. */
-static const sharp_type *sharp_closure_type(const zval *value)
+/* The function type of `carried`, a type sharp_function_carried read, or NULL when it is a result type alone. */
+static const sharp_type *sharp_carried_function(const sharp_type *carried)
+{
+	return carried && carried->kind == SHARP_TYPE_FUNCTION ? carried : NULL;
+}
+
+/* The result type of `carried`, a type sharp_function_carried read: its function type's result, or itself. */
+static const sharp_type *sharp_carried_result(const sharp_type *carried)
+{
+	return carried && carried->kind == SHARP_TYPE_FUNCTION ? carried->members[0] : carried;
+}
+
+/* The type the closure `value` carries, as sharp_function_carried spells it for the object the closure is bound to and
+ * the method type arguments it captured. */
+static const sharp_type *sharp_closure_carried(const zval *value)
 {
 	const zend_function *func = zend_get_closure_method_def(Z_OBJ_P(value));
 	zval *this_ptr = zend_get_closure_this_ptr((zval *) value);
@@ -5050,12 +5063,18 @@ static const sharp_type *sharp_closure_type(const zval *value)
 	zval *arguments = captured ? zend_hash_find(captured, sharp_type_arguments_key) : NULL;
 	const sharp_type *method = arguments && Z_TYPE_P(arguments) == IS_PTR ? Z_PTR_P(arguments) : NULL;
 
-	return sharp_function_type(func, object, method);
+	return sharp_function_carried(func, object, method);
+}
+
+/* The function type the closure `value` declares, as sharp_closure_carried spells it. */
+static const sharp_type *sharp_closure_type(const zval *value)
+{
+	return sharp_carried_function(sharp_closure_carried(value));
 }
 
 /* The element type the PHP# generator `object` yields, spec section 12: the `T` of the `Iterable<T>` its method
- * returns, spelled for the frame it runs in. NULL for a plain PHP generator and for one that has finished, whose frame
- * is gone. */
+ * returns, spelled for the frame it runs in, whatever its body calls. NULL for a plain PHP generator and for one that
+ * has finished, whose frame is gone. */
 static const sharp_type *sharp_generator_yields(zend_object *object)
 {
 	const zend_execute_data *frame = ((zend_generator *) object)->execute_data;
@@ -5063,8 +5082,9 @@ static const sharp_type *sharp_generator_yields(zend_object *object)
 		return NULL;
 	}
 	zend_object *self = Z_TYPE(frame->This) == IS_OBJECT ? Z_OBJ(frame->This) : NULL;
-	const sharp_type *function = sharp_function_type(frame->func, self, sharp_frame_method_type_arguments(frame));
-	const sharp_type *iterable = function ? sharp_type_iterable_member(function->members[0]) : NULL;
+	const sharp_type *result =
+		sharp_carried_result(sharp_function_carried(frame->func, self, sharp_frame_method_type_arguments(frame)));
+	const sharp_type *iterable = result ? sharp_type_iterable_member(result) : NULL;
 
 	return iterable ? iterable->members[0] : NULL;
 }
@@ -5139,9 +5159,9 @@ static bool sharp_iterable_object_holds(const sharp_type *iterable, zend_object 
 		case SHARP_SEQUENCE_CHECK:
 			return sharp_type_within(sequence->checked, element);
 		case SHARP_SEQUENCE_MAP: {
-			const sharp_type *function = sharp_closure_type(&sequence->fci.function_name);
+			const sharp_type *result = sharp_carried_result(sharp_closure_carried(&sequence->fci.function_name));
 
-			return !EG(exception) && sharp_type_within(function ? function->members[0] : NULL, element);
+			return !EG(exception) && sharp_type_within(result, element);
 		}
 		default:
 			return sharp_type_holds(iterable, &sequence->source, SHARP_HOLDS_TEST, NULL);

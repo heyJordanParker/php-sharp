@@ -56,6 +56,30 @@ public class Import
     public static bool holdsRows(Any value) => value is Iterable<Row>;
 
     public static bool holdsTexts(Any value) => value is Iterable<string>;
+
+    public static bool holdsInts(Any value) => value is Iterable<int>;
+
+    public Iterable<Row> printed()
+    {
+        global.names_and("printed");
+        yield this.latest;
+    }
+
+    public Iterable<int> lengths() => this.all().map(row => global.iterator_count(global.names_and(row.number)));
+
+    public static List<string> spelled(string word) => word.letters().toList();
+}
+
+public static class Words
+{
+    extension(string text)
+    {
+        public Iterable<string> letters()
+        {
+            yield text;
+            yield global.strtoupper(text);
+        }
+    }
 }
 
 public class Row
