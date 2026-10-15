@@ -1,5 +1,6 @@
 namespace Demo;
 
+import Lib.Aligned;
 import Lib.Copies;
 import Lib.Document;
 import Lib.HasSlug;
@@ -42,4 +43,20 @@ public class Draft : Copies
 public enum Shade : Copies
 {
     case Light;
+}
+
+public enum Align : string, Aligned
+{
+    case Left = "left";
+    case Right = "right";
+
+    public string label() => "align";
+}
+
+public enum Tier : int, Aligned
+{
+    case Low = 1;
+    case High = 2;
+
+    public string label() => "level";
 }

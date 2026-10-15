@@ -1,5 +1,6 @@
 <?php declare(strict_types=1); namespace Demo;
 
+use Lib\Aligned;
 use Lib\Copies;
 use Lib\Document;
 use Lib\HasSlug;
@@ -42,4 +43,20 @@ class Draft
 enum Shade
 {   use Copies;
     case Light;
+}
+
+enum Align: string implements Aligned
+{
+    case Left = "left";
+    case Right = "right";
+
+    public function label(): string { return "align"; }
+}
+
+enum Tier: int implements Aligned
+{
+    case Low = 1;
+    case High = 2;
+
+    public function label(): string { return "level"; }
 }

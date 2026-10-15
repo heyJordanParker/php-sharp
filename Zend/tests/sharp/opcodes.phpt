@@ -2003,6 +2003,6 @@ Operators: different opcodes and lines in 73 op arrays, same signatures in 9 cla
   .php   0001 CV1($value) = RECV 2
   .php   0002 T2 = CAST (string) CV0($key)
   .php   0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
-Traits: same opcodes and lines in 6 op arrays, same signatures in 4 classes
+Traits: same opcodes and lines in 8 op arrays, same signatures in 6 classes
 a check: same
 a check and another opcode: different

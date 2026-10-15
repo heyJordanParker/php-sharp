@@ -22,6 +22,11 @@ trait HasSlug
     }
 }
 
+interface Aligned extends \BackedEnum
+{
+    public function label(): string;
+}
+
 trait Copies
 {
     public function copy(): string
