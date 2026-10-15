@@ -36,6 +36,15 @@ try {
 $plan = new Lazy\Plan();
 echo $plan->stamp, ' ', $plan->stamp, ' ', Lazy\Loads::seen(), "\n";
 
+// A copy is a new value, so it keeps no `lazy` value: `with` on a struct, and plain PHP's `clone` of an object.
+echo Lazy\Square::grown(), "\n";
+$plan = new Lazy\Plan();
+$plan->setId(3);
+echo $plan->doubled, ' ';
+$copy = clone $plan;
+$copy->setId(4);
+echo $copy->doubled, ' ', $plan->doubled, "\n";
+
 // A `static lazy` body runs once for a singleton's lifetime, and a throw keeps nothing.
 echo Lazy\Loads::firstTwice(), ' ', Lazy\Loads::seen(), "\n";
 try {
@@ -58,6 +67,8 @@ NULL
 NULL
 Cannot modify private(set) property Lazy\Plan::$doubled from global scope
 1 1 1
+9 16
+6 8 6
 4 2
 Modulo by zero
 2

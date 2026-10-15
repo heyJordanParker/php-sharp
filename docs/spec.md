@@ -380,7 +380,7 @@ public class Trimmed : Behavior<string>
 
 - A behavior is a class that implements `Behavior<T>` for the property's type, and its constructor takes no arguments. A behavior for another type, an interface, an abstract class, or a constructor that needs an argument is a compile error.
 - `via` goes on an instance auto-property with `get; set;`. A property in an interface or an `abstract` one has no storage to run around, a static one has no object to keep behaviors in, and one with an accessor body already says how it reads and writes, so each is a compile error. A constructor parameter takes no `via`: declare the property in the class body.
-- Each object creates its own behaviors with `new` when it is constructed, before any initial value, and keeps each one in a hidden slot. Two objects never share a behavior's state.
+- Each object creates its own behaviors with `new` when it is constructed, before any initial value, and keeps each one in a hidden slot. A copy made with `with`, or with plain PHP's `clone`, creates its own too, so two objects never share a behavior's state.
 - A write runs each behavior's `set` in the order they are written, then stores the result. A read runs each behavior's `get` the other way, so the first behavior wraps the rest. The initial value is a write, so it runs through each `set`.
 
 ### 6.5 `lazy`
@@ -396,6 +396,9 @@ public lazy Plan plan => this.planner.plan(this.id);
 ```
 
 A `lazy` body may have any effect, such as a database query, and reading the property carries the body's effects (section 29). Like every `get` body, it never writes `this` (section 6.1). It may read properties that can change later. The value is computed once and kept, even if those inputs change, as in Swift and Kotlin. A value that must follow its inputs is a plain computed property (`=> expr`).
+
+- **A body that throws keeps nothing,** so the next read runs it again, as Kotlin's `lazy` does.
+- **A copy made with `with` keeps no `lazy` value,** because it is a new value whose inputs may differ. Its first read computes each `lazy` property again, as Kotlin's `copy()` does.
 
 ## 7. Methods
 

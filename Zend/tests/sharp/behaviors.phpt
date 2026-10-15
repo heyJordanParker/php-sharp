@@ -19,8 +19,17 @@ echo $first->name, '|', $first->code, "\n";
 $second = new Behaviors\Profile();
 $second->name = ' cy ';
 echo $second->name, ' ', $first->name, "\n";
+
+// A copy has its own behaviors, made with `with` or with plain PHP's `clone`, so its writes count apart.
+$copy = $first->renamed(' dee ');
+echo $copy->name, ' ', $first->name, "\n";
+$cloned = clone $first;
+$cloned->name = 'eve';
+echo $cloned->name, ' ', $first->name, "\n";
 ?>
 --EXPECT--
 #1|X#1
 ada#2|BO#2
 cy#2 ada#2
+dee#1 ada#2
+eve#1 ada#2

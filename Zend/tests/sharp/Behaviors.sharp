@@ -33,4 +33,6 @@ public class Profile
 {
     public string name { get; set; } via Trimmed, Counted = "";
     public string code { get; set; } via Counted, Upper = "x";
+
+    public Profile renamed(string name) => this with { name: name };
 }

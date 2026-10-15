@@ -221,7 +221,7 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 
 - **Semantics:** `lazy` only on a computed property (question 11). It is no longer "not supported yet" outside a parameter. The parameter's error from the constructors Slice stays.
 - **Analyzer:** the body is a `get` body, so `getters_never_write_this` covers it, and a read carries its effects.
-- **The bridge, instance:** `public private(set) \App\Plan $plan { get => $this->plan ??= <body>; }`, a backed property whose `get` hook fills its own storage once. A `lazy T?` keeps a hidden `plan#lazy` flag beside it, because `??=` would run the body again after `null`.
+- **The bridge, instance:** `public private(set) \App\Plan $plan { get { if (!$this->{'plan#lazy'}) { $this->plan = <body>; $this->{'plan#lazy'} = true; } return $this->plan; } }`, a backed property whose `get` hook fills its own storage once, with a hidden `plan#lazy` flag beside it, since a kept `null` can't say the body ran. A copy's hidden `__clone` clears the flag, so a `with` copy or a `clone` computes again (Queue 14).
 - **The bridge, static:** PHP has no hooks on a static property. The value is held in a hidden static, or in #121's singleton store (question 11), behind the hidden static method `plan#get`. Every PHP# read of `StaticLazy.plan` lowers to a call of that method. Decision 3's static computed properties and accessor bodies use the same read lowering, without the keeping.
 - **Engine:** `Lazy.sharp` and `lazy.phpt`: the body runs once, a changed input does not recompute, a throw keeps nothing, and a `static lazy` runs once per request.
 
@@ -344,7 +344,7 @@ sharp/composer/library/Sharp/Behavior.sharp       <- added if question 10 says s
 
 the PHP the bridge emits
 ├── public string $name { set { <willSet>; $this->name = $value; <didSet>; } }
-├── public private(set) \App\Plan $plan { get => $this->plan ??= <body>; }
+├── public private(set) \App\Plan $plan { get { if (!$this->{'plan#lazy'}) { … } return $this->plan; } }
 ├── private \App\Trimmed ${'name#via0'};     <- one per behavior, filled in the constructor
 ├── abstract public string $kind { get; }
 ├── 'total'                                  <- nameof(Order.total)
