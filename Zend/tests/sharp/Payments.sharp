@@ -31,6 +31,12 @@ public class Payments
 
     public bool differs(CheckoutState a, CheckoutState b) => a != b;
 
+    public int distinct(CheckoutState a, CheckoutState b)
+    {
+        Set<CheckoutState> seen = [a, b];
+        return seen.count();
+    }
+
     public bool found(List<PaymentResult> results, PaymentResult result) => results.contains(result);
 
     public List<int> keyed()
