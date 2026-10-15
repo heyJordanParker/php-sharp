@@ -22,6 +22,7 @@
 #include "zend_closures.h"
 #include "zend_enum.h"
 #include "zend_exceptions.h"
+#include "zend_generators.h"
 #include "zend_interfaces.h"
 #include "zend_language_parser.h"
 #include "zend_observer.h"
@@ -3992,6 +3993,7 @@ static bool sharp_type_holds(
 	const sharp_type *type, const zval *value, sharp_holds_mode mode, sharp_type_problems *problems);
 static bool sharp_closure_is(const zval *value, const sharp_type *type, sharp_holds_mode mode);
 static bool sharp_iterable_object_holds(const sharp_type *iterable, zend_object *object);
+static const sharp_type *sharp_type_iterable_member(const sharp_type *type);
 static const sharp_type *sharp_type_lazily_checked(const sharp_type *type, const zval *value);
 static void sharp_sequence_check(zval *value, const sharp_type *iterable, zend_string *head);
 
@@ -4903,33 +4905,57 @@ static bool sharp_type_fits(sharp_type_node *type, sharp_type_node *bound, sharp
 	return true;
 }
 
-/* The function type the closure `value` declares, spec section 21: a PHP# function's, spelled for the object the closure
- * is bound to and the method type arguments it captured. NULL for a closure of a plain PHP function, of a method that
- * declares no function type, and of one whose type names a type parameter it has no type argument for. */
-static const sharp_type *sharp_closure_type(const zval *value)
+/* The function type the PHP# function `func` declares, spec section 21, spelled for `object`, its `this`, and `method`,
+ * the type arguments of its own type parameters. NULL for a plain PHP function, for a method that declares no function
+ * type, and for one whose type names a type parameter it has no type argument for. */
+static const sharp_type *sharp_function_type(const zend_function *func, zend_object *object, const sharp_type *method)
 {
-	const zend_function *func = zend_get_closure_method_def(Z_OBJ_P(value));
 	if (func->type != ZEND_USER_FUNCTION || !func->op_array.sharp_type) {
 		return NULL;
 	}
 
 	zval text;
 	ZVAL_INTERNED_STR(&text, func->op_array.sharp_type);
-	zval *this_ptr = zend_get_closure_this_ptr((zval *) value);
-	zend_object *object = Z_TYPE_P(this_ptr) == IS_OBJECT ? Z_OBJ_P(this_ptr) : NULL;
 	if (!object && memchr(Z_STRVAL(text), '$', Z_STRLEN(text))) {
 		return NULL;
 	}
-	/* A lambda that names its method's own type parameters captures the method's type arguments, as its frame keeps
-	 * them. A closure made from a method owns no statics, as zend_closure_get_gc says. */
-	HashTable *captured = !(func->common.fn_flags & ZEND_ACC_FAKE_CLOSURE)
-		? ZEND_MAP_PTR_GET(func->op_array.static_variables_ptr) : NULL;
-	zval *arguments = captured ? zend_hash_find(captured, sharp_type_arguments_key) : NULL;
-	const sharp_type *method = arguments && Z_TYPE_P(arguments) == IS_PTR ? Z_PTR_P(arguments) : NULL;
 	void *cache[4] = {NULL};
 	const sharp_type *own = sharp_type_list_of_frame(&text, object, method, false, func->common.scope, cache);
 
 	return own && own->members[0]->kind == SHARP_TYPE_FUNCTION ? own->members[0] : NULL;
+}
+
+/* The function type the closure `value` declares, as sharp_function_type spells it for the object the closure is bound
+ * to and the method type arguments it captured. */
+static const sharp_type *sharp_closure_type(const zval *value)
+{
+	const zend_function *func = zend_get_closure_method_def(Z_OBJ_P(value));
+	zval *this_ptr = zend_get_closure_this_ptr((zval *) value);
+	zend_object *object = Z_TYPE_P(this_ptr) == IS_OBJECT ? Z_OBJ_P(this_ptr) : NULL;
+	/* A lambda that names its method's own type parameters captures the method's type arguments, as its frame keeps
+	 * them. A closure made from a method owns no statics, as zend_closure_get_gc says. */
+	HashTable *captured = func->type == ZEND_USER_FUNCTION && !(func->common.fn_flags & ZEND_ACC_FAKE_CLOSURE)
+		? ZEND_MAP_PTR_GET(func->op_array.static_variables_ptr) : NULL;
+	zval *arguments = captured ? zend_hash_find(captured, sharp_type_arguments_key) : NULL;
+	const sharp_type *method = arguments && Z_TYPE_P(arguments) == IS_PTR ? Z_PTR_P(arguments) : NULL;
+
+	return sharp_function_type(func, object, method);
+}
+
+/* The element type the PHP# generator `object` yields, spec section 12: the `T` of the `Iterable<T>` its method
+ * returns, spelled for the frame it runs in. NULL for a plain PHP generator and for one that has finished, whose frame
+ * is gone. */
+static const sharp_type *sharp_generator_yields(zend_object *object)
+{
+	const zend_execute_data *frame = ((zend_generator *) object)->execute_data;
+	if (!frame) {
+		return NULL;
+	}
+	zend_object *self = Z_TYPE(frame->This) == IS_OBJECT ? Z_OBJ(frame->This) : NULL;
+	const sharp_type *function = sharp_function_type(frame->func, self, sharp_frame_method_type_arguments(frame));
+	const sharp_type *iterable = function ? sharp_type_iterable_member(function->members[0]) : NULL;
+
+	return iterable ? iterable->members[0] : NULL;
 }
 
 /* Whether `value` is a closure whose function's type can be assigned to the function type `type`, spec section 21, as
@@ -4981,12 +5007,18 @@ static bool sharp_type_within(const sharp_type *given, const sharp_type *wanted)
 }
 
 /* Whether the Traversable `object`, held as `iterable`, gives only elements of its element type, read from the type the
- * object carries and none of its elements, spec section 12: a check stage carries the type it checks each value
- * against, a map stage the return type of its PHP# function, and every other stage the type of the source it reads. A
- * plain PHP Traversable carries none, so it is only an `Iterable<Any?>`. */
+ * object carries and none of its elements, spec section 12: a PHP# generator the element type of the `Iterable<T>` its
+ * method returns, a check stage the type it checks each value against, a map stage the return type of its PHP#
+ * function, and every other stage the type of the source it reads. A plain PHP Traversable carries none, so it is only
+ * an `Iterable<Any?>`. */
 static bool sharp_iterable_object_holds(const sharp_type *iterable, zend_object *object)
 {
 	const sharp_type *element = iterable->members[0];
+	if (object->ce == zend_ce_generator) {
+		const sharp_type *yields = sharp_generator_yields(object);
+
+		return !EG(exception) && sharp_type_within(yields, element);
+	}
 	if (object->ce != sharp_ce_sequence) {
 		return sharp_type_within(NULL, element);
 	}
