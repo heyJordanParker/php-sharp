@@ -81,7 +81,7 @@ try {
 }
 
 // Every path through the constructor sets the get-only `T?` `note` and the settable `level`, so neither has an
-// initial value, and `note` stays PHP's `readonly` with no default. The settable `T?` `nickname` starts as null.
+// initial value, and `note` stays PHP's `readonly` with no default. The settable `T?` `nickname` writes `= null`.
 $claimed = new Overrides\Member('hi', true);
 $open = new Overrides\Member('hi', false);
 var_dump($claimed->note, $claimed->level, $open->note, $open->level, $open->nickname);

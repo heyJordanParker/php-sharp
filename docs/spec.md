@@ -209,9 +209,9 @@ public List<Tag> tags { get; set; } = [];
 
 Initial values run before the parent's constructor, in the order the members are declared, and can't read `this`, as in C#.
 
-**A `T?` field or settable auto-property with no initial value starts as null,** as in C# and Swift. A get-only `T?` property is set once, by its initial value or by the constructor, like every other get-only property.
+**A member has no implicit starting value, `null` included.** A `T?` member writes `= null` like any other starting value, and PHP# has no default filler such as C#'s `default(T)`.
 
-**A property with storage and no initial value must be set on every path through the main constructor,** as Swift's and Kotlin's stored properties must be. This holds for a get-only property, nullable or not, and for a settable one that isn't `T?`. Otherwise it is a compile error that names both fixes: an initial value, or setting it in the constructor.
+**A field or a property with storage and no initial value must be set on every path through the main constructor,** as Swift's and Kotlin's stored properties must be. This holds for every one, settable or get-only, nullable or not, as it does for a struct. Otherwise it is a compile error that names both fixes: an initial value, or setting it in the constructor.
 
 <!-- example nullable-members -->
 ```csharp
@@ -220,8 +220,9 @@ namespace App;
 
 public class Profile
 {
-    private int? total;                      // compiles: starts as null
-    public string? nickname { get; set; }    // compiles: starts as null
+    private int? total = null;               // compiles: starts as null
+    private int? count;                      // compile error: give count an initial value, or set it on every path through the constructor
+    public string? nickname { get; set; }    // compile error: give nickname an initial value, or set it on every path through the constructor
     public string? note { get; }             // compiles: the constructor sets it once
     public string? memo { get; } = null;     // compiles: the initial value sets it once
     public string? handle { get; }           // compile error: give handle an initial value, or set it on every path through the constructor
@@ -232,12 +233,12 @@ public class Profile
     {
         this.note = note;
         this.level = 1;
-        if (claimed) { this.handle = "taken"; this.rank = 1; }
+        if (claimed) { this.handle = "taken"; this.rank = 1; this.count = 1; this.nickname = "new"; }
     }
 }
 ```
 
-**A static field or property that isn't `T?` needs an initial value.** No constructor sets it, so the error names both fixes: an initial value, or `T?`.
+**A static field or property with storage needs an initial value, whatever its type.** No constructor sets it, so the error names that one fix.
 
 **A static's initial value runs once, when a request first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. A get-only static is set only by its initial value.
 
@@ -246,10 +247,10 @@ public class Profile
 <!-- example static-initial-values: members -->
 ```csharp
 private static int hits = 0;                     // compiles
-private static int misses;                       // compile error: give misses an initial value, or make it int?
-public static string? region { get; set; }       // compiles: starts as null
-public static string label { get; set; }         // compile error: give label an initial value, or make it string?
-private static int started = global.time();      // compiles: runs once, when the class is loaded
+private static int misses;                       // compile error: give misses an initial value
+public static string? region { get; set; } = null;   // compiles: starts as null
+public static string? zone { get; set; }         // compile error: give zone an initial value
+private static int started = global.time();      // compiles: runs once, when a request first uses the class's statics
 public static int limit { get; } = 10;           // compiles: get-only, set only by its initial value
 ```
 
@@ -1476,7 +1477,7 @@ A function type is written as `Function<ReturnType(ParameterTypes)>`, in the sam
 
 <!-- example function-types: members -->
 ```csharp
-Function<Money?(readonly Line, string)> priceOf
+Function<Money?(readonly Line, string)> priceOf = (line, currency) => null
 Function<void(Order)>? onPaid = null
 public Function<bool(Order)> eligibleFor(Account account)
 ```
@@ -1543,7 +1544,7 @@ In a plain PHP class with both a property and a method of that name, the propert
 int price = 900;
 -->
 ```csharp
-private Function<int(int)> discount;
+private Function<int(int)> discount = (int amount) => amount - 100;
 int paid = this.discount(price);       // calls the function in discount, since there is no discount method
 ```
 
@@ -3772,18 +3773,18 @@ public interface PaymentGateway
     Charge charge(Cart cart) uses Http;              // implementations may reach Http, nothing else
 }
 
-Function<Money(Offer)> priceOf                       // a pure function value
-Function<Charge(Cart) uses Http> charge              // may reach Http
+Function<Money(Offer)> priceOf = (offer) => Money.zero("USD");      // a pure function value
+Function<Charge(Cart) uses Http> charge = (cart) => new Charge();   // may reach Http
 ```
 
 **A function type lists its effects inside its brackets,** after the parameter types, wherever the type is written:
 
 <!-- example function-type-effects: members -->
 ```csharp
-Function<Charge(Cart) uses Http> charge;                        // compiles
-Function<Charge(Cart) uses Http>? fallback;                      // compiles
-Map<string, Function<Charge(Cart) uses Http, Mail>> handlers;    // compiles: Http and Mail are both effects
-Function<int(Function<int(int) uses Http>)> apply;               // compiles
+Function<Charge(Cart) uses Http> charge = (cart) => new Charge();          // compiles
+Function<Charge(Cart) uses Http>? fallback = null;                          // compiles
+Map<string, Function<Charge(Cart) uses Http, Mail>> handlers = [:];         // compiles: Http and Mail are both effects
+Function<int(Function<int(int) uses Http>)> apply = (step) => 0;            // compiles
 ```
 
 An implementation that calls plain PHP fits the declaration only through an `extern`:

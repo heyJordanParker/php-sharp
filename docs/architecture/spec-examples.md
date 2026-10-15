@@ -104,8 +104,8 @@ Members that declare `note` twice, checked one line at a time (section 6):
 ````diff
 +<!-- example nullable-members: members alone -->
  ```csharp
- private int? total;                      // compiles: starts as null
- public string? nickname { get; set; }    // compiles: starts as null
+ private int? total = null;               // compiles: starts as null
+ public string? nickname { get; set; }    // compile error: give nickname an initial value, or set it on every path through the constructor
  public string? note { get; }             // compile error: give note an initial value, or a set accessor
  public string? note { get; } = null;     // compiles
  ```

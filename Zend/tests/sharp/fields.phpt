@@ -31,7 +31,7 @@ try {
 --EXPECT--
 private int count = 0 field
 protected float rate = 3.0 field
-private string label field
+private string label = '' field
 bool(false)
 5
 15
