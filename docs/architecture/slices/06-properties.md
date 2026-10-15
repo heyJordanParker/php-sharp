@@ -39,9 +39,9 @@ Each question is about syntax or meaning. The recommendation is mine, and the bu
    - Recommended: A. It is one flag and one method, and PHP's `getProperties()` keeps listing both, as plain PHP tools expect.
 7. **Lines 191 and 252, an access level on `get`.** C# lets either accessor be narrower. PHP cannot run a `get` narrower than `set`. Master refuses `{ protected get; set; }` as "not supported yet". Recommended: only `set` and `init` take a level, as in Swift's `private(set)`, and a level on `get` is the error "Write the read level on the property, and a narrower one on `set`."
 8. **Line 293, what an observer sees and when it runs.** Recommended, after Swift:
-   - Both observers see `value`, the written value, and `field`, the storage, as accessor bodies do (line 256). In `willSet`, `field` is the old value. In `didSet`, it is the new one.
+   - Both observers see `value`, the written value, and `field`, the storage, as accessor bodies do (line 256). In `didSet`, `field` is the new value. In `willSet` it is "not supported yet": before the first write there is no old value, and Jordan rules between `T?`, null before the first write, and a compile error.
    - `willSet` cannot change or stop the write.
-   - They run on every write through `set`, constructor writes included. An initial value is no write, so it runs neither.
+   - Jordan's ruling: they run on every write, the constructor's and the initial value's included.
    - They run when the value is unchanged.
    - Beside a `set` body, the order is `willSet`, the `set` body, `didSet`.
    - They need `set`. On `init`, a get-only or a computed property, they are an error.
@@ -169,13 +169,13 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 
 | Line | Rule | Today | Mechanism | Reuses |
 |---|---|---|---|---|
-| 293 | `willSet` runs before a write, `didSet` after it | Refused: `Observed`, `WillSet`, "This accessor is not supported yet" | See below | `check_accessors`, `Lowering::hooks` |
-| 299 | `public string name { get; set; didSet => this.touch(); }` | Refused, as above | As above | |
+| 293 | `willSet` runs before a write, `didSet` after it | Refused: `Observed`, `WillSet`, "This accessor is not supported yet" | Built, as below. Jordan's ruling on question 8: observers run on every write, the initial value's and the constructor's included. `field` in `willSet` is "not supported yet" until his ruling on its first-write value | `check_accessors`, `Lowering::hooks` |
+| 299 | `public string name { get; set; didSet => this.touch(); }` | Passes: `change-observers` is out of the baseline | As above | |
 
 - **Syntax:** none new. The parser already reads `willSet` and `didSet` as `PropertyHook`s by name. `PropertyHook::is_observer` names them, beside `is_setter`.
 - **Semantics:** `is_slice_accessor` accepts each once, with a body, no modifier, no parameter list, on a property with `set` (question 8). On a parameter, decision 4's error.
-- **Codex:** `scan_property_hook` counts the observers' bodies into the `set` hook, so effects and `field` resolve as they do for a `set` body.
-- **The bridge:** `Lowering::hooks` writes one `set` hook: the `willSet` body, then the `set` body or the storage write `$this->name = $value`, then the `didSet` body. A `get` with no body stays PHP's backed read.
+- **Codex:** `scan_property_hook` counts the observers' bodies into the `set` hook, so `value` and `field` resolve as they do for a `set` body. Each observer keeps its own effect summary, `Body::Accessor` named `willSet` or `didSet`, which every write calls beside `set`.
+- **The bridge:** `Lowering::hooks` writes one `set` hook: the `willSet` body, then the `set` body or the storage write `$this->name = $value`, then the `didSet` body. A `get` with no body stays PHP's backed read. An observed property's initial value, constant or not, is a write at the start of the constructor (`Property::initial_value_runs_in_constructor`).
 - **Engine:** `Observers.sharp` and `observers.phpt`, with each order of question 8 as a row.
 
 ## Section 6.3: typed property references

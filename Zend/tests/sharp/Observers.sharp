@@ -1,0 +1,19 @@
+namespace Observed;
+
+public class Account
+{
+    public int balance { get; set; willSet => global.printf("will %d\n", value); didSet => global.printf("did %d\n", field); } = 1;
+    public string name { get; set { global.printf("set [%s]\n", value); field = global.trim(value); } didSet => global.printf("named %s\n", field); }
+
+    public Account(string name)
+    {
+        global.printf("constructor\n");
+        this.name = name;
+        this.balance = 2;
+    }
+
+    public void deposit(int amount)
+    {
+        this.balance = this.balance + amount;
+    }
+}

@@ -320,11 +320,17 @@ public class Order : Model
 
 `willSet` runs before a write, and `didSet` runs after it.
 
+**Observers run on every write,** the initial value's and the constructor's included, and also when the value is unchanged. Both see `value`, the written value, and `didSet` reads `field`, the stored one. Beside a `set` body, the order is `willSet`, the `set` body, then `didSet`. An observer runs inside `set`, so a property with one needs `set`.
+
+**`willSet` cannot change or stop the write.** Writing `value` or returning in it is a compile error, and so is returning in a `set` body before `didSet`:
+
 <!-- example change-observers: members
 private void touch() { }
 -->
 ```csharp
-public string name { get; set; didSet => this.touch(); } = "";
+public string name { get; set; didSet => this.touch(); } = "";    // compiles: didSet runs on each write, the initial value's included
+public int total { get; set; willSet { value = 0; } } = 0;        // compile error: willSet cannot change value
+public int count { get; didSet => this.touch(); } = 0;            // compile error: didSet needs set
 ```
 
 ### 6.3 Typed property references
