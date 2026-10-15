@@ -1,0 +1,21 @@
+namespace Defaults;
+
+public class Counter
+{
+    int count = 1;
+    int views { get; set; } = 2;
+    int size => this.count + this.views;
+    static int made { get; set; } = 3;
+    const int MAX = 4;
+
+    public Counter(int start)
+    {
+        this.count = start;
+    }
+
+    Counter.empty() : this(0) { }
+
+    public static Counter make() => new Counter.empty();
+
+    public int total() => this.count + this.views + this.size + Counter.made + Counter.MAX;
+}
