@@ -19,6 +19,7 @@
 #include "php_incomplete_class.h"
 #include "zend_portability.h"
 #include "zend_exceptions.h"
+#include "ext/sharp/php_sharp.h"
 
 /* {{{ reference-handling for unserializer: var_* */
 #define VAR_ENTRIES_MAX 1018     /* 1024 - offsetof(php_unserialize_data, entries) / sizeof(void*) */
@@ -460,7 +461,41 @@ static inline size_t parse_uiv(const unsigned char *p)
 
 static int php_var_unserialize_internal(UNSERIALIZE_PARAMETER);
 
-static zend_always_inline int process_nested_array_data(UNSERIALIZE_PARAMETER, HashTable *ht, zend_long elements)
+/* PHP#: the class a type argument names, which `context` holds the var_hash for. It resolves as an object's class does:
+ * allowed_classes first, then the autoloader under the serialize lock, so an unserialize the autoloader runs keeps its
+ * own reference numbers. */
+static zend_class_entry *unserialize_type_argument_class(zend_string *class_name, void *context)
+{
+	zend_string *lc_name = zend_string_tolower(class_name);
+	zend_class_entry *ce = NULL;
+
+	if (unserialize_allowed_class(lc_name, context)) {
+		BG(serialize_lock)++;
+		ce = zend_lookup_class_ex(class_name, lc_name, 0);
+		BG(serialize_lock)--;
+	}
+	zend_string_release_ex(lc_name, 0);
+
+	return EG(exception) ? NULL : ce;
+}
+
+/* PHP#: reads the value serialize wrote under sharp_type_arguments_key into the hidden slot of `obj`. Serialize gives
+ * the value no number, so no R: or r: can name it, and it is read without the var_hash. */
+static int process_type_arguments(UNSERIALIZE_PARAMETER, zend_object *obj)
+{
+	zval text;
+	int filled;
+
+	ZVAL_UNDEF(&text);
+	filled = php_var_unserialize_internal(&text, p, max, NULL)
+		&& sharp_type_arguments_unserialize(obj, &text, unserialize_type_argument_class, var_hash) == SUCCESS;
+	zval_ptr_dtor(&text);
+
+	return filled;
+}
+
+/* `obj` is the object whose __unserialize gets the data, NULL for an array. */
+static zend_always_inline int process_nested_array_data(UNSERIALIZE_PARAMETER, HashTable *ht, zend_long elements, zend_object *obj)
 {
 	if (var_hash) {
 		if ((*var_hash)->max_depth > 0 && (*var_hash)->cur_depth >= (*var_hash)->max_depth) {
@@ -497,6 +532,13 @@ numeric_key:
 			if (UNEXPECTED(ZEND_HANDLE_NUMERIC(Z_STR(key), idx))) {
 				zval_ptr_dtor_str(&key);
 				goto numeric_key;
+			}
+			if (UNEXPECTED(obj && zend_string_equals(Z_STR(key), sharp_type_arguments_key))) {
+				zval_ptr_dtor_str(&key);
+				if (!process_type_arguments(UNSERIALIZE_PASSTHRU, obj)) {
+					goto failure;
+				}
+				continue;
 			}
 			data = zend_hash_lookup(ht, Z_STR(key));
 			if (UNEXPECTED(Z_TYPE_INFO_P(data) != IS_NULL)) {
@@ -586,6 +628,10 @@ static zend_always_inline int process_nested_object_data(UNSERIALIZE_PARAMETER, 
 		(*var_hash)->cur_depth++;
 	}
 
+	/* PHP#: a PHP# property's type may name the class's type parameters, which the object's type arguments, read after
+	 * its properties, spell. */
+	uint32_t sharp_typed = 0;
+
 	while (elements-- > 0) {
 		zval key, *data;
 		zend_property_info *info = NULL;
@@ -599,6 +645,24 @@ static zend_always_inline int process_nested_object_data(UNSERIALIZE_PARAMETER, 
 
 		if (EXPECTED(Z_TYPE(key) == IS_STRING)) {
 string_key:
+			if (UNEXPECTED(zend_string_equals(Z_STR(key), sharp_type_arguments_key))) {
+				zval_ptr_dtor_str(&key);
+				if (obj->ce == PHP_IC_ENTRY) {
+					/* PHP#: an incomplete class keeps the type arguments as an ordinary entry, read as serialize
+					 * wrote them, without a reference number, so it serializes back to the same bytes. */
+					zval text;
+
+					ZVAL_UNDEF(&text);
+					if (!php_var_unserialize_internal(&text, p, max, NULL) || Z_TYPE(text) != IS_STRING) {
+						zval_ptr_dtor(&text);
+						goto failure;
+					}
+					zend_hash_update(ht, sharp_type_arguments_key, &text);
+				} else if (!process_type_arguments(UNSERIALIZE_PASSTHRU, obj)) {
+					goto failure;
+				}
+				continue;
+			}
 			data = zend_hash_find(ht, Z_STR(key));
 			if (data != NULL) {
 				if (Z_TYPE_P(data) == IS_INDIRECT) {
@@ -688,11 +752,13 @@ second_try:
 		}
 
 		if (UNEXPECTED(info)) {
-			if (!zend_verify_prop_assignable_by_ref(info, data, /* strict */ 1)) {
+			if (!zend_verify_prop_assignable_by_ref(info, data, /* strict */ 1)
+					|| UNEXPECTED(Z_ISREF_P(data) && sharp_property_refuses_reference(info))) {
 				zval_ptr_dtor(data);
 				ZVAL_UNDEF(data);
 				goto failure;
 			}
+			sharp_typed |= info->flags & ZEND_ACC_SHARP_TYPED;
 
 			if (Z_ISREF_P(data)) {
 				ZEND_REF_ADD_TYPE_SOURCE(Z_REF_P(data), info);
@@ -712,6 +778,10 @@ second_try:
 			(*p)--;
 			goto failure;
 		}
+	}
+
+	if (UNEXPECTED(sharp_typed) && !sharp_object_open_properties_accept(obj)) {
+		goto failure;
 	}
 
 	if (var_hash) {
@@ -799,7 +869,7 @@ static inline int object_common(UNSERIALIZE_PARAMETER, zend_long elements, bool 
 		array_init_size(&ary, elements);
 		/* Avoid reallocation due to packed -> mixed conversion. */
 		zend_hash_real_init_mixed(Z_ARRVAL(ary));
-		if (!process_nested_array_data(UNSERIALIZE_PASSTHRU, Z_ARRVAL(ary), elements)) {
+		if (!process_nested_array_data(UNSERIALIZE_PASSTHRU, Z_ARRVAL(ary), elements, Z_OBJ_P(rval))) {
 			ZVAL_DEREF(rval);
 			GC_ADD_FLAGS(Z_OBJ_P(rval), IS_OBJ_DESTRUCTOR_CALLED);
 			zval_ptr_dtor(&ary);
@@ -915,6 +985,9 @@ static int php_var_unserialize_internal(UNSERIALIZE_PARAMETER)
 		zend_property_info *info = NULL;
 		if ((*var_hash)->ref_props) {
 			info = zend_hash_index_find_ptr((*var_hash)->ref_props, (uintptr_t) rval_ref);
+		}
+		if (info && UNEXPECTED(sharp_property_refuses_reference(info))) {
+			return 0;
 		}
 		ZVAL_NEW_REF(rval_ref, rval_ref);
 		if (info) {
@@ -1121,7 +1194,7 @@ use_double:
 	 * prohibit "r:" references to non-objects, as we only generate them for objects. */
 	HT_ALLOW_COW_VIOLATION(Z_ARRVAL_P(rval));
 
-	if (!process_nested_array_data(UNSERIALIZE_PASSTHRU, Z_ARRVAL_P(rval), elements)) {
+	if (!process_nested_array_data(UNSERIALIZE_PASSTHRU, Z_ARRVAL_P(rval), elements, /* obj */ NULL)) {
 		return 0;
 	}
 

@@ -65,6 +65,6 @@ class Label
 
     public Label.shouting(string text) : this(text)
     {
-        this.text = strtoupper(text);
+        this.text = global.strtoupper(text);
     }
 }

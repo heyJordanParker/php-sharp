@@ -843,7 +843,9 @@ zend_jit_trace_stop ZEND_FASTCALL zend_jit_trace_execute(zend_execute_data  *ex,
 					flags |= IS_TRACE_PACKED;
 				}
 			}
-			op1_type |= flags;
+			/* PHP#: an IS_PTR, such as a generic call's type arguments or the hidden local that holds them, is no PHP
+			 * type. */
+			op1_type = op1_type == IS_PTR ? IS_UNKNOWN : op1_type | flags;
 		} else if (opline->op1_type == IS_UNUSED && (op_array->fn_flags & ZEND_ACC_CLOSURE)) {
 			uint32_t op1_flags = ZEND_VM_OP1_FLAGS(zend_get_opcode_flags(opline->opcode));
 			if ((op1_flags & ZEND_VM_OP_MASK) == ZEND_VM_OP_THIS) {
@@ -888,7 +890,7 @@ zend_jit_trace_stop ZEND_FASTCALL zend_jit_trace_execute(zend_execute_data  *ex,
 			if (Z_TYPE_P(zv) == IS_OBJECT) {
 				ce2 = Z_OBJCE_P(zv);
 			}
-			op2_type |= flags;
+			op2_type = op2_type == IS_PTR ? IS_UNKNOWN : op2_type | flags;
 		}
 		if (opline->opcode == ZEND_ASSIGN_DIM ||
 			opline->opcode == ZEND_ASSIGN_OBJ ||
@@ -913,7 +915,7 @@ zend_jit_trace_stop ZEND_FASTCALL zend_jit_trace_execute(zend_execute_data  *ex,
 					op3_type = Z_TYPE_P(zv);
 					flags |= IS_TRACE_REFERENCE;
 				}
-				op3_type |= flags;
+				op3_type = op3_type == IS_PTR ? IS_UNKNOWN : op3_type | flags;
 			}
 		}
 

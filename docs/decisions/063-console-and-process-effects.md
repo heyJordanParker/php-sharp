@@ -1,5 +1,7 @@
 # 63. The effects of printing and `exit`
 
+Superseded in part by [decision 76](076-plain-php-functions.md): a bare call such as `printf(…)`, `fwrite(…)` or `exit(1)` below is a compile error, and the call is written `global.printf(…)`. A bare `STDERR` or `PHP_EOL` is a compile error too, and the constant is written `global.STDERR`. `global.fwrite` has both `Console` and `Files`, because the handle it takes can be a terminal or a file.
+
 ## Decision
 
 Printing has the effect `Console`, and `exit` has the effect `Process`. This replaces "`Php` until the standard library wraps them" (decision 34). `Console` covers standard output and standard error, which includes `printf` and `fwrite(STDOUT|STDERR, …)`. `Files` covers every other file. `Process` covers `exit`. `Console` and `Process` join the standard library's list of standard effects.

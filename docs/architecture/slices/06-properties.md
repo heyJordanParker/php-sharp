@@ -355,7 +355,7 @@ php-sharp
 ├── docs/decisions/028-plain-php-property-override.md   <- the property form (question 3)
 ├── docs/spec.md                                <- errata team-lead rules on (questions 1, 2, 13)
 ├── ext/reflection/php_reflection.c, .stub.php  <- ReflectionProperty::isField(): bool, beside isVirtual
-├── Zend/zend_compile.h                         <- ZEND_ACC_FIELD (1 << 13), a property flag the bridge sets on
+├── Zend/zend_compile.h                         <- ZEND_ACC_FIELD (1 << 15), a property flag the bridge sets on
 │                                                  each field, a promoted one included
 ├── Zend/zend_compile.c                         <- a promoted parameter keeps ZEND_ACC_FIELD
 ├── Zend/tests/sharp/

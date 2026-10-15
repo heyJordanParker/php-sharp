@@ -51,6 +51,7 @@
 #include "zend_smart_str.h"
 #include "zend_enum.h"
 #include "zend_fibers.h"
+#include "ext/sharp/php_sharp.h"
 
 #define REFLECTION_ATTRIBUTE_IS_INSTANCEOF (1 << 1)
 
@@ -446,7 +447,8 @@ static void _class_string(smart_str *str, zend_class_entry *ce, zval *obj, const
 		zend_property_info *prop;
 
 		ZEND_HASH_MAP_FOREACH_PTR(&ce->properties_info, prop) {
-			if ((prop->flags & ZEND_ACC_PRIVATE) && prop->ce != ce) {
+			/* PHP#: the slot that keeps an object's type arguments counts as a shadow, so no listing shows it. */
+			if (((prop->flags & ZEND_ACC_PRIVATE) && prop->ce != ce) || (prop->flags & ZEND_ACC_SHARP_HIDDEN)) {
 				count_shadow_props++;
 			} else if (prop->flags & ZEND_ACC_STATIC) {
 				count_static_props++;
@@ -507,7 +509,7 @@ static void _class_string(smart_str *str, zend_class_entry *ce, zval *obj, const
 		zend_property_info *prop;
 
 		ZEND_HASH_MAP_FOREACH_PTR(&ce->properties_info, prop) {
-			if (!(prop->flags & ZEND_ACC_STATIC)
+			if (!(prop->flags & (ZEND_ACC_STATIC|ZEND_ACC_SHARP_HIDDEN))
 			 && (!(prop->flags & ZEND_ACC_PRIVATE) || prop->ce == ce)) {
 				_property_string(str, prop, NULL, ZSTR_VAL(sub_indent));
 			}
@@ -864,7 +866,8 @@ static void _function_closure_string(smart_str *str, const zend_function *fptr, 
 	}
 
 	static_variables = ZEND_MAP_PTR_GET(fptr->op_array.static_variables_ptr);
-	count = zend_hash_num_elements(static_variables);
+	/* A PHP# lambda's hidden local of its method's type arguments is no variable it binds. */
+	count = zend_hash_num_elements(static_variables) - zend_hash_exists(static_variables, sharp_type_arguments_key);
 
 	if (!count) {
 		return;
@@ -874,6 +877,9 @@ static void _function_closure_string(smart_str *str, const zend_function *fptr, 
 	smart_str_append_printf(str, "%s- Bound Variables [%u] {\n", indent, count);
 	i = 0;
 	ZEND_HASH_MAP_FOREACH_STR_KEY(static_variables, key) {
+		if (UNEXPECTED(sharp_is_type_arguments_key(key))) {
+			continue;
+		}
 		smart_str_append_printf(str, "%s    Variable #%d [ $%s ]\n", indent, i++, ZSTR_VAL(key));
 	} ZEND_HASH_FOREACH_END();
 	smart_str_append_printf(str, "%s}\n", indent);
@@ -1966,7 +1972,7 @@ ZEND_METHOD(ReflectionFunctionAbstract, getClosureUsedVariables)
 				(((char*)static_variables->arData) +
 				(opline->extended_value & ~(ZEND_BIND_REF|ZEND_BIND_IMPLICIT|ZEND_BIND_EXPLICIT)));
 
-			if (Z_ISUNDEF(bucket->val)) {
+			if (Z_ISUNDEF(bucket->val) || UNEXPECTED(sharp_is_type_arguments_key(bucket->key))) {
 				continue;
 			}
 
@@ -2149,6 +2155,8 @@ ZEND_METHOD(ReflectionFunctionAbstract, getStaticVariables)
 			ZEND_MAP_PTR_SET(fptr->op_array.static_variables_ptr, ht);
 		}
 		zend_hash_copy(Z_ARRVAL_P(return_value), ht, zval_add_ref);
+		/* A PHP# lambda's hidden local of its method's type arguments is no variable of the lambda. */
+		zend_hash_del(Z_ARRVAL_P(return_value), sharp_type_arguments_key);
 	} else {
 		RETURN_EMPTY_ARRAY();
 	}
@@ -4231,7 +4239,7 @@ static void add_class_vars(zend_class_entry *ce, bool statics, zval *return_valu
 
 	ZEND_HASH_MAP_FOREACH_STR_KEY_PTR(&ce->properties_info, key, prop_info) {
 		if (((prop_info->flags & ZEND_ACC_PRIVATE) &&
-		     prop_info->ce != ce)) {
+		     prop_info->ce != ce) || (prop_info->flags & ZEND_ACC_SHARP_HIDDEN)) {
 			continue;
 		}
 
@@ -4290,7 +4298,8 @@ ZEND_METHOD(ReflectionClass, getStaticProperties)
 		     prop_info->ce != ce)) {
 			continue;
 		}
-		if ((prop_info->flags & ZEND_ACC_STATIC) == 0) {
+		/* PHP#: a generic class's hidden static store is no static property. */
+		if ((prop_info->flags & (ZEND_ACC_STATIC|ZEND_ACC_SHARP_HIDDEN)) != ZEND_ACC_STATIC) {
 			continue;
 		}
 
@@ -4395,7 +4404,7 @@ ZEND_METHOD(ReflectionClass, setStaticPropertyValue)
 		}
 	}
 
-	if (ZEND_TYPE_IS_SET(prop_info->type) && !zend_verify_property_type(prop_info, value, 0)) {
+	if (ZEND_TYPE_IS_SET(prop_info->type) && !zend_verify_object_property_type(prop_info, value, 0, NULL)) {
 		return;
 	}
 
@@ -4712,6 +4721,7 @@ ZEND_METHOD(ReflectionClass, hasProperty)
 
 	GET_REFLECTION_OBJECT_PTR(ce);
 	if ((property_info = zend_hash_find_ptr(&ce->properties_info, name)) != NULL
+	 && !(property_info->flags & ZEND_ACC_SHARP_HIDDEN)
 	 && (!(property_info->flags & ZEND_ACC_PRIVATE)
 	  || property_info->ce == ce)) {
 		RETURN_TRUE;
@@ -4741,6 +4751,7 @@ ZEND_METHOD(ReflectionClass, getProperty)
 
 	GET_REFLECTION_OBJECT_PTR(ce);
 	if ((property_info = zend_hash_find_ptr(&ce->properties_info, name)) != NULL
+	 && !(property_info->flags & ZEND_ACC_SHARP_HIDDEN)
 	 && (!(property_info->flags & ZEND_ACC_PRIVATE)
 	  || property_info->ce == ce)) {
 		reflection_property_factory(ce, name, property_info, return_value);
@@ -4788,6 +4799,7 @@ ZEND_METHOD(ReflectionClass, getProperty)
 
 		property_info = zend_hash_str_find_ptr(&ce->properties_info, str_name, str_name_len);
 		if (property_info != NULL
+		 && !(property_info->flags & ZEND_ACC_SHARP_HIDDEN)
 		 && (!(property_info->flags & ZEND_ACC_PRIVATE)
 		  || property_info->ce == ce)) {
 			reflection_property_factory_str(ce, str_name, str_name_len, property_info, return_value);
@@ -4813,7 +4825,7 @@ ZEND_METHOD(ReflectionClass, getProperty)
 /* {{{ _addproperty */
 static void _addproperty(zend_property_info *pptr, zend_string *key, zend_class_entry *ce, HashTable *ht, long filter)
 {
-	if ((pptr->flags & ZEND_ACC_PRIVATE) && pptr->ce != ce) {
+	if (((pptr->flags & ZEND_ACC_PRIVATE) && pptr->ce != ce) || (pptr->flags & ZEND_ACC_SHARP_HIDDEN)) {
 		return;
 	}
 
@@ -5820,6 +5832,35 @@ ZEND_METHOD(ReflectionObject, __construct)
 }
 /* }}} */
 
+/* {{{ PHP#: the type texts of the object's type arguments, one per type parameter of its own class */
+ZEND_METHOD(ReflectionObject, getTypeArguments)
+{
+	reflection_object *intern;
+	const sharp_type *arguments;
+
+	ZEND_PARSE_PARAMETERS_NONE();
+	GET_REFLECTION_OBJECT();
+	if (UNEXPECTED(Z_TYPE(intern->obj) != IS_OBJECT)) {
+		zend_throw_error(NULL, "Internal error: Failed to retrieve the reflection object");
+		RETURN_THROWS();
+	}
+
+	arguments = sharp_type_arguments(Z_OBJ(intern->obj));
+	if (!arguments) {
+		/* A lazy proxy's initializer runs here, and can throw. */
+		if (UNEXPECTED(EG(exception))) {
+			RETURN_THROWS();
+		}
+		RETURN_EMPTY_ARRAY();
+	}
+
+	array_init_size(return_value, arguments->count);
+	for (uint32_t i = 0; i < arguments->count; i++) {
+		add_next_index_str(return_value, arguments->members[i]->text);
+	}
+}
+/* }}} */
+
 /* {{{ Constructor. Throws an Exception in case the given property does not exist */
 ZEND_METHOD(ReflectionProperty, __construct)
 {
@@ -5855,6 +5896,7 @@ ZEND_METHOD(ReflectionProperty, __construct)
 
 	property_info = zend_hash_find_ptr(&ce->properties_info, name);
 	if (property_info == NULL
+	 || (property_info->flags & ZEND_ACC_SHARP_HIDDEN)
 	 || ((property_info->flags & ZEND_ACC_PRIVATE)
 	  && property_info->ce != ce)) {
 		/* Check for dynamic properties */

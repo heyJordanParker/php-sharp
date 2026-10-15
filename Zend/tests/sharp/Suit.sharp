@@ -7,11 +7,11 @@ enum Suit
 
     public string label()
     {
-        return strtolower(this.name);
+        return global.strtolower(this.name);
     }
 
     public static int size()
     {
-        return count(Suit.cases());
+        return global.count(Suit.cases());
     }
 }

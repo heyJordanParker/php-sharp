@@ -1,5 +1,7 @@
 # 43. The effects of PHP's built-in functions
 
+Superseded in part by [decision 76](076-plain-php-functions.md): a bare call such as `file_put_contents("seen.txt", token)` below is a compile error, and the call is written `global.file_put_contents(…)`.
+
 ## Decision
 
 PHP#'s Composer package ships an `extern` declaration for every PHP built-in function, with its real effect or as pure. There is no catch-all effect. This replaces the earlier rule that every other built-in function is pure. Printing has the effect `Console`, and `exit` has the effect `Process` (decision 63).
