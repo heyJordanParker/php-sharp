@@ -425,11 +425,6 @@ static void zend_persist_op_array_ex(zend_op_array *op_array, zend_persistent_sc
 		}
 	}
 
-	/* PHP#: the type text is interned where the function is compiled, so each copy of the function stores the one. */
-	if (op_array->sharp_type) {
-		zend_accel_store_interned_string(op_array->sharp_type);
-	}
-
 	if (op_array->scope) {
 		zend_class_entry *scope = zend_shared_alloc_get_xlat_entry(op_array->scope);
 
@@ -483,6 +478,10 @@ static void zend_persist_op_array_ex(zend_op_array *op_array, zend_persistent_sc
 				} else {
 					op_array->doc_comment = NULL;
 				}
+			}
+			if (op_array->sharp_type && !IS_ACCEL_INTERNED(op_array->sharp_type)) {
+				op_array->sharp_type = zend_shared_alloc_get_xlat_entry(op_array->sharp_type);
+				ZEND_ASSERT(op_array->sharp_type != NULL);
 			}
 			if (op_array->attributes) {
 				op_array->attributes = zend_shared_alloc_get_xlat_entry(op_array->attributes);
@@ -676,6 +675,12 @@ static void zend_persist_op_array_ex(zend_op_array *op_array, zend_persistent_sc
 			zend_string_release_ex(op_array->doc_comment, 0);
 			op_array->doc_comment = NULL;
 		}
+	}
+
+	/* PHP#: the type text is one string each copy of the function shares, as its doc comment is, and destroy_op_array
+	 * releases it once. A copy takes the stored one above. */
+	if (op_array->sharp_type) {
+		zend_accel_store_interned_string(op_array->sharp_type);
 	}
 
 	if (op_array->attributes) {
