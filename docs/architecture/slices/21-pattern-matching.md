@@ -32,7 +32,13 @@ When the Slice lands, every entry of §14.4, §20, §20.1 and §21 leaves `sharp
 4. **A type pattern takes properties.** `TypePattern` gains `properties: Option<PropertiesPattern>`, between its `hint` and its `variable`, so `Paid { amount: > 1000 } big` is one pattern. `php_shape` tests the type on the named variable, or on the subject, and then each property on it, as the properties arm does today: `($big = x) instanceof Paid && $big->amount > 1000`. Decision 13 adds the positional fields of a case to the same node.
 5. **A list pattern is the new `Pattern::List(ListPattern)`.** Each element is any pattern, and one `RestPattern`, `...List<Line> rest` or a bare `...`, stands anywhere among them (answer 3, then Jordan's ruling in Queue 3); a second rest is a compile error. `php_shape` lowers it on a `List` subject to PHP on the array: `\count(s) === 1 && ($only = s[0]) instanceof Line`, and with a rest `\count(s) >= n`, each element before the rest read as `s[i]`, each after it as `s[\count(s) - m]`, and a named rest at place `k` assigned `\array_slice(s, k, \count(s) - n)`, or `\array_slice(s, k)` at the end. On a subject whose type is not a `List`, the first test is #102's `is List<T>`. The binder records `\count` and `\array_slice` as the names their spans call, as it records `is_int` today (`called_function`).
 6. **A pattern takes types and constants only.** The semantic check refuses a type pattern whose bare name the binder binds to a local or a parameter, and a value or comparison pattern that reads a local, a parameter or `this`, with the spec's reason: "`limit` is a local: compare its value in `when`, as in `int n when n == limit`." The analyzer refuses `Class.y` when `y` is a static property, because only the codebase tells it from a constant. Reading (a) leaves the binder (`walk_in_type_pattern`), the CST doc of `TypePattern` and `php_shape`'s first `test` arm.
-7. **A function type is tested like any other type.** The semantic check accepts `Function<R(P…)>` in `is`, `as` and an arm. The engine's `sharp_type_holds`, which on #102 holds every value for `SHARP_TYPE_FUNCTION`, holds a `Closure` that could be assigned to the tested type: the parameter, result and effect rules of assignment, nothing looser (answer 4). A lambda's parameter types are the ones #102's `ZEND_SHARP_RECV_TYPE_ARGS` already carries, and the bridge adds the lambda's result type, written or inferred, and its effects to that same type text. The analyzer refuses a test of a function whose source declares no signature, such as a plain PHP method returning `Closure`, with the new issue code `unknown-function-type`: "The type of `Legacy.doubler()`'s function is unknown: its source declares no parameter or result types."
+7. **A function type is tested like any other type.** The semantic check accepts `Function<R(P…)>` in `is`, `as` and an arm. The engine's `sharp_type_holds`, which on #102 held every value for `SHARP_TYPE_FUNCTION`, holds a `Closure` that could be assigned to the tested type: the parameter, result and effect rules of assignment, nothing looser (answer 4).
+   - **Where the type lives:** each PHP# method and lambda carries its whole type, `Function<Charge(Cart) uses App.Http>`, in the new field `zend_op_array.sharp_type`, as `zend_property_info.sharp_type` carries a property's. It is engine data, not an attribute plain PHP sees in `getAttributes()`. The bridge wraps a declaration's result type in the `SHARP_TYPE_ARGS` a property's type uses, and `zend_compile_func_decl_ex` unwraps it with `zend_sharp_declared_type`, the renamed `zend_sharp_property_type`. Opcache persists it, sizes it and file-caches it, `destroy_op_array` frees it, and a call trampoline has none. A closure reads it from its function.
+   - **What the bridge spells:** a method's declared parameter and result types, and a lambda's as the analysis gives them, written or inferred from the type it is written for, which `resolve_closure_like_type` now keeps. The effects are `Effects::function_effects` of the whole solve, sorted, which compile solves once and gives `check`. A function no function type can say has no type: one whose solve finds plain PHP no `extern` declares, or one with a type PHP# can't write, as the `never` of a lambda that always throws.
+   - **What the engine compares:** `sharp_type_function_fits`, which `sharp_type_fits` also uses for a function type inside a type argument. The tested type lists each effect of the closure's, each tested parameter type is within the closure's, the closure's result is within the tested one unless that is `void` or `Any?`, and an extra parameter must be optional. Classes, unions and type arguments by the class's declared `in` and `out` compare through the existing `sharp_type_argument_takes`, so the engine agrees with the checker. The closure's `$i` is spelled for the object it is bound to and its `#i` for the method type arguments it captured.
+   - **`sharp_holds_mode`** replaces `int_as_float`: `is`, `as` and an arm find no type on a closure plain PHP made, while a value entering PHP# from plain PHP keeps PHP's own `Closure` check, as raw generics do.
+   - **The cache:** a function's effects come from the bodies it calls, in any file. `Unit::function_types` lists each type the file spells, `Reads::function_types` puts them in the key, and `Effects::callee_files` makes each file whose bodies a call reaches an input, along every chain of calls.
+   - The analyzer refuses a test of a function whose source declares no signature, such as a plain PHP method returning `Closure`, with the new issue code `unknown-function-type`: "The type of `Legacy.doubler()`'s function is unknown: its source declares no parameter or result types."
 8. **`switch`, `and`, `or` and `xor` are errors that name their replacement,** as `?:` is today: "PHP# has no `switch`: write `match`." "PHP# has no `and`: write `&&`." "PHP# has no `or`: write `||`." "PHP# has no `xor`: write `!=` between two `bool`s." Each stops being "not supported yet", because the spec removes them.
 9. **The PHP# parser reads `?:` right-associatively,** as C#, Java, TypeScript, Swift and Dart do, so `a ? b : c ? d : e` is `a ? b : (c ? d : e)`. `check_conditional` loses its nested-condition arm, which a right-associative parse never reaches: a ternary as the condition of another is then always written in parentheses. A `.php` file parses as before. The bridge already lowers a conditional in the else branch, as `Operators.sharp`'s `nested` runs today with its parentheses written.
 
@@ -268,8 +274,8 @@ docs/spec.md:2199 expects a compile error, and the checker reports: This type is
 
 `FunctionTests.sharp` gave the same, with the note "A PHP# pattern is a type of `int`, `float`, `string`, `bool` or a class with an optional name …". `OtherTypeTests.sharp` gave it for `value is Any` and `value is int|float`, and `AsCollection.sharp` for `as List<string>`, `is List<string>` and `as Map<string, int>`, with the note "`as` converts to `int`, `float`, `string`, `bool` or a class." Those last five are #102's.
 
-- **Mechanism (decision 7):** the semantic check's type-pattern arm accepts `Function<…>`. `type_test_of` gives it #102's engine test. The analyzer reports `unknown-function-type` when the tested expression's type is a function with no declared signature. The bridge adds a lambda's result type to the type text #102's `ZEND_SHARP_RECV_TYPE_ARGS` carries.
-- **Engine:** `sharp_type_holds`'s `SHARP_TYPE_FUNCTION` arm compares the closure's parameter and result types with the tested ones (question 4).
+- **Mechanism (decision 7):** the semantic check's type-pattern arm accepts `Function<…>`. `type_test_of` gives it #102's engine test. The analyzer reports `unknown-function-type` when the tested expression's type is a function with no declared signature. The bridge spells each method's and lambda's whole type, effects included, into `zend_op_array.sharp_type`.
+- **Engine:** `sharp_type_holds`'s `SHARP_TYPE_FUNCTION` arm compares the closure's type with the tested one through `sharp_type_function_fits` (question 4).
 
 ## P1 and P34: `switch`, `and`, `or`, `xor`
 
@@ -379,29 +385,41 @@ sharp/mago/crates/
 │   └── tests/sharp.rs                    <- rows move out of the "not supported yet" tests (The tests, below)
 ├── analyzer/
 │   ├── src/code.rs                       <- IssueCode::UnknownFunctionType, "unknown-function-type"
+│   ├── src/effects/mod.rs                <- Effects::function_effects, Effects::callee_files
+│   ├── src/statement/function_like/mod.rs
+│   │                                     <- a lambda keeps the parameter types it infers
 │   ├── src/expression/call/              <- a NullSafeFunction call, typed on the callee without null
 │   ├── src/expression/                   <- Leave typed never, with the return and loop checks; a data case
 │   │                                        made by `PaymentResult.Declined(…)`; coverage of a closed set
 │   ├── src/statement/class_like/mod.rs   <- the sealed-interface refusal in PHP#'s words
 │   ├── src/                              <- the recorded read of an interface's implementer set (S4)
 │   └── tests/sharp.rs                    <- one test per rule, forms as rows (The tests, below)
+├── orchestrator/src/service/incremental_analysis/compile.rs
+│                                         <- the effects solve given to check; each file a call reaches
+│                                            an input; each spelled function type in the key
 ├── sharp-bridge/
-│   ├── src/lower.rs                      <- NullSafeFunction through null_safe_chain; Leave as its
-│   │                                        RETURN, CONTINUE or BREAK node; a lambda's result type and
-│   │                                        effects in its type text; a data-case enum as an abstract class
-│   │                                        and its cases
+│   ├── src/lower.rs, src/lower/types.rs  <- NullSafeFunction through null_safe_chain; Leave as its
+│   │                                        RETURN, CONTINUE or BREAK node; each method's and lambda's
+│   │                                        whole type around its result type; a data-case enum as an
+│   │                                        abstract class and its cases
+│   ├── src/lower/checked.rs              <- check takes the effects solve
+│   ├── src/lib.rs, src/unit.rs           <- Unit::function_types, Reads::function_types in the key
 │   └── tests/lower.rs                    <- one tree per new lowering; the `extra is limit` row removed
 └── formatter/, linter/, codex/, hir/, fingerprint/, sharp-lean/
                                           <- each exhaustive match on Call, Expression and Pattern takes the
                                              new variants: the formatter prints them, the others treat them
                                              as the forms they lower to
 
-ext/sharp/sharp.c                         <- sharp_type_holds: SHARP_TYPE_FUNCTION compares a closure's
-                                             signature and effects (on #102's type walk)
+ext/sharp/sharp.c                         <- the type text reads and spells `uses`; sharp_holds_mode;
+                                             sharp_type_function_fits; sharp_closure_is reads a closure's
+                                             zend_op_array.sharp_type
+Zend/zend_compile.h                       <- zend_op_array.sharp_type: a PHP# function's whole type
 Zend/zend_compile.c                       <- a RETURN, BREAK or CONTINUE node in an expression compiled as
                                              its statement with ZEND_SHARP_LEAVE before its finally blocks
-                                             and loop variables; zend_compile_sharp_recv_type_args takes a
-                                             lambda's result type
+                                             and loop variables; zend_sharp_declared_type, renamed from
+                                             zend_sharp_property_type, unwraps a function's whole type
+Zend/zend_opcode.c, zend_object_handlers.c, ext/opcache/zend_persist.c, zend_persist_calc.c,
+zend_file_cache.c                         <- sharp_type initialized, freed, persisted, sized and file-cached
 Zend/zend_vm_def.h                        <- ZEND_SHARP_LEAVE: cleanup_unfinished_calls, cleanup_live_vars
 Zend/zend_opcode.c                        <- zend_calc_live_ranges splits each range a leave frees
 ext/opcache/jit/                          <- both JITs store a temporary whose range ends at ZEND_SHARP_LEAVE
@@ -426,8 +444,10 @@ Zend/tests/sharp/
 │                                            template, a constructor's arguments, a try with finally or
 │                                            catch, and each other, in every opcache mode
 ├── opcodes.phpt                          <- each new form's opcodes equal its PHP twin's
-└── #102's type-test fixture              <- rows for Function<…> on a lambda, a method value and a plain
-                                             PHP closure, true and false
+├── FunctionTypes.sharp, function_types.inc, function_types.phpt
+│                                         <- 28 rows of Function<…> on lambdas, a method value and a plain
+│                                            PHP closure, true and false
+└── type_arguments_requests.phpt          <- its key type holds the template's App.Order
 sharp/baseline/spec/                      <- every §14.4, §20, §20.1 and §21 entry removed, nine in all
 docs/architecture/slices/21-pattern-matching.md   <- this note
 ```
@@ -466,6 +486,10 @@ team-lead approves these. Everything not here is tactical.
 - **`RestPattern { ellipsis, hint, variable }`**, `...List<Line> rest`, with `hint` and `variable` both absent for a bare `...`. The slate: `RestPattern` (JavaScript's and TypeScript's "rest element" for `...` that collects; recommended), `SpreadPattern` (PHP#'s word for `...`, but a spread expands and this collects; runner-up), `SlicePattern` (C#'s `..`; PHP# says "slice" nowhere), `TailPattern` (removed if question 3 allows a rest in the middle), `RemainderPattern` (long; `%` is remainder in section 24).
 - **`TypePattern.properties: Option<&PropertiesPattern>`**, a field on an existing node.
 - **`IssueCode::UnknownFunctionType`, `"unknown-function-type"`**, beside `unknown-iterator-type` and `unknown-match-subject-type`.
+- **`zend_op_array.sharp_type`**, a PHP# function's whole type, beside `zend_property_info.sharp_type` (decision 7, approved).
+- **`Effects::function_effects`** and **`Effects::callee_files`**, what a function type lists and the files its effects come from.
+- **`check(file, program, names, artifacts, codebase, effects, inline_forms, issues)`**, which gains `effects`.
+- **`Unit::function_types`** and **`Reads::function_types`**, each function type a file spells, in its key.
 - **The opcode `ZEND_SHARP_LEAVE`**, number 216 (decision 2). It follows #102's `ZEND_SHARP_IS_TYPE` and takes the number after #102's last, so neither renumbers when both land, and the CST's `Leave`.
 - **`EnumCaseItem::Data(EnumCaseDataItem { name, parameter_list })`**, beside `EnumCaseItem::Unit` and `EnumCaseItem::Backed`, with `Node::EnumCaseDataItem` and `Enum::has_data_case()`, which the codex, the semantic check and the bridge share.
 - **`MetadataFlags::ENUM_CASE_CLASS`**, beside `EVENT`: the class a case of an enum with data runs as, which the bridge and the analyzer's clash and namespace checks read.
@@ -490,7 +514,8 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 - `a_pattern_takes_constants_of_the_codebase_only` (new): a static property through its class is refused with P15's message; a class constant and an enum case through their class compile.
 - `a_type_with_properties_tests_both_and_binds` (new): `big` is `Paid` inside the `if` of `payment is Paid { amount: > 1000 } big`, its property test reads `Paid`'s `amount`, and an unknown property of `Paid` is `non-existent-property`.
 - `list_patterns_test_the_count_and_each_element` (new): element and rest variables typed from the subject, a list pattern on a `Map` never matching, and a `match` on a `List` without `default` refused.
-- `function_types_are_tested_like_any_type` (new): `Function<int(int)>` on a lambda, a method value and a `Closure` from plain PHP (`unknown-function-type`), in `is`, `as` and an arm.
+- `function_types_are_tested_like_any_type` (new): `Function<int(int)>` on a lambda, a method value and a `Closure` from plain PHP (`unknown-function-type`), in `is`, `as`, an arm and a bare statement.
+- orchestrator: `a_body_edit_that_changes_a_callees_effects_changes_the_callers_key` (new): a lambda's file lists the file of the body it calls, and an edit there that changes its effects changes the lambda's key.
 - `a_pattern_that_can_never_match_is_an_error_at_the_pattern` grows rows for a list pattern on a `Map` and a type with properties on a type it can't be.
 
 **`sharp/mago/crates/semantics/tests/sharp.rs`:**

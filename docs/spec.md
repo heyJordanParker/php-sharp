@@ -2345,7 +2345,7 @@ if (circle is Square) { … }            // compile error: This pattern never ma
 ```php
 class Legacy
 {
-    public static function doubler(): Closure { return fn($x) => $x * 2; }
+    public static function doubler(): \Closure { return fn($x) => $x * 2; }
 }
 ```
 
