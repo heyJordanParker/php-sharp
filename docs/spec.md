@@ -374,6 +374,16 @@ Math.max(0, ...prices);  // into the standard library too. The 0 gives max a val
 - Only a `List` spreads into a call. Spreading a `Map` into a call is a compile error (section 12).
 - An override of a plain PHP method declared with `...` declares that parameter with `...` too.
 
+**A class has one method per name, so there is no overloading by argument types.** A second method with the same name is a compile error, whatever it takes. Give each method a name that says what it takes, so a reader of the call knows which one runs:
+
+<!-- example one-method-per-name: members -->
+```csharp
+public void grantUserAccess(User user) { … }          // compiles
+public void grantPageAccess(Page page) { … }          // compiles
+public void grant(User user) { … }
+public void grant(Page page) { … }                    // compile error: grant is declared twice. Name each by what it takes, as in grantPageAccess
+```
+
 **A statement that can never run is a compile error,** as Java's "unreachable statement" and Zig's "unreachable code" are. A statement after `return`, `throw`, `global.exit(…)`, `break` or `continue` in the same block never runs, and neither does one after an `if` whose every branch ends the block, or after a loop that never ends, such as a `do` whose body ends the block. The error names the line that ends the block, and says to delete the statement or move it above that line. The block of an `if` or a `for … of` whose condition never finishes, as `if (global.exit(1))`, never runs either, and the error says to write the condition as its own statement in place of the `if` or the `for`.
 
 <!-- example unreachable-statements: members -->
@@ -490,7 +500,7 @@ let artifact = new Artifact.fromJson(json);
 ```
 
 - The dependency container always uses the main constructor (section 32).
-- There is no overloading by argument types.
+- A class has one main constructor, as it has one method per name (section 7).
 - A static method that looks up an existing object, such as `Journey.forUuid`, stays a static method.
 
 **A subclass's constructor always calls its parent's with `: super(…)`,** as in `public Order(Row row) : super(row) { }`, even when the parent's takes no arguments, as Kotlin always writes `: Document()`. A constructor without the call is a compile error:
@@ -2385,6 +2395,42 @@ page.designKey();                                           // "design:design", 
 - A default body sees only the interface's own members.
 - Every field is declared in the class that owns it. An interface holds no fields.
 - A PHP# interface with default bodies compiles to a PHP interface plus a PHP trait named `<Interface>\Defaults` that holds the default bodies, as Kotlin nests `DefaultImpls` in an interface. A plain PHP class that implements it must also `use` that trait to get the defaults. PHP# code never names the trait, so section 23's rule that a class cannot share its full name with a namespace does not apply to it.
+
+**A class has one method per name, whatever it inherits** (section 7). When two places give a class a body for the same method, the class writes the method itself, as Kotlin requires. The places are two interfaces' default bodies, a default body and a plain PHP trait, two header traits, or a default body and the base class. Until the class writes it, the class is a compile error that names both places. Inside its own methods, the class runs one interface's default body with `super<Interface>`:
+
+<!-- example one-body-per-method -->
+```csharp
+// app/Tickets.sharp
+namespace App;
+
+public interface ShowsLabel
+{
+    string label() => "label";
+}
+
+public interface ShowsTitle
+{
+    string label() => "title";
+}
+
+public class Ticket : ShowsLabel, ShowsTitle { }        // compile error: Ticket gets label from both ShowsLabel and ShowsTitle, so Ticket writes label
+
+public class Sticker : ShowsLabel, ShowsTitle
+{
+    public override string label() => super<ShowsLabel>.label() + "/" + super<ShowsTitle>.label();
+}
+
+public class Stray : ShowsTitle
+{
+    public string name() => super<ShowsLabel>.label();   // compile error: Stray does not implement ShowsLabel
+}
+```
+<!-- run one-body-per-method
+new Sticker().label();   // "label/title"
+-->
+
+- `super<Interface>` names an interface the class implements, and is written only in the class's own methods.
+- Replacing a default body takes `override`, as replacing a base class's method does. Implementing an interface method that has no default body takes none.
 
 <!-- example php-trait-defaults -->
 ```php
