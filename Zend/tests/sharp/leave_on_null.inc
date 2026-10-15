@@ -21,6 +21,10 @@ for ($round = 0; $round < 100; $round++) {
         $leave->nested(['pro' => 5, 'basic' => 1], 'pro', 'basic'),
         $leave->nested(['basic' => 1], 'pro', 'basic'),
         $leave->nested([], 'pro', 'basic'),
+        $leave->counted([[1, 2, null, 4], [5, null]]),
+        $leave->skipped([1, null, 2]),
+        $leave->stepped([1, 2, null]),
+        $leave->after([5, 1, 2, null, 7]),
     ];
 }
 
