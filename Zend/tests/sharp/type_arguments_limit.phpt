@@ -39,10 +39,15 @@ if (($argv[1] ?? null) === 'request') {
     return;
 }
 
-echo shell_exec(escapeshellarg(PHP_BINARY) . ' -n --repeat 2 ' . escapeshellarg(__FILE__) . ' request');
+// The CLI's --repeat runs the requests in one process, and its lines are renamed, since run-tests.php removes them from
+// a test's output when it runs a test twice itself.
+echo strtr(shell_exec(escapeshellarg(PHP_BINARY) . ' -n --repeat 2 ' . escapeshellarg(__FILE__) . ' request'), [
+    "Executing for the first time...\n" => "the first request:\n",
+    "Finished execution, repeating...\n" => "the next request, in the same process:\n",
+]);
 ?>
 --EXPECTF--
-Executing for the first time...
+the first request:
 a new text fails before 65,536 texts
 App\Pair still reads a text the app holds
 
@@ -50,7 +55,7 @@ Warning: unserialize(): Error at offset %d of %d bytes in %s on line %d
 bool(false)
 Error: The app already holds 65536 run-time types, its limit, so it cannot make <List<string>>
 App\Node still makes a type the app holds
-Finished execution, repeating...
+the next request, in the same process:
 a new text fails before 65,536 texts
 App\Pair still reads a text the app holds
 
