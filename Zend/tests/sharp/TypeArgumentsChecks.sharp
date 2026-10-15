@@ -99,11 +99,11 @@ public class Page<T>
 
 public class Shelf
 {
-    public PaginatedList<Order>? page { get; set; }
+    public PaginatedList<Order>? page { get; set; } = null;
 
-    public static PaginatedList<Order>? latest { get; set; }
+    public static PaginatedList<Order>? latest { get; set; } = null;
 
-    protected static PaginatedList<Order>? kept;
+    protected static PaginatedList<Order>? kept = null;
 
     public static string keepBoth(PaginatedList<Order> page)
     {
@@ -203,7 +203,7 @@ public class Tally
 
 public class Rack<TItem>
 {
-    public Box<TItem>? own { get; set; }
+    public Box<TItem>? own { get; set; } = null;
 
     public List<TItem> items { get; set; } = [];
 
@@ -216,9 +216,9 @@ public class Rack<TItem>
 
 public class Ledger<TItem>
 {
-    public Box<TItem>? first { get; set; }
+    public Box<TItem>? first { get; set; } = null;
 
-    public Box<TItem>? kept { get; set => field = value; }
+    public Box<TItem>? kept { get; set => field = value; } = null;
 
     public static Ledger<Order> orders() => new Ledger<Order>();
 }

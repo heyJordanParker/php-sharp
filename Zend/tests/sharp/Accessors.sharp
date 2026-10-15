@@ -47,9 +47,11 @@ class Product
 class Address
 {
     protected string region { get => global.strtoupper(field); }
+    public string city { get; set => field = global.ucfirst(value.trim()); }
 
-    public Address(public string city { get; set => field = global.ucfirst(value.trim()); }, string region)
+    public Address(string city, string region)
     {
+        this.city = city;
         this.region = region;
     }
 

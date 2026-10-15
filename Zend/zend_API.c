@@ -1597,11 +1597,13 @@ ZEND_API zend_result zend_update_class_constants(zend_class_entry *class_type) /
 		} ZEND_HASH_FOREACH_END();
 	}
 
+	bool built_statics = false;
 	if (class_type->default_static_members_count) {
 		static_members_table = CE_STATIC_MEMBERS(class_type);
 		if (!static_members_table) {
 			zend_class_init_statics(class_type);
 			static_members_table = CE_STATIC_MEMBERS(class_type);
+			built_statics = true;
 		}
 	}
 
@@ -1669,6 +1671,11 @@ ZEND_API zend_result zend_update_class_constants(zend_class_entry *class_type) /
 		mutable_data->ce_flags = ce_flags;
 	} else {
 		class_type->ce_flags = ce_flags;
+	}
+
+	/* PHP#: the statics built above get their initial values that aren't constant, once their constant defaults are. */
+	if (built_statics) {
+		return zend_class_init_sharp_statics(class_type);
 	}
 
 	return SUCCESS;

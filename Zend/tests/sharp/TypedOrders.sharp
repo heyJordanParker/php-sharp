@@ -4,7 +4,7 @@ import Lib.TypedModel;
 
 public class Order : TypedModel
 {
-    protected override string table = "orders";
+    protected override string table { get; set; } = "orders";
 
     public string tableName()
     {
@@ -14,5 +14,5 @@ public class Order : TypedModel
 
 public class RushOrder : Order
 {
-    protected override string table = "rush_orders";
+    protected override string table { get; set; } = "rush_orders";
 }

@@ -1,5 +1,5 @@
 --TEST--
-PHP# accessor bodies run as property hooks: field and value, a validating set, a private set, a collection written back through set, an auto accessor beside a body, a promoted property and a property over a plain PHP base
+PHP# accessor bodies run as property hooks: field and value, a validating set, a private set, a collection written back through set, an auto accessor beside a body, a set the constructor runs and a property over a plain PHP base
 --FILE--
 <?php
 require __DIR__ . '/accessor_bodies.inc';

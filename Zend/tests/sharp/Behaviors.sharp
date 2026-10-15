@@ -1,0 +1,53 @@
+namespace Behaviors;
+
+import Sharp.Behavior;
+
+public class Trimmed : Behavior<string>
+{
+    public string get(string value) => value;
+
+    public string set(string value) => global.trim(value);
+}
+
+public class Upper : Behavior<string>
+{
+    public string get(string value) => value;
+
+    public string set(string value) => global.strtoupper(value);
+}
+
+public class Counted : Behavior<string>
+{
+    private int writes = 0;
+
+    public string get(string value) => `${value}#${this.writes}`;
+
+    public string set(string value)
+    {
+        this.writes = this.writes + 1;
+        return value;
+    }
+}
+
+// A generic behavior, which each property names with its type argument.
+public class Kept<T> : Behavior<T>
+{
+    private int writes = 0;
+
+    public T get(T value) => value;
+
+    public T set(T value)
+    {
+        this.writes = this.writes + 1;
+        return value;
+    }
+}
+
+public class Profile
+{
+    public string name { get; set; } via Trimmed, Counted = "  start  ";
+    public string code { get; set; } via Counted, Upper = "x";
+    public int level { get; set; } via Kept<int> = 1;
+
+    public Profile renamed(string name) => this with { name: name };
+}

@@ -139,6 +139,8 @@ function accepts(string $type, mixed &$value, string $path, array &$problems): b
 
 function &statics(string $class, string $key): array {}
 
+function keep(string $key, \Closure $compute): mixed {}
+
 function equals(mixed $value, mixed $other): bool {}
 
 function readModule(string $path): void {}
@@ -148,6 +150,10 @@ function testModule(array $classes, array $bindings): void {}
 function startTest(string $class): void {}
 
 function endTest(): void {}
+
+function building(object $object): bool {}
+
+function build(object $object, \Closure $body, mixed ...$arguments): mixed {}
 
 function emit(object $event): void {}
 
