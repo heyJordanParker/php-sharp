@@ -5326,7 +5326,7 @@ static bool sharp_listeners_for(zval *event, zval *listeners)
 /* Throws that the listener table names name, which the code no longer has, as an out-of-date compiled file does. */
 static void sharp_listener_table_out_of_date(const zend_string *name)
 {
-	zend_string *written = zend_string_dup(name, 0);
+	zend_string *written = zend_string_init(ZSTR_VAL(name), ZSTR_LEN(name), 0);
 
 	for (size_t i = 0; i < ZSTR_LEN(written); i++) {
 		if (ZSTR_VAL(written)[i] == '\\') {
