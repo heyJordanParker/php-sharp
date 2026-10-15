@@ -21,6 +21,14 @@ php_cli_server_start(<<<PHP
     \$interfaces = class_implements(\$card);
     ksort(\$interfaces);
     echo get_parent_class(\$card), ' ', implode(',', \$interfaces), ' ', \$card->copy()->link(), "\n";
+    require $dir . '/harness/Traits.inc';
+    require $dir . '/Traits.sharp';
+    require $dir . '/Inheritance.sharp';
+    foreach ([new Demo\Essay(), new Demo\Guide(), new Demo\Both()] as \$object) {
+        echo get_parent_class(\$object), ' ', implode(',', class_uses(\$object)), ' ',
+            implode(',', (new ReflectionClass(\$object))->getTraitNames()), ' ',
+            \$object instanceof Demo\Both ? \$object->describe() : \$object->link(), "\n";
+    }
     PHP, null, ['-d', 'opcache.enable=1', '-d', 'opcache.enable_cli=1']);
 
 for ($i = 0; $i < 3; $i++) {
@@ -30,7 +38,16 @@ for ($i = 0; $i < 3; $i++) {
 --EXPECT--
 Lib\Record Demo\Linkable,Lib\Named 7
 Lib\Shelf Demo\Linkable,Lib\Named /card
+Lib\Document Lib\HasSlug Lib\HasSlug /articles/intro
+Demo\Essay   /articles/setup
+ Demo\Described\Defaults,Demo\Told\Defaults Demo\Described\Defaults,Demo\Told\Defaults described+told
 Lib\Record Demo\Linkable,Lib\Named 7
 Lib\Shelf Demo\Linkable,Lib\Named /card
+Lib\Document Lib\HasSlug Lib\HasSlug /articles/intro
+Demo\Essay   /articles/setup
+ Demo\Described\Defaults,Demo\Told\Defaults Demo\Described\Defaults,Demo\Told\Defaults described+told
 Lib\Record Demo\Linkable,Lib\Named 7
 Lib\Shelf Demo\Linkable,Lib\Named /card
+Lib\Document Lib\HasSlug Lib\HasSlug /articles/intro
+Demo\Essay   /articles/setup
+ Demo\Described\Defaults,Demo\Told\Defaults Demo\Described\Defaults,Demo\Told\Defaults described+told

@@ -1,0 +1,154 @@
+namespace Demo;
+
+import Lib.Copies;
+
+public interface HasDesign
+{
+    string designColumn { get; }
+
+    string designKey() => `design:${this.designColumn}`;
+
+    string designTitle();
+
+    string designTag => `tag:${this.designColumn}`;
+}
+
+public class Poster : HasDesign
+{
+    public string designColumn => "poster";
+
+    public string designTitle() => "Poster";
+
+    public override string designTag => "poster tag";
+}
+
+public class Stamped : HasDesign
+{
+    public string designColumn => "stamped";
+
+    public string designTitle() => "Stamped";
+
+    public override string designTag { get; set; } = "stamped";
+}
+
+public interface Described
+{
+    string describe() => "described";
+}
+
+public interface Told
+{
+    string describe() => "told";
+}
+
+public class Sheet : HasDesign
+{
+    public string designColumn => "sheet";
+
+    public string designTitle() => "Sheet";
+}
+
+public class Both : Described, Told
+{
+    public override string describe() => super<Described>.describe() + "+" + super<Told>.describe();
+}
+
+public interface Shows
+{
+    string label() => "shows";
+}
+
+public interface ShowsMore : Shows
+{
+    override string label() => "more";
+}
+
+public class Fancy : ShowsMore
+{
+    public string both() => super<Shows>.label() + "/" + this.label();
+}
+
+public class Repeater : Both
+{
+    public string repeat() => super<Told>.describe() + "!";
+}
+
+public enum Mood : Told
+{
+    case Calm;
+}
+
+public struct Memo : Told
+{
+    public Memo(public string text { get; }) { }
+}
+
+public enum Verdict : Told
+{
+    case Pending;
+    case Ruled(string by);
+}
+
+public class Base
+{
+    public virtual string kind() => "base";
+}
+
+public class Sealed : Base
+{
+    public final override string kind() => "sealed";
+}
+
+public interface Keyed<TKey>
+{
+    TKey key();
+
+    List<TKey> keys() => [this.key(), this.key()];
+
+    bool holds(Any value) => value is TKey;
+
+    bool same(TKey other) => other == this.key();
+
+    List<TItem> pair<TItem>(TItem item) => [item, item];
+}
+
+public class Tagger<TTag> : Keyed<List<TTag>>
+{
+    public Tagger(public TTag tag { get; }) { }
+
+    public List<TTag> key() => [this.tag];
+}
+
+public class Coded : Keyed<int>
+{
+    public int key() => 7;
+}
+
+public struct Seal : Copies
+{
+    public Seal(public int at { get; }) { }
+}
+
+public event Copied(int id) : Copies;
+
+public interface Greets
+{
+    string hi();
+}
+
+public static class Seeder
+{
+    public static bool owns(Any value) => value is Copies;
+
+    public static string seed(Copies owner) => owner.copy();
+
+    public static int count(List<Copies> owners) => owners.count();
+
+    public static string bound<T : Copies>(T owner) => owner.copy();
+
+    public static string both<T : Greets & Copies>(T owner) => owner.hi() + " " + owner.copy();
+
+    public static int firstKey(Coded coded) => coded.keys()[0];
+
+    public static Tagger<string> tagger() => new Tagger<string>("a");
+}
