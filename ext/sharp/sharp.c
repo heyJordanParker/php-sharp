@@ -4484,9 +4484,9 @@ static bool sharp_closure_is(const zval *value, const sharp_type *type, sharp_ho
 	zval *arguments = captured ? zend_hash_find(captured, sharp_type_arguments_key) : NULL;
 	const sharp_type *method = arguments && Z_TYPE_P(arguments) == IS_PTR ? Z_PTR_P(arguments) : NULL;
 	void *cache[4] = {NULL};
-	const sharp_type *own = sharp_type_list_of_frame(&text, object, method, true, func->common.scope, cache);
+	const sharp_type *own = sharp_type_list_of_frame(&text, object, method, false, func->common.scope, cache);
 	if (!own) {
-		return false;
+		return !EG(exception) && mode != SHARP_HOLDS_TEST;
 	}
 
 	zend_string *spelled = own->members[0]->text;
@@ -4495,12 +4495,11 @@ static bool sharp_closure_is(const zval *value, const sharp_type *type, sharp_ho
 	sharp_type_reader tested = sharp_type_reader_of(ZSTR_VAL(type->text), ZSTR_LEN(type->text), reader.arena);
 	sharp_type_node *wanted = sharp_type_read(&tested);
 	reader.arena = tested.arena;
-	/* A type with a type parameter no type argument was given for reads as no type. */
-	bool is = given && wanted && given->kind == SHARP_TYPE_FUNCTION
-		&& sharp_type_function_fits(given, wanted, func->common.required_num_args, &reader);
+	ZEND_ASSERT(given && given->kind == SHARP_TYPE_FUNCTION && wanted);
+	bool is = sharp_type_function_fits(given, wanted, func->common.required_num_args, &reader);
 	zend_arena_destroy(reader.arena);
 
-	return is || (!given && mode != SHARP_HOLDS_TEST);
+	return is;
 }
 
 /* Whether `node`, read from input, is a type code can spell, made so in one walk of its members before it: each class
