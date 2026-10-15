@@ -924,7 +924,7 @@ int|string id = 1;
 -->
 ```csharp
 const first = lines[0];       // throws OutOfRangeException when lines is empty
-lines[0] = line;              // replaces the element at 0, and throws OutOfRangeException when lines is empty
+lines[0] = line;              // replaces the element at 0; throws OutOfRangeException when lines is empty
 plans["pro"] = pro;           // inserts or replaces
 items[-1];                    // throws OutOfRangeException: write items.last()
 items.last();                 // the last item
