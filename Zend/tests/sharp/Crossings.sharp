@@ -76,6 +76,25 @@ class Crossings
         return Crossings.joined(names);
     }
 
+    public static string heldGenerator(Any? last)
+    {
+        Iterable<string> names = global.names_generator(last);
+        return Crossings.joined(names);
+    }
+
+    public static string heldRows(Any? last)
+    {
+        Iterable<string> names = global.name_rows(last);
+        return Crossings.joined(names);
+    }
+
+    public static Iterable<string> returnedLazy(Any? last) => global.lazy_names(last);
+
+    public static string passedGenerator(Any? last) => Crossings.joined(global.names_generator(last));
+
+    // Until it is held as an `Iterable<T>`, a plain PHP class keeps its own methods.
+    public static int lazyCount(Any? last) => global.lazy_names(last).count();
+
     public static string pair([string name, int count] given) => `${given.name} ${given.count}`;
 
     public static string entries(Iterable<[string, int]> given)

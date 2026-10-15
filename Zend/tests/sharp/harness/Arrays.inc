@@ -91,6 +91,78 @@ function names_and(mixed $last): iterable
     }
 }
 
+// The same source as a generator, an IteratorAggregate and a Laravel LazyCollection twin, each typed by its own class.
+/** @return Generator<int, string> */
+function names_generator(mixed $last): Generator
+{
+    yield from names_and($last);
+}
+
+/**
+ * @template TKey of array-key
+ * @template TValue
+ *
+ * @implements IteratorAggregate<TKey, TValue>
+ */
+final class NameRows implements IteratorAggregate
+{
+    public function __construct(private mixed $last)
+    {
+    }
+
+    /** @return Generator<TKey, TValue> */
+    public function getIterator(): Generator
+    {
+        yield from names_and($this->last);
+    }
+}
+
+/** @return NameRows<int, string> */
+function name_rows(mixed $last): NameRows
+{
+    return new NameRows($last);
+}
+
+/**
+ * @template TKey of array-key
+ * @template-covariant TValue
+ *
+ * @extends IteratorAggregate<TKey, TValue>
+ */
+interface Enumerable extends IteratorAggregate
+{
+}
+
+/**
+ * @template TKey of array-key
+ * @template-covariant TValue
+ *
+ * @implements Enumerable<TKey, TValue>
+ */
+final class LazyCollection implements Enumerable
+{
+    public function __construct(private mixed $last)
+    {
+    }
+
+    /** @return Generator<TKey, TValue> */
+    public function getIterator(): Generator
+    {
+        yield from names_and($this->last);
+    }
+
+    public function count(): int
+    {
+        return iterator_count($this->getIterator());
+    }
+}
+
+/** @return LazyCollection<int, string> */
+function lazy_names(mixed $last): LazyCollection
+{
+    return new LazyCollection($last);
+}
+
 // A plain PHP object a call runs through its __invoke, whose parameter names array.
 final class ArrayCounter
 {

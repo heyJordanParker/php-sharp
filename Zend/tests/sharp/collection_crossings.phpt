@@ -36,7 +36,15 @@ for ($round = 0; $round < 100; $round++) {
     // read and not before, and the source is never read ahead.
     Names::$given = 0;
     echo 'a lazy plain PHP source into an Iterable<string> parameter: ', Crossings::joined(names_and('cake')), Names::$given, "\n";
-    foreach ([fn () => Crossings::joined(names_and(3)), fn () => Crossings::lazilyReturned(3)] as $read) {
+    $reads = [
+        fn () => Crossings::joined(names_and(3)),
+        fn () => Crossings::lazilyReturned(3),
+        fn () => Crossings::heldGenerator(3),
+        fn () => Crossings::heldRows(3),
+        fn () => Crossings::joined(Crossings::returnedLazy(3)),
+        fn () => Crossings::passedGenerator(3),
+    ];
+    foreach ($reads as $read) {
         Names::$given = 0;
         try {
             $read();
@@ -44,6 +52,7 @@ for ($round = 0; $round < 100; $round++) {
             echo get_class($e), ': ', $e->getMessage(), ', after ', Names::$given, " names\n";
         }
     }
+    echo 'a plain PHP class keeps its own methods: ', Crossings::lazyCount(3), "\n";
     // A tuple from plain PHP is a PHP list of exactly its elements, each of its type.
     echo 'a PHP list into a [string name, int count] parameter: ', Crossings::pair(['tea', 3]), "\n";
     foreach ([['tea'], ['tea', 'x'], ['name' => 'tea', 'count' => 3]] as $given) {
@@ -89,6 +98,11 @@ a PHP array into a Map<string|Level, int> parameter: ["1","1","true"]
 a lazy plain PHP source into an Iterable<string> parameter: tea jam cake pie 4
 TypeError: Demo\Crossings::joined(): Argument #1 ($names) must be of type Iterable<string>, Generator given: [2] expected string, got int 3, after 3 names
 TypeError: names_and(): Return value must be of type Iterable<string>, Generator returned: [2] expected string, got int 3, after 3 names
+TypeError: names_generator(): Return value must be of type Iterable<string>, Generator returned: [2] expected string, got int 3, after 3 names
+TypeError: name_rows(): Return value must be of type Iterable<string>, NameRows returned: [2] expected string, got int 3, after 3 names
+TypeError: lazy_names(): Return value must be of type Iterable<string>, LazyCollection returned: [2] expected string, got int 3, after 3 names
+TypeError: names_generator(): Return value must be of type Iterable<string>, Generator returned: [2] expected string, got int 3, after 3 names
+a plain PHP class keeps its own methods: 4
 a PHP list into a [string name, int count] parameter: tea 3
 TypeError: Demo\Crossings::pair(): Argument #1 ($given) must be of type [string, int], array given, called in %s on line %d
 TypeError: Demo\Crossings::pair(): Argument #1 ($given) must be of type [string, int], array given: [1] expected int, got string 'x', called in %s on line %d
