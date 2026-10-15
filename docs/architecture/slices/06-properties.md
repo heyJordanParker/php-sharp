@@ -54,7 +54,7 @@ Each question is about syntax or meaning. The recommendation is mine, and the bu
     - `via` goes on an auto-property with `get` and `set` and no bodies. It is an error with observers, `lazy`, `static` or in an interface.
     - A behavior's `get` is a getter, so it never writes `this` (section 6.1).
 11. **Lines 332 to 342, `lazy`.**
-    - Jordan's ruling: a `lazy` body may have any effect, and a read carries it. "Getters must be pure." is gone from section 29: a `get` body has any effect but never writes `this`, checked as a method marked `readonly` (`getters_never_write_this`, `getter-writes-this`). The kept value is the language's write.
+    - Jordan's ruling: a `lazy` body may have any effect, and a read carries it. "Getters must be pure." is gone from section 29: a `get` body may have any effect but never writes `this` (`getters_never_write_this`, `getter-writes-this`), and unlike a method marked `readonly` it may call plain PHP and unmarked PHP# methods. The kept value is the language's write.
     - Recommended form: only `lazy T name => expr;`. `lazy` with accessors or an initial value is an error.
     - If the body throws, nothing is kept and the next read runs it again, as Kotlin's `lazy` does.
     - `static lazy` lives "the lifetime of a `singleton` (section 32)". #121 makes a singleton live for the request. Recommended: a `static lazy` value is kept where #121 keeps singletons, so the two lifetimes are equal by construction. This needs #121. The other option is a PHP static, equal under PHP-FPM and different in a worker that serves many requests.

@@ -258,7 +258,9 @@ PHP# has all of C#'s property features:
 - properties in interfaces, abstract properties, and overrides
 - Reflection that tells fields from properties
 
-**A `get` body may run anything, but it never writes `this`.** It is checked as a method marked `readonly` (section 13). A read may query the database or read the clock, and it carries the body's effects (section 29). Writing a field of `this`, or calling a method on `this` that writes one, is a compile error that names the write. A `lazy` property still keeps its computed value (section 6.5), because that write is the language's, not the body's.
+**A `get` body may have any effect but never writes `this`.** A read may query the database or read the clock, and it carries the body's effects (section 29). Writing a field of `this`, or calling a method on `this` that writes one, is a compile error that names the write. A `lazy` property still keeps its computed value (section 6.5), because that write is the language's, not the body's.
+
+A getter promises less than a method marked `readonly` (section 13): it may call a plain PHP method, and a PHP# method not marked `readonly` that writes nothing of `this`.
 
 <!-- example getter-writes: members
 private int reads = 0;
