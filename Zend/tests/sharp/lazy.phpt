@@ -56,6 +56,12 @@ Lazy\Loads::divideBy(7);
 echo Lazy\Loads::ratioNow(), "\n";
 Lazy\Loads::divideBy(9);
 echo Lazy\Loads::ratioNow(), "\n";
+
+// A test gets fresh singletons, so a `static lazy` computes again once a test ends and the next one starts: `ratio`
+// is 100 % 9 now, not the 2 it kept, and `first` takes the third `next()`.
+\Sharp\Internal\endTest();
+\Sharp\Internal\startTest(Lazy\Loads::class);
+echo Lazy\Loads::ratioNow(), ' ', Lazy\Loads::firstTwice(), "\n";
 ?>
 --EXPECT--
 6
@@ -73,3 +79,4 @@ Cannot modify private(set) property Lazy\Plan::$doubled from global scope
 Modulo by zero
 2
 2
+1 6
