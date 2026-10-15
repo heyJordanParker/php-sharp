@@ -100,6 +100,26 @@ bool(false)
 string(4) "paid"
 string(8) "no funds"
 string(17) "https://bank.test"
+bool(true)
+bool(false)
+bool(false)
+bool(false)
+bool(false)
+bool(false)
+bool(true)
+bool(true)
+bool(true)
+bool(false)
+array(4) {
+  [0]=>
+  int(2)
+  [1]=>
+  int(2)
+  [2]=>
+  int(2)
+  [3]=>
+  int(1)
+}
 string(5) "popup"
 string(8) "scroll 3"
 bool(true)

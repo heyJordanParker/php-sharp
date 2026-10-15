@@ -2111,6 +2111,7 @@ public enum CheckoutState
 A case with a value and a case with data in one enum is a compile error. Swift enforces the same rule.
 
 - **Each case is its own type,** so a method can take `PaymentResult.Paid` alone.
+- **Two cases are `==`** when they are the same case and each field is `==`, as two structs are (section 19). A case with a field that has no `==` gives its enum no `==`.
 - **At runtime,** each case is a real class, so Reflection sees it.
 - **The checker** rejects a `match` over the enum that misses a case.
 

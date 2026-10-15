@@ -62,9 +62,10 @@ Each decides what a user writes or what plain PHP sees. Each has a proposal, whi
 6. **The PHP name of a case, and how plain PHP makes one.** Spec lines "Each case is its own type, so a method can take `PaymentResult.Paid` alone." and "At runtime, each case is a real class, so Reflection sees it."
    - **Proposed:** `PaymentResult.Paid` in namespace `App` is the PHP class `App\PaymentResult\Paid`, a `final` subclass of the `abstract` class `App\PaymentResult`. That is the name PHP#'s own `.` already resolves `PaymentResult.Paid` to, as a type and in `is`. Plain PHP writes `new PaymentResult\Paid(transactionId: 'tx')`. A plain case of a mixed enum, `CheckoutState.Open`, is the one instance of `App\CheckoutState\Open`, which plain PHP reads as `CheckoutState\Open::instance()`. A class `Paid` in the namespace `App.PaymentResult`, in `app/PaymentResult/Paid.sharp`, is a compile error, because it would take the case's name.
    - Kotlin's JVM name instead, one flat class per case such as `App\PaymentResult_Paid`, which no PHP# name resolves to.
-7. **`==` on two data cases.** Decision 012 says enums compare by value. Section 20 says nothing about `==`.
-   - **Proposed:** two data cases are `==` when they are the same case and every field is `==`, as two structs are. That is #123's struct `==` (`feat/slice-structs`, open), so this Slice reuses it once #123 is on master. Until then `==` on a data case is refused as "`==` on an enum case that carries data is not supported yet in PHP#.", never PHP's identity `===`. `==` on a plain or backed case stays `===`, as master runs it.
-   - Build field-by-field `==` for data cases in this Slice, a second equality path beside #123's.
+7. **`==` on two data cases.** Answered: two data cases are `==` when they are the same case and every field is `==`, as two structs are, built on #123's struct `==`.
+   - **Built:** the codex gives an enum with a case that carries data the `op_Equality` it gives a struct with none declared, and the bridge writes it into the enum's abstract class: `if ($a instanceof \App\PaymentResult\Paid && $b instanceof \App\PaymentResult\Paid) { return …each field's ==…; }` per case that carries data, then `return $a === $b;`. A struct's `op_Equality` is the same method with one class, so one lowering writes both. The analyzer compares a data case as an enum case (`Comparand::Enum`), so `===` and an ordering stay refused as on any enum case, and refuses `==` on an enum whose case holds a field `==` can't compare, naming the field, as it refuses a struct's.
+   - **`Map` and `Set`:** a case that carries data implements `\Sharp\Struct`, so the engine hashes it by its class and fields, as it hashes a struct, and its `op_Equality` finds an equal key. A case that holds a field with no `==` can't key a `Map` or join a `Set`, as a struct can't. This widens #123's ruling 18, "only a lowered struct implements `Sharp\Struct`", to a case that carries data; the engine's check (a final class from a `.sharp` file) already accepts it.
+   - **`readonly`:** spec section 13's "A `readonly` that can't matter is a compile error, … before a type whose value never changes, … an enum, a struct" decides it, so `readonly PaymentResult`, `readonly PaymentResult.Paid` and `readonly List<CheckoutState>` are refused like a struct, with "A `PaymentResult` never changes, so `readonly` changes nothing: write `PaymentResult`."
 
 ## Questions for team-lead, answered
 
@@ -88,9 +89,9 @@ The questions of `ac74f1fec9`, kept for the record:
 
 ## The order #102 and #123 set
 
-#102 (open) lands `is` and `match` on type arguments. #123 (open) lands struct `==`. Section 20 is now this Slice's.
+#102 lands `is` and `match` on type arguments. #123 lands struct `==`. Both are on master. Section 20 is now this Slice's.
 
-**Rules that depend on #123:** `==` on a data case (question 7).
+**Rules that depend on #123:** `==` on a data case (question 7), built.
 
 **Rules that depend on #102:**
 
@@ -518,7 +519,6 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 
 # What the Slice refuses as "not supported yet", and why
 
-- **`==` on a data case,** until #123 is on master, if team-lead takes question 7's proposal.
 - **A law that reads a data case's field** (section 28). `sharp-lean`'s `Translator::r#enum` writes an enum as a Lean `inductive` with one constructor per case, and gains each data case's fields as constructor arguments, `| Paid (transactionId : String)`. `PaymentResult.Paid(x)` in a law is the constructor applied, `(App.PaymentResult.Paid x)`, and a plain case `CheckoutState.Open` is the constructor without fields. A law that reads `d.reason` is reported through `Body::unmodeled` as "the field PaymentResult.Declined.reason of a case". The compile step's namespace list for Lean leaves out the case classes, whose namespace is the enum's own name, which Lean declares as the `inductive`. Section 28 has no example of one, so no entry moves.
 
 # Found outside the Slice

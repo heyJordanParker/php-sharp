@@ -1252,9 +1252,10 @@ ZEND_METHOD(Sharp_Collection, set)
 
 zend_class_entry *sharp_ce_struct;
 
-/* As PHP lets only an enum implement UnitEnum, only a struct implements Sharp\Struct: the final class the bridge
- * lowers a struct to, from a .sharp file, whose checker lets no PHP# code name Sharp.Struct. A Map or a Set hashes a
- * struct key by its fields (sharp_table.c), and a plain PHP class could hold a cycle, whose hash would never end. */
+/* As PHP lets only an enum implement UnitEnum, only a value implements Sharp\Struct: the final class the bridge
+ * lowers a struct, or an enum case that carries data, to, from a .sharp file, whose checker lets no PHP# code name
+ * Sharp.Struct. A Map or a Set hashes such a key by its fields (sharp_table.c), and a plain PHP class could hold a
+ * cycle, whose hash would never end. */
 static int sharp_struct_implemented(zend_class_entry *interface, zend_class_entry *class_type)
 {
 	if (class_type->type == ZEND_USER_CLASS && (class_type->ce_flags & ZEND_ACC_FINAL)

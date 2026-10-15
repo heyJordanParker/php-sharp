@@ -27,6 +27,23 @@ public class Payments
         PaymentResult.RequiresAction(string redirect) => redirect,
     };
 
+    public bool same(PaymentResult a, PaymentResult? b) => a == b;
+
+    public bool differs(CheckoutState a, CheckoutState b) => a != b;
+
+    public bool found(List<PaymentResult> results, PaymentResult result) => results.contains(result);
+
+    public List<int> keyed()
+    {
+        Set<PaymentResult> seen = [PaymentResult.Paid("tx_1"), PaymentResult.Paid("tx_1"), PaymentResult.Declined("tx_1")];
+        Map<CheckoutState, int> visits = [:];
+        visits[CheckoutState.Paying(gateway: "stripe")] = 1;
+        visits[CheckoutState.Paying(gateway: "stripe")] = 2;
+        visits[CheckoutState.Open] = 3;
+
+        return [seen.count(), visits.count(), visits[CheckoutState.Paying(gateway: "stripe")] ?? 0, seen.contains(PaymentResult.Paid("tx_1")) ? 1 : 0];
+    }
+
     public string interacted(Interaction interaction) => match (interaction) {
         PopupInteraction popup => popup.name(),
         ScrollInteraction scroll => `${scroll.name()} ${scroll.depth}`,
