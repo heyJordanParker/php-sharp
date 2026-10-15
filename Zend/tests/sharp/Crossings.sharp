@@ -32,6 +32,23 @@ class Crossings
 
     public static Map<string, int> returned() => global.price_list();
 
+    public static List<string> plainMapCalls() => [
+        `${global.price_list().get("tea") ?? -1}`,
+        `${global.price_list().get("5") ?? -1}`,
+        `${global.price_list().has("5")}`,
+        global.implode(",", global.price_list().keys()),
+        `${global.price_list().count()}`,
+    ];
+
+    public static string untypedLocal()
+    {
+        let kept = global.price_list();
+        const removed = kept.remove("5");
+        const left = kept.count();
+        kept = global.price_list();
+        return `${removed} ${left} ${kept.has("5")} ${global.get_debug_type(kept)}`;
+    }
+
     public static Map<string, int> received(Map<string, int> counts) => counts;
 
     public static List<string> objects(Map<string, int> prices, Set<string> tags)

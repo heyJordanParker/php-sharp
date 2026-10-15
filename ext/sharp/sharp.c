@@ -1358,8 +1358,7 @@ ZEND_METHOD(Sharp_Collection, removeAt)
 	sharp_collection_renumber(collection, index, NULL);
 }
 
-/* A List's get: the element at index, or null past its ends. A Map's: the value of key, or null when
- * the Map holds no equal key. */
+/* A Map's get: the value of key, or null when the Map holds no equal key. */
 ZEND_METHOD(Sharp_Collection, get)
 {
 	zval *key;
@@ -1368,25 +1367,16 @@ ZEND_METHOD(Sharp_Collection, get)
 		Z_PARAM_ZVAL(key)
 	ZEND_PARSE_PARAMETERS_END();
 
-	zval *held = sharp_collection_array(sharp_collection_from(Z_OBJ_P(ZEND_THIS)));
-	if (!held) {
+	sharp_table *table = sharp_collection_table(ZEND_THIS, false);
+	sharp_table_bucket *bucket = table ? sharp_table_find(table, key) : NULL;
+	if (EG(exception)) {
 		RETURN_THROWS();
 	}
-	zval *found;
-	if (Z_TYPE_P(held) == IS_ARRAY) {
-		found = Z_TYPE_P(key) == IS_LONG ? zend_hash_index_find(Z_ARRVAL_P(held), Z_LVAL_P(key)) : NULL;
-	} else {
-		sharp_table_bucket *bucket = sharp_table_find(sharp_table_of(Z_OBJ_P(held)), key);
-		if (EG(exception)) {
-			RETURN_THROWS();
-		}
-		found = bucket ? &bucket->value : NULL;
-	}
-	if (!found) {
+	if (!bucket) {
 		RETURN_NULL();
 	}
 
-	RETURN_COPY_DEREF(found);
+	RETURN_COPY_DEREF(&bucket->value);
 }
 
 /* A List's entries: the Map of each index to its element. A Map's: the Map. */
