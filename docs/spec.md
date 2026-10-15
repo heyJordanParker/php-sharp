@@ -2582,7 +2582,7 @@ public class Page : DatabaseEntity
 public override string label() => super.label() + " (page)";
 ```
 
-**An interface can give a method a default body.** PHP# declares no traits:
+**An interface can give a method or a computed property a default body.** PHP# declares no traits:
 
 <!-- example interface-defaults -->
 ```csharp
@@ -2594,6 +2594,7 @@ public interface HasDesign
     List<string> claims { get; set; }                       // abstract: each class declares its storage
     string designColumn { get; }                            // abstract
     string designKey() => `design:${this.designColumn}`;    // compiles: a default body
+    string designLabel => `${this.designColumn} design`;    // compiles: a computed property's default body
     string designId() => `design:${this.id}`;               // compile error: a default body sees only HasDesign's members, and id is not one
 }
 ```
@@ -2615,10 +2616,12 @@ Page page = new Page();
 -->
 ```csharp
 page.designKey();                                           // "design:design", from the default body
+page.designLabel;                                           // "design design", from the default body
 ```
 
 - A default body sees only the interface's own members.
 - Every field is declared in the class that owns it. An interface holds no fields.
+- A computed property's default body runs on each read, so it takes no `static` and no `lazy`.
 - A PHP# interface with default bodies compiles to a PHP interface plus a PHP trait named `<Interface>\Defaults` that holds the default bodies, as Kotlin nests `DefaultImpls` in an interface. A plain PHP class that implements it must also `use` that trait to get the defaults. PHP# code never names the trait, so section 23's rule that a class cannot share its full name with a namespace does not apply to it.
 
 **A class has one method per name, whatever it inherits** (section 7). When two places give a class a body for the same method, the class writes the method itself, as Kotlin requires. The places are two interfaces' default bodies, a default body and a plain PHP trait, two header traits, or a default body and the base class. Until the class writes it, the class is a compile error that names both places. Inside its own methods, the class runs one interface's default body with `super<Interface>`:
@@ -2667,6 +2670,10 @@ class LegacyPage implements HasDesign
 
     public array $claims = [];
     public string $designColumn = "design";
+
+    public $designLabel {                                   // runs designLabel's default body, and has no PHP type, as HasDesign's has none
+        get => $this->{'designLabel@App\Design\HasDesign'}();
+    }
 }
 ```
 

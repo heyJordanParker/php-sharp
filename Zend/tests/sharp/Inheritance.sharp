@@ -80,6 +80,19 @@ public interface Keyed<TKey>
     TKey key();
 
     List<TKey> keys() => [this.key(), this.key()];
+
+    bool holds(Any value) => value is TKey;
+
+    bool same(TKey other) => other == this.key();
+
+    List<TItem> pair<TItem>(TItem item) => [item, item];
+}
+
+public class Tagger<TTag> : Keyed<List<TTag>>
+{
+    public Tagger(public TTag tag { get; }) { }
+
+    public List<TTag> key() => [this.tag];
 }
 
 public class Coded : Keyed<int>
@@ -96,4 +109,6 @@ public static class Seeder
     public static int count(List<Copies> owners) => owners.count();
 
     public static int firstKey(Coded coded) => coded.keys()[0];
+
+    public static Tagger<string> tagger() => new Tagger<string>("a");
 }

@@ -30,6 +30,16 @@ var_dump((new Demo\Memo('memo'))->describe(), Demo\Verdict\Pending::instance()->
 var_dump((new Demo\Both())->describe(), (new Demo\Repeater())->repeat());
 $coded = new Demo\Coded();
 var_dump($coded->keys(), Demo\Seeder::firstKey($coded));
+// A default body tests a value, and checks the arguments plain PHP gives it, against the interface's type argument each
+// class gives, its own or its own generic one.
+$tagger = Demo\Seeder::tagger();
+var_dump($coded->holds(7), $coded->holds('7'), $tagger->holds(['b']), $tagger->holds([1]));
+var_dump($coded->same(7), $tagger->same(['a']), $coded->pair('x'));
+try {
+    $tagger->same([1]);
+} catch (TypeError $error) {
+    echo $error->getMessage(), "\n";
+}
 
 var_dump(
     (new ReflectionMethod(Demo\HasDesign::class, 'designKey'))->isAbstract(),
@@ -46,7 +56,7 @@ var_dump(array_map(
     (new ReflectionClass(Demo\Both::class))->getMethods(ReflectionMethod::IS_PROTECTED),
 ));
 ?>
---EXPECT--
+--EXPECTF--
 string(12) "design:sheet"
 string(13) "design:legacy"
 string(4) "told"
@@ -65,6 +75,19 @@ array(2) {
   int(7)
 }
 int(7)
+bool(true)
+bool(false)
+bool(true)
+bool(false)
+bool(true)
+bool(true)
+array(2) {
+  [0]=>
+  string(1) "x"
+  [1]=>
+  string(1) "x"
+}
+Demo\Tagger::same(): Argument #1 ($other) must be of type List<string>, array given: [0] expected string, got int 1, called in %s on line %d
 bool(true)
 bool(true)
 bool(false)
