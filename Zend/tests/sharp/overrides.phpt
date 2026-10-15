@@ -45,6 +45,19 @@ try {
 echo Overrides\Box::grow(new Overrides\Box()), ' ';
 $size = new ReflectionProperty(Overrides\Sized::class, 'size');
 echo $size->hasHook(PropertyHookType::Set) ? 'set' : 'no set', "\n";
+
+// Every path through the constructor sets the get-only `T?` `note` and the settable `level`, so neither has an
+// initial value, and `note` stays PHP's `readonly` with no default. The settable `T?` `nickname` starts as null.
+$claimed = new Overrides\Member('hi', true);
+$open = new Overrides\Member('hi', false);
+var_dump($claimed->note, $claimed->level, $open->note, $open->level, $open->nickname);
+$note = new ReflectionProperty(Overrides\Member::class, 'note');
+var_dump($note->isReadOnly(), $note->hasDefaultValue());
+try {
+    $claimed->note = 'again';
+} catch (Error $error) {
+    echo $error->getMessage(), "\n";
+}
 ?>
 --EXPECT--
 square four sides 4
@@ -61,3 +74,11 @@ Ada named
 Bo
 Cannot modify private(set) property Overrides\Account::$name from global scope
 2 set
+string(2) "hi"
+int(2)
+NULL
+int(1)
+NULL
+bool(true)
+bool(false)
+Cannot modify readonly property Overrides\Member::$note

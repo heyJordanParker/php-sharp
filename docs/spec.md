@@ -21,7 +21,7 @@ Attributes use square brackets and follow C#'s rules:
 <!-- example attribute-arguments: members -->
 ```csharp
 [Field(label: "Name", render: Render.Heading, searchable: true)]
-public string name { get; set; }
+public string name { get; set; } = "";
 ```
 
 Named arguments use `label: "Name"`, the same "name: value" form used everywhere in the language (section 16). C#'s `Label = "Name"` is not allowed.
@@ -193,8 +193,8 @@ Fields and properties are separate concepts.
 <!-- example field-and-property: members -->
 ```csharp
 Map<string, Plan> cache = [:];                                  // field
-public int views { get; private set; }                          // auto-property
-public string name { get; internal set => field = value.trim(); }
+public int views { get; private set; } = 0;                     // auto-property
+public string name { get; internal set => field = value.trim(); } = "";
 public string slug => Str.slug(this.name);                      // computed
 ```
 
@@ -211,7 +211,7 @@ Initial values run before the parent's constructor, in the order the members are
 
 **A `T?` field or settable auto-property with no initial value starts as null,** as in C# and Swift. A get-only `T?` property is set once, by its initial value or by the constructor, like every other get-only property.
 
-**A get-only property with no initial value must be set on every path through the main constructor,** nullable or not, as Swift's `let` and Kotlin's `val` must be. Otherwise it is a compile error that names both fixes: an initial value, or setting it in the constructor.
+**A property with storage and no initial value must be set on every path through the main constructor,** as Swift's and Kotlin's stored properties must be. This holds for a get-only property, nullable or not, and for a settable one that isn't `T?`. Otherwise it is a compile error that names both fixes: an initial value, or setting it in the constructor.
 
 <!-- example nullable-members -->
 ```csharp
@@ -225,11 +225,14 @@ public class Profile
     public string? note { get; }             // compiles: the constructor sets it once
     public string? memo { get; } = null;     // compiles: the initial value sets it once
     public string? handle { get; }           // compile error: give handle an initial value, or set it on every path through the constructor
+    public int level { get; set; }           // compiles: the constructor sets it
+    public int rank { get; set; }            // compile error: give rank an initial value, or set it on every path through the constructor
 
     public Profile(string? note, bool claimed)
     {
         this.note = note;
-        if (claimed) { this.handle = "taken"; }
+        this.level = 1;
+        if (claimed) { this.handle = "taken"; this.rank = 1; }
     }
 }
 ```
@@ -321,7 +324,7 @@ public class Order : Model
 private void touch() { }
 -->
 ```csharp
-public string name { get; set; didSet => this.touch(); }
+public string name { get; set; didSet => this.touch(); } = "";
 ```
 
 ### 6.3 Typed property references
@@ -345,7 +348,7 @@ A clause after the property names its behaviors. It reads as "get/set via Trimme
 
 <!-- example property-behaviors: members -->
 ```csharp
-public string name { get; set; } via Trimmed, Tracked;
+public string name { get; set; } via Trimmed, Tracked = "";
 ```
 
 - A behavior is a class that implements `get` and `set` once.
@@ -1256,7 +1259,7 @@ import Illuminate.Database.Eloquent.Model;
 
 public class Order
 {
-    public string number { get; set; }
+    public string number { get; set; } = "";
     public Money totalIn(string currency) readonly { … }
     public void markPaid() { … }
 }
@@ -2745,7 +2748,7 @@ public class Invoice<TLine : Line>                             // type and type 
 {
     const MAX_LINES = 100;                                     // constant
     List<TLine> pendingLines = [];                             // field
-    public string dueDate { get; set; }                        // property
+    public string dueDate { get; set; } = "";                   // property
 
     public Money totalIn(string currency)                      // method and parameter
     {
