@@ -9,10 +9,10 @@ require __DIR__ . '/Checkout.sharp';
 
 use Demo\Checkout;
 
-var_dump(Checkout::total("12.50", "3"), Checkout::total(" 0.5 ", null), Checkout::total("1e2", "x"));
+var_dump(Checkout::total("12.50", "3"), Checkout::total("0.5", null), Checkout::total("1e2", "x"));
 var_dump(Checkout::page("7"), Checkout::price("-.25"));
 
-foreach (["12abc", "", "1,5"] as $page) {
+foreach (["12abc", "", "1,5", " 7 "] as $page) {
     try {
         Checkout::page($page);
     } catch (ValueError $e) {
@@ -39,5 +39,6 @@ float(-0.25)
 ValueError: Int.parse: "12abc" is not an int in Checkout.sharp on line 47
 ValueError: Int.parse: "" is not an int in Checkout.sharp on line 47
 ValueError: Int.parse: "1,5" is not an int in Checkout.sharp on line 47
+ValueError: Int.parse: " 7 " is not an int: remove its spaces with Text.trim() first in Checkout.sharp on line 47
 ArithmeticError: Int.parse: "99999999999999999999" is out of range for an int in Checkout.sharp on line 47
 ValueError: Float.parse: "NaN" is not a float in Checkout.sharp on line 42

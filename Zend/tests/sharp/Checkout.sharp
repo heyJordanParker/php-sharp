@@ -39,7 +39,7 @@ class Checkout
 
     public static int total(string price, string? count)
     {
-        return (int)(Float.parse(price) * 100) * (Int.tryParse(count) ?? 1);
+        return (int)(Float.parse(price) * 100) * ((count != null ? Int.tryParse(count) : null) ?? 1);
     }
 
     public static int page(string value)

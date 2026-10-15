@@ -189,6 +189,7 @@ Fields and properties are separate concepts.
 
 - **A field is storage.** It can only be `private` or `protected`. A field with no modifier is `private`. There are no public fields.
 - **A property is the API.** It has `get` and `set` accessors. `get` reads at the property's access level, and `set` may carry a narrower one of its own.
+- **A field or a constant declares one name.** `private int first, second;` is a compile error that says to declare each on its own line, so a member's type, initial value and attributes stay in one place, as in Rust and TypeScript.
 
 <!-- example field-and-property: members -->
 ```csharp
@@ -2947,7 +2948,9 @@ public User find(int|string id)
 - `List`, `Map` and `Set` can't share a union, because they share PHP's one array kind and the literal rules need to know which one a place holds.
 - Alternatives that belong to the domain stay enums (section 20) and sealed interfaces (section 20.1).
 
-**A union that holds null is written `(int|string)?`,** with the same `?` as any other type. `int|string|null` is a compile error that names `(int|string)?`.
+**A union that holds null is written `(int|string)?`,** with the same `?` as any other type. `int|string|null` is a compile error that names `(int|string)?`, and `int|null` one that names `int?`.
+
+- `null`, `true` and `false` are values, not types. `null` alone as a type is a compile error that names `T?`, and `true` or `false` alone is one that names `bool`.
 
 <!-- example nullable-unions: members -->
 ```csharp
@@ -3039,7 +3042,7 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 
 - `(int)` and `(float)` convert between `int` and `float`. `(string)` converts a number to a `string`.
 - `(int)` truncates a `float` toward zero. A `float` too large for an `int`, or NaN, throws `ArithmeticError`.
-- A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take a `string`, as C#'s `int.Parse(string)` and Kotlin's `String.toInt()` do, and throw on a string that holds anything but a number, such as `"abc"` or `"12abc"`. An `Any?` is checked with `as string` first.
+- A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take a `string`, as C#'s `int.Parse(string)` and Kotlin's `String.toInt()` do, and throw on a string that holds anything but a number, such as `"abc"` or `"12abc"`. Spaces around the number count too, as in Rust and Kotlin: `Int.parse(" 12 ")` throws, and its error says to call `Text.trim()` first. An `Any?` is checked with `as string` first.
 - `Int.tryParse(s)` and `Float.tryParse(s)` take a `string` too, and give null where `parse` throws.
 - A class or an interface narrows only with `as`, which gives null, or with `as … ?? throw` (section 21).
 - PHP# has no user-defined conversion operators, such as C#'s `implicit operator`. A type converts only through a property or method it declares, such as `username.value`.
@@ -3095,8 +3098,9 @@ if (payload is WebhookPayload) {
 **An unchecked `Any?` can be given a default or compared with a plain value:**
 
 - `x ?? y` compiles and gives `Any`.
-- `==` against a struct, enum, string, number or collection compiles, and compares by value (section 19).
+- `==` against a struct, enum, string, number, `bool` or collection compiles, and compares by value (section 19).
 - `==` against an object, or against another unchecked `Any?`, is a compile error.
+- `===` against an object compiles: it asks only whether both are the same object (section 19), so it is false when `x` holds no object.
 - `${x}` in a template is a compile error until `x` is checked.
 
 <!-- example unchecked-any: statements
