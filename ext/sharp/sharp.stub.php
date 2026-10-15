@@ -128,6 +128,8 @@ function startTest(string $class): void {}
 
 function endTest(): void {}
 
+function building(object $object): bool {}
+
 function emit(object $event): void {}
 
 function listenersFor(object $event): array {}

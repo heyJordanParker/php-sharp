@@ -5179,6 +5179,33 @@ ZEND_FUNCTION(Sharp_Internal_endTest)
 	SHARP_G(container_test) = NULL;
 }
 
+/* Spec section 6.2: a property's observers run only once its object is fully built. The object is still being built
+ * while one of its constructors runs, a parent's included, while a named constructor's body runs on it as the closure
+ * the bridge marks ZEND_ACC_SHARP_BUILDS, and while clone() writes a `with` copy's new values, IS_OBJ_SHARP_BUILDING.
+ * A method a constructor calls runs before the constructor returns, so the object is still being built. */
+ZEND_FUNCTION(Sharp_Internal_building)
+{
+	zend_object *object;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJ(object)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (OBJ_EXTRA_FLAGS(object) & IS_OBJ_SHARP_BUILDING) {
+		RETURN_TRUE;
+	}
+	for (const zend_execute_data *frame = EX(prev_execute_data); frame; frame = frame->prev_execute_data) {
+		if (frame->func
+		 && (frame->func->common.fn_flags & (ZEND_ACC_CTOR | ZEND_ACC_SHARP_BUILDS))
+		 && (ZEND_CALL_INFO(frame) & ZEND_CALL_HAS_THIS)
+		 && Z_OBJ(frame->This) == object) {
+			RETURN_TRUE;
+		}
+	}
+
+	RETURN_FALSE;
+}
+
 /* Spec section 15: emit hands an event, and one function per listener of it, to the app's dispatcher. mago compile
  * lists every listener an `on` clause declares in the listener table, and Sharp\Internal\listen starts one for as long
  * as its handle lives. Each function takes the event, as PSR-14 calls a listener, and creates its listener's object

@@ -65,7 +65,7 @@ foreach ([1, 2] as $attempt) {
 }
 
 // A static computed property, a static `set` body and a static observer run as an instance property's do, through
-// their class's hidden static methods. The observer sees the initial value's write when `run` first uses the statics.
+// their class's hidden static methods. The initial value fills the storage, so the observer runs only on a later write.
 echo Overrides\Tally::run(), ' ', Overrides\Tally::current(), "\n";
 Overrides\Tally::rename('Bo');
 
@@ -125,7 +125,6 @@ Cannot modify private(set) property Overrides\Account::$name from global scope
 Cannot modify private(set) property Overrides\Registry::$size from global scope
 1 no code
 2 Typed static property Overrides\Faulty::$code must not be accessed before initialization
-label start
 16 7
 label Bo
 4

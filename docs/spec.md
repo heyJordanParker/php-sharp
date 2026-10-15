@@ -209,6 +209,14 @@ public List<Tag> tags { get; set; } = [];
 
 Initial values run before the parent's constructor, in the order the members are declared, and can't read `this`, as in C#.
 
+**No code that can read the object runs before the object is built.** An initial value can't read `this`, it fills the storage without running a `set` body, constant or not, and observers wait until the constructor returns (section 6.2). Only a behavior's `set` processes an initial value, because a behavior never sees the object (section 6.4).
+
+<!-- example initial-value-storage: members -->
+```csharp
+public string code { get; set => field = value.trim(); } = "  a  ";            // compiles: code starts as "  a  ", since set doesn't run
+public string label { get; set => field = value.trim(); } = global.strval(1);  // compiles: a computed initial value fills the storage too
+```
+
 **A member has no implicit starting value, `null` included.** A `T?` member writes `= null` like any other starting value, and PHP# has no default filler such as C#'s `default(T)`.
 
 **A field or a property with storage and no initial value must be set on every path through the main constructor,** as Swift's and Kotlin's stored properties must be. This holds for every one, settable or get-only, nullable or not, as it does for a struct. Otherwise it is a compile error that names both fixes: an initial value, or setting it in the constructor.
@@ -327,7 +335,7 @@ public class Order : Model
 
 `willSet` runs before a write, and `didSet` runs after it.
 
-**Observers run on every write,** the initial value's and the constructor's included, and also when the value is unchanged. Both see `value`, the written value, and `didSet` reads `field`, the stored one. Beside a `set` body, the order is `willSet`, the `set` body, then `didSet`. An observer runs inside `set`, so a property with one needs `set`.
+**Observers run only once the object is built,** on every write after its constructor returns, an object initializer's included, and also when the value is unchanged. The initial value runs none, and neither does a write while a constructor or a named constructor runs, a method it calls included. A `with` copy is a new object being built, so the values it is written with run none either. A static's initial value runs none, and every later write does. Both observers see `value`, the written value, and `field`, the stored one: `willSet` reads the value the write replaces, and `didSet` the value it stored. Beside a `set` body, the order is `willSet`, the `set` body, then `didSet`. An observer runs inside `set`, so a property with one needs `set`.
 
 **`willSet` cannot change or stop the write.** Writing `value` or returning in it is a compile error, and so is returning in a `set` body before `didSet`:
 
@@ -335,7 +343,8 @@ public class Order : Model
 private void touch() { }
 -->
 ```csharp
-public string name { get; set; didSet => this.touch(); } = "";    // compiles: didSet runs on each write, the initial value's included
+public string name { get; set; didSet => this.touch(); } = "";    // compiles: didSet runs on each write once the object is built
+public int level { get; set; willSet { if (field != value) { this.touch(); } } } = 0;   // compiles: field is the value the write replaces
 public int total { get; set; willSet { value = 0; } } = 0;        // compile error: willSet cannot change value
 public int count { get; didSet => this.touch(); } = 0;            // compile error: didSet needs set
 ```
@@ -384,7 +393,7 @@ public class Trimmed : Behavior<string>
 - A behavior's `get` and `set` are the property's accessors. Each may have any effect, and a read or write of the property carries it (section 29). `set` may write the behavior's own fields, and `get` writes none, as no `get` body writes `this` (section 6.1).
 - `via` goes on an instance auto-property with `get; set;`. A property in an interface or an `abstract` one has no storage to run around, a static one has no object to keep behaviors in, and one with an accessor body already says how it reads and writes, so each is a compile error. A constructor parameter takes no `via`: declare the property in the class body.
 - Each object creates its own behaviors with `new` when it is constructed, before any initial value, and keeps each one in a hidden slot. A copy made with `with`, or with plain PHP's `clone`, creates its own too, so two objects never share a behavior's state.
-- A write runs each behavior's `set` in the order they are written, then stores the result. A read runs each behavior's `get` the other way, so the first behavior wraps the rest. The initial value is a write, so it runs through each `set`.
+- A write runs each behavior's `set` in the order they are written, then stores the result. A read runs each behavior's `get` the other way, so the first behavior wraps the rest. The initial value is a write, so it runs through each `set`, which never sees the object (section 6).
 
 ### 6.5 `lazy`
 

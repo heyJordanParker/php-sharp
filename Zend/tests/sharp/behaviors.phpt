@@ -1,12 +1,12 @@
 --TEST--
-PHP# behaviors run set in the order they are written and get the other way, the initial value's write included, with one instance of each per object
+PHP# behaviors run set in the order they are written and get the other way, the initial value's write included, which a behavior trims, with one instance of each per object
 --FILE--
 <?php
 
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Behavior.sharp';
 require __DIR__ . '/Behaviors.sharp';
 
-// The initial values went through each `set`, so each `Counted` counted one write.
+// The initial values went through each `set`, so `Trimmed` trimmed one and each `Counted` counted one write.
 $first = new Behaviors\Profile();
 echo $first->name, '|', $first->code, "\n";
 
@@ -32,7 +32,7 @@ $first->level = 4;
 echo $first->level, "\n";
 ?>
 --EXPECT--
-#1|X#1
+start#1|X#1
 ada#2|BO#2
 cy#2 ada#2
 dee#1 ada#2
