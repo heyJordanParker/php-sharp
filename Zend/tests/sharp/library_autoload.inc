@@ -4,7 +4,8 @@
 // native bodies, or one that also declares Text.missing, with Sharp\ and a project's App\Clock found by PSR-4 or by an
 // authoritative class map, and Composer reporting the package at that version or not installed, then uses
 // Sharp\Text\Text, App\Clock, App\Tick\Now, a case of the enum App/Tick.sharp declares, or the trait App\Timed\Defaults
-// of the interface App/Timed.sharp declares, through a plain PHP class. The class map lists the classes the package's
+// of the interface App/Timed.sharp declares, or App\Ticking\Defaults of an interface without a default body, through a
+// plain PHP class. The class map lists the classes the package's
 // Composer plugin finds in each file. With composer, Composer itself requires autoload.php, as it does to load a plugin.
 
 namespace Composer\Plugin {
@@ -105,6 +106,7 @@ namespace {
     file_put_contents("$package/src/App/Clock.sharp", "namespace App;\n\npublic class Clock\n{\n    public string now() => \"noon\";\n}\n");
     file_put_contents("$package/src/App/Tick.sharp", "namespace App;\n\npublic enum Tick\n{\n    case Later;\n    case Now(string at);\n}\n");
     file_put_contents("$package/src/App/Timed.sharp", "namespace App;\n\npublic interface Timed\n{\n    string now() => \"default noon\";\n}\n");
+    file_put_contents("$package/src/App/Ticking.sharp", "namespace App;\n\npublic interface Ticking\n{\n    string now();\n}\n");
     file_put_contents("$package/mago.toml", "[source]\npaths = [\"src\", \"library\"]\nextensions = [\"sharp\"]\n");
     run_mago($package);
 
@@ -113,7 +115,7 @@ namespace {
         require "$root/sharp/composer/src/Plugin.php";
         $declaredClasses = new ReflectionMethod(PhpSharp\Composer\Plugin::class, 'declaredClasses');
         $classMap = [];
-        foreach (["$package/src/App/Clock.sharp", "$package/src/App/Tick.sharp", "$package/src/App/Timed.sharp", "$library/Text/Text.sharp"] as $file) {
+        foreach (["$package/src/App/Clock.sharp", "$package/src/App/Tick.sharp", "$package/src/App/Timed.sharp", "$package/src/App/Ticking.sharp", "$library/Text/Text.sharp"] as $file) {
             $classMap += array_fill_keys($declaredClasses->invoke(null, new SplFileInfo($file)), $file);
         }
         file_put_contents("$package/vendor/composer/autoload_sharp.php", '<?php return ' . var_export($classMap, true) . ';');
@@ -132,6 +134,11 @@ namespace {
             'App\Tick\Now' => (new $class('noon'))->at . (class_exists('App\Tick', false) ? ', with its enum' : ''),
             // A plain PHP class gets a PHP# interface's default bodies by using its trait, spec section 22.
             'App\Timed\Defaults' => (new class implements \App\Timed { use \App\Timed\Defaults; })->now(),
+            // An interface without a default body has no Defaults trait, and asking for it after the interface loaded
+            // leaves the interface's file unread.
+            'App\Ticking\Defaults' => interface_exists(\App\Ticking::class)
+                ? (new class implements \App\Ticking { use \App\Ticking\Defaults; })->now()
+                : 'no interface',
             default => (new $class())->now(),
         }, "\n";
     } catch (Error $error) {
