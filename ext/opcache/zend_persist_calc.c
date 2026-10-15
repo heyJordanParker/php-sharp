@@ -227,10 +227,6 @@ static void zend_persist_op_array_calc_ex(zend_op_array *op_array)
 		}
 	}
 
-	if (op_array->sharp_type) {
-		ADD_INTERNED_STRING(op_array->sharp_type);
-	}
-
 	if (op_array->scope) {
 		if (zend_shared_alloc_get_xlat_entry(op_array->opcodes)) {
 			/* already stored */
@@ -317,6 +313,11 @@ static void zend_persist_op_array_calc_ex(zend_op_array *op_array)
 
 	if (ZCG(accel_directives).save_comments && op_array->doc_comment) {
 		ADD_STRING(op_array->doc_comment);
+	}
+
+	/* PHP#: the type text is one string each copy of the function shares, as its doc comment is. */
+	if (op_array->sharp_type && !IS_ACCEL_INTERNED(op_array->sharp_type)) {
+		ADD_STRING(op_array->sharp_type);
 	}
 
 	if (op_array->attributes) {
