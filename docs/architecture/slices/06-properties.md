@@ -106,7 +106,7 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 
 | Line | Rule | Today | Mechanism | Reuses |
 |---|---|---|---|---|
-| 191 | A property has `get` and `set`, each with its own level | Works for `private set` and `protected set`. Refused on `get`: `GetAccess`, "This accessor is not supported yet" | Question 7: a named error on `get` | `check_accessors` |
+| 191 | A property has `get` and `set`, each with its own level | Works for `private set` and `protected set`. Refused on `get`: `GetAccess`, "This accessor is not supported yet" | Jordan's ruling on question 7: only `set` and `init` take a level, and one on `get` is the error "Only `set` and `init` take an access level", whose help says to read the property through a method inside the class. Lines 191, 252 and 483 say so, with the `access-on-get` example | `check_accessors` |
 | 196 | `public int views { get; private set; }` | Works (`Views`). Reading before a write throws at runtime (question 13) | None new | |
 | 197 | `{ get; internal set => field = value.trim(); }` | Refused: `InternalSet`, "This accessor is not supported yet" at `internal` | Question 1: built with section 5's `internal`, so the `field-and-property` example passes | |
 | 198 | `public string slug => Str.slug(this.name);` | Refused: `PureGetter`, "Getter `slug` calls `Str.slug`, which has no `extern` declaration. Getters must be pure." | Harness `app/Stubs/Str.sharp` (decision 2). Since Jordan's ruling on question 11 a getter may call it without one | Section 29's `extern` |

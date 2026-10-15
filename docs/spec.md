@@ -188,7 +188,7 @@ public interface Notifier
 Fields and properties are separate concepts.
 
 - **A field is storage.** It can only be `private` or `protected`. A field with no modifier is `private`. There are no public fields.
-- **A property is the API.** It has `get` and `set` accessors, and each accessor carries its own access level.
+- **A property is the API.** It has `get` and `set` accessors. `get` reads at the property's access level, and `set` may carry a narrower one of its own.
 
 <!-- example field-and-property: members -->
 ```csharp
@@ -249,7 +249,7 @@ public static string label { get; set; }         // compile error: give label an
 PHP# has all of C#'s property features:
 
 - auto-properties
-- a separate access level for each accessor
+- a separate, narrower access level for `set` and `init`
 - get-only properties, which are set in the constructor
 - `init`, which allows a set only while the object is being created
 - computed properties, written `=> expr`
@@ -257,6 +257,14 @@ PHP# has all of C#'s property features:
 - `required`, which the checker enforces wherever the object is created
 - properties in interfaces, abstract properties, and overrides
 - Reflection that tells fields from properties
+
+**Only `set` and `init` take an access level of their own,** narrower than the property's, as Swift's `private(set)` is. `get` reads at the property's level, so an access level on it is a compile error. A property read only inside its class is read through a method there.
+
+<!-- example access-on-get: members -->
+```csharp
+public int views { get; private set; } = 0;     // compiles: set is narrower than the property
+public int score { protected get; set; } = 0;   // compile error: only set and init take an access level; read score inside the class through a method
+```
 
 **A `get` body may have any effect but never writes `this`.** A read may query the database or read the clock, and it carries the body's effects (section 29). Writing a field of `this`, or calling a method on `this` that writes one, is a compile error that names the write. A `lazy` property still keeps its computed value (section 6.5), because that write is the language's, not the body's.
 
@@ -480,7 +488,7 @@ public StoreService(
 }
 ```
 
-**A member declared on a parameter takes access levels and attributes only,** as TypeScript's and Kotlin's parameter properties do: an access modifier, an accessor list with an access level for each accessor, such as `{ get; private set; }`, and attributes. Accessor bodies, `willSet`, `didSet`, `via`, `lazy`, computed properties and `static` go on a member in the class body:
+**A member declared on a parameter takes access levels and attributes only,** as TypeScript's and Kotlin's parameter properties do: an access modifier, an accessor list whose `set` or `init` may take a narrower access level, such as `{ get; private set; }`, and attributes. Accessor bodies, `willSet`, `didSet`, `via`, `lazy`, computed properties and `static` go on a member in the class body:
 
 <!-- example parameter-member-limits: members in Ledger -->
 ```csharp
