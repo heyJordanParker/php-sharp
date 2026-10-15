@@ -248,7 +248,7 @@ public class Profile
 
 **A static field or property with storage needs an initial value, whatever its type.** No constructor sets it, so the error names that one fix.
 
-**A static's initial value runs once, when a request first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. A get-only static is set only by its initial value.
+**A static lives as long as the app runs, and its initial value runs once, when the app first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. Under php-fpm the app runs for one request. Under a long-running host, such as Octane or FrankenPHP's worker mode, each request sees what the last one left, as in C#, TypeScript and Rust. A host that runs several workers runs one app in each. A get-only static is set only by its initial value.
 
 **Plain PHP reaches a static with an accessor body, a computed body or an observer only through a method,** because PHP has no hooks on a static property. Reading or writing it directly from plain PHP is PHP's access error.
 
@@ -258,7 +258,7 @@ private static int hits = 0;                     // compiles
 private static int misses;                       // compile error: give misses an initial value
 public static string? region { get; set; } = null;   // compiles: starts as null
 public static string? zone { get; set; }         // compile error: give zone an initial value
-private static int started = global.time();      // compiles: runs once, when a request first uses the class's statics
+private static int started = global.time();      // compiles: runs once, when the app first uses the class's statics
 public static int limit { get; } = 10;           // compiles: get-only, set only by its initial value
 ```
 
@@ -4014,6 +4014,49 @@ module
 - **A module also states the laws that span its classes** (section 28).
 
 **The host defines each lifetime, as ASP.NET Core's host does.** A `singleton` lives as long as the host runs the app. A `scoped` binding lives for one scope, which the host starts and ends, such as one HTTP request, one queued job or one console command run. A `transient` binding is created each time a class needs one.
+
+**A host starts and ends each scope with `Scope.run(body)`.** While `body` runs, each `scoped` service it builds lives until `body` returns or throws, and is then dropped. `Scope.run` returns what `body` returns, and has `body`'s effects (section 29). PHP's own request is the default scope, so php-fpm, the CLI and FrankenPHP outside worker mode need no call. A long-running host wraps each unit of work in it, such as an Octane request, a FrankenPHP worker request or a queued job, as ASP.NET Core's `CreateScope()` and Node's `AsyncLocalStorage.run` start one. Plain PHP calls it as `\Sharp\Scope::run(fn () => …)`.
+
+<!-- example host-scope -->
+```csharp
+// app/Jobs/Worker.sharp
+namespace App.Jobs;
+
+import Sharp.Scope;
+
+public class Worker
+{
+    public Worker(private JobQueue queue) { }
+
+    public void work()
+    {
+        for (const job of this.queue.pending())
+        {
+            Scope.run(() => job.handle());   // each job gets its own scoped services
+        }
+    }
+}
+```
+
+**A scope follows the fiber that runs in it,** as .NET's `AsyncLocal` and Node's `AsyncLocalStorage` flow into the work they start. A fiber started inside `Scope.run` belongs to that scope, and a `Scope.run` inside a fiber is that fiber's own, so code on another fiber never builds from it. A `scoped` service resolved after its scope ended throws `Sharp\ContainerError`, as .NET throws when code uses a disposed scope.
+
+<!-- example scope-fibers -->
+```php
+<?php
+// A plain PHP event loop, such as Revolt's, runs each request in a fiber of its own.
+function serve(\Sharp\Container $container): void
+{
+    $request = new Fiber(fn () => \Sharp\Scope::run(function () use ($container): void {
+        $first = $container->get('App\Mail\Mailer');           // the fiber's scope builds it
+        Fiber::suspend();
+        $again = $container->get('App\Mail\Mailer');           // the same object: the fiber still runs in its scope
+        echo $first === $again ? "one Mailer\n" : "two Mailers\n";
+    }));
+    $request->start();
+    $container->get('App\Mail\Mailer');                         // the request's own scope builds another
+    $request->resume();
+}
+```
 
 A binding's expression runs each time its lifetime needs a new service, so a choice made while the app runs is one expression:
 
