@@ -27,10 +27,27 @@ try {
 } catch (TypeError $error) {
     echo $error->getMessage(), "\n";
 }
+
+// Reflection reports the written type, as a framework that finds a listener's event from its parameter's type reads it.
+$parameter = (new ReflectionMethod(Handlers\OrderHandler::class, 'handle'))->getParameters()[0];
+echo $parameter->getType()->getName(), "\n";
+
+// The check follows the caller's `strict_types`, as any typed parameter's does.
+$echoes = new Handlers\Echoes();
+$echoes->handle(5);
+var_dump($echoes->last);
+try {
+    eval('declare(strict_types=1); $echoes->handle(6);');
+} catch (TypeError $error) {
+    echo $error->getMessage(), "\n";
+}
 ?>
 --EXPECTF--
 7
-Handlers\OrderHandler::handle(): Argument #1 ($item) must be of type Handlers.Order, string given, called in %s on line 13
+Handlers\OrderHandler::handle(): Argument #1 ($item) must be of type Handlers\Order, string given, called in %s on line 13
 a Handler
 5 6
-Handlers\OrderInbox::count(): Argument #1 ($item) must be of type Handlers.Order, int given, called in %s on line 23
+Handlers\OrderInbox::count(): Argument #1 ($item) must be of type Handlers\Order, int given, called in %s on line 23
+Handlers\Order
+string(1) "5"
+Handlers\Echoes::handle(): Argument #1 ($item) must be of type string, int given, called in %s : eval()'d code on line 1

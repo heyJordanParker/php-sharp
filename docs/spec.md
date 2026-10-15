@@ -798,7 +798,7 @@ public PaginatedList<TItem> list<TItem : DatabaseEntity>(Query<TItem> query) { â
 public TValue keep<TValue : Object>(TValue value) => value;
 ```
 
-**A class that implements or extends a generic type takes its type argument's type,** as in C#, Java, Kotlin, TypeScript and Rust: `OrderHandler : Handler<Order>` writes `handle(Order item)`. A call from plain PHP still checks `item` against `Order`, and a value of another type throws `TypeError`, as Java's bridge method casts it:
+**A class that implements or extends a generic type takes its type argument's type,** as in C#, Java, Kotlin, TypeScript and Rust: `OrderHandler : Handler<Order>` writes `handle(Order item)`. A call from plain PHP still checks `item` against `Order` under the caller's `strict_types`, as every typed parameter is checked, and reflection reports `Order` as its type:
 
 <!-- example generic-implementation -->
 ```csharp
