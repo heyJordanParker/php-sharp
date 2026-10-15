@@ -241,6 +241,8 @@ public class Profile
 
 **A static's initial value runs once, when its class is loaded,** so it may be any expression, as C#'s static initializer is. A get-only static is set only by its initial value.
 
+**Plain PHP reaches a static with an accessor body, a computed body or an observer only through a method,** because PHP has no hooks on a static property. Reading or writing it directly from plain PHP is PHP's access error.
+
 <!-- example static-initial-values: members -->
 ```csharp
 private static int hits = 0;                     // compiles

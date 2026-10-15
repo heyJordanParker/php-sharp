@@ -62,6 +62,14 @@ Overrides\Tally::rename('Bo');
 // A static with a `get` body and no storage needs no initial value, and computes on each read.
 echo Overrides\Tally::square(), "\n";
 
+// PHP has no static hooks, so the storage of a static with accessors is private: plain PHP reaches it only through a
+// method, never as a raw value its accessors never saw.
+try {
+    var_dump(Overrides\Tally::$total);
+} catch (Error $error) {
+    echo $error->getMessage(), "\n";
+}
+
 // Every path through the constructor sets the get-only `T?` `note` and the settable `level`, so neither has an
 // initial value, and `note` stays PHP's `readonly` with no default. The settable `T?` `nickname` starts as null.
 $claimed = new Overrides\Member('hi', true);
@@ -96,6 +104,7 @@ Cannot modify private(set) property Overrides\Registry::$size from global scope
 16 7
 label Bo
 4
+Cannot access private property Overrides\Tally::$total
 string(2) "hi"
 int(2)
 NULL
