@@ -22,6 +22,8 @@
 #include "zend_closures.h"
 #include "zend_enum.h"
 #include "zend_exceptions.h"
+#include "zend_extensions.h"
+#include "zend_fibers.h"
 #include "zend_interfaces.h"
 #include "zend_language_parser.h"
 #include "zend_observer.h"
@@ -54,6 +56,22 @@ ZEND_STATIC_ASSERT(sizeof(sharp_node) == 56, "a .sharpc node is 56 bytes");
 
 #define SHARP_SPARE_COLLECTIONS 4
 
+/* Spec section 32: a scope keeps the scoped services built in it, by binding row. Sharp\Internal\runScoped starts one
+ * and ends it when its body returns or throws, so it is empty and ended from then on, and is freed once nothing holds
+ * it: each fiber holds the scope it started in. */
+typedef struct {
+	uint32_t references;
+	bool ended;
+	HashTable services;
+} sharp_scope;
+
+/* The scope a fiber started in and the scope it runs in now, in the reserved slot sharp_fiber_slot of its
+ * zend_fiber_context. The request's main context has one too. */
+typedef struct {
+	sharp_scope *start;
+	sharp_scope *current;
+} sharp_fiber_scope;
+
 ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	zend_object *spare_collections[SHARP_SPARE_COLLECTIONS];
 	HashTable folder_roots;
@@ -79,16 +97,15 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	/* Spec section 32: Sharp\Container's bindings, under "namespace id" a list of the modules that bind it, each a
 	 * list of its rows, the base modules' and the environment modules' apart; the paths of the module files it read;
 	 * each test file's module, under each class the file declares, and the one of the test that runs now, or NULL;
-	 * the services a singleton or a scoped binding keeps, by binding row; and the bindings and classes it is
-	 * building, to refuse a cycle. */
+	 * the services each singleton keeps, by binding row; the main context's scopes, whose start is the request's
+	 * scope; and the bindings and classes it is building, to refuse a cycle. */
 	HashTable container_bindings;
 	HashTable container_environment;
 	HashTable container_modules;
 	HashTable container_tests;
 	HashTable *container_test;
 	HashTable container_singletons;
-	HashTable container_request_scope;
-	HashTable *container_scope;
+	sharp_fiber_scope container_main_scope;
 	HashTable container_building;
 ZEND_END_MODULE_GLOBALS(sharp)
 
@@ -4618,6 +4635,60 @@ static zend_string *sharp_environment_variable(const char *name, size_t name_len
 
 static zend_class_entry *sharp_ce_container_error;
 
+/* The slot of each zend_fiber_context's reserved array that holds its sharp_fiber_scope. */
+static int sharp_fiber_slot;
+
+static sharp_scope *sharp_scope_start(void)
+{
+	sharp_scope *scope = emalloc(sizeof(sharp_scope));
+
+	scope->references = 1;
+	scope->ended = false;
+	zend_hash_init(&scope->services, 8, NULL, ZVAL_PTR_DTOR, false);
+
+	return scope;
+}
+
+/* The scope drops its services, and builds none from then on. */
+static void sharp_scope_end(sharp_scope *scope)
+{
+	scope->ended = true;
+	zend_hash_clean(&scope->services);
+}
+
+static void sharp_scope_release(sharp_scope *scope)
+{
+	if (--scope->references == 0) {
+		zend_hash_destroy(&scope->services);
+		efree(scope);
+	}
+}
+
+/* The scopes of the fiber that runs now, or of the request's main context. */
+static sharp_fiber_scope *sharp_running_scope(void)
+{
+	return EG(current_fiber_context)->reserved[sharp_fiber_slot];
+}
+
+/* A fiber starts in the scope of the code that starts it, as .NET's AsyncLocal flows into the work it starts. */
+static void sharp_fiber_started(zend_fiber_context *context)
+{
+	sharp_fiber_scope *scopes = emalloc(sizeof(sharp_fiber_scope));
+
+	scopes->start = scopes->current = sharp_running_scope()->current;
+	scopes->start->references++;
+	context->reserved[sharp_fiber_slot] = scopes;
+}
+
+static void sharp_fiber_destroyed(zend_fiber_context *context)
+{
+	sharp_fiber_scope *scopes = context->reserved[sharp_fiber_slot];
+
+	sharp_scope_release(scopes->start);
+	efree(scopes);
+	context->reserved[sharp_fiber_slot] = NULL;
+}
+
 /* The key the bindings of id in the namespace's first length bytes are kept under. */
 static zend_string *sharp_container_key(const zend_string *namespace, size_t length, const zend_string *id)
 {
@@ -4921,16 +4992,29 @@ static bool sharp_container_build_named(zend_string *name, zval *object)
 }
 
 /* The service row binds: a class, a list of classes, or the result of its closure over its parameters, which
- * resolve from the row's namespace. A singleton is kept for the request and a scoped service for the scope. */
+ * resolve from the row's namespace. A singleton is kept for as long as the app runs, and a scoped service for the
+ * scope the running fiber runs in. */
 static bool sharp_container_bound(zval *row, zval *service)
 {
 	zend_string *namespace = Z_STR_P(zend_hash_index_find(Z_ARRVAL_P(row), 0));
 	zend_string *lifetime = Z_STR_P(zend_hash_index_find(Z_ARRVAL_P(row), 3));
 	zval *value = zend_hash_index_find(Z_ARRVAL_P(row), 4);
 	zend_ulong key = (zend_ulong) (uintptr_t) Z_ARRVAL_P(row);
-	HashTable *kept = zend_string_equals_literal(lifetime, "singleton") ? &SHARP_G(container_singletons)
-		: zend_string_equals_literal(lifetime, "scoped") ? SHARP_G(container_scope)
-		: NULL;
+	/* A class the row binds is named as it is written, and any other service by its id. */
+	const char *name = Z_STRVAL_P(Z_TYPE_P(value) == IS_STRING ? value : zend_hash_index_find(Z_ARRVAL_P(row), 1));
+	HashTable *kept = NULL;
+	sharp_scope *scope = NULL;
+	if (zend_string_equals_literal(lifetime, "singleton")) {
+		kept = &SHARP_G(container_singletons);
+	} else if (zend_string_equals_literal(lifetime, "scoped")) {
+		scope = sharp_running_scope()->current;
+		if (scope->ended) {
+			zend_throw_error(sharp_ce_container_error,
+				"The scope this code runs in has ended, so the container can't build the scoped %s", name);
+			return false;
+		}
+		kept = &scope->services;
+	}
 	zval *found = kept ? zend_hash_index_find(kept, key) : NULL;
 	if (found) {
 		ZVAL_COPY(service, found);
@@ -4938,9 +5022,7 @@ static bool sharp_container_bound(zval *row, zval *service)
 	}
 
 	if (!zend_hash_index_add_empty_element(&SHARP_G(container_building), key)) {
-		/* A class the row binds is named as it is written, and any other service by its id. */
-		zend_throw_error(sharp_ce_container_error, "%s needs itself, so the container can't build it",
-			Z_STRVAL_P(Z_TYPE_P(value) == IS_STRING ? value : zend_hash_index_find(Z_ARRVAL_P(row), 1)));
+		zend_throw_error(sharp_ce_container_error, "%s needs itself, so the container can't build it", name);
 		return false;
 	}
 
@@ -4977,7 +5059,8 @@ static bool sharp_container_bound(zval *row, zval *service)
 	}
 
 	zend_hash_index_del(&SHARP_G(container_building), key);
-	if (built && kept) {
+	/* A fiber suspended while it built the service, and the scope it started in ended meanwhile, keeps nothing. */
+	if (built && kept && !(scope && scope->ended)) {
 		Z_TRY_ADDREF_P(service);
 		zend_hash_index_add_new(kept, key, service);
 	}
@@ -5048,8 +5131,9 @@ ZEND_METHOD(Sharp_Container, has)
 	RETURN_BOOL(has);
 }
 
-/* Spec section 32: calls run in a new scope, and releases the scoped services it built when run returns. */
-ZEND_METHOD(Sharp_Container, scope)
+/* Spec section 32: Scope.run runs body in a new scope of the running fiber, and ends the scope when body returns or
+ * throws. A fatal error leaves it to the request's end. */
+ZEND_FUNCTION(Sharp_Internal_runScoped)
 {
 	zend_fcall_info fci;
 	zend_fcall_info_cache fcc;
@@ -5058,16 +5142,22 @@ ZEND_METHOD(Sharp_Container, scope)
 		Z_PARAM_FUNC(fci, fcc)
 	ZEND_PARSE_PARAMETERS_END();
 
-	HashTable *outer = SHARP_G(container_scope);
-	HashTable scope;
-	zend_hash_init(&scope, 8, NULL, ZVAL_PTR_DTOR, 0);
-	SHARP_G(container_scope) = &scope;
+	sharp_fiber_scope *running = sharp_running_scope();
+	sharp_scope *outer = running->current;
+	sharp_scope *scope = sharp_scope_start();
+	running->current = scope;
 
 	fci.retval = return_value;
-	zend_call_function(&fci, &fcc);
+	zend_try {
+		zend_call_function(&fci, &fcc);
+	} zend_catch {
+		running->current = outer;
+		zend_bailout();
+	} zend_end_try();
 
-	SHARP_G(container_scope) = outer;
-	zend_hash_destroy(&scope);
+	running->current = outer;
+	sharp_scope_end(scope);
+	sharp_scope_release(scope);
 }
 
 /* Spec section 32: the standard library's autoloader adds the library's module, whose file is at path, as the
@@ -5149,7 +5239,7 @@ ZEND_FUNCTION(Sharp_Internal_keep)
 static void sharp_container_forget(void)
 {
 	zend_hash_clean(&SHARP_G(container_singletons));
-	zend_hash_clean(&SHARP_G(container_request_scope));
+	zend_hash_clean(&SHARP_G(container_main_scope).start->services);
 }
 
 /* Spec section 32: a test of class starts, so the container uses the module of class's test file before every
@@ -6761,6 +6851,12 @@ static PHP_MINIT_FUNCTION(sharp)
 
 	register_class_Sharp_Container();
 	sharp_ce_container_error = register_class_Sharp_ContainerError(zend_ce_error);
+	sharp_fiber_slot = zend_get_resource_handle("sharp");
+	if (sharp_fiber_slot < 0) {
+		return FAILURE;
+	}
+	zend_observer_fiber_init_register(sharp_fiber_started);
+	zend_observer_fiber_destroy_register(sharp_fiber_destroyed);
 
 	sharp_ce_listener = register_class_Sharp_Internal_Listener();
 	sharp_ce_listener->create_object = sharp_listener_create;
@@ -6835,15 +6931,15 @@ static PHP_RINIT_FUNCTION(sharp)
 	zend_hash_init(&SHARP_G(scoped_listeners), 0, NULL, NULL, false);
 	SHARP_G(next_scoped_listener) = 0;
 	ZVAL_UNDEF(&SHARP_G(compile_command_report));
-	/* Spec section 32: the request is the host's scope, as each CLI run is. */
 	zend_hash_init(&SHARP_G(container_bindings), 8, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(container_environment), 8, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(container_modules), 8, NULL, NULL, false);
 	zend_hash_init(&SHARP_G(container_tests), 8, NULL, ZVAL_PTR_DTOR, false);
 	SHARP_G(container_test) = NULL;
 	zend_hash_init(&SHARP_G(container_singletons), 8, NULL, ZVAL_PTR_DTOR, false);
-	zend_hash_init(&SHARP_G(container_request_scope), 8, NULL, ZVAL_PTR_DTOR, false);
-	SHARP_G(container_scope) = &SHARP_G(container_request_scope);
+	/* Spec section 32: the request is the default scope, as each CLI run is. */
+	SHARP_G(container_main_scope).start = SHARP_G(container_main_scope).current = sharp_scope_start();
+	EG(main_fiber_context)->reserved[sharp_fiber_slot] = &SHARP_G(container_main_scope);
 	zend_hash_init(&SHARP_G(container_building), 8, NULL, NULL, false);
 
 	/* The CLI names the script in argv[0] only while the request starts, as PHP's $argv does. */
@@ -6873,7 +6969,9 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 		}
 	}
 	zend_hash_destroy(&SHARP_G(request_stamps));
-	zend_hash_destroy(&SHARP_G(container_request_scope));
+	/* A fiber that is still to be freed keeps the request's scope, ended, until it is. */
+	sharp_scope_end(SHARP_G(container_main_scope).start);
+	sharp_scope_release(SHARP_G(container_main_scope).start);
 	zend_hash_destroy(&SHARP_G(container_singletons));
 	zend_hash_destroy(&SHARP_G(container_bindings));
 	zend_hash_destroy(&SHARP_G(container_environment));
