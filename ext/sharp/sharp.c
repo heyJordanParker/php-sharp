@@ -1048,8 +1048,8 @@ static bool sharp_collection_key(zval *key, zend_string **string_key, zend_long 
 }
 
 /* The element at index. For a missing key it is NULL after throwing OutOfRangeException, as a PHP#
- * index read does, or NULL alone when quiet, as a `?.` read is (spec section 12). */
-static zval *sharp_collection_element(HashTable *array, zval *index, bool quiet)
+ * index read does (spec section 12). */
+static zval *sharp_collection_element(HashTable *array, zval *index)
 {
 	zend_string *string_key;
 	zend_long long_key;
@@ -1058,7 +1058,7 @@ static zval *sharp_collection_element(HashTable *array, zval *index, bool quiet)
 		return NULL;
 	}
 	zval *element = string_key ? zend_symtable_find(array, string_key) : zend_hash_index_find(array, long_key);
-	if (!element && !quiet) {
+	if (!element) {
 		if (string_key) {
 			zend_throw_exception_ex(spl_ce_OutOfRangeException, 0, "Undefined array key \"%s\"", ZSTR_VAL(string_key));
 		} else {
@@ -1095,7 +1095,7 @@ static zval *sharp_collection_array(sharp_collection *collection)
 	}
 
 	zval *container = sharp_collection_array(sharp_collection_from(collection->container));
-	zval *element = container ? sharp_collection_element(Z_ARRVAL_P(container), &collection->index, false) : NULL;
+	zval *element = container ? sharp_collection_element(Z_ARRVAL_P(container), &collection->index) : NULL;
 
 	return element ? sharp_collection_checked(element) : NULL;
 }
@@ -1110,7 +1110,7 @@ static zval *sharp_collection_place(sharp_collection *collection)
 	}
 
 	zval *container = sharp_collection_change(sharp_collection_from(collection->container));
-	zval *element = container ? sharp_collection_element(Z_ARRVAL_P(container), &collection->index, false) : NULL;
+	zval *element = container ? sharp_collection_element(Z_ARRVAL_P(container), &collection->index) : NULL;
 
 	return element ? sharp_collection_checked(element) : NULL;
 }
@@ -1557,8 +1557,8 @@ ZEND_METHOD(Sharp_Collection, toList)
 /* A PHP# method call on an index of a List reads the element through the collection that holds it,
  * as `grid[0].add(5)` does. An element that is a collection becomes a collection that changes it at
  * that index, and any other element is read as it is. A missing index throws as a PHP# index read
- * does, and reads as null before `?.`, whose index FETCH_DIM_IS reads, so the call is skipped. A Map
- * index reads its value, or null for a missing key, and no change runs through it (spec section 12). */
+ * does, before `?.` too. A Map index reads its value, or null for a missing key, and no change runs
+ * through it (spec section 12). */
 static zval *sharp_collection_read_dimension(zend_object *object, zval *offset, int type, zval *rv)
 {
 	zval *held = sharp_collection_array(sharp_collection_from(object));
@@ -1575,7 +1575,7 @@ static zval *sharp_collection_read_dimension(zend_object *object, zval *offset, 
 		}
 		return rv;
 	}
-	zval *element = held ? sharp_collection_element(Z_ARRVAL_P(held), offset, type == BP_VAR_IS) : NULL;
+	zval *element = held ? sharp_collection_element(Z_ARRVAL_P(held), offset) : NULL;
 	if (!element) {
 		return &EG(uninitialized_zval);
 	}

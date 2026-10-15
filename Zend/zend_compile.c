@@ -3119,12 +3119,6 @@ static zend_op *zend_delayed_compile_dim(znode *result, zend_ast *ast, uint32_t 
 	}
 
 	opline = zend_delayed_emit_op(result, ZEND_FETCH_DIM_R, &var_node, &dim_node);
-	/* The bridge marks the List index directly before `?.` with ZEND_DIM_IS, so a missing index reads
-	 * as null and `?.` skips, as spec section 12 handles a read with `?.`. Its container stays a bare
-	 * PHP# read, so `cube[9][0]?.x` still throws on `cube[9]`. */
-	if (type == BP_VAR_R && (ast->attr & ZEND_DIM_SHARP) && (ast->attr & ZEND_DIM_IS)) {
-		type = BP_VAR_IS;
-	}
 	zend_adjust_for_fetch_type(opline, result, type);
 	if (by_ref) {
 		opline->extended_value = ZEND_FETCH_DIM_REF;
@@ -5299,9 +5293,8 @@ static void zend_compile_call(znode *result, zend_ast *ast, uint32_t type) /* {{
  * writes the property back, or else a cast, which keeps a local's slot or a copy of any other value.
  * An index reads its element through the collection of what it indexes, because a List index is a
  * place (spec section 12): `grid[0].add(5)` changes the list stored at index 0. The cast then passes
- * that element on, and makes a collection of an array a plain PHP ArrayAccess object gives. The
- * bridge marks the index of `grid[9]?.add(5)` with ZEND_DIM_IS, which php-src gives an index `??`
- * reads, so a missing index reads as null and the call's JMP_NULL skips it.
+ * that element on, and makes a collection of an array a plain PHP ArrayAccess object gives. A
+ * missing index throws, as a bare PHP# index read does, before `?.` too.
  * Before a `?.` call the receiver ends its own null-safe chain ahead of the cast, as PHP's
  * ((object) $a?->b())?->c() does: the call's own JMP_NULL gives null for either. */
 static void zend_compile_sharp_receiver(znode *result, zend_ast *ast, bool nullsafe)
@@ -5313,8 +5306,7 @@ static void zend_compile_sharp_receiver(znode *result, zend_ast *ast, bool nulls
 
 		zend_compile_sharp_receiver(&container_node, ast->child[0], false);
 		zend_compile_expr(&dim_node, ast->child[1]);
-		zend_emit_op_tmp(result, (ast->attr & ZEND_DIM_IS) ? ZEND_FETCH_DIM_IS : ZEND_FETCH_DIM_R,
-			&container_node, &dim_node);
+		zend_emit_op_tmp(result, ZEND_FETCH_DIM_R, &container_node, &dim_node);
 	} else if (ast->kind == ZEND_AST_PROP || ast->kind == ZEND_AST_NULLSAFE_PROP || ast->kind == ZEND_AST_STATIC_PROP) {
 		opline = zend_compile_var(result, ast, BP_VAR_R, 0);
 		if (opline && ((opline->opcode == ZEND_FETCH_OBJ_R && opline->op2_type == IS_CONST)

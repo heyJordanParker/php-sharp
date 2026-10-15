@@ -135,52 +135,65 @@ class Grid
     {
         grid[0]?.add(5);
         grid[1]?.add(6);
-        grid[9]?.add(7);
-        grid[9]?.clear();
-        return [grid, grid[9]?.remove(1), grid[9]?.contains(1), grid[9]?.count()];
+        grid[1]?.clear();
+        return [grid, grid[1]?.remove(1), grid[1]?.contains(1), grid[1]?.count()];
     }
 
     public List<Any?> spareSkipped()
     {
         this.spare[0]?.add(5);
         this.spare[1]?.add(6);
-        this.spare[9]?.add(7);
-        this.spare[9]?.clear();
-        return [this.spare, this.spare[9]?.remove(1), this.spare[9]?.contains(1), this.spare[9]?.count()];
+        this.spare[1]?.clear();
+        return [this.spare, this.spare[1]?.remove(1), this.spare[1]?.contains(1), this.spare[1]?.count()];
     }
 
     public List<Any?> linesSkipped()
     {
         this.lines[0]?.add(5);
         this.lines[1]?.add(6);
-        this.lines[9]?.add(7);
-        this.lines[9]?.clear();
-        return [this.lines, this.lines[9]?.remove(1), this.lines[9]?.contains(1), this.lines[9]?.count()];
+        this.lines[1]?.clear();
+        return [this.lines, this.lines[1]?.remove(1), this.lines[1]?.contains(1), this.lines[1]?.count()];
     }
 
-    public static List<Any?> otherSkips(List<List<int>> grid, List<Map<string, int>> maps, List<Set<int>> sets)
+    public static List<Any?> otherSkips(List<List<int>?> grid, List<Map<string, int>?> maps, List<Set<int>?> sets)
     {
-        grid[9]?.insert(0, 1);
-        sets[9]?.add(1);
-        sets[9]?.clear();
+        grid[0]?.insert(0, 1);
+        sets[0]?.add(1);
+        sets[0]?.clear();
         return [
-            grid, grid[9]?.indexOf(1), grid[9]?.last(), grid[9]?.entries(),
-            maps, maps[9]?.remove("a"), maps[9]?.has("a"),
-            sets, sets[9]?.remove(1), sets[9]?.contains(1),
+            grid, grid[0]?.indexOf(1), grid[0]?.last(), grid[0]?.entries(),
+            maps, maps[0]?.remove("a"), maps[0]?.has("a"),
+            sets, sets[0]?.remove(1), sets[0]?.contains(1),
         ];
     }
 
-    public static void nestedAdd(List<List<List<int>>> cube) { cube[9][0]?.add(1); }
+    public static void pastAdd(List<List<int>?> grid) { grid[9]?.add(1); }
 
-    public static void nestedClear(List<List<List<int>>> cube) { cube[9][0]?.clear(); }
+    public static void pastClear(List<List<int>?> grid) { grid[9]?.clear(); }
 
-    public static void nestedRemove(List<List<List<int>>> cube) { cube[9][0]?.remove(1); }
+    public static void pastRemove(List<List<int>?> grid) { grid[9]?.remove(1); }
 
-    public static int? nestedCount(List<List<List<int>>> cube) => cube[9][0]?.count();
+    public static int? pastCount(List<List<int>?> grid) => grid[9]?.count();
 
-    public static bool? nestedContains(List<List<List<int>>> cube) => cube[9][0]?.contains(1);
+    public static bool? pastContains(List<List<int>?> grid) => grid[9]?.contains(1);
 
-    public static Any? nestedEntries(List<List<List<int>>> cube) => cube[9][0]?.entries();
+    public static Any? pastEntries(List<List<int>?> grid) => grid[9]?.entries();
+
+    public int? spareMissing() => this.spare[9]?.count();
+
+    public static bool tested(List<int?> sizes, int at) => sizes[at] is int;
+
+    public static int? cast(List<int?> sizes, int at) => sizes[at] as int;
+
+    public static string matched(List<int?> sizes, int at) => match (sizes[at]) {
+        int size => `size ${size}`,
+        default => "none",
+    };
+
+    public void linesMissing()
+    {
+        this.lines[9]?.add(7);
+    }
 
     public List<List<int>> rowsMissing(int row)
     {
