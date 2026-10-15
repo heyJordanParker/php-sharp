@@ -157,7 +157,7 @@ A trailing `//` comment on a code line is its annotation. A comment alone on a l
 | Form | Example | Checked |
 |---|---|---|
 | `compiles`, `compiles: …`, `compiles, …`, `compiles; runs: …` | `// compiles: starts as null` | no error on the line |
-| `fits: …`, `accepted: …` | `// fits: StripeClient is declared Http` | no error on the line, or no throw for plain PHP |
+| `fits: …`, `accepted: …` | `// fits: StripeClient is declared Http` | no error on the line, or for plain PHP no throw but an `App\Elided` from a body the spec leaves out |
 | `compile error`, `compile error: …`, `compile error when …`, `compile error outside …`, `compile error, same message` | `// compile error: write the type` | an error on the line |
 | `<words>: compile error` | `// enum case: compile error` | an error on the line |
 | `parse error: …` | `// parse error: let takes no written type` | a parse error on the line |
@@ -185,7 +185,7 @@ A value is a number, `true`, `false`, `null`, a quoted string, or a balanced `[�
 
 **A `throws: "<message>"` is compared exactly.** The spec quotes it, and the message is what a caller of `parse` reads.
 
-**A runtime line runs only when the block compiles.** For a block with `compile error` lines, the run uses the block with those lines blanked, and that file must compile with no error. A value line runs as the argument of a call that records its value. A `throws` line runs inside a `try`, so the lines after it still run.
+**A runtime line runs only when the block compiles.** For a block with `compile error` lines, the run uses the block with those lines blanked, and that file must compile with no error. A value line runs as the argument of a call that records its value. A `throws` line runs inside a `try`, so the lines after it still run. A plain PHP line that claims no error, `compiles`, `fits:` or `accepted:`, runs inside a `try` that takes only `App\Elided`: the call reached a body the spec leaves out, so PHP# took it, as `raw-generic-objects`' `$report->count($page)` does.
 
 ## Setup
 
