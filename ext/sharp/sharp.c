@@ -1221,6 +1221,8 @@ ZEND_METHOD(Sharp_Collection, add)
 	RETURN_TRUE;
 }
 
+/* `list[i] = v`, which the bridge lowers to set: v replaces the element at index, and past either end
+ * set throws, where PHP's write would append or leave a gap (spec section 12). */
 ZEND_METHOD(Sharp_Collection, set)
 {
 	zend_long index;
@@ -1248,6 +1250,8 @@ ZEND_METHOD(Sharp_Collection, set)
 	ZVAL_COPY(element, value);
 	sharp_collection_write_back(collection);
 	zval_ptr_dtor(&old);
+	/* `list[i] = v` gives v, as a PHP assignment gives the value it stores. */
+	RETURN_COPY(value);
 }
 
 zend_class_entry *sharp_ce_struct;
@@ -1517,9 +1521,9 @@ ZEND_METHOD(Sharp_Collection, count)
 	RETURN_LONG(Z_TYPE_P(held) == IS_ARRAY ? zend_hash_num_elements(Z_ARRVAL_P(held)) : sharp_table_of(Z_OBJ_P(held))->size);
 }
 
-/* A Map's keys and a Set's toList: the List of its keys or its elements, each as it was stored, in
- * insertion order. */
-static void sharp_collection_keys(INTERNAL_FUNCTION_PARAMETERS)
+/* A Map's keys or values and a Set's toList: the List of its keys, its values or its elements, each
+ * as it was stored, in insertion order. */
+static void sharp_collection_list(INTERNAL_FUNCTION_PARAMETERS, bool values)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
 
@@ -1529,19 +1533,25 @@ static void sharp_collection_keys(INTERNAL_FUNCTION_PARAMETERS)
 	}
 	array_init_size(return_value, table->size);
 	SHARP_TABLE_FOREACH(table, bucket) {
-		Z_TRY_ADDREF(bucket->key);
-		zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), &bucket->key);
+		zval *listed = values ? &bucket->value : &bucket->key;
+		Z_TRY_ADDREF_P(listed);
+		zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), listed);
 	} SHARP_TABLE_FOREACH_END();
 }
 
 ZEND_METHOD(Sharp_Collection, keys)
 {
-	sharp_collection_keys(INTERNAL_FUNCTION_PARAM_PASSTHRU);
+	sharp_collection_list(INTERNAL_FUNCTION_PARAM_PASSTHRU, false);
+}
+
+ZEND_METHOD(Sharp_Collection, values)
+{
+	sharp_collection_list(INTERNAL_FUNCTION_PARAM_PASSTHRU, true);
 }
 
 ZEND_METHOD(Sharp_Collection, toList)
 {
-	sharp_collection_keys(INTERNAL_FUNCTION_PARAM_PASSTHRU);
+	sharp_collection_list(INTERNAL_FUNCTION_PARAM_PASSTHRU, false);
 }
 
 /* A PHP# method call on an index of a List reads the element through the collection that holds it,

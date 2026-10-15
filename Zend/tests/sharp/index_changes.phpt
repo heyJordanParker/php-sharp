@@ -78,7 +78,7 @@ array(2) {
     int(4)
   }
   [1]=>
-  object(Sharp\Set)#8 (0) {
+  object(Sharp\Set)#9 (0) {
   }
 }
 array(2) {
@@ -93,7 +93,7 @@ array(2) {
     }
   }
   [1]=>
-  object(Sharp\Map)#7 (2) {
+  object(Sharp\Map)#8 (2) {
     [0]=>
     array(2) {
       [0]=>
@@ -143,7 +143,7 @@ array(2) {
 }
 array(2) {
   [0]=>
-  object(Sharp\Map)#7 (3) {
+  object(Sharp\Map)#8 (3) {
     [0]=>
     array(2) {
       [0]=>
@@ -284,7 +284,7 @@ array(10) {
   [7]=>
   array(1) {
     [0]=>
-    object(Sharp\Set)#8 (1) {
+    object(Sharp\Set)#9 (1) {
       [0]=>
       int(1)
     }
@@ -293,6 +293,94 @@ array(10) {
   NULL
   [9]=>
   NULL
+}
+array(2) {
+  [0]=>
+  int(1)
+  [1]=>
+  int(5)
+}
+OutOfRangeException: Undefined array key 2 in Grid.sharp on line 201
+OutOfRangeException: Undefined array key -1 in Grid.sharp on line 201
+array(6) {
+  [0]=>
+  int(12)
+  [1]=>
+  int(2)
+  [2]=>
+  int(40)
+  [3]=>
+  int(13)
+  [4]=>
+  int(1)
+  [5]=>
+  int(40)
+}
+array(3) {
+  [0]=>
+  array(1) {
+    [0]=>
+    string(2) "a!"
+  }
+  [1]=>
+  array(1) {
+    [0]=>
+    float(2.75)
+  }
+  [2]=>
+  float(1.75)
+}
+OutOfRangeException: Undefined array key 5 in Grid.sharp on line 227
+array(2) {
+  [0]=>
+  array(2) {
+    [0]=>
+    int(1)
+    [1]=>
+    int(9)
+  }
+  [1]=>
+  array(2) {
+    [0]=>
+    int(5)
+    [1]=>
+    int(5)
+  }
+}
+array(2) {
+  [0]=>
+  array(2) {
+    [0]=>
+    array(2) {
+      [0]=>
+      int(6)
+      [1]=>
+      int(2)
+    }
+    [1]=>
+    array(1) {
+      [0]=>
+      int(7)
+    }
+  }
+  [1]=>
+  int(2)
+}
+array(2) {
+  [0]=>
+  array(2) {
+    [0]=>
+    int(1)
+    [1]=>
+    int(12)
+  }
+  [1]=>
+  array(2) {
+    [0]=>
+    int(3)
+    [1]=>
+    int(4)
+  }
 }
 array(2) {
   [0]=>

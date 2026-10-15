@@ -14,7 +14,7 @@ final class Collection
 
     public function add(mixed $value): bool {}
 
-    public function set(int $index, mixed $value): void {}
+    public function set(int $index, mixed $value): mixed {}
 
     public function insert(int $index, mixed $value): void {}
 
@@ -37,6 +37,8 @@ final class Collection
     public function count(): int {}
 
     public function keys(): array {}
+
+    public function values(): array {}
 
     public function toList(): array {}
 

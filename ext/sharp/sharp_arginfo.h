@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: ab2a8aa6acb328039dfa2957a6c42a119b7458c7 */
+ * Stub hash: d7880b49c1980a9a815c55abf69a8e74456f7228 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -54,12 +54,15 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_add, 0, 1
 	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_set, 0, 2, IS_VOID, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_set, 0, 2, IS_MIXED, 0)
 	ZEND_ARG_TYPE_INFO(0, index, IS_LONG, 0)
 	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
 
-#define arginfo_class_Sharp_Collection_insert arginfo_class_Sharp_Collection_set
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_insert, 0, 2, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, index, IS_LONG, 0)
+	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_removeAt, 0, 1, IS_VOID, 0)
 	ZEND_ARG_TYPE_INFO(0, index, IS_LONG, 0)
@@ -92,6 +95,8 @@ ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_keys, 0, 0, IS_ARRAY, 0)
 ZEND_END_ARG_INFO()
+
+#define arginfo_class_Sharp_Collection_values arginfo_class_Sharp_Collection_keys
 
 #define arginfo_class_Sharp_Collection_toList arginfo_class_Sharp_Collection_keys
 
@@ -174,6 +179,7 @@ ZEND_METHOD(Sharp_Collection, put);
 ZEND_METHOD(Sharp_Collection, clear);
 ZEND_METHOD(Sharp_Collection, count);
 ZEND_METHOD(Sharp_Collection, keys);
+ZEND_METHOD(Sharp_Collection, values);
 ZEND_METHOD(Sharp_Collection, toList);
 ZEND_METHOD(Sharp_Collection, filter);
 ZEND_METHOD(Sharp_Collection, map);
@@ -220,6 +226,7 @@ static const zend_function_entry class_Sharp_Collection_methods[] = {
 	ZEND_ME(Sharp_Collection, clear, arginfo_class_Sharp_Collection_clear, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, count, arginfo_class_Sharp_Collection_count, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, keys, arginfo_class_Sharp_Collection_keys, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Collection, values, arginfo_class_Sharp_Collection_values, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, toList, arginfo_class_Sharp_Collection_toList, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, filter, arginfo_class_Sharp_Collection_filter, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, map, arginfo_class_Sharp_Collection_map, ZEND_ACC_PUBLIC)

@@ -33,6 +33,7 @@ object(Sharp\Map)#6 (1) {
 }
 int(2)
 NULL
+NULL
 int(7)
 NULL
 object(Sharp\Map)#6 (2) {
@@ -239,6 +240,22 @@ array(2) {
   [1]=>
   string(3) "tea"
 }
+array(3) {
+  [0]=>
+  int(2)
+  [1]=>
+  int(7)
+  [2]=>
+  int(2)
+}
+object(Sharp\Set)#11 (3) {
+  [0]=>
+  int(3)
+  [1]=>
+  int(1)
+  [2]=>
+  int(2)
+}
 object(Sharp\Map)#7 (2) {
   [0]=>
   array(2) {
@@ -265,5 +282,5 @@ array(1) {
 NULL
 DivisionByZeroError: Modulo by zero in CollectionMethods.sharp on line 79
 NULL
-Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 103
-ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 104
+Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 107
+ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 108

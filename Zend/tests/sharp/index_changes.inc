@@ -32,6 +32,20 @@ for ($round = 0; $round < 100; $round++) {
     attempt(fn () => $grid->spareSkipped());
     attempt(fn () => [$grid->linesSkipped(), $grid->writes]);
     attempt(fn () => Demo\Grid::otherSkips([[1]], [['a' => 1]], [[1 => 1]]));
+    // An index write replaces the element, and throws past either end, where PHP would append or leave a gap.
+    attempt(fn () => Demo\Grid::replaced([1, 2], 1, 5));
+    attempt(fn () => Demo\Grid::replaced([1, 2], 2, 5));
+    attempt(fn () => Demo\Grid::replaced([1, 2], -1, 5));
+    // op=, ++ and -- write what the operator gives; x[i]++ gives the element before, and x[i] = v gives v.
+    attempt(fn () => Demo\Grid::stepped([1, 2, 7]));
+    attempt(fn () => Demo\Grid::joined(['a'], [1.25]));
+    attempt(fn () => Demo\Grid::stepPast([1]));
+    // Through a property, and through a property's set hook, which runs once for each write.
+    $grid = new Demo\Grid();
+    attempt(fn () => $grid->rowsReplaced());
+    attempt(fn () => [$grid->tableReplaced(), $grid->writes]);
+    // An index that runs something runs once.
+    attempt(fn () => (new Demo\Grid())->stepOnce([[1, 2], [3, 4]]));
     // An element a plain PHP ArrayAccess object gives is a collection of its own.
     attempt(fn () => Demo\Grid::doubled(new Lib\RowSet([[1, 2]])));
     // An index that runs something runs once.
