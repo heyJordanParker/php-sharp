@@ -4970,6 +4970,39 @@ ZEND_FUNCTION(Sharp_Internal_testModule)
 	zval_ptr_dtor(&module);
 }
 
+/* Spec section 6.5: a `static lazy` property computes its value on its first read and keeps it for a singleton's
+ * lifetime, section 32, as the container keeps a singleton service, so a test's start and end forget it too. PHP#
+ * reads `Class.name` as `Class::{'name#get'}()`, which returns `\Sharp\Internal\keep('Class::name', static fn () =>
+ * body)`. The value is kept under the key `key` beside the singleton services. A throw in `compute` keeps nothing, so
+ * the next read runs it again. */
+ZEND_FUNCTION(Sharp_Internal_keep)
+{
+	zend_string *key;
+	zval *compute;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_STR(key)
+		Z_PARAM_OBJECT_OF_CLASS(compute, zend_ce_closure)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zval *kept = zend_hash_find(&SHARP_G(container_singletons), key);
+	if (kept) {
+		RETURN_COPY(kept);
+	}
+
+	zval value;
+	ZVAL_UNDEF(&value);
+	if (call_user_function(NULL, NULL, compute, &value, 0, NULL) != SUCCESS || EG(exception)) {
+		zval_ptr_dtor(&value);
+		RETURN_THROWS();
+	}
+
+	/* A body that read the property again kept a value already, and the outer read keeps its own. */
+	Z_TRY_ADDREF(value);
+	zend_hash_update(&SHARP_G(container_singletons), key, &value);
+	RETURN_COPY_VALUE(&value);
+}
+
 /* The container forgets every service it kept, so the next test builds its own. */
 static void sharp_container_forget(void)
 {

@@ -215,13 +215,13 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 | Line | Rule | Today | Mechanism | Reuses |
 |---|---|---|---|---|
 | 332, 339 | `public lazy Plan plan => this.planner.plan(this.id);` computes on first read and keeps it | Refused: `Lazy`, "`lazy` is not supported yet in PHP#." (from `enter` in semantics, after the constructors Slice made `lazy` a modifier) | See below | `Modifier::Lazy`, `Lowering::property` |
-| 332 | `static lazy` computes once for a singleton's lifetime | Refused: `StaticLazy`, "A static computed property is not supported yet" and "`lazy` is not supported yet" | Question 11 and decision 3 | #121 |
+| 332 | `static lazy` computes once for a singleton's lifetime | Refused: `StaticLazy`, "A static computed property is not supported yet" and "`lazy` is not supported yet" | Built (Queue 4, Proposal A): its `name#get` returns `\Sharp\Internal\keep('Class::name', static fn () => body)`, which keeps the value in the container's singleton store and keeps nothing on a throw, and `sharp_container_forget` clears it when a test starts or ends. Engine: `lazy.phpt` (`Loads`' `first` and `ratio`) | #121 |
 | 342 | Computed once, even if its inputs change | No | The bridge keeps the first value | |
 
 - **Semantics:** `lazy` only on a computed property (question 11). It is no longer "not supported yet" outside a parameter. The parameter's error from the constructors Slice stays.
 - **Analyzer:** the body is a `get` body, so `getters_never_write_this` covers it, and a read carries its effects.
 - **The bridge, instance:** `public private(set) \App\Plan $plan { get => $this->plan ??= <body>; }`, a backed property whose `get` hook fills its own storage once. A `lazy T?` keeps a hidden `plan#lazy` flag beside it, because `??=` would run the body again after `null`.
-- **The bridge, static:** PHP has no hooks on a static property. The value is held in a hidden static, or in #121's singleton store (question 11), behind a hidden static method `plan#lazy`. Every PHP# read of `StaticLazy.plan` lowers to a call of that method. Decision 3's static computed properties and accessor bodies use the same read lowering, without the keeping.
+- **The bridge, static:** PHP has no hooks on a static property. The value is held in a hidden static, or in #121's singleton store (question 11), behind the hidden static method `plan#get`. Every PHP# read of `StaticLazy.plan` lowers to a call of that method. Decision 3's static computed properties and accessor bodies use the same read lowering, without the keeping.
 - **Engine:** `Lazy.sharp` and `lazy.phpt`: the body runs once, a changed input does not recompute, a throw keeps nothing, and a `static lazy` runs once per request.
 
 # Queue 1: team-lead's answers, and what they needed checked
