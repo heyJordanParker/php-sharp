@@ -239,12 +239,16 @@ public class Profile
 
 **A static field or property that isn't `T?` needs an initial value.** No constructor sets it, so the error names both fixes: an initial value, or `T?`.
 
+**A static's initial value runs once, when its class is loaded,** so it may be any expression, as C#'s static initializer is. A get-only static is set only by its initial value.
+
 <!-- example static-initial-values: members -->
 ```csharp
 private static int hits = 0;                     // compiles
 private static int misses;                       // compile error: give misses an initial value, or make it int?
 public static string? region { get; set; }       // compiles: starts as null
 public static string label { get; set; }         // compile error: give label an initial value, or make it string?
+private static int started = global.time();      // compiles: runs once, when the class is loaded
+public static int limit { get; } = 10;           // compiles: get-only, set only by its initial value
 ```
 
 ### 6.1 Property features

@@ -46,6 +46,14 @@ echo Overrides\Box::grow(new Overrides\Box()), ' ';
 $size = new ReflectionProperty(Overrides\Sized::class, 'size');
 echo $size->hasHook(PropertyHookType::Set) ? 'set' : 'no set', "\n";
 
+// A get-only static keeps its initial value, and one that isn't constant ran once, when the file declared the class.
+echo Overrides\Registry::$size, ' ', Overrides\Registry::$label, ' ', Overrides\Registry::total(), "\n";
+try {
+    Overrides\Registry::$size = 4;
+} catch (Error $error) {
+    echo $error->getMessage(), "\n";
+}
+
 // Every path through the constructor sets the get-only `T?` `note` and the settable `level`, so neither has an
 // initial value, and `note` stays PHP's `readonly` with no default. The settable `T?` `nickname` starts as null.
 $claimed = new Overrides\Member('hi', true);
@@ -74,6 +82,8 @@ Ada named
 Bo
 Cannot modify private(set) property Overrides\Account::$name from global scope
 2 set
+3 READY 7
+Cannot modify private(set) property Overrides\Registry::$size from global scope
 string(2) "hi"
 int(2)
 NULL

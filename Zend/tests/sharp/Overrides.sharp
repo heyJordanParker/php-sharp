@@ -65,6 +65,15 @@ public class Box : Sized
     }
 }
 
+public class Registry
+{
+    public static int size { get; } = 3;
+    public static string label { get; } = global.strtoupper("ready");
+    private static int started = global.strlen("four");
+
+    public static int total() => Registry.size + Registry.started;
+}
+
 public class Member
 {
     public string? note { get; }
