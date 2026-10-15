@@ -1254,6 +1254,7 @@ ZEND_VM_C_LABEL(assign_dim_op_new_array):
 		}
 
 		if (EXPECTED(Z_TYPE_P(container) == IS_OBJECT)) {
+			SHARP_SEPARATE(container);
 			zend_object *obj = Z_OBJ_P(container);
 
 			dim = GET_OP2_ZVAL_PTR_UNDEF(BP_VAR_R);
@@ -1946,7 +1947,7 @@ ZEND_VM_INLINE_HELPER(zend_fetch_static_prop_helper, ANY, ANY, int type)
 ZEND_VM_C_LABEL(copy_deref):
 		ZVAL_COPY_DEREF(EX_VAR(opline->result.var), prop);
 		if (type == BP_VAR_R && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)
-		 && Z_TYPE_P(EX_VAR(opline->result.var)) == IS_ARRAY) {
+		 && SHARP_IS_COLLECTION(EX_VAR(opline->result.var))) {
 			sharp_collection_of_static_property(EX_VAR(opline->result.var), prop, prop_info);
 		}
 	} else {
@@ -2300,7 +2301,7 @@ ZEND_VM_C_LABEL(fetch_obj_r_copy):
 		}
 		if (OP2_TYPE == IS_CONST && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
 ZEND_VM_C_LABEL(fetch_obj_r_sharp):
-			if (Z_TYPE_P(EX_VAR(opline->result.var)) == IS_ARRAY) {
+			if (SHARP_IS_COLLECTION(EX_VAR(opline->result.var))) {
 				sharp_collection_of_property(EX_VAR(opline->result.var), zobj, Z_STR_P(GET_OP2_ZVAL_PTR(BP_VAR_R)), cache_slot);
 			}
 		}
@@ -2810,6 +2811,7 @@ ZEND_VM_C_LABEL(try_assign_dim_array):
 			}
 		}
 		if (EXPECTED(Z_TYPE_P(object_ptr) == IS_OBJECT)) {
+			SHARP_SEPARATE(object_ptr);
 			zend_object *obj = Z_OBJ_P(object_ptr);
 
 			GC_ADDREF(obj);
@@ -6789,7 +6791,7 @@ ZEND_VM_COLD_CONST_HANDLER(51, ZEND_CAST, CONST|TMP|VAR|CV, ANY, TYPE)
 			zval *value = expr;
 
 			ZVAL_DEREF(value);
-			if (Z_TYPE_P(value) != IS_ARRAY) {
+			if (!SHARP_IS_COLLECTION(value)) {
 				ZVAL_COPY(result, value);
 			} else if (OP1_TYPE == IS_CV) {
 				sharp_collection_of_local(result, expr);
@@ -7108,6 +7110,7 @@ ZEND_VM_C_LABEL(num_index_dim):
 			if (OP2_TYPE == IS_CONST && Z_EXTRA_P(offset) == ZEND_EXTRA_VALUE) {
 				offset++;
 			}
+			SHARP_SEPARATE(container);
 			Z_OBJ_HT_P(container)->unset_dimension(Z_OBJ_P(container), offset);
 		} else if (UNEXPECTED(Z_TYPE_P(container) == IS_STRING)) {
 			zend_throw_error(NULL, "Cannot unset string offsets");
@@ -8935,6 +8938,21 @@ ZEND_VM_HANDLER(159, ZEND_DISCARD_EXCEPTION, ANY, ANY)
 		Z_OBJ_P(fast_call) = NULL;
 	}
 
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+}
+
+/* PHP#: `a ?? return`, `a ?? continue` and `a ?? break` leave from the middle of an expression. This frees the calls
+ * the expression has started and the temporaries it holds, as an exception thrown here would. Its return or jump
+ * follows: the finally blocks it runs, the loop variables it frees, then the RETURN or JMP. The live ranges of those
+ * temporaries end at this opcode, and resume after that RETURN or JMP (see zend_sharp_split_leave_ranges). */
+ZEND_VM_HANDLER(216, ZEND_SHARP_LEAVE, ANY, ANY)
+{
+	USE_OPLINE
+	uint32_t op_num = opline - EX(func)->op_array.opcodes;
+
+	SAVE_OPLINE();
+	cleanup_unfinished_calls(execute_data, op_num);
+	cleanup_live_vars(execute_data, op_num - 1, op_num);
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 

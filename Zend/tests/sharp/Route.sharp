@@ -1,0 +1,16 @@
+namespace Demo;
+
+import Lib.Standing;
+
+public struct Route
+{
+    public Route(
+        public List<Spot> stops { get; },
+        public Standing standing { get; },
+        public Tone tone { get; },
+        public float length { get; },
+        public Map<string, int> tolls { get; },
+        public string? note { get; },
+        public bool open { get; },
+    ) { }
+}

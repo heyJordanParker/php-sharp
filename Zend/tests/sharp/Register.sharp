@@ -1,0 +1,15 @@
+namespace Shop;
+
+public class Register
+{
+    public void pay(int orderId, int amount)
+    {
+        emit new OrderPaid(orderId, amount);
+    }
+
+    public void refund(int orderId)
+    {
+        const refunded = new OrderRefunded(orderId);
+        emit refunded;
+    }
+}

@@ -4,21 +4,21 @@ use Lib\Standing;
 
 class Roster
 {
-    public static function report(array $members): array
-    {
+    public static function report(\Sharp\Map|array $members): array { $members = \is_array($members) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [Standing::from((string) $key), $value], \array_keys($members), $members))) : $members;
+
         $ranked = ((object) $members)->sortedBy(fn ($n) => -$n);
         $tens = ((object) $members)->map(fn ($n) => $n * 10);
-        $busy = ((object) $members)->filterValues(fn ($n) => $n > 1);
-        $kept = ((object) $members)->filterValues(function ($n) use (&$members) { return $n >= (((object) $members)->get(Standing::Active->value) ?? 0); });
-        \array_key_exists(array: $members, key: Standing::Closed->value) && ((object) $members)->delete(Standing::Closed->value) === null;
+        $busy = ((object) $members)->filter(fn ($n) => $n > 1);
+        $kept = ((object) $members)->filter(function ($n) use (&$members) { return $n >= (((object) $members)->get(Standing::Active) ?? 0); });
+        ((object) $members)->remove(Standing::Closed);
         return [
             \implode(",", $ranked),
             \implode(",", $tens),
-            \implode(",", $kept),
-            (string) (((object) $busy)->get(Standing::Active->value) ?? 0),
-            (string) (((object) $busy)->get(Standing::Closed->value) ?? 0),
-            (string) (((object) $members)->get(Standing::Active->value) ?? 0),
-            (string) (((object) $members)->get(Standing::Closed->value) ?? 0),
+            \implode(",", ((object) $kept)->map(fn ($n) => $n)),
+            (string) (((object) $busy)->get(Standing::Active) ?? 0),
+            (string) (((object) $busy)->get(Standing::Closed) ?? 0),
+            (string) (((object) $members)->get(Standing::Active) ?? 0),
+            (string) (((object) $members)->get(Standing::Closed) ?? 0),
         ];
     }
 }

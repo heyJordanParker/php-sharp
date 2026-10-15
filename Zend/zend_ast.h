@@ -158,7 +158,9 @@ enum _zend_ast_kind {
 	ZEND_AST_PIPE,
 	/* PHP#: the type arguments that child 1, a type text, gives child 0. In an expression child 0 is a
 	 * ZEND_AST_NEW, and a NULL text means $this's type arguments. As the type of a ZEND_AST_PROP_GROUP child 0
-	 * is the property's PHP type and the text its PHP# type, which every write from plain PHP checks. */
+	 * is the property's PHP type and the text its PHP# type, which every write from plain PHP checks. As the
+	 * return type of a method or a closure child 0 is its PHP return type, or NULL, and the text its whole
+	 * function type, which `is` tests a closure of it by. */
 	ZEND_AST_SHARP_TYPE_ARGS,
 	/* PHP#: whether child 0 is of the type child 1, a type text, spells, type arguments included. */
 	ZEND_AST_SHARP_IS_TYPE,

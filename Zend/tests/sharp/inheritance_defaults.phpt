@@ -1,5 +1,5 @@
 --TEST--
-A PHP# interface's default bodies run in a PHP# class, an enum and a plain PHP class that uses its Defaults trait, and super<Told> runs one of two through a private alias
+A PHP# interface's default bodies run in a PHP# class, an enum, a struct, each case of an enum that carries data and a plain PHP class that uses its Defaults trait, and super<Told> runs one of two through a private alias
 --FILE--
 <?php
 
@@ -19,7 +19,8 @@ final class LegacySheet implements Demo\HasDesign
 }
 
 $sheet = new Demo\Sheet();
-var_dump($sheet->designKey(), (new LegacySheet())->designKey(), Demo\Tone::Calm->describe());
+var_dump($sheet->designKey(), (new LegacySheet())->designKey(), Demo\Mood::Calm->describe());
+var_dump((new Demo\Memo('memo'))->describe(), Demo\Verdict\Pending::instance()->describe(), (new Demo\Verdict\Ruled('court'))->describe());
 var_dump((new Demo\Both())->describe());
 $coded = new Demo\Coded();
 var_dump($coded->keys(), Demo\Seeder::firstKey($coded));
@@ -42,6 +43,9 @@ var_dump(array_map(
 --EXPECT--
 string(12) "design:sheet"
 string(13) "design:legacy"
+string(4) "told"
+string(4) "told"
+string(4) "told"
 string(4) "told"
 string(14) "described+told"
 array(2) {

@@ -85,4 +85,48 @@ class Patterns
         }
         return total;
     }
+
+    public float big(Figure shape)
+    {
+        if (shape is Circle { radius: > 10.0 } big) {
+            return big.radius;
+        }
+        return shape is Square { side: 0.0 } ? -1.0 : 0.0;
+    }
+
+    public int lines(List<Figure> shapes) => match (shapes) {
+        [] => 0,
+        [Circle] => 1,
+        [Square { side: > 1.0 }, ...List<Figure> rest] => 2 + rest.count(),
+        default => -1,
+    };
+
+    public float head(List<Figure>? shapes)
+    {
+        if (shapes is [Circle first, ...List<Figure> others] && others.count() == 0) {
+            return first.radius;
+        }
+        return 0.0;
+    }
+
+    public float ends(List<Figure> shapes) => match (shapes) {
+        [Circle, ...List<Figure> inner, Circle] => -(float) inner.count(),
+        [...List<Figure> before, Circle last] => last.radius + before.count(),
+        [Square first, ..., Square last] => first.side + last.side,
+        default => 0.0,
+    };
+
+    public int circles(List<Figure> shapes) => match (shapes) {
+        [Square, ...List<Circle> rest] => rest.count(),
+        default => -1,
+    };
+
+    public int listed(Any value) => match (value) {
+        [] => 0,
+        [int one] => one,
+        [string, ...List<string> rest] => 100 + rest.count(),
+        default => -1,
+    };
+
+    public bool rows(List<Any> rows) => rows is [[], [int]];
 }

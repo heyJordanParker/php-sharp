@@ -85,4 +85,48 @@ class Patterns
 
         return $total;
     }
+
+    public function big(\Demo\Figure $shape): float
+    {
+        if (($big = $shape) instanceof \Demo\Circle && (${'match#1'} = $big->radius) > 10.0) {
+            return $big->radius;
+        }
+        return $shape instanceof \Demo\Square && (${'match#1'} = $shape->side) === 0.0 ? -1.0 : 0.0;
+    }
+
+    public function lines(array $shapes): int { return match (true) {
+        \is_array($shapes) && \count($shapes) === 0 => 0,
+        \is_array($shapes) && \count($shapes) === 1 && (${'match#1'} = $shapes[0]) instanceof \Demo\Circle => 1,
+        \is_array($shapes) && \count($shapes) >= 1 && ((${'match#2'} = $shapes[0]) instanceof \Demo\Square && (${'match#3'} = ${'match#2'}->side) > 1.0) && \is_array($rest = \array_slice($shapes, 1)) => 2 + \count($rest),
+        default => -1,
+    }; }
+
+    public function head(?array $shapes): float
+    {
+        if (\is_array($shapes) && \count($shapes) >= 1 && ($first = $shapes[0]) instanceof \Demo\Circle && \is_array($others = \array_slice($shapes, 1)) && \count($others) === 0) {
+            return $first->radius;
+        }
+        return 0.0;
+    }
+
+    public function ends(array $shapes): float { return match (true) {
+        \is_array($shapes) && \count($shapes) >= 2 && (${'match#1'} = $shapes[0]) instanceof \Demo\Circle && (${'match#2'} = $shapes[\count($shapes) - 1]) instanceof \Demo\Circle && \is_array($inner = \array_slice($shapes, 1, \count($shapes) - 2)) => -(float) \count($inner),
+        \is_array($shapes) && \count($shapes) >= 1 && ($last = $shapes[\count($shapes) - 1]) instanceof \Demo\Circle && \is_array($before = \array_slice($shapes, 0, \count($shapes) - 1)) => $last->radius + \count($before),
+        \is_array($shapes) && \count($shapes) >= 2 && ($first = $shapes[0]) instanceof \Demo\Square && ($last = $shapes[\count($shapes) - 1]) instanceof \Demo\Square => $first->side + $last->side,
+        default => 0.0,
+    }; }
+
+    public function circles(array $shapes): int { return match (true) {
+        \is_array($shapes) && \count($shapes) >= 1 && (${'match#1'} = $shapes[0]) instanceof \Demo\Square && \is_array($rest = \array_slice($shapes, 1)) => \count($rest),
+        default => -1,
+    }; }
+
+    public function listed(mixed $value): int { return match (true) {
+        \is_array($value) && \count($value) === 0 => 0,
+        \is_array($value) && \count($value) === 1 && \is_int($one = $value[0]) => $one,
+        \is_array($value) && \count($value) >= 1 && \is_string(${'match#1'} = $value[0]) && \is_array($rest = \array_slice($value, 1)) => 100 + \count($rest),
+        default => -1,
+    }; }
+
+    public function rows(array $rows): bool { return \is_array($rows) && \count($rows) === 2 && (\is_array(${'match#1'} = $rows[0]) && \count(${'match#1'}) === 0) && (\is_array(${'match#2'} = $rows[1]) && \count(${'match#2'}) === 1 && \is_int(${'match#3'} = ${'match#2'}[0])); }
 }

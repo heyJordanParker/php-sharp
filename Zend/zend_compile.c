@@ -5532,10 +5532,11 @@ static uint32_t zend_add_sharp_open_type_text(zend_ast *text_ast)
 	return zend_add_literal_string(&text);
 }
 
-/* The PHP type `type_ast` of a property or a promoted parameter. A ZEND_AST_SHARP_TYPE_ARGS wraps the PHP type of one
- * whose PHP# type a write from plain PHP checks, with the type text, which may name the class's type parameters as `$i`,
- * interned into `sharp_type`. A closed text is checked here. */
-static zend_ast *zend_sharp_property_type(zend_ast *type_ast, zend_string **sharp_type)
+/* The PHP type `type_ast` of a property, a promoted parameter or a function's result. A ZEND_AST_SHARP_TYPE_ARGS wraps
+ * the PHP type of a property whose PHP# type a write from plain PHP checks, and the result type of a PHP# method or
+ * lambda, with the type text, the property's type or the function's whole type, which may name type parameters as `$i`
+ * and `#i`, interned into `sharp_type`. A closed text is checked here. */
+static zend_ast *zend_sharp_declared_type(zend_ast *type_ast, zend_string **sharp_type)
 {
 	if (!type_ast || type_ast->kind != ZEND_AST_SHARP_TYPE_ARGS) {
 		return type_ast;
@@ -6026,7 +6027,9 @@ static bool zend_has_finally(void) /* {{{ */
 }
 /* }}} */
 
-static void zend_compile_return(zend_ast *ast) /* {{{ */
+/* A `leave` is the right side of PHP#'s `a ?? return`: ZEND_SHARP_LEAVE frees what the expression around it holds once
+ * the value is ready, before the finally blocks and loop variables the return handles. */
+static void zend_compile_return(zend_ast *ast, bool leave) /* {{{ */
 {
 	zend_ast *expr_ast = ast->child[0];
 	bool is_generator = (CG(active_op_array)->fn_flags & ZEND_ACC_GENERATOR) != 0;
@@ -6065,6 +6068,10 @@ static void zend_compile_return(zend_ast *ast) /* {{{ */
 	if (!is_generator && (CG(active_op_array)->fn_flags & ZEND_ACC_HAS_RETURN_TYPE)) {
 		zend_emit_return_type_check(
 			expr_ast ? &expr_node : NULL, CG(active_op_array)->arg_info - 1, 0);
+	}
+
+	if (leave) {
+		zend_emit_op(NULL, ZEND_SHARP_LEAVE, NULL, NULL);
 	}
 
 	uint32_t opnum_before_finally = get_next_op_number();
@@ -6144,7 +6151,8 @@ static void zend_compile_throw(znode *result, zend_ast *ast) /* {{{ */
 }
 /* }}} */
 
-static void zend_compile_break_continue(zend_ast *ast) /* {{{ */
+/* A `leave` is the right side of PHP#'s `a ?? break` or `a ?? continue`, as in zend_compile_return. */
+static void zend_compile_break_continue(zend_ast *ast, bool leave) /* {{{ */
 {
 	zend_ast *depth_ast = ast->child[0];
 
@@ -6175,6 +6183,9 @@ static void zend_compile_break_continue(zend_ast *ast) /* {{{ */
 		zend_error_noreturn(E_COMPILE_ERROR, "'%s' not in the 'loop' or 'switch' context",
 			ast->kind == ZEND_AST_BREAK ? "break" : "continue");
 	} else {
+		if (leave) {
+			zend_emit_op(NULL, ZEND_SHARP_LEAVE, NULL, NULL);
+		}
 		if (!zend_handle_loops_and_finally_ex(depth, NULL)) {
 			zend_error_noreturn(E_COMPILE_ERROR, "Cannot '%s' " ZEND_LONG_FMT " level%s",
 				ast->kind == ZEND_AST_BREAK ? "break" : "continue",
@@ -8121,7 +8132,7 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 	for (i = 0; i < list->children; ++i) {
 		zend_ast *param_ast = list->child[i];
 		zend_string *sharp_type = NULL;
-		zend_ast *type_ast = zend_sharp_property_type(param_ast->child[0], &sharp_type);
+		zend_ast *type_ast = zend_sharp_declared_type(param_ast->child[0], &sharp_type);
 		zend_ast *var_ast = param_ast->child[1];
 		zend_ast **default_ast_ptr = &param_ast->child[2];
 		zend_ast *attributes_ast = param_ast->child[3];
@@ -8812,6 +8823,7 @@ static zend_op_array *zend_compile_func_decl_ex(
 	memset(&info, 0, sizeof(closure_info));
 
 	init_op_array(op_array, ZEND_USER_FUNCTION, INITIAL_OP_ARRAY_SIZE);
+	return_type_ast = zend_sharp_declared_type(return_type_ast, &op_array->sharp_type);
 
 	if (CG(compiler_options) & ZEND_COMPILE_PRELOAD) {
 		op_array->fn_flags |= ZEND_ACC_PRELOADED;
@@ -9187,6 +9199,8 @@ static void zend_compile_property_hooks(
 	}
 }
 
+static void zend_property_default_to_zval(zval *result, zend_ast **ast_ptr);
+
 static void zend_compile_prop_decl(zend_ast *ast, zend_ast *type_ast, uint32_t flags, zend_ast *attr_ast, zend_string *sharp_type) /* {{{ */
 {
 	zend_ast_list *list = zend_ast_get_list(ast);
@@ -9268,7 +9282,7 @@ static void zend_compile_prop_decl(zend_ast *ast, zend_ast *type_ast, uint32_t f
 		}
 
 		if (*value_ast_ptr) {
-			zend_const_expr_to_zval(&value_zv, value_ast_ptr, /* allow_dynamic */ false);
+			zend_property_default_to_zval(&value_zv, value_ast_ptr);
 
 			if (ZEND_TYPE_IS_SET(type) && !Z_CONSTANT(value_zv)
 					&& !zend_is_valid_default_value(type, &value_zv)) {
@@ -9344,7 +9358,7 @@ static void zend_compile_prop_group(zend_ast *ast) /* {{{ */
 	zend_ast *prop_ast = ast->child[1];
 	zend_ast *attr_ast = ast->child[2];
 	zend_string *sharp_type = NULL;
-	zend_ast *type_ast = zend_sharp_property_type(ast->child[0], &sharp_type);
+	zend_ast *type_ast = zend_sharp_declared_type(ast->child[0], &sharp_type);
 
 	zend_compile_prop_decl(prop_ast, type_ast, ast->attr, attr_ast, sharp_type);
 	if (sharp_type) {
@@ -11964,7 +11978,29 @@ static void zend_compile_const_expr_args(zend_ast **ast_ptr)
 typedef struct {
 	/* Whether the value of this expression may differ on each evaluation. */
 	bool allow_dynamic;
+	/* Whether it is a property default, where a .sharp file may create a Sharp\Map or a Sharp\Set. */
+	bool property_default;
 } const_expr_context;
+
+/* A PHP# Map or Set literal lowers to `new \Sharp\Map([...])` or `new \Sharp\Set([...])`, so a .sharp file's property
+ * default may create one of those two, and no other object. PHP evaluates the default once, at the class's first use,
+ * and every object of the class starts with that one object, which sharp_separate copies before any write, so sharing
+ * it changes nothing another holder sees. */
+static bool zend_is_sharp_collection_default(const zend_ast *ast, const const_expr_context *ctx)
+{
+	const zend_ast *class_ast = ast->child[0];
+	const zend_string *file = CG(compiled_filename);
+
+	if (!ctx->property_default || class_ast->kind != ZEND_AST_ZVAL || class_ast->attr != ZEND_NAME_FQ
+			|| Z_TYPE_P(zend_ast_get_zval((zend_ast *) class_ast)) != IS_STRING) {
+		return false;
+	}
+	const zend_string *class_name = zend_ast_get_str((zend_ast *) class_ast);
+
+	return (zend_string_equals_literal_ci(class_name, "Sharp\\Map") || zend_string_equals_literal_ci(class_name, "Sharp\\Set"))
+		&& file && ZSTR_LEN(file) > strlen(".sharp")
+		&& memcmp(ZSTR_VAL(file) + ZSTR_LEN(file) - strlen(".sharp"), ".sharp", strlen(".sharp")) == 0;
+}
 
 static void zend_compile_const_expr(zend_ast **ast_ptr, void *context) /* {{{ */
 {
@@ -11998,7 +12034,7 @@ static void zend_compile_const_expr(zend_ast **ast_ptr, void *context) /* {{{ */
 			}
 			break;
 		case ZEND_AST_NEW:
-			if (!ctx->allow_dynamic) {
+			if (!ctx->allow_dynamic && !zend_is_sharp_collection_default(ast, ctx)) {
 				zend_error_noreturn(E_COMPILE_ERROR,
 					"New expressions are not supported in this context");
 			}
@@ -12021,11 +12057,8 @@ static void zend_compile_const_expr(zend_ast **ast_ptr, void *context) /* {{{ */
 }
 /* }}} */
 
-void zend_const_expr_to_zval(zval *result, zend_ast **ast_ptr, bool allow_dynamic) /* {{{ */
+static void zend_const_expr_to_zval_in(zval *result, zend_ast **ast_ptr, const_expr_context context)
 {
-	const_expr_context context;
-	context.allow_dynamic = allow_dynamic;
-
 	zend_eval_const_expr(ast_ptr);
 	zend_compile_const_expr(ast_ptr, &context);
 	if ((*ast_ptr)->kind != ZEND_AST_ZVAL) {
@@ -12037,7 +12070,17 @@ void zend_const_expr_to_zval(zval *result, zend_ast **ast_ptr, bool allow_dynami
 	}
 	ZVAL_COPY(result, zend_ast_get_zval(*ast_ptr));
 }
+
+void zend_const_expr_to_zval(zval *result, zend_ast **ast_ptr, bool allow_dynamic) /* {{{ */
+{
+	zend_const_expr_to_zval_in(result, ast_ptr, (const_expr_context) { .allow_dynamic = allow_dynamic });
+}
 /* }}} */
+
+static void zend_property_default_to_zval(zval *result, zend_ast **ast_ptr)
+{
+	zend_const_expr_to_zval_in(result, ast_ptr, (const_expr_context) { .property_default = true });
+}
 
 /* Same as compile_stmt, but with early binding */
 void zend_compile_top_stmt(zend_ast *ast) /* {{{ */
@@ -12098,14 +12141,14 @@ static void zend_compile_stmt(zend_ast *ast) /* {{{ */
 			zend_compile_unset(ast);
 			break;
 		case ZEND_AST_RETURN:
-			zend_compile_return(ast);
+			zend_compile_return(ast, false);
 			break;
 		case ZEND_AST_ECHO:
 			zend_compile_echo(ast);
 			break;
 		case ZEND_AST_BREAK:
 		case ZEND_AST_CONTINUE:
-			zend_compile_break_continue(ast);
+			zend_compile_break_continue(ast, false);
 			break;
 		case ZEND_AST_GOTO:
 			zend_compile_goto(ast);
@@ -12335,6 +12378,19 @@ static void zend_compile_expr_inner(znode *result, zend_ast *ast) /* {{{ */
 			return;
 		case ZEND_AST_THROW:
 			zend_compile_throw(result, ast);
+			return;
+		/* PHP#: the right side of `a ?? return`, `a ?? continue` or `a ?? break`. PHP's parser never puts a
+		 * statement in an expression. */
+		case ZEND_AST_RETURN:
+			zend_compile_return(ast, true);
+			result->op_type = IS_CONST;
+			ZVAL_TRUE(&result->u.constant);
+			return;
+		case ZEND_AST_BREAK:
+		case ZEND_AST_CONTINUE:
+			zend_compile_break_continue(ast, true);
+			result->op_type = IS_CONST;
+			ZVAL_TRUE(&result->u.constant);
 			return;
 		case ZEND_AST_MATCH:
 			zend_compile_match(result, ast);

@@ -1,0 +1,29 @@
+namespace Shop;
+
+import Lib.JobFailed;
+extern event JobFailed;
+
+public class OrderNotices
+{
+    public static List<string> heard { get; set; } = [];
+
+    public void send(OrderEvent e) on OrderPaid, OrderEvent
+    {
+        OrderNotices.heard.add(`send ${e.orderId}`);
+    }
+
+    private void refresh() on OrderPaid
+    {
+        OrderNotices.heard.add("refresh");
+    }
+
+    public void audit(OrderEvent e) on OrderEvent
+    {
+        OrderNotices.heard.add(`audit ${e.orderId}`);
+    }
+
+    public void alert(JobFailed e) on JobFailed
+    {
+        OrderNotices.heard.add(`alert ${e.job}`);
+    }
+}

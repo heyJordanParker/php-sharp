@@ -5232,10 +5232,12 @@ static zend_vm_opcode_handler_t zend_jit_trace(zend_jit_trace_rec *trace_buffer,
 						}
 						goto done;
 					case ZEND_CAST:
-						/* PHP#'s (int) passes an int through, and the receiver of a PHP# method call an object. */
+						/* PHP#'s (int) passes an int through, and the receiver of a PHP# method call an object that
+						 * is no Sharp\Map or Sharp\Set. */
 						if (opline->extended_value != op1_type
 						 && (opline->extended_value != (IS_LONG | ZEND_SHARP_OPERATOR) || op1_type != IS_LONG)
-						 && (opline->extended_value != (IS_OBJECT | ZEND_SHARP_OPERATOR) || op1_type != IS_OBJECT)) {
+						 && (opline->extended_value != (IS_OBJECT | ZEND_SHARP_OPERATOR) || op1_type != IS_OBJECT
+						  || zend_jit_sharp_receiver_may_be_table(ssa, ssa_op))) {
 							break;
 						}
 						ZEND_FALLTHROUGH;
@@ -6126,7 +6128,7 @@ static zend_vm_opcode_handler_t zend_jit_trace(zend_jit_trace_rec *trace_buffer,
 							}
 						}
 						if (opline->opcode == ZEND_FETCH_OBJ_R
-						 && zend_jit_sharp_receiver_may_be_array(op_array, opline, ce, on_this, op1_ce)) {
+						 && zend_jit_sharp_receiver_may_be_collection(op_array, opline, ce, on_this, op1_ce)) {
 							break;
 						}
 						if (!zend_jit_fetch_obj(&ctx, opline, op_array, ssa, ssa_op,
@@ -6157,7 +6159,7 @@ static zend_vm_opcode_handler_t zend_jit_trace(zend_jit_trace_rec *trace_buffer,
 							break;
 						}
 						if (opline->opcode == ZEND_FETCH_STATIC_PROP_R
-						 && zend_jit_sharp_receiver_may_be_array(op_array, opline, NULL, 0, NULL)) {
+						 && zend_jit_sharp_receiver_may_be_collection(op_array, opline, NULL, 0, NULL)) {
 							break;
 						}
 						if (!zend_jit_fetch_static_prop(&ctx, opline, op_array)) {
@@ -6616,12 +6618,13 @@ done:
 										/* further blocks will not be relevant... */
 										break;
 									} else if (op_num < range->end && var_num == (range->var & ~ZEND_LIVE_MASK)) {
-										/* check if opcodes in range may throw */
-										bool store_type = 0;
+										/* check if opcodes in range may throw, or if a PHP# ZEND_SHARP_LEAVE frees the
+										 * temporary where its range ends */
+										bool store_type = op_array->opcodes[range->end].opcode == ZEND_SHARP_LEAVE;
 										const zend_ssa_op *next_ssa_op = ssa_op + zend_jit_trace_op_len(opline);
 										const zend_jit_trace_rec *q = p + 1;
 
-										while (1) {
+										while (!store_type) {
 											if (q->op != ZEND_JIT_TRACE_VM) {
 												store_type = 1;
 												break;

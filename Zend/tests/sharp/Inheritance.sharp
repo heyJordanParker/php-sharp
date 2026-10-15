@@ -33,9 +33,20 @@ public class Both : Described, Told
     public override string describe() => super<Described>.describe() + "+" + super<Told>.describe();
 }
 
-public enum Tone : Told
+public enum Mood : Told
 {
     case Calm;
+}
+
+public struct Memo : Told
+{
+    public Memo(public string text { get; }) { }
+}
+
+public enum Verdict : Told
+{
+    case Pending;
+    case Ruled(string by);
 }
 
 public class Base
