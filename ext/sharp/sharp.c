@@ -3118,9 +3118,47 @@ typedef struct {
 	bool unresolved;
 } sharp_type_spelling;
 
+/* The class whose type parameters the `$i` of code `scope` holds count, of `func` when the code is a function's. A
+ * method a class took from a trait is the trait's code, whose op array it shares. The trait of a PHP# interface's
+ * default bodies counts its interface's, which its header names, spec section 22. */
+static const zend_class_entry *sharp_type_scope(const zend_class_entry *scope, const zend_function *func)
+{
+	if (scope && func && func->type == ZEND_USER_FUNCTION && (func->common.fn_flags & ZEND_ACC_TRAIT_CLONE)) {
+		const zend_class_entry *user = scope;
+
+		/* A loaded class has loaded each trait it uses. */
+		for (uint32_t i = 0; scope == user && i < user->num_traits; i++) {
+			const zend_class_entry *trait = zend_lookup_class_ex(
+				user->trait_names[i].name, user->trait_names[i].lc_name, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+			const zend_function *original;
+
+			ZEND_ASSERT(trait != NULL);
+			ZEND_HASH_MAP_FOREACH_PTR(&trait->function_table, original) {
+				if (original->type == ZEND_USER_FUNCTION && original->op_array.opcodes == func->op_array.opcodes) {
+					scope = trait;
+					break;
+				}
+			} ZEND_HASH_FOREACH_END();
+		}
+	}
+	if (scope && (scope->ce_flags & ZEND_ACC_TRAIT) && sharp_class_is_sharp(scope) && scope->info.user.sharp_header) {
+		const zend_string *header = scope->info.user.sharp_header;
+		zend_string *name = sharp_type_class_name(ZSTR_VAL(header), strcspn(ZSTR_VAL(header), "<"), false);
+		const zend_class_entry *interface = zend_lookup_class_ex(name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+		zend_string_release_ex(name, false);
+
+		/* The trait is declared after its interface, in the interface's file. */
+		ZEND_ASSERT(interface != NULL);
+		scope = interface;
+	}
+
+	return scope;
+}
+
 const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object, const sharp_type *method,
 	bool unresolved, const zend_class_entry *scope, void **cache)
 {
+	scope = sharp_type_scope(scope, NULL);
 	/* Only a text that names a `$i` reads this's type arguments, so one that names none never runs a lazy proxy's
 	 * initializer. A lambda bound to an object of an unrelated class has no type arguments of the class it is written
 	 * in to read. */
@@ -3310,9 +3348,28 @@ static bool sharp_type_arguments_take(const zend_class_entry *given, sharp_type_
 	return true;
 }
 
-/* Whether `object` is an instance of the class `type` names whose type arguments for that class match `type`'s own, as
- * sharp_type_argument_matches matches them. Only a class PHP# declares with type parameters has type arguments to
- * compare: plain PHP's generics are erased. A loaded object's class has loaded each class it extends or implements. */
+/* Whether `ce` or a class it extends uses the trait `trait`, itself or through a trait it uses, as class_uses() lists
+ * them on each class up the chain. No object is instanceof a trait, and spec section 22 makes a plain PHP trait a type.
+ * A linked class has loaded each trait it uses. */
+static bool sharp_class_uses_trait(const zend_class_entry *ce, const zend_class_entry *trait)
+{
+	for (; ce; ce = ce->parent) {
+		for (uint32_t i = 0; i < ce->num_traits; i++) {
+			const zend_class_entry *used = zend_lookup_class_ex(
+				ce->trait_names[i].name, ce->trait_names[i].lc_name, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+			if (used && (used == trait || sharp_class_uses_trait(used, trait))) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+/* Whether `object` is an instance of the class `type` names, or uses the trait it names, whose type arguments for that
+ * class match `type`'s own, as sharp_type_argument_matches matches them. Only a class PHP# declares with type
+ * parameters has type arguments to compare: plain PHP's generics are erased. A loaded object's class has loaded each
+ * class it extends or implements. */
 static bool sharp_object_is(zend_object *object, const sharp_type *type)
 {
 	/* An object of the class itself holds its type arguments for that class, interned, so equal ones are one pointer. A
@@ -3334,7 +3391,13 @@ static bool sharp_object_is(zend_object *object, const sharp_type *type)
 	}
 
 	zend_class_entry *ce = zend_lookup_class_ex(type->class_name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
-	if (!ce || !instanceof_function(object->ce, ce)) {
+	if (!ce) {
+		return false;
+	}
+	if (ce->ce_flags & ZEND_ACC_TRAIT) {
+		return sharp_class_uses_trait(object->ce, ce);
+	}
+	if (!instanceof_function(object->ce, ce)) {
 		return false;
 	}
 	if (!type->count || !sharp_class_is_sharp(ce) || !ce->info.user.sharp_bounds) {
@@ -4197,7 +4260,7 @@ void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *tex
 {
 	/* Only a call from plain PHP is checked, and it gives the method no type arguments. */
 	const sharp_type *expected = sharp_type_list_of_frame(text,
-		Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, true, EX(func)->common.scope, cache);
+		Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, true, sharp_type_scope(EX(func)->common.scope, EX(func)), cache);
 	if (!expected) {
 		return;
 	}
@@ -4221,7 +4284,7 @@ void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *tex
 bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval *text, void **cache)
 {
 	const sharp_type *expected = sharp_type_list_of_frame(text,
-		Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, true, EX(func)->common.scope, cache);
+		Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, true, sharp_type_scope(EX(func)->common.scope, EX(func)), cache);
 	if (!expected) {
 		return !EG(exception);
 	}
