@@ -60,6 +60,21 @@ class Crossings
     public static string applied(Function<string(Map<string, int>)> each, Map<string, int> prices) => each(prices);
 
     public static List<string> named(Map<string|Level, int> counts) => [`${counts.count()}`, `${counts["5"] ?? -1}`, `${counts.has("5")}`];
+
+    public static string joined(Iterable<string> names)
+    {
+        let joined = "";
+        for (const name of names) {
+            joined = `${joined}${name} `;
+        }
+        return joined;
+    }
+
+    public static string lazilyReturned(Any? last)
+    {
+        Iterable<string> names = global.names_and(last);
+        return Crossings.joined(names);
+    }
 }
 
 public enum Level : string

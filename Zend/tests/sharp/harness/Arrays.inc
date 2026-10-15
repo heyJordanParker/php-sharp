@@ -75,6 +75,22 @@ function array_counter(): Closure
     return static fn (array $counts): string => get_debug_type($counts) . ' ' . count($counts);
 }
 
+// A lazy plain PHP source that counts the names it gave, so a test sees how far a PHP# loop read it. Its docblock
+// promises strings, which `$last` need not be.
+final class Names
+{
+    public static int $given = 0;
+}
+
+/** @return iterable<string> */
+function names_and(mixed $last): iterable
+{
+    foreach (['tea', 'jam', $last, 'pie'] as $name) {
+        Names::$given++;
+        yield $name;
+    }
+}
+
 // A plain PHP object a call runs through its __invoke, whose parameter names array.
 final class ArrayCounter
 {

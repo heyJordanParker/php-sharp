@@ -59,6 +59,27 @@ final class Collection
     public function sortedBy(\Closure $selector): array {}
 }
 
+/**
+ * @strict-properties
+ * @not-serializable
+ */
+final class Sequence implements \IteratorAggregate
+{
+    private function __construct() {}
+
+    public static function from(iterable $source): Sequence {}
+
+    public function filter(\Closure $predicate): Sequence {}
+
+    public function map(\Closure $transform): Sequence {}
+
+    public function take(int $count): Sequence {}
+
+    public function toList(): array {}
+
+    public function getIterator(): \Iterator {}
+}
+
 /** @strict-properties */
 final class Position
 {

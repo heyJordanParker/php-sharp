@@ -187,6 +187,18 @@ public class Tally
     public static Any taken(Any? value) => value as Any ?? "none";
 
     public static (int|string)? narrowed(Any? value) => value as int|string;
+
+    public static bool orders(Any? value) => value is Iterable<Order>;
+
+    public static bool ids(Any? value) => value is Iterable<int>;
+
+    public static bool anything(Any? value) => value is Iterable<Any?>;
+
+    public static Iterable<Order> held(Iterable<Order> orders) => orders;
+
+    public static Iterable<Order> firstOf(Iterable<Order> orders) => orders.take(1);
+
+    public static Iterable<int> idsOf(Iterable<Order> orders) => orders.map(o => o.id);
 }
 
 public class Rack<TItem>

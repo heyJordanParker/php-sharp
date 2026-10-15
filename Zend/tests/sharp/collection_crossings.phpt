@@ -32,6 +32,18 @@ for ($round = 0; $round < 100; $round++) {
     echo 'a plain PHP object a local holds: ', Crossings::invoked(new Map(['a', 1, 'b', 2])), "\n";
     echo 'a PHP# function type passes the object: ', Crossings::applied(fn ($values) => get_debug_type($values), new Map(['a', 1])), "\n";
     echo 'a PHP array into a Map<string|Level, int> parameter: ', json_encode(Crossings::named(['5' => 1])), "\n";
+    // A lazy plain PHP source is checked element by element as a loop reads it, so a bad element throws at the
+    // read and not before, and the source is never read ahead.
+    Names::$given = 0;
+    echo 'a lazy plain PHP source into an Iterable<string> parameter: ', Crossings::joined(names_and('cake')), Names::$given, "\n";
+    foreach ([fn () => Crossings::joined(names_and(3)), fn () => Crossings::lazilyReturned(3)] as $read) {
+        Names::$given = 0;
+        try {
+            $read();
+        } catch (TypeError $e) {
+            echo get_class($e), ': ', $e->getMessage(), ', after ', Names::$given, " names\n";
+        }
+    }
     $output = ob_get_clean();
 }
 echo $output;
@@ -56,3 +68,6 @@ a plain PHP closure a local holds: array 2
 a plain PHP object a local holds: array 2
 a PHP# function type passes the object: Sharp\Map
 a PHP array into a Map<string|Level, int> parameter: ["1","1","true"]
+a lazy plain PHP source into an Iterable<string> parameter: tea jam cake pie 4
+TypeError: Demo\Crossings::joined(): Argument #1 ($names) must be of type Iterable<string>, Generator given: [2] expected string, got int 3, after 3 names
+TypeError: names_and(): Return value must be of type Iterable<string>, Generator returned: [2] expected string, got int 3, after 3 names
