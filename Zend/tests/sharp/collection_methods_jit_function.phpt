@@ -22,7 +22,7 @@ array(3) {
   [2]=>
   int(4)
 }
-object(Sharp\Map)#6 (1) {
+object(Sharp\Map)#3 (1) {
   [0]=>
   array(2) {
     [0]=>
@@ -36,7 +36,7 @@ NULL
 NULL
 int(7)
 NULL
-object(Sharp\Map)#6 (2) {
+object(Sharp\Map)#3 (2) {
   [0]=>
   array(2) {
     [0]=>
@@ -58,7 +58,7 @@ array(2) {
   [1]=>
   int(2)
 }
-object(Sharp\Map)#6 (1) {
+object(Sharp\Map)#3 (1) {
   [0]=>
   array(2) {
     [0]=>
@@ -73,7 +73,7 @@ object(Sharp\Map)#6 (1) {
   }
 }
 OutOfRangeException: Undefined array key 2 in CollectionMethods.sharp on line 55
-object(Sharp\Map)#10 (1) {
+object(Sharp\Map)#6 (1) {
   [0]=>
   array(2) {
     [0]=>
@@ -82,7 +82,7 @@ object(Sharp\Map)#10 (1) {
     int(7)
   }
 }
-object(Sharp\Map)#10 (1) {
+object(Sharp\Map)#6 (1) {
   [0]=>
   array(2) {
     [0]=>
@@ -248,7 +248,7 @@ array(3) {
   [2]=>
   int(2)
 }
-object(Sharp\Set)#11 (3) {
+object(Sharp\Set)#9 (3) {
   [0]=>
   int(3)
   [1]=>
@@ -256,7 +256,17 @@ object(Sharp\Set)#11 (3) {
   [2]=>
   int(2)
 }
-object(Sharp\Map)#7 (2) {
+array(4) {
+  [0]=>
+  int(2)
+  [1]=>
+  string(1) "b"
+  [2]=>
+  string(4) "none"
+  [3]=>
+  int(1)
+}
+object(Sharp\Map)#10 (2) {
   [0]=>
   array(2) {
     [0]=>
@@ -282,5 +292,5 @@ array(1) {
 NULL
 DivisionByZeroError: Modulo by zero in CollectionMethods.sharp on line 79
 NULL
-Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 107
-ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 108
+Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 109
+ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 110

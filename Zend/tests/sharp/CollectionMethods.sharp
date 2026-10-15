@@ -197,6 +197,17 @@ class Pantry
         return sizes.toSet();
     }
 
+    public static List<Any> keyedByCollections()
+    {
+        Map<List<int>, string> named = [[1, 2]: "a"];
+        named[[1, 2]] = "b";
+        named[[3]] = "c";
+        Set<string> first = ["x", "y"];
+        Set<string> second = ["y", "x"];
+        Set<Set<string>> groups = [first, second];
+        return [named.count(), named[[1, 2]] ?? "none", named[[2, 1]] ?? "none", groups.count()];
+    }
+
     public static Map<string, int> cheap(Map<string, int> prices)
     {
         return prices.filter(price => price < 100);

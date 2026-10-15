@@ -78,6 +78,8 @@ namespace {
         // values() gives the values in the order their keys were stored, and toSet() keeps each element once.
         attempt(fn () => Demo\Pantry::amounts(['tea' => 2, 'pie' => 7, 'cake' => 2]));
         attempt(fn () => Demo\Pantry::unique([3, 1, 3, 2, 1]));
+        // A collection keys a Map and joins a Set by its elements: a List in order, a Set in any order.
+        attempt(fn () => Demo\Pantry::keyedByCollections());
         attempt(fn () => Demo\Pantry::cheap(['tea' => 3, 'cake' => 300, 'pie' => 7]));
         attempt(fn () => Demo\Pantry::sold(['tea' => 3], 'tea'));
         attempt(fn () => Demo\Pantry::sold(['tea' => 3], 'pie'));
