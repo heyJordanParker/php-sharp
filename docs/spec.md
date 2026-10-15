@@ -162,7 +162,7 @@ Checkout.maximum;
 - **A member is never more visible than its class.**
 - **Visibility is checked both ways.**
   - Too narrow is a compile error at the caller.
-  - Too wide is a warning, for example a `public` member that nothing outside its namespace uses. It runs in a project, a package whose `composer.json` says `"type": "project"`, because a library's members are used by the projects that install it, which the checker never sees.
+  - Too wide is a warning, for example a `public` member that nothing outside its namespace uses. It runs in a project, a package whose `composer.json` says `"type": "project"`, because a library's members are used by the projects that install it, which the checker never sees. A constructor never warns: `new` calls it, so it reaches as far as its class.
 - **There is no named reach,** such as `internal(App\Tenant)`. A helper shared by sibling namespaces moves to their parent namespace.
 
 **An interface member is always public, so it takes no access modifier.** Writing one, `public` included, is a compile error, as in TypeScript, Swift and Go:

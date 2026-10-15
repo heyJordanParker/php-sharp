@@ -64,7 +64,7 @@ Each question is about syntax or meaning. The recommendation is mine, and the bu
 ## Decisions team-lead approves
 
 1. **Order: this PR lands after #123 and #102,** and after #121 if question 11's answer keeps `static lazy` with singletons, and after section 5 if question 1's answer is A.
-   - #123 builds `required` (line 257), object initializers, and the every-path check for a non-nullable get-only property, as `uninitialized-property` "`count` is get-only and never set: set it in the main constructor, or give it an initial value." This PR extends that check to `T?` and to the spec's wording. It adds no second definite-assignment mechanism.
+   - #123 builds `required` (line 257), object initializers, and the every-path check for a non-nullable get-only property, as `uninitialized-property` "`count` is get-only and never set: give `count` an initial value, or set it on every path through the constructor." This PR extends that check to `T?` and to the spec's wording. It adds no second definite-assignment mechanism.
    - If team-lead orders this PR first, it builds the every-path check on master's `artifacts.method_initialized_properties` and #123 adapts. That is the second mechanism the order above avoids.
 2. **The harness gains three files,** listed in the PR body for review:
    - `sharp/harness/app/Stubs/Str.sharp`: `extern Str;`. `Str.slug` is pure plain PHP, and line 198's getter needs it declared. A probe with this file compiles `public string slug => Str.slug(this.name);` with no error.
