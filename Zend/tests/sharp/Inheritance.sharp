@@ -22,6 +22,15 @@ public class Poster : HasDesign
     public override string designTag => "poster tag";
 }
 
+public class Stamped : HasDesign
+{
+    public string designColumn => "stamped";
+
+    public string designTitle() => "Stamped";
+
+    public override string designTag { get; set; } = "stamped";
+}
+
 public interface Described
 {
     string describe() => "described";
@@ -42,6 +51,21 @@ public class Sheet : HasDesign
 public class Both : Described, Told
 {
     public override string describe() => super<Described>.describe() + "+" + super<Told>.describe();
+}
+
+public interface Shows
+{
+    string label() => "shows";
+}
+
+public interface ShowsMore : Shows
+{
+    override string label() => "more";
+}
+
+public class Fancy : ShowsMore
+{
+    public string both() => super<Shows>.label() + "/" + this.label();
 }
 
 public class Repeater : Both
@@ -100,6 +124,18 @@ public class Coded : Keyed<int>
     public int key() => 7;
 }
 
+public struct Seal : Copies
+{
+    public Seal(public int at { get; }) { }
+}
+
+public event Copied(int id) : Copies;
+
+public interface Greets
+{
+    string hi();
+}
+
 public static class Seeder
 {
     public static bool owns(Any value) => value is Copies;
@@ -107,6 +143,10 @@ public static class Seeder
     public static string seed(Copies owner) => owner.copy();
 
     public static int count(List<Copies> owners) => owners.count();
+
+    public static string bound<T : Copies>(T owner) => owner.copy();
+
+    public static string both<T : Greets & Copies>(T owner) => owner.hi() + " " + owner.copy();
 
     public static int firstKey(Coded coded) => coded.keys()[0];
 

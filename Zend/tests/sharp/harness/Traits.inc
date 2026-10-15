@@ -22,6 +22,51 @@ trait HasSlug
     }
 }
 
+// The methods Laravel's SoftDeletes and HasUniqueStringIds share with Model, which a model's `use` replaces.
+abstract class Persisted
+{
+    public function forceDelete(): string
+    {
+        return 'model force';
+    }
+
+    protected function performDeleteOnModel(): string
+    {
+        return 'model delete';
+    }
+
+    public function delete(): string
+    {
+        return $this->performDeleteOnModel();
+    }
+
+    public function getKeyType(): string
+    {
+        return 'int';
+    }
+}
+
+trait SoftDeletes
+{
+    public function forceDelete(): string
+    {
+        return 'soft force';
+    }
+
+    protected function performDeleteOnModel(): string
+    {
+        return 'soft delete';
+    }
+}
+
+trait HasUniqueStringIds
+{
+    public function getKeyType(): string
+    {
+        return 'string';
+    }
+}
+
 interface Aligned extends \BackedEnum
 {
     public function label(): string;

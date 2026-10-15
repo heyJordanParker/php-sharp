@@ -3,6 +3,7 @@ A PHP# interface's default bodies, of methods and computed properties, run in a 
 --FILE--
 <?php
 
+require __DIR__ . '/harness/Traits.inc';
 require __DIR__ . '/Inheritance.sharp';
 
 // A plain PHP class gets a PHP# interface's default bodies by using the trait `<Interface>\Defaults`, spec section 22.
@@ -12,8 +13,8 @@ final class LegacySheet implements Demo\HasDesign
 
     public string $designColumn = 'legacy';
 
-    // A computed property's default body is the trait's method that the property runs, which has no PHP type.
-    public $designTag {
+    // A computed property's default body is the trait's method that the property runs, and the class writes its type.
+    public string $designTag {
         get => $this->{'designTag@Demo\HasDesign'}();
     }
 
@@ -26,8 +27,17 @@ final class LegacySheet implements Demo\HasDesign
 $sheet = new Demo\Sheet();
 var_dump($sheet->designKey(), (new LegacySheet())->designKey(), Demo\Mood::Calm->describe());
 var_dump($sheet->designTag, (new LegacySheet())->designTag, (new Demo\Poster())->designTag);
+// An override keeps its PHP type, stored or computed, and the property the class gets runs the default body as `mixed`.
+$stamp = new Demo\Stamped();
+$stamp->designTag = 'restamped';
+var_dump($stamp->designTag, ...array_map(
+    static fn (string $class): string => (string) (new ReflectionProperty($class, 'designTag'))->getType(),
+    [Demo\Stamped::class, Demo\Poster::class, Demo\Sheet::class, Demo\HasDesign::class],
+));
 var_dump((new Demo\Memo('memo'))->describe(), Demo\Verdict\Pending::instance()->describe(), (new Demo\Verdict\Ruled('court'))->describe());
 var_dump((new Demo\Both())->describe(), (new Demo\Repeater())->repeat());
+// A sub-interface's default body replaces its parent's, which super<Shows> still runs.
+var_dump((new Demo\Fancy())->label(), (new Demo\Fancy())->both());
 $coded = new Demo\Coded();
 var_dump($coded->keys(), Demo\Seeder::firstKey($coded));
 // A default body tests a value, and checks the arguments plain PHP gives it, against the interface's type argument each
@@ -63,11 +73,18 @@ string(4) "told"
 string(9) "tag:sheet"
 string(10) "tag:legacy"
 string(10) "poster tag"
+string(9) "restamped"
+string(6) "string"
+string(6) "string"
+string(5) "mixed"
+string(5) "mixed"
 string(4) "told"
 string(4) "told"
 string(4) "told"
 string(14) "described+told"
 string(5) "told!"
+string(4) "more"
+string(10) "shows/more"
 array(2) {
   [0]=>
   int(7)

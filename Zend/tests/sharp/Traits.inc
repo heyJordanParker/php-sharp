@@ -4,6 +4,9 @@ use Lib\Aligned;
 use Lib\Copies;
 use Lib\Document;
 use Lib\HasSlug;
+use Lib\HasUniqueStringIds;
+use Lib\Persisted;
+use Lib\SoftDeletes;
 
 interface Linked
 {
@@ -59,4 +62,8 @@ enum Tier: int implements Aligned
     case High = 2;
 
     public function label(): string { return "level"; }
+}
+
+class Posting extends Persisted
+{   use SoftDeletes, HasUniqueStringIds;
 }

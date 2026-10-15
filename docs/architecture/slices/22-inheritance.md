@@ -33,7 +33,7 @@ The Slice builds all of section 22 in one PR. Zend/ does not change:
    - two classes in a header: "`TwoClasses` names two base classes, `DatabaseEntity` and `Report`." This replaces "cannot implement non-interface type `Report`".
    - `super.m()` when the parent's `m` is abstract: "`Shape.draw` is abstract, so `super.draw()` has no body to run."
    - two header traits, or two `Defaults` traits, that give the same method, which PHP refuses when it links the class. Question 2 decides the wording.
-8. **A default body in a generic interface is refused with a named error.** Section 11 owns generic interfaces, and #102 has no type arguments for a trait's methods. See the boundary with #102.
+8. **A default body in a generic interface reads the type arguments each class gives the interface.** The codex gives the trait the interface's type parameters, as `@template` on a trait does, and each class the type arguments it gives the interface, as `@use` does. The bridge gives the trait the header `App.Keyed<$0>`, and the engine maps a trait's code, and a method a class took from a trait, to the interface the header names, so `is`, `new` and the checks of a call from plain PHP read the class's type arguments.
 
 ## Questions for Jordan
 
@@ -45,6 +45,7 @@ Each one decides what users write. The note recommends, and decides none.
    - replacing a method a header trait gives
    Recommended: refuse `override` on the first, as C# does (CS0115), and require it on the second and third, because each replaces a body, as line 2253 requires for a base class's method. Kotlin requires it on all three.
 2. **Lines 2345 and 2397: what happens when two places give a class the same method?** The cases are a default body against a base class's method, two interfaces' default bodies, two header traits' methods, and a sub-interface that gives a body to a method of the interface it extends. PHP runs a trait's method over an inherited one, and refuses two traits' methods with the same name. Recommended: a compile error at the class unless the class declares the method itself, as Kotlin requires. A sub-interface's body replaces its parent's, as in Java, and writes `override`.
+   Decided: one body per member, so two places give a class a member only as a compile error the class fixes by writing it, and `super<Interface>` reuses one body. A header trait replaces the base class's method, as PHP's `use` does, and counts against a default body only. A sub-interface replaces its parent's default body with `override`, and the most specific interface's body wins, as in Java, C# and Kotlin: the class's `use` takes it `insteadof` the parent's.
 3. **Line 2331: is `final` allowed on a method without `override`?** A PHP# method is already closed unless it is `virtual`. Recommended: a compile error, as C# refuses `sealed` without `override` (CS0238).
 4. **Line 2397: can an enum's header name a plain PHP trait?** "It works everywhere an interface does", an enum header takes interfaces, and PHP enums can `use` traits that have no properties. Recommended: yes, with PHP's rule that the trait has no properties as the error.
 5. **Line 2431: which traits does Reflection list?** Lowered to `use`, `ReflectionClass::getTraitNames()` and `class_uses()` list a class's own header traits and its `Defaults` traits, and a subclass lists neither, as PHP lists traits. `getInterfaceNames()` does list inherited interfaces. Recommended: keep PHP's lists as they are, `Defaults` traits included, because Laravel's `class_uses_recursive` already covers the inherited case.
@@ -147,7 +148,7 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 | 2382, 2390 | A plain PHP class that implements it `use`s the trait to get the defaults | Silently accepted by the spec run, which only lints `php-trait-defaults`. The trait does not exist | The codex's trait for `mago analyze`, and the autoload rule (decision 5) for the engine. An engine test runs `LegacyPage.designKey()` |
 | 2382 | Section 23's class-and-namespace rule does not apply to the trait | Holds by construction: the trait is never a file or a folder | None |
 
-A default body in a generic interface is refused with a named error (decision 8). An interface's computed property, `string label => …;`, stays refused as on master: section 22 gives only methods a default body.
+A default body in a generic interface reads the class's type arguments (decision 8). An interface's computed property, `string label => …;`, is a default body too: the interface states it as `public mixed $label { get; }`, the trait holds its body as the protected method `label@App\HasLabel`, and each class that gets the body declares `public mixed $label { get => $this->{'label@App\HasLabel'}(); }`, which a plain PHP class writes with its own type. An enum has no property, so an enum that implements the interface is an error that names the property.
 
 ## A plain PHP trait
 

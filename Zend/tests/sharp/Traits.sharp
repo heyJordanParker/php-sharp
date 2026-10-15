@@ -4,6 +4,9 @@ import Lib.Aligned;
 import Lib.Copies;
 import Lib.Document;
 import Lib.HasSlug;
+import Lib.HasUniqueStringIds;
+import Lib.Persisted;
+import Lib.SoftDeletes;
 
 public interface Linked
 {
@@ -59,4 +62,8 @@ public enum Tier : int, Aligned
     case High = 2;
 
     public string label() => "level";
+}
+
+public class Posting : Persisted, SoftDeletes, HasUniqueStringIds
+{
 }

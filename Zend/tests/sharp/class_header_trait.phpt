@@ -15,6 +15,10 @@ var_dump($guide->link(), $guide->topic(), $guide->path(), get_parent_class($guid
 var_dump(class_uses($guide), (new ReflectionClass($guide))->getTraitNames());
 
 var_dump((new Demo\Draft())->copy(), Demo\Shade::Light->copy(), class_uses(Demo\Shade::class));
+
+// A header trait's method replaces the base class's, as Laravel's SoftDeletes replaces Model's.
+$posting = new Demo\Posting();
+var_dump($posting->forceDelete(), $posting->delete(), $posting->getKeyType());
 ?>
 --EXPECT--
 string(15) "/articles/intro"
@@ -48,3 +52,6 @@ array(1) {
   ["Lib\Copies"]=>
   string(10) "Lib\Copies"
 }
+string(10) "soft force"
+string(11) "soft delete"
+string(6) "string"
