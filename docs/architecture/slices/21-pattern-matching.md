@@ -274,7 +274,7 @@ docs/spec.md:2199 expects a compile error, and the checker reports: This type is
 
 `FunctionTests.sharp` gave the same, with the note "A PHP# pattern is a type of `int`, `float`, `string`, `bool` or a class with an optional name …". `OtherTypeTests.sharp` gave it for `value is Any` and `value is int|float`, and `AsCollection.sharp` for `as List<string>`, `is List<string>` and `as Map<string, int>`, with the note "`as` converts to `int`, `float`, `string`, `bool` or a class." Those last five are #102's.
 
-- **Mechanism (decision 7):** the semantic check's type-pattern arm accepts `Function<…>`. `type_test_of` gives it #102's engine test. The analyzer reports `unknown-function-type` when the tested expression's type is a function with no declared signature. The bridge spells each method's and lambda's whole type, effects included, into `zend_op_array.sharp_type`.
+- **Mechanism (decision 7):** the semantic check's type-pattern arm accepts `Function<…>`. `type_test_of` gives it #102's engine test. The analyzer reports `unknown-function-type` when the tested expression's type is a function with no declared signature: a `Closure`, or the signature of a function plain PHP wrote, as a plain PHP method named as a value. Such a test is never "always true", since the engine finds no type on the function. The bridge spells each method's and lambda's whole type, effects included, into `zend_op_array.sharp_type`.
 - **Engine:** `sharp_type_holds`'s `SHARP_TYPE_FUNCTION` arm compares the closure's type with the tested one through `sharp_type_function_fits` (question 4).
 
 ## P1 and P34: `switch`, `and`, `or`, `xor`
@@ -519,6 +519,7 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 - `a_type_with_properties_tests_both_and_binds` (new): `big` is `Paid` inside the `if` of `payment is Paid { amount: > 1000 } big`, its property test reads `Paid`'s `amount`, and an unknown property of `Paid` is `non-existent-property`.
 - `list_patterns_test_the_count_and_each_element` (new): element and rest variables typed from the subject, a list pattern on a `Map` never matching, and a `match` on a `List` without `default` refused.
 - `function_types_are_tested_like_any_type` (new): `Function<int(int)>` on a lambda, a method value and a `Closure` from plain PHP (`unknown-function-type`), in `is`, `as`, an arm and a bare statement.
+- `a_function_type_test_of_a_plain_php_function_value_is_unknown` (new): a `Closure` parameter and a plain PHP method named as a value are `unknown-function-type`, with no "always true" beside it.
 - orchestrator: `a_body_edit_that_changes_a_callees_effects_changes_the_callers_key` (new): a lambda's file lists the file of the body it calls, and an edit there that changes its effects changes the lambda's key.
 - `a_pattern_that_can_never_match_is_an_error_at_the_pattern` grows rows for a list pattern on a `Map` and a type with properties on a type it can't be.
 
@@ -537,7 +538,7 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 
 - syntax: `case Paid(string transactionId);` parses into `EnumCaseItem::Data` and stays a parse error in a `.php` file; `sealed interface` parses, and `sealed class` stays refused.
 - semantics: `enum_shapes_are_backed_or_not` (new), with a value case beside a data case refused and every mix of plain and data cases compiling; `{ status: 200 } r` refused with answer 5's message.
-- analyzer: `a_data_case_is_a_type_of_its_own` (new): `PaymentResult.Declined(reason: x)` types `PaymentResult.Declined`, a method taking `PaymentResult.Paid` refuses a `Declined`, `d.reason` is `string`; `a_match_over_a_closed_set_needs_no_default` (new), rows for a data-case enum, a mixed enum and a sealed interface, each covered, each missing one case, and each with a `when` arm that does not count; `a_sealed_interface_is_implemented_only_in_its_namespace` (new); a positional pattern's wrong count of fields; `==` on a data case, by question 7.
+- analyzer: `a_data_case_is_a_type_of_its_own` (new): `PaymentResult.Declined(reason: x)` types `PaymentResult.Declined`, a method taking `PaymentResult.Paid` refuses a `Declined`, `d.reason` is `string`; `a_match_over_a_closed_set_needs_no_default` (new), rows for a data-case enum, a mixed enum and a sealed interface, each covered, each missing one case, and each with a `when` arm that does not count; `a_sealed_interface_is_implemented_only_in_its_namespace` (new); a positional pattern's wrong count of fields, a plain case's none among them; a case pattern on a dotted name of a class that is no case reports only that the name is no case of an enum; `==` on a data case, by question 7.
 - orchestrator: a warm compile after adding an implementer reports the `match` it leaves uncovered, as a cold one does.
 - bridge: the abstract class, the case classes and their construction as trees.
 - engine: the rows listed in the file tree, and plain PHP's `new PaymentResult\Paid(…)` loading the enum through `sharp/composer/autoload.php`.
