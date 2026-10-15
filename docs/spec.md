@@ -604,7 +604,7 @@ Point origin = new Point { x: 0 };    // compile error: y has no initial value, 
 
 `with` copies an object or a struct and sets the listed properties through their `init` or `set` accessors. The original is unchanged.
 
-**A struct keys a `Map` by its whole value when every field has `==`,** with nothing declared, as Swift's `Hashable` structs, Rust's `Hash` derive, C#'s record structs, Java's records, Kotlin's data classes and Go's structs are. It is the general rule for keys (section 12): a struct whose every field has `==` has `==` and `hash()` (section 19). Two structs are one key when they are `==`. A struct gets JSON key text only from its `toString()`, so `Json.encode` of a `Map` keyed by a struct without `toString()` is a compile error, as Jackson writes a key through `toString` and serde and Go refuse a key that is not text.
+**A struct keys a `Map` when every field has `==`, by its whole value with nothing declared, or when it declares `==` with `hash()`, by that pair,** as Swift's `Hashable` structs, Rust's `Hash` derive, C#'s record structs, Java's records, Kotlin's data classes and Go's structs are. It is the general rule for keys (section 12): a struct whose every field has `==` has `==` and `hash()`, and a struct with a field that has none, such as a function, declares both (section 19). Two structs are one key when they are `==`. A struct gets JSON key text only from its `toString()`, so `Json.encode` of a `Map` keyed by a struct without `toString()` is a compile error, as Jackson writes a key through `toString` and serde and Go refuse a key that is not text.
 
 **Every struct has a static `parse`,** which reads a `Map<string, Any?>` or an object's public properties and throws one error that lists every bad field, and a static `tryParse`, which gives null instead. The names follow `Int.parse` and `Int.tryParse` (section 24). Every class gets both the same way.
 
@@ -742,6 +742,7 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 - **Names start with `T`:** `TItem`, `TKey`.
 - **The bound is written inline:** `<TItem : DatabaseEntity>`.
 - **Several bounds use `&`:** `<TItem : DatabaseEntity & Shareable>`.
+- **`Object` bounds a type parameter to any object,** `<TValue : Object>`, as C#'s `where T : class` and TypeScript's `T extends object` do. It is a bound alone.
 - **A type parameter with no bound may hold `null`,** so it is bounded by `Any?`.
 - **A generic class can't implement PHP's `Serializable`,** and the error points to `__serialize` and `__unserialize`.
 - **A class value with type arguments can't be a `Map` key,** because `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` share the plain class name.
@@ -750,6 +751,7 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 ```csharp
 public class PaginatedList<TItem : DatabaseEntity> { … }
 public PaginatedList<TItem> list<TItem : DatabaseEntity>(Query<TItem> query) { … }
+public TValue keep<TValue : Object>(TValue value) => value;
 ```
 
 **`Self` on a receiver typed by a type parameter is that type parameter** (section 25). In `TBox refill<TBox : Box<int>>(TBox box)`, `box.withValue(5)` returns a `TBox`, not `Box<int>`, as Rust's `t.clone()` on a `T: Clone` returns a `T`:
@@ -1005,6 +1007,7 @@ for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is a 
 **Map keys:** anything with `==` and `hash()` (section 19) keys a `Map` and joins a `Set`, as in Swift, Rust, Java and Kotlin.
 
 - A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type, as in `const [Status status, int n]`, stays allowed. An inferred `Map`, such as a `groupBy` result, gives its keys back the same way.
+- Plain PHP receives the `Map` itself, or a PHP array where its parameter's declared type names `array`. A PHP array's keys are `int` or `string`, so passing a `Map` keyed by anything else to such a parameter is a compile error that names the parameter and the key type. `counts.count()` counts any `Map`, where PHP's `global.count(counts)` takes only one keyed by `int` or `string`.
 
 <!-- example enum-map-keys -->
 ```csharp
@@ -1265,7 +1268,81 @@ public void show(readonly Model model) { … }   // compile error: Model is a pl
 - A copy in a local belongs to the local. After `let copy = order.lines`, `copy.add(line)` is allowed and leaves `order` unchanged.
 - The objects inside that copy stay readonly.
 
-**A `readonly` method is checked as if `this` were a `readonly` value.** Inside it, `this` cannot be written, and only other `readonly` methods can be called on it.
+**A readonly value never goes where a writable one is expected.** Passing, returning or storing it is a compile error that names the `readonly` to declare:
+
+<!-- example readonly-stays-readonly: members -->
+```csharp
+public Order give(readonly Order order) => order;   // compile error: declare the return type `readonly Order`
+```
+
+**A `readonly` method is checked as if `this` were a `readonly` value.** Inside it, `this` cannot be written, and only other `readonly` methods can be called on it. An override or an implementation of a `readonly` method is `readonly` too, so a call through a readonly value never runs a body that changes `this`:
+
+<!-- example readonly-overrides -->
+```csharp
+// app/Shape.sharp
+namespace App;
+
+public class Shape
+{
+    public virtual int area() readonly => 0;
+}
+```
+
+<!-- example readonly-overrides -->
+```csharp
+// app/Square.sharp
+namespace App;
+
+public class Square : Shape
+{
+    public override int area() => 1;   // compile error: Square.area overrides the readonly Shape.area, so declare it `area() readonly`
+}
+```
+
+**A `readonly` that can't matter is a compile error,** as a `?` that can't matter is: before a type whose value never changes, an `int`, a `string`, an enum, a struct, a function type or a collection of them, and in `is` or `as`:
+
+<!-- example readonly-cannot-matter: members -->
+```csharp
+public int count(readonly List<int> numbers) => 0;   // compile error: a List<int> never changes, so write List<int>
+```
+
+**A method's `readonly` is its last clause,** after `on` and `uses`, because it talks about the `this` inside the body. Anywhere else it is a compile error that says to write it last:
+
+<!-- example readonly-last-clause -->
+```csharp
+// app/Quotes.sharp
+namespace App;
+
+public interface Quotes
+{
+    Money quote(Cart cart) uses Http readonly;   // compiles: readonly is the last clause
+    Money price(Cart cart) readonly uses Http;   // compile error: write readonly last
+}
+```
+
+**Operators, `int hash()` and `string toString()` are readonly by definition.** The language runs them on readonly values with no marker, so a body that changes an operand or `this` is a compile error, and an operator that returns an operand declares its return type `readonly`:
+
+<!-- example readonly-by-definition -->
+```csharp
+// app/Points.sharp
+namespace App;
+
+public class Points
+{
+    public int count { get; set; } = 0;
+
+    public static Points operator +(Points a, Points b)
+    {
+        a.count += b.count;                       // compile error: an operator's operands are readonly
+        return new Points();
+    }
+
+    public static readonly Points operator -(Points a, Points b) => a;   // compiles: it returns a readonly operand
+
+    public int hash() => this.count++;            // compile error: hash() is readonly
+    public string toString() => "points";         // compiles
+}
+```
 
 **A missing marker is a compile error that names the fix:**
 
@@ -1476,8 +1553,7 @@ namespace App;
 
 public class Order
 {
-    public int id { get; }
-    public Money total { get; }
+    public Order(public int id { get; }, public Money total { get; }) { }
 
     public void markPaid()
     {
@@ -1602,6 +1678,56 @@ public class ImportScreen
 **Effects:** `emit` has the effect `Events` (section 29), so a method that emits shows `Events` among its effects, and code without a body allows it with `uses Events`.
 
 **Timing:** the default dispatcher runs listeners immediately, before `emit` returns. An app replaces the dispatcher once at startup, to run listeners later, after a save, with retries, or not at all in tests.
+
+The app's top module binds `Dispatcher`, its binding serves every `emit`, and a binding of it in any other module of the app is a compile error. A test module still replaces it:
+
+<!-- example one-dispatcher
+namespace App;
+
+import Sharp.Dispatcher;
+import Sharp.ImmediateDispatcher;
+-->
+```csharp
+// app/Module.sharp
+module
+{
+    singleton Dispatcher = ImmediateDispatcher;   // compiles: the app's dispatcher, for every emit
+}
+```
+
+<!-- example one-dispatcher
+namespace App.Shop;
+
+import Sharp.Dispatcher;
+import Sharp.ImmediateDispatcher;
+-->
+```csharp
+// app/Shop/Module.sharp
+module
+{
+    singleton Dispatcher = ImmediateDispatcher;   // compile error: only app/Module.sharp, the top module, binds Dispatcher
+}
+```
+
+**A plain PHP library's own events reach PHP# listeners through PSR-14.** PHP#'s `Sharp.Psr.ListenerProvider` offers every PHP# listener as a PSR-14 listener provider. One module binding gives it to a library whose dispatcher follows PSR-14, as any binding creates a service (section 32):
+
+<!-- example psr-listeners -->
+```csharp
+// app/Module.sharp
+namespace App;
+
+import Psr.EventDispatcher.EventDispatcherInterface;
+import Sharp.Psr.ListenerProvider;
+import Vendor.Events.EventDispatcher;
+
+module
+{
+    singleton EventDispatcherInterface = new EventDispatcher(new ListenerProvider());   // compiles: the library's dispatcher runs every PHP# listener
+}
+```
+
+- **Every event the library dispatches runs each `on` method and each listener `Events.on` started for it,** with nothing else written by hand. Each listener runs on a new object, as for `emit`, and the library's dispatcher decides when.
+- **A library with a dispatcher of its own kind needs one adapter package,** and PHP# ships none for any framework.
 
 ## 16. Naming a value
 
@@ -2770,8 +2896,7 @@ const point = (object)["x": 1];                   // compile error: write a Map 
 ```
 
 - **A JSON object** is a `Map` literal for a one-off payload, and a declared struct for a shape that repeats.
-- **`Json.encode` encodes by the value's PHP# type, as far as the type is written,** so there a `Map` is a JSON object and a `List` is a JSON array, even when empty, and even when a `Map`'s keys run from 0 to n. PHP's own `json_encode` sees a plain array, so it gives `[]` for an empty `Map`.
-- **Below an `Any`, a value encodes as PHP sees it,** because an array carries no mark that says `List` or `Map` (decision 26). Any list-shaped array there, such as an empty `Map` or a `Map<int, V>` with keys 0 to n, encodes as a JSON array. To keep a `Map` a JSON object, write its type or use a struct.
+- **`Json.encode` encodes by the value's PHP# type,** so a `Map` is a JSON object and a `List` is a JSON array wherever it is, below an `Any` too, even when empty, and even when a `Map`'s keys run from 0 to n. A `Map` is an object the engine tells apart from a `List` (section 12).
 
 <!-- example json-encoding: statements
 import Sharp.Json.Json;
@@ -2782,9 +2907,9 @@ Json.encode(none);                                // {}
 List<int> empty = [];
 Json.encode(empty);                               // []
 Map<string, Any> loose = ["counts": none];
-Json.encode(loose);                               // {"counts":[]}: counts sits below Any
-Map<string, Map<string, int>> typed = ["counts": none];
-Json.encode(typed);                               // {"counts":{}}: the type is written
+Json.encode(loose);                               // {"counts":{}}: an empty Map below Any is still an object
+Map<string, Any> listed = ["counts": empty];
+Json.encode(listed);                              // {"counts":[]}: an empty List below Any is still an array
 ```
 
 **`Any` holds a value of any type except null. `Any?` also allows null.** A value of type `Any` must be checked with `is`, `as` or `match` before it can be used:
@@ -2844,7 +2969,7 @@ Ids.identity(5);                                // compile error: 5 is not an ob
 
 ## 25. Referring to classes
 
-**`typeof(X)`** is typed `Class<X>`. It works on every type parameter, a method's included, because every type argument reaches the running program (section 11). PHP's `Order::class` is removed.
+**`typeof(X)`** is typed `Class<X>`, for any one type `X`, as C#'s `typeof` is. It works on every type parameter, a method's included, because every type argument reaches the running program (section 11). PHP's `Order::class` is removed.
 
 <!-- example typeof-types
 public class Example
@@ -2859,6 +2984,11 @@ public class Example
 Class<Order> type = typeof(Order);
 type.attributes<Listen>();
 typeof(TItem);
+typeof(int);                    // the class value of int
+typeof(int|string);             // the class value of int|string: a union is one type
+typeof(List<Order>);            // the class value of a list of orders
+typeof(Map<string, int>);
+typeof(Self);                   // the class run was called on
 ```
 
 **`typeof(TItem)` works for any type argument, including `int`,** as C#'s `typeof(T)` does. It is a `Class<TItem>`, which can create objects, only when `TItem`'s bound is a class:
@@ -2939,7 +3069,8 @@ public class FormBuilder
 
 - **`new (type)(…)`** creates an object from a class value. The parentheses around `type` mark it as an expression, not a class name. It needs a `required` constructor, as `new Self(…)` does. For a plain PHP class, such as `Class<Model>`, the checker checks the call against that class's own constructor.
 - **A static call through a class value,** such as `type.defaultTag()` or `type.find(id)`, calls the static on the class the value holds.
-- **`Class`'s own members win,** such as `attributes`. A class cannot declare a static named like one of them, as in TypeScript's error 2699.
+- **`Class`'s own members win,** such as `attributes`. A class cannot declare a static named like one of them, as in TypeScript's error 2699. Only the standard library adds members to `Class`, so an extension of `Class<T>` elsewhere is a compile error.
+- **`attributes<TAttribute : Object>()` reads attributes, which are objects,** so `attributes<int>()` is a compile error.
 - **A class value's type need not be written.** `const type = …` holds a `Class<Element>`.
 - **A property named by a variable has no form.**
 
@@ -2950,6 +3081,7 @@ string key = "signup";
 -->
 ```csharp
 type.attributes<Listen>();                       // Class's own method
+type.attributes<int>();                          // compile error: int is not an Object
 public static string attributes() => "";         // compile error: attributes is a member of Class
 new (kind)(key);                                 // compile error: kind is a string, not a Class
 ```
@@ -2985,6 +3117,7 @@ typeof(Box<Order>) == typeof(Box<Invoice>);     // false: the same class with ot
 **`Self`** means the class a static method was actually called on. It replaces PHP's `static`. PHP's `self` is removed: to mean the declaring class, write its name.
 
 <!-- example self-return: statements
+public class Order : DatabaseEntity { public Order(Row row) : super(row) { } }
 Any value = 1;
 VerifiedUser caller = new VerifiedUser();
 -->
@@ -2992,7 +3125,12 @@ VerifiedUser caller = new VerifiedUser();
 public abstract class DatabaseEntity
 {
     public required DatabaseEntity(Row row) { … }
-    public static Self fromSchema(Any value, VerifiedUser caller) { … return new Self(row); }
+
+    public static Self fromSchema(Any value, VerifiedUser caller)
+    {
+        Row row = …;
+        return new Self(row);
+    }
 }
 
 const order = Order.fromSchema(value, caller);   // typed as Order
@@ -3000,7 +3138,7 @@ const order = Order.fromSchema(value, caller);   // typed as Order
 
 `Self` replaces the C# workaround of passing a class to itself, as in `class Order : Entity<Order>`.
 
-`Self` is written only as a return type, and in bodies as `new Self(…)` and `Self.m()`. A `Self` parameter is a compile error, because a subclass would accept any parent:
+`Self` is written only as a return type, and in bodies as `new Self(…)`, `Self.m()` and `typeof(Self)`, the class value of the class the method was called on, which replaces PHP's `static::class`. A `Self` parameter is a compile error, because a subclass would accept any parent:
 
 <!-- example self-parameter: members -->
 ```csharp
@@ -3012,7 +3150,10 @@ public bool same(Self other) { … }   // compile error: Self is a return type o
 - its leading parameters match the parameters of the `required` constructor
 - every parameter it adds has a default
 
-<!-- example required-constructors -->
+<!-- example required-constructors
+public abstract class DatabaseEntity { public required DatabaseEntity(Row row) { } }
+…
+-->
 ```csharp
 // app/Order.sharp
 namespace App;
@@ -3110,6 +3251,59 @@ import App.Billing.PriceTotals;     // extension(Map<string, Money> prices) { pu
 
 lines.total();                      // compiles: lines is a List<Line>, so LineTotals runs
 prices.total();                     // compiles: prices is a Map<string, Money>, so PriceTotals runs
+```
+
+- **An extension block can declare type parameters, as in C# 14,** so one block serves a receiver of any type argument, `extension<TItem>(List<TItem> items)`, within the type parameters' bounds (section 11). A call infers them from its receiver. A member's own type parameters come after the block's, and a call writes only those:
+
+<!-- example generic-extensions -->
+```csharp
+// app/Shared/Lists/ListExtensions.sharp
+namespace App.Shared.Lists;
+
+import App.DatabaseEntity;
+
+public static class ListExtensions
+{
+    extension<TItem>(List<TItem> items)
+    {
+        public bool holds(TItem wanted) => items.contains(wanted);
+        public List<TOut> mapped<TOut>(Function<TOut(TItem)> map) => items.map(map);
+    }
+
+    extension<TEntity : DatabaseEntity>(List<TEntity> rows)
+    {
+        public int saved => rows.count();
+    }
+}
+```
+
+<!-- example generic-extensions: statements
+List<Order> orders = [new Order()];
+List<string> names = ["spring"];
+-->
+```csharp
+import App.Shared.Lists.ListExtensions;
+
+orders.holds(new Order());              // compiles: TItem is Order, from orders
+orders.mapped<string>(o => "order");    // compiles: a List<string>, the call writes only TOut
+orders.saved;                           // compiles: an Order is a DatabaseEntity
+names.saved;                            // compile error: string is outside TEntity's bound, so List<string> has no saved
+```
+
+- **Each type parameter of an extension block appears in its receiver's type,** because the receiver is the only place a call infers it from, as C# requires:
+
+<!-- example extension-unused-type-parameter -->
+```csharp
+// app/Shared/Lists/Pairs.sharp
+namespace App.Shared.Lists;
+
+public static class Pairs
+{
+    extension<TItem, TOther>(List<TItem> items)    // compile error: the receiver List<TItem> doesn't use TOther
+    {
+        public int size() => items.count();
+    }
+}
 ```
 
 ## 27. PHP# files

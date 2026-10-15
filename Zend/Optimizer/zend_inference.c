@@ -24,6 +24,7 @@
 #include "zend_closures.h"
 #include "zend_worklist.h"
 #include "zend_optimizer_internal.h"
+#include "ext/sharp/php_sharp.h"
 
 /* The used range inference algorithm is described in:
  *     V. Campos, R. Rodrigues, I. de Assis Costa and F. Pereira.
@@ -2645,8 +2646,11 @@ static zend_always_inline zend_result _zend_update_type_info(
 			break;
 		case ZEND_CAST:
 			if (opline->extended_value == (IS_OBJECT | ZEND_SHARP_OPERATOR)) {
-				/* The receiver of a PHP# method call: an array becomes a Sharp\Collection, whose
-				 * method may change the array in the variable, and any other value passes through. */
+				/* The receiver of a PHP# method call: an array, a Sharp\Map or a Sharp\Set becomes a
+				 * Sharp\Collection, whose method may change the collection in the variable, and any other value
+				 * passes through. */
+				bool collection = (t1 & MAY_BE_ARRAY)
+					|| sharp_may_be_table(t1, ssa->var_info[ssa_op->op1_use].ce, ssa->var_info[ssa_op->op1_use].is_instanceof);
 				if (ssa_op->op1_def >= 0) {
 					tmp = t1;
 					if (t1 & MAY_BE_ARRAY) {
@@ -2669,7 +2673,7 @@ static zend_always_inline zend_result _zend_update_type_info(
 					tmp |= MAY_BE_RC1 | MAY_BE_RCN;
 				}
 				UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
-				if (t1 & MAY_BE_ARRAY) {
+				if (collection) {
 					UPDATE_SSA_OBJ_TYPE(NULL, 0, ssa_op->result_def);
 				} else {
 					COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->result_def);
@@ -3878,8 +3882,9 @@ static zend_always_inline zend_result _zend_update_type_info(
 				}
 				if (opline->opcode == ZEND_FETCH_OBJ_R
 						&& (opline->extended_value & ZEND_SHARP_OPERATOR)
-						&& (tmp & MAY_BE_ARRAY)) {
-					/* The receiver of a PHP# method call: an array becomes a Sharp\Collection. */
+						&& ((tmp & MAY_BE_ARRAY) || sharp_may_be_table(tmp, ce, true))) {
+					/* The receiver of a PHP# method call: an array, a Sharp\Map or a Sharp\Set becomes a
+					 * Sharp\Collection. */
 					tmp |= MAY_BE_OBJECT | MAY_BE_RC1 | MAY_BE_RCN;
 					ce = NULL;
 				}
@@ -3914,8 +3919,9 @@ static zend_always_inline zend_result _zend_update_type_info(
 			}
 			if (opline->opcode == ZEND_FETCH_STATIC_PROP_R
 					&& (opline->extended_value & ZEND_SHARP_OPERATOR)
-					&& (tmp & MAY_BE_ARRAY)) {
-				/* The receiver of a PHP# method call: an array becomes a Sharp\Collection. */
+					&& ((tmp & MAY_BE_ARRAY) || sharp_may_be_table(tmp, ce, true))) {
+				/* The receiver of a PHP# method call: an array, a Sharp\Map or a Sharp\Set becomes a
+				 * Sharp\Collection. */
 				tmp |= MAY_BE_OBJECT | MAY_BE_RC1 | MAY_BE_RCN;
 				ce = NULL;
 			}
