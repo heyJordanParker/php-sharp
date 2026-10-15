@@ -1,0 +1,45 @@
+namespace Handlers;
+
+public interface Handler<T>
+{
+    void handle(T item);
+}
+
+public class Order
+{
+    public Order(public int id { get; })
+    {
+    }
+}
+
+// `handle` takes an `Order` where `Handler.handle` erases its parameter to `Any?`.
+public class OrderHandler : Handler<Order>
+{
+    public int handled { get; private set; } = 0;
+
+    public void handle(Order item)
+    {
+        this.handled = this.handled + item.id;
+    }
+}
+
+public class Inbox<T>
+{
+    public virtual int count(T item) => 0;
+}
+
+// `count` overrides a class's method with the type argument's type.
+public class OrderInbox : Inbox<Order>
+{
+    public override int count(Order item) => item.id;
+}
+
+public class Dispatch
+{
+    public static int tally(Inbox<Order> inbox, int id) => inbox.count(new Order(id));
+
+    public static void send(Handler<Order> handler, int id)
+    {
+        handler.handle(new Order(id));
+    }
+}

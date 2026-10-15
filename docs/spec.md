@@ -361,9 +361,25 @@ A clause after the property names its behaviors. It reads as "get/set via Trimme
 public string name { get; set; } via Trimmed, Tracked = "";
 ```
 
-- A behavior is a class that implements `get` and `set` once.
-- The property forwards its accessors to one behavior instance per object, held in a hidden slot.
-- Several behaviors run in the order they are written, each one wrapping the next.
+A behavior implements `get` and `set` once, as a class that implements the standard library's `Behavior<T>` for the property's type:
+
+<!-- example behavior-class -->
+```csharp
+namespace App.Text;
+
+import Sharp.Behavior;
+
+public class Trimmed : Behavior<string>
+{
+    public string get(string value) => value;          // a read returns what is stored
+    public string set(string value) => value.trim();   // a write stores the trimmed text
+}
+```
+
+- A behavior is a class that implements `Behavior<T>` for the property's type, and its constructor takes no arguments. A behavior for another type, an interface, an abstract class, or a constructor that needs an argument is a compile error.
+- `via` goes on an instance auto-property with `get; set;`. A property in an interface or an `abstract` one has no storage to run around, a static one has no object to keep behaviors in, and one with an accessor body already says how it reads and writes, so each is a compile error. A constructor parameter takes no `via`: declare the property in the class body.
+- Each object creates its own behaviors with `new` when it is constructed, before any initial value, and keeps each one in a hidden slot. Two objects never share a behavior's state.
+- A write runs each behavior's `set` in the order they are written, then stores the result. A read runs each behavior's `get` the other way, so the first behavior wraps the rest. The initial value is a write, so it runs through each `set`.
 
 ### 6.5 `lazy`
 
@@ -775,6 +791,32 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 public class PaginatedList<TItem : DatabaseEntity> { … }
 public PaginatedList<TItem> list<TItem : DatabaseEntity>(Query<TItem> query) { … }
 public TValue keep<TValue : Object>(TValue value) => value;
+```
+
+**A class that implements or extends a generic type takes its type argument's type,** as in C#, Java, Kotlin, TypeScript and Rust: `OrderHandler : Handler<Order>` writes `handle(Order item)`. A call from plain PHP still checks `item` against `Order`, and a value of another type throws `TypeError`, as Java's bridge method casts it:
+
+<!-- example generic-implementation -->
+```csharp
+namespace App.Handlers;
+
+import App.Order;
+
+public interface Handler<T>
+{
+    void handle(T item);
+}
+
+public class OrderHandler : Handler<Order>
+{
+    public void handle(Order item) { }   // compiles: takes the type argument's type
+}
+```
+
+<!-- example generic-implementation: statements
+$handler = new App\Handlers\OrderHandler();
+-->
+```php
+$handler->handle("x");   // throws TypeError: handle takes an Order
 ```
 
 **`Self` on a receiver typed by a type parameter is that type parameter** (section 25). In `TBox refill<TBox : Box<int>>(TBox box)`, `box.withValue(5)` returns a `TBox`, not `Box<int>`, as Rust's `t.clone()` on a `T: Clone` returns a `T`:

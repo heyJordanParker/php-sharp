@@ -197,15 +197,16 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 
 | Line | Rule | Today | Mechanism | Reuses |
 |---|---|---|---|---|
-| 319, 323 | `public string name { get; set; } via Trimmed, Tracked;` | Refused at parse: `Via`, "`via` is not supported yet in PHP#." from `skip_via_clause` | See below, to question 10's recommendation | |
-| 326 | A behavior implements `get` and `set` once | No | Question 10 | |
-| 327 | One behavior instance per object, in a hidden slot | No | The bridge | Named constructors' hidden local `this#1` |
-| 328 | Behaviors run in written order, each wrapping the next | No | The bridge | |
+| 319, 323 | `public string name { get; set; } via Trimmed, Tracked;` | Built: `PropertyBehaviorList` on `HookedProperty`, and the spec example passes | See below | |
+| 326 | A behavior implements `get` and `set` once | Built: `Sharp\Behavior<T>`, checked as `invalid-property-behavior`. It needed #102's erasure to take `string set(string value)`, so an implementation's parameter that takes its type argument is widened (Queue 13) | Question 10 | #102's erased signature check |
+| 327 | One behavior instance per object, in a hidden slot | Built: `name#via0` slots that the constructor fills before the initial values | The bridge | Named constructors' hidden local `this#1` |
+| 328 | Behaviors run in written order, each wrapping the next | Built: `behaviors.phpt` | The bridge | |
 
 - **Syntax:** `BehaviorList { via, behaviors }` on `HookedProperty` and on a promoted parameter, parsed where `skip_via_clause` skips it today. `skip_via_clause` and its `NotSupportedYetInSharp("`via`")` go.
 - **Names:** each behavior binds as a class name.
 - **Semantics:** `via` only where question 10 allows it. On a parameter, decision 4's error.
-- **Analyzer:** each behavior implements `Behavior<T>` for the property's type, as `invalid-property-behavior`: "`Trimmed` is a `Behavior<string>`, and `count` is an `int`."
+- **Analyzer:** each behavior implements `Behavior<T>` for the property's type, as `invalid-property-behavior`: "`Trimmed` is a `Behavior<string>`, and `count` is an `int`." The same code refuses a behavior that `new` with no arguments can't create: an interface, an abstract class, or a constructor with a required parameter.
+- **Generics (Queue 13):** `validate_erased_signature_compatibility` marks a narrowed parameter `substitutes` when the parent's parameter names a type parameter of its class. For a PHP# class's own method, `widens_parameter` records it in `AnalysisArtifacts::widened_parameters` instead of refusing it. The bridge declares it with no PHP type and lists its written type in the method's metadata, which `ZEND_SHARP_RECV_TYPE_ARGS` checks on a call from plain PHP. The refusal stays for a plain PHP class, a method the class inherits, and a narrowing no type parameter explains (`parent`, PHP's `callable`). Engine: `handlers.phpt`.
 - **The bridge:** one private property per behavior, named `name#via0` and `name#via1`, which PHP source can't spell, as the bridge already names `this#1`. The constructor fills them with `new \App\Trimmed()` before the initial values. The property gets two hooks: `get => $this->{'name#via0'}->get($this->{'name#via1'}->get($this->name))` and `set { $this->name = $this->{'name#via1'}->set($this->{'name#via0'}->set($value)); }`.
 - **Standard library:** `sharp/composer/library/Sharp/Behavior.sharp` declares `Behavior<T>`, if question 10 says so.
 - **Engine:** `Behaviors.sharp` and `behaviors.phpt`: the order of two behaviors, one instance per object, and two objects that keep separate behavior state.
