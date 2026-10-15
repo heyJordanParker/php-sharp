@@ -5532,10 +5532,11 @@ static uint32_t zend_add_sharp_open_type_text(zend_ast *text_ast)
 	return zend_add_literal_string(&text);
 }
 
-/* The PHP type `type_ast` of a property or a promoted parameter. A ZEND_AST_SHARP_TYPE_ARGS wraps the PHP type of one
- * whose PHP# type a write from plain PHP checks, with the type text, which may name the class's type parameters as `$i`,
- * interned into `sharp_type`. A closed text is checked here. */
-static zend_ast *zend_sharp_property_type(zend_ast *type_ast, zend_string **sharp_type)
+/* The PHP type `type_ast` of a property, a promoted parameter or a function's result. A ZEND_AST_SHARP_TYPE_ARGS wraps
+ * the PHP type of a property whose PHP# type a write from plain PHP checks, and the result type of a PHP# method or
+ * lambda, with the type text, the property's type or the function's whole type, which may name type parameters as `$i`
+ * and `#i`, interned into `sharp_type`. A closed text is checked here. */
+static zend_ast *zend_sharp_declared_type(zend_ast *type_ast, zend_string **sharp_type)
 {
 	if (!type_ast || type_ast->kind != ZEND_AST_SHARP_TYPE_ARGS) {
 		return type_ast;
@@ -8131,7 +8132,7 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 	for (i = 0; i < list->children; ++i) {
 		zend_ast *param_ast = list->child[i];
 		zend_string *sharp_type = NULL;
-		zend_ast *type_ast = zend_sharp_property_type(param_ast->child[0], &sharp_type);
+		zend_ast *type_ast = zend_sharp_declared_type(param_ast->child[0], &sharp_type);
 		zend_ast *var_ast = param_ast->child[1];
 		zend_ast **default_ast_ptr = &param_ast->child[2];
 		zend_ast *attributes_ast = param_ast->child[3];
@@ -8822,6 +8823,7 @@ static zend_op_array *zend_compile_func_decl_ex(
 	memset(&info, 0, sizeof(closure_info));
 
 	init_op_array(op_array, ZEND_USER_FUNCTION, INITIAL_OP_ARRAY_SIZE);
+	return_type_ast = zend_sharp_declared_type(return_type_ast, &op_array->sharp_type);
 
 	if (CG(compiler_options) & ZEND_COMPILE_PRELOAD) {
 		op_array->fn_flags |= ZEND_ACC_PRELOADED;
@@ -9356,7 +9358,7 @@ static void zend_compile_prop_group(zend_ast *ast) /* {{{ */
 	zend_ast *prop_ast = ast->child[1];
 	zend_ast *attr_ast = ast->child[2];
 	zend_string *sharp_type = NULL;
-	zend_ast *type_ast = zend_sharp_property_type(ast->child[0], &sharp_type);
+	zend_ast *type_ast = zend_sharp_declared_type(ast->child[0], &sharp_type);
 
 	zend_compile_prop_decl(prop_ast, type_ast, ast->attr, attr_ast, sharp_type);
 	if (sharp_type) {

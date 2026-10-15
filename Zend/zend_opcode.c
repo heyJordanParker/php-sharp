@@ -90,6 +90,7 @@ void init_op_array(zend_op_array *op_array, uint8_t type, int initial_ops_size)
 
 	op_array->num_dynamic_func_defs = 0;
 	op_array->dynamic_func_defs = NULL;
+	op_array->sharp_type = NULL;
 
 	ZEND_MAP_PTR_INIT(op_array->run_time_cache, NULL);
 	op_array->cache_size = zend_op_array_extension_handles * sizeof(void*);
@@ -621,6 +622,9 @@ ZEND_API void destroy_op_array(zend_op_array *op_array)
 	zend_string_release_ex(op_array->filename, 0);
 	if (op_array->doc_comment) {
 		zend_string_release_ex(op_array->doc_comment, 0);
+	}
+	if (op_array->sharp_type) {
+		zend_string_release_ex(op_array->sharp_type, 0);
 	}
 	if (op_array->attributes) {
 		zend_hash_release(op_array->attributes);

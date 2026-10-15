@@ -2117,6 +2117,9 @@ struct _sharp_type_node {
 	uint32_t class_parameter;
 	/* For `#i` in an open text, i + 1: it stands for the method's own type argument at index i. 0 for any other type. */
 	uint32_t method_parameter;
+	/* A SHARP_TYPE_FUNCTION's members are its result, its parameters, then the effect classes its `uses` lists, which
+	 * are the last `effects` of them. */
+	uint32_t effects;
 	uint32_t count;
 	sharp_type_node *first;
 	sharp_type_node *last;
@@ -2368,7 +2371,7 @@ static const sharp_type *sharp_type_intern(const sharp_type_node *node, bool fro
 	return type;
 }
 
-/* `name`, `name<A, B>` or `Function<R(P1, P2)>`. */
+/* `name`, `name<A, B>`, `Function<R(P1, P2)>` or `Function<R(P1, P2) uses E1, E2>`. */
 static sharp_type_node *sharp_type_read_atom(sharp_type_reader *reader)
 {
 	const char *start = reader->at;
@@ -2416,6 +2419,20 @@ static sharp_type_node *sharp_type_read_atom(sharp_type_reader *reader)
 			if (!sharp_type_skip(reader, ")")) {
 				return NULL;
 			}
+		}
+		/* Each effect is a class, sorted after the one before it, as spec section 29 lists them in `uses`. */
+		if (sharp_type_skip(reader, " uses ")) {
+			do {
+				sharp_type_node *effect = sharp_type_read_atom(reader);
+
+				if (!effect || effect->kind != SHARP_TYPE_NAMED || !effect->name || effect->count
+					|| (type->effects
+						&& zend_binary_strcmp(type->last->text, type->last->length, effect->text, effect->length) >= 0)) {
+					return NULL;
+				}
+				sharp_type_node_add(type, effect);
+				type->effects++;
+			} while (sharp_type_skip(reader, ", "));
 		}
 		if (!sharp_type_skip(reader, ">")) {
 			return NULL;
@@ -2887,13 +2904,25 @@ static void sharp_type_node_spell(sharp_type_node *node, zend_arena **arena)
 		case SHARP_TYPE_INTERSECTION:
 			sharp_type_node_join(&text, node->first, " & ");
 			break;
-		case SHARP_TYPE_FUNCTION:
+		case SHARP_TYPE_FUNCTION: {
 			smart_str_appends(&text, "Function<");
 			smart_str_appendl(&text, node->first->text, node->first->length);
 			smart_str_appendc(&text, '(');
-			sharp_type_node_join(&text, node->first->next, ", ");
-			smart_str_appends(&text, ")>");
+			const sharp_type_node *member = node->first->next;
+			for (uint32_t i = 0; i < node->count - 1 - node->effects; i++, member = member->next) {
+				if (i) {
+					smart_str_appends(&text, ", ");
+				}
+				smart_str_appendl(&text, member->text, member->length);
+			}
+			smart_str_appendc(&text, ')');
+			if (member) {
+				smart_str_appends(&text, " uses ");
+				sharp_type_node_join(&text, member, ", ");
+			}
+			smart_str_appendc(&text, '>');
 			break;
+		}
 	}
 
 	char *spelling = zend_arena_alloc(arena, ZSTR_LEN(text.s));
@@ -3546,7 +3575,20 @@ static const sharp_type *sharp_type_walked(const sharp_type *type, const zval *v
 	}
 }
 
-static bool sharp_type_holds(const sharp_type *type, const zval *value, bool int_as_float, sharp_type_problems *problems);
+/* How sharp_type_holds takes a value. */
+typedef enum {
+	/* As `is` tests it: a closure plain PHP made, with no PHP# type, is of no function type. */
+	SHARP_HOLDS_TEST,
+	/* As a value from plain PHP enters PHP#: such a closure is of every function type, since PHP's own check of
+	 * `Closure` is all plain PHP gives it, as a raw generic object has its bounds. */
+	SHARP_HOLDS_ENTRY,
+	/* As SHARP_HOLDS_ENTRY, with an int of `float`, which entry then converts. */
+	SHARP_HOLDS_ENTRY_INT_AS_FLOAT,
+} sharp_holds_mode;
+
+static bool sharp_type_holds(
+	const sharp_type *type, const zval *value, sharp_holds_mode mode, sharp_type_problems *problems);
+static bool sharp_closure_is(const zval *value, const sharp_type *type, sharp_holds_mode mode);
 
 /* Whether `key`, or the int `index` when `key` is NULL, is a key of the PHP array a plain PHP caller gives for a `Map`
  * whose keys are of `type`. PHP stores the key `"5"` as the int 5, so a `string` key type takes every key, a backed enum
@@ -3589,7 +3631,7 @@ static bool sharp_type_holds_key(const sharp_type *type, zend_ulong index, zend_
 		ZVAL_LONG(&value, (zend_long) index);
 	}
 
-	return sharp_type_holds(type, &value, false, NULL);
+	return sharp_type_holds(type, &value, SHARP_HOLDS_ENTRY, NULL);
 }
 
 /* Whether the entry `element` under `key` of a collection holds, where `key_holds` says whether the key is of `keys`,
@@ -3597,7 +3639,7 @@ static bool sharp_type_holds_key(const sharp_type *type, zend_ulong index, zend_
  * walk's path while it is checked: `["name"]` for a string key, `[5]` for an int, and the key's own text for any other
  * key a Sharp\Map holds, as `[object Lib\Standing::Active]`. Without `problems`, a bad key stops the check. */
 static bool sharp_type_entry_holds(const sharp_type *keys, bool key_holds, const zval *key, const sharp_type *elements,
-	const zval *element, bool int_as_float, sharp_type_problems *problems)
+	const zval *element, sharp_holds_mode mode, sharp_type_problems *problems)
 {
 	size_t length = 0;
 	if (problems) {
@@ -3619,7 +3661,7 @@ static bool sharp_type_entry_holds(const sharp_type *keys, bool key_holds, const
 	if (!key_holds && problems) {
 		sharp_type_problem(problems, "key ", keys, key);
 	}
-	if ((holds || problems) && !sharp_type_holds(elements, element, int_as_float, problems)) {
+	if ((holds || problems) && !sharp_type_holds(elements, element, mode, problems)) {
 		holds = false;
 	}
 
@@ -3635,7 +3677,7 @@ static bool sharp_type_entry_holds(const sharp_type *keys, bool key_holds, const
  * at its position in the Set's order. An int it accepts for a float stays an int, since the table may be shared. The
  * table is held while it is walked, so a write that a check runs through a holder copies it first. */
 static bool sharp_type_table_holds(
-	const sharp_type *type, zend_object *table, bool int_as_float, sharp_type_problems *problems)
+	const sharp_type *type, zend_object *table, sharp_holds_mode mode, sharp_type_problems *problems)
 {
 	const sharp_type *keys = type->built_in == SHARP_BUILT_IN_MAP ? type->members[0] : NULL;
 	const sharp_type *elements = sharp_type_elements(type);
@@ -3647,8 +3689,8 @@ static bool sharp_type_table_holds(
 		ZVAL_LONG(&at, position++);
 		const zval *key = keys ? &bucket->key : &at;
 		const zval *element = keys ? &bucket->value : &bucket->key;
-		bool key_holds = !keys || sharp_type_holds(keys, &bucket->key, int_as_float, NULL);
-		if (!sharp_type_entry_holds(keys, key_holds, key, elements, element, int_as_float, problems)) {
+		bool key_holds = !keys || sharp_type_holds(keys, &bucket->key, mode, NULL);
+		if (!sharp_type_entry_holds(keys, key_holds, key, elements, element, mode, problems)) {
 			holds = false;
 		}
 		if (UNEXPECTED(EG(exception)) || (!holds && !problems)) {
@@ -3663,10 +3705,10 @@ static bool sharp_type_table_holds(
 /* Whether `value`, an array, or the Sharp\Map or Sharp\Set of a `Map` or a `Set`, is of the collection `type`, each
  * element checked by sharp_type_holds. */
 static bool sharp_type_collection_holds(
-	const sharp_type *type, const zval *value, bool int_as_float, sharp_type_problems *problems)
+	const sharp_type *type, const zval *value, sharp_holds_mode mode, sharp_type_problems *problems)
 {
 	if (Z_TYPE_P(value) == IS_OBJECT) {
-		return sharp_type_table_holds(type, Z_OBJ_P(value), int_as_float, problems);
+		return sharp_type_table_holds(type, Z_OBJ_P(value), mode, problems);
 	}
 	if (type->built_in == SHARP_BUILT_IN_LIST && !zend_array_is_list(Z_ARRVAL_P(value))) {
 		if (problems) {
@@ -3689,7 +3731,7 @@ static bool sharp_type_collection_holds(
 			ZVAL_LONG(&key, (zend_long) index);
 		}
 		bool key_holds = !keys || sharp_type_holds_key(keys, index, name);
-		if (!sharp_type_entry_holds(keys, key_holds, &key, elements, element, int_as_float, problems)) {
+		if (!sharp_type_entry_holds(keys, key_holds, &key, elements, element, mode, problems)) {
 			holds = false;
 		}
 		if (UNEXPECTED(EG(exception)) || (!holds && !problems)) {
@@ -3700,18 +3742,18 @@ static bool sharp_type_collection_holds(
 	return holds;
 }
 
-/* Whether `value` is of `type`, as sharp_type_accepts decides, with an int of `float` only when `int_as_float`. With
- * `problems`, it adds a problem for each bad value: an element of a collection at its own path, any other value at the
- * path the walk is at. */
-static bool sharp_type_holds(const sharp_type *type, const zval *value, bool int_as_float, sharp_type_problems *problems)
+/* Whether `value` is of `type`, as `mode` takes it. With `problems`, it adds a problem for each bad value: an element of
+ * a collection at its own path, any other value at the path the walk is at. */
+static bool sharp_type_holds(
+	const sharp_type *type, const zval *value, sharp_holds_mode mode, sharp_type_problems *problems)
 {
 	ZVAL_DEREF(value);
 	if (problems) {
 		const sharp_type *walked = sharp_type_walked(type, value);
 		if (walked) {
-			return sharp_type_collection_holds(walked, value, int_as_float, problems);
+			return sharp_type_collection_holds(walked, value, mode, problems);
 		}
-		if (sharp_type_holds(type, value, int_as_float, NULL)) {
+		if (sharp_type_holds(type, value, mode, NULL)) {
 			return true;
 		}
 		if (!EG(exception)) {
@@ -3722,23 +3764,23 @@ static bool sharp_type_holds(const sharp_type *type, const zval *value, bool int
 
 	switch (type->kind) {
 		case SHARP_TYPE_NULLABLE:
-			return Z_TYPE_P(value) == IS_NULL || sharp_type_holds(type->members[0], value, int_as_float, NULL);
+			return Z_TYPE_P(value) == IS_NULL || sharp_type_holds(type->members[0], value, mode, NULL);
 		case SHARP_TYPE_UNION:
 			for (uint32_t i = 0; i < type->count; i++) {
-				if (sharp_type_holds(type->members[i], value, int_as_float, NULL)) {
+				if (sharp_type_holds(type->members[i], value, mode, NULL)) {
 					return true;
 				}
 			}
 			return false;
 		case SHARP_TYPE_INTERSECTION:
 			for (uint32_t i = 0; i < type->count; i++) {
-				if (!sharp_type_holds(type->members[i], value, int_as_float, NULL)) {
+				if (!sharp_type_holds(type->members[i], value, mode, NULL)) {
 					return false;
 				}
 			}
 			return true;
 		case SHARP_TYPE_FUNCTION:
-			return true;
+			return sharp_closure_is(value, type, mode);
 		case SHARP_TYPE_LIST:
 			ZEND_UNREACHABLE();
 		case SHARP_TYPE_NAMED:
@@ -3751,7 +3793,7 @@ static bool sharp_type_holds(const sharp_type *type, const zval *value, bool int
 		case SHARP_BUILT_IN_INT:
 			return Z_TYPE_P(value) == IS_LONG;
 		case SHARP_BUILT_IN_FLOAT:
-			return Z_TYPE_P(value) == IS_DOUBLE || (int_as_float && Z_TYPE_P(value) == IS_LONG);
+			return Z_TYPE_P(value) == IS_DOUBLE || (mode == SHARP_HOLDS_ENTRY_INT_AS_FLOAT && Z_TYPE_P(value) == IS_LONG);
 		case SHARP_BUILT_IN_BOOL:
 			return Z_TYPE_P(value) == IS_TRUE || Z_TYPE_P(value) == IS_FALSE;
 		case SHARP_BUILT_IN_STRING:
@@ -3765,10 +3807,10 @@ static bool sharp_type_holds(const sharp_type *type, const zval *value, bool int
 		case SHARP_BUILT_IN_LIST:
 		case SHARP_BUILT_IN_MAP:
 		case SHARP_BUILT_IN_SET:
-			return sharp_type_collects(type, value) && sharp_type_collection_holds(type, value, int_as_float, NULL);
+			return sharp_type_collects(type, value) && sharp_type_collection_holds(type, value, mode, NULL);
 		case SHARP_BUILT_IN_ITERABLE:
 			if (Z_TYPE_P(value) == IS_ARRAY) {
-				return sharp_type_collection_holds(type, value, int_as_float, NULL);
+				return sharp_type_collection_holds(type, value, mode, NULL);
 			}
 			return Z_TYPE_P(value) == IS_OBJECT && instanceof_function(Z_OBJCE_P(value), zend_ce_traversable);
 		case SHARP_BUILT_IN_CLASS:
@@ -3790,12 +3832,12 @@ static const sharp_type *sharp_type_converting(const sharp_type *type, const zva
 			return Z_TYPE_P(value) == IS_NULL ? NULL : sharp_type_converting(type->members[0], value);
 		case SHARP_TYPE_UNION:
 			for (uint32_t i = 0; i < type->count; i++) {
-				if (sharp_type_holds(type->members[i], value, false, NULL)) {
+				if (sharp_type_holds(type->members[i], value, SHARP_HOLDS_ENTRY, NULL)) {
 					return NULL;
 				}
 			}
 			for (uint32_t i = 0; i < type->count; i++) {
-				if (sharp_type_holds(type->members[i], value, true, NULL)) {
+				if (sharp_type_holds(type->members[i], value, SHARP_HOLDS_ENTRY_INT_AS_FLOAT, NULL)) {
 					return sharp_type_converting(type->members[i], value);
 				}
 			}
@@ -3855,10 +3897,11 @@ static void sharp_type_convert(const sharp_type *type, zval *value)
 bool sharp_type_accepts(const sharp_type *type, zval *value, sharp_type_problems *problems)
 {
 	/* A value that holds without converting an int is taken in one walk. */
-	if (sharp_type_holds(type, value, false, NULL)) {
+	if (sharp_type_holds(type, value, SHARP_HOLDS_ENTRY, NULL)) {
 		return !EG(exception);
 	}
-	if (UNEXPECTED(EG(exception)) || !sharp_type_holds(type, value, true, problems) || UNEXPECTED(EG(exception))) {
+	if (UNEXPECTED(EG(exception))
+		|| !sharp_type_holds(type, value, SHARP_HOLDS_ENTRY_INT_AS_FLOAT, problems) || UNEXPECTED(EG(exception))) {
 		return false;
 	}
 	sharp_type_convert(type, value);
@@ -4019,7 +4062,7 @@ bool sharp_type_list_holds(const sharp_type *list, const zval *value)
 	}
 
 	/* A lazy proxy's initializer runs to read its type arguments, and can throw. */
-	return sharp_type_holds(list->members[0], value, false, NULL) && !EG(exception);
+	return sharp_type_holds(list->members[0], value, SHARP_HOLDS_TEST, NULL) && !EG(exception);
 }
 
 zend_string *sharp_type_list_class_value(const sharp_type *list, bool whole)
@@ -4109,7 +4152,7 @@ static ZEND_COLD zend_string *sharp_first_problem(const sharp_type *type, const 
 	zval problems;
 	array_init(&problems);
 	sharp_type_problems found = {&problems, {0}};
-	sharp_type_holds(type, value, true, &found);
+	sharp_type_holds(type, value, SHARP_HOLDS_ENTRY_INT_AS_FLOAT, &found);
 	smart_str_free(&found.path);
 
 	zend_string *path;
@@ -4280,10 +4323,58 @@ bool sharp_object_open_properties_accept(zend_object *object)
 static bool sharp_type_arguments_fit(
 	const sharp_type_node *arguments, const zend_class_entry *ce, sharp_type_reader *reader);
 
+/* Whether a function of the type `given` can be assigned to the function type `wanted`, spec section 21, by the rules the
+ * checker assigns one by: `wanted` lists each effect `given` has, each parameter type of `wanted` is within `given`'s at
+ * its place, and `given`'s result is within `wanted`'s unless that is `void` or `Any?`. A function may take fewer
+ * parameters than `wanted` passes, and more only from the index `required` on, where its own parameters are optional. */
+static bool sharp_type_function_fits(
+	sharp_type_node *given, sharp_type_node *wanted, uint32_t required, sharp_type_reader *reader)
+{
+	uint32_t given_parameters = given->count - 1 - given->effects;
+	uint32_t wanted_parameters = wanted->count - 1 - wanted->effects;
+
+	sharp_type_node *allowed = wanted->first;
+	for (uint32_t i = 0; i <= wanted_parameters; i++) {
+		allowed = allowed->next;
+	}
+	sharp_type_node *effect = given->first;
+	for (uint32_t i = 0; i <= given_parameters; i++) {
+		effect = effect->next;
+	}
+	/* Spec section 29 compares effects by their class names, which PHP compares without case. */
+	for (; effect; effect = effect->next) {
+		sharp_type_node *listed = allowed;
+		while (listed && zend_binary_strcasecmp(effect->text, effect->length, listed->text, listed->length) != 0) {
+			listed = listed->next;
+		}
+		if (!listed) {
+			return false;
+		}
+	}
+
+	sharp_type_node *parameter = given->first->next;
+	sharp_type_node *passed = wanted->first->next;
+	for (uint32_t i = 0; i < given_parameters; i++, parameter = parameter->next) {
+		if (i >= wanted_parameters) {
+			if (i < required) {
+				return false;
+			}
+			break;
+		}
+		if (!sharp_type_fits(passed, parameter, reader)) {
+			return false;
+		}
+		passed = passed->next;
+	}
+
+	return sharp_type_node_is(wanted->first, "void") || sharp_type_node_is(wanted->first, "Any?")
+		|| sharp_type_fits(given->first, wanted->first, reader);
+}
+
 /* Whether `type` is within `bound`: `Any?` holds every type, `Any` every type but null, a class its subclasses, a class
- * with type arguments each subclass whose header gives it type arguments its own take, an intersection what each of its
- * classes holds, and any other bound only itself. A union is within a bound when each of its members is, and an
- * intersection when one of its classes is. */
+ * with type arguments each subclass whose header gives it type arguments its own take, a function type each function
+ * type that can be assigned to it, an intersection what each of its classes holds, and any other bound only itself. A
+ * union is within a bound when each of its members is, and an intersection when one of its classes is. */
 static bool sharp_type_fits(sharp_type_node *type, sharp_type_node *bound, sharp_type_reader *reader)
 {
 	if (sharp_type_node_is(bound, "Any?")) {
@@ -4332,6 +4423,10 @@ static bool sharp_type_fits(sharp_type_node *type, sharp_type_node *bound, sharp
 
 		return false;
 	}
+	/* A function type has no default for a parameter, so each it takes is one a caller passes. */
+	if (bound->kind == SHARP_TYPE_FUNCTION) {
+		return type->kind == SHARP_TYPE_FUNCTION && sharp_type_function_fits(type, bound, UINT32_MAX, reader);
+	}
 	if (bound->kind != SHARP_TYPE_NAMED || !bound->name) {
 		return sharp_type_argument_fits(type, bound, '=', reader);
 	}
@@ -4359,6 +4454,53 @@ static bool sharp_type_fits(sharp_type_node *type, sharp_type_node *bound, sharp
 	}
 
 	return true;
+}
+
+/* Whether `value` is a closure whose function's type can be assigned to the function type `type`, spec section 21, as
+ * sharp_type_function_fits decides. A PHP# function declares its type, spelled for the object the closure is bound to
+ * and the method type arguments it captured. A closure of a plain PHP function, or one whose type names a type parameter
+ * it has no type argument for, has no type to compare, so `mode` decides. */
+static bool sharp_closure_is(const zval *value, const sharp_type *type, sharp_holds_mode mode)
+{
+	if (Z_TYPE_P(value) != IS_OBJECT || Z_OBJCE_P(value) != zend_ce_closure) {
+		return false;
+	}
+	const zend_function *func = zend_get_closure_method_def(Z_OBJ_P(value));
+	if (func->type != ZEND_USER_FUNCTION || !func->op_array.sharp_type) {
+		return mode != SHARP_HOLDS_TEST;
+	}
+
+	zval text;
+	ZVAL_INTERNED_STR(&text, func->op_array.sharp_type);
+	zval *this_ptr = zend_get_closure_this_ptr((zval *) value);
+	zend_object *object = Z_TYPE_P(this_ptr) == IS_OBJECT ? Z_OBJ_P(this_ptr) : NULL;
+	if (!object && memchr(Z_STRVAL(text), '$', Z_STRLEN(text))) {
+		return mode != SHARP_HOLDS_TEST;
+	}
+	/* A lambda that names its method's own type parameters captures the method's type arguments, as its frame keeps
+	 * them. A closure made from a method owns no statics, as zend_closure_get_gc says. */
+	HashTable *captured = !(func->common.fn_flags & ZEND_ACC_FAKE_CLOSURE)
+		? ZEND_MAP_PTR_GET(func->op_array.static_variables_ptr) : NULL;
+	zval *arguments = captured ? zend_hash_find(captured, sharp_type_arguments_key) : NULL;
+	const sharp_type *method = arguments && Z_TYPE_P(arguments) == IS_PTR ? Z_PTR_P(arguments) : NULL;
+	void *cache[4] = {NULL};
+	const sharp_type *own = sharp_type_list_of_frame(&text, object, method, true, func->common.scope, cache);
+	if (!own) {
+		return false;
+	}
+
+	zend_string *spelled = own->members[0]->text;
+	sharp_type_reader reader = sharp_type_reader_of(ZSTR_VAL(spelled), ZSTR_LEN(spelled), zend_arena_create(1024));
+	sharp_type_node *given = sharp_type_read(&reader);
+	sharp_type_reader tested = sharp_type_reader_of(ZSTR_VAL(type->text), ZSTR_LEN(type->text), reader.arena);
+	sharp_type_node *wanted = sharp_type_read(&tested);
+	reader.arena = tested.arena;
+	/* A type with a type parameter no type argument was given for reads as no type. */
+	bool is = given && wanted && given->kind == SHARP_TYPE_FUNCTION
+		&& sharp_type_function_fits(given, wanted, func->common.required_num_args, &reader);
+	zend_arena_destroy(reader.arena);
+
+	return is || (!given && mode != SHARP_HOLDS_TEST);
 }
 
 /* Whether `node`, read from input, is a type code can spell, made so in one walk of its members before it: each class
