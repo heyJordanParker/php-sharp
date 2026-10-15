@@ -59,6 +59,9 @@ try {
 echo Overrides\Tally::run(), ' ', Overrides\Tally::current(), "\n";
 Overrides\Tally::rename('Bo');
 
+// A static with a `get` body and no storage needs no initial value, and computes on each read.
+echo Overrides\Tally::square(), "\n";
+
 // Every path through the constructor sets the get-only `T?` `note` and the settable `level`, so neither has an
 // initial value, and `note` stays PHP's `readonly` with no default. The settable `T?` `nickname` starts as null.
 $claimed = new Overrides\Member('hi', true);
@@ -92,6 +95,7 @@ Cannot modify private(set) property Overrides\Account::$name from global scope
 Cannot modify private(set) property Overrides\Registry::$size from global scope
 16 7
 label Bo
+4
 string(2) "hi"
 int(2)
 NULL
