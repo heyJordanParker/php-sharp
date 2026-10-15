@@ -36,7 +36,7 @@ Each decides what a user writes. Each has its proposal and its answer, which the
    - **Proposed:** the Slice builds section 30 whole, because a tuple a user cannot unpack or read is no use. A tuple type `[Money, int]` or `[Money total, int count]` is mago's sealed list shape, shown in messages as written. A list literal becomes a tuple where a tuple is declared. `const [a, b] = t` unpacks it, and `t.total` reads a named element. At run time a tuple is a PHP list. A single loop variable over a `Map` is the tuple `[TKey, TValue]`, and a `Map` that lands in an `Iterable<T>` place gives its entries. The PR writes `Completes: §12, §17, §30`.
    - Build only the `Map` entry: a single loop variable is typed `[TKey, TValue]`, and every tuple type, literal and unpacking stays a parse error until a section 30 Slice. `entry` can then only be passed on.
    - A section 30 Slice lands first, and this PR waits for it.
-   - **Answered: as proposed.** A tuple type is the CST's `TupleHint` of `TupleElementHint`s, and codex's `TList` of its element types with `tuple_names`. A local declaration's `target` is a `LocalTarget`, a name or a `LocalUnpack`. A PHP# `Iterable<T>` is a `TIterable` with `map_entries`, so a `Map` held as one gives `[TKey, TValue]`. The engine reads the type text `[A, B]`: a PHP list of exactly that length whose elements hold their types.
+   - **Answered: as proposed.** A tuple type is the CST's `TupleHint` of `TupleElementHint`s, and codex's `TList` of its element types with `tuple_names`. A local declaration's `target` is a `LocalTarget`, a name or a `LocalUnpack`. A PHP# `Iterable<T>` is a `TIterable` with `holds_map_entries`, so a `Map` held as one gives `[TKey, TValue]`. The engine reads the type text `[A, B]`: a PHP list of exactly that length whose elements hold their types.
 2. **`List.get(i)` and `List.set(i, v)` stay as second names.** Spec lines "`x.getOrNull(i)` is the safe read" and "`x[i] = v` on a `List` replaces the element at `i`". Master has `get` and `set` on `List` from the old spec, which the spec no longer names anywhere. Section 12's other uses of `.get(` are on a `Map`.
    - **Proposed:** both are deleted, with no alias, as decision 5 of `12-collection-methods.md` deleted a `Map`'s interim `delete` and `filterValues`. Every use moves to `getOrNull` and the index write: the `.get(` and `.set(` calls of 10 engine test sources (21 calls, a `Map`'s `get` among them), and the mago tests. A `Map`'s `get` stays.
    - Keep both beside the spec's forms.
@@ -276,7 +276,7 @@ sharp/mago/crates/
 ├── codex/
 │   ├── src/scanner/ttype.rs              <- Iterable<T>, ported; a tuple type as a TList with tuple_names (Q1)
 │   ├── src/scanner/function_like.rs      <- scan_method: a .sharp method without a modifier is private (decision 8)
-│   ├── src/ttype/atomic/                 <- TList.tuple_names; TIterable.map_entries, PHP#'s Iterable<T> (Q1)
+│   ├── src/ttype/atomic/                 <- TList.tuple_names; TIterable.holds_map_entries, PHP#'s Iterable<T> (Q1)
 │   └── src/ttype/comparator/             <- a List and a Set are contained by Iterable<T>; a Map by
 │                                            Iterable<[K, V]>
 ├── prelude/assets/extensions/sharp.php   <- ListMethods gains getOrNull(int): ?T and toSet(): Set<T>, loses get
@@ -366,7 +366,7 @@ team-lead approves these. Everything not here is tactical.
 
 - **PHP# names, all from the spec:** `List.getOrNull(int index): T?`, `List.toSet(): Set<T>`, `Map.values(): List<TValue>`, `Iterable<T>` with `filter`, `map`, `take` and `toList`, `yield value;`, `yield ...other;`, and section 30's tuple types. Question 2 deletes `List.get` and `List.set`. Question 6 adds `string.parseCsv(): List<string>`.
 - **Engine names plain PHP can see:** the final class `Sharp\Sequence`, which plain PHP gets back where a PHP# `Iterable` it holds reaches it, and `Sharp\Collection::values()`. `Sharp\Collection` has a private constructor, and so does `Sharp\Sequence`.
-- **mago names:** the CST nodes `YieldSpread`, `TupleHint`, `TupleElementHint`, `LocalTarget` and `LocalUnpack`, with their `NodeKind.php` entries, `LocalDeclaration.target` in place of `LocalDeclaration.name`, codex's `TList.tuple_names` and `TIterable.map_entries`, and the prelude class `Sharp\IterableMethods`, beside `Sharp\ListMethods`, `Sharp\MapMethods` and `Sharp\SetMethods`.
+- **mago names:** the CST nodes `YieldSpread`, `TupleHint`, `TupleElementHint`, `LocalTarget` and `LocalUnpack`, with their `NodeKind.php` entries, `LocalDeclaration.target` in place of `LocalDeclaration.name`, codex's `TList.tuple_names` and `TIterable.holds_map_entries`, and the prelude class `Sharp\IterableMethods`, beside `Sharp\ListMethods`, `Sharp\MapMethods` and `Sharp\SetMethods`.
 
 The slate for the engine class, called as `\Sharp\Sequence::from($orders)->filter($f)->take(100)->toList()`:
 
