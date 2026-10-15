@@ -40,6 +40,21 @@ class Crossings
         `${global.price_list().count()}`,
     ];
 
+    public static List<string> plainLoops()
+    {
+        List<string> seen = [];
+        for (const [sku, count] of global.price_list()) {
+            seen.add(`${sku is string}:${sku}=${count}`);
+        }
+        for (const entry of global.price_list()) {
+            seen.add(`${entry[0] is string}:${entry[0]}=${entry[1]}`);
+        }
+        for (const [string, int] typed of global.price_list()) {
+            seen.add(`${typed[0] is string}:${typed[0]}`);
+        }
+        return seen;
+    }
+
     public static string untypedLocal()
     {
         let kept = global.price_list();

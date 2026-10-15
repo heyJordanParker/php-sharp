@@ -28,6 +28,7 @@ for ($round = 0; $round < 100; $round++) {
     echo 'a plain PHP result into a Map return: ', show(Crossings::returned()), "\n";
     echo 'Map methods on a plain PHP result: ', implode(' / ', Crossings::plainMapCalls()), "\n";
     echo 'a plain PHP result in a local without a type: ', Crossings::untypedLocal(), "\n";
+    echo 'a loop over a plain PHP result keyed by string: ', implode(' ', Crossings::plainLoops()), "\n";
     echo 'a PHP array into a Map<string, int> parameter: ', show(Crossings::received(['5' => 1, 'x' => 2])), "\n";
     echo implode("\n", Crossings::objects(new Map(['tea', 3, '5', 1]), new Set(['a', 'b']))), "\n";
     echo 'a plain PHP closure a local holds: ', Crossings::counted(new Map(['a', 1, 'b', 2])), "\n";
@@ -89,6 +90,7 @@ a plain PHP result into a Map local: 'tea' => 3, '5' => 1, 'jam' => 5
 a plain PHP result into a Map return: 'tea' => 3, '5' => 1
 Map methods on a plain PHP result: 3 / 1 / true / tea,5 / 2
 a plain PHP result in a local without a type: true 1 true Sharp\Map
+a loop over a plain PHP result keyed by string: true:tea=3 true:5=1 true:tea=3 true:5=1 true:tea true:5
 a PHP array into a Map<string, int> parameter: '5' => 1, 'x' => 2
 Sharp\Map 2
 Sharp\Set 2
