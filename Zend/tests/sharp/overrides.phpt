@@ -54,6 +54,11 @@ try {
     echo $error->getMessage(), "\n";
 }
 
+// A static computed property, a static `set` body and a static observer run as an instance property's do, through
+// their class's hidden static methods. The observer saw the initial value's write, when the file declared the class.
+echo Overrides\Tally::run(), ' ', Overrides\Tally::current(), "\n";
+Overrides\Tally::rename('Bo');
+
 // Every path through the constructor sets the get-only `T?` `note` and the settable `level`, so neither has an
 // initial value, and `note` stays PHP's `readonly` with no default. The settable `T?` `nickname` starts as null.
 $claimed = new Overrides\Member('hi', true);
@@ -68,6 +73,7 @@ try {
 }
 ?>
 --EXPECT--
+label start
 square four sides 4
 0 4
 kind: abstract, virtual
@@ -84,6 +90,8 @@ Cannot modify private(set) property Overrides\Account::$name from global scope
 2 set
 3 READY 7
 Cannot modify private(set) property Overrides\Registry::$size from global scope
+16 7
+label Bo
 string(2) "hi"
 int(2)
 NULL
