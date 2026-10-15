@@ -62,7 +62,7 @@ class Members
     {
         $count = 0;
         foreach (Registry::$items as $item) {
-            if ($item === 1) {
+            if (\Sharp\Internal\equals($item, 1)) {
                 $count++;
             }
         }

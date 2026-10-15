@@ -621,6 +621,7 @@ Library: different opcodes and lines in 20 op arrays, same signatures in 1 class
   .php   0002 T2 = CAST (string) CV0($key)
   .php   0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
 Inbox: different opcodes and lines in 9 op arrays, same signatures in 1 classes
+  check  Demo\Inbox::keep string("Any")
   .sharp     Property [ private Sharp\Map $saved = new \Sharp\Map() ]
   .php       Property [ private Sharp\Map $saved ]
 Patterns: different opcodes and lines in 18 op arrays, same signatures in 1 classes
@@ -628,6 +629,8 @@ Patterns: different opcodes and lines in 18 op arrays, same signatures in 1 clas
   check  Demo\Patterns::head string("List<Demo.Figure>?")
   check  Demo\Patterns::ends string("List<Demo.Figure>")
   check  Demo\Patterns::circles string("List<Demo.Figure>")
+  check  Demo\Patterns::listed string("Any")
+  check  Demo\Patterns::rows string("List<Any>")
   .sharp      ; (lines=61, args=1, vars=5, tmps=26)
   .sharp L0098 0007 JMPNZ T5 0047
   .sharp L0099 0019 JMPNZ T5 0049
