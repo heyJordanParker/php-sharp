@@ -1,0 +1,79 @@
+namespace Demo;
+
+public foreign class Meter
+{
+    public int now() => 7;
+}
+
+public interface Animal
+{
+}
+
+public class Dog : Animal
+{
+}
+
+public class Kennel<out TAnimal>
+{
+    public Kennel(public TAnimal resident { get; }) { }
+}
+
+public class Pen<TAnimal : Animal>
+{
+    public Any? keeper() => (TAnimal animal) => animal;
+
+    public Any? holder<TFood>(TFood food) => () => food;
+}
+
+public class FunctionTypes
+{
+    public int twice(int x) => x * 2;
+
+    public List<bool> tested(Meter meter, Any? plain)
+    {
+        Any? doubled = (int x) => x * 2;
+        Any? both = (int x, int y) => x + y;
+        Any? optional = (int x, int y = 0) => x + y;
+        Any? method = this.twice;
+        Any? timed = () => meter.now();
+        Any? pure = () => 1;
+        Function<int(int)> half = b => b / 2;
+        Any? inferred = half;
+        Any? feed = (Animal animal) => animal;
+        Any? kennel = () => new Kennel<Dog>(new Dog());
+        Any? maybe = (int? x) => 1;
+        const pen = new Pen<Dog>();
+        Any? keeper = pen.keeper();
+        Any? holder = pen.holder<Dog>(new Dog());
+        return [
+            doubled is Function<int(int)>,
+            doubled is Function<string(string)>,
+            doubled is Function<Any?(int)>,
+            doubled is Function<void(int)>,
+            doubled is Function<int(Any?)>,
+            doubled is Function<int(int, int)>,
+            both is Function<int(int)>,
+            optional is Function<int(int)>,
+            method is Function<int(int)>,
+            method is Function<int(string)>,
+            timed is Function<int()>,
+            timed is Function<int() uses Meter>,
+            pure is Function<int() uses Meter>,
+            inferred is Function<int(int)>,
+            inferred is Function<int(string)>,
+            feed is Function<Animal(Dog)>,
+            feed is Function<Dog(Animal)>,
+            kennel is Function<Kennel<Animal>()>,
+            kennel is Function<Kennel<Dog>()>,
+            maybe is Function<int(int)>,
+            doubled is Function<int(int?)>,
+            plain is Function<int(int)>,
+            (doubled as Function<string(string)>) == null,
+            match (method) { Function<int(int)> f => f(4) == 8, default => false },
+            keeper is Function<Dog(Dog)>,
+            keeper is Function<Animal(Animal)>,
+            holder is Function<Dog()>,
+            holder is Function<Kennel<Dog>()>,
+        ];
+    }
+}

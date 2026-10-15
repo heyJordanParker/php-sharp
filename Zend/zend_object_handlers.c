@@ -1839,6 +1839,8 @@ ZEND_API zend_function *zend_get_call_trampoline_func(const zend_class_entry *ce
 
 	func->prototype = NULL;
 	func->prop_info = NULL;
+	/* PHP#: a trampoline has no PHP# type, whatever another use of EG(trampoline) left there. */
+	func->sharp_type = NULL;
 	func->num_args = 0;
 	func->required_num_args = 0;
 	func->arg_info = (zend_arg_info *) arg_info;

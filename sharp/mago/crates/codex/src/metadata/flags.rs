@@ -82,6 +82,12 @@ impl MetadataFlags {
     /// A PHP# operator, spec section 19: the public static method it runs as, named after .NET's operator method, as
     /// `op_Addition` for `operator +`. It is readonly by definition, spec section 13.
     pub const OPERATOR: MetadataFlags = MetadataFlags(1 << 54);
+    /// A PHP# enum case that runs as a class, spec section 20: the final subclass of its enum, named in the enum's
+    /// namespace, that a case of an enum with a case that carries data runs as.
+    pub const ENUM_CASE_CLASS: MetadataFlags = MetadataFlags(1 << 55);
+    /// A PHP# sealed interface, spec section 20.1: its permitted inheritors are the classes of its namespace that
+    /// implement it, which the populator gathers.
+    pub const SEALED: MetadataFlags = MetadataFlags(1 << 56);
 }
 
 impl MetadataFlags {
@@ -176,6 +182,18 @@ impl MetadataFlags {
     #[must_use]
     pub const fn is_event(self) -> bool {
         self.contains(Self::EVENT)
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn is_enum_case_class(self) -> bool {
+        self.contains(Self::ENUM_CASE_CLASS)
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn is_sealed(self) -> bool {
+        self.contains(Self::SEALED)
     }
 
     #[inline]
@@ -551,6 +569,8 @@ mod tests {
             ("STRUCT", MetadataFlags::STRUCT),
             ("REQUIRED", MetadataFlags::REQUIRED),
             ("OPERATOR", MetadataFlags::OPERATOR),
+            ("ENUM_CASE_CLASS", MetadataFlags::ENUM_CASE_CLASS),
+            ("SEALED", MetadataFlags::SEALED),
         ];
 
         let mut seen = MetadataFlags::empty();

@@ -177,7 +177,7 @@ echo 'a check and another opcode: ', without_checks($added, $checks) === $twin ?
 ?>
 --EXPECT--
 Calc: same opcodes and lines in 4 op arrays, same signatures in 1 classes
-Nulls: same opcodes and lines in 13 op arrays, same signatures in 1 classes
+Nulls: same opcodes and lines in 17 op arrays, same signatures in 1 classes
 ControlFlow: different opcodes and lines in 6 op arrays, same signatures in 1 classes
   .sharp      ; (lines=25, args=1, vars=4, tmps=13)
   .sharp L0061 0004 T6 = SHARP_VERIFY_TYPE_ARGS V5 string("Map<int, int>")
@@ -622,7 +622,879 @@ Library: different opcodes and lines in 20 op arrays, same signatures in 1 class
 Inbox: different opcodes and lines in 9 op arrays, same signatures in 1 classes
   .sharp     Property [ private Sharp\Map $saved = new \Sharp\Map() ]
   .php       Property [ private Sharp\Map $saved ]
-Patterns: same opcodes and lines in 11 op arrays, same signatures in 1 classes
+Patterns: different opcodes and lines in 18 op arrays, same signatures in 1 classes
+  check  Demo\Patterns::lines string("List<Demo.Figure>")
+  check  Demo\Patterns::head string("List<Demo.Figure>?")
+  check  Demo\Patterns::ends string("List<Demo.Figure>")
+  check  Demo\Patterns::circles string("List<Demo.Figure>")
+  .sharp      ; (lines=61, args=1, vars=5, tmps=26)
+  .sharp L0098 0007 JMPNZ T5 0047
+  .sharp L0099 0019 JMPNZ T5 0049
+  .sharp L0100 0035 T15 = JMPZ_EX T15 0044
+  .sharp L0100 0041 T26 = SHARP_TYPE_ARGS string("List<Demo.Figure>")
+  .sharp L0100 0042 T27 = SHARP_IS_TYPE T25 T26
+  .sharp L0100 0043 T15 = BOOL T27
+  .sharp L0100 0044 T5 = IS_IDENTICAL T15 bool(true)
+  .sharp L0100 0045 JMPNZ T5 0051
+  .sharp L0100 0046 JMP 0055
+  .sharp L0098 0047 T28 = QM_ASSIGN int(0)
+  .sharp L0098 0048 JMP 0057
+  .sharp L0099 0049 T28 = QM_ASSIGN int(1)
+  .sharp L0099 0050 JMP 0057
+  .sharp L0100 0051 T29 = COUNT CV4($rest)
+  .sharp L0100 0052 T30 = ADD int(2) T29
+  .sharp L0100 0053 T28 = QM_ASSIGN T30
+  .sharp L0100 0054 JMP 0057
+  .sharp L0101 0055 T28 = QM_ASSIGN int(-1)
+  .sharp L0101 0056 JMP 0057
+  .sharp L0101 0057 VERIFY_RETURN_TYPE T28
+  .sharp L0101 0058 RETURN T28
+  .sharp L0102 0059 VERIFY_RETURN_TYPE
+  .sharp L0102 0060 RETURN null
+  .sharp      ; (lines=31, args=1, vars=3, tmps=13)
+  .sharp L0106 0011 T3 = JMPZ_EX T3 0020
+  .sharp L0106 0017 T11 = SHARP_TYPE_ARGS string("List<Demo.Figure>")
+  .sharp L0106 0018 T12 = SHARP_IS_TYPE T10 T11
+  .sharp L0106 0019 T3 = BOOL T12
+  .sharp L0106 0020 T3 = JMPZ_EX T3 0024
+  .sharp L0106 0021 T13 = COUNT CV2($others)
+  .sharp L0106 0022 T14 = IS_IDENTICAL T13 int(0)
+  .sharp L0106 0023 T3 = BOOL T14
+  .sharp L0106 0024 JMPZ T3 0028
+  .sharp L0107 0025 T15 = FETCH_OBJ_R CV1($first) string("radius")
+  .sharp L0107 0026 VERIFY_RETURN_TYPE T15
+  .sharp L0107 0027 RETURN T15
+  .sharp L0109 0028 RETURN float(0)
+  .sharp L0110 0029 VERIFY_RETURN_TYPE
+  .sharp L0110 0030 RETURN null
+  .sharp      ; (lines=99, args=1, vars=7, tmps=53)
+  .sharp L0113 0018 T8 = JMPZ_EX T8 0030
+  .sharp L0113 0027 T23 = SHARP_TYPE_ARGS string("List<Demo.Figure>")
+  .sharp L0113 0028 T24 = SHARP_IS_TYPE T22 T23
+  .sharp L0113 0029 T8 = BOOL T24
+  .sharp L0113 0030 T7 = IS_IDENTICAL T8 bool(true)
+  .sharp L0113 0031 JMPNZ T7 0078
+  .sharp L0114 0032 T25 = TYPE_CHECK (array) CV0($shapes)
+  .sharp L0114 0033 T25 = JMPZ_EX T25 0037
+  .sharp L0114 0034 T26 = COUNT CV0($shapes)
+  .sharp L0114 0035 T27 = IS_SMALLER_OR_EQUAL int(1) T26
+  .sharp L0114 0036 T25 = BOOL T27
+  .sharp L0114 0037 T25 = JMPZ_EX T25 0044
+  .sharp L0114 0038 T28 = COUNT CV0($shapes)
+  .sharp L0114 0039 T29 = SUB T28 int(1)
+  .sharp L0114 0040 T30 = FETCH_DIM_R CV0($shapes) T29
+  .sharp L0114 0041 T31 = ASSIGN CV4($last) T30
+  .sharp L0114 0042 T32 = INSTANCEOF T31 string("Demo\\Circle")
+  .sharp L0114 0043 T25 = BOOL T32
+  .sharp L0114 0044 T25 = JMPZ_EX T25 0056
+  .sharp L0114 0045 INIT_FCALL 3 128 string("array_slice")
+  .sharp L0114 0046 SEND_VAR CV0($shapes) 1
+  .sharp L0114 0047 SEND_VAL int(0) 2
+  .sharp L0114 0048 T33 = COUNT CV0($shapes)
+  .sharp L0114 0049 T34 = SUB T33 int(1)
+  .sharp L0114 0050 SEND_VAL T34 3
+  .sharp L0114 0051 V35 = DO_ICALL
+  .sharp L0114 0052 T36 = ASSIGN CV5($before) V35
+  .sharp L0114 0053 T37 = SHARP_TYPE_ARGS string("List<Demo.Figure>")
+  .sharp L0114 0054 T38 = SHARP_IS_TYPE T36 T37
+  .sharp L0114 0055 T25 = BOOL T38
+  .sharp L0114 0056 T7 = IS_IDENTICAL T25 bool(true)
+  .sharp L0114 0057 JMPNZ T7 0083
+  .sharp L0115 0058 T39 = TYPE_CHECK (array) CV0($shapes)
+  .sharp L0115 0059 T39 = JMPZ_EX T39 0063
+  .sharp L0115 0060 T40 = COUNT CV0($shapes)
+  .sharp L0115 0061 T41 = IS_SMALLER_OR_EQUAL int(2) T40
+  .sharp L0115 0062 T39 = BOOL T41
+  .sharp L0115 0063 T39 = JMPZ_EX T39 0068
+  .sharp L0115 0064 T42 = FETCH_DIM_R CV0($shapes) int(0)
+  .sharp L0115 0065 T43 = ASSIGN CV6($first) T42
+  .sharp L0115 0066 T44 = INSTANCEOF T43 string("Demo\\Square")
+  .sharp L0115 0067 T39 = BOOL T44
+  .sharp L0115 0068 T39 = JMPZ_EX T39 0075
+  .sharp L0115 0069 T45 = COUNT CV0($shapes)
+  .sharp L0115 0070 T46 = SUB T45 int(1)
+  .sharp L0115 0071 T47 = FETCH_DIM_R CV0($shapes) T46
+  .sharp L0115 0072 T48 = ASSIGN CV4($last) T47
+  .sharp L0115 0073 T49 = INSTANCEOF T48 string("Demo\\Square")
+  .sharp L0115 0074 T39 = BOOL T49
+  .sharp L0115 0075 T7 = IS_IDENTICAL T39 bool(true)
+  .sharp L0115 0076 JMPNZ T7 0088
+  .sharp L0115 0077 JMP 0093
+  .sharp L0113 0078 T50 = COUNT CV3($inner)
+  .sharp L0113 0079 T51 = CAST (double) T50
+  .sharp L0113 0080 T52 = MUL T51 int(-1)
+  .sharp L0113 0081 T53 = QM_ASSIGN T52
+  .sharp L0113 0082 JMP 0095
+  .sharp L0114 0083 T54 = FETCH_OBJ_R CV4($last) string("radius")
+  .sharp L0114 0084 T55 = COUNT CV5($before)
+  .sharp L0114 0085 T56 = ADD T54 T55
+  .sharp L0114 0086 T53 = QM_ASSIGN T56
+  .sharp L0114 0087 JMP 0095
+  .sharp L0115 0088 T57 = FETCH_OBJ_R CV6($first) string("side")
+  .sharp L0115 0089 T58 = FETCH_OBJ_R CV4($last) string("side")
+  .sharp L0115 0090 T59 = ADD T57 T58
+  .sharp L0115 0091 T53 = QM_ASSIGN T59
+  .sharp L0115 0092 JMP 0095
+  .sharp L0116 0093 T53 = QM_ASSIGN float(0)
+  .sharp L0116 0094 JMP 0095
+  .sharp L0116 0095 VERIFY_RETURN_TYPE T53
+  .sharp L0116 0096 RETURN T53
+  .sharp L0117 0097 VERIFY_RETURN_TYPE
+  .sharp L0117 0098 RETURN null
+  .sharp      ; (lines=32, args=1, vars=3, tmps=13)
+  .sharp L0120 0011 T4 = JMPZ_EX T4 0020
+  .sharp L0120 0017 T12 = SHARP_TYPE_ARGS string("List<Demo.Circle>")
+  .sharp L0120 0018 T13 = SHARP_IS_TYPE T11 T12
+  .sharp L0120 0019 T4 = BOOL T13
+  .sharp L0120 0020 T3 = IS_IDENTICAL T4 bool(true)
+  .sharp L0120 0021 JMPNZ T3 0023
+  .sharp L0120 0022 JMP 0026
+  .sharp L0120 0023 T14 = COUNT CV2($rest)
+  .sharp L0120 0024 T15 = QM_ASSIGN T14
+  .sharp L0120 0025 JMP 0028
+  .sharp L0121 0026 T15 = QM_ASSIGN int(-1)
+  .sharp L0121 0027 JMP 0028
+  .sharp L0121 0028 VERIFY_RETURN_TYPE T15
+  .sharp L0121 0029 RETURN T15
+  .sharp L0122 0030 VERIFY_RETURN_TYPE
+  .sharp L0122 0031 RETURN null
+  .sharp      ; (lines=59, args=1, vars=4, tmps=26)
+  .sharp L0125 0001 T5 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp L0125 0002 T6 = SHARP_IS_TYPE CV0($value) T5
+  .sharp L0125 0003 T6 = JMPZ_EX T6 0007
+  .sharp L0125 0004 T7 = COUNT CV0($value)
+  .sharp L0125 0005 T8 = IS_IDENTICAL T7 int(0)
+  .sharp L0125 0006 T6 = BOOL T8
+  .sharp L0125 0007 T4 = IS_IDENTICAL T6 bool(true)
+  .sharp L0125 0008 JMPNZ T4 0045
+  .sharp L0126 0009 T9 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp L0126 0010 T10 = SHARP_IS_TYPE CV0($value) T9
+  .sharp L0126 0011 T10 = JMPZ_EX T10 0015
+  .sharp L0126 0012 T11 = COUNT CV0($value)
+  .sharp L0126 0013 T12 = IS_IDENTICAL T11 int(1)
+  .sharp L0126 0014 T10 = BOOL T12
+  .sharp L0126 0015 T10 = JMPZ_EX T10 0020
+  .sharp L0126 0016 T13 = FETCH_DIM_R CV0($value) int(0)
+  .sharp L0126 0017 T14 = ASSIGN CV1($one) T13
+  .sharp L0126 0018 T15 = TYPE_CHECK (long) T14
+  .sharp L0126 0019 T10 = BOOL T15
+  .sharp L0126 0020 T4 = IS_IDENTICAL T10 bool(true)
+  .sharp L0126 0021 JMPNZ T4 0047
+  .sharp L0127 0022 T16 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp L0127 0023 T17 = SHARP_IS_TYPE CV0($value) T16
+  .sharp L0127 0024 T17 = JMPZ_EX T17 0028
+  .sharp L0127 0025 T18 = COUNT CV0($value)
+  .sharp L0127 0026 T19 = IS_SMALLER_OR_EQUAL int(1) T18
+  .sharp L0127 0027 T17 = BOOL T19
+  .sharp L0127 0028 T17 = JMPZ_EX T17 0033
+  .sharp L0127 0029 T20 = FETCH_DIM_R CV0($value) int(0)
+  .sharp L0127 0030 T21 = ASSIGN CV2($match#1) T20
+  .sharp L0127 0031 T22 = TYPE_CHECK (string) T21
+  .sharp L0127 0032 T17 = BOOL T22
+  .sharp L0127 0033 T17 = JMPZ_EX T17 0042
+  .sharp L0127 0034 INIT_FCALL 2 112 string("array_slice")
+  .sharp L0127 0035 SEND_VAR CV0($value) 1
+  .sharp L0127 0036 SEND_VAL int(1) 2
+  .sharp L0127 0037 V23 = DO_ICALL
+  .sharp L0127 0038 T24 = ASSIGN CV3($rest) V23
+  .sharp L0127 0039 T25 = SHARP_TYPE_ARGS string("List<string>")
+  .sharp L0127 0040 T26 = SHARP_IS_TYPE T24 T25
+  .sharp L0127 0041 T17 = BOOL T26
+  .sharp L0127 0042 T4 = IS_IDENTICAL T17 bool(true)
+  .sharp L0127 0043 JMPNZ T4 0049
+  .sharp L0127 0044 JMP 0053
+  .sharp L0125 0045 T27 = QM_ASSIGN int(0)
+  .sharp L0125 0046 JMP 0055
+  .sharp L0126 0047 T27 = QM_ASSIGN CV1($one)
+  .sharp L0126 0048 JMP 0055
+  .sharp L0127 0049 T28 = COUNT CV3($rest)
+  .sharp L0127 0050 T29 = ADD int(100) T28
+  .sharp L0127 0051 T27 = QM_ASSIGN T29
+  .sharp L0127 0052 JMP 0055
+  .sharp L0128 0053 T27 = QM_ASSIGN int(-1)
+  .sharp L0128 0054 JMP 0055
+  .sharp L0128 0055 VERIFY_RETURN_TYPE T27
+  .sharp L0128 0056 RETURN T27
+  .sharp L0129 0057 VERIFY_RETURN_TYPE
+  .sharp L0129 0058 RETURN null
+  .sharp      ; (lines=35, args=1, vars=4, tmps=18)
+  .sharp L0131 0006 T4 = JMPZ_EX T4 0016
+  .sharp L0131 0009 T9 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp L0131 0010 T10 = SHARP_IS_TYPE T8 T9
+  .sharp L0131 0011 T10 = JMPZ_EX T10 0015
+  .sharp L0131 0012 T11 = COUNT CV1($match#1)
+  .sharp L0131 0013 T12 = IS_IDENTICAL T11 int(0)
+  .sharp L0131 0014 T10 = BOOL T12
+  .sharp L0131 0015 T4 = BOOL T10
+  .sharp L0131 0016 T4 = JMPZ_EX T4 0031
+  .sharp L0131 0017 T13 = FETCH_DIM_R CV0($rows) int(1)
+  .sharp L0131 0018 T14 = ASSIGN CV2($match#2) T13
+  .sharp L0131 0019 T15 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp L0131 0020 T16 = SHARP_IS_TYPE T14 T15
+  .sharp L0131 0021 T16 = JMPZ_EX T16 0025
+  .sharp L0131 0022 T17 = COUNT CV2($match#2)
+  .sharp L0131 0023 T18 = IS_IDENTICAL T17 int(1)
+  .sharp L0131 0024 T16 = BOOL T18
+  .sharp L0131 0025 T16 = JMPZ_EX T16 0030
+  .sharp L0131 0026 T19 = FETCH_DIM_R CV2($match#2) int(0)
+  .sharp L0131 0027 T20 = ASSIGN CV3($match#3) T19
+  .sharp L0131 0028 T21 = TYPE_CHECK (long) T20
+  .sharp L0131 0029 T16 = BOOL T21
+  .sharp L0131 0030 T4 = BOOL T16
+  .sharp L0131 0031 VERIFY_RETURN_TYPE T4
+  .sharp L0131 0032 RETURN T4
+  .sharp L0131 0033 VERIFY_RETURN_TYPE
+  .sharp L0131 0034 RETURN null
+  .sharp      ; (lines=61, args=1, vars=5, tmps=26)
+  .sharp 0007 JMPNZ T5 0047
+  .sharp 0019 JMPNZ T5 0049
+  .sharp 0035 T15 = JMPZ_EX T15 0044
+  .sharp 0041 T26 = SHARP_TYPE_ARGS string("List<Demo.Figure>")
+  .sharp 0042 T27 = SHARP_IS_TYPE T25 T26
+  .sharp 0043 T15 = BOOL T27
+  .sharp 0044 T5 = IS_IDENTICAL T15 bool(true)
+  .sharp 0045 JMPNZ T5 0051
+  .sharp 0046 JMP 0055
+  .sharp 0047 T28 = QM_ASSIGN int(0)
+  .sharp 0048 JMP 0057
+  .sharp 0049 T28 = QM_ASSIGN int(1)
+  .sharp 0050 JMP 0057
+  .sharp 0051 T29 = COUNT CV4($rest)
+  .sharp 0052 T30 = ADD int(2) T29
+  .sharp 0053 T28 = QM_ASSIGN T30
+  .sharp 0054 JMP 0057
+  .sharp 0055 T28 = QM_ASSIGN int(-1)
+  .sharp 0056 JMP 0057
+  .sharp 0057 VERIFY_RETURN_TYPE T28
+  .sharp 0058 RETURN T28
+  .sharp 0059 VERIFY_RETURN_TYPE
+  .sharp 0060 RETURN null
+  .sharp      25: 0041 - 0042 (tmp/var)
+  .sharp      28: 0056 - 0058 (tmp/var)
+  .sharp      ; (lines=31, args=1, vars=3, tmps=13)
+  .sharp 0011 T3 = JMPZ_EX T3 0020
+  .sharp 0017 T11 = SHARP_TYPE_ARGS string("List<Demo.Figure>")
+  .sharp 0018 T12 = SHARP_IS_TYPE T10 T11
+  .sharp 0019 T3 = BOOL T12
+  .sharp 0020 T3 = JMPZ_EX T3 0024
+  .sharp 0021 T13 = COUNT CV2($others)
+  .sharp 0022 T14 = IS_IDENTICAL T13 int(0)
+  .sharp 0023 T3 = BOOL T14
+  .sharp 0024 JMPZ T3 0028
+  .sharp 0025 T15 = FETCH_OBJ_R CV1($first) string("radius")
+  .sharp 0026 VERIFY_RETURN_TYPE T15
+  .sharp 0027 RETURN T15
+  .sharp 0028 RETURN float(0)
+  .sharp      10: 0017 - 0018 (tmp/var)
+  .sharp      15: 0026 - 0027 (tmp/var)
+  .sharp      ; (lines=99, args=1, vars=7, tmps=53)
+  .sharp 0018 T8 = JMPZ_EX T8 0030
+  .sharp 0027 T23 = SHARP_TYPE_ARGS string("List<Demo.Figure>")
+  .sharp 0028 T24 = SHARP_IS_TYPE T22 T23
+  .sharp 0029 T8 = BOOL T24
+  .sharp 0030 T7 = IS_IDENTICAL T8 bool(true)
+  .sharp 0031 JMPNZ T7 0078
+  .sharp 0032 T25 = TYPE_CHECK (array) CV0($shapes)
+  .sharp 0033 T25 = JMPZ_EX T25 0037
+  .sharp 0034 T26 = COUNT CV0($shapes)
+  .sharp 0035 T27 = IS_SMALLER_OR_EQUAL int(1) T26
+  .sharp 0036 T25 = BOOL T27
+  .sharp 0037 T25 = JMPZ_EX T25 0044
+  .sharp 0038 T28 = COUNT CV0($shapes)
+  .sharp 0039 T29 = SUB T28 int(1)
+  .sharp 0040 T30 = FETCH_DIM_R CV0($shapes) T29
+  .sharp 0041 T31 = ASSIGN CV4($last) T30
+  .sharp 0042 T32 = INSTANCEOF T31 string("Demo\\Circle")
+  .sharp 0043 T25 = BOOL T32
+  .sharp 0044 T25 = JMPZ_EX T25 0056
+  .sharp 0045 INIT_FCALL 3 128 string("array_slice")
+  .sharp 0046 SEND_VAR CV0($shapes) 1
+  .sharp 0047 SEND_VAL int(0) 2
+  .sharp 0048 T33 = COUNT CV0($shapes)
+  .sharp 0049 T34 = SUB T33 int(1)
+  .sharp 0050 SEND_VAL T34 3
+  .sharp 0051 V35 = DO_ICALL
+  .sharp 0052 T36 = ASSIGN CV5($before) V35
+  .sharp 0053 T37 = SHARP_TYPE_ARGS string("List<Demo.Figure>")
+  .sharp 0054 T38 = SHARP_IS_TYPE T36 T37
+  .sharp 0055 T25 = BOOL T38
+  .sharp 0056 T7 = IS_IDENTICAL T25 bool(true)
+  .sharp 0057 JMPNZ T7 0083
+  .sharp 0058 T39 = TYPE_CHECK (array) CV0($shapes)
+  .sharp 0059 T39 = JMPZ_EX T39 0063
+  .sharp 0060 T40 = COUNT CV0($shapes)
+  .sharp 0061 T41 = IS_SMALLER_OR_EQUAL int(2) T40
+  .sharp 0062 T39 = BOOL T41
+  .sharp 0063 T39 = JMPZ_EX T39 0068
+  .sharp 0064 T42 = FETCH_DIM_R CV0($shapes) int(0)
+  .sharp 0065 T43 = ASSIGN CV6($first) T42
+  .sharp 0066 T44 = INSTANCEOF T43 string("Demo\\Square")
+  .sharp 0067 T39 = BOOL T44
+  .sharp 0068 T39 = JMPZ_EX T39 0075
+  .sharp 0069 T45 = COUNT CV0($shapes)
+  .sharp 0070 T46 = SUB T45 int(1)
+  .sharp 0071 T47 = FETCH_DIM_R CV0($shapes) T46
+  .sharp 0072 T48 = ASSIGN CV4($last) T47
+  .sharp 0073 T49 = INSTANCEOF T48 string("Demo\\Square")
+  .sharp 0074 T39 = BOOL T49
+  .sharp 0075 T7 = IS_IDENTICAL T39 bool(true)
+  .sharp 0076 JMPNZ T7 0088
+  .sharp 0077 JMP 0093
+  .sharp 0078 T50 = COUNT CV3($inner)
+  .sharp 0079 T51 = CAST (double) T50
+  .sharp 0080 T52 = MUL T51 int(-1)
+  .sharp 0081 T53 = QM_ASSIGN T52
+  .sharp 0082 JMP 0095
+  .sharp 0083 T54 = FETCH_OBJ_R CV4($last) string("radius")
+  .sharp 0084 T55 = COUNT CV5($before)
+  .sharp 0085 T56 = ADD T54 T55
+  .sharp 0086 T53 = QM_ASSIGN T56
+  .sharp 0087 JMP 0095
+  .sharp 0088 T57 = FETCH_OBJ_R CV6($first) string("side")
+  .sharp 0089 T58 = FETCH_OBJ_R CV4($last) string("side")
+  .sharp 0090 T59 = ADD T57 T58
+  .sharp 0091 T53 = QM_ASSIGN T59
+  .sharp 0092 JMP 0095
+  .sharp 0093 T53 = QM_ASSIGN float(0)
+  .sharp 0094 JMP 0095
+  .sharp 0095 VERIFY_RETURN_TYPE T53
+  .sharp 0096 RETURN T53
+  .sharp 0097 VERIFY_RETURN_TYPE
+  .sharp 0098 RETURN null
+  .sharp      22: 0027 - 0028 (tmp/var)
+  .sharp      36: 0053 - 0054 (tmp/var)
+  .sharp      54: 0084 - 0085 (tmp/var)
+  .sharp      57: 0089 - 0090 (tmp/var)
+  .sharp      53: 0094 - 0096 (tmp/var)
+  .sharp      ; (lines=32, args=1, vars=3, tmps=13)
+  .sharp 0011 T4 = JMPZ_EX T4 0020
+  .sharp 0017 T12 = SHARP_TYPE_ARGS string("List<Demo.Circle>")
+  .sharp 0018 T13 = SHARP_IS_TYPE T11 T12
+  .sharp 0019 T4 = BOOL T13
+  .sharp 0020 T3 = IS_IDENTICAL T4 bool(true)
+  .sharp 0021 JMPNZ T3 0023
+  .sharp 0022 JMP 0026
+  .sharp 0023 T14 = COUNT CV2($rest)
+  .sharp 0024 T15 = QM_ASSIGN T14
+  .sharp 0025 JMP 0028
+  .sharp 0026 T15 = QM_ASSIGN int(-1)
+  .sharp 0027 JMP 0028
+  .sharp 0028 VERIFY_RETURN_TYPE T15
+  .sharp 0029 RETURN T15
+  .sharp 0030 VERIFY_RETURN_TYPE
+  .sharp 0031 RETURN null
+  .sharp      11: 0017 - 0018 (tmp/var)
+  .sharp      15: 0027 - 0029 (tmp/var)
+  .sharp      ; (lines=59, args=1, vars=4, tmps=26)
+  .sharp 0001 T5 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp 0002 T6 = SHARP_IS_TYPE CV0($value) T5
+  .sharp 0003 T6 = JMPZ_EX T6 0007
+  .sharp 0004 T7 = COUNT CV0($value)
+  .sharp 0005 T8 = IS_IDENTICAL T7 int(0)
+  .sharp 0006 T6 = BOOL T8
+  .sharp 0007 T4 = IS_IDENTICAL T6 bool(true)
+  .sharp 0008 JMPNZ T4 0045
+  .sharp 0009 T9 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp 0010 T10 = SHARP_IS_TYPE CV0($value) T9
+  .sharp 0011 T10 = JMPZ_EX T10 0015
+  .sharp 0012 T11 = COUNT CV0($value)
+  .sharp 0013 T12 = IS_IDENTICAL T11 int(1)
+  .sharp 0014 T10 = BOOL T12
+  .sharp 0015 T10 = JMPZ_EX T10 0020
+  .sharp 0016 T13 = FETCH_DIM_R CV0($value) int(0)
+  .sharp 0017 T14 = ASSIGN CV1($one) T13
+  .sharp 0018 T15 = TYPE_CHECK (long) T14
+  .sharp 0019 T10 = BOOL T15
+  .sharp 0020 T4 = IS_IDENTICAL T10 bool(true)
+  .sharp 0021 JMPNZ T4 0047
+  .sharp 0022 T16 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp 0023 T17 = SHARP_IS_TYPE CV0($value) T16
+  .sharp 0024 T17 = JMPZ_EX T17 0028
+  .sharp 0025 T18 = COUNT CV0($value)
+  .sharp 0026 T19 = IS_SMALLER_OR_EQUAL int(1) T18
+  .sharp 0027 T17 = BOOL T19
+  .sharp 0028 T17 = JMPZ_EX T17 0033
+  .sharp 0029 T20 = FETCH_DIM_R CV0($value) int(0)
+  .sharp 0030 T21 = ASSIGN CV2($match#1) T20
+  .sharp 0031 T22 = TYPE_CHECK (string) T21
+  .sharp 0032 T17 = BOOL T22
+  .sharp 0033 T17 = JMPZ_EX T17 0042
+  .sharp 0034 INIT_FCALL 2 112 string("array_slice")
+  .sharp 0035 SEND_VAR CV0($value) 1
+  .sharp 0036 SEND_VAL int(1) 2
+  .sharp 0037 V23 = DO_ICALL
+  .sharp 0038 T24 = ASSIGN CV3($rest) V23
+  .sharp 0039 T25 = SHARP_TYPE_ARGS string("List<string>")
+  .sharp 0040 T26 = SHARP_IS_TYPE T24 T25
+  .sharp 0041 T17 = BOOL T26
+  .sharp 0042 T4 = IS_IDENTICAL T17 bool(true)
+  .sharp 0043 JMPNZ T4 0049
+  .sharp 0044 JMP 0053
+  .sharp 0045 T27 = QM_ASSIGN int(0)
+  .sharp 0046 JMP 0055
+  .sharp 0047 T27 = QM_ASSIGN CV1($one)
+  .sharp 0048 JMP 0055
+  .sharp 0049 T28 = COUNT CV3($rest)
+  .sharp 0050 T29 = ADD int(100) T28
+  .sharp 0051 T27 = QM_ASSIGN T29
+  .sharp 0052 JMP 0055
+  .sharp 0053 T27 = QM_ASSIGN int(-1)
+  .sharp 0054 JMP 0055
+  .sharp 0055 VERIFY_RETURN_TYPE T27
+  .sharp 0056 RETURN T27
+  .sharp 0057 VERIFY_RETURN_TYPE
+  .sharp 0058 RETURN null
+  .sharp      24: 0039 - 0040 (tmp/var)
+  .sharp      27: 0054 - 0056 (tmp/var)
+  .sharp      ; (lines=35, args=1, vars=4, tmps=18)
+  .sharp 0006 T4 = JMPZ_EX T4 0016
+  .sharp 0009 T9 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp 0010 T10 = SHARP_IS_TYPE T8 T9
+  .sharp 0011 T10 = JMPZ_EX T10 0015
+  .sharp 0012 T11 = COUNT CV1($match#1)
+  .sharp 0013 T12 = IS_IDENTICAL T11 int(0)
+  .sharp 0014 T10 = BOOL T12
+  .sharp 0015 T4 = BOOL T10
+  .sharp 0016 T4 = JMPZ_EX T4 0031
+  .sharp 0017 T13 = FETCH_DIM_R CV0($rows) int(1)
+  .sharp 0018 T14 = ASSIGN CV2($match#2) T13
+  .sharp 0019 T15 = SHARP_TYPE_ARGS string("List<Any?>")
+  .sharp 0020 T16 = SHARP_IS_TYPE T14 T15
+  .sharp 0021 T16 = JMPZ_EX T16 0025
+  .sharp 0022 T17 = COUNT CV2($match#2)
+  .sharp 0023 T18 = IS_IDENTICAL T17 int(1)
+  .sharp 0024 T16 = BOOL T18
+  .sharp 0025 T16 = JMPZ_EX T16 0030
+  .sharp 0026 T19 = FETCH_DIM_R CV2($match#2) int(0)
+  .sharp 0027 T20 = ASSIGN CV3($match#3) T19
+  .sharp 0028 T21 = TYPE_CHECK (long) T20
+  .sharp 0029 T16 = BOOL T21
+  .sharp 0030 T4 = BOOL T16
+  .sharp 0031 VERIFY_RETURN_TYPE T4
+  .sharp 0032 RETURN T4
+  .sharp 0033 VERIFY_RETURN_TYPE
+  .sharp 0034 RETURN null
+  .sharp      8: 0009 - 0010 (tmp/var)
+  .sharp      14: 0019 - 0020 (tmp/var)
+  .php        ; (lines=60, args=1, vars=5, tmps=25)
+  .php   L0098 0007 JMPNZ T5 0046
+  .php   L0099 0019 JMPNZ T5 0048
+  .php   L0100 0035 T15 = JMPZ_EX T15 0043
+  .php   L0100 0041 T26 = TYPE_CHECK (array) T25
+  .php   L0100 0042 T15 = BOOL T26
+  .php   L0100 0043 T5 = IS_IDENTICAL T15 bool(true)
+  .php   L0100 0044 JMPNZ T5 0050
+  .php   L0100 0045 JMP 0054
+  .php   L0098 0046 T27 = QM_ASSIGN int(0)
+  .php   L0098 0047 JMP 0056
+  .php   L0099 0048 T27 = QM_ASSIGN int(1)
+  .php   L0099 0049 JMP 0056
+  .php   L0100 0050 T28 = COUNT CV4($rest)
+  .php   L0100 0051 T29 = ADD int(2) T28
+  .php   L0100 0052 T27 = QM_ASSIGN T29
+  .php   L0100 0053 JMP 0056
+  .php   L0101 0054 T27 = QM_ASSIGN int(-1)
+  .php   L0101 0055 JMP 0056
+  .php   L0101 0056 VERIFY_RETURN_TYPE T27
+  .php   L0101 0057 RETURN T27
+  .php   L0102 0058 VERIFY_RETURN_TYPE
+  .php   L0102 0059 RETURN null
+  .php        ; (lines=30, args=1, vars=3, tmps=12)
+  .php   L0106 0011 T3 = JMPZ_EX T3 0019
+  .php   L0106 0017 T11 = TYPE_CHECK (array) T10
+  .php   L0106 0018 T3 = BOOL T11
+  .php   L0106 0019 T3 = JMPZ_EX T3 0023
+  .php   L0106 0020 T12 = COUNT CV2($others)
+  .php   L0106 0021 T13 = IS_IDENTICAL T12 int(0)
+  .php   L0106 0022 T3 = BOOL T13
+  .php   L0106 0023 JMPZ T3 0027
+  .php   L0107 0024 T14 = FETCH_OBJ_R CV1($first) string("radius")
+  .php   L0107 0025 VERIFY_RETURN_TYPE T14
+  .php   L0107 0026 RETURN T14
+  .php   L0109 0027 RETURN float(0)
+  .php   L0110 0028 VERIFY_RETURN_TYPE
+  .php   L0110 0029 RETURN null
+  .php        ; (lines=97, args=1, vars=7, tmps=51)
+  .php   L0113 0018 T8 = JMPZ_EX T8 0029
+  .php   L0113 0027 T23 = TYPE_CHECK (array) T22
+  .php   L0113 0028 T8 = BOOL T23
+  .php   L0113 0029 T7 = IS_IDENTICAL T8 bool(true)
+  .php   L0113 0030 JMPNZ T7 0076
+  .php   L0114 0031 T24 = TYPE_CHECK (array) CV0($shapes)
+  .php   L0114 0032 T24 = JMPZ_EX T24 0036
+  .php   L0114 0033 T25 = COUNT CV0($shapes)
+  .php   L0114 0034 T26 = IS_SMALLER_OR_EQUAL int(1) T25
+  .php   L0114 0035 T24 = BOOL T26
+  .php   L0114 0036 T24 = JMPZ_EX T24 0043
+  .php   L0114 0037 T27 = COUNT CV0($shapes)
+  .php   L0114 0038 T28 = SUB T27 int(1)
+  .php   L0114 0039 T29 = FETCH_DIM_R CV0($shapes) T28
+  .php   L0114 0040 T30 = ASSIGN CV4($last) T29
+  .php   L0114 0041 T31 = INSTANCEOF T30 string("Demo\\Circle")
+  .php   L0114 0042 T24 = BOOL T31
+  .php   L0114 0043 T24 = JMPZ_EX T24 0054
+  .php   L0114 0044 INIT_FCALL 3 128 string("array_slice")
+  .php   L0114 0045 SEND_VAR CV0($shapes) 1
+  .php   L0114 0046 SEND_VAL int(0) 2
+  .php   L0114 0047 T32 = COUNT CV0($shapes)
+  .php   L0114 0048 T33 = SUB T32 int(1)
+  .php   L0114 0049 SEND_VAL T33 3
+  .php   L0114 0050 V34 = DO_ICALL
+  .php   L0114 0051 T35 = ASSIGN CV5($before) V34
+  .php   L0114 0052 T36 = TYPE_CHECK (array) T35
+  .php   L0114 0053 T24 = BOOL T36
+  .php   L0114 0054 T7 = IS_IDENTICAL T24 bool(true)
+  .php   L0114 0055 JMPNZ T7 0081
+  .php   L0115 0056 T37 = TYPE_CHECK (array) CV0($shapes)
+  .php   L0115 0057 T37 = JMPZ_EX T37 0061
+  .php   L0115 0058 T38 = COUNT CV0($shapes)
+  .php   L0115 0059 T39 = IS_SMALLER_OR_EQUAL int(2) T38
+  .php   L0115 0060 T37 = BOOL T39
+  .php   L0115 0061 T37 = JMPZ_EX T37 0066
+  .php   L0115 0062 T40 = FETCH_DIM_R CV0($shapes) int(0)
+  .php   L0115 0063 T41 = ASSIGN CV6($first) T40
+  .php   L0115 0064 T42 = INSTANCEOF T41 string("Demo\\Square")
+  .php   L0115 0065 T37 = BOOL T42
+  .php   L0115 0066 T37 = JMPZ_EX T37 0073
+  .php   L0115 0067 T43 = COUNT CV0($shapes)
+  .php   L0115 0068 T44 = SUB T43 int(1)
+  .php   L0115 0069 T45 = FETCH_DIM_R CV0($shapes) T44
+  .php   L0115 0070 T46 = ASSIGN CV4($last) T45
+  .php   L0115 0071 T47 = INSTANCEOF T46 string("Demo\\Square")
+  .php   L0115 0072 T37 = BOOL T47
+  .php   L0115 0073 T7 = IS_IDENTICAL T37 bool(true)
+  .php   L0115 0074 JMPNZ T7 0086
+  .php   L0115 0075 JMP 0091
+  .php   L0113 0076 T48 = COUNT CV3($inner)
+  .php   L0113 0077 T49 = CAST (double) T48
+  .php   L0113 0078 T50 = MUL T49 int(-1)
+  .php   L0113 0079 T51 = QM_ASSIGN T50
+  .php   L0113 0080 JMP 0093
+  .php   L0114 0081 T52 = FETCH_OBJ_R CV4($last) string("radius")
+  .php   L0114 0082 T53 = COUNT CV5($before)
+  .php   L0114 0083 T54 = ADD T52 T53
+  .php   L0114 0084 T51 = QM_ASSIGN T54
+  .php   L0114 0085 JMP 0093
+  .php   L0115 0086 T55 = FETCH_OBJ_R CV6($first) string("side")
+  .php   L0115 0087 T56 = FETCH_OBJ_R CV4($last) string("side")
+  .php   L0115 0088 T57 = ADD T55 T56
+  .php   L0115 0089 T51 = QM_ASSIGN T57
+  .php   L0115 0090 JMP 0093
+  .php   L0116 0091 T51 = QM_ASSIGN float(0)
+  .php   L0116 0092 JMP 0093
+  .php   L0116 0093 VERIFY_RETURN_TYPE T51
+  .php   L0116 0094 RETURN T51
+  .php   L0117 0095 VERIFY_RETURN_TYPE
+  .php   L0117 0096 RETURN null
+  .php        ; (lines=31, args=1, vars=3, tmps=12)
+  .php   L0120 0011 T4 = JMPZ_EX T4 0019
+  .php   L0120 0017 T12 = TYPE_CHECK (array) T11
+  .php   L0120 0018 T4 = BOOL T12
+  .php   L0120 0019 T3 = IS_IDENTICAL T4 bool(true)
+  .php   L0120 0020 JMPNZ T3 0022
+  .php   L0120 0021 JMP 0025
+  .php   L0120 0022 T13 = COUNT CV2($rest)
+  .php   L0120 0023 T14 = QM_ASSIGN T13
+  .php   L0120 0024 JMP 0027
+  .php   L0121 0025 T14 = QM_ASSIGN int(-1)
+  .php   L0121 0026 JMP 0027
+  .php   L0121 0027 VERIFY_RETURN_TYPE T14
+  .php   L0121 0028 RETURN T14
+  .php   L0122 0029 VERIFY_RETURN_TYPE
+  .php   L0122 0030 RETURN null
+  .php        ; (lines=55, args=1, vars=4, tmps=22)
+  .php   L0125 0001 T5 = TYPE_CHECK (array) CV0($value)
+  .php   L0125 0002 T5 = JMPZ_EX T5 0006
+  .php   L0125 0003 T6 = COUNT CV0($value)
+  .php   L0125 0004 T7 = IS_IDENTICAL T6 int(0)
+  .php   L0125 0005 T5 = BOOL T7
+  .php   L0125 0006 T4 = IS_IDENTICAL T5 bool(true)
+  .php   L0125 0007 JMPNZ T4 0041
+  .php   L0126 0008 T8 = TYPE_CHECK (array) CV0($value)
+  .php   L0126 0009 T8 = JMPZ_EX T8 0013
+  .php   L0126 0010 T9 = COUNT CV0($value)
+  .php   L0126 0011 T10 = IS_IDENTICAL T9 int(1)
+  .php   L0126 0012 T8 = BOOL T10
+  .php   L0126 0013 T8 = JMPZ_EX T8 0018
+  .php   L0126 0014 T11 = FETCH_DIM_R CV0($value) int(0)
+  .php   L0126 0015 T12 = ASSIGN CV1($one) T11
+  .php   L0126 0016 T13 = TYPE_CHECK (long) T12
+  .php   L0126 0017 T8 = BOOL T13
+  .php   L0126 0018 T4 = IS_IDENTICAL T8 bool(true)
+  .php   L0126 0019 JMPNZ T4 0043
+  .php   L0127 0020 T14 = TYPE_CHECK (array) CV0($value)
+  .php   L0127 0021 T14 = JMPZ_EX T14 0025
+  .php   L0127 0022 T15 = COUNT CV0($value)
+  .php   L0127 0023 T16 = IS_SMALLER_OR_EQUAL int(1) T15
+  .php   L0127 0024 T14 = BOOL T16
+  .php   L0127 0025 T14 = JMPZ_EX T14 0030
+  .php   L0127 0026 T17 = FETCH_DIM_R CV0($value) int(0)
+  .php   L0127 0027 T18 = ASSIGN CV2($match#1) T17
+  .php   L0127 0028 T19 = TYPE_CHECK (string) T18
+  .php   L0127 0029 T14 = BOOL T19
+  .php   L0127 0030 T14 = JMPZ_EX T14 0038
+  .php   L0127 0031 INIT_FCALL 2 112 string("array_slice")
+  .php   L0127 0032 SEND_VAR CV0($value) 1
+  .php   L0127 0033 SEND_VAL int(1) 2
+  .php   L0127 0034 V20 = DO_ICALL
+  .php   L0127 0035 T21 = ASSIGN CV3($rest) V20
+  .php   L0127 0036 T22 = TYPE_CHECK (array) T21
+  .php   L0127 0037 T14 = BOOL T22
+  .php   L0127 0038 T4 = IS_IDENTICAL T14 bool(true)
+  .php   L0127 0039 JMPNZ T4 0045
+  .php   L0127 0040 JMP 0049
+  .php   L0125 0041 T23 = QM_ASSIGN int(0)
+  .php   L0125 0042 JMP 0051
+  .php   L0126 0043 T23 = QM_ASSIGN CV1($one)
+  .php   L0126 0044 JMP 0051
+  .php   L0127 0045 T24 = COUNT CV3($rest)
+  .php   L0127 0046 T25 = ADD int(100) T24
+  .php   L0127 0047 T23 = QM_ASSIGN T25
+  .php   L0127 0048 JMP 0051
+  .php   L0128 0049 T23 = QM_ASSIGN int(-1)
+  .php   L0128 0050 JMP 0051
+  .php   L0128 0051 VERIFY_RETURN_TYPE T23
+  .php   L0128 0052 RETURN T23
+  .php   L0129 0053 VERIFY_RETURN_TYPE
+  .php   L0129 0054 RETURN null
+  .php        ; (lines=33, args=1, vars=4, tmps=16)
+  .php   L0131 0006 T4 = JMPZ_EX T4 0015
+  .php   L0131 0009 T9 = TYPE_CHECK (array) T8
+  .php   L0131 0010 T9 = JMPZ_EX T9 0014
+  .php   L0131 0011 T10 = COUNT CV1($match#1)
+  .php   L0131 0012 T11 = IS_IDENTICAL T10 int(0)
+  .php   L0131 0013 T9 = BOOL T11
+  .php   L0131 0014 T4 = BOOL T9
+  .php   L0131 0015 T4 = JMPZ_EX T4 0029
+  .php   L0131 0016 T12 = FETCH_DIM_R CV0($rows) int(1)
+  .php   L0131 0017 T13 = ASSIGN CV2($match#2) T12
+  .php   L0131 0018 T14 = TYPE_CHECK (array) T13
+  .php   L0131 0019 T14 = JMPZ_EX T14 0023
+  .php   L0131 0020 T15 = COUNT CV2($match#2)
+  .php   L0131 0021 T16 = IS_IDENTICAL T15 int(1)
+  .php   L0131 0022 T14 = BOOL T16
+  .php   L0131 0023 T14 = JMPZ_EX T14 0028
+  .php   L0131 0024 T17 = FETCH_DIM_R CV2($match#2) int(0)
+  .php   L0131 0025 T18 = ASSIGN CV3($match#3) T17
+  .php   L0131 0026 T19 = TYPE_CHECK (long) T18
+  .php   L0131 0027 T14 = BOOL T19
+  .php   L0131 0028 T4 = BOOL T14
+  .php   L0131 0029 VERIFY_RETURN_TYPE T4
+  .php   L0131 0030 RETURN T4
+  .php   L0131 0031 VERIFY_RETURN_TYPE
+  .php   L0131 0032 RETURN null
+  .php        ; (lines=60, args=1, vars=5, tmps=25)
+  .php   0007 JMPNZ T5 0046
+  .php   0019 JMPNZ T5 0048
+  .php   0035 T15 = JMPZ_EX T15 0043
+  .php   0041 T26 = TYPE_CHECK (array) T25
+  .php   0042 T15 = BOOL T26
+  .php   0043 T5 = IS_IDENTICAL T15 bool(true)
+  .php   0044 JMPNZ T5 0050
+  .php   0045 JMP 0054
+  .php   0046 T27 = QM_ASSIGN int(0)
+  .php   0047 JMP 0056
+  .php   0048 T27 = QM_ASSIGN int(1)
+  .php   0049 JMP 0056
+  .php   0050 T28 = COUNT CV4($rest)
+  .php   0051 T29 = ADD int(2) T28
+  .php   0052 T27 = QM_ASSIGN T29
+  .php   0053 JMP 0056
+  .php   0054 T27 = QM_ASSIGN int(-1)
+  .php   0055 JMP 0056
+  .php   0056 VERIFY_RETURN_TYPE T27
+  .php   0057 RETURN T27
+  .php   0058 VERIFY_RETURN_TYPE
+  .php   0059 RETURN null
+  .php        27: 0055 - 0057 (tmp/var)
+  .php        ; (lines=30, args=1, vars=3, tmps=12)
+  .php   0011 T3 = JMPZ_EX T3 0019
+  .php   0017 T11 = TYPE_CHECK (array) T10
+  .php   0018 T3 = BOOL T11
+  .php   0019 T3 = JMPZ_EX T3 0023
+  .php   0020 T12 = COUNT CV2($others)
+  .php   0021 T13 = IS_IDENTICAL T12 int(0)
+  .php   0022 T3 = BOOL T13
+  .php   0023 JMPZ T3 0027
+  .php   0024 T14 = FETCH_OBJ_R CV1($first) string("radius")
+  .php   0025 VERIFY_RETURN_TYPE T14
+  .php   0026 RETURN T14
+  .php   0027 RETURN float(0)
+  .php   0028 VERIFY_RETURN_TYPE
+  .php   0029 RETURN null
+  .php        14: 0025 - 0026 (tmp/var)
+  .php        ; (lines=97, args=1, vars=7, tmps=51)
+  .php   0018 T8 = JMPZ_EX T8 0029
+  .php   0027 T23 = TYPE_CHECK (array) T22
+  .php   0028 T8 = BOOL T23
+  .php   0029 T7 = IS_IDENTICAL T8 bool(true)
+  .php   0030 JMPNZ T7 0076
+  .php   0031 T24 = TYPE_CHECK (array) CV0($shapes)
+  .php   0032 T24 = JMPZ_EX T24 0036
+  .php   0033 T25 = COUNT CV0($shapes)
+  .php   0034 T26 = IS_SMALLER_OR_EQUAL int(1) T25
+  .php   0035 T24 = BOOL T26
+  .php   0036 T24 = JMPZ_EX T24 0043
+  .php   0037 T27 = COUNT CV0($shapes)
+  .php   0038 T28 = SUB T27 int(1)
+  .php   0039 T29 = FETCH_DIM_R CV0($shapes) T28
+  .php   0040 T30 = ASSIGN CV4($last) T29
+  .php   0041 T31 = INSTANCEOF T30 string("Demo\\Circle")
+  .php   0042 T24 = BOOL T31
+  .php   0043 T24 = JMPZ_EX T24 0054
+  .php   0044 INIT_FCALL 3 128 string("array_slice")
+  .php   0045 SEND_VAR CV0($shapes) 1
+  .php   0046 SEND_VAL int(0) 2
+  .php   0047 T32 = COUNT CV0($shapes)
+  .php   0048 T33 = SUB T32 int(1)
+  .php   0049 SEND_VAL T33 3
+  .php   0050 V34 = DO_ICALL
+  .php   0051 T35 = ASSIGN CV5($before) V34
+  .php   0052 T36 = TYPE_CHECK (array) T35
+  .php   0053 T24 = BOOL T36
+  .php   0054 T7 = IS_IDENTICAL T24 bool(true)
+  .php   0055 JMPNZ T7 0081
+  .php   0056 T37 = TYPE_CHECK (array) CV0($shapes)
+  .php   0057 T37 = JMPZ_EX T37 0061
+  .php   0058 T38 = COUNT CV0($shapes)
+  .php   0059 T39 = IS_SMALLER_OR_EQUAL int(2) T38
+  .php   0060 T37 = BOOL T39
+  .php   0061 T37 = JMPZ_EX T37 0066
+  .php   0062 T40 = FETCH_DIM_R CV0($shapes) int(0)
+  .php   0063 T41 = ASSIGN CV6($first) T40
+  .php   0064 T42 = INSTANCEOF T41 string("Demo\\Square")
+  .php   0065 T37 = BOOL T42
+  .php   0066 T37 = JMPZ_EX T37 0073
+  .php   0067 T43 = COUNT CV0($shapes)
+  .php   0068 T44 = SUB T43 int(1)
+  .php   0069 T45 = FETCH_DIM_R CV0($shapes) T44
+  .php   0070 T46 = ASSIGN CV4($last) T45
+  .php   0071 T47 = INSTANCEOF T46 string("Demo\\Square")
+  .php   0072 T37 = BOOL T47
+  .php   0073 T7 = IS_IDENTICAL T37 bool(true)
+  .php   0074 JMPNZ T7 0086
+  .php   0075 JMP 0091
+  .php   0076 T48 = COUNT CV3($inner)
+  .php   0077 T49 = CAST (double) T48
+  .php   0078 T50 = MUL T49 int(-1)
+  .php   0079 T51 = QM_ASSIGN T50
+  .php   0080 JMP 0093
+  .php   0081 T52 = FETCH_OBJ_R CV4($last) string("radius")
+  .php   0082 T53 = COUNT CV5($before)
+  .php   0083 T54 = ADD T52 T53
+  .php   0084 T51 = QM_ASSIGN T54
+  .php   0085 JMP 0093
+  .php   0086 T55 = FETCH_OBJ_R CV6($first) string("side")
+  .php   0087 T56 = FETCH_OBJ_R CV4($last) string("side")
+  .php   0088 T57 = ADD T55 T56
+  .php   0089 T51 = QM_ASSIGN T57
+  .php   0090 JMP 0093
+  .php   0091 T51 = QM_ASSIGN float(0)
+  .php   0092 JMP 0093
+  .php   0093 VERIFY_RETURN_TYPE T51
+  .php   0094 RETURN T51
+  .php   0095 VERIFY_RETURN_TYPE
+  .php   0096 RETURN null
+  .php        52: 0082 - 0083 (tmp/var)
+  .php        55: 0087 - 0088 (tmp/var)
+  .php        51: 0092 - 0094 (tmp/var)
+  .php        ; (lines=31, args=1, vars=3, tmps=12)
+  .php   0011 T4 = JMPZ_EX T4 0019
+  .php   0017 T12 = TYPE_CHECK (array) T11
+  .php   0018 T4 = BOOL T12
+  .php   0019 T3 = IS_IDENTICAL T4 bool(true)
+  .php   0020 JMPNZ T3 0022
+  .php   0021 JMP 0025
+  .php   0022 T13 = COUNT CV2($rest)
+  .php   0023 T14 = QM_ASSIGN T13
+  .php   0024 JMP 0027
+  .php   0025 T14 = QM_ASSIGN int(-1)
+  .php   0026 JMP 0027
+  .php   0027 VERIFY_RETURN_TYPE T14
+  .php   0028 RETURN T14
+  .php        14: 0026 - 0028 (tmp/var)
+  .php        ; (lines=55, args=1, vars=4, tmps=22)
+  .php   0001 T5 = TYPE_CHECK (array) CV0($value)
+  .php   0002 T5 = JMPZ_EX T5 0006
+  .php   0003 T6 = COUNT CV0($value)
+  .php   0004 T7 = IS_IDENTICAL T6 int(0)
+  .php   0005 T5 = BOOL T7
+  .php   0006 T4 = IS_IDENTICAL T5 bool(true)
+  .php   0007 JMPNZ T4 0041
+  .php   0008 T8 = TYPE_CHECK (array) CV0($value)
+  .php   0009 T8 = JMPZ_EX T8 0013
+  .php   0010 T9 = COUNT CV0($value)
+  .php   0011 T10 = IS_IDENTICAL T9 int(1)
+  .php   0012 T8 = BOOL T10
+  .php   0013 T8 = JMPZ_EX T8 0018
+  .php   0014 T11 = FETCH_DIM_R CV0($value) int(0)
+  .php   0015 T12 = ASSIGN CV1($one) T11
+  .php   0016 T13 = TYPE_CHECK (long) T12
+  .php   0017 T8 = BOOL T13
+  .php   0018 T4 = IS_IDENTICAL T8 bool(true)
+  .php   0019 JMPNZ T4 0043
+  .php   0020 T14 = TYPE_CHECK (array) CV0($value)
+  .php   0021 T14 = JMPZ_EX T14 0025
+  .php   0022 T15 = COUNT CV0($value)
+  .php   0023 T16 = IS_SMALLER_OR_EQUAL int(1) T15
+  .php   0024 T14 = BOOL T16
+  .php   0025 T14 = JMPZ_EX T14 0030
+  .php   0026 T17 = FETCH_DIM_R CV0($value) int(0)
+  .php   0027 T18 = ASSIGN CV2($match#1) T17
+  .php   0028 T19 = TYPE_CHECK (string) T18
+  .php   0029 T14 = BOOL T19
+  .php   0030 T14 = JMPZ_EX T14 0038
+  .php   0031 INIT_FCALL 2 112 string("array_slice")
+  .php   0032 SEND_VAR CV0($value) 1
+  .php   0033 SEND_VAL int(1) 2
+  .php   0034 V20 = DO_ICALL
+  .php   0035 T21 = ASSIGN CV3($rest) V20
+  .php   0036 T22 = TYPE_CHECK (array) T21
+  .php   0037 T14 = BOOL T22
+  .php   0038 T4 = IS_IDENTICAL T14 bool(true)
+  .php   0039 JMPNZ T4 0045
+  .php   0040 JMP 0049
+  .php   0041 T23 = QM_ASSIGN int(0)
+  .php   0042 JMP 0051
+  .php   0043 T23 = QM_ASSIGN CV1($one)
+  .php   0044 JMP 0051
+  .php   0045 T24 = COUNT CV3($rest)
+  .php   0046 T25 = ADD int(100) T24
+  .php   0047 T23 = QM_ASSIGN T25
+  .php   0048 JMP 0051
+  .php   0049 T23 = QM_ASSIGN int(-1)
+  .php   0050 JMP 0051
+  .php   0051 VERIFY_RETURN_TYPE T23
+  .php   0052 RETURN T23
+  .php   0053 VERIFY_RETURN_TYPE
+  .php   0054 RETURN null
+  .php        23: 0050 - 0052 (tmp/var)
+  .php        ; (lines=33, args=1, vars=4, tmps=16)
+  .php   0006 T4 = JMPZ_EX T4 0015
+  .php   0009 T9 = TYPE_CHECK (array) T8
+  .php   0010 T9 = JMPZ_EX T9 0014
+  .php   0011 T10 = COUNT CV1($match#1)
+  .php   0012 T11 = IS_IDENTICAL T10 int(0)
+  .php   0013 T9 = BOOL T11
+  .php   0014 T4 = BOOL T9
+  .php   0015 T4 = JMPZ_EX T4 0029
+  .php   0016 T12 = FETCH_DIM_R CV0($rows) int(1)
+  .php   0017 T13 = ASSIGN CV2($match#2) T12
+  .php   0018 T14 = TYPE_CHECK (array) T13
+  .php   0019 T14 = JMPZ_EX T14 0023
+  .php   0020 T15 = COUNT CV2($match#2)
+  .php   0021 T16 = IS_IDENTICAL T15 int(1)
+  .php   0022 T14 = BOOL T16
+  .php   0023 T14 = JMPZ_EX T14 0028
+  .php   0024 T17 = FETCH_DIM_R CV2($match#2) int(0)
+  .php   0025 T18 = ASSIGN CV3($match#3) T17
+  .php   0026 T19 = TYPE_CHECK (long) T18
+  .php   0027 T14 = BOOL T19
+  .php   0028 T4 = BOOL T14
+  .php   0029 VERIFY_RETURN_TYPE T4
+  .php   0030 RETURN T4
+  .php   0031 VERIFY_RETURN_TYPE
+  .php   0032 RETURN null
 Signatures: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Accessors: same opcodes and lines in 15 op arrays, same signatures in 2 classes
 Parcel: same opcodes and lines in 3 op arrays, same signatures in 1 classes

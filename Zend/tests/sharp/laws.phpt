@@ -18,8 +18,23 @@ public class Money
 }
 
 SHARP);
+file_put_contents("$root/app/Shared/Payment.sharp", <<<'SHARP'
+namespace App.Shared;
+
+public enum Payment
+{
+    case Paid(int cents);
+    case Pending;
+
+    public static bool settles(Payment payment) => true;
+
+    law aPaymentSettles(int cents) => Payment.settles(Payment.Paid(cents)) && Payment.settles(Payment.Pending);
+}
+
+SHARP);
 run_mago($root);
 $settings = ['sharp.compile_command' => escapeshellarg(getenv('TEST_MAGO_EXECUTABLE')) . ' --no-version-check compile'];
+refusal("$root/app/Shared/Payment.sharp", $settings);
 refusal("$root/app/Shared/Money.sharp", $settings);
 
 file_put_contents("$root/app/Shared/Money.lean", <<<'LEAN'
@@ -34,6 +49,7 @@ refusal("$root/app/Shared/Money.sharp", $settings);
 remove_project($root);
 ?>
 --EXPECT--
+ran
 ran
 CompileError: app/Shared/Money.sharp has 1 error:
 line 8: Law addKeepsCurrency is not proven: app/Shared/Money.lean line 4 is a gap (sorry). Write the proof there, or change the law.

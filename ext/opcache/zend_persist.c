@@ -425,6 +425,11 @@ static void zend_persist_op_array_ex(zend_op_array *op_array, zend_persistent_sc
 		}
 	}
 
+	/* PHP#: the type text is interned where the function is compiled, so each copy of the function stores the one. */
+	if (op_array->sharp_type) {
+		zend_accel_store_interned_string(op_array->sharp_type);
+	}
+
 	if (op_array->scope) {
 		zend_class_entry *scope = zend_shared_alloc_get_xlat_entry(op_array->scope);
 

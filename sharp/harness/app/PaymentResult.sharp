@@ -1,0 +1,8 @@
+namespace App;
+
+public enum PaymentResult
+{
+    case Paid(string transactionId);
+    case Declined(string reason);
+    case RequiresAction(string redirect);
+}

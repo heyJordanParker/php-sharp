@@ -8941,6 +8941,21 @@ ZEND_VM_HANDLER(159, ZEND_DISCARD_EXCEPTION, ANY, ANY)
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
+/* PHP#: `a ?? return`, `a ?? continue` and `a ?? break` leave from the middle of an expression. This frees the calls
+ * the expression has started and the temporaries it holds, as an exception thrown here would. Its return or jump
+ * follows: the finally blocks it runs, the loop variables it frees, then the RETURN or JMP. The live ranges of those
+ * temporaries end at this opcode, and resume after that RETURN or JMP (see zend_sharp_split_leave_ranges). */
+ZEND_VM_HANDLER(216, ZEND_SHARP_LEAVE, ANY, ANY)
+{
+	USE_OPLINE
+	uint32_t op_num = opline - EX(func)->op_array.opcodes;
+
+	SAVE_OPLINE();
+	cleanup_unfinished_calls(execute_data, op_num);
+	cleanup_live_vars(execute_data, op_num - 1, op_num);
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+}
+
 ZEND_VM_HANDLER(162, ZEND_FAST_CALL, JMP_ADDR, ANY)
 {
 	USE_OPLINE

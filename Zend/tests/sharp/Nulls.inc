@@ -73,4 +73,22 @@ class Nulls
     {
         return null === $value;
     }
+
+    private ?\Closure $doubler = null;
+
+    public function local(?\Closure $function, int $value): ?int { return ($function === null ? null : $function($value)); }
+
+    public function property(?\Closure $function, int $value): ?int
+    {
+        $this->doubler = $function;
+        return ((${'nullsafe#1'} = $this->doubler) === null ? null : ${'nullsafe#1'}($value));
+    }
+
+    public function called(?\Closure $function, int $value): ?int
+    {
+        $this->doubler = $function;
+        return ((${'nullsafe#1'} = $this->held()) === null ? null : ${'nullsafe#1'}($value));
+    }
+
+    public function held(): ?\Closure { return $this->doubler; }
 }
