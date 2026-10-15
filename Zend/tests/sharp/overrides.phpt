@@ -46,7 +46,8 @@ echo Overrides\Box::grow(new Overrides\Box()), ' ';
 $size = new ReflectionProperty(Overrides\Sized::class, 'size');
 echo $size->hasHook(PropertyHookType::Set) ? 'set' : 'no set', "\n";
 
-// A get-only static keeps its initial value, and one that isn't constant ran once, when the file declared the class.
+// A get-only static keeps its initial value, and one that isn't constant runs once, when the request first uses the
+// class's statics.
 echo Overrides\Registry::$size, ' ', Overrides\Registry::$label, ' ', Overrides\Registry::total(), "\n";
 try {
     Overrides\Registry::$size = 4;
@@ -54,8 +55,17 @@ try {
     echo $error->getMessage(), "\n";
 }
 
+// An initial value that throws fails that first use, and runs no more, so the static stays unset.
+foreach ([1, 2] as $attempt) {
+    try {
+        Overrides\Faulty::read();
+    } catch (Throwable $error) {
+        echo $attempt, ' ', $error->getMessage(), "\n";
+    }
+}
+
 // A static computed property, a static `set` body and a static observer run as an instance property's do, through
-// their class's hidden static methods. The observer saw the initial value's write, when the file declared the class.
+// their class's hidden static methods. The observer sees the initial value's write when `run` first uses the statics.
 echo Overrides\Tally::run(), ' ', Overrides\Tally::current(), "\n";
 Overrides\Tally::rename('Bo');
 
@@ -97,7 +107,6 @@ class LegacyFigure extends Overrides\Figure
 echo (new LegacyFigure())->name(), ' ', (new Overrides\Figure())->name(), "\n";
 ?>
 --EXPECT--
-label start
 square four sides 4
 0 4
 kind: abstract, virtual
@@ -114,6 +123,9 @@ Cannot modify private(set) property Overrides\Account::$name from global scope
 2 set
 3 READY 7
 Cannot modify private(set) property Overrides\Registry::$size from global scope
+1 no code
+2 Typed static property Overrides\Faulty::$code must not be accessed before initialization
+label start
 16 7
 label Bo
 4

@@ -2111,6 +2111,38 @@ ZEND_API zend_function *zend_std_get_static_method(zend_class_entry *ce, zend_st
 }
 /* }}} */
 
+/* PHP#: PHP gives a static only a constant default, so a PHP# class sets each static whose initial value isn't constant
+ * in its hidden private static method `#statics`. It runs once each request, when the request first builds the class's
+ * statics, after their constant defaults, so a class opcache preloads gets the values in every request too. A
+ * `#statics` the class inherits sets only its parent's statics, which the parent's own build sets. */
+ZEND_API zend_result zend_class_init_sharp_statics(zend_class_entry *class_type) /* {{{ */
+{
+	zend_function *initializer = zend_hash_str_find_ptr(&class_type->function_table, ZEND_STRL("#statics"));
+
+	if (EXPECTED(!initializer) || initializer->common.scope != class_type) {
+		return SUCCESS;
+	}
+	zend_call_known_function(initializer, NULL, class_type, NULL, 0, NULL, NULL);
+
+	return EG(exception) ? FAILURE : SUCCESS;
+}
+/* }}} */
+
+/* Whether the class's constant defaults are evaluated in this request, as zend_update_class_constants reads it. */
+static bool zend_class_constants_updated(const zend_class_entry *class_type) /* {{{ */
+{
+	if (class_type->ce_flags & ZEND_ACC_CONSTANTS_UPDATED) {
+		return true;
+	}
+	if (ZEND_MAP_PTR(class_type->mutable_data) == NULL) {
+		return false;
+	}
+	const zend_class_mutable_data *mutable_data = ZEND_MAP_PTR_GET_IMM(class_type->mutable_data);
+
+	return mutable_data && (mutable_data->ce_flags & ZEND_ACC_CONSTANTS_UPDATED);
+}
+/* }}} */
+
 ZEND_API void zend_class_init_statics(zend_class_entry *class_type) /* {{{ */
 {
 	int i;
@@ -2131,6 +2163,10 @@ ZEND_API void zend_class_init_statics(zend_class_entry *class_type) /* {{{ */
 			} else {
 				ZVAL_COPY_OR_DUP(&CE_STATIC_MEMBERS(class_type)[i], p);
 			}
+		}
+		/* zend_update_class_constants runs `#statics` itself once it has evaluated the constant defaults. */
+		if (zend_class_constants_updated(class_type)) {
+			zend_class_init_sharp_statics(class_type);
 		}
 	}
 } /* }}} */
@@ -2176,6 +2212,10 @@ undeclared_property:
 	/* Ensure static properties are initialized. */
 	if (UNEXPECTED(CE_STATIC_MEMBERS(ce) == NULL)) {
 		zend_class_init_statics(ce);
+		/* PHP#: the class's `#statics` threw, see zend_class_init_sharp_statics. */
+		if (UNEXPECTED(EG(exception))) {
+			return NULL;
+		}
 	}
 
 	ret = CE_STATIC_MEMBERS(ce) + property_info->offset;
