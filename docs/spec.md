@@ -3875,7 +3875,7 @@ public class StoreCheckout : Checkout
 
 **A method that takes a function can have that function's effects.** Its declaration writes `uses f`, where `f` is one of its function-typed parameters, with or without a body. At each call, the method has its body's own effects plus the effects of the function passed as `f`. Code that calls it writes nothing.
 
-<!-- example function-effects: statements
+<!-- example function-effects: statements in Carts<T>
 List<Cart> carts = [new Cart()];
 private PaymentGateway gateway = new StripeGateway();
 -->

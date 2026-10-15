@@ -421,9 +421,18 @@ function complete(string $code, string $language, bool $top, bool $last_of_const
     if (trim($code) === '…' || trim($code) === '') {
         return '';
     }
+    // A signature may end in the function parameters whose effects it has, as `List.map`'s `… uses f` does.
+    // `readonly` comes last, after `uses` (section 13).
+    $uses = '\s+uses\s+\w+(?:\s*,\s*\w+)*';
+    $tail = "\)(?:$uses)?(?:\s+readonly)?";
+    if ($top && $last_of_construct && $language === 'sharp' && preg_match("~\){$uses}(?:\s+readonly)?;\s*$~", $code)) {
+        // A library declaration such as `public List<TResult> map<TResult>(Function<TResult(T)> f) uses f;` has no
+        // body, and a class holds no method without one.
+        $code = preg_replace('~;\s*$~', '', $code);
+    }
     if ($top && $last_of_construct && $language === 'sharp' && !preg_match('~[;{},(\[]$|=>$~', rtrim($code))) {
-        $signature = preg_match('~^\s*(?:\[.*\]\s*)*(?:(?:public|private|protected|internal|static|abstract|virtual|override|final|readonly)\s+)+.*\)(?:\s+readonly)?$~', $code)
-            || preg_match('~^\s*[\w<>?,|() \[\].]+\s+\w+(?:<[^>]*>)?\(.*\)(?:\s+readonly)?$~', $code);
+        $signature = preg_match("~^\s*(?:\[.*\]\s*)*(?:(?:public|private|protected|internal|static|abstract|virtual|override|final|readonly)\s+)+.*{$tail}$~", $code)
+            || preg_match("~^\s*[\w<>?,|() \[\].]+\s+\w+(?:<[^>]*>)?\(.*{$tail}$~", $code);
         $code .= $signature && ($next === null || !preg_match('~^\s*[{:]~', $next)) ? ' { … }' : ';';
     }
     // A type's body and a control statement's block stay empty, so a run passes through them.

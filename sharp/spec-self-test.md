@@ -1,6 +1,6 @@
 # Spec check self-test
 
-`sharp/bin/spec --self-test` checks the examples below as it checks `docs/spec.md`, then compares each example's problems with the `<!-- expect <id>` comment after it. Each example shows one rule of `sharp/bin/spec`: how it reads an annotation, how it matches the checker's errors to lines, or how it compares a run with its claims. Most examples break their rule on purpose, so the problems they expect are the rule at work.
+`sharp/bin/spec --self-test` checks the examples below as it checks `docs/spec.md`, then compares each example's problems with the `<!-- expect <id>` comment after it. Each example shows one rule of `sharp/bin/spec`: how it reads an annotation, how it matches the checker's errors to lines, how it compares a run with its claims, or how it completes a fragment. Most examples break their rule on purpose, so the problems they expect are the rule at work.
 
 An expect comment lists every problem, one per line, and a one-line `<!-- expect <id> -->` expects none. A location reads `line <n>`, counted from the example's first fence, so line 1 is its first code line. `…` matches any text, so a row keeps passing when mago words a message differently.
 
@@ -199,3 +199,15 @@ const a = match (n) {   // compiles
 line 1 expects no error, and the checker reports: …
 line 2 expects a compile error, and the checker accepts it
 -->
+
+## 3. Fragments
+
+A signature that ends in `uses` and the function parameters it names gets a body, with or without its `;`, as a library declaration such as `List.map`'s is written:
+
+<!-- example uses-signature: members -->
+```csharp
+public int twice(Function<int(int)> f) uses f;
+public int thrice(Function<int(int)> f) uses f
+public int quoted(Function<int(int)> f) uses f readonly;
+```
+<!-- expect uses-signature -->
