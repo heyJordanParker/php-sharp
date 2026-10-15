@@ -727,6 +727,7 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 - **Names start with `T`:** `TItem`, `TKey`.
 - **The bound is written inline:** `<TItem : DatabaseEntity>`.
 - **Several bounds use `&`:** `<TItem : DatabaseEntity & Shareable>`.
+- **`Object` bounds a type parameter to any object,** `<TValue : Object>`, as C#'s `where T : class` and TypeScript's `T extends object` do. It is a bound alone.
 - **A type parameter with no bound may hold `null`,** so it is bounded by `Any?`.
 - **A generic class can't implement PHP's `Serializable`,** and the error points to `__serialize` and `__unserialize`.
 - **A class value with type arguments can't be a `Map` key,** because `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` share the plain class name.
@@ -735,6 +736,7 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 ```csharp
 public class PaginatedList<TItem : DatabaseEntity> { … }
 public PaginatedList<TItem> list<TItem : DatabaseEntity>(Query<TItem> query) { … }
+public TValue keep<TValue : Object>(TValue value) => value;
 ```
 
 **`Self` on a receiver typed by a type parameter is that type parameter** (section 25). In `TBox refill<TBox : Box<int>>(TBox box)`, `box.withValue(5)` returns a `TBox`, not `Box<int>`, as Rust's `t.clone()` on a `T: Clone` returns a `T`:
@@ -2952,7 +2954,7 @@ Ids.identity(5);                                // compile error: 5 is not an ob
 
 ## 25. Referring to classes
 
-**`typeof(X)`** is typed `Class<X>`. It works on every type parameter, a method's included, because every type argument reaches the running program (section 11). PHP's `Order::class` is removed.
+**`typeof(X)`** is typed `Class<X>`, for any one type `X`, as C#'s `typeof` is. It works on every type parameter, a method's included, because every type argument reaches the running program (section 11). PHP's `Order::class` is removed.
 
 <!-- example typeof-types
 public class Example
@@ -2967,6 +2969,11 @@ public class Example
 Class<Order> type = typeof(Order);
 type.attributes<Listen>();
 typeof(TItem);
+typeof(int);                    // the class value of int
+typeof(int|string);             // the class value of int|string: a union is one type
+typeof(List<Order>);            // the class value of a list of orders
+typeof(Map<string, int>);
+typeof(Self);                   // the class run was called on
 ```
 
 **`typeof(TItem)` works for any type argument, including `int`,** as C#'s `typeof(T)` does. It is a `Class<TItem>`, which can create objects, only when `TItem`'s bound is a class:
@@ -3047,7 +3054,8 @@ public class FormBuilder
 
 - **`new (type)(…)`** creates an object from a class value. The parentheses around `type` mark it as an expression, not a class name. It needs a `required` constructor, as `new Self(…)` does. For a plain PHP class, such as `Class<Model>`, the checker checks the call against that class's own constructor.
 - **A static call through a class value,** such as `type.defaultTag()` or `type.find(id)`, calls the static on the class the value holds.
-- **`Class`'s own members win,** such as `attributes`. A class cannot declare a static named like one of them, as in TypeScript's error 2699.
+- **`Class`'s own members win,** such as `attributes`. A class cannot declare a static named like one of them, as in TypeScript's error 2699. Only the standard library adds members to `Class`, so an extension of `Class<T>` elsewhere is a compile error.
+- **`attributes<TAttribute : Object>()` reads attributes, which are objects,** so `attributes<int>()` is a compile error.
 - **A class value's type need not be written.** `const type = …` holds a `Class<Element>`.
 - **A property named by a variable has no form.**
 
@@ -3058,6 +3066,7 @@ string key = "signup";
 -->
 ```csharp
 type.attributes<Listen>();                       // Class's own method
+type.attributes<int>();                          // compile error: int is not an Object
 public static string attributes() => "";         // compile error: attributes is a member of Class
 new (kind)(key);                                 // compile error: kind is a string, not a Class
 ```
@@ -3093,6 +3102,7 @@ typeof(Box<Order>) == typeof(Box<Invoice>);     // false: the same class with ot
 **`Self`** means the class a static method was actually called on. It replaces PHP's `static`. PHP's `self` is removed: to mean the declaring class, write its name.
 
 <!-- example self-return: statements
+public class Order : DatabaseEntity { public Order(Row row) : super(row) { } }
 Any value = 1;
 VerifiedUser caller = new VerifiedUser();
 -->
@@ -3100,7 +3110,12 @@ VerifiedUser caller = new VerifiedUser();
 public abstract class DatabaseEntity
 {
     public required DatabaseEntity(Row row) { … }
-    public static Self fromSchema(Any value, VerifiedUser caller) { … return new Self(row); }
+
+    public static Self fromSchema(Any value, VerifiedUser caller)
+    {
+        Row row = …;
+        return new Self(row);
+    }
 }
 
 const order = Order.fromSchema(value, caller);   // typed as Order
@@ -3108,7 +3123,7 @@ const order = Order.fromSchema(value, caller);   // typed as Order
 
 `Self` replaces the C# workaround of passing a class to itself, as in `class Order : Entity<Order>`.
 
-`Self` is written only as a return type, and in bodies as `new Self(…)` and `Self.m()`. A `Self` parameter is a compile error, because a subclass would accept any parent:
+`Self` is written only as a return type, and in bodies as `new Self(…)`, `Self.m()` and `typeof(Self)`, the class value of the class the method was called on, which replaces PHP's `static::class`. A `Self` parameter is a compile error, because a subclass would accept any parent:
 
 <!-- example self-parameter: members -->
 ```csharp
@@ -3120,7 +3135,10 @@ public bool same(Self other) { … }   // compile error: Self is a return type o
 - its leading parameters match the parameters of the `required` constructor
 - every parameter it adds has a default
 
-<!-- example required-constructors -->
+<!-- example required-constructors
+public abstract class DatabaseEntity { public required DatabaseEntity(Row row) { } }
+…
+-->
 ```csharp
 // app/Order.sharp
 namespace App;
@@ -3218,6 +3236,59 @@ import App.Billing.PriceTotals;     // extension(Map<string, Money> prices) { pu
 
 lines.total();                      // compiles: lines is a List<Line>, so LineTotals runs
 prices.total();                     // compiles: prices is a Map<string, Money>, so PriceTotals runs
+```
+
+- **An extension block can declare type parameters, as in C# 14,** so one block serves a receiver of any type argument, `extension<TItem>(List<TItem> items)`, within the type parameters' bounds (section 11). A call infers them from its receiver. A member's own type parameters come after the block's, and a call writes only those:
+
+<!-- example generic-extensions -->
+```csharp
+// app/Shared/Lists/ListExtensions.sharp
+namespace App.Shared.Lists;
+
+import App.DatabaseEntity;
+
+public static class ListExtensions
+{
+    extension<TItem>(List<TItem> items)
+    {
+        public bool holds(TItem wanted) => items.contains(wanted);
+        public List<TOut> mapped<TOut>(Function<TOut(TItem)> map) => items.map(map);
+    }
+
+    extension<TEntity : DatabaseEntity>(List<TEntity> rows)
+    {
+        public int saved => rows.count();
+    }
+}
+```
+
+<!-- example generic-extensions: statements
+List<Order> orders = [new Order()];
+List<string> names = ["spring"];
+-->
+```csharp
+import App.Shared.Lists.ListExtensions;
+
+orders.holds(new Order());              // compiles: TItem is Order, from orders
+orders.mapped<string>(o => "order");    // compiles: a List<string>, the call writes only TOut
+orders.saved;                           // compiles: an Order is a DatabaseEntity
+names.saved;                            // compile error: string is outside TEntity's bound, so List<string> has no saved
+```
+
+- **Each type parameter of an extension block appears in its receiver's type,** because the receiver is the only place a call infers it from, as C# requires:
+
+<!-- example extension-unused-type-parameter -->
+```csharp
+// app/Shared/Lists/Pairs.sharp
+namespace App.Shared.Lists;
+
+public static class Pairs
+{
+    extension<TItem, TOther>(List<TItem> items)    // compile error: the receiver List<TItem> doesn't use TOther
+    {
+        public int size() => items.count();
+    }
+}
 ```
 
 ## 27. PHP# files

@@ -3341,17 +3341,48 @@ static const sharp_type *sharp_class_value_type(const zend_string *value)
 	return type;
 }
 
+/* Whether the string `value` is a class value of `Class<type>`, for a `type` that is no class, spec section 25: the
+ * class value of a type that fits `type`, as the checker lets `Class<X>` fit `Class<Y>` when `X` fits `Y`, so a
+ * `Class<int|string>` takes `int`, `string` and `int|string`. The class value of such a type is the text `typeof` gives
+ * it, which reads only as typeof spells it, and that of a class is its name, `App\Order`, which reads as `App.Order`. */
+static bool sharp_class_value_fits(const zend_string *value, const sharp_type *type)
+{
+	zend_string *text = zend_string_init(ZSTR_VAL(value), ZSTR_LEN(value), false);
+	for (size_t i = 0; i < ZSTR_LEN(text); i++) {
+		if (ZSTR_VAL(text)[i] == '\\') {
+			ZSTR_VAL(text)[i] = '.';
+		}
+	}
+
+	sharp_type_reader reader = sharp_type_reader_of(ZSTR_VAL(text), ZSTR_LEN(text), zend_arena_create(1024));
+	reader.depth_left = SHARP_TYPE_INPUT_DEPTH;
+	sharp_type_node *given = sharp_type_read(&reader);
+	bool fits = given && reader.at == reader.end && !reader.names
+		&& sharp_type_argument_takes(type, given, '+', &reader);
+	zend_arena_destroy(reader.arena);
+	zend_string_release_ex(text, false);
+
+	return fits;
+}
+
 /* Whether the string `value` is a class value of `Class<type>`, spec section 11: it names `type`'s class or a class that
  * extends or implements it, and the type arguments it carries give that class type arguments `type` takes. A class name
  * plain PHP writes carries none, so it gives its class's bounds, as an object plain PHP creates does. A `Class` of a type
- * that is no class, such as `typeof(TItem)` of an `int`, takes any string. */
+ * that is no class, as `Class<int>` or `Class<int|string>`, takes what sharp_class_value_fits takes. `Class<Any?>`,
+ * `Class<Object>` and a `Class` of a type parameter no type argument resolves take any string. */
 static bool sharp_class_value_is(const zval *value, const sharp_type *type)
 {
 	if (Z_TYPE_P(value) != IS_STRING) {
 		return false;
 	}
-	if (type->kind != SHARP_TYPE_NAMED || !type->class_name) {
+	const sharp_type *held = type->kind == SHARP_TYPE_NULLABLE ? type->members[0] : type;
+	if (held->kind == SHARP_TYPE_NAMED
+		&& (held->built_in == SHARP_BUILT_IN_ANY || held->built_in == SHARP_BUILT_IN_OBJECT
+			|| zend_string_equals_literal(held->text, SHARP_TYPE_UNRESOLVED))) {
 		return true;
+	}
+	if (type->kind != SHARP_TYPE_NAMED || !type->class_name) {
+		return sharp_class_value_fits(Z_STR_P(value), type);
 	}
 
 	/* An autoloader runs here, and can throw. Its exception stands for the check. */
@@ -5585,6 +5616,55 @@ static zend_class_entry *register_class_Sharp_List(void)
 	return zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES);
 }
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Class_of, 0, 1, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, value, IS_OBJECT, 0)
+ZEND_END_ARG_INFO()
+
+/* Spec section 25: the class of the object a value holds, which may be a subclass of its type. A class value is its
+ * class name, so plain PHP receives it as the name it takes. An object of a generic class gives the interned class
+ * value of its class with the object's type arguments, the one `typeof(Box<Order>)` gives, so `==` and `new (…)()`
+ * read them. */
+ZEND_METHOD(Sharp_Class, of)
+{
+	zend_object *value;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_OBJ(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	/* A lazy proxy's initializer runs to read its type arguments, and can throw. */
+	const sharp_type *arguments = sharp_type_arguments(value);
+	if (UNEXPECTED(EG(exception))) {
+		RETURN_THROWS();
+	}
+	if (!arguments) {
+		RETURN_STR_COPY(value->ce->name);
+	}
+
+	smart_str text = {0};
+	sharp_object_text(&text, value);
+	smart_str_0(&text);
+	const sharp_type *type = sharp_type_list(ZSTR_VAL(text.s), ZSTR_LEN(text.s));
+	smart_str_free(&text);
+	ZEND_ASSERT(type != NULL);
+
+	RETURN_STR_COPY(sharp_type_list_class_value(type, false));
+}
+
+static const zend_function_entry class_Sharp_Class_methods[] = {
+	ZEND_ME(Sharp_Class, of, arginfo_class_Sharp_Class_of, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_FE_END
+};
+
+static zend_class_entry *register_class_Sharp_Class(void)
+{
+	zend_class_entry ce;
+
+	INIT_NS_CLASS_ENTRY(ce, "Sharp", "Class", class_Sharp_Class_methods);
+
+	return zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES);
+}
+
 /* Spec section 12, rulings 22 and 23 of docs/architecture/slices/10-structs.md: a Map and a Set are Sharp\Map and
  * Sharp\Set objects, each holding a sharp_table. Plain PHP reads and writes one through its index, as $map[$key],
  * $map[$key] = $value, unset($map[$key]) and $set[] = $element, which the VM runs through the dimension handlers below
@@ -6442,6 +6522,7 @@ static PHP_MINIT_FUNCTION(sharp)
 
 	register_class_Sharp_Position();
 	register_class_Sharp_List();
+	register_class_Sharp_Class();
 	sharp_ce_struct = register_class_Sharp_Struct();
 	register_sharp_tables();
 	register_class_Sharp_Crossing();
