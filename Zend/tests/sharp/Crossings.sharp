@@ -75,6 +75,26 @@ class Crossings
         Iterable<string> names = global.names_and(last);
         return Crossings.joined(names);
     }
+
+    public static string pair([string name, int count] given) => `${given.name} ${given.count}`;
+
+    public static string entries(Iterable<[string, int]> given)
+    {
+        let joined = "";
+        for (const [name, count] of given) {
+            joined = `${joined}${name}=${count} `;
+        }
+        return joined;
+    }
+
+    public static string ownEntries(Map<string, int> counts)
+    {
+        let joined = "";
+        for (const entry of counts) {
+            joined = `${joined}${entry[0]}:${entry[1]} `;
+        }
+        return `${joined}${Crossings.entries(counts)}`;
+    }
 }
 
 public enum Level : string

@@ -49,6 +49,27 @@ class Cart
     {
         return [...before, ...this.prices(), 0, ...after];
     }
+
+    public [int total, int count] totals()
+    {
+        let total = 0;
+        for (const item of this.items) {
+            total += item.cents;
+        }
+        return [total, global.count(this.items)];
+    }
+
+    public string described()
+    {
+        const totals = this.totals();
+        const [total, count] = this.totals();
+        let described = `${totals.total}/${totals.count} ${total}/${count}`;
+        List<[string, int]> pairs = [["tea", 3], ["pie", 7]];
+        for (const [name, cents] of pairs) {
+            described = `${described} ${name}:${cents}`;
+        }
+        return described;
+    }
 }
 
 class Item

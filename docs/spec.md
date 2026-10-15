@@ -3803,20 +3803,22 @@ The standard library's collection methods (section 12) are declared this way, so
 
 A tuple groups a fixed number of typed values without declaring a class. It uses TypeScript's brackets. Each element is declared type first, as everywhere in PHP#.
 
-<!-- example tuples: statements
-Money total = new Money(500, "USD");
-int count = 2;
-Date since = new Date();
+<!-- example tuples: statements in Order
+public class Date { }
+private Money total = new Money(500, "USD");
+private int count = 2;
+private Date since = new Date();
+Order order = new Order();
 -->
 ```csharp
-public [Money total, int count, Date since] summarize() { return [total, count, since]; }
+public [Money total, int count, Date since] summarize() { return [this.total, this.count, this.since]; }
 
 const [total, count, since] = order.summarize();     // unpack
 const summary = order.summarize();
 summary.total;                                        // read by name, as in C#
 
-public [Money, int] totals() { return [total, count]; }   // compiles: element names are optional
-const [money, items] = order.totals();                    // unpack an unnamed tuple
+public [Money, int] totals() { return [this.total, this.count]; }   // compiles: element names are optional
+const [money, items] = order.totals();                              // unpack an unnamed tuple
 ```
 
 - **A tuple can have any number of elements.** The checker suggests a struct past four.

@@ -2078,8 +2078,19 @@ static bool sharp_sequence_call(sharp_sequence *sequence, zval *element, zval *r
 	return sharp_collection_call(&fci, &sequence->fcc, element, result);
 }
 
-/* Moves the source to its first element or its next, and copies that element. Returns false at the end and when reading
- * threw. */
+/* Spec sections 12 and 30: the tuple `[key, value]` a Map's entry is, a PHP list, as `entry`. */
+static void sharp_map_entry(zval *entry, zval *key, zval *value)
+{
+	zval part;
+	array_init_size(entry, 2);
+	ZVAL_COPY_DEREF(&part, key);
+	zend_hash_next_index_insert_new(Z_ARRVAL_P(entry), &part);
+	ZVAL_COPY_DEREF(&part, value);
+	zend_hash_next_index_insert_new(Z_ARRVAL_P(entry), &part);
+}
+
+/* Moves the source to its first element or its next, and copies that element: a Sharp\Map's entry `[key, value]`, since
+ * a Map is an `Iterable` of its entries. Returns false at the end and when reading threw. */
 static bool sharp_sequence_iterator_read(sharp_sequence_iterator *iterator, bool rewind, zval *element)
 {
 	zend_object_iterator *source = iterator->source;
@@ -2107,6 +2118,14 @@ static bool sharp_sequence_iterator_read(sharp_sequence_iterator *iterator, bool
 	}
 	if (!current || EG(exception)) {
 		return false;
+	}
+	if (source && Z_OBJCE(sharp_sequence_from(Z_OBJ(iterator->it.data))->source) == sharp_ce_map) {
+		zval key;
+		source->funcs->get_current_key(source, &key);
+		sharp_map_entry(element, &key, current);
+		zval_ptr_dtor(&key);
+
+		return true;
 	}
 	ZVAL_COPY_DEREF(element, current);
 
@@ -2772,7 +2791,7 @@ static const sharp_type *sharp_type_intern(const sharp_type_node *node, bool fro
 	return type;
 }
 
-/* `name`, `name<A, B>`, `Function<R(P1, P2)>` or `Function<R(P1, P2) uses E1, E2>`. */
+/* `name`, `name<A, B>`, `Function<R(P1, P2)>`, `Function<R(P1, P2) uses E1, E2>` or the tuple `[A, B]`. */
 static sharp_type_node *sharp_type_read_atom(sharp_type_reader *reader)
 {
 	const char *start = reader->at;
@@ -2836,6 +2855,23 @@ static sharp_type_node *sharp_type_read_atom(sharp_type_reader *reader)
 			} while (sharp_type_skip(reader, ", "));
 		}
 		if (!sharp_type_skip(reader, ">")) {
+			return NULL;
+		}
+		type->length = reader->at - start;
+
+		return type;
+	}
+	if (sharp_type_skip(reader, "[")) {
+		type = sharp_type_node_start(reader, SHARP_TYPE_TUPLE, start);
+		do {
+			sharp_type_node *element = sharp_type_read(reader);
+
+			if (!element) {
+				return NULL;
+			}
+			sharp_type_node_add(type, element);
+		} while (sharp_type_skip(reader, ", "));
+		if (!sharp_type_skip(reader, "]")) {
 			return NULL;
 		}
 		type->length = reader->at - start;
@@ -3324,6 +3360,11 @@ static void sharp_type_node_spell(sharp_type_node *node, zend_arena **arena)
 			smart_str_appendc(&text, '>');
 			break;
 		}
+		case SHARP_TYPE_TUPLE:
+			smart_str_appendc(&text, '[');
+			sharp_type_node_join(&text, node->first, ", ");
+			smart_str_appendc(&text, ']');
+			break;
 	}
 
 	char *spelling = zend_arena_alloc(arena, ZSTR_LEN(text.s));
@@ -3935,9 +3976,16 @@ static const sharp_type *sharp_type_elements(const sharp_type *type)
 	}
 }
 
+/* The type of the element at `position` of a value of `type`: a tuple's element type there, a collection's one element
+ * type, or NULL for any other type. */
+static const sharp_type *sharp_type_element_at(const sharp_type *type, uint32_t position)
+{
+	return type->kind == SHARP_TYPE_TUPLE ? type->members[position] : sharp_type_elements(type);
+}
+
 /* Whether `value` is walked entry by entry as a collection of `type`: an array where `type` is a collection whose
- * elements are checked, the Sharp\Map or Sharp\Set object of a `Map` or a `Set`, or a Sharp\Set held as an
- * `Iterable`. */
+ * elements are checked, the Sharp\Map or Sharp\Set object of a `Map` or a `Set`, or a Sharp\Map or a Sharp\Set held
+ * as an `Iterable`. */
 static bool sharp_type_collects(const sharp_type *type, const zval *value)
 {
 	if (Z_TYPE_P(value) == IS_ARRAY) {
@@ -3947,7 +3995,8 @@ static bool sharp_type_collects(const sharp_type *type, const zval *value)
 		return false;
 	}
 
-	return (type->built_in == SHARP_BUILT_IN_MAP && Z_OBJCE_P(value) == sharp_ce_map)
+	return ((type->built_in == SHARP_BUILT_IN_MAP || type->built_in == SHARP_BUILT_IN_ITERABLE)
+			&& Z_OBJCE_P(value) == sharp_ce_map)
 		|| ((type->built_in == SHARP_BUILT_IN_SET || type->built_in == SHARP_BUILT_IN_ITERABLE)
 			&& Z_OBJCE_P(value) == sharp_ce_set);
 }
@@ -4080,25 +4129,34 @@ static bool sharp_type_entry_holds(const sharp_type *keys, bool key_holds, const
 }
 
 /* Whether the Sharp\Map or Sharp\Set `table` is of the collection `type`: each key of a Map is checked against its key
- * type as the value it is, and each value, or each element of a Set, as sharp_type_holds checks it. A Set's entry is
- * at its position in the Set's order. An int it accepts for a float stays an int, since the table may be shared. The
- * table is held while it is walked, so a write that a check runs through a holder copies it first. */
+ * type as the value it is, and each value, or each element of a Set, as sharp_type_holds checks it. A Map held as an
+ * `Iterable` is checked by the `[key, value]` tuple of each entry, as it gives them. A Set's entry is at its position in
+ * the Set's order. An int it accepts for a float stays an int, since the table may be shared. The table is held while
+ * it is walked, so a write that a check runs through a holder copies it first. */
 static bool sharp_type_table_holds(
 	const sharp_type *type, zend_object *table, sharp_holds_mode mode, sharp_type_problems *problems)
 {
 	const sharp_type *keys = type->built_in == SHARP_BUILT_IN_MAP ? type->members[0] : NULL;
 	const sharp_type *elements = sharp_type_elements(type);
+	/* Spec section 12: a `Map` held as an `Iterable` is the `[key, value]` tuple of each entry. */
+	bool entries = !keys && table->ce == sharp_ce_map;
 	bool holds = true;
 	zend_long position = 0;
 	GC_ADDREF(table);
 	SHARP_TABLE_FOREACH(sharp_table_of(table), bucket) {
-		zval at;
+		zval at, entry;
 		ZVAL_LONG(&at, position++);
+		if (entries) {
+			sharp_map_entry(&entry, &bucket->key, &bucket->value);
+		}
 		const zval *key = keys ? &bucket->key : &at;
-		const zval *element = keys ? &bucket->value : &bucket->key;
+		const zval *element = entries ? &entry : keys ? &bucket->value : &bucket->key;
 		bool key_holds = !keys || sharp_type_holds(keys, &bucket->key, mode, NULL);
 		if (!sharp_type_entry_holds(keys, key_holds, key, elements, element, mode, problems)) {
 			holds = false;
+		}
+		if (entries) {
+			zval_ptr_dtor(&entry);
 		}
 		if (UNEXPECTED(EG(exception)) || (!holds && !problems)) {
 			break;
@@ -4149,13 +4207,45 @@ static bool sharp_type_collection_holds(
 	return holds;
 }
 
+/* Whether `value` has the shape of the tuple `type`, spec section 30: a PHP list of exactly its count of elements. */
+static bool sharp_type_tuple_shaped(const sharp_type *type, const zval *value)
+{
+	return Z_TYPE_P(value) == IS_ARRAY && zend_hash_num_elements(Z_ARRVAL_P(value)) == type->count
+		&& zend_array_is_list(Z_ARRVAL_P(value));
+}
+
+/* Whether `value`, of the shape of the tuple `type`, holds the element type at each position. With `problems`, each bad
+ * element is a problem at its position's path, `[1]`. */
+static bool sharp_type_tuple_holds(
+	const sharp_type *type, const zval *value, sharp_holds_mode mode, sharp_type_problems *problems)
+{
+	bool holds = true;
+	zend_long position = 0;
+	zval *element;
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(value), element) {
+		zval at;
+		ZVAL_LONG(&at, position);
+		if (!sharp_type_entry_holds(NULL, true, &at, type->members[position++], element, mode, problems)) {
+			holds = false;
+		}
+		if (UNEXPECTED(EG(exception)) || (!holds && !problems)) {
+			break;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return holds;
+}
+
 /* Whether `value` is of `type`, as `mode` takes it. With `problems`, it adds a problem for each bad value: an element of
- * a collection at its own path, any other value at the path the walk is at. */
+ * a collection or a tuple at its own path, any other value at the path the walk is at. */
 static bool sharp_type_holds(
 	const sharp_type *type, const zval *value, sharp_holds_mode mode, sharp_type_problems *problems)
 {
 	ZVAL_DEREF(value);
 	if (problems) {
+		if (type->kind == SHARP_TYPE_TUPLE && sharp_type_tuple_shaped(type, value)) {
+			return sharp_type_tuple_holds(type, value, mode, problems);
+		}
 		const sharp_type *walked = sharp_type_walked(type, value);
 		if (walked) {
 			return sharp_type_collection_holds(walked, value, mode, problems);
@@ -4188,6 +4278,8 @@ static bool sharp_type_holds(
 			return true;
 		case SHARP_TYPE_FUNCTION:
 			return sharp_closure_is(value, type, mode);
+		case SHARP_TYPE_TUPLE:
+			return sharp_type_tuple_shaped(type, value) && sharp_type_tuple_holds(type, value, mode, NULL);
 		case SHARP_TYPE_LIST:
 			ZEND_UNREACHABLE();
 		case SHARP_TYPE_NAMED:
@@ -4232,13 +4324,16 @@ static bool sharp_type_holds(
 }
 
 /* The member of `type` an int in `value` is converted by once sharp_type_holds took `value` with ints as floats: the type
- * itself, the member of `T?` for a value that is not null, and the first member of a union that holds the value with
- * ints as floats when none holds it without, as PHP picks a union member for an argument. NULL when nothing converts. */
+ * itself, a tuple too, the member of `T?` for a value that is not null, and the first member of a union that holds the
+ * value with ints as floats when none holds it without, as PHP picks a union member for an argument. NULL when nothing
+ * converts. */
 static const sharp_type *sharp_type_converting(const sharp_type *type, const zval *value)
 {
 	switch (type->kind) {
 		case SHARP_TYPE_NAMED:
 			return type->class_name ? NULL : type;
+		case SHARP_TYPE_TUPLE:
+			return type;
 		case SHARP_TYPE_NULLABLE:
 			return Z_TYPE_P(value) == IS_NULL ? NULL : sharp_type_converting(type->members[0], value);
 		case SHARP_TYPE_UNION:
@@ -4270,13 +4365,13 @@ static bool sharp_type_changes(const sharp_type *type, const zval *value)
 		return type->built_in == SHARP_BUILT_IN_FLOAT;
 	}
 
-	const sharp_type *elements = sharp_type_elements(type);
-	if (!elements || Z_TYPE_P(value) != IS_ARRAY) {
+	if (!sharp_type_element_at(type, 0) || Z_TYPE_P(value) != IS_ARRAY) {
 		return false;
 	}
+	uint32_t position = 0;
 	zval *element;
 	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(value), element) {
-		if (sharp_type_changes(elements, element)) {
+		if (sharp_type_changes(sharp_type_element_at(type, position++), element)) {
 			return true;
 		}
 	} ZEND_HASH_FOREACH_END();
@@ -4297,11 +4392,12 @@ static void sharp_type_convert(const sharp_type *type, zval *value)
 		return;
 	}
 
-	const sharp_type *elements = sharp_type_elements(sharp_type_converting(type, value));
+	const sharp_type *converting = sharp_type_converting(type, value);
+	uint32_t position = 0;
 	zval *element;
 	SEPARATE_ARRAY(value);
 	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(value), element) {
-		sharp_type_convert(elements, element);
+		sharp_type_convert(sharp_type_element_at(converting, position++), element);
 	} ZEND_HASH_FOREACH_END();
 }
 
@@ -4822,7 +4918,8 @@ static bool sharp_type_function_fits(
 
 /* Whether `type` is within `bound`: `Any?` holds every type, `Any` every type but null, a class its subclasses, a class
  * with type arguments each subclass whose header gives it type arguments its own take, a function type each function
- * type that can be assigned to it, an intersection what each of its classes holds, and any other bound only itself. A
+ * type that can be assigned to it, a tuple each tuple whose element types are within its own, an intersection what
+ * each of its classes holds, and any other bound only itself. A
  * union is within a bound when each of its members is, and an intersection when one of its classes is. */
 static bool sharp_type_fits(sharp_type_node *type, sharp_type_node *bound, sharp_type_reader *reader)
 {
@@ -4875,6 +4972,20 @@ static bool sharp_type_fits(sharp_type_node *type, sharp_type_node *bound, sharp
 	/* A function type has no default for a parameter, so each it takes is one a caller passes. */
 	if (bound->kind == SHARP_TYPE_FUNCTION) {
 		return type->kind == SHARP_TYPE_FUNCTION && sharp_type_function_fits(type, bound, UINT32_MAX, reader);
+	}
+	/* A tuple never changes, so each element type need only be within the bound's at its position. */
+	if (bound->kind == SHARP_TYPE_TUPLE) {
+		if (type->kind != SHARP_TYPE_TUPLE || type->count != bound->count) {
+			return false;
+		}
+		for (sharp_type_node *element = type->first, *wanted = bound->first; element;
+			element = element->next, wanted = wanted->next) {
+			if (!sharp_type_fits(element, wanted, reader)) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 	if (bound->kind != SHARP_TYPE_NAMED || !bound->name) {
 		return sharp_type_argument_fits(type, bound, '=', reader);
@@ -5061,10 +5172,14 @@ static const sharp_type *sharp_type_iterable_member(const sharp_type *type)
 
 /* The `Iterable<T>` a crossing checks `value`, a value sharp_type_accepts took for `type`, against as it is read, decision
  * 7 of the collections Slice: a Traversable object other than a Sharp\Set, which is checked whole, that carries no type
- * within `type`. NULL for any other value. */
+ * within `type`. A Sharp\Map is checked whole too, and an `Iterable<T>` holds its entries, so it is read through one as
+ * well. NULL for any other value. */
 static const sharp_type *sharp_type_lazily_checked(const sharp_type *type, const zval *value)
 {
 	ZVAL_DEREF(value);
+	if (Z_TYPE_P(value) == IS_OBJECT && Z_OBJCE_P(value) == sharp_ce_map) {
+		return sharp_type_iterable_member(type);
+	}
 	if (Z_TYPE_P(value) != IS_OBJECT || Z_OBJCE_P(value) == sharp_ce_set
 		|| !instanceof_function(Z_OBJCE_P(value), zend_ce_traversable)
 		|| sharp_type_holds(type, value, SHARP_HOLDS_TEST, NULL) || EG(exception)) {
@@ -5075,11 +5190,19 @@ static const sharp_type *sharp_type_lazily_checked(const sharp_type *type, const
 }
 
 /* Puts in place of `value` a check stage over it, which checks each element against `iterable`'s element type as a
- * loop reads it, and takes `head` for the start of the TypeError a bad one throws. */
+ * loop reads it, and takes `head` for the start of the TypeError a bad one throws. A Sharp\Map, checked whole, takes a
+ * from stage, which reads its entries. */
 static void sharp_sequence_check(zval *value, const sharp_type *iterable, zend_string *head)
 {
 	ZVAL_DEREF(value);
 	zval checked;
+	if (Z_TYPE_P(value) == IS_OBJECT && Z_OBJCE_P(value) == sharp_ce_map) {
+		sharp_sequence_new(&checked, SHARP_SEQUENCE_FROM, value);
+		zend_string_release(head);
+		zval_ptr_dtor(value);
+		ZVAL_COPY_VALUE(value, &checked);
+		return;
+	}
 	sharp_sequence *sequence = sharp_sequence_new(&checked, SHARP_SEQUENCE_CHECK, value);
 	sequence->checked = iterable->members[0];
 	sequence->head = head;

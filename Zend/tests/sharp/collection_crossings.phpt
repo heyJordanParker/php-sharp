@@ -1,5 +1,5 @@
 --TEST--
-A Map or a Set crosses into a plain PHP parameter that names array as a PHP array, and into one that names an object type as the object, and a PHP array crosses back into a Map
+A Map or a Set crosses into a plain PHP parameter that names array as a PHP array, and into one that names an object type as the object, a PHP array crosses back into a Map, a PHP list enters a tuple when its length and elements match, and a Map enters an Iterable as its entries
 --FILE--
 <?php
 require __DIR__ . '/harness/Arrays.inc';
@@ -44,11 +44,29 @@ for ($round = 0; $round < 100; $round++) {
             echo get_class($e), ': ', $e->getMessage(), ', after ', Names::$given, " names\n";
         }
     }
+    // A tuple from plain PHP is a PHP list of exactly its elements, each of its type.
+    echo 'a PHP list into a [string name, int count] parameter: ', Crossings::pair(['tea', 3]), "\n";
+    foreach ([['tea'], ['tea', 'x'], ['name' => 'tea', 'count' => 3]] as $given) {
+        try {
+            Crossings::pair($given);
+        } catch (TypeError $e) {
+            echo get_class($e), ': ', $e->getMessage(), "\n";
+        }
+    }
+    // A Map is an Iterable of its entries, from plain PHP and from PHP#, and a loop variable over it is each entry.
+    echo 'a Map into an Iterable<[string, int]> parameter: ', Crossings::entries(new Map(['tea', 3, 'pie', 7])), "\n";
+    echo 'a list of tuples into an Iterable<[string, int]> parameter: ', Crossings::entries([['tea', 3]]), "\n";
+    echo 'a Map a PHP# call passes on: ', Crossings::ownEntries(['tea' => 3, 'pie' => 7]), "\n";
+    try {
+        Crossings::entries(new Map(['tea', 'x']));
+    } catch (TypeError $e) {
+        echo get_class($e), ': ', $e->getMessage(), "\n";
+    }
     $output = ob_get_clean();
 }
 echo $output;
 ?>
---EXPECT--
+--EXPECTF--
 array ["tea",5]
 array [0,1]
 array ["tea",5]
@@ -71,3 +89,11 @@ a PHP array into a Map<string|Level, int> parameter: ["1","1","true"]
 a lazy plain PHP source into an Iterable<string> parameter: tea jam cake pie 4
 TypeError: Demo\Crossings::joined(): Argument #1 ($names) must be of type Iterable<string>, Generator given: [2] expected string, got int 3, after 3 names
 TypeError: names_and(): Return value must be of type Iterable<string>, Generator returned: [2] expected string, got int 3, after 3 names
+a PHP list into a [string name, int count] parameter: tea 3
+TypeError: Demo\Crossings::pair(): Argument #1 ($given) must be of type [string, int], array given, called in %s on line %d
+TypeError: Demo\Crossings::pair(): Argument #1 ($given) must be of type [string, int], array given: [1] expected int, got string 'x', called in %s on line %d
+TypeError: Demo\Crossings::pair(): Argument #1 ($given) must be of type [string, int], array given, called in %s on line %d
+a Map into an Iterable<[string, int]> parameter: tea=3 pie=7 
+a list of tuples into an Iterable<[string, int]> parameter: tea=3 
+a Map a PHP# call passes on: tea:3 pie:7 tea=3 pie=7 
+TypeError: Demo\Crossings::entries(): Argument #1 ($given) must be of type Iterable<[string, int]>, Sharp.Map given: [0][1] expected int, got string 'x', called in %s on line %d
