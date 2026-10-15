@@ -74,6 +74,13 @@ public class Registry
     public static int total() => Registry.size + Registry.started;
 }
 
+public class Figure
+{
+    protected string title { get; set; } = "figure";
+
+    public string name() => this.title;
+}
+
 public class Tally
 {
     private static int hits = 0;
