@@ -21,6 +21,9 @@ foreach ($import->all() as $row) {
 echo Demo\Import::last($import->all()), "\n";
 echo $import->lastPending(), "\n";
 echo Demo\Import::last([new Demo\Row('X1')]), "\n";
+// `yield ...other` takes the generator's next automatic keys, so a plain PHP reader that keeps keys keeps every element.
+echo implode(',', array_map(fn ($row) => $row->number, iterator_to_array($import->all()))), "\n";
+echo implode(',', array_keys(iterator_to_array($import->all()))), "\n";
 
 $missing = Demo\Import::rows(__DIR__ . '/missing.csv');
 echo get_class($missing), "\n";
@@ -63,6 +66,8 @@ L1
 L1
 P2
 X1
+P1,P2,L1
+0,1,2
 Generator
 RuntimeException: SplFileObject::__construct(%smissing.csv): Failed to open stream: No such file or directory
 bool(true)

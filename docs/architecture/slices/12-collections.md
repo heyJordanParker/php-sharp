@@ -65,7 +65,7 @@ Each decides what a user writes. Each has its proposal and its answer, which the
 ## Decisions team-lead approves
 
 1. **The Slice ports the two `feat/slice-lazy-and-types` branches, and merges neither.** mago-sharp `feat/slice-lazy-and-types` (5 commits) and php-sharp `feat/slice-lazy-and-types` (2 commits) predate #102, #123 and #131. A preview merge of the mago-sharp one into `sharp/mago` (`git merge-tree -X subtree=sharp/mago master mago-sharp/feat/slice-lazy-and-types`) conflicts in 10 files. Both also carry `Object` (section 24) and `typeof(value)`, which section 25's `Class.of` replaced. The Slice takes, with their tests:
-   - `Yield::Spread(YieldSpread)` and its parse of `yield ...expr` in a `.sharp` file only, `check_yield` and `check_iterator_returns`, the analyzer's naming of `yield ...` in its spread messages, and the bridge's `YIELD`, `YIELD_FROM` and generator flag.
+   - `Yield::Spread(YieldSpread)` and its parse of `yield ...expr` in a `.sharp` file only, `check_yield` and `check_iterator_returns`, the analyzer's naming of `yield ...` in its spread messages, and the bridge's `YIELD`, the loop of `YIELD`s that `yield ...other;` runs as, so each element takes the generator's next automatic key, and the generator flag.
    - The `Iterable<T>` type hint, `Sharp\IterableMethods`, and the resolver's rule that a place declared `Iterable<T>` has only the lazy operations.
    - The engine's `Sharp\Sequence` and its `sequence.phpt` tests, and `Import.sharp` with `yield.phpt`.
 2. **`x[i] = v` on a `List` lowers to the engine's `Sharp\Collection::set`,** through `Lowering::element_write`, which already lowers a write into a `Map` element of a `List` or of a hooked property to `put`. So a write reaches a local, a property, a hooked property's `set` and a `List` element, and throws `OutOfRangeException` past the end, as `lines.set(0, line)` does on master ("Undefined array key 0"). `x[i] op= v`, `x[i]++` and `x[i]--` lower to `$x->set($i, $x[$i] op v)` with the index read once, which the refusal's own help writes today.
@@ -306,7 +306,7 @@ sharp/mago/crates/
 └── sharp-bridge/
     ├── src/lower.rs                      <- element_write lowers a List index write to set (decision 2);
     │                                        null_safe_object and read_collection lose ZEND_DIM_IS;
-    │                                        collection_call lowers getOrNull and toSet; YIELD, YIELD_FROM
+    │                                        collection_call lowers getOrNull and toSet; YIELD, a FOREACH of YIELD
     │                                        and the generator flag, ported; one \Sharp\Sequence::from per
     │                                        chain, ported; method() gives a missing modifier
     │                                        ZEND_ACC_PRIVATE; a Map entry and a tuple as a PHP list, a
