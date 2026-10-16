@@ -236,6 +236,22 @@ const ticket = new Ticket();
 line … of the generated app/Seat.sharp, from the marker's setup or wrapper: …
 -->
 
+A block whose first line names its file keeps that file as written, and each type of its setup still gets a file of its own, so an error in the setup's type names that type's file:
+
+<!-- example named-file-setup
+public class Seat { public int number() { return "three"; } }
+…
+-->
+```csharp
+// app/Ticket.sharp
+namespace App;
+
+public class Ticket { }
+```
+<!-- expect named-file-setup
+line … of the generated app/Seat.sharp, from the marker's setup or wrapper: …
+-->
+
 A signature that ends in `uses` and the function parameters it names gets a body, with or without its `;`, as a library declaration such as `List.map`'s is written:
 
 <!-- example uses-signature: members -->

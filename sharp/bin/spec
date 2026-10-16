@@ -609,8 +609,10 @@ function build_files(array $block, int $index, array $read, array $blank): array
         $file = [...$head, ...$groups['types'], ...$class];
     }
 
-    // The wrapper class of a statements block comes last, so its file is the last one.
-    $parts = $language === 'sharp' && $path === null ? split_types($file) : [$file];
+    // The wrapper class of a statements block comes last, so its file is the last one. A block that names its file
+    // keeps what it writes there, as the first part, and only its setup's types move.
+    $parts = $language === 'sharp' ? split_types($file, $path !== null) : [$file];
+    $last = $path === null ? array_key_last($parts) : 0;
     $files = [];
     foreach ($parts as $k => $part) {
         $contents = implode("\n", array_column($part, 0)) . "\n";
@@ -622,10 +624,10 @@ function build_files(array $block, int $index, array $read, array $blank): array
         $namespace = preg_match('~^namespace ([\w.\\\\]+)~m', $contents, $m) ? str_replace('.', '\\', $m[1]) : '';
         $entry = match (true) {
             $language === 'php' && $block['shape'] === 'statements' => 'script',
-            $language === 'sharp' && $block['shape'] === 'statements' && $k === array_key_last($parts) => "$namespace\\$block[class]",
+            $language === 'sharp' && $block['shape'] === 'statements' && $k === $last => "$namespace\\$block[class]",
             default => null,
         };
-        $files[] = ['path' => $path, 'contents' => $contents, 'map' => array_column($part, 1), 'names' => declared_names($contents, $language), 'entry' => $entry];
+        $files[] = ['path' => $k === 0 ? $path : null, 'contents' => $contents, 'map' => array_column($part, 1), 'names' => declared_names($contents, $language), 'entry' => $entry];
     }
 
     return $files;
@@ -634,12 +636,14 @@ function build_files(array $block, int $index, array $read, array $blank): array
 /**
  * Splits a PHP# file's lines into one file per type it declares, each led by the file's `namespace` and `import` lines.
  * What is no type, such as an `extern` line or a `module` block, stays with the first type. A line with no code goes
- * with the construct after it, as a type's doc comment does.
+ * with the construct after it, as a type's doc comment does. With `$named`, the file is a block's named file, which
+ * keeps every type the block writes a line of, as written, so `one-type-per-file` still shows its error, and only each
+ * type the setup alone declares gets a file of its own.
  *
  * @param list<array{string, ?array{int, int}}> $file
  * @return list<list<array{string, ?array{int, int}}>>
  */
-function split_types(array $file): array
+function split_types(array $file, bool $named): array
 {
     $read = read_block(['lines' => array_column($file, 0)]);
     $constructs = [];
@@ -657,7 +661,8 @@ function split_types(array $file): array
     $constructs[array_key_last($constructs)] = [...$constructs[array_key_last($constructs)], ...$waiting];
 
     $head = [];
-    $types = [];
+    $kept = 0;
+    $moved = [];
     $first = [];
     foreach ($constructs as $start => $indexes) {
         $lines = array_map(static fn (int $i): array => $file[$i], $indexes);
@@ -673,19 +678,22 @@ function split_types(array $file): array
         if (preg_match('~^(?:namespace|import)\b~', $declaration)) {
             array_push($head, ...$lines);
         } elseif (preg_match('~^(?:\[.*\]\s*)*(?:(?:public|private|protected|internal|abstract|final|sealed|static|readonly|foreign)\s+)*(?:class|struct|enum|interface|event|trait)\b~', $declaration)) {
-            $types[] = $lines;
-            if (count($types) === 1) {
+            $written = array_filter(array_column($lines, 1), static fn (?array $at): bool => $at !== null) !== [];
+            if ($named ? $written : $kept === 0) {
                 array_push($first, ...$lines);
+                $kept++;
+            } else {
+                $moved[] = $lines;
             }
         } else {
             array_push($first, ...$lines);
         }
     }
-    if (count($types) < 2) {
+    if ($moved === []) {
         return [$file];
     }
 
-    return [[...$head, ...$first], ...array_map(static fn (array $lines): array => [...$head, ...$lines], array_slice($types, 1))];
+    return [[...$head, ...$first], ...array_map(static fn (array $lines): array => [...$head, ...$lines], $moved)];
 }
 
 /** The number a run records for line $line of block $block. */
