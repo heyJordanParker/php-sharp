@@ -1,0 +1,70 @@
+namespace Demo;
+
+public class FunctionValues
+{
+    private static Function<int(int)> round = (int n) => n - 1;
+    public static Function<int(int)> scale { get; set; } = (int n) => n * 3;
+    private Function<int(int)> step = (int n) => n + 10;
+
+    public Function<int(int)> times(int by) => (int n) => n * by;
+
+    // Spec section 14.1: any expression that gives a function is called, and section 14.3's static field or property
+    // that holds one is called through its class.
+    public List<Any?> calls()
+    {
+        List<Function<int(int)>> steps = [(int n) => n + 1, (int n) => n * 2];
+        Map<string, Function<int(int)>> named = ["negate": (int n) => -n];
+        const adder = (int a) => (int b) => a + b;
+        bool doubles = true;
+        FunctionShelf<int>.keep((int n) => n * 7);
+        FunctionShelf<string>.keep((string s) => s + "!");
+        return [
+            steps[0](5),
+            steps[1](5),
+            named.get("negate")?.(5),
+            named.get("missing")?.(5),
+            this.times(4)(5),
+            (doubles ? steps[1] : steps[0])(5),
+            ((int n) => n * n)(5),
+            adder(2)(3),
+            (this.step)(5),
+            FunctionValues.round(5),
+            FunctionValues.scale(5),
+            FunctionShelf<int>.run(3),
+            FunctionShelf<string>.run("hi"),
+        ];
+    }
+
+    // Spec section 14.2: a lambda captures the variable itself, and each pass of a loop has its own variable.
+    public List<int> forOfPasses()
+    {
+        List<Function<int()>> seen = [];
+        for (let n of [1, 2, 3]) {
+            n *= 10;
+            seen.add(() => n);
+        }
+        return seen.map(f => f());
+    }
+
+    public List<int> forCounterPasses()
+    {
+        List<Function<int()>> seen = [];
+        for (let i = 0; i < 6; i++) {
+            if (i == 1) { continue; }
+            if (i == 4) { break; }
+            seen.add(() => i);
+        }
+        return seen.map(f => f());
+    }
+
+    public List<int> forCounterChangedByALambda()
+    {
+        List<Function<int()>> seen = [];
+        for (let i = 0; i < 6; i++) {
+            const skip = () => { i += 1; };
+            skip();
+            seen.add(() => i);
+        }
+        return seen.map(f => f());
+    }
+}

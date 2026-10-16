@@ -1518,6 +1518,24 @@ Function<void(Order)>? onPaid = null
 public Function<bool(Order)> eligibleFor(Account account)
 ```
 
+**Any expression that gives a function is called the same way,** with the arguments in parentheses after it, as in C#, TypeScript, Kotlin and Swift: a list element, a call's result, a conditional or a lambda.
+
+<!-- example function-calls: statements
+List<Function<int(int)>> steps = [(int n) => n + 1, (int n) => n * 2];
+bool doubles = true;
+-->
+```csharp
+const adder = (int a) => (int b) => a + b;
+int first = steps[0](5);                             // 6
+int picked = (doubles ? steps[1] : steps[0])(5);     // 10
+int sum = adder(2)(3);                               // 5
+```
+<!-- run function-calls
+first;    // 6
+picked;   // 10
+sum;      // 5
+-->
+
 ### 14.2 Lambdas
 
 A lambda is written as a bare arrow. Parameter types are optional when the checker can infer them.
@@ -1547,7 +1565,7 @@ increment();   // count is now 1
 count;   // 1
 -->
 
-A lambda that calls `add`, `set` or `remove` on a captured variable changes the variable itself:
+A lambda that changes a captured collection, with `add`, `insert`, `remove`, `clear` or an index write, changes the variable itself:
 
 <!-- example capture-and-change: statements
 List<int> numbers = [1, 2, 3];
@@ -1613,7 +1631,7 @@ public void renewAll(List<int> customerIds, string plan)
 **A `?` or a null check that cannot matter is a compile error,** because it misstates the code. Section 24 gives the rule for `?`.
 
 - a null check, `?.` or `??` on a value whose type has no `?`
-- a nullable return type on a method that never returns null
+- a nullable return type on a method no subclass can override that never returns null
 
 <!-- example needless-null-checks: members
 private Customer customer = new Customer();

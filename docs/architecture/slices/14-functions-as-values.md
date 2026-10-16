@@ -130,7 +130,7 @@ The states are **works**, **refused** (rejected, with its message), **silently a
 
 | Rule | Spec line | State on master | Mechanism | Reuses |
 |---|---|---|---|---|
-| T1 | 1512: a function type is `Function<ReturnType(ParameterTypes)>`, in a method declaration's order | works: a nullable result, a `readonly` parameter, a nullable function type, a function-typed field, local and return (`FunctionTypes.sharp:5`–`7`, `12`). A lambda with too many parameters, a wrong parameter type or a wrong result is refused (`FunctionTypeErrors.sharp:5`–`7`). A lambda with too few parameters, and a value body for `void`, compile (Q3) | Q3: `callable_comparator::is_contained_by` in `crates/codex` lets a function with fewer parameters fit unless it is built in (line 57), and under `sharp_rules` it requires the same count; `arrow_function.rs` refuses an expression body that is no call or assignment where the expected type returns `void` | `ComparisonResult::sharp_rules` |
+| T1 | 1512: a function type is `Function<ReturnType(ParameterTypes)>`, in a method declaration's order | works: a nullable result, a `readonly` parameter, a nullable function type, a function-typed field, local and return (`FunctionTypes.sharp:5`–`7`, `12`). A lambda with too many parameters, a wrong parameter type or a wrong result is refused (`FunctionTypeErrors.sharp:5`–`7`). A lambda with too few parameters, and a value body for `void`, compile (Q3) | Q3: `callable_comparator::is_contained_by` in `crates/codex` lets a function with fewer parameters fit unless it is built in, and under `sharp_rules` `TCallableSignature::takes_more_parameters_than` refuses one that takes fewer than a call passes, a parameter that is optional or variadic not counted, so a plain PHP `callable` takes any function; `can_argument_be_identical` uses it too, so an argument is `invalid-argument`, not "possibly". `report_value_for_void` refuses, as `invalid-return-statement`, an expression body that is no call, change, `new` or `throw` where every expected type returns `void` | `ComparisonResult::sharp_rules` |
 | T2 | 1512: one name covers every case, `void` included | works: `Function<void(Item)>`. `callable` is refused: "PHP# has no `callable`: write `Function<R(P)>`." (`PhpTypes.sharp:5`). `import Closure;` makes `Closure` a type (Q2). `Function<int(void)>` is "This type is not supported yet in PHP#." (`NotSupportedYet.sharp:5`) | Gap 7: "A function type takes no `void` parameter: write `Function<int()>` for a function that takes nothing." Q2's refusal beside `callable`'s | `check_hint` in semantics |
 | T3 | 1512: effects go inside the brackets (section 29) | works: `Function<int() uses Http>` holds a lambda that calls `remote.fetch()` (`FunctionTypes.sharp:16`), and `Function<int()>` refuses it: "This lambda calls `Remote.fetch`, which has the effect `Http`, so a `Function<int()>` cannot hold it." (`FunctionTypeErrors.sharp:11`) | nothing to build | decision 71, #136 |
 | T4 | 1512 and 1594: a function value is called | works through a local, a parameter and a field. Missing through any other expression: seven forms are "This expression is not supported yet in PHP#." (`CallForms.sharp:10`–`22`), while `this.make()?.(1)` and `steps[0]?.(1)` run (`nullsafe.php`: `NULL`, `41`, `NULL 2`) | Gap 1, Q1 | the bridge's `NullSafeFunction` lowering, `declared_effects` in `effects/summary.rs` |
@@ -167,23 +167,25 @@ Section 4's line 149 points here: `Class.y` without a call reads a static method
 
 `resolve_called_property` refuses a static property (`resolution.property.flags.is_static()`), and `analyze_static_method_call` never asks it. The call `StaticFunctionField.shared(5)` gets the analyzer's "does not exist".
 
-- **Analyzer:** `resolve_static_method_targets` in `resolver/static_method.rs` falls back, when the class has no static method of that name, to a visible static property holding a function, through `resolve_called_property` with the property's staticness as an argument. The call records `CallTarget::Property` and types through `resolve_callable_targets`, as `analyze_method_call` does for an instance property.
-- **Bridge:** `method_call` lowers a `STATIC_CALL` whose target is a property as `CALL(<the static read>, ARG_LIST)`, the static read being `static_member`'s, so a generic class's static field reads through `Sharp\Internal\statics` as every static read does. PHP runs `(StaticFunctionField::$shared)(5)`.
+- **Analyzer:** `resolve_static_method_targets` in `resolver/static_method.rs` falls back, when the class has no static method of that name, to its static property of that name, through `resolve_called_static_property` in `resolver/static_property.rs`. That reads the property as a static read does, with `find_static_property_in_class`: the visibility check, and the type arguments the class is written with, so `FunctionShelf<int>.shared` holds a `Function<int(int)>`. It records those type arguments at the call for the bridge. A private property called from outside is the read's "Cannot read private property", and the call reports nothing more. The call records `CallTarget::Property` and types through `resolve_callable_targets`, as `analyze_method_call` does for an instance property, in one shared `add_called_property_targets`.
+- **Bridge:** `method_call` lowers a `STATIC_CALL` whose target is a static property as `CALL(<the static read>, ARG_LIST)`, the read being `static_property`'s, so a generic class's static field reads through `Sharp\Internal\statics` as every static read does. The call passes no type arguments: the ones it records pick the statics entry. PHP runs `(StaticFunctionField::$shared)(5)`.
 - **Effects:** `property_call` reads the property's type through the codebase's `get_property`, whose map holds static and instance properties alike. This was read, not run.
 
 ## Gap 3: a member named like an inherited one (Q4)
 
 `report_methods_named_as_properties` reads one class body in semantics, which knows no parent. The inherited half moves to the analyzer, where the codebase knows each ancestor.
 
-- `statement/class_like/mod.rs` gains the check beside `report_statics_named_like_class_members`: for each method the class declares, an inherited visible property of that name, and for each field or property it declares, an inherited visible method of that name, compared ignoring case as PHP finds a method. It reports `name-already-in-use`, the code the static clash uses, with Q4's message.
+- `statement/class_like/mod.rs` gains `report_members_named_like_inherited_members` beside `report_statics_named_like_class_members`: for each method the class declares, an inherited visible property of that name, and for each field or property it declares, an inherited visible method of that name, compared ignoring case as PHP finds a method. It reports `name-already-in-use`, the code the static clash uses: "`Sale` declares the field `discount` and inherits the method `discount` from `Pricing`, so `x.discount(…)` could run either. Rename one of them."
 - The one-body check stays in semantics, since a file with a parse error still gets it.
+- The standard library's `Sharp.InvalidFields` declared a private static method `message` below plain PHP's `Error.message`. The method is renamed `describe`.
 
 ## Gap 4: a lambda parameter nothing types
 
 `analyze` in `expression/arrow_function.rs` and `expression/closure.rs` takes the parameter types from `closure_parameter_types` of the expected type, and a parameter with neither a written type nor an inferred one becomes `Any?`.
 
-- In a `.sharp` file, a parameter with no written type whose expected type gives none is `missing-parameter-type`, an error: "Nothing gives `x` a type here. Write it, as in `(int x) => …`, or give the lambda a function type." It is the rule `a_generic_method_value_without_a_function_type_is_refused` applies to a generic method value, and C#'s CS8917.
-- A lambda passed to plain PHP takes its parameter types from the plain PHP signature (`a_lambda_passed_to_php_takes_its_parameter_types_from_the_php_signature_as_in_php`). A plain PHP parameter typed `callable` with no docblock gives none, so `(int x) => …` is written there. The existing engine and spec tests show whether any of them relies on `Any?`, and each is listed in the pull request.
+- In a `.sharp` file, a parameter with no written type whose expected type gives none is `missing-parameter-type`, an error from `report_untyped_lambda_parameters` in `statement/function_like/mod.rs`: "Nothing gives the parameter `x` a type here: write it, as in `(int x) => …`, or give the lambda a function type." It is the rule `a_generic_method_value_without_a_function_type_is_refused` applies to a generic method value, and C#'s CS8917.
+- A field's or property's initial value takes the declared type through `expect_type`, as a typed local's value does. Before, `private Function<int(int)> step = n => n + 1;` gave `n` the type `Any?`.
+- A lambda passed to plain PHP takes its parameter types from the plain PHP signature (`a_lambda_passed_to_php_takes_its_parameter_types_from_the_php_signature_as_in_php`). A plain PHP parameter typed `callable` or `\Closure` with no docblock gives each parameter `Any?`, as its signature says and as section 24 gives an untyped plain PHP value. Of the existing tests, only `yield_is_a_yield_statement_and_yield_spread_is_a_loop_that_yields_each_element` relied on a parameter nothing typed, and it now writes `(int x) => x`.
 
 ## Gap 5: a method value of a collection, a built-in type or an extension (Q5)
 
@@ -205,12 +207,15 @@ Spec section 3 gives each loop pass a fresh binding, and line 1538 has the lambd
 
 - `Item.doubled(...)`: `enter` refuses `Expression::PartialApplication` in a `.sharp` file with "PHP# writes a method value without `(...)`: `Item.doubled`.", naming the callee as written.
 - `Function<int(void)>`: the type check refuses a `void` parameter with "A function type takes no `void` parameter: write `Function<int()>` for a function that takes nothing."
-- Q2's `Closure` and Q9's `&` refusals, with the messages those questions propose.
+- Q2's `Closure` and Q9's `&` refusals, with the messages those questions propose. A `Closure` a plain PHP method's docblock types, as `\Closure(int): int`, arrives as that function type and is called, held and passed as one. An untyped `\Closure` return assigned to `Function<int(int)>` is refused, as an untyped `array` return assigned to `List<int>` is.
+- A wrong call of a function value names it as the code writes it. `InvocationTarget::guess_name` gives a PHP# function value's source text and `guess_kind` calls it a "function value", and a lambda a "lambda": "Invalid argument type for argument #1 of `f`: …" and "Too few arguments provided for function value `this.scale`." replace the two messages that named PHP's `Closure`.
 
 # What changes
 
 ```text
 sharp/mago/crates/
+├── codex/src/ttype/atomic/callable/mod.rs
+│                                        <- takes_more_parameters_than, Q3's count
 ├── codex/src/ttype/comparator/callable_comparator.rs
 │                                        <- Q3's parameter count under sharp_rules
 ├── semantics/
@@ -220,9 +225,15 @@ sharp/mago/crates/
 │   │                                      deleted (Gap 6)
 │   └── tests/sharp.rs
 ├── analyzer/
-│   ├── src/resolver/method.rs           <- resolve_called_property takes a static property (Gap 2); a
-│   │                                      collection method read without parentheses (Gap 5)
+│   ├── src/resolver/method.rs           <- a collection method read without parentheses (Gap 5)
 │   ├── src/resolver/static_method.rs    <- a static call of a static property holding a function (Gap 2)
+│   ├── src/resolver/static_property.rs  <- resolve_called_static_property (Gap 2)
+│   ├── src/invocation/mod.rs, src/invocation/arguments.rs, src/invocation/analyzer.rs
+│   │                                    <- a function value named as written (Gap 7); Q3's argument
+│   ├── src/statement/function_like/mod.rs
+│   │                                    <- report_untyped_lambda_parameters (Gap 4), report_value_for_void (Q3)
+│   ├── src/statement/class_like/property.rs
+│   │                                    <- an initial value takes its declared type (Gap 4)
 │   ├── src/resolver/extension.rs        <- an extension method read without parentheses is its member (Gap 5)
 │   ├── src/resolver/property.rs         <- resolve_method_value types a collection's or an extension's
 │   │                                      method without its receiver (Gap 5)
@@ -239,18 +250,24 @@ sharp/mago/crates/
 │   │                                      returning_closure (Gap 5); a fresh loop variable in each pass (Gap 6)
 │   ├── src/lower/types.rs               <- closure_parameters and function_value_name take any callee (Gap 1)
 │   └── tests/lower.rs
+sharp/composer/library/Sharp/InvalidFields.sharp
+                                         <- its private `message` method renamed `describe` (Gap 3)
 Zend/tests/sharp/
-├── FunctionValues.sharp                 <- new: Gap 1's calls, Gap 2's static field, Gap 5's method values,
-│                                           Gap 6's loops
-├── function_values.inc                  <- new: runs each row twice, so the JIT variants compile it first
+├── FunctionValues/
+│   ├── FunctionValues.sharp             <- new: Gap 1's calls, Gap 2's static fields, Gap 5's method values,
+│   │                                       Gap 6's loops
+│   └── FunctionShelf.sharp              <- new: a generic class's static field holding a function (Gap 2)
+├── function_values.inc                  <- new: loads the folder with fixture(), runs each row twice, so the
+│                                           JIT variants compile it first
 ├── function_values.phpt                 <- new
+├── function_values_preload.inc          <- new: the folder's files, for opcache.preload
 └── function_values_preload.phpt         <- new: the same rows under opcache preloading
 docs/spec.md                             <- section 14 as Q1, Q3, Q7 and Q8 answer: Q1's line and its example
                                             `function-calls`; line 1550; line 1616
 docs/architecture/slices/14-functions-as-values.md   <- this note
 ```
 
-`sharp/bin/spec` and `sharp/harness/` do not change, so no pull request goes first. The engine's C code, the standard library and the prelude do not change.
+`sharp/bin/spec` and `sharp/harness/` do not change, so no pull request goes first. The engine's C code and the prelude do not change, and the standard library changes one private method's name.
 
 The PHP the bridge emits:
 
@@ -274,8 +291,8 @@ for ($step = 0; $step < 3; $step++) {
 
 team-lead approves these. Everything not here is tactical.
 
-- **New engine test files:** `Zend/tests/sharp/FunctionValues.sharp`, `function_values.inc`, `function_values.phpt` and `function_values_preload.phpt`.
-- **No new issue code.** Gap 3 reuses `name-already-in-use`, Gap 4 reuses `missing-parameter-type`, Q3's refusals reuse `invalid-property-default-value` and `invalid-local-assignment-value` with section 14's words, and the semantics refusals carry no code, as every semantics refusal.
+- **New engine test files:** the folder `Zend/tests/sharp/FunctionValues/` with `FunctionValues.sharp` and `FunctionShelf.sharp`, and `function_values.inc`, `function_values.phpt`, `function_values_preload.inc` and `function_values_preload.phpt`.
+- **No new issue code.** Gap 3 reuses `name-already-in-use`, Gap 4 reuses `missing-parameter-type`, Q3's refusals reuse `invalid-argument`, `invalid-property-default-value`, `invalid-local-assignment-value` and, for a `void` type's value, `invalid-return-statement`, and the semantics refusals carry no code, as every semantics refusal.
 - **No new node, type, engine function, library class or harness file.**
 - **The spec:** one line and one example under section 14.1 if Q1 is accepted, and the wording of lines 1550 and 1616.
 
@@ -322,7 +339,6 @@ Nothing. Every "not supported yet" that section 14's rules reach, a call of an e
 
 Each was probed on master's `mago` in `/Users/jordan/.claude/jobs/6affb5f6/tmp/slice-functions/ws`. None blocks a rule of section 14.
 
-- **A function value's argument errors name PHP's `Closure`.** `f("x")` on a `Function<int(int)>` local is "Invalid argument type for argument #1 of `Closure`: expected `int`, but found `string`.", and `f()` is "Too few arguments provided for closure `Closure`." (`FunctionTypeErrors.sharp:18`, `24`). A PHP# user reads a PHP class name. The message should name the local, `f`.
 - **A nullable function called without `?.` gets two errors, and neither names `?.(…)`.** `this.maybe(5)` on a `Function<int(int)>?` field is "Expression of type `null` cannot be called as a function or method." and "Could not infer a precise return type for method `NullableCalledPlainly.nullableFieldCalledPlainly`. Saw type `Any?`." (`NullableCalledPlainly.sharp:7`, `12`).
 - **Messages print a method's name in lowercase.** "Declared return type `int?` for `saferead` has unused branches: `null`." (`NeedlessNullChecks.sharp:16`), and "Parameter `value` is nullable, but `leavethrow` rejects null on every path." from an earlier probe of `NullOperators.sharp`. The methods are `safeRead` and `leaveThrow`.
 - **Null check messages keep PHP's words.** "Redundant null coalesce: left-hand side can never be `null` or undefined." and "Redundant nullsafe operator (`?.`) used on an expression that is never `null`." (`NeedlessNullChecks.sharp:14`, `16`). PHP# has no undefined value, and the spec calls `?.` a null check.
