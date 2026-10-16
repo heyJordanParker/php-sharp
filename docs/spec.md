@@ -2831,7 +2831,7 @@ public class Layout
 
 **The standard library lives under one root, `Sharp`,** with the standard library namespaces `Sharp.Text`, `Sharp.Math`, `Sharp.Json`, `Sharp.IO`, `Sharp.Time`, `Sharp.Net` and `Sharp.Data`, as .NET has `System.*` and Rust has `std::*`.
 
-**Only `Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin:
+**`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin:
 
 <!-- example own-namespace-shadows -->
 ```csharp
@@ -2853,6 +2853,19 @@ public class Release
 {
     public string stage() => Environment.stage();                   // compiles: Environment is App.Shop.Environment, with no import
     public string? region(Environment environment) => environment.variable("AWS_REGION");   // compile error: App.Shop.Environment declares no variable
+}
+```
+
+**PHP's standard exception classes need no import either,** as Java's `java.lang` exceptions and Kotlin's need none. A bare `ValueError`, `OutOfRangeException` or any other exception class in PHP's root namespace names PHP's own. A class of the same name that the file declares or imports, or one in the file's own namespace, shadows it by the same rule:
+
+<!-- example standard-exceptions -->
+```csharp
+// app/Shop/Gauge.sharp
+namespace App.Shop;
+
+public class Gauge
+{
+    public int first(List<int> values) => values.count() > 0 ? values[0] : throw new ValueError("empty");   // compiles: ValueError is PHP's, with no import
 }
 ```
 

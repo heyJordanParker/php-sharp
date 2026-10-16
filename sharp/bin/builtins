@@ -525,15 +525,18 @@ if ($unclassified !== []) {
 }
 ksort($lines, SORT_STRING);
 
-// A class in a namespace whose short name another class has, as FFI\Exception shares Exception's, is imported under its
-// full name with each part capitalized, as the checker's help names an aliased import.
+// A class in PHP's root namespace is a standard exception, which a .sharp file names with no import (spec section 23).
+// A class in a namespace is imported, and one whose short name another class has, as FFI\Exception shares Exception's,
+// under its full name with each part capitalized, as the checker's help names an aliased import.
 $exceptions = exceptionClasses($map, $stubs, $checkerClasses);
 $shortNames = array_count_values(array_map(static fn (string $class): string => basename(str_replace('\\', '/', $class)), $exceptions));
 [$imports, $externs] = [[], []];
 foreach ($exceptions as $class) {
     $short = basename(str_replace('\\', '/', $class));
     $alias = str_contains($class, '\\') && $shortNames[$short] > 1 ? implode('', array_map(ucfirst(...), explode('\\', $class))) : null;
-    $imports[] = 'import ' . str_replace('\\', '.', $class) . ($alias === null ? '' : " as $alias") . ';';
+    if (str_contains($class, '\\')) {
+        $imports[] = 'import ' . str_replace('\\', '.', $class) . ($alias === null ? '' : " as $alias") . ';';
+    }
     $externs[] = 'extern ' . ($alias ?? $short) . ';';
 }
 
