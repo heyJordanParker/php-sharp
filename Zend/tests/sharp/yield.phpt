@@ -4,15 +4,17 @@ PHP# yield produces an Iterable<T> lazily: yield value, yield ...other, a body t
 <?php
 
 require __DIR__ . '/harness/Arrays.inc';
+require __DIR__ . '/effect_classes.inc';
 require __DIR__ . '/Import.sharp';
 
 $path = tempnam(sys_get_temp_dir(), 'sharp_yield');
 file_put_contents($path, "A1,tea,3\n\nA2,cake,5\n");
+$files = new Sharp\Files();
 
-foreach (Demo\Import::rows($path) as $row) {
+foreach (Demo\Import::rows($files, $path) as $row) {
     echo implode('|', $row), "\n";
 }
-echo Demo\Import::fields(Demo\Import::rows($path)), "\n";
+echo Demo\Import::fields(Demo\Import::rows($files, $path)), "\n";
 
 $import = new Demo\Import([new Demo\Row('P1'), new Demo\Row('P2')], new Demo\Row('L1'));
 foreach ($import->all() as $row) {
@@ -25,7 +27,7 @@ echo Demo\Import::last([new Demo\Row('X1')]), "\n";
 echo implode(',', array_map(fn ($row) => $row->number, iterator_to_array($import->all()))), "\n";
 echo implode(',', array_keys(iterator_to_array($import->all()))), "\n";
 
-$missing = Demo\Import::rows(__DIR__ . '/missing.csv');
+$missing = Demo\Import::rows($files, __DIR__ . '/missing.csv');
 echo get_class($missing), "\n";
 try {
     Demo\Import::fields($missing);
@@ -35,7 +37,7 @@ try {
 
 // A PHP# generator carries the type it yields, so the test reads none of it, and a plain PHP one holds any value.
 $all = $import->all();
-var_dump(Demo\Import::holdsRows($all), Demo\Import::holdsTexts($all), Demo\Import::holdsRows(Demo\Import::rows($path)));
+var_dump(Demo\Import::holdsRows($all), Demo\Import::holdsTexts($all), Demo\Import::holdsRows(Demo\Import::rows($files, $path)));
 echo $all->current()->number, "\n";
 var_dump(Demo\Import::holdsRows((function () { yield new Demo\Row('G1'); })()));
 // A generic method's generator yields the type its call gave it, and a call from plain PHP gives none, so `T` is `Any?`.
@@ -69,7 +71,7 @@ X1
 P1,P2,L1
 0,1,2
 Generator
-RuntimeException: SplFileObject::__construct(%smissing.csv): Failed to open stream: No such file or directory
+RuntimeException: %smissing.csv does not exist
 bool(true)
 bool(false)
 bool(false)
