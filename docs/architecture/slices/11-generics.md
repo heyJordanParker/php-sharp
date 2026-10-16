@@ -272,5 +272,4 @@ A parameter, a plain PHP result and a property write of `Class<PaginatedList<Ord
 ### Left as they are
 
 - `Class<…>` has no `is` test, as R3c says, and `==` between class values compares their names until Jordan rules on it.
-- A static field whose initial value is `typeof(Box<Order>)` meets the refusal of every static initial value that is not constant, task #517.
 - A `ReflectionType` prints PHP's erased type: `string` for a `Class<PaginatedList<Order>>` parameter, `App\Box` for a `Box<Order>` return.
