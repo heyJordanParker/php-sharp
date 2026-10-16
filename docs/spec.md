@@ -3851,9 +3851,13 @@ public class CheckoutController
     public string origin() => _SERVER["HTTP_HOST"];             // compile error: take the request data as a parameter
 }
 ```
-<!-- run environment
-new Deploy(new Environment()).target();   // throws OutOfRangeException
--->
+
+Plain PHP, which no module binding limits, creates a `Deploy` and its `Environment` directly:
+
+<!-- example environment: statements -->
+```php
+(new App\Deploy(new Sharp\Environment()))->target();   // throws OutOfRangeException
+```
 
 `Deploy` holds an `Environment`, so it has that effect (see the rule on a class's effects below).
 
@@ -3868,7 +3872,7 @@ public class TenantCache
 ```
 
 - **A class's effects** are the `foreign` classes it holds, directly or through its fields, the effects of the plain PHP its methods call, and the events its methods emit. The checker works them out from field and constructor types and from method bodies. Nothing is written down.
-- **A `foreign` object** is created in a module binding (section 32), as often as its binding's lifetime decides, and handed down through constructors. Creating one anywhere else, or storing one in a static, is a compile error.
+- **A `foreign` object** is created in a module binding (section 32), as often as its binding's lifetime decides, and handed down through constructors. Creating one anywhere else in PHP# code, or storing one in a static, is a compile error. Plain PHP creates one as it creates any object.
 
 **Pure code** reaches no `foreign` object, emits no event, calls no plain PHP unless an `extern` declares it pure, and changes nothing it was given (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
 

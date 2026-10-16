@@ -6,11 +6,6 @@ class Deploy
     {
     }
 
-    public static Deploy create()
-    {
-        return new Deploy(new Environment());
-    }
-
     public string? variable(string name)
     {
         return this.environment.variable(name);
