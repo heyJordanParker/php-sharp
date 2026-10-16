@@ -80,7 +80,8 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	HashTable *request_spelled_lists;
 	/* Spec section 32: Sharp\Container's bindings, under "namespace id" a list of the modules that bind it, each a
 	 * list of its rows, the base modules' and the environment modules' apart; the paths of the module files it read;
-	 * each test file's module, under each class the file declares, and the one of the test that runs now, or NULL;
+	 * each test file's module, under the lowercase name of the one class the file declares, and the one of the test
+	 * that runs now, or NULL;
 	 * the services a singleton or a scoped binding keeps, by binding row; and the bindings and classes it is
 	 * building, to refuse a cycle. */
 	HashTable container_bindings;

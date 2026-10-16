@@ -3551,7 +3551,7 @@ public static class Pairs
 
 A file's extension marks it as PHP#. The engine, Composer's autoloader, editors and the checker all choose the grammar from the filename.
 
-A PHP# file has no opening tag. Its first line is code:
+A PHP# file has no PHP tags, so `<?php`, `<?`, `<?=` and `?>` are compile errors. Its first line is code, after the byte order mark an editor may save:
 
 <!-- example file-header -->
 ```csharp
@@ -3562,7 +3562,7 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 
 The extension is **`.sharp`**, as in `StoreService.sharp`.
 
-**A `.sharp` file that declares a type declares one, named like the file, case included,** as Java allows one public top-level class per file and names the file after it. Every type, events and interfaces included, sits at file level in the namespace its folder names (section 5), so a reader finds a type by its namespace and its file. A second type in a file is a compile error. An `extern` declaration file (section 29) and a `Module.sharp` file (section 32) hold no type, so the rule doesn't cover them:
+**A `.sharp` file that declares a type declares one, named like the file, case included,** as Java allows one public top-level class per file and names the file after it. Every type, events and interfaces included, sits at file level in the namespace its folder names (section 5), so a reader finds a type by its namespace and its file. A second type in a file is a compile error, and so is C#'s `partial`, because a class lives in one file. An `extern` declaration file (section 29) and a `Module.sharp` file (section 32) hold no type, so the rule doesn't cover them:
 
 <!-- example one-type-per-file -->
 ```csharp
@@ -3614,7 +3614,9 @@ Log.info("charged", ["class": typeof(Order)]);                   // compiles: re
 - `Position.current()` in a body gives the position where it is written.
 - As a parameter's default, `Position.current()` gives the caller's position, as C++20's `std::source_location::current()` and Swift's `#file` defaults do.
 - A call through a function value gives the position of the parameter's declaration, because C++ and Swift fill the default only at a direct call too.
-- The parameter takes the whole position. A default that reads one part of it, as `int line = Position.current().line`, is a compile error: write `Position caller = Position.current()`.
+- A call that spreads a list whose elements may be a `Position`, as a `List<Any>`, gives the position of the parameter's declaration too, because the list may fill the parameter. A spread of any other list gives the caller's position.
+- The parameter takes the whole position. A default that only uses it, as `int line = Position.current().line` or `int next = Position.current().line + 1`, is a compile error: write `Position caller = Position.current()`.
+
 **A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. A pragma, `mago.toml`'s `ignore` or the baseline can hide a warning, never an error.
 
 **`vendor/bin/mago compile` compiles the project.** It checks every `.sharp` file, vendor packages included. It also creates a missing `.lean` file beside a class that has a law (section 28.1), and never rewrites an existing one.

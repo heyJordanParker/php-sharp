@@ -8,4 +8,8 @@ public class Note
     {
         this.made = made;
     }
+
+    public Note.stamped(string label, Position at = Position.current()) : this(at) { }
+
+    public Note.blank() : this() { }
 }
