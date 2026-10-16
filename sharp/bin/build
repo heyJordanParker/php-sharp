@@ -32,12 +32,13 @@ flags=(
   --with-sodium
   --with-zip
   --with-zlib
+  --with-curl
 )
 
 if [[ "$(uname -s)" == Darwin ]]; then
   brew_opt="$(brew --prefix)/opt"
   export PATH="$brew_opt/bison/bin:$PATH"
-  export PKG_CONFIG_PATH="$brew_opt/icu4c/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+  export PKG_CONFIG_PATH="$brew_opt/icu4c/lib/pkgconfig:$brew_opt/curl/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
   flags+=(
     --with-pgsql="$brew_opt/libpq"
     --with-pdo-pgsql="$brew_opt/libpq"

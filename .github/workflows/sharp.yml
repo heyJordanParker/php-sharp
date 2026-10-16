@@ -128,6 +128,7 @@ jobs:
           brew install \
             autoconf \
             bison \
+            curl \
             re2c \
             pkgconf \
             icu4c \

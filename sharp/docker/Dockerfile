@@ -17,6 +17,7 @@ RUN apt-get update \
       re2c \
       rustup \
       unzip \
+      libcurl4-openssl-dev \
       libicu-dev \
       libonig-dev \
       libpq-dev \

@@ -86,7 +86,7 @@ git archive HEAD | docker build -f sharp/docker/runtime/Dockerfile -t php-sharp 
 ## macOS dependencies
 
 ```sh
-brew install autoconf bison re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
+brew install autoconf bison curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
 ```
 
 ## CI
