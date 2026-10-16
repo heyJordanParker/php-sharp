@@ -4588,10 +4588,12 @@ ZEND_FUNCTION(Sharp_Internal_statics)
 	RETURN_COPY(entry);
 }
 
-/* Spec section 25: PHP# compares two class values with `\Sharp\Internal\equals($value, $other)`, by the whole type, as
- * C# compares two Type objects, so `typeof(Box<Order>) == typeof(Box<Invoice>)` is false. A class value with type
- * arguments is the interned class name sharp_class_values knows it by, so it equals only a class value of the same type
- * arguments, though its text is the bare class name. Any other two values compare as `===` compares them. */
+/* PHP#'s `==` on two values whose type only the running code knows, `\Sharp\Internal\equals($value, $other)`: a class
+ * value's, spec section 25, and a type parameter's, section 31, as `Result<T, TError>`'s `==` compares its `T` field.
+ * Two class values compare by the whole type, as C# compares two Type objects, so `typeof(Box<Order>) ==
+ * typeof(Box<Invoice>)` is false. A class value with type arguments is the interned class name sharp_class_values knows
+ * it by, so it equals only a class value of the same type arguments, though its text is the bare class name. Any other
+ * two values compare by the `==` of their type, sharp_equal, as an element of a collection does. */
 ZEND_FUNCTION(Sharp_Internal_equals)
 {
 	zval *value, *other;
@@ -4601,16 +4603,20 @@ ZEND_FUNCTION(Sharp_Internal_equals)
 		Z_PARAM_ZVAL(other)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (Z_TYPE_P(value) != IS_STRING || Z_TYPE_P(other) != IS_STRING) {
-		RETURN_BOOL(zend_is_identical(value, other));
-	}
-	const sharp_type *type = sharp_class_value_type(Z_STR_P(value));
-	const sharp_type *other_type = sharp_class_value_type(Z_STR_P(other));
-	if (type || other_type) {
-		RETURN_BOOL(sharp_type_equals(type, other_type));
+	if (Z_TYPE_P(value) == IS_STRING && Z_TYPE_P(other) == IS_STRING) {
+		const sharp_type *type = sharp_class_value_type(Z_STR_P(value));
+		const sharp_type *other_type = sharp_class_value_type(Z_STR_P(other));
+		if (type || other_type) {
+			RETURN_BOOL(sharp_type_equals(type, other_type));
+		}
 	}
 
-	RETURN_BOOL(zend_string_equals(Z_STR_P(value), Z_STR_P(other)));
+	bool equal;
+	if (!sharp_equal(value, other, &equal)) {
+		RETURN_THROWS();
+	}
+
+	RETURN_BOOL(equal);
 }
 
 /* Throws the Error for the type arguments of a frame that ZEND_SHARP_TYPE_ARGS could not spell. */

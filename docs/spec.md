@@ -741,13 +741,14 @@ Counter<User>.count;                                     // 0: Counter<User> has
 Counter.count;                                           // compile error: name the type argument, as in Counter<Order>.count
 ```
 
-A static member names its type arguments: `Counter<Order>.count`. A bare `Counter.count` names none and is a compile error.
+A static field names its type arguments: `Counter<Order>.count`. A bare `Counter.count` names none and is a compile error. A static method call fixes them as a generic method call does, below.
 
 **Writing type arguments:**
 
 - **`new` always names them:** `new PaginatedList<Order>(…)`, or names a class value that carries them, as in `new (pages)()` (section 25). `new Self(…)` names none, because `Self` is the class with its own type parameters.
 - **A type names them too:** `PaginatedList<Order> page`. `Class<PaginatedList>` is the one exception: a class type names the class itself.
 - **A generic method call fixes them** from the arguments it receives, or from the declared type its result goes into. A type argument that neither fixes is a compile error, as in C#'s error CS0411 and in Swift.
+- **A static method call of a generic class fixes the class's type arguments the same way,** or names them on the class: `Holder<int> holder = Holder.of(5);` and `Holder<int>.of(5)` both compile, and a bare `Holder.of(5)` with no declared type is a compile error.
 - **A plain PHP generic class,** declared with PHPDoc's `@template`, takes type arguments in PHP# code, as in `Collection<Order>`. The checker checks them, but the object carries none while the code runs, as Java's erased generics do. So a type test against one, such as `x is Collection<Order>`, is a compile error that says the type argument is unknown while the code runs (section 21).
 
 <!-- example generic-method-inference: statements alone
@@ -2233,6 +2234,9 @@ A case with a value and a case with data in one enum is a compile error. Swift e
 
 - **Each case is its own type,** so a method can take `PaymentResult.Paid` alone.
 - **Two cases are `==`** when they are the same case and each field is `==`, as two structs are (section 19). A case with a field that has no `==` gives its enum no `==`.
+- **A not-backed enum may declare type parameters,** with bounds and without `in` or `out`, as `enum Lookup<T> { case Found(T value); case Missing; }`. A backed enum declares none.
+- **A case of a generic enum** is the type `Lookup<int>.Found`. A case takes its type arguments as a static method call does (section 11), so `Lookup<int> lookup = Lookup.Missing;` and `Lookup<int>.Missing` both compile. A pattern names the bare case, as in `lookup is Lookup.Found(int value)`, and takes the type arguments of the value it tests.
+- **A plain case of a generic enum is one object for each list of type arguments,** so `Lookup<int>.Missing` and `Lookup<string>.Missing` are two objects, as each list has its own static fields.
 - **At runtime,** each case is a real class, so Reflection sees it.
 - **The checker** rejects a `match` over the enum that misses a case.
 
@@ -2635,7 +2639,7 @@ page.designLabel;                                           // "design design", 
 
 - A default body sees only the interface's own members.
 - Every field is declared in the class that owns it. An interface holds no fields.
-- A computed property's default body runs on each read, so it takes no `static` and no `lazy`. An enum has no property, so an enum that implements an interface with one is a compile error.
+- A computed property's default body runs on each read, so it takes no `static` and no `lazy`. An enum declares no stored property; a computed property is allowed.
 - A PHP# interface with default bodies compiles to a PHP interface plus a PHP trait named `<Interface>\Defaults` that holds the default bodies, as Kotlin nests `DefaultImpls` in an interface. A plain PHP class that implements it must also `use` that trait to get the defaults. PHP# code never names the trait, so section 23's rule that a class cannot share its full name with a namespace does not apply to it.
 
 **A class has one method per name, whatever it inherits** (section 7). When two places give a class a body for the same method, the class writes the method itself, as Kotlin requires. The places are two interfaces' default bodies, a default body and a plain PHP trait, two header traits, or a default body and the base class. Until the class writes it, the class is a compile error that names both places. Inside its own methods, the class runs one interface's default body with `super<Interface>`:
@@ -2830,7 +2834,7 @@ public class Layout
 
 **The standard library lives under one root, `Sharp`,** with the standard library namespaces `Sharp.Text`, `Sharp.Math`, `Sharp.Json`, `Sharp.IO`, `Sharp.Time`, `Sharp.Net` and `Sharp.Data`, as .NET has `System.*` and Rust has `std::*`.
 
-**Only `Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin:
+**Only `Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin. `Error` is the one default name that nothing shadows (section 31):
 
 <!-- example own-namespace-shadows -->
 ```csharp
@@ -4031,12 +4035,18 @@ public enum Result<T, TError : Error>
     case Err(TError error);                       // Err beside the Error interface, as Rust's Result::Err sits beside its Error trait
 }
 
-public Result<Order, PaymentError> charge(Cart cart) { … return Result.Err(PaymentError.Declined(reason)); }
+public Result<Order, PaymentError> charge(Cart cart) => Result.Err(PaymentError.Declined("card expired"));
 ```
 
 `Result` is an ordinary enum with data from the standard library, so `match`, `is` and the exhaustive-case check work on it unchanged.
 
-**`try` passes a failure up to the caller.** If the call returns `Err`, the enclosing method returns that same `Err` immediately. Otherwise `try` gives the `Ok` value. Zig and Swift use `try` the same way.
+**A case of `Result` is the type `Result<Order, PaymentError>.Ok`.** `Result.Ok(…)` and `Result.Err(…)` take their type arguments from their arguments and from the declared type their result goes into, as `charge` above does. A type argument that neither fixes is written on the enum, as in `Result<int, PaymentError>.Ok(5)`. A pattern names the bare case, as in `Result.Ok(Order order)`, and takes the type arguments of the value it tests.
+
+**`try` passes a failure up to the caller.** If the call returns `Err`, the enclosing method returns an `Err` holding the same error immediately. Otherwise `try` gives the `Ok` value. Zig uses `try` the same way.
+
+- **The returned `Err` takes the type arguments of the enclosing method's `Result`,** and it is `==` to the `Err` it holds the error of. An operand whose error type doesn't fit the method's error type is a compile error that names both.
+- **`try` is a prefix operator with `!`'s precedence.** A member read and a call bind tighter, so `try this.gateway.charge(cart)` passes up the call's failure, and parentheses read a member of the `Ok` value.
+- **The operand is any `Result` expression,** and `try` stands anywhere an expression can, a lambda that returns a `Result` included.
 
 <!-- example try-propagation: members
 private CheckoutGateway gateway = new CheckoutGateway();
@@ -4044,9 +4054,11 @@ private CheckoutGateway gateway = new CheckoutGateway();
 ```csharp
 public Result<Receipt, PaymentError> checkout(Cart cart)
 {
-    const order = try gateway.charge(cart);      // Order, or return the failure here
+    const order = try this.gateway.charge(cart);      // Order, or return the failure here
     return Result.Ok(order.receipt());
 }
+
+public Result<int, PaymentError> total(Cart cart) => Result.Ok((try this.gateway.charge(cart)).total);   // a member of the Ok value
 ```
 
 `try`/`catch` blocks remain for exceptions, which are now mostly limited to the edges, such as wrapping a plain PHP exception.
@@ -4074,7 +4086,10 @@ public enum PaymentError : Error
 }
 ```
 
-**Inside `.sharp` files, `Error` always means this interface.** PHP's global engine class `Error` is never named in PHP# code. Bugs are caught as `Throwable`, and engine subclasses such as `TypeError` keep their names.
+**Inside `.sharp` files, `Error` always means this interface,** whatever the file declares or imports. PHP's global engine class `Error` is never named in PHP# code.
+
+- **An import whose last part is `Error`, or that renames a class to `Error`, is a compile error,** so another library's `Error` is imported under a new name, as in `import Vendor.Payments.Error as PaymentsError;`.
+- **Bugs are caught as `Throwable`,** so `catch (Error failure)` is a compile error that names `Throwable`. Engine subclasses such as `TypeError` keep their names.
 
 ## 32. Modules
 

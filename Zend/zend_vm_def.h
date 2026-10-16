@@ -8952,7 +8952,7 @@ ZEND_VM_HANDLER(216, ZEND_SHARP_LEAVE, ANY, ANY)
 
 	SAVE_OPLINE();
 	cleanup_unfinished_calls(execute_data, op_num);
-	cleanup_live_vars(execute_data, op_num - 1, op_num);
+	zend_sharp_cleanup_leave_vars(execute_data, op_num);
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 

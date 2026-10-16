@@ -277,8 +277,11 @@ sharp/mago/crates/
 │   ├── src/parser/internal/statement.rs   <- `try` then `{` stays the statement; any other `try` starts an expression
 │   ├── src/utils/control_flow.rs, utils/mod.rs, utils/reference.rs, utils/assignment.rs
 │   │                                      <- Propagate's operand read as Leave's value is
+│   ├── src/utils/pattern.rs               <- a case pattern's field tests read the object at the field, so two
+│   │                                         fields never share a span
 │   └── tests/sharp.rs                     <- parse rows (The tests)
 ├── names/src/lib.rs                       <- Sharp\Result among the shadowable default names, Sharp\Error among the fixed ones
+├── names/src/internal/walker.rs           <- an enum case and a computed property each declare their own names
 ├── codex/src/scanner/class_like.rs        <- a generic enum, its generic case classes and factories; the enums that run as classes
 ├── semantics/
 │   ├── src/internal/checker/sharp.rs      <- an enum's type parameters; none on a backed enum; Propagate in the slice;
@@ -306,6 +309,10 @@ sharp/composer/library/Sharp/
 └── Error.sharp                            <- new: section 31's Error
 Zend/zend_compile.c                        <- zend_compile_prop_decl lets a property with a PHP# type through on an enum
 Zend/zend_enum.c                           <- zend_verify_enum_properties accepts a virtual PHP# property
+Zend/zend_execute.c, Zend/zend_vm_def.h    <- SHARP_LEAVE frees a `new` that is still live where the leave returns, as
+                                              try's returned Err in a lambda needs
+ext/sharp/sharp.c                          <- \Sharp\Internal\equals compares by PHP#'s ==, so a type parameter's
+                                              value compares by its type argument's operator ==
 sharp/harness/app/
 ├── PaymentError.sharp                     <- new: error-interface's PaymentError, with its message
 ├── CheckoutGateway.sharp                  <- new: try-propagation's gateway, charge(Cart) returning Result<Order, PaymentError>
@@ -316,9 +323,8 @@ Zend/tests/sharp/
 │                                             returned Err (ReflectionObject::getTypeArguments), try inside a call's
 │                                             arguments, a template, a try with finally and catch; a match over every
 │                                             case; ==; PaymentError's message; every plain PHP crossing above
-├── results_preload.phpt, results_preload.inc
-│                                          <- the same Result classes and a try under opcache preloading
-└── opcodes.phpt                           <- a case factory's SHARP_TYPE_ARGS pinned
+└── results_preload.phpt, results_preload.inc
+                                           <- the same Result classes and a try under opcache preloading
 docs/spec.md                               <- section 31 states each answer; line 4034 as Q7 says; section 22's line
                                               2638 as Q3 says; section 23 names Error beside the default names that never shadow
 sharp/baseline/spec/§31/                   <- error-interface, result-enum and try-propagation removed

@@ -3558,7 +3558,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_LEAVE_S
 
 	SAVE_OPLINE();
 	cleanup_unfinished_calls(execute_data, op_num);
-	cleanup_live_vars(execute_data, op_num - 1, op_num);
+	zend_sharp_cleanup_leave_vars(execute_data, op_num);
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
@@ -60692,7 +60692,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_LEAVE_SPEC_T
 
 	SAVE_OPLINE();
 	cleanup_unfinished_calls(execute_data, op_num);
-	cleanup_live_vars(execute_data, op_num - 1, op_num);
+	zend_sharp_cleanup_leave_vars(execute_data, op_num);
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
