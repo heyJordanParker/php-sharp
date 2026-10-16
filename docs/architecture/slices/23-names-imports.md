@@ -1,0 +1,240 @@
+# Slice 23: Namespaces and imports, and keyword case
+
+Spec section 23, and section 2's rule that keywords are lowercase. team-lead approved G1 to G8, the four engine test files and `ParseError::UsesOnImportInSharp`, with the answers below, which replace the proposals of this note wherever they differ.
+
+## Answers in force
+
+1. **Q1:** no. An alias exists only in a framework's runtime config, so `import Log;` names a class the checker sees, as in `import Illuminate.Support.Facades.Log;`. Its error says there is no class `Log` to import, with no special case for `log()`.
+2. **Q2 and G5:** one source of truth. Every public class the standard library declares directly in `Sharp` is a default name. The list is generated from the library, and a test fails when the two disagree, in place of the checker guard. `ListMethods`, `MapMethods`, `SetMethods` and `IterableMethods` move to `Sharp\Internal`, in the engine, the prelude, the bridge and the tests.
+3. **P1** still waits for Jordan, and master's behavior stays.
+
+## The answer first
+
+Section 23 already holds on master for every example and for most rule lines: dotted namespaces, capitalized namespace parts, calls and constants through a library's namespace, `global.`, the refused single-function import and bare call, shadowing a default name, `import … as`, one name per file, and `extern` through a renamed import. The engine and the Composer plugin run every crossing probed. The checker is where every gap is:
+
+- **`keyword-case` fails because a miscased keyword hides every other PHP# error in its file.** `Return;` is a parse-level error ("Write the keyword `return` in lowercase."), and `checks_slice` runs no PHP# check on a file with a parse error, so line 99's `TRUE` is never reported. The tree the parser builds for `Return` is the tree of `return`, so nothing justifies the gate there.
+- **Some miscased keywords get no suggestion:** `THIS`, `This`, `SUPER`, `SELF`, `Typeof(…)`, `Nameof(…)`, `Exit(…)`, `value IS int`, `value As int`, `Case Paid;` in an enum and `Public class` at file level. `Struct` gets its suggestion plus a second, generic parse error.
+- **Four imports are silently accepted:** an import that names nothing (`import Nowhere.Missing;`), a namespace of classes (`import App.Shared.Schema;`, `import Sharp.Json;`) and a constant (`import Vendor.Pdf.DEFAULT_DPI;`). Line 2770 allows only a class, or a namespace of a plain PHP library's functions and constants.
+- **A full name in code is refused, but the error names the import only for member chains.** In a type, `new`, `nameof`, `typeof`, `catch`, a class header, an attribute, an `extern` and `Pdf.Document`, the error is "Cannot find type `App.F.App.Order`", "Class `App` not found" or a bare parse error.
+- **Six classes directly in `Sharp` are not default names:** `Behavior`, `ClassMembers`, `Dispatcher`, `ImmediateDispatcher`, `InvalidFields` and `Listening`. The name resolver keeps a hand-written list, while the analyzer's extension lookup already treats every class directly in `Sharp` as imported.
+- **`import X uses Y;` is two generic parse errors,** which per `docs/architecture/spec-examples.md` satisfy only a `parse error` line.
+- **A plain PHP class named like a PHP# namespace compiles.** `mago analyze` reports it on the `.php` file, and `mago compile` prints only `.sharp` files' errors, so nothing refuses it.
+- **Two errors don't say what the spec says they say:** `Math.floor` without its import is "Method `Math.floor` does not exist." instead of naming the import, and a bare library constant `DEFAULT_DPI` is "Undefined constant" instead of naming `Pdf.DEFAULT_DPI`.
+
+The bridge, the engine and the Composer plugin need no change. The Slice adds one engine test that pins section 23's runtime meaning in every opcache mode. Two questions decide what users write, and one item waits on Jordan.
+
+## Rule by rule
+
+The states are **works**, **fails example**, **silently accepted** (code the spec refuses compiles), **wrong error** (refused, but the error isn't the one the rule describes) and **parse error** (refused by "Parse error encountered during parsing", which satisfies only a `parse error` line). The layer is what the Slice changes: **parser** and **semantics** are `sharp/mago/crates/syntax` and `crates/semantics`, **names** is `crates/names`, **analyzer** is `crates/analyzer`. "none" means the rule holds and the Slice keeps it under test.
+
+### Section 2: keyword case (lines 86 to 101)
+
+| # | Line | Rule | State on master | Layer | Reuses |
+|---|---|---|---|---|---|
+| K1 | 86 | Keywords are lowercase only | works: `is_sharp_keyword` compares exactly | none | |
+| K2 | 86 | `Self` is the one capitalized keyword | works: `public Self same()` compiles, `self` gets "PHP# has no `self`" | none | |
+| K3 | 86, 93 | A capitalized keyword is an ordinary name: `class Event`, `class Struct` | works: `class Struct`, `Event`, `Return`, `If`, `Throw` compile, `Return.make()`, `If.make()`, `Return r = new Return();`, locals `Match`, `Event` and a parameter `Return` compile, and the engine creates `App\N\Return`, `App\N\If` and `App\N\Throw` | none | |
+| K4 | 86, 99, 100 | Where no such name exists, the error suggests the lowercase keyword | **fails example** `keyword-case`: line 99's error is lost (G1). **Wrong error** for `THIS`, `This`, `SUPER` ("Undefined constant"), `SELF` ("Cannot find type"), `Typeof(…)`, `Nameof(…)` ("Function `global.Typeof` does not exist"), `Exit(1)` ("write `global.exit(…)`"), `Case Paid;` ("Enum `Cases` cannot have properties"). **Parse error** for `value IS int`, `value As int`, `Public class Heads`, and the second error of `public Struct Point` | semantics, parser | `MiscasedKeywordInSharp`, `miscased_construct_follows`, `check_constant_access` |
+
+What already suggests the keyword: every statement head (`If`, `IF`, `RETURN`, `Return;`, `For`, `While`, `Do`, `Try`, `Catch`, `Finally`, `Else`, `Break`, `Continue`, `Throw`, `Yield`, `Emit`, `Let`, `LET`, `Const`, `Match (…)`, `NEW`), every member and type modifier (`Private`, `Protected`, `Readonly`, `Abstract`, `Virtual`, `Final`, `Internal`, `Lazy`, `Required`, `Static`, `Sealed`), every file-level head (`Namespace`, `Import`, `Extern`, `Event`, `public Interface`, `public Enum`), and the values `TRUE`, `True`, `FALSE`, `False`, `NULL`, `Null` ("Write `true` in lowercase."). The spec's annotation text, "no name TRUE exists; did you mean true?", is a paraphrase, and `sharp/bin/spec` doesn't compare it.
+
+### Section 23 (lines 2760 to 2890)
+
+| # | Line | Rule | State on master | Layer | Reuses |
+|---|---|---|---|---|---|
+| N1 | 2762 | Namespace parts are separated by `.`, and imports use `import` | works: `namespace-and-import` | none | |
+| N2 | 2762 | Every part of a `namespace` line starts with a capital letter | works: `namespace App.p;` gives "`p` must start with a capital letter: PHP# capitalizes every namespace and every type except the built-in ones." An import keeps its letters (decision 69) | none | `check_capitalized` |
+| N3 | 2770 | Full names appear only in `namespace` and `import` lines, so `.` in code is always member access | see N5 | analyzer, parser | |
+| N4 | 2770 | The last part of an import is a class, or the namespace of a plain PHP library's functions and constants | **silently accepted**: `import Nowhere.Missing;`, `import App.Shared.Schema;` (classes only), `import Sharp.Json;`, `import Vendor.Pdf.DEFAULT_DPI;`. A single function is refused (N9) | analyzer | `check_sharp_import`, `report_non_existent_import` |
+| N5 | 2770 | A full class name in code is a compile error that names the import to add | works for member chains: `App.Shared.Schema.Entities.DatabaseEntity.class` and `x is App.Order` give "Full names appear only in `import` lines: add `import App.Order;` and write `Order`." **Wrong error** for a parameter, return, property or generic argument type ("Cannot find type `App.F.App.Order`"), `new App.Order()` ("Class `App` not found"), `nameof(App.Order)`, `typeof(App.Order)`, `catch (App.NotFound e)`, `Vendor.Pdf.DEFAULT_DPI` and `Vendor.Pdf.render(h)` ("`Vendor` names no class, and no namespace this file imports."), `Pdf.Document.blank()` ("Undefined constant `Pdf.Document`") and `new Pdf.Document()`. **Parse error** for a local's type `App.Order o = …`, a header `: App.Shared.Schema.Entities.DatabaseEntity`, an attribute `[App.Searchable]` and `extern Vendor.Pdf.render uses Files;` | analyzer, parser | `report_full_name` |
+| N6 | 2770 | A module header names a namespace: `module : App.Shop` | works: section 32's examples | none | |
+| N7 | 2772 | A library's function is called through its namespace: `Pdf.render(html)` | works: `library-functions`, and the engine printed `pdf(x)` | none | |
+| N8 | 2772 | A root function is called as `global.now()` | works: `global.strlen(text)` | none | |
+| N9 | 2772, 2800 | Importing a single function is a compile error | works: `library-functions` line 2800 | none | |
+| N10 | 2772, 2791 | A bare call is a compile error that names `Pdf.render(html)` | works: `library-functions` line 2791 | none | |
+| N11 | 2805 | A plain PHP constant is read through its namespace: `global.PHP_EOL`, `Pdf.DEFAULT_DPI` | works: `library-constants`, and the engine printed `300` | none | |
+| N12 | 2805, 2826 | A bare uppercase name is the code's own constant: bare `PHP_EOL` is an error that says `global.PHP_EOL` | works for `PHP_EOL`. **Wrong error** for a library's constant after its namespace's import: bare `DEFAULT_DPI` is "Undefined constant: `DEFAULT_DPI`." | analyzer | the `global.PHP_EOL` help in `constant_access.rs` |
+| N13 | 2830 | An import never carries `uses` | **parse error** ×2 for `import Vendor.Pdf uses Files;` | parser | the `*InSharp` parse errors |
+| N14 | 2832 | The standard library lives under `Sharp`, with `Text`, `Math`, `Json`, `IO`, `Time`, `Net` and `Data` | works: the seven folders of `sharp/composer/library/Sharp/` | none | |
+| N15 | 2834 | Only `Sharp` itself is imported by default, with the extensions on `string`, `int`, `float`, `List`, `Map` and `Set`: bare `Int`, bare `Key`, `name.trim()` | works for `Int`, `Key`, `Position`, `Events`, `Environment`, `List`, `Map`, `name.trim()`. **Wrong error** ("Cannot find type") for `Behavior`, `ClassMembers`, `Dispatcher`, `ImmediateDispatcher`, `InvalidFields` and `Listening`. The extension rule holds through `is_imported_by_default` (`the_standard_library_extensions_on_the_default_types_need_no_import`) | names, semantics | `shadowable_default_classes`, `default_class` (mago-sharp #179) |
+| N16 | 2834 | A class the file declares or imports, or one of its namespace, shadows the default one | works: `own-namespace-shadows`; a plain PHP `App\S\Environment` shadows in `App.S`; `import Acme.Position;` of a plain PHP class shadows; `import Cache.Key;` makes `[Key(…)]` name `Cache.Key`; the engine printed `production` for `Release.stage()` through Composer | none | |
+| N17 | 2859, 2870 | A static class of a standard library namespace needs its import: `Math.max(a, b)` without it is a compile error, "Math is not imported" | refused, **wrong error**: "Method `Math.floor` does not exist." and "Method `Json.encode` does not exist." | analyzer | the import help of `resolver/extension.rs` and of `match-not-exhaustive` |
+| N18 | 2873 | `import X.Y as Z;` renames in this file only, as PHP's `use X\Y as Z;` | works: `import-rename`; another file's `Paper` is "Cannot find type"; the original `Document` is unbound after the rename; the engine ran `Cash.of(250)`, `List<Cash>`, `value is Cash` and `new Paper("invoice")`. The bridge writes every class by its full name and drops the import, which gives `use … as`'s meaning | none | |
+| N19 | 2887 | An imported name is used once per file: two imports of one name, or an import named like a declared class, are errors | works: `import App.Order;` twice, `import Cache.Key as Order;` then `import App.Order;`, `import … as Duplicates` in `Duplicates.sharp` | none | `check_declarations` |
+| N20 | 2888 | A rename changes the name, not the import; an `extern` through the new name declares the same function | works: `extern Printing.render` and `extern Pdf.render` give `duplicate-extern` | none | |
+| N21 | 2890 | A class can't share its full name with a namespace; `Store/Store.sharp` is allowed; plain PHP classes count | works for PHP#: `Store.sharp` beside `Store/` is "`App.P.Store` is both a class and a namespace: rename the class or the folder.", and `Store/Store.sharp` compiles. **Silently accepted** for a plain PHP class: `Old.php` beside `Old/Fresh.sharp` compiles, because the error lands on the `.php` file, which `mago compile` never prints | analyzer | `report_class_like_named_as_a_namespace` |
+
+### Crossings
+
+| # | Crossing | State on master |
+|---|---|---|
+| C1 | A PHP# file imports a plain PHP class, function and constant | works: `import Vendor.Pdf.Document as Paper;`, `Pdf.render`, `Pdf.DEFAULT_DPI`, `Stripe.StripeClient`, checked and run |
+| C2 | Plain PHP uses a PHP# class through Composer's autoloader | works, PSR-4 and `dump-autoload --optimize`: `new App\Probe()`, `App\Shop\Money::of(7)`, `new \App\Return()` |
+| C3 | An import collides with a default name | works: `import Cache.Key;` shadows `Key`, so `[Key("cache_key")]` names `Cache.Key` and is "not declared with `#[Attribute]`", the error the spec renames around |
+| C4 | A Laravel facade imported by its alias, `import Log;` | **wrong error**: "An import names a class or a namespace, not a function: call `global.Log(…)`.", because PHP's `log()` matches ignoring case, then "Function `Log.info` does not exist." Question 1 |
+
+### Waiting on Jordan
+
+- **P1. A PHP# override of a plain PHP method whose parameter is named after a PHP# keyword.** `handle(Object event)` over `handle(object $event)` is "`event` is a PHP# keyword, so it can't name a parameter.", and `handle(Object happened)` is "Parameter #1 of `Renamed.handle` is named `happened` but parent `Listener.handle` names it `event`". The Slice keeps both.
+
+## Mechanism
+
+Each Problem below lists its rows, its change and the code it reuses. A test per rule holds every form as a row, and each row is seen failing before its code.
+
+### G1. A miscased keyword stops hiding the file's other errors (K4, `keyword-case`)
+
+`crates/semantics/src/internal/mod.rs`'s `checks_slice` runs PHP# checks when every parse error of the file is `ParseError::MiscasedKeywordInSharp`. That error comes from `read_miscased_keyword`, which reads the token as the lowercase keyword, so the tree is the tree of the correct code. The gate's reason (`623b29626c`: a node the parser rejected must not get a second error) doesn't apply. `keyword-case` then reports line 99 and line 100.
+
+The alternative, reading `Return;` as a name so that it is no parse error, fixes only the one form. The gate change covers `If (TRUE) { }` and every other mix.
+
+### G2. Every miscased keyword suggests the keyword (K4)
+
+- **Values:** `check_constant_access` in `crates/semantics/src/internal/checker/sharp.rs`, which writes "Write `true` in lowercase.", takes `this` and `super` too. The `self` check takes `SELF` and any other spelling of `Self` that names no class, as "Write `Self` …".
+- **Expression heads:** `Typeof(`, `Nameof(` and `Exit(` read as their keyword with `MiscasedKeywordInSharp`, as `Match (` and `NEW` do, in `miscased_construct_follows`.
+- **Infix:** `is` and `as` in another case after an operand read as the operator with the same error, where `operator_kind` in `parser/internal/expression.rs` reads PHP's infix keywords.
+- **Members and file heads:** `Case` before a name in an enum reads as `case`. A miscased modifier at file level followed by a type keyword reads as the modifier, so `Public class` is one error. `Struct` gives only its own error.
+
+### G3. An import names a class, or a namespace of functions and constants (N4, C4)
+
+In a `.sharp` file, `Statement::Use` in `crates/analyzer/src/statement/mod.rs` checks every import, whatever `check_use_statements` says, through `check_sharp_import` in `use_statement.rs`:
+
+- a class-like: compiles.
+- a namespace that holds a plain PHP function or constant: compiles. The check scans `CodebaseMetadata::function_likes` and `constants`, which are public fields, so no new public method.
+- a function: today's `function-import` error.
+- a constant: the same error, with "read it as `Pdf.DEFAULT_DPI`".
+- a namespace of classes only: "An import names a class or a namespace of functions: import the class, as in `import Sharp.Json.Json;`" when the namespace holds one class, and the class list otherwise.
+- nothing: `non-existent-use-import`, "Imported class `Nowhere.Missing` does not exist." An import whose last part is capitalized never gets the function message, so `import Log;` gets this one. Question 1 may change it.
+
+### G4. A full name anywhere in code names its import (N3, N5)
+
+One function in `crates/analyzer/src/utils/names.rs` takes a dotted name as written and returns the refusal when the whole name, read as a full name, is a class-like or a namespace member: "Full names appear only in `import` lines: add `import App.Order;` and write `Order`." `report_full_name` becomes its caller for member chains. The other callers are the sites that today report the wrong error:
+
+- `report_undefined_type` (`statement/function_like/mod.rs`): parameter, return, property, local and generic argument types.
+- `new` (`expression/instantiation.rs`), `nameof` (`expression/name_of.rs`), `typeof` (`expression/type_of.rs`), `catch` (`statement/try.rs`), and `report_unknown_class_read` (`expression/access/mod.rs`) for `Vendor.Pdf.DEFAULT_DPI`.
+- A class through a namespace import, `Pdf.Document`: "import `Vendor.Pdf.Document`".
+
+The parser reads a dotted name where it now stops: a local's type at a statement's head, a class header after `:`, an attribute's name and an `extern` target. `Identifier::Dotted` already exists, so the tree's shape doesn't change, and the analyzer refuses the name before the bridge sees it.
+
+### G5. Every class directly in `Sharp` is a default name (N15)
+
+`shadowable_default_classes` in `crates/names/src/lib.rs` gains `Sharp\Behavior`, `Sharp\ClassMembers`, `Sharp\Dispatcher`, `Sharp\ImmediateDispatcher`, `Sharp\InvalidFields` and `Sharp\Listening`. The `feat/result` Slice adds `Result` there and `Error` as a default nothing shadows, so this Slice leaves `Error` alone and only merges its list.
+
+The list can drift from the library, so `check_declarations` refuses a standard library file that declares a class-like directly in `Sharp` that `default_class` doesn't know: "A class directly in `Sharp` is a default name of every file: add `Sharp.X` to `shadowable_default_classes`." Every compile of the library, the spec harness's included, runs it.
+
+The alternative builds the default names from the codebase, as the analyzer's extension lookup does. The name resolver runs before the codebase exists, so that needs a third scan pass in `IncrementalAnalysisService::analyze`, beside the one `NamespaceClasses` already adds.
+
+### G6. `import X uses Y;` is one error that says why (N13)
+
+The parser's import reader in `crates/syntax/src/parser/internal/use.rs` reads `uses` and the names after it, and reports a new `ParseError` variant, "An import never carries `uses`: declare the library's effect once, with `extern`.", in the shape of `PhpLambdaInSharp` and `QualifiedNameInSharp`. It is a public enum variant, so it is listed under Architecture.
+
+### G7. A plain PHP class named like a PHP# namespace refuses the PHP# file (N21)
+
+`report_class_like_named_as_a_namespace` in `crates/analyzer/src/statement/class_like/mod.rs` also runs from the PHP# side: a PHP# class-like whose namespace is a plain PHP class gets "`App.D.Old` is both a plain PHP class and this file's namespace: rename the class or the folder." `mago compile` then refuses it. The warm path re-analyzes a namespace's files when a class-like of that name appears or goes, as `a_compile_after_the_folder_named_like_a_class_gains_or_loses_a_class_matches_a_clean_compile` checks today; that test gains the row.
+
+### G8. The two errors that don't say what the spec says (N12, N17)
+
+- **Not imported:** where the analyzer reports a missing class in a `.sharp` file (`report_non_existent_method` on a class that doesn't exist, and `report_undefined_type`), a short name that names exactly one class-like of the codebase gets "`Math` is not imported: add `import Sharp.Math.Math;`". The help reuses the aliased-import writer that `match-not-exhaustive` and the extension lookup use.
+- **Bare library constant:** a bare uppercase name that names no constant of the code, while a namespace the file imports holds one of that name, gets "Read the library's constant through its namespace: write `Pdf.DEFAULT_DPI`."
+
+### What doesn't change
+
+- **Bridge:** imports are dropped and names written in full (`Lowering::file_statement`), which is the meaning of `use … as`. No change.
+- **Engine:** no change. The new engine test pins N7, N11, N16, N18 and K3 at runtime.
+- **Composer plugin:** `autoload.php` and `Plugin::declaredClasses` found `App\Return`, `App\Shop\Money` and `App\Probe` through PSR-4 and through the optimized class map. No change.
+- **`sharp/bin/spec` and the harness:** no change.
+- **Plain PHP:** every change runs only in a `.sharp` file, except G7's PHP# side, which reads a plain PHP class and reports on the PHP# file.
+
+## Files
+
+```text
+docs/architecture/slices/23-names-imports.md          new: this note
+sharp/baseline/spec/§2/keyword-case                   deleted: the example passes (G1)
+sharp/mago/crates/
+├── syntax/src/
+│   ├── error.rs                                       new variant for `uses` on an import (G6)
+│   └── parser/internal/
+│       ├── common.rs                                  Typeof, Nameof, Exit, Case and a file-level modifier read as keywords (G2)
+│       ├── expression.rs                              IS and As read as is and as (G2)
+│       ├── use.rs                                     `uses` after an import is one named error (G6)
+│       ├── local_declaration.rs, class_like/mod.rs,
+│       │   attribute.rs, extern.rs                    a dotted name parses where it now stops (G4)
+├── semantics/src/internal/
+│   ├── mod.rs                                         checks_slice runs past a miscased keyword (G1)
+│   └── checker/sharp.rs                               this, super and Self in another case (G2); the library's
+│                                                      classes directly in Sharp are default names (G5)
+├── names/src/lib.rs                                   six default names (G5)
+├── analyzer/src/
+│   ├── utils/names.rs                                 the full-name refusal and the not-imported help (G4, G8)
+│   ├── expression/access/mod.rs                       report_full_name and report_unknown_class_read use it (G4)
+│   ├── expression/instantiation.rs, name_of.rs,
+│   │   type_of.rs, statement/try.rs                   a full name names its import (G4)
+│   ├── statement/function_like/mod.rs                 report_undefined_type names the import (G4, G8)
+│   ├── statement/mod.rs, statement/use_statement.rs   every PHP# import is checked (G3)
+│   ├── expression/constant_access.rs                  a bare library constant names Pdf.DEFAULT_DPI (G8)
+│   ├── resolver/method.rs                             a static call on an unimported class names its import (G8)
+│   └── statement/class_like/mod.rs                    the class-and-namespace rule from the PHP# side (G7)
+├── syntax/tests/sharp.rs, semantics/tests/sharp.rs,
+│   names/tests/binder.rs, analyzer/tests/sharp.rs     one test per rule, forms as rows
+└── orchestrator/src/service/incremental_analysis/
+    compile.rs                                         the plain PHP row of the class-and-namespace test (G7)
+Zend/tests/sharp/
+├── NamesImports.sharp                                 new: renamed imports, shadowed defaults, keyword-named classes,
+│                                                      a library's function and constant
+├── names_imports.inc                                  new: the plain PHP library and the driver
+├── names_imports.phpt                                 new: runs in every mode sharp/bin/test runs
+└── names_imports_preload.phpt                         new: the same under opcache.preload
+```
+
+## Architecture team-lead approves
+
+1. **One new `ParseError` variant for `uses` on an import** (G6). Names, each in its call `ParseError::…(span)`:
+   - `UsesOnImportInSharp`: what is written where, as `QualifiedNameInSharp` is. Recommended.
+   - `ImportUsesInSharp`: the same, shorter, but reads as "imports uses".
+   - `ImportEffectInSharp`: names the meaning, but the line never names an effect class unless it does.
+2. **The four engine test files** under `Zend/tests/sharp/`.
+3. **The library guard** (G5): a standard library file is refused when it declares a class directly in `Sharp` that isn't a default name.
+
+Everything else changes function bodies and `pub(crate)` items.
+
+## Questions for Jordan
+
+Each one decides what users write. The note recommends and decides none.
+
+1. **Can a PHP# file import a Laravel facade by its alias, `import Log;`?** The alias is a class only while the app runs: Laravel's `AliasLoader` calls `class_alias` on first use. The checker sees no class `Log`. Recommended: no. An import names a class the checker sees, so the file writes `import Illuminate.Support.Facades.Log;`, and `import Log;` is "Imported class `Log` does not exist." This matches section 29: "PHP# ships declarations for no framework". The alternative reads `config/app.php`'s `aliases` and `Facade::defaultAliases()`, which is code for one framework.
+2. **Are the prelude's helper classes default names?** The prelude declares `ListMethods`, `MapMethods`, `SetMethods` and `IterableMethods` directly in `Sharp`, and line 2834 imports all of `Sharp`. Today a bare `ListMethods` is "Cannot find type". Recommended: they stay unnamed in PHP# code, as the engine's implementation of the collection methods, and G5's guard covers `.sharp` library files only. The alternative makes them default names, so `ListMethods.map(…)` compiles.
+
+## Existing work
+
+Every open and closed PR of php-sharp and of `heyJordanParker/mago-sharp` was listed (`gh pr list --state all`), and php-sharp's commits since 2026-10-01 were searched by message on every branch for imports, default names, keywords, full names and namespaces.
+
+- **mago-sharp #179, `feat/same-namespace-names`, merged.** `shadowable_default_classes`, `default_class`, `NamespaceClasses` and the second scan pass. G5 completes its list.
+- **mago-sharp #78, `feat/sharp-import-alias`, and #108, `fix/sharp-import-help-alias`, merged.** `import … as`, its checks in `check_declarations`, and the help that writes an aliased import. G8 reuses the help.
+- **mago-sharp #95 and #90, capitalized namespaces and types, merged.** `check_capitalized`, N2.
+- **mago-sharp commit `76bc6c25c8`, "a keyword in another case is one error that writes it in lowercase", merged.** `MiscasedKeywordInSharp`, `miscased_construct_follows`, and `TRUE` in `check_constant_access`. G1 and G2 build on it.
+- **php-sharp #124, `feat/plain-php-calls`, merged.** Calls and constants through a namespace, `check_sharp_import`'s function refusal, `bare-function-call`. N7 to N12.
+- **mago-sharp #177, `fix/effect-names`, merged.** An imported class named like an effect. No change.
+- **php-sharp #141, `feat/built-in-types`, merged.** The naming warnings, which cover namespace parts.
+- **`feat/result`, in progress (slot 2).** Its note, `docs/architecture/slices/31-result.md` on that branch, makes `Error` a default name nothing shadows and refuses an import whose last part is `Error`, and adds `Result` to `shadowable_default_classes`. This Slice leaves both to it and merges the list.
+- **php-sharp #142, `feat/generics-rest`, open.** Its failing `generic-method-inference` is N21 at work: the example declares `App.Cache` beside the harness folder `app/Cache/`. Section 11 owns the fix.
+- `origin/experimental/namespaces` is php-src's own 2000s branch, not PHP# work.
+
+## How the states were observed
+
+- **mago:** release, built from master `0b98cd4a46` with `CARGO_PROFILE_RELEASE_LTO=off`, at `sharp/build/darwin-arm64/mago/release/mago` in slot 1.
+- **Engine:** `sharp/bin/build` at `0b98cd4a46`, PHP 8.5.11 NTS DEBUG, without opcache.
+- **Spec run:** `sharp/bin/spec` with that pair: "Checked 201 examples, ignored 1, and 16 fail", equal to `sharp/baseline/spec`. Section 23's six examples pass. Section 2 fails only `keyword-case`:
+
+  ```text
+  FAIL §2 keyword-case (docs/spec.md:89)
+    docs/spec.md:99 expects a compile error, and the checker accepts it
+  ```
+
+- **Probes:** each project lays out `sharp/harness/` and the standard library as `sharp/bin/spec` does, and `mago compile` reported with `MAGO_REPORTING_FORMAT=emacs`. Each rule's forms sit in files of their own, since a parse error in a file hides that file's PHP# errors (G1). The crossings ran in a Composer project that installs `sharp/composer` from its path, with a plain PHP library under `Vendor\Pdf` and a stub `Illuminate\Support\Facades\Log` imported by its full name, through PSR-4 and through `composer dump-autoload --optimize`. C4's `import Log;` was probed with the checker only, since it doesn't compile. Its run printed:
+
+  ```text
+  ["250","2","true","invoice","pdf(x)","300","true"]
+  production
+  7
+  ["logged"]
+  a class named Return
+  ```
