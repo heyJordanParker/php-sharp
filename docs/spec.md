@@ -249,7 +249,7 @@ public class Profile
 
 **A static field or property with storage needs an initial value, whatever its type.** No constructor sets it, so the error names that one fix.
 
-**A static's initial value runs once, when a request first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. A get-only static is set only by its initial value.
+**A static's initial value runs once, when a request first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. A get-only static is set only by its initial value. A throw there reaches the code that first used the statics and runs nothing again. The static it left unset, and each after it whose initial value runs as code, throws an `Error` when it is read, or written with a compound assignment, `++` or `--`, until a write sets it, in a generic class too.
 
 **Plain PHP reaches a static with an accessor body, a computed body or an observer only through a method,** because PHP has no hooks on a static property. Reading or writing it directly from plain PHP is PHP's access error.
 

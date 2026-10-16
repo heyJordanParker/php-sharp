@@ -45,6 +45,19 @@ foreach ([1, 2] as $round) {
 // A class that isn't generic runs an initial value that reads another static as code too.
 echo Runs::$second, "\n";
 echo implode(', ', Repository::reachedThrough()), "\n";
+// The static `Fragile<Order>`'s throw left unset, and the one after it, throw PHP's error on a read, a compound
+// assignment and `++`, of a field and through accessors, twice for the tracing JIT, and a write sets each.
+foreach ([1, 2] as $round) {
+    foreach (range(0, 5) as $use) {
+        try {
+            echo Repository::fragileUse($use), "\n";
+        } catch (Error $error) {
+            echo $error::class, ': ', $error->getMessage(), "\n";
+        }
+    }
+}
+echo Repository::fragileUse(6), ' ', Repository::fragileUse(7), ' ', Repository::fragileUse(0), ' ',
+    Repository::fragileUse(4), "\n";
 ?>
 --EXPECT--
 8, 9, 2, 9, 3, 9, 40, 0
@@ -69,3 +82,16 @@ made App\SharedOrder | label App\SharedOrder 2 | next 3 | 22 4 4 | once App\Shar
 made App\Order, once App\Order, made App\SharedOrder, once App\SharedOrder, made App\DatabaseEntity, broken
 2
 7, 7, 11, 11
+Error: Typed static property Calls\Fragile::$broken must not be accessed before initialization
+Error: Typed static property Calls\Fragile::$after must not be accessed before initialization
+Error: Typed static property Calls\Fragile::$broken must not be accessed before initialization
+Error: Typed static property Calls\Fragile::$broken must not be accessed before initialization
+Error: Typed static property Calls\Fragile::$watched must not be accessed before initialization
+Error: Typed static property Calls\Fragile::$watched must not be accessed before initialization
+Error: Typed static property Calls\Fragile::$broken must not be accessed before initialization
+Error: Typed static property Calls\Fragile::$after must not be accessed before initialization
+Error: Typed static property Calls\Fragile::$broken must not be accessed before initialization
+Error: Typed static property Calls\Fragile::$broken must not be accessed before initialization
+Error: Typed static property Calls\Fragile::$watched must not be accessed before initialization
+Error: Typed static property Calls\Fragile::$watched must not be accessed before initialization
+5 12 5 12

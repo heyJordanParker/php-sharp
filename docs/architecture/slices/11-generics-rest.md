@@ -63,7 +63,7 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 | Line | Rule | On master | Built |
 |---|---|---|---|
 | 729, 731 to 742 | `generic-statics`: `Counter<Order>.count` and `Counter<User>.count` are two values, and `List<T> seen` compiles | Works: the example passes | |
-| 729 | A static may use `T`, with an initial value that runs as code | Refused: "A static member of a generic class with an initial value that runs as code is not supported yet in PHP#." | Each type argument runs it once, on its first use, in `#entry`. Engine: `type_arguments_call_statics.phpt`, `type_arguments_preload.phpt` |
+| 729 | A static may use `T`, with an initial value that runs as code | Refused: "A static member of a generic class with an initial value that runs as code is not supported yet in PHP#." | Each type argument runs it once, on its first use, in `#entry`. A throw there leaves it unset, and a read, a compound assignment, `++` or `--` then throws PHP's "must not be accessed before initialization", as a class that isn't generic does, where it had read as `OutOfRangeException` and a compound assignment had warned and written. Engine: `type_arguments_call_statics.phpt`, `type_arguments_preload.phpt` |
 | 729 | A static may use `T`, with accessors: a computed static, `get` and `set` bodies, observers, `static lazy` | Refused: "A static property with accessors in a generic class is not supported yet in PHP#." | `name#get` and `name#set` take the class's type arguments, and each type argument has its own storage and `static lazy` value. Engine: `type_arguments_call_statics.phpt` |
 | 744 | A bare `Counter.count` is a compile error | Works: "`Tally` needs its type argument." Inside the class, `Inside<T>.count += 1` compiles | |
 
@@ -180,7 +180,7 @@ public static function &'#entry'(/* type args: the class's bounds */)
 - **A class whose initial values are all constant** returns the call's entry: `return \Sharp\Internal\statics(\App\Counter::class, /* the text of #0 */);`.
 - **Every access calls it,** `\App\Counter::{'#entry'}(/* type args App.Order */)['count']`, so `Lowering::static_property` keeps one path. A write through a class value and a subclass's header reach it the same way, since they already give the access its type arguments.
 - **`\Sharp\Internal\statics` takes `?bool &$created = null`,** set when this call adds the key. The store keeps the one record of which keys exist.
-- **A throw in an initial value leaves the entry's other fields as they are** and runs nothing again, as a class's `#statics` does after `zend_class_init_sharp_statics` returns `FAILURE`.
+- **A throw in an initial value leaves the entry's other fields as they are** and runs nothing again, as a class's `#statics` does after `zend_class_init_sharp_statics` returns `FAILURE`. The throw reaches the code that first used the statics. The static it left unset, and each after it whose initial value runs as code, throws PHP's own error on a later read, compound assignment, `++` or `--`, "Typed static property App\Counter::$made must not be accessed before initialization", as in a class that isn't generic, and a write sets it. Such a static's read checks its entry only when the value it reads is not there or null, `#entry(…)['made'] ?? (\array_key_exists('made', #entry(…)) ? null : throw …)`. An update checks inside its index, through a hidden `$statics#N` it binds to the entry, which PHP runs before it fetches the field. The codex marks such a static with `MetadataFlags::RUNTIME_INITIAL_VALUE`, so an access in any file knows it.
 - **A static with accessors** keeps decision 3's hidden `name#get` and `name#set`. In a generic class they take the class's type arguments as their own, the access passes them, and `field` is `\App\Counter::{'#entry'}(/* type args #0 */)['name']`.
 - **`static lazy`** keeps its value with `\Sharp\Internal\keep`, under a key that adds the type arguments: `'App\Counter<' . /* the text of #0 */ . '>::once'`. A body that reads `T` is a closure that captures the type arguments.
 - **`#entry` declares no return type,** since its accesses are its only callers. `zend_compile_params` returned early for a method with neither parameters nor a return type, before it emitted `ZEND_SHARP_RECV_TYPE_ARGS`, so such a method read type arguments its frame never got. `#entry` is the first such method, and the receive is emitted on that path too.
@@ -199,6 +199,18 @@ tracing JIT                 452.0   832.2   1.84            502.0   878.2   1.75
 ```
 
 The first shape, with an `array` return type and `${'entry#1'}` bound on every call, read at 942.5 in the interpreter, 2.03 times master's. The return type's check and the reference bind were most of the difference.
+
+A class with an initial value that runs as code keeps that bind, since its `#entry` runs the initial values on the call that adds the entry. Measured the same way, interpreter only, with one class holding `count = 1` and `made = Counter<T>.count + 1`, against master's 464.9:
+
+```text
+                                  per access   ratio
+read of count                         1072.5    2.31
+read of made, checked                 1077.8    2.32
+count += 1                            1129.4
+made += 1, checked                    1267.4
+```
+
+The check costs 5.3 instructions a read and 138 a compound assignment. The bind keeps a read of any static of such a class above twice master's.
 
 ## A type parameter's bound at entry
 
@@ -241,6 +253,8 @@ sharp/
     │                                   alone, and never leads back to itself; a struct's type
     │                                   parameters and a generic struct key
     ├── codex/src/
+    │   ├── metadata/flags.rs        <- RUNTIME_INITIAL_VALUE
+    │   ├── scanner/property.rs      <- a static whose initial value runs as code gets it
     │   ├── scanner/class_like.rs    <- a struct registers its type parameters; parse returns them
     │   ├── scanner/mod.rs           <- reparent_types gives a default body's bounds the header's types
     │   ├── ttype/template/inferred_type_replacer.rs
@@ -263,7 +277,8 @@ sharp/
     └── sharp-bridge/src/
         ├── lower.rs                 <- #entry; static_property calls it; static_accessors and
         │                               static_lazy_value of a generic class; statics_store keeps
-        │                               constant defaults only; a generic struct's statics and parse
+        │                               constant defaults only; a generic struct's statics and parse;
+        │                               statics_field checks a static a throw can leave unset
         └── lower/types.rs           <- a method type parameter's bound at entry
 ext/sharp/
 ├── sharp_table.c                    <- a struct's hash skips its hidden type arguments slot
@@ -284,7 +299,8 @@ One test per rule, forms as rows, each seen failing before its code:
 - **`crates/semantics/tests/sharp.rs`:** `a_static_member_takes_any_initial_value_and_is_get_only_or_settable` and `a_static_property_takes_accessors` lose their generic refusals. `a_bound_that_is_not_object_a_class_an_interface_a_generic_class_type_or_a_type_parameter_is_an_error` and `a_type_parameter_whose_bound_leads_back_to_it_is_an_error` hold question 2's forms.
 - **`crates/analyzer/tests/sharp.rs`:** `the_declared_type_a_call_goes_into_fixes_its_type_arguments`, with rows for `match`, a lambda's expression body, a closure's `return` and question 1's nested call. `a_type_names_the_type_arguments_of_a_plain_php_generic_class` with its PHP twin, `a_bound_that_names_another_type_parameter_holds_values_of_that_type_parameter`, `a_default_body_keeps_a_bound_that_names_the_interfaces_type_parameter`, and `a_property_names_its_class_type_parameters_in_its_initial_value_and_accessors`.
 - **`crates/sharp-bridge/tests/lower.rs`:** `a_generic_class_runs_its_statics_initial_values_and_accessors_with_its_type_arguments` (`#entry` with a code initial value and with constant ones, `name#get`, `static lazy`, the access), `a_generic_class_keeps_the_initial_values_of_its_static_fields_in_one_hidden_static`, and `a_parameter_of_a_methods_own_type_parameter_checks_its_bound_from_plain_php`.
-- **`Zend/tests/sharp/type_arguments_call_statics.phpt`,** each row twice for the tracing JIT: an initial value that runs as code runs once per type argument, at its first use, as the log shows; through a class value and a subclass's header; a plain PHP `Tally::bump()` runs the bounds' entry; a throw runs nothing again; accessors, observers, a get-only static and `static lazy` keep one value per type argument.
+- **`Zend/tests/sharp/type_arguments_call_statics.phpt`,** each row twice for the tracing JIT: an initial value that runs as code runs once per type argument, at its first use, as the log shows; through a class value and a subclass's header; a plain PHP `Tally::bump()` runs the bounds' entry; a throw runs nothing again, and the statics it left unset throw PHP's error on a read, `+=` and `++`, of a field and through accessors, until a write sets them; accessors, observers, a get-only static and `static lazy` keep one value per type argument.
+- **`crates/sharp-bridge/tests/lower.rs` `a_read_of_a_generic_static_whose_initial_value_runs_as_code_checks_its_entry_holds_it`:** a write, an update and a read of such a static, and a read of a constant one.
 - **`Zend/tests/sharp/type_arguments_preload.phpt`:** a preloaded generic class's initial value runs once per type argument, and a preloaded generic struct keeps its type arguments, statics, `==`, `Map` key and `parse`.
 - **A generic struct:** `crates/syntax/tests/sharp.rs` `a_generic_struct_takes_type_parameters`, `crates/semantics/tests/sharp.rs` `a_map_key_is_refused_once` and the naming rule's struct row, `crates/analyzer/tests/sharp.rs` `a_generic_struct_takes_its_type_arguments_for_equality_keys_and_parse`, and `Zend/tests/sharp/structs.phpt`: a swap, `with`, `==`, `is`, `parse` and `tryParse`, a nested generic field, a `Map` key and each type argument's statics.
 - **`Zend/tests/sharp/type_arguments_entry_unresolved.phpt`:** `Pages.boxed<TBox : Box<T>>` takes a `Box<Order>` and throws for a raw `Box` and a `Box<Customer>`, nullable too, and `Rack<Order>.add<TSub : TItem>` throws for a `Customer`.
