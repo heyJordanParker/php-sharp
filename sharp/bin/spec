@@ -964,18 +964,28 @@ function runner(string $folder, array $files, array $harness): string
         }
     }
     // Every block that runs, in the order the example writes them: a plain PHP script, or the run method of a class.
+    // A class whose constructor takes services gets them as the container fills a bound class's constructor, so run
+    // lines reach a `foreign` object the way PHP# code does, through a constructor.
     $entries = [];
     foreach ($files as $file) {
         if ($file['entry'] === 'script') {
             $entries[] = 'require __DIR__ . ' . var_export('/' . $file['path'], true) . ';';
         } elseif ($file['entry'] !== null) {
-            $entries[] = '(new ReflectionClass(' . var_export($file['entry'], true) . '))->newInstanceWithoutConstructor()->run();';
+            $entries[] = 'run_entry(' . var_export($file['entry'], true) . ');';
         }
     }
 
     return "<?php\n"
         . '$classes = ' . var_export($classes, true) . ";\n"
         . 'spl_autoload_register(static function (string $class) use ($classes): void { if (isset($classes[$class])) { require_once __DIR__ . "/" . $classes[$class]; } });' . "\n"
+        // The standard library's module binds `Environment` and its other services, as its Composer autoload reads it.
+        . '\Sharp\Internal\readModule(__DIR__ . ' . var_export('/' . PACKAGE_FOLDER . '/library/Sharp/Module.sharp', true) . ");\n"
+        . "function run_entry(string \$class): void\n{\n"
+        . "    \$reflection = new ReflectionClass(\$class);\n"
+        . "    \$parameters = \$reflection->getConstructor()?->getParameters() ?? [];\n"
+        . "    \$services = array_map(static fn (ReflectionParameter \$parameter): mixed => (new \\Sharp\\Container())->get(\$parameter->getType()->getName()), \$parameters);\n"
+        . "    (\$parameters === [] ? \$reflection->newInstanceWithoutConstructor() : \$reflection->newInstanceArgs(\$services))->run();\n"
+        . "}\n"
         . (is_file("$folder/app/functions.php") ? "require __DIR__ . '/app/functions.php';\n" : '')
         . "try {\n    " . implode("\n    ", $entries) . "\n} catch (\\Throwable \$e) {\n    \\App\\Outcome::threw(-1, \$e);\n}\n";
 }

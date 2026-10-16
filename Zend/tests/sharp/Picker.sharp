@@ -1,0 +1,19 @@
+namespace Orchard;
+
+public class Picker
+{
+    public static string weigh(Harvest<Fruit> harvest) => "weighed";
+
+    public static Crate<Apple> apples() => new Crate<Apple>();
+
+    public static Crate<Quince> quinces() => new Crate<Quince>();
+
+    public static Crate<Medlar> medlars() => new Crate<Medlar>();
+
+    // The closure is never called, so nothing loads Tray or Pear before `is` needs them.
+    public static bool packs()
+    {
+        Any? pack = () => new Tray<Pear>();
+        return pack is Function<Tray<Fruit>()>;
+    }
+}
