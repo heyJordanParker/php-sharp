@@ -1,0 +1,14 @@
+namespace Strict;
+
+public class NonNull
+{
+    public Any value { get; set; } = 0;
+
+    public static Any keep(Any value) => value;
+
+    public static int count(List<Any> values) => values.count();
+
+    public static int size(Map<string, Any> values) => values.count();
+
+    public static Any? loose(Any? value) => value;
+}
