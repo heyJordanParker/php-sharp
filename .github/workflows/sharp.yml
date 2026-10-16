@@ -46,9 +46,20 @@ jobs:
     if: needs.CHANGES.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: git checkout
         uses: actions/checkout@v6
+      # sharp/docker/Dockerfile starts FROM ghcr.io/heyjordanparker/debian, which base-images.yml copies
+      # from the public registry, so the pull never meets an anonymous quota.
+      - name: Pull the base image from ghcr.io
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+          docker pull "$(sed -n 's/^FROM //p' sharp/docker/Dockerfile)"
       - name: Keep local sources out of Cargo.lock
         run: |
           if git grep -nE '(path|git)\+file://' -- '*Cargo.lock'; then

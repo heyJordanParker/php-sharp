@@ -1,0 +1,46 @@
+name: Base images
+# sharp/docker's two Dockerfiles start FROM Debian's images in this repository's registry,
+# ghcr.io/heyjordanparker/debian, so CI pulls them with its GITHUB_TOKEN. GitHub's shared runners
+# exhaust the anonymous quota of public registries: Docker Hub answered 429 on 2026-10-09, and ECR
+# Public answered "429 Too Many Requests: Data limit exceeded" on #135 and #143. This workflow is
+# the one place that reads the public registry. It copies each tag every day, so the images take
+# Debian's security updates, and a failed copy leaves the previous day's images for every build.
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/base-images.yml
+  pull_request:
+    branches:
+      - master
+    paths:
+      - .github/workflows/base-images.yml
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+jobs:
+  MIRROR:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        tag: [trixie, trixie-slim]
+    steps:
+      # --all keeps every platform, since the release image is built for linux/amd64 and linux/arm64.
+      - name: Copy debian:${{ matrix.tag }} to ghcr.io/heyjordanparker/debian:${{ matrix.tag }}
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          skopeo copy --all --retry-times 5 \
+            --dest-creds "${{ github.actor }}:$TOKEN" \
+            "docker://public.ecr.aws/docker/library/debian:${{ matrix.tag }}" \
+            "docker://ghcr.io/heyjordanparker/debian:${{ matrix.tag }}"
+          skopeo inspect --raw "docker://ghcr.io/heyjordanparker/debian:${{ matrix.tag }}" | sha256sum

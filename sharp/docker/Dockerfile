@@ -1,4 +1,4 @@
-FROM public.ecr.aws/docker/library/debian:trixie
+FROM ghcr.io/heyjordanparker/debian:trixie
 
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
