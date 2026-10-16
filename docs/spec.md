@@ -354,7 +354,7 @@ public int count { get; didSet => this.touch(); } = 0;            // compile err
 `nameof(Order.total)` names a property. The reference is typed, and the checker rejects a misspelled or removed property wherever it is used. It sits beside `typeof(Order)` (section 25), as in C#'s `nameof`.
 
 <!-- example property-references: statements
-Query query = new Query();
+Query<Order> query = new Query<Order>();
 -->
 ```csharp
 query.orderBy(nameof(Order.total));   // compiles: a typed reference to Order's total property
@@ -751,6 +751,8 @@ A static member names its type arguments: `Counter<Order>.count`. A bare `Counte
 - **A plain PHP generic class,** declared with PHPDoc's `@template`, takes type arguments in PHP# code, as in `Collection<Order>`. The checker checks them, but the object carries none while the code runs, as Java's erased generics do. So a type test against one, such as `x is Collection<Order>`, is a compile error that says the type argument is unknown while the code runs (section 21).
 
 <!-- example generic-method-inference: statements alone
+namespace App.Inference;
+import App.Order;
 Cache cache = new Cache();
 -->
 ```csharp
