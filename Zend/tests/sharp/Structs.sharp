@@ -19,4 +19,44 @@ public class Structs
     public static bool sameLists(List<Stamp> a, List<Stamp> b) => a == b;
 
     public static bool sameMaps(Map<string, Stamp> a, Map<string, Stamp> b) => a == b;
+
+    public static Pair<int, string> pair(int first, string second) => new Pair<int, string>(first, second);
+
+    public static Pair<string, int> swapped(Pair<int, string> pair) => pair.swapped();
+
+    public static Pair<int, string> renumbered(Pair<int, string> pair, int first) => pair with { first: first };
+
+    public static bool samePairs(Pair<int, string> a, Pair<int, string> b) => a == b;
+
+    public static Pair<int, string> parsed(Map<string, Any?> input) => Pair<int, string>.parse(input);
+
+    public static Pair<int, string>? tried(Map<string, Any?> input) => Pair<int, string>.tryParse(input);
+
+    public static bool isPair(Any value) => value is Pair<int, string>;
+
+    public static int keys(Pair<int, string> a, Pair<int, string> b)
+    {
+        Map<Pair<int, string>, int> counts = [:];
+        counts[a] = 1;
+        counts[b] = 2;
+        return counts.count();
+    }
+
+    public static string made() => Pair<int, string>.made + " | " + Pair<string, int>.made;
+
+    public static Wrapped wrapped(Map<string, Any?> input) => Wrapped.parse(input);
+}
+
+public struct Wrapped
+{
+    public Wrapped(public Pair<int, string> inner { get; }) { }
+}
+
+public struct Pair<TFirst, TSecond>
+{
+    public static string made { get; } = global.sprintf("%s %s", typeof(TFirst), typeof(TSecond));
+
+    public Pair(public TFirst first { get; init; }, public TSecond second { get; }) { }
+
+    public Pair<TSecond, TFirst> swapped() => new Pair<TSecond, TFirst>(this.second, this.first);
 }

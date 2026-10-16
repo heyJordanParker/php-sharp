@@ -143,6 +143,19 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 | 873 to 878 | The error names the marker to add | Works | |
 | 880 | No variance at the point of use | Works: `Members<out Order>` is a parse error | |
 
+## A generic struct, from section 10
+
+Section 10's line 640 makes a struct generic with this section's type parameters, and the structs Slice refused it whole until generics landed (`10-structs.md`, question 4).
+
+| Line | Rule | On master | Built |
+|---|---|---|---|
+| 640 | `struct Pair<TFirst, TSecond>` declares type parameters, with bounds and markers, under section 11's naming rule | Refused: "A generic struct is not supported yet in PHP#." | The parser keeps the list, and the names walker and the checker take it as a class's |
+| 640 | `==` compares a property of a type parameter as its type argument does | Refused with the struct | `struct_property_refusal` reads each property with the operand's type arguments: `Pair<int, string>` compares, and `Pair<Plan, int>` is "`first` is a `Plan`, which declares no `operator ==`." |
+| 640 | `Map<Pair<int, string>, int>` keys by value | Refused with the struct | The key check takes a generic struct's name, and the engine's struct hash skips the hidden slot of its type arguments |
+| 640 | `Pair<int, string>.parse` and `tryParse` give `Pair<int, string>` and check each field against its type argument, also for a field of a generic struct | Refused with the struct | `parse` takes the type's type arguments as a static method does and gives them to its `new`. A field of `Pair<int, string>` passes them to the inner `parse` |
+| 640 | Each type argument has its own statics | Refused with the struct | A struct's statics reach `#entry`, as a generic class's do |
+| 640 | `parse` reads a field of a type parameter only as its input holds it | | Decision of this Slice: a type argument that `parse` builds first, a struct, a class, a `Map`, a `Set` or an enum case, also inside a `List`, is "`Spot` is a type argument `parse` builds, and it reads a field of a type parameter only as its input holds it." The walk that checks the field reads no type it would have to build |
+
 # Mechanisms
 
 ## Generic statics
@@ -221,10 +234,14 @@ sharp/
 ├── baseline/spec/§11/               <- the three entries go
 ├── harness/app/Query.sharp          <- Query<T>
 └── mago/crates/
+    ├── syntax/src/                  <- a struct keeps its type parameter list
+    ├── names/src/                   <- a struct's type parameters are in scope in its body
     ├── semantics/src/internal/checker/sharp.rs
     │                                <- report_generic_static goes; a bound may be a type parameter,
-    │                                   alone, and never leads back to itself
+    │                                   alone, and never leads back to itself; a struct's type
+    │                                   parameters and a generic struct key
     ├── codex/src/
+    │   ├── scanner/class_like.rs    <- a struct registers its type parameters; parse returns them
     │   ├── scanner/mod.rs           <- reparent_types gives a default body's bounds the header's types
     │   ├── ttype/template/inferred_type_replacer.rs
     │   │                            <- replaces inside an unresolved reference
@@ -239,13 +256,17 @@ sharp/
     │   ├── expression/instantiation.rs      <- question 3's error and help
     │   ├── statement/mod.rs, try.rs, invocation/template_result.rs
     │   │                                    <- a type test or catch names a plain PHP class alone
-    │   └── statement/class_like/mod.rs      <- a property names its class's type parameters
+    │   ├── statement/class_like/mod.rs      <- a property names its class's type parameters
+    │   ├── statement/class_like/struct.rs   <- parse reads fields with the call's type arguments
+    │   ├── expression/binary/comparison.rs  <- == reads properties with the operand's
+    │   └── utils/template.rs                <- class_type_arguments
     └── sharp-bridge/src/
         ├── lower.rs                 <- #entry; static_property calls it; static_accessors and
         │                               static_lazy_value of a generic class; statics_store keeps
-        │                               constant defaults only
+        │                               constant defaults only; a generic struct's statics and parse
         └── lower/types.rs           <- a method type parameter's bound at entry
 ext/sharp/
+├── sharp_table.c                    <- a struct's hash skips its hidden type arguments slot
 ├── sharp.c                          <- statics' $created; sharp_type_scope is shared
 ├── php_sharp.h                      <- declares sharp_type_scope
 ├── sharp.stub.php                   <- statics(string $class, string $key, ?bool &$created = null)
@@ -264,7 +285,8 @@ One test per rule, forms as rows, each seen failing before its code:
 - **`crates/analyzer/tests/sharp.rs`:** `the_declared_type_a_call_goes_into_fixes_its_type_arguments`, with rows for `match`, a lambda's expression body, a closure's `return` and question 1's nested call. `a_type_names_the_type_arguments_of_a_plain_php_generic_class` with its PHP twin, `a_bound_that_names_another_type_parameter_holds_values_of_that_type_parameter`, `a_default_body_keeps_a_bound_that_names_the_interfaces_type_parameter`, and `a_property_names_its_class_type_parameters_in_its_initial_value_and_accessors`.
 - **`crates/sharp-bridge/tests/lower.rs`:** `a_generic_class_runs_its_statics_initial_values_and_accessors_with_its_type_arguments` (`#entry` with a code initial value and with constant ones, `name#get`, `static lazy`, the access), `a_generic_class_keeps_the_initial_values_of_its_static_fields_in_one_hidden_static`, and `a_parameter_of_a_methods_own_type_parameter_checks_its_bound_from_plain_php`.
 - **`Zend/tests/sharp/type_arguments_call_statics.phpt`,** each row twice for the tracing JIT: an initial value that runs as code runs once per type argument, at its first use, as the log shows; through a class value and a subclass's header; a plain PHP `Tally::bump()` runs the bounds' entry; a throw runs nothing again; accessors, observers, a get-only static and `static lazy` keep one value per type argument.
-- **`Zend/tests/sharp/type_arguments_preload.phpt`:** a preloaded generic class's initial value runs once per type argument.
+- **`Zend/tests/sharp/type_arguments_preload.phpt`:** a preloaded generic class's initial value runs once per type argument, and a preloaded generic struct keeps its type arguments, statics, `==`, `Map` key and `parse`.
+- **A generic struct:** `crates/syntax/tests/sharp.rs` `a_generic_struct_takes_type_parameters`, `crates/semantics/tests/sharp.rs` `a_map_key_is_refused_once` and the naming rule's struct row, `crates/analyzer/tests/sharp.rs` `a_generic_struct_takes_its_type_arguments_for_equality_keys_and_parse`, and `Zend/tests/sharp/structs.phpt`: a swap, `with`, `==`, `is`, `parse` and `tryParse`, a nested generic field, a `Map` key and each type argument's statics.
 - **`Zend/tests/sharp/type_arguments_entry_unresolved.phpt`:** `Pages.boxed<TBox : Box<T>>` takes a `Box<Order>` and throws for a raw `Box` and a `Box<Customer>`, nullable too, and `Rack<Order>.add<TSub : TItem>` throws for a `Customer`.
 - **`Zend/tests/sharp/inheritance_defaults.phpt`:** a default body's bound reads the type argument the class gives.
 - **The spec run:** the three examples pass, and `sharp/bin/spec --completes` passes on `Completes: §11`.
