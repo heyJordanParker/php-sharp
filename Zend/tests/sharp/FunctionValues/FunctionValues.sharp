@@ -16,8 +16,8 @@ public class FunctionValues
         Map<string, Function<int(int)>> named = ["negate": (int n) => -n];
         const adder = (int a) => (int b) => a + b;
         bool doubles = true;
-        FunctionShelf<int>.keep((int n) => n * 7);
-        FunctionShelf<string>.keep((string s) => s + "!");
+        FunctionShelf<int>.keep(21);
+        FunctionShelf<string>.keep("hi!");
         return [
             steps[0](5),
             steps[1](5),
