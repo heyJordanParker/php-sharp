@@ -27,9 +27,9 @@ team-lead settled each from its spec line, and each spec line now states the rul
 1. **`generic-method-inference` declares `Cache` in a namespace of its own.** The example's `App.Cache` class met the harness folder `app/Cache/`, which section 32's `module-services` imports as `App.Cache.RedisStore`. The marker's hidden setup gains `namespace App.Inference;` and `import App.Order;`. No rendered line changes.
 2. **The harness `Query` becomes `Query<T>`.** `type-parameter-bounds` writes `Query<TItem>`. Section 6.3's `property-references` creates one, so its hidden setup becomes `Query<Order> query = new Query<Order>();`.
 3. **`raw-generic-objects`'s `accepted:` line passes on an `App\Elided` throw.** `sharp/bin/spec` runs a plain PHP line annotated `accepted:` or `compiles` inside a `try`, and an `App\Elided` it throws holds the claim. It landed first, in its own pull request, #140.
-4. **Generic statics run through one hidden static method per generic class.** See "Generic statics" below. It adds the hidden method name `#entry` and the third parameter `?bool &$created = null` to `\Sharp\Internal\statics`, which `ext/sharp/sharp.stub.php` declares.
+4. **Every generic static access calls `\Sharp\Internal\statics` directly.** See "Generic statics" below. It adds the hidden method `#init`, which `\Sharp\Internal\statics` runs when it adds an entry, and the third parameter `?string $field = null`, which `ext/sharp/sharp.stub.php` declares. This replaced the first approved shape, a hidden static method `#entry` that every access called, because the direct call costs 0.90 to 1.04 times the access of master before #142, and `#entry` cost 1.78 to 2.44 times it.
 5. **The entry check reads a method's bounds for a value of its type parameter.** A plain PHP caller that passes a raw object into such a method throws `TypeError` where it passed before. That is line 766's rule.
-6. **The names:** `#entry` for the hidden method, from the slate `#entry`, `#statics`, `#own` and `#typeStatics`, and `$created` for the parameter, from `$created`, `$first` and `$fresh`.
+6. **The names:** `#init` for the hidden method, and `$field` for the parameter.
 7. **Order:** this PR lands after collections (#135), hosts (#136) and built-in types. It merged master once, after #135 and #140 landed.
 
 ## How the states were observed
@@ -63,7 +63,7 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 | Line | Rule | On master | Built |
 |---|---|---|---|
 | 729, 731 to 742 | `generic-statics`: `Counter<Order>.count` and `Counter<User>.count` are two values, and `List<T> seen` compiles | Works: the example passes | |
-| 729 | A static may use `T`, with an initial value that runs as code | Refused: "A static member of a generic class with an initial value that runs as code is not supported yet in PHP#." | Each type argument runs it once, on its first use, in `#entry`. A throw there leaves it unset, and a read, a compound assignment, `++` or `--` then throws PHP's "must not be accessed before initialization", as a class that isn't generic does, where it had read as `OutOfRangeException` and a compound assignment had warned and written. Engine: `type_arguments_call_statics.phpt`, `type_arguments_preload.phpt` |
+| 729 | A static may use `T`, with an initial value that runs as code | Refused: "A static member of a generic class with an initial value that runs as code is not supported yet in PHP#." | Each type argument runs it once, on its first use, in `#init`. A throw there leaves it unset, and a read, a compound assignment, `++` or `--` then throws PHP's "must not be accessed before initialization", as a class that isn't generic does, where it had read as `OutOfRangeException` and a compound assignment had warned and written. Engine: `type_arguments_call_statics.phpt`, `type_arguments_preload.phpt` |
 | 729 | A static may use `T`, with accessors: a computed static, `get` and `set` bodies, observers, `static lazy` | Refused: "A static property with accessors in a generic class is not supported yet in PHP#." | `name#get` and `name#set` take the class's type arguments, and each type argument has its own storage and `static lazy` value. Engine: `type_arguments_call_statics.phpt` |
 | 744 | A bare `Counter.count` is a compile error | Works: "`Tally` needs its type argument." Inside the class, `Inside<T>.count += 1` compiles | |
 
@@ -153,7 +153,7 @@ Section 10's line 640 makes a struct generic with this section's type parameters
 | 640 | `==` compares a property of a type parameter as its type argument does | Refused with the struct | `struct_property_refusal` reads each property with the operand's type arguments: `Pair<int, string>` compares, and `Pair<Plan, int>` is "`first` is a `Plan`, which declares no `operator ==`." |
 | 640 | `Map<Pair<int, string>, int>` keys by value | Refused with the struct | The key check takes a generic struct's name, and the engine's struct hash skips the hidden slot of its type arguments |
 | 640 | `Pair<int, string>.parse` and `tryParse` give `Pair<int, string>` and check each field against its type argument, also for a field of a generic struct | Refused with the struct | `parse` takes the type's type arguments as a static method does and gives them to its `new`. A field of `Pair<int, string>` passes them to the inner `parse` |
-| 640 | Each type argument has its own statics | Refused with the struct | A struct's statics reach `#entry`, as a generic class's do |
+| 640 | Each type argument has its own statics | Refused with the struct | A struct's statics are reached through `\Sharp\Internal\statics`, as a generic class's are |
 | 640 | `parse` reads a field of a type parameter only as its input holds it | | Decision of this Slice: a type argument that `parse` builds first, a struct, a class, a `Map`, a `Set` or an enum case, also inside a `List`, is "`Spot` is a type argument `parse` builds, and it reads a field of a type parameter only as its input holds it." The walk that checks the field reads no type it would have to build |
 
 # Mechanisms
@@ -164,53 +164,50 @@ Section 10's line 640 makes a struct generic with this section's type parameters
 
 A static lives as long as the app, and its initial value runs once, when the app first uses `Counter<Order>`'s statics. The store is a PHP static, so it already lives as long as the app does: one request under php-fpm, the worker under a long-running host, and every request again for a preloaded class.
 
-**One hidden static method per generic class with static fields returns the entry of its type arguments.** It takes the class's type arguments as its own, as #102's part 1 gives every static method of a generic class, so its body spells the key and runs each initial value with `T` known:
+**Every access calls `\Sharp\Internal\statics` with the class and the text of its type arguments,** which returns their entry by reference, so every write is PHP's own array write:
 
 ```php
-public static function &'#entry'(/* type args: the class's bounds */)
-{
-    ${'entry#1'} = &\Sharp\Internal\statics(\App\Counter::class, /* the text of #0 */, ${'created#2'});
-    if (${'created#2'}) {
-        ${'entry#1'}['made'] = \App\Counter::fresh(/* type args #0 */);    // each initial value that runs as code
-    }
-    return ${'entry#1'};
-}
+\Sharp\Internal\statics(\App\Counter::class, /* the text of App.Order */)['count'] += 1;
 ```
 
-- **A class whose initial values are all constant** returns the call's entry: `return \Sharp\Internal\statics(\App\Counter::class, /* the text of #0 */);`.
-- **Every access calls it,** `\App\Counter::{'#entry'}(/* type args App.Order */)['count']`, so `Lowering::static_property` keeps one path. A write through a class value and a subclass's header reach it the same way, since they already give the access its type arguments.
-- **`\Sharp\Internal\statics` takes `?bool &$created = null`,** set when this call adds the key. The store keeps the one record of which keys exist.
-- **A throw in an initial value leaves the entry's other fields as they are** and runs nothing again, as a class's `#statics` does after `zend_class_init_sharp_statics` returns `FAILURE`. The throw reaches the code that first used the statics. The static it left unset, and each after it whose initial value runs as code, throws PHP's own error on a later read, compound assignment, `++` or `--`, "Typed static property App\Counter::$made must not be accessed before initialization", as in a class that isn't generic, and a write sets it. Such a static's read checks its entry only when the value it reads is not there or null, `#entry(…)['made'] ?? (\array_key_exists('made', #entry(…)) ? null : throw …)`. An update checks inside its index, through a hidden `$statics#N` it binds to the entry, which PHP runs before it fetches the field. The codex marks such a static with `MetadataFlags::RUNTIME_INITIAL_VALUE`, so an access in any file knows it.
-- **A static with accessors** keeps decision 3's hidden `name#get` and `name#set`. In a generic class they take the class's type arguments as their own, the access passes them, and `field` is `\App\Counter::{'#entry'}(/* type args #0 */)['name']`.
+- **The text is the engine's own spelling,** `ZEND_SHARP_TYPE_OF` with `ZEND_SHARP_TYPE_OF_LIST` over the access's type arguments, so a key spelled from `#0` inside the class and one spelled from `App.Order` outside it are the same key. `Lowering::static_property` keeps one path. A write through a class value and a subclass's header reach it the same way, since they already give the access its type arguments.
+- **The call that adds an entry runs the class's hidden `#init`,** which a class with an initial value that runs as code declares. `\Sharp\Internal\statics` copies the defaults under `""`, then calls `#init` with the type arguments the key spells, from `sharp_type_list`, in the hidden local a method keeps its own in. `#init` sets each initial value that runs as code, with `T` known:
+
+  ```php
+  private static function '#init'($"\0<sharp>\0types")
+  {
+      \Sharp\Internal\statics(\App\Counter::class, /* the text of #0 */)['made'] = \App\Counter::fresh(/* type args #0 */);
+  }
+  ```
+
+- **A throw in an initial value leaves the entry's other fields as they are** and runs nothing again, as a class's `#statics` does after `zend_class_init_sharp_statics` returns `FAILURE`. The throw reaches the code that first used the statics. The static it left unset, and each after it whose initial value runs as code, throws PHP's own error on a later read, compound assignment, `++` or `--`, "Typed static property App\Counter::$made must not be accessed before initialization", as in a class that isn't generic, and a write sets it. Such a use names the static, `\Sharp\Internal\statics(\App\Counter::class, /* … */, 'made')['made']`, and the engine throws when the entry does not hold it. The codex marks such a static with `MetadataFlags::RUNTIME_INITIAL_VALUE`, so an access in any file knows it.
+- **A static with accessors** keeps decision 3's hidden `name#get` and `name#set`. In a generic class they take the class's type arguments as their own, the access passes them, and `field` is `\Sharp\Internal\statics(\App\Counter::class, /* the text of #0 */)['name']`.
 - **`static lazy`** keeps its value with `\Sharp\Internal\keep`, under a key that adds the type arguments: `'App\Counter<' . /* the text of #0 */ . '>::once'`. A body that reads `T` is a closure that captures the type arguments.
-- **`#entry` declares no return type,** since its accesses are its only callers. `zend_compile_params` returned early for a method with neither parameters nor a return type, before it emitted `ZEND_SHARP_RECV_TYPE_ARGS`, so such a method read type arguments its frame never got. `#entry` is the first such method, and the receive is emitted on that path too.
+- **`zend_compile_params` emits `ZEND_SHARP_RECV_TYPE_ARGS` for a function with neither parameters nor a return type.** It returned early on that path, before it emitted the receive, so such a function read type arguments its frame never got.
 - **A property's initial value and accessor bodies name the class's type parameters,** as a method's body does. The analyzer analyzes a PHP# class's properties with the class's type parameters in scope (`analyze_class_like`), where it had none.
-- **Plain PHP** still reaches the store only through `\Sharp\Internal\statics` and `#entry`, whose name it can't write as a member access.
+- **Plain PHP** reaches the store only through `\Sharp\Internal\statics`.
 
-### Cost of the frame
+### Cost of an access
 
-Instructions retired per access, from `/usr/bin/time -l`, release builds of both heads configured `--disable-all --disable-cgi --disable-phpdbg --without-pear`, 10,000,000 passes, median of 3 runs, each head measured the same hour. Per access is the loop's instructions less the same loop without the static, divided by the passes. Master is `24bd9909cf` with its own `mago`.
-
-```text
-                     read: master  branch  ratio    write: master  branch  ratio
-interpreter                 465.3   864.4   1.86            460.9   862.3   1.87
-opcache                     519.1   926.2   1.78            517.2   924.2   1.79
-tracing JIT                 452.0   832.2   1.84            502.0   878.2   1.75
-```
-
-The first shape, with an `array` return type and `${'entry#1'}` bound on every call, read at 942.5 in the interpreter, 2.03 times master's. The return type's check and the reference bind were most of the difference.
-
-A class with an initial value that runs as code keeps that bind, since its `#entry` runs the initial values on the call that adds the entry. Measured the same way, interpreter only, with one class holding `count = 1` and `made = Counter<T>.count + 1`, against master's 464.9:
+Instructions retired per access, from `/usr/bin/time -l`, release builds of each head configured `--disable-all --disable-cgi --disable-phpdbg --without-pear`, the interpreter, 10,000,000 passes, median of 3 runs, every head measured the same hour. Per access is the loop's instructions less the same loop without the static, divided by the passes. Before #142 is `24bd9909cf`, which refused a static whose initial value runs as code, so `made` is compared with its `count`. `#entry` is master `830d4aac13` with #142. Each head runs with its own `mago`.
 
 ```text
-                                  per access   ratio
-read of count                         1072.5    2.31
-read of made, checked                 1077.8    2.32
-count += 1                            1129.4
-made += 1, checked                    1267.4
+                                       before #142    #entry   this shape   ratio to before #142
+count, every initial value constant
+  read                                       462.2     867.6        455.3   0.99
+  =                                          460.2     865.5        453.3   0.99
+  +=                                         519.3     923.0        512.5   0.99
+count, beside a code initial value
+  read                                       462.2    1076.0        455.4   0.99
+  =                                          460.2    1074.1        454.5   0.99
+  +=                                         519.3    1134.2        514.3   0.99
+made, whose initial value runs as code
+  read                                       462.2    1083.3        478.5   1.04
+  =                                          460.2    1036.1        415.7   0.90
+  +=                                         519.3    1268.1        536.0   1.03
 ```
 
-The check costs 5.3 instructions a read and 138 a compound assignment. The bind keeps a read of any static of such a class above twice master's.
+Naming `made` costs 23 instructions a read and 22 a compound assignment.
 
 ## A type parameter's bound at entry
 
@@ -275,19 +272,19 @@ sharp/
     │   ├── expression/binary/comparison.rs  <- == reads properties with the operand's
     │   └── utils/template.rs                <- class_type_arguments
     └── sharp-bridge/src/
-        ├── lower.rs                 <- #entry; static_property calls it; static_accessors and
+        ├── lower.rs                 <- #init; statics_field calls \Sharp\Internal\statics and
+        │                               names a static a throw can leave unset; static_accessors and
         │                               static_lazy_value of a generic class; statics_store keeps
-        │                               constant defaults only; a generic struct's statics and parse;
-        │                               statics_field checks a static a throw can leave unset
+        │                               constant defaults only; a generic struct's statics and parse
         └── lower/types.rs           <- a method type parameter's bound at entry
 ext/sharp/
 ├── sharp_table.c                    <- a struct's hash skips its hidden type arguments slot
-├── sharp.c                          <- statics' $created; sharp_type_scope is shared
+├── sharp.c                          <- statics runs #init and checks $field; sharp_type_scope is shared
 ├── php_sharp.h                      <- declares sharp_type_scope
-├── sharp.stub.php                   <- statics(string $class, string $key, ?bool &$created = null)
+├── sharp.stub.php                   <- statics(string $class, string $key, ?string $field = null)
 └── sharp_arginfo.h                  <- regenerated from the stub
 Zend/
-├── zend_compile.c                   <- a method without parameters or a return type gets its receive
+├── zend_compile.c                   <- a function without parameters or a return type gets its receive
 ├── zend_vm_def.h                    <- ZEND_SHARP_RECV_TYPE_ARGS spells bounds in its function's scope
 └── zend_vm_execute.h                <- regenerated
 ```
@@ -298,9 +295,9 @@ One test per rule, forms as rows, each seen failing before its code:
 
 - **`crates/semantics/tests/sharp.rs`:** `a_static_member_takes_any_initial_value_and_is_get_only_or_settable` and `a_static_property_takes_accessors` lose their generic refusals. `a_bound_that_is_not_object_a_class_an_interface_a_generic_class_type_or_a_type_parameter_is_an_error` and `a_type_parameter_whose_bound_leads_back_to_it_is_an_error` hold question 2's forms.
 - **`crates/analyzer/tests/sharp.rs`:** `the_declared_type_a_call_goes_into_fixes_its_type_arguments`, with rows for `match`, a lambda's expression body, a closure's `return` and question 1's nested call. `a_type_names_the_type_arguments_of_a_plain_php_generic_class` with its PHP twin, `a_bound_that_names_another_type_parameter_holds_values_of_that_type_parameter`, `a_default_body_keeps_a_bound_that_names_the_interfaces_type_parameter`, and `a_property_names_its_class_type_parameters_in_its_initial_value_and_accessors`.
-- **`crates/sharp-bridge/tests/lower.rs`:** `a_generic_class_runs_its_statics_initial_values_and_accessors_with_its_type_arguments` (`#entry` with a code initial value and with constant ones, `name#get`, `static lazy`, the access), `a_generic_class_keeps_the_initial_values_of_its_static_fields_in_one_hidden_static`, and `a_parameter_of_a_methods_own_type_parameter_checks_its_bound_from_plain_php`.
+- **`crates/sharp-bridge/tests/lower.rs`:** `a_generic_class_runs_its_statics_initial_values_and_accessors_with_its_type_arguments` (`#init`, and none for a class whose initial values are all constant, `name#get`, `static lazy`, the access), `a_generic_class_keeps_the_initial_values_of_its_static_fields_in_one_hidden_static`, and `a_parameter_of_a_methods_own_type_parameter_checks_its_bound_from_plain_php`.
 - **`Zend/tests/sharp/type_arguments_call_statics.phpt`,** each row twice for the tracing JIT: an initial value that runs as code runs once per type argument, at its first use, as the log shows; through a class value and a subclass's header; a plain PHP `Tally::bump()` runs the bounds' entry; a throw runs nothing again, and the statics it left unset throw PHP's error on a read, `+=` and `++`, of a field and through accessors, until a write sets them; accessors, observers, a get-only static and `static lazy` keep one value per type argument.
-- **`crates/sharp-bridge/tests/lower.rs` `a_read_of_a_generic_static_whose_initial_value_runs_as_code_checks_its_entry_holds_it`:** a write, an update and a read of such a static, and a read of a constant one.
+- **`crates/sharp-bridge/tests/lower.rs` `a_read_of_a_generic_static_whose_initial_value_runs_as_code_names_it_for_the_engine_to_check`:** a write, an update and a read of such a static, and a read of a constant one.
 - **`Zend/tests/sharp/type_arguments_preload.phpt`:** a preloaded generic class's initial value runs once per type argument, and a preloaded generic struct keeps its type arguments, statics, `==`, `Map` key and `parse`.
 - **A generic struct:** `crates/syntax/tests/sharp.rs` `a_generic_struct_takes_type_parameters`, `crates/semantics/tests/sharp.rs` `a_map_key_is_refused_once` and the naming rule's struct row, `crates/analyzer/tests/sharp.rs` `a_generic_struct_takes_its_type_arguments_for_equality_keys_and_parse`, and `Zend/tests/sharp/structs.phpt`: a swap, `with`, `==`, `is`, `parse` and `tryParse`, a nested generic field, a `Map` key and each type argument's statics.
 - **`Zend/tests/sharp/type_arguments_entry_unresolved.phpt`:** `Pages.boxed<TBox : Box<T>>` takes a `Box<Order>` and throws for a raw `Box` and a `Box<Customer>`, nullable too, and `Rack<Order>.add<TSub : TItem>` throws for a `Customer`.
