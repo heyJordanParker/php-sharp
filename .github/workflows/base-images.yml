@@ -1,0 +1,56 @@
+name: Base images
+# CI builds sharp/docker's two Dockerfiles with BASE_IMAGE set to Debian's images in this repository's
+# registry, ghcr.io/heyjordanparker/debian, so it pulls them with its GITHUB_TOKEN. A local build
+# keeps each Dockerfile's default, the public registry's image, and needs no login. GitHub's shared runners
+# exhaust the anonymous quota of public registries: Docker Hub answered 429 on 2026-10-09, and ECR
+# Public answered "429 Too Many Requests: Data limit exceeded" on #135 and #143. This workflow is
+# the one place that reads public registries. It copies each tag every day, so the images take
+# Debian's security updates, and a failed copy leaves the previous day's images for every build.
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/base-images.yml
+  pull_request:
+    branches:
+      - master
+    paths:
+      - .github/workflows/base-images.yml
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+jobs:
+  MIRROR:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        tag: [trixie, trixie-slim]
+    steps:
+      # Each source serves Docker's official image under the same index digest, so the first that answers
+      # gives the same copy. ECR Public answered "Data limit exceeded" to this job on 2026-10-16, five times
+      # in a row. --all keeps every platform, since the release image is built for linux/amd64 and linux/arm64.
+      - name: Copy debian:${{ matrix.tag }} to ghcr.io/heyjordanparker/debian:${{ matrix.tag }}
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for source in mirror.gcr.io/library public.ecr.aws/docker/library docker.io/library; do
+            if skopeo copy --all --retry-times 2 \
+              --dest-creds "${{ github.actor }}:$TOKEN" \
+              "docker://$source/debian:${{ matrix.tag }}" \
+              "docker://ghcr.io/heyjordanparker/debian:${{ matrix.tag }}"; then
+              echo "Copied from $source"
+              skopeo inspect --raw "docker://ghcr.io/heyjordanparker/debian:${{ matrix.tag }}" | sha256sum
+              exit 0
+            fi
+          done
+          echo "::error::No source gave debian:${{ matrix.tag }}, so ghcr.io keeps the previous copy."
+          exit 1
