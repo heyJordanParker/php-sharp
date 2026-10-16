@@ -3118,10 +3118,7 @@ typedef struct {
 	bool unresolved;
 } sharp_type_spelling;
 
-/* The class whose type parameters the `$i` of code `scope` holds count, of `func` when the code is a function's. A
- * method a class took from a trait is the trait's code, whose op array it shares. The trait of a PHP# interface's
- * default bodies counts its interface's, which its header names, spec section 22. */
-static const zend_class_entry *sharp_type_scope(const zend_class_entry *scope, const zend_function *func)
+const zend_class_entry *sharp_type_scope(const zend_class_entry *scope, const zend_function *func)
 {
 	if (scope && func && func->type == ZEND_USER_FUNCTION && (func->common.fn_flags & ZEND_ACC_TRAIT_CLONE)) {
 		const zend_class_entry *user = scope;
