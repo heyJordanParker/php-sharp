@@ -42,6 +42,8 @@ foreach ([1, 2] as $round) {
     echo Repository::fragile(), "\n";
     echo implode(', ', Runs::logged()), "\n";
 }
+// A class that isn't generic runs an initial value that reads another static as code too.
+echo Runs::$second, "\n";
 ?>
 --EXPECT--
 8, 9, 2, 9, 3, 9, 40, 0
@@ -50,17 +52,18 @@ foreach ([1, 2] as $round) {
 8, 9, 2, 9, 3, 9, 40, 0
 101, 2, 101
 3, 7, 0
-made App\Order | label App\Order 0 | 22 4 2 | once App\Order | label App\Order 2
-made App\SharedOrder | label App\SharedOrder 0 | 22 4 2 | once App\SharedOrder | label App\SharedOrder 2
+made App\Order | label App\Order 0 | next 3 | 22 4 2 | once App\Order | label App\Order 2
+made App\SharedOrder | label App\SharedOrder 0 | next 3 | 22 4 2 | once App\SharedOrder | label App\SharedOrder 2
 100 4 | label App\SharedOrder 2 | 22
 10
 RuntimeException: broken
 3
 made App\Order, once App\Order, made App\SharedOrder, once App\SharedOrder, made App\DatabaseEntity, broken
-made App\Order | label App\Order 2 | 22 4 4 | once App\Order | label App\Order 4
-made App\SharedOrder | label App\SharedOrder 2 | 22 4 4 | once App\SharedOrder | label App\SharedOrder 4
+made App\Order | label App\Order 2 | next 3 | 22 4 4 | once App\Order | label App\Order 4
+made App\SharedOrder | label App\SharedOrder 2 | next 3 | 22 4 4 | once App\SharedOrder | label App\SharedOrder 4
 100 4 | label App\SharedOrder 4 | 22
 20
 3
 3
 made App\Order, once App\Order, made App\SharedOrder, once App\SharedOrder, made App\DatabaseEntity, broken
+2

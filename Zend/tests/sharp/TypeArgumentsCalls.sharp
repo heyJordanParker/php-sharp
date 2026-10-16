@@ -199,7 +199,7 @@ public class Repository
     // Each row reads `Tally<T>`'s statics, whose initial values run when code first uses them.
     public static List<string> tallied<T : DatabaseEntity>()
     {
-        List<string> seen = [Tally<T>.made, Tally<T>.label];
+        List<string> seen = [Tally<T>.made, Tally<T>.label, global.sprintf("next %d", Tally<T>.next)];
         Tally<T>.doubled = 5;
         Tally<T>.doubled += 1;
         Tally<T>.watched = 3;
@@ -262,6 +262,9 @@ public class Tally<T : DatabaseEntity>
 
     public static int doubled { get => field * 2; set => field = value; } = 1;
 
+    // An initial value that reads another static runs as code, after the statics it reads.
+    public static int next { get; } = Tally<T>.doubled + 1;
+
     public static int watched { get; set; didSet => Tally<T>.count += 1; } = 0;
 
     public static lazy string once => Runs.ran(global.sprintf("once %s", typeof(T)));
@@ -288,6 +291,10 @@ public class Fragile<T>
 public class Runs
 {
     private static List<string> log = [];
+
+    public static int first { get; } = 1;
+
+    public static int second { get; } = Runs.first + 1;
 
     public static string ran(string what)
     {
