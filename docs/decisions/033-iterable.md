@@ -2,7 +2,9 @@
 
 ## Decision
 
-`Iterable<T>` is anything a loop can read, and it compiles to PHP's `iterable`. `List<T>` and `Set<T>` are `Iterable<T>`, and a `Map<TKey, TValue>` is an `Iterable<TValue>`. It has lazy operations, such as `filter`, `map` and `take`, that run only when `toList()` or a loop reads the result. A lazy plain PHP source is checked element by element as it is read.
+`Iterable<T>` is anything a loop can read, and it compiles to PHP's `iterable`. `List<T>` and `Set<T>` are `Iterable<T>`, and a `Map<TKey, TValue>` is an `Iterable<[TKey, TValue]>` of its entries, as a loop over it reads them, and `values()` gives its values. It has lazy operations, such as `filter`, `map` and `take`, that run only when `toList()` or a loop reads the result. A lazy plain PHP source is checked element by element as it is read.
+
+A PHP# `Iterable` carries its element type while the code runs, as every PHP# generic does, so `is Iterable<Order>` reads no element. A plain PHP `Traversable` carries none, so it is only an `Iterable<Any?>`.
 
 ## Options
 
@@ -40,6 +42,8 @@ Every `filter`, `map` and `take` over a lazy source becomes a loop written by ha
 ## Precedent
 
 - **Chosen:** C#'s `IEnumerable<T>` with LINQ, and Kotlin's `Sequence<T>`, whose operations run only when a terminal operation reads them.
+- **Chosen, a `Map` as the `Iterable` of its entries:** C#'s `Dictionary<TKey, TValue>`, an `IEnumerable<KeyValuePair<TKey, TValue>>`, and Swift's `Dictionary`, a `Sequence` of `(key, value)` tuples.
+- **Chosen, a carried element type:** C#'s reified `is IEnumerable<Order>`, which reads no element.
 - **Rejected, loop only:** Java's `Iterable<T>`, TypeScript's `Iterable<T>` and Hack's `Traversable<T>`, which a loop reads and which carry no lazy operations of their own.
 
 ## Spec

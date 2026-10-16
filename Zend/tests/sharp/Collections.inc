@@ -49,6 +49,27 @@ class Cart
     {
         return [...$before, ...$this->prices(), 0, ...$after];
     }
+
+    public function totals(): array
+    {
+        $total = 0;
+        foreach ($this->items as $item) {
+            $total += $item->cents;
+        }
+        return [$total, \count($this->items)];
+    }
+
+    public function described(): string
+    {
+        $totals = $this->totals();
+        [$total, $count] = $this->totals();
+        $described = "{$totals[0]}/{$totals[1]} {$total}/{$count}";
+        $pairs = [["tea", 3], ["pie", 7]];
+        foreach ($pairs as [$name, $cents]) {
+            $described = "{$described} {$name}:{$cents}";
+        }
+        return $described;
+    }
 }
 
 class Item

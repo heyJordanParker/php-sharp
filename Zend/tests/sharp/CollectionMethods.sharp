@@ -15,7 +15,7 @@ class Pantry
     public static List<int> grow(List<int> sizes)
     {
         sizes.add(4);
-        sizes.set(0, 9);
+        sizes[0] = 9;
         return sizes;
     }
 
@@ -27,7 +27,7 @@ class Pantry
 
     public static int? at(List<int> sizes, int index)
     {
-        return sizes.get(index);
+        return sizes.getOrNull(index);
     }
 
     public static int? price(Map<string, int> stock, string name)
@@ -42,7 +42,7 @@ class Pantry
 
     public static List<int>? first(List<List<int>> rows)
     {
-        return rows.get(0);
+        return rows.getOrNull(0);
     }
 
     public static Map<int, List<int>> rows(List<List<int>> rows)
@@ -52,7 +52,7 @@ class Pantry
 
     public static void setPast(List<int> sizes)
     {
-        sizes.set(2, 1);
+        sizes[2] = 1;
     }
 
     public Map<string, int> restock(string name)
@@ -81,7 +81,7 @@ class Pantry
 
     public static int? total(Basket basket)
     {
-        return basket.totals.get(0);
+        return basket.totals.getOrNull(0);
     }
 
     public static int size(Pantry pantry)
@@ -185,6 +185,27 @@ class Pantry
     public static List<string> names(Map<string, int> stock)
     {
         return stock.keys();
+    }
+
+    public static List<int> amounts(Map<string, int> stock)
+    {
+        return stock.values();
+    }
+
+    public static Set<int> unique(List<int> sizes)
+    {
+        return sizes.toSet();
+    }
+
+    public static List<Any> keyedByCollections()
+    {
+        Map<List<int>, string> named = [[1, 2]: "a"];
+        named[[1, 2]] = "b";
+        named[[3]] = "c";
+        Set<string> first = ["x", "y"];
+        Set<string> second = ["y", "x"];
+        Set<Set<string>> groups = [first, second];
+        return [named.count(), named[[1, 2]] ?? "none", named[[2, 1]] ?? "none", groups.count()];
     }
 
     public static Map<string, int> cheap(Map<string, int> prices)

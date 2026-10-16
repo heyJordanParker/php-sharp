@@ -11,6 +11,7 @@ namespace {
         attempt(fn () => Demo\Pantry::drop(['tea' => 3, '5' => 7], 'tea'));
         attempt(fn () => Demo\Pantry::at([1, 2], 1));
         attempt(fn () => Demo\Pantry::at([1, 2], 2));
+        attempt(fn () => Demo\Pantry::at([1, 2], -1));
         attempt(fn () => Demo\Pantry::price(['tea' => 3, '5' => 7], '5'));
         attempt(fn () => Demo\Pantry::price(['tea' => 3], 'pie'));
         attempt(fn () => Demo\Pantry::entries([5, 6]));
@@ -74,6 +75,11 @@ namespace {
         attempt(fn () => Demo\Pantry::has(['pro' => null], 'team'));
         // PHP stores the key "5" as the int 5, and keys() gives it back as the string "5".
         attempt(fn () => Demo\Pantry::names(['5' => 1, 'tea' => 2]));
+        // values() gives the values in the order their keys were stored, and toSet() keeps each element once.
+        attempt(fn () => Demo\Pantry::amounts(['tea' => 2, 'pie' => 7, 'cake' => 2]));
+        attempt(fn () => Demo\Pantry::unique([3, 1, 3, 2, 1]));
+        // A collection keys a Map and joins a Set by its elements: a List in order, a Set in any order.
+        attempt(fn () => Demo\Pantry::keyedByCollections());
         attempt(fn () => Demo\Pantry::cheap(['tea' => 3, 'cake' => 300, 'pie' => 7]));
         attempt(fn () => Demo\Pantry::sold(['tea' => 3], 'tea'));
         attempt(fn () => Demo\Pantry::sold(['tea' => 3], 'pie'));

@@ -17,5 +17,7 @@ public class Counter
 
     public static Counter make() => new Counter.empty();
 
-    public int total() => this.count + this.views + this.size + Counter.made + Counter.MAX;
+    public int total() => this.count + this.views + this.size + Counter.made + Counter.MAX + this.bonus();
+
+    int bonus() => 0;
 }
