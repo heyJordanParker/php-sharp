@@ -13,6 +13,7 @@ foreach ([
     ['classmap', 'App\Timed\Defaults'],
     ['psr4', 'App\Ticking\Defaults'],
     ['classmap', 'App\Ticking\Defaults'],
+    ['classmap', 'App\Stamp'],
 ] as [$layout, $class]) {
     echo "== $layout, $class\n";
     echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n ' . escapeshellarg(__DIR__ . '/library_autoload.inc') . " engine $layout 0.1.0 " . escapeshellarg($class) . ' 2>&1');
@@ -24,6 +25,7 @@ booted, with no library class declared
 class map handed to Composer: []
 a-b
 == classmap, Sharp\Text\Text
+class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\Text"]
 booted, with no library class declared
 class map handed to Composer: []
 a-b
@@ -32,6 +34,7 @@ booted, with no library class declared
 class map handed to Composer: []
 noon
 == classmap, App\Clock
+class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\Text"]
 booted, with no library class declared
 class map handed to Composer: []
 noon
@@ -40,6 +43,7 @@ booted, with no library class declared
 class map handed to Composer: []
 noon, with its enum
 == classmap, App\Tick\Now
+class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\Text"]
 booted, with no library class declared
 class map handed to Composer: []
 noon, with its enum
@@ -48,6 +52,7 @@ booted, with no library class declared
 class map handed to Composer: []
 default noon
 == classmap, App\Timed\Defaults
+class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\Text"]
 booted, with no library class declared
 class map handed to Composer: []
 default noon
@@ -57,7 +62,13 @@ class map handed to Composer: []
 Error: Trait "App\Ticking\Defaults" not found
 1 .sharp files included
 == classmap, App\Ticking\Defaults
+class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\Text"]
 booted, with no library class declared
 class map handed to Composer: []
 Error: Trait "App\Ticking\Defaults" not found
 1 .sharp files included
+== classmap, App\Stamp
+class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\Text"]
+booted, with no library class declared
+class map handed to Composer: []
+stamped

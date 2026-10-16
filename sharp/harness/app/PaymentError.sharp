@@ -1,0 +1,12 @@
+namespace App;
+
+public enum PaymentError : Error
+{
+    case Declined(string reason);
+    case Expired;
+
+    public string message => match (this) {
+        PaymentError.Declined(string reason) => `declined: ${reason}`,
+        PaymentError.Expired => "card expired",
+    };
+}

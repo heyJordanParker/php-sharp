@@ -5,8 +5,8 @@
 // authoritative class map, and Composer reporting the package at that version or not installed, then uses
 // Sharp\Text\Text, App\Clock, App\Tick\Now, a case of the enum App/Tick.sharp declares, or the trait App\Timed\Defaults
 // of the interface App/Timed.sharp declares, or App\Ticking\Defaults of an interface without a default body, through a
-// plain PHP class. The class map lists the classes the package's
-// Composer plugin finds in each file. With composer, Composer itself requires autoload.php, as it does to load a plugin.
+// plain PHP class, or App\Stamp, whose type line starts with an attribute. The class map lists the classes the package's
+// Composer plugin finds in each file, which it prints. With composer, Composer itself requires autoload.php, as it does to load a plugin.
 
 namespace Composer\Plugin {
     if (($argv[5] ?? null) === 'composer') {
@@ -108,6 +108,11 @@ namespace {
     file_put_contents("$package/src/App/Tick.sharp", "namespace App;\n\npublic enum Tick\n{\n    case Later;\n    case Now(string at);\n}\n");
     file_put_contents("$package/src/App/Timed.sharp", "namespace App;\n\npublic interface Timed\n{\n    string now() => \"default noon\";\n}\n");
     file_put_contents("$package/src/App/Ticking.sharp", "namespace App;\n\npublic interface Ticking\n{\n    string now();\n}\n");
+    file_put_contents("$package/src/App/Stamp.sharp", "namespace App;\n\nimport Attribute;\n\n[Attribute] public class Stamp\n{\n    public string now() => \"stamped\";\n}\n");
+    // An extern declaration file, which declares no type, named like the class its line declares. The class map reads
+    // it, and mago compiles only src and library.
+    @mkdir("$package/stubs/App", 0777, true);
+    file_put_contents("$package/stubs/App/Failed.sharp", "namespace App;\n\nimport Lib.Failed;\n\nextern event Failed;\n");
     file_put_contents("$package/mago.toml", "[source]\npaths = [\"src\", \"library\"]\nextensions = [\"sharp\"]\n");
     run_mago($package);
 
@@ -116,9 +121,12 @@ namespace {
         require "$root/sharp/composer/src/Plugin.php";
         $declaredClasses = new ReflectionMethod(PhpSharp\Composer\Plugin::class, 'declaredClasses');
         $classMap = [];
-        foreach (["$package/src/App/Clock.sharp", "$package/src/App/Tick.sharp", "$package/src/App/Timed.sharp", "$package/src/App/Ticking.sharp", "$library/Text/Text.sharp"] as $file) {
+        foreach (["$package/src/App/Clock.sharp", "$package/src/App/Tick.sharp", "$package/src/App/Timed.sharp", "$package/src/App/Ticking.sharp", "$package/src/App/Stamp.sharp", "$package/stubs/App/Failed.sharp", "$library/Text/Text.sharp", "$library/Module.sharp"] as $file) {
             $classMap += array_fill_keys($declaredClasses->invoke(null, new SplFileInfo($file)), $file);
         }
+        // A module's file and an extern declaration file declare no type, spec section 27, so the class map lists
+        // nothing for them.
+        echo 'class map the plugin writes: ', json_encode(array_keys($classMap)), "\n";
         file_put_contents("$package/vendor/composer/autoload_sharp.php", '<?php return ' . var_export($classMap, true) . ';');
         $loader = new ClassLoader([], true);
     } else {

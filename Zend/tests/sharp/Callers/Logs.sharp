@@ -1,0 +1,6 @@
+namespace Callers;
+
+public interface Logs
+{
+    Position log(string message, Position caller = Position.current()) => caller;
+}

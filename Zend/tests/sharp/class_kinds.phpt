@@ -3,7 +3,8 @@ PHP# abstract and final classes, abstract methods and interfaces are PHP's
 --FILE--
 <?php
 
-require __DIR__ . '/Shapes.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Shapes');
 
 final class Square extends Demo\Shape implements Demo\Measured
 {

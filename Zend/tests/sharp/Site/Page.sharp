@@ -1,0 +1,56 @@
+namespace Site;
+
+import Lib.Access;
+import Lib.Catalog;
+import Lib.Linkable;
+import Lib.Resource;
+import Lib.Status;
+
+[Access(typeof(Page))]
+public class Page : Resource, Linkable
+{
+    public const int LIMIT = 3;
+    public static int views { get; private set; } = 0;
+    private Status status = Status.Live;
+
+    protected override string render()
+    {
+        return "page";
+    }
+
+    public override int id()
+    {
+        return super.id() + 1;
+    }
+
+    public string link()
+    {
+        return "/page";
+    }
+
+    public int limit()
+    {
+        return Page.LIMIT;
+    }
+
+    public int visit()
+    {
+        Page.views++;
+        return Page.views;
+    }
+
+    public bool live()
+    {
+        return this.status == Status.Live;
+    }
+
+    public Status draft()
+    {
+        return Status.Draft;
+    }
+
+    public string registered()
+    {
+        return Catalog.register(typeof(Page));
+    }
+}

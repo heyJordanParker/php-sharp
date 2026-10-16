@@ -1,0 +1,6 @@
+namespace Equalities;
+
+public struct Point
+{
+    public Point(public int x { get; }) { }
+}

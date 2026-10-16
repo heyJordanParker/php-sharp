@@ -1,0 +1,10 @@
+namespace App;
+
+import Lib.Sleeper;
+
+public class Journal<TEntry : DatabaseEntity> : Sleeper
+{
+    public Journal(public List<TEntry> entries { get; }, public int pages { get; })
+    {
+    }
+}

@@ -1,0 +1,11 @@
+namespace Paging;
+
+public class OrderQuery : Query<Order>
+{
+
+    public OrderQuery(private List<Order> orders)
+    {
+    }
+
+    public List<Order> rows() => this.orders;
+}

@@ -1,0 +1,12 @@
+namespace Handlers;
+
+// `handle` takes an `Order` where `Handler.handle` erases its parameter to `Any?`.
+public class OrderHandler : Handler<Order>
+{
+    public int handled { get; private set; } = 0;
+
+    public void handle(Order item)
+    {
+        this.handled = this.handled + item.id;
+    }
+}

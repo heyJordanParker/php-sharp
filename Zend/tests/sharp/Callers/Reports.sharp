@@ -1,0 +1,10 @@
+namespace Callers;
+
+public class Reports
+{
+    public static Position logSlow(string message, Position caller = Position.current()) => caller;
+
+    public Position seen(int times, Position where = Position.current()) => where;
+
+    public static Position pick<T>(T value, Position caller = Position.current()) => caller;
+}

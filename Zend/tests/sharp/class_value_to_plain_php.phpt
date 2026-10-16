@@ -4,7 +4,8 @@ A PHP# class value reaches plain PHP that takes a class name as that name, with 
 <?php
 
 require __DIR__ . '/harness/Factory.inc';
-require __DIR__ . '/ClassValues.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('ClassValues');
 
 var_dump(get_class(Classes\ClassValues::made()));
 var_dump(get_class(Classes\ClassValues::remade(new Classes\GoldBadge())));

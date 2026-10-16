@@ -13,7 +13,8 @@ final class Summary
     }
 }
 
-require __DIR__ . '/Collections.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Collections');
 
 $cart = new \Demo\Cart();
 echo $cart->fill([new \Demo\Item('pie', 7)]), "\n";

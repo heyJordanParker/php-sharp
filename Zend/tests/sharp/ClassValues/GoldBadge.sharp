@@ -1,0 +1,6 @@
+namespace Classes;
+
+public class GoldBadge : Badge
+{
+    public static override string tag() => "gold";
+}

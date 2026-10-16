@@ -4,7 +4,8 @@ A PHP# class header names its parent class and its interfaces in any order
 <?php
 
 require __DIR__ . '/harness/Header.inc';
-require __DIR__ . '/Header.sharp';
+require_once __DIR__ . '/harness/fixture.inc';
+fixture('Header');
 
 function inheritance(string $class): array
 {

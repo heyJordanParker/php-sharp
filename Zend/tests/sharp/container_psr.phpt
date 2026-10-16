@@ -66,7 +66,7 @@ namespace {
     }
 
     // A test's module, as the compiler writes one, binds these classes. The checker refuses the first three bindings.
-    Sharp\Internal\testModule(['PsrTest'], [
+    Sharp\Internal\testModule('PsrTest', [
         ['', 'needy', null, 'transient', 'Needy'],
         ['', 'egg', null, 'transient', 'Egg'],
         ['', 'chicken', null, 'transient', 'Chicken'],

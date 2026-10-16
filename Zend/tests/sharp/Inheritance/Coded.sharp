@@ -1,0 +1,6 @@
+namespace Demo;
+
+public class Coded : Keyed<int>
+{
+    public int key() => 7;
+}

@@ -1,6 +1,7 @@
 <?php
 
-require __DIR__ . '/Ids.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Ids');
 
 use Holders\Ids;
 use Holders\Ticket;

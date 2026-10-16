@@ -1,0 +1,11 @@
+namespace Site;
+
+public abstract class Shape
+{
+    public abstract float area();
+
+    public virtual int sides()
+    {
+        return 0;
+    }
+}

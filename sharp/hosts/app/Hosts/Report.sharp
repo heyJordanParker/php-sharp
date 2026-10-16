@@ -1,0 +1,21 @@
+namespace App.Hosts;
+
+public class Report
+{
+    private static int served = 0;
+    private static int lastVisit = 0;
+
+    public Report(private Visit visit, private Visit again, private Counter counter, private Counter other) { }
+
+    public string text()
+    {
+        Report.served = Report.served + 1;
+        const fresh = this.visit.number != Report.lastVisit;
+        Report.lastVisit = this.visit.number;
+
+        return `served: ${Report.served}\n`
+            + (this.visit.number == this.again.number ? "scoped: one object in the request\n" : "scoped: two objects in the request\n")
+            + (fresh ? "scoped: new in this request\n" : "scoped: kept from the last request\n")
+            + (this.counter.number == this.other.number ? "singleton: one object\n" : "singleton: two objects\n");
+    }
+}

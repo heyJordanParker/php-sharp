@@ -1,0 +1,11 @@
+namespace Paging;
+
+public class Feed<TItem : DatabaseEntity>
+{
+
+    public Feed(private List<TItem> items)
+    {
+    }
+
+    public TItem next() => this.items[0];
+}

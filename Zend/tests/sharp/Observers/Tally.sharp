@@ -1,0 +1,30 @@
+namespace Observed;
+
+import RuntimeException;
+
+public class Tally
+{
+    public int count { get; set; didSet => global.printf("count %d\n", field); } = 0;
+    private static Tally? kept = null;
+
+    public Tally() { }
+
+    // Keeps the object before its body throws, so a later write reaches it.
+    public Tally.failing() : this()
+    {
+        Tally.kept = this;
+        this.count = 5;
+        throw new RuntimeException("failed");
+    }
+
+    // An initializer inside a named constructor builds another object.
+    public Tally.paired() : this()
+    {
+        Tally.kept = new Tally { count: 2 };
+        this.count = 4;
+    }
+
+    public static Tally started() => new Tally { count: 3 };
+
+    public static Tally? last() => Tally.kept;
+}

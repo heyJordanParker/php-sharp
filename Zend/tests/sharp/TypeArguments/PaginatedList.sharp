@@ -1,0 +1,31 @@
+namespace App;
+
+import Lib.Witness;
+
+public class PaginatedList<TItem : DatabaseEntity>
+{
+    public required PaginatedList(public List<TItem> items { get; })
+    {
+        Witness.see(this);
+    }
+
+    public Self copy() => new Self(this.items);
+
+    public PaginatedList<TItem> copyLater()
+    {
+        const Function<PaginatedList<TItem>()> make = () => new Self(this.items);
+        return make();
+    }
+
+    public Function<PaginatedList<TItem>()> maker() => () => new Self([]);
+
+    public Pair<TItem, List<TItem>?> paired(TItem item) => new Pair<TItem, List<TItem>?>(item, null);
+
+    public Box<T> boxed<T>(T item) => new Box<T>();
+
+    public Function<PaginatedList<TItem>()> emptied() => () => new PaginatedList<TItem>([]);
+
+    public Function<Function<PaginatedList<TItem>()>()> makerLater() => () => () => new Self([]);
+
+    public Function<Function<PaginatedList<TItem>()>()> emptiedLater() => () => () => new PaginatedList<TItem>([]);
+}

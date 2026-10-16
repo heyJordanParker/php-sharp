@@ -1,0 +1,13 @@
+namespace Demo;
+
+public class Guarded
+{
+    public Map<string, int> getOnly { get; } = ["a": 1];
+    public Map<string, int> initOnly { get; init; } = ["a": 1];
+    public Map<string, int> hooked
+    {
+        get => field;
+        set => field = value;
+    } = ["a": 1];
+    public Map<string, int> setHooked { get; set => field = value; } = ["a": 1];
+}

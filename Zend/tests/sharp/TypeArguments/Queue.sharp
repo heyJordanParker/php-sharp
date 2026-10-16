@@ -1,0 +1,42 @@
+namespace App;
+
+public class Queue
+{
+    public static Maker<Order> maker() => new Maker<Order>();
+
+    public static Maker<int> intMaker() => new Maker<int>();
+
+    public static Box<int> box() => new Box<int>();
+
+    public static Box<Query<Order>> queryBox() => new Box<Query<Order>>();
+
+    public static Holder<IntBox> holder() => new Holder<IntBox>();
+
+    public static OrderMaker orderMaker() => new OrderMaker();
+
+    public static ListMaker<int> listMaker() => new ListMaker<int>();
+
+    public static Node<int> intNode() => new Node<int>();
+
+    public static Node<string> stringNode() => new Node<string>();
+
+    public static Node<float> floatNode() => new Node<float>();
+
+    public static Node<bool> boolNode() => new Node<bool>();
+
+    public static PaginatedList<Order> orders() => new PaginatedList<Order>([]);
+
+    public static PaginatedList<DatabaseEntity> entities() => new PaginatedList<DatabaseEntity>([]);
+
+    public static Pair<Order, int> pair() => new Pair<Order, int>(new Order(2), 3);
+
+    public static Pair<Order, int> flippedPair() => new Pair<Order, int>.flipped(3, new Order(2));
+
+    public static OrderPage page() => new OrderPage([]);
+
+    public static Ledger<Order> ledger() => new Ledger<Order>([]);
+
+    public static Journal<Order> journal() => new Journal<Order>([], 4);
+
+    public static Report<SharedOrder> report() => new Report<SharedOrder>([]);
+}

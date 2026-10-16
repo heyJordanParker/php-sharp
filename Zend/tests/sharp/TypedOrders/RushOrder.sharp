@@ -1,0 +1,6 @@
+namespace Typed;
+
+public class RushOrder : Order
+{
+    protected override string table { get; set; } = "rush_orders";
+}

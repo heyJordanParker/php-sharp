@@ -1,0 +1,85 @@
+namespace Demo;
+
+class Archive
+{
+    private static List<string> titles = [];
+    private static Map<string, int> stock = [:];
+    private static Set<string> tags = [];
+    protected static List<string> shared = [];
+    public static List<string> shown { get; private set; } = [];
+    private static Ticker? ticker = null;
+    private static List<string> copied = [];
+    public static List<string> shelf { get; set; } = [];
+    private List<string> own = [];
+
+    public static List<string> retitle(string title)
+    {
+        Archive.titles = ["draft", "notes"];
+        Archive.titles[0] = title;
+        return Archive.titles;
+    }
+
+    public static Map<string, int> sell(string name)
+    {
+        Archive.stock = ["tea": 3, "pie": 7];
+        Archive.stock.remove(name);
+        return Archive.stock;
+    }
+
+    public static List<Any> tag()
+    {
+        Archive.tags = [];
+        const added = Archive.tags.add("new");
+        const again = Archive.tags.add("sale");
+        const removed = Archive.tags.remove("new");
+        const kept = Archive.tags.toList();
+        Archive.tags.clear();
+        return [added, again, removed, kept, Archive.tags.toList()];
+    }
+
+    public static List<string> shelved() => Archive.shared;
+
+    public static List<string> show(string title)
+    {
+        Archive.shown = [];
+        Archive.shown.add(title);
+        return Archive.shown;
+    }
+
+    public static Function<void(string)> shower() => title => Archive.shown.add(title);
+
+    public static int tickTwice()
+    {
+        Archive.ticker = new Ticker();
+        Archive.ticker.tick();
+        return Archive.ticker.tick();
+    }
+
+    public List<string> keep(string title)
+    {
+        this.own = [];
+        this.own.add(title);
+        return this.own;
+    }
+
+    public static List<List<string>> sharedWithStatic()
+    {
+        Archive.titles = ["one"];
+        Archive.copied = Archive.titles;
+        Archive.titles.add("two");
+        return [Archive.copied, Archive.titles];
+    }
+
+    public static List<List<string>> sharedWithLocal()
+    {
+        Archive.titles = ["one"];
+        const snapshot = Archive.titles;
+        Archive.titles.add("two");
+        return [snapshot, Archive.titles];
+    }
+
+    public static void shelve(string title)
+    {
+        Archive.shelf.add(title);
+    }
+}

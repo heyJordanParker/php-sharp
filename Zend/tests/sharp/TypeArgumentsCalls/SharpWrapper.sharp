@@ -1,0 +1,9 @@
+namespace Calls;
+
+import App.Box;
+import Lib.Wrapper;
+
+public class SharpWrapper : Wrapper
+{
+    public Box<T> wrap<T>(T item) => new Box<T>();
+}

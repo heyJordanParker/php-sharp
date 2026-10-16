@@ -532,6 +532,10 @@ $exceptions = exceptionClasses($map, $stubs, $checkerClasses);
 $shortNames = array_count_values(array_map(static fn (string $class): string => basename(str_replace('\\', '/', $class)), $exceptions));
 [$imports, $externs] = [[], []];
 foreach ($exceptions as $class) {
+    // A bare `Error` names the standard library's `Sharp.Error` (spec section 31), so PHP# code never names PHP's.
+    if ($class === 'Error') {
+        continue;
+    }
     $short = basename(str_replace('\\', '/', $class));
     $alias = str_contains($class, '\\') && $shortNames[$short] > 1 ? implode('', array_map(ucfirst(...), explode('\\', $class))) : null;
     if (str_contains($class, '\\')) {

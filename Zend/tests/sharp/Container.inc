@@ -3,15 +3,15 @@
 require __DIR__ . '/project.inc';
 
 // An app whose modules bind each lifetime and each kind of value, with an environment module and a nested namespace's
-// module that overrides its parent's, beside the standard library's module, the classes it binds, and Events, as a
-// Composer project holds them. container_project compiles it with $files, loads it with container_load, and returns
+// module that overrides its parent's, beside the standard library's module, the classes it binds, Events and Scope, as
+// a Composer project holds them. container_project compiles it with $files, loads it with container_load, and returns
 // the project's folder.
 function container_project(string $name, array $files = []): string
 {
     $library = 'vendor/heyjordanparker/php-sharp-composer';
     $source = dirname(__DIR__, 3) . '/sharp/composer/library/Sharp';
     $classes = [];
-    foreach ([...LIBRARY_MODULE, 'Events'] as $class) {
+    foreach ([...LIBRARY_MODULE, 'Events', 'Scope'] as $class) {
         $classes["$library/library/Sharp/$class.sharp"] = file_get_contents("$source/$class.sharp");
     }
     $root = compile_project($name, CONTAINER_APP + $files + $classes + [

@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: c63abf9fae12013259fc77e80c897077d1bd7526 */
+ * Stub hash: a7defd252b2ca5be3ec15d38ac3c35bd75a71394 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -11,6 +11,7 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_statics, 1, 2, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, key, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, field, IS_STRING, 1, "null")
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_keep, 0, 2, IS_MIXED, 0)
@@ -28,7 +29,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_readModule, 0, 1,
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_testModule, 0, 2, IS_VOID, 0)
-	ZEND_ARG_TYPE_INFO(0, classes, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, bindings, IS_ARRAY, 0)
 ZEND_END_ARG_INFO()
 
@@ -37,6 +38,10 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_startTest, 0, 1, 
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_endTest, 0, 0, IS_VOID, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_runScoped, 0, 1, IS_MIXED, 0)
+	ZEND_ARG_OBJ_INFO(0, body, Closure, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_building, 0, 1, _IS_BOOL, 0)
@@ -183,10 +188,6 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Container_has, 0, 1,
 	ZEND_ARG_TYPE_INFO(0, id, IS_STRING, 0)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Container_scope, 0, 1, IS_MIXED, 0)
-	ZEND_ARG_OBJ_INFO(0, run, Closure, 0)
-ZEND_END_ARG_INFO()
-
 #define arginfo_class_Sharp_Listening___construct arginfo_class_Sharp_Collection___construct
 
 #define arginfo_class_Sharp_Internal_Listener___construct arginfo_class_Sharp_Collection___construct
@@ -201,6 +202,7 @@ ZEND_FUNCTION(Sharp_Internal_readModule);
 ZEND_FUNCTION(Sharp_Internal_testModule);
 ZEND_FUNCTION(Sharp_Internal_startTest);
 ZEND_FUNCTION(Sharp_Internal_endTest);
+ZEND_FUNCTION(Sharp_Internal_runScoped);
 ZEND_FUNCTION(Sharp_Internal_building);
 ZEND_FUNCTION(Sharp_Internal_build);
 ZEND_FUNCTION(Sharp_Internal_emit);
@@ -240,7 +242,6 @@ ZEND_METHOD(Sharp_Sequence, getIterator);
 ZEND_METHOD(Sharp_Position, __construct);
 ZEND_METHOD(Sharp_Container, get);
 ZEND_METHOD(Sharp_Container, has);
-ZEND_METHOD(Sharp_Container, scope);
 ZEND_METHOD(Sharp_Listening, __construct);
 ZEND_METHOD(Sharp_Internal_Listener, __construct);
 ZEND_METHOD(Sharp_Internal_Listener, hear);
@@ -254,6 +255,7 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "testModule"), zif_Sharp_Internal_testModule, arginfo_Sharp_Internal_testModule, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "startTest"), zif_Sharp_Internal_startTest, arginfo_Sharp_Internal_startTest, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "endTest"), zif_Sharp_Internal_endTest, arginfo_Sharp_Internal_endTest, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "runScoped"), zif_Sharp_Internal_runScoped, arginfo_Sharp_Internal_runScoped, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "building"), zif_Sharp_Internal_building, arginfo_Sharp_Internal_building, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "build"), zif_Sharp_Internal_build, arginfo_Sharp_Internal_build, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "emit"), zif_Sharp_Internal_emit, arginfo_Sharp_Internal_emit, 0, NULL, NULL)
@@ -309,7 +311,6 @@ static const zend_function_entry class_Sharp_Position_methods[] = {
 static const zend_function_entry class_Sharp_Container_methods[] = {
 	ZEND_ME(Sharp_Container, get, arginfo_class_Sharp_Container_get, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Container, has, arginfo_class_Sharp_Container_has, ZEND_ACC_PUBLIC)
-	ZEND_ME(Sharp_Container, scope, arginfo_class_Sharp_Container_scope, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
 	ZEND_FE_END
 };
 

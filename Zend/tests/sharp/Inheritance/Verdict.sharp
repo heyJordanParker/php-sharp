@@ -1,0 +1,7 @@
+namespace Demo;
+
+public enum Verdict : Told
+{
+    case Pending;
+    case Ruled(string by);
+}

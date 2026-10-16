@@ -3,7 +3,8 @@ PHP# collection methods change a static List, Map or Set where it lives
 --FILE--
 <?php
 require __DIR__ . '/attempt.inc';
-require __DIR__ . '/StaticCollections.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('StaticCollections');
 
 // Each round runs every form, so the JIT runs compiled code before the last round, whose output is printed.
 for ($round = 0; $round < 3; $round++) {
@@ -96,7 +97,7 @@ array(1) {
   string(5) "diary"
 }
 int(6)
-Error: Cannot modify private(set) property Demo\Archive::$shown from scope Demo\Patron in StaticCollections.sharp on line 66
+Error: Cannot modify private(set) property Demo\Archive::$shown from scope Demo\Patron in Archive.sharp on line 49
 array(1) {
   [0]=>
   string(5) "poems"

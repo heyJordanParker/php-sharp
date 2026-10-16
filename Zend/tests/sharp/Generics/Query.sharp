@@ -1,0 +1,7 @@
+namespace Paging;
+
+public interface Query<TItem>
+{
+
+    List<TItem> rows();
+}

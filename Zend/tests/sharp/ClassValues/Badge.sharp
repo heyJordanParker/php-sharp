@@ -1,0 +1,14 @@
+namespace Classes;
+
+[Listen("badges")]
+[Loud("shiny")]
+public class Badge
+{
+    public required Badge() { }
+
+    public static virtual string tag() => "badge";
+
+    public static Class<Badge> own() => typeof(Self);
+
+    public static string ownTag() => typeof(Self).tag();
+}

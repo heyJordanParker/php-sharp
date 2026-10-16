@@ -1,0 +1,5 @@
+namespace Orchard;
+
+public class Crate<out TFruit> : Harvest<TFruit>
+{
+}

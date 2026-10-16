@@ -1,0 +1,16 @@
+namespace Calls;
+
+import App.DatabaseEntity;
+import App.Shareable;
+import App.SharedOrder;
+
+public class Feed<TItem : DatabaseEntity & Shareable>
+{
+    public Function<string()> sharer(TItem item) => item.share;
+
+    public static string shared()
+    {
+        const Function<string()> share = new Feed<SharedOrder>().sharer(new SharedOrder(5));
+        return share();
+    }
+}

@@ -1,0 +1,12 @@
+namespace Demo;
+
+class Ticker
+{
+    public int ticks { get; private set; } = 0;
+
+    public int tick()
+    {
+        this.ticks += 1;
+        return this.ticks;
+    }
+}

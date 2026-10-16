@@ -1,13 +1,14 @@
 <?php declare(strict_types=1);
 
-// The plain PHP side of Constructors.sharp: the base class `SalesReport` extends, the attribute on
+// The plain PHP side of the Constructors fixture: the base class `SalesReport` extends, the attribute on
 // `Artifact.fromJson`, and plain PHP subclasses of two PHP# classes.
 
 namespace Demo;
 
 require_once __DIR__ . '/harness/Report.inc';
 require_once __DIR__ . '/harness/Attributes.inc';
-require_once __DIR__ . '/Constructors.sharp';
+require_once __DIR__ . '/harness/fixture.inc';
+\fixture('Constructors');
 
 class LegacyArtifact extends Artifact
 {

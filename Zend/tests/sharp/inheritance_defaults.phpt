@@ -1,10 +1,11 @@
 --TEST--
-A PHP# interface's default bodies, of methods and computed properties, run in a PHP# class, an enum, a struct, each case of an enum that carries data and a plain PHP class that uses its Defaults trait, and super<Told> runs one of two through a protected alias, in the class and in its subclass
+A PHP# interface's default bodies, of methods and computed properties, run in a PHP# class, an enum, a struct, each case of an enum that carries data and a plain PHP class that uses its Defaults trait, and super<Told> runs one of two through a protected alias, in the class and in its subclass, and a default body's own type parameter that plain PHP leaves out is its bound, read with the type argument each class gives the interface
 --FILE--
 <?php
 
 require __DIR__ . '/harness/Traits.inc';
-require __DIR__ . '/Inheritance.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Inheritance');
 
 // A plain PHP class gets a PHP# interface's default bodies by using the trait `<Interface>\Defaults`, spec section 22.
 final class LegacySheet implements Demo\HasDesign
@@ -50,6 +51,10 @@ try {
 } catch (TypeError $error) {
     echo $error->getMessage(), "\n";
 }
+// A default body's own type parameter that plain PHP leaves out is its bound, Keyed<TKey>, read with the TKey each class
+// gives, from its second type parameter in Ranked<int, string>.
+$ranked = Demo\Seeder::ranked();
+var_dump($ranked->fits($ranked, $ranked), $ranked->fits($ranked, $coded), $coded->fits($coded, $coded));
 
 var_dump(
     (new ReflectionMethod(Demo\HasDesign::class, 'designKey'))->isAbstract(),
@@ -105,6 +110,9 @@ array(2) {
   string(1) "x"
 }
 Demo\Tagger::same(): Argument #1 ($other) must be of type List<string>, array given: [0] expected string, got int 1, called in %s on line %d
+bool(true)
+bool(false)
+bool(true)
 bool(true)
 bool(true)
 bool(false)

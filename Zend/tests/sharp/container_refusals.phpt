@@ -43,7 +43,7 @@ $root = container_project('container-refusals');
 $container = new Sharp\Container();
 
 // A test's module, as the compiler writes one, binds these classes. The checker refuses the first four bindings.
-Sharp\Internal\testModule(['RefusalsTest'], [
+Sharp\Internal\testModule('RefusalsTest', [
     ['', 'egg', null, 'transient', 'Egg'],
     ['', 'chicken', null, 'transient', 'Chicken'],
     ['', 'loose', null, 'transient', 'Loose'],

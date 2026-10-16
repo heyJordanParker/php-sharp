@@ -1,0 +1,8 @@
+namespace App.Hosts;
+
+module
+{
+    scoped Visit = Visit;
+    singleton Counter = Counter;
+    transient Report = Report;
+}

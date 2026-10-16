@@ -1,5 +1,7 @@
 # 56. Modules
 
+Superseded in part by [decision 78](078-hosts.md): a host starts and ends each scope with the standard library's `Scope.run`, and PHP# ships no `php-sharp/laravel` adapter. A `singleton` and a static live as long as the app runs, which is one request under PHP-FPM and many under a long-running worker.
+
 ## Decision
 
 Each namespace folder may hold `Module.sharp`, a `module { … }` declaration with no name, because the folder names it. It declares services with `singleton`, `scoped` and `transient`. A binding's value is a class, built through its main constructor, or one expression. A binding names the services it needs as parameters, as Dagger's `@Provides` methods do, so a choice made while the app runs is one expression over them, run each time the binding's lifetime needs a new service. A module holds no statements, branches, loops or methods. `environment.require("NAME")` is a method of the `Environment` a binding takes as a parameter. It returns a `string` and throws `ValueError` when the variable is not set.

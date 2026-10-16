@@ -1,0 +1,19 @@
+namespace Overrides;
+
+public class Member
+{
+    public string? note { get; }
+    public int level { get; set; }
+    public string? nickname { get; set; } = null;
+
+    public Member(string? note, bool claimed)
+    {
+        if (claimed) {
+            this.note = note;
+            this.level = 2;
+        } else {
+            this.note = null;
+            this.level = 1;
+        }
+    }
+}

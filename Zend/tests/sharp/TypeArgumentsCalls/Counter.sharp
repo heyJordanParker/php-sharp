@@ -1,0 +1,22 @@
+namespace Calls;
+
+public class Counter<TItem>
+{
+    public static int count { get; set; } = 0;
+
+    public static int? limit { get; set; } = null;
+
+    public static List<TItem> items { get; set; } = [];
+
+    public static Map<string, int> byId { get; set; } = [:];
+
+    public static List<List<int>> grid { get; set; } = [[0, 0]];
+
+    public static void track(TItem item)
+    {
+        Counter<TItem>.items.add(item);
+        Counter<TItem>.count++;
+    }
+
+    public static int own() => Counter<TItem>.count;
+}

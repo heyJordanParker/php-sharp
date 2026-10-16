@@ -1,0 +1,23 @@
+namespace Demo;
+
+class Coin
+{
+    public Coin(public int cents { get; })
+    {
+    }
+
+    public static bool operator ==(Coin a, Coin b) => a.cents == b.cents;
+
+    public int hash() => this.cents;
+
+    public static bool held(List<Coin> coins, int cents)
+    {
+        return coins.contains(new Coin(cents));
+    }
+
+    public static List<int> spent(List<Coin> coins, int cents)
+    {
+        coins.remove(new Coin(cents));
+        return coins.map(coin => coin.cents);
+    }
+}

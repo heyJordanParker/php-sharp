@@ -2,7 +2,8 @@
 A Set type argument round-trips through getTypeArguments and serialize, and plain PHP entering a method that takes a Box<Set<Order>> and a Set<Order> gets a TypeError only for a box of other type arguments
 --FILE--
 <?php
-require __DIR__ . '/TypeArgumentsSets.sharp';
+require_once __DIR__ . '/harness/fixture.inc';
+fixture('TypeArgumentsSets');
 
 use Shelf\Boxes;
 use Shelf\Order;

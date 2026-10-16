@@ -14,8 +14,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
   cancel-in-progress: true
 jobs:
-  # CI_PASSED is this workflow's one required check, so the workflow always runs, and LINUX and
-  # MACOS skip a change to documentation alone. docs/spec.md, README.md and
+  # CI_PASSED is this workflow's one required check, so the workflow always runs, and LINUX,
+  # LINUX_ZTS, HOSTS and MACOS skip a change to documentation alone. docs/spec.md, README.md and
   # sharp/spec-self-test.md count as code, because LINUX compiles and runs their examples.
   CHANGES:
     runs-on: ubuntu-24.04
@@ -49,19 +49,21 @@ jobs:
     permissions:
       contents: read
       packages: read
-    # sharp/docker/run builds the image FROM this copy, which base-images.yml makes of the public
-    # registry's image, so the pull never meets an anonymous quota.
+    # sharp/docker/run builds the image FROM these copies, which base-images.yml makes of the public
+    # registry's images, so the pulls never meet an anonymous quota.
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
     steps:
       - name: git checkout
         uses: actions/checkout@v6
-      - name: Pull the base image from ghcr.io
+      - name: Pull the base images from ghcr.io
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
           docker pull "$BASE_IMAGE"
+          docker pull "$GOLANG_IMAGE"
       - name: Keep local sources out of Cargo.lock
         run: |
           if git grep -nE '(path|git)\+file://' -- '*Cargo.lock'; then
@@ -115,6 +117,112 @@ jobs:
           sharp/docker/run sh -c 'cargo="$(cd ext/sharp && rustup which cargo)" && PATH="$(dirname "$cargo"):$PATH" "$cargo" build --locked --release --manifest-path sharp/mago/Cargo.toml --target-dir "sharp/build/linux-$(uname -m)/mago" -p mago-sharp-bridge --message-format=json' > "$RUNNER_TEMP/build.json"
           header="$(jq -r 'select(.reason == "build-script-executed" and (.package_id | contains("mago-sharp-bridge"))) | .out_dir | ltrimstr("/src/")' "$RUNNER_TEMP/build.json")/sharp_unit.h"
           diff -u ext/sharp/sharp_unit.h "$header"
+      # HOSTS serves the fixture from this build's php-fpm, and compiles it with this build's mago. A tar keeps
+      # their modes, which an artifact drops.
+      - name: Keep php-fpm and mago for HOSTS
+        run: tar -cf "$RUNNER_TEMP/hosts-nts.tar" "sharp/build/linux-$(uname -m)/sapi/fpm/php-fpm" "sharp/build/linux-$(uname -m)/mago/release/mago"
+      - name: Upload php-fpm and mago for HOSTS
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosts-nts
+          path: ${{ runner.temp }}/hosts-nts.tar
+          retention-days: 1
+  # The thread-safe build, which FrankenPHP and Octane on Swoole run, in every mode LINUX runs. Linux has a
+  # thread-safe JIT, so the JIT passes run too.
+  LINUX_ZTS:
+    needs: CHANGES
+    if: needs.CHANGES.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    # sharp/docker/run builds the image FROM base-images.yml's copies, as LINUX does.
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
+    steps:
+      - name: git checkout
+        uses: actions/checkout@v6
+      - name: Pull the base images from ghcr.io
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+          docker pull "$BASE_IMAGE"
+          docker pull "$GOLANG_IMAGE"
+      - name: Rust cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            sharp/build/cargo
+            sharp/build/rustup
+          key: SHARP_LINUX_RUST-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
+      # sharp/bin/test --zts builds mago into the other build's folder, sharp/build/<os>-<arch>/mago, as LINUX does.
+      - name: Mago cache
+        uses: actions/cache@v5
+        with:
+          path: sharp/build/*/mago
+          key: SHARP_LINUX_MAGO-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.lock') }}
+      - name: Build
+        run: sharp/bin/build --linux --zts
+      - name: Test PHP#
+        run: sharp/bin/test --linux --zts --opcache --repeat --passes
+      # HOSTS builds FrankenPHP against the libphp, headers and php-config that sharp/bin/build --zts installed.
+      - name: Keep the installed engine for HOSTS
+        run: |
+          install="sharp/build/linux-$(uname -m)-zts/install"
+          tar -cf "$RUNNER_TEMP/hosts-zts.tar" "$install/lib" "$install/include" "$install/bin/php-config"
+      - name: Upload the installed engine for HOSTS
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosts-zts
+          path: ${{ runner.temp }}/hosts-zts.tar
+          retention-days: 1
+  # The fixture in sharp/hosts, served from php-fpm and from FrankenPHP's worker mode. FrankenPHP is built with Go
+  # against the engine LINUX_ZTS built, and php-fpm is the one LINUX built.
+  HOSTS:
+    needs: [LINUX, LINUX_ZTS]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    # sharp/docker/run builds the image FROM base-images.yml's copies, as LINUX does.
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
+    steps:
+      - name: git checkout
+        uses: actions/checkout@v6
+      - name: Pull the base images from ghcr.io
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+          docker pull "$BASE_IMAGE"
+          docker pull "$GOLANG_IMAGE"
+      - name: Go module cache
+        uses: actions/cache@v5
+        with:
+          path: sharp/build/go/pkg/mod
+          key: SHARP_HOSTS_GO-${{ hashFiles('sharp/bin/hosts', 'sharp/docker/Dockerfile') }}
+      - name: Download php-fpm and mago
+        uses: actions/download-artifact@v4
+        with:
+          name: hosts-nts
+          path: ${{ runner.temp }}
+      - name: Download the installed engine
+        uses: actions/download-artifact@v4
+        with:
+          name: hosts-zts
+          path: ${{ runner.temp }}
+      - name: Unpack them where they were built
+        run: |
+          tar -xf "$RUNNER_TEMP/hosts-nts.tar"
+          tar -xf "$RUNNER_TEMP/hosts-zts.tar"
+      - name: Serve the fixture from php-fpm and FrankenPHP
+        run: sharp/bin/hosts --linux
   MACOS:
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true'
@@ -158,13 +266,13 @@ jobs:
   # from Composer on plain PHP.
   CI_PASSED:
     if: always()
-    needs: [CHANGES, LINUX, MACOS]
+    needs: [CHANGES, LINUX, LINUX_ZTS, HOSTS, MACOS]
     runs-on: ubuntu-24.04
     steps:
       - name: Every job passed, or skipped a change to documentation alone
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # release/v1
         with:
-          allowed-skips: LINUX, MACOS
+          allowed-skips: LINUX, LINUX_ZTS, HOSTS, MACOS
           jobs: ${{ toJSON(needs) }}
   COMPOSER:
     needs: [LINUX, MACOS]
@@ -218,9 +326,22 @@ jobs:
             exit 0
           fi
           git push origin "FETCH_HEAD:$GITHUB_REF"
+  # One image per host, under one name: php-fpm's as <version>, FrankenPHP's as <version>-frankenphp, as
+  # docker-library names 8.5-fpm and 8.5-zts.
   IMAGE:
     if: github.ref_type == 'tag'
-    needs: [LINUX, MACOS]
+    needs: [LINUX, LINUX_ZTS, HOSTS, MACOS]
+    strategy:
+      matrix:
+        include:
+          - file: sharp/docker/runtime/Dockerfile
+            flavor: latest=false
+            build-args: BASE_IMAGE=ghcr.io/heyjordanparker/debian:trixie-slim
+          - file: sharp/docker/runtime/frankenphp.Dockerfile
+            flavor: latest=false,suffix=-frankenphp
+            build-args: |
+              BASE_IMAGE=ghcr.io/heyjordanparker/debian:trixie-slim
+              GOLANG_IMAGE=ghcr.io/heyjordanparker/golang:1.27-trixie
     uses: docker/github-builder/.github/workflows/build.yml@58cb9f5b71b1836d6f690c1e95effdeb9b98cb8a # v1.17.0
     permissions:
       contents: read
@@ -229,12 +350,12 @@ jobs:
     with:
       output: image
       push: true
-      file: sharp/docker/runtime/Dockerfile
-      build-args: BASE_IMAGE=ghcr.io/heyjordanparker/debian:trixie-slim
+      file: ${{ matrix.file }}
+      build-args: ${{ matrix.build-args }}
       platforms: linux/amd64,linux/arm64
       meta-images: ghcr.io/heyjordanparker/php-sharp
       meta-tags: type=semver,pattern={{version}}
-      meta-flavor: latest=false
+      meta-flavor: ${{ matrix.flavor }}
     secrets:
       registry-auths: |
         - registry: ghcr.io

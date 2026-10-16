@@ -2,7 +2,8 @@
 
 namespace Plain;
 
-require __DIR__ . '/Unverified.sharp';
+require_once __DIR__ . '/harness/fixture.inc';
+\fixture('Unverified');
 
 use Crossed\Unverified;
 

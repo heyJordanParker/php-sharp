@@ -1,6 +1,7 @@
 <?php
 
-require __DIR__ . '/Defaults.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Defaults');
 
 use Defaults\Counter;
 

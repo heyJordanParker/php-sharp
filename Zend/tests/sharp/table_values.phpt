@@ -5,7 +5,8 @@ A Map or a Set is a value: every write through a holder copies a shared one firs
 use Sharp\Map;
 use Sharp\Set;
 
-require __DIR__ . '/Guarded.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Guarded');
 
 final class Holder
 {

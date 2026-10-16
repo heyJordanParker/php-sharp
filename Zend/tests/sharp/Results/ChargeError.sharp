@@ -1,0 +1,14 @@
+namespace Demo;
+
+public enum ChargeError : Error
+{
+    case Declined(string reason);
+    case Expired;
+
+    public string message => match (this) {
+        ChargeError.Declined(string reason) => `declined: ${reason}`,
+        ChargeError.Expired => "card expired",
+    };
+
+    public static string kind => "charge";
+}

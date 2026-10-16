@@ -1,0 +1,6 @@
+namespace App;
+
+public class Labeled<TLabel, T> : Maker<T>
+{
+    public Box<T> inner() => new Box<T>();
+}

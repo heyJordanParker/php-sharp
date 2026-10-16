@@ -249,7 +249,7 @@ public class Profile
 
 **A static field or property with storage needs an initial value, whatever its type.** No constructor sets it, so the error names that one fix.
 
-**A static's initial value runs once, when a request first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. A get-only static is set only by its initial value.
+**A static lives as long as the app runs, and its initial value runs once, when the app first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. Under php-fpm the app runs for one request. Under a long-running host, such as Octane or FrankenPHP's worker mode, each request sees what the last one left, as in C#, TypeScript and Rust. A host that runs several workers runs one app in each. A get-only static is set only by its initial value. A throw there reaches the code that first used the statics and runs nothing again. The static it left unset, and each after it whose initial value runs as code, throws an `Error` when it is read, or written with a compound assignment, `++` or `--`, until a write sets it, in a generic class too.
 
 **Plain PHP reaches a static with an accessor body, a computed body or an observer only through a method,** because PHP has no hooks on a static property. Reading or writing it directly from plain PHP is PHP's access error.
 
@@ -259,7 +259,7 @@ private static int hits = 0;                     // compiles
 private static int misses;                       // compile error: give misses an initial value
 public static string? region { get; set; } = null;   // compiles: starts as null
 public static string? zone { get; set; }         // compile error: give zone an initial value
-private static int started = global.time();      // compiles: runs once, when a request first uses the class's statics
+private static int started = global.time();      // compiles: runs once, when the app first uses the class's statics
 public static int limit { get; } = 10;           // compiles: get-only, set only by its initial value
 ```
 
@@ -355,7 +355,7 @@ public int count { get; didSet => this.touch(); } = 0;            // compile err
 `nameof(Order.total)` names a property. The reference is typed, and the checker rejects a misspelled or removed property wherever it is used. It sits beside `typeof(Order)` (section 25), as in C#'s `nameof`.
 
 <!-- example property-references: statements
-Query query = new Query();
+Query<Order> query = new Query<Order>();
 -->
 ```csharp
 query.orderBy(nameof(Order.total));   // compiles: a typed reference to Order's total property
@@ -742,26 +742,38 @@ Counter<User>.count;                                     // 0: Counter<User> has
 Counter.count;                                           // compile error: name the type argument, as in Counter<Order>.count
 ```
 
-A static member names its type arguments: `Counter<Order>.count`. A bare `Counter.count` names none and is a compile error.
+A static field names its type arguments: `Counter<Order>.count`. A bare `Counter.count` names none and is a compile error. A static method call fixes them as a generic method call does, below.
 
 **Writing type arguments:**
 
 - **`new` always names them:** `new PaginatedList<Order>(…)`, or names a class value that carries them, as in `new (pages)()` (section 25). `new Self(…)` names none, because `Self` is the class with its own type parameters.
 - **A type names them too:** `PaginatedList<Order> page`. `Class<PaginatedList>` is the one exception: a class type names the class itself.
-- **A generic method call fixes them** from the arguments it receives, or from the declared type its result goes into. A type argument that neither fixes is a compile error, as in C#'s error CS0411 and in Swift.
-- **A plain PHP generic class,** declared with PHPDoc's `@template`, takes type arguments in PHP# code, as in `Collection<Order>`. The checker checks them, but the object carries none while the code runs, as Java's erased generics do. So a type test against one, such as `x is Collection<Order>`, is a compile error that says the type argument is unknown while the code runs (section 21).
+- **A generic method call fixes them** from the arguments it receives, or from the declared type its result goes into. The declared type reaches the call through each arm of a `match`, through the result of a lambda written for a function type, and through the parameter of an outer generic call that the declared type fixed, as Swift and TypeScript infer nested calls. An argument fixes a type PHP# writes: `int` for `5`, `List<int>` for `[1, 2]` and the enum for its case, as C# and Kotlin have no literal types and TypeScript widens the literal it infers. A type argument that none of these fixes is a compile error, as in C#'s error CS0411 and in Swift.
+- **A static method call of a generic class fixes the class's type arguments the same way,** or names them on the class: `Holder<int> holder = Holder.of(5);` and `Holder<int>.of(5)` both compile, and a bare `Holder.of(5)` with no declared type is a compile error.
+- **A plain PHP generic class,** declared with PHPDoc's `@template`, names its type arguments in a PHP# type and after `new` too, as in `Collection<Order>` and `new Collection<Order>()`, as TypeScript and Kotlin require. A bare `Collection items` or `new Collection()` is a compile error that names the type parameters to write. A type parameter with a default may be left out. The checker checks the type arguments, but the object carries none while the code runs, as Java's erased generics do. So a type test tests the class alone: `x is Collection` compiles, and `x is Collection<Order>` is a compile error that says the type argument is unknown while the code runs (section 21).
+
+<!-- example plain-php-generic-types: members -->
+```csharp
+public void fill(Cell<float> cell) { }                  // compiles: the type names Cell's type argument
+public void clear(Cell cell) { }                        // compile error: Cell needs its type argument, as in Cell<float>
+public bool holds(Any value) => value is Cell;          // compiles: a type test tests a plain PHP class alone
+```
 
 <!-- example generic-method-inference: statements alone
+namespace App.Inference;
+import App.Order;
 Cache cache = new Cache();
 -->
 ```csharp
 public class Cache
 {
     public T get<T>(string key) { … }
+    public T keep<T>(T value) => value;
 }
 
-List<Order> orders = cache.get("orders");   // compiles: the declared type fixes T as List<Order>
-const orders = cache.get("orders");         // compile error: nothing fixes T; write cache.get<List<Order>>("orders")
+List<Order> orders = cache.get("orders");               // compiles: the declared type fixes T as List<Order>
+List<Order> kept = cache.keep(cache.get("orders"));     // compiles: keep's parameter takes List<Order>, which fixes get's T
+const orders = cache.get("orders");                     // compile error: nothing fixes T; write cache.get<List<Order>>("orders")
 ```
 
 **A generic object that plain PHP creates without type arguments** (`new PaginatedList($rows)`, or Laravel's container) has its bounds as its type arguments, as Java's raw types do, but checked where it enters PHP# instead of trusted. Under `PaginatedList<TItem : DatabaseEntity>`, a raw page is a `PaginatedList<DatabaseEntity>`. A parameter that needs `PaginatedList<Order>` throws `TypeError`. A method that takes any page is generic. PHP# code never creates a raw object, because a type argument it can't fix or infer is a compile error.
@@ -810,6 +822,7 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 - **The bound is written inline:** `<TItem : DatabaseEntity>`.
 - **Several bounds use `&`:** `<TItem : DatabaseEntity & Shareable>`.
 - **`Object` bounds a type parameter to any object,** `<TValue : Object>`, as C#'s `where T : class` and TypeScript's `T extends object` do. It is a bound alone.
+- **A bound may name another type parameter,** `<TPart : TItem>`, as C#'s `where TPart : TItem` and Java's and TypeScript's `<U extends T>` do. A `TPart` then goes wherever a `TItem` goes. It is a bound alone, as in Java, and a bound that leads back to its own type parameter, such as `<TItem : TItem>`, is a compile error, as in C#.
 - **A type parameter with no bound may hold `null`,** so it is bounded by `Any?`.
 - **A generic class can't implement PHP's `Serializable`,** and the error points to `__serialize` and `__unserialize`.
 - **A class value with type arguments can't be a `Map` key,** because `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` share the plain class name.
@@ -819,6 +832,9 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 public class PaginatedList<TItem : DatabaseEntity> { … }
 public PaginatedList<TItem> list<TItem : DatabaseEntity>(Query<TItem> query) { … }
 public TValue keep<TValue : Object>(TValue value) => value;
+public TItem either<TItem : DatabaseEntity, TPart : TItem>(TItem whole, TPart part) => part;   // compiles: a TPart goes where a TItem goes
+public void joined<TItem, TPart : TItem & Shareable>() { }                                      // compile error: a type parameter is a bound alone
+public void looped<TItem : TItem>() { }                                                         // compile error: the bound of TItem leads back to TItem
 ```
 
 **A class that implements or extends a generic type takes its type argument's type,** as in C#, Java, Kotlin, TypeScript and Rust: `OrderHandler : Handler<Order>` writes `handle(Order item)`. A call from plain PHP still checks `item` against `Order` under the caller's `strict_types`, as every typed parameter is checked, and reflection reports `Order` as its type:
@@ -1194,7 +1210,7 @@ lines.sortedBy(l => l.amount);
 - Methods that read return a new collection.
 - `first` throws `OutOfRangeException` when nothing matches, as a bare index read does.
 - A `sortedBy` key of type `T` or `T?` compiles exactly when `<` compiles on two non-null `T` values. The nullable part is allowed, and it sorts first.
-- A method that takes a function has that function's effects (section 29), so `lines.map(l => l.name)` is pure.
+- A method takes on the effects of each function it is given (section 29), so `lines.map(l => l.name)` is pure.
 - Methods that change a collection change it in place:
 
 <!-- example collection-write-methods: statements
@@ -2234,6 +2250,9 @@ A case with a value and a case with data in one enum is a compile error. Swift e
 
 - **Each case is its own type,** so a method can take `PaymentResult.Paid` alone.
 - **Two cases are `==`** when they are the same case and each field is `==`, as two structs are (section 19). A case with a field that has no `==` gives its enum no `==`.
+- **A not-backed enum may declare type parameters,** with bounds and without `in` or `out`, as `enum Lookup<T> { case Found(T value); case Missing; }`. A backed enum declares none.
+- **A case of a generic enum** is the type `Lookup<int>.Found`. A case takes its type arguments as a static method call does (section 11), so `Lookup<int> lookup = Lookup.Missing;` and `Lookup<int>.Missing` both compile. A pattern names the bare case, as in `lookup is Lookup.Found(int value)`, and takes the type arguments of the value it tests.
+- **A plain case of a generic enum is one object for each list of type arguments,** so `Lookup<int>.Missing` and `Lookup<string>.Missing` are two objects, as each list has its own static fields.
 - **At runtime,** each case is a real class, so Reflection sees it.
 - **The checker** rejects a `match` over the enum that misses a case.
 
@@ -2636,32 +2655,56 @@ page.designLabel;                                           // "design design", 
 
 - A default body sees only the interface's own members.
 - Every field is declared in the class that owns it. An interface holds no fields.
-- A computed property's default body runs on each read, so it takes no `static` and no `lazy`. An enum has no property, so an enum that implements an interface with one is a compile error.
+- A computed property's default body runs on each read, so it takes no `static` and no `lazy`. An enum declares no stored property; a computed property is allowed, static or not, and an enum takes an interface's computed default as a class does. Every enum already has `name`, and a backed enum `value`, so no computed property takes either name.
 - A PHP# interface with default bodies compiles to a PHP interface plus a PHP trait named `<Interface>\Defaults` that holds the default bodies, as Kotlin nests `DefaultImpls` in an interface. A plain PHP class that implements it must also `use` that trait to get the defaults. PHP# code never names the trait, so section 23's rule that a class cannot share its full name with a namespace does not apply to it.
 
 **A class has one method per name, whatever it inherits** (section 7). When two places give a class a body for the same method, the class writes the method itself, as Kotlin requires. The places are two interfaces' default bodies, a default body and a plain PHP trait, two header traits, or a default body and the base class. Until the class writes it, the class is a compile error that names both places. Inside its own methods, the class runs one interface's default body with `super<Interface>`:
 
 <!-- example one-body-per-method -->
 ```csharp
-// app/Tickets.sharp
+// app/ShowsLabel.sharp
 namespace App;
 
 public interface ShowsLabel
 {
     string label() => "label";
 }
+```
+
+<!-- example one-body-per-method -->
+```csharp
+// app/ShowsTitle.sharp
+namespace App;
 
 public interface ShowsTitle
 {
     string label() => "title";
 }
+```
+
+<!-- example one-body-per-method -->
+```csharp
+// app/Ticket.sharp
+namespace App;
 
 public class Ticket : ShowsLabel, ShowsTitle { }        // compile error: Ticket gets label from both ShowsLabel and ShowsTitle, so Ticket writes label
+```
+
+<!-- example one-body-per-method -->
+```csharp
+// app/Sticker.sharp
+namespace App;
 
 public class Sticker : ShowsLabel, ShowsTitle
 {
     public override string label() => super<ShowsLabel>.label() + "/" + super<ShowsTitle>.label();
 }
+```
+
+<!-- example one-body-per-method -->
+```csharp
+// app/Stray.sharp
+namespace App;
 
 public class Stray : ShowsTitle
 {
@@ -2687,16 +2730,34 @@ public interface Shows
 {
     string label() => "shows";
 }
+```
+
+<!-- example sub-interface-defaults -->
+```csharp
+// app/ShowsMore.sharp
+namespace App;
 
 public interface ShowsMore : Shows
 {
     override string label() => "more";             // compiles: replaces the default body of Shows
 }
+```
+
+<!-- example sub-interface-defaults -->
+```csharp
+// app/ShowsLess.sharp
+namespace App;
 
 public interface ShowsLess : Shows
 {
     string label() => "less";                     // compile error: replaces the default body of Shows, so it writes override
 }
+```
+
+<!-- example sub-interface-defaults -->
+```csharp
+// app/Fancy.sharp
+namespace App;
 
 public class Fancy : ShowsMore { }                // gets label from ShowsMore
 ```
@@ -2831,7 +2892,7 @@ public class Layout
 
 **The standard library lives under one root, `Sharp`,** with the standard library namespaces `Sharp.Text`, `Sharp.Math`, `Sharp.Json`, `Sharp.IO`, `Sharp.Time`, `Sharp.Net` and `Sharp.Data`, as .NET has `System.*` and Rust has `std::*`.
 
-**`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin:
+**`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin. `Error` is the one default name that nothing shadows (section 31):
 
 <!-- example own-namespace-shadows -->
 ```csharp
@@ -3507,7 +3568,7 @@ public static class Pairs
 
 A file's extension marks it as PHP#. The engine, Composer's autoloader, editors and the checker all choose the grammar from the filename.
 
-A PHP# file has no opening tag. Its first line is code:
+A PHP# file has no PHP tags, so `<?php`, `<?`, `<?=` and `?>` are compile errors. Its first line is code, after the byte order mark an editor may save:
 
 <!-- example file-header -->
 ```csharp
@@ -3518,7 +3579,7 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 
 The extension is **`.sharp`**, as in `StoreService.sharp`.
 
-**A `.sharp` file that declares a type declares one, named like the file,** as Java allows one public top-level class per file. Every type, events and interfaces included, sits at file level in the namespace its folder names (section 5), so a reader finds a type by its namespace and its file. A second type in a file is a compile error. An `extern` declaration file (section 29) and a `Module.sharp` file (section 32) hold no type, so the rule doesn't cover them:
+**A `.sharp` file that declares a type declares one, named like the file, case included,** as Java allows one public top-level class per file and names the file after it. Every type, events and interfaces included, sits at file level in the namespace its folder names (section 5), so a reader finds a type by its namespace and its file. A second type in a file is a compile error, and so is C#'s `partial`, because a class lives in one file. An `extern` declaration file (section 29) and a `Module.sharp` file (section 32) hold no type, so the rule doesn't cover them:
 
 <!-- example one-type-per-file -->
 ```csharp
@@ -3553,9 +3614,13 @@ public class Reports
         Log.warning(message, ["file": caller.file, "line": caller.line, "function": caller.function]);
     }
 
+    public static void logLine(string message, int line = Position.current().line) { }   // compile error: take the whole position
+
     public void run()
     {
         Reports.logSlow("slow query");                           // logs this call's own file and line, and "App.Reports.run"
+        const log = Reports.logSlow;
+        log("slow query");                                       // logs where logSlow declares caller, and "App.Reports.logSlow"
     }
 }
 
@@ -3565,6 +3630,10 @@ Log.info("charged", ["class": typeof(Order)]);                   // compiles: re
 
 - `Position.current()` in a body gives the position where it is written.
 - As a parameter's default, `Position.current()` gives the caller's position, as C++20's `std::source_location::current()` and Swift's `#file` defaults do.
+- A call through a function value gives the position of the parameter's declaration, because C++ and Swift fill the default only at a direct call too.
+- A call that spreads a list whose elements may be a `Position`, as a `List<Any>`, gives the position of the parameter's declaration too, because the list may fill the parameter. A spread of any other list gives the caller's position.
+- The parameter takes the whole position. A default that only uses it, as `int line = Position.current().line` or `int next = Position.current().line + 1`, is a compile error: write `Position caller = Position.current()`.
+
 **A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. A pragma, `mago.toml`'s `ignore` or the baseline can hide a warning, never an error.
 
 **`vendor/bin/mago compile` compiles the project.** It checks every `.sharp` file, vendor packages included. It also creates a missing `.lean` file beside a class that has a law (section 28.1), and never rewrites an existing one.
@@ -3926,7 +3995,7 @@ public class Stamp
 
 **Pure code** reaches no `foreign` object, emits no event, and calls no plain PHP unless an `extern` declares it pure. Pure limits only what code reaches outside the program, so a pure method may change its own object and its arguments. `readonly` after the parameters is what promises a method changes nothing, as in `T peek() readonly;`, and it holds every implementation to that (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code that changes nothing it was given, so a law that reaches a change is a compile error naming the method, and Lean cannot see inside `foreign` classes or plain PHP.
 
-**Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types. Every implementation is held to what the declaration allows:
+**Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types, except the function type of a method's parameter, which takes on what each call passes (below). Every implementation is held to what the declaration allows:
 
 <!-- example effectful-declarations: members -->
 ```csharp
@@ -4027,7 +4096,9 @@ public class StoreCheckout : Checkout
 }
 ```
 
-**A method that takes a function can have that function's effects.** Its declaration writes `uses f`, where `f` is one of its function-typed parameters, with or without a body. At each call, the method has its body's own effects plus the effects of the function passed as `f`. Code that calls it writes nothing.
+**A method takes on the effects of each function it is given.** A parameter whose function type states no effects, as `f` in `map(Function<TResult(T)> f)`, has at each call the effects of the function that call passes. The method has its body's own effects plus those, and nothing is written, as with Swift's `rethrows` and Kotlin's inline lambdas, and as a call to plain PHP takes on the effects of each lambda passed to it.
+
+**Such a parameter runs only inside the call,** as a Swift closure parameter does without `@escaping`. Storing it in a field, a collection or a new object, returning it, and capturing it in a lambda that escapes are compile errors that name the type to take instead. Calling it, and passing it on to another method's function parameter, are allowed. A local may hold it, and the local is held to the same rules.
 
 <!-- example function-effects: statements in Carts<T>
 List<Cart> carts = [new Cart()];
@@ -4035,20 +4106,25 @@ private PaymentGateway gateway = new StripeGateway();
 -->
 ```csharp
 // in the standard library's List<T>
-public List<TResult> map<TResult>(Function<TResult(T)> f) uses f;
-
-carts.map(c => c.total);                             // pure
-carts.map(c => this.gateway.charge(c));              // has Http
-
-// a method with a body: Http from this.gateway, plus the effects of prepare
-public Charge charge(Cart cart, Function<Cart(Cart)> prepare) uses prepare => this.gateway.charge(prepare(cart));
+public List<TResult> map<TResult>(Function<TResult(T)> f)                                   // map takes on the effects of the f it calls
+public Charge charge(Cart cart, Function<Cart(Cart)> prepare) => this.gateway.charge(prepare(cart));   // Http, plus prepare's effects
+public Holder keep(Function<string()> body) => new Holder(body);                            // compile error: body can't be stored; take a Function<string() uses Environment>
+carts.map(c => c.total);                                                                    // pure
+carts.map(c => this.gateway.charge(c));                                                     // has Http
 ```
 
-The standard library's collection methods (section 12) are declared this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
+```text
+`body` can't be stored in a new object: its type states no effects.
+Take a `Function<string() uses Environment>`, whose type states the effects it may have.
+```
+
+**A parameter whose function type states its effects keeps them as a cap.** `Function<Charge(Cart) uses Http>` accepts a function with `Http` or no effects, and the method has `Http` from calling it. Such a parameter may be stored, returned and captured, as any function value may.
+
+The standard library's collection methods (section 12) take on the effects of their functions this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
 
 **Plain PHP can run any function it is given,** as `global.array_map(f, list)` and `global.usort(list, f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => global.time()` to `global.call_user_func` has the effect `Clock`.
 
-**Code with a body writes no `uses` except `uses f`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function its `uses f` names, and its body and declaration show all four. The checker works out each method's effects, and its errors name them, as in "`Gauge.level` calls `Clock.now`, which has the effect `Clock`".
+**Code with a body writes no `uses`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function it is given, and its body and declaration show all four. The checker works out each method's effects, and its errors name them, as in "`Gauge.level` calls `Clock.now`, which has the effect `Clock`". A `uses` that names a function parameter, with or without a body, is a parse error that says to delete it.
 
 ## 30. Tuples
 
@@ -4089,22 +4165,33 @@ public enum Result<T, TError : Error>
     case Err(TError error);                       // Err beside the Error interface, as Rust's Result::Err sits beside its Error trait
 }
 
-public Result<Order, PaymentError> charge(Cart cart) { … return Result.Err(PaymentError.Declined(reason)); }
+public Result<Order, PaymentError> charge(Cart cart) => Result.Err(PaymentError.Declined("card expired"));
 ```
 
 `Result` is an ordinary enum with data from the standard library, so `match`, `is` and the exhaustive-case check work on it unchanged.
 
-**`try` passes a failure up to the caller.** If the call returns `Err`, the enclosing method returns that same `Err` immediately. Otherwise `try` gives the `Ok` value. Zig and Swift use `try` the same way.
+**A case of `Result` is the type `Result<Order, PaymentError>.Ok`.** `Result.Ok(…)` and `Result.Err(…)` take their type arguments from their arguments and from the declared type their result goes into, as `charge` above does. A type argument that neither fixes is written on the enum, as in `Result<int, PaymentError>.Ok(5)`. A pattern names the bare case, as in `Result.Ok(Order order)`, and takes the type arguments of the value it tests.
+
+**`try` passes a failure up to the caller.** If the call returns `Err`, the enclosing method returns an `Err` holding the same error immediately. Otherwise `try` gives the `Ok` value. Zig uses `try` the same way.
+
+- **The returned `Err` takes the type arguments of the enclosing method's `Result`,** and it is `==` to the `Err` it holds the error of. An operand whose error type doesn't fit the method's error type is a compile error that names both.
+- **`try` is a prefix operator with `!`'s precedence.** A member read and a call bind tighter, so `try this.gateway.charge(cart)` passes up the call's failure, and parentheses read a member of the `Ok` value.
+- **The operand is any `Result` expression,** and `try` stands anywhere an expression can, a lambda that returns a `Result` included. In a computed property whose type is a `Result`, `try` returns the failure from the property's getter.
 
 <!-- example try-propagation: members
 private CheckoutGateway gateway = new CheckoutGateway();
+private Cart cart = new Cart();
 -->
 ```csharp
 public Result<Receipt, PaymentError> checkout(Cart cart)
 {
-    const order = try gateway.charge(cart);      // Order, or return the failure here
+    const order = try this.gateway.charge(cart);      // Order, or return the failure here
     return Result.Ok(order.receipt());
 }
+
+public Result<int, PaymentError> total(Cart cart) => Result.Ok((try this.gateway.charge(cart)).total);   // a member of the Ok value
+
+public Result<int, PaymentError> cartTotal => Result.Ok((try this.gateway.charge(this.cart)).total);   // the getter returns the failure
 ```
 
 `try`/`catch` blocks remain for exceptions, which are now mostly limited to the edges, such as wrapping a plain PHP exception.
@@ -4132,7 +4219,10 @@ public enum PaymentError : Error
 }
 ```
 
-**Inside `.sharp` files, `Error` always means this interface.** PHP's global engine class `Error` is never named in PHP# code. Bugs are caught as `Throwable`, and engine subclasses such as `TypeError` keep their names.
+**Inside `.sharp` files, `Error` always means this interface,** whatever the file declares or imports. PHP's global engine class `Error` is never named in PHP# code.
+
+- **An import whose last part is `Error`, or that renames a class to `Error`, is a compile error,** so another library's `Error` is imported under a new name, as in `import Vendor.Payments.Error as PaymentsError;`.
+- **Bugs are caught as `Throwable`,** so `catch (Error failure)` is a compile error that names `Throwable`. Engine subclasses such as `TypeError` keep their names.
 
 ## 32. Modules
 
@@ -4170,6 +4260,49 @@ module
 - **A module also states the laws that span its classes** (section 28).
 
 **The host defines each lifetime, as ASP.NET Core's host does.** A `singleton` lives as long as the host runs the app. A `scoped` binding lives for one scope, which the host starts and ends, such as one HTTP request, one queued job or one console command run. A `transient` binding is created each time a class needs one.
+
+**A host starts and ends each scope with `Scope.run(body)`.** While `body` runs, each `scoped` service it builds lives until `body` returns or throws, and is then dropped. `Scope.run` returns what `body` returns, and has `body`'s effects (section 29). PHP's own request is the default scope, so php-fpm, the CLI and FrankenPHP outside worker mode need no call. A long-running host wraps each unit of work in it, such as an Octane request, a FrankenPHP worker request or a queued job, as ASP.NET Core's `CreateScope()` and Node's `AsyncLocalStorage.run` start one. Plain PHP calls it as `\Sharp\Scope::run(fn () => …)`.
+
+<!-- example host-scope -->
+```csharp
+// app/Jobs/Worker.sharp
+namespace App.Jobs;
+
+import Sharp.Scope;
+
+public class Worker
+{
+    public Worker(private JobQueue queue) { }
+
+    public void work()
+    {
+        for (const job of this.queue.pending())
+        {
+            Scope.run(() => job.handle());   // each job gets its own scoped services
+        }
+    }
+}
+```
+
+**A scope follows the fiber that runs in it,** as .NET's `AsyncLocal` and Node's `AsyncLocalStorage` flow into the work they start. A fiber started inside `Scope.run` belongs to that scope, and a `Scope.run` inside a fiber is that fiber's own, so code on another fiber never builds from it. A `scoped` service resolved after its scope ended throws `Sharp\ContainerError`, as .NET throws when code uses a disposed scope.
+
+<!-- example scope-fibers -->
+```php
+<?php
+// A plain PHP event loop, such as Revolt's, runs each request in a fiber of its own.
+function serve(\Sharp\Container $container): void
+{
+    $request = new Fiber(fn () => \Sharp\Scope::run(function () use ($container): void {
+        $first = $container->get('App\Mail\Mailer');           // the fiber's scope builds it
+        Fiber::suspend();
+        $again = $container->get('App\Mail\Mailer');           // the same object: the fiber still runs in its scope
+        echo $first === $again ? "one Mailer\n" : "two Mailers\n";
+    }));
+    $request->start();
+    $container->get('App\Mail\Mailer');                         // the request's own scope builds another
+    $request->resume();
+}
+```
 
 A binding's expression runs each time its lifetime needs a new service, so a choice made while the app runs is one expression:
 

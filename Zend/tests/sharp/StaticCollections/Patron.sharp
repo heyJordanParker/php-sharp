@@ -1,0 +1,6 @@
+namespace Demo;
+
+class Patron
+{
+    public static int count() => Archive.shown.count();
+}

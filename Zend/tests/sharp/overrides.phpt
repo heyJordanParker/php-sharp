@@ -3,7 +3,8 @@ PHP# properties open with virtual and abstract, an override is a property, a pro
 --FILE--
 <?php
 require __DIR__ . '/harness/Model.inc';
-require __DIR__ . '/Overrides.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Overrides');
 
 $square = new Overrides\Square();
 echo $square->describe(), "\n";
