@@ -49,19 +49,21 @@ jobs:
     permissions:
       contents: read
       packages: read
-    # sharp/docker/run builds the image FROM this copy, which base-images.yml makes of the public
-    # registry's image, so the pull never meets an anonymous quota.
+    # sharp/docker/run builds the image FROM these copies, which base-images.yml makes of the public
+    # registry's images, so the pulls never meet an anonymous quota.
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
     steps:
       - name: git checkout
         uses: actions/checkout@v6
-      - name: Pull the base image from ghcr.io
+      - name: Pull the base images from ghcr.io
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
           docker pull "$BASE_IMAGE"
+          docker pull "$GOLANG_IMAGE"
       - name: Keep local sources out of Cargo.lock
         run: |
           if git grep -nE '(path|git)\+file://' -- '*Cargo.lock'; then
@@ -135,18 +137,20 @@ jobs:
     permissions:
       contents: read
       packages: read
-    # sharp/docker/run builds the image FROM base-images.yml's copy, as LINUX does.
+    # sharp/docker/run builds the image FROM base-images.yml's copies, as LINUX does.
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
     steps:
       - name: git checkout
         uses: actions/checkout@v6
-      - name: Pull the base image from ghcr.io
+      - name: Pull the base images from ghcr.io
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
           docker pull "$BASE_IMAGE"
+          docker pull "$GOLANG_IMAGE"
       - name: Rust cache
         uses: actions/cache@v5
         with:
@@ -184,18 +188,20 @@ jobs:
     permissions:
       contents: read
       packages: read
-    # sharp/docker/run builds the image FROM base-images.yml's copy, as LINUX does.
+    # sharp/docker/run builds the image FROM base-images.yml's copies, as LINUX does.
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
     steps:
       - name: git checkout
         uses: actions/checkout@v6
-      - name: Pull the base image from ghcr.io
+      - name: Pull the base images from ghcr.io
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
           docker pull "$BASE_IMAGE"
+          docker pull "$GOLANG_IMAGE"
       - name: Go module cache
         uses: actions/cache@v5
         with:
@@ -329,8 +335,12 @@ jobs:
         include:
           - file: sharp/docker/runtime/Dockerfile
             flavor: latest=false
+            build-args: BASE_IMAGE=ghcr.io/heyjordanparker/debian:trixie-slim
           - file: sharp/docker/runtime/frankenphp.Dockerfile
             flavor: latest=false,suffix=-frankenphp
+            build-args: |
+              BASE_IMAGE=ghcr.io/heyjordanparker/debian:trixie-slim
+              GOLANG_IMAGE=ghcr.io/heyjordanparker/golang:1.27-trixie
     uses: docker/github-builder/.github/workflows/build.yml@58cb9f5b71b1836d6f690c1e95effdeb9b98cb8a # v1.17.0
     permissions:
       contents: read
@@ -340,7 +350,7 @@ jobs:
       output: image
       push: true
       file: ${{ matrix.file }}
-      build-args: BASE_IMAGE=ghcr.io/heyjordanparker/debian:trixie-slim
+      build-args: ${{ matrix.build-args }}
       platforms: linux/amd64,linux/arm64
       meta-images: ghcr.io/heyjordanparker/php-sharp
       meta-tags: type=semver,pattern={{version}}

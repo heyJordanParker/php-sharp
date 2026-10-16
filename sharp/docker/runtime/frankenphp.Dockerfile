@@ -6,6 +6,7 @@
 #
 
 ARG BASE_IMAGE=public.ecr.aws/docker/library/debian:trixie-slim
+ARG GOLANG_IMAGE=public.ecr.aws/docker/library/golang:1.27-trixie
 FROM ${BASE_IMAGE} AS source
 
 RUN set -eux; \
@@ -240,7 +241,7 @@ FROM scratch AS frankenphp-source
 
 ADD https://github.com/php/frankenphp.git#v1.13.0 /
 
-FROM public.ecr.aws/docker/library/golang:1.27-trixie AS golang-base
+FROM ${GOLANG_IMAGE} AS golang-base
 
 #
 # FrankenPHP v1.13.0's Dockerfile, with e-dant/watcher and install-php-extensions at fixed releases.

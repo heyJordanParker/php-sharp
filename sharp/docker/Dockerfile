@@ -1,6 +1,7 @@
 ARG BASE_IMAGE=public.ecr.aws/docker/library/debian:trixie
+ARG GOLANG_IMAGE=public.ecr.aws/docker/library/golang:1.27-trixie
 
-FROM public.ecr.aws/docker/library/golang:1.27-trixie AS golang
+FROM ${GOLANG_IMAGE} AS golang
 
 FROM ${BASE_IMAGE}
 
