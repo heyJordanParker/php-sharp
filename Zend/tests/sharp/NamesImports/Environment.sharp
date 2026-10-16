@@ -1,0 +1,6 @@
+namespace Imports;
+
+public class Environment
+{
+    public static string stage() => "production";
+}
