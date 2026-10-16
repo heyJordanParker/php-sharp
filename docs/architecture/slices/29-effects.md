@@ -38,6 +38,8 @@ The Slice builds all of section 29 in one php-sharp PR, after #136 merges and af
    - `Random\Randomizer` to `Random`
 5. **Line 3871 is the code `foreign-outside-module`,** reported by `expression/instantiation.rs` for a `new` of a `foreign` class in a `.sharp` file, except inside a module binding's expression, which `statement/module.rs` marks. A test module is a module, so a fake still works. Question 2 must be answered first, because `environment`'s run line breaks this rule.
 6. **The collection methods take `uses f` from #136's mechanism (line 3993).** Their effects already hold: `carts.map(c => this.gateway.charge(c))` is refused naming `Http`, and `this.carts.map(c => c.orders.count())` fits a pure method. But `prelude_stub_call` in `effects/summary.rs` does that through a second path, beside #136's `uses_arguments`. The scanner will flag each `\Closure` parameter of a `Sharp\ListMethods`, `MapMethods`, `SetMethods` and `IterableMethods` stub `USES_PARAMETER`, as #136 flags `uses f`. `prelude_stub_call` then keeps only its change of the receiver.
+
+   Built on #136 as it landed, where `uses f` became `TAKES_ON_EFFECTS`: a function parameter whose type states no effects. `runs_inside_collection_method` in `scanner/function_like.rs` sets that flag on each `\Closure` parameter of the four stubs, so `passed_functions` takes on what a collection method is given, as it does for a PHP# method. `prelude_stub_call` keeps only its change of the receiver, and `callbacks` runs only for plain PHP. `function-effects` passes.
 7. **No editor in this PR (line 3997).** An editor package is its own feature, outside v1. Agents read effects in the checker's messages. Line 3997 changes to say the checker reports a method's effects in its errors, and section 28's line 3686 changes the same way. No language-server dependency is added.
 8. **Four messages change, each gated to `.sharp` files:**
    - Line 3759: a bare call of a function an effect class replaces names the member on the object a constructor takes, as `29-effect-classes.md` writes it: "write `clock.now()` on the `Clock` your constructor takes". `REPLACEMENTS` in `expression/call/function_call.rs` gains one row per mapped function, and `member_form` writes an instance member that way.
@@ -266,7 +268,7 @@ sharp/mago/
 │   │                                        instance member on the constructor's object; WRAPPED_CLASSES
 │   ├── code.rs                         <- ForeignOutsideModule, WrappedClass
 │   └── tests/sharp.rs                  <- one test per rule below
-├── crates/codex/src/scanner/function_like.rs  <- USES_PARAMETER on the collection stubs' \Closure parameters
+├── crates/codex/src/scanner/function_like.rs  <- TAKES_ON_EFFECTS on the collection stubs' \Closure parameters
 ├── crates/semantics/src/internal/checker/sharp.rs  <- report_superglobal names Environment for _ENV and argv
 ├── crates/semantics/tests/sharp.rs     <- the superglobal rows
 └── crates/sharp-lean/src/translate/body.rs  <- decision 9: a List, a lambda, map, filter and count in Lean
@@ -302,7 +304,7 @@ Each rule gets one test, with each form as a row, watched failing before its cod
   - line 3741: a chain, a local, a field, a `static` return, a facade through `__callStatic`, and an `extern` on the returned class that wins
   - line 3759: each replaced function's message, and each `wrapped-class` row, with the standard library exempt
   - line 3871: `new` of a `foreign` class in a method, a property's initial value and a lambda, against a module binding and a test module
-  - line 3993: a collection method with an effectful lambda, a method value and a function value, through `uses_arguments`
+  - line 3993: a collection method with an effectful lambda, a method value and a function value, through `passed_functions`
   - the four messages of decision 8
   - line 3741's class returned by two declared calls with different effects, which takes both
   - decision 10: pure code throws `new ValueError("empty")`
