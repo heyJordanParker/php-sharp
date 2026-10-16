@@ -2640,7 +2640,7 @@ page.designLabel;                                           // "design design", 
 
 - A default body sees only the interface's own members.
 - Every field is declared in the class that owns it. An interface holds no fields.
-- A computed property's default body runs on each read, so it takes no `static` and no `lazy`. An enum declares no stored property; a computed property is allowed.
+- A computed property's default body runs on each read, so it takes no `static` and no `lazy`. An enum declares no stored property; a computed property is allowed, static or not, and an enum takes an interface's computed default as a class does. Every enum already has `name`, and a backed enum `value`, so no computed property takes either name.
 - A PHP# interface with default bodies compiles to a PHP interface plus a PHP trait named `<Interface>\Defaults` that holds the default bodies, as Kotlin nests `DefaultImpls` in an interface. A plain PHP class that implements it must also `use` that trait to get the defaults. PHP# code never names the trait, so section 23's rule that a class cannot share its full name with a namespace does not apply to it.
 
 **A class has one method per name, whatever it inherits** (section 7). When two places give a class a body for the same method, the class writes the method itself, as Kotlin requires. The places are two interfaces' default bodies, a default body and a plain PHP trait, two header traits, or a default body and the base class. Until the class writes it, the class is a compile error that names both places. Inside its own methods, the class runs one interface's default body with `super<Interface>`:
@@ -4050,10 +4050,11 @@ public Result<Order, PaymentError> charge(Cart cart) => Result.Err(PaymentError.
 
 - **The returned `Err` takes the type arguments of the enclosing method's `Result`,** and it is `==` to the `Err` it holds the error of. An operand whose error type doesn't fit the method's error type is a compile error that names both.
 - **`try` is a prefix operator with `!`'s precedence.** A member read and a call bind tighter, so `try this.gateway.charge(cart)` passes up the call's failure, and parentheses read a member of the `Ok` value.
-- **The operand is any `Result` expression,** and `try` stands anywhere an expression can, a lambda that returns a `Result` included.
+- **The operand is any `Result` expression,** and `try` stands anywhere an expression can, a lambda that returns a `Result` included. In a computed property whose type is a `Result`, `try` returns the failure from the property's getter.
 
 <!-- example try-propagation: members
 private CheckoutGateway gateway = new CheckoutGateway();
+private Cart cart = new Cart();
 -->
 ```csharp
 public Result<Receipt, PaymentError> checkout(Cart cart)
@@ -4063,6 +4064,8 @@ public Result<Receipt, PaymentError> checkout(Cart cart)
 }
 
 public Result<int, PaymentError> total(Cart cart) => Result.Ok((try this.gateway.charge(cart)).total);   // a member of the Ok value
+
+public Result<int, PaymentError> cartTotal => Result.Ok((try this.gateway.charge(this.cart)).total);   // the getter returns the failure
 ```
 
 `try`/`catch` blocks remain for exceptions, which are now mostly limited to the edges, such as wrapping a plain PHP exception.

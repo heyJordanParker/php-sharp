@@ -52,3 +52,25 @@ string(34) "Sharp\Result\Ok<Any?, Sharp.Error>"
 string(25) "Demo\Lookup\Missing<Any?>"
 string(16) "Demo\ChargeError"
 bool(true)
+string(38) "Sharp\Result\Ok<int, Demo.ChargeError>"
+string(39) "Sharp\Result\Err<int, Demo.ChargeError>"
+string(22) "Demo\Lookup\Found<int>"
+string(24) "Demo\Lookup\Missing<int>"
+int(4)
+int(0)
+int(-1)
+array(2) {
+  [0]=>
+  int(6)
+  [1]=>
+  string(39) "Sharp\Result\Err<int, Demo.ChargeError>"
+}
+string(7) "total 3"
+string(42) "Sharp\Result\Err<string, Demo.ChargeError>"
+int(4)
+string(39) "Sharp\Result\Err<int, Demo.ChargeError>"
+int(5)
+string(39) "Sharp\Result\Err<int, Demo.ChargeError>"
+string(19) "charge calm first 1"
+string(34) "label calm, label big, label boxed"
+string(9) "label big"

@@ -2,6 +2,7 @@
 
 use Demo\ChargeError;
 use Demo\Gateway;
+use Demo\Kind;
 use Demo\Lookup;
 
 /** The class of `$value` with the type arguments it carries, as `Sharp\Result\Ok<int, Demo.ChargeError>`. */
@@ -51,5 +52,33 @@ function results(): array
         typed(Lookup\Missing::instance()),
         (new ReflectionClass(ChargeError\Expired::class))->getParentClass()->getName(),
         ChargeError\Expired::instance() instanceof Sharp\Error,
+        // A case call in a `match` arm takes the declared type the `match` goes into.
+        typed($gateway->arm(1)),
+        typed($gateway->arm(2)),
+        typed($gateway->lookupArm(1)),
+        typed($gateway->lookupArm(2)),
+        // A case pattern in a field takes the type arguments of the field's type.
+        $gateway->nested($gateway->wrapped(4)),
+        $gateway->nested($gateway->wrapped(0)),
+        $gateway->nested($gateway->expired()),
+        // `try` in a computed property returns the failure from its getter.
+        (static function () use ($gateway): array {
+            $gateway->amount = 6;
+            $paid = $gateway->charged->value;
+            $gateway->amount = 0;
+
+            return [$paid, typed($gateway->charged)];
+        })(),
+        // `try` in a template, a `catch` and a `finally`.
+        $gateway->templated(3)->value,
+        typed($gateway->templated(0)),
+        $gateway->caught(4)->value,
+        typed($gateway->caught(0)),
+        $gateway->finished(5)->value,
+        typed($gateway->finished(0)),
+        // A static computed property, and an interface's computed default, on each kind of enum.
+        $gateway->statics(),
+        $gateway->labels(),
+        Kind::Big->label,
     ];
 }
