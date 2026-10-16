@@ -116,7 +116,7 @@ In a `.sharp` file, `Statement::Use` in `crates/analyzer/src/statement/mod.rs` c
 
 `report_full_name` in `expression/access/mod.rs` handles member chains. Its root may be a constant read, a name, or the class of a `new` without arguments. An imported root starts from its imported name, so `Pdf.Document.blank()` after `import Vendor.Pdf;` names `import Vendor.Pdf.Document;`. A root the file doesn't import starts from the name as written, then from the file's namespace, so `Shop.Order.make()` and `new Shop.Order()` inside `App` name `import App.Shop.Order;`. A function or constant read through a namespace written in two or more parts is refused with "add `import Vendor.Pdf;` and write `Pdf.render`". `check_extern` refuses an `extern` target of three or more parts.
 
-A refused full name reports nothing more. A call or a member read through it has the error type, and so has a pattern's variable after `is` or a `match` arm tests it. A `catch` of it catches every `Throwable`, so the `try` reports no uncaught exception. A PHP# `instanceof` of no class narrows to the error type in `expression/binary/mod.rs`, so `App.Shop.Order order => order.total` is one error.
+A refused full name reports nothing more. A call or a member read through it has the error type, and so has a pattern's variable after `is` or a `match` arm tests it, and so has `typeof` of it, in `class_value` in `expression/type_of.rs`. A plain PHP file's `Missing::class` keeps its issues. A `catch` of it catches every `Throwable`, so the `try` reports no uncaught exception. A PHP# `instanceof` of no class narrows to the error type in `expression/binary/mod.rs`, so `App.Shop.Order order => order.total` is one error.
 
 The parser reads a dotted name where it stopped: a type of any length (`peek_dotted_name` in `type_hint.rs`), a local's type at a statement's head (`is_at_dotted_typed_local`), the class before a member in `nameof`, an attribute's name, an `extern` target, a `match` or `is` type pattern of three or more parts (`is_at_dotted_type_pattern` in `pattern.rs`; two parts stay a case value, as `Status.Open`), and an `on` clause's events. `Identifier::Dotted` already exists. `On.events` holds `Identifier`s in place of `LocalIdentifier`s, so a dotted event is a name, and the analyzer refuses it before the bridge sees it.
 
@@ -191,7 +191,7 @@ sharp/mago/
     │   ├── resolver/class_name.rs                     full class names, miscased keywords, not imported (G2, G4, G8)
     │   ├── expression/access/mod.rs, call/mod.rs,
     │   │   instantiation.rs, call/function_call.rs    member chains, `new` and bare calls (G2, G4)
-    │   ├── expression/binary/mod.rs                   a test of no class narrows to the error type (G4)
+    │   ├── expression/binary/mod.rs, type_of.rs       a test or `typeof` of no class has the error type (G4)
     │   ├── statement/function_like/mod.rs, try.rs,
     │   │   attributes/mod.rs, resolver/method.rs,
     │   │   class_like/enum_case.rs, listener.rs       a missing class names its import (G4, G8)
