@@ -100,7 +100,8 @@ Three findings shape the work more than the code does:
 7. **A `global.` call of a function the library replaces is refused with its bare call's message** (Jordan answer 3). `analyze_namespace_function_call` reports it for a `Members` or `CollectionMethod` row whose member the codebase declares, in a `.sharp` file outside the standard library, so `global.trim(name)` reads "`trim` is wrapped by the standard library: write `name.trim()`." The standard library keeps calling `global.trim`, because its members are made of those calls. A `Syntax` row is replaced by PHP# syntax, not by the library, and keeps its `global.` form: section 6 line 218 writes `global.strval(1)`. The effect-class rows join when #151 lands, through the same check. Every `.sharp` fixture and test source that calls a replaced function through `global.` moves to the member, and section 29 line 4064 names `global.usort` and `global.call_user_func` in place of `global.array_map`.
 
 8. **What decision 7 took away comes back** (team-lead, Queue 2):
-   - **`count` on a value that may be a `List` or a `Map`** compiles and runs, as `let held = listed ? sizes : stock; held.count();` does. A `List`'s `count` is PHP's `\count`, which counts a `Map` and a `Set` too. Every other collection method on such a value keeps its refusal.
+   - **Every method a `List` shares with a `Map` or a `Set` runs on a value that may be either** (team-lead, Queue 3), as `let held = listed ? names : stock; held.remove("tea");` does. A `List`'s `count` is PHP's `\count`, which counts a `Map` and a `Set` too. `remove`, `contains` and `clear` test the value: `(\is_array($held) ? <the List's PHP> : $held->remove("tea"))`. Every other shared method already ran on the collection the value holds. The "not supported by the engine yet" refusal is gone. A value that may also be an object is refused as `invalid-method-access`, "`List<int>|Box` may be a collection or an object, and `count` runs a different method on each."
+   - **A declared `List<int>|Map<string, int>` stays refused,** "`List<int>` and `Map<string, int>` both run as a PHP array, so a union can't hold both.", which `a_union_of_two_collections_or_two_function_types_is_a_type_written_twice` and `a_union_refuses_only_members_the_engine_cannot_tell_apart` pin. It goes to Jordan as a question.
    - **`count` on an empty value with no collection type,** an empty literal the semantic checks refuse or an emptied plain PHP array property, is a `List`'s `count`, typed `int`.
    - **A method call on an unchecked `Any` is refused once:** `mixed-method-access` only, its result refused, so a return or an operator that uses it reports nothing more.
    - **A `List<int>` has `max()` and `min()`,** declared in `Sharp\Internal\ListMethods` beside `sumOf` with `@where T is int`, and lowered as `last()` is: `($list === [] ? throw new \OutOfRangeException("The list is empty.") : \max($list))`. A list of another element type reads "`max` needs elements of type `int`, and this is a `List<string>`." `Tally.sharp` writes `Pager.sizes().max()`.
@@ -225,13 +226,14 @@ sharp/
 └── mago/
     ├── crates/analyzer/
     │   ├── src/expression/call/function_call.rs                 REPLACEMENTS rows; Replacement::CollectionMethod; the global. refusal (decisions 2, 3, 7, 8)
-    │   ├── src/expression/call/method_call.rs                   count on several collections; a call on an Any refused once (decision 8)
+    │   ├── src/expression/call/method_call.rs                   no refusal on several collections; the object one in PHP# words; a call on an Any refused once (decision 8)
     │   ├── src/expression/mod.rs                                a list pattern's own count call stays unreported
     │   ├── src/resolver/method.rs                               count on an empty value; the PHP# words of a @where refusal (decision 8)
     │   └── tests/sharp.rs                                       a row per new REPLACEMENTS row, the global. test, the decision 8 tests, sources moved to members
     ├── crates/names/src/lib.rs                                  INLINED_COLLECTION_METHODS gains List max and min (decision 8)
     ├── crates/prelude/assets/extensions/sharp.php               ListMethods max() and min() (decision 8)
-    ├── crates/sharp-bridge/src/lower.rs                         max and min lowered as last is (decision 8)
+    ├── crates/sharp-bridge/src/lower.rs                         max and min lowered as last is; a shared List method tests for the List (decision 8)
+    ├── crates/sharp-bridge/src/lower/types.rs                   list_method_on_several_collections (decision 8)
     ├── crates/semantics/tests/fixtures/slice/                   Report.sharp and Suit.sharp moved to members (decision 7)
     ├── crates/sharp-bridge/tests/lower.rs                       sources moved to members (decision 7); max and min (decision 8)
     └── tests/sharp.rs                                           @global.strtoupper in place of @global.trim (decision 7)
@@ -240,7 +242,7 @@ Zend/tests/sharp/
 ├── library_math.phpt                                            the max and min rows
 ├── library_math.inc                                             new: the preload script
 ├── library_math_preload.phpt                                    new: the same rows, preloaded
-├── CollectionMethods/Pantry.sharp, collection_methods*.{inc,phpt}  max, min, and count on a List or a Map (decision 8)
+├── CollectionMethods/Pantry.sharp, collection_methods*.{inc,phpt}  max, min, and count, remove, contains and clear on a List or another collection (decision 8)
 └── every fixture that called a replaced function through global., its PHP twin and its driver (decision 7)
 ```
 

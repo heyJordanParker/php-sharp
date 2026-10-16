@@ -295,8 +295,10 @@ array(1) {
   [0]=>
   int(7)
 }
+string(13) "true 1 true 0"
+string(14) "true 1 false 0"
 NULL
 DivisionByZeroError: Modulo by zero in Pantry.sharp on line 78
 NULL
-Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 118
-ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 119
+Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 123
+ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 124

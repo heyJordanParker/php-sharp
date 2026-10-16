@@ -176,6 +176,16 @@ class Pantry
         return held.count();
     }
 
+    public static string shared(bool listed, List<string> names, Map<string, int> stock, Set<string> tags)
+    {
+        let held = listed ? names : stock;
+        let kept = listed ? names : tags;
+        const removed = held.remove("tea");
+        const found = kept.contains("pie");
+        kept.clear();
+        return `${removed} ${held.count()} ${found} ${kept.count()}`;
+    }
+
     public static int? position(List<int> sizes, int size)
     {
         return sizes.indexOf(size);

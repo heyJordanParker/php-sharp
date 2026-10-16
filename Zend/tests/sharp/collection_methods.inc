@@ -100,6 +100,11 @@ namespace {
 
     echo $output;
 
+    // remove, contains and clear on a value that may be a List or another collection run the List's or the
+    // collection's own. They run once, after the rounds, so the objects they make leave the numbers above as they are.
+    attempt(fn () => Demo\Pantry::shared(true, ['tea', 'pie'], ['tea' => 1, 'pie' => 2], ['cake']));
+    attempt(fn () => Demo\Pantry::shared(false, ['tea', 'pie'], ['tea' => 1, 'pie' => 2], ['cake']));
+
     // A collection kept for reuse lets go of the object whose property it changed when its call returns.
     $basket = new Lib\Basket();
     Demo\Pantry::fill($basket, 5);
