@@ -195,6 +195,58 @@ public class Repository
     }
 
     public static List<int> orderWrittenThrough(Order order) => Repository.writtenThrough<Order>(order);
+
+    // Each row reads `Tally<T>`'s statics, whose initial values run when code first uses them.
+    public static List<string> tallied<T : DatabaseEntity>()
+    {
+        List<string> seen = [Tally<T>.made, Tally<T>.label, global.sprintf("next %d", Tally<T>.next)];
+        Tally<T>.doubled = 5;
+        Tally<T>.doubled += 1;
+        Tally<T>.watched = 3;
+        Tally<T>.watched++;
+        seen.add(global.sprintf("%d %d %d", Tally<T>.doubled, Tally<T>.watched, Tally<T>.count));
+        seen.add(Tally<T>.once);
+        seen.add(Tally<T>.label);
+        return seen;
+    }
+
+    public static List<string> orderTallied() => Repository.tallied<Order>();
+
+    public static List<string> sharedTallied() => Repository.tallied<SharedOrder>();
+
+    // `Tallies : Tally<Order>` and a class value of `Tally<SharedOrder>` reach the statics of their type arguments.
+    public static List<string> talliedThrough()
+    {
+        Tallies.doubled = 50;
+        const type = typeof(Tally<SharedOrder>);
+        return [global.sprintf("%d %d", Tally<Order>.doubled, Tallies.watched), type.label, global.sprintf("%d", type.doubled)];
+    }
+
+    public static int fragile() => Fragile<Order>.count;
+
+    // Each use of a static that `Fragile<Order>`'s throw left unset, by its number.
+    public static int fragileUse(int use) => match (use) {
+        0 => Fragile<Order>.brokenRead(),
+        1 => Fragile<Order>.afterRead(),
+        2 => Fragile<Order>.brokenAdded(),
+        3 => Fragile<Order>.brokenStepped(),
+        4 => Fragile<Order>.watchedRead(),
+        5 => Fragile<Order>.watchedAdded(),
+        6 => Fragile<Order>.brokenSet(),
+        default => Fragile<Order>.watchedSet(),
+    };
+
+    // A generic subclass's header reaches the statics of the type arguments the access gives it, and a type parameter
+    // reaches its bound's.
+    public static List<int> reachedThrough()
+    {
+        Counter<List<Shelf>>.count = 6;
+        Wrapped<Shelf>.count += 1;
+        Counter<Order>.count = 11;
+        return [Wrapped<Shelf>.count, Counter<List<Shelf>>.count, Repository.counted<Orders>(), Repository.counted<Counter<Order>>()];
+    }
+
+    public static int counted<TCounter : Counter<Order>>() => TCounter.count;
 }
 
 public class Counter<TItem>
@@ -218,8 +270,115 @@ public class Counter<TItem>
     public static int own() => Counter<TItem>.count;
 }
 
+public class Wrapped<TX> : Counter<List<TX>>
+{
+}
+
 public class Orders : Counter<Order>
 {
+}
+
+// Each type argument's statics run their initial values that run as code once, on that type argument's first use, and
+// have their own accessors' storage and `static lazy` value.
+public class Tally<T : DatabaseEntity>
+{
+    public static int count { get; set; } = 0;
+
+    public static string made { get; } = Runs.ran(global.sprintf("made %s", typeof(T)));
+
+    public static string label => global.sprintf("label %s %d", typeof(T), Tally<T>.count);
+
+    public static int doubled { get => field * 2; set => field = value; } = 1;
+
+    // An initial value that reads another static runs as code, after the statics it reads.
+    public static int next { get; } = Tally<T>.doubled + 1;
+
+    public static int watched { get; set; didSet => Tally<T>.count += 1; } = 0;
+
+    public static lazy string once => Runs.ran(global.sprintf("once %s", typeof(T)));
+
+    public static int bump()
+    {
+        Tally<T>.count += 10;
+        return Tally<T>.count;
+    }
+}
+
+public class Tallies : Tally<Order>
+{
+}
+
+// A throw from an initial value leaves the type argument's other statics as they are, and nothing runs again. The
+// static it leaves unset, and each after it whose initial value runs as code, throws PHP's error on a read, a compound
+// assignment and `++`, and a write sets it, as in a class that isn't generic.
+public class Fragile<T>
+{
+    public static int count { get; } = 3;
+
+    private static int broken = Runs.fail("broken");
+
+    private static int after = Fragile<T>.count + 1;
+
+    private static int watched { get; set => field = value * 2; } = Fragile<T>.count + 2;
+
+    public static int brokenRead() => Fragile<T>.broken;
+
+    public static int afterRead() => Fragile<T>.after;
+
+    public static int brokenAdded()
+    {
+        Fragile<T>.broken += 1;
+        return Fragile<T>.broken;
+    }
+
+    public static int brokenStepped()
+    {
+        Fragile<T>.broken++;
+        return Fragile<T>.broken;
+    }
+
+    public static int watchedRead() => Fragile<T>.watched;
+
+    public static int watchedAdded()
+    {
+        Fragile<T>.watched += 1;
+        return Fragile<T>.watched;
+    }
+
+    public static int brokenSet()
+    {
+        Fragile<T>.broken = 5;
+        return Fragile<T>.broken;
+    }
+
+    public static int watchedSet()
+    {
+        Fragile<T>.watched = 6;
+        return Fragile<T>.watched;
+    }
+}
+
+public class Runs
+{
+    private static List<string> log = [];
+
+    public static int first { get; } = 1;
+
+    public static int second { get; } = Runs.first + 1;
+
+    public static string ran(string what)
+    {
+        Runs.log.add(what);
+        return what;
+    }
+
+    public static int fail(string what)
+    {
+        Runs.log.add(what);
+        throw new RuntimeException(what);
+    }
+
+    public static List<string> logged() => Runs.log;
 }
 
 public class Failure<T> : RuntimeException
