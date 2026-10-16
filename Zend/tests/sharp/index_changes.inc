@@ -25,13 +25,46 @@ for ($round = 0; $round < 100; $round++) {
     // A clear writes the element back through the property's set hook.
     $grid = new Demo\Grid();
     attempt(fn () => [$grid->emptied(), $grid->writes]);
-    // After ?., a change reaches the element the list stores, and a null element or a missing index
-    // skips the call, on a local, a property and a property's set hook, whichever path the method takes.
+    // After ?., a change reaches the element the list stores, and a null element skips the call, on a
+    // local, a property and a property's set hook, whichever path the method takes.
     attempt(fn () => Demo\Grid::skipped([[1], null]));
     $grid = new Demo\Grid();
     attempt(fn () => $grid->spareSkipped());
     attempt(fn () => [$grid->linesSkipped(), $grid->writes]);
-    attempt(fn () => Demo\Grid::otherSkips([[1]], [['a' => 1]], [[1 => 1]]));
+    attempt(fn () => Demo\Grid::otherSkips([null], [null], [null]));
+    // The index before ?. is a bare read, so a missing index throws, whatever the method, and on a
+    // property and a property's set hook, which never runs.
+    attempt(fn () => Demo\Grid::pastAdd([[1]]));
+    attempt(fn () => Demo\Grid::pastClear([[1]]));
+    attempt(fn () => Demo\Grid::pastRemove([[1]]));
+    attempt(fn () => Demo\Grid::pastCount([[1]]));
+    attempt(fn () => Demo\Grid::pastContains([[1]]));
+    attempt(fn () => Demo\Grid::pastEntries([[1]]));
+    $grid = new Demo\Grid();
+    attempt(fn () => $grid->spareMissing());
+    attempt(function () use ($grid) { $grid->linesMissing(); });
+    attempt(fn () => $grid->writes);
+    // is, as and match read a List index bare too: a null element fails the test, and a missing index throws.
+    attempt(fn () => [Demo\Grid::tested([3, null], 0), Demo\Grid::tested([3, null], 1)]);
+    attempt(fn () => Demo\Grid::tested([3], 9));
+    attempt(fn () => [Demo\Grid::cast([3, null], 0), Demo\Grid::cast([3, null], 1)]);
+    attempt(fn () => Demo\Grid::cast([3], 9));
+    attempt(fn () => [Demo\Grid::matched([3, null], 0), Demo\Grid::matched([3, null], 1)]);
+    attempt(fn () => Demo\Grid::matched([3], 9));
+    // An index write replaces the element, and throws past either end, where PHP would append or leave a gap.
+    attempt(fn () => Demo\Grid::replaced([1, 2], 1, 5));
+    attempt(fn () => Demo\Grid::replaced([1, 2], 2, 5));
+    attempt(fn () => Demo\Grid::replaced([1, 2], -1, 5));
+    // op=, ++ and -- write what the operator gives; x[i]++ gives the element before, and x[i] = v gives v.
+    attempt(fn () => Demo\Grid::stepped([1, 2, 7]));
+    attempt(fn () => Demo\Grid::joined(['a'], [1.25]));
+    attempt(fn () => Demo\Grid::stepPast([1]));
+    // Through a property, and through a property's set hook, which runs once for each write.
+    $grid = new Demo\Grid();
+    attempt(fn () => $grid->rowsReplaced());
+    attempt(fn () => [$grid->tableReplaced(), $grid->writes]);
+    // An index that runs something runs once.
+    attempt(fn () => (new Demo\Grid())->stepOnce([[1, 2], [3, 4]]));
     // An element a plain PHP ArrayAccess object gives is a collection of its own.
     attempt(fn () => Demo\Grid::doubled(new Lib\RowSet([[1, 2]])));
     // An index that runs something runs once.
@@ -43,18 +76,14 @@ for ($round = 0; $round < 100; $round++) {
     attempt(fn () => (new Demo\Grid())->rowsMissing(9));
     $grid = new Demo\Grid();
     attempt(fn () => [$grid->tableMissing(9), $grid->writes]);
-    // Only the index directly before ?. reads quietly, so a missing index before it throws, whatever the method.
-    attempt(fn () => Demo\Grid::nestedAdd([[[1]]]));
-    attempt(fn () => Demo\Grid::nestedClear([[[1]]]));
-    attempt(fn () => Demo\Grid::nestedRemove([[[1]]]));
-    attempt(fn () => Demo\Grid::nestedCount([[[1]]]));
-    attempt(fn () => Demo\Grid::nestedContains([[[1]]]));
-    attempt(fn () => Demo\Grid::nestedEntries([[[1]]]));
     // An element that is an object is the object, so a change to it sticks, and a missing index throws.
     attempt(fn () => Demo\Point::moved([new Demo\Point()], 0)[0]->x);
     attempt(fn () => Demo\Point::moved([new Demo\Point()], 5));
-    // A property read after ?. gives null for a missing index, on a local, a property and a hooked property.
-    attempt(fn () => (new Demo\Point())->read([new Demo\Point()]));
+    // A property read after ?. gives null for a null element, on a local, a property and a hooked
+    // property, and a missing index throws.
+    attempt(fn () => (new Demo\Point())->read([new Demo\Point(), null]));
+    attempt(fn () => Demo\Point::readPast([new Demo\Point()]));
+    attempt(fn () => (new Demo\Point())->farPast([new Demo\Point()]));
     $output = ob_get_clean();
 }
 

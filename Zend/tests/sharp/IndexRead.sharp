@@ -16,7 +16,7 @@ class IndexRead
 
     public static int orZero(List<int> values, int index)
     {
-        return values[index] ?? 0;
+        return values.getOrNull(index) ?? 0;
     }
 
     public static int price(Map<string, int> prices, string plan)

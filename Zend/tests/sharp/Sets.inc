@@ -96,7 +96,7 @@ class Tagged
         $size = function (\Sharp\Set|array $tags) { $tags = \is_array($tags) ? new \Sharp\Set($tags) : $tags;
             return ((object) $tags)->count();
         };
-        return [$check($names), $check([$prefix]), $size(["a", "a", "b"])];
+        return [$check(new \Sharp\Set($names)), $check([$prefix]), $size(["a", "a", "b"])];
     }
 
     public static function groups(\Sharp\Set|array ...$groups): array { $groups = \array_map(fn ($collection) => \is_array($collection) ? new \Sharp\Set($collection) : $collection, $groups);

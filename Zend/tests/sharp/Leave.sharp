@@ -69,7 +69,7 @@ class Leave
     {
         let total = 0;
         for (const values of rows) {
-            for (let i = 0; i < 10 && (values[i] ?? break) > 0; i += 1) {
+            for (let i = 0; i < 10 && (values.getOrNull(i) ?? break) > 0; i += 1) {
                 total += 1;
             }
             total += 100;
@@ -80,7 +80,7 @@ class Leave
     public int skipped(List<int?> values)
     {
         let seen = 0;
-        for (let i = 0; i < values.count() && (values[i] ?? continue) > 0; i += 1) {
+        for (let i = 0; i < values.count() && (values.getOrNull(i) ?? continue) > 0; i += 1) {
             seen += 1;
         }
         return seen;
@@ -90,7 +90,7 @@ class Leave
     {
         let i = 0;
         let steps = 0;
-        for (; i < 3; i = values[i] ?? break) {
+        for (; i < 3; i = values.getOrNull(i) ?? break) {
             steps += 1;
         }
         return steps;
@@ -101,7 +101,7 @@ class Leave
         let i = 0;
         do {
             i += 1;
-        } while ((values[i] ?? break) > 0);
+        } while ((values.getOrNull(i) ?? break) > 0);
         return i;
     }
 }
