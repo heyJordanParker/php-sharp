@@ -48,7 +48,7 @@ The Slice builds all of section 29 in one php-sharp PR, after #136 merges and af
    - **A.** This PR translates a `List` to Lean's `List`, a lambda to a Lean `fun`, and the collection methods whose Lean function means the same, such as `map`, `filter` and `count` to `List.map`, `List.filter` and `List.length`. Every other construct stays refused by name.
    - **B.** Section 28's translator owns it, and line 3993's law clause stays refused by name until then.
 
-   Approved: A, so a law over list code proves.
+   Approved: A, so a law over list code proves. Built: a `List` is Lean's `List`, a list literal a Lean list, `count()` is `List.length`, and `map` and `filter` of a lambda whose body cannot throw are `List.map` and `List.filter`. Any other `List` method is refused by name, as are a `Map`, a `Set` and any other lambda.
 
 Decisions 4, 5, 6 and 8 are approved as written, with the codes `wrapped-class` and `foreign-outside-module`. Decision 6 builds on #136's mechanism. If Jordan's open answer drops the `uses f` syntax for an inferred one, as Swift's `rethrows`, the declarations change and the mechanism stays.
 
@@ -59,7 +59,10 @@ Decisions 4, 5, 6 and 8 are approved as written, with the codes `wrapped-class` 
 Each one decides what users write. The note recommends, and decides none.
 
 - **Answered:** question 2, the plain PHP block, built first in `fix/spec-plain-php-run`. Question 4 went to team-lead, as decision 10.
-- **Waiting:** questions 1 and 3. Master's behaviour stays until the answers arrive.
+- **Question 1, answered Option B.** Pure limits only what a method reaches outside the program, so a pure method may change its own object and its arguments, and `readonly` after the parameters promises it changes nothing. The checker already holds this: `effect_outside` skips a change, and section 13 holds every implementation of a `readonly` method to it. Laws keep refusing a change, naming the method, because Lean sees an object as its values and cannot see two names that share one, so modeling a change as a new value would prove laws aliasing breaks. Line 3927 says so.
+- **Question 3, answered Option B.** A `foreign` object is an ordinary type in a parameter and a return value, as the checker already treats it: a call on one a method takes or a call returns has its class's effect. `DateTimeImmutable` and `DateTimeZone` come declared pure, so `Date.format` no longer carries the `Clock` and `Environment` of every call that returns one. Line 3901 and its bullets say so, with the `foreign-parameter` example, and `foreign-in-static` and `foreign-outside-module` no longer say a `foreign` object reaches code only through constructors.
+- **Problem 1, answered Option A:** decision 4.
+- **Problem 2, answered Option A.** The exception classes in PHP's root namespace that `Builtins.sharp` declares are default names, as `Sharp`'s are, in `STANDARD_EXCEPTIONS` in the names crate, and a test holds the two lists equal.
 
 1. **Lines 3873 and 3875: does a pure declaration also forbid changes?** Line 3873 says pure code "changes nothing it was given", and line 3768 says a `Formatter`'s implementations "must be pure". On master, an implementation of `void touch(Box box);` that writes `box.count = 1`, and one of `void keep(int n);` that writes `this.kept = n`, both compile. Refusing them would leave no way to declare an interface method whose implementations change their object. Recommended: a declaration without `uses` limits effects only, and section 13's `readonly` states what it may change, as `Money quote(Cart cart) uses Http readonly;` (line 1411) already does. Laws keep the full rule. Line 3875 would then read "Code without a body has no effect unless it says `uses`".
 2. **Line 3871 against lines 3854 to 3856: where does the `environment` example get its `Environment`?** Its run line, `new Deploy(new Environment()).target();`, creates a `foreign` object outside a module, which line 3871 makes a compile error. The options:
