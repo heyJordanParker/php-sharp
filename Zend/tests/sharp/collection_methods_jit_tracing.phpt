@@ -232,6 +232,12 @@ array(2) {
 }
 int(5)
 OutOfRangeException: The list is empty. in Pantry.sharp on line 166
+int(5)
+int(-9)
+OutOfRangeException: The list is empty. in Pantry.sharp on line 169
+OutOfRangeException: The list is empty. in Pantry.sharp on line 171
+int(3)
+int(1)
 int(1)
 NULL
 bool(true)
@@ -296,5 +302,5 @@ array(1) {
 NULL
 DivisionByZeroError: Modulo by zero in Pantry.sharp on line 78
 NULL
-Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 110
-ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 111
+Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 118
+ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 119

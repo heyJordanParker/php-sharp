@@ -67,6 +67,14 @@ namespace {
         attempt(function () use ($shelf) { Demo\Pantry::empty($shelf); return [$shelf->lines, $shelf->writes]; });
         attempt(fn () => Demo\Pantry::last([4, 5]));
         attempt(fn () => Demo\Pantry::last([]));
+        // max and min are the largest and smallest element, and throw on an empty list as last does.
+        attempt(fn () => Demo\Pantry::largest([4, -9, 5]));
+        attempt(fn () => Demo\Pantry::smallest([4, -9, 5]));
+        attempt(fn () => Demo\Pantry::largest([]));
+        attempt(fn () => Demo\Pantry::smallest([]));
+        // count runs on a local that may hold the List or the Map.
+        attempt(fn () => Demo\Pantry::counted(true, [1, 2, 3], ['tea' => 1]));
+        attempt(fn () => Demo\Pantry::counted(false, [1, 2, 3], ['tea' => 1]));
         attempt(fn () => Demo\Pantry::position([4, 5, 5], 5));
         attempt(fn () => Demo\Pantry::position([4, 5], 9));
         attempt(fn () => Demo\Pantry::holds([4, 5], 5));

@@ -166,6 +166,16 @@ class Pantry
         return sizes.last();
     }
 
+    public static int largest(List<int> sizes) => sizes.max();
+
+    public static int smallest(List<int> sizes) => sizes.min();
+
+    public static int counted(bool listed, List<int> sizes, Map<string, int> stock)
+    {
+        let held = listed ? sizes : stock;
+        return held.count();
+    }
+
     public static int? position(List<int> sizes, int size)
     {
         return sizes.indexOf(size);

@@ -3,7 +3,6 @@ namespace Checks;
 import App.Order;
 import Lib.Pager;
 import Sharp.Json.Json;
-import Sharp.Math.Math;
 
 public class Tally
 {
@@ -19,7 +18,7 @@ public class Tally
 
     public static float first(List<float> amounts) => amounts[0];
 
-    public static int largest() => Math.max(0, ...Pager.sizes());
+    public static int largest() => Pager.sizes().max();
 
     public static string kind(Any? value) => match (value) {
         List<int> numbers => "ints",

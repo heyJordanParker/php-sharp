@@ -3,7 +3,6 @@
 require __DIR__ . '/type_arguments.inc';
 require __DIR__ . '/harness/Pager.inc';
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Json/Json.sharp';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Math/Math.sharp';
 require_once __DIR__ . '/harness/fixture.inc';
 fixture('TypeArgumentsChecks');
 
