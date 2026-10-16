@@ -3741,7 +3741,7 @@ extern now uses Clock;               // compile error: name the function through
 - **An object a declared plain PHP call returns carries that call's effect,** so `StripeClient.charges()` returns an object with `Http`, and calling it fits `uses Http`. An `extern` on the returned class itself wins over the inherited effect.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way.
-- **PHP's own built-in functions come declared.** PHP#'s Composer package ships an `extern global.…` declaration for each one, so `global.levenshtein(a, b)` is pure and `global.fopen(path, "r")` has `Files`.
+- **PHP's own built-in functions and exception classes come declared.** PHP#'s Composer package ships an `extern global.…` declaration for each function, so `global.levenshtein(a, b)` is pure and `global.fopen(path, "r")` has `Files`. Each built-in exception class is declared pure, so pure code may `throw new ValueError("empty")`.
 
 **The standard library's ten effect classes replace PHP's built-ins for their effects:**
 

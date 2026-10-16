@@ -121,7 +121,7 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 | 3741 | An `extern` on the returned class wins | Works: with `extern Session uses Mail;`, `Client.make().send()` under `uses Http` gets "calls `Session.send`, which has the effect `Mail`" | None new | `extern_of` |
 | 3742 | An undeclared call has an unknown effect: a body may make it, it is never pure, no `uses` accepts it, and the error names the declaration | Works: `go()` compiles, the law `pokedKeeps` gets `impure-law`, and `Pure.run` refuses `Thing.poke()` with "Declare it in a .sharp file: `extern Thing.poke;`" | Help text, decision 8 | `impure`, `laws_must_be_pure` |
 | 3743 | A project declares every library; PHP# ships none for a framework | Works: `trace grep -i "illuminate\|laravel\|symfony\|carbon" sharp/composer` finds nothing | None new | |
-| 3744 | PHP's built-in functions come declared | Works: `global.levenshtein` fits a pure method, `global.fopen` gets "has the effect `Files`". Built-in classes are not declared (question 4) | None new | `Builtins.sharp`, `sharp/bin/builtins` |
+| 3744 | PHP's built-in functions come declared | Works: `global.levenshtein` fits a pure method, `global.fopen` gets "has the effect `Files`". Each built-in exception class is declared pure by name (decision 10), and `extern_of` walks parents, so a plain PHP subclass with no `extern` of its own is pure too, as on master | `sharp/bin/builtins` writes an `extern` per exception class | `Builtins.sharp`, `sharp/bin/builtins` |
 
 ## The ten effect classes
 
