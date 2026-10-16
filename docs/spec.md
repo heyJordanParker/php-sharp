@@ -3852,12 +3852,22 @@ public class CheckoutController
 }
 ```
 
-Plain PHP, which no module binding limits, creates a `Deploy` and its `Environment` directly:
+A module binds `Deploy`, and the standard library's module gives it the app's `Environment` (section 32):
 
-<!-- example environment: statements -->
-```php
-(new App\Deploy(new Sharp\Environment()))->target();   // throws OutOfRangeException
+<!-- example environment -->
+```csharp
+// app/Module.sharp
+namespace App;
+
+module
+{
+    transient Deploy = Deploy;   // every class that takes a Deploy gets one with the app's Environment
+}
 ```
+<!-- run environment
+public ExampleRun(private Deploy deploy) { }
+this.deploy.target();   // throws OutOfRangeException
+-->
 
 `Deploy` holds an `Environment`, so it has that effect (see the rule on a class's effects below).
 
