@@ -477,11 +477,15 @@ function is_body(array $read, int $i): bool
  * A top-level statement rewritten so the run records its value or what it throws. A bare expression with no
  * annotation to check, such as `order == sameOrderLoadedAgain;`, is handed to Outcome too, because the spec writes
  * it to show what it gives, and PHP# refuses a statement that has no effect. A top-level `return x;` shows the value
- * of `x` the same way, since the run method returns nothing.
+ * of `x` the same way, since the run method returns nothing. A plain PHP line that claims PHP# takes its call, as
+ * `accepted:` does, holds when the call reaches a body the spec leaves out, whose `…` throws `App\Elided`.
  */
 function observe(string $code, int $line, array $expect, string $language): string
 {
     $statement = rtrim(trim($code), ';');
+    if ($language === 'php' && $expect['kind'] === 'compiles') {
+        return "try { $statement; } catch (\\App\\Elided) { }";
+    }
     if ($language === 'sharp' && preg_match('~^return\s+(.+)$~', $statement, $m)) {
         $statement = $m[1];
         if (!in_array($expect['kind'], RUNTIME, true)) {
