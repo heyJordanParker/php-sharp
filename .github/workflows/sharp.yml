@@ -49,17 +49,19 @@ jobs:
     permissions:
       contents: read
       packages: read
+    # sharp/docker/run builds the image FROM this copy, which base-images.yml makes of the public
+    # registry's image, so the pull never meets an anonymous quota.
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
     steps:
       - name: git checkout
         uses: actions/checkout@v6
-      # sharp/docker/Dockerfile starts FROM ghcr.io/heyjordanparker/debian, which base-images.yml copies
-      # from the public registry, so the pull never meets an anonymous quota.
       - name: Pull the base image from ghcr.io
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-          docker pull "$(sed -n 's/^FROM //p' sharp/docker/Dockerfile)"
+          docker pull "$BASE_IMAGE"
       - name: Keep local sources out of Cargo.lock
         run: |
           if git grep -nE '(path|git)\+file://' -- '*Cargo.lock'; then
@@ -227,6 +229,7 @@ jobs:
       output: image
       push: true
       file: sharp/docker/runtime/Dockerfile
+      build-args: BASE_IMAGE=ghcr.io/heyjordanparker/debian:trixie-slim
       platforms: linux/amd64,linux/arm64
       meta-images: ghcr.io/heyjordanparker/php-sharp
       meta-tags: type=semver,pattern={{version}}
