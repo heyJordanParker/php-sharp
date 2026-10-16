@@ -539,6 +539,13 @@ foreach ($exceptions as $class) {
     }
     $externs[] = 'extern ' . ($alias ?? $short) . ';';
 }
+// A date or a time zone is a value once created, and a .sharp file outside the standard library never creates one
+// (wrapped-class, spec section 29), so holding and reading one is pure. Without the line, each would carry the
+// effects of every declared call that returns one, as `date_create_immutable`'s `Clock`.
+foreach (['DateTimeImmutable', 'DateTimeZone'] as $class) {
+    $imports[] = "import $class;";
+    $externs[] = "extern $class;";
+}
 
 $license = file_get_contents("$stubs/LICENSE");
 $notice = implode("\n", array_map(static fn (string $line): string => rtrim("// $line"), explode("\n", trim($license))));

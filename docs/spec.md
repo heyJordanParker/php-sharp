@@ -3898,7 +3898,7 @@ this.deploy.target();   // throws OutOfRangeException
 
 `Deploy` holds an `Environment`, so it has that effect (see the rule on a class's effects below).
 
-**A `foreign` object reaches other code only through constructors:**
+**A `foreign` object is an ordinary type in a constructor, a method parameter and a return value:**
 
 <!-- example foreign-constructor -->
 ```csharp
@@ -3908,8 +3908,21 @@ public class TenantCache
 }
 ```
 
-- **A class's effects** are the `foreign` classes it holds, directly or through its fields, the effects of the plain PHP its methods call, and the events its methods emit. The checker works them out from field and constructor types and from method bodies. Nothing is written down.
-- **A `foreign` object** is created in a module binding (section 32), as often as its binding's lifetime decides, and handed down through constructors. Creating one anywhere else in PHP# code, or storing one in a static, is a compile error. Plain PHP creates one as it creates any object.
+<!-- example foreign-parameter -->
+```csharp
+// app/Shop/Stamp.sharp
+namespace App.Shop;
+
+import Sharp.Time.Date;
+
+public class Stamp
+{
+    public string stampedWith(Clock clock) => Date.format(clock.now(), "Y-m-d");   // compiles: the method has the effect Clock
+}
+```
+
+- **A class's effects** are the `foreign` classes it holds, directly or through its fields, or that its methods take, the effects of the plain PHP its methods call, and the events its methods emit. A method that calls a `foreign` object it takes has that effect, as when it calls one it holds, and a caller that uses one a method returns has the effect at that call. The checker works them out from field, constructor and parameter types and from method bodies. Nothing is written down.
+- **A `foreign` object** is created in a module binding (section 32), as often as its binding's lifetime decides, and passed on through constructors, method parameters and return values. Creating one anywhere else in PHP# code, or storing one in a static, is a compile error. Plain PHP creates one as it creates any object.
 
 **Pure code** reaches no `foreign` object, emits no event, calls no plain PHP unless an `extern` declares it pure, and changes nothing it was given (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
 
@@ -4153,7 +4166,7 @@ module
 - **A binding's value is a class or one expression.** A class, such as `SmtpMailer`, is built through its main constructor (section 9.1). A class binds to itself to be created, as `SendReceipt` does.
 - **A binding names the services it needs as parameters, and its value is one expression over them,** as Dagger's `@Provides` methods do. The container passes each parameter the service bound to its type, so `RedisStore` above gets the app's `Environment`, which the standard library's module binds for every namespace. An expression is for a value no binding gives, such as `RedisStore`'s URL.
 - **A module stays declarative:** one expression per binding, and no statements, loops or methods.
-- **A `foreign` object is created in a module binding** (section 29). The binding's lifetime decides how often one is created, and it reaches classes only through constructors.
+- **A `foreign` object is created in a module binding** (section 29). The binding's lifetime decides how often one is created, and the container passes it to classes through their constructors.
 - **A module also states the laws that span its classes** (section 28).
 
 **The host defines each lifetime, as ASP.NET Core's host does.** A `singleton` lives as long as the host runs the app. A `scoped` binding lives for one scope, which the host starts and ends, such as one HTTP request, one queued job or one console command run. A `transient` binding is created each time a class needs one.
