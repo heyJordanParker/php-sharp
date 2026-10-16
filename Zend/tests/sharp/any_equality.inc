@@ -1,6 +1,7 @@
 <?php
 
-require __DIR__ . '/Unchecked.sharp';
+require_once __DIR__ . '/harness/fixture.inc';
+fixture('Unchecked');
 
 use Equalities\Point;
 use Equalities\Suit;

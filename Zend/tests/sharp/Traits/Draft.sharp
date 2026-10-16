@@ -1,0 +1,7 @@
+namespace Demo;
+
+import Lib.Copies;
+
+public class Draft : Copies
+{
+}

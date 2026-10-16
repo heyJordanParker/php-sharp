@@ -1,0 +1,26 @@
+namespace Lazy;
+
+public class Loads
+{
+    private static int count = 0;
+    private static int divisor = 0;
+    public static lazy int first => Loads.next();
+    public static lazy int ratio => 100 % Loads.divisor;
+
+    public static int next()
+    {
+        Loads.count = Loads.count + 1;
+        return Loads.count;
+    }
+
+    public static int seen() => Loads.count;
+
+    public static int firstTwice() => Loads.first + Loads.first;
+
+    public static int ratioNow() => Loads.ratio;
+
+    public static void divideBy(int divisor)
+    {
+        Loads.divisor = divisor;
+    }
+}

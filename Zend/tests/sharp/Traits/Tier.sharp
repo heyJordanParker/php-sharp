@@ -1,0 +1,11 @@
+namespace Demo;
+
+import Lib.Aligned;
+
+public enum Tier : int, Aligned
+{
+    case Low = 1;
+    case High = 2;
+
+    public string label() => "level";
+}

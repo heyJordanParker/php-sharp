@@ -1,0 +1,6 @@
+namespace Checks;
+
+public interface Sink<in TItem>
+{
+    void put(TItem item);
+}

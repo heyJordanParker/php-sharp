@@ -1,0 +1,12 @@
+namespace App.Hosts;
+
+public class Box<T>
+{
+    public Box(public T value { get; }) { }
+
+    public Box<List<T>> listed() => new Box<List<T>>([this.value]);
+
+    public static Box<List<int>> numbers() => new Box<int>(1).listed();
+
+    public static Box<List<string>> words() => new Box<string>("a").listed();
+}

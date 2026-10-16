@@ -1,0 +1,51 @@
+namespace Calls;
+
+// A throw from an initial value leaves the type argument's other statics as they are, and nothing runs again. The
+// static it leaves unset, and each after it whose initial value runs as code, throws PHP's error on a read, a compound
+// assignment and `++`, and a write sets it, as in a class that isn't generic.
+public class Fragile<T>
+{
+    public static int count { get; } = 3;
+
+    private static int broken = Runs.fail("broken");
+
+    private static int after = Fragile<T>.count + 1;
+
+    private static int watched { get; set => field = value * 2; } = Fragile<T>.count + 2;
+
+    public static int brokenRead() => Fragile<T>.broken;
+
+    public static int afterRead() => Fragile<T>.after;
+
+    public static int brokenAdded()
+    {
+        Fragile<T>.broken += 1;
+        return Fragile<T>.broken;
+    }
+
+    public static int brokenStepped()
+    {
+        Fragile<T>.broken++;
+        return Fragile<T>.broken;
+    }
+
+    public static int watchedRead() => Fragile<T>.watched;
+
+    public static int watchedAdded()
+    {
+        Fragile<T>.watched += 1;
+        return Fragile<T>.watched;
+    }
+
+    public static int brokenSet()
+    {
+        Fragile<T>.broken = 5;
+        return Fragile<T>.broken;
+    }
+
+    public static int watchedSet()
+    {
+        Fragile<T>.watched = 6;
+        return Fragile<T>.watched;
+    }
+}

@@ -1,0 +1,6 @@
+namespace App;
+
+public class Picker
+{
+    public Box<T> pick<T>(T item) => new Box<T>();
+}

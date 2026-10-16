@@ -1,0 +1,15 @@
+namespace Lazy;
+
+public struct Square
+{
+    public int side { get; init; }
+    public lazy int area => this.side * this.side;
+
+    public static string grown()
+    {
+        Square small = new Square { side: 3 };
+        int before = small.area;
+        Square big = small with { side: 4 };
+        return `${before} ${big.area}`;
+    }
+}

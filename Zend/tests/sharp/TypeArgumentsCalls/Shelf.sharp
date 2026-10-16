@@ -1,0 +1,35 @@
+namespace Calls;
+
+import App.Box;
+import App.DatabaseEntity;
+import App.Order;
+import App.PaginatedList;
+
+public class Shelf
+{
+    public Class<PaginatedList<Order>>? pages { get; set; } = null;
+
+    public Shelf()
+    {
+    }
+
+    public Box<T> make<T>(T item) => new Box<T>();
+
+    public Box<Order> stock(Order order) => this.make<Order>(order);
+
+    public Box<Order> made(Order order)
+    {
+        Function<Box<Order>(Order)> make = this.make;
+        return make(order);
+    }
+
+    public int take<T : DatabaseEntity>(Source<T> source) => 1;
+
+    public List<int> taken(List<Source<Order>> sources) => sources.map(this.take);
+
+    public string drain(Source<DatabaseEntity> source) => "drained";
+
+    public string drained() => this.drain(new Source<DatabaseEntity>());
+
+    public static Source<Order> orders() => new Source<Order>();
+}

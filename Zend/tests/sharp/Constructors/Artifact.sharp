@@ -1,0 +1,18 @@
+namespace Demo;
+
+class Artifact : Entity
+{
+    public string seen { get; set; } = "";
+
+    public Artifact(public Manifest manifest { get; }) : super(manifest.name) { }
+
+    public override string describe() => "artifact " + this.name;
+
+    [Retry(times: 2)]
+    public Artifact.fromJson(string json) : this(Manifest.parse(json))
+    {
+        this.seen = super.describe();
+    }
+
+    public static Artifact load(string json) => new Artifact.fromJson(json);
+}

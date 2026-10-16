@@ -164,7 +164,7 @@ heard('the recorder sees an event no listener hears', fn () => (new App\Events\P
 heard('plain PHP emits', fn () => Sharp\Internal\emit(new App\Events\Paid(3)));
 heard('a PHP# package in vendor/ emits', fn () => (new Acme\Billing\Biller())->bill(4));
 
-Sharp\Internal\testModule(['Tests\LaterTest'], [['app', 'sharp\dispatcher', null, 'singleton', 'App\Testing\Later']]);
+Sharp\Internal\testModule('Tests\LaterTest', [['app', 'sharp\dispatcher', null, 'singleton', 'App\Testing\Later']]);
 Sharp\Internal\startTest('Tests\LaterTest');
 heard('a test module binds a dispatcher that runs them later', function (): void {
     (new App\Events\Payer())->pay(5);
@@ -174,7 +174,7 @@ heard('a test module binds a dispatcher that runs them later', function (): void
 });
 Sharp\Internal\endTest();
 
-Sharp\Internal\testModule(['Tests\Billing\RetryTest'], [['tests\billing', 'sharp\dispatcher', null, 'singleton', 'App\Testing\Retrying']]);
+Sharp\Internal\testModule('Tests\Billing\RetryTest', [['tests\billing', 'sharp\dispatcher', null, 'singleton', 'App\Testing\Retrying']]);
 Sharp\Internal\startTest('Tests\Billing\RetryTest');
 heard('a test module of any namespace binds one that retries a listener once', function (): void {
     App\Events\Hears::$failures = 1;

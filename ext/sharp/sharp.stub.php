@@ -105,8 +105,6 @@ final class Container
     public function get(string $id): mixed {}
 
     public function has(string $id): bool {}
-
-    public static function scope(\Closure $run): mixed {}
 }
 
 final class ContainerError extends \Error
@@ -145,11 +143,13 @@ function equals(mixed $value, mixed $other): bool {}
 
 function readModule(string $path): void {}
 
-function testModule(array $classes, array $bindings): void {}
+function testModule(string $class, array $bindings): void {}
 
 function startTest(string $class): void {}
 
 function endTest(): void {}
+
+function runScoped(\Closure $body): mixed {}
 
 function building(object $object): bool {}
 

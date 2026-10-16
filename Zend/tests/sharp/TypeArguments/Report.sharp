@@ -1,0 +1,8 @@
+namespace App;
+
+public class Report<TItem : DatabaseEntity & Shareable>
+{
+    public Report(public List<TItem> items { get; })
+    {
+    }
+}

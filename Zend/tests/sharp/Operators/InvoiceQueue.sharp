@@ -1,0 +1,36 @@
+namespace Billing;
+
+public class InvoiceQueue
+{
+    public int calls { get; private set; } = 0;
+    private Invoice invoice;
+
+    public InvoiceQueue(Invoice invoice)
+    {
+        this.invoice = invoice;
+    }
+
+    public Invoice next()
+    {
+        this.calls += 1;
+        return this.invoice;
+    }
+
+    public int halve()
+    {
+        this.next().total /= 2;
+        return this.invoice.total;
+    }
+
+    public Money halveBalance()
+    {
+        this.next().balance /= 2;
+        return this.invoice.balance;
+    }
+
+    public int halveTwice()
+    {
+        this.next().total /= (this.next().total /= 2);
+        return this.invoice.total;
+    }
+}

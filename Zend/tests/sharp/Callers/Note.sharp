@@ -1,0 +1,15 @@
+namespace Callers;
+
+public class Note
+{
+    public Position made { get; }
+
+    public Note(Position made = Position.current())
+    {
+        this.made = made;
+    }
+
+    public Note.stamped(string label, Position at = Position.current()) : this(at) { }
+
+    public Note.blank() : this() { }
+}

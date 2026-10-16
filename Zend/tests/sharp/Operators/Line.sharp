@@ -1,0 +1,13 @@
+namespace Billing;
+
+public class Line
+{
+    public string sku { get; }
+    public Money price { get; }
+
+    public Line(string sku, Money price)
+    {
+        this.sku = sku;
+        this.price = price;
+    }
+}

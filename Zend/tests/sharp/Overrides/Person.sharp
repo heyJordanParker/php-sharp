@@ -1,0 +1,6 @@
+namespace Overrides;
+
+public class Person : Named
+{
+    public Person(public string name { get; }) { }
+}

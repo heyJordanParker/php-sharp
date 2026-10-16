@@ -1,0 +1,6 @@
+namespace Imports;
+
+public class If
+{
+    public static string label() => "if";
+}

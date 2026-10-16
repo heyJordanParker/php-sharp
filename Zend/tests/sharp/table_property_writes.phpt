@@ -4,7 +4,8 @@ Plain PHP writing a PHP array to a PHP# Map or Set property, instance or static,
 <?php
 declare(strict_types=1);
 
-require __DIR__ . '/Larder.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Larder');
 
 use Demo\Larder;
 

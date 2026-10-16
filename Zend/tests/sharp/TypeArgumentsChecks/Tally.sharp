@@ -1,0 +1,57 @@
+namespace Checks;
+
+import App.Order;
+import Lib.Pager;
+
+public class Tally
+{
+    public List<float> amounts { get; set; } = [];
+
+    public static string sizes(List<int> sizes, Map<string, float> prices, Set<string> tags) => "sized";
+
+    public static int rows(List<List<int>> rows) => rows.count();
+
+    public static string|bool ordered(Map<string, Order> orders, Set<int> ids) => global.json_encode(orders.keys());
+
+    public static string|bool counted(Map<string?, int> counts) => global.json_encode(counts.keys());
+
+    public static float first(List<float> amounts) => amounts[0];
+
+    public static int largest() => global.max(Pager.sizes());
+
+    public static string kind(Any? value) => match (value) {
+        List<int> numbers => "ints",
+        Map<string, float> prices => "prices",
+        default => "other",
+    };
+
+    public static bool floats(Any? value) => value is List<float>;
+
+    public static List<int>? kept(Any? value) => value as List<int>;
+
+    public static string sort(Any? value) => match (value) {
+        int|string scalar => "scalar",
+        List<int>|Order entry => "entry",
+        default => "other",
+    };
+
+    public static bool present(Any? value) => value is Any;
+
+    public static bool scalar(Any? value) => value is int|string;
+
+    public static Any taken(Any? value) => value as Any ?? "none";
+
+    public static (int|string)? narrowed(Any? value) => value as int|string;
+
+    public static bool orders(Any? value) => value is Iterable<Order>;
+
+    public static bool ids(Any? value) => value is Iterable<int>;
+
+    public static bool anything(Any? value) => value is Iterable<Any?>;
+
+    public static Iterable<Order> held(Iterable<Order> orders) => orders;
+
+    public static Iterable<Order> firstOf(Iterable<Order> orders) => orders.take(1);
+
+    public static Iterable<int> idsOf(Iterable<Order> orders) => orders.map(o => o.id);
+}

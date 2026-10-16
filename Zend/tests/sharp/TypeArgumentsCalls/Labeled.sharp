@@ -1,0 +1,13 @@
+namespace Calls;
+
+import App.Box;
+import App.Order;
+
+public class Labeled
+{
+    public Labeled(public Order order { get; })
+    {
+    }
+
+    public Box<Order> boxed { get => Repository.box<Order>(this.order); }
+}

@@ -1,0 +1,21 @@
+namespace Demo;
+
+import Lib.Record;
+
+public class Article : Linkable, Record
+{
+    public string link()
+    {
+        return "/article";
+    }
+
+    public string name()
+    {
+        return "article";
+    }
+
+    public int number()
+    {
+        return this.id();
+    }
+}

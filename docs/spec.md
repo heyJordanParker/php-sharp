@@ -249,7 +249,7 @@ public class Profile
 
 **A static field or property with storage needs an initial value, whatever its type.** No constructor sets it, so the error names that one fix.
 
-**A static's initial value runs once, when a request first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. A get-only static is set only by its initial value. A throw there reaches the code that first used the statics and runs nothing again. The static it left unset, and each after it whose initial value runs as code, throws an `Error` when it is read, or written with a compound assignment, `++` or `--`, until a write sets it, in a generic class too.
+**A static lives as long as the app runs, and its initial value runs once, when the app first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. Under php-fpm the app runs for one request. Under a long-running host, such as Octane or FrankenPHP's worker mode, each request sees what the last one left, as in C#, TypeScript and Rust. A host that runs several workers runs one app in each. A get-only static is set only by its initial value. A throw there reaches the code that first used the statics and runs nothing again. The static it left unset, and each after it whose initial value runs as code, throws an `Error` when it is read, or written with a compound assignment, `++` or `--`, until a write sets it, in a generic class too.
 
 **Plain PHP reaches a static with an accessor body, a computed body or an observer only through a method,** because PHP has no hooks on a static property. Reading or writing it directly from plain PHP is PHP's access error.
 
@@ -259,7 +259,7 @@ private static int hits = 0;                     // compiles
 private static int misses;                       // compile error: give misses an initial value
 public static string? region { get; set; } = null;   // compiles: starts as null
 public static string? zone { get; set; }         // compile error: give zone an initial value
-private static int started = global.time();      // compiles: runs once, when a request first uses the class's statics
+private static int started = global.time();      // compiles: runs once, when the app first uses the class's statics
 public static int limit { get; } = 10;           // compiles: get-only, set only by its initial value
 ```
 
@@ -1210,7 +1210,7 @@ lines.sortedBy(l => l.amount);
 - Methods that read return a new collection.
 - `first` throws `OutOfRangeException` when nothing matches, as a bare index read does.
 - A `sortedBy` key of type `T` or `T?` compiles exactly when `<` compiles on two non-null `T` values. The nullable part is allowed, and it sorts first.
-- A method that takes a function has that function's effects (section 29), so `lines.map(l => l.name)` is pure.
+- A method takes on the effects of each function it is given (section 29), so `lines.map(l => l.name)` is pure.
 - Methods that change a collection change it in place:
 
 <!-- example collection-write-methods: statements
@@ -2680,25 +2680,49 @@ page.designLabel;                                           // "design design", 
 
 <!-- example one-body-per-method -->
 ```csharp
-// app/Tickets.sharp
+// app/ShowsLabel.sharp
 namespace App;
 
 public interface ShowsLabel
 {
     string label() => "label";
 }
+```
+
+<!-- example one-body-per-method -->
+```csharp
+// app/ShowsTitle.sharp
+namespace App;
 
 public interface ShowsTitle
 {
     string label() => "title";
 }
+```
+
+<!-- example one-body-per-method -->
+```csharp
+// app/Ticket.sharp
+namespace App;
 
 public class Ticket : ShowsLabel, ShowsTitle { }        // compile error: Ticket gets label from both ShowsLabel and ShowsTitle, so Ticket writes label
+```
+
+<!-- example one-body-per-method -->
+```csharp
+// app/Sticker.sharp
+namespace App;
 
 public class Sticker : ShowsLabel, ShowsTitle
 {
     public override string label() => super<ShowsLabel>.label() + "/" + super<ShowsTitle>.label();
 }
+```
+
+<!-- example one-body-per-method -->
+```csharp
+// app/Stray.sharp
+namespace App;
 
 public class Stray : ShowsTitle
 {
@@ -2724,16 +2748,34 @@ public interface Shows
 {
     string label() => "shows";
 }
+```
+
+<!-- example sub-interface-defaults -->
+```csharp
+// app/ShowsMore.sharp
+namespace App;
 
 public interface ShowsMore : Shows
 {
     override string label() => "more";             // compiles: replaces the default body of Shows
 }
+```
+
+<!-- example sub-interface-defaults -->
+```csharp
+// app/ShowsLess.sharp
+namespace App;
 
 public interface ShowsLess : Shows
 {
     string label() => "less";                     // compile error: replaces the default body of Shows, so it writes override
 }
+```
+
+<!-- example sub-interface-defaults -->
+```csharp
+// app/Fancy.sharp
+namespace App;
 
 public class Fancy : ShowsMore { }                // gets label from ShowsMore
 ```
@@ -3531,7 +3573,7 @@ public static class Pairs
 
 A file's extension marks it as PHP#. The engine, Composer's autoloader, editors and the checker all choose the grammar from the filename.
 
-A PHP# file has no opening tag. Its first line is code:
+A PHP# file has no PHP tags, so `<?php`, `<?`, `<?=` and `?>` are compile errors. Its first line is code, after the byte order mark an editor may save:
 
 <!-- example file-header -->
 ```csharp
@@ -3542,7 +3584,7 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 
 The extension is **`.sharp`**, as in `StoreService.sharp`.
 
-**A `.sharp` file that declares a type declares one, named like the file,** as Java allows one public top-level class per file. Every type, events and interfaces included, sits at file level in the namespace its folder names (section 5), so a reader finds a type by its namespace and its file. A second type in a file is a compile error. An `extern` declaration file (section 29) and a `Module.sharp` file (section 32) hold no type, so the rule doesn't cover them:
+**A `.sharp` file that declares a type declares one, named like the file, case included,** as Java allows one public top-level class per file and names the file after it. Every type, events and interfaces included, sits at file level in the namespace its folder names (section 5), so a reader finds a type by its namespace and its file. A second type in a file is a compile error, and so is C#'s `partial`, because a class lives in one file. An `extern` declaration file (section 29) and a `Module.sharp` file (section 32) hold no type, so the rule doesn't cover them:
 
 <!-- example one-type-per-file -->
 ```csharp
@@ -3577,9 +3619,13 @@ public class Reports
         Log.warning(message, ["file": caller.file, "line": caller.line, "function": caller.function]);
     }
 
+    public static void logLine(string message, int line = Position.current().line) { }   // compile error: take the whole position
+
     public void run()
     {
         Reports.logSlow("slow query");                           // logs this call's own file and line, and "App.Reports.run"
+        const log = Reports.logSlow;
+        log("slow query");                                       // logs where logSlow declares caller, and "App.Reports.logSlow"
     }
 }
 
@@ -3589,6 +3635,10 @@ Log.info("charged", ["class": typeof(Order)]);                   // compiles: re
 
 - `Position.current()` in a body gives the position where it is written.
 - As a parameter's default, `Position.current()` gives the caller's position, as C++20's `std::source_location::current()` and Swift's `#file` defaults do.
+- A call through a function value gives the position of the parameter's declaration, because C++ and Swift fill the default only at a direct call too.
+- A call that spreads a list whose elements may be a `Position`, as a `List<Any>`, gives the position of the parameter's declaration too, because the list may fill the parameter. A spread of any other list gives the caller's position.
+- The parameter takes the whole position. A default that only uses it, as `int line = Position.current().line` or `int next = Position.current().line + 1`, is a compile error: write `Position caller = Position.current()`.
+
 **A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. A pragma, `mago.toml`'s `ignore` or the baseline can hide a warning, never an error.
 
 **`vendor/bin/mago compile` compiles the project.** It checks every `.sharp` file, vendor packages included. It also creates a missing `.lean` file beside a class that has a law (section 28.1), and never rewrites an existing one.
@@ -3909,7 +3959,7 @@ public class TenantCache
 
 **Pure code** reaches no `foreign` object, emits no event, calls no plain PHP unless an `extern` declares it pure, and changes nothing it was given (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
 
-**Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types. Every implementation is held to what the declaration allows:
+**Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types, except the function type of a method's parameter, which takes on what each call passes (below). Every implementation is held to what the declaration allows:
 
 <!-- example effectful-declarations: members -->
 ```csharp
@@ -4010,7 +4060,9 @@ public class StoreCheckout : Checkout
 }
 ```
 
-**A method that takes a function can have that function's effects.** Its declaration writes `uses f`, where `f` is one of its function-typed parameters, with or without a body. At each call, the method has its body's own effects plus the effects of the function passed as `f`. Code that calls it writes nothing.
+**A method takes on the effects of each function it is given.** A parameter whose function type states no effects, as `f` in `map(Function<TResult(T)> f)`, has at each call the effects of the function that call passes. The method has its body's own effects plus those, and nothing is written, as with Swift's `rethrows` and Kotlin's inline lambdas, and as a call to plain PHP takes on the effects of each lambda passed to it.
+
+**Such a parameter runs only inside the call,** as a Swift closure parameter does without `@escaping`. Storing it in a field, a collection or a new object, returning it, and capturing it in a lambda that escapes are compile errors that name the type to take instead. Calling it, and passing it on to another method's function parameter, are allowed. A local may hold it, and the local is held to the same rules.
 
 <!-- example function-effects: statements in Carts<T>
 List<Cart> carts = [new Cart()];
@@ -4018,20 +4070,25 @@ private PaymentGateway gateway = new StripeGateway();
 -->
 ```csharp
 // in the standard library's List<T>
-public List<TResult> map<TResult>(Function<TResult(T)> f) uses f;
-
-carts.map(c => c.total);                             // pure
-carts.map(c => this.gateway.charge(c));              // has Http
-
-// a method with a body: Http from this.gateway, plus the effects of prepare
-public Charge charge(Cart cart, Function<Cart(Cart)> prepare) uses prepare => this.gateway.charge(prepare(cart));
+public List<TResult> map<TResult>(Function<TResult(T)> f)                                   // map takes on the effects of the f it calls
+public Charge charge(Cart cart, Function<Cart(Cart)> prepare) => this.gateway.charge(prepare(cart));   // Http, plus prepare's effects
+public Holder keep(Function<string()> body) => new Holder(body);                            // compile error: body can't be stored; take a Function<string() uses Environment>
+carts.map(c => c.total);                                                                    // pure
+carts.map(c => this.gateway.charge(c));                                                     // has Http
 ```
 
-The standard library's collection methods (section 12) are declared this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
+```text
+`body` can't be stored in a new object: its type states no effects.
+Take a `Function<string() uses Environment>`, whose type states the effects it may have.
+```
+
+**A parameter whose function type states its effects keeps them as a cap.** `Function<Charge(Cart) uses Http>` accepts a function with `Http` or no effects, and the method has `Http` from calling it. Such a parameter may be stored, returned and captured, as any function value may.
+
+The standard library's collection methods (section 12) take on the effects of their functions this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
 
 **Plain PHP can run any function it is given,** as `global.array_map(f, list)` and `global.usort(list, f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => global.time()` to `global.call_user_func` has the effect `Clock`.
 
-**Code with a body writes no `uses` except `uses f`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function its `uses f` names, and its body and declaration show all four. The checker works out each method's effects, and the editor displays them.
+**Code with a body writes no `uses`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function it is given, and its body and declaration show all four. The checker works out each method's effects, and the editor displays them. A `uses` that names a function parameter, with or without a body, is a parse error that says to delete it.
 
 ## 30. Tuples
 
@@ -4167,6 +4224,49 @@ module
 - **A module also states the laws that span its classes** (section 28).
 
 **The host defines each lifetime, as ASP.NET Core's host does.** A `singleton` lives as long as the host runs the app. A `scoped` binding lives for one scope, which the host starts and ends, such as one HTTP request, one queued job or one console command run. A `transient` binding is created each time a class needs one.
+
+**A host starts and ends each scope with `Scope.run(body)`.** While `body` runs, each `scoped` service it builds lives until `body` returns or throws, and is then dropped. `Scope.run` returns what `body` returns, and has `body`'s effects (section 29). PHP's own request is the default scope, so php-fpm, the CLI and FrankenPHP outside worker mode need no call. A long-running host wraps each unit of work in it, such as an Octane request, a FrankenPHP worker request or a queued job, as ASP.NET Core's `CreateScope()` and Node's `AsyncLocalStorage.run` start one. Plain PHP calls it as `\Sharp\Scope::run(fn () => …)`.
+
+<!-- example host-scope -->
+```csharp
+// app/Jobs/Worker.sharp
+namespace App.Jobs;
+
+import Sharp.Scope;
+
+public class Worker
+{
+    public Worker(private JobQueue queue) { }
+
+    public void work()
+    {
+        for (const job of this.queue.pending())
+        {
+            Scope.run(() => job.handle());   // each job gets its own scoped services
+        }
+    }
+}
+```
+
+**A scope follows the fiber that runs in it,** as .NET's `AsyncLocal` and Node's `AsyncLocalStorage` flow into the work they start. A fiber started inside `Scope.run` belongs to that scope, and a `Scope.run` inside a fiber is that fiber's own, so code on another fiber never builds from it. A `scoped` service resolved after its scope ended throws `Sharp\ContainerError`, as .NET throws when code uses a disposed scope.
+
+<!-- example scope-fibers -->
+```php
+<?php
+// A plain PHP event loop, such as Revolt's, runs each request in a fiber of its own.
+function serve(\Sharp\Container $container): void
+{
+    $request = new Fiber(fn () => \Sharp\Scope::run(function () use ($container): void {
+        $first = $container->get('App\Mail\Mailer');           // the fiber's scope builds it
+        Fiber::suspend();
+        $again = $container->get('App\Mail\Mailer');           // the same object: the fiber still runs in its scope
+        echo $first === $again ? "one Mailer\n" : "two Mailers\n";
+    }));
+    $request->start();
+    $container->get('App\Mail\Mailer');                         // the request's own scope builds another
+    $request->resume();
+}
+```
 
 A binding's expression runs each time its lifetime needs a new service, so a choice made while the app runs is one expression:
 

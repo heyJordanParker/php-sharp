@@ -8,7 +8,8 @@ spl_autoload_register(function (string $class): void {
     require_once __DIR__ . '/harness/Header.inc';
 });
 
-require __DIR__ . '/Header.sharp';
+require __DIR__ . '/Header/Linkable.sharp';
+require __DIR__ . '/Header/Article.sharp';
 
 var_dump(get_parent_class(Demo\Article::class), (new Demo\Article())->number());
 ?>

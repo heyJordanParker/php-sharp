@@ -3,7 +3,8 @@ A Map or a Set crosses into a plain PHP parameter that names array as a PHP arra
 --FILE--
 <?php
 require __DIR__ . '/harness/Arrays.inc';
-require __DIR__ . '/Crossings.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Crossings');
 
 use Demo\Crossings;
 use Sharp\Map;

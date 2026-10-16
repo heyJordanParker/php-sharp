@@ -1,0 +1,14 @@
+namespace Site;
+
+public class Square : Shape
+{
+    public override float area()
+    {
+        return 4.0;
+    }
+
+    public override int sides()
+    {
+        return super.sides() + 4;
+    }
+}

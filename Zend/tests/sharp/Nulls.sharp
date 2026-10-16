@@ -74,21 +74,21 @@ class Nulls
         return null == value;
     }
 
-    private Function<int(int)>? doubler = null;
+    private Function<int(int) uses Clock>? doubler = null;
 
     public int? local(Function<int(int)>? function, int value) => function?.(value);
 
-    public int? property(Function<int(int)>? function, int value)
+    public int? property(Function<int(int) uses Clock>? function, int value)
     {
         this.doubler = function;
         return this.doubler?.(value);
     }
 
-    public int? called(Function<int(int)>? function, int value)
+    public int? called(Function<int(int) uses Clock>? function, int value)
     {
         this.doubler = function;
         return this.held()?.(value);
     }
 
-    public Function<int(int)>? held() => this.doubler;
+    public Function<int(int) uses Clock>? held() => this.doubler;
 }

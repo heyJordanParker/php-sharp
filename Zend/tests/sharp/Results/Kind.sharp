@@ -1,0 +1,10 @@
+namespace Demo;
+
+public enum Kind : string, Labeled
+{
+    case Big = "big";
+
+    public string code => "big";
+
+    public static int count => 1;
+}

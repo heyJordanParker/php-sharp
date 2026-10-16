@@ -1,0 +1,9 @@
+namespace Calls;
+
+import App.Box;
+import Lib.PlainWrapper;
+
+public class SharpPlainWrapper : PlainWrapper
+{
+    public override Box<T> wrap<T>(T item) => new Box<T>();
+}

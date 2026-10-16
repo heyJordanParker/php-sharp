@@ -2,7 +2,8 @@
 PHP# lazy keeps the value of its first read, even when its inputs change, keeps nothing when the body throws, keeps null for a nullable one, runs a body with an effect once, and a static one keeps its value for a singleton's lifetime
 --FILE--
 <?php
-require __DIR__ . '/Lazy.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Lazy');
 
 $plan = new Lazy\Plan();
 $plan->setId(3);

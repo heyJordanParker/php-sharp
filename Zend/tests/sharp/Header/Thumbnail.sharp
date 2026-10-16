@@ -1,0 +1,9 @@
+namespace Demo;
+
+public class Thumbnail : Image
+{
+    public override int size()
+    {
+        return super.size() + 1;
+    }
+}

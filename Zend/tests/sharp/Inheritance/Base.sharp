@@ -1,0 +1,6 @@
+namespace Demo;
+
+public class Base
+{
+    public virtual string kind() => "base";
+}

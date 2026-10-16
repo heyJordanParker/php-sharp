@@ -2,12 +2,13 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: sharp/bin/test [--linux] [--opcache] [--repeat] [--passes] [--census] [--spec] [--differential] [--phpunit] [--upstream | paths...]" >&2
+  echo "usage: sharp/bin/test [--linux] [--zts] [--opcache] [--repeat] [--passes] [--census] [--spec] [--differential] [--phpunit] [--upstream | paths...]" >&2
   exit 2
 }
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 linux=false
+zts=false
 opcache=false
 repeat=false
 passes=false
@@ -21,6 +22,7 @@ container_command=(sharp/bin/test)
 for arg in "$@"; do
   case "$arg" in
     --linux) linux=true; continue ;;
+    --zts) zts=true ;;
     --opcache) opcache=true ;;
     --repeat) repeat=true ;;
     --passes) passes=true ;;
@@ -51,16 +53,23 @@ fi
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 build_dir="$root/sharp/build/$os-$(uname -m)"
+# mago doesn't depend on thread safety, so both builds' tests use the one in the other build's folder.
+mago_dir="$build_dir/mago"
+build_command=sharp/bin/build
+if $zts; then
+  build_dir+=-zts
+  build_command+=" --zts"
+fi
 php="$build_dir/sapi/cli/php"
 if [[ ! -x "$php" ]]; then
-  echo "$php is missing. Run sharp/bin/build first." >&2
+  echo "$php is missing. Run $build_command first." >&2
   exit 1
 fi
 
 version="$(sed -n 's/^#define PHP_SHARP_VERSION "\(.*\)"$/\1/p' "$root/ext/sharp/php_sharp.h")"
 engine_version="$("$php" -n --ri sharp | sed -n 's/^Version => //p')"
 if [[ "$engine_version" != "$version" ]]; then
-  echo "The built engine is $engine_version, but the tree is $version. Run sharp/bin/build." >&2
+  echo "The built engine is $engine_version, but the tree is $version. Run $build_command." >&2
   exit 1
 fi
 
@@ -71,8 +80,8 @@ fi
 
 cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
 PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --release --jobs "$jobs" \
-  --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$build_dir/mago" --bin mago
-mago="$build_dir/mago/release/mago"
+  --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$mago_dir" --bin mago
+mago="$mago_dir/release/mago"
 
 echo "== mago compile, built from sharp/mago"
 if ! "$mago" --no-version-check --colors never --workspace "$root" --config "$root/Zend/tests/sharp/mago.toml" compile; then
@@ -167,7 +176,7 @@ fi
 check_differential() {
   echo "== every file mago compile accepted against php -l, through its .sharpc file"
   local file name linted mismatch=false
-  for file in "$root"/Zend/tests/sharp/*.sharp; do
+  for file in "$root"/Zend/tests/sharp/*.sharp "$root"/Zend/tests/sharp/*/*.sharp; do
     name="${file#"$root"/}"
     linted="$("$php" -l "$file" 2>&1)" || true
     if [[ "$linted" == "No syntax errors detected in $file" ]]; then

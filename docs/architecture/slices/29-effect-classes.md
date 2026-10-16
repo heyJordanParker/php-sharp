@@ -218,8 +218,8 @@ public foreign class Cache
 
     public void remove(string key);                  // a missing key is not an error
 
-    public string getOrCreate(string key, Function<string()> create, Duration? expiresAfter = null) uses create;
-                                                     // each call has the effects of the create it passes
+    public string getOrCreate(string key, Function<string()> create, Duration? expiresAfter = null);
+                                                     // each call takes on the effects of the create it passes
 }
 ```
 

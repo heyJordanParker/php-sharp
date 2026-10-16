@@ -1,0 +1,6 @@
+namespace Demo;
+
+public enum Level : string
+{
+    case Low = "low";
+}

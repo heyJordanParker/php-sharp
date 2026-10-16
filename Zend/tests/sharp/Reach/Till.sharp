@@ -1,0 +1,11 @@
+namespace Reach;
+
+public class Till
+{
+    public int run(Shop shop)
+    {
+        shop.views = 2;
+        shop.stock = 3;
+        return shop.views + shop.stock + shop.secret() + shop.id;
+    }
+}

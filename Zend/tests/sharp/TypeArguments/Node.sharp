@@ -1,0 +1,6 @@
+namespace App;
+
+public class Node<T>
+{
+    public Node<List<T>> deeper() => new Node<List<T>>();
+}

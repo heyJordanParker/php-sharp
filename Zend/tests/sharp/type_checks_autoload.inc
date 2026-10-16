@@ -16,6 +16,6 @@ spl_autoload_register(static function (string $class) use (&$asked): void {
         $GLOBALS['stock']['ripe'] = 99;
     }
     if ($class !== 'Orchard\Medlar') {
-        require __DIR__ . '/' . substr($class, strlen('Orchard\\')) . '.sharp';
+        require __DIR__ . '/Orchard/' . substr($class, strlen('Orchard\\')) . '.sharp';
     }
 });

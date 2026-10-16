@@ -1,0 +1,11 @@
+namespace Demo;
+
+class Gate
+{
+    public Gate(public Tenant tenant { get; })
+    {
+        if (!tenant.active) {
+            throw new InactiveTenant(tenant);
+        }
+    }
+}

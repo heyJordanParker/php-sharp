@@ -1,0 +1,11 @@
+namespace Demo;
+
+import Lib.Named;
+
+public class Tag : Named
+{
+    public string name()
+    {
+        return "tag";
+    }
+}

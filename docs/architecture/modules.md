@@ -76,7 +76,7 @@ return [
 ];
 ```
 
-The standard library's table names the root namespace, `''`. A test file's module is a call instead, `\Sharp\Internal\testModule(['App\Shop\CheckoutTest'], [ /* its rows */ ]);`, naming each class the file declares, even when the module binds nothing. Each of those classes also gets two methods, which PHPUnit runs around each of its tests in its own process and in a child one:
+The standard library's table names the root namespace, `''`. A test file's module is a call instead, `\Sharp\Internal\testModule('App\Shop\CheckoutTest', [ /* its rows */ ]);`, naming the class the file declares, even when the module binds nothing. A file declares one type (section 27 of the spec), and a test file whose type is no class makes no call. The class also gets two methods, which PHPUnit runs around each of its tests in its own process and in a child one:
 
 ```php
 #[\PHPUnit\Framework\Attributes\Before(PHP_INT_MAX)]      // before every other Before method and setUp
@@ -102,20 +102,24 @@ A service's id is its PHP# type in lowercase, as codex's `service_id` writes it 
 - It builds only what a binding binds, and the class of each listener `emit` runs, a new one for every event whatever lifetime a module gives it (spec section 15). It builds a class through its constructor and calls a binding's closure. Either way, it fills each parameter with the service its `Service` attribute, or else its class, names. It reads the parameters from the function's own argument information, with no reflection.
 - It runs a module file in a symbol table of its own. `zend_execute` would give the PHP code that called the engine one, which a tracing-JIT frame never frees, and `emit` and `Container::get` are both called from PHP code.
 - `emit` resolves one `Sharp.Dispatcher` for the whole app, whoever emits: a running test's module binding first, whatever its namespace, then the app's top module that binds it, which `mago compile` names in `.sharp/listeners.php`, then the standard library's `ImmediateDispatcher` (spec section 15). The checker refuses a binding of it in any other app module, and each of two top modules of the same depth.
-- It keeps each `singleton` for the request and each `scoped` service for the current scope. A `transient` service is built every time.
+- It keeps each `singleton` for as long as the app runs and each `scoped` service for the scope the running fiber runs in. A `transient` service is built every time.
 - It throws its own failures as `Sharp\ContainerError`, which extends `Error`: the service no module binds, the class that needs itself, the parameter with no class type, or the bound class that isn't there. It throws a constructor's own exception unchanged, and the request goes on.
 
-The request is the scope, as each CLI run is. A long-running host runs each unit of work in `Sharp\Container::scope(fn)`.
+The request is the default scope, as each CLI run is. A long-running host runs each unit of work in the standard library's `Scope.run`, which plain PHP calls as `\Sharp\Scope::run(fn () => …)` (spec section 32). A scope is a refcounted table with an ended mark. Each fiber context holds the scope it started in, the one it runs in and the services it is building, in a reserved slot the fiber observers fill, so a fiber started inside a scope belongs to it, and a `scoped` service resolved after its scope ended throws `Sharp\ContainerError`.
 
 ```php
 final class Container
 {
     public function get(string $id): mixed { }                  // the service $id names
     public function has(string $id): bool { }                   // whether a module binds $id
-    public static function scope(\Closure $run): mixed { }      // runs $run in a new scope and returns its result
 }
 
 final class ContainerError extends \Error { }                  // a failure of the container itself
+```
+
+```csharp
+// sharp/composer/library/Sharp/Scope.sharp: runs body in a new scope, and takes on body's effects
+public static T run<T>(Function<T()> body) => Internal.runScoped(body);
 ```
 
 **Tests.** A test file's module applies while a test of a class the file declares runs, as Spring applies a test class's own `@TestConfiguration`. The test needs no code, and the project adds nothing to `phpunit.xml`. The class's `__sharpStartTest` calls `Sharp\Internal\startTest($class)` before PHPUnit sets a test up, and its `__sharpEndTest` calls `Sharp\Internal\endTest()` after the test finishes, in PHPUnit's own process and in the child process of `#[RunInSeparateProcess]` or `processIsolation`. While a test runs, its module comes before the base modules and the environment modules don't apply, even with `SHARP_ENV` set, so a test runs exactly the set of services the checker checks. Each test builds its services again. `sharp/phpunit/` is a Composer project whose PHP# test class runs under the PHPUnit version its `composer.lock` pins, and CI runs it with `sharp/bin/test --phpunit`.
@@ -143,7 +147,7 @@ sharp/mago/crates/
                                         __sharpStartTest and __sharpEndTest, the Service attribute
 ext/sharp/
 ├── sharp.c                             Sharp\Container, Sharp\ContainerError,
-│                                       Sharp\Internal\{readModule, testModule, startTest, endTest}
+│                                       Sharp\Internal\{readModule, testModule, startTest, endTest, runScoped}
 ├── sharp.stub.php                      their public signatures
 └── sharp_arginfo.h                     generated from sharp.stub.php
 sharp/composer/
@@ -151,6 +155,7 @@ sharp/composer/
 │                                       maps Sharp\Psr\ to src/Psr/
 ├── autoload.php                        reads the library's module
 ├── library/Sharp/Module.sharp          new: binds Environment and Dispatcher for every namespace
+├── library/Sharp/Scope.sharp           Scope.run, which a long-running host calls for each unit of work
 ├── src/Psr/Container.php               new: Sharp\Psr\Container, PSR-11 over Sharp\Container
 ├── src/Psr/ContainerException.php      new: PSR-11's error for a service the container can't build
 └── src/Psr/NotFoundException.php       new: PSR-11's not-found error
@@ -162,7 +167,10 @@ Zend/tests/sharp/
 ├── Container.inc                       the app the container tests build, with the library's module
 ├── container_resolution.phpt           each kind of binding, nested namespaces
 ├── container_environment.phpt          SHARP_ENV's module first
-├── container_lifetimes.phpt            singleton, scoped, scope(), transient
+├── container_lifetimes.phpt            singleton, scoped, transient
+├── scope_run.phpt                      Scope.run: a scope per body, its end, a throw, nesting, statics
+├── scope_fibers.phpt                   a scope follows the fiber that runs in it
+├── scope_fibers_building.phpt          each fiber builds its own services, a suspended one included
 ├── container_refusals.phpt             each Sharp\ContainerError, a constructor that throws, a module that won't load
 ├── container_test_module.phpt          new: a test file's module while its test runs
 ├── container_test_environment.phpt     new: no environment module while a test runs

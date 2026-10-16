@@ -3,7 +3,8 @@ PHP# implements a generic interface with the type argument's type, a default bod
 --FILE--
 <?php
 
-require __DIR__ . '/Handlers.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Handlers');
 
 // PHP# calls `handle` through the interface, and plain PHP calls it on the class.
 $handler = new Handlers\OrderHandler();
@@ -53,7 +54,7 @@ try {
 ?>
 --EXPECTF--
 7
-Handlers\OrderHandler::handle(): Argument #1 ($item) must be of type Handlers\Order, string given, called in %s on line 13
+Handlers\OrderHandler::handle(): Argument #1 ($item) must be of type Handlers\Order, string given, called in %s on line 14
 a Handler
 11
 Handlers\OrderHandler::handleTwice(): Argument #1 ($item) must be of type Handlers.Order, string given, called in %s on line %d

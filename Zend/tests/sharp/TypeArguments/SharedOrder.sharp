@@ -1,0 +1,6 @@
+namespace App;
+
+public class SharedOrder : DatabaseEntity, Shareable
+{
+    public string share() => `shared ${this.id}`;
+}

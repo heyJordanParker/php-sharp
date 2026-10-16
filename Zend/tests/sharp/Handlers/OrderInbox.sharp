@@ -1,0 +1,7 @@
+namespace Handlers;
+
+// `count` overrides a class's method with the type argument's type.
+public class OrderInbox : Inbox<Order>
+{
+    public override int count(Order item) => item.id;
+}

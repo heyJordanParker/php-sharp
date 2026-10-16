@@ -1,0 +1,39 @@
+namespace Billing;
+
+public class Money
+{
+    public static int equalityRuns { get; private set; } = 0;
+
+    public int cents { get; }
+    public string currency { get; }
+
+    public Money(int cents, string currency)
+    {
+        this.cents = cents;
+        this.currency = currency;
+    }
+
+    public static bool operator ==(Money a, Money b)
+    {
+        Money.equalityRuns += 1;
+        return a.cents == b.cents && a.currency == b.currency;
+    }
+
+    public int hash() => this.cents;
+
+    public static int operator <=>(Money a, Money b) => a.currency == b.currency ? a.cents <=> b.cents : a.currency <=> b.currency;
+
+    public static Money operator +(Money a, Money b) => new Money(a.cents + b.cents, a.currency);
+
+    public static Money operator -(Money a, Money b) => new Money(a.cents - b.cents, a.currency);
+
+    public static Money operator *(Money a, int factor) => new Money(a.cents * factor, a.currency);
+
+    public static Money operator /(Money a, int parts) => new Money(a.cents / parts, a.currency);
+
+    public static Money operator %(Money a, int parts) => new Money(a.cents % parts, a.currency);
+
+    public static Money operator **(Money a, int power) => new Money(a.cents ** power, a.currency);
+
+    public static Money operator -(Money a) => new Money(-a.cents, a.currency);
+}

@@ -1,0 +1,6 @@
+namespace Demo;
+
+public struct Memo : Told
+{
+    public Memo(public string text { get; }) { }
+}

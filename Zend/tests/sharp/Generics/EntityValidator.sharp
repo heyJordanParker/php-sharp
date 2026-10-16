@@ -1,0 +1,6 @@
+namespace Paging;
+
+public class EntityValidator : Validator<DatabaseEntity>
+{
+    public bool validate(DatabaseEntity item) => item.id > 0;
+}

@@ -4,7 +4,8 @@ PHP# behaviors run set in the order they are written and get the other way, the 
 <?php
 
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Behavior.sharp';
-require __DIR__ . '/Behaviors.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Behaviors');
 
 // The initial values went through each `set`, so `Trimmed` trimmed one and each `Counted` counted one write.
 $first = new Behaviors\Profile();

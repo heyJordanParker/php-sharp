@@ -25,7 +25,7 @@ object(Closure)#%d (%d) {
   ["name"]=>
   string(%d) "{closure:Calls\Repository::held():%d}"
   ["file"]=>
-  string(%d) "%sTypeArgumentsCalls.sharp"
+  string(%d) "%sRepository.sharp"
   ["line"]=>
   int(%d)
   ["static"]=>
@@ -46,7 +46,7 @@ array(1) {
   string(4) "item"
 }
 Closure [ <user> public method {closure:Calls\Repository::held():%d} ] {
-  @@ %sTypeArgumentsCalls.sharp %d - %d
+  @@ %sRepository.sharp %d - %d
 
   - Bound Variables [1] {
       Variable #0 [ $item ]
