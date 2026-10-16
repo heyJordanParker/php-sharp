@@ -211,3 +211,21 @@ public int thrice(Function<int(int)> f) uses f
 public int quoted(Function<int(int)> f) uses f readonly;
 ```
 <!-- expect uses-signature -->
+
+A line holding only `…` that ends a function's body becomes a throw, so a body that returns a value still compiles. Anywhere else it is dropped, so a statement after it still runs:
+
+<!-- example elided-body: members -->
+```csharp
+public int total()
+{
+    const count = 1;
+    …
+}
+
+public void refresh()
+{
+    …
+    this.total();
+}
+```
+<!-- expect elided-body -->
