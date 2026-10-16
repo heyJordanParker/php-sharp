@@ -32,7 +32,7 @@ class IndexRead
 
     public static bool passed(List<int> values, int index)
     {
-        const fixed = new SplFixedArray(3);
+        const fixed = new SplFixedArray<int>(3);
         return fixed.offsetExists(values[index]);
     }
 

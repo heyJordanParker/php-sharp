@@ -84,7 +84,7 @@ Paths under `crates/` are in `sharp/mago/crates/`. "Semantics" is `crates/semant
 | 751 | A `@template` class takes type arguments, and the checker checks them | Works: `Shelf<Order, int>` "Too many type arguments for `Shelf`: expected 1, but found 2.", `Shelf<string>` "Type argument `string` does not satisfy `Shelf`'s `TItem`." | |
 | 751 | Its object carries none while the code runs | Works: `getTypeArguments()` of a PHP# `new Shelf<Order>()` is `[]` | |
 | 751 | `x is Shelf<Order>` is a compile error that says why | Works: "`Shelf<Order>` can't be tested: `Shelf` is a plain PHP class, so its objects carry no type arguments while the code runs.", for `as` too | |
-| 749, 751 | A bare `@template` class in a PHP# type | Compiles | Question 3: "`Shelf` needs its type argument.", with the type parameters to write (`report_unnamed_type_arguments`). Swept: `Zend/tests/sharp/IndexRead.sharp` writes `SplFixedArray<int>` |
+| 749, 751 | A bare `@template` class in a PHP# type, or after `new` | Compiles, and `new Shelf()` infers from the constructor's arguments | Question 3: "`Shelf` needs its type argument.", with the type parameters to write. `new` and a type call one check, `report_missing_type_arguments`, and only a type test (`HintPlace::TypeTest`) and a static member leave a plain PHP class alone. Swept: `Zend/tests/sharp/IndexRead.sharp` writes `SplFixedArray<int>` and `new SplFixedArray<int>(3)` |
 | 753 to 764 | `generic-method-inference` | Fails for its setup | Decision 1. Passes, and its rows include `cache.keep(cache.get("orders"))` |
 
 ## Generic objects that plain PHP creates
