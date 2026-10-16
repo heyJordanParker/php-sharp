@@ -4052,11 +4052,16 @@ private PaymentGateway gateway = new StripeGateway();
 -->
 ```csharp
 // in the standard library's List<T>
-public List<TResult> map<TResult>(Function<TResult(T)> f)                                   // map takes on the effects of the f it calls
-public Charge charge(Cart cart, Function<Cart(Cart)> prepare) => this.gateway.charge(prepare(cart));   // Http, plus prepare's effects
-public Holder keep(Function<string()> body) => new Holder(body);                            // compile error: body can't be stored; take a Function<string() uses Environment>
-carts.map(c => c.total);                                                                    // pure
-carts.map(c => this.gateway.charge(c));                                                     // has Http
+public List<TResult> map<TResult>(Function<TResult(T)> f);          // map takes on the effects of the f it calls
+
+public Charge charge(Cart cart, Function<Cart(Cart)> prepare)
+    => this.gateway.charge(prepare(cart));                            // Http, plus prepare's effects
+
+public Holder keep(Function<string()> body)
+    => new Holder(body);                                              // compile error: body can't be stored; take a Function<string() uses Environment>
+
+carts.map(c => c.total);                                              // pure
+carts.map(c => this.gateway.charge(c));                               // has Http
 ```
 
 ```text
