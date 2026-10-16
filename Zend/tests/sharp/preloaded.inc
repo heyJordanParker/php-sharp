@@ -1,2 +1,2 @@
 <?php
-require __DIR__ . '/Preloaded.sharp';
+require __DIR__ . '/Preloaded/Registry.sharp';

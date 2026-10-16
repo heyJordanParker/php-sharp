@@ -1,0 +1,14 @@
+namespace Demo.ReadonlyValues;
+
+public class Ledger
+{
+    public int paid { get; set; } = 0;
+    public string number { get; set; } = "A-1";
+
+    public int totalIn(int rate) readonly => this.paid * rate;
+
+    public void markPaid()
+    {
+        this.paid = 1;
+    }
+}

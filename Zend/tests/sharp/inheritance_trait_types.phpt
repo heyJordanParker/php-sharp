@@ -4,8 +4,9 @@ A plain PHP trait is a PHP# type: is, a parameter from plain PHP and a List elem
 <?php
 
 require __DIR__ . '/harness/Traits.inc';
-require __DIR__ . '/Traits.sharp';
-require __DIR__ . '/Inheritance.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Traits');
+fixture('Inheritance');
 
 trait Wraps
 {

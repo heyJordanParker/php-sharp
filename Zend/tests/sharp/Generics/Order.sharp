@@ -1,0 +1,6 @@
+namespace Paging;
+
+public class Order : DatabaseEntity, Shareable
+{
+    public string link() => `/orders/${this.id}`;
+}

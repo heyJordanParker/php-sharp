@@ -1,0 +1,10 @@
+namespace Demo;
+
+public enum Temper : Labeled
+{
+    case Calm;
+
+    public string code => "calm";
+
+    public static string first => "calm first";
+}

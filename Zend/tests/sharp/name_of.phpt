@@ -2,7 +2,8 @@
 PHP# nameof(X.y) runs as the string 'y': an instance property, an inherited one, a static one, and in an initial value
 --FILE--
 <?php
-require __DIR__ . '/NameOf.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('NameOf');
 
 $order = new NameOf\Order();
 echo $order->sortColumn(), "\n";

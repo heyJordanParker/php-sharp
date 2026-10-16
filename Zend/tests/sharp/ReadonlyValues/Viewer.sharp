@@ -1,0 +1,22 @@
+namespace Demo.ReadonlyValues;
+
+public class Viewer
+{
+    private Ledger kept = new Ledger();
+
+    public Viewer(readonly Ledger ledger)
+    {
+        this.kept.paid = ledger.paid;
+    }
+
+    public int render(readonly Ledger ledger)
+    {
+        const total = (readonly Ledger l) => l.totalIn(3);
+
+        return total(ledger);
+    }
+
+    public string label(readonly List<Ledger> ledgers) => ledgers[0].number;
+
+    public readonly Ledger current() readonly => this.kept;
+}

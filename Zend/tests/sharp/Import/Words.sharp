@@ -1,0 +1,13 @@
+namespace Demo;
+
+public static class Words
+{
+    extension(string text)
+    {
+        public Iterable<string> letters()
+        {
+            yield text;
+            yield global.strtoupper(text);
+        }
+    }
+}

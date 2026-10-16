@@ -1,0 +1,6 @@
+namespace Demo;
+
+public enum Aisle : int
+{
+    case First = 1;
+}

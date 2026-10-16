@@ -112,6 +112,9 @@ pub enum ParseError {
     /// class-like as a message names it, `A class`, and the type's name, at the whole type. Every type, events and
     /// interfaces included, is declared in its own file.
     NestedTypeInSharp(&'static str, Box<str>, Span),
+    /// C#'s `partial` written before a PHP# type, as in `public partial class Order`, at the `partial`. A class lives
+    /// in one file, spec section 27.
+    PartialTypeInSharp(Span),
     /// A type other than an interface name in a PHP# struct's header, as in `struct Username : string`, at the type.
     /// Spec section 10: a struct implements interfaces, and keys a `Map` by its whole value.
     StructHeaderTypeInSharp(Span),
@@ -171,6 +174,7 @@ impl HasFileId for ParseError {
             | ParseError::ConstructorInitializerInSharp(span)
             | ParseError::EventBodyInSharp(span)
             | ParseError::NestedTypeInSharp(_, _, span)
+            | ParseError::PartialTypeInSharp(span)
             | ParseError::StructHeaderTypeInSharp(span)
             | ParseError::NamedConstructorTypeParametersInSharp(_, _, span)
             | ParseError::MiscasedKeywordInSharp(_, span)
@@ -224,6 +228,7 @@ impl HasSpan for ParseError {
             | ParseError::ConstructorInitializerInSharp(span)
             | ParseError::EventBodyInSharp(span)
             | ParseError::NestedTypeInSharp(_, _, span)
+            | ParseError::PartialTypeInSharp(span)
             | ParseError::StructHeaderTypeInSharp(span)
             | ParseError::NamedConstructorTypeParametersInSharp(_, _, span)
             | ParseError::MiscasedKeywordInSharp(_, span)
@@ -293,6 +298,12 @@ impl std::fmt::Display for ParseError {
                 T!["use"] => "`use` is PHP syntax: PHP# imports a class with `import`".to_string(),
                 T!["foreach"] => "`foreach` is PHP syntax: PHP# loops over a collection with `for … of`".to_string(),
                 T!["=>"] => "PHP# writes a `Map` entry as `key: value`: `=>` is the lambda arrow".to_string(),
+                T!["<?php"] => "`<?php` is PHP syntax: a `.sharp` file has no opening tag, so delete it".to_string(),
+                T!["<?"] => "`<?` is PHP syntax: a `.sharp` file has no opening tag, so delete it".to_string(),
+                T!["<?="] => {
+                    "`<?=` is PHP syntax: a `.sharp` file has no tags, and writes output with `global.printf`".to_string()
+                }
+                T!["?>"] => "`?>` is PHP syntax: a `.sharp` file has no closing tag, so delete it".to_string(),
                 T!["#["] => {
                     "`#[` is PHP syntax: PHP# writes attributes in square brackets, as in `[Searchable]`".to_string()
                 }
@@ -381,6 +392,7 @@ impl std::fmt::Display for ParseError {
             ParseError::NestedTypeInSharp(owner, name, _) => {
                 format!("{owner} can't declare a type inside it: declare `{name}` in its own file.")
             }
+            ParseError::PartialTypeInSharp(_) => "PHP# has no partial classes: a class lives in one file.".to_string(),
             ParseError::StructHeaderTypeInSharp(_) => {
                 "A struct's header lists the interfaces it implements: a struct keys a `Map` by its whole value."
                     .to_string()
@@ -459,6 +471,7 @@ impl From<&ParseError> for Issue {
             | ParseError::ConstructorInitializerInSharp(..)
             | ParseError::EventBodyInSharp(..)
             | ParseError::NestedTypeInSharp(..)
+            | ParseError::PartialTypeInSharp(..)
             | ParseError::StructHeaderTypeInSharp(..)
             | ParseError::MiscasedKeywordInSharp(..)
             | ParseError::ClassCastInSharp(..) => Issue::error(error.to_string())

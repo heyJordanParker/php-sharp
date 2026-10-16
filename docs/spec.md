@@ -2662,25 +2662,49 @@ page.designLabel;                                           // "design design", 
 
 <!-- example one-body-per-method -->
 ```csharp
-// app/Tickets.sharp
+// app/ShowsLabel.sharp
 namespace App;
 
 public interface ShowsLabel
 {
     string label() => "label";
 }
+```
+
+<!-- example one-body-per-method -->
+```csharp
+// app/ShowsTitle.sharp
+namespace App;
 
 public interface ShowsTitle
 {
     string label() => "title";
 }
+```
+
+<!-- example one-body-per-method -->
+```csharp
+// app/Ticket.sharp
+namespace App;
 
 public class Ticket : ShowsLabel, ShowsTitle { }        // compile error: Ticket gets label from both ShowsLabel and ShowsTitle, so Ticket writes label
+```
+
+<!-- example one-body-per-method -->
+```csharp
+// app/Sticker.sharp
+namespace App;
 
 public class Sticker : ShowsLabel, ShowsTitle
 {
     public override string label() => super<ShowsLabel>.label() + "/" + super<ShowsTitle>.label();
 }
+```
+
+<!-- example one-body-per-method -->
+```csharp
+// app/Stray.sharp
+namespace App;
 
 public class Stray : ShowsTitle
 {
@@ -2706,16 +2730,34 @@ public interface Shows
 {
     string label() => "shows";
 }
+```
+
+<!-- example sub-interface-defaults -->
+```csharp
+// app/ShowsMore.sharp
+namespace App;
 
 public interface ShowsMore : Shows
 {
     override string label() => "more";             // compiles: replaces the default body of Shows
 }
+```
+
+<!-- example sub-interface-defaults -->
+```csharp
+// app/ShowsLess.sharp
+namespace App;
 
 public interface ShowsLess : Shows
 {
     string label() => "less";                     // compile error: replaces the default body of Shows, so it writes override
 }
+```
+
+<!-- example sub-interface-defaults -->
+```csharp
+// app/Fancy.sharp
+namespace App;
 
 public class Fancy : ShowsMore { }                // gets label from ShowsMore
 ```
@@ -3513,7 +3555,7 @@ public static class Pairs
 
 A file's extension marks it as PHP#. The engine, Composer's autoloader, editors and the checker all choose the grammar from the filename.
 
-A PHP# file has no opening tag. Its first line is code:
+A PHP# file has no PHP tags, so `<?php`, `<?`, `<?=` and `?>` are compile errors. Its first line is code, after the byte order mark an editor may save:
 
 <!-- example file-header -->
 ```csharp
@@ -3524,7 +3566,7 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 
 The extension is **`.sharp`**, as in `StoreService.sharp`.
 
-**A `.sharp` file that declares a type declares one, named like the file,** as Java allows one public top-level class per file. Every type, events and interfaces included, sits at file level in the namespace its folder names (section 5), so a reader finds a type by its namespace and its file. A second type in a file is a compile error. An `extern` declaration file (section 29) and a `Module.sharp` file (section 32) hold no type, so the rule doesn't cover them:
+**A `.sharp` file that declares a type declares one, named like the file, case included,** as Java allows one public top-level class per file and names the file after it. Every type, events and interfaces included, sits at file level in the namespace its folder names (section 5), so a reader finds a type by its namespace and its file. A second type in a file is a compile error, and so is C#'s `partial`, because a class lives in one file. An `extern` declaration file (section 29) and a `Module.sharp` file (section 32) hold no type, so the rule doesn't cover them:
 
 <!-- example one-type-per-file -->
 ```csharp
@@ -3559,9 +3601,13 @@ public class Reports
         Log.warning(message, ["file": caller.file, "line": caller.line, "function": caller.function]);
     }
 
+    public static void logLine(string message, int line = Position.current().line) { }   // compile error: take the whole position
+
     public void run()
     {
         Reports.logSlow("slow query");                           // logs this call's own file and line, and "App.Reports.run"
+        const log = Reports.logSlow;
+        log("slow query");                                       // logs where logSlow declares caller, and "App.Reports.logSlow"
     }
 }
 
@@ -3571,6 +3617,10 @@ Log.info("charged", ["class": typeof(Order)]);                   // compiles: re
 
 - `Position.current()` in a body gives the position where it is written.
 - As a parameter's default, `Position.current()` gives the caller's position, as C++20's `std::source_location::current()` and Swift's `#file` defaults do.
+- A call through a function value gives the position of the parameter's declaration, because C++ and Swift fill the default only at a direct call too.
+- A call that spreads a list whose elements may be a `Position`, as a `List<Any>`, gives the position of the parameter's declaration too, because the list may fill the parameter. A spread of any other list gives the caller's position.
+- The parameter takes the whole position. A default that only uses it, as `int line = Position.current().line` or `int next = Position.current().line + 1`, is a compile error: write `Position caller = Position.current()`.
+
 **A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. A pragma, `mago.toml`'s `ignore` or the baseline can hide a warning, never an error.
 
 **`vendor/bin/mago compile` compiles the project.** It checks every `.sharp` file, vendor packages included. It also creates a missing `.lean` file beside a class that has a law (section 28.1), and never rewrites an existing one.

@@ -1,0 +1,6 @@
+namespace Crossed;
+
+public interface Source
+{
+    Any read();
+}

@@ -1,0 +1,6 @@
+namespace Demo;
+
+public struct Wrapped
+{
+    public Wrapped(public Pair<int, string> inner { get; }) { }
+}

@@ -167,7 +167,7 @@ fi
 check_differential() {
   echo "== every file mago compile accepted against php -l, through its .sharpc file"
   local file name linted mismatch=false
-  for file in "$root"/Zend/tests/sharp/*.sharp; do
+  for file in "$root"/Zend/tests/sharp/*.sharp "$root"/Zend/tests/sharp/*/*.sharp; do
     name="${file#"$root"/}"
     linted="$("$php" -l "$file" 2>&1)" || true
     if [[ "$linted" == "No syntax errors detected in $file" ]]; then

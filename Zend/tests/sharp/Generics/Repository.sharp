@@ -1,0 +1,9 @@
+namespace Paging;
+
+public class Repository
+{
+
+
+
+    public PaginatedList<TItem> list<TItem : DatabaseEntity>(Query<TItem> query) => new PaginatedList<TItem>(query.rows());
+}

@@ -1,7 +1,8 @@
 <?php
 
 require __DIR__ . '/harness/Row.inc';
-require __DIR__ . '/Accessors.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Accessors');
 require __DIR__ . '/Parcel.sharp';
 
 // Each run repeats, so the JIT variants compile the accessors and methods before the second run.

@@ -1,0 +1,11 @@
+namespace NameOf;
+
+public class Order : Line
+{
+    public int total { get; set; } = 0;
+    public static int count { get; private set; } = 0;
+    protected string column = nameof(Order.total);
+
+    public string sortColumn() => this.column;
+    public List<string> columns() => [nameof(Order.total), nameof(Order.quantity), nameof(Order.count)];
+}

@@ -76,7 +76,7 @@ return [
 ];
 ```
 
-The standard library's table names the root namespace, `''`. A test file's module is a call instead, `\Sharp\Internal\testModule(['App\Shop\CheckoutTest'], [ /* its rows */ ]);`, naming each class the file declares, even when the module binds nothing. Each of those classes also gets two methods, which PHPUnit runs around each of its tests in its own process and in a child one:
+The standard library's table names the root namespace, `''`. A test file's module is a call instead, `\Sharp\Internal\testModule('App\Shop\CheckoutTest', [ /* its rows */ ]);`, naming the class the file declares, even when the module binds nothing. A file declares one type (section 27 of the spec), and a test file whose type is no class makes no call. The class also gets two methods, which PHPUnit runs around each of its tests in its own process and in a child one:
 
 ```php
 #[\PHPUnit\Framework\Attributes\Before(PHP_INT_MAX)]      // before every other Before method and setUp

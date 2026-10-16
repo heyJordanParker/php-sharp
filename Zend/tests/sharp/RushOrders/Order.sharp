@@ -1,0 +1,13 @@
+namespace Rush;
+
+import Lib.Model;
+
+public class Order : Model
+{
+    protected override string table { get; set; } = "orders";
+
+    public string tableName()
+    {
+        return this.table;
+    }
+}

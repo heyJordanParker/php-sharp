@@ -1,0 +1,14 @@
+namespace Demo;
+
+public class Guide : Essay
+{
+    public Guide()
+    {
+        this.slug = "setup";
+    }
+
+    public string topic()
+    {
+        return this.slug;
+    }
+}

@@ -1,0 +1,17 @@
+namespace Checks;
+
+import App.Order;
+import App.PaginatedList;
+
+public class Purse
+{
+    public Purse(public int count { get; })
+    {
+    }
+
+    public Purse.of(PaginatedList<Order> page) : this(1)
+    {
+    }
+
+    public static Purse operator +(Purse purse, PaginatedList<Order> page) => new Purse(purse.count);
+}

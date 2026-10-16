@@ -63,7 +63,7 @@ object(Sharp\Map)#3 (1) {
     }
   }
 }
-OutOfRangeException: Undefined array key 2 in CollectionMethods.sharp on line 55
+OutOfRangeException: Undefined array key 2 in Pantry.sharp on line 54
 object(Sharp\Map)#6 (1) {
   [0]=>
   array(2) {
@@ -143,8 +143,8 @@ array(3) {
   [2]=>
   int(9)
 }
-OutOfRangeException: Undefined array key 3 in CollectionMethods.sharp on line 121
-OutOfRangeException: Undefined array key -1 in CollectionMethods.sharp on line 121
+OutOfRangeException: Undefined array key 3 in Pantry.sharp on line 120
+OutOfRangeException: Undefined array key -1 in Pantry.sharp on line 120
 bool(true)
 bool(false)
 array(3) {
@@ -218,7 +218,7 @@ array(2) {
   int(4)
 }
 int(5)
-OutOfRangeException: The list is empty. in CollectionMethods.sharp on line 167
+OutOfRangeException: The list is empty. in Pantry.sharp on line 166
 int(1)
 NULL
 bool(true)
@@ -281,7 +281,7 @@ array(1) {
   int(7)
 }
 NULL
-DivisionByZeroError: Modulo by zero in CollectionMethods.sharp on line 79
+DivisionByZeroError: Modulo by zero in Pantry.sharp on line 78
 NULL
-Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 109
-ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 110
+Error: Call to private Sharp\Collection::__construct() from global scope in collection_methods.inc on line 110
+ReflectionException: Class Sharp\Collection is an internal class marked as final that cannot be instantiated without invoking its constructor in collection_methods.inc on line 111

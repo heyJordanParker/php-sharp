@@ -3,7 +3,8 @@ A PHP# entity holds state through fields, properties, initial values and its con
 --FILE--
 <?php
 
-require __DIR__ . '/Order.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Order');
 
 echo (new Demo\Till())->ring(), "\n";
 

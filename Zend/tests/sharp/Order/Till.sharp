@@ -1,0 +1,11 @@
+namespace Demo;
+
+class Till
+{
+    public int ring()
+    {
+        const order = new Order(1, 2, "A1");
+        order.add(3);
+        return order.total + order.id;
+    }
+}

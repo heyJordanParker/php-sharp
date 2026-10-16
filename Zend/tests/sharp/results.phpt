@@ -4,7 +4,8 @@ A method returns an expected failure as a Result, try passes it up to the caller
 <?php
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Error.sharp';
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Result.sharp';
-require __DIR__ . '/Results.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Results');
 require __DIR__ . '/results.inc';
 
 // A hot function's second call runs the code the tracing JIT compiled on its first.

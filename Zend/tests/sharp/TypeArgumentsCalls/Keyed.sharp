@@ -1,0 +1,16 @@
+namespace Calls;
+
+import App.Pair;
+
+public class Keyed<TKey>
+{
+    public Keyed(public TKey key { get; })
+    {
+    }
+
+    public Pair<TKey, T> with<T>(T value) => new Pair<TKey, T>(this.key, value);
+
+    public Pair<TKey, T> again<T>(T value) => this.with<T>(value);
+
+    public Pair<TKey, TKey> twice() => this.with<TKey>(this.key);
+}

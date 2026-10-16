@@ -1,0 +1,6 @@
+namespace Overrides;
+
+public interface Sized
+{
+    int size { get; set; }
+}

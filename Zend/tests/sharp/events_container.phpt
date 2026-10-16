@@ -84,7 +84,7 @@ echo 'its transient service, new each time: ', var_export($first->usedStamp() !=
 [$ledger, $next] = App\Shop\Bound\Ledger::$made;
 echo 'a class a module binds as a singleton, still new for every event: ', var_export($ledger !== $next, true), "\n";
 
-Sharp\Internal\testModule(['Tests\NoticesTest'], [['app\shop', 'app\mail\mailer', null, 'singleton', 'App\Mail\QueueMailer']]);
+Sharp\Internal\testModule('Tests\NoticesTest', [['app\shop', 'app\mail\mailer', null, 'singleton', 'App\Mail\QueueMailer']]);
 Sharp\Internal\startTest('Tests\NoticesTest');
 Sharp\Internal\emit(new App\Shop\Paid(3));
 Sharp\Internal\endTest();

@@ -1,0 +1,107 @@
+namespace Demo;
+
+import RuntimeException;
+
+public class Gateway
+{
+    public int amount { get; set; } = 0;
+
+    public Result<int, ChargeError> charged => Result.Ok((try this.charge(this.amount)).total);
+
+    public Result<Receipt, ChargeError> charge(int total)
+    {
+        if (total > 0) {
+            return Result.Ok(new Receipt(total));
+        }
+        return Result.Err(ChargeError.Declined("empty cart"));
+    }
+
+    public Result<int, ChargeError> doubled(int total)
+    {
+        const receipt = try this.charge(total);
+        return Result.Ok(receipt.total * 2);
+    }
+
+    public Result<int, ChargeError> total(int total) => Result.Ok((try this.charge(total)).total);
+
+    public Result<int, ChargeError> later(int total)
+    {
+        Function<Result<int, ChargeError>(int)> charged = amount => Result.Ok((try this.charge(amount)).total + 1);
+        return charged(total);
+    }
+
+    public static Result<List<T>, ChargeError> listed<T>(Result<T, ChargeError> result) => Result.Ok([try result]);
+
+    public Result<List<Receipt>, ChargeError> receipts(int total) => Gateway.listed(this.charge(total));
+
+    public Result<int, ChargeError> written() => Result<int, ChargeError>.Ok(5);
+
+    public string describe(Result<Receipt, ChargeError> result) => match (result) {
+        Result.Ok(Receipt receipt) => `paid ${receipt.total}`,
+        Result.Err(ChargeError error) => error.message,
+    };
+
+    public bool failed(Result<Receipt, ChargeError> result) => result is Result.Err;
+
+    public string message(Error error) => error.message;
+
+    public bool same(Result<int, ChargeError> a, Result<int, ChargeError> b) => a == b;
+
+    public Lookup<int> missing() => Lookup.Missing;
+
+    public Lookup<string> missingText() => Lookup.Missing;
+
+    public Lookup<int> writtenMissing() => Lookup<int>.Missing;
+
+    public Lookup<int> found(int value) => Lookup.Found(value);
+
+    public Result<int, ChargeError> arm(int mode) => match (mode) {
+        1 => Result.Ok(1),
+        default => Result.Err(ChargeError.Expired),
+    };
+
+    public Lookup<int> lookupArm(int mode) => match (mode) {
+        1 => Lookup.Found(1),
+        default => Lookup.Missing,
+    };
+
+    public Result<Lookup<int>, ChargeError> wrapped(int value)
+    {
+        Lookup<int> lookup = value > 0 ? Lookup.Found(value) : Lookup.Missing;
+        return Result.Ok(lookup);
+    }
+
+    public Result<Lookup<int>, ChargeError> expired() => Result.Err(ChargeError.Expired);
+
+    public int nested(Result<Lookup<int>, ChargeError> result) => match (result) {
+        Result.Ok(Lookup.Found(int value)) => value,
+        Result.Ok(Lookup.Missing) => 0,
+        Result.Err e => -1,
+    };
+
+    public Result<string, ChargeError> templated(int total) => Result.Ok(`total ${(try this.charge(total)).total}`);
+
+    public Result<int, ChargeError> caught(int total)
+    {
+        try {
+            throw new RuntimeException("boom");
+        } catch (RuntimeException failure) {
+            return Result.Ok((try this.charge(total)).total);
+        }
+    }
+
+    public Result<int, ChargeError> finished(int total)
+    {
+        int seen = 0;
+        try {
+            seen = 1;
+        } finally {
+            seen = (try this.charge(total)).total;
+        }
+        return Result.Ok(seen);
+    }
+
+    public string statics() => `${ChargeError.kind} ${Temper.first} ${Kind.count}`;
+
+    public string labels() => `${Temper.Calm.label}, ${Kind.Big.label}, ${Parcel.Boxed(2).label}`;
+}

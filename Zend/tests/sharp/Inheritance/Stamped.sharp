@@ -1,0 +1,10 @@
+namespace Demo;
+
+public class Stamped : HasDesign
+{
+    public string designColumn => "stamped";
+
+    public string designTitle() => "Stamped";
+
+    public override string designTag { get; set; } = "stamped";
+}

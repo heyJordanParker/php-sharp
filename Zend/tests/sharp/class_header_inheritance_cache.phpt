@@ -12,7 +12,8 @@ include __DIR__ . '/../../../sapi/cli/tests/php_cli_server.inc';
 $dir = var_export(__DIR__, true);
 php_cli_server_start(<<<PHP
     require $dir . '/harness/Header.inc';
-    require $dir . '/Header.sharp';
+    require_once $dir . '/harness/fixture.inc';
+    fixture('Header');
     \$article = new Demo\Article();
     \$interfaces = class_implements(\$article);
     ksort(\$interfaces);
@@ -22,8 +23,8 @@ php_cli_server_start(<<<PHP
     ksort(\$interfaces);
     echo get_parent_class(\$card), ' ', implode(',', \$interfaces), ' ', \$card->copy()->link(), "\n";
     require $dir . '/harness/Traits.inc';
-    require $dir . '/Traits.sharp';
-    require $dir . '/Inheritance.sharp';
+    fixture('Traits');
+    fixture('Inheritance');
     foreach ([new Demo\Essay(), new Demo\Guide(), new Demo\Both()] as \$object) {
         echo get_parent_class(\$object), ' ', implode(',', class_uses(\$object)), ' ',
             implode(',', (new ReflectionClass(\$object))->getTraitNames()), ' ',

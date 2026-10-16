@@ -98,7 +98,7 @@ array(3) {
   [2]=>
   string(1) "y"
 }
-Demo\InactiveTenant: The tenant is inactive. in Constructors.sharp on line 57
+Demo\InactiveTenant: The tenant is inactive. in Gate.sharp on line 8
 bool(true)
 string(2) "HI"
 Error: Cannot modify protected(set) property Demo\Label::$text from global scope in constructors.php on line 39

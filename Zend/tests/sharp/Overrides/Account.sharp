@@ -1,0 +1,11 @@
+namespace Overrides;
+
+public class Account : Named
+{
+    public string name { get; private set; } = "new";
+
+    public void rename(string name)
+    {
+        this.name = name;
+    }
+}

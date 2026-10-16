@@ -1,0 +1,12 @@
+namespace Demo;
+
+public interface HasDesign
+{
+    string designColumn { get; }
+
+    string designKey() => `design:${this.designColumn}`;
+
+    string designTitle();
+
+    string designTag => `tag:${this.designColumn}`;
+}

@@ -128,7 +128,7 @@ object(Sharp\Map)#4 (2) {
     int(4)
   }
 }
-TypeError: Demo\Headcount::byName(): Argument #1 ($counts) must be of type Map<Lib.Standing, int>, array given: ["missing"] key expected Lib.Standing, got string 'missing', called in %s on line %d in EnumKeys.sharp on line 67
+TypeError: Demo\Headcount::byName(): Argument #1 ($counts) must be of type Map<Lib.Standing, int>, array given: ["missing"] key expected Lib.Standing, got string 'missing', called in %s on line %d in Headcount.sharp on line 67
 array(2) {
   [0]=>
   string(1) "5"
@@ -165,7 +165,7 @@ array(2) {
   [1]=>
   string(6) "Closed"
 }
-TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 44
-TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 47
-TypeError: Cannot access offset of type Lib\Size on array in enum_keys.inc on line 48
-TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 49
+TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 45
+TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 48
+TypeError: Cannot access offset of type Lib\Size on array in enum_keys.inc on line 49
+TypeError: Cannot access offset of type Lib\Standing on array in enum_keys.inc on line 50

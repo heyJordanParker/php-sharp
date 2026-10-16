@@ -1,0 +1,8 @@
+namespace Overrides;
+
+public class Figure
+{
+    protected string title { get; set; } = "figure";
+
+    public string name() => this.title;
+}

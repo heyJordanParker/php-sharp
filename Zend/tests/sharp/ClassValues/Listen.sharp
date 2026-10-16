@@ -1,0 +1,9 @@
+namespace Classes;
+
+import Attribute;
+
+[Attribute]
+public class Listen
+{
+    public Listen(public string topic { get; }) { }
+}

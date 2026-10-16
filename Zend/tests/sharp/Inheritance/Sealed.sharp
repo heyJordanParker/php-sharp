@@ -1,0 +1,6 @@
+namespace Demo;
+
+public class Sealed : Base
+{
+    public final override string kind() => "sealed";
+}

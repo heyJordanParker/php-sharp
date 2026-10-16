@@ -1,0 +1,38 @@
+namespace Calls;
+
+import App.Box;
+import App.DatabaseEntity;
+import App.PaginatedList;
+
+public class Inspection<TItem : DatabaseEntity>
+{
+    public Inspection()
+    {
+    }
+
+    public bool holds(Any value) => value is TItem;
+
+    public TItem? kept(Any value) => value as TItem;
+
+    public string arm(Any value) => match (value) { TItem => "item", Box<TItem> => "box", default => "other" };
+
+    public string kind() => typeof(TItem);
+
+    public TItem made(int id) => new TItem(id);
+
+    public TItem remade(int id)
+    {
+        const type = typeof(TItem);
+        return new (type)(id);
+    }
+
+    public PaginatedList<TItem> listed() => new (typeof(PaginatedList<TItem>))([]);
+
+    public int limit() => TItem.LIMIT;
+
+    public Function<bool(Any)> tester() => (Any value) => value is TItem;
+
+    public Function<string()> namer() => () => typeof(TItem);
+
+    public Function<TItem()> maker() => () => new TItem(7);
+}

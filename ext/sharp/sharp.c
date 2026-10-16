@@ -80,7 +80,8 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	HashTable *request_spelled_lists;
 	/* Spec section 32: Sharp\Container's bindings, under "namespace id" a list of the modules that bind it, each a
 	 * list of its rows, the base modules' and the environment modules' apart; the paths of the module files it read;
-	 * each test file's module, under each class the file declares, and the one of the test that runs now, or NULL;
+	 * each test file's module, under the lowercase name of the one class the file declares, and the one of the test
+	 * that runs now, or NULL;
 	 * the services a singleton or a scoped binding keeps, by binding row; and the bindings and classes it is
 	 * building, to refuse a cycle. */
 	HashTable container_bindings;
@@ -5988,28 +5989,25 @@ ZEND_FUNCTION(Sharp_Internal_readModule)
 	sharp_container_read(ZSTR_VAL(path), &SHARP_G(container_bindings));
 }
 
-/* Spec section 32: a test file's module, the rows bindings holds, applies while a test of a class of classes runs.
- * The compiler calls this from the test file. */
+/* Spec section 32: a test file's module, the rows bindings holds, applies while a test of the class named class runs.
+ * A file declares one type, section 27, so the module is that one class's. The compiler calls this from the test
+ * file. */
 ZEND_FUNCTION(Sharp_Internal_testModule)
 {
-	HashTable *classes, *bindings;
+	zend_string *class;
+	HashTable *bindings;
 
 	ZEND_PARSE_PARAMETERS_START(2, 2)
-		Z_PARAM_ARRAY_HT(classes)
+		Z_PARAM_STR(class)
 		Z_PARAM_ARRAY_HT(bindings)
 	ZEND_PARSE_PARAMETERS_END();
 
 	zval module;
 	array_init(&module);
 	sharp_container_group(bindings, Z_ARRVAL(module));
-	zval *class;
-	ZEND_HASH_FOREACH_VAL(classes, class) {
-		zend_string *name = zend_string_tolower(Z_STR_P(class));
-		Z_ADDREF(module);
-		zend_hash_update(&SHARP_G(container_tests), name, &module);
-		zend_string_release(name);
-	} ZEND_HASH_FOREACH_END();
-	zval_ptr_dtor(&module);
+	zend_string *name = zend_string_tolower(class);
+	zend_hash_update(&SHARP_G(container_tests), name, &module);
+	zend_string_release(name);
 }
 
 /* Spec section 6.5: a `static lazy` property computes its value on its first read and keeps it for a singleton's

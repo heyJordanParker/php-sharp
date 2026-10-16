@@ -1,0 +1,9 @@
+namespace Callers;
+
+public static class Texts
+{
+    extension(string value)
+    {
+        public Position at(Position caller = Position.current()) => caller;
+    }
+}

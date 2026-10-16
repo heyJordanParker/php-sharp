@@ -7,7 +7,8 @@ namespace {
     require __DIR__ . '/attempt.inc';
     require __DIR__ . '/../../../sharp/composer/library/Sharp/InvalidFields.sharp';
     require __DIR__ . '/Stamp.sharp';
-    require __DIR__ . '/Structs.sharp';
+    require __DIR__ . '/harness/fixture.inc';
+    fixture('Structs');
 
     // Each round runs every method, so the JIT variants compile them before the last round, whose output is printed.
     for ($round = 0; $round < 100; $round++) {

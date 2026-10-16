@@ -1,0 +1,5 @@
+namespace Demo;
+
+import Lib.Copies;
+
+public event Copied(int id) : Copies;

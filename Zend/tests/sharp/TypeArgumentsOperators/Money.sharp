@@ -1,0 +1,10 @@
+namespace Operators;
+
+public class Money
+{
+    public Money(public int cents { get; })
+    {
+    }
+
+    public static Money operator +(Money a, Money b) => new Money(a.cents + b.cents);
+}

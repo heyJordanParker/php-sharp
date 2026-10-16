@@ -1,0 +1,7 @@
+namespace Paging;
+
+public interface Validator<TItem : DatabaseEntity>
+{
+
+    bool validate(TItem item);
+}
