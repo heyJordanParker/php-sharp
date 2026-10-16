@@ -820,6 +820,7 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 - **The bound is written inline:** `<TItem : DatabaseEntity>`.
 - **Several bounds use `&`:** `<TItem : DatabaseEntity & Shareable>`.
 - **`Object` bounds a type parameter to any object,** `<TValue : Object>`, as C#'s `where T : class` and TypeScript's `T extends object` do. It is a bound alone.
+- **A bound may name another type parameter,** `<TPart : TItem>`, as C#'s `where TPart : TItem` and Java's and TypeScript's `<U extends T>` do. A `TPart` then goes wherever a `TItem` goes. It is a bound alone, as in Java, and a bound that leads back to its own type parameter, such as `<TItem : TItem>`, is a compile error, as in C#.
 - **A type parameter with no bound may hold `null`,** so it is bounded by `Any?`.
 - **A generic class can't implement PHP's `Serializable`,** and the error points to `__serialize` and `__unserialize`.
 - **A class value with type arguments can't be a `Map` key,** because `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` share the plain class name.
@@ -829,6 +830,9 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 public class PaginatedList<TItem : DatabaseEntity> { … }
 public PaginatedList<TItem> list<TItem : DatabaseEntity>(Query<TItem> query) { … }
 public TValue keep<TValue : Object>(TValue value) => value;
+public TItem either<TItem : DatabaseEntity, TPart : TItem>(TItem whole, TPart part) => part;   // compiles: a TPart goes where a TItem goes
+public void joined<TItem, TPart : TItem & Shareable>() { }                                      // compile error: a type parameter is a bound alone
+public void looped<TItem : TItem>() { }                                                         // compile error: the bound of TItem leads back to TItem
 ```
 
 **A class that implements or extends a generic type takes its type argument's type,** as in C#, Java, Kotlin, TypeScript and Rust: `OrderHandler : Handler<Order>` writes `handle(Order item)`. A call from plain PHP still checks `item` against `Order` under the caller's `strict_types`, as every typed parameter is checked, and reflection reports `Order` as its type:
