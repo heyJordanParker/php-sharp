@@ -218,6 +218,10 @@ public class Rack<TItem>
     public static Box<Customer> customerBox() => new Box<Customer>();
 
     public string add<TSub : TItem>(TSub item) => "added";
+
+    public static string put<TSub : TItem>(TSub item) => "put";
+
+    public static string boxed<TBox : Box<TItem>>(TBox box) => "boxed";
 }
 
 public class Ledger<TItem>
