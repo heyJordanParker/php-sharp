@@ -118,8 +118,8 @@ final class ContainerError extends \Error { }                  // a failure of t
 ```
 
 ```csharp
-// sharp/composer/library/Sharp/Scope.sharp: runs body in a new scope, and has body's effects
-public static T run<T>(Function<T()> body) uses body => Internal.runScoped(body);
+// sharp/composer/library/Sharp/Scope.sharp: runs body in a new scope, and takes on body's effects
+public static T run<T>(Function<T()> body) => Internal.runScoped(body);
 ```
 
 **Tests.** A test file's module applies while a test of a class the file declares runs, as Spring applies a test class's own `@TestConfiguration`. The test needs no code, and the project adds nothing to `phpunit.xml`. The class's `__sharpStartTest` calls `Sharp\Internal\startTest($class)` before PHPUnit sets a test up, and its `__sharpEndTest` calls `Sharp\Internal\endTest()` after the test finishes, in PHPUnit's own process and in the child process of `#[RunInSeparateProcess]` or `processIsolation`. While a test runs, its module comes before the base modules and the environment modules don't apply, even with `SHARP_ENV` set, so a test runs exactly the set of services the checker checks. Each test builds its services again. `sharp/phpunit/` is a Composer project whose PHP# test class runs under the PHPUnit version its `composer.lock` pins, and CI runs it with `sharp/bin/test --phpunit`.

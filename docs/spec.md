@@ -1183,7 +1183,7 @@ lines.sortedBy(l => l.amount);
 - Methods that read return a new collection.
 - `first` throws `OutOfRangeException` when nothing matches, as a bare index read does.
 - A `sortedBy` key of type `T` or `T?` compiles exactly when `<` compiles on two non-null `T` values. The nullable part is allowed, and it sorts first.
-- A method that takes a function has that function's effects (section 29), so `lines.map(l => l.name)` is pure.
+- A method takes on the effects of each function it is given (section 29), so `lines.map(l => l.name)` is pure.
 - Methods that change a collection change it in place:
 
 <!-- example collection-write-methods: statements
@@ -3772,7 +3772,7 @@ public class TenantCache
 
 **Pure code** reaches no `foreign` object, emits no event, calls no plain PHP unless an `extern` declares it pure, and changes nothing it was given (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
 
-**Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types. Every implementation is held to what the declaration allows:
+**Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types, except the function type of a method's parameter, which takes on what each call passes (below). Every implementation is held to what the declaration allows:
 
 <!-- example effectful-declarations: members -->
 ```csharp
@@ -3873,7 +3873,9 @@ public class StoreCheckout : Checkout
 }
 ```
 
-**A method that takes a function can have that function's effects.** Its declaration writes `uses f`, where `f` is one of its function-typed parameters, with or without a body. At each call, the method has its body's own effects plus the effects of the function passed as `f`. Code that calls it writes nothing.
+**A method takes on the effects of each function it is given.** A parameter whose function type states no effects, as `f` in `map(Function<TResult(T)> f)`, has at each call the effects of the function that call passes. The method has its body's own effects plus those, and nothing is written, as with Swift's `rethrows` and Kotlin's inline lambdas, and as a call to plain PHP takes on the effects of each lambda passed to it.
+
+**Such a parameter runs only inside the call,** as a Swift closure parameter does without `@escaping`. Storing it in a field, a collection or a new object, returning it, and capturing it in a lambda that escapes are compile errors that name the type to take instead. Calling it, and passing it on to another method's function parameter, are allowed. A local may hold it, and the local is held to the same rules.
 
 <!-- example function-effects: statements in Carts<T>
 List<Cart> carts = [new Cart()];
@@ -3881,20 +3883,25 @@ private PaymentGateway gateway = new StripeGateway();
 -->
 ```csharp
 // in the standard library's List<T>
-public List<TResult> map<TResult>(Function<TResult(T)> f) uses f;
-
-carts.map(c => c.total);                             // pure
-carts.map(c => this.gateway.charge(c));              // has Http
-
-// a method with a body: Http from this.gateway, plus the effects of prepare
-public Charge charge(Cart cart, Function<Cart(Cart)> prepare) uses prepare => this.gateway.charge(prepare(cart));
+public List<TResult> map<TResult>(Function<TResult(T)> f)                                   // map takes on the effects of the f it calls
+public Charge charge(Cart cart, Function<Cart(Cart)> prepare) => this.gateway.charge(prepare(cart));   // Http, plus prepare's effects
+public Holder keep(Function<string()> body) => new Holder(body);                            // compile error: body can't be stored; take a Function<string() uses Environment>
+carts.map(c => c.total);                                                                    // pure
+carts.map(c => this.gateway.charge(c));                                                     // has Http
 ```
 
-The standard library's collection methods (section 12) are declared this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
+```text
+`body` can't be stored in a new object: its type states no effects.
+Take a `Function<string() uses Environment>`, whose type states the effects it may have.
+```
+
+**A parameter whose function type states its effects keeps them as a cap.** `Function<Charge(Cart) uses Http>` accepts a function with `Http` or no effects, and the method has `Http` from calling it. Such a parameter may be stored, returned and captured, as any function value may.
+
+The standard library's collection methods (section 12) take on the effects of their functions this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
 
 **Plain PHP can run any function it is given,** as `global.array_map(f, list)` and `global.usort(list, f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => global.time()` to `global.call_user_func` has the effect `Clock`.
 
-**Code with a body writes no `uses` except `uses f`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function its `uses f` names, and its body and declaration show all four. The checker works out each method's effects, and the editor displays them.
+**Code with a body writes no `uses`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function it is given, and its body and declaration show all four. The checker works out each method's effects, and the editor displays them. A `uses` that names a function parameter, with or without a body, is a compile error that says to delete it.
 
 ## 30. Tuples
 

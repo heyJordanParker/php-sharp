@@ -202,12 +202,12 @@ line 2 expects a compile error, and the checker accepts it
 
 ## 3. Fragments
 
-A signature that ends in `uses` and the function parameters it names gets a body, with or without its `;`, as a library declaration such as `List.map`'s is written:
+A signature that ends in `uses` and the function parameters it names gets a body, with or without its `;`, as the standard library once declared `List.map`. A method now takes on the effects of each function it is given with nothing written, so the checker refuses a function parameter in `uses`, and each line expects that compile error. sharp/bin/spec drops this rule in a pull request of its own, since the spec guard lets sharp/bin/spec change only alone:
 
 <!-- example uses-signature: members -->
 ```csharp
-public int twice(Function<int(int)> f) uses f;
-public int thrice(Function<int(int)> f) uses f
-public int quoted(Function<int(int)> f) uses f readonly;
+public int twice(Function<int(int)> f) uses f;          // compile error
+public int thrice(Function<int(int)> f) uses f          // compile error
+public int quoted(Function<int(int)> f) uses f readonly; // compile error
 ```
 <!-- expect uses-signature -->
