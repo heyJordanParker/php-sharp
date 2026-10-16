@@ -14,6 +14,12 @@ public static class FloatResults
         return value ?? "none";
     }
 
+    public static Any maybe(Function<float(int)>? f)
+    {
+        const value = f?.(2);
+        return value ?? "none";
+    }
+
     public static List<float> listed(Function<List<float>()> f) => f();
 
     public static Any kept(Function<int(int)> f)

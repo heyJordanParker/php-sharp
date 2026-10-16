@@ -9,6 +9,8 @@ use Floats\FloatResults;
 var_dump(FloatResults::direct(fn (int $n) => $n * 2));
 var_dump(FloatResults::nullable(fn (int $n) => $n * 2));
 var_dump(FloatResults::nullable(fn (int $n) => null));
+var_dump(FloatResults::maybe(fn (int $n) => $n * 2));
+var_dump(FloatResults::maybe(null));
 var_dump(FloatResults::listed(fn () => [1, 2.5]));
 var_dump(FloatResults::kept(fn (int $n) => $n * 2));
 try {
@@ -19,6 +21,8 @@ try {
 ?>
 --EXPECTF--
 float(4)
+float(4)
+string(4) "none"
 float(4)
 string(4) "none"
 array(2) {
