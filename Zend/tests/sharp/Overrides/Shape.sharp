@@ -1,0 +1,11 @@
+namespace Overrides;
+
+public abstract class Shape
+{
+    public abstract string kind { get; }
+    public virtual string label => "shape";
+    public virtual int sides { get; set; } = 0;
+    protected int corners = 0;
+
+    public string describe() => `${this.kind} ${this.label} ${this.sides}`;
+}

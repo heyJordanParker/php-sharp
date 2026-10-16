@@ -5903,28 +5903,25 @@ ZEND_FUNCTION(Sharp_Internal_readModule)
 	sharp_container_read(ZSTR_VAL(path), &SHARP_G(container_bindings));
 }
 
-/* Spec section 32: a test file's module, the rows bindings holds, applies while a test of a class of classes runs.
- * The compiler calls this from the test file. */
+/* Spec section 32: a test file's module, the rows bindings holds, applies while a test of the class named class runs.
+ * A file declares one type, section 27, so the module is that one class's. The compiler calls this from the test
+ * file. */
 ZEND_FUNCTION(Sharp_Internal_testModule)
 {
-	HashTable *classes, *bindings;
+	zend_string *class;
+	HashTable *bindings;
 
 	ZEND_PARSE_PARAMETERS_START(2, 2)
-		Z_PARAM_ARRAY_HT(classes)
+		Z_PARAM_STR(class)
 		Z_PARAM_ARRAY_HT(bindings)
 	ZEND_PARSE_PARAMETERS_END();
 
 	zval module;
 	array_init(&module);
 	sharp_container_group(bindings, Z_ARRVAL(module));
-	zval *class;
-	ZEND_HASH_FOREACH_VAL(classes, class) {
-		zend_string *name = zend_string_tolower(Z_STR_P(class));
-		Z_ADDREF(module);
-		zend_hash_update(&SHARP_G(container_tests), name, &module);
-		zend_string_release(name);
-	} ZEND_HASH_FOREACH_END();
-	zval_ptr_dtor(&module);
+	zend_string *name = zend_string_tolower(class);
+	zend_hash_update(&SHARP_G(container_tests), name, &module);
+	zend_string_release(name);
 }
 
 /* Spec section 6.5: a `static lazy` property computes its value on its first read and keeps it for a singleton's

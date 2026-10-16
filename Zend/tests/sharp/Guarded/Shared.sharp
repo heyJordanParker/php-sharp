@@ -1,0 +1,15 @@
+namespace Demo;
+
+public class Shared
+{
+    private static Map<string, int> counts = [:];
+
+    public static List<Map<string, int>> write()
+    {
+        Shared.counts = ["a": 1];
+        const kept = Shared.counts;
+        Shared.counts["a"] = 2;
+        Shared.counts["b"] = 3;
+        return [kept, Shared.counts];
+    }
+}

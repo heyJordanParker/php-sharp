@@ -1,0 +1,11 @@
+namespace Demo;
+
+class Label
+{
+    public Label(public string text { get; init; }) { }
+
+    public Label.shouting(string text) : this(text)
+    {
+        this.text = global.strtoupper(text);
+    }
+}

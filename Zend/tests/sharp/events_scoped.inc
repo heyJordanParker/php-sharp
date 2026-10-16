@@ -75,7 +75,7 @@ container_project('events-scoped', [
         }
         SHARP,
 ]);
-Sharp\Internal\testModule(['Tests\LaterTest'], [['app', 'sharp\dispatcher', null, 'singleton', 'App\Scoped\Later']]);
+Sharp\Internal\testModule('Tests\LaterTest', [['app', 'sharp\dispatcher', null, 'singleton', 'App\Scoped\Later']]);
 
 // Keeps its listener's handle in a property, and its listener uses it, so the two only go together.
 final class Keeper

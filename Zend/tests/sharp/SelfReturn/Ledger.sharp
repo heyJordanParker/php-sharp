@@ -1,0 +1,8 @@
+namespace Classes;
+
+public class Ledger : Entity
+{
+    public Ledger(string row, int pages = 1) : super(row) { }
+
+    public static override string kind() => "ledger";
+}

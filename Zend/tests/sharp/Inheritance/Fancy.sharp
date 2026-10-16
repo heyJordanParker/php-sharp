@@ -1,0 +1,6 @@
+namespace Demo;
+
+public class Fancy : ShowsMore
+{
+    public string both() => super<Shows>.label() + "/" + this.label();
+}

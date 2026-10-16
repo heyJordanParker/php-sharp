@@ -1,0 +1,17 @@
+namespace Behaviors;
+
+import Sharp.Behavior;
+
+// A generic behavior, which each property names with its type argument.
+public class Kept<T> : Behavior<T>
+{
+    private int writes = 0;
+
+    public T get(T value) => value;
+
+    public T set(T value)
+    {
+        this.writes = this.writes + 1;
+        return value;
+    }
+}

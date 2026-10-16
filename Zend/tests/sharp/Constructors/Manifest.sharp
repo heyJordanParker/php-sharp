@@ -1,0 +1,8 @@
+namespace Demo;
+
+class Manifest
+{
+    public Manifest(public string name { get; }) { }
+
+    public static Manifest parse(string json) => new Manifest(json.trim());
+}

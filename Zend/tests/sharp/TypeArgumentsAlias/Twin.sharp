@@ -1,0 +1,8 @@
+namespace Aliased;
+
+public class Twin<TFirst, TSecond>
+{
+    public Twin()
+    {
+    }
+}

@@ -1,0 +1,10 @@
+namespace App;
+
+import Lib.Snapshot;
+
+public class Ledger<TEntry : DatabaseEntity> : Snapshot
+{
+    public Ledger(public List<TEntry> entries { get; })
+    {
+    }
+}

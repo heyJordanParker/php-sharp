@@ -1,0 +1,8 @@
+namespace Demo;
+
+public struct JsonTag
+{
+    public JsonTag(public string name { get; }) { }
+
+    public string toString() => `#${this.name}`;
+}

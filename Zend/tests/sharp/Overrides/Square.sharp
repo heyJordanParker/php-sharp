@@ -1,0 +1,11 @@
+namespace Overrides;
+
+public class Square : Shape
+{
+    public override string kind => "square";
+    public override string label => "four sides";
+    public override int sides { get => field; set => field = value < 0 ? 0 : value; } = 4;
+    protected override int corners { get; set; } = 4;
+
+    public int cornerCount() => this.corners;
+}

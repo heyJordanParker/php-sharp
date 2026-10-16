@@ -1,0 +1,11 @@
+namespace Callers;
+
+public class Note
+{
+    public Position made { get; }
+
+    public Note(Position made = Position.current())
+    {
+        this.made = made;
+    }
+}

@@ -1,0 +1,8 @@
+namespace Handlers;
+
+public class Order
+{
+    public Order(public int id { get; })
+    {
+    }
+}

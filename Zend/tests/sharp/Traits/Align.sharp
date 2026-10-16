@@ -1,0 +1,11 @@
+namespace Demo;
+
+import Lib.Aligned;
+
+public enum Align : string, Aligned
+{
+    case Left = "left";
+    case Right = "right";
+
+    public string label() => "align";
+}

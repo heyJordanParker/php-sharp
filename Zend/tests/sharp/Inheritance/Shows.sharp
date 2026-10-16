@@ -1,0 +1,6 @@
+namespace Demo;
+
+public interface Shows
+{
+    string label() => "shows";
+}

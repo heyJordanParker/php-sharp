@@ -1,0 +1,15 @@
+namespace Overrides;
+
+import RuntimeException;
+
+public class Faulty
+{
+    private static int code = Faulty.fail();
+
+    public static int fail()
+    {
+        throw new RuntimeException("no code");
+    }
+
+    public static int read() => Faulty.code;
+}

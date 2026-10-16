@@ -1,0 +1,10 @@
+namespace Calls;
+
+import App.Box;
+import App.Order;
+import Lib.PlainPicker;
+
+public class OrderPicker : PlainPicker
+{
+    public Box<Order> pickOrder(Order order) => super.pick<Order>(order);
+}

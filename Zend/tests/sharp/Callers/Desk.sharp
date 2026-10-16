@@ -1,0 +1,17 @@
+namespace Callers;
+
+public class Desk
+{
+    public static List<Position> calls()
+    {
+        const reports = new Reports();
+        const log = Reports.logSlow;
+        return [
+            Reports.logSlow("a static call"),
+            Reports.logSlow("a named argument", caller: new Position("Given.sharp", 1, 1, "Callers.given")),
+            reports.seen(1),
+            new Note().made,
+            log("through a function value"),
+        ];
+    }
+}

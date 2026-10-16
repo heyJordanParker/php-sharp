@@ -1,0 +1,6 @@
+namespace Demo;
+
+public struct JsonPoint
+{
+    public JsonPoint(public int x { get; }) { }
+}

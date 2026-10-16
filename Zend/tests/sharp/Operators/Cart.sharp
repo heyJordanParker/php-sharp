@@ -1,0 +1,5 @@
+namespace Billing;
+
+public class Cart
+{
+}

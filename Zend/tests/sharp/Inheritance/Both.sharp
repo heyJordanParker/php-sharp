@@ -1,0 +1,6 @@
+namespace Demo;
+
+public class Both : Described, Told
+{
+    public override string describe() => super<Described>.describe() + "+" + super<Told>.describe();
+}

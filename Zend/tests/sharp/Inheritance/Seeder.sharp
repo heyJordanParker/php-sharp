@@ -1,0 +1,20 @@
+namespace Demo;
+
+import Lib.Copies;
+
+public static class Seeder
+{
+    public static bool owns(Any value) => value is Copies;
+
+    public static string seed(Copies owner) => owner.copy();
+
+    public static int count(List<Copies> owners) => owners.count();
+
+    public static string bound<T : Copies>(T owner) => owner.copy();
+
+    public static string both<T : Greets & Copies>(T owner) => owner.hi() + " " + owner.copy();
+
+    public static int firstKey(Coded coded) => coded.keys()[0];
+
+    public static Tagger<string> tagger() => new Tagger<string>("a");
+}

@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: c63abf9fae12013259fc77e80c897077d1bd7526 */
+ * Stub hash: b86f5dfbcf1a0d2d8cd4cfd6eb5fd036846ae21f */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -28,7 +28,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_readModule, 0, 1,
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_testModule, 0, 2, IS_VOID, 0)
-	ZEND_ARG_TYPE_INFO(0, classes, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO(0, class, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, bindings, IS_ARRAY, 0)
 ZEND_END_ARG_INFO()
 

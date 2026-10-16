@@ -1,0 +1,10 @@
+namespace Demo;
+
+public class Poster : HasDesign
+{
+    public string designColumn => "poster";
+
+    public string designTitle() => "Poster";
+
+    public override string designTag => "poster tag";
+}

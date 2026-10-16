@@ -3,7 +3,8 @@ PHP# willSet and didSet run only once the object is built: after its constructor
 --FILE--
 <?php
 
-require __DIR__ . '/Observers.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Observers');
 
 // The initial values fill the storage without `set` or an observer, a computed one included, and the static's too.
 // The constructor's writes, a method's it calls included, run `set` and no observer.

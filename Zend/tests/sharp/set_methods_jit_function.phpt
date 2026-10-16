@@ -72,7 +72,7 @@ array(6) {
   [5]=>
   string(9) "vip,5,tea"
 }
-OutOfRangeException: No element matches the predicate in Sets.sharp on line 43
+OutOfRangeException: No element matches the predicate in Tagged.sharp on line 43
 array(7) {
   [0]=>
   bool(true)
@@ -125,7 +125,7 @@ array(7) {
   [6]=>
   bool(true)
 }
-TypeError: Demo\Tagged::strings(): Argument #1 ($tags) must be of type Set<string>, array given: [0] expected string, got float 1.5, called in %s on line %d in Sets.sharp on line 18
+TypeError: Demo\Tagged::strings(): Argument #1 ($tags) must be of type Set<string>, array given: [0] expected string, got float 1.5, called in %s on line %d in Tagged.sharp on line 18
 object(Sharp\Set)#14 (2) {
   [0]=>
   int(3)

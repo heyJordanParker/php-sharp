@@ -1,4 +1,6 @@
 <?php
 
 require __DIR__ . '/harness/Header.inc';
-opcache_compile_file(__DIR__ . '/Header.sharp');
+foreach (glob(__DIR__ . '/Header/*.sharp') as $file) {
+    opcache_compile_file($file);
+}

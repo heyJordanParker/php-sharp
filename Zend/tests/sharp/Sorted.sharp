@@ -1,9 +1,0 @@
-namespace Demo;
-
-public interface Comparable<T>
-{
-}
-
-public class Sorted<TItem : Comparable<TItem>>
-{
-}

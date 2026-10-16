@@ -1,0 +1,8 @@
+namespace Checks;
+
+public class Drain<in TItem> : Sink<TItem>
+{
+    public void put(TItem item)
+    {
+    }
+}

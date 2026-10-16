@@ -1,0 +1,11 @@
+namespace Demo;
+
+class Branch : Archive
+{
+    public static List<string> stack(string title)
+    {
+        Branch.shared = [];
+        Branch.shared.add(title);
+        return Archive.shelved();
+    }
+}

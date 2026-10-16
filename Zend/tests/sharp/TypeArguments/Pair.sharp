@@ -1,0 +1,23 @@
+namespace App;
+
+import Lib.Witness;
+
+public class Pair<TKey, TValue>
+{
+    public Pair(public TKey key { get; }, public TValue value { get; })
+    {
+    }
+
+    public Pair.flipped(TValue value, TKey key) : this(key, value)
+    {
+        Witness.see(this);
+    }
+
+    public Pair<TValue, TKey> flippedOver() => new Pair<TValue, TKey>.flipped(this.key, this.value);
+
+    public Pair<TValue, TKey?> swapped() => new Pair<TValue, TKey?>(this.value, this.key);
+
+    public Pair<TKey|int, TValue> widened() => new Pair<TKey|int, TValue>(this.key, this.value);
+
+    public Function<Box<TValue>()> boxer() => () => new Box<TValue>();
+}

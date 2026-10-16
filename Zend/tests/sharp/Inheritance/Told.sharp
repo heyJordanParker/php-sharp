@@ -1,0 +1,6 @@
+namespace Demo;
+
+public interface Told
+{
+    string describe() => "told";
+}

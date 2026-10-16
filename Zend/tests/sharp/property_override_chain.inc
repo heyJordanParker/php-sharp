@@ -2,8 +2,9 @@
 
 require __DIR__ . '/harness/Model.inc';
 require __DIR__ . '/harness/TypedModel.inc';
-require __DIR__ . '/RushOrders.sharp';
-require __DIR__ . '/TypedOrders.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('RushOrders');
+fixture('TypedOrders');
 
 // Each order is made twice, so the JIT variants compile the methods before the second run.
 for ($run = 0; $run < 2; $run++) {

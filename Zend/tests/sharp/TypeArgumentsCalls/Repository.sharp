@@ -1,0 +1,196 @@
+namespace Calls;
+
+import App.Box;
+import App.DatabaseEntity;
+import App.Order;
+import App.PaginatedList;
+import App.Pair;
+import App.SharedOrder;
+import Legacy.Converter;
+import Lib.Inspector;
+import Lib.PlainWrapper;
+import Lib.Witness;
+import Lib.Wrapper;
+import RuntimeException;
+import UnexpectedValueException;
+
+public class Repository
+{
+    public static Box<T> box<T>(T item) => new Box<T>();
+
+    public static Box<Order> written(Order order) => Repository.box<Order>(order);
+
+    public static Box<Order> inferred(Order order) => Repository.box(order);
+
+    public static Box<T> forward<T : DatabaseEntity>(T item) => Repository.box<T>(item);
+
+    public static Box<Order> forwarded(Order order) => Repository.forward<Order>(order);
+
+    public static Box<T> gather<T>(T first, T ...rest) => new Box<T>();
+
+    public static Box<Order> spread(List<Order> orders) => Repository.gather<Order>(orders[0], ...orders);
+
+    public static Box<T> pick<T>(T item, bool paused) => new Box<T>();
+
+    public static Box<Order> suspended(Order order) => Repository.pick<Order>(order, Inspector.pause(1));
+
+    public static Function<Box<T>()> later<T>(T item) => () => new Box<T>();
+
+    public static Function<Function<Box<T>()>()> laterStill<T>(T item) => () => () => new Box<T>();
+
+    public static Function<Box<T>()> held<T>(T item) => () => Repository.box<T>(item);
+
+    public static Function<Box<Order>()> orderLater(Order order) => Repository.later<Order>(order);
+
+    public static Function<Function<Box<Order>()>()> orderLaterStill(Order order) => Repository.laterStill<Order>(order);
+
+    public static Function<Box<Order>()> orderHeld(Order order) => Repository.held<Order>(order);
+
+    public static Function<Box<T>(T)> boxer<T>() => Repository.box;
+
+    public static Box<Order> boxedByValue(Order order)
+    {
+        const box = Repository.boxer<Order>();
+        return box(order);
+    }
+
+    public static Keyed<int> numbered() => new Keyed<int>(7);
+
+    public static Pair<int, Order> keyed(Order order) => Repository.numbered().again<Order>(order);
+
+    public static int one<T>() => 1;
+
+    public static int called() => Repository.one<Order>();
+
+    public static Order converted(Order order) => Converter.convert<Order>(order);
+
+    public static bool record<T>(T level, string message)
+    {
+        Witness.see(new Box<T>());
+        return true;
+    }
+
+    public static Map<int|string, Any?> locals<T>(T item) => global.get_defined_vars();
+
+    public static Box<Order> wrapped(Wrapper wrapper, Order order) => wrapper.wrap(order);
+
+    public static Box<Order> wrappedByParent(PlainWrapper wrapper, Order order) => wrapper.wrap(order);
+
+    public static bool boxed<T>(Any value) => value is Box<T>;
+
+    public static bool orderBoxed(Any value) => Repository.boxed<Order>(value);
+
+    public static T fresh<T : DatabaseEntity>(int id) => new T(id);
+
+    public static Order freshOrder(int id) => Repository.fresh<Order>(id);
+
+    public static int limitOf<T : DatabaseEntity>() => T.LIMIT;
+
+    public static int orderLimit() => Repository.limitOf<Order>();
+
+    public static string caught<TError : RuntimeException>(RuntimeException thrown)
+    {
+        try {
+            throw thrown;
+        } catch (Failure<int> numbers) {
+            return global.sprintf("numbers: %s", numbers.getMessage());
+        } catch (TError | Failure<string> failure) {
+            return global.sprintf("error: %s", failure.getMessage());
+        }
+    }
+
+    public static string caughtUnexpected(RuntimeException thrown) => Repository.caught<UnexpectedValueException>(thrown);
+
+    public static Failure<int> numberFailure() => new Failure<int>("one");
+
+    public static Failure<string> textFailure() => new Failure<string>("two");
+
+    public static Failure<bool> flagFailure() => new Failure<bool>("three");
+
+    public static Inspection<Order> orderInspection() => new Inspection<Order>();
+
+    // Each row reads back a write to a static field of `Counter<T>`, whose statics no code used before the first.
+    public static List<int?> statics<T>(T item)
+    {
+        List<int?> seen = [];
+        Counter<T>.count = 5;
+        Counter<T>.count += 2;
+        Counter<T>.count++;
+        seen.add(Counter<T>.count);
+        Counter<T>.limit ??= 9;
+        Counter<T>.limit ??= 4;
+        seen.add(Counter<T>.limit);
+        Counter<T>.items.add(item);
+        Counter<T>.track(item);
+        seen.add(Counter<T>.items.count());
+        seen.add(Counter<T>.count);
+        Counter<T>.byId["k"] = 3;
+        Counter<List<T>>.byId["k"] = 4;
+        Counter<List<T>>.count = 40;
+        seen.add(Counter<T>.byId["k"] ?? 0);
+        seen.add(Counter<T>.count);
+        seen.add(Counter<List<T>>.count);
+        seen.add(Counter<List<T>>.items.count());
+        return seen;
+    }
+
+    public static List<int?> orderStatics(Order order) => Repository.statics<Order>(order);
+
+    public static List<int?> shelfStatics(Shelf shelf) => Repository.statics<Shelf>(shelf);
+
+    // `Orders : Counter<Order>` reads and writes the statics of `Counter<Order>`.
+    public static List<int> inherited(Order order)
+    {
+        int count = Counter<Order>.count;
+        int items = Counter<Order>.items.count();
+        Orders.count += 100;
+        Orders.items.add(order);
+        Orders.track(order);
+        return [Counter<Order>.count - count, Counter<Order>.items.count() - items, Orders.own() - count];
+    }
+
+    // A class value carries its type arguments to `new` and to the static members read through it.
+    public static Class<PaginatedList<Order>> orderPages() => typeof(PaginatedList<Order>);
+
+    public static Class<PaginatedList<SharedOrder>> sharedPages() => typeof(PaginatedList<SharedOrder>);
+
+    // `==` compares two class values by their whole type, type arguments included, as C# compares two `Type`s, and a
+    // search of class values compares each one so.
+    public static List<bool> sameTypes() => [typeof(PaginatedList<Order>) == typeof(PaginatedList<SharedOrder>), typeof(PaginatedList<Order>) == Repository.orderPages(), typeof(Order) == typeof(Order), typeof(PaginatedList<Order>) != typeof(PaginatedList<SharedOrder>), Repository.holdsType(typeof(PaginatedList<SharedOrder>))];
+
+    public static bool holdsType(Class<PaginatedList<SharedOrder>> type)
+    {
+        List<Any> types = [typeof(PaginatedList<Order>)];
+        return types.contains(type);
+    }
+
+    public static PaginatedList<Order> paged(Class<PaginatedList<Order>> type) => new (type)([]);
+
+    public static PaginatedList<T> pagedAs<T : DatabaseEntity>(Class<PaginatedList<T>> type) => new (type)([]);
+
+    public static PaginatedList<SharedOrder> sharedPaged() => Repository.pagedAs<SharedOrder>(Repository.sharedPages());
+
+    public static PaginatedList<Order> orderPaged(Class<PaginatedList> type) => new (type)<Order>([]);
+
+    public static int countedThrough<T>(int count)
+    {
+        Counter<T>.count = count;
+        const type = typeof(Counter<T>);
+        return type.own() + type.count;
+    }
+
+    public static int sourceCounted() => Repository.countedThrough<Source<Order>>(41);
+
+    // A write through a class value writes the static field of the type arguments the value carries.
+    public static List<int> writtenThrough<T>(T item)
+    {
+        const type = typeof(Counter<Map<string, T>>);
+        type.count = 5;
+        type.count += 2;
+        type.count++;
+        type.items.add(["k": item]);
+        return [type.count, Counter<Map<string, T>>.count, Counter<Map<string, T>>.items.count(), Counter<Map<int, T>>.count];
+    }
+
+    public static List<int> orderWrittenThrough(Order order) => Repository.writtenThrough<Order>(order);
+}

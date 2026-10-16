@@ -1,0 +1,27 @@
+namespace Equalities;
+
+public static class Unchecked
+{
+    public static Ticket ticket { get; set; } = new Ticket();
+
+    public static Map<string, bool> compare(Any? raw)
+    {
+        List<int> numbers = [1, 2];
+        Map<string, int> counts = ["a": 1];
+        Set<int> seen = [1, 2];
+        return [
+            "pro": raw == "pro",
+            "one": raw == 1.0,
+            "true": raw == true,
+            "numbers": raw == numbers,
+            "counts": raw == counts,
+            "seen": raw == seen,
+            "hearts": raw == Suit.Hearts,
+            "point": raw == new Point(1),
+            "ticket": raw === Unchecked.ticket,
+            "not ticket": raw !== Unchecked.ticket,
+            "null": raw == null,
+            "not pro": raw != "pro",
+        ];
+    }
+}

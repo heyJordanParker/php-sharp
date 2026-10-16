@@ -1,0 +1,7 @@
+namespace Shelf;
+
+public enum Order : string
+{
+    case Open = "open";
+    case Shipped = "shipped";
+}

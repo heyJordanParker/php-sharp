@@ -4,7 +4,8 @@ A PHP# interface's default bodies, of methods and computed properties, run in a 
 <?php
 
 require __DIR__ . '/harness/Traits.inc';
-require __DIR__ . '/Inheritance.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Inheritance');
 
 // A plain PHP class gets a PHP# interface's default bodies by using the trait `<Interface>\Defaults`, spec section 22.
 final class LegacySheet implements Demo\HasDesign

@@ -1,0 +1,11 @@
+namespace Handlers;
+
+public class Dispatch
+{
+    public static int tally(Inbox<Order> inbox, int id) => inbox.count(new Order(id));
+
+    public static void send(Handler<Order> handler, int id)
+    {
+        handler.handle(new Order(id));
+    }
+}

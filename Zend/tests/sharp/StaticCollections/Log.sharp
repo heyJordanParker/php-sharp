@@ -1,0 +1,18 @@
+namespace Demo;
+
+class Log
+{
+    private static List<string> events = [];
+
+    public static void note(string entry)
+    {
+        Log.events.add(entry);
+    }
+
+    public static List<string> seen() => Log.events;
+
+    public static void forget()
+    {
+        Log.events = [];
+    }
+}

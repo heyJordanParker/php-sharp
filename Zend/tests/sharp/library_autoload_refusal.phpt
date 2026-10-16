@@ -12,5 +12,6 @@ foreach (['psr4', 'classmap'] as $layout) {
 Error: The PHP# standard library 0.1.0 was built for other native bodies than PHP# engine <engine version> has. Install the same PHP# version of both.
 0 .sharp files included
 == classmap
+class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","Sharp\\Text\\Text"]
 Error: The PHP# standard library 0.1.0 was built for other native bodies than PHP# engine <engine version> has. Install the same PHP# version of both.
 0 .sharp files included

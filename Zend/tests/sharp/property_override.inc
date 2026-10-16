@@ -1,7 +1,8 @@
 <?php
 
 require __DIR__ . '/harness/Model.inc';
-require __DIR__ . '/Store.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Store');
 
 // Each order is made twice, so the JIT variants compile the methods before the second run.
 for ($run = 0; $run < 2; $run++) {

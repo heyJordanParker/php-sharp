@@ -2,7 +2,8 @@
 A value of a type parameter runs the operator its bound declares, and plain PHP keeps its own operator on objects
 --FILE--
 <?php
-require __DIR__ . '/TypeArgumentsOperators.sharp';
+require_once __DIR__ . '/harness/fixture.inc';
+fixture('TypeArgumentsOperators');
 
 use Operators\Ledger;
 use Operators\Money;

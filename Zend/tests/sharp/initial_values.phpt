@@ -3,7 +3,8 @@ A PHP# initial value that is not constant runs at the start of the constructor, 
 --FILE--
 <?php
 
-require __DIR__ . '/Inventory.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Inventory');
 
 echo (new Demo\Inventory(5))->total(), "\n";
 echo (new Demo\Shelf())->stock->count, "\n";
@@ -16,5 +17,5 @@ foreach ([Demo\Inventory::class, Demo\Shelf::class] as $class) {
 --EXPECT--
 21
 7
-Demo\Inventory __construct 24-27
-Demo\Shelf __construct 35-38
+Demo\Inventory __construct 9-12
+Demo\Shelf __construct 3-6

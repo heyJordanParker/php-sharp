@@ -1,0 +1,56 @@
+namespace Checks;
+
+import App.Order;
+import App.PaginatedList;
+import Lib.Pager;
+
+public class Shelf
+{
+    public PaginatedList<Order>? page { get; set; } = null;
+
+    public static PaginatedList<Order>? latest { get; set; } = null;
+
+    protected static PaginatedList<Order>? kept = null;
+
+    public static string keepBoth(PaginatedList<Order> page)
+    {
+        Shelf.latest = page;
+        Shelf.kept = page;
+
+        return "kept both";
+    }
+
+    public static string read()
+    {
+        PaginatedList<Order> page = Pager.orders();
+        page = Pager.orders();
+
+        return "read";
+    }
+
+    public static string untyped()
+    {
+        let page = Pager.orders();
+
+        return "untyped";
+    }
+
+    public static string passed() => Pages.take(Pager.orders());
+
+    public static PaginatedList<Order> given() => Pager.orders();
+
+    public string stored()
+    {
+        this.page = Pager.orders();
+
+        return "stored";
+    }
+
+    public static Shelf filled()
+    {
+        Shelf shelf = new Shelf();
+        shelf.page = new PaginatedList<Order>([]);
+
+        return shelf;
+    }
+}

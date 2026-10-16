@@ -1,0 +1,18 @@
+namespace Store;
+
+class Address
+{
+    protected string region { get => global.strtoupper(field); }
+    public string city { get; set => field = global.ucfirst(value.trim()); }
+
+    public Address(string city, string region)
+    {
+        this.city = city;
+        this.region = region;
+    }
+
+    public string label()
+    {
+        return global.sprintf("%s, %s", this.city, this.region);
+    }
+}

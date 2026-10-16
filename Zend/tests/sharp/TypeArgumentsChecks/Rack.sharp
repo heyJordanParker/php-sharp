@@ -1,0 +1,17 @@
+namespace Checks;
+
+import App.Box;
+import App.Order;
+
+public class Rack<TItem>
+{
+    public Box<TItem>? own { get; set; } = null;
+
+    public List<TItem> items { get; set; } = [];
+
+    public static Rack<Order> orders() => new Rack<Order>();
+
+    public static Box<Order> box() => new Box<Order>();
+
+    public static Box<Customer> customerBox() => new Box<Customer>();
+}

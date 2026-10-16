@@ -1,0 +1,8 @@
+namespace Paging;
+
+public abstract class DatabaseEntity
+{
+    public DatabaseEntity(public int id { get; })
+    {
+    }
+}

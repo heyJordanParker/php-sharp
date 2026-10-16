@@ -1,0 +1,14 @@
+namespace Demo;
+
+class Tray
+{
+    public List<int> items { get; private set; } = [];
+
+    public static List<int> filled()
+    {
+        const tray = new Tray();
+        tray.items = [5];
+        tray.items.add(6);
+        return tray.items;
+    }
+}

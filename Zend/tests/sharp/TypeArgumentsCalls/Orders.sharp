@@ -1,0 +1,7 @@
+namespace Calls;
+
+import App.Order;
+
+public class Orders : Counter<Order>
+{
+}

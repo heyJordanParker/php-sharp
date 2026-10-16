@@ -3,7 +3,8 @@
 namespace {
     require __DIR__ . '/attempt.inc';
     require __DIR__ . '/harness/Basket.inc';
-    require __DIR__ . '/CollectionMethods.sharp';
+    require __DIR__ . '/harness/fixture.inc';
+    fixture('CollectionMethods');
 
     for ($round = 0; $round < 100; $round++) {
         ob_start();

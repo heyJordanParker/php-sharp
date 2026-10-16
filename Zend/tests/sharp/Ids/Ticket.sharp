@@ -1,0 +1,6 @@
+namespace Holders;
+
+public class Ticket
+{
+    public string code() => "T7";
+}

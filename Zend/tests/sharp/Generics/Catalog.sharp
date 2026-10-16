@@ -1,0 +1,36 @@
+namespace Paging;
+
+public class Catalog
+{
+
+    public static List<Order> orders() => [new Order(1), new Order(2)];
+
+    public static int paged() => new PaginatedList<Order>(Catalog.orders()).first().id;
+
+    public static int listed() => new Repository().list(new OrderQuery(Catalog.orders())).first().id;
+
+    public static int written() => Store.pick<Order>(Catalog.orders(), 2)?.id ?? 0;
+
+    public static int inferred() => Store.pick(Catalog.orders(), 2)?.id ?? 0;
+
+    public static int headed() => new OrderPage(Catalog.orders()).first().id;
+
+    public static int newest(Feed<Order> feed) => feed.next().id;
+
+    public static int fed() => Catalog.newest(new Feed<Order>(Catalog.orders()));
+
+    public static bool check(Validator<DatabaseEntity> validator, Order order) => validator.validate(order);
+
+    public static bool checked() => Catalog.check(new EntityValidator(), new Order(3));
+
+    public static int firstId() => new Store().first(Catalog.orders()).id;
+
+    public static string shared() => new Store().share(new Order(4));
+
+    public static int loaded()
+    {
+        const store = new Store();
+        store.save(typeof(Order), new Order(5));
+        return store.load(store.kind("order"), 5)?.id ?? 0;
+    }
+}
