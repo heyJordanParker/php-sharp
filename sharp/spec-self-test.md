@@ -93,21 +93,36 @@ $gate->pass("x");    // accepted: PHP refuses the string first
 the run threw TypeError: …
 -->
 
-A claim no run reaches, such as one on a method's line, holds when a plain PHP line of the example makes the same claim, as a run line does. Without that rule the check stops before anything compiles:
+Run lines reach a `foreign` object the way PHP# code does: a constructor on a run line takes the services a module binds, and the run gets them from the container. Without that rule the run reads a field the constructor never set:
 
-<!-- example restated-by-php -->
+<!-- example run-takes-services -->
 ```csharp
+// app/Gauge.sharp
+namespace App;
+
 public class Gauge
 {
-    public int first(List<int> values) => values[0];   // throws OutOfRangeException when values is empty
+    public Gauge(private Environment environment) { }
+
+    public string tenth() => this.environment.arguments[10];   // throws OutOfRangeException when the run has fewer arguments
 }
 ```
 
-<!-- example restated-by-php: statements -->
-```php
-(new App\Gauge())->first([]);   // throws OutOfRangeException
+<!-- example run-takes-services -->
+```csharp
+// app/Module.sharp
+namespace App;
+
+module
+{
+    transient Gauge = Gauge;
+}
 ```
-<!-- expect restated-by-php -->
+<!-- run run-takes-services
+public ExampleRun(private Gauge gauge) { }
+this.gauge.tenth();   // throws OutOfRangeException
+-->
+<!-- expect run-takes-services -->
 
 ## 2. Errors and lines
 
