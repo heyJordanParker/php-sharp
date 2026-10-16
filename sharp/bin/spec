@@ -1092,15 +1092,17 @@ function check_run(array $example, array $reads, string $outcomes): array
 
 /**
  * Fails on a value, `throws` or message annotation that no run reaches, such as one on a method's line, unless a run
- * line of the example restates it. A `<!-- run <id> -->` comment after the example's last block holds those run lines,
- * and only they restate a claim.
+ * line or a plain PHP line of the example restates it. A `<!-- run <id> -->` comment after the example's last block
+ * holds those run lines, and a plain PHP statements block of the example holds the plain PHP lines. Only they restate
+ * a claim.
  */
 function check_reached(array $example, array $reads): void
 {
     $restated = [];
     foreach ($example['blocks'] as $b => $block) {
         foreach ($reads[$b] as $i => $line) {
-            if ($i >= ($block['run_from'] ?? PHP_INT_MAX) && in_array($line['expect']['kind'], RUNTIME, true) && runs($block, $line)) {
+            $restates = $block['language'] === 'php' || $i >= ($block['run_from'] ?? PHP_INT_MAX);
+            if ($restates && in_array($line['expect']['kind'], RUNTIME, true) && runs($block, $line)) {
                 $restated[] = $line['expect'];
             }
         }
@@ -1108,7 +1110,7 @@ function check_reached(array $example, array $reads): void
     foreach ($example['blocks'] as $b => $block) {
         foreach ($reads[$b] as $i => $line) {
             if (in_array($line['expect']['kind'], RUNTIME, true) && !runs($block, $line) && !in_array($line['expect'], $restated, true)) {
-                fail(where($block, $i) . ": no run reaches the claim `// $line[comment]`. Add a line that shows it to a `" . RUN_MARKER . "$example[id]` comment after the block.");
+                fail(where($block, $i) . ": no run reaches the claim `// $line[comment]`. Add a line that shows it to a `" . RUN_MARKER . "$example[id]` comment after the block, or to a plain PHP statements block of the example.");
             }
         }
     }

@@ -93,6 +93,22 @@ $gate->pass("x");    // accepted: PHP refuses the string first
 the run threw TypeError: …
 -->
 
+A claim no run reaches, such as one on a method's line, holds when a plain PHP line of the example makes the same claim, as a run line does. Without that rule the check stops before anything compiles:
+
+<!-- example restated-by-php -->
+```csharp
+public class Gauge
+{
+    public int first(List<int> values) => values[0];   // throws OutOfRangeException when values is empty
+}
+```
+
+<!-- example restated-by-php: statements -->
+```php
+(new App\Gauge())->first([]);   // throws OutOfRangeException
+```
+<!-- expect restated-by-php -->
+
 ## 2. Errors and lines
 
 A `compile error` line with no error fails:
