@@ -72,7 +72,7 @@ The spec writes `…` for code the reader doesn't need. `sharp/bin/spec` replace
 - `(…)` becomes `()`.
 - `match (x) { … }` becomes `match (x) { default => throw new Elided() }`.
 - `Plan plan = …;`, a declaration with its type written, becomes `Plan plan = Elided.value() as Plan ?? throw new Elided();`. PHP# refuses to assign a `throw`, whose type is `never`.
-- A line holding only `…` is dropped.
+- A line holding only `…` that ends a function's body, the braces after a header that is neither a type's nor a control statement's, becomes `throw new Elided();`, as `{ … }` does there, so a body that returns a value still compiles. Any other line holding only `…` is dropped, so a statement after it still runs.
 - Any other `…` becomes `throw new Elided()`.
 
 A line that ends a statement with no `;`, such as `7 / 2`, gets one, and a method signature with no body, such as `public void tag(string label = null)`, gets `{ … }`. So does a signature that ends in `uses` and the function parameters it names, with or without its `;`, as the standard library declares `public List<TResult> map<TResult>(Function<TResult(T)> f) uses f;`, since a class holds no method without a body. A top-level statement that is a bare expression, such as `order == sameOrderLoadedAgain;`, runs as the argument of the call that records values, because the spec writes it to show what it gives, and PHP# refuses a statement with no effect. A top-level `return x;` under `statements`, such as `return PaymentResult.Declined(reason: "card expired");`, runs the same way, since the `run` method returns nothing. Each rewrite keeps the line on its own line, so every line number the checker reports is the spec's.

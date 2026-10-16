@@ -37,6 +37,7 @@ const MOVES = ['match-not-exhaustive', 'rejected-nullable-parameter', 'A `match`
 const SECTION = '§\d+(?:\.\d+)*|README';
 const PARALLEL = 4;
 const TYPE_DECLARATION = '~^(?:\[.*\]\s*)*(?:(?:public|private|protected|internal|abstract|final|sealed|static|readonly|foreign|extern)\s+)*(?:class|struct|enum|interface|event|trait|module)\b|^extern\b|^module\b~';
+const CONTROL_STATEMENT = '~^\s*(?:\}\s*)?(?:if|else|while|for|foreach|do|try|catch|finally)\b~';
 const MEMBER = '~^(?:\[.*\]\s*)*(?:public|private|protected|internal|static)\b|^[\w<>?,|.\[\]]+\s+\w+\s*\([^)]*\)\s*(?:\{|=>)~';
 const PHP_DECLARATION = '~^(?:(?:abstract|final|readonly)\s+)*(?:class|interface|trait|enum|function)\b|^(?:namespace|use)\b~';
 
@@ -415,10 +416,13 @@ function read_block(array $block): array
 }
 
 /** Rewrites `…` and completes a top-level line, as docs/architecture/spec-examples.md lists. */
-function complete(string $code, string $language, bool $top, bool $last_of_construct, ?string $next): string
+function complete(string $code, string $language, bool $top, bool $last_of_construct, ?string $next, bool $ends_body): string
 {
     $throw = $language === 'sharp' ? 'throw new Elided()' : 'throw new \App\Elided()';
-    if (trim($code) === '…' || trim($code) === '') {
+    if (trim($code) === '…') {
+        return $ends_body ? "$throw;" : '';
+    }
+    if (trim($code) === '') {
         return '';
     }
     // A signature may end in the function parameters whose effects it has, as `List.map`'s `… uses f` does.
@@ -436,7 +440,7 @@ function complete(string $code, string $language, bool $top, bool $last_of_const
         $code .= $signature && ($next === null || !preg_match('~^\s*[{:]~', $next)) ? ' { … }' : ';';
     }
     // A type's body and a control statement's block stay empty, so a run passes through them.
-    if (preg_match(TYPE_DECLARATION, ltrim($code)) || preg_match('~^\s*(?:\}\s*)?(?:if|else|while|for|foreach|do|try|catch|finally)\b~', $code)) {
+    if (preg_match(TYPE_DECLARATION, ltrim($code)) || preg_match(CONTROL_STATEMENT, $code)) {
         $code = str_replace('{ … }', '{ }', $code);
     }
     $code = preg_replace('~(\bmatch\s*\([^)]*\)\s*)\{ … \}~u', '$1{ default => ' . $throw . ' }', $code);
@@ -447,6 +451,26 @@ function complete(string $code, string $language, bool $top, bool $last_of_const
     $code = str_replace(['{ … }', '(…)'], ['{ ' . $throw . '; }', '()'], $code);
 
     return str_replace('…', $throw, $code);
+}
+
+/**
+ * Whether line $i sits in a function's body: in braces whose header is neither a type's nor a control statement's, as
+ * `{ … }` takes `{ }` after those and a throw everywhere else. The header is the line that opens the braces, or the line
+ * before a `{` that stands alone.
+ */
+function is_body(array $read, int $i): bool
+{
+    $before = array_filter(array_slice($read, 0, $i, true), static fn (array $line): bool => trim($line['code']) !== '');
+    $opener = array_key_last(array_filter($before, static fn (array $line): bool => $line['depth'] < $read[$i]['depth']));
+    if ($opener !== null && trim($read[$opener]['code']) === '{') {
+        $opener = array_key_last(array_filter($before, static fn (int $k): bool => $k < $opener, ARRAY_FILTER_USE_KEY));
+    }
+    if ($opener === null) {
+        return false;
+    }
+    $header = $read[$opener]['code'];
+
+    return !preg_match(TYPE_DECLARATION, ltrim($header)) && !preg_match(CONTROL_STATEMENT, $header);
 }
 
 /**
@@ -512,7 +536,8 @@ function build_file(array $block, int $index, array $read, array $blank): array
         }
         $top = $line['depth'] === 0 && $line['delta'] === 0;
         $last = $next === null || $read[$next]['construct'] !== $line['construct'];
-        $code = isset($blank[$i]) ? '' : complete($line['code'], $language, $top, $last, $next === null ? null : $read[$next]['code']);
+        $ends_body = trim($line['code']) === '…' && $next !== null && str_starts_with(ltrim($read[$next]['code']), '}') && is_body($read, $i);
+        $code = isset($blank[$i]) ? '' : complete($line['code'], $language, $top, $last, $next === null ? null : $read[$next]['code'], $ends_body);
         if ($top && !isset($blank[$i]) && run_line($block, $line)) {
             $code = observe($code, outcome_key($index, $i), $line['expect'], $language);
         }

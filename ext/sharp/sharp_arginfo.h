@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 445c14c54acd1258d42cb7d50a507110dd433abf */
+ * Stub hash: c63abf9fae12013259fc77e80c897077d1bd7526 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -69,12 +69,15 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_add, 0, 1
 	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_set, 0, 2, IS_VOID, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_set, 0, 2, IS_MIXED, 0)
 	ZEND_ARG_TYPE_INFO(0, index, IS_LONG, 0)
 	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
 
-#define arginfo_class_Sharp_Collection_insert arginfo_class_Sharp_Collection_set
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_insert, 0, 2, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, index, IS_LONG, 0)
+	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_removeAt, 0, 1, IS_VOID, 0)
 	ZEND_ARG_TYPE_INFO(0, index, IS_LONG, 0)
@@ -108,6 +111,8 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_keys, 0, 0, IS_ARRAY, 0)
 ZEND_END_ARG_INFO()
 
+#define arginfo_class_Sharp_Collection_values arginfo_class_Sharp_Collection_keys
+
 #define arginfo_class_Sharp_Collection_toList arginfo_class_Sharp_Collection_keys
 
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_TYPE_MASK_EX(arginfo_class_Sharp_Collection_filter, 0, 1, Sharp\\Map|Sharp\\Set, MAY_BE_ARRAY)
@@ -138,6 +143,29 @@ ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_sortedBy, 0, 1, IS_ARRAY, 0)
 	ZEND_ARG_OBJ_INFO(0, selector, Closure, 0)
+ZEND_END_ARG_INFO()
+
+#define arginfo_class_Sharp_Sequence___construct arginfo_class_Sharp_Collection___construct
+
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Sharp_Sequence_from, 0, 1, Sharp\\Sequence, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(0, source, Traversable, MAY_BE_ARRAY, NULL)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Sharp_Sequence_filter, 0, 1, Sharp\\Sequence, 0)
+	ZEND_ARG_OBJ_INFO(0, predicate, Closure, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Sharp_Sequence_map, 0, 1, Sharp\\Sequence, 0)
+	ZEND_ARG_OBJ_INFO(0, transform, Closure, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Sharp_Sequence_take, 0, 1, Sharp\\Sequence, 0)
+	ZEND_ARG_TYPE_INFO(0, count, IS_LONG, 0)
+ZEND_END_ARG_INFO()
+
+#define arginfo_class_Sharp_Sequence_toList arginfo_class_Sharp_Collection_keys
+
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Sharp_Sequence_getIterator, 0, 0, Iterator, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Sharp_Position___construct, 0, 0, 4)
@@ -192,6 +220,7 @@ ZEND_METHOD(Sharp_Collection, put);
 ZEND_METHOD(Sharp_Collection, clear);
 ZEND_METHOD(Sharp_Collection, count);
 ZEND_METHOD(Sharp_Collection, keys);
+ZEND_METHOD(Sharp_Collection, values);
 ZEND_METHOD(Sharp_Collection, toList);
 ZEND_METHOD(Sharp_Collection, filter);
 ZEND_METHOD(Sharp_Collection, map);
@@ -201,6 +230,13 @@ ZEND_METHOD(Sharp_Collection, any);
 ZEND_METHOD(Sharp_Collection, groupBy);
 ZEND_METHOD(Sharp_Collection, associateBy);
 ZEND_METHOD(Sharp_Collection, sortedBy);
+ZEND_METHOD(Sharp_Sequence, __construct);
+ZEND_METHOD(Sharp_Sequence, from);
+ZEND_METHOD(Sharp_Sequence, filter);
+ZEND_METHOD(Sharp_Sequence, map);
+ZEND_METHOD(Sharp_Sequence, take);
+ZEND_METHOD(Sharp_Sequence, toList);
+ZEND_METHOD(Sharp_Sequence, getIterator);
 ZEND_METHOD(Sharp_Position, __construct);
 ZEND_METHOD(Sharp_Container, get);
 ZEND_METHOD(Sharp_Container, has);
@@ -241,6 +277,7 @@ static const zend_function_entry class_Sharp_Collection_methods[] = {
 	ZEND_ME(Sharp_Collection, clear, arginfo_class_Sharp_Collection_clear, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, count, arginfo_class_Sharp_Collection_count, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, keys, arginfo_class_Sharp_Collection_keys, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Collection, values, arginfo_class_Sharp_Collection_values, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, toList, arginfo_class_Sharp_Collection_toList, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, filter, arginfo_class_Sharp_Collection_filter, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, map, arginfo_class_Sharp_Collection_map, ZEND_ACC_PUBLIC)
@@ -250,6 +287,17 @@ static const zend_function_entry class_Sharp_Collection_methods[] = {
 	ZEND_ME(Sharp_Collection, groupBy, arginfo_class_Sharp_Collection_groupBy, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, associateBy, arginfo_class_Sharp_Collection_associateBy, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, sortedBy, arginfo_class_Sharp_Collection_sortedBy, ZEND_ACC_PUBLIC)
+	ZEND_FE_END
+};
+
+static const zend_function_entry class_Sharp_Sequence_methods[] = {
+	ZEND_ME(Sharp_Sequence, __construct, arginfo_class_Sharp_Sequence___construct, ZEND_ACC_PRIVATE)
+	ZEND_ME(Sharp_Sequence, from, arginfo_class_Sharp_Sequence_from, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(Sharp_Sequence, filter, arginfo_class_Sharp_Sequence_filter, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Sequence, map, arginfo_class_Sharp_Sequence_map, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Sequence, take, arginfo_class_Sharp_Sequence_take, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Sequence, toList, arginfo_class_Sharp_Sequence_toList, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Sequence, getIterator, arginfo_class_Sharp_Sequence_getIterator, ZEND_ACC_PUBLIC)
 	ZEND_FE_END
 };
 
@@ -282,6 +330,17 @@ static zend_class_entry *register_class_Sharp_Collection(void)
 
 	INIT_NS_CLASS_ENTRY(ce, "Sharp", "Collection", class_Sharp_Collection_methods);
 	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES|ZEND_ACC_NOT_SERIALIZABLE);
+
+	return class_entry;
+}
+
+static zend_class_entry *register_class_Sharp_Sequence(zend_class_entry *class_entry_IteratorAggregate)
+{
+	zend_class_entry ce, *class_entry;
+
+	INIT_NS_CLASS_ENTRY(ce, "Sharp", "Sequence", class_Sharp_Sequence_methods);
+	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES|ZEND_ACC_NOT_SERIALIZABLE);
+	zend_class_implements(class_entry, 1, class_entry_IteratorAggregate);
 
 	return class_entry;
 }

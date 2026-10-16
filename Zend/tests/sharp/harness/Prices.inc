@@ -9,4 +9,10 @@ class Prices
     {
         return [10 => 3, 20 => 4];
     }
+
+    /** @return list<int> */
+    public static function listed(): array
+    {
+        return [3, 4];
+    }
 }

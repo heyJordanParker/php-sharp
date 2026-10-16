@@ -96,7 +96,7 @@ class Tagged
         const size = (Set<string> tags) => {
             return tags.count();
         };
-        return [check(names), check([prefix]), size(["a", "a", "b"])];
+        return [check(names.toSet()), check([prefix]), size(["a", "a", "b"])];
     }
 
     public static List<bool> groups(Set<string> ...groups)

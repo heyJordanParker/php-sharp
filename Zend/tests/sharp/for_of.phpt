@@ -1,5 +1,5 @@
 --TEST--
-PHP# runs for … of loops over the values, or the keys and values, of a PHP array
+PHP# runs for … of loops over the elements of a List, and the keys and values of a Map, each a PHP array
 --FILE--
 <?php
 

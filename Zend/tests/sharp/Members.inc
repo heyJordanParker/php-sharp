@@ -61,7 +61,7 @@ class Members
     public static function ones(): int
     {
         $count = 0;
-        foreach (Registry::$items as $item) {
+        foreach (Registry::$items as $index => $item) {
             if ($item === 1) {
                 $count++;
             }

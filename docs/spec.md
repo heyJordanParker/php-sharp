@@ -1031,7 +1031,7 @@ int|string id = 1;
 -->
 ```csharp
 const first = lines[0];       // throws OutOfRangeException when lines is empty
-lines[0] = line;              // replaces the element at 0, and throws OutOfRangeException when lines is empty
+lines[0] = line;              // replaces the element at 0; throws OutOfRangeException when lines is empty
 plans["pro"] = pro;           // inserts or replaces
 items[-1];                    // throws OutOfRangeException: write items.last()
 items.last();                 // the last item
@@ -1923,6 +1923,20 @@ These keep their C and PHP form:
 - `for (let i = 0; i < n; i++) { … }`
 
 PHP's `foreach` is removed.
+
+**`?? continue` in a loop's own condition skips to the loop's next check,** as `continue` does anywhere in the loop (section 14.4). The condition runs again, so the body runs only for a value that is not null, and `?? break` ends the loop at the first null instead. A source that stays null keeps the loop running, as `while (true) { continue; }` does.
+
+<!-- example continue-in-condition: statements in Feed
+private int calls = 0;
+private bool? next() { this.calls += 1; return this.calls % 3 == 0 ? null : this.calls < 7; }
+let passes = 0;
+-->
+```csharp
+while (this.next() ?? continue) { passes += 1; }                // a null runs the condition again
+do { passes += 1; } while (this.next() ?? continue);
+for (let i = 0; this.next() ?? continue; i++) { passes += 1; }  // a null runs i++, then the condition
+passes;                                                          // 5
+```
 
 **The body of every `if`, `else`, `while`, `do` and `for` is written in braces,** as in Go, Rust and Swift, and as PSR-12 requires of PHP. A body without braces is a compile error:
 
@@ -3982,20 +3996,22 @@ The standard library's collection methods (section 12) are declared this way, so
 
 A tuple groups a fixed number of typed values without declaring a class. It uses TypeScript's brackets. Each element is declared type first, as everywhere in PHP#.
 
-<!-- example tuples: statements
-Money total = new Money(500, "USD");
-int count = 2;
-Date since = new Date();
+<!-- example tuples: statements in Order
+public class Date { }
+private Money total = new Money(500, "USD");
+private int count = 2;
+private Date since = new Date();
+Order order = new Order();
 -->
 ```csharp
-public [Money total, int count, Date since] summarize() { return [total, count, since]; }
+public [Money total, int count, Date since] summarize() { return [this.total, this.count, this.since]; }
 
 const [total, count, since] = order.summarize();     // unpack
 const summary = order.summarize();
 summary.total;                                        // read by name, as in C#
 
-public [Money, int] totals() { return [total, count]; }   // compiles: element names are optional
-const [money, items] = order.totals();                    // unpack an unnamed tuple
+public [Money, int] totals() { return [this.total, this.count]; }   // compiles: element names are optional
+const [money, items] = order.totals();                              // unpack an unnamed tuple
 ```
 
 - **A tuple can have any number of elements.** The checker suggests a struct past four.
