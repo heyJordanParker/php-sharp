@@ -3678,12 +3678,23 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 	return substituted;
 }
 
-/* The class `node`, a SHARP_TYPE_NAMED type, names, once loaded, or NULL for a built-in type. */
+/* The class `name` names, for a check that needs the class's declaration, loaded through the autoloader the first time,
+ * as Java and C# load a class on first use. A type argument is text, so `Crate<Apple>` exists before any code loads
+ * Apple, and whether it fits `Harvest<Fruit>` depends on what Apple extends. A loaded class stays in the class table,
+ * so the autoloader runs once for it. NULL when the autoloader finds no such class, and NULL with the autoloader's
+ * exception left for the check's caller when it throws, which every check then stops for. Once an exception is
+ * pending, nothing more runs: the class is only looked up. */
+static zend_class_entry *sharp_type_class(zend_string *name)
+{
+	return zend_lookup_class_ex(name, NULL, UNEXPECTED(EG(exception)) ? ZEND_FETCH_CLASS_NO_AUTOLOAD : 0);
+}
+
+/* The class `node`, a SHARP_TYPE_NAMED type, names, as sharp_type_class finds it, or NULL for a built-in type. */
 static zend_class_entry *sharp_type_node_class(sharp_type_node *node)
 {
 	if (!node->ce && node->name) {
 		zend_string *name = sharp_type_class_name(node->name, node->name_length, false);
-		node->ce = zend_lookup_class_ex(name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+		node->ce = sharp_type_class(name);
 		zend_string_release_ex(name, false);
 	}
 
@@ -3916,8 +3927,9 @@ static bool sharp_class_value_is(const zval *value, const sharp_type *type)
 		return sharp_class_value_fits(Z_STR_P(value), type);
 	}
 
-	/* An autoloader runs here, and can throw. Its exception stands for the check. */
-	zend_class_entry *given = zend_lookup_class(Z_STR_P(value));
+	/* A class value is text, so the class it names may not be loaded yet. That class loads each class it extends or
+	 * implements, so `type`'s class is loaded whenever it is one of them. */
+	zend_class_entry *given = sharp_type_class(Z_STR_P(value));
 	zend_class_entry *ce = given ? zend_lookup_class_ex(type->class_name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD) : NULL;
 	if (!ce || !instanceof_function(given, ce)) {
 		return false;
@@ -4125,8 +4137,8 @@ static bool sharp_type_holds_key(const sharp_type *type, zend_ulong index, zend_
 		return true;
 	}
 
-	zend_class_entry *ce = type->class_name
-		? zend_lookup_class_ex(type->class_name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD) : NULL;
+	/* A key is text or an int, so the enum it names a case of may not be loaded yet. */
+	zend_class_entry *ce = type->class_name ? sharp_type_class(type->class_name) : NULL;
 	if (ce && (ce->ce_flags & ZEND_ACC_ENUM) && ce->enum_backing_type != IS_UNDEF) {
 		zend_object *found = NULL;
 		if (ce->enum_backing_type == IS_LONG) {
@@ -5054,9 +5066,13 @@ static bool sharp_type_fits(sharp_type_node *type, sharp_type_node *bound, sharp
 		return sharp_type_argument_fits(type, bound, '=', reader);
 	}
 
-	/* A loaded class has loaded each class it extends or implements. */
+	/* The type's class loads first, which loads each class it extends or implements, so the bound's is then loaded
+	 * whenever it is one of them. */
+	if (type->kind != SHARP_TYPE_NAMED || !sharp_type_node_class(type)) {
+		return false;
+	}
 	zend_class_entry *ce = sharp_type_node_class(bound);
-	if (type->kind != SHARP_TYPE_NAMED || !sharp_type_node_class(type) || !ce || !instanceof_function(type->ce, ce)) {
+	if (!ce || !instanceof_function(type->ce, ce)) {
 		return false;
 	}
 	if (!bound->count) {

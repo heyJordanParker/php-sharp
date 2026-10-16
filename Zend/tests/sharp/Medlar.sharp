@@ -1,0 +1,5 @@
+namespace Orchard;
+
+public class Medlar : Fruit
+{
+}
