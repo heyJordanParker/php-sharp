@@ -4612,23 +4612,26 @@ ZEND_FUNCTION(Sharp_Internal_accepts)
 	RETURN_BOOL(accepts);
 }
 
-/* Spec section 11: each type argument of a generic class has its own statics, which PHP# reads and writes through the
- * class's hidden static method `#entry`, as `\App\Counter::{'#entry'}(<App.Order>)['count']`. `#entry` calls this with
- * the text of its type arguments. Returns by reference the entry of the class's hidden
- * static sharp_statics_key for the type argument text `key`, so every write is PHP's own array write. The entry starts
- * as a copy of the defaults under the key "", as C# runs a closed type's static initializer on its first use, and
- * `created` says whether this call added it, so the class's hidden `#entry` runs each initial value that is code then. */
+/* Spec section 11: each type argument of a generic class has its own statics, which every PHP# access reads and
+ * writes through this, with the text of the access's type arguments, as
+ * `\Sharp\Internal\statics(\App\Counter::class, 'App.Order')['count']`. Returns by reference the entry of the class's
+ * hidden static sharp_statics_key for the type argument text `key`, so every write is PHP's own array write. The entry
+ * starts as a copy of the defaults under the key "", and the call that adds it runs the class's hidden `#init` with
+ * the type arguments `key` spells, which sets each initial value that runs as code, as C# runs a closed type's static
+ * initializer on its first use. A throw there reaches this call's caller and leaves the entry as it is, so nothing
+ * runs again. An access that reads the static `field`, which such a throw can leave out of the entry, names it, and
+ * throws PHP's own error for a typed static read before it is set, as a class that isn't generic does. */
 ZEND_FUNCTION(Sharp_Internal_statics)
 {
 	zend_class_entry *ce = NULL;
 	zend_string *key;
-	zval *created = NULL;
+	zend_string *field = NULL;
 
 	ZEND_PARSE_PARAMETERS_START(2, 3)
 		Z_PARAM_CLASS(ce)
 		Z_PARAM_STR(key)
 		Z_PARAM_OPTIONAL
-		Z_PARAM_ZVAL(created)
+		Z_PARAM_STR_OR_NULL(field)
 	ZEND_PARSE_PARAMETERS_END();
 
 	zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, sharp_statics_key);
@@ -4647,17 +4650,37 @@ ZEND_FUNCTION(Sharp_Internal_statics)
 	ZVAL_DEINDIRECT(store);
 	SEPARATE_ARRAY(store);
 	zval *entry = zend_hash_find(Z_ARRVAL_P(store), key);
-	if (created) {
-		/* A typed reference can refuse a bool. */
-		ZEND_TRY_ASSIGN_REF_BOOL(created, !entry);
-		if (UNEXPECTED(EG(exception))) {
-			RETURN_THROWS();
-		}
-	}
 	if (!entry) {
+		zend_function *init = zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("#init"));
+		const sharp_type *arguments = NULL;
+		if (init && init->common.scope == ce) {
+			arguments = sharp_type_list(ZSTR_VAL(key), ZSTR_LEN(key));
+			if (UNEXPECTED(!arguments)) {
+				zend_argument_value_error(2, "must be the text of type arguments");
+				RETURN_THROWS();
+			}
+		}
 		zval defaults;
 		ZVAL_COPY(&defaults, zend_hash_find_known_hash(Z_ARRVAL_P(store), ZSTR_EMPTY_ALLOC()));
 		entry = zend_hash_add_new(Z_ARRVAL_P(store), key, &defaults);
+		if (arguments) {
+			/* `#init` writes the entry through this function, which finds it, and so can add other entries to the
+			 * store, which moves this one. */
+			zval type_arguments;
+			ZVAL_PTR(&type_arguments, (void *) arguments);
+			zend_call_known_function(init, NULL, ce, NULL, 1, &type_arguments, NULL);
+			if (UNEXPECTED(EG(exception))) {
+				RETURN_THROWS();
+			}
+			store = CE_STATIC_MEMBERS(ce) + info->offset;
+			ZVAL_DEINDIRECT(store);
+			entry = zend_hash_find_known_hash(Z_ARRVAL_P(store), key);
+		}
+	}
+	if (field && UNEXPECTED(!zend_hash_exists(Z_ARRVAL_P(Z_ISREF_P(entry) ? Z_REFVAL_P(entry) : entry), field))) {
+		zend_throw_error(NULL, "Typed static property %s::$%s must not be accessed before initialization",
+			ZSTR_VAL(ce->name), ZSTR_VAL(field));
+		RETURN_THROWS();
 	}
 
 	ZVAL_MAKE_REF(entry);
