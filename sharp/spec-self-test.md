@@ -72,6 +72,27 @@ line 1 expects a throw of NotFound, and throws App\NotPaid: 7
 line 2 expects a throw with the message "8", and throws App\NotPaid: 7
 -->
 
+A plain PHP line that claims PHP# takes its call holds when the call reaches a body the spec leaves out, whose `…` throws `App\Elided`. Any other throw still stops the run:
+
+<!-- example accepted-elided -->
+```csharp
+public class Gate
+{
+    public int pass(int n) { … }
+}
+```
+
+<!-- example accepted-elided: statements
+$gate = new App\Gate();
+-->
+```php
+$gate->pass(1);      // accepted: the call reaches the elided body
+$gate->pass("x");    // accepted: PHP refuses the string first
+```
+<!-- expect accepted-elided
+the run threw TypeError: …
+-->
+
 ## 2. Errors and lines
 
 A `compile error` line with no error fails:
@@ -88,7 +109,7 @@ A "not supported yet" refusal never satisfies a `compile error` line, because it
 
 <!-- example refusal: members -->
 ```csharp
-void bump() { }   // compile error: a method states its access level
+int views { get; set; } = 0;   // compile error: a property states its access level
 ```
 <!-- expect refusal
 line 1 expects a compile error, and the checker reports: …not supported yet…
@@ -211,3 +232,21 @@ public int thrice(Function<int(int)> f) uses f
 public int quoted(Function<int(int)> f) uses f readonly;
 ```
 <!-- expect uses-signature -->
+
+A line holding only `…` that ends a function's body becomes a throw, so a body that returns a value still compiles. Anywhere else it is dropped, so a statement after it still runs:
+
+<!-- example elided-body: members -->
+```csharp
+public int total()
+{
+    const count = 1;
+    …
+}
+
+public void refresh()
+{
+    …
+    this.total();
+}
+```
+<!-- expect elided-body -->

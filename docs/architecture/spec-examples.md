@@ -72,7 +72,7 @@ The spec writes `…` for code the reader doesn't need. `sharp/bin/spec` replace
 - `(…)` becomes `()`.
 - `match (x) { … }` becomes `match (x) { default => throw new Elided() }`.
 - `Plan plan = …;`, a declaration with its type written, becomes `Plan plan = Elided.value() as Plan ?? throw new Elided();`. PHP# refuses to assign a `throw`, whose type is `never`.
-- A line holding only `…` is dropped.
+- A line holding only `…` that ends a function's body, the braces after a header that is neither a type's nor a control statement's, becomes `throw new Elided();`, as `{ … }` does there, so a body that returns a value still compiles. Any other line holding only `…` is dropped, so a statement after it still runs.
 - Any other `…` becomes `throw new Elided()`.
 
 A line that ends a statement with no `;`, such as `7 / 2`, gets one, and a method signature with no body, such as `public void tag(string label = null)`, gets `{ … }`. So does a signature that ends in `uses` and the function parameters it names, with or without its `;`, as the standard library declares `public List<TResult> map<TResult>(Function<TResult(T)> f) uses f;`, since a class holds no method without a body. A top-level statement that is a bare expression, such as `order == sameOrderLoadedAgain;`, runs as the argument of the call that records values, because the spec writes it to show what it gives, and PHP# refuses a statement with no effect. A top-level `return x;` under `statements`, such as `return PaymentResult.Declined(reason: "card expired");`, runs the same way, since the `run` method returns nothing. Each rewrite keeps the line on its own line, so every line number the checker reports is the spec's.
@@ -157,7 +157,7 @@ A trailing `//` comment on a code line is its annotation. A comment alone on a l
 | Form | Example | Checked |
 |---|---|---|
 | `compiles`, `compiles: …`, `compiles, …`, `compiles; runs: …` | `// compiles: starts as null` | no error on the line |
-| `fits: …`, `accepted: …` | `// fits: StripeClient is declared Http` | no error on the line, or no throw for plain PHP |
+| `fits: …`, `accepted: …` | `// fits: StripeClient is declared Http` | no error on the line, or for plain PHP no throw but an `App\Elided` from a body the spec leaves out |
 | `compile error`, `compile error: …`, `compile error when …`, `compile error outside …`, `compile error, same message` | `// compile error: write the type` | an error on the line |
 | `<words>: compile error` | `// enum case: compile error` | an error on the line |
 | `parse error: …` | `// parse error: let takes no written type` | a parse error on the line |
@@ -185,7 +185,7 @@ A value is a number, `true`, `false`, `null`, a quoted string, or a balanced `[�
 
 **A `throws: "<message>"` is compared exactly.** The spec quotes it, and the message is what a caller of `parse` reads.
 
-**A runtime line runs only when the block compiles.** For a block with `compile error` lines, the run uses the block with those lines blanked, and that file must compile with no error. A value line runs as the argument of a call that records its value. A `throws` line runs inside a `try`, so the lines after it still run.
+**A runtime line runs only when the block compiles.** For a block with `compile error` lines, the run uses the block with those lines blanked, and that file must compile with no error. A value line runs as the argument of a call that records its value. A `throws` line runs inside a `try`, so the lines after it still run. A plain PHP line that claims no error, `compiles`, `fits:` or `accepted:`, runs inside a `try` that takes only `App\Elided`: the call reached a body the spec leaves out, so PHP# took it, as `raw-generic-objects`' `$report->count($page)` does.
 
 ## Setup
 

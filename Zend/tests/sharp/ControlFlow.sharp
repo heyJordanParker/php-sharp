@@ -58,7 +58,7 @@ class ControlFlow
     public static int weigh(int factor)
     {
         let total = 0;
-        for (const price of Prices.all()) {
+        for (const price of Prices.listed()) {
             total += price * factor;
         }
         for (let [slot, price] of Prices.all()) {
