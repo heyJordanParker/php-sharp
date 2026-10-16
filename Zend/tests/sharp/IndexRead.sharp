@@ -36,7 +36,7 @@ class IndexRead
         return fixed.offsetExists(values[index]);
     }
 
-    public static int? size(Map<string, SplFixedArray> arrays, string key)
+    public static int? size(Map<string, SplFixedArray<int>> arrays, string key)
     {
         return arrays[key]?.getSize();
     }

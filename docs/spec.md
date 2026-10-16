@@ -747,8 +747,15 @@ A static member names its type arguments: `Counter<Order>.count`. A bare `Counte
 
 - **`new` always names them:** `new PaginatedList<Order>(…)`, or names a class value that carries them, as in `new (pages)()` (section 25). `new Self(…)` names none, because `Self` is the class with its own type parameters.
 - **A type names them too:** `PaginatedList<Order> page`. `Class<PaginatedList>` is the one exception: a class type names the class itself.
-- **A generic method call fixes them** from the arguments it receives, or from the declared type its result goes into. A type argument that neither fixes is a compile error, as in C#'s error CS0411 and in Swift.
-- **A plain PHP generic class,** declared with PHPDoc's `@template`, takes type arguments in PHP# code, as in `Collection<Order>`. The checker checks them, but the object carries none while the code runs, as Java's erased generics do. So a type test against one, such as `x is Collection<Order>`, is a compile error that says the type argument is unknown while the code runs (section 21).
+- **A generic method call fixes them** from the arguments it receives, or from the declared type its result goes into. The declared type reaches the call through each arm of a `match`, through the result of a lambda written for a function type, and through the parameter of an outer generic call that the declared type fixed, as Swift and TypeScript infer nested calls. A type argument that none of these fixes is a compile error, as in C#'s error CS0411 and in Swift.
+- **A plain PHP generic class,** declared with PHPDoc's `@template`, names its type arguments in a PHP# type too, as in `Collection<Order>`, as TypeScript and Kotlin require. A bare `Collection items` is a compile error that names the type parameters to write. A type parameter with a default may be left out. The checker checks the type arguments, but the object carries none while the code runs, as Java's erased generics do. So a type test tests the class alone: `x is Collection` compiles, and `x is Collection<Order>` is a compile error that says the type argument is unknown while the code runs (section 21).
+
+<!-- example plain-php-generic-types: members -->
+```csharp
+public void fill(Cell<float> cell) { }                  // compiles: the type names Cell's type argument
+public void clear(Cell cell) { }                        // compile error: Cell needs its type argument, as in Cell<float>
+public bool holds(Any value) => value is Cell;          // compiles: a type test tests a plain PHP class alone
+```
 
 <!-- example generic-method-inference: statements alone
 namespace App.Inference;
@@ -759,10 +766,12 @@ Cache cache = new Cache();
 public class Cache
 {
     public T get<T>(string key) { … }
+    public T keep<T>(T value) => value;
 }
 
-List<Order> orders = cache.get("orders");   // compiles: the declared type fixes T as List<Order>
-const orders = cache.get("orders");         // compile error: nothing fixes T; write cache.get<List<Order>>("orders")
+List<Order> orders = cache.get("orders");               // compiles: the declared type fixes T as List<Order>
+List<Order> kept = cache.keep(cache.get("orders"));     // compiles: keep's parameter takes List<Order>, which fixes get's T
+const orders = cache.get("orders");                     // compile error: nothing fixes T; write cache.get<List<Order>>("orders")
 ```
 
 **A generic object that plain PHP creates without type arguments** (`new PaginatedList($rows)`, or Laravel's container) has its bounds as its type arguments, as Java's raw types do, but checked where it enters PHP# instead of trusted. Under `PaginatedList<TItem : DatabaseEntity>`, a raw page is a `PaginatedList<DatabaseEntity>`. A parameter that needs `PaginatedList<Order>` throws `TypeError`. A method that takes any page is generic. PHP# code never creates a raw object, because a type argument it can't fix or infer is a compile error.
