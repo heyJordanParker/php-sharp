@@ -1,5 +1,13 @@
 <?php
 
+// The standard library's module, each class it binds, and the classes and types their members take, return and call,
+// by their paths under the library's Sharp folder. A project that holds the library's module holds these.
+const LIBRARY_MODULE = [
+    'Module', 'Dispatcher', 'ImmediateDispatcher', 'Environment', 'Clock', 'Random', 'Console', 'Process',
+    'ProcessResult', 'Files', 'Http', 'Mail', 'Time/Duration', 'Net/HttpMethod', 'Net/HttpRequest', 'Net/HttpResponse',
+    'Net/MailAddress', 'Net/MailMessage', 'Net/Url', 'Net/Email',
+];
+
 function compile_project(string $name, array $files): string
 {
     // The process ID keeps two test runs on one machine out of each other's projects.
