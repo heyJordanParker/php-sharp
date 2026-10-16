@@ -14,4 +14,6 @@ public class Order : DatabaseEntity
     public static OrderQuery query() => new OrderQuery();
 
     public void markPaid() { this.paid = true; }
+
+    public Receipt receipt() => new Receipt();
 }
