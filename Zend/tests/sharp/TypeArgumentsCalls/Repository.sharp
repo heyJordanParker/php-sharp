@@ -193,4 +193,56 @@ public class Repository
     }
 
     public static List<int> orderWrittenThrough(Order order) => Repository.writtenThrough<Order>(order);
+
+    // Each row reads `Tally<T>`'s statics, whose initial values run when code first uses them.
+    public static List<string> tallied<T : DatabaseEntity>()
+    {
+        List<string> seen = [Tally<T>.made, Tally<T>.label, global.sprintf("next %d", Tally<T>.next)];
+        Tally<T>.doubled = 5;
+        Tally<T>.doubled += 1;
+        Tally<T>.watched = 3;
+        Tally<T>.watched++;
+        seen.add(global.sprintf("%d %d %d", Tally<T>.doubled, Tally<T>.watched, Tally<T>.count));
+        seen.add(Tally<T>.once);
+        seen.add(Tally<T>.label);
+        return seen;
+    }
+
+    public static List<string> orderTallied() => Repository.tallied<Order>();
+
+    public static List<string> sharedTallied() => Repository.tallied<SharedOrder>();
+
+    // `Tallies : Tally<Order>` and a class value of `Tally<SharedOrder>` reach the statics of their type arguments.
+    public static List<string> talliedThrough()
+    {
+        Tallies.doubled = 50;
+        const type = typeof(Tally<SharedOrder>);
+        return [global.sprintf("%d %d", Tally<Order>.doubled, Tallies.watched), type.label, global.sprintf("%d", type.doubled)];
+    }
+
+    public static int fragile() => Fragile<Order>.count;
+
+    // Each use of a static that `Fragile<Order>`'s throw left unset, by its number.
+    public static int fragileUse(int use) => match (use) {
+        0 => Fragile<Order>.brokenRead(),
+        1 => Fragile<Order>.afterRead(),
+        2 => Fragile<Order>.brokenAdded(),
+        3 => Fragile<Order>.brokenStepped(),
+        4 => Fragile<Order>.watchedRead(),
+        5 => Fragile<Order>.watchedAdded(),
+        6 => Fragile<Order>.brokenSet(),
+        default => Fragile<Order>.watchedSet(),
+    };
+
+    // A generic subclass's header reaches the statics of the type arguments the access gives it, and a type parameter
+    // reaches its bound's.
+    public static List<int> reachedThrough()
+    {
+        Counter<List<Shelf>>.count = 6;
+        Wrapped<Shelf>.count += 1;
+        Counter<Order>.count = 11;
+        return [Wrapped<Shelf>.count, Counter<List<Shelf>>.count, Repository.counted<Orders>(), Repository.counted<Counter<Order>>()];
+    }
+
+    public static int counted<TCounter : Counter<Order>>() => TCounter.count;
 }

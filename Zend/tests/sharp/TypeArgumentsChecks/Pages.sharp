@@ -30,6 +30,10 @@ public class Pages
 
     public static int count<T>(Page<Box<T>> page) => 1;
 
+    public static string boxed<TBox : Box<Order>>(TBox box) => "boxed";
+
+    public static string maybeBoxed<TBox : Box<Order>>(TBox? box) => "maybe boxed";
+
     public static Function<string(PaginatedList<Order>)> taker() => (PaginatedList<Order> page) => "took";
 
     public static string read(Feed<DatabaseEntity> feed) => "read";

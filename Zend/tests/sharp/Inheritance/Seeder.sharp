@@ -17,4 +17,6 @@ public static class Seeder
     public static int firstKey(Coded coded) => coded.keys()[0];
 
     public static Tagger<string> tagger() => new Tagger<string>("a");
+
+    public static Ranked<int, string> ranked() => new Ranked<int, string>("first");
 }

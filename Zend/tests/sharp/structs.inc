@@ -5,8 +5,10 @@ namespace {
     use Demo\Structs;
 
     require __DIR__ . '/attempt.inc';
+    require __DIR__ . '/../../../sharp/composer/library/Sharp/InvalidFields.sharp';
     require __DIR__ . '/Stamp.sharp';
-    require __DIR__ . '/Structs.sharp';
+    require __DIR__ . '/harness/fixture.inc';
+    fixture('Structs');
 
     // Each round runs every method, so the JIT variants compile them before the last round, whose output is printed.
     for ($round = 0; $round < 100; $round++) {
@@ -35,6 +37,24 @@ namespace {
             Structs::sameMaps(['a' => $stamp, 'b' => $heavier], ['b' => $stamp->heavier(), 'a' => Structs::stamp('post', 1)]),
             Structs::sameMaps(['a' => $stamp], ['a' => $heavier]),
         ]);
+        // A generic struct carries its type arguments through a swap, a changed copy, ==, parse and tryParse, a type
+        // test, a Map key, and each type argument's own statics.
+        $pair = Structs::pair(1, 'a');
+        attempt(fn () => [Structs::swapped($pair)->first, Structs::renumbered($pair, 2)->first, $pair->first]);
+        attempt(fn () => [Structs::samePairs($pair, Structs::pair(1, 'a')), Structs::samePairs($pair, Structs::pair(2, 'a'))]);
+        attempt(fn () => [
+            Structs::isPair($pair),
+            Structs::isPair(Structs::swapped($pair)),
+            Structs::isPair(Structs::renumbered($pair, 2)),
+            Structs::isPair(Structs::parsed(['first' => 3, 'second' => 'c'])),
+        ]);
+        attempt(fn () => Structs::parsed(['first' => 'x', 'second' => 4])->first);
+        attempt(fn () => Structs::tried(['first' => 'x', 'second' => 'c']));
+        attempt(fn () => Structs::keys($pair, Structs::pair(1, 'a')));
+        attempt(fn () => Structs::made());
+        // A field of a generic struct is read with the field's type arguments.
+        attempt(fn () => Structs::isPair(Structs::wrapped(['inner' => ['first' => 5, 'second' => 'e']])->inner));
+        attempt(fn () => Structs::wrapped(['inner' => ['first' => 'x', 'second' => 'e']]));
         $output = ob_get_clean();
     }
 

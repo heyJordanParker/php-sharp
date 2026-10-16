@@ -1,0 +1,8 @@
+namespace Orchard;
+
+public class Stall
+{
+    public Map<Ripeness, int> stock { get; set; } = [:];
+
+    public int ripe() => this.stock[Ripeness.Ripe] ?? -1;
+}

@@ -1,0 +1,8 @@
+namespace Demo;
+
+public class Ranked<TRank, TName> : Keyed<TName>
+{
+    public Ranked(public TName name { get; }) { }
+
+    public TName key() => this.name;
+}

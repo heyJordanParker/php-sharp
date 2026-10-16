@@ -11,4 +11,6 @@ public interface Keyed<TKey>
     bool same(TKey other) => other == this.key();
 
     List<TItem> pair<TItem>(TItem item) => [item, item];
+
+    bool fits<TOther : Keyed<TKey>>(TOther given, Any other) => other is TOther;
 }

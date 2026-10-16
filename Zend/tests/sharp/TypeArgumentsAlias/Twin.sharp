@@ -2,6 +2,8 @@ namespace Aliased;
 
 public class Twin<TFirst, TSecond>
 {
+    public static int made { get; } = Maker.run();
+
     public Twin()
     {
     }

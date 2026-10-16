@@ -48,7 +48,9 @@ Every `csharp`, `ts` and `php` block in `docs/spec.md` and `README.md` has a mar
 
 Run lines are PHP# and carry annotations like any other line. They run after the block's own lines, in its `run` method when the block is `statements`, and otherwise in a `run` method of their own. A value, `throws` or message annotation that no run reaches, such as `// throws OutOfRangeException when no argument was passed` on a method's line, fails the check before anything compiles, unless a run line of the same example makes the same claim. Only a run line restates a claim, never another line of the block. `environment` (§29) shows its `throws` this way, and `copy-on-write`, `capture-by-reference` and `capture-and-change` check the values their prose states, such as `a.count();   // 1`.
 
-A run line calls the code whose claim it restates, as `new Deploy(new Environment()).target();` calls `target()`. The checker can't see that: `throw new OutOfRangeException();   // throws OutOfRangeException` would satisfy the same claim. So the review of the pull request that changes a run line checks it.
+Run lines reach a `foreign` object as PHP# code does, through a constructor, since only a module binding creates one (§29). A run line may declare the run class's constructor, as `public ExampleRun(private Deploy deploy) { }`, and the run gets each parameter from `Sharp\Container`, as the container fills a bound class's constructor. The example's module binds the services, and the standard library's module binds `Environment` and the other effect classes. A run class with no constructor parameters is created without its constructor, as before.
+
+A run line calls the code whose claim it restates, as `this.deploy.target();` calls `target()`. The checker can't see that: `throw new OutOfRangeException();   // throws OutOfRangeException` would satisfy the same claim. So the review of the pull request that changes a run line checks it.
 
 The check fails at the run marker's own line when a run comment follows a block that is not its example's last, when its id is not the block's, and when it has no `-->` line before the next fence or comment.
 
