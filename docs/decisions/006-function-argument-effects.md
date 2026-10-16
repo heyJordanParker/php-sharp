@@ -1,6 +1,6 @@
 # 6. Effects of a function argument
 
-Superseded by [decision 79](079-function-parameter-effects.md): a method takes on the effects of each function it is given with nothing written, a function parameter whose type states no effects never escapes the call, and a function parameter in `uses` is a compile error.
+Superseded by [decision 79](079-function-parameter-effects.md): a method takes on the effects of each function it is given with nothing written, a function parameter whose type states no effects never escapes the call, and a function parameter in `uses` is a parse error.
 
 ## Decision
 

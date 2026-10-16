@@ -3901,7 +3901,7 @@ The standard library's collection methods (section 12) take on the effects of th
 
 **Plain PHP can run any function it is given,** as `global.array_map(f, list)` and `global.usort(list, f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => global.time()` to `global.call_user_func` has the effect `Clock`.
 
-**Code with a body writes no `uses`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function it is given, and its body and declaration show all four. The checker works out each method's effects, and the editor displays them. A `uses` that names a function parameter, with or without a body, is a compile error that says to delete it.
+**Code with a body writes no `uses`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function it is given, and its body and declaration show all four. The checker works out each method's effects, and the editor displays them. A `uses` that names a function parameter, with or without a body, is a parse error that says to delete it.
 
 ## 30. Tuples
 

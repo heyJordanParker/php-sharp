@@ -6,7 +6,7 @@ A method takes on the effects of each function it is given, with nothing written
 
 - **Such a parameter runs only inside the call.** Storing it in a field, a collection or a new object, returning it, and capturing it in a lambda that escapes are compile errors that name the type to take instead. Calling it, and passing it on to another method's function parameter, are allowed. A local may hold it, and the local is held to the same rules.
 - **A parameter whose function type states its effects keeps them as a cap.** `Function<Charge(Cart) uses Http>` accepts a function with `Http` or no effects, the method has `Http` from calling it, and the parameter may be stored, returned and captured.
-- **A function parameter in `uses` is a compile error that says to delete it,** with or without a body.
+- **A function parameter in `uses` is a parse error that says to delete it,** with or without a body.
 
 ```csharp
 // in the standard library's List<T>

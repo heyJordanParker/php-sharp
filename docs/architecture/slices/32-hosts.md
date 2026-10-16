@@ -248,7 +248,7 @@ sharp/
 ├── mago/crates/
 │   ├── codex/                                TAKES_ON_EFFECTS marks a function parameter whose type states no effects
 │   ├── names/src/binding.rs                  takes_on_effects; which of a method's `uses` names are its parameters
-│   ├── semantics/src/internal/checker/sharp.rs   a function parameter in `uses` is refused: delete it
+│   ├── syntax/src/                           a function parameter in `uses` is a parse error: delete it
 │   ├── prelude/assets/extensions/sharp.php   runScoped, with its @template
 │   ├── analyzer/src/invocation/analyzer.rs   an argument for such a parameter may hold any effect
 │   ├── analyzer/src/effects/summary.rs       a call takes on the effects of the function it passes there
