@@ -3,7 +3,7 @@ namespace Observed;
 public class Account
 {
     public int balance { get; set; willSet => global.printf("will %d from %d\n", value, field); didSet => global.printf("did %d\n", field); } = 1;
-    public string name { get; set { global.printf("set [%s]\n", value); field = global.trim(value); } didSet => global.printf("named %s\n", field); } = "  start  ";
+    public string name { get; set { global.printf("set [%s]\n", value); field = value.trim(); } didSet => global.printf("named %s\n", field); } = "  start  ";
     public string note { get; set { global.printf("set note\n"); field = value; } } = global.str_repeat(" ", 2);
     public static int opened { get; set; didSet => global.printf("opened %d\n", field); } = global.intdiv(4, 2);
 

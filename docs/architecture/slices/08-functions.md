@@ -204,23 +204,35 @@ Each is outside section 8 and blocks none of its rules.
 
 - **`<` and `>` on an unbounded type parameter compile, and run PHP's comparison (sections 11 and 19).** `public static T of<T>(T a, T b) => a > b ? a : b;` compiles. `Larger.of("10", "9")` gives `"10"`, where section 19 line 2118 orders `"10"` before `"9"`, and PHP# itself gives `true` for `"10" < "9"`. `Larger.of(a, b)` on a class with no `operator <=>` compiles and runs, while `a < b` on that class is refused with "`<` cannot compare `Larger` with `Larger`: `Larger` declares no `operator <=>`."
 - **A `float` passed to an `int` parameter gets mago's generic wording (section 24).** `float largerFloat(float a, float b) => Math.max(a, b)` with decision 1's `max` reports "Possible argument type mismatch … expected `int`, but possibly received `float`. The provided type `float` overlaps with `int` but is not fully contained." for each argument, then "`int` is not `float`: convert with (float) Math.max(a, b)".
+- **`.count()` on a `List|Map` union is refused (section 12).** `int size(List<int>|Map<string, int> cells) => cells.count();` gets "Calling `count` on `List<int>|Map<string, int>` is not supported by the engine yet. | Test which one the value is with `is` before the call." With decision 7, `global.count(cells)` is refused too, so such a value counts only after an `is` test.
+- **The largest element of a `List` has no direct form (section 12).** `Math.max` takes a first value, so `Math.max(...sizes)` is refused, "Too few arguments provided for method `Math.max`", and `global.max(sizes)` is refused by decision 7. `Math.max(0, ...sizes)` works when every element is at least 0. `List` has no `max()`.
+- **`.count()` on a receiver the checker types as `Any?` reports `mixed-return-statement` (section 12).** `messages.count()` on a local holding an untyped empty literal, and `this.items.count()` on an emptied plain PHP array property, each report it, where `global.count(…)` reported nothing.
+- **PHP's aliases `sizeof` and `key_exists` have no row.** A bare `sizeof(items)` names `global.sizeof(…)`, not `items.count()`.
 
 ## Files
 
 ```text
-docs/architecture/slices/08-functions.md                         new: this note
+docs/
+├── architecture/slices/08-functions.md                          new: this note
+└── spec.md                                                      section 12 line 1119 and section 29 line 4064 (decision 7)
 sharp/
 ├── baseline/spec/§7/variadic-parameters                         deleted (decision 5)
 ├── baseline/spec/§8/standard-library-calls                      deleted (decision 5)
 ├── composer/library/Sharp/Math/Math.sharp                       max and min (decision 1)
-└── mago/crates/analyzer/
-    ├── src/expression/call/function_call.rs                     REPLACEMENTS rows; Replacement::CollectionMethod (decisions 2, 3)
-    └── tests/sharp.rs                                           a row per new REPLACEMENTS row (decision 4)
+└── mago/
+    ├── crates/analyzer/
+    │   ├── src/expression/call/function_call.rs                 REPLACEMENTS rows; Replacement::CollectionMethod; the global. refusal (decisions 2, 3, 7)
+    │   ├── src/expression/mod.rs                                a list pattern's own count call stays unreported
+    │   └── tests/sharp.rs                                       a row per new REPLACEMENTS row, the global. test, sources moved to members (decisions 4, 7)
+    ├── crates/semantics/tests/fixtures/slice/                   Report.sharp and Suit.sharp moved to members (decision 7)
+    ├── crates/sharp-bridge/tests/lower.rs                       sources moved to members (decision 7)
+    └── tests/sharp.rs                                           @global.strtoupper in place of @global.trim (decision 7)
 Zend/tests/sharp/
 ├── MathCalls.sharp                                              calls max and min
 ├── library_math.phpt                                            the max and min rows
 ├── library_math.inc                                             new: the preload script
-└── library_math_preload.phpt                                    new: the same rows, preloaded
+├── library_math_preload.phpt                                    new: the same rows, preloaded
+└── every fixture that called a replaced function through global., its PHP twin and its driver (decision 7)
 ```
 
-The bridge and the engine need no change. The new rows run only in a `.sharp` file: `resolve_targets` calls `report_bare_function_call` only when `context.dialect.is_sharp()`. `Math.sharp` is a `.sharp` file of the standard library. A plain PHP project's analysis does not change, which the PR proves by running `mago analyze` on a plain PHP project before and after.
+The bridge and the engine need no change. The new rows and the `global.` refusal run only in a `.sharp` file: each check runs only when `context.dialect.is_sharp()`. `Math.sharp` is a `.sharp` file of the standard library. A plain PHP project's analysis does not change: `mago analyze` on a plain PHP project that calls `\max`, `min`, `\array_filter`, `\in_array`, `str_getcsv`, `\trim` and `count` reports "No issues found."

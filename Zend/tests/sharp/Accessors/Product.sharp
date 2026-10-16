@@ -1,6 +1,7 @@
 namespace Store;
 
 import InvalidArgumentException;
+import Sharp.Math.Math;
 
 class Product
 {
@@ -18,7 +19,7 @@ class Product
             field = value;
         }
     } = 0;
-    public int stock { get; private set => field = global.max(0, value); } = 0;
+    public int stock { get; private set => field = Math.max(0, value); } = 0;
     public List<string> tags
     {
         get => field;

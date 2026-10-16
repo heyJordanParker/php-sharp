@@ -6,5 +6,5 @@ public class Trimmed : Behavior<string>
 {
     public string get(string value) => value;
 
-    public string set(string value) => global.trim(value);
+    public string set(string value) => value.trim();
 }

@@ -15,14 +15,14 @@ class Lambdas
             $count += $step + $this->base;
         };
         $bump = function () use (&$count) { return $count += 1; };
-        $add($twice($half(4)));
+        \call_user_func($add, $twice($half(4)));
         $bump();
         return $count;
     }
 
     public static function doubled(array $numbers, int $by): array
     {
-        return \array_map(fn ($n) => $n * $by, $numbers);
+        return ((object) $numbers)->map(fn ($n) => $n * $by);
     }
 
     public static function passes(int $times): string
@@ -37,7 +37,7 @@ class Lambdas
             ((object) $marks)->add(function () use (&$seen) { return $seen; });
             $times -= 1;
         }
-        return \implode(",", \array_map(fn ($read) => $read(), $marks));
+        return \implode(",", ((object) $marks)->map(fn ($read) => $read()));
     }
 
     public static function pipeline(array $numbers, \Sharp\Map|array $prices): array { $prices = \is_array($prices) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [(string) $key, $value], \array_keys($prices), $prices))) : $prices; // PHP# makes the array a Map, its keys strings
@@ -49,9 +49,9 @@ class Lambdas
             \implode(",", $labels),
             \implode(",", ((object) $numbers)->sortedBy(fn ($n) => -$n)),
             \implode(",", $groups["odd"] ?? []),
-            \implode(",", \array_keys(\iterator_to_array(((object) $labels)->associateBy(fn ($label) => $label)))), // PHP# passes plain PHP the Map's array
-            \implode(",", \array_keys(\iterator_to_array(((object) $prices)->filter(fn ($price) => $price < 100)))),
-            \implode(",", \iterator_to_array(((object) $prices)->filter(fn ($price) => $price < 100))),
+            \implode(",", ((object) ((object) $labels)->associateBy(fn ($label) => $label))->keys()),
+            \implode(",", ((object) ((object) $prices)->filter(fn ($price) => $price < 100))->keys()),
+            \implode(",", \iterator_to_array(((object) $prices)->filter(fn ($price) => $price < 100))), // PHP# passes plain PHP the Map's array
             \implode(",", ((object) $prices)->map(fn ($price) => $price * 2)),
         ];
     }

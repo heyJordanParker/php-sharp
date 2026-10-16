@@ -15,14 +15,14 @@ class Lambdas
             count += step + this.base;
         };
         const bump = () => count += 1;
-        add(twice(half(4)));
+        global.call_user_func(add, twice(half(4)));
         bump();
         return count;
     }
 
     public static List<int> doubled(List<int> numbers, int by)
     {
-        return global.array_map(n => n * by, numbers);
+        return numbers.map(n => n * by);
     }
 
     public static string passes(int times)
@@ -37,7 +37,7 @@ class Lambdas
             marks.add(() => seen);
             times -= 1;
         }
-        return global.implode(",", global.array_map(read => read(), marks));
+        return global.implode(",", marks.map(read => read()));
     }
 
     public static List<string> pipeline(List<int> numbers, Map<string, int> prices)
@@ -49,8 +49,8 @@ class Lambdas
             global.implode(",", labels),
             global.implode(",", numbers.sortedBy(n => -n)),
             global.implode(",", groups["odd"] ?? []),
-            global.implode(",", global.array_keys(labels.associateBy(label => label))),
-            global.implode(",", global.array_keys(prices.filter(price => price < 100))),
+            global.implode(",", labels.associateBy(label => label).keys()),
+            global.implode(",", prices.filter(price => price < 100).keys()),
             global.implode(",", prices.filter(price => price < 100)),
             global.implode(",", prices.map(price => price * 2)),
         ];
@@ -81,10 +81,10 @@ class Lambdas
             seen.add(n);
             return true;
         });
-        const grown = global.count(seen);
-        const size = () => global.count(seen);
+        const grown = seen.count();
+        const size = () => seen.count();
         seen.add(0);
-        return [global.count(kept), grown, size()];
+        return [kept.count(), grown, size()];
     }
 
     public int nested(int extra)

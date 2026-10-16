@@ -56,7 +56,7 @@ class Pantry
 
     public Map<string, int> restock(string name)
     {
-        this.sizes.add(global.count(this.sizes));
+        this.sizes.add(this.sizes.count());
         this.stock.remove(name);
         return this.stock;
     }
