@@ -137,7 +137,7 @@ final class Listener
 
 function accepts(string $type, mixed &$value, string $path, array &$problems): bool {}
 
-function &statics(string $class, string $key, ?bool &$created = null): array {}
+function &statics(string $class, string $key, ?string $field = null): array {}
 
 function keep(string $key, \Closure $compute): mixed {}
 
