@@ -83,45 +83,49 @@ Each Problem below lists its rows, its change and the code it reuses. A test per
 
 ### G1. A miscased keyword stops hiding the file's other errors (K4, `keyword-case`)
 
-`crates/semantics/src/internal/mod.rs`'s `checks_slice` runs PHP# checks when every parse error of the file is `ParseError::MiscasedKeywordInSharp`. That error comes from `read_miscased_keyword`, which reads the token as the lowercase keyword, so the tree is the tree of the correct code. The gate's reason (`623b29626c`: a node the parser rejected must not get a second error) doesn't apply. `keyword-case` then reports line 99 and line 100.
+`crates/semantics/src/internal/mod.rs`'s `checks_slice` runs PHP# checks when every parse error of the file is `ParseError::MiscasedKeywordInSharp`. That error comes from `read_miscased_keyword`, which reads the token as the lowercase keyword, so the tree is the tree of the correct code. The gate's reason (`623b29626c`: a node the parser rejected must not get a second error) doesn't apply. `keyword-case` then reports line 99 and line 100. The bridge's `check` in `crates/sharp-bridge/src/lower/checked.rs` takes the same predicate, so `mago compile` prints the parse errors and the checker's errors together.
 
 The alternative, reading `Return;` as a name so that it is no parse error, fixes only the one form. The gate change covers `If (TRUE) { }` and every other mix.
 
 ### G2. Every miscased keyword suggests the keyword (K4)
 
-- **Values:** `check_constant_access` in `crates/semantics/src/internal/checker/sharp.rs`, which writes "Write `true` in lowercase.", takes `this` and `super` too. The `self` check takes `SELF` and any other spelling of `Self` that names no class, as "Write `Self` …".
-- **Expression heads:** `Typeof(`, `Nameof(` and `Exit(` read as their keyword with `MiscasedKeywordInSharp`, as `Match (` and `NEW` do, in `miscased_construct_follows`.
-- **Infix:** `is` and `as` in another case after an operand read as the operator with the same error, where `operator_kind` in `parser/internal/expression.rs` reads PHP's infix keywords.
-- **Members and file heads:** `Case` before a name in an enum reads as `case`. A miscased modifier at file level followed by a type keyword reads as the modifier, so `Public class` is one error. `Struct` gives only its own error.
+- **Values and calls:** "where no such name exists" needs the codebase, so the analyzer decides it. `report_keyword_in_another_case` in `crates/analyzer/src/resolver/class_name.rs` runs where a class, a type or a constant names nothing, and `FunctionCall::analyze` runs it for a bare call: `THIS`, `This`, `SUPER`, `SELF`, `Typeof(…)`, `Nameof(…)` and `Exit(…)` get `MiscasedKeywordInSharp`'s message, as "Write the keyword `this` in lowercase." `Self` gets "Write the keyword `Self` with a capital S and the rest in lowercase." A class named `This` keeps the name.
+- **Infix:** `is` and `as` in another case after an operand read as the operator with the same error, in `is_at_is_or_as` in `parser/internal/pattern.rs`.
+- **Members and file heads:** `Case` before a name in an enum reads as `case`, and a miscased modifier at file level followed by a modifier or a type keyword reads as the modifier, so `Public class` is one error, both in `parser/internal/common.rs`. `parse_modified_class_like_with_attributes` reads a miscased type keyword first, so `Struct` gives only its own error.
 
 ### G3. An import names a class, or a namespace of functions and constants (N4, C4)
 
 In a `.sharp` file, `Statement::Use` in `crates/analyzer/src/statement/mod.rs` checks every import, whatever `check_use_statements` says, through `check_sharp_import` in `use_statement.rs`:
 
-- a class-like: compiles.
-- a namespace that holds a plain PHP function or constant: compiles. The check scans `CodebaseMetadata::function_likes` and `constants`, which are public fields, so no new public method.
-- a function: today's `function-import` error.
-- a constant: the same error, with "read it as `Pdf.DEFAULT_DPI`".
-- a namespace of classes only: "An import names a class or a namespace of functions: import the class, as in `import Sharp.Json.Json;`" when the namespace holds one class, and the class list otherwise.
-- nothing: `non-existent-use-import`, "Imported class `Nowhere.Missing` does not exist." An import whose last part is capitalized never gets the function message, so `import Log;` gets this one. Question 1 may change it.
+- a class-like, or a standard effect such as `Sharp.Mail`, which an import renames: compiles.
+- a namespace that holds a plain PHP function or constant directly: compiles. The check scans `CodebaseMetadata::function_likes` and `constants`, which are public fields, so no new public method.
+- a function whose last part starts in lowercase: today's `function-import` error.
+- a constant: "An import names a class or a namespace, not a constant: import `Vendor.Pdf`, and read `Pdf.DEFAULT_DPI`."
+- a namespace of classes only: "`App.Shared.Schema` holds classes only, and an import names a class or a namespace of functions: import the class, as in `import App.Shared.Schema.Column;` or `import App.Shared.Schema.Entity;`", every class of the namespace in name order.
+- nothing: `non-existent-use-import`, "Imported class, interface, trait, or enum `Nowhere.Missing` does not exist." A capitalized last part never gets the function message, so `import Log;` gets this one (Q1).
+
+The general `check_use_statements` pass skips `.sharp` files, so an import gets one error. Bridge tests whose template imported `Lib.Calc` with no `Lib\Calc` declared now import it only when the code names `Calc`.
 
 ### G4. A full name anywhere in code names its import (N3, N5)
 
-One function in `crates/analyzer/src/utils/names.rs` takes a dotted name as written and returns the refusal when the whole name, read as a full name, is a class-like or a namespace member: "Full names appear only in `import` lines: add `import App.Order;` and write `Order`." `report_full_name` becomes its caller for member chains. The other callers are the sites that today report the wrong error:
+`report_full_class_name` in `crates/analyzer/src/resolver/class_name.rs` writes the refusal for a dotted name that is a class-like: "Full names appear only in `import` lines: add `import App.Order;` and write `Order`." `report_unknown_sharp_class` calls it wherever a missing class is reported, and falls back to the keyword (G2) and to "not imported" (G8):
 
 - `report_undefined_type` (`statement/function_like/mod.rs`): parameter, return, property, local and generic argument types.
-- `new` (`expression/instantiation.rs`), `nameof` (`expression/name_of.rs`), `typeof` (`expression/type_of.rs`), `catch` (`statement/try.rs`), and `report_unknown_class_read` (`expression/access/mod.rs`) for `Vendor.Pdf.DEFAULT_DPI`.
-- A class through a namespace import, `Pdf.Document`: "import `Vendor.Pdf.Document`".
+- `new` (`expression/instantiation.rs`), `catch` (`statement/try.rs`), attributes (`statement/attributes/mod.rs`), a class header (`statement/class_like/mod.rs`), `report_non_existent_method` (`resolver/method.rs`) and `report_non_existent_class_like`, which `nameof` and `typeof` reach.
 
-The parser reads a dotted name where it now stops: a local's type at a statement's head, a class header after `:`, an attribute's name and an `extern` target. `Identifier::Dotted` already exists, so the tree's shape doesn't change, and the analyzer refuses the name before the bridge sees it.
+`report_full_name` in `expression/access/mod.rs` handles member chains. Its root may be a constant read, a name, or the class of a `new` without arguments. An imported root starts from its imported name, so `Pdf.Document.blank()` after `import Vendor.Pdf;` names `import Vendor.Pdf.Document;`. A function or constant read through a namespace written in two or more parts is refused with "add `import Vendor.Pdf;` and write `Pdf.render`". `check_extern` refuses an `extern` target of three or more parts.
+
+The parser reads a dotted name where it stopped: a type of any length (`kind_after_dotted_name` in `type_hint.rs`), a local's type at a statement's head (`is_at_dotted_typed_local`), the class before a member in `nameof`, an attribute's name and an `extern` target. `Identifier::Dotted` already exists, so the tree's shape doesn't change, and the analyzer refuses the name before the bridge sees it.
 
 ### G5. Every class directly in `Sharp` is a default name (N15)
 
-`shadowable_default_classes` in `crates/names/src/lib.rs` gains `Sharp\Behavior`, `Sharp\ClassMembers`, `Sharp\Dispatcher`, `Sharp\ImmediateDispatcher`, `Sharp\InvalidFields` and `Sharp\Listening`. The `feat/result` Slice adds `Result` there and `Error` as a default nothing shadows, so this Slice leaves `Error` alone and only merges its list.
+The name resolver runs before the codebase exists, so it can't read the library when it runs. The list is generated at build time instead, per Q2:
 
-The list can drift from the library, so `check_declarations` refuses a standard library file that declares a class-like directly in `Sharp` that `default_class` doesn't know: "A class directly in `Sharp` is a default name of every file: add `Sharp.X` to `shadowable_default_classes`." Every compile of the library, the spec harness's included, runs it.
+- `sharp/mago/scripts/regen-sharp-classes.php <library>` reads every public class-like the library's `Sharp/*.sharp` files declare directly in `Sharp`, and the prelude's `namespace Sharp` block, and writes `crates/names/src/sharp_classes.rs`. The Justfile recipe `regen-sharp-classes` runs it.
+- `default_classes()` in `crates/names/src/lib.rs` is `NAMED_EFFECTS` plus `SHARP_CLASSES`, and every default name is shadowable. `NAMED_EFFECTS` moves from the analyzer's `effects/mod.rs` to `mago_names`, its one owner.
+- `the_default_class_likes_are_generated_from_the_standard_library_and_the_prelude` in `names/tests/binder.rs` runs the script and fails when its output differs from the file.
 
-The alternative builds the default names from the codebase, as the analyzer's extension lookup does. The name resolver runs before the codebase exists, so that needs a third scan pass in `IncrementalAnalysisService::analyze`, beside the one `NamespaceClasses` already adds.
+The prelude's `ListMethods`, `MapMethods`, `SetMethods` and `IterableMethods` move to `namespace Sharp\Internal`, with every reference in the analyzer, codex, the bridge and the tests. The engine names none of them. `Listening` stays in `Sharp`, so it is a default name. The `feat/result` Slice adds `Result` and `Error` to the library, and the script adds them on its next run.
 
 ### G6. `import X uses Y;` is one error that says why (N13)
 
@@ -129,17 +133,17 @@ The parser's import reader in `crates/syntax/src/parser/internal/use.rs` reads `
 
 ### G7. A plain PHP class named like a PHP# namespace refuses the PHP# file (N21)
 
-`report_class_like_named_as_a_namespace` in `crates/analyzer/src/statement/class_like/mod.rs` also runs from the PHP# side: a PHP# class-like whose namespace is a plain PHP class gets "`App.D.Old` is both a plain PHP class and this file's namespace: rename the class or the folder." `mago compile` then refuses it. The warm path re-analyzes a namespace's files when a class-like of that name appears or goes, as `a_compile_after_the_folder_named_like_a_class_gains_or_loses_a_class_matches_a_clean_compile` checks today; that test gains the row.
+`report_namespace_named_as_a_plain_php_class_like` in `crates/analyzer/src/statement/class_like/mod.rs` runs beside `report_class_like_named_as_a_namespace`: a PHP# class-like whose namespace, or a namespace above it, is a plain PHP class gets "`App.Tenant.Store` is both a plain PHP class and a namespace: rename the class or the folder." `mago compile` then refuses it. The warm path in `incremental_analysis.rs` also re-analyzes a file whose class-like lies in the namespace a class-like scanned again names, so `a_compile_after_the_folder_named_like_a_class_gains_or_loses_a_class_matches_a_clean_compile` gains three rows and matches a clean compile with and without `diff`.
 
 ### G8. The two errors that don't say what the spec says (N12, N17)
 
-- **Not imported:** where the analyzer reports a missing class in a `.sharp` file (`report_non_existent_method` on a class that doesn't exist, and `report_undefined_type`), a short name that names exactly one class-like of the codebase gets "`Math` is not imported: add `import Sharp.Math.Math;`". The help reuses the aliased-import writer that `match-not-exhaustive` and the extension lookup use.
-- **Bare library constant:** a bare uppercase name that names no constant of the code, while a namespace the file imports holds one of that name, gets "Read the library's constant through its namespace: write `Pdf.DEFAULT_DPI`."
+- **Not imported:** `report_not_imported` in `resolver/class_name.rs`, reached through `report_unknown_sharp_class` (G4): a short name that names exactly one class-like of the codebase gets "`Math` is not imported.", with the import to add as help from `sharp_missing_imports`.
+- **Bare library constant:** in `expression/constant_access.rs`, a bare uppercase name that names no constant of the code, while a namespace the file imports holds one of that name, gets "Read the library's constant through its namespace: write `Pdf.DEFAULT_DPI`."
 
 ### What doesn't change
 
-- **Bridge:** imports are dropped and names written in full (`Lowering::file_statement`), which is the meaning of `use … as`. No change.
-- **Engine:** no change. The new engine test pins N7, N11, N16, N18 and K3 at runtime.
+- **Bridge:** imports are dropped and names written in full (`Lowering::file_statement`), which is the meaning of `use … as`. Only the collection classes' new namespace and G1's predicate change.
+- **Engine:** no change. The new engine test pins N7, N11, N16, N18 and K3 at runtime. Its plain PHP library is `harness/Names.inc`, where `mago compile` reads plain PHP. PHP's preloading keeps no constant, so the preload test defines the library's constant in the request, as a Composer `files` entry would.
 - **Composer plugin:** `autoload.php` and `Plugin::declaredClasses` found `App\Return`, `App\Shop\Money` and `App\Probe` through PSR-4 and through the optimized class map. No change.
 - **`sharp/bin/spec` and the harness:** no change.
 - **Plain PHP:** every change runs only in a `.sharp` file, except G7's PHP# side, which reads a plain PHP class and reports on the PHP# file.
@@ -149,38 +153,50 @@ The parser's import reader in `crates/syntax/src/parser/internal/use.rs` reads `
 ```text
 docs/architecture/slices/23-names-imports.md          new: this note
 sharp/baseline/spec/§2/keyword-case                   deleted: the example passes (G1)
-sharp/mago/crates/
-├── syntax/src/
-│   ├── error.rs                                       new variant for `uses` on an import (G6)
-│   └── parser/internal/
-│       ├── common.rs                                  Typeof, Nameof, Exit, Case and a file-level modifier read as keywords (G2)
-│       ├── expression.rs                              IS and As read as is and as (G2)
-│       ├── use.rs                                     `uses` after an import is one named error (G6)
-│       ├── local_declaration.rs, class_like/mod.rs,
-│       │   attribute.rs, extern.rs                    a dotted name parses where it now stops (G4)
-├── semantics/src/internal/
-│   ├── mod.rs                                         checks_slice runs past a miscased keyword (G1)
-│   └── checker/sharp.rs                               this, super and Self in another case (G2); the library's
-│                                                      classes directly in Sharp are default names (G5)
-├── names/src/lib.rs                                   six default names (G5)
-├── analyzer/src/
-│   ├── utils/names.rs                                 the full-name refusal and the not-imported help (G4, G8)
-│   ├── expression/access/mod.rs                       report_full_name and report_unknown_class_read use it (G4)
-│   ├── expression/instantiation.rs, name_of.rs,
-│   │   type_of.rs, statement/try.rs                   a full name names its import (G4)
-│   ├── statement/function_like/mod.rs                 report_undefined_type names the import (G4, G8)
-│   ├── statement/mod.rs, statement/use_statement.rs   every PHP# import is checked (G3)
-│   ├── expression/constant_access.rs                  a bare library constant names Pdf.DEFAULT_DPI (G8)
-│   ├── resolver/method.rs                             a static call on an unimported class names its import (G8)
-│   └── statement/class_like/mod.rs                    the class-and-namespace rule from the PHP# side (G7)
-├── syntax/tests/sharp.rs, semantics/tests/sharp.rs,
-│   names/tests/binder.rs, analyzer/tests/sharp.rs     one test per rule, forms as rows
-└── orchestrator/src/service/incremental_analysis/
-    compile.rs                                         the plain PHP row of the class-and-namespace test (G7)
+sharp/mago/
+├── Justfile                                           the regen-sharp-classes recipe (G5)
+├── scripts/regen-sharp-classes.php                    new: writes the default class list from the library (G5)
+└── crates/
+    ├── syntax/src/
+    │   ├── error.rs                                   new variant for `uses` on an import (G6)
+    │   └── parser/internal/
+    │       ├── common.rs, class_like/mod.rs           Case, a file-level modifier and Struct read as keywords (G2)
+    │       ├── pattern.rs                             IS and As read as is and as (G2)
+    │       ├── use.rs                                 `uses` after an import is one named error (G6)
+    │       └── type_hint.rs, local_declaration.rs,
+    │           name_of.rs, attribute.rs, extern.rs    a dotted name parses where it stopped (G4)
+    ├── hir/src/lower/error/mod.rs                     lowers the new variant (G6)
+    ├── semantics/src/internal/mod.rs                  checks_slice runs past a miscased keyword (G1)
+    ├── sharp-bridge/src/lower/
+    │   ├── checked.rs                                 refuses with every error past a miscased keyword (G1)
+    │   └── types.rs                                   the collection classes in Sharp\Internal (G5)
+    ├── names/src/
+    │   ├── lib.rs                                     default_classes and NAMED_EFFECTS (G5)
+    │   ├── sharp_classes.rs                           new, generated: the classes directly in Sharp (G5)
+    │   └── internal/walker.rs                         resolves through default_classes (G5)
+    ├── prelude/assets/extensions/sharp.php            the collection classes move to Sharp\Internal (G5)
+    ├── codex/src/metadata/mod.rs                      the collection classes in Sharp\Internal (G5)
+    ├── analyzer/src/
+    │   ├── resolver/class_name.rs                     full class names, miscased keywords, not imported (G2, G4, G8)
+    │   ├── expression/access/mod.rs, call/mod.rs,
+    │   │   instantiation.rs, call/function_call.rs    member chains, `new` and bare calls (G2, G4)
+    │   ├── statement/function_like/mod.rs, try.rs,
+    │   │   attributes/mod.rs, resolver/method.rs      a missing class names its import (G4, G8)
+    │   ├── statement/mod.rs, use_statement.rs         every PHP# import is checked (G3)
+    │   ├── expression/constant_access.rs              a bare library constant names Pdf.DEFAULT_DPI (G8)
+    │   ├── statement/class_like/mod.rs                the class-and-namespace rule from the PHP# side (G7)
+    │   ├── effects/                                   NAMED_EFFECTS from mago_names; a long extern target (G4, G5)
+    │   └── utils/names.rs, invocation/
+    │       return_type_fetcher.rs                     the collection classes in Sharp\Internal (G5)
+    ├── orchestrator/src/service/
+    │   └── incremental_analysis.rs                    the warm path re-analyzes a namespace's files (G7)
+    └── syntax/tests/sharp.rs, semantics/tests/sharp.rs, names/tests/binder.rs, analyzer/tests/sharp.rs,
+        sharp-bridge/tests/lower.rs, orchestrator/…/compile.rs   one test per rule, forms as rows
 Zend/tests/sharp/
 ├── NamesImports.sharp                                 new: renamed imports, shadowed defaults, keyword-named classes,
 │                                                      a library's function and constant
-├── names_imports.inc                                  new: the plain PHP library and the driver
+├── harness/Names.inc                                  new: the plain PHP library
+├── names_imports.inc                                  new: the driver both tests run
 ├── names_imports.phpt                                 new: runs in every mode sharp/bin/test runs
 └── names_imports_preload.phpt                         new: the same under opcache.preload
 ```
@@ -191,8 +207,8 @@ Zend/tests/sharp/
    - `UsesOnImportInSharp`: what is written where, as `QualifiedNameInSharp` is. Recommended.
    - `ImportUsesInSharp`: the same, shorter, but reads as "imports uses".
    - `ImportEffectInSharp`: names the meaning, but the line never names an effect class unless it does.
-2. **The four engine test files** under `Zend/tests/sharp/`.
-3. **The library guard** (G5): a standard library file is refused when it declares a class directly in `Sharp` that isn't a default name.
+2. **The four engine test files** under `Zend/tests/sharp/`, and the plain PHP library `harness/Names.inc`.
+3. **The generated default names** (G5, Q2): `scripts/regen-sharp-classes.php`, `crates/names/src/sharp_classes.rs`, the Justfile recipe, and `mago_names::NAMED_EFFECTS`, which replaces the analyzer's own constant.
 
 Everything else changes function bodies and `pub(crate)` items.
 
