@@ -4591,7 +4591,9 @@ ZEND_FUNCTION(Sharp_Internal_statics)
 /* Spec section 25: PHP# compares two class values with `\Sharp\Internal\equals($value, $other)`, by the whole type, as
  * C# compares two Type objects, so `typeof(Box<Order>) == typeof(Box<Invoice>)` is false. A class value with type
  * arguments is the interned class name sharp_class_values knows it by, so it equals only a class value of the same type
- * arguments, though its text is the bare class name. Any other two values compare as `===` compares them. */
+ * arguments, though its text is the bare class name. Spec section 24 compares an unchecked `Any?` with `==` here too,
+ * so any other two values compare by value, as sharp_equal compares a Map's keys: an int and a float as numbers, a
+ * List, a Map or a Set by its elements, and a struct or a class with `operator ==` through it. */
 ZEND_FUNCTION(Sharp_Internal_equals)
 {
 	zval *value, *other;
@@ -4602,7 +4604,11 @@ ZEND_FUNCTION(Sharp_Internal_equals)
 	ZEND_PARSE_PARAMETERS_END();
 
 	if (Z_TYPE_P(value) != IS_STRING || Z_TYPE_P(other) != IS_STRING) {
-		RETURN_BOOL(zend_is_identical(value, other));
+		bool equal;
+		if (!sharp_equal(value, other, &equal)) {
+			RETURN_THROWS();
+		}
+		RETURN_BOOL(equal);
 	}
 	const sharp_type *type = sharp_class_value_type(Z_STR_P(value));
 	const sharp_type *other_type = sharp_class_value_type(Z_STR_P(other));
@@ -7235,8 +7241,9 @@ ZEND_METHOD(Sharp_Table, offsetUnset)
 	zend_throw_error(NULL, "A %s is written through its index, which copies a shared one first", ZSTR_VAL(Z_OBJCE_P(ZEND_THIS)->name));
 }
 
-/* The text JSON writes for a key: an int, a string or a backed enum case's value. NULL after a JsonException for any
- * other key, which has no text. */
+/* The text JSON writes for a key: an int, a string, a backed enum case's value, or what an object's PHP# toString()
+ * or PHP __toString() gives, as spec section 10 keys a JSON object by a struct. NULL after an exception for any other
+ * key, which has no text. */
 static zend_string *sharp_table_json_key(zval *key)
 {
 	if (Z_TYPE_P(key) == IS_OBJECT && (Z_OBJCE_P(key)->ce_flags & ZEND_ACC_ENUM)
@@ -7245,6 +7252,24 @@ static zend_string *sharp_table_json_key(zval *key)
 	}
 	if (Z_TYPE_P(key) == IS_LONG || Z_TYPE_P(key) == IS_STRING) {
 		return zval_get_string(key);
+	}
+	if (Z_TYPE_P(key) == IS_OBJECT) {
+		zend_class_entry *ce = Z_OBJCE_P(key);
+		zend_function *to_string = zend_hash_str_find_ptr(&ce->function_table, "tostring", sizeof("tostring") - 1);
+		if (!to_string) {
+			to_string = ce->__tostring;
+		}
+		if (to_string) {
+			zval text;
+			zend_call_known_instance_method_with_0_params(to_string, Z_OBJ_P(key), &text);
+			if (EG(exception)) {
+				return NULL;
+			}
+			if (Z_TYPE(text) == IS_STRING) {
+				return Z_STR(text);
+			}
+			zval_ptr_dtor(&text);
+		}
 	}
 
 	zend_throw_exception_ex(php_json_exception_ce, 0, "A JSON object key is text, and %s is not",

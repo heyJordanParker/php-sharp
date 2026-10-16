@@ -1574,7 +1574,8 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
                             members.push(self.promoted_property(parameter));
                         }
                     }
-                    let constructor = self.method(method, modifier_flags(&method.modifiers), &initial_values);
+                    let constructor =
+                        self.method(method, modifier_flags_or_private(&method.modifiers), &initial_values);
                     self.promoted_beside = false;
 
                     constructor
@@ -1589,9 +1590,11 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
                         call
                     };
 
-                    self.method(method, modifier_flags(&method.modifiers), &[body])
+                    self.method(method, modifier_flags_or_private(&method.modifiers), &[body])
                 }
-                ClassLikeMember::Method(method) => self.method(method, modifier_flags(&method.modifiers), &[]),
+                ClassLikeMember::Method(method) => {
+                    self.method(method, modifier_flags_or_private(&method.modifiers), &[])
+                }
                 ClassLikeMember::Operator(operator) => self.operator(operator),
                 ClassLikeMember::NamedConstructor(
                     constructor @ NamedConstructor { initializer: Some(initializer), .. },
@@ -2063,7 +2066,9 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
         // A law, spec section 28, is checked and never runs, so the engine gets no node for it.
         for member in &r#enum.members {
             members.push(match member {
-                ClassLikeMember::Method(method) => self.method(method, modifier_flags(&method.modifiers), &[]),
+                ClassLikeMember::Method(method) => {
+                    self.method(method, modifier_flags_or_private(&method.modifiers), &[])
+                }
                 ClassLikeMember::Constant(constant) => self.constant(constant),
                 ClassLikeMember::EnumCase(_) | ClassLikeMember::Law(_) => continue,
                 _ => unreachable!("check_slice refuses the enum member `{member}`"),
@@ -2176,7 +2181,9 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
         // A law, spec section 28, is checked and never runs, so the engine gets no node for it.
         for member in r#enum.members.iter().filter(|member| !matches!(member, ClassLikeMember::Law(_))) {
             members.push(match member {
-                ClassLikeMember::Method(method) => self.method(method, modifier_flags(&method.modifiers), &[]),
+                ClassLikeMember::Method(method) => {
+                    self.method(method, modifier_flags_or_private(&method.modifiers), &[])
+                }
                 ClassLikeMember::EnumCase(case) => self.enum_case(case),
                 ClassLikeMember::Constant(constant) => self.constant(constant),
                 _ => unreachable!("check_slice refuses the enum member `{member}`"),
@@ -2234,12 +2241,7 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
     }
 
     /// A method with `flags`, whose body starts with `first_statements`, or which has no body when they are `None`.
-    fn method_declaration(&mut self, method: &Method, mut flags: u32, first_statements: Option<&[u32]>) -> u32 {
-        // Spec section 5: a method with no access modifier is `private`, while PHP makes it `public`.
-        if flags & (ZEND_ACC_PUBLIC | ZEND_ACC_PROTECTED | ZEND_ACC_PRIVATE) == 0 {
-            flags |= ZEND_ACC_PRIVATE;
-        }
-
+    fn method_declaration(&mut self, method: &Method, flags: u32, first_statements: Option<&[u32]>) -> u32 {
         self.enter(method.name.value);
         if flags & ZEND_ACC_STATIC != 0 {
             self.static_type_parameters = self.types.static_type_parameters(self.class);
@@ -2582,7 +2584,7 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
 
         self.declaration(
             SHARP_AST_METHOD,
-            modifier_flags(&constructor.modifiers) | ZEND_ACC_STATIC,
+            modifier_flags_or_private(&constructor.modifiers) | ZEND_ACC_STATIC,
             constructor.class,
             constructor.body.span(),
             constructor.name.value,
@@ -3469,7 +3471,7 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
 
         self.node(
             SHARP_AST_CLASS_CONST_GROUP,
-            modifier_flags(&constant.modifiers),
+            modifier_flags_or_private(&constant.modifiers),
             self.line(constant),
             &[declaration, NULL, hint],
         )
@@ -3816,7 +3818,7 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
     }
 
     /// The type PHP writes for a type that is not a union, with generics erased. A built-in type is its name, `Object`
-    /// included, which only a type parameter's bound writes, and `Any` is `mixed`. A class is its full name. `Self` is `static`. A `List` is a PHP array, so its type is `array`, and a
+    /// is `object`, and `Any` is `mixed`. A class is its full name. `Self` is `static`. A `List` is a PHP array, so its type is `array`, and a
     /// `Map` or a `Set` is the engine's `\Sharp\Map` or `\Sharp\Set`, and an `Iterable` is PHP's `iterable`. A generic class type is its class, and `Class<T>` is `string`, because plain PHP receives a class
     /// value as its class-name string (spec section 25). A function type runs as PHP's `\Closure`. A type parameter is
     /// its bound, or `mixed` without one, as the PHP twin written with `@template` declares it, and the classes a bound
@@ -3827,12 +3829,10 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
         'arena: 'hint,
     {
         match hint {
-            Hint::Integer(name)
-            | Hint::Float(name)
-            | Hint::Bool(name)
-            | Hint::String(name)
-            | Hint::Void(name)
-            | Hint::Object(name) => PhpType::Named(name.value),
+            Hint::Integer(name) | Hint::Float(name) | Hint::Bool(name) | Hint::String(name) | Hint::Void(name) => {
+                PhpType::Named(name.value)
+            }
+            Hint::Object(_) => PhpType::Named(b"object"),
             Hint::Mixed(_) => PhpType::Mixed,
             Hint::Identifier(name) => match self.names.binding(name) {
                 Some(Binding::TypeParameter { declaration }) => {
@@ -4995,25 +4995,30 @@ impl<'lowering, 'arena> Lowering<'lowering, 'arena> {
     }
 
     /// `lhs == rhs`, or `lhs != rhs` when `negated`, as spec section 19 compares a value of `lhs`'s type with one of
-    /// `rhs`'s: the `op_Equality` the class of an instance side declares, which lifts a null side itself, two class
-    /// values by their whole type through `\Sharp\Internal\equals`, as C# compares two `Type`s, an int and a float as two
-    /// floats, and `===` otherwise. `== null` tests for null and runs no operator. A collection search compares each
-    /// element with its value through it, so a search never compares differently from `==`.
+    /// `rhs`'s: an unchecked `Any?` with a value [`compares_unchecked`] names, spec section 24, and two class values by
+    /// their whole type, as C# compares two `Type`s, through `\Sharp\Internal\equals`, the `op_Equality` the class of an
+    /// instance side declares, which lifts a null side itself, an int and a float as two floats, and `===` otherwise.
+    /// `== null` tests for null and runs no operator. A collection search compares each element with its value through
+    /// it, so a search never compares differently from `==`.
     fn equality(&mut self, line: u32, lhs: Side, rhs: Side, negated: bool) -> u32 {
         let (lhs_type, rhs_type) = (self.side_type(&lhs), self.side_type(&rhs));
-        if let Some((class, name)) = self.declared_equality(lhs_type, rhs_type) {
-            let lhs = self.side(&lhs);
-            let rhs = self.side(&rhs);
-            let call = self.operator_call(line, class, name, &[lhs, rhs]);
-
-            return if negated { self.node(SHARP_AST_UNARY_OP, ZEND_BOOL_NOT, line, &[call]) } else { call };
-        }
-        if holds_class_value(lhs_type) || holds_class_value(rhs_type) {
+        if compares_unchecked(lhs_type, rhs_type)
+            || compares_unchecked(rhs_type, lhs_type)
+            || holds_class_value(lhs_type)
+            || holds_class_value(rhs_type)
+        {
             let function = self.string(ZEND_NAME_FQ, line, b"Sharp\\Internal\\equals");
             let lhs = self.side(&lhs);
             let rhs = self.side(&rhs);
             let arguments = self.node(SHARP_AST_ARG_LIST, 0, line, &[lhs, rhs]);
             let call = self.node(SHARP_AST_CALL, 0, line, &[function, arguments]);
+
+            return if negated { self.node(SHARP_AST_UNARY_OP, ZEND_BOOL_NOT, line, &[call]) } else { call };
+        }
+        if let Some((class, name)) = self.declared_equality(lhs_type, rhs_type) {
+            let lhs = self.side(&lhs);
+            let rhs = self.side(&rhs);
+            let call = self.operator_call(line, class, name, &[lhs, rhs]);
 
             return if negated { self.node(SHARP_AST_UNARY_OP, ZEND_BOOL_NOT, line, &[call]) } else { call };
         }
@@ -7466,6 +7471,18 @@ fn behavior_slot_name(property: &[u8], index: usize) -> Vec<u8> {
     [property, format!("#via{index}").as_bytes()].concat()
 }
 
+/// The flags of a class member's modifiers, with `ZEND_ACC_PRIVATE` when they name no access: a PHP# member written
+/// without an access modifier is `private`, spec section 5, where PHP makes it `public`.
+fn modifier_flags_or_private(modifiers: &Sequence<Modifier>) -> u32 {
+    let flags = modifier_flags(modifiers);
+
+    if flags & (ZEND_ACC_PUBLIC | ZEND_ACC_PROTECTED | ZEND_ACC_PRIVATE) == 0 {
+        flags | ZEND_ACC_PRIVATE
+    } else {
+        flags
+    }
+}
+
 /// `ZEND_ACC_GENERATOR` for a method whose body yields, as php-src's grammar flags a function whose body holds a
 /// `yield`, and zero for any other.
 fn generator_flag(body: &MethodBody) -> u32 {
@@ -7688,6 +7705,13 @@ fn mixes_numbers(lhs: &TUnion, rhs: &TUnion) -> bool {
 /// Whether a value of `union` may be a class value, which `==` compares by its whole type, type arguments included.
 fn holds_class_value(union: &TUnion) -> bool {
     union.types.iter().any(|atomic| matches!(atomic, TAtomic::Scalar(TScalar::ClassLikeString(_))))
+}
+
+/// Whether `==` on an unchecked `Any?` of `any` and a value of `other` needs the engine's `==`, spec section 24: a
+/// number equals an `int` or a `float` of the same value, and a collection, a struct or an object compares by value. A
+/// string, a `bool` or `null` equals only the same one, which PHP's `===` tests.
+fn compares_unchecked(any: &TUnion, other: &TUnion) -> bool {
+    any.is_mixed() && !other.types.iter().all(|atomic| atomic.is_any_string() || atomic.is_bool() || atomic.is_null())
 }
 
 /// The kinds of number the values of `union` are, `null` aside, as `[may hold an int, may hold a float]`, or `None`

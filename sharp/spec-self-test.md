@@ -109,7 +109,7 @@ A "not supported yet" refusal never satisfies a `compile error` line, because it
 
 <!-- example refusal: members -->
 ```csharp
-int views { get; set; } = 0;   // compile error: a property states its access level
+public void bump(&count) { }   // compile error: a parameter takes a value, not a reference
 ```
 <!-- expect refusal
 line 1 expects a compile error, and the checker reports: …not supported yet…
