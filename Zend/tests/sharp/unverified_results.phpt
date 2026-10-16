@@ -14,4 +14,5 @@ sumOf: 6.0
 groupBy giving text: groupBy(): Return value must be of type Map<float, List<int>>, Sharp.Map returned: ["key"] key expected float, got string 'key'
 associateBy giving text: associateBy(): Return value must be of type Map<float, int>, Sharp.Map returned: ["key"] key expected float, got string 'key'
 lazy map: array (   0 => 2.0,   1 => 4.0, )
+null-safe map: array (   0 => 2.0,   1 => 4.0, )
 map to Any giving null: map(): Return value must be of type List<Any>, array returned: [0] expected Any, got null

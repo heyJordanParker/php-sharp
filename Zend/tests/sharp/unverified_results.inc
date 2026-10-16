@@ -24,6 +24,7 @@ $calls = [
     'groupBy giving text' => fn () => Unverified::grouped(fn (int $n) => 'key'),
     'associateBy giving text' => fn () => Unverified::associated(fn (int $n) => 'key'),
     'lazy map' => fn () => Unverified::lazy(fn (int $n) => $n * 2),
+    'null-safe map' => fn () => Unverified::maybeMapped([1, 2], fn (int $n) => $n * 2),
     'map to Any giving null' => fn () => Unverified::anyMapped(fn (int $n) => null),
 ];
 foreach ($calls as $name => $call) {
