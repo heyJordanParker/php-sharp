@@ -28,7 +28,7 @@ The Slice builds all of section 29 in one php-sharp PR, after #136 merges and af
    - The standard library's `Module.sharp` binds the seven classes whose constructors take nothing (`Clock`, `Random`, `Console`, `Process`, `Files`, `Http`, `Mail`) beside `Environment`. `Database` and `Cache` take a connection string and a path, so the app's module binds them, as `29-effect-classes.md` says ("A module sets it").
 2. **`Http` keeps the curl backend `29-effect-classes.md` names,** so `sharp/bin/build` gains `--with-curl`, and `sharp/docker/Dockerfile` and `sharp/docker/runtime/Dockerfile` carry `libcurl4-openssl-dev`. The built engine has no curl today (`php -n -m` lists none). Approved: real PHP apps and their HTTP clients depend on curl.
 3. **Line 3741 is a type-level carry, decided in `Effects::solve`.** A plain PHP class with no `extern` of its own takes the effects of every declared call that returns it, as the spec's "inherited effect" says. `solve` builds one map per run, from each `extern`'d class's and method's return types, closed over chains such as `Builder.where(): static`. It then reads an `Effect::Unknown` whose class is in the map as those effects. No codex field and no incremental input are added, because `solve` already runs over every summary on each compile. The cost is that a class two libraries return gets both effects. The spec's own way out holds for that case: an `extern` on the returned class wins. Approved, with a row where one plain PHP class is returned by two declared calls with different effects and takes both.
-4. **Line 3759's built-in classes are refused at their `import`,** in `statement/use_statement.rs`, with the code `wrapped-class`, as `wrapped-function` refuses a function. PHP# names a root-namespace class only through `import` (`new global.DateTime()` gets "Class `global` not found"), so the import is the one place. The standard library is exempt, because `Database` must use `PDO`. The rows follow line 3759's own rule, "a standard library type that replaces it":
+4. **Line 3759's built-in classes may be imported and named, and only creating one is refused** (Jordan's answer, Option A), with the code `wrapped-class`, as `wrapped-function` refuses a function. `new` of one, and a static factory, a static method whose return type is the class, as `DateTimeImmutable.createFromFormat(…)` and `PDO.connect(…)`, are refused at the call. The error names the standard library members to write instead through `member_form`, as in "write `Date.parse(…)` or `clock.now()` on the `Clock` your constructor takes". `WRAPPED_CLASSES` sits beside `REPLACEMENTS` in `expression/call/function_call.rs`, and the test that holds every `REPLACEMENTS` member to the library holds its members too. The standard library is exempt, because `Database` must use `PDO`. The rows follow line 3759's own rule, "a standard library type that replaces it":
    - `PDO`, `PDOStatement`, `mysqli`, `SQLite3` to `Database`
    - `DateTime`, `DateTimeImmutable` to `Date`
    - `DateTimeZone` to `TimeZone`
@@ -129,7 +129,7 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 |---|---|---|---|---|
 | 3746 to 3757 | Ten effect classes replace PHP's built-ins | Missing for nine: only `Environment.sharp` declares a `foreign class`. `uses Files` resolves to a name in `NAMED_EFFECTS` with no class | Nine `foreign` classes and seven types in `sharp/composer/library/Sharp/`, decision 1 | `29-effect-classes.md`, `Environment.sharp` |
 | 3759 | A replaced function called directly names the method | Wrong: `time()` gets "write `global.time(…)`", which is the plain PHP call | `REPLACEMENTS` rows, decision 8 | `report_bare_function_call`, `member_form` |
-| 3759 | A built-in class is refused, naming its replacement | Silently accepted: `import DateTime;`, `new DateTime().format("Y")` and `PDO?` compile | `wrapped-class` at the import, decision 4 | `check_sharp_import`, `wrapped-function`'s shape |
+| 3759 | Creating a built-in class the library replaces is refused, naming the member to use | Silently accepted: `new DateTime().format("Y")` compiles | `wrapped-class` at `new` and a static factory, decision 4 | `member_form`, `wrapped-function`'s shape |
 | 3761 to 3801 | `pure-interface`: `greet` is pure, `remember` has `Files`, `FileFormatter.format` is refused | Fails: "Cannot find type `Files`" | `Sharp.Files`. The refusal itself already holds: `ClockShape.area` and `Loud.name` show it | `implementations_must_fit_their_declarations` |
 | 3803, 3805 | A `foreign` class turns an effect into an object; holding one has that effect by name; `foreign-class` | Works: the example passes. `read(string key) uses Store` accepts `this.store.get(key)`, and `Pure.run` refuses it with "has the effect `Store`" | None new | `foreign_class` |
 | 3815 | The ten are `foreign` classes; a project declares its own the same way | Missing for nine (above). A project's own works | Decision 1 | |
@@ -236,7 +236,7 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 
 Recommended: `foreign-outside-module`, the sibling of `foreign-in-static`. Runner-up: `foreign-created-outside-module`.
 
-`wrapped-class` candidates, read at "`import DateTime;` is `wrapped-class`: write `Date`":
+`wrapped-class` candidates, read at "`new DateTime()` is `wrapped-class`: write `clock.now()`":
 
 - `wrapped-class` pairs with `wrapped-function`, which refuses a function the standard library wraps, as line 3759 says "the same way".
 - `replaced-by-library` pairs with `replaced-by-syntax`. It names no kind.
@@ -256,11 +256,11 @@ sharp/mago/
 │   ├── effects/summary.rs              <- prelude_stub_call keeps only its change of the receiver (decision 6);
 │   │                                      instantiate names the class `new` names
 │   ├── effects/check.rs                <- the undeclared-call help names the class and the declaration's effects
-│   ├── expression/instantiation.rs     <- foreign-outside-module (decision 5)
+│   ├── expression/instantiation.rs     <- foreign-outside-module (decision 5); wrapped-class at `new` (decision 4)
 │   ├── statement/module.rs             <- marks a binding's expression, where a foreign object may be created
-│   ├── statement/use_statement.rs      <- wrapped-class at the import (decision 4)
+│   ├── expression/call/static_method_call.rs  <- wrapped-class at a static factory (decision 4)
 │   ├── expression/call/function_call.rs  <- REPLACEMENTS rows for the nine classes; member_form writes an
-│   │                                        instance member on the constructor's object
+│   │                                        instance member on the constructor's object; WRAPPED_CLASSES
 │   ├── code.rs                         <- ForeignOutsideModule, WrappedClass
 │   └── tests/sharp.rs                  <- one test per rule below
 ├── crates/codex/src/scanner/function_like.rs  <- USES_PARAMETER on the collection stubs' \Closure parameters

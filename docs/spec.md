@@ -3769,7 +3769,21 @@ extern now uses Clock;               // compile error: name the function through
 - `Mail` replaces `mail()`.
 - `Environment` replaces `getenv()` and PHP's other environment functions.
 
-Calling a replaced function directly is a compile error that names the method (section 8). **A PHP built-in class, such as `PDO` or `DateTime`, is refused the same way,** and the error names the standard library type that replaces it, such as `Database` or `Date`.
+Calling a replaced function directly is a compile error that names the method (section 8). **A PHP built-in class the standard library replaces, such as `PDO` or `DateTimeImmutable`, may be imported and named** to hold, pass, return and read what a library gives. Creating one, with `new` or a static factory such as `DateTimeImmutable.createFromFormat(…)`, is a compile error that names the standard library member to use instead, such as `clock.now()` on the `Clock` a constructor takes, or `database.query(…)` on the `Database`:
+
+<!-- example wrapped-class -->
+```csharp
+// app/Shop/Stamp.sharp
+namespace App.Shop;
+
+import DateTimeImmutable;
+
+public class Stamp
+{
+    public string year(DateTimeImmutable moment) => moment.format("Y");      // compiles: code holds and reads one a library gives
+    public DateTimeImmutable now() => new DateTimeImmutable();               // compile error: read the time with clock.now() on the Clock your constructor takes
+}
+```
 
 <!-- example pure-interface -->
 ```csharp
