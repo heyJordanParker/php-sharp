@@ -3,13 +3,14 @@ require __DIR__ . '/type_arguments.inc';
 
 use App\Queue;
 
-// The arguments of the Box make() gives, and whether it spelled them: spelling reads a text into an arena, which raises
-// the peak above what the Box keeps.
+// The arguments of the Box make() gives, and whether it spelled them: spelling reads a text into an arena of 1024 bytes,
+// which raises the peak further than the Box does.
 function made(App\Maker $maker): string
 {
     memory_reset_peak_usage();
+    $before = memory_get_usage();
     $box = $maker->make();
-    $spelled = memory_get_peak_usage() - memory_get_usage() > 512;
+    $spelled = memory_get_peak_usage() - $before > 512;
 
     return get_class($maker) . ': ' . implode(', ', arguments($box)) . ($spelled ? ' spelled' : ' cached');
 }

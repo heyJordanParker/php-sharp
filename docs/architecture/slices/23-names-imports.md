@@ -127,7 +127,7 @@ The semantic checks pass the rest to the analyzer. `is_slice_bound` accepts a do
 The name resolver runs before the codebase exists, so it can't read the library when it runs. The list is generated at build time instead, per Q2:
 
 - `sharp/mago/scripts/regen-sharp-classes.php <library>` reads every public class-like the library's `Sharp/*.sharp` files declare directly in `Sharp`, and the prelude's `namespace Sharp` block, and writes `crates/names/src/sharp_classes.rs`. The Justfile recipe `regen-sharp-classes` runs it.
-- `default_classes()` in `crates/names/src/lib.rs` is `NAMED_EFFECTS` plus `SHARP_CLASSES`, and every default name is shadowable. `NAMED_EFFECTS` moves from the analyzer's `effects/mod.rs` to `mago_names`, its one owner.
+- `default_classes()` in `crates/names/src/lib.rs` is `NAMED_EFFECTS` plus `SHARP_CLASSES`, and every default name is shadowable but `Error`, which `fixed_default_class` from the Result Slice always names `Sharp\Error`. `NAMED_EFFECTS` moves from the analyzer's `effects/mod.rs` to `mago_names`, its one owner.
 - `the_default_class_likes_are_generated_from_the_standard_library_and_the_prelude` in `names/tests/binder.rs` runs the script and fails when its output differs from the file.
 
 The prelude's `ListMethods`, `MapMethods`, `SetMethods` and `IterableMethods` move to `namespace Sharp\Internal`, with every reference in the analyzer, codex, the bridge and the tests. The engine names none of them. `Listening` stays in `Sharp`, so it is a default name. The `feat/result` Slice adds `Result` and `Error` to the library, and the script adds them on its next run.

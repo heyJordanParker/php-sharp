@@ -72,6 +72,10 @@ static void zend_verify_enum_properties(const zend_class_entry *ce)
 		) {
 			continue;
 		}
+		/* A PHP# enum's computed property, which has no storage. */
+		if ((property_info->flags & (ZEND_ACC_VIRTUAL|ZEND_ACC_SHARP_TYPED)) == (ZEND_ACC_VIRTUAL|ZEND_ACC_SHARP_TYPED)) {
+			continue;
+		}
 		// FIXME: File/line number for traits?
 		zend_error_noreturn(E_COMPILE_ERROR, "Enum %s cannot include properties",
 			ZSTR_VAL(ce->name));

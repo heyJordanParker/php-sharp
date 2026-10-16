@@ -4975,6 +4975,52 @@ static void cleanup_unfinished_calls(zend_execute_data *execute_data, uint32_t o
 }
 /* }}} */
 
+/* Frees the temporary of `range`, which is live at op_num. */
+static void cleanup_live_var(zend_execute_data *execute_data, const zend_live_range *range, uint32_t op_num) /* {{{ */
+{
+	uint32_t kind = range->var & ZEND_LIVE_MASK;
+	uint32_t var_num = range->var & ~ZEND_LIVE_MASK;
+	zval *var = EX_VAR(var_num);
+
+	if (kind == ZEND_LIVE_TMPVAR) {
+		zval_ptr_dtor_nogc(var);
+	} else if (kind == ZEND_LIVE_NEW) {
+		zend_object *obj;
+		ZEND_ASSERT(Z_TYPE_P(var) == IS_OBJECT);
+		obj = Z_OBJ_P(var);
+		zend_object_store_ctor_failed(obj);
+		OBJ_RELEASE(obj);
+	} else if (kind == ZEND_LIVE_LOOP) {
+		if (Z_TYPE_P(var) != IS_ARRAY && Z_FE_ITER_P(var) != (uint32_t)-1) {
+			zend_hash_iterator_del(Z_FE_ITER_P(var));
+		}
+		zval_ptr_dtor_nogc(var);
+	} else if (kind == ZEND_LIVE_ROPE) {
+		zend_string **rope = (zend_string **)var;
+		zend_op *last = EX(func)->op_array.opcodes + op_num;
+		while ((last->opcode != ZEND_ROPE_ADD && last->opcode != ZEND_ROPE_INIT)
+				|| last->result.var != var_num) {
+			ZEND_ASSERT(last >= EX(func)->op_array.opcodes);
+			last--;
+		}
+		if (last->opcode == ZEND_ROPE_INIT) {
+			zend_string_release_ex(*rope, 0);
+		} else {
+			int j = last->extended_value;
+			do {
+				zend_string_release_ex(rope[j], 0);
+			} while (j--);
+		}
+	} else if (kind == ZEND_LIVE_SILENCE) {
+		/* restore previous error_reporting value */
+		if (E_HAS_ONLY_FATAL_ERRORS(EG(error_reporting))
+				&& !E_HAS_ONLY_FATAL_ERRORS(Z_LVAL_P(var))) {
+			EG(error_reporting) = Z_LVAL_P(var);
+		}
+	}
+}
+/* }}} */
+
 static void cleanup_live_vars(zend_execute_data *execute_data, uint32_t op_num, uint32_t catch_op_num) /* {{{ */
 {
 	int i;
@@ -4986,10 +5032,6 @@ static void cleanup_live_vars(zend_execute_data *execute_data, uint32_t op_num, 
 			break;
 		} else if (op_num < range->end) {
 			if (!catch_op_num || catch_op_num >= range->end) {
-				uint32_t kind = range->var & ZEND_LIVE_MASK;
-				uint32_t var_num = range->var & ~ZEND_LIVE_MASK;
-				zval *var = EX_VAR(var_num);
-
 				/* Handle the split range for loop vars */
 				if (catch_op_num) {
 					zend_op *final_op = EX(func)->op_array.opcodes + range->end;
@@ -5000,44 +5042,39 @@ static void cleanup_live_vars(zend_execute_data *execute_data, uint32_t op_num, 
 					}
 				}
 
-				if (kind == ZEND_LIVE_TMPVAR) {
-					zval_ptr_dtor_nogc(var);
-				} else if (kind == ZEND_LIVE_NEW) {
-					zend_object *obj;
-					ZEND_ASSERT(Z_TYPE_P(var) == IS_OBJECT);
-					obj = Z_OBJ_P(var);
-					zend_object_store_ctor_failed(obj);
-					OBJ_RELEASE(obj);
-				} else if (kind == ZEND_LIVE_LOOP) {
-					if (Z_TYPE_P(var) != IS_ARRAY && Z_FE_ITER_P(var) != (uint32_t)-1) {
-						zend_hash_iterator_del(Z_FE_ITER_P(var));
-					}
-					zval_ptr_dtor_nogc(var);
-				} else if (kind == ZEND_LIVE_ROPE) {
-					zend_string **rope = (zend_string **)var;
-					zend_op *last = EX(func)->op_array.opcodes + op_num;
-					while ((last->opcode != ZEND_ROPE_ADD && last->opcode != ZEND_ROPE_INIT)
-							|| last->result.var != var_num) {
-						ZEND_ASSERT(last >= EX(func)->op_array.opcodes);
-						last--;
-					}
-					if (last->opcode == ZEND_ROPE_INIT) {
-						zend_string_release_ex(*rope, 0);
-					} else {
-						int j = last->extended_value;
-						do {
-							zend_string_release_ex(rope[j], 0);
-						} while (j--);
-					}
-				} else if (kind == ZEND_LIVE_SILENCE) {
-					/* restore previous error_reporting value */
-					if (E_HAS_ONLY_FATAL_ERRORS(EG(error_reporting))
-							&& !E_HAS_ONLY_FATAL_ERRORS(Z_LVAL_P(var))) {
-						EG(error_reporting) = Z_LVAL_P(var);
-					}
-				}
+				cleanup_live_var(execute_data, range, op_num);
 			}
 		}
+	}
+}
+/* }}} */
+
+/* PHP#: a ZEND_SHARP_LEAVE at op_num frees each temporary whose live range ends at it, the ranges
+ * zend_sharp_split_leave_ranges ends there. A range that ends there on its own is the construction of the object a
+ * `return new X(…)` gives, whose constructor ran right before the leave: the object goes on in a range that starts at
+ * op_num and ends at the return, so the leave keeps it. */
+static void zend_sharp_cleanup_leave_vars(zend_execute_data *execute_data, uint32_t op_num) /* {{{ */
+{
+	const zend_op_array *op_array = &EX(func)->op_array;
+
+	for (uint32_t i = 0; i < op_array->last_live_range; i++) {
+		const zend_live_range *range = &op_array->live_range[i];
+		if (range->start >= op_num || range->end != op_num) {
+			continue;
+		}
+		if ((range->var & ZEND_LIVE_MASK) == ZEND_LIVE_NEW) {
+			uint32_t var_num = range->var & ~ZEND_LIVE_MASK;
+			bool goes_on = false;
+			for (uint32_t j = 0; j < op_array->last_live_range && !goes_on; j++) {
+				goes_on = op_array->live_range[j].start == op_num
+					&& (op_array->live_range[j].var & ~ZEND_LIVE_MASK) == var_num;
+			}
+			if (goes_on) {
+				continue;
+			}
+		}
+
+		cleanup_live_var(execute_data, range, op_num - 1);
 	}
 }
 /* }}} */

@@ -157,6 +157,11 @@ uint32_t sharp_type_list_names(const char *text, size_t length);
 const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object, const sharp_type *method,
 	bool unresolved, const zend_class_entry *scope, void **cache);
 
+/* The class whose type parameters the `$i` of code `scope` holds count, of `func` when the code is a function's. A
+ * method a class took from a trait is the trait's code, whose op array it shares. The trait of a PHP# interface's
+ * default bodies counts its interface's, which its header names, spec section 22. */
+const zend_class_entry *sharp_type_scope(const zend_class_entry *scope, const zend_function *func);
+
 /* The bad values one check found. The walk adds each one under the path to it, in the order it meets them. */
 typedef struct {
 	/* An array: the path to a bad value, then its problem, `expected int, got string 'abc'`. */
