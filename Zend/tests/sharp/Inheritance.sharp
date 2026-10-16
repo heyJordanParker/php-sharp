@@ -110,6 +110,15 @@ public interface Keyed<TKey>
     bool same(TKey other) => other == this.key();
 
     List<TItem> pair<TItem>(TItem item) => [item, item];
+
+    bool fits<TOther : Keyed<TKey>>(TOther given, Any other) => other is TOther;
+}
+
+public class Ranked<TRank, TName> : Keyed<TName>
+{
+    public Ranked(public TName name { get; }) { }
+
+    public TName key() => this.name;
 }
 
 public class Tagger<TTag> : Keyed<List<TTag>>
@@ -151,4 +160,6 @@ public static class Seeder
     public static int firstKey(Coded coded) => coded.keys()[0];
 
     public static Tagger<string> tagger() => new Tagger<string>("a");
+
+    public static Ranked<int, string> ranked() => new Ranked<int, string>("first");
 }
