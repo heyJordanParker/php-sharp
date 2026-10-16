@@ -4043,18 +4043,23 @@ ZEND_FUNCTION(Sharp_Internal_accepts)
 	RETURN_BOOL(accepts);
 }
 
-/* Spec section 11: each type argument of a generic class has its own statics, which PHP# reads and writes as
- * `\Sharp\Internal\statics(Counter::class, 'App.Order')['count']`. Returns by reference the entry of the class's hidden
+/* Spec section 11: each type argument of a generic class has its own statics, which PHP# reads and writes through the
+ * class's hidden static method `#entry`, as `\App\Counter::{'#entry'}(<App.Order>)['count']`. `#entry` calls this with
+ * the text of its type arguments. Returns by reference the entry of the class's hidden
  * static sharp_statics_key for the type argument text `key`, so every write is PHP's own array write. The entry starts
- * as a copy of the defaults under the key "", as C# runs a closed type's static initializer on its first use. */
+ * as a copy of the defaults under the key "", as C# runs a closed type's static initializer on its first use, and
+ * `created` says whether this call added it, so the class's hidden `#entry` runs each initial value that is code then. */
 ZEND_FUNCTION(Sharp_Internal_statics)
 {
 	zend_class_entry *ce = NULL;
 	zend_string *key;
+	zval *created = NULL;
 
-	ZEND_PARSE_PARAMETERS_START(2, 2)
+	ZEND_PARSE_PARAMETERS_START(2, 3)
 		Z_PARAM_CLASS(ce)
 		Z_PARAM_STR(key)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_ZVAL(created)
 	ZEND_PARSE_PARAMETERS_END();
 
 	zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, sharp_statics_key);
@@ -4073,6 +4078,13 @@ ZEND_FUNCTION(Sharp_Internal_statics)
 	ZVAL_DEINDIRECT(store);
 	SEPARATE_ARRAY(store);
 	zval *entry = zend_hash_find(Z_ARRVAL_P(store), key);
+	if (created) {
+		/* A typed reference can refuse a bool. */
+		ZEND_TRY_ASSIGN_REF_BOOL(created, !entry);
+		if (UNEXPECTED(EG(exception))) {
+			RETURN_THROWS();
+		}
+	}
 	if (!entry) {
 		zval defaults;
 		ZVAL_COPY(&defaults, zend_hash_find_known_hash(Z_ARRVAL_P(store), ZSTR_EMPTY_ALLOC()));

@@ -1,5 +1,5 @@
 --TEST--
-A preloaded generic PHP# class gives its objects their type arguments, and new throws an Error when its class name reaches a preloaded class of another arity
+A preloaded generic PHP# class gives its objects their type arguments, runs a static's initial value that runs as code once for each type argument, and new throws an Error when its class name reaches a preloaded class of another arity
 --INI--
 opcache.enable=1
 opcache.enable_cli=1
@@ -18,6 +18,7 @@ use Aliased\Twin;
 
 echo implode(', ', (new ReflectionObject(Maker::twin()))->getTypeArguments()), "\n";
 echo implode(', ', (new ReflectionObject(new Twin()))->getTypeArguments()), "\n";
+echo implode(', ', Maker::made()), "\n";
 foreach ([Maker::pair(...), Maker::node(...)] as $make) {
     try {
         var_dump($make());
@@ -29,5 +30,6 @@ foreach ([Maker::pair(...), Maker::node(...)] as $make) {
 --EXPECT--
 int, string
 Any?, Any?
+1, 2, 1
 Error: Class PlainPair declares no type parameters, so new cannot give it <int, string>
 Error: Class Aliased\Twin declares 2 type parameters, so new cannot give it <int>
