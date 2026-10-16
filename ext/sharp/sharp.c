@@ -3539,10 +3539,9 @@ static sharp_type_node *sharp_type_node_ancestor(const zend_class_entry *ce, sha
 	return arguments;
 }
 
-/* What a list sharp_type_list_of_frame spells depends on, as the key of the request's table. Its padding is zeroed, since
- * the table hashes its bytes. */
+/* What a list sharp_type_list_of_frame spells depends on besides its text. The key of the request's table is its bytes
+ * followed by the text's, so its padding is zeroed. */
 typedef struct {
-	const zend_string *text;
 	const zend_class_entry *scope;
 	const zend_class_entry *ce;
 	const sharp_type *own;
@@ -3610,20 +3609,23 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 		return cache[3];
 	}
 	/* The request keeps every list it spelled, so a site whose this alternates between classes or type arguments, as one
-	 * generic service used for several entity types does, spells each once. The text is an interned literal, and two
-	 * sites write one text into one pointer, so the class each is written in tells them apart. */
-	ZEND_ASSERT(ZSTR_IS_INTERNED(Z_STR_P(text)));
+	 * generic service used for several entity types does, spells each once. Two sites may write one text, so the class
+	 * each is written in tells them apart. The text is keyed by its bytes: a script opcache preloads runs before opcache
+	 * interns its literals, so the same text may be several strings. */
 	sharp_type_spelling key;
 	memset(&key, 0, sizeof(key));
-	key.text = Z_STR_P(text);
 	key.scope = scope;
 	key.ce = ce;
 	key.own = own;
 	key.method = method;
 	key.unresolved = unresolved;
+	zend_string *spelling = zend_string_alloc(sizeof(key) + Z_STRLEN_P(text), false);
+	memcpy(ZSTR_VAL(spelling), &key, sizeof(key));
+	memcpy(ZSTR_VAL(spelling) + sizeof(key), Z_STRVAL_P(text), Z_STRLEN_P(text) + 1);
 	HashTable **spelled = &SHARP_G(request_spelled_lists);
-	const sharp_type *substituted = *spelled ? zend_hash_str_find_ptr(*spelled, (const char *) &key, sizeof(key)) : NULL;
+	const sharp_type *substituted = *spelled ? zend_hash_find_ptr(*spelled, spelling) : NULL;
 	if (substituted) {
+		zend_string_release_ex(spelling, false);
 		cache[0] = (void *) ce;
 		cache[1] = (void *) own;
 		cache[2] = (void *) method;
@@ -3646,6 +3648,7 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 	 * with its class's bounds, as one plain PHP creates. */
 	if (!list) {
 		zend_arena_destroy(reader.arena);
+		zend_string_release_ex(spelling, false);
 
 		return NULL;
 	}
@@ -3659,7 +3662,8 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 		ALLOC_HASHTABLE(*spelled);
 		zend_hash_init(*spelled, 8, NULL, NULL, false);
 	}
-	zend_hash_str_add_new_ptr(*spelled, (const char *) &key, sizeof(key), (void *) substituted);
+	zend_hash_add_new_ptr(*spelled, spelling, (void *) substituted);
+	zend_string_release_ex(spelling, false);
 
 	/* Every user run-time cache lives for one request: zend_activate zeroes the dynamic map_ptr table, and accel_activate
 	 * the preloaded caches. A list that lives for the request, which unserialize or a substitution makes, is freed at
@@ -4519,9 +4523,8 @@ ZEND_FUNCTION(Sharp_Internal_accepts)
 		RETURN_THROWS();
 	}
 
-	/* The text is a literal of the calling code, interned as code's literals are, which the list spelled for it keys. */
 	zval text;
-	ZVAL_INTERNED_STR(&text, ZSTR_IS_INTERNED(type) ? type : zend_new_interned_string(zend_string_copy(type)));
+	ZVAL_STR(&text, type);
 	void *cache[4] = {NULL};
 	const sharp_type *list = sharp_type_list_of_frame(
 		&text, object, method, false, is_user_code ? caller->func->common.scope : NULL, cache);
@@ -4860,10 +4863,9 @@ bool sharp_property_accepts(const zend_property_info *info, zval *value, zend_ob
 		return true;
 	}
 
-	/* The text is interned where the property is declared, and each check spells it for the object's class and type
-	 * arguments once a request. */
+	/* Each check spells the property's text for the object's class and type arguments once a request. */
 	zval text;
-	ZVAL_INTERNED_STR(&text, info->sharp_type);
+	ZVAL_STR(&text, info->sharp_type);
 	void *cache[4] = {NULL};
 	const sharp_type *list = sharp_type_list_of_frame(&text, object, NULL, true, info->ce, cache);
 	if (!list) {
@@ -5086,7 +5088,7 @@ static const sharp_type *sharp_function_carried(const zend_function *func, zend_
 	}
 
 	zval text;
-	ZVAL_INTERNED_STR(&text, func->op_array.sharp_type);
+	ZVAL_STR(&text, func->op_array.sharp_type);
 	if (!object && memchr(Z_STRVAL(text), '$', Z_STRLEN(text))) {
 		return NULL;
 	}
@@ -5461,6 +5463,32 @@ static void sharp_container_group(HashTable *rows, HashTable *module)
 	} ZEND_HASH_FOREACH_END();
 }
 
+/* Copies `value`, which a compiled file returns or holds as a literal, into `copy` for the request to keep. When opcache
+ * persists a script it preloads, after the preload script runs and before that request ends, it frees each mutable array
+ * of the script's literals whatever its refcount, so each one is copied, nested ones too. An immutable array lives in
+ * opcache's shared memory, and opcache only releases a string, so they and every other value are shared. */
+static void sharp_copy_literal(zval *copy, const zval *value)
+{
+	if (Z_TYPE_P(value) != IS_ARRAY || (GC_FLAGS(Z_ARRVAL_P(value)) & IS_ARRAY_IMMUTABLE)) {
+		ZVAL_COPY(copy, value);
+		return;
+	}
+
+	zend_string *key;
+	zend_ulong index;
+	zval *element;
+	array_init_size(copy, zend_hash_num_elements(Z_ARRVAL_P(value)));
+	ZEND_HASH_FOREACH_KEY_VAL(Z_ARRVAL_P(value), index, key, element) {
+		zval owned;
+		sharp_copy_literal(&owned, element);
+		if (key) {
+			zend_hash_add_new(Z_ARRVAL_P(copy), key, &owned);
+		} else {
+			zend_hash_index_add_new(Z_ARRVAL_P(copy), index, &owned);
+		}
+	} ZEND_HASH_FOREACH_END();
+}
+
 /* Runs a module file's op_array for the rows it returns, as zend_execute does, but in a symbol table of its own.
  * zend_execute would give the PHP code that called the engine a symbol table, which a tracing-JIT frame never frees. */
 static void sharp_container_execute(zend_op_array *op_array, zval *rows)
@@ -5497,7 +5525,13 @@ static void sharp_container_read(const char *path, HashTable *bindings)
 		zend_op_array *op_array = zend_compile_file(&handle, ZEND_REQUIRE);
 		zend_destroy_file_handle(&handle);
 		if (op_array && !EG(exception)) {
-			sharp_container_execute(op_array, &rows);
+			zval returned;
+			ZVAL_UNDEF(&returned);
+			sharp_container_execute(op_array, &returned);
+			if (!EG(exception) && Z_TYPE(returned) == IS_ARRAY) {
+				sharp_copy_literal(&rows, &returned);
+			}
+			zval_ptr_dtor(&returned);
 		}
 		if (op_array) {
 			zend_destroy_static_vars(op_array);
@@ -6181,7 +6215,7 @@ static void sharp_read_listener_table(zend_string *path, bool past_opcache, zval
 			opline++;
 		}
 		if (opline->opcode == ZEND_RETURN && opline->op1_type == IS_CONST) {
-			ZVAL_COPY(table, RT_CONSTANT(opline, opline->op1));
+			sharp_copy_literal(table, RT_CONSTANT(opline, opline->op1));
 		}
 		destroy_op_array(op_array);
 		efree_size(op_array, sizeof(zend_op_array));
