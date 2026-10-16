@@ -1,0 +1,54 @@
+namespace Classes;
+
+import Lib.Factory;
+
+public class ClassValues
+{
+    private Class<Badge> kept = typeof(GoldBadge);
+
+    public string keptTag() => this.kept.tag();
+
+    public static string of(Badge badge) => Class.of(badge);
+
+    public static string directTag(Badge badge) => Class.of(badge).tag();
+
+    public static List<Any> types() => [typeof(int), typeof(List<Badge>), typeof(Map<string, int>), typeof(Set<int>)];
+
+    public static List<Any> unions() => [typeof(int?), typeof(string|int), typeof((Badge|int)?)];
+
+    public static Class<int|string> either(Class<int|string> type) => type;
+
+    public static Class<int> exact(Class<int> type) => type;
+
+    public static Class<(Badge|int)?> badgeOrInt(Class<(Badge|int)?> type) => type;
+
+    public static Class<int|string> narrowed() => ClassValues.either(typeof(int));
+
+    public static Crate<Badge> crate() => new Crate<Badge>();
+
+    public static bool sameAsTypeof(Crate<Badge> crate) => Class.of(crate) == typeof(Crate<Badge>);
+
+    public static bool otherThanTypeof(Crate<Badge> crate) => Class.of(crate) == typeof(Crate<GoldBadge>);
+
+    public static bool remadeKeepsTypeArguments(Crate<Badge> crate)
+    {
+        const again = new (Class.of(crate))();
+        return Class.of(again) == typeof(Crate<Badge>);
+    }
+
+    public static Badge fromValue(Class<Badge> type) => Factory.make(type);
+
+    public static string tagOf(Badge badge)
+    {
+        const type = Class.of(badge);
+        return type.tag();
+    }
+
+    public static Badge made() => Factory.make(typeof(GoldBadge));
+
+    public static List<string> topics(Class<Badge> type) => type.attributes<Listen>().map(listen => listen.topic);
+
+    public static int loud() => typeof(Badge).attributes<Loud>().count();
+
+    public static Badge remade(Badge badge) => Factory.make(Class.of(badge));
+}

@@ -1,0 +1,28 @@
+namespace Overrides;
+
+public class Tally
+{
+    private static int hits = 0;
+    public static int doubled => Tally.hits * 2;
+    public static int total { get => field; set { field = value; Tally.hits = Tally.hits + 1; } } = 0;
+    public static string label { get; private set; didSet => global.printf("label %s\n", field); } = "start";
+    public static int squared { get { return 2 * 2; } }
+
+    public static void rename(string text)
+    {
+        Tally.label = text;
+    }
+
+    public static int run()
+    {
+        Tally.total = 5;
+        Tally.total += 2;
+        Tally.total++;
+        let old = Tally.total--;
+        return old + Tally.doubled;
+    }
+
+    public static int current() => Tally.total;
+
+    public static int square() => Tally.squared;
+}

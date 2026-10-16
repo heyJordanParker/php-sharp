@@ -4,7 +4,8 @@ PHP# yield produces an Iterable<T> lazily: yield value, yield ...other, a body t
 <?php
 
 require __DIR__ . '/harness/Arrays.inc';
-require __DIR__ . '/Import.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Import');
 
 $path = tempnam(sys_get_temp_dir(), 'sharp_yield');
 file_put_contents($path, "A1,tea,3\n\nA2,cake,5\n");

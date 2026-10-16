@@ -1,0 +1,13 @@
+namespace Handlers;
+
+public interface Handler<T>
+{
+    void handle(T item);
+
+    // A default body calls `handle`, which a class may write for the type argument's type.
+    void handleTwice(T item)
+    {
+        this.handle(item);
+        this.handle(item);
+    }
+}

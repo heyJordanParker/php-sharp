@@ -1,0 +1,5 @@
+namespace Shelf;
+
+public class Box<T>
+{
+}

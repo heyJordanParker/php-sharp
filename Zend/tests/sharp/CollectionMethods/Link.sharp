@@ -1,0 +1,35 @@
+namespace Demo;
+
+import Countable;
+
+class Link
+{
+    public Link(public int value { get; })
+    {
+    }
+
+    public Link plus(int step)
+    {
+        return new Link(this.value + step);
+    }
+
+    public static int? after(Link? link, int step)
+    {
+        return link?.plus(step).value;
+    }
+
+    public static Link? further(Link? link)
+    {
+        return link?.plus(1)?.plus(2);
+    }
+
+    public static Link? skipped(Link? link)
+    {
+        return link?.plus(1).plus(2);
+    }
+
+    public static string label(Link link, Countable items)
+    {
+        return `${link.plus(1).value} of ${items.count()}`;
+    }
+}

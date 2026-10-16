@@ -1,0 +1,13 @@
+namespace Typed;
+
+import Lib.TypedModel;
+
+public class Order : TypedModel
+{
+    protected override string table { get; set; } = "orders";
+
+    public string tableName()
+    {
+        return this.table;
+    }
+}

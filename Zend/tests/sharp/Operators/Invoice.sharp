@@ -1,0 +1,13 @@
+namespace Billing;
+
+public class Invoice
+{
+    public int total { get; set; }
+    public Money balance { get; set; }
+
+    public Invoice(int total, Money balance)
+    {
+        this.total = total;
+        this.balance = balance;
+    }
+}

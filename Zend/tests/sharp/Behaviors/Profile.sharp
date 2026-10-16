@@ -1,0 +1,10 @@
+namespace Behaviors;
+
+public class Profile
+{
+    public string name { get; set; } via Trimmed, Counted = "  start  ";
+    public string code { get; set; } via Counted, Upper = "x";
+    public int level { get; set; } via Kept<int> = 1;
+
+    public Profile renamed(string name) => this with { name: name };
+}

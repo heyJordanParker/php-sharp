@@ -3,7 +3,8 @@ A PHP# class calls Sharp.Json.Json: decode gives objects as maps and throws Json
 --FILE--
 <?php
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Json/Json.sharp';
-require __DIR__ . '/JsonCalls.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('JsonCalls');
 
 use Demo\JsonCalls;
 

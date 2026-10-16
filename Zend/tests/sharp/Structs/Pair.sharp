@@ -1,0 +1,10 @@
+namespace Demo;
+
+public struct Pair<TFirst, TSecond>
+{
+    public static string made { get; } = global.sprintf("%s %s", typeof(TFirst), typeof(TSecond));
+
+    public Pair(public TFirst first { get; init; }, public TSecond second { get; }) { }
+
+    public Pair<TSecond, TFirst> swapped() => new Pair<TSecond, TFirst>(this.second, this.first);
+}

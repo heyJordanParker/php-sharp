@@ -1,0 +1,16 @@
+namespace Behaviors;
+
+import Sharp.Behavior;
+
+public class Counted : Behavior<string>
+{
+    private int writes = 0;
+
+    public string get(string value) => `${value}#${this.writes}`;
+
+    public string set(string value)
+    {
+        this.writes = this.writes + 1;
+        return value;
+    }
+}

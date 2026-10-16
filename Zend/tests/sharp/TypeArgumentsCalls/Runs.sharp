@@ -1,0 +1,26 @@
+namespace Calls;
+
+import RuntimeException;
+
+public class Runs
+{
+    private static List<string> log = [];
+
+    public static int first { get; } = 1;
+
+    public static int second { get; } = Runs.first + 1;
+
+    public static string ran(string what)
+    {
+        Runs.log.add(what);
+        return what;
+    }
+
+    public static int fail(string what)
+    {
+        Runs.log.add(what);
+        throw new RuntimeException(what);
+    }
+
+    public static List<string> logged() => Runs.log;
+}

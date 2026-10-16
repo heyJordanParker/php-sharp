@@ -1,6 +1,7 @@
 <?php
 
-require __DIR__ . '/ReadonlyValues.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('ReadonlyValues');
 
 use Demo\ReadonlyValues\Ledger;
 use Demo\ReadonlyValues\Viewer;

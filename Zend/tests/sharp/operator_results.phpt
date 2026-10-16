@@ -10,7 +10,7 @@ bool(false)
 bool(true)
 bool(true)
 bool(true)
-ArithmeticError: Bit shift by negative number in Operators.sharp on line 165
+ArithmeticError: Bit shift by negative number in Operators.sharp on line 93
 int(0)
 int(8)
 int(12)
@@ -44,5 +44,5 @@ string(7) "450 EUR"
 int(2)
 int(2)
 int(4)
-Billing\Ungraded: a negative grade has no order in Operators.sharp on line 360
+Billing\Ungraded: a negative grade has no order in Grade.sharp on line 15
 string(5) "1 2 3"

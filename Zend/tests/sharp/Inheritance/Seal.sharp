@@ -1,0 +1,8 @@
+namespace Demo;
+
+import Lib.Copies;
+
+public struct Seal : Copies
+{
+    public Seal(public int at { get; }) { }
+}

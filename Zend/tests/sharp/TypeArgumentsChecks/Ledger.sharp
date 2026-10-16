@@ -1,0 +1,13 @@
+namespace Checks;
+
+import App.Box;
+import App.Order;
+
+public class Ledger<TItem>
+{
+    public Box<TItem>? first { get; set; } = null;
+
+    public Box<TItem>? kept { get; set => field = value; } = null;
+
+    public static Ledger<Order> orders() => new Ledger<Order>();
+}

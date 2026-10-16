@@ -1,0 +1,12 @@
+namespace Classes;
+
+public abstract class Entity
+{
+    public required Entity(public string row { get; }) { }
+
+    public static Self fromSchema(string row) => new Self(row);
+
+    public static virtual string kind() => "entity";
+
+    public static string kindOfSelf() => Self.kind();
+}

@@ -1,0 +1,23 @@
+namespace Checks;
+
+import App.Box;
+import App.Order;
+
+public class Rack<TItem>
+{
+    public Box<TItem>? own { get; set; } = null;
+
+    public List<TItem> items { get; set; } = [];
+
+    public static Rack<Order> orders() => new Rack<Order>();
+
+    public static Box<Order> box() => new Box<Order>();
+
+    public static Box<Customer> customerBox() => new Box<Customer>();
+
+    public string add<TSub : TItem>(TSub item) => "added";
+
+    public static string put<TSub : TItem>(TSub item) => "put";
+
+    public static string boxed<TBox : Box<TItem>>(TBox box) => "boxed";
+}

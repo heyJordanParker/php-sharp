@@ -1,0 +1,8 @@
+namespace Demo;
+
+public class Receipt
+{
+    public int total { get; }
+
+    public Receipt(int total) { this.total = total; }
+}

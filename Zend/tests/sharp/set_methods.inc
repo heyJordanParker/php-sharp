@@ -3,7 +3,8 @@
 namespace {
     require __DIR__ . '/attempt.inc';
     require __DIR__ . '/harness/Standing.inc';
-    require __DIR__ . '/Sets.sharp';
+    require __DIR__ . '/harness/fixture.inc';
+    fixture('Sets');
 
     // Each round runs every method, so the JIT variants compile them before the last round, whose output is printed.
     for ($round = 0; $round < 100; $round++) {

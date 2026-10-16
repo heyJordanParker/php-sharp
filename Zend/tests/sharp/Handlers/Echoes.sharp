@@ -1,0 +1,12 @@
+namespace Handlers;
+
+// `handle` takes a `string`, which a call from plain PHP checks under the caller's `strict_types`.
+public class Echoes : Handler<string>
+{
+    public string last { get; private set; } = "";
+
+    public void handle(string item)
+    {
+        this.last = item;
+    }
+}

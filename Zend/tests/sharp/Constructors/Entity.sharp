@@ -1,0 +1,8 @@
+namespace Demo;
+
+class Entity
+{
+    public Entity(public string name { get; }) { }
+
+    public virtual string describe() => "entity " + this.name;
+}

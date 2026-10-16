@@ -1,0 +1,11 @@
+namespace Paging;
+
+public class PaginatedList<TItem : DatabaseEntity>
+{
+
+    public PaginatedList(private List<TItem> rows)
+    {
+    }
+
+    public TItem first() => this.rows[0];
+}

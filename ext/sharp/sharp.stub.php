@@ -143,7 +143,7 @@ function equals(mixed $value, mixed $other): bool {}
 
 function readModule(string $path): void {}
 
-function testModule(array $classes, array $bindings): void {}
+function testModule(string $class, array $bindings): void {}
 
 function startTest(string $class): void {}
 

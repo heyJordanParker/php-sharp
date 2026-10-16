@@ -1,0 +1,8 @@
+namespace App;
+
+public class Maker<T>
+{
+    public int made { get; set; } = 0;
+
+    public Box<T> make() => new Box<T>();
+}

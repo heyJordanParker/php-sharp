@@ -1,0 +1,8 @@
+namespace Demo;
+
+public interface Labeled
+{
+    string code { get; }
+
+    string label => `label ${this.code}`;
+}

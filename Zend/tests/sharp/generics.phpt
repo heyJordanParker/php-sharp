@@ -3,7 +3,8 @@ PHP# runs generic classes, interfaces and methods erased, with type arguments wr
 --FILE--
 <?php
 
-require __DIR__ . '/Generics.sharp';
+require __DIR__ . '/harness/fixture.inc';
+fixture('Generics');
 
 use Paging\Catalog;
 

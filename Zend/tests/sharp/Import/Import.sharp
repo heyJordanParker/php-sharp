@@ -1,0 +1,71 @@
+namespace Demo;
+
+import SplFileObject;
+
+public class Import
+{
+    public Import(private List<Row> pending, private Row latest)
+    {
+    }
+
+    public static Iterable<List<string>> rows(string path)
+    {
+        const file = new SplFileObject(path);
+        while (!file.eof()) {
+            const text = global.rtrim(file.fgets());
+            if (text != "") {
+                yield global.explode(",", text);
+            }
+        }
+    }
+
+    public Iterable<Row> all()
+    {
+        yield ...this.pending;
+        yield this.latest;
+    }
+
+    public static int fields(Iterable<List<string>> rows)
+    {
+        let total = 0;
+        for (const row of rows) {
+            total += row.count();
+        }
+        return total;
+    }
+
+    public static string last(Iterable<Row> rows)
+    {
+        let found = "";
+        for (const row of rows) {
+            found = row.number;
+        }
+        return found;
+    }
+
+    public string lastPending() => Import.last(this.pending);
+
+    public static Iterable<T> repeat<T>(T value)
+    {
+        yield value;
+        yield value;
+    }
+
+    public static Any repeatRow(Row row) => Import.repeat<Row>(row);
+
+    public static bool holdsRows(Any value) => value is Iterable<Row>;
+
+    public static bool holdsTexts(Any value) => value is Iterable<string>;
+
+    public static bool holdsInts(Any value) => value is Iterable<int>;
+
+    public Iterable<Row> printed()
+    {
+        global.names_and("printed");
+        yield this.latest;
+    }
+
+    public Iterable<int> lengths() => this.all().map(row => global.iterator_count(global.names_and(row.number)));
+
+    public static List<string> spelled(string word) => word.letters().toList();
+}
