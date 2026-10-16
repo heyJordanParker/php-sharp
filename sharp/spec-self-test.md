@@ -223,6 +223,19 @@ line 2 expects a compile error, and the checker accepts it
 
 ## 3. Fragments
 
+Each type of a block and its setup is written to a file of its own, named like the type, so an error in the setup's second type names that type's file:
+
+<!-- example file-per-type: statements
+public class Ticket { }
+public class Seat { public int number() { return "three"; } }
+-->
+```csharp
+const ticket = new Ticket();
+```
+<!-- expect file-per-type
+line … of the generated app/Seat.sharp, from the marker's setup or wrapper: …
+-->
+
 A signature that ends in `uses` and the function parameters it names gets a body, with or without its `;`, as a library declaration such as `List.map`'s is written:
 
 <!-- example uses-signature: members -->

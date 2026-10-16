@@ -65,6 +65,8 @@ A line goes where the line that starts its construct goes. A construct continues
 
 A file with no `namespace` line gets `namespace App;`, the namespace of the shared setup classes, so the block's names resolve with no imports, as the reader assumes.
 
+Each type then gets a file of its own, as section 27 says a `.sharp` file declares one type. The types of the block, of its setup and the example class each go to the path their namespace and name give, as `app/Store/Cart.sharp` for `App.Store.Cart`, after the file's `namespace` and `import` lines. What is no type, such as an `extern` line or a `module` block, stays with the first type, and a comment above a type goes with it. Each file maps its lines to the spec's, so an error still names the spec's line. A block whose first line is a path comment, such as `// app/Store/Cart.sharp`, is one file as written, so `one-type-per-file` shows its error. Two files of one example at one path stop the run, since two types of one name are an error in the example itself.
+
 The spec writes `…` for code the reader doesn't need. `sharp/bin/spec` replaces it, as Kotlin's `TODO()` and Rust's `todo!()` stand in for a missing body:
 
 - `{ … }` after a type's header, or after `if`, `else`, `while`, `for`, `do`, `try`, `catch` or `finally`, becomes `{ }`, so a run passes through it.
