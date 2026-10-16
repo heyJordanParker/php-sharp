@@ -75,7 +75,8 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	HashTable *request_type_lists;
 	/* The class values of request_types, NULL until there is one. See sharp_class_values. */
 	HashTable *request_class_values;
-	/* The lists sharp_type_list_of_frame spelled this request, keyed by a sharp_type_spelling, NULL until there is one. */
+	/* The lists sharp_type_list_of_frame spelled this request, under their text an array keyed by a sharp_type_spelling,
+	 * NULL until there is one. */
 	HashTable *request_spelled_lists;
 	/* Spec section 32: Sharp\Container's bindings, under "namespace id" a list of the modules that bind it, each a
 	 * list of its rows, the base modules' and the environment modules' apart; the paths of the module files it read;
@@ -3539,8 +3540,8 @@ static sharp_type_node *sharp_type_node_ancestor(const zend_class_entry *ce, sha
 	return arguments;
 }
 
-/* What a list sharp_type_list_of_frame spells depends on besides its text. The key of the request's table is its bytes
- * followed by the text's, so its padding is zeroed. */
+/* What a list sharp_type_list_of_frame spells depends on besides its text, as the key of the text's table of lists. Its
+ * padding is zeroed, since the table hashes its bytes. */
 typedef struct {
 	const zend_class_entry *scope;
 	const zend_class_entry *ce;
@@ -3610,8 +3611,9 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 	}
 	/* The request keeps every list it spelled, so a site whose this alternates between classes or type arguments, as one
 	 * generic service used for several entity types does, spells each once. Two sites may write one text, so the class
-	 * each is written in tells them apart. The text is keyed by its bytes: a script opcache preloads runs before opcache
-	 * interns its literals, so the same text may be several strings. */
+	 * each is written in tells them apart. The lists are kept under the text, found by its contents: a script opcache
+	 * preloads runs before opcache interns its literals, so one text may be several strings. The table holds the text,
+	 * so its address is never reused this request, and a lookup reuses its hash. */
 	sharp_type_spelling key;
 	memset(&key, 0, sizeof(key));
 	key.scope = scope;
@@ -3619,13 +3621,10 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 	key.own = own;
 	key.method = method;
 	key.unresolved = unresolved;
-	zend_string *spelling = zend_string_alloc(sizeof(key) + Z_STRLEN_P(text), false);
-	memcpy(ZSTR_VAL(spelling), &key, sizeof(key));
-	memcpy(ZSTR_VAL(spelling) + sizeof(key), Z_STRVAL_P(text), Z_STRLEN_P(text) + 1);
 	HashTable **spelled = &SHARP_G(request_spelled_lists);
-	const sharp_type *substituted = *spelled ? zend_hash_find_ptr(*spelled, spelling) : NULL;
+	zval *of_text = *spelled ? zend_hash_find(*spelled, Z_STR_P(text)) : NULL;
+	const sharp_type *substituted = of_text ? zend_hash_str_find_ptr(Z_ARRVAL_P(of_text), (const char *) &key, sizeof(key)) : NULL;
 	if (substituted) {
-		zend_string_release_ex(spelling, false);
 		cache[0] = (void *) ce;
 		cache[1] = (void *) own;
 		cache[2] = (void *) method;
@@ -3648,7 +3647,6 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 	 * with its class's bounds, as one plain PHP creates. */
 	if (!list) {
 		zend_arena_destroy(reader.arena);
-		zend_string_release_ex(spelling, false);
 
 		return NULL;
 	}
@@ -3660,10 +3658,14 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 	zend_arena_destroy(reader.arena);
 	if (!*spelled) {
 		ALLOC_HASHTABLE(*spelled);
-		zend_hash_init(*spelled, 8, NULL, NULL, false);
+		zend_hash_init(*spelled, 8, NULL, ZVAL_PTR_DTOR, false);
 	}
-	zend_hash_add_new_ptr(*spelled, spelling, (void *) substituted);
-	zend_string_release_ex(spelling, false);
+	if (!of_text) {
+		zval lists;
+		array_init(&lists);
+		of_text = zend_hash_add_new(*spelled, Z_STR_P(text), &lists);
+	}
+	zend_hash_str_add_new_ptr(Z_ARRVAL_P(of_text), (const char *) &key, sizeof(key), (void *) substituted);
 
 	/* Every user run-time cache lives for one request: zend_activate zeroes the dynamic map_ptr table, and accel_activate
 	 * the preloaded caches. A list that lives for the request, which unserialize or a substitution makes, is freed at
