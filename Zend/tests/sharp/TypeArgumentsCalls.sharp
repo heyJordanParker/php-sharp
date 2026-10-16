@@ -223,6 +223,18 @@ public class Repository
     }
 
     public static int fragile() => Fragile<Order>.count;
+
+    // A generic subclass's header reaches the statics of the type arguments the access gives it, and a type parameter
+    // reaches its bound's.
+    public static List<int> reachedThrough()
+    {
+        Counter<List<Shelf>>.count = 6;
+        Wrapped<Shelf>.count += 1;
+        Counter<Order>.count = 11;
+        return [Wrapped<Shelf>.count, Counter<List<Shelf>>.count, Repository.counted<Orders>(), Repository.counted<Counter<Order>>()];
+    }
+
+    public static int counted<TCounter : Counter<Order>>() => TCounter.count;
 }
 
 public class Counter<TItem>
@@ -244,6 +256,10 @@ public class Counter<TItem>
     }
 
     public static int own() => Counter<TItem>.count;
+}
+
+public class Wrapped<TX> : Counter<List<TX>>
+{
 }
 
 public class Orders : Counter<Order>

@@ -44,6 +44,7 @@ foreach ([1, 2] as $round) {
 }
 // A class that isn't generic runs an initial value that reads another static as code too.
 echo Runs::$second, "\n";
+echo implode(', ', Repository::reachedThrough()), "\n";
 ?>
 --EXPECT--
 8, 9, 2, 9, 3, 9, 40, 0
@@ -67,3 +68,4 @@ made App\SharedOrder | label App\SharedOrder 2 | next 3 | 22 4 4 | once App\Shar
 3
 made App\Order, once App\Order, made App\SharedOrder, once App\SharedOrder, made App\DatabaseEntity, broken
 2
+7, 7, 11, 11
