@@ -75,7 +75,8 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	HashTable *request_type_lists;
 	/* The class values of request_types, NULL until there is one. See sharp_class_values. */
 	HashTable *request_class_values;
-	/* The lists sharp_type_list_of_frame spelled this request, keyed by a sharp_type_spelling, NULL until there is one. */
+	/* The lists sharp_type_list_of_frame spelled this request, under their text an array keyed by a sharp_type_spelling,
+	 * NULL until there is one. */
 	HashTable *request_spelled_lists;
 	/* Spec section 32: Sharp\Container's bindings, under "namespace id" a list of the modules that bind it, each a
 	 * list of its rows, the base modules' and the environment modules' apart; the paths of the module files it read;
@@ -3539,10 +3540,9 @@ static sharp_type_node *sharp_type_node_ancestor(const zend_class_entry *ce, sha
 	return arguments;
 }
 
-/* What a list sharp_type_list_of_frame spells depends on, as the key of the request's table. Its padding is zeroed, since
- * the table hashes its bytes. */
+/* What a list sharp_type_list_of_frame spells depends on besides its text, as the key of the text's table of lists. Its
+ * padding is zeroed, since the table hashes its bytes. */
 typedef struct {
-	const zend_string *text;
 	const zend_class_entry *scope;
 	const zend_class_entry *ce;
 	const sharp_type *own;
@@ -3550,10 +3550,7 @@ typedef struct {
 	bool unresolved;
 } sharp_type_spelling;
 
-/* The class whose type parameters the `$i` of code `scope` holds count, of `func` when the code is a function's. A
- * method a class took from a trait is the trait's code, whose op array it shares. The trait of a PHP# interface's
- * default bodies counts its interface's, which its header names, spec section 22. */
-static const zend_class_entry *sharp_type_scope(const zend_class_entry *scope, const zend_function *func)
+const zend_class_entry *sharp_type_scope(const zend_class_entry *scope, const zend_function *func)
 {
 	if (scope && func && func->type == ZEND_USER_FUNCTION && (func->common.fn_flags & ZEND_ACC_TRAIT_CLONE)) {
 		const zend_class_entry *user = scope;
@@ -3610,19 +3607,20 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 		return cache[3];
 	}
 	/* The request keeps every list it spelled, so a site whose this alternates between classes or type arguments, as one
-	 * generic service used for several entity types does, spells each once. The text is an interned literal, and two
-	 * sites write one text into one pointer, so the class each is written in tells them apart. */
-	ZEND_ASSERT(ZSTR_IS_INTERNED(Z_STR_P(text)));
+	 * generic service used for several entity types does, spells each once. Two sites may write one text, so the class
+	 * each is written in tells them apart. The lists are kept under the text, found by its contents: a script opcache
+	 * preloads runs before opcache interns its literals, so one text may be several strings. The table holds the text,
+	 * so its address is never reused this request, and a lookup reuses its hash. */
 	sharp_type_spelling key;
 	memset(&key, 0, sizeof(key));
-	key.text = Z_STR_P(text);
 	key.scope = scope;
 	key.ce = ce;
 	key.own = own;
 	key.method = method;
 	key.unresolved = unresolved;
 	HashTable **spelled = &SHARP_G(request_spelled_lists);
-	const sharp_type *substituted = *spelled ? zend_hash_str_find_ptr(*spelled, (const char *) &key, sizeof(key)) : NULL;
+	zval *of_text = *spelled ? zend_hash_find(*spelled, Z_STR_P(text)) : NULL;
+	const sharp_type *substituted = of_text ? zend_hash_str_find_ptr(Z_ARRVAL_P(of_text), (const char *) &key, sizeof(key)) : NULL;
 	if (substituted) {
 		cache[0] = (void *) ce;
 		cache[1] = (void *) own;
@@ -3657,9 +3655,14 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 	zend_arena_destroy(reader.arena);
 	if (!*spelled) {
 		ALLOC_HASHTABLE(*spelled);
-		zend_hash_init(*spelled, 8, NULL, NULL, false);
+		zend_hash_init(*spelled, 8, NULL, ZVAL_PTR_DTOR, false);
 	}
-	zend_hash_str_add_new_ptr(*spelled, (const char *) &key, sizeof(key), (void *) substituted);
+	if (!of_text) {
+		zval lists;
+		array_init(&lists);
+		of_text = zend_hash_add_new(*spelled, Z_STR_P(text), &lists);
+	}
+	zend_hash_str_add_new_ptr(Z_ARRVAL_P(of_text), (const char *) &key, sizeof(key), (void *) substituted);
 
 	/* Every user run-time cache lives for one request: zend_activate zeroes the dynamic map_ptr table, and accel_activate
 	 * the preloaded caches. A list that lives for the request, which unserialize or a substitution makes, is freed at
@@ -3672,12 +3675,23 @@ const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object
 	return substituted;
 }
 
-/* The class `node`, a SHARP_TYPE_NAMED type, names, once loaded, or NULL for a built-in type. */
+/* The class `name` names, for a check that needs the class's declaration, loaded through the autoloader the first time,
+ * as Java and C# load a class on first use. A type argument is text, so `Crate<Apple>` exists before any code loads
+ * Apple, and whether it fits `Harvest<Fruit>` depends on what Apple extends. A loaded class stays in the class table,
+ * so the autoloader runs once for it. NULL when the autoloader finds no such class, and NULL with the autoloader's
+ * exception left for the check's caller when it throws, which every check then stops for. Once an exception is
+ * pending, nothing more runs: the class is only looked up. */
+static zend_class_entry *sharp_type_class(zend_string *name)
+{
+	return zend_lookup_class_ex(name, NULL, UNEXPECTED(EG(exception)) ? ZEND_FETCH_CLASS_NO_AUTOLOAD : 0);
+}
+
+/* The class `node`, a SHARP_TYPE_NAMED type, names, as sharp_type_class finds it, or NULL for a built-in type. */
 static zend_class_entry *sharp_type_node_class(sharp_type_node *node)
 {
 	if (!node->ce && node->name) {
 		zend_string *name = sharp_type_class_name(node->name, node->name_length, false);
-		node->ce = zend_lookup_class_ex(name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+		node->ce = sharp_type_class(name);
 		zend_string_release_ex(name, false);
 	}
 
@@ -3910,8 +3924,9 @@ static bool sharp_class_value_is(const zval *value, const sharp_type *type)
 		return sharp_class_value_fits(Z_STR_P(value), type);
 	}
 
-	/* An autoloader runs here, and can throw. Its exception stands for the check. */
-	zend_class_entry *given = zend_lookup_class(Z_STR_P(value));
+	/* A class value is text, so the class it names may not be loaded yet. That class loads each class it extends or
+	 * implements, so `type`'s class is loaded whenever it is one of them. */
+	zend_class_entry *given = sharp_type_class(Z_STR_P(value));
 	zend_class_entry *ce = given ? zend_lookup_class_ex(type->class_name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD) : NULL;
 	if (!ce || !instanceof_function(given, ce)) {
 		return false;
@@ -4119,8 +4134,8 @@ static bool sharp_type_holds_key(const sharp_type *type, zend_ulong index, zend_
 		return true;
 	}
 
-	zend_class_entry *ce = type->class_name
-		? zend_lookup_class_ex(type->class_name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD) : NULL;
+	/* A key is text or an int, so the enum it names a case of may not be loaded yet. */
+	zend_class_entry *ce = type->class_name ? sharp_type_class(type->class_name) : NULL;
 	if (ce && (ce->ce_flags & ZEND_ACC_ENUM) && ce->enum_backing_type != IS_UNDEF) {
 		zend_object *found = NULL;
 		if (ce->enum_backing_type == IS_LONG) {
@@ -4519,9 +4534,8 @@ ZEND_FUNCTION(Sharp_Internal_accepts)
 		RETURN_THROWS();
 	}
 
-	/* The text is a literal of the calling code, interned as code's literals are, which the list spelled for it keys. */
 	zval text;
-	ZVAL_INTERNED_STR(&text, ZSTR_IS_INTERNED(type) ? type : zend_new_interned_string(zend_string_copy(type)));
+	ZVAL_STR(&text, type);
 	void *cache[4] = {NULL};
 	const sharp_type *list = sharp_type_list_of_frame(
 		&text, object, method, false, is_user_code ? caller->func->common.scope : NULL, cache);
@@ -4548,18 +4562,23 @@ ZEND_FUNCTION(Sharp_Internal_accepts)
 	RETURN_BOOL(accepts);
 }
 
-/* Spec section 11: each type argument of a generic class has its own statics, which PHP# reads and writes as
- * `\Sharp\Internal\statics(Counter::class, 'App.Order')['count']`. Returns by reference the entry of the class's hidden
+/* Spec section 11: each type argument of a generic class has its own statics, which PHP# reads and writes through the
+ * class's hidden static method `#entry`, as `\App\Counter::{'#entry'}(<App.Order>)['count']`. `#entry` calls this with
+ * the text of its type arguments. Returns by reference the entry of the class's hidden
  * static sharp_statics_key for the type argument text `key`, so every write is PHP's own array write. The entry starts
- * as a copy of the defaults under the key "", as C# runs a closed type's static initializer on its first use. */
+ * as a copy of the defaults under the key "", as C# runs a closed type's static initializer on its first use, and
+ * `created` says whether this call added it, so the class's hidden `#entry` runs each initial value that is code then. */
 ZEND_FUNCTION(Sharp_Internal_statics)
 {
 	zend_class_entry *ce = NULL;
 	zend_string *key;
+	zval *created = NULL;
 
-	ZEND_PARSE_PARAMETERS_START(2, 2)
+	ZEND_PARSE_PARAMETERS_START(2, 3)
 		Z_PARAM_CLASS(ce)
 		Z_PARAM_STR(key)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_ZVAL(created)
 	ZEND_PARSE_PARAMETERS_END();
 
 	zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, sharp_statics_key);
@@ -4578,6 +4597,13 @@ ZEND_FUNCTION(Sharp_Internal_statics)
 	ZVAL_DEINDIRECT(store);
 	SEPARATE_ARRAY(store);
 	zval *entry = zend_hash_find(Z_ARRVAL_P(store), key);
+	if (created) {
+		/* A typed reference can refuse a bool. */
+		ZEND_TRY_ASSIGN_REF_BOOL(created, !entry);
+		if (UNEXPECTED(EG(exception))) {
+			RETURN_THROWS();
+		}
+	}
 	if (!entry) {
 		zval defaults;
 		ZVAL_COPY(&defaults, zend_hash_find_known_hash(Z_ARRVAL_P(store), ZSTR_EMPTY_ALLOC()));
@@ -4861,10 +4887,9 @@ bool sharp_property_accepts(const zend_property_info *info, zval *value, zend_ob
 		return true;
 	}
 
-	/* The text is interned where the property is declared, and each check spells it for the object's class and type
-	 * arguments once a request. */
+	/* Each check spells the property's text for the object's class and type arguments once a request. */
 	zval text;
-	ZVAL_INTERNED_STR(&text, info->sharp_type);
+	ZVAL_STR(&text, info->sharp_type);
 	void *cache[4] = {NULL};
 	const sharp_type *list = sharp_type_list_of_frame(&text, object, NULL, true, info->ce, cache);
 	if (!list) {
@@ -5051,9 +5076,13 @@ static bool sharp_type_fits(sharp_type_node *type, sharp_type_node *bound, sharp
 		return sharp_type_argument_fits(type, bound, '=', reader);
 	}
 
-	/* A loaded class has loaded each class it extends or implements. */
+	/* The type's class loads first, which loads each class it extends or implements, so the bound's is then loaded
+	 * whenever it is one of them. */
+	if (type->kind != SHARP_TYPE_NAMED || !sharp_type_node_class(type)) {
+		return false;
+	}
 	zend_class_entry *ce = sharp_type_node_class(bound);
-	if (type->kind != SHARP_TYPE_NAMED || !sharp_type_node_class(type) || !ce || !instanceof_function(type->ce, ce)) {
+	if (!ce || !instanceof_function(type->ce, ce)) {
 		return false;
 	}
 	if (!bound->count) {
@@ -5087,7 +5116,7 @@ static const sharp_type *sharp_function_carried(const zend_function *func, zend_
 	}
 
 	zval text;
-	ZVAL_INTERNED_STR(&text, func->op_array.sharp_type);
+	ZVAL_STR(&text, func->op_array.sharp_type);
 	if (!object && memchr(Z_STRVAL(text), '$', Z_STRLEN(text))) {
 		return NULL;
 	}
@@ -5462,6 +5491,32 @@ static void sharp_container_group(HashTable *rows, HashTable *module)
 	} ZEND_HASH_FOREACH_END();
 }
 
+/* Copies `value`, which a compiled file returns or holds as a literal, into `copy` for the request to keep. When opcache
+ * persists a script it preloads, after the preload script runs and before that request ends, it frees each mutable array
+ * of the script's literals whatever its refcount, so each one is copied, nested ones too. An immutable array lives in
+ * opcache's shared memory, and opcache only releases a string, so they and every other value are shared. */
+static void sharp_copy_literal(zval *copy, const zval *value)
+{
+	if (Z_TYPE_P(value) != IS_ARRAY || (GC_FLAGS(Z_ARRVAL_P(value)) & IS_ARRAY_IMMUTABLE)) {
+		ZVAL_COPY(copy, value);
+		return;
+	}
+
+	zend_string *key;
+	zend_ulong index;
+	zval *element;
+	array_init_size(copy, zend_hash_num_elements(Z_ARRVAL_P(value)));
+	ZEND_HASH_FOREACH_KEY_VAL(Z_ARRVAL_P(value), index, key, element) {
+		zval owned;
+		sharp_copy_literal(&owned, element);
+		if (key) {
+			zend_hash_add_new(Z_ARRVAL_P(copy), key, &owned);
+		} else {
+			zend_hash_index_add_new(Z_ARRVAL_P(copy), index, &owned);
+		}
+	} ZEND_HASH_FOREACH_END();
+}
+
 /* Runs a module file's op_array for the rows it returns, as zend_execute does, but in a symbol table of its own.
  * zend_execute would give the PHP code that called the engine a symbol table, which a tracing-JIT frame never frees. */
 static void sharp_container_execute(zend_op_array *op_array, zval *rows)
@@ -5498,7 +5553,13 @@ static void sharp_container_read(const char *path, HashTable *bindings)
 		zend_op_array *op_array = zend_compile_file(&handle, ZEND_REQUIRE);
 		zend_destroy_file_handle(&handle);
 		if (op_array && !EG(exception)) {
-			sharp_container_execute(op_array, &rows);
+			zval returned;
+			ZVAL_UNDEF(&returned);
+			sharp_container_execute(op_array, &returned);
+			if (!EG(exception) && Z_TYPE(returned) == IS_ARRAY) {
+				sharp_copy_literal(&rows, &returned);
+			}
+			zval_ptr_dtor(&returned);
 		}
 		if (op_array) {
 			zend_destroy_static_vars(op_array);
@@ -6182,7 +6243,7 @@ static void sharp_read_listener_table(zend_string *path, bool past_opcache, zval
 			opline++;
 		}
 		if (opline->opcode == ZEND_RETURN && opline->op1_type == IS_CONST) {
-			ZVAL_COPY(table, RT_CONSTANT(opline, opline->op1));
+			sharp_copy_literal(table, RT_CONSTANT(opline, opline->op1));
 		}
 		destroy_op_array(op_array);
 		efree_size(op_array, sizeof(zend_op_array));

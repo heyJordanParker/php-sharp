@@ -8104,6 +8104,10 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 	} else {
 		if (list->children == 0) {
 			list->children += sharp_metadata_ast != NULL;
+			/* PHP#: a method without parameters or a return type still gets its type arguments. */
+			if (sharp_metadata_ast && (sharp_metadata_ast->child[0] || sharp_metadata_ast->child[1])) {
+				zend_compile_sharp_recv_type_args(sharp_metadata_ast->child[0], sharp_metadata_ast->child[1]);
+			}
 			return;
 		}
 		arg_infos = safe_emalloc(sizeof(zend_arg_info), list->children, 0);

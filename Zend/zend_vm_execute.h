@@ -7861,8 +7861,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_RECV_TY
 		if (!arguments) {
 			SAVE_OPLINE();
 			arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op1),
-				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, false, EX(func)->common.scope,
-				CACHE_ADDR(opline->extended_value));
+				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, false,
+				sharp_type_scope(EX(func)->common.scope, EX(func)), CACHE_ADDR(opline->extended_value));
 			if (UNEXPECTED(EG(exception))) {
 				HANDLE_EXCEPTION();
 			}
@@ -11667,8 +11667,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_RECV_TY
 		if (!arguments) {
 			SAVE_OPLINE();
 			arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op1),
-				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, false, EX(func)->common.scope,
-				CACHE_ADDR(opline->extended_value));
+				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, false,
+				sharp_type_scope(EX(func)->common.scope, EX(func)), CACHE_ADDR(opline->extended_value));
 			if (UNEXPECTED(EG(exception))) {
 				HANDLE_EXCEPTION();
 			}
@@ -36975,8 +36975,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_RECV_TY
 		if (!arguments) {
 			SAVE_OPLINE();
 			arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op1),
-				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, false, EX(func)->common.scope,
-				CACHE_ADDR(opline->extended_value));
+				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, false,
+				sharp_type_scope(EX(func)->common.scope, EX(func)), CACHE_ADDR(opline->extended_value));
 			if (UNEXPECTED(EG(exception))) {
 				HANDLE_EXCEPTION();
 			}
@@ -40052,8 +40052,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_RECV_TY
 		if (!arguments) {
 			SAVE_OPLINE();
 			arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op1),
-				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, false, EX(func)->common.scope,
-				CACHE_ADDR(opline->extended_value));
+				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, false,
+				sharp_type_scope(EX(func)->common.scope, EX(func)), CACHE_ADDR(opline->extended_value));
 			if (UNEXPECTED(EG(exception))) {
 				HANDLE_EXCEPTION();
 			}
@@ -64995,8 +64995,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_RECV_TYPE_AR
 		if (!arguments) {
 			SAVE_OPLINE();
 			arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op1),
-				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, false, EX(func)->common.scope,
-				CACHE_ADDR(opline->extended_value));
+				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, false,
+				sharp_type_scope(EX(func)->common.scope, EX(func)), CACHE_ADDR(opline->extended_value));
 			if (UNEXPECTED(EG(exception))) {
 				HANDLE_EXCEPTION();
 			}
@@ -68699,8 +68699,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_RECV_TYPE_AR
 		if (!arguments) {
 			SAVE_OPLINE();
 			arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op1),
-				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, false, EX(func)->common.scope,
-				CACHE_ADDR(opline->extended_value));
+				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, false,
+				sharp_type_scope(EX(func)->common.scope, EX(func)), CACHE_ADDR(opline->extended_value));
 			if (UNEXPECTED(EG(exception))) {
 				HANDLE_EXCEPTION();
 			}
@@ -93907,8 +93907,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_RECV_TYPE_AR
 		if (!arguments) {
 			SAVE_OPLINE();
 			arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op1),
-				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, false, EX(func)->common.scope,
-				CACHE_ADDR(opline->extended_value));
+				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, false,
+				sharp_type_scope(EX(func)->common.scope, EX(func)), CACHE_ADDR(opline->extended_value));
 			if (UNEXPECTED(EG(exception))) {
 				HANDLE_EXCEPTION();
 			}
@@ -96984,8 +96984,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_RECV_TYPE_AR
 		if (!arguments) {
 			SAVE_OPLINE();
 			arguments = sharp_type_list_of_frame(RT_CONSTANT(opline, opline->op1),
-				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, false, EX(func)->common.scope,
-				CACHE_ADDR(opline->extended_value));
+				Z_TYPE(EX(This)) == IS_OBJECT ? Z_OBJ(EX(This)) : NULL, NULL, false,
+				sharp_type_scope(EX(func)->common.scope, EX(func)), CACHE_ADDR(opline->extended_value));
 			if (UNEXPECTED(EG(exception))) {
 				HANDLE_EXCEPTION();
 			}

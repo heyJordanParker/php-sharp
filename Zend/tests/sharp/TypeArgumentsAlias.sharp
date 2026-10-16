@@ -5,6 +5,8 @@ import App.Pair;
 
 public class Twin<TFirst, TSecond>
 {
+    public static int made { get; } = Maker.run();
+
     public Twin()
     {
     }
@@ -12,6 +14,17 @@ public class Twin<TFirst, TSecond>
 
 public class Maker
 {
+    private static int runs = 0;
+
+    public static int run()
+    {
+        Maker.runs += 1;
+        return Maker.runs;
+    }
+
+    // Each type argument's statics run `made`'s initial value on their first use.
+    public static List<int> made() => [Twin<int, string>.made, Twin<string, int>.made, Twin<int, string>.made];
+
     public static Pair<int, string> pair() => new Pair<int, string>(1, "one");
 
     public static Node<int> node() => new Node<int>();

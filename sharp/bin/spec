@@ -520,11 +520,12 @@ function observe(string $code, int $line, array $expect, string $language): stri
 }
 
 /**
- * Builds a block's file. A line of $blank is left empty, and observe() rewrites the run's top-level statements.
+ * Builds a block's files. A line of $blank is left empty, and observe() rewrites the run's top-level statements. A PHP#
+ * block declares each type in a file of its own, as section 27 says, unless a path comment names its one file.
  *
- * @return array{path: ?string, contents: string, map: list<?array{int, int}>, names: list<string>, entry: ?string}
+ * @return list<array{path: ?string, contents: string, map: list<?array{int, int}>, names: list<string>, entry: ?string}>
  */
-function build_file(array $block, int $index, array $read, array $blank): array
+function build_files(array $block, int $index, array $read, array $blank): array
 {
     $language = $block['language'];
     $lines = [];
@@ -608,20 +609,83 @@ function build_file(array $block, int $index, array $read, array $blank): array
         $file = [...$head, ...$groups['types'], ...$class];
     }
 
-    $contents = implode("\n", array_column($file, 0)) . "\n";
-    if ($language === 'sharp' && preg_match('~^namespace (?!App;)~m', $contents)) {
-        $imports = (str_contains($contents, 'Elided') ? "import App.Elided; " : '') . (str_contains($contents, 'Outcome.') ? 'import App.Outcome;' : '');
-        $contents = preg_replace('~^(namespace [^;]+;)~m', '$1 ' . $imports, $contents, 1);
+    // The wrapper class of a statements block comes last, so its file is the last one.
+    $parts = $language === 'sharp' && $path === null ? split_types($file) : [$file];
+    $files = [];
+    foreach ($parts as $k => $part) {
+        $contents = implode("\n", array_column($part, 0)) . "\n";
+        if ($language === 'sharp' && preg_match('~^namespace (?!App;)~m', $contents)) {
+            $imports = (str_contains($contents, 'Elided') ? "import App.Elided; " : '') . (str_contains($contents, 'Outcome.') ? 'import App.Outcome;' : '');
+            $contents = preg_replace('~^(namespace [^;]+;)~m', '$1 ' . $imports, $contents, 1);
+        }
+
+        $namespace = preg_match('~^namespace ([\w.\\\\]+)~m', $contents, $m) ? str_replace('.', '\\', $m[1]) : '';
+        $entry = match (true) {
+            $language === 'php' && $block['shape'] === 'statements' => 'script',
+            $language === 'sharp' && $block['shape'] === 'statements' && $k === array_key_last($parts) => "$namespace\\$block[class]",
+            default => null,
+        };
+        $files[] = ['path' => $path, 'contents' => $contents, 'map' => array_column($part, 1), 'names' => declared_names($contents, $language), 'entry' => $entry];
     }
 
-    $namespace = preg_match('~^namespace ([\w.\\\\]+)~m', $contents, $m) ? str_replace('.', '\\', $m[1]) : '';
-    $entry = match (true) {
-        $language === 'php' && $block['shape'] === 'statements' => 'script',
-        $language === 'sharp' && $block['shape'] === 'statements' => "$namespace\\$block[class]",
-        default => null,
-    };
+    return $files;
+}
 
-    return ['path' => $path, 'contents' => $contents, 'map' => array_column($file, 1), 'names' => declared_names($contents, $language), 'entry' => $entry];
+/**
+ * Splits a PHP# file's lines into one file per type it declares, each led by the file's `namespace` and `import` lines.
+ * What is no type, such as an `extern` line or a `module` block, stays with the first type. A line with no code goes
+ * with the construct after it, as a type's doc comment does.
+ *
+ * @param list<array{string, ?array{int, int}}> $file
+ * @return list<list<array{string, ?array{int, int}}>>
+ */
+function split_types(array $file): array
+{
+    $read = read_block(['lines' => array_column($file, 0)]);
+    $constructs = [];
+    $waiting = [];
+    foreach ($read as $i => $line) {
+        $waiting[] = $i;
+        if (trim($line['code']) !== '') {
+            $constructs[$line['construct']] = [...$constructs[$line['construct']] ?? [], ...$waiting];
+            $waiting = [];
+        }
+    }
+    if ($constructs === []) {
+        return [$file];
+    }
+    $constructs[array_key_last($constructs)] = [...$constructs[array_key_last($constructs)], ...$waiting];
+
+    $head = [];
+    $types = [];
+    $first = [];
+    foreach ($constructs as $start => $indexes) {
+        $lines = array_map(static fn (int $i): array => $file[$i], $indexes);
+        // The construct's first line of code, after the attributes that may stand on lines of their own above a type.
+        $declaration = '';
+        foreach ($indexes as $i) {
+            $text = ltrim($read[$i]['bare']);
+            if ($i >= $start && $text !== '' && !preg_match('~^\[.*\]$~', $text)) {
+                $declaration = $text;
+                break;
+            }
+        }
+        if (preg_match('~^(?:namespace|import)\b~', $declaration)) {
+            array_push($head, ...$lines);
+        } elseif (preg_match('~^(?:\[.*\]\s*)*(?:(?:public|private|protected|internal|abstract|final|sealed|static|readonly|foreign)\s+)*(?:class|struct|enum|interface|event|trait)\b~', $declaration)) {
+            $types[] = $lines;
+            if (count($types) === 1) {
+                array_push($first, ...$lines);
+            }
+        } else {
+            array_push($first, ...$lines);
+        }
+    }
+    if (count($types) < 2) {
+        return [$file];
+    }
+
+    return [[...$head, ...$first], ...array_map(static fn (array $lines): array => [...$head, ...$lines], array_slice($types, 1))];
 }
 
 /** The number a run records for line $line of block $block. */
@@ -846,24 +910,23 @@ function variant_files(array $example, array $reads, array $variant): array
     $files = [];
     $entry = 0;
     foreach ($example['blocks'] as $b => $block) {
-        $file = build_file($block, $b, $reads[$b], $variant[$b] ?? []);
-        if ($file['entry'] === 'script') {
-            $file['path'] = 'entry' . ($entry++ ?: '') . '.php';
-        } elseif ($file['path'] === null) {
-            $namespace = preg_match('~^namespace ([\w.\\\\]+)~m', $file['contents'], $m) ? preg_split('~[.\\\\]~', $m[1]) : [];
-            $name = $file['names'] === [] ? 'Example' : substr(strrchr('\\' . $file['names'][0], '\\'), 1);
-            if (($namespace[0] ?? '') === 'App') {
-                $namespace[0] = 'app';
+        foreach (build_files($block, $b, $reads[$b], $variant[$b] ?? []) as $file) {
+            if ($file['entry'] === 'script') {
+                $file['path'] = 'entry' . ($entry++ ?: '') . '.php';
+            } elseif ($file['path'] === null) {
+                $namespace = preg_match('~^namespace ([\w.\\\\]+)~m', $file['contents'], $m) ? preg_split('~[.\\\\]~', $m[1]) : [];
+                $name = $file['names'] === [] ? 'Example' : substr(strrchr('\\' . $file['names'][0], '\\'), 1);
+                if (($namespace[0] ?? '') === 'App') {
+                    $namespace[0] = 'app';
+                }
+                $file['path'] = implode('/', [...$namespace, $name]) . '.' . $block['language'];
             }
-            $file['path'] = implode('/', [...$namespace, $name]) . '.' . $block['language'];
-        }
-        foreach ($files as $other) {
-            if ($other['path'] === $file['path']) {
-                $file['path'] = preg_replace('~\.(\w+)$~', "$b.$1", $file['path']);
+            if (in_array($file['path'], array_column($files, 'path'), true)) {
+                fail("$block[document]:$block[fence]: two files of $example[id] are $file[path]. Give each type of an example its own name.");
             }
+            $file['block'] = $b;
+            $files[] = $file;
         }
-        $file['block'] = $b;
-        $files[] = $file;
     }
 
     return $files;
@@ -893,18 +956,28 @@ function runner(string $folder, array $files, array $harness): string
         }
     }
     // Every block that runs, in the order the example writes them: a plain PHP script, or the run method of a class.
+    // A class whose constructor takes services gets them as the container fills a bound class's constructor, so run
+    // lines reach a `foreign` object the way PHP# code does, through a constructor.
     $entries = [];
     foreach ($files as $file) {
         if ($file['entry'] === 'script') {
             $entries[] = 'require __DIR__ . ' . var_export('/' . $file['path'], true) . ';';
         } elseif ($file['entry'] !== null) {
-            $entries[] = '(new ReflectionClass(' . var_export($file['entry'], true) . '))->newInstanceWithoutConstructor()->run();';
+            $entries[] = 'run_entry(' . var_export($file['entry'], true) . ');';
         }
     }
 
     return "<?php\n"
         . '$classes = ' . var_export($classes, true) . ";\n"
         . 'spl_autoload_register(static function (string $class) use ($classes): void { if (isset($classes[$class])) { require_once __DIR__ . "/" . $classes[$class]; } });' . "\n"
+        // The standard library's module binds `Environment` and its other services, as its Composer autoload reads it.
+        . '\Sharp\Internal\readModule(__DIR__ . ' . var_export('/' . PACKAGE_FOLDER . '/library/Sharp/Module.sharp', true) . ");\n"
+        . "function run_entry(string \$class): void\n{\n"
+        . "    \$reflection = new ReflectionClass(\$class);\n"
+        . "    \$parameters = \$reflection->getConstructor()?->getParameters() ?? [];\n"
+        . "    \$services = array_map(static fn (ReflectionParameter \$parameter): mixed => (new \\Sharp\\Container())->get(\$parameter->getType()->getName()), \$parameters);\n"
+        . "    (\$parameters === [] ? \$reflection->newInstanceWithoutConstructor() : \$reflection->newInstanceArgs(\$services))->run();\n"
+        . "}\n"
         . (is_file("$folder/app/functions.php") ? "require __DIR__ . '/app/functions.php';\n" : '')
         . "try {\n    " . implode("\n    ", $entries) . "\n} catch (\\Throwable \$e) {\n    \\App\\Outcome::threw(-1, \$e);\n}\n";
 }
