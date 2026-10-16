@@ -1,0 +1,30 @@
+{
+	auto_https off
+	admin off
+}
+
+# One worker, so each request after the first sees what the last one left.
+:8080 {
+	php_server {
+		root public
+		worker {
+			file ../worker.php
+			name sequential
+			num 1
+			match /*
+		}
+	}
+}
+
+# Four workers, each running an app of its own, serving requests at once in one process.
+:8081 {
+	php_server {
+		root public
+		worker {
+			file ../worker.php
+			name concurrent
+			num 4
+			match /*
+		}
+	}
+}

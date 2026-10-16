@@ -1,0 +1,14 @@
+namespace App.Hosts;
+
+public class Visit
+{
+    private static int made = 0;
+
+    public int number { get; }
+
+    public Visit()
+    {
+        Visit.made = Visit.made + 1;
+        this.number = Visit.made;
+    }
+}

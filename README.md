@@ -68,9 +68,11 @@ sharp/bin/test --upstream   # run php-src's own suites against the upstream base
 
 [sharp/README.md](sharp/README.md) lists every option, the macOS dependencies, the Linux image and CI.
 
-## Runtime image
+## Runtime images
 
-`sharp/docker/runtime/` builds docker-library's `php:8.5-fpm-trixie` image from this repository, with PHP# built in. An app switches to PHP# by changing only its `FROM` line. Each version tag, such as `v0.1.0`, publishes it as `ghcr.io/heyjordanparker/php-sharp:<version>`.
+`sharp/docker/runtime/` builds two images from this repository, with PHP# built in: docker-library's `php:8.5-fpm-trixie`, and FrankenPHP's own image on docker-library's `php:8.5-zts-trixie`. An app switches to PHP# by changing only its `FROM` line. Each version tag, such as `v0.1.0`, publishes them as `ghcr.io/heyjordanparker/php-sharp:<version>` and `ghcr.io/heyjordanparker/php-sharp:<version>-frankenphp`.
+
+A long-running host, such as FrankenPHP's worker mode or Octane, runs each unit of work in `Scope.run`, which plain PHP calls as `\Sharp\Scope::run(fn () => …)`, so each request gets its own `scoped` services ([spec section 32](docs/spec.md#32-modules)).
 
 ## Composer plugin
 

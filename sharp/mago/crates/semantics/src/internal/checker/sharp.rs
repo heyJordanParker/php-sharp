@@ -2659,10 +2659,9 @@ fn is_extern(method: &Method) -> bool {
     method.modifiers.iter().any(|modifier| matches!(modifier, Modifier::Extern(_)))
 }
 
-/// Refuses every name but a function parameter in the `uses` of a method with a body, spec section 29: the checker
-/// works a body's effects out from its code, so only a method without a body states the effects its implementations
-/// may have. A function parameter in `uses`, as `charge(…) uses prepare => …` writes it, belongs to function effects,
-/// so it passes.
+/// Refuses every name in the `uses` of a method with a body, spec section 29: the checker works a body's effects out
+/// from its code, so only a method without a body states the effects its implementations may have. A function
+/// parameter in `uses`, as the old `charge(…) uses prepare => …` wrote it, is the parser's error.
 fn check_method_uses(method: &Method, context: &mut Context<'_, '_, '_>) {
     if method.is_abstract() {
         return;
@@ -2671,11 +2670,11 @@ fn check_method_uses(method: &Method, context: &mut Context<'_, '_, '_>) {
     for name in MethodParts::of_method(method).uses_effects() {
         context.report(
             Issue::error(format!(
-                "A method with a body takes no effect in `uses`, and `{}` is not one of its function parameters.",
+                "A method with a body takes no effect in `uses`, and it names `{}`.",
                 BytesDisplay(name.value)
             ))
             .with_annotation(Annotation::primary(name.span).with_message("Written here."))
-            .with_note("Its effects come from its code, so its `uses` names only its function parameters.")
+            .with_note("Its effects come from its code.")
             .with_help("Remove it from `uses`, or declare the method without a body."),
         );
     }

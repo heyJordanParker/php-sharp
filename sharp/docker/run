@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-docker build --quiet --build-arg BASE_IMAGE --tag php-sharp-linux "$root/sharp/docker" >/dev/null
+docker build --quiet --build-arg BASE_IMAGE --build-arg GOLANG_IMAGE --tag php-sharp-linux "$root/sharp/docker" >/dev/null
 exec docker run --rm --init \
   --user "$(id -u):$(id -g)" \
   --ulimit stack=8388608:-1 \
@@ -11,6 +11,7 @@ exec docker run --rm --init \
   --env ELAN_HOME=/src/sharp/build/elan \
   --env XDG_CACHE_HOME=/src/sharp/build/cache \
   --env COMPOSER_HOME=/src/sharp/build/composer-home \
+  --env GOPATH=/src/sharp/build/go \
   --env MAKEFLAGS \
   --env CARGO_BUILD_JOBS \
   --volume "$root:/src" \

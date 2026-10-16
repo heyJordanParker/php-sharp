@@ -283,13 +283,13 @@ public class Ticket { }
 line … of the generated app/Seat.sharp, from the marker's setup or wrapper: …
 -->
 
-A signature that ends in `uses` and the function parameters it names gets a body, with or without its `;`, as a library declaration such as `List.map`'s is written:
+A signature that ends in `uses` and the function parameters it names gets a body, with or without its `;`, as the standard library once declared `List.map`. A method now takes on the effects of each function it is given with nothing written, so the parser refuses a function parameter in `uses`, and each line expects that parse error. sharp/bin/spec drops this rule in a pull request of its own, since the spec guard lets sharp/bin/spec change only alone:
 
 <!-- example uses-signature: members -->
 ```csharp
-public int twice(Function<int(int)> f) uses f;
-public int thrice(Function<int(int)> f) uses f
-public int quoted(Function<int(int)> f) uses f readonly;
+public int twice(Function<int(int)> f) uses f;          // parse error
+public int thrice(Function<int(int)> f) uses f          // parse error
+public int quoted(Function<int(int)> f) uses f readonly; // parse error
 ```
 <!-- expect uses-signature -->
 

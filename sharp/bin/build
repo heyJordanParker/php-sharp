@@ -4,12 +4,14 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 linux=false
 clean=false
+zts=false
 container_command=(sharp/bin/build)
 for arg in "$@"; do
   case "$arg" in
     --linux) linux=true ;;
     --clean) clean=true; container_command+=("$arg") ;;
-    *) echo "usage: sharp/bin/build [--clean] [--linux]" >&2; exit 2 ;;
+    --zts) zts=true; container_command+=("$arg") ;;
+    *) echo "usage: sharp/bin/build [--clean] [--linux] [--zts]" >&2; exit 2 ;;
   esac
 done
 
@@ -18,10 +20,16 @@ if $linux; then
 fi
 
 build_dir="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
+# The thread-safe build, which FrankenPHP and other threaded hosts run, sits beside the other one.
+if $zts; then
+  build_dir+=-zts
+fi
 
 flags=(
+  --prefix="$build_dir/install"
   --enable-option-checking=fatal
   --enable-debug
+  --enable-fpm
   --disable-cgi
   --without-pear
   --enable-zend-test
@@ -47,6 +55,12 @@ else
   flags+=(--with-pgsql --with-pdo-pgsql)
 fi
 
+# FrankenPHP links the embed SAPI's libphp, which sharp/bin/hosts builds it against from the installed build, and
+# refuses an engine with Zend signals, as docker-library's zts images build without them.
+if $zts; then
+  flags+=(--enable-zts --enable-embed --disable-zend-signals)
+fi
+
 if $clean; then
   rm -rf "$build_dir"
 fi
@@ -63,4 +77,7 @@ if [[ " ${MAKEFLAGS:-}" =~ [[:space:]](-j[[:space:]]*|--jobs=)([0-9]+) ]]; then
   jobs="${BASH_REMATCH[2]}"
 fi
 make -C "$build_dir" -j"$jobs" >/dev/null
+if $zts; then
+  make -C "$build_dir" install >/dev/null
+fi
 "$build_dir/sapi/cli/php" -v

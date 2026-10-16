@@ -1,11 +1,12 @@
 name: Base images
-# CI builds sharp/docker's two Dockerfiles with BASE_IMAGE set to Debian's images in this repository's
-# registry, ghcr.io/heyjordanparker/debian, so it pulls them with its GITHUB_TOKEN. A local build
-# keeps each Dockerfile's default, the public registry's image, and needs no login. GitHub's shared runners
-# exhaust the anonymous quota of public registries: Docker Hub answered 429 on 2026-10-09, and ECR
-# Public answered "429 Too Many Requests: Data limit exceeded" on #135 and #143. This workflow is
-# the one place that reads public registries. It copies each tag every day, so the images take
-# Debian's security updates, and a failed copy leaves the previous day's images for every build.
+# CI builds sharp/docker's Dockerfiles with BASE_IMAGE and GOLANG_IMAGE set to Debian's and Go's images in
+# this repository's registry, ghcr.io/heyjordanparker/debian and ghcr.io/heyjordanparker/golang, so it
+# pulls them with its GITHUB_TOKEN. A local build keeps each Dockerfile's default, the public registry's
+# image, and needs no login. GitHub's shared runners exhaust the anonymous quota of public registries:
+# Docker Hub answered 429 on 2026-10-09, and ECR Public answered "429 Too Many Requests: Data limit
+# exceeded" on #135, #143 and #136. This workflow is the one place that reads public registries. It
+# copies each image every day, so the copies take Debian's and Go's security updates, and a failed copy
+# leaves the previous day's images for every build.
 on:
   schedule:
     - cron: '17 4 * * *'
@@ -33,24 +34,24 @@ jobs:
       packages: write
     strategy:
       matrix:
-        tag: [trixie, trixie-slim]
+        image: ['debian:trixie', 'debian:trixie-slim', 'golang:1.27-trixie']
     steps:
       # Each source serves Docker's official image under the same index digest, so the first that answers
       # gives the same copy. ECR Public answered "Data limit exceeded" to this job on 2026-10-16, five times
       # in a row. --all keeps every platform, since the release image is built for linux/amd64 and linux/arm64.
-      - name: Copy debian:${{ matrix.tag }} to ghcr.io/heyjordanparker/debian:${{ matrix.tag }}
+      - name: Copy ${{ matrix.image }} to ghcr.io/heyjordanparker/${{ matrix.image }}
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           for source in mirror.gcr.io/library public.ecr.aws/docker/library docker.io/library; do
             if skopeo copy --all --retry-times 2 \
               --dest-creds "${{ github.actor }}:$TOKEN" \
-              "docker://$source/debian:${{ matrix.tag }}" \
-              "docker://ghcr.io/heyjordanparker/debian:${{ matrix.tag }}"; then
+              "docker://$source/${{ matrix.image }}" \
+              "docker://ghcr.io/heyjordanparker/${{ matrix.image }}"; then
               echo "Copied from $source"
-              skopeo inspect --raw "docker://ghcr.io/heyjordanparker/debian:${{ matrix.tag }}" | sha256sum
+              skopeo inspect --raw "docker://ghcr.io/heyjordanparker/${{ matrix.image }}" | sha256sum
               exit 0
             fi
           done
-          echo "::error::No source gave debian:${{ matrix.tag }}, so ghcr.io keeps the previous copy."
+          echo "::error::No source gave ${{ matrix.image }}, so ghcr.io keeps the previous copy."
           exit 1

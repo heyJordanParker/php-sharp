@@ -1,0 +1,14 @@
+namespace App.Hosts;
+
+public class Counter
+{
+    private static int made = 0;
+
+    public int number { get; }
+
+    public Counter()
+    {
+        Counter.made = Counter.made + 1;
+        this.number = Counter.made;
+    }
+}
