@@ -189,6 +189,7 @@ Fields and properties are separate concepts.
 
 - **A field is storage.** It can only be `private` or `protected`. A field with no modifier is `private`. There are no public fields.
 - **A property is the API.** It has `get` and `set` accessors. `get` reads at the property's access level, and `set` may carry a narrower one of its own.
+- **A field or a constant declares one name.** `private int first, second;` is a compile error that says to declare each on its own line, so a member's type, initial value and attributes stay in one place, as in Rust and TypeScript.
 
 <!-- example field-and-property: members -->
 ```csharp
@@ -248,7 +249,7 @@ public class Profile
 
 **A static field or property with storage needs an initial value, whatever its type.** No constructor sets it, so the error names that one fix.
 
-**A static lives as long as the app runs, and its initial value runs once, when the app first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. Under php-fpm the app runs for one request. Under a long-running host, such as Octane or FrankenPHP's worker mode, each request sees what the last one left, as in C#, TypeScript and Rust. A host that runs several workers runs one app in each. A get-only static is set only by its initial value.
+**A static lives as long as the app runs, and its initial value runs once, when the app first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. Under php-fpm the app runs for one request. Under a long-running host, such as Octane or FrankenPHP's worker mode, each request sees what the last one left, as in C#, TypeScript and Rust. A host that runs several workers runs one app in each. A get-only static is set only by its initial value. A throw there reaches the code that first used the statics and runs nothing again. The static it left unset, and each after it whose initial value runs as code, throws an `Error` when it is read, or written with a compound assignment, `++` or `--`, until a write sets it, in a generic class too.
 
 **Plain PHP reaches a static with an accessor body, a computed body or an observer only through a method,** because PHP has no hooks on a static property. Reading or writing it directly from plain PHP is PHP's access error.
 
@@ -354,7 +355,7 @@ public int count { get; didSet => this.touch(); } = 0;            // compile err
 `nameof(Order.total)` names a property. The reference is typed, and the checker rejects a misspelled or removed property wherever it is used. It sits beside `typeof(Order)` (section 25), as in C#'s `nameof`.
 
 <!-- example property-references: statements
-Query query = new Query();
+Query<Order> query = new Query<Order>();
 -->
 ```csharp
 query.orderBy(nameof(Order.total));   // compiles: a typed reference to Order's total property
@@ -444,6 +445,16 @@ Math.max(0, ...prices);  // into the standard library too. The 0 gives max a val
 - A spread works the same into PHP# methods and into plain PHP.
 - Only a `List` spreads into a call. Spreading a `Map` into a call is a compile error (section 12).
 - An override of a plain PHP method declared with `...` declares that parameter with `...` too.
+
+**A class has one method per name, so there is no overloading by argument types.** A second method with the same name is a compile error, whatever it takes. Give each method a name that says what it takes, so a reader of the call knows which one runs:
+
+<!-- example one-method-per-name: members -->
+```csharp
+public void grantUserAccess(User user) { … }          // compiles
+public void grantPageAccess(Page page) { … }          // compiles
+public void grant(User user) { … }
+public void grant(Page page) { … }                    // compile error: grant is declared twice. Name each by what it takes, as in grantPageAccess
+```
 
 **A statement that can never run is a compile error,** as Java's "unreachable statement" and Zig's "unreachable code" are. A statement after `return`, `throw`, `global.exit(…)`, `break` or `continue` in the same block never runs, and neither does one after an `if` whose every branch ends the block, or after a loop that never ends, such as a `do` whose body ends the block. The error names the line that ends the block, and says to delete the statement or move it above that line. The block of an `if` or a `for … of` whose condition never finishes, as `if (global.exit(1))`, never runs either, and the error says to write the condition as its own statement in place of the `if` or the `for`.
 
@@ -561,7 +572,7 @@ let artifact = new Artifact.fromJson(json);
 ```
 
 - The dependency container always uses the main constructor (section 32).
-- There is no overloading by argument types.
+- A class has one main constructor, as it has one method per name (section 7).
 - A static method that looks up an existing object, such as `Journey.forUuid`, stays a static method.
 
 **A subclass's constructor always calls its parent's with `: super(…)`,** as in `public Order(Row row) : super(row) { }`, even when the parent's takes no arguments, as Kotlin always writes `: Document()`. A constructor without the call is a compile error:
@@ -706,7 +717,7 @@ public class OrderRecord
     public OrderRecord(public int id { get; }, public string number { get; }) { }
 }
 
-OrderRecord record = OrderRecord.parse(row);   // a class parses the same way: its main constructor's parameters, then every property an initializer may set
+OrderRecord record = OrderRecord.parse(row);   // a class parses the same way, by its main constructor's parameters, then every property an initializer may set; throws: "id: expected int, got string 'abc'"
 ```
 
 ## 11. Generics
@@ -731,26 +742,38 @@ Counter<User>.count;                                     // 0: Counter<User> has
 Counter.count;                                           // compile error: name the type argument, as in Counter<Order>.count
 ```
 
-A static member names its type arguments: `Counter<Order>.count`. A bare `Counter.count` names none and is a compile error.
+A static field names its type arguments: `Counter<Order>.count`. A bare `Counter.count` names none and is a compile error. A static method call fixes them as a generic method call does, below.
 
 **Writing type arguments:**
 
 - **`new` always names them:** `new PaginatedList<Order>(…)`, or names a class value that carries them, as in `new (pages)()` (section 25). `new Self(…)` names none, because `Self` is the class with its own type parameters.
 - **A type names them too:** `PaginatedList<Order> page`. `Class<PaginatedList>` is the one exception: a class type names the class itself.
-- **A generic method call fixes them** from the arguments it receives, or from the declared type its result goes into. A type argument that neither fixes is a compile error, as in C#'s error CS0411 and in Swift.
-- **A plain PHP generic class,** declared with PHPDoc's `@template`, takes type arguments in PHP# code, as in `Collection<Order>`. The checker checks them, but the object carries none while the code runs, as Java's erased generics do. So a type test against one, such as `x is Collection<Order>`, is a compile error that says the type argument is unknown while the code runs (section 21).
+- **A generic method call fixes them** from the arguments it receives, or from the declared type its result goes into. The declared type reaches the call through each arm of a `match`, through the result of a lambda written for a function type, and through the parameter of an outer generic call that the declared type fixed, as Swift and TypeScript infer nested calls. An argument fixes a type PHP# writes: `int` for `5`, `List<int>` for `[1, 2]` and the enum for its case, as C# and Kotlin have no literal types and TypeScript widens the literal it infers. A type argument that none of these fixes is a compile error, as in C#'s error CS0411 and in Swift.
+- **A static method call of a generic class fixes the class's type arguments the same way,** or names them on the class: `Holder<int> holder = Holder.of(5);` and `Holder<int>.of(5)` both compile, and a bare `Holder.of(5)` with no declared type is a compile error.
+- **A plain PHP generic class,** declared with PHPDoc's `@template`, names its type arguments in a PHP# type and after `new` too, as in `Collection<Order>` and `new Collection<Order>()`, as TypeScript and Kotlin require. A bare `Collection items` or `new Collection()` is a compile error that names the type parameters to write. A type parameter with a default may be left out. The checker checks the type arguments, but the object carries none while the code runs, as Java's erased generics do. So a type test tests the class alone: `x is Collection` compiles, and `x is Collection<Order>` is a compile error that says the type argument is unknown while the code runs (section 21).
+
+<!-- example plain-php-generic-types: members -->
+```csharp
+public void fill(Cell<float> cell) { }                  // compiles: the type names Cell's type argument
+public void clear(Cell cell) { }                        // compile error: Cell needs its type argument, as in Cell<float>
+public bool holds(Any value) => value is Cell;          // compiles: a type test tests a plain PHP class alone
+```
 
 <!-- example generic-method-inference: statements alone
+namespace App.Inference;
+import App.Order;
 Cache cache = new Cache();
 -->
 ```csharp
 public class Cache
 {
     public T get<T>(string key) { … }
+    public T keep<T>(T value) => value;
 }
 
-List<Order> orders = cache.get("orders");   // compiles: the declared type fixes T as List<Order>
-const orders = cache.get("orders");         // compile error: nothing fixes T; write cache.get<List<Order>>("orders")
+List<Order> orders = cache.get("orders");               // compiles: the declared type fixes T as List<Order>
+List<Order> kept = cache.keep(cache.get("orders"));     // compiles: keep's parameter takes List<Order>, which fixes get's T
+const orders = cache.get("orders");                     // compile error: nothing fixes T; write cache.get<List<Order>>("orders")
 ```
 
 **A generic object that plain PHP creates without type arguments** (`new PaginatedList($rows)`, or Laravel's container) has its bounds as its type arguments, as Java's raw types do, but checked where it enters PHP# instead of trusted. Under `PaginatedList<TItem : DatabaseEntity>`, a raw page is a `PaginatedList<DatabaseEntity>`. A parameter that needs `PaginatedList<Order>` throws `TypeError`. A method that takes any page is generic. PHP# code never creates a raw object, because a type argument it can't fix or infer is a compile error.
@@ -799,6 +822,7 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 - **The bound is written inline:** `<TItem : DatabaseEntity>`.
 - **Several bounds use `&`:** `<TItem : DatabaseEntity & Shareable>`.
 - **`Object` bounds a type parameter to any object,** `<TValue : Object>`, as C#'s `where T : class` and TypeScript's `T extends object` do. It is a bound alone.
+- **A bound may name another type parameter,** `<TPart : TItem>`, as C#'s `where TPart : TItem` and Java's and TypeScript's `<U extends T>` do. A `TPart` then goes wherever a `TItem` goes. It is a bound alone, as in Java, and a bound that leads back to its own type parameter, such as `<TItem : TItem>`, is a compile error, as in C#.
 - **A type parameter with no bound may hold `null`,** so it is bounded by `Any?`.
 - **A generic class can't implement PHP's `Serializable`,** and the error points to `__serialize` and `__unserialize`.
 - **A class value with type arguments can't be a `Map` key,** because `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` share the plain class name.
@@ -808,6 +832,9 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 public class PaginatedList<TItem : DatabaseEntity> { … }
 public PaginatedList<TItem> list<TItem : DatabaseEntity>(Query<TItem> query) { … }
 public TValue keep<TValue : Object>(TValue value) => value;
+public TItem either<TItem : DatabaseEntity, TPart : TItem>(TItem whole, TPart part) => part;   // compiles: a TPart goes where a TItem goes
+public void joined<TItem, TPart : TItem & Shareable>() { }                                      // compile error: a type parameter is a bound alone
+public void looped<TItem : TItem>() { }                                                         // compile error: the bound of TItem leads back to TItem
 ```
 
 **A class that implements or extends a generic type takes its type argument's type,** as in C#, Java, Kotlin, TypeScript and Rust: `OrderHandler : Handler<Order>` writes `handle(Order item)`. A call from plain PHP still checks `item` against `Order` under the caller's `strict_types`, as every typed parameter is checked, and reflection reports `Order` as its type:
@@ -1021,7 +1048,7 @@ int|string id = 1;
 -->
 ```csharp
 const first = lines[0];       // throws OutOfRangeException when lines is empty
-lines[0] = line;              // replaces the element at 0, and throws OutOfRangeException when lines is empty
+lines[0] = line;              // replaces the element at 0; throws OutOfRangeException when lines is empty
 plans["pro"] = pro;           // inserts or replaces
 items[-1];                    // throws OutOfRangeException: write items.last()
 items.last();                 // the last item
@@ -1914,6 +1941,20 @@ These keep their C and PHP form:
 
 PHP's `foreach` is removed.
 
+**`?? continue` in a loop's own condition skips to the loop's next check,** as `continue` does anywhere in the loop (section 14.4). The condition runs again, so the body runs only for a value that is not null, and `?? break` ends the loop at the first null instead. A source that stays null keeps the loop running, as `while (true) { continue; }` does.
+
+<!-- example continue-in-condition: statements in Feed
+private int calls = 0;
+private bool? next() { this.calls += 1; return this.calls % 3 == 0 ? null : this.calls < 7; }
+let passes = 0;
+-->
+```csharp
+while (this.next() ?? continue) { passes += 1; }                // a null runs the condition again
+do { passes += 1; } while (this.next() ?? continue);
+for (let i = 0; this.next() ?? continue; i++) { passes += 1; }  // a null runs i++, then the condition
+passes;                                                          // 5
+```
+
 **The body of every `if`, `else`, `while`, `do` and `for` is written in braces,** as in Go, Rust and Swift, and as PSR-12 requires of PHP. A body without braces is a compile error:
 
 <!-- example braces: statements
@@ -2209,6 +2250,9 @@ A case with a value and a case with data in one enum is a compile error. Swift e
 
 - **Each case is its own type,** so a method can take `PaymentResult.Paid` alone.
 - **Two cases are `==`** when they are the same case and each field is `==`, as two structs are (section 19). A case with a field that has no `==` gives its enum no `==`.
+- **A not-backed enum may declare type parameters,** with bounds and without `in` or `out`, as `enum Lookup<T> { case Found(T value); case Missing; }`. A backed enum declares none.
+- **A case of a generic enum** is the type `Lookup<int>.Found`. A case takes its type arguments as a static method call does (section 11), so `Lookup<int> lookup = Lookup.Missing;` and `Lookup<int>.Missing` both compile. A pattern names the bare case, as in `lookup is Lookup.Found(int value)`, and takes the type arguments of the value it tests.
+- **A plain case of a generic enum is one object for each list of type arguments,** so `Lookup<int>.Missing` and `Lookup<string>.Missing` are two objects, as each list has its own static fields.
 - **At runtime,** each case is a real class, so Reflection sees it.
 - **The checker** rejects a `match` over the enum that misses a case.
 
@@ -2572,7 +2616,7 @@ public class Page : DatabaseEntity
 public override string label() => super.label() + " (page)";
 ```
 
-**An interface can give a method a default body.** PHP# declares no traits:
+**An interface can give a method or a computed property a default body.** PHP# declares no traits:
 
 <!-- example interface-defaults -->
 ```csharp
@@ -2584,6 +2628,7 @@ public interface HasDesign
     List<string> claims { get; set; }                       // abstract: each class declares its storage
     string designColumn { get; }                            // abstract
     string designKey() => `design:${this.designColumn}`;    // compiles: a default body
+    string designLabel => `${this.designColumn} design`;    // compiles: a computed property's default body
     string designId() => `design:${this.id}`;               // compile error: a default body sees only HasDesign's members, and id is not one
 }
 ```
@@ -2605,11 +2650,78 @@ Page page = new Page();
 -->
 ```csharp
 page.designKey();                                           // "design:design", from the default body
+page.designLabel;                                           // "design design", from the default body
 ```
 
 - A default body sees only the interface's own members.
 - Every field is declared in the class that owns it. An interface holds no fields.
+- A computed property's default body runs on each read, so it takes no `static` and no `lazy`. An enum declares no stored property; a computed property is allowed, static or not, and an enum takes an interface's computed default as a class does. Every enum already has `name`, and a backed enum `value`, so no computed property takes either name.
 - A PHP# interface with default bodies compiles to a PHP interface plus a PHP trait named `<Interface>\Defaults` that holds the default bodies, as Kotlin nests `DefaultImpls` in an interface. A plain PHP class that implements it must also `use` that trait to get the defaults. PHP# code never names the trait, so section 23's rule that a class cannot share its full name with a namespace does not apply to it.
+
+**A class has one method per name, whatever it inherits** (section 7). When two places give a class a body for the same method, the class writes the method itself, as Kotlin requires. The places are two interfaces' default bodies, a default body and a plain PHP trait, two header traits, or a default body and the base class. Until the class writes it, the class is a compile error that names both places. Inside its own methods, the class runs one interface's default body with `super<Interface>`:
+
+<!-- example one-body-per-method -->
+```csharp
+// app/Tickets.sharp
+namespace App;
+
+public interface ShowsLabel
+{
+    string label() => "label";
+}
+
+public interface ShowsTitle
+{
+    string label() => "title";
+}
+
+public class Ticket : ShowsLabel, ShowsTitle { }        // compile error: Ticket gets label from both ShowsLabel and ShowsTitle, so Ticket writes label
+
+public class Sticker : ShowsLabel, ShowsTitle
+{
+    public override string label() => super<ShowsLabel>.label() + "/" + super<ShowsTitle>.label();
+}
+
+public class Stray : ShowsTitle
+{
+    public string name() => super<ShowsLabel>.label();   // compile error: Stray does not implement ShowsLabel
+}
+```
+<!-- run one-body-per-method
+new Sticker().label();   // "label/title"
+-->
+
+- `super<Interface>` names an interface the class implements, and is written only in the class's own methods.
+- Replacing a default body takes `override`, as replacing a base class's method does. Implementing an interface method that has no default body takes none.
+- A header trait replaces the base class's method, as PHP's `use` does, so the two count as one place.
+
+A sub-interface replaces its parent's default body with `override`, and the most specific interface's body wins, as in Java, C# and Kotlin:
+
+<!-- example sub-interface-defaults -->
+```csharp
+// app/Shows.sharp
+namespace App;
+
+public interface Shows
+{
+    string label() => "shows";
+}
+
+public interface ShowsMore : Shows
+{
+    override string label() => "more";             // compiles: replaces the default body of Shows
+}
+
+public interface ShowsLess : Shows
+{
+    string label() => "less";                     // compile error: replaces the default body of Shows, so it writes override
+}
+
+public class Fancy : ShowsMore { }                // gets label from ShowsMore
+```
+<!-- run sub-interface-defaults
+new Fancy().label();   // "more"
+-->
 
 <!-- example php-trait-defaults -->
 ```php
@@ -2621,6 +2733,10 @@ class LegacyPage implements HasDesign
 
     public array $claims = [];
     public string $designColumn = "design";
+
+    public string $designLabel {                            // runs designLabel's default body
+        get => $this->{'designLabel@App\Design\HasDesign'}();
+    }
 }
 ```
 
@@ -2734,7 +2850,7 @@ public class Layout
 
 **The standard library lives under one root, `Sharp`,** with the standard library namespaces `Sharp.Text`, `Sharp.Math`, `Sharp.Json`, `Sharp.IO`, `Sharp.Time`, `Sharp.Net` and `Sharp.Data`, as .NET has `System.*` and Rust has `std::*`.
 
-**Only `Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin:
+**Only `Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin. `Error` is the one default name that nothing shadows (section 31):
 
 <!-- example own-namespace-shadows -->
 ```csharp
@@ -2865,7 +2981,9 @@ public User find(int|string id)
 - `List`, `Map` and `Set` can't share a union, because they share PHP's one array kind and the literal rules need to know which one a place holds.
 - Alternatives that belong to the domain stay enums (section 20) and sealed interfaces (section 20.1).
 
-**A union that holds null is written `(int|string)?`,** with the same `?` as any other type. `int|string|null` is a compile error that names `(int|string)?`.
+**A union that holds null is written `(int|string)?`,** with the same `?` as any other type. `int|string|null` is a compile error that names `(int|string)?`, and `int|null` one that names `int?`.
+
+- `null`, `true` and `false` are values, not types. `null` alone as a type is a compile error that names `T?`, and `true` or `false` alone is one that names `bool`.
 
 <!-- example nullable-unions: members -->
 ```csharp
@@ -2905,7 +3023,7 @@ a ** b                       // int. Throws ArithmeticError at runtime when b < 
 
 **An `int` where a `float` is expected is a compile error in PHP# code,** wherever a value lands, such as an assignment, an argument, a return, a property write, a list or map element, or a generic `T` that is `float`, as in `Cell<float>`.
 
-<!-- example int-to-float: statements alone
+<!-- example int-to-float: statements alone 1-4,6
 int count = 3;
 int n = 2;
 -->
@@ -2957,7 +3075,7 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 
 - `(int)` and `(float)` convert between `int` and `float`. `(string)` converts a number to a `string`.
 - `(int)` truncates a `float` toward zero. A `float` too large for an `int`, or NaN, throws `ArithmeticError`.
-- A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take a `string`, as C#'s `int.Parse(string)` and Kotlin's `String.toInt()` do, and throw on a string that holds anything but a number, such as `"abc"` or `"12abc"`. An `Any?` is checked with `as string` first.
+- A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take a `string`, as C#'s `int.Parse(string)` and Kotlin's `String.toInt()` do, and throw on a string that holds anything but a number, such as `"abc"` or `"12abc"`. Spaces around the number count too, as in Rust and Kotlin: `Int.parse(" 12 ")` throws, and its error says to call `Text.trim()` first. An `Any?` is checked with `as string` first.
 - `Int.tryParse(s)` and `Float.tryParse(s)` take a `string` too, and give null where `parse` throws.
 - A class or an interface narrows only with `as`, which gives null, or with `as … ?? throw` (section 21).
 - PHP# has no user-defined conversion operators, such as C#'s `implicit operator`. A type converts only through a property or method it declares, such as `username.value`.
@@ -3013,8 +3131,9 @@ if (payload is WebhookPayload) {
 **An unchecked `Any?` can be given a default or compared with a plain value:**
 
 - `x ?? y` compiles and gives `Any`.
-- `==` against a struct, enum, string, number or collection compiles, and compares by value (section 19).
+- `==` against a struct, enum, string, number, `bool` or collection compiles, and compares by value (section 19).
 - `==` against an object, or against another unchecked `Any?`, is a compile error.
+- `===` against an object compiles: it asks only whether both are the same object (section 19), so it is false when `x` holds no object.
 - `${x}` in a template is a compile error until `x` is checked.
 
 <!-- example unchecked-any: statements
@@ -3038,8 +3157,8 @@ PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or
 ```csharp
 public class Ids
 {
-    public static int identity(Object value) => spl_object_id(value);   // compiles
-    public static int identityOf(Any value) => spl_object_id(value);    // compile error: Any may hold an int, and spl_object_id takes an object
+    public static int identity(Object value) => global.spl_object_id(value);   // compiles
+    public static int identityOf(Any value) => global.spl_object_id(value);    // compile error: Any may hold an int, and spl_object_id takes an object
 
     public static void sync(Object source)
     {
@@ -3907,20 +4026,22 @@ The standard library's collection methods (section 12) take on the effects of th
 
 A tuple groups a fixed number of typed values without declaring a class. It uses TypeScript's brackets. Each element is declared type first, as everywhere in PHP#.
 
-<!-- example tuples: statements
-Money total = new Money(500, "USD");
-int count = 2;
-Date since = new Date();
+<!-- example tuples: statements in Order
+public class Date { }
+private Money total = new Money(500, "USD");
+private int count = 2;
+private Date since = new Date();
+Order order = new Order();
 -->
 ```csharp
-public [Money total, int count, Date since] summarize() { return [total, count, since]; }
+public [Money total, int count, Date since] summarize() { return [this.total, this.count, this.since]; }
 
 const [total, count, since] = order.summarize();     // unpack
 const summary = order.summarize();
 summary.total;                                        // read by name, as in C#
 
-public [Money, int] totals() { return [total, count]; }   // compiles: element names are optional
-const [money, items] = order.totals();                    // unpack an unnamed tuple
+public [Money, int] totals() { return [this.total, this.count]; }   // compiles: element names are optional
+const [money, items] = order.totals();                              // unpack an unnamed tuple
 ```
 
 - **A tuple can have any number of elements.** The checker suggests a struct past four.
@@ -3940,22 +4061,33 @@ public enum Result<T, TError : Error>
     case Err(TError error);                       // Err beside the Error interface, as Rust's Result::Err sits beside its Error trait
 }
 
-public Result<Order, PaymentError> charge(Cart cart) { … return Result.Err(PaymentError.Declined(reason)); }
+public Result<Order, PaymentError> charge(Cart cart) => Result.Err(PaymentError.Declined("card expired"));
 ```
 
 `Result` is an ordinary enum with data from the standard library, so `match`, `is` and the exhaustive-case check work on it unchanged.
 
-**`try` passes a failure up to the caller.** If the call returns `Err`, the enclosing method returns that same `Err` immediately. Otherwise `try` gives the `Ok` value. Zig and Swift use `try` the same way.
+**A case of `Result` is the type `Result<Order, PaymentError>.Ok`.** `Result.Ok(…)` and `Result.Err(…)` take their type arguments from their arguments and from the declared type their result goes into, as `charge` above does. A type argument that neither fixes is written on the enum, as in `Result<int, PaymentError>.Ok(5)`. A pattern names the bare case, as in `Result.Ok(Order order)`, and takes the type arguments of the value it tests.
+
+**`try` passes a failure up to the caller.** If the call returns `Err`, the enclosing method returns an `Err` holding the same error immediately. Otherwise `try` gives the `Ok` value. Zig uses `try` the same way.
+
+- **The returned `Err` takes the type arguments of the enclosing method's `Result`,** and it is `==` to the `Err` it holds the error of. An operand whose error type doesn't fit the method's error type is a compile error that names both.
+- **`try` is a prefix operator with `!`'s precedence.** A member read and a call bind tighter, so `try this.gateway.charge(cart)` passes up the call's failure, and parentheses read a member of the `Ok` value.
+- **The operand is any `Result` expression,** and `try` stands anywhere an expression can, a lambda that returns a `Result` included. In a computed property whose type is a `Result`, `try` returns the failure from the property's getter.
 
 <!-- example try-propagation: members
 private CheckoutGateway gateway = new CheckoutGateway();
+private Cart cart = new Cart();
 -->
 ```csharp
 public Result<Receipt, PaymentError> checkout(Cart cart)
 {
-    const order = try gateway.charge(cart);      // Order, or return the failure here
+    const order = try this.gateway.charge(cart);      // Order, or return the failure here
     return Result.Ok(order.receipt());
 }
+
+public Result<int, PaymentError> total(Cart cart) => Result.Ok((try this.gateway.charge(cart)).total);   // a member of the Ok value
+
+public Result<int, PaymentError> cartTotal => Result.Ok((try this.gateway.charge(this.cart)).total);   // the getter returns the failure
 ```
 
 `try`/`catch` blocks remain for exceptions, which are now mostly limited to the edges, such as wrapping a plain PHP exception.
@@ -3983,7 +4115,10 @@ public enum PaymentError : Error
 }
 ```
 
-**Inside `.sharp` files, `Error` always means this interface.** PHP's global engine class `Error` is never named in PHP# code. Bugs are caught as `Throwable`, and engine subclasses such as `TypeError` keep their names.
+**Inside `.sharp` files, `Error` always means this interface,** whatever the file declares or imports. PHP's global engine class `Error` is never named in PHP# code.
+
+- **An import whose last part is `Error`, or that renames a class to `Error`, is a compile error,** so another library's `Error` is imported under a new name, as in `import Vendor.Payments.Error as PaymentsError;`.
+- **Bugs are caught as `Throwable`,** so `catch (Error failure)` is a compile error that names `Throwable`. Engine subclasses such as `TypeError` keep their names.
 
 ## 32. Modules
 

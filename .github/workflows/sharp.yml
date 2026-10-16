@@ -46,9 +46,22 @@ jobs:
     if: needs.CHANGES.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    # sharp/docker/run builds the image FROM this copy, which base-images.yml makes of the public
+    # registry's image, so the pull never meets an anonymous quota.
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
     steps:
       - name: git checkout
         uses: actions/checkout@v6
+      - name: Pull the base image from ghcr.io
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+          docker pull "$BASE_IMAGE"
       - name: Keep local sources out of Cargo.lock
         run: |
           if git grep -nE '(path|git)\+file://' -- '*Cargo.lock'; then
@@ -119,9 +132,21 @@ jobs:
     if: needs.CHANGES.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    # sharp/docker/run builds the image FROM base-images.yml's copy, as LINUX does.
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
     steps:
       - name: git checkout
         uses: actions/checkout@v6
+      - name: Pull the base image from ghcr.io
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+          docker pull "$BASE_IMAGE"
       - name: Rust cache
         uses: actions/cache@v5
         with:
@@ -156,9 +181,21 @@ jobs:
     needs: [LINUX, LINUX_ZTS]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    # sharp/docker/run builds the image FROM base-images.yml's copy, as LINUX does.
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
     steps:
       - name: git checkout
         uses: actions/checkout@v6
+      - name: Pull the base image from ghcr.io
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+          docker pull "$BASE_IMAGE"
       - name: Go module cache
         uses: actions/cache@v5
         with:
@@ -303,6 +340,7 @@ jobs:
       output: image
       push: true
       file: ${{ matrix.file }}
+      build-args: BASE_IMAGE=ghcr.io/heyjordanparker/debian:trixie-slim
       platforms: linux/amd64,linux/arm64
       meta-images: ghcr.io/heyjordanparker/php-sharp
       meta-tags: type=semver,pattern={{version}}

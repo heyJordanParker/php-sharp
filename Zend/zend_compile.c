@@ -3119,12 +3119,6 @@ static zend_op *zend_delayed_compile_dim(znode *result, zend_ast *ast, uint32_t 
 	}
 
 	opline = zend_delayed_emit_op(result, ZEND_FETCH_DIM_R, &var_node, &dim_node);
-	/* The bridge marks the List index directly before `?.` with ZEND_DIM_IS, so a missing index reads
-	 * as null and `?.` skips, as spec section 12 handles a read with `?.`. Its container stays a bare
-	 * PHP# read, so `cube[9][0]?.x` still throws on `cube[9]`. */
-	if (type == BP_VAR_R && (ast->attr & ZEND_DIM_SHARP) && (ast->attr & ZEND_DIM_IS)) {
-		type = BP_VAR_IS;
-	}
 	zend_adjust_for_fetch_type(opline, result, type);
 	if (by_ref) {
 		opline->extended_value = ZEND_FETCH_DIM_REF;
@@ -5299,9 +5293,8 @@ static void zend_compile_call(znode *result, zend_ast *ast, uint32_t type) /* {{
  * writes the property back, or else a cast, which keeps a local's slot or a copy of any other value.
  * An index reads its element through the collection of what it indexes, because a List index is a
  * place (spec section 12): `grid[0].add(5)` changes the list stored at index 0. The cast then passes
- * that element on, and makes a collection of an array a plain PHP ArrayAccess object gives. The
- * bridge marks the index of `grid[9]?.add(5)` with ZEND_DIM_IS, which php-src gives an index `??`
- * reads, so a missing index reads as null and the call's JMP_NULL skips it.
+ * that element on, and makes a collection of an array a plain PHP ArrayAccess object gives. A
+ * missing index throws, as a bare PHP# index read does, before `?.` too.
  * Before a `?.` call the receiver ends its own null-safe chain ahead of the cast, as PHP's
  * ((object) $a?->b())?->c() does: the call's own JMP_NULL gives null for either. */
 static void zend_compile_sharp_receiver(znode *result, zend_ast *ast, bool nullsafe)
@@ -5313,8 +5306,7 @@ static void zend_compile_sharp_receiver(znode *result, zend_ast *ast, bool nulls
 
 		zend_compile_sharp_receiver(&container_node, ast->child[0], false);
 		zend_compile_expr(&dim_node, ast->child[1]);
-		zend_emit_op_tmp(result, (ast->attr & ZEND_DIM_IS) ? ZEND_FETCH_DIM_IS : ZEND_FETCH_DIM_R,
-			&container_node, &dim_node);
+		zend_emit_op_tmp(result, ZEND_FETCH_DIM_R, &container_node, &dim_node);
 	} else if (ast->kind == ZEND_AST_PROP || ast->kind == ZEND_AST_NULLSAFE_PROP || ast->kind == ZEND_AST_STATIC_PROP) {
 		opline = zend_compile_var(result, ast, BP_VAR_R, 0);
 		if (opline && ((opline->opcode == ZEND_FETCH_OBJ_R && opline->op2_type == IS_CONST)
@@ -8112,6 +8104,10 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 	} else {
 		if (list->children == 0) {
 			list->children += sharp_metadata_ast != NULL;
+			/* PHP#: a method without parameters or a return type still gets its type arguments. */
+			if (sharp_metadata_ast && (sharp_metadata_ast->child[0] || sharp_metadata_ast->child[1])) {
+				zend_compile_sharp_recv_type_args(sharp_metadata_ast->child[0], sharp_metadata_ast->child[1]);
+			}
 			return;
 		}
 		arg_infos = safe_emalloc(sizeof(zend_arg_info), list->children, 0);
@@ -9210,7 +9206,8 @@ static void zend_compile_prop_decl(zend_ast *ast, zend_ast *type_ast, uint32_t f
 	zend_class_entry *ce = CG(active_class_entry);
 	uint32_t i, children = list->children;
 
-	if (ce->ce_flags & ZEND_ACC_ENUM) {
+	/* A PHP# enum may declare a computed property, which has a PHP# type and no storage. */
+	if ((ce->ce_flags & ZEND_ACC_ENUM) && !sharp_type) {
 		zend_error_noreturn(E_COMPILE_ERROR, "Enum %s cannot include properties", ZSTR_VAL(ce->name));
 	}
 
@@ -9245,6 +9242,9 @@ static void zend_compile_prop_decl(zend_ast *ast, zend_ast *type_ast, uint32_t f
 		zval value_zv;
 		zend_type type = ZEND_TYPE_INIT_NONE(0);
 		flags |= zend_property_is_virtual(ce, name, hooks_ast, flags) ? ZEND_ACC_VIRTUAL : 0;
+		if ((ce->ce_flags & ZEND_ACC_ENUM) && !(flags & ZEND_ACC_VIRTUAL)) {
+			zend_error_noreturn(E_COMPILE_ERROR, "Enum %s cannot include properties", ZSTR_VAL(ce->name));
+		}
 
 		zend_string *old_active_property_info_name = CG(context).active_property_info_name;
 		CG(context).active_property_info_name = name;

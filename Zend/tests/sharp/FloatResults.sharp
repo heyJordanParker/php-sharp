@@ -1,0 +1,30 @@
+namespace Floats;
+
+public static class FloatResults
+{
+    public static Any direct(Function<float(int)> f)
+    {
+        const value = f(2);
+        return value;
+    }
+
+    public static Any nullable(Function<float?(int)> f)
+    {
+        const value = f(2);
+        return value ?? "none";
+    }
+
+    public static Any maybe(Function<float(int)>? f)
+    {
+        const value = f?.(2);
+        return value ?? "none";
+    }
+
+    public static List<float> listed(Function<List<float>()> f) => f();
+
+    public static Any kept(Function<int(int)> f)
+    {
+        const value = f(2);
+        return value;
+    }
+}

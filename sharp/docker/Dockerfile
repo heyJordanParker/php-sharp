@@ -1,6 +1,8 @@
+ARG BASE_IMAGE=public.ecr.aws/docker/library/debian:trixie
+
 FROM public.ecr.aws/docker/library/golang:1.27-trixie AS golang
 
-FROM public.ecr.aws/docker/library/debian:trixie
+FROM ${BASE_IMAGE}
 
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \

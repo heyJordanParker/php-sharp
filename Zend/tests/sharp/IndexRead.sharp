@@ -16,7 +16,7 @@ class IndexRead
 
     public static int orZero(List<int> values, int index)
     {
-        return values[index] ?? 0;
+        return values.getOrNull(index) ?? 0;
     }
 
     public static int price(Map<string, int> prices, string plan)
@@ -32,11 +32,11 @@ class IndexRead
 
     public static bool passed(List<int> values, int index)
     {
-        const fixed = new SplFixedArray(3);
+        const fixed = new SplFixedArray<int>(3);
         return fixed.offsetExists(values[index]);
     }
 
-    public static int? size(Map<string, SplFixedArray> arrays, string key)
+    public static int? size(Map<string, SplFixedArray<int>> arrays, string key)
     {
         return arrays[key]?.getSize();
     }

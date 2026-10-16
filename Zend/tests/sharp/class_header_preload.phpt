@@ -19,7 +19,15 @@ foreach ([new Demo\Article(), new Demo\Card()] as $object) {
     ksort($interfaces);
     echo get_parent_class($object), ' ', implode(',', $interfaces), ' ', $object->link(), "\n";
 }
+foreach ([new Demo\Essay(), new Demo\Guide(), new Demo\Both()] as $object) {
+    echo get_parent_class($object), ' ', implode(',', class_uses($object)), ' ',
+        implode(',', (new ReflectionClass($object))->getTraitNames()), ' ',
+        $object instanceof Demo\Both ? $object->describe() : $object->link(), "\n";
+}
 ?>
 --EXPECT--
 Lib\Record Demo\Linkable,Lib\Named /article
 Lib\Shelf Demo\Linkable,Lib\Named /card
+Lib\Document Lib\HasSlug Lib\HasSlug /articles/intro
+Demo\Essay   /articles/setup
+ Demo\Described\Defaults,Demo\Told\Defaults Demo\Described\Defaults,Demo\Told\Defaults described+told

@@ -48,7 +48,9 @@ Every `csharp`, `ts` and `php` block in `docs/spec.md` and `README.md` has a mar
 
 Run lines are PHP# and carry annotations like any other line. They run after the block's own lines, in its `run` method when the block is `statements`, and otherwise in a `run` method of their own. A value, `throws` or message annotation that no run reaches, such as `// throws OutOfRangeException when no argument was passed` on a method's line, fails the check before anything compiles, unless a run line of the same example makes the same claim. Only a run line restates a claim, never another line of the block. `environment` (§29) shows its `throws` this way, and `copy-on-write`, `capture-by-reference` and `capture-and-change` check the values their prose states, such as `a.count();   // 1`.
 
-A run line calls the code whose claim it restates, as `new Deploy(new Environment()).target();` calls `target()`. The checker can't see that: `throw new OutOfRangeException();   // throws OutOfRangeException` would satisfy the same claim. So the review of the pull request that changes a run line checks it.
+Run lines reach a `foreign` object as PHP# code does, through a constructor, since only a module binding creates one (§29). A run line may declare the run class's constructor, as `public ExampleRun(private Deploy deploy) { }`, and the run gets each parameter from `Sharp\Container`, as the container fills a bound class's constructor. The example's module binds the services, and the standard library's module binds `Environment` and the other effect classes. A run class with no constructor parameters is created without its constructor, as before.
+
+A run line calls the code whose claim it restates, as `this.deploy.target();` calls `target()`. The checker can't see that: `throw new OutOfRangeException();   // throws OutOfRangeException` would satisfy the same claim. So the review of the pull request that changes a run line checks it.
 
 The check fails at the run marker's own line when a run comment follows a block that is not its example's last, when its id is not the block's, and when it has no `-->` line before the next fence or comment.
 
@@ -65,6 +67,8 @@ A line goes where the line that starts its construct goes. A construct continues
 
 A file with no `namespace` line gets `namespace App;`, the namespace of the shared setup classes, so the block's names resolve with no imports, as the reader assumes.
 
+Each type then gets a file of its own, as section 27 says a `.sharp` file declares one type. The types of the block, of its setup and the example class each go to the path their namespace and name give, as `app/Store/Cart.sharp` for `App.Store.Cart`, after the file's `namespace` and `import` lines. What is no type, such as an `extern` line or a `module` block, stays with the first type, and a comment above a type goes with it. Each file maps its lines to the spec's, so an error still names the spec's line. A block whose first line is a path comment, such as `// app/Store/Cart.sharp`, keeps every type it writes in that file, as written, so `one-type-per-file` shows its error, and each type its setup alone declares still gets a file of its own. Two files of one example at one path stop the run, since two types of one name are an error in the example itself.
+
 The spec writes `…` for code the reader doesn't need. `sharp/bin/spec` replaces it, as Kotlin's `TODO()` and Rust's `todo!()` stand in for a missing body:
 
 - `{ … }` after a type's header, or after `if`, `else`, `while`, `for`, `do`, `try`, `catch` or `finally`, becomes `{ }`, so a run passes through it.
@@ -72,7 +76,7 @@ The spec writes `…` for code the reader doesn't need. `sharp/bin/spec` replace
 - `(…)` becomes `()`.
 - `match (x) { … }` becomes `match (x) { default => throw new Elided() }`.
 - `Plan plan = …;`, a declaration with its type written, becomes `Plan plan = Elided.value() as Plan ?? throw new Elided();`. PHP# refuses to assign a `throw`, whose type is `never`.
-- A line holding only `…` is dropped.
+- A line holding only `…` that ends a function's body, the braces after a header that is neither a type's nor a control statement's, becomes `throw new Elided();`, as `{ … }` does there, so a body that returns a value still compiles. Any other line holding only `…` is dropped, so a statement after it still runs.
 - Any other `…` becomes `throw new Elided()`.
 
 A line that ends a statement with no `;`, such as `7 / 2`, gets one, and a method signature with no body, such as `public void tag(string label = null)`, gets `{ … }`. So does a signature that ends in `uses` and the names it lists, with or without its `;`, since a class holds no method without a body. That rule served `uses f`, which decision 79 replaced, and sharp/bin/spec drops it in a pull request of its own. A library declaration such as `public List<TResult> map<TResult>(Function<TResult(T)> f)` is written without its `;`, so it gets `{ … }` as any other signature does. A top-level statement that is a bare expression, such as `order == sameOrderLoadedAgain;`, runs as the argument of the call that records values, because the spec writes it to show what it gives, and PHP# refuses a statement with no effect. A top-level `return x;` under `statements`, such as `return PaymentResult.Declined(reason: "card expired");`, runs the same way, since the `run` method returns nothing. Each rewrite keeps the line on its own line, so every line number the checker reports is the spec's.
@@ -157,7 +161,7 @@ A trailing `//` comment on a code line is its annotation. A comment alone on a l
 | Form | Example | Checked |
 |---|---|---|
 | `compiles`, `compiles: …`, `compiles, …`, `compiles; runs: …` | `// compiles: starts as null` | no error on the line |
-| `fits: …`, `accepted: …` | `// fits: StripeClient is declared Http` | no error on the line, or no throw for plain PHP |
+| `fits: …`, `accepted: …` | `// fits: StripeClient is declared Http` | no error on the line, or for plain PHP no throw but an `App\Elided` from a body the spec leaves out |
 | `compile error`, `compile error: …`, `compile error when …`, `compile error outside …`, `compile error, same message` | `// compile error: write the type` | an error on the line |
 | `<words>: compile error` | `// enum case: compile error` | an error on the line |
 | `parse error: …` | `// parse error: let takes no written type` | a parse error on the line |
@@ -185,7 +189,7 @@ A value is a number, `true`, `false`, `null`, a quoted string, or a balanced `[�
 
 **A `throws: "<message>"` is compared exactly.** The spec quotes it, and the message is what a caller of `parse` reads.
 
-**A runtime line runs only when the block compiles.** For a block with `compile error` lines, the run uses the block with those lines blanked, and that file must compile with no error. A value line runs as the argument of a call that records its value. A `throws` line runs inside a `try`, so the lines after it still run.
+**A runtime line runs only when the block compiles.** For a block with `compile error` lines, the run uses the block with those lines blanked, and that file must compile with no error. A value line runs as the argument of a call that records its value. A `throws` line runs inside a `try`, so the lines after it still run. A plain PHP line that claims no error, `compiles`, `fits:` or `accepted:`, runs inside a `try` that takes only `App\Elided`: the call reached a body the spec leaves out, so PHP# took it, as `raw-generic-objects`' `$report->count($page)` does.
 
 ## Setup
 

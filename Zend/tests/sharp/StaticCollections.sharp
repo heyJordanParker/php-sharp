@@ -32,7 +32,7 @@ class Archive
     public static List<string> retitle(string title)
     {
         Archive.titles = ["draft", "notes"];
-        Archive.titles.set(0, title);
+        Archive.titles[0] = title;
         return Archive.titles;
     }
 

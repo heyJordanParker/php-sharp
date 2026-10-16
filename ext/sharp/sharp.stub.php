@@ -14,7 +14,7 @@ final class Collection
 
     public function add(mixed $value): bool {}
 
-    public function set(int $index, mixed $value): void {}
+    public function set(int $index, mixed $value): mixed {}
 
     public function insert(int $index, mixed $value): void {}
 
@@ -38,6 +38,8 @@ final class Collection
 
     public function keys(): array {}
 
+    public function values(): array {}
+
     public function toList(): array {}
 
     public function filter(\Closure $predicate): Map|Set|array {}
@@ -55,6 +57,27 @@ final class Collection
     public function associateBy(\Closure $key): Map {}
 
     public function sortedBy(\Closure $selector): array {}
+}
+
+/**
+ * @strict-properties
+ * @not-serializable
+ */
+final class Sequence implements \IteratorAggregate
+{
+    private function __construct() {}
+
+    public static function from(iterable $source): Sequence {}
+
+    public function filter(\Closure $predicate): Sequence {}
+
+    public function map(\Closure $transform): Sequence {}
+
+    public function take(int $count): Sequence {}
+
+    public function toList(): array {}
+
+    public function getIterator(): \Iterator {}
 }
 
 /** @strict-properties */
@@ -112,7 +135,7 @@ final class Listener
 
 function accepts(string $type, mixed &$value, string $path, array &$problems): bool {}
 
-function &statics(string $class, string $key): array {}
+function &statics(string $class, string $key, ?bool &$created = null): array {}
 
 function keep(string $key, \Closure $compute): mixed {}
 

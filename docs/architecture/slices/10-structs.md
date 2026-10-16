@@ -6,7 +6,7 @@ Spec section 10, with the parts of the sections it leans on: section 16 (object 
 
 **No part of section 10 exists, and none of it compiles silently.** On mago-sharp `master` at `c3a2b5af8`, `struct`, `readonly struct`, an object initializer and `with` are parse errors, `required` on a property is "not supported yet", `[Key(…)]` is an unknown attribute, and `Note.parse(…)` on a class is "Method `Note.parse` does not exist." Section 10's 4 entries in `sharp/baseline/spec` fail on those parse errors.
 
-**The Slice builds it in one mago-sharp PR and one php-sharp PR.** The mago-sharp PR opens once #166 merges, for a struct key in `has`, `keys()` and `remove`. The php-sharp PR follows the collection Slice's engine PR and pins past generics R3c's php-sharp merge, since `parse` checks types through R3c's engine walk. Generic structs are refused whole until generics R3c (Jordan's answer to question 4).
+**The Slice builds it in one mago-sharp PR and one php-sharp PR.** The mago-sharp PR opens once #166 merges, for a struct key in `has`, `keys()` and `remove`. The php-sharp PR follows the collection Slice's engine PR and pins past generics R3c's php-sharp merge, since `parse` checks types through R3c's engine walk. Generic structs are refused whole until generics R3c (Jordan's answer to question 4). The rest of section 11 lifts that refusal: `11-generics-rest.md`, "A generic struct, from section 10".
 
 **Each construct lowers to PHP the engine already runs, plus one engine change:**
 

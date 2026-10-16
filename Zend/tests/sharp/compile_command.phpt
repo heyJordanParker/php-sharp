@@ -90,7 +90,7 @@ line 5: Parse error encountered during parsing
 line 5: Parse error encountered during parsing
 CompileError: Wrong.sharp has 2 errors:
 line 5: PHP# has no `echo`: write `global.printf` or `global.fwrite`.
-line 5: class method `Wrong.run` has already been defined
+line 5: `Wrong.run` is declared twice: a class has one method per name, with no overloading by argument types.
 CompileError: app/Orders/Order.sharp has 3 errors:
 line 12: Invalid return type for method `Order.total`: expected `int`, but found `string`.
 line 19: PHP# has no `echo`: write `global.printf` or `global.fwrite`.

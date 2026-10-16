@@ -138,6 +138,7 @@ $fixtures = [
     'PhpForms' => null,
     'Generics' => null,
     'Operators' => 'harness/Billing.inc',
+    'Traits' => 'harness/Traits.inc',
 ];
 $user_class = '/(?:Class|Enum) \[ <user> /';
 
@@ -180,7 +181,7 @@ Calc: same opcodes and lines in 4 op arrays, same signatures in 1 classes
 Nulls: same opcodes and lines in 17 op arrays, same signatures in 1 classes
 ControlFlow: different opcodes and lines in 6 op arrays, same signatures in 1 classes
   .sharp      ; (lines=25, args=1, vars=4, tmps=13)
-  .sharp L0061 0004 T6 = SHARP_VERIFY_TYPE_ARGS V5 string("Map<int, int>")
+  .sharp L0061 0004 T6 = SHARP_VERIFY_TYPE_ARGS V5 string("List<int>")
   .sharp L0061 0005 V7 = FE_RESET_R T6 0010
   .sharp L0061 0006 FE_FETCH_R V7 CV2($price) 0010
   .sharp L0062 0007 T8 = MUL CV2($price) CV0($factor)
@@ -202,7 +203,7 @@ ControlFlow: different opcodes and lines in 6 op arrays, same signatures in 1 cl
   .sharp L0069 0023 VERIFY_RETURN_TYPE
   .sharp L0069 0024 RETURN null
   .sharp      ; (lines=25, args=1, vars=4, tmps=13)
-  .sharp 0004 T6 = SHARP_VERIFY_TYPE_ARGS V5 string("Map<int, int>")
+  .sharp 0004 T6 = SHARP_VERIFY_TYPE_ARGS V5 string("List<int>")
   .sharp 0005 V7 = FE_RESET_R T6 0010
   .sharp 0006 FE_FETCH_R V7 CV2($price) 0010
   .sharp 0007 T8 = MUL CV2($price) CV0($factor)
@@ -280,7 +281,7 @@ Task: same opcodes and lines in 4 op arrays, same signatures in 1 classes
 Shapes: same opcodes and lines in 5 op arrays, same signatures in 2 classes
 Members: same opcodes and lines in 10 op arrays, same signatures in 1 classes
 Site: same opcodes and lines in 13 op arrays, same signatures in 3 classes
-Collections: different opcodes and lines in 7 op arrays, same signatures in 2 classes
+Collections: different opcodes and lines in 9 op arrays, same signatures in 2 classes
   check  Demo\Cart::fill string("List<Demo.Item>")
   check  Demo\Cart::withPrices string("List<int>, List<int>")
   .sharp     Property [ private Sharp\Map $counts = new \Sharp\Map() ]
@@ -620,6 +621,7 @@ Library: different opcodes and lines in 20 op arrays, same signatures in 1 class
   .php   0002 T2 = CAST (string) CV0($key)
   .php   0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
 Inbox: different opcodes and lines in 9 op arrays, same signatures in 1 classes
+  check  Demo\Inbox::keep string("Any")
   .sharp     Property [ private Sharp\Map $saved = new \Sharp\Map() ]
   .php       Property [ private Sharp\Map $saved ]
 Patterns: different opcodes and lines in 18 op arrays, same signatures in 1 classes
@@ -627,6 +629,8 @@ Patterns: different opcodes and lines in 18 op arrays, same signatures in 1 clas
   check  Demo\Patterns::head string("List<Demo.Figure>?")
   check  Demo\Patterns::ends string("List<Demo.Figure>")
   check  Demo\Patterns::circles string("List<Demo.Figure>")
+  check  Demo\Patterns::listed string("Any")
+  check  Demo\Patterns::rows string("List<Any>")
   .sharp      ; (lines=61, args=1, vars=5, tmps=26)
   .sharp L0098 0007 JMPNZ T5 0047
   .sharp L0099 0019 JMPNZ T5 0049
@@ -2002,5 +2006,6 @@ Operators: different opcodes and lines in 73 op arrays, same signatures in 9 cla
   .php   0001 CV1($value) = RECV 2
   .php   0002 T2 = CAST (string) CV0($key)
   .php   0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+Traits: same opcodes and lines in 8 op arrays, same signatures in 7 classes
 a check: same
 a check and another opcode: different

@@ -64,7 +64,8 @@ static zend_always_inline bool sharp_may_be_table(uint32_t type, const zend_clas
 } while (0)
 
 /* PHP# type texts, the one spelling of a type the bridge prints and the engine reads: `App.Order`, `int?`,
- * `List<App.Order>`, `(int|string)?`, `App.DatabaseEntity & App.Shareable`, `Function<bool(App.Order, int)>`. Each text parses once into an interned
+ * `List<App.Order>`, `(int|string)?`, `App.DatabaseEntity & App.Shareable`, `Function<bool(App.Order, int)>`, `[string, int]`.
+ * Each text parses once into an interned
  * sharp_type, so equal types are one pointer. A type code spells lives for the process. A type first read from input
  * lives for its request, and only a type that lives for the process goes into a run-time cache slot. */
 typedef enum {
@@ -80,6 +81,8 @@ typedef enum {
 	SHARP_TYPE_INTERSECTION,
 	/* `Function<R(P1, P2)>`: the return type, then each parameter type. */
 	SHARP_TYPE_FUNCTION,
+	/* `[A, B]`, spec section 30: each element type, in order. The checker keeps the element names. */
+	SHARP_TYPE_TUPLE,
 } sharp_type_kind;
 
 /* The built-in type a SHARP_TYPE_NAMED type names, so a check of a value reads no text. */
@@ -153,6 +156,11 @@ uint32_t sharp_type_list_names(const char *text, size_t length);
  * `text` names an index the arguments have no member at. */
 const sharp_type *sharp_type_list_of_frame(const zval *text, zend_object *object, const sharp_type *method,
 	bool unresolved, const zend_class_entry *scope, void **cache);
+
+/* The class whose type parameters the `$i` of code `scope` holds count, of `func` when the code is a function's. A
+ * method a class took from a trait is the trait's code, whose op array it shares. The trait of a PHP# interface's
+ * default bodies counts its interface's, which its header names, spec section 22. */
+const zend_class_entry *sharp_type_scope(const zend_class_entry *scope, const zend_function *func);
 
 /* The bad values one check found. The walk adds each one under the path to it, in the order it meets them. */
 typedef struct {

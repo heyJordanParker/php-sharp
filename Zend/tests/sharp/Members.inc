@@ -61,8 +61,8 @@ class Members
     public static function ones(): int
     {
         $count = 0;
-        foreach (Registry::$items as $item) {
-            if ($item === 1) {
+        foreach (Registry::$items as $index => $item) {
+            if (\Sharp\Internal\equals($item, 1)) {
                 $count++;
             }
         }
