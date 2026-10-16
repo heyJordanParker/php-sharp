@@ -93,6 +93,37 @@ $gate->pass("x");    // accepted: PHP refuses the string first
 the run threw TypeError: …
 -->
 
+Run lines reach a `foreign` object the way PHP# code does: a constructor on a run line takes the services a module binds, and the run gets them from the container. Without that rule the run reads a field the constructor never set:
+
+<!-- example run-takes-services -->
+```csharp
+// app/Gauge.sharp
+namespace App;
+
+public class Gauge
+{
+    public Gauge(private Environment environment) { }
+
+    public string tenth() => this.environment.arguments[10];   // throws OutOfRangeException when the run has fewer arguments
+}
+```
+
+<!-- example run-takes-services -->
+```csharp
+// app/Module.sharp
+namespace App;
+
+module
+{
+    transient Gauge = Gauge;
+}
+```
+<!-- run run-takes-services
+public ExampleRun(private Gauge gauge) { }
+this.gauge.tenth();   // throws OutOfRangeException
+-->
+<!-- expect run-takes-services -->
+
 ## 2. Errors and lines
 
 A `compile error` line with no error fails:
