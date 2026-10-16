@@ -72,6 +72,27 @@ line 1 expects a throw of NotFound, and throws App\NotPaid: 7
 line 2 expects a throw with the message "8", and throws App\NotPaid: 7
 -->
 
+A plain PHP line that claims PHP# takes its call holds when the call reaches a body the spec leaves out, whose `…` throws `App\Elided`. Any other throw still stops the run:
+
+<!-- example accepted-elided -->
+```csharp
+public class Gate
+{
+    public int pass(int n) { … }
+}
+```
+
+<!-- example accepted-elided: statements
+$gate = new App\Gate();
+-->
+```php
+$gate->pass(1);      // accepted: the call reaches the elided body
+$gate->pass("x");    // accepted: PHP refuses the string first
+```
+<!-- expect accepted-elided
+the run threw TypeError: …
+-->
+
 ## 2. Errors and lines
 
 A `compile error` line with no error fails:
