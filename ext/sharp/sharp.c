@@ -4619,8 +4619,9 @@ ZEND_FUNCTION(Sharp_Internal_statics)
  * C# compares two Type objects, so `typeof(Box<Order>) == typeof(Box<Invoice>)` is false. A class value with type
  * arguments is the interned class name sharp_class_values knows it by, so it equals only a class value of the same type
  * arguments, though its text is the bare class name. Spec section 24 compares an unchecked `Any?` with `==` here too,
- * so any other two values compare by value, as sharp_equal compares a Map's keys: an int and a float as numbers, a
- * List, a Map or a Set by its elements, and a struct or a class with `operator ==` through it. */
+ * and section 31 a value of a type parameter, as `Result<T, TError>`'s `==` compares its `T` field, so any other two
+ * values compare by value, as sharp_equal compares a Map's keys: an int and a float as numbers, a List, a Map or a Set
+ * by its elements, and a struct or a class with `operator ==` through it. */
 ZEND_FUNCTION(Sharp_Internal_equals)
 {
 	zval *value, *other;
