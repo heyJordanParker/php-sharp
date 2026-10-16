@@ -1,0 +1,6 @@
+namespace App;
+
+public class CheckoutGateway
+{
+    public Result<Order, PaymentError> charge(Cart cart) => Result.Err(PaymentError.Declined("card expired"));
+}

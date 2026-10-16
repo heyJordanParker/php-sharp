@@ -9206,7 +9206,8 @@ static void zend_compile_prop_decl(zend_ast *ast, zend_ast *type_ast, uint32_t f
 	zend_class_entry *ce = CG(active_class_entry);
 	uint32_t i, children = list->children;
 
-	if (ce->ce_flags & ZEND_ACC_ENUM) {
+	/* A PHP# enum may declare a computed property, which has a PHP# type and no storage. */
+	if ((ce->ce_flags & ZEND_ACC_ENUM) && !sharp_type) {
 		zend_error_noreturn(E_COMPILE_ERROR, "Enum %s cannot include properties", ZSTR_VAL(ce->name));
 	}
 
@@ -9241,6 +9242,9 @@ static void zend_compile_prop_decl(zend_ast *ast, zend_ast *type_ast, uint32_t f
 		zval value_zv;
 		zend_type type = ZEND_TYPE_INIT_NONE(0);
 		flags |= zend_property_is_virtual(ce, name, hooks_ast, flags) ? ZEND_ACC_VIRTUAL : 0;
+		if ((ce->ce_flags & ZEND_ACC_ENUM) && !(flags & ZEND_ACC_VIRTUAL)) {
+			zend_error_noreturn(E_COMPILE_ERROR, "Enum %s cannot include properties", ZSTR_VAL(ce->name));
+		}
 
 		zend_string *old_active_property_info_name = CG(context).active_property_info_name;
 		CG(context).active_property_info_name = name;
