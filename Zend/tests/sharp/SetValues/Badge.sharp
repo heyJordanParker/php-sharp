@@ -1,0 +1,8 @@
+namespace SetValues;
+
+public enum Badge
+{
+    case Marked(Set<string> tags);
+    case Counted(Map<string, int> counts);
+    case Blank;
+}
