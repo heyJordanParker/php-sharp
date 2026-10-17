@@ -196,13 +196,17 @@ if $differential; then
 fi
 
 # A PHP# test class runs with its file's test module under real PHPUnit, at the version sharp/phpunit/composer.lock
-# pins: in PHPUnit's own process, in the child process of #[RunInSeparateProcess], and with every test in a child.
+# pins: in PHPUnit's own process, in the child process of #[RunInSeparateProcess], and with every test in a child. The
+# compile starts from nothing compiled, with the fixture's extension host, which loads vendor/autoload.php on the
+# engine. composer run-script runs post-autoload-dump with no flags.
 check_phpunit() {
   local project="$root/sharp/phpunit" isolation
   echo "== a PHP# test class under PHPUnit, in sharp/phpunit"
+  rm -rf "$project/.sharp"
   if ! composer install --no-interaction --no-progress --quiet --working-dir="$project" \
-    || ! "$mago" --no-version-check --colors never --workspace "$project" compile; then
-    failed+=("the PHPUnit fixture's install and compile")
+    || ! composer run-script --no-interaction post-autoload-dump --working-dir="$project" \
+    || ! PATH="$(dirname "$php"):$PATH" "$mago" --no-version-check --colors never --workspace "$project" compile; then
+    failed+=("the PHPUnit fixture's install, post-autoload-dump and compile")
     return
   fi
   for isolation in "" --process-isolation; do
