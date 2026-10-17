@@ -1,6 +1,8 @@
 # 34. Output and exit
 
-Superseded in part by [decision 76](076-plain-php-functions.md): a bare call such as `fwrite(…)`, `exit(1)` or `printf(…)` below is a compile error, and the call is written `global.exit(1)`. A bare `STDERR` or `PHP_EOL` is a compile error too, and the constant is written `global.STDERR`. A statement after `global.exit(1)` in its block never runs, which [decision 77](077-unreachable-statements.md) makes a compile error. The standard library's effect classes (spec section 29) now carry output and exit, so the error for `echo` and `print` names `console.write(text)`, the error for `die` names `console.writeError(text)`, then `process.exit(1)`, and the error for a bare `exit(1)` names `process.exit(…)`.
+Superseded in part by [decision 76](076-plain-php-functions.md): a bare call such as `fwrite(…)`, `exit(1)` or `printf(…)` below is a compile error. A bare `STDERR` or `PHP_EOL` is a compile error too, and the constant is written `global.STDERR`. A statement after a call that never returns never runs, which [decision 77](077-unreachable-statements.md) makes a compile error.
+
+Superseded in part by [decision 80](080-global-calls-of-replaced-functions.md): outside the standard library, the call through `global`, as `global.exit(1)` or `global.printf(…)`, is a compile error too. The standard library's effect classes (spec section 29) carry output and exit, so each error names the member to write: `console.write(…)` for `printf`, `console.write(…)` or `console.writeError(…)` for `fwrite`, and `process.exit(…)` for `exit`. The error for `echo` and `print` names `console.write(text)`, and the error for `die` and `global.die` names `console.writeError(text)`, then `process.exit(1)`.
 
 ## Decision
 

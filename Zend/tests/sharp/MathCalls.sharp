@@ -26,6 +26,8 @@ class MathCalls
 
     public static int minOf(int first, List<int> rest) => Math.min(first, ...rest);
 
+    public static int maxOfNone(int first) => Math.max(first, ...[]);
+
     public static int maxOne(int only) => Math.max(only);
 
     public static int minOne(int only) => Math.min(only);

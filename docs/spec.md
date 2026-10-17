@@ -492,11 +492,13 @@ public class Receipt
     public int larger(int a, int b) => Math.max(a, b);                      // compiles
     public string body(Map<string, Any> payload) => Json.encode(payload);   // compiles
     public string raw(string name) => trim(name);                           // compile error: write name.trim()
+    public string rawGlobal(string name) => global.trim(name);              // compile error: write name.trim()
 }
 ```
 
 - **Every PHP built-in function is a standard library method,** so calling one by its bare name from `.sharp` code is a compile error that names the method. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
-- **A built-in the standard library has no method for is called through PHP's root namespace,** as `global.levenshtein(a, b)` (section 23), and the standard library calls PHP the same way.
+- **A built-in the standard library has no method for is called through PHP's root namespace,** as `global.levenshtein(a, b)` (section 23).
+- **A built-in the standard library has a method for is reached only through that method.** Outside the standard library, `global.trim(name)` is a compile error that names `name.trim()`, as the bare call is, and so is the value `global.trim`, as in `names.map(global.trim)`. The standard library's own methods call PHP through `global`, and a built-in PHP# syntax replaces keeps its `global.` call, as `global.strval(1)`.
 - **PHP's constants are read through its root namespace too,** as `global.PHP_EOL` (section 23). A bare `PHP_EOL` is a compile error, because a bare uppercase name is always the code's own constant.
 
 **Output and exit go through the standard library.** `echo` and `print` are removed, and output goes through `Console` (section 29). `die` is removed, because `die("…")` prints its message and exits with status 0, which reports success. Exiting goes through `Process`.

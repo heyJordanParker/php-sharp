@@ -6,7 +6,7 @@ The running program carries every type argument, as decisions 7 and 29 require. 
 
 A method value of a generic method takes its type arguments from the parameter types of the function type it goes into, as C#'s method group conversion does, and one that nothing fixes is a compile error, as C#'s CS0411 is.
 
-A union is refused only where the engine can't tell two members apart: a type written twice, two of `List`, `Map` and `Set`, which share PHP's one array kind, or a collection beside an `Iterable` of its element type.
+A union of two generic classes, or of one class with other type arguments, compiles, since the engine tells them apart. A union is refused where it holds one type twice: a type written twice, two function types, which all run as one closure, or a collection beside an `Iterable` of its element type. Two of `List`, `Map` and `Set` are refused too, because a type is one collection, as in C#, Java, Kotlin and Swift, and a value that may be either kind still runs every method both have (spec section 12).
 
 A call site keeps a type list the request made in its run-time cache, as it keeps one the process holds, because every user run-time cache lives for one request.
 

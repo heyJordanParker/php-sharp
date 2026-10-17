@@ -101,7 +101,7 @@ Three findings shape the work more than the code does:
 
 8. **What decision 7 took away comes back** (team-lead, Queue 2):
    - **Every method a `List` shares with a `Map` or a `Set` runs on a value that may be either** (team-lead, Queue 3), as `let held = listed ? names : stock; held.remove("tea");` does. A `List`'s `count` is PHP's `\count`, which counts a `Map` and a `Set` too. `remove`, `contains` and `clear` test the value: `(\is_array($held) ? <the List's PHP> : $held->remove("tea"))`. Every other shared method already ran on the collection the value holds. The "not supported by the engine yet" refusal is gone. A value that may also be an object is refused as `invalid-method-access`, "`List<int>|Box` may be a collection or an object, and `count` runs a different method on each."
-   - **A declared `List<int>|Map<string, int>` stays refused** (team-lead, Queue 4), as C#, Java, Kotlin and Swift have no such union, in words that name no PHP: "A type can't be both a `List<int>` and a `Map<string, int>`.", with "Take the `List<int>` and the `Map<string, int>` as two parameters, or as an enum with one case that holds each." `a_union_of_two_collections_or_two_function_types_is_a_type_written_twice` and `a_union_refuses_only_members_the_engine_cannot_tell_apart` pin it, and section 24 line 3023 says the same.
+   - **A declared `List<int>|Map<string, int>` stays refused** (team-lead, Queue 4), as C#, Java, Kotlin and Swift have no such union, in words that name no PHP: "A type can't be both a `List<int>` and a `Map<string, int>`.", with "Take the `List<int>` and the `Map<string, int>` as two parameters, or as an enum with one case that holds each." `a_union_of_two_collections_or_of_two_function_types_is_refused` and `a_union_refuses_a_type_written_twice_two_collections_and_a_collection_beside_its_iterable` pin it, and section 24 line 3023 says the same.
    - **`count` on an empty value with no collection type,** an empty literal the semantic checks refuse or an emptied plain PHP array property, is a `List`'s `count`, typed `int`.
    - **A method call on an unchecked `Any` is refused once:** `mixed-method-access` only, its result refused, so a return or an operator that uses it reports nothing more.
    - **A `List<int>` has `max()` and `min()`,** declared in `Sharp\Internal\ListMethods` beside `sumOf` with `@where T is int`, and lowered as `last()` is: `($list === [] ? throw new \OutOfRangeException("The list is empty.") : \max($list))`. A list of another element type reads "`max` needs elements of type `int`, and this is a `List<string>`." `Tally.sharp` writes `Pager.sizes().max()`.
@@ -109,10 +109,21 @@ Three findings shape the work more than the code does:
 
 9. **#151's effect rows and the environment rows** (team-lead, Queue 6):
    - **#151's rows join decision 7's check unchanged.** `global.printf("x")`, `global.exit(1)`, `global.time()` and `global.file_put_contents(path, text)` name `console.write(…)`, `process.exit(…)`, `clock.now()` and `files.write(…)` or `files.append(…)`, as their bare calls do. A project without the standard library has no member to name, so its `global.exit(1)` still compiles.
-   - **The `global.exit` status check is gone.** Every `global.exit(…)` outside the standard library gets the bare `exit`'s message, so `global.exit("failed")` names `process.exit(…)` once instead of being refused twice. Inside the library, `Process.exit(int code)` types the status. `global.die` keeps its own refusal, with the note "`global.die("…")` prints the message and exits with status 0, which reports success."
+   - **The `global.exit` status check is gone.** Every `global.exit(…)` outside the standard library gets the bare `exit`'s message, so `global.exit("failed")` names `process.exit(…)` once instead of being refused twice. Inside the library, `Process.exit(int code)` types the status. `global.die` keeps its own refusal, `wrapped-function` at "Called here." as every `global.` refusal, with the bare `die`'s note "`die("…")` prints the message and exits with status 0, which reports success."
    - **Section 6 line 262** initializes a static with `[10, 25].map(size => size * 2)`. **Section 7 line 459** lists `return`, `throw`, `break`, `continue` and a call that never returns, and gives `if (throw new ValueError("empty"))` as a condition that never finishes. `process.exit(…)` joins them when the singles PR makes it a `never` method (Jordan answer 4).
    - **`Environment` gains `Map<string, string> variables()`,** which reads every variable on each call, for `getenv()` with no name, which `global.` no longer reaches. `getenv` names `environment.variable(…)` or `environment.variables()`, `apache_getenv` names `environment.variable(…)`, `apache_setenv` names `environment.setVariable(…)`, and `getopt` names `environment.arguments`. A row names a property with `$`, as `$arguments`. A read of `$argv` names `environment.arguments`, and `$argc` names `environment.arguments.count()`. A parameter named `$argv` reads nothing, so it keeps "PHP# variables have no `$`: write `argv`."
    - **The observer and override fixtures trace through `Lib\Witness::say`,** because a static's hook has no object to hold a `Console`. `Exits` and `PhpForms` take a `Console` and a `Process`.
+
+10. **#157's review** (team-lead, Queue 7), with the reviewer's probes as rows:
+   - **A replaced function read as a value names its member.** `names.map(global.trim)` reads "`trim` is wrapped by the standard library: write `x.trim()`.", with "Pass a lambda that makes the call in its place." `analyze_namespace_constant` asks `report_replaced_function_value`, which shares `replaced_global_refusal` with the `global.` call. A refused read is typed as refused, so the call it is given to reports nothing more. `global.strlen` and `global.strval` keep "is a plain PHP function, not a constant".
+   - **A collection function's form fits the kind it is given.** Both refusals run after the call's arguments are analyzed. A `CollectionMethod` row lists its method per group of kinds, as `in_array`'s `{b}.contains({a})` on a `List` or a `Set` and `{b}.values().contains({a})` on a `Map`, and `end`'s `{a}.values().last()` on a `Map`. A collection of a kind the row names gets its method with the call's arguments: `in_array(item, stock)` on a `Map` names `stock.values().contains(item)`. A kind with no method, or no known kind, names each group on `x`, as `` `x.indexOf(…)` on a `List` ``, so the user's variable never goes into another kind's method.
+   - **An argument that is no name is written `…`,** as `member_form` writes it, and a call with an argument the method drops writes none of its arguments: `count(names, 1)` names `x.count()`, and `array_push(names, "a", "b")` names `x.add(…)`.
+   - **A method one kind of a collection value lacks is one error.** `held.contains("tea")` on a `List`-or-`Map` value reports `non-existent-method` once, and `MethodResolutionResult::lacks_collection_method` types the call as refused, so no "Could not infer" follows.
+   - **`Process.exit` throws `ValueError` for a code outside 0 to 254,** "Process.exit: the code 255 is not from 0 to 254", since PHP keeps 255 for its fatal errors.
+   - **`@global.trim(name)` reports both errors in one run.** The semantic checks no longer refuse `@`. The analyzer's `silence-outside-library` refuses it in every file outside the standard library, the only check that knows a file's package, and it leaves the line's other refusals reported.
+   - **`Math.max(0, ...[])` gives 0.** An empty list adds no element to a spread, so it is neither "a value of type `never`" nor a value that is no list.
+   - **`apache_getenv(name);` gets no "pure function" note,** since its `extern` in `Builtins.sharp` declares `uses Environment`. In a `.sharp` file, a function whose `extern` declares an effect is never a pure call whose result goes unused. PHP's own stub, which calls it pure, stays as it is for plain PHP.
+   - **Decision 80 records the `global.` refusal.** Decisions 34, 43, 63, 76 and 77 are superseded by it in part, and decision 72's union line names why two collections are refused. Spec section 8 states the refusal under line 499, and `standard-library-calls` writes `rawGlobal`.
 
 ## Answers
 
@@ -221,41 +232,53 @@ Each is outside section 8 and blocks none of its rules.
 - **`<` and `>` on an unbounded type parameter compile, and run PHP's comparison (sections 11 and 19).** `public static T of<T>(T a, T b) => a > b ? a : b;` compiles. `Larger.of("10", "9")` gives `"10"`, where section 19 line 2118 orders `"10"` before `"9"`, and PHP# itself gives `true` for `"10" < "9"`. `Larger.of(a, b)` on a class with no `operator <=>` compiles and runs, while `a < b` on that class is refused with "`<` cannot compare `Larger` with `Larger`: `Larger` declares no `operator <=>`."
 - **A `float` passed to an `int` parameter gets mago's generic wording (section 24).** `float largerFloat(float a, float b) => Math.max(a, b)` with decision 1's `max` reports "Possible argument type mismatch … expected `int`, but possibly received `float`. The provided type `float` overlaps with `int` but is not fully contained." for each argument, then "`int` is not `float`: convert with (float) Math.max(a, b)".
 - **A non-negative `int` parameter is named as `int` (section 24).** `global.str_repeat("x", items.count())` reports "Possible argument type mismatch for argument #2 of `global.str_repeat`: expected `int`, but possibly received `int`.", because `str_repeat` takes `int<0, max>` and the message prints both as `int`.
-- **Decision 76 says "The standard library calls PHP the same way, with no exemption."** Since decision 7, the standard library is the one place a `global.` call of a replaced function compiles.
+- **A partial application of a plain PHP function is "not supported yet", and the line after it reports again (section 8 with #155).** `const counter = global.count(...); return counter(items);` gets "This expression is not supported yet in PHP#." on the first line, then "Could not infer a precise return type for method `Reach.partial`. Saw type `Any?`." on the return. Probe: `review-output/p/app/Reach.sharp` lines 19 and 20.
 
 ## Files
 
 ```text
 docs/
 ├── architecture/slices/08-functions.md                          new: this note
-└── spec.md                                                      sections 6, 7, 12, 24 and 29 (decisions 7, 8 and 9)
+├── architecture/slices/24-built-in-types.md                     json_encode is the library's call (decision 10)
+├── decisions/080-global-calls-of-replaced-functions.md          new: the global. refusal (decision 10)
+├── decisions/034, 043, 063, 076, 077                            superseded in part by decision 80 (decision 10)
+├── decisions/072-reified-generics.md                            why two collections are refused (decision 10)
+└── spec.md                                                      sections 6, 7, 8, 12, 24 and 29 (decisions 7, 8, 9 and 10)
 sharp/
 ├── baseline/spec/§7/variadic-parameters                         deleted (decision 5)
 ├── baseline/spec/§8/standard-library-calls                      deleted (decision 5)
 ├── composer/library/Sharp/Math/Math.sharp                       max and min (decision 1)
 ├── composer/library/Sharp/Environment.sharp                     variables() (decision 9)
+├── composer/library/Sharp/Process.sharp                         exit takes a code from 0 to 254 (decision 10)
 └── mago/
     ├── crates/analyzer/
-    │   ├── src/expression/call/function_call.rs                 REPLACEMENTS rows; Replacement::CollectionMethod; the global. refusal; a property member; no exit status check (decisions 2, 3, 7, 8, 9)
+    │   ├── src/expression/call/function_call.rs                 REPLACEMENTS rows; Replacement::CollectionMethod by kind; the global. refusal after the arguments; a property member; no exit status check (decisions 2, 3, 7, 8, 9, 10)
+    │   ├── src/expression/call/pipe.rs                          resolve_targets takes no arguments (decision 10)
+    │   ├── src/expression/constant_access.rs                    a replaced function read as a value names its member (decision 10)
+    │   ├── src/expression/unary.rs                              the comment on @ (decision 10)
+    │   ├── src/effects/mod.rs, src/effects/summary.rs           extern_of reachable from the crate; two comment examples that still compile (decision 10)
+    │   ├── src/invocation/arguments.rs                          an empty list adds nothing to a spread (decision 10)
+    │   ├── src/statement/mod.rs                                 a call whose extern declares an effect is never unused (decision 10)
     │   ├── src/statement/mod.rs, src/statement/loop/mod.rs, src/context/scope/loop_scope.rs  a throw as the example of a condition that never finishes (decision 9)
-    │   ├── src/expression/call/method_call.rs                   no refusal on several collections; the object one in PHP# words; a call on an Any refused once (decision 8)
+    │   ├── src/expression/call/method_call.rs                   no refusal on several collections; the object one in PHP# words; a call on an Any refused once; a method one kind lacks refused once (decisions 8 and 10)
     │   ├── src/expression/mod.rs                                a list pattern's own count call stays unreported
-    │   ├── src/resolver/method.rs                               count on an empty value; the PHP# words of a @where refusal (decision 8)
-    │   └── tests/sharp.rs                                       a row per new REPLACEMENTS row, the global. test, the decision 8 tests, sources moved to members
+    │   ├── src/resolver/method.rs                               count on an empty value; the PHP# words of a @where refusal; lacks_collection_method (decisions 8 and 10)
+    │   └── tests/sharp.rs                                       a row per new REPLACEMENTS row, the global. test, the decision 8 and 10 tests, sources moved to members
     ├── crates/names/src/lib.rs                                  INLINED_COLLECTION_METHODS gains List max and min (decision 8)
     ├── crates/prelude/assets/extensions/sharp.php               ListMethods max() and min() (decision 8)
     ├── crates/sharp-bridge/src/lower.rs                         max and min lowered as last is; a shared List method tests for the List (decision 8)
     ├── crates/sharp-bridge/src/lower/types.rs                   list_method_on_several_collections (decision 8)
-    ├── crates/semantics/src/internal/checker/sharp.rs           $argv and $argc name Environment's arguments (decision 9)
-    ├── crates/semantics/tests/sharp.rs                          the $argv and $argc test (decision 9)
+    ├── crates/semantics/src/internal/checker/sharp.rs           $argv and $argc name Environment's arguments (decision 9); no @ refusal, and the die note and union comments (decision 10)
+    ├── crates/semantics/tests/sharp.rs                          the $argv and $argc test (decision 9); the @ and union tests (decision 10)
     ├── crates/semantics/tests/fixtures/slice/                   Report.sharp and Suit.sharp moved to members (decisions 7 and 9)
     ├── crates/sharp-bridge/tests/lower.rs                       sources moved to members (decision 7); max and min (decision 8); global.exit lowered from a standard library file (decision 9)
-    └── tests/sharp.rs                                           @global.strtoupper in place of @global.trim (decision 7)
+    └── tests/sharp.rs                                           @global.strtoupper in place of @global.trim (decision 7); @ beside the call it silences (decision 10)
 Zend/tests/sharp/
-├── MathCalls.sharp                                              calls max and min
+├── MathCalls.sharp                                              calls max and min, and spreads []
 ├── library_math.phpt                                            the max and min rows
 ├── library_math.inc                                             new: the preload script
 ├── library_math_preload.phpt                                    new: the same rows, preloaded
+├── effect_console_process.phpt                                  Process.exit refuses a code outside 0 to 254 (decision 10)
 ├── CollectionMethods/Pantry.sharp, collection_methods*.{inc,phpt}  max, min, and count, remove, contains and clear on a List or another collection (decision 8)
 ├── environment.phpt                                             variables() (decision 9)
 ├── harness/Witness.inc                                          say(), for the hook fixtures (decision 9)

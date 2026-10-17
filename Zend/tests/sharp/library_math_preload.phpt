@@ -20,7 +20,7 @@ var_dump(class_exists(Demo\MathCalls::class, false), class_exists(Sharp\Math\Mat
 use Demo\MathCalls;
 
 var_dump(MathCalls::max(2, 7), MathCalls::max(-3, -9), MathCalls::min(2, 7), MathCalls::min(-3, -9));
-var_dump(MathCalls::maxOf(0, [900, 2900]), MathCalls::maxOf(0, []), MathCalls::maxOf(0, [-5]));
+var_dump(MathCalls::maxOf(0, [900, 2900]), MathCalls::maxOf(0, []), MathCalls::maxOf(0, [-5]), MathCalls::maxOfNone(0));
 var_dump(MathCalls::minOf(1000, [900, 2900]), MathCalls::minOf(0, []), MathCalls::minOf(0, [-5]));
 var_dump(MathCalls::maxOne(4), MathCalls::minOne(-4));
 ?>
@@ -32,6 +32,7 @@ int(-3)
 int(2)
 int(-9)
 int(2900)
+int(0)
 int(0)
 int(0)
 int(900)
