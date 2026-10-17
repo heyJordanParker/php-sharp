@@ -7,6 +7,7 @@ use mago_database::file::File;
 use mago_php_version::PHPVersion;
 use mago_reporting::Issue;
 use mago_span::HasSpan;
+use mago_span::Span;
 use mago_syntax::cst::*;
 use mago_syntax::dialect::Dialect;
 use mago_syntax::error::ParseError;
@@ -492,40 +493,63 @@ fn php_keeps_refusing_an_arrow_after_a_method_or_a_property() {
     }
 }
 
-/// `required` on a method is spec syntax outside the slice, and `via` on a constructor parameter is section 9's error.
-/// Each one is a single error where it starts, and the class around it still parses.
+/// Spec section 9: a constructor parameter's property takes its accessors, then its behaviors, then its default, as a
+/// property in the class body does. A behavior after a comma is a type alone, generic or not, followed by `,`, `)` or
+/// `=`, so the next parameter, which writes a name after its type, still parses.
+#[test]
+fn a_parameter_default_follows_its_accessors_and_behaviors() {
+    let code = "class Report\n{\n    public Report(public string raw { get; } = \"\", public int id { get; set; } via Tracked, Logged<Map<string, int>> = 1, public string tag { get; set; } via Trimmed, List<int> other) {}\n}\n";
+    let arena = LocalArena::new();
+    let program = parse(&arena, "src/Report.sharp", code);
+
+    assert!(program.errors.is_empty(), "{:#?}", program.errors);
+    let Some(Statement::Class(class)) = program.statements.first() else {
+        panic!("expected a class, got {:#?}", program.statements);
+    };
+    let Some(ClassLikeMember::Method(constructor)) = class.members.first() else {
+        panic!("expected the constructor");
+    };
+    let parameters: Vec<_> = constructor.parameter_list.parameters.iter().collect();
+    let written = |span: Span| &code[span.start.offset as usize..span.end.offset as usize];
+
+    let behaviors = |index: usize| {
+        parameters[index]
+            .behaviors
+            .iter()
+            .flat_map(|list| list.behaviors.iter())
+            .map(|hint| written(hint.span()))
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(parameters.len(), 4);
+    assert_eq!(parameters[0].default_value.as_ref().map(|default| written(default.value.span())), Some("\"\""));
+    assert_eq!(behaviors(1), ["Tracked", "Logged<Map<string, int>>"]);
+    assert_eq!(parameters[1].default_value.as_ref().map(|default| written(default.value.span())), Some("1"));
+    assert_eq!(behaviors(2), ["Trimmed"]);
+    assert_eq!(written(parameters[3].variable.span()), "other");
+}
+
+/// `required` on a method is spec syntax outside the slice: a single error where it starts, and the class around it
+/// still parses.
 #[test]
 fn spec_syntax_outside_the_slice_is_one_not_supported_error_where_it_starts() {
-    for (member, message, start) in [
-        ("public required int count() { return 1; }", "`required` is not supported yet in PHP#.", "required"),
-        (
-            "public Report(public int id { get; } via Tracked, int other) {}",
-            "Declare `id` in the class body to give it `via`: a member declared on a constructor parameter takes access levels and attributes only.",
-            "via",
-        ),
-    ] {
-        let arena = LocalArena::new();
-        let code: &'static str = Box::leak(
-            format!("class Report\n{{\n    {member}\n\n    public int run() {{ return 1; }}\n}}\n").into_boxed_str(),
-        );
-        let program = parse(&arena, "src/Report.sharp", code);
+    let arena = LocalArena::new();
+    let code =
+        "class Report\n{\n    public required int count() { return 1; }\n\n    public int run() { return 1; }\n}\n";
+    let program = parse(&arena, "src/Report.sharp", code);
 
-        let [error] = program.errors else {
-            panic!("expected one error for `{member}`, got {:#?}", program.errors);
-        };
-        assert_eq!(error.to_string(), message, "{member}");
-        assert_eq!(source(code, error), start, "{member}");
-        let Some(Statement::Class(class)) = program.statements.first() else {
-            panic!("expected a class for `{member}`, got {:#?}", program.statements);
-        };
-        assert!(
-            class
-                .members
-                .iter()
-                .any(|member| matches!(member, ClassLikeMember::Method(run) if run.name.value == b"run")),
-            "the class keeps parsing after `{member}`"
-        );
-    }
+    let [error] = program.errors else {
+        panic!("expected one error, got {:#?}", program.errors);
+    };
+    assert_eq!(error.to_string(), "`required` is not supported yet in PHP#.");
+    assert_eq!(source(code, error), "required");
+    let Some(Statement::Class(class)) = program.statements.first() else {
+        panic!("expected a class, got {:#?}", program.statements);
+    };
+    assert!(
+        class.members.iter().any(|member| matches!(member, ClassLikeMember::Method(run) if run.name.value == b"run")),
+        "the class keeps parsing after `required`"
+    );
 }
 
 /// Spec section 6.4: a property names its behaviors after its accessors, `via` and types separated by commas, which
@@ -903,6 +927,10 @@ fn a_sharp_parse_error_shows_its_message_as_the_issue_title() {
         (
             "class Report\n{\n    public void run() { match (status) { Status.Open when strict ? forced : ready => {}, default => {}, } }\n}\n",
             "A `? :` in a `when` condition needs parentheses, as in `when (strict ? forced : ready) =>`.",
+        ),
+        (
+            "class Report\n{\n    public Report(public string raw = \"\" { get; }) { }\n}\n",
+            "A parameter's default comes last: write it after the accessors, as in `public string raw { get; } = \"\"`.",
         ),
     ] {
         let arena = LocalArena::new();
@@ -2844,7 +2872,7 @@ fn statement_expression<'arena>(program: &'arena Program<'arena>, n: usize) -> &
 
 #[test]
 fn a_lambda_with_an_expression_body_is_an_arrow_function_without_fn() {
-    const CODE: &str = "class Report\n{\n    void run()\n    {\n        lines.filter(l => !l.refunded);\n        const add = (a, b) => a + b;\n        const check = (Order order, int minimum = 1) => order.total >= minimum;\n        const one = () => 1;\n    }\n}\n";
+    const CODE: &str = "class Report\n{\n    void run()\n    {\n        lines.filter(l => !l.refunded);\n        const add = (a, b) => a + b;\n        const check = (Order order, int minimum = 1) => order.total >= minimum;\n        const one = () => 1;\n        const keyword = match => 1;\n    }\n}\n";
     let arena = LocalArena::new();
     let program = parse(&arena, "src/Report.sharp", CODE);
 
@@ -2853,7 +2881,7 @@ fn a_lambda_with_an_expression_body_is_an_arrow_function_without_fn() {
         panic!("expected `lines.filter(…)`, got {:#?}", method_body(program));
     };
     let mut lambdas = vec![filter.argument_list.arguments.first().expect("one argument").value()];
-    lambdas.extend((1..4).map(|n| statement_expression(program, n)));
+    lambdas.extend((1..5).map(|n| statement_expression(program, n)));
 
     /// A parameter's name and type.
     type Parameter<'a> = (&'a str, Option<&'a str>);
@@ -2890,6 +2918,8 @@ fn a_lambda_with_an_expression_body_is_an_arrow_function_without_fn() {
                 "order.total >= minimum"
             ),
             ("() => 1", vec![], "=>", "1"),
+            // A keyword reads as the lone parameter's name, which the checker refuses with a message that names it.
+            ("match => 1", vec![("match", None)], "=>", "1"),
         ]
     );
 }
@@ -3987,6 +4017,86 @@ fn super_without_a_dot_is_a_name() {
     assert_eq!(bare_name(expression(statement)), b"super");
 }
 
+/// `@` directly before a name makes a keyword a name, spec section 2, as C#'s `@class` does. The name spans the `@` and
+/// holds the word after it, so `@event` is the name `event`, and `@super` never reads as the parent class. `@this` keeps
+/// its `@`, so the name differs from the object `this`. Any other `@` stays an operator, which the checker refuses.
+#[test]
+fn an_at_before_a_letter_is_a_name() {
+    const CODE: &str = "class Page\n{\n    public int label(int @event)\n    {\n        const @class = @event;\n        const @this = @super.label;\n        return @(@this);\n    }\n}\n";
+    let arena = LocalArena::new();
+    let program = parse(&arena, "src/Page.sharp", CODE);
+
+    assert!(program.errors.is_empty(), "{:#?}", program.errors);
+    let Some(ClassLikeMember::Method(method)) = class_members(program).first() else {
+        panic!("expected a method, got {:#?}", class_members(program));
+    };
+    let parameter = method.parameter_list.parameters.first().expect("a parameter");
+    assert_eq!(parameter.variable.name, b"event");
+    assert_eq!(source(CODE, &parameter.variable), "@event");
+    let [
+        Statement::LocalDeclaration(class),
+        Statement::LocalDeclaration(this),
+        Statement::Return(Return { value: Some(silenced), .. }),
+    ] = method_body(program)
+    else {
+        panic!("expected two locals and a return, got {:#?}", method_body(program));
+    };
+    let (LocalTarget::Name(class_name), LocalTarget::Name(this_name)) = (&class.target, &this.target) else {
+        panic!("expected two named locals, got {:#?} and {:#?}", class.target, this.target);
+    };
+    assert_eq!((class_name.value, source(CODE, class_name)), (b"class".as_slice(), "@class"));
+    assert_eq!(bare_name(class.value), b"event");
+    assert_eq!((this_name.value, source(CODE, this_name)), (b"@this".as_slice(), "@this"));
+    let Expression::Access(Access::Property(label)) = this.value else {
+        panic!("expected a property read, got {:#?}", this.value);
+    };
+    assert_eq!(bare_name(label.object), b"super");
+    let Expression::UnaryPrefix(UnaryPrefix { operator: UnaryPrefixOperator::ErrorControl(_), operand }) = silenced
+    else {
+        panic!("expected `@` before parentheses, got {silenced:#?}");
+    };
+    let Expression::Parenthesized(parenthesized) = operand else {
+        panic!("expected parentheses, got {operand:#?}");
+    };
+    assert_eq!(bare_name(parenthesized.expression), b"@this");
+}
+
+/// A name before `:` in a call is never the object a method runs on, so the PHP# named argument `this:` names the
+/// parameter `@this`, as `@this:` does, and `class:` names `@class`. A plain PHP call keeps the name it writes.
+#[test]
+fn a_named_argument_this_names_the_parameter_at_this() {
+    let names = |arguments: &ArgumentList| -> Vec<Vec<u8>> {
+        arguments
+            .arguments
+            .iter()
+            .map(|argument| match argument {
+                Argument::Named(named) => named.name.value.to_vec(),
+                Argument::Positional(positional) => panic!("expected a named argument, got {positional:#?}"),
+            })
+            .collect()
+    };
+
+    let arena = LocalArena::new();
+    let code = "class Page\n{\n    public void run() { this.label(this: 1, @this: 2, class: 3); }\n}\n";
+    let program = parse(&arena, "src/Page.sharp", code);
+    assert!(program.errors.is_empty(), "{:#?}", program.errors);
+    let Expression::Call(Call::Method(call)) = statement_expression(program, 0) else {
+        panic!("expected `this.label(…)`, got {:#?}", method_body(program));
+    };
+    assert_eq!(names(&call.argument_list), [b"@this".to_vec(), b"@this".to_vec(), b"class".to_vec()]);
+
+    let code = "<?php label(this: 1, class: 2);\n";
+    let program = parse(&arena, "src/Page.php", code);
+    assert!(program.errors.is_empty(), "{:#?}", program.errors);
+    let Some(Statement::Expression(statement)) = program.statements.get(1) else {
+        panic!("expected a call, got {:#?}", program.statements);
+    };
+    let Expression::Call(Call::Function(call)) = statement.expression else {
+        panic!("expected `label(…)`, got {:#?}", statement.expression);
+    };
+    assert_eq!(names(&call.argument_list), [b"this".to_vec(), b"class".to_vec()]);
+}
+
 /// `required` on a constructor is a modifier, spec section 25, and stays a name elsewhere. The parser keeps its own
 /// "not supported yet" error for `required` on any other member.
 #[test]
@@ -4353,14 +4463,16 @@ fn yield_spread_produces_every_element_of_another_iterable() {
 
 #[test]
 fn a_name_before_an_arrow_after_yield_is_a_lambda() {
-    const CODE: &str = "class Report\n{\n    Iterable<Function<int(int)>> all()\n    {\n        yield x => x;\n        yield \"key\" => 1;\n        yield from rows;\n    }\n}\n";
+    const CODE: &str = "class Report\n{\n    Iterable<Function<int(int)>> all()\n    {\n        yield x => x;\n        yield \"key\" => 1;\n        yield from rows;\n        yield true => 1;\n    }\n}\n";
     let arena = LocalArena::new();
     let program = parse(&arena, "src/Report.sharp", CODE);
 
     assert!(program.errors.is_empty(), "{:#?}", program.errors);
-    let [lambda, pair, from] = method_body(program) else {
-        panic!("expected three statements, got {:#?}", method_body(program));
+    let [lambda, pair, from, literal] = method_body(program) else {
+        panic!("expected four statements, got {:#?}", method_body(program));
     };
+    // A literal keyword is a value, so `true =>` is a key and its value.
+    assert!(matches!(expression(literal), Expression::Yield(Yield::Pair(_))), "{literal:#?}");
     let Expression::Yield(Yield::Value(YieldValue { value: Some(Expression::ArrowFunction(lambda)), .. })) =
         expression(lambda)
     else {

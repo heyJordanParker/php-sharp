@@ -1,0 +1,18 @@
+namespace ParameterDefaults;
+
+public class Stamp
+{
+    public static int seeds { get; private set; } = 0;
+
+    public Stamp(public int value { get; }) { }
+
+    public static int seed()
+    {
+        Stamp.seeds += 1;
+        return 40 + Stamp.seeds;
+    }
+
+    private static int secret() => 7;
+
+    public static int hidden(int value = Stamp.secret()) => value;
+}

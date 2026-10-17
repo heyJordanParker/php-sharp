@@ -6,7 +6,7 @@ Superseded in part by [decision 80](080-global-calls-of-replaced-functions.md): 
 
 A plain PHP function is called through its namespace, as a member. After `import Vendor.Pdf;`, the call is `Pdf.render(html)`. A function in PHP's root namespace is called as `global.now()`. Calling a function by its bare name, and importing a single function, are compile errors. `extern` names a function the same way, as `extern Pdf.render uses Files;` and `extern global.now uses Clock;`.
 
-A plain PHP constant is read through its namespace the same way. `global.PHP_EOL`, `global.PHP_INT_MAX` and `global.STDERR` read PHP's root constants, and `Pdf.DEFAULT_DPI` reads the library's after `import Vendor.Pdf;`. A bare uppercase name is always the code's own constant, so a bare PHP constant such as `PHP_EOL` is a compile error that says to write `global.PHP_EOL`.
+A plain PHP constant is read through its namespace the same way. `global.PHP_EOL`, `global.CURLOPT_TIMEOUT` and `global.STDERR` read PHP's root constants, and `Pdf.DEFAULT_DPI` reads the library's after `import Vendor.Pdf;`. A bare uppercase name is always the code's own constant, so a bare PHP constant such as `PHP_EOL` is a compile error that says to write `global.PHP_EOL`.
 
 The error for a bare call names the standard library member that does the same work, such as `name.trim()` for `trim(name)`. One table in the checker maps each PHP function to that member, and also covers the syntax PHP# removed, such as `echo`. A function with no member gets `global.name(…)` in its message, and a function with a member gets its row in the pull request that ships the member.
 
@@ -31,7 +31,7 @@ public class Printer
     public string draft(string html) => render(html);                 // compile error: write Pdf.render(…)
     public string label(string name) => trim(name);                   // compile error: write name.trim()
     public string line(string text) => text + global.PHP_EOL;         // compiles: a root constant goes through global
-    public int largest() => global.PHP_INT_MAX;                       // compiles
+    public int timeout() => global.CURLOPT_TIMEOUT;                   // compiles
     public int dpi() => Pdf.DEFAULT_DPI;                              // compiles: the library's constant goes through its namespace
     public string bare(string text) => text + PHP_EOL;                // compile error: write global.PHP_EOL
 }

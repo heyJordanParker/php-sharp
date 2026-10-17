@@ -16,5 +16,5 @@ class Interop
 
     public static int freeAbove() => Shipping.FREE_ABOVE;
 
-    public static int largest() => global.PHP_INT_MAX;
+    public static int largest() => Int.MAX;
 }

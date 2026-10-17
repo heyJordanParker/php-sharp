@@ -1,0 +1,9 @@
+namespace ParameterProperties;
+
+// A generic behavior, which the constructor creates with its type argument.
+public class Bracketed<T> : Behavior<string>
+{
+    public string get(string value) => value;
+
+    public string set(string value) => `[${value}]`;
+}

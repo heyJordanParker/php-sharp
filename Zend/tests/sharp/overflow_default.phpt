@@ -4,6 +4,7 @@ PHP# throws ArithmeticError when a parameter default or a field's initial value 
 <?php
 
 require __DIR__ . '/attempt.inc';
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
 require __DIR__ . '/Overflow.sharp';
 
 attempt(fn () => Demo\Overflow::withDefault(5));
@@ -14,5 +15,5 @@ attempt(fn () => new Demo\Overflow());
 --EXPECT--
 int(5)
 ArithmeticError: Integer overflow in Overflow.sharp on line 121
-Parameter #0 [ <optional> int $a = PHP_INT_MAX + 1 ]
+Parameter #0 [ <optional> int $a = \Sharp\Int::MAX + 1 ]
 ArithmeticError: Integer overflow in Overflow.sharp on line 281

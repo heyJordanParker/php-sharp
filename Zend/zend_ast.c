@@ -1065,6 +1065,22 @@ ZEND_API zend_result ZEND_FASTCALL zend_ast_evaluate_inner(
 				return FAILURE;
 			}
 
+			/* A .sharp file's computed parameter default, `(static function () { return …; })()`, runs its closure. */
+			if (ast->kind == ZEND_AST_CALL && ast->child[0]->kind == ZEND_AST_OP_ARRAY) {
+				zval closure;
+				zend_create_closure(&closure, (zend_function *) zend_ast_get_op_array(ast->child[0])->op_array, scope, scope, NULL);
+				ctx->had_side_effects = true;
+				ZVAL_UNDEF(result);
+				call_user_function(NULL, NULL, &closure, result, 0, NULL);
+				zval_ptr_dtor(&closure);
+				if (UNEXPECTED(EG(exception))) {
+					zval_ptr_dtor(result);
+					ZVAL_UNDEF(result);
+					return FAILURE;
+				}
+				return SUCCESS;
+			}
+
 			zend_function *fptr;
 			zend_class_entry *called_scope = NULL;
 			switch (ast->kind) {

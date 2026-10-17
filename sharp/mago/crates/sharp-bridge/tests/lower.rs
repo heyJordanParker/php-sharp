@@ -2792,6 +2792,117 @@ fn behaviors_are_hidden_slots_the_hooks_call_in_order() {
 }
 
 /// ```php
+/// public function __construct(string $name) {
+///     $this->{'name#via0'} = new \App\Trimmed();
+///     $this->name = $name;
+/// }
+/// ```
+///
+/// Spec sections 6.4 and 9: a promoted parameter's behavior is a hidden slot as a property's is. The constructor fills
+/// it with `new` before it sets the property from the argument through the hooks.
+#[test]
+fn a_promoted_parameter_s_behaviors_are_filled_before_its_argument_is_set() {
+    let behavior = (
+        "vendor/heyjordanparker/php-sharp-composer/library/Sharp/Behavior.sharp",
+        "namespace Sharp;\n\npublic interface Behavior<T>\n{\n    T get(T value);\n\n    T set(T value);\n}\n",
+    );
+    let trimmed = (
+        "src/Trimmed.sharp",
+        "namespace App;\n\nimport Sharp.Behavior;\n\npublic class Trimmed : Behavior<string>\n{\n    public string get(string value) => value;\n\n    public string set(string value) => global.trim(value);\n}\n",
+    );
+    let lowered = Lowered::with(
+        "namespace App;\n\npublic class Report\n{\n    public Report(public string name { get; set; } via Trimmed) { }\n}\n",
+        &[behavior, trimmed],
+    );
+
+    assert_eq!(
+        property_groups(&lowered),
+        [
+            indoc! {r#"
+                PROP_GROUP [1]
+                  ZVAL [1] "string"
+                  PROP_DECL
+                    PROP_ELEM
+                      ZVAL "name"
+                      null
+                      null
+                      STMT_LIST
+                        PROPERTY_HOOK "get" @5-5
+                          null
+                          null
+                          PROPERTY_HOOK_SHORT_BODY
+                            METHOD_CALL
+                              PROP
+                                VAR
+                                  ZVAL "this"
+                                ZVAL "name#via0"
+                              ZVAL "get"
+                              ARG_LIST
+                                PROP
+                                  VAR
+                                    ZVAL "this"
+                                  ZVAL "name"
+                          null
+                          null
+                        PROPERTY_HOOK "set" @5-5
+                          null
+                          null
+                          STMT_LIST
+                            ASSIGN
+                              PROP
+                                VAR
+                                  ZVAL "this"
+                                ZVAL "name"
+                              METHOD_CALL
+                                PROP
+                                  VAR
+                                    ZVAL "this"
+                                  ZVAL "name#via0"
+                                ZVAL "set"
+                                ARG_LIST
+                                  VAR
+                                    ZVAL "value"
+                          null
+                          null
+                  null
+            "#},
+            indoc! {r#"
+                PROP_GROUP [4]
+                  ZVAL "App\\Trimmed"
+                  PROP_DECL
+                    PROP_ELEM
+                      ZVAL "name#via0"
+                      null
+                      null
+                      null
+                  null
+            "#},
+        ]
+    );
+    assert_eq!(
+        lowered.body_of("__construct"),
+        indoc! {r#"
+            STMT_LIST
+              ASSIGN
+                PROP
+                  VAR
+                    ZVAL "this"
+                  ZVAL "name#via0"
+                NEW
+                  ZVAL "App\\Trimmed"
+                  ARG_LIST
+              ASSIGN
+                PROP
+                  VAR
+                    ZVAL "this"
+                  ZVAL "name"
+                VAR
+                  ZVAL "name"
+        "#}
+    );
+}
+
+/// ```php
 /// public function __clone(): void
 /// {
 ///     if (\method_exists(parent::class, '__clone')) { parent::__clone(); }
@@ -9434,6 +9545,80 @@ fn any_and_nullable_any_are_mixed() {
 }
 
 /// ```php
+/// public function run(int $extra): never
+/// {
+///     throw new \App\Tenant\Failure();
+/// }
+/// ```
+///
+/// Spec section 7: a `never` method is PHP's `never`, so PHP throws `TypeError` if it returns.
+#[test]
+fn a_never_method_is_php_never() {
+    let lowered = Lowered::with(
+        &method_with("never run(int extra)", "        throw new Failure();\n"),
+        &[("src/App/Tenant/Failure.php", "<?php namespace App\\Tenant; final class Failure extends \\Exception {}")],
+    );
+
+    assert_eq!(member_in(&[lowered], "Report", &[0, 3]), "ZVAL [1] \"never\"\n");
+}
+
+/// Spec section 9: a parameter's default is any expression. One PHP takes as a constant expression stays as written,
+/// and any other runs in a static closure the default calls, which the engine runs each time a call leaves the
+/// argument out. PHP reads a property in a constant expression only of an enum case, so a property read runs in the
+/// closure too.
+///
+/// ```php
+/// public function run(int $at = (static function () { return \levenshtein("a", "b"); })(), int $step = 1 + 2): int
+/// public function size(int $size = (static function () { return (new \Report())->count; })()): int
+/// ```
+#[test]
+fn a_parameter_default_that_is_no_constant_expression_runs_in_a_static_closure() {
+    let lowered = [Lowered::new(
+        "class Report\n{\n    public int count { get; } = 7;\n\n    public int run(int at = global.levenshtein(\"a\", \"b\"), int step = 1 + 2)\n    {\n        return at + step;\n    }\n\n    public int size(int size = new Report().count) => size;\n}\n",
+    )];
+    assert_eq!(
+        member_in(&lowered, "Report", &[2, 0, 0, 2]),
+        indoc! {r#"
+            CALL
+              CLOSURE [16] "" @10-10
+                PARAM_LIST
+                null
+                STMT_LIST
+                  RETURN
+                    PROP
+                      NEW
+                        ZVAL "Report"
+                        ARG_LIST
+                      ZVAL "count"
+                null
+                null
+              ARG_LIST
+        "#}
+    );
+
+    assert_eq!(
+        member_in(&lowered, "Report", &[1, 0, 0, 2]),
+        indoc! {r#"
+            CALL
+              CLOSURE [16] "" @5-5
+                PARAM_LIST
+                null
+                STMT_LIST
+                  RETURN
+                    CALL
+                      ZVAL "levenshtein"
+                      ARG_LIST
+                        ZVAL "a"
+                        ZVAL "b"
+                null
+                null
+              ARG_LIST
+        "#}
+    );
+    assert_eq!(member_in(&lowered, "Report", &[1, 0, 1, 2]), "BINARY_OP [1]\n  ZVAL 1\n  ZVAL 2\n");
+}
+
+/// ```php
 /// public function run(): void
 /// {
 ///     return;
@@ -9819,10 +10004,11 @@ fn a_spread_in_a_literal_is_an_unpack_among_its_elements() {
 /// \Lib\Calc::sum(...$extra);
 /// $this->run(1, ...$extra);
 /// $made = new \Lib\Calc(...$extra);
-/// return max(...$extra);
+/// return @\max($first, ...$extra);
 /// ```
 ///
-/// A spread argument is an `UNPACK` of its value, as php-src's grammar builds `...$extra`.
+/// A spread argument is an `UNPACK` of its value, as php-src's grammar builds `...$extra`. `max` returns `mixed`, which
+/// holds `null`, so its call runs without its warnings.
 #[test]
 fn a_spread_argument_is_an_unpack_of_its_value() {
     assert_eq!(
@@ -9862,14 +10048,15 @@ fn a_spread_argument_is_an_unpack_of_its_value() {
                       VAR
                         ZVAL "extra"
               RETURN
-                CALL
-                  ZVAL "max"
-                  ARG_LIST
-                    VAR
-                      ZVAL "first"
-                    UNPACK
+                SILENCE
+                  CALL
+                    ZVAL "max"
+                    ARG_LIST
                       VAR
-                        ZVAL "extra"
+                        ZVAL "first"
+                      UNPACK
+                        VAR
+                          ZVAL "extra"
         "#}
     );
 }
@@ -12861,6 +13048,129 @@ fn an_override_of_a_property_with_no_type_has_no_type() {
                       ZVAL "Override"
                       null
         "#}
+    );
+}
+
+/// ```php
+/// #[\Override] protected null|string $table = 'orders';   // with the type text "string"
+/// #[\Override] public int|float $level = 3;           // with the type text "int"
+/// ```
+///
+/// An override that narrows a typed plain PHP property, spec section 6.1, runs with the parent's PHP type, which PHP
+/// keeps through every override as the class links, and the engine checks its own type on each write.
+#[test]
+fn an_override_that_narrows_a_typed_property_runs_with_the_parent_type_and_checks_its_own() {
+    let lowered = Lowered::with(
+        "class Order : Model\n{\n    protected override string table { get; set; } = \"orders\";\n    public override int level { get; set; } = 3;\n}\n",
+        &[("src/Model.php", "<?php class Model { protected ?string $table = null; public int|float $level = 0; }")],
+    );
+    let class = lowered.child(lowered.root(), 1);
+
+    assert_eq!(
+        lowered.render(lowered.child(class, 2)),
+        indoc! {r#"
+            STMT_LIST
+              PROP_GROUP [2]
+                SHARP_TYPE_ARGS
+                  TYPE_UNION
+                    ZVAL [1] "null"
+                    ZVAL [1] "string"
+                  ZVAL "string"
+                PROP_DECL
+                  PROP_ELEM
+                    ZVAL "table"
+                    ZVAL "orders"
+                    null
+                    null
+                ATTRIBUTE_LIST
+                  ATTRIBUTE_GROUP
+                    ATTRIBUTE
+                      ZVAL "Override"
+                      null
+              PROP_GROUP [1]
+                SHARP_TYPE_ARGS
+                  TYPE_UNION
+                    ZVAL [1] "int"
+                    ZVAL [1] "float"
+                  ZVAL "int"
+                PROP_DECL
+                  PROP_ELEM
+                    ZVAL "level"
+                    ZVAL 3
+                    null
+                    null
+                ATTRIBUTE_LIST
+                  ATTRIBUTE_GROUP
+                    ATTRIBUTE
+                      ZVAL "Override"
+                      null
+        "#}
+    );
+}
+
+/// Spec section 6.1: an override that narrows a typed plain PHP property runs with whichever PHP type the parent
+/// declares, a single type, `mixed`, `array`, `iterable`, `object`, an enum, a class or an intersection of classes.
+#[test]
+fn an_override_runs_with_each_php_type_its_plain_php_parent_declares() {
+    let model = "<?php enum Level: string { case Low = 'low'; } final class Box implements Countable, ArrayAccess { public function count(): int { return 0; } public function offsetExists(mixed $o): bool { return false; } public function offsetGet(mixed $o): mixed { return null; } public function offsetSet(mixed $o, mixed $v): void {} public function offsetUnset(mixed $o): void {} } class Model { public mixed $anything = null; public ?array $items = null; public ?iterable $each = null; public ?object $owner = null; public ?Level $level = null; public (Countable&ArrayAccess)|null $box = null; }";
+    let lowered = Lowered::with(
+        "class Order : Model\n{\n    public override string anything { get; set; } = \"\";\n    public override List<int> items { get; set; } = [];\n    public override List<int> each { get; set; } = [];\n    public override Box owner { get; set; } = new Box();\n    public override Level level { get; set; } = Level.Low;\n    public override Box box { get; set; } = new Box();\n}\n",
+        &[("src/Model.php", model)],
+    );
+    let types: Vec<String> = lowered
+        .nodes()
+        .iter()
+        .enumerate()
+        .filter(|(_, node)| node.kind == sharp_kind::SHARP_AST_PROP_GROUP)
+        .map(|(group, _)| lowered.render(lowered.child(group as u32, 0)))
+        .collect();
+
+    assert_eq!(
+        types,
+        [
+            indoc! {r#"
+                SHARP_TYPE_ARGS
+                  ZVAL [1] "mixed"
+                  ZVAL "string"
+            "#},
+            indoc! {r#"
+                SHARP_TYPE_ARGS
+                  TYPE_UNION
+                    TYPE [7]
+                    ZVAL [1] "null"
+                  ZVAL "List<int>"
+            "#},
+            indoc! {r#"
+                SHARP_TYPE_ARGS
+                  TYPE_UNION
+                    ZVAL [1] "iterable"
+                    ZVAL [1] "null"
+                  ZVAL "List<int>"
+            "#},
+            indoc! {r#"
+                SHARP_TYPE_ARGS
+                  TYPE_UNION
+                    ZVAL [1] "null"
+                    ZVAL [1] "object"
+                  ZVAL "Box"
+            "#},
+            indoc! {r#"
+                SHARP_TYPE_ARGS
+                  TYPE_UNION
+                    ZVAL "Level"
+                    ZVAL [1] "null"
+                  ZVAL "Level"
+            "#},
+            indoc! {r#"
+                SHARP_TYPE_ARGS
+                  TYPE_UNION
+                    TYPE_INTERSECTION
+                      ZVAL "Countable"
+                      ZVAL "ArrayAccess"
+                    ZVAL [1] "null"
+                  ZVAL "Box"
+            "#},
+        ]
     );
 }
 
@@ -16182,21 +16492,58 @@ fn a_static_member_only_a_magic_method_serves_is_refused() {
     assert_eq!(lowered.diagnostics(), ["9:29 compile error: `Order.where` does not exist."]);
 }
 
-/// A constant expression reads only constants and enum cases, as PHP's does, so a parameter default of a static
-/// property or a static method is refused, and the lowering never emits a fetch PHP refuses there.
+/// ```php
+/// public function run(int $limit = (static function () { return \Lib\Order::$max; })()): int
+/// ```
+///
+/// A parameter default is any expression, spec section 7, so one that reads a static property or takes a static
+/// method runs in a static closure, as any default PHP's constant expression cannot hold does.
 #[test]
-fn a_static_property_or_method_in_a_constant_expression_is_refused() {
-    let property = Lowered::with(
+fn a_static_property_or_method_in_a_parameter_default_runs_in_a_static_closure() {
+    let property = [Lowered::with(
         "namespace App.Tenant;\n\nimport Lib.Order;\n\nclass Report\n{\n    public int run(int limit = Order.max)\n    {\n        return limit;\n    }\n}\n",
         &[MAGIC_ORDER],
-    );
-    let method = Lowered::with(
+    )];
+    let method = [Lowered::with(
         "namespace App.Tenant;\n\nimport Lib.Order;\n\nclass Report\n{\n    public int run(Function<int(int)> twice = Order.twice)\n    {\n        return twice(1);\n    }\n}\n",
         &[MAGIC_ORDER],
-    );
+    )];
 
-    assert_eq!(property.diagnostics(), ["7:38 compile error: Class-like constant `max` does not exist."]);
-    assert_eq!(method.diagnostics(), ["7:53 compile error: Class-like constant `twice` does not exist."]);
+    assert_eq!(
+        member_in(&property, "Report", &[0, 0, 0, 2]),
+        indoc! {r#"
+            CALL
+              CLOSURE [16] "" @7-7
+                PARAM_LIST
+                null
+                STMT_LIST
+                  RETURN
+                    STATIC_PROP
+                      ZVAL "Lib\\Order"
+                      ZVAL "max"
+                null
+                null
+              ARG_LIST
+        "#}
+    );
+    assert_eq!(
+        member_in(&method, "Report", &[0, 0, 0, 2]),
+        indoc! {r#"
+            CALL
+              CLOSURE [16] "" @7-7
+                PARAM_LIST
+                null
+                STMT_LIST
+                  RETURN
+                    STATIC_CALL
+                      ZVAL "Lib\\Order"
+                      ZVAL "twice"
+                      CALLABLE_CONVERT
+                null
+                null
+              ARG_LIST
+        "#}
+    );
 }
 
 /// ```php
@@ -17750,28 +18097,69 @@ fn the_ternary_is_a_conditional_marked_when_parenthesized() {
 }
 
 /// ```php
-/// return @\trim($x);
+/// $class = $event;
+/// return $class + ${'@this'};
 /// ```
 ///
-/// php-src's grammar builds `@expr` as a `SILENCE` of one child, the expression.
+/// A name written with `@`, spec section 2, runs as the PHP variable of its word, so `@event` is `$event`, as a plain PHP
+/// parent names its parameter. `@this` keeps its `@`, a variable name PHP code never writes, since PHP forbids `$this`.
 #[test]
-fn error_control_is_a_silence_of_its_expression() {
-    let lowered = Lowered::named(
-        "vendor/heyjordanparker/php-sharp-composer/library/Sharp/Text/Text.sharp",
-        "namespace Sharp.Text;\n\npublic static class Text\n{\n    public static string run(string x)\n    {\n        return @global.trim(x);\n    }\n}\n",
-    );
-
+fn a_name_written_with_at_runs_as_the_variable_of_its_word() {
     assert_eq!(
-        lowered.body(),
+        body_in(
+            "int run(int @event, int @this)",
+            "        const @class = @event;\n        return @class + @this;\n",
+            &[]
+        ),
         indoc! {r#"
             STMT_LIST
+              ASSIGN
+                VAR
+                  ZVAL "class"
+                VAR
+                  ZVAL "event"
               RETURN
-                SILENCE
-                  CALL
-                    ZVAL "trim"
-                    ARG_LIST
+                BINARY_OP [1]
+                  VAR
+                    ZVAL "class"
+                  VAR
+                    ZVAL "@this"
+        "#}
+    );
+}
+
+/// ```php
+/// ${'@_GET'} = ${'@GLOBALS'};
+/// return $this->run(GLOBALS: ${'@_GET'});
+/// ```
+///
+/// A local or a parameter named as one of PHP's superglobals runs as `@` before its name, which PHP code never writes,
+/// so it never reads or replaces PHP's, and a named argument reaches it by that name.
+#[test]
+fn a_local_named_as_a_superglobal_runs_under_a_hidden_name() {
+    assert_eq!(
+        body_in(
+            "int run(int GLOBALS)",
+            "        const _GET = GLOBALS;\n        return this.run(GLOBALS: _GET);\n",
+            &[]
+        ),
+        indoc! {r#"
+            STMT_LIST
+              ASSIGN
+                VAR
+                  ZVAL "@_GET"
+                VAR
+                  ZVAL "@GLOBALS"
+              RETURN
+                METHOD_CALL
+                  VAR
+                    ZVAL "this"
+                  ZVAL "run"
+                  ARG_LIST
+                    NAMED_ARG
+                      ZVAL "@GLOBALS"
                       VAR
-                        ZVAL "x"
+                        ZVAL "@_GET"
         "#}
     );
 }
@@ -18295,11 +18683,11 @@ fn a_typed_for_counter_is_the_assignment_of_its_value() {
 }
 
 /// ```php
-/// foreach (<check Map<int, int>>(\Lib\Calc::make(2)) as $key#1 => $value#2) {
+/// foreach (<check Map<int|string, int>>(\Lib\Calc::make(2)) as $key#1 => $value#2) {
 ///     $entry = [$key#1, $value#2];
 ///     $extra += $entry[1];
 /// }
-/// foreach (<check Map<int, int>>(\Lib\Calc::make(3)) as $key => $value) {
+/// foreach (<check Map<int|string, int>>(\Lib\Calc::make(3)) as $key => $value) {
 /// }
 /// ```
 ///
@@ -18313,7 +18701,7 @@ fn for_of_loops_are_foreach_nodes_with_the_value_before_the_key() {
             "        for (const entry of Calc.make(2)) {\n            extra += entry[1];\n        }\n        for (let [key, value] of Calc.make(3)) {\n        }\n        return extra;\n",
             &[(
                 "src/Lib/Calc.php",
-                "<?php namespace Lib; final class Calc { /** @return array<int, int> */ public static function make(int $n): array { return [$n => $n]; } }",
+                "<?php namespace Lib; final class Calc { /** @return array<int|string, int> */ public static function make(int $n): array { return [$n => $n]; } }",
             )]
         ),
         indoc! {r#"
@@ -18325,7 +18713,7 @@ fn for_of_loops_are_foreach_nodes_with_the_value_before_the_key() {
                     ZVAL "make"
                     ARG_LIST
                       ZVAL 2
-                  ZVAL "Map<int, int>"
+                  ZVAL "Map<int|string, int>"
                   ZVAL "Lib\\Calc::make()"
                 VAR
                   ZVAL "value#2"
@@ -18359,7 +18747,7 @@ fn for_of_loops_are_foreach_nodes_with_the_value_before_the_key() {
                     ZVAL "make"
                     ARG_LIST
                       ZVAL 3
-                  ZVAL "Map<int, int>"
+                  ZVAL "Map<int|string, int>"
                   ZVAL "Lib\\Calc::make()"
                 VAR
                   ZVAL "value"
@@ -19254,6 +19642,83 @@ fn a_call_through_a_namespace_is_a_call_of_its_plain_php_function() {
 }
 
 /// ```php
+/// $size = \strlen($text);
+/// $decoded = \is_string(${'match#1'} = \Vendor\Pdf\decode($text));
+/// $called = \call_user_func(\strlen(...), $text);
+/// return \is_string(${'match#1'} = @\iconv("UTF-8", "ASCII", $text));
+/// ```
+///
+/// PHP# reads a built-in's failure from its value, so a call of one whose declared return type holds `false` or `null`,
+/// as `iconv`'s `string|false` does, runs without PHP's warning for the same failure. A call of a built-in that cannot
+/// fail, as `strlen`, of one that runs a function it is given, as `call_user_func`, and of a plain PHP library's own
+/// function keep their warnings.
+#[test]
+fn a_call_of_a_built_in_that_returns_its_failure_runs_without_its_warning() {
+    let lowered = Lowered::with(
+        "namespace App.Tenant;\n\nimport Vendor.Pdf;\n\nclass Report\n{\n    public bool run(string text)\n    {\n        int size = global.strlen(text);\n        bool decoded = Pdf.decode(text) is string;\n        Any? called = global.call_user_func(global.strlen, text);\n        return global.iconv(\"UTF-8\", \"ASCII\", text) is string;\n    }\n}\n",
+        &[(
+            "src/Vendor/Pdf/functions.php",
+            "<?php namespace Vendor\\Pdf; function decode(string $text): string|false { return $text; }",
+        )],
+    );
+
+    assert_eq!(
+        lowered.body(),
+        indoc! {r#"
+            STMT_LIST
+              ASSIGN
+                VAR
+                  ZVAL "size"
+                CALL
+                  ZVAL "strlen"
+                  ARG_LIST
+                    VAR
+                      ZVAL "text"
+              ASSIGN
+                VAR
+                  ZVAL "decoded"
+                CALL
+                  ZVAL "is_string"
+                  ARG_LIST
+                    ASSIGN
+                      VAR
+                        ZVAL "match#1"
+                      CALL
+                        ZVAL "Vendor\\Pdf\\decode"
+                        ARG_LIST
+                          VAR
+                            ZVAL "text"
+              ASSIGN
+                VAR
+                  ZVAL "called"
+                CALL
+                  ZVAL "call_user_func"
+                  ARG_LIST
+                    CALL
+                      ZVAL "strlen"
+                      CALLABLE_CONVERT
+                    VAR
+                      ZVAL "text"
+              RETURN
+                CALL
+                  ZVAL "is_string"
+                  ARG_LIST
+                    ASSIGN
+                      VAR
+                        ZVAL "match#1"
+                      SILENCE
+                        CALL
+                          ZVAL "iconv"
+                          ARG_LIST
+                            ZVAL "UTF-8"
+                            ZVAL "ASCII"
+                            VAR
+                              ZVAL "text"
+        "#}
+    );
+}
+
+/// ```php
 /// return \Vendor\Pdf\DEFAULT_DPI + \PHP_INT_SIZE;
 /// ```
 ///
@@ -19374,6 +19839,207 @@ fn a_template_is_an_encaps_list_of_its_text_and_interpolations() {
                   ZVAL "extra"
         "#}
     );
+}
+
+/// Spec section 12: plain PHP's `array<int, T>` arrives as a `List<T>`, renumbered where PHP# reads it with
+/// `\array_values`, a `List` of `Map`s too. A `Map` place keeps its keys and makes the `Map` of them, an argument of
+/// plain PHP takes the array as plain PHP gave it, and a value plain PHP declares a list is one already.
+#[test]
+fn a_plain_php_int_keyed_array_is_renumbered_where_it_arrives() {
+    let ids = (
+        "src/App/Tenant/Ids.php",
+        "<?php namespace App\\Tenant; final class Ids { /** @return array<int, int> */ public static function all(): array { return [5 => 1]; } /** @return list<int> */ public static function listed(): array { return [1]; } /** @return array<int, array<string, int>> */ public static function rows(): array { return []; } }",
+    );
+    let lowered = |statements: &str| body_in(RUN, statements, &[ids]);
+
+    assert!(lowered("        List<int> all = Ids.all();\n        return all[0];\n").contains("ZVAL \"array_values\""));
+    assert!(
+        lowered("        List<Map<string, int>> rows = Ids.rows();\n        return rows.count();\n")
+            .contains("ZVAL \"array_values\"")
+    );
+    assert!(
+        !lowered("        Map<int, int> byId = Ids.all();\n        return byId.count();\n")
+            .contains("ZVAL \"array_values\"")
+    );
+    assert!(!lowered("        return (int)global.array_sum(Ids.all());\n").contains("ZVAL \"array_values\""));
+    assert!(
+        !lowered("        List<int> listed = Ids.listed();\n        return listed[0];\n")
+            .contains("ZVAL \"array_values\"")
+    );
+}
+
+/// ```php
+/// [$users->names = \is_array($renumbered#1 = $users->names) ? \array_values($renumbered#1) : $renumbered#1,
+///     $users->names->add('cy')][1];
+/// [$receiver#1 = \App\Tenant\Users::make(), $receiver#1->names = …, $receiver#1->names->add('x')][2];
+/// $users->names = ['p', 'q'];
+/// ```
+///
+/// Spec section 12: a plain PHP property PHP# reads as a `List` is a `List` everywhere, writes included. A change in
+/// place sets the renumbered list back first and then changes the property, through a method that changes the list, an
+/// index and `++`, whose object runs once. A write of the whole property sets it, and a method that reads the list
+/// reads it renumbered.
+#[test]
+fn a_write_through_a_plain_php_property_read_as_a_list_changes_it_renumbered() {
+    let users = (
+        "src/App/Tenant/Users.php",
+        "<?php namespace App\\Tenant; class Users { /** @var array<int, string> */ public array $names = []; /** @var array<int, int> */ public array $scores = []; /** @var array<int, string> */ public static array $tags = []; /** @var array<int, string>|null */ public ?array $aliases = null; public static function make(): Users { return new Users(); } }",
+    );
+    let lowered = |statements: &str| body_in("int run(Users users)", statements, &[users]);
+
+    assert_eq!(
+        lowered("        users.names.add(\"cy\");\n        return 1;\n"),
+        indoc! {r#"
+            STMT_LIST
+              DIM
+                ARRAY [3]
+                  ARRAY_ELEM
+                    ASSIGN
+                      PROP
+                        VAR
+                          ZVAL "users"
+                        ZVAL "names"
+                      CONDITIONAL
+                        CALL
+                          ZVAL "is_array"
+                          ARG_LIST
+                            ASSIGN
+                              VAR
+                                ZVAL "renumbered#1"
+                              PROP
+                                VAR
+                                  ZVAL "users"
+                                ZVAL "names"
+                        CALL
+                          ZVAL "array_values"
+                          ARG_LIST
+                            VAR
+                              ZVAL "renumbered#1"
+                        VAR
+                          ZVAL "renumbered#1"
+                    null
+                  ARRAY_ELEM
+                    METHOD_CALL
+                      PROP
+                        VAR
+                          ZVAL "users"
+                        ZVAL "names"
+                      ZVAL "add"
+                      ARG_LIST
+                        ZVAL "cy"
+                    null
+                ZVAL 1
+              RETURN
+                ZVAL 1
+        "#}
+    );
+    for (statement, place) in [
+        ("users.names.add(\"cy\")", "PROP"),
+        ("users.names[0] = \"zed\"", "PROP"),
+        ("users.scores[1]++", "PROP"),
+        ("users.names.remove(\"ada\")", "PROP"),
+        ("Users.tags.add(\"z\")", "STATIC_PROP"),
+        ("Users.make().names.add(\"x\")", "PROP"),
+        ("users.aliases?.add(\"al\")", "PROP"),
+    ] {
+        let body = lowered(&format!("        {statement};\n        return 1;\n"));
+        assert!(body.starts_with("STMT_LIST\n  DIM\n    ARRAY [3]\n"), "{statement}\n{body}");
+        assert!(body.contains(&format!("ASSIGN\n          {place}\n")), "{statement}\n{body}");
+        assert!(body.contains("ZVAL \"array_values\""), "{statement}\n{body}");
+    }
+    assert!(
+        lowered("        Users.make().names.add(\"x\");\n        return 1;\n")
+            .contains("ASSIGN\n          VAR\n            ZVAL \"receiver#1\"\n          STATIC_CALL\n")
+    );
+    assert_eq!(
+        lowered("        users.names = [\"p\", \"q\"];\n        return 1;\n"),
+        indoc! {r#"
+            STMT_LIST
+              ASSIGN
+                PROP
+                  VAR
+                    ZVAL "users"
+                  ZVAL "names"
+                ARRAY [3]
+                  ARRAY_ELEM
+                    ZVAL "p"
+                    null
+                  ARRAY_ELEM
+                    ZVAL "q"
+                    null
+              RETURN
+                ZVAL 1
+        "#}
+    );
+    assert!(
+        lowered("        string? first = users.names.getOrNull(0);\n        return 1;\n")
+            .contains("COALESCE\n      DIM\n        CONDITIONAL\n")
+    );
+}
+
+/// Spec section 18 shows an object in a template by what its `toString()` returns, so the part calls it, which an enum
+/// case needs, since PHP gives an enum no string conversion.
+#[test]
+fn an_object_in_a_template_shows_what_its_to_string_returns() {
+    assert_eq!(
+        body_in(
+            "string run(Sku sku)",
+            "        return `Sku: ${sku}`;\n",
+            &[(
+                "src/App/Tenant/Sku.sharp",
+                "namespace App.Tenant;\n\nclass Sku\n{\n    public string toString() => \"A-12\";\n}\n"
+            )]
+        ),
+        indoc! {r#"
+            STMT_LIST
+              RETURN
+                ENCAPS_LIST
+                  ZVAL "Sku: "
+                  METHOD_CALL
+                    VAR
+                      ZVAL "sku"
+                    ZVAL "toString"
+                    ARG_LIST
+        "#}
+    );
+}
+
+/// ```php
+/// public function __toString(): string { return $this->toString(); }
+/// ```
+///
+/// Spec section 18: plain PHP converts an object of a class that declares `toString()` to the text it returns, so the
+/// class gets PHP's `__toString()`, which calls it.
+#[test]
+fn a_class_that_declares_to_string_gets_php_s_string_conversion() {
+    let conversion = |lines: &str| {
+        format!(
+            "METHOD [1] \"__toString\" @{lines}\n  PARAM_LIST\n  null\n  STMT_LIST\n    RETURN\n      METHOD_CALL\n        VAR\n          ZVAL \"this\"\n        ZVAL \"toString\"\n        ARG_LIST\n  ZVAL [1] \"string\"\n  null\n"
+        )
+    };
+    assert_eq!(
+        Lowered::new("namespace App.Tenant;\n\nclass Sku\n{\n    public string toString() => \"A-12\";\n}\n")
+            .declared("__toString"),
+        conversion("5-6")
+    );
+
+    // A class, or an event, that takes `toString()` from an interface's default body gets it too, from its body's start,
+    // and the trait of the body declares none.
+    let named = (
+        "src/App/Tenant/Named.sharp",
+        "namespace App.Tenant;\n\npublic interface Named\n{\n    string toString() => \"named\";\n}\n",
+    );
+    assert_eq!(
+        Lowered::with("namespace App.Tenant;\n\nclass Widget : Named\n{\n}\n", &[named]).declared("__toString"),
+        conversion("4-5")
+    );
+    assert_eq!(
+        Lowered::with("namespace App.Tenant;\n\npublic event Shipped(int order) : Named;\n", &[named])
+            .declared("__toString"),
+        conversion("3-3")
+    );
+    let interface = Lowered::named("src/App/Tenant/Named.sharp", named.1);
+    assert!(!interface.tree().contains("__toString"), "{}", interface.tree());
 }
 
 /// ```php
@@ -20205,6 +20871,187 @@ fn statements_at(code: &str, library: &[(&str, &str)], positions: std::ops::Rang
     let body = lowered.child(lowered.method_named("run"), 2);
 
     positions.map(|position| lowered.render(lowered.child(body, position))).collect()
+}
+
+/// ```php
+/// $typed = $gadget->label(...);
+/// $held = $gadget->format;
+/// ```
+///
+/// A plain PHP class's method is the value of a read of its name, where the class also declares a property of that
+/// name, when the code takes the read as a function the property's type does not fit, spec section 14.3. The engine
+/// would read the property, so the read is PHP's first-class callable. A property whose type fits keeps the read.
+#[test]
+fn a_plain_php_method_of_a_property_s_name_read_as_a_function_is_a_first_class_callable() {
+    let gadget = (
+        "src/Lib/Gadget.php",
+        "<?php\n\nnamespace Lib;\n\nfinal class Gadget\n{\n    public string $label = 'gadget';\n\n    /** @var Closure(string): string */\n    public \\Closure $format;\n\n    public function label(string $prefix): string\n    {\n        return $prefix . $this->label;\n    }\n\n    public function format(string $text): string\n    {\n        return $text;\n    }\n}\n",
+    );
+    let code = "namespace App.Tenant;\n\nimport Lib.Gadget;\nextern Gadget.label;\n\nclass Report\n{\n    public int run(Gadget gadget)\n    {\n        Function<string(string)> typed = gadget.label;\n        Function<string(string)> held = gadget.format;\n        return global.strlen(typed(\"a\") + held(\"b\"));\n    }\n}\n";
+
+    assert_eq!(
+        statements_at(code, &[gadget], 0..2),
+        [
+            indoc! {r#"
+                ASSIGN
+                  VAR
+                    ZVAL "typed"
+                  METHOD_CALL
+                    VAR
+                      ZVAL "gadget"
+                    ZVAL "label"
+                    CALLABLE_CONVERT
+            "#},
+            indoc! {r#"
+                ASSIGN
+                  VAR
+                    ZVAL "held"
+                  PROP
+                    VAR
+                      ZVAL "gadget"
+                    ZVAL "format"
+            "#},
+        ]
+    );
+}
+
+/// ```php
+/// return \Lib\Calc::total((fn ($map#1) => \is_object($map#1)
+///     ? \array_combine(\array_column($map#1->keys(), 'value'), $map#1->values()) : $map#1)($stock));
+/// return \Lib\Calc::sum(...\array_map(fn ($element#1) => (fn ($map#2) => \is_object($map#2)
+///     ? \array_combine(\array_column($map#2->keys(), 'value'), $map#2->values()) : $map#2)($element#1), [$stock]));
+/// ```
+///
+/// A `Map` keyed by a backed enum goes into a plain PHP parameter that takes `array` with each case's backing value as
+/// its key, spec section 12, as the keys a PHP array holds, and so does each `Map` a spread passes.
+#[test]
+fn a_map_keyed_by_a_backed_enum_goes_into_a_plain_php_array_with_backing_values_as_keys() {
+    let level = ("src/Lib/Level.php", "<?php namespace Lib; enum Level: string { case Low = 'low'; }");
+    let code = "namespace App.Tenant;\n\nimport Lib.Calc;\nimport Lib.Level;\n\nclass Report\n{\n    public int run(int extra)\n    {\n        Map<Level, int> stock = this.stock();\n        return Calc.total(stock);\n    }\n\n    private Map<Level, int> stock() => [Level.Low: 1];\n}\n";
+
+    assert_eq!(
+        statements_at(code, &[level], 1..2),
+        [indoc! {r#"
+            RETURN
+              STATIC_CALL
+                ZVAL "Lib\\Calc"
+                ZVAL "total"
+                ARG_LIST
+                  CALL
+                    ARROW_FUNC "" @11-11
+                      PARAM_LIST
+                        PARAM
+                          null
+                          ZVAL "map#1"
+                          null
+                          null
+                          null
+                          null
+                      null
+                      CONDITIONAL
+                        CALL
+                          ZVAL "is_object"
+                          ARG_LIST
+                            VAR
+                              ZVAL "map#1"
+                        CALL
+                          ZVAL "array_combine"
+                          ARG_LIST
+                            CALL
+                              ZVAL "array_column"
+                              ARG_LIST
+                                METHOD_CALL
+                                  VAR
+                                    ZVAL "map#1"
+                                  ZVAL "keys"
+                                  ARG_LIST
+                                ZVAL "value"
+                            METHOD_CALL
+                              VAR
+                                ZVAL "map#1"
+                              ZVAL "values"
+                              ARG_LIST
+                        VAR
+                          ZVAL "map#1"
+                      null
+                      null
+                    ARG_LIST
+                      VAR
+                        ZVAL "stock"
+        "#}]
+    );
+    assert_eq!(
+        statements_at(&code.replace("Calc.total(stock)", "Calc.sum(...[stock])"), &[level], 1..2),
+        [indoc! {r#"
+            RETURN
+              STATIC_CALL
+                ZVAL "Lib\\Calc"
+                ZVAL "sum"
+                ARG_LIST
+                  UNPACK
+                    CALL
+                      ZVAL "array_map"
+                      ARG_LIST
+                        ARROW_FUNC "" @11-11
+                          PARAM_LIST
+                            PARAM
+                              null
+                              ZVAL "element#1"
+                              null
+                              null
+                              null
+                              null
+                          null
+                          CALL
+                            ARROW_FUNC "" @11-11
+                              PARAM_LIST
+                                PARAM
+                                  null
+                                  ZVAL "map#2"
+                                  null
+                                  null
+                                  null
+                                  null
+                              null
+                              CONDITIONAL
+                                CALL
+                                  ZVAL "is_object"
+                                  ARG_LIST
+                                    VAR
+                                      ZVAL "map#2"
+                                CALL
+                                  ZVAL "array_combine"
+                                  ARG_LIST
+                                    CALL
+                                      ZVAL "array_column"
+                                      ARG_LIST
+                                        METHOD_CALL
+                                          VAR
+                                            ZVAL "map#2"
+                                          ZVAL "keys"
+                                          ARG_LIST
+                                        ZVAL "value"
+                                    METHOD_CALL
+                                      VAR
+                                        ZVAL "map#2"
+                                      ZVAL "values"
+                                      ARG_LIST
+                                VAR
+                                  ZVAL "map#2"
+                              null
+                              null
+                            ARG_LIST
+                              VAR
+                                ZVAL "element#1"
+                          null
+                          null
+                        ARRAY [3]
+                          ARRAY_ELEM
+                            VAR
+                              ZVAL "stock"
+                            null
+        "#}]
+    );
 }
 
 /// ```php
@@ -22401,7 +23248,7 @@ fn every_construct_of_the_slice_lowers_into_nodes_of_their_kinds_child_count() {
         &[
             (
                 "src/Lib/Calc.php",
-                "<?php namespace Lib; final class Money { public int $cents = 0; } final class Calc extends \\Exception { public const int MAX = 3; public static Money $standard; public ?float $rate = null; public Money $price; public function __construct(int|float|Calc $start = 0, int $rate = 1, int ...$more) {} public static function make(): Calc { return new Calc(); } public function add(int ...$amounts): Calc { return $this; } /** @return array<int, int> */ public static function values(): array { return []; } }",
+                "<?php namespace Lib; final class Money { public int $cents = 0; } final class Calc extends \\Exception { public const int MAX = 3; public static Money $standard; public ?float $rate = null; public Money $price; public function __construct(int|float|Calc $start = 0, int $rate = 1, int ...$more) {} public static function make(): Calc { return new Calc(); } public function add(int ...$amounts): Calc { return $this; } /** @return array<int|string, int> */ public static function values(): array { return []; } }",
             ),
             (
                 "src/App/Tenant/Access.php",
@@ -24049,7 +24896,7 @@ const KEY: (&str, &str) = (
 #[test]
 fn a_struct_parses_each_field_from_its_key_and_creates_itself_through_its_main_constructor() {
     let lowered = Lowered::with(
-        "namespace App;\n\nimport Sharp.Key;\n\npublic struct Ticket\n{\n    public Ticket([Key(\"ticket_id\")] public int id { get; }, public int seats = 1 { get; }) { }\n\n    public string note { get; init; } = \"\";\n\n    public string? owner { get; init; }\n}\n",
+        "namespace App;\n\nimport Sharp.Key;\n\npublic struct Ticket\n{\n    public Ticket([Key(\"ticket_id\")] public int id { get; }, public int seats { get; } = 1) { }\n\n    public string note { get; init; } = \"\";\n\n    public string? owner { get; init; }\n}\n",
         &[KEY],
     );
 
@@ -26592,7 +27439,7 @@ fn with_and_an_initializer_run_in_a_closure_bound_to_the_object() {
 /// static class, and a class or a struct that declares its own `parse` get neither method.
 #[test]
 fn a_class_parses_as_a_struct_does() {
-    let members = "Ticket([Key(\"ticket_id\")] public int id { get; }, public int seats = 1 { get; }) { }\n\n    public string note { get; init; } = \"\";\n}\n";
+    let members = "Ticket([Key(\"ticket_id\")] public int id { get; }, public int seats { get; } = 1) { }\n\n    public string note { get; init; } = \"\";\n}\n";
     let lowered = |kind: &str| {
         Lowered::with(
             &format!("namespace App;\n\nimport Sharp.Key;\n\npublic {kind} Ticket\n{{\n    public {members}"),

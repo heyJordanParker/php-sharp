@@ -1,0 +1,16 @@
+namespace Nevers;
+
+public class Errors
+{
+    public static never fail(string reason) => throw new BadInput(reason);
+
+    public static string named(string? input) => input ?? Errors.fail("name is required");
+
+    public static int counted(bool bad)
+    {
+        if (bad) {
+            Errors.fail("bad count");
+        }
+        return 1;
+    }
+}

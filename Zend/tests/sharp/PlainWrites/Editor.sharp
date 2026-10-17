@@ -1,0 +1,51 @@
+namespace PlainWrites;
+
+import Lib.Roster;
+
+// Each write through a plain PHP property PHP# reads as a `List` reaches the property, which holds the changed `List`.
+public class Editor
+{
+    public void add(Roster roster)
+    {
+        roster.names.add("cy");
+    }
+
+    public void set(Roster roster)
+    {
+        roster.names[0] = "zed";
+    }
+
+    public int bump(Roster roster) => roster.scores[1]++;
+
+    public void remove(Roster roster)
+    {
+        roster.names.remove("ada");
+    }
+
+    public void replace(Roster roster)
+    {
+        roster.names = ["p", "q"];
+    }
+
+    public void addTag()
+    {
+        Roster.tags.add("z");
+    }
+
+    public void replaceTags()
+    {
+        Roster.tags = ["p", "q"];
+    }
+
+    public void addShared()
+    {
+        Roster.shared().names.add("dee");
+    }
+
+    public void addAlias(Roster roster)
+    {
+        roster.aliases?.add("ali");
+    }
+
+    public string? first(Roster roster) => roster.names.getOrNull(0);
+}

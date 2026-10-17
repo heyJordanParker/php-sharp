@@ -6,6 +6,8 @@ Outside the standard library, a call through `global` of a plain PHP function th
 
 A read of such a function as a value, as `names.map(global.trim)`, names the same member and says to pass a lambda that makes the call.
 
+A PHP constant the standard library gives is replaced the same way: a read of `PHP_INT_MAX` or `PHP_INT_MIN`, bare or through `global`, is a compile error that names `Int.MAX` or `Int.MIN`.
+
 A function the standard library has no member for keeps its `global.` call, as `global.levenshtein(a, b)` does, and so does a function PHP# syntax replaces, as `global.strval(value)`, since the syntax is no member to call. The standard library writes `global.` for every function, because its members are made of those calls.
 
 This replaces decision 76's rule that `global.` reaches every plain PHP function, and its "The standard library calls PHP the same way, with no exemption". Only the standard library may call a replaced function.

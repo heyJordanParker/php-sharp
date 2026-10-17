@@ -200,94 +200,134 @@ echo 'a check and another opcode: ', without_checks($added, $checks) === $twin ?
 Calc: same opcodes and lines in 4 op arrays, same signatures in 1 classes
 Nulls: same opcodes and lines in 17 op arrays, same signatures in 1 classes
 ControlFlow: different opcodes and lines in 6 op arrays, same signatures in 1 classes
-  .sharp      ; (lines=25, args=1, vars=4, tmps=13)
-  .sharp L0061 0004 T6 = SHARP_VERIFY_TYPE_ARGS V5 string("List<int>")
-  .sharp L0061 0005 V7 = FE_RESET_R T6 0010
-  .sharp L0061 0006 FE_FETCH_R V7 CV2($price) 0010
-  .sharp L0062 0007 T8 = MUL CV2($price) CV0($factor)
-  .sharp L0062 0008 ASSIGN_OP (ADD) CV1($total) T8
+  .sharp      ; (lines=35, args=1, vars=6, tmps=18)
+  .sharp L0061 0004 T8 = SHARP_VERIFY_TYPE_ARGS V7 string("List<int>")
+  .sharp L0061 0005 V9 = FE_RESET_R T8 0010
+  .sharp L0061 0006 FE_FETCH_R V9 CV2($price) 0010
+  .sharp L0062 0007 T10 = MUL CV2($price) CV0($factor)
+  .sharp L0062 0008 ASSIGN_OP (ADD) CV1($total) T10
   .sharp L0061 0009 JMP 0006
-  .sharp L0061 0010 FE_FREE V7
+  .sharp L0061 0010 FE_FREE V9
   .sharp L0064 0011 INIT_STATIC_METHOD_CALL 0 string("Demo\\Prices") string("all")
-  .sharp L0064 0012 V10 = DO_FCALL
-  .sharp L0064 0013 T11 = SHARP_VERIFY_TYPE_ARGS V10 string("Map<int, int>")
-  .sharp L0064 0014 V12 = FE_RESET_R T11 0020
-  .sharp L0064 0015 T13 = FE_FETCH_R V12 CV2($price) 0020
-  .sharp L0064 0016 ASSIGN CV3($slot) T13
-  .sharp L0065 0017 ASSIGN_OP (ADD) CV1($total) CV3($slot)
-  .sharp L0066 0018 ASSIGN CV2($price) int(0)
-  .sharp L0064 0019 JMP 0015
-  .sharp L0064 0020 FE_FREE V12
-  .sharp L0068 0021 VERIFY_RETURN_TYPE CV1($total)
-  .sharp L0068 0022 RETURN CV1($total)
-  .sharp L0069 0023 VERIFY_RETURN_TYPE
-  .sharp L0069 0024 RETURN null
-  .sharp      ; (lines=25, args=1, vars=4, tmps=13)
-  .sharp 0004 T6 = SHARP_VERIFY_TYPE_ARGS V5 string("List<int>")
-  .sharp 0005 V7 = FE_RESET_R T6 0010
-  .sharp 0006 FE_FETCH_R V7 CV2($price) 0010
-  .sharp 0007 T8 = MUL CV2($price) CV0($factor)
-  .sharp 0008 ASSIGN_OP (ADD) CV1($total) T8
+  .sharp L0064 0012 V12 = DO_FCALL
+  .sharp L0064 0013 T13 = SHARP_VERIFY_TYPE_ARGS V12 string("Map<int, int>")
+  .sharp L0064 0014 T14 = ASSIGN CV4($crossing#1) T13
+  .sharp L0064 0015 T15 = TYPE_CHECK (array) T14
+  .sharp L0064 0016 JMPZ T15 0022
+  .sharp L0064 0017 INIT_STATIC_METHOD_CALL 1 string("Sharp\\Map") string("from")
+  .sharp L0064 0018 SEND_VAR CV4($crossing#1) 1
+  .sharp L0064 0019 V16 = DO_FCALL
+  .sharp L0064 0020 T17 = QM_ASSIGN V16
+  .sharp L0064 0021 JMP 0023
+  .sharp L0064 0022 T17 = QM_ASSIGN CV4($crossing#1)
+  .sharp L0064 0023 ASSIGN CV3($slots) T17
+  .sharp L0065 0024 V19 = FE_RESET_R CV3($slots) 0030
+  .sharp L0065 0025 T20 = FE_FETCH_R V19 CV2($price) 0030
+  .sharp L0065 0026 ASSIGN CV5($slot) T20
+  .sharp L0066 0027 ASSIGN_OP (ADD) CV1($total) CV5($slot)
+  .sharp L0067 0028 ASSIGN CV2($price) int(0)
+  .sharp L0065 0029 JMP 0025
+  .sharp L0065 0030 FE_FREE V19
+  .sharp L0069 0031 VERIFY_RETURN_TYPE CV1($total)
+  .sharp L0069 0032 RETURN CV1($total)
+  .sharp L0070 0033 VERIFY_RETURN_TYPE
+  .sharp L0070 0034 RETURN null
+  .sharp      ; (lines=35, args=1, vars=6, tmps=18)
+  .sharp 0004 T8 = SHARP_VERIFY_TYPE_ARGS V7 string("List<int>")
+  .sharp 0005 V9 = FE_RESET_R T8 0010
+  .sharp 0006 FE_FETCH_R V9 CV2($price) 0010
+  .sharp 0007 T10 = MUL CV2($price) CV0($factor)
+  .sharp 0008 ASSIGN_OP (ADD) CV1($total) T10
   .sharp 0009 JMP 0006
-  .sharp 0010 FE_FREE V7
+  .sharp 0010 FE_FREE V9
   .sharp 0011 INIT_STATIC_METHOD_CALL 0 string("Demo\\Prices") string("all")
-  .sharp 0012 V10 = DO_FCALL
-  .sharp 0013 T11 = SHARP_VERIFY_TYPE_ARGS V10 string("Map<int, int>")
-  .sharp 0014 V12 = FE_RESET_R T11 0020
-  .sharp 0015 T13 = FE_FETCH_R V12 CV2($price) 0020
-  .sharp 0016 ASSIGN CV3($slot) T13
-  .sharp 0017 ASSIGN_OP (ADD) CV1($total) CV3($slot)
-  .sharp 0018 ASSIGN CV2($price) int(0)
-  .sharp 0019 JMP 0015
-  .sharp 0020 FE_FREE V12
-  .sharp 0021 VERIFY_RETURN_TYPE CV1($total)
-  .sharp 0022 RETURN CV1($total)
-  .sharp 0023 VERIFY_RETURN_TYPE
-  .sharp 0024 RETURN null
-  .sharp      7: 0006 - 0010 (loop)
-  .sharp      12: 0015 - 0020 (loop)
-  .php        ; (lines=23, args=1, vars=4, tmps=11)
-  .php   L0061 0004 V6 = FE_RESET_R V5 0009
-  .php   L0061 0005 FE_FETCH_R V6 CV2($price) 0009
-  .php   L0062 0006 T7 = MUL CV2($price) CV0($factor)
-  .php   L0062 0007 ASSIGN_OP (ADD) CV1($total) T7
+  .sharp 0012 V12 = DO_FCALL
+  .sharp 0013 T13 = SHARP_VERIFY_TYPE_ARGS V12 string("Map<int, int>")
+  .sharp 0014 T14 = ASSIGN CV4($crossing#1) T13
+  .sharp 0015 T15 = TYPE_CHECK (array) T14
+  .sharp 0016 JMPZ T15 0022
+  .sharp 0017 INIT_STATIC_METHOD_CALL 1 string("Sharp\\Map") string("from")
+  .sharp 0018 SEND_VAR CV4($crossing#1) 1
+  .sharp 0019 V16 = DO_FCALL
+  .sharp 0020 T17 = QM_ASSIGN V16
+  .sharp 0021 JMP 0023
+  .sharp 0022 T17 = QM_ASSIGN CV4($crossing#1)
+  .sharp 0023 ASSIGN CV3($slots) T17
+  .sharp 0024 V19 = FE_RESET_R CV3($slots) 0030
+  .sharp 0025 T20 = FE_FETCH_R V19 CV2($price) 0030
+  .sharp 0026 ASSIGN CV5($slot) T20
+  .sharp 0027 ASSIGN_OP (ADD) CV1($total) CV5($slot)
+  .sharp 0028 ASSIGN CV2($price) int(0)
+  .sharp 0029 JMP 0025
+  .sharp 0030 FE_FREE V19
+  .sharp 0031 VERIFY_RETURN_TYPE CV1($total)
+  .sharp 0032 RETURN CV1($total)
+  .sharp 0033 VERIFY_RETURN_TYPE
+  .sharp 0034 RETURN null
+  .sharp      9: 0006 - 0010 (loop)
+  .sharp      19: 0025 - 0030 (loop)
+  .php        ; (lines=33, args=1, vars=6, tmps=16)
+  .php   L0061 0004 V8 = FE_RESET_R V7 0009
+  .php   L0061 0005 FE_FETCH_R V8 CV2($price) 0009
+  .php   L0062 0006 T9 = MUL CV2($price) CV0($factor)
+  .php   L0062 0007 ASSIGN_OP (ADD) CV1($total) T9
   .php   L0061 0008 JMP 0005
-  .php   L0061 0009 FE_FREE V6
+  .php   L0061 0009 FE_FREE V8
   .php   L0064 0010 INIT_STATIC_METHOD_CALL 0 string("Demo\\Prices") string("all")
-  .php   L0064 0011 V9 = DO_FCALL
-  .php   L0064 0012 V10 = FE_RESET_R V9 0018
-  .php   L0064 0013 T11 = FE_FETCH_R V10 CV2($price) 0018
-  .php   L0064 0014 ASSIGN CV3($slot) T11
-  .php   L0065 0015 ASSIGN_OP (ADD) CV1($total) CV3($slot)
-  .php   L0066 0016 ASSIGN CV2($price) int(0)
-  .php   L0064 0017 JMP 0013
-  .php   L0064 0018 FE_FREE V10
-  .php   L0068 0019 VERIFY_RETURN_TYPE CV1($total)
-  .php   L0068 0020 RETURN CV1($total)
-  .php   L0069 0021 VERIFY_RETURN_TYPE
-  .php   L0069 0022 RETURN null
-  .php        ; (lines=23, args=1, vars=4, tmps=11)
-  .php   0004 V6 = FE_RESET_R V5 0009
-  .php   0005 FE_FETCH_R V6 CV2($price) 0009
-  .php   0006 T7 = MUL CV2($price) CV0($factor)
-  .php   0007 ASSIGN_OP (ADD) CV1($total) T7
+  .php   L0064 0011 V11 = DO_FCALL
+  .php   L0064 0012 T12 = ASSIGN CV4($crossing#1) V11
+  .php   L0064 0013 T13 = TYPE_CHECK (array) T12
+  .php   L0064 0014 JMPZ T13 0020
+  .php   L0064 0015 INIT_STATIC_METHOD_CALL 1 string("Sharp\\Map") string("from")
+  .php   L0064 0016 SEND_VAR CV4($crossing#1) 1
+  .php   L0064 0017 V14 = DO_FCALL
+  .php   L0064 0018 T15 = QM_ASSIGN V14
+  .php   L0064 0019 JMP 0021
+  .php   L0064 0020 T15 = QM_ASSIGN CV4($crossing#1)
+  .php   L0064 0021 ASSIGN CV3($slots) T15
+  .php   L0065 0022 V17 = FE_RESET_R CV3($slots) 0028
+  .php   L0065 0023 T18 = FE_FETCH_R V17 CV2($price) 0028
+  .php   L0065 0024 ASSIGN CV5($slot) T18
+  .php   L0066 0025 ASSIGN_OP (ADD) CV1($total) CV5($slot)
+  .php   L0067 0026 ASSIGN CV2($price) int(0)
+  .php   L0065 0027 JMP 0023
+  .php   L0065 0028 FE_FREE V17
+  .php   L0069 0029 VERIFY_RETURN_TYPE CV1($total)
+  .php   L0069 0030 RETURN CV1($total)
+  .php   L0070 0031 VERIFY_RETURN_TYPE
+  .php   L0070 0032 RETURN null
+  .php        ; (lines=33, args=1, vars=6, tmps=16)
+  .php   0004 V8 = FE_RESET_R V7 0009
+  .php   0005 FE_FETCH_R V8 CV2($price) 0009
+  .php   0006 T9 = MUL CV2($price) CV0($factor)
+  .php   0007 ASSIGN_OP (ADD) CV1($total) T9
   .php   0008 JMP 0005
-  .php   0009 FE_FREE V6
+  .php   0009 FE_FREE V8
   .php   0010 INIT_STATIC_METHOD_CALL 0 string("Demo\\Prices") string("all")
-  .php   0011 V9 = DO_FCALL
-  .php   0012 V10 = FE_RESET_R V9 0018
-  .php   0013 T11 = FE_FETCH_R V10 CV2($price) 0018
-  .php   0014 ASSIGN CV3($slot) T11
-  .php   0015 ASSIGN_OP (ADD) CV1($total) CV3($slot)
-  .php   0016 ASSIGN CV2($price) int(0)
-  .php   0017 JMP 0013
-  .php   0018 FE_FREE V10
-  .php   0019 VERIFY_RETURN_TYPE CV1($total)
-  .php   0020 RETURN CV1($total)
-  .php   0021 VERIFY_RETURN_TYPE
-  .php   0022 RETURN null
-  .php        6: 0005 - 0009 (loop)
-  .php        10: 0013 - 0018 (loop)
+  .php   0011 V11 = DO_FCALL
+  .php   0012 T12 = ASSIGN CV4($crossing#1) V11
+  .php   0013 T13 = TYPE_CHECK (array) T12
+  .php   0014 JMPZ T13 0020
+  .php   0015 INIT_STATIC_METHOD_CALL 1 string("Sharp\\Map") string("from")
+  .php   0016 SEND_VAR CV4($crossing#1) 1
+  .php   0017 V14 = DO_FCALL
+  .php   0018 T15 = QM_ASSIGN V14
+  .php   0019 JMP 0021
+  .php   0020 T15 = QM_ASSIGN CV4($crossing#1)
+  .php   0021 ASSIGN CV3($slots) T15
+  .php   0022 V17 = FE_RESET_R CV3($slots) 0028
+  .php   0023 T18 = FE_FETCH_R V17 CV2($price) 0028
+  .php   0024 ASSIGN CV5($slot) T18
+  .php   0025 ASSIGN_OP (ADD) CV1($total) CV5($slot)
+  .php   0026 ASSIGN CV2($price) int(0)
+  .php   0027 JMP 0023
+  .php   0028 FE_FREE V17
+  .php   0029 VERIFY_RETURN_TYPE CV1($total)
+  .php   0030 RETURN CV1($total)
+  .php   0031 VERIFY_RETURN_TYPE
+  .php   0032 RETURN null
+  .php        8: 0005 - 0009 (loop)
+  .php        17: 0023 - 0028 (loop)
 Order/Order: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Order/Till: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 Product: same opcodes and lines in 3 op arrays, same signatures in 1 classes

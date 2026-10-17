@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use mago_bytes::BytesDisplay;
 use mago_casing::is_camel_case;
 use mago_casing::is_class_case;
@@ -12,6 +14,7 @@ use mago_names::binding::BindingError;
 use mago_names::binding::Local;
 use mago_names::binding::LocalKind;
 use mago_names::binding::MethodParts;
+use mago_names::binding::SUPERGLOBALS;
 use mago_names::binding::php_method_name;
 use mago_names::binding::php_operator_name;
 use mago_names::scope::php_name;
@@ -145,11 +148,6 @@ use mago_syntax_core::utils::is_start_of_identifier;
 use crate::internal::checker::class_like::check_law_parameters;
 use crate::internal::consts::RESERVED_CLASS_NAMES;
 use crate::internal::context::Context;
-
-/// The PHP superglobals, which spec section 29 removes. A PHP# local or parameter of one of these names would read or
-/// replace it.
-const SUPERGLOBALS: [&[u8]; 9] =
-    [b"GLOBALS", b"_SERVER", b"_GET", b"_POST", b"_FILES", b"_COOKIE", b"_SESSION", b"_REQUEST", b"_ENV"];
 
 /// How PHP# writes PHP's `mixed`. The parser reads both as `Hint::Mixed`, and only `Any` is PHP#.
 const ANY: &[u8] = b"Any";
@@ -296,11 +294,11 @@ const OBJECT: &[u8] = b"Object";
 ///   checks. A type argument is any of
 ///   these types but `void`, and a type parameter takes none. A `Map`'s key is `int` or `string`, or a type the
 ///   analyzer finds an `int` or `string` backing value for. PHP's own check reports a `void` parameter and a `void`
-///   field. Each of them is nullable when written with `?` after it, as in `int?` or `Map<string, Any?>`, and PHP's
-///   own check reports `void?`. PHP's `mixed` is an error, because spec section 24 writes it `Any?`. A union of them but
+///   field. `never` is a method's return type alone, spec section 7. Each of them is nullable when written with `?`
+///   after it, as in `int?` or `Map<string, Any?>`, and PHP's own check reports `void?` and `never?`. PHP's `mixed` is an error, because spec section 24 writes it `Any?`. A union of them but
 ///   `void`, written inline as spec section 24 writes it, as in `int|string` or `List<int>|string`, goes wherever a
-///   type goes, and each member takes the type arguments it takes outside a union. PHP's own check reports `void` and
-///   a nullable type, as in `int?|string`, in a union, and `check_union` reports a type written twice, which the
+///   type goes, and each member takes the type arguments it takes outside a union. PHP's own check reports `void`,
+///   `never` and a nullable type, as in `int?|string`, in a union, and `check_union` reports a type written twice, which the
 ///   engine refuses. A union holds null only when written in parentheses with `?` after it, as in `(int|string)?`,
 ///   which the engine compiles as `int|string|null`.
 ///   `check_union` reports `null` written in a union, as in `int|null`, as not supported yet. PHP's own check reports
@@ -372,9 +370,8 @@ const OBJECT: &[u8] = b"Object";
 ///   `===` and `<=>` in the next, and an operator of either row that takes an operand of its own row without
 ///   parentheses, as in `a < b < c` or `a is T is U`, is an error that names the groupings to write. So is a comparison
 ///   in the value of a comparison or value pattern, as in `x is > a < b`.
-/// - `@`, which hides PHP's warnings, in a method body, where the standard library writes it before a method throws
-///   its own exception. The analyzer refuses it in any file that is not the standard library's, since only it knows a
-///   file's package, and so the refusal leaves the rest of the line analyzed.
+/// - No `@` before a value: `@` before a name makes a keyword a name, spec section 2, and a PHP built-in's failure is
+///   the value it returns, which the bridge runs without PHP's warning.
 /// - The ternary `c ? a : b` in a method body, as spec section 21 writes it. PHP's `a ?: b` is an error, and
 ///   `a ? b : c ? d : e` is `a ? b : (c ? d : e)`, as in C#.
 /// - Pattern matching in a method body, as spec section 21 writes it: `x is pattern`, `x as T` to a type that is not
@@ -1171,7 +1168,7 @@ fn enter(node: Node<'_, '_>, place: Place, context: &mut Context<'_, '_, '_>) ->
                 report_no_storage(variable, initial_value.value.span(), context);
             }
             if let Some(behaviors) = &property.behaviors {
-                check_behaviors(property, behaviors, context);
+                check_behaviors(&property.modifiers, &property.hook_list, property.span(), behaviors, context);
             }
 
             Some(FieldOrProperty)
@@ -1257,7 +1254,9 @@ fn enter(node: Node<'_, '_>, place: Place, context: &mut Context<'_, '_, '_>) ->
         (Node::GenericHint(generic), FieldOrProperty | Method | Signature | Parameter | Body) => {
             check_generic(generic, place, context)
         }
-        // A generic type's type arguments, and those of `new` and of a method call, are never `void`.
+        // A generic type's type arguments, and those of `new` and of a method call, are never `void`. Nor are they
+        // `never` in a return type, which is a type only as the whole return type, spec section 7, and which
+        // `type_written_another_way` refuses everywhere else.
         (
             Node::TypeArgumentList(list),
             FieldOrProperty | Method | Signature | Parameter | Body | Instantiation,
@@ -1269,6 +1268,15 @@ fn enter(node: Node<'_, '_>, place: Place, context: &mut Context<'_, '_, '_>) ->
                 );
 
                 return None;
+            }
+            if matches!(place, Method | Signature) {
+                let refusals = list.arguments.iter().filter_map(|argument| match argument {
+                    Hint::Never(_) => type_written_another_way(argument, Parameter),
+                    _ => None,
+                });
+                for issue in refusals {
+                    context.report(issue);
+                }
             }
 
             Some(if place == Instantiation { Body } else { place })
@@ -1444,12 +1452,20 @@ fn enter(node: Node<'_, '_>, place: Place, context: &mut Context<'_, '_, '_>) ->
                 context,
             )
         }
+        // Spec section 9: a member declared on a constructor parameter is a property like one in the class body, with
+        // storage the argument goes into.
         (Node::FunctionLikeParameter(parameter), Method | Signature | Lambda) => {
             if let Some(accessors) = &parameter.hooks
                 && parameter.modifiers.contains_visibility()
             {
                 check_accessors(&parameter.modifiers, accessors, &parameter.variable, context);
-                report_parameter_accessor_bodies(parameter, accessors, context);
+                check_accessor_bodies(accessors, parameter.variable.name, context);
+                if !context.names.has_storage(accessors) {
+                    report_no_storage(&parameter.variable, parameter.variable.span, context);
+                }
+                if let Some(behaviors) = &parameter.behaviors {
+                    check_behaviors(&parameter.modifiers, accessors, parameter.span(), behaviors, context);
+                }
             }
 
             Some(Parameter)
@@ -1484,6 +1500,19 @@ fn enter(node: Node<'_, '_>, place: Place, context: &mut Context<'_, '_, '_>) ->
         (Node::Hint(hint), FieldOrProperty | Method | Signature | Parameter | Body) if is_slice_type(hint) => {
             Some(place)
         }
+        // Spec section 9: every call passes a parameter without a default, a constructor's or a method's, so `required`
+        // adds nothing. It declares no member either, so it is this one error.
+        (Node::Modifier(modifier @ Modifier::Required(_)), Parameter) => {
+            context.report(
+                Issue::error("A parameter is required unless it has a default: remove `required`.")
+                    .with_annotation(Annotation::primary(modifier.span()).with_message("Written here.")),
+            );
+
+            None
+        }
+        // Spec section 7: `never` is a method's return type, which `type_written_another_way` refuses elsewhere, and
+        // PHP's own check reports `never?` and `never` in a union.
+        (Node::Hint(Hint::Never(_)), Method | Signature) => Some(place),
         (Node::Hint(Hint::Union(union)), FieldOrProperty | ClassConstant | Method | Signature | Parameter | Body) => {
             check_union(union, place, context);
 
@@ -1537,7 +1566,12 @@ fn enter(node: Node<'_, '_>, place: Place, context: &mut Context<'_, '_, '_>) ->
 
             None
         }
-        (Node::FunctionLikeParameterDefaultValue(_), Parameter) => Some(Constant),
+        // Spec section 9: a parameter's default is any expression, which runs each time a call leaves the argument out.
+        (Node::FunctionLikeParameterDefaultValue(default), Parameter) => {
+            check_default_reads(default.value, context);
+
+            Some(Body)
+        }
         // An interface method's body is its default body, spec section 22, checked as a class method's body.
         (Node::Block(_), Method | Signature | Body) => Some(Body),
         (Node::MethodExpressionBody(_), Method | Signature) => Some(Body),
@@ -2027,6 +2061,18 @@ fn enter(node: Node<'_, '_>, place: Place, context: &mut Context<'_, '_, '_>) ->
         }
         // `check_cast` decided the cast at its `UnaryPrefix`.
         (Node::UnaryPrefixOperator(operator), Body | Constant) if operator.is_cast() => Some(place),
+        // Spec section 2: `@` before a name makes a keyword a name, and PHP# has no `@` before a value.
+        (Node::UnaryPrefixOperator(operator @ UnaryPrefixOperator::ErrorControl(_)), Body | Constant) => {
+            report_removed(
+                operator.span(),
+                b"@",
+                "a failure is the value a call returns, so test that value, as in `global.iconv(from, to, text) is string converted`.",
+                "`@` before a name makes a keyword a name, as in `@event`.",
+                context,
+            );
+
+            None
+        }
         (Node::UnaryPrefixOperator(operator), Body | Constant) if is_slice_prefix_operator(operator, place) => {
             Some(place)
         }
@@ -3097,34 +3143,6 @@ fn several_names(span: Span, kind: &str) -> Issue {
         .with_annotation(Annotation::primary(span).with_message("Several names here."))
 }
 
-/// Reports each accessor body of a member declared on a constructor parameter. Spec section 9: such a member takes
-/// access levels and attributes only, and an accessor body goes on a member in the class body. So every member a
-/// parameter declares has storage for the constructor to set.
-fn report_parameter_accessor_bodies(
-    parameter: &FunctionLikeParameter,
-    accessors: &PropertyHookList,
-    context: &mut Context<'_, '_, '_>,
-) {
-    for accessor in &accessors.hooks {
-        let PropertyHookBody::Concrete(body) = &accessor.body else {
-            continue;
-        };
-
-        let (given, annotation) = if accessor.is_observer() {
-            (format!("`{}`", BytesDisplay(accessor.name.value)), "An observer on a parameter.")
-        } else {
-            ("an accessor body".to_owned(), "An accessor body on a parameter.")
-        };
-        context.report(
-            Issue::error(format!(
-                "Declare `{}` in the class body to give it {given}: a member declared on a constructor parameter takes access levels and attributes only.",
-                BytesDisplay(parameter.variable.name)
-            ))
-            .with_annotation(Annotation::primary(body.span()).with_message(annotation)),
-        );
-    }
-}
-
 /// Reports a static field or a static property with storage that has no initial value, spec section 6. No constructor
 /// sets a static, so it would be read before anything set it, and a `T?` one has no implicit `null` either.
 fn report_static_without_initial_value(property: &Property, context: &mut Context<'_, '_, '_>) {
@@ -3299,8 +3317,15 @@ fn is_slice_accessor(accessor: &PropertyHook) -> bool {
 
 /// Spec section 6.4: a behavior runs around a property's storage, once per object, so `via` goes on an instance
 /// auto-property with `get; set;` and no accessor body, which a class declares, never an interface. Each behavior is
-/// a class PHP# creates with `new`, so it names one, with its type arguments when it is generic.
-fn check_behaviors(property: &HookedProperty, behaviors: &PropertyBehaviorList, context: &mut Context<'_, '_, '_>) {
+/// a class PHP# creates with `new`, so it names one, with its type arguments when it is generic. The property, at
+/// `span`, is declared in the class body or on a constructor parameter, with `modifiers` and `accessors`.
+fn check_behaviors(
+    modifiers: &Sequence<Modifier>,
+    accessors: &PropertyHookList,
+    span: Span,
+    behaviors: &PropertyBehaviorList,
+    context: &mut Context<'_, '_, '_>,
+) {
     for behavior in behaviors.behaviors.iter() {
         let names_class = match behavior {
             Hint::Identifier(_) => true,
@@ -3318,18 +3343,18 @@ fn check_behaviors(property: &HookedProperty, behaviors: &PropertyBehaviorList, 
         }
     }
 
-    let accessors = &property.hook_list.hooks;
+    let accessors = &accessors.hooks;
     let is_auto = |name: &[u8]| {
         accessors
             .iter()
             .any(|accessor| accessor.name.value == name && matches!(accessor.body, PropertyHookBody::Abstract(_)))
     };
-    let refusal = if is_in_interface(context.program, property.span()) || property.modifiers.contains_abstract() {
+    let refusal = if is_in_interface(context.program, span) || modifiers.contains_abstract() {
         Some((
             "A property without storage takes no `via`: the class that stores the property names its behaviors.",
             None,
         ))
-    } else if property.modifiers.contains_static() {
+    } else if modifiers.contains_static() {
         Some(("A static property takes no `via`: each object keeps its own behaviors.", None))
     } else if accessors.len() != 2 || !is_auto(b"get") || !is_auto(b"set") {
         Some((
@@ -4139,8 +4164,8 @@ fn is_slice_type(hint: &Hint) -> bool {
 
 /// The error for a type PHP# writes another way, spec section 24: the built-in types are lowercase, every other type is
 /// capitalized, and PHP's `mixed`, `object`, `array`, `callable`, `true`, `false` and a lone `null` each have a PHP#
-/// form. `never` is a type only as a method's return type, at `place` [`Place::Method`], which keeps PHP's handling.
-/// `None` for a type written as PHP# writes it.
+/// form. `never` is a type only as a method's return type, spec section 7, at `place` [`Place::Method`] or
+/// [`Place::Signature`]. `None` for a type written as PHP# writes it.
 fn type_written_another_way(hint: &Hint, place: Place) -> Option<Issue> {
     let written = match hint {
         Hint::Identifier(Identifier::Local(name)) => name.value,
@@ -4156,7 +4181,7 @@ fn type_written_another_way(hint: &Hint, place: Place) -> Option<Issue> {
         | Hint::False(keyword)
         | Hint::Array(keyword)
         | Hint::Callable(keyword) => keyword.value,
-        Hint::Never(keyword) if !matches!(place, Place::Method) => keyword.value,
+        Hint::Never(keyword) if !matches!(place, Place::Method | Place::Signature) => keyword.value,
         _ => return None,
     };
     let lowercase = written.to_ascii_lowercase();
@@ -4478,7 +4503,7 @@ fn check_union(union: &UnionHint, place: Place, context: &mut Context<'_, '_, '_
 
                 false
             }
-            Hint::Void(_) | Hint::Nullable(_) => false,
+            Hint::Void(_) | Hint::Never(_) | Hint::Nullable(_) => false,
             Hint::Self_(keyword) => check_self_type(keyword, place, context),
             Hint::Static(keyword) => {
                 report_php_static(keyword, context);
@@ -4996,18 +5021,17 @@ const fn is_slice_binary_operator(operator: &BinaryOperator) -> bool {
     }
 }
 
-/// Whether the slice has a prefix operator at a place. A parameter default has no `++`, `--` or `@`. Every operator is
-/// named, so a new one does not compile until it is decided.
+/// Whether the slice has a prefix operator at a place. A parameter default has no `++` or `--`, and `enter` refuses
+/// `@` before it calls this. Every operator is named, so a new one does not compile until it is decided.
 fn is_slice_prefix_operator(operator: &UnaryPrefixOperator, place: Place) -> bool {
     match operator {
         UnaryPrefixOperator::Negation(_)
         | UnaryPrefixOperator::Plus(_)
         | UnaryPrefixOperator::Not(_)
         | UnaryPrefixOperator::BitwiseNot(_) => true,
-        UnaryPrefixOperator::PreIncrement(_)
-        | UnaryPrefixOperator::PreDecrement(_)
-        | UnaryPrefixOperator::ErrorControl(_) => place == Place::Body,
-        UnaryPrefixOperator::Reference(_)
+        UnaryPrefixOperator::PreIncrement(_) | UnaryPrefixOperator::PreDecrement(_) => place == Place::Body,
+        UnaryPrefixOperator::ErrorControl(_)
+        | UnaryPrefixOperator::Reference(_)
         | UnaryPrefixOperator::ArrayCast(..)
         | UnaryPrefixOperator::BoolCast(..)
         | UnaryPrefixOperator::BooleanCast(..)
@@ -5414,7 +5438,7 @@ fn supported(place: Place) -> &'static str {
             "A PHP# interface has an optional `public`, a name, optional type parameters as in `<in TItem>`, an optional `: Interface` header, methods and get-only properties, as in `int orderId { get; }`, with no attributes, other modifiers, `extends`, constants or other properties."
         }
         Place::Signature => {
-            "A PHP# interface method has no modifier, optional type parameters, parameters, a return type of `int`, `float`, `bool`, `string`, `Any`, `void`, a class or a type parameter, a generic type as in `List<T>` or `PaginatedList<Order>`, or `Self`, each but `void` nullable as in `int?`, or a union of them but `void`, as in `int|string`, and no body or a default body."
+            "A PHP# interface method has no modifier, optional type parameters, parameters, a return type of `int`, `float`, `bool`, `string`, `Any`, `void`, `never`, a class or a type parameter, a generic type as in `List<T>` or `PaginatedList<Order>`, or `Self`, each but `void` and `never` nullable as in `int?`, or a union of them but `void` and `never`, as in `int|string`, and no body or a default body."
         }
         Place::Enum => {
             "A PHP# enum has attributes, an optional `public`, a name, optional type parameters as in `<T, TError : Error>` when it has no backing type, an optional `: string, Interface` header whose `int` or `string` comes first, constants, cases, computed properties, methods and laws, with no other modifiers or `implements`. A case of a backed enum has a value, as in `case None = \"none\";`, and a case of any other enum may carry data, as in `case Paid(string transactionId);`."
@@ -5439,7 +5463,7 @@ fn supported(place: Place) -> &'static str {
             "A PHP# constant has `public`, `protected` or `private`, an optional type of `int`, `float`, `bool`, `string`, `Any` or a class, nullable as in `int?` or not, or a union of them as in `int|string`, one name, and a constant value."
         }
         Place::Method => {
-            "A PHP# method takes `public`, `protected`, `private`, `static`, `abstract`, `virtual` and `override`, a constructor also `required`, optional type parameters as in `<TItem : DatabaseEntity>`, parameters, and a return type of `int`, `float`, `bool`, `string`, `Any`, `void`, a class or a type parameter, a generic type as in `List<T>` or `PaginatedList<Order>`, `Function<R(P)>`, a tuple as in `[Money, int]` or `Self`, each but `void` nullable as in `int?`, or a union of them but `void`, as in `int|string`, and an optional `on` clause after the parameters, as in `on OrderPaid, OrderRefunded`."
+            "A PHP# method takes `public`, `protected`, `private`, `static`, `abstract`, `virtual` and `override`, a constructor also `required`, optional type parameters as in `<TItem : DatabaseEntity>`, parameters, and a return type of `int`, `float`, `bool`, `string`, `Any`, `void`, `never`, a class or a type parameter, a generic type as in `List<T>` or `PaginatedList<Order>`, `Function<R(P)>`, a tuple as in `[Money, int]` or `Self`, each but `void` and `never` nullable as in `int?`, or a union of them but `void` and `never`, as in `int|string`, and an optional `on` clause after the parameters, as in `on OrderPaid, OrderRefunded`."
         }
         Place::Parameter => {
             "A PHP# parameter has a type of `int`, `float`, `bool`, `string`, `Any`, a class or a type parameter, a generic type as in `List<T>` or `PaginatedList<Order>`, `Function<R(P)>`, or a tuple as in `[Money, int]`, nullable as in `int?` or not, or a union of them as in `int|string`, a name, and an optional default. The last parameter can be variadic, as in `int ...values`."
@@ -6159,37 +6183,23 @@ fn declarations<'ast, 'arena>(program: &'ast Program<'arena>) -> Declarations<'a
     declarations
 }
 
-/// Checks the name of a PHP# local or parameter, which runs as the PHP variable of the same name, and a
-/// `__Something__` name, which spec section 27 removes.
+/// Checks the name of a PHP# local or parameter, and a `__Something__` name, which spec section 27 removes. A keyword
+/// names one only with `@` before it, spec section 2. The name of `@event` is `event`, and its span holds the `@` too,
+/// and the name of `@this` keeps its `@`.
 fn check_local_name(name: &[u8], span: Span, kind: &str, context: &mut Context<'_, '_, '_>) {
-    if name == b"this" {
-        context.report(
-            Issue::error(format!("Cannot name a {kind} `this`: `this` is the object the method runs on."))
-                .with_annotation(Annotation::primary(span).with_message("Declared here."))
-                .with_note(format!("A PHP# {kind} runs as a PHP variable of the same name, and PHP forbids `$this`.")),
-        );
-    } else if SUPERGLOBALS.contains(&name) {
+    let marked = span.length() as usize > name.len();
+    if is_sharp_keyword(name) && !marked {
         let name = BytesDisplay(name);
 
         context.report(
-            Issue::error(format!("`{name}` is the name of a PHP superglobal: rename this {kind}."))
-                .with_annotation(Annotation::primary(span).with_message("Declared here."))
-                .with_note(format!("A PHP# {kind} runs as a PHP variable of the same name, which would be `${name}`.")),
-        );
-    } else if is_sharp_keyword(name) {
-        let renamed = format!("{}Value", name.to_ascii_lowercase().escape_ascii());
-        let name = BytesDisplay(name);
-
-        context.report(
-            Issue::error(format!("`{name}` is a PHP# keyword, so it can't name a {kind}."))
-                .with_annotation(Annotation::primary(span).with_message("Declared here."))
-                .with_help(format!("Rename it, as in `{renamed}`.")),
+            Issue::error(format!("`{name}` is a keyword; write `@{name}`."))
+                .with_annotation(Annotation::primary(span).with_message("Declared here.")),
         );
     } else {
         let mut kind = kind.to_owned();
         kind[..1].make_ascii_uppercase();
 
-        check_declared_name(name, span, &kind, NameCase::Camel, context);
+        check_declared_name(name.strip_prefix(b"@").unwrap_or(name), span, &kind, NameCase::Camel, context);
     }
 }
 
@@ -6515,6 +6525,35 @@ fn check_iterator_returns(method: &Method, context: &mut Context<'_, '_, '_>) {
             Issue::error("A method that yields cannot return a value: write `return;` to end it.")
                 .with_annotation(Annotation::primary(span).with_message("Returns a value here."))
                 .with_note("A method that yields produces only the values it yields, as in C#."),
+        );
+    }
+}
+
+/// Reports each read of `this`, `field`, a parameter or a type parameter in `default`, a parameter's default, outside a
+/// lambda's own parameters. Spec section 9: the default runs before the method, each time a call leaves the argument
+/// out, so no object, argument or type argument is there yet. A bare member read already has its own error.
+fn check_default_reads(default: &Expression, context: &mut Context<'_, '_, '_>) {
+    // A name's binding is kept at its first byte, where the expressions it starts begin too. The walk gives a node's
+    // children before it, so the first node at that byte is the smallest, the name.
+    let mut reads = BTreeMap::<u32, Span>::new();
+    for span in Node::Expression(default).filter_map(|node| Some(node.span())) {
+        let unavailable = match context.names.binding(&span.start) {
+            Some(Binding::This | Binding::Field | Binding::TypeParameter { .. }) => true,
+            Some(Binding::Local(local)) => !default.span().contains(&local.declaration.start),
+            _ => false,
+        };
+        if unavailable {
+            reads.entry(span.start.offset).or_insert(span);
+        }
+    }
+    for read in reads.into_values() {
+        context.report(
+            Issue::error(format!(
+                "A parameter's default runs before the method, so `{}` is not there yet.",
+                BytesDisplay(context.get_code_snippet(read))
+            ))
+            .with_annotation(Annotation::primary(read).with_message("Read here."))
+            .with_help("Compute the value in the method from a nullable parameter, as in `int? limit = null`."),
         );
     }
 }

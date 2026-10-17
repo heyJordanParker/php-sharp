@@ -40,7 +40,7 @@ pub(crate) fn lower_parse_error(error: &ParseError) -> Error {
         | ParseError::ReadonlyNotLastInSharp(..)
         | ParseError::OtherMemberInSharpModule(..)
         | ParseError::ComputedParameterInSharp(..)
-        | ParseError::BehaviorParameterInSharp(..)
+        | ParseError::DefaultBeforeAccessorsInSharp(..)
         | ParseError::ConstructorInitializerInSharp(..)
         | ParseError::EventBodyInSharp(..)
         | ParseError::StructHeaderTypeInSharp(..)

@@ -556,18 +556,16 @@ fn a_catch_type_that_is_not_a_class_reports_only_the_php_error() {
     );
 }
 
+/// A bare `this` is a keyword, and a superglobal's name is a name like any other.
 #[test]
-fn a_catch_variable_named_this_or_a_superglobal_is_an_error() {
+fn a_catch_variable_named_this_is_an_error_and_one_named_as_a_superglobal_is_a_name() {
     let code = leak(method(
         "        try {\n        } catch (Missing this) {\n        } catch (Broken _GET) {\n        }\n        return extra;\n",
     ));
 
     assert_eq!(
         issues(code),
-        [
-            "8:26 Cannot name a catch variable `this`: `this` is the object the method runs on.",
-            "9:25 `_GET` is the name of a PHP superglobal: rename this catch variable.",
-        ]
+        ["8:26 `this` is a keyword; write `@this`.", "9:25 Catch variable name `_GET` should be in camel case.",]
     );
 }
 
@@ -735,18 +733,16 @@ fn a_const_loop_variable_cannot_be_assigned_and_is_out_of_scope_after_its_loop()
     );
 }
 
+/// A bare `this` is a keyword, and a superglobal's name is a name like any other.
 #[test]
-fn a_loop_variable_named_this_or_a_superglobal_is_an_error() {
+fn a_loop_variable_named_this_is_an_error_and_one_named_as_a_superglobal_is_a_name() {
     let code = leak(method(
         "        for (const this of Store.values()) {\n        }\n        for (const [_GET, value] of Store.values()) {\n        }\n        return extra;\n",
     ));
 
     assert_eq!(
         issues(code),
-        [
-            "7:20 Cannot name a loop variable `this`: `this` is the object the method runs on.",
-            "9:21 `_GET` is the name of a PHP superglobal: rename this loop variable.",
-        ]
+        ["7:20 `this` is a keyword; write `@this`.", "9:21 Loop variable name `_GET` should be in camel case.",]
     );
 }
 
@@ -1146,17 +1142,17 @@ fn isset_empty_unset_array_and_list_written_as_calls_name_the_php_sharp_form() {
 #[test]
 fn the_keyword_names_example_reserves_only_the_keywords_php_sharp_uses() {
     let code = leak(method(
-        "        const list = [1, 2, 3];\n        let empty = true;\n        const print = \"draft\";\n        const match = 1;\n        return extra;\n",
+        "        const list = [1, 2, 3];\n        let empty = true;\n        const print = \"draft\";\n        const @emit = 1;\n        const match = 1;\n        return extra;\n",
     ));
 
-    assert_eq!(issues(code), ["10:15 `match` is a PHP# keyword, so it can't name a local."]);
+    assert_eq!(issues(code), ["11:15 `match` is a keyword; write `@match`."]);
 }
 
-/// Spec section 2, after C#'s keywords: every word that starts or structures PHP# syntax is reserved, so it can't name
-/// a `const` or `let` local, a parameter, a catch variable or a pattern variable. `this` keeps its own message. The
-/// name the help suggests compiles.
+/// Spec section 2, after C#'s keywords: every word that starts or structures PHP# syntax names a `const` or `let`
+/// local, a parameter, a catch variable, a pattern variable or a loop variable only with `@` before it, `this`
+/// included, and the error says to write it so.
 #[test]
-fn every_keyword_php_sharp_uses_is_refused_as_a_local_or_parameter_name() {
+fn every_keyword_names_a_local_or_parameter_only_with_at() {
     const RESERVED: [&str; 53] = [
         "let",
         "const",
@@ -1214,7 +1210,6 @@ fn every_keyword_php_sharp_uses_is_refused_as_a_local_or_parameter_name() {
     ];
 
     for word in RESERVED {
-        let renamed = format!("{}Value", word.to_lowercase());
         let rows = [
             (leak(method(&format!("        const {word} = 1;\n        return extra;\n"))), "7:15", "local"),
             (leak(method(&format!("        let {word} = 1;\n        return extra;\n"))), "7:13", "local"),
@@ -1237,24 +1232,29 @@ fn every_keyword_php_sharp_uses_is_refused_as_a_local_or_parameter_name() {
             ),
         ];
 
-        for (code, at, kind) in rows {
-            let (message, help) = if word == "this" {
-                (format!("Cannot name a {kind} `this`: `this` is the object the method runs on."), None)
-            } else {
-                (
-                    format!("`{word}` is a PHP# keyword, so it can't name a {kind}."),
-                    Some(format!("Rename it, as in `{renamed}`.")),
-                )
-            };
-            let refused: Vec<(String, Option<String>)> =
-                check_in_type_file(code).into_iter().map(|issue| (issue.message, issue.help)).collect();
-
-            assert_eq!(refused, [(message, help)], "{code}");
-            assert_eq!(issues(code)[0].split_once(' ').map(|(location, _)| location), Some(at), "{code}");
+        for (code, at, _) in rows {
+            assert_eq!(issues(code), [format!("{at} `{word}` is a keyword; write `@{word}`.")], "{code}");
         }
 
-        let fixed = leak(method(&format!("        const {renamed} = 1;\n        return {renamed};\n")));
-        assert_eq!(issues(fixed), Vec::<String>::new(), "{fixed}");
+        let marked = [
+            format!("        const @{word} = 1;\n        return @{word};\n"),
+            format!("        let @{word} = 1;\n        @{word} = 2;\n        return @{word};\n"),
+            format!("        try {{ return 1; }} catch (Exception @{word}) {{ throw @{word}; }}\n"),
+            format!("        if (extra is int @{word}) {{ return @{word}; }}\n        return extra;\n"),
+            format!("        for (const @{word} of [1]) {{ return @{word}; }}\n        return extra;\n"),
+        ];
+        // `Self` is a name in Pascal case, which a local's name breaks with a warning.
+        if word == "Self" {
+            continue;
+        }
+        for body in marked {
+            let fixed = leak(method(&body));
+            assert_eq!(issues(fixed), Vec::<String>::new(), "{fixed}");
+        }
+        let parameter = leak(format!(
+            "namespace App.Tenant;\n\nclass Report\n{{\n    public int run(int @{word}) => @{word};\n}}\n"
+        ));
+        assert_eq!(issues(parameter), Vec::<String>::new(), "{parameter}");
     }
 }
 
@@ -1814,7 +1814,7 @@ fn a_type_an_interface_method_cannot_take_names_what_it_has() {
     assert_eq!(
         check_in_type_file(code).into_iter().map(|issue| issue.notes).collect::<Vec<_>>(),
         [[
-            "A PHP# interface method has no modifier, optional type parameters, parameters, a return type of `int`, `float`, `bool`, `string`, `Any`, `void`, a class or a type parameter, a generic type as in `List<T>` or `PaginatedList<Order>`, or `Self`, each but `void` nullable as in `int?`, or a union of them but `void`, as in `int|string`, and no body or a default body."
+            "A PHP# interface method has no modifier, optional type parameters, parameters, a return type of `int`, `float`, `bool`, `string`, `Any`, `void`, `never`, a class or a type parameter, a generic type as in `List<T>` or `PaginatedList<Order>`, or `Self`, each but `void` and `never` nullable as in `int?`, or a union of them but `void` and `never`, as in `int|string`, and no body or a default body."
         ]]
     );
 }
@@ -1995,24 +1995,19 @@ fn a_constant_or_an_enum_case_is_read_in_a_default_a_constant_value_and_an_initi
     assert_eq!(issues(code), Vec::<String>::new());
 }
 
+/// A constant value cannot read a static member or a member of one, and a parameter's default, which is any
+/// expression, can.
 #[test]
 fn a_static_member_read_in_a_constant_expression_is_an_error() {
-    let code = "namespace App.Tenant;\n\nclass Report\n{\n    private static int count = 0;\n    public const int MAX = Report.count;\n\n    public int run(int extra = Report.count)\n    {\n        return 1;\n    }\n}\n";
+    let code = "namespace App.Tenant;\n\nclass Report\n{\n    private static int count = 0;\n    public const int MAX = Report.count;\n    public const int CENTS = Calc.rate.cents;\n\n    public int run(int extra = Report.count, int cents = Calc.rate.cents)\n    {\n        return 1;\n    }\n}\n";
 
     assert_eq!(
         issues(code),
         [
             "6:28 `Report.count` is a static member, which a constant value cannot read.",
-            "8:32 `Report.count` is a static member, which a constant value cannot read."
+            "7:30 This expression is not supported yet in PHP#."
         ]
     );
-}
-
-#[test]
-fn a_member_chain_in_a_constant_expression_is_not_supported_yet() {
-    let code = leak(method("        return extra;\n").replace("int extra", "int extra = Calc.rate.cents"));
-
-    assert_eq!(issues(code), ["5:32 This expression is not supported yet in PHP#."]);
 }
 
 #[test]
@@ -2307,13 +2302,7 @@ fn two_imports_with_the_same_short_name_are_an_error() {
 fn a_parameter_or_local_named_this_is_an_error() {
     let code = "class Report\n{\n    public int run(int this) { return 1; }\n\n    public int total() { let this = 1; return 1; }\n}\n";
 
-    assert_eq!(
-        issues(code),
-        [
-            "3:24 Cannot name a parameter `this`: `this` is the object the method runs on.",
-            "5:30 Cannot name a local `this`: `this` is the object the method runs on.",
-        ]
-    );
+    assert_eq!(issues(code), ["3:24 `this` is a keyword; write `@this`.", "5:30 `this` is a keyword; write `@this`.",]);
 }
 
 #[test]
@@ -2569,16 +2558,15 @@ fn an_interface_named_like_a_reserved_class_name_is_an_error() {
     assert_eq!(issues(code), ["3:11 Cannot use `Mixed` as a class name: it is reserved."]);
 }
 
+/// A local or a parameter named as one of PHP's superglobals is a name like any other, which the bridge runs under a
+/// PHP name of its own, so only its case is checked.
 #[test]
-fn a_local_or_parameter_named_after_a_superglobal_is_an_error() {
+fn a_local_or_parameter_named_after_a_superglobal_is_a_name_like_any_other() {
     let code = leak(method("        let _GET = 1;\n        return _GET;\n").replace("int extra", "int GLOBALS"));
 
     assert_eq!(
         issues(code),
-        [
-            "5:24 `GLOBALS` is the name of a PHP superglobal: rename this parameter.",
-            "7:13 `_GET` is the name of a PHP superglobal: rename this local.",
-        ]
+        ["5:24 Parameter name `GLOBALS` should be in camel case.", "7:13 Local name `_GET` should be in camel case."]
     );
 }
 
@@ -3254,7 +3242,7 @@ fn a_promoted_member_follows_the_rules_of_the_same_declaration_in_the_class_body
         [
             "5:30 A PHP# property needs a `get` accessor.",
             "5:63 The `set` accessor of a PHP# property must be narrower than the property.",
-            "5:98 Declare `c` in the class body to give it an accessor body: a member declared on a constructor parameter takes access levels and attributes only.",
+            "5:90 The property `c` has no storage for its initial value: give it an auto accessor, such as `get;`, or use `field` in an accessor body.",
         ]
     );
 }
@@ -3298,23 +3286,19 @@ fn a_parameter_cannot_be_lazy() {
     );
 }
 
-/// Spec section 9: a member declared on a constructor parameter takes access levels and attributes only, so each
-/// accessor body is an error, an expression body or a block, on `get`, `set` or `init`. Access levels stay.
+/// Spec section 9: a member declared on a constructor parameter is a property like one in the class body: accessor
+/// bodies on `get`, `set` and `init`, observers, behaviors and a default after them. `via` keeps its rules, and
+/// `required` adds nothing to a parameter every call passes.
 #[test]
-fn an_accessor_body_on_a_constructor_parameter_is_an_error() {
-    let code = "namespace App.Tenant;\n\nclass Ledger\n{\n    public Ledger(\n        public string name { get; set => field = value.trim(); },\n        public int count { get => field; private set; },\n        public string code { get; init { field = value; } },\n        public int total { get; private set; },\n    ) {}\n}\n";
-    let message = |name: &str| {
-        format!(
-            "Declare `{name}` in the class body to give it an accessor body: a member declared on a constructor parameter takes access levels and attributes only."
-        )
-    };
+fn a_parameter_property_takes_every_body_property_feature() {
+    let code = "namespace App.Tenant;\n\nclass Ledger\n{\n    public Ledger(\n        public required string kind { get; },\n        public int count { get => field; private set; },\n        public string code { get; init { field = value; } },\n        public int total { get; set; didSet { } },\n        public string slug { get; } via Trimmed,\n        public string name { get; set => field = value.trim(); } = \"\",\n        public string label { get; set; } via Trimmed = \"x\",\n    ) {}\n\n    public void method(required int x) { }\n}\n";
 
     assert_eq!(
         issues(code),
         [
-            format!("6:39 {}", message("name")),
-            format!("7:32 {}", message("count")),
-            format!("8:40 {}", message("code"))
+            "6:16 A parameter is required unless it has a default: remove `required`.",
+            "10:37 `via` goes on an auto-property with `get; set;`: its behaviors run around the storage.",
+            "15:24 A parameter is required unless it has a default: remove `required`.",
         ]
     );
 }
@@ -3752,21 +3736,23 @@ fn extern_on_a_field_is_not_supported_yet() {
     assert_eq!(issues(code), ["5:20 This modifier is not supported yet in PHP#."]);
 }
 
-/// The analyzer refuses `@` in a file that is not the standard library's, which only it can tell, so the semantic
-/// checks take it in a method body of any namespace.
+/// Spec section 2: `@` before a name makes a keyword a name, and PHP# has no `@` before a value, in the standard
+/// library too, since the bridge runs a PHP built-in that returns its failure without its warning.
 #[test]
-fn the_error_control_operator_is_in_the_slice_in_a_method_body() {
-    for namespace in ["Sharp", "Sharp.Text", "SHARP.Text", "App", "Sharpen.Text", "App.Sharp"] {
+fn the_error_control_operator_is_an_error_in_every_namespace() {
+    for namespace in ["Sharp", "Sharp.Text", "App"] {
         let code = leak(format!(
-            "namespace {namespace};\n\npublic static class Text\n{{\n    public static string quiet(string title) => @trim(title);\n}}\n"
+            "namespace {namespace};\n\npublic static class Text\n{{\n    public static string quiet(string title) => @(global.trim(title));\n}}\n"
         ));
 
-        assert_eq!(issues(code), Vec::<String>::new(), "{namespace}");
+        assert_eq!(
+            issues(code),
+            [
+                "5:49 PHP# has no `@`: a failure is the value a call returns, so test that value, as in `global.iconv(from, to, text) is string converted`."
+            ],
+            "{namespace}"
+        );
     }
-
-    let default =
-        "namespace Sharp;\n\npublic static class Text\n{\n    public static int quiet(int size = @1) => size;\n}\n";
-    assert_eq!(issues(default), ["5:40 This operator is not supported yet in PHP#."]);
 }
 
 #[test]
@@ -4175,8 +4161,8 @@ fn via_goes_on_an_instance_auto_property_with_get_and_set() {
 
 /// Spec section 6.2: `willSet` and `didSet` each take a body and need `set`, as they run inside it on each write.
 /// `willSet` cannot change or stop the write, so it neither writes `value` nor returns, and a `set` body cannot return
-/// before `didSet`, nor `didSet` return a value. `field` in `willSet` reads the value the write replaces.
-/// A member declared on a constructor parameter takes no observer, as section 9 says.
+/// before `didSet`, nor `didSet` return a value. `field` in `willSet` reads the value the write replaces. A member
+/// declared on a constructor parameter takes observers too, as section 9 says.
 #[test]
 fn observers_take_a_body_beside_set_and_cannot_change_or_stop_the_write() {
     let code = "namespace App.Tenant;\n\npublic class Report\n{\n    public string name { get; set; willSet => this.log(value); didSet { this.log(field); } } = \"\";\n    public int count { get; set { if (value < 0) { return; } field = value; } didSet => this.log(\"count\"); } = 0;\n    public int total { get; willSet => this.log(\"total\"); } = 0;\n    public int size { get; init; didSet => this.log(\"size\"); }\n    public int rank { get; set; willSet { value = 2; value++; return; } } = 0;\n    public int level { get; set; willSet => this.log(field); didSet; } = 0;\n    public int depth { get; set; didSet { return 1; } } = 0;\n\n    public Report(public string title { get; set; didSet => this.log(value); }) { }\n\n    private void log(Any? text) { }\n}\n";
@@ -4192,7 +4178,6 @@ fn observers_take_a_body_beside_set_and_cannot_change_or_stop_the_write() {
             "9:54 `willSet` cannot change `value`: the write after it stores `value` as written.",
             "10:62 This accessor is not supported yet in PHP#.",
             "11:50 `didSet` must not return a value.",
-            "13:58 Declare `title` in the class body to give it `didSet`: a member declared on a constructor parameter takes access levels and attributes only.",
         ]
     );
 }
@@ -4495,9 +4480,16 @@ fn bitwise_operators_their_compound_assignments_and_modulo_assignment_are_in_the
 
 #[test]
 fn operators_outside_the_slice_are_not_supported_yet() {
-    let code = leak(method("        let a = extra;\n        a = extra <> 1;\n        return a;\n"));
+    let code =
+        leak(method("        let a = extra;\n        a = @(extra);\n        a = extra <> 1;\n        return a;\n"));
 
-    assert_eq!(issues(code), ["8:19 This operator is not supported yet in PHP#."]);
+    assert_eq!(
+        issues(code),
+        [
+            "8:13 PHP# has no `@`: a failure is the value a call returns, so test that value, as in `global.iconv(from, to, text) is string converted`.",
+            "9:19 This operator is not supported yet in PHP#.",
+        ]
+    );
 }
 
 /// `<=>` orders two values, as spec section 19 writes it for numbers, strings and instances whose class declares
@@ -4583,18 +4575,38 @@ fn a_type_php_sharp_writes_another_way_is_an_error_that_names_its_form() {
         );
     }
 
-    // `never` keeps its handling as a return type, and is a type PHP# doesn't have anywhere else.
+    // Spec section 7: `never` is a method's return type, and a type PHP# doesn't have anywhere else, each refused once.
     let never = leak(method("        never local = extra;\n        return 1;\n").replace("int extra", "never extra"));
     assert_eq!(
         issues(never),
-        [
-            "5:20 Invalid parameter type: bottom type `never` cannot be used as a parameter type.",
-            "5:20 PHP# has no `never` type outside a return type.",
-            "7:9 PHP# has no `never` type outside a return type.",
-        ]
+        ["5:20 PHP# has no `never` type outside a return type.", "7:9 PHP# has no `never` type outside a return type."]
     );
     let returned = leak(method("        throw new Error();\n").replace("public int run", "public never run"));
-    assert_eq!(issues(returned), ["5:12 This type is not supported yet in PHP#."]);
+    assert_eq!(issues(returned), Vec::<String>::new());
+    let signature = "namespace App.Tenant;\n\ninterface Stops\n{\n    never stop();\n}\n";
+    assert_eq!(issues(signature), Vec::<String>::new());
+    let nullable = leak(method("        throw new Error();\n").replace("public int run", "public never? run"));
+    let union = leak(method("        throw new Error();\n").replace("public int run", "public int|never run"));
+    assert_eq!(issues(nullable), ["5:12 Type `never` cannot be nullable."]);
+    assert_eq!(issues(union), ["5:16 Type `never` cannot be part of a union."]);
+    let property = "namespace App.Tenant;\n\nclass Report\n{\n    public never value { get; set; }\n    private List<never> items = [];\n}\n";
+    assert_eq!(
+        issues(property),
+        [
+            "5:12 PHP# has no `never` type outside a return type.",
+            "6:18 PHP# has no `never` type outside a return type."
+        ]
+    );
+    // `never` is a type only as the whole return type, so not as a return type's type argument, nested or not.
+    let arguments = "namespace App.Tenant;\n\ninterface Stops\n{\n    List<never> listed();\n\n    Map<string, List<never>> mapped();\n\n    List<int|never> joined();\n\n    List<Self> own();\n}\n";
+    assert_eq!(
+        issues(arguments),
+        [
+            "5:10 PHP# has no `never` type outside a return type.",
+            "7:22 PHP# has no `never` type outside a return type.",
+            "9:14 Type `never` cannot be part of a union."
+        ]
+    );
 }
 
 #[test]
@@ -4693,13 +4705,21 @@ fn a_void_parameter_reports_only_the_php_error() {
     assert_eq!(issues(code), ["3:21 Invalid parameter type: bottom type `void` cannot be used as a parameter type."]);
 }
 
+/// Spec section 9: a parameter's default is any expression: a call, a `new`, a cast, a ternary or a lambda. It runs
+/// before the method each time a call leaves the argument out, so it reads no `this`, member, `field` or other
+/// parameter, and a lambda in it reads its own parameters.
 #[test]
-fn a_parameter_default_is_a_constant_expression() {
-    let code = "class Report\n{\n    public int run(int a = -1 + 2 * PHP_INT_MAX, int b = a, int c = this.run(), bool d = !true)\n    {\n        return a;\n    }\n}\n";
+fn a_parameter_default_is_any_expression_that_reads_no_object_or_parameter() {
+    let code = "class Report\n{\n    private int size = 0;\n\n    public int run(\n        int a = -1 + 2 * PHP_INT_MAX,\n        int b = Report.make(),\n        Report c = new Report(),\n        int d = (int)1.5,\n        int e = true ? 1 : 2,\n        Function<int(int)> f = (int x) => x + 1,\n        int g = a,\n        int h = this.run(),\n        int i = size,\n    )\n    {\n        return a;\n    }\n\n    public static int make() => 1;\n}\n";
+    let message = |name: &str| format!("A parameter's default runs before the method, so `{name}` is not there yet.");
 
     assert_eq!(
         issues(code),
-        ["3:58 This expression is not supported yet in PHP#.", "3:69 This expression is not supported yet in PHP#.",]
+        [
+            format!("12:17 {}", message("a")),
+            format!("13:17 {}", message("this")),
+            "14:17 Write `this.size`: members of the same object are always written with `this.`.".to_owned(),
+        ]
     );
 }
 
@@ -5238,15 +5258,6 @@ fn an_interface_method_and_a_class_constant_take_any_and_never_mixed() {
     assert_eq!(issues(class), [format!("5:18 {mixed}")]);
 }
 
-#[test]
-fn a_cast_or_a_ternary_in_a_parameter_default_is_not_supported_yet() {
-    let cast = leak(method("        return extra;\n").replace("int extra", "int extra = (int)1.5"));
-    let ternary = leak(method("        return extra;\n").replace("int extra", "int extra = true ? 1 : 2"));
-
-    assert_eq!(issues(cast), ["5:32 This operator is not supported yet in PHP#."]);
-    assert_eq!(issues(ternary), ["5:32 This expression is not supported yet in PHP#."]);
-}
-
 /// Spec section 27: as a parameter's default, `Position.current()` gives the caller's position, which a PHP# call
 /// passes, of a method, a signature and a lambda alike. PHP compares method names ignoring case.
 #[test]
@@ -5294,16 +5305,16 @@ fn position_current_in_a_body_or_an_initial_value_is_in_the_slice() {
     assert_eq!(issues(code), Vec::<String>::new());
 }
 
-/// An imported or a declared `Position` is not the standard library's, so its `current()` default keeps the refusal
-/// of any call in a constant expression.
+/// An imported or a declared `Position` is not the standard library's, so its `current()` default is a call like any
+/// other, and no part of it is refused.
 #[test]
-fn a_current_default_of_an_imported_or_declared_position_keeps_the_constant_expression_refusal() {
-    let imported = "namespace App;\n\nimport App.Shared.Position;\n\nclass Reports\n{\n    public static void logSlow(Position caller = Position.current())\n    {\n    }\n}\n";
+fn a_current_default_of_an_imported_or_declared_position_is_a_call() {
+    let imported = "namespace App;\n\nimport App.Shared.Position;\n\nclass Reports\n{\n    public static void logSlow(Position caller = Position.current().next())\n    {\n    }\n}\n";
     // A file names the class it declares, so in `Position.sharp` a bare `Position` is that class.
-    let declared = "namespace App;\n\nclass Position\n{\n    public static void logSlow(Position caller = Position.current())\n    {\n    }\n}\n";
+    let declared = "namespace App;\n\nclass Position\n{\n    public static void logSlow(int line = Position.current().line)\n    {\n    }\n}\n";
 
-    assert_eq!(issues(imported), ["7:50 This expression is not supported yet in PHP#."]);
-    assert_eq!(issues(declared), ["5:50 This expression is not supported yet in PHP#."]);
+    assert_eq!(issues(imported), Vec::<String>::new());
+    assert_eq!(issues(declared), Vec::<String>::new());
 }
 
 /// A class constant's value and an enum case's value are constant expressions as a default is, and keep the refusal of
@@ -5664,8 +5675,8 @@ fn a_type_argument_is_read_in_a_body_and_never_in_a_constant() {
     assert_eq!(
         issues(code),
         [
-            "22:39 `typeof(TItem)` is not a constant: it reads the type argument the code runs with.",
-            "24:33 `TItem.LIMIT` is not a constant: it reads the type argument the code runs with.",
+            "22:46 A parameter's default runs before the method, so `TItem` is not there yet.",
+            "24:33 A parameter's default runs before the method, so `TItem` is not there yet.",
             "26:44 `TItem` already carries the type arguments of the type it stands for.",
             "28:36 A named constructor through a type parameter, as in `new TItem.of(…)`, is not supported yet in PHP#.",
         ]
@@ -6211,7 +6222,7 @@ fn a_pattern_variable_used_where_its_test_does_not_hold_names_its_test() {
 fn a_pattern_variable_named_this_is_an_error() {
     let code = leak(method("        if (extra is int this) {\n        }\n        return extra;\n"));
 
-    assert_eq!(issues(code), ["7:26 Cannot name a pattern variable `this`: `this` is the object the method runs on."]);
+    assert_eq!(issues(code), ["7:26 `this` is a keyword; write `@this`."]);
 }
 
 /// Spec section 19 groups `< <= > >= is as` in one row and `== != === <=>` in the next, and neither row chains.

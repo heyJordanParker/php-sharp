@@ -27,6 +27,7 @@ use mago_syntax::cst::Hint;
 use mago_syntax::cst::HookedProperty;
 use mago_syntax::cst::PlainProperty;
 use mago_syntax::cst::Property;
+use mago_syntax::cst::PropertyBehaviorList;
 use mago_syntax::cst::PropertyHook;
 use mago_syntax::cst::PropertyHookBody;
 use mago_syntax::cst::PropertyHookConcreteBody;
@@ -47,6 +48,7 @@ use crate::effects::summary::record_function_values;
 use crate::error::AnalysisError;
 use crate::expression::array::check_sharp_literal_kind;
 use crate::expression::array::get_set_literal_type;
+use crate::resolver::class_name::report_missing_class;
 use crate::statement::analyze_statements;
 use crate::statement::attributes::AttributeTarget;
 use crate::statement::attributes::analyze_attributes;
@@ -172,7 +174,7 @@ where
     let is_sharp = context.dialect.is_sharp();
 
     if let Some((class_metadata, declared_type_metadata, declared_type)) = declared {
-        check_sharp_literal_kind(context, value, &declared_type_metadata.type_union);
+        check_sharp_literal_kind(context, Some(block_context), artifacts, value, &declared_type_metadata.type_union);
 
         if (is_sharp
             || !(declared_type_metadata.type_union.is_mixed()
@@ -276,14 +278,28 @@ where
         analyze_property_hook(hook, property_name, context, block_context, artifacts)?;
     }
     if let Some(behaviors) = &property.behaviors {
-        let mut classes = Vec::new();
-        for behavior in behaviors.behaviors.iter() {
-            classes.extend(check_behavior(behavior, property_name, context, block_context, artifacts));
-        }
-        effects::summary::record_behaviors(context, block_context, artifacts, property_name, &classes);
+        analyze_behaviors(behaviors, property_name, context, block_context, artifacts);
     }
 
     Ok(())
+}
+
+/// Checks each of `behaviors`, which run the property `property_name`, a property in the class body or one a
+/// constructor parameter declares, and records the accessors they run, spec sections 6.4 and 9.
+pub(crate) fn analyze_behaviors<A>(
+    behaviors: &PropertyBehaviorList<'_>,
+    property_name: Word,
+    context: &mut Context<'_, '_, A>,
+    block_context: &BlockContext<'_>,
+    artifacts: &mut AnalysisArtifacts,
+) where
+    A: Arena,
+{
+    let mut classes = Vec::new();
+    for behavior in behaviors.behaviors.iter() {
+        classes.extend(check_behavior(behavior, property_name, context, block_context, artifacts));
+    }
+    effects::summary::record_behaviors(context, block_context, artifacts, property_name, &classes);
 }
 
 /// Spec section 6.4: a behavior runs a property's `get` and `set`, so it is a class that implements
@@ -309,19 +325,8 @@ where
         _ => return None,
     };
     let Some(class) = context.codebase.get_class_like(name.as_bytes()) else {
-        // PHP# creates a behavior with `new`, so an unknown one is named as `new` names it.
-        let missing = display_class_like_name(context, name);
-        context.collector.report_with_code(
-            IssueCode::NonExistentClass,
-            Issue::error(format!("Class `{missing}` not found."))
-                .with_annotation(
-                    Annotation::primary(behavior.span())
-                        .with_message(format!("`{missing}` is not defined or cannot be autoloaded")),
-                )
-                .with_help(
-                    "Ensure the name is correct, including its namespace, and that it's properly defined and autoloadable.",
-                ),
-        );
+        // Only a `.sharp` file has behaviors, so the missing class is reported by its PHP# name.
+        report_missing_class(context, name.as_bytes(), behavior.span());
         return None;
     };
     let behavior_type = get_type_from_hint(context, block_context, artifacts, behavior);

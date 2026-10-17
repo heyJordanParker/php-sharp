@@ -11,7 +11,7 @@ public foreign class Files
             return null;
         }
 
-        return @global.file_get_contents(path) is string contents ? contents : throw new RuntimeException(`Files.read: "${path}" cannot be read`);
+        return global.file_get_contents(path) is string contents ? contents : throw new RuntimeException(`Files.read: "${path}" cannot be read`);
     }
 
     // The lines without their endings, null when the file doesn't exist.
@@ -50,21 +50,21 @@ public foreign class Files
     // A missing file is not an error.
     public void delete(string path)
     {
-        if (global.is_file(path) && !@global.unlink(path)) {
+        if (global.is_file(path) && !global.unlink(path)) {
             throw new RuntimeException(`Files.delete: "${path}" cannot be deleted`);
         }
     }
 
     public void copy(string from, string to)
     {
-        if (!@global.copy(from, to)) {
+        if (!global.copy(from, to)) {
             throw new RuntimeException(`Files.copy: "${from}" cannot be copied to "${to}"`);
         }
     }
 
     public void move(string from, string to)
     {
-        if (!@global.rename(from, to)) {
+        if (!global.rename(from, to)) {
             throw new RuntimeException(`Files.move: "${from}" cannot be moved to "${to}"`);
         }
     }
@@ -75,7 +75,7 @@ public foreign class Files
         if (!global.is_dir(directory)) {
             return null;
         }
-        if (@global.scandir(directory) is not List<string> entries) {
+        if (global.scandir(directory) is not List<string> entries) {
             throw new RuntimeException(`Files.list: "${directory}" cannot be read`);
         }
 
@@ -85,31 +85,31 @@ public foreign class Files
     // Creates the parents too. An existing folder is not an error.
     public void createDirectory(string path)
     {
-        if (!global.is_dir(path) && !@global.mkdir(path, 0o777, true)) {
+        if (!global.is_dir(path) && !global.mkdir(path, 0o777, true)) {
             throw new RuntimeException(`Files.createDirectory: "${path}" cannot be created`);
         }
     }
 
     public void deleteDirectory(string path)
     {
-        if (!@global.rmdir(path)) {
+        if (!global.rmdir(path)) {
             throw new RuntimeException(`Files.deleteDirectory: "${path}" cannot be deleted`);
         }
     }
 
     // Bytes, null when the file is missing.
-    public int? size(string path) => global.is_file(path) && @global.filesize(path) is int size ? size : null;
+    public int? size(string path) => global.is_file(path) && global.filesize(path) is int size ? size : null;
 
     // A Unix timestamp, null when the file is missing.
-    public int? lastModified(string path) => global.file_exists(path) && @global.filemtime(path) is int time ? time : null;
+    public int? lastModified(string path) => global.file_exists(path) && global.filemtime(path) is int time ? time : null;
 
     // A new empty file's path.
     public string temporaryFile()
-        => @global.tempnam(global.sys_get_temp_dir(), "sharp") is string path ? path : throw new RuntimeException("Files.temporaryFile: no temporary file can be created");
+        => global.tempnam(global.sys_get_temp_dir(), "sharp") is string path ? path : throw new RuntimeException("Files.temporaryFile: no temporary file can be created");
 
     private static Iterable<string> lines(string path)
     {
-        const handle = @global.fopen(path, "r");
+        const handle = global.fopen(path, "r");
         if (handle is bool) {
             throw new RuntimeException(`Files.readLinesLazily: "${path}" cannot be read`);
         }
@@ -125,7 +125,7 @@ public foreign class Files
     private static void put(string path, string contents, int flags, string member)
     {
         Files.local(path, member);
-        if (@global.file_put_contents(path, contents, flags) == false) {
+        if (global.file_put_contents(path, contents, flags) == false) {
             throw new RuntimeException(`${member}: "${path}" cannot be written`);
         }
     }

@@ -9,9 +9,9 @@ public struct HttpRequest
     public HttpRequest(
         public HttpMethod method { get; },
         public string url { get; },
-        public Map<string, string> headers = [:] { get; },
-        public string body = "" { get; },
-        public Duration? timeout = null { get; },
+        public Map<string, string> headers { get; } = [:],
+        public string body { get; } = "",
+        public Duration? timeout { get; } = null,
     )
     {
         for (const [name, value] of headers) {

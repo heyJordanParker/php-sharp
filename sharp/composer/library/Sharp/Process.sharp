@@ -7,7 +7,7 @@ import Sharp.Time.Duration;
 public foreign class Process
 {
     // Ends the run with `code`, from 0 to 254, skipping every finally. PHP keeps 255 for its own fatal errors.
-    public void exit(int code)
+    public never exit(int code)
     {
         if (code < 0 || code > 254) {
             throw new ValueError(`Process.exit: the code ${code} is not from 0 to 254`);
@@ -31,7 +31,7 @@ public foreign class Process
             throw new RuntimeException("Process.run: no temporary file can be created");
         }
         Map<int, Any> pipes = [:];
-        const process = @global.proc_open([program, ...arguments], [0: ["file", "/dev/null", "r"], 1: output, 2: errorOutput], pipes);
+        const process = global.proc_open([program, ...arguments], [0: ["file", "/dev/null", "r"], 1: output, 2: errorOutput], pipes);
         if (process is bool) {
             throw new RuntimeException(`Process.run: ${program} cannot start`);
         }

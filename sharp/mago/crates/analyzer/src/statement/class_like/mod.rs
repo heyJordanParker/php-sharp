@@ -71,6 +71,7 @@ use mago_syntax::cst::Module;
 use mago_syntax::cst::ModuleMember;
 use mago_syntax::cst::Property;
 use mago_syntax::cst::Trait;
+use mago_syntax::token::is_sharp_keyword;
 use mago_word::Word;
 use mago_word::WordMap;
 use mago_word::ascii_lowercase_word;
@@ -84,7 +85,7 @@ use crate::context::block::BlockContext;
 use crate::effects::check::check_foreign_statics;
 use crate::error::AnalysisError;
 use crate::plugin::context::HookContext;
-use crate::resolver::class_name::report_unknown_sharp_class;
+use crate::resolver::class_name::report_missing_class;
 use crate::resolver::extension::class_member;
 use crate::statement::attributes::analyze_class_like_attributes;
 use crate::statement::class_like::method_signature::SignatureCompatibilityIssue;
@@ -1826,6 +1827,9 @@ fn check_class_like_extends<'ctx, 'arena, A>(
 
         // Case: The extended type does not exist.
         let Some(extended_class_metadata) = extended_class_metadata else {
+            if report_missing_class(context, extended_type_str, extended_type.span()) {
+                continue;
+            }
             let extended_name = BytesDisplay(extended_type.value());
 
             context.collector.report_with_code(
@@ -2189,7 +2193,7 @@ fn check_class_like_implements<'ctx, 'arena, A>(
                 implemented_metadata,
                 checked_signatures,
             );
-        } else if !report_unknown_sharp_class(context, implemented_type_str, implemented_type.span()) {
+        } else if !report_missing_class(context, implemented_type_str, implemented_type.span()) {
             let implemented_name = BytesDisplay(implemented_type.value());
             let (note, help) = if is_struct {
                 ("A struct's header lists the interfaces it implements.", "Check the interface's name and its import.")
@@ -2234,6 +2238,9 @@ fn check_class_like_use<'ctx, 'arena, A>(
         let used_trait_metadata = context.codebase.get_class_like(used_type_str);
 
         let Some(used_trait_metadata) = used_trait_metadata else {
+            if report_missing_class(context, used_type_str, used_type.span()) {
+                continue;
+            }
             let used_name = BytesDisplay(used_type.value());
 
             context.collector.report_with_code(
@@ -2865,7 +2872,7 @@ where
             Annotation::primary(class_like_metadata.name_span.unwrap_or(class_like_metadata.span))
                 .with_message(format!("`{class_name}` has type parameters")),
         )
-        .with_help("Leave `Serializable` out: `serialize()` then uses `__serialize` and `__unserialize`, or its default form, which keep them."),
+        .with_help("Leave `Serializable` out: an object serialized as it is keeps its type arguments."),
     );
 }
 
@@ -4396,15 +4403,22 @@ fn report_signature_compatibility_issue<'ctx, A>(
             parent_name: parent_param_name,
         } => {
             // PHP# keeps every parameter name of the method it overrides, spec section 22, so a rename is an error, and
-            // PHP# writes the names without `$`.
-            let (level, child_param_name, parent_param_name) = if context.dialect.is_sharp() {
+            // PHP# writes the names without `$`, and a keyword with `@`, spec section 2.
+            let (level, child_param_name, parent_param_name, help) = if context.dialect.is_sharp() {
+                let parent = word(mago_bytes::trim_start_byte(parent_param_name.as_bytes(), b'$'));
+                let mark = if is_sharp_keyword(parent.as_bytes()) { "@" } else { "" };
+
                 (
                     Level::Error,
                     word(mago_bytes::trim_start_byte(child_param_name.as_bytes(), b'$')),
-                    word(mago_bytes::trim_start_byte(parent_param_name.as_bytes(), b'$')),
+                    parent,
+                    format!("Name it `{mark}{parent}`, as the parent does."),
                 )
             } else {
-                (Level::Warning, child_param_name, parent_param_name)
+                let help =
+                    format!("Consider renaming the parameter to `{parent_param_name}` to match the parent method.");
+
+                (Level::Warning, child_param_name, parent_param_name, help)
             };
 
             context.collector.report_with_code(
@@ -4426,9 +4440,7 @@ fn report_signature_compatibility_issue<'ctx, A>(
                     Annotation::secondary(child_class_span).with_message(format!("In class `{child_name}`")),
                 )
                 .with_note("Parameter name changes can break code using named arguments.")
-                .with_help(format!(
-                    "Consider renaming the parameter to `{parent_param_name}` to match the parent method."
-                )),
+                .with_help(help),
             );
         }
     }
@@ -4535,6 +4547,40 @@ fn check_docblock_declared_members<A>(
             report_undefined_type_references(context, mixin);
         }
     }
+}
+
+/// Reports a PHP# override of a plain PHP property whose type `declaring_type` does not fit `parent_type`, the parent's
+/// type at `parent_span`, which `parent_label` names, as in "the parent's `@var` type", and `note` explains.
+fn report_unfit_override<A>(
+    context: &mut Context<'_, '_, A>,
+    (child_display, parent_display): (&str, &str),
+    declaring_type: &TypeMetadata,
+    (parent_type, parent_span): (&TUnion, Span),
+    parent_label: &str,
+    note: &'static str,
+) where
+    A: Arena,
+{
+    if is_type_compatible(context.codebase, &declaring_type.type_union, parent_type) {
+        return;
+    }
+
+    let declaring_type_id = display_type(context, &declaring_type.type_union);
+    let parent_type_id = display_type(context, parent_type);
+    context.collector.report_with_code(
+        IssueCode::IncompatiblePropertyType,
+        Issue::error(format!(
+            "The override `{child_display}` has type `{declaring_type_id}`, which does not fit `{parent_type_id}`, the type of `{parent_display}`."
+        ))
+        .with_annotation(
+            Annotation::primary(declaring_type.span).with_message(format!("`{declaring_type_id}` is written here.")),
+        )
+        .with_annotation(
+            Annotation::secondary(parent_span).with_message(format!("`{parent_type_id}` is {parent_label}.")),
+        )
+        .with_note(note)
+        .with_help(format!("Write a type that fits `{parent_type_id}`.")),
+    );
 }
 
 /// Reports a PHP# override of a plain PHP property that has no `set`, an `init`, or a `set` at another level than the
@@ -4942,6 +4988,29 @@ fn check_class_like_properties<'ctx, A>(
                 property_metadata.type_declaration_metadata.as_ref(),
                 parent_property.type_declaration_metadata.as_ref(),
             ) {
+                // Spec section 6.1: a PHP# override of a typed plain PHP property may narrow its type. The class links
+                // with the parent's PHP type, and the override's type checks each write, so it fits the parent's type,
+                // its `@var` type included.
+                (Some(declaring_type), Some(parent_declaration)) if plain_php_parent => {
+                    let parent_type = parent_property.type_metadata.as_ref().unwrap_or(parent_declaration);
+
+                    report_unfit_override(
+                        context,
+                        (&child_display, &parent_display),
+                        declaring_type,
+                        (
+                            &localize_parent_type(
+                                context.codebase,
+                                class_like_metadata,
+                                parent_metadata.name,
+                                &parent_type.type_union,
+                            ),
+                            parent_type.span,
+                        ),
+                        "the parent's type",
+                        "The parent's code reads this property as its own type, so the override's type must fit it.",
+                    );
+                }
                 (Some(declaring_type), Some(parent_type)) => {
                     // A PHP# declaration may name a type parameter, which the child's header or `@extends` fills.
                     let is_sharp = parent_metadata.flags.is_sharp() || class_like_metadata.flags.is_sharp();
@@ -5042,34 +5111,22 @@ fn check_class_like_properties<'ctx, A>(
                     // it fits the parent's `@var` type, or any type without one, spec section 6.1.
                     if context.dialect.is_sharp() {
                         if let Some(parent_type) = parent_property.type_metadata.as_ref().filter(|t| t.from_docblock) {
-                            let parent_type_union = localize_parent_type(
-                                context.codebase,
-                                class_like_metadata,
-                                parent_metadata.name,
-                                &parent_type.type_union,
+                            report_unfit_override(
+                                context,
+                                (&child_display, &parent_display),
+                                declaring_type,
+                                (
+                                    &localize_parent_type(
+                                        context.codebase,
+                                        class_like_metadata,
+                                        parent_metadata.name,
+                                        &parent_type.type_union,
+                                    ),
+                                    parent_type.span,
+                                ),
+                                "the parent's `@var` type",
+                                "PHP does not check this property's type, so the override's type must fit the one the parent's code relies on.",
                             );
-
-                            if !is_type_compatible(context.codebase, &declaring_type.type_union, &parent_type_union) {
-                                let declaring_type_id = display_type(context, &declaring_type.type_union);
-                                let parent_type_id = display_type(context, &parent_type_union);
-
-                                context.collector.report_with_code(
-                                    IssueCode::IncompatiblePropertyType,
-                                    Issue::error(format!(
-                                        "The override `{child_display}` has type `{declaring_type_id}`, which does not fit `{parent_type_id}`, the type of `{parent_display}`."
-                                    ))
-                                    .with_annotation(
-                                        Annotation::primary(declaring_type.span)
-                                            .with_message(format!("`{declaring_type_id}` is written here.")),
-                                    )
-                                    .with_annotation(
-                                        Annotation::secondary(parent_type.span)
-                                            .with_message(format!("`{parent_type_id}` is the parent's `@var` type.")),
-                                    )
-                                    .with_note("PHP does not check this property's type, so the override's type must fit the one the parent's code relies on.")
-                                    .with_help(format!("Write a type that fits `{parent_type_id}`.")),
-                                );
-                            }
                         }
 
                         continue;

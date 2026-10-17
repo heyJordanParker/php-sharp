@@ -2,6 +2,8 @@
 
 PHP# is a language that runs on PHP's engine and calls plain PHP freely, as Kotlin runs on the JVM and calls Java. This file is the single source of truth for PHP# syntax and rules.
 
+**No PHP# rule makes code write around how PHP# runs on PHP's engine.** A PHP# developer never needs to know what a PHP# construct compiles to. Plain PHP libraries are called as libraries, as Kotlin calls Java libraries.
+
 [decisions/](decisions/) records why each rule was chosen.
 
 - Every rule here was approved by the Architect.
@@ -50,17 +52,20 @@ const plan = this.plan();   // type inferred, cannot be reassigned
 const Plan plan = …;        // type written, cannot be reassigned
 ```
 
-**A PHP# keyword, such as `let`, `match` or `emit`, can't name a local. Every other word can,** such as `empty`, `list` and `print`:
+**A PHP# keyword, such as `let`, `match` or `emit`, names a local only with `@` before it,** as C#'s `@class` does. Every other word names one as it is, such as `empty`, `list` and `print`:
 
 <!-- example keyword-names: statements -->
 ```csharp
 const list = [1, 2, 3];     // compiles: PHP# has no list keyword
 let empty = true;           // compiles
 const print = "draft";      // compiles
-const match = 1;            // compile error: match is a PHP# keyword
+const @emit = 1;            // compiles: @ makes a keyword a name
+const match = 1;            // compile error: match is a keyword; write @match
 ```
 
-**Any word, PHP# keywords included, names a method or a property with no mark,** as in JavaScript and TypeScript, because a member's name is written only after `.` or where it is declared. Locals, parameters, `catch` variables and pattern variables can't take a keyword's name:
+**`@this` is a name like any other,** and a bare `this` stays the object the method runs on. A name before `:` is never the object, so the named argument `this:` passes the parameter `@this`, as `class:` passes `@class`. PHP# has no other `@`: a call's failure is the value it returns (section 23).
+
+**Any word, PHP# keywords included, names a method or a property with no mark,** as in JavaScript and TypeScript, because a member's name is written only after `.` or where it is declared. Locals, parameters, `catch` variables and pattern variables take a keyword's name with `@`, so a plain PHP method's `$event` parameter is `@event` in PHP#:
 
 <!-- example keyword-members -->
 ```csharp
@@ -80,7 +85,8 @@ Rule rule = new Rule();
 ```csharp
 rule.match("paid");                                 // true
 rule.event;                                         // "paid"
-const event = "paid";                               // compile error: a local can't take a keyword's name
+const match = "paid";                               // compile error: match is a keyword; write @match
+const @event = "paid";                              // compiles
 ```
 
 **PHP# keywords are lowercase only,** as in C#, Java, Kotlin, Swift, TypeScript, Go and Rust. `Self` (section 25) is the one capitalized keyword, as it is in Rust and Swift. A capitalized keyword is an ordinary name, so `class Event` and `class Struct` are valid. Where no such name exists, as for `TRUE` or `Return`, the error suggests the lowercase keyword:
@@ -326,7 +332,7 @@ public class Order : Model
 }
 ```
 
-- **The written type must fit the parent's.** When PHP declares the parent's property with no type, the written type must be assignable to the parent's `@var` type, or to anything when there is no `@var`. The engine drops the written type when the class links, because PHP refuses a typed redeclaration there. When PHP declares the parent's property with a type, the written type must equal it, because PHP checks property types for invariance when the class links. The engine keeps it.
+- **The written type must fit the parent's.** When PHP declares the parent's property with no type, the written type must be assignable to the parent's `@var` type, or to anything when there is no `@var`. The engine drops the written type when the class links, because PHP refuses a typed redeclaration there. When PHP declares the parent's property with a type, the written type must be assignable to it, as `string` is to `string?`. The property keeps the parent's type when the class links, and each write is checked against the written type, so a `null` the parent's code writes to a `string` override is a `TypeError`.
 - **The access level is written and must match the parent's.** It is `public` when the parent's property is, as `timestamps` is in `Model`. The `set` keeps the parent's level too, so `timestamps { get; protected set; }` is an error.
 - **The override has `set`.** The parent's own code writes the property at any time, as Eloquent's `setTable` writes `table`, so a get-only override or one with `init` is an error. The override may give `get` and `set` bodies.
 - **The initial value runs before the parent's constructor and can't read `this`** (section 6), so a parent's constructor that reads the property, as Eloquent's does, sees it.
@@ -392,7 +398,7 @@ public class Trimmed : Behavior<string>
 - A behavior is a class that implements `Behavior<T>` for the property's type, and its constructor takes no arguments. A behavior for another type, an interface, an abstract class, or a constructor that needs an argument is a compile error.
 - `via` names a type, so a generic behavior takes its type arguments as every type does (section 11): `via Logged<string>` creates each behavior as `new Logged<string>()`.
 - A behavior's `get` and `set` are the property's accessors. Each may have any effect, and a read or write of the property carries it (section 29). `set` may write the behavior's own fields, and `get` writes none, as no `get` body writes `this` (section 6.1).
-- `via` goes on an instance auto-property with `get; set;`. A property in an interface or an `abstract` one has no storage to run around, a static one has no object to keep behaviors in, and one with an accessor body already says how it reads and writes, so each is a compile error. A constructor parameter takes no `via`: declare the property in the class body.
+- `via` goes on an instance auto-property with `get; set;`. A property in an interface or an `abstract` one has no storage to run around, a static one has no object to keep behaviors in, and one with an accessor body already says how it reads and writes, so each is a compile error.
 - Each object creates its own behaviors with `new` when it is constructed, before any initial value, and keeps each one in a hidden slot. A copy made with `with`, or with plain PHP's `clone`, creates its own too, so two objects never share a behavior's state.
 - A write runs each behavior's `set` in the order they are written, then stores the result. A read runs each behavior's `get` the other way, so the first behavior wraps the rest. The initial value is a write, so it runs through each `set`, which never sees the object (section 6).
 
@@ -475,6 +481,47 @@ public int total(List<int> prices)
 }
 ```
 
+**A method that never returns declares the return type `never`,** as TypeScript's `never`, Kotlin's `Nothing` and Rust's `!` do. Every path through its body ends in a `throw` or in a call of another `never` method, and a path that reaches the closing brace is a compile error. A call of one ends the block it is in, as `throw` does, so a statement after it never runs, and `input ?? fail(…)` has the type of `input`. An override of a `never` method returns `never` too. `never` is only a whole return type: a parameter, a property, a local or a type argument of `never` is a compile error, a return type's type argument included, as in `List<never>`. An expression body returns its value, so a `never` method with one, as `never stop() => 1;`, is a compile error unless the expression never finishes, as `=> throw new ValueError("stopped")` does.
+
+<!-- example never-methods: members -->
+```csharp
+public static never fail(string reason) => throw new BadPayload(reason);   // compiles
+
+public string name(string? input) => input ?? Example.fail("name");         // compiles: the result is a string
+
+public static never stop(bool urgent)
+{
+    if (urgent) {
+        throw new BadPayload("stopped");
+    }
+}                                                                            // compile error: stop is never, and it reaches its closing brace when no throw runs before it
+```
+
+**A parameter's default is any expression,** as in Kotlin, Swift and TypeScript, and it runs each time a call leaves the argument out, from PHP# and from plain PHP alike, so `new` gives each call its own object. It runs before the method, so a default that reads `this` or another parameter is a compile error.
+
+<!-- example parameter-defaults -->
+```csharp
+public class Tickets
+{
+    private static int issued = 0;
+
+    public static int next()
+    {
+        Tickets.issued += 1;
+        return Tickets.issued;
+    }
+
+    public static int take(int number = Tickets.next()) => number;   // compiles: next() runs each time a call leaves number out
+
+    public static int after(int start, int end = start + 1) => end;  // compile error: a default runs before the method, so start is not there yet
+}
+```
+<!-- run parameter-defaults
+Tickets.take();     // 1
+Tickets.take(10);   // 10
+Tickets.take();     // 2
+-->
+
 ## 8. Functions
 
 There are no top-level functions. Shared code lives in static methods on a class.
@@ -499,7 +546,7 @@ public class Receipt
 - **Every PHP built-in function is a standard library method,** so calling one by its bare name from `.sharp` code is a compile error that names the method. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
 - **A built-in the standard library has no method for is called through PHP's root namespace,** as `global.levenshtein(a, b)` (section 23).
 - **A built-in the standard library has a method for is reached only through that method.** Outside the standard library, `global.trim(name)` is a compile error that names `name.trim()`, as the bare call is, and so is the value `global.trim`, as in `names.map(global.trim)`. The standard library's own methods call PHP through `global`, and a built-in PHP# syntax replaces keeps its `global.` call, as `global.strval(1)`.
-- **PHP's constants are read through its root namespace too,** as `global.PHP_EOL` (section 23). A bare `PHP_EOL` is a compile error, because a bare uppercase name is always the code's own constant.
+- **PHP's constants are read through its root namespace too,** as `global.CURLOPT_TIMEOUT` (section 23). A bare `CURLOPT_TIMEOUT` is a compile error, because a bare uppercase name is always the code's own constant. A value the standard library gives, as `Int.MAX`, is read from it.
 
 **Output and exit go through the standard library.** `echo` and `print` are removed, and output goes through `Console` (section 29). `die` is removed, because `die("…")` prints its message and exits with status 0, which reports success. Exiting goes through `Process`.
 
@@ -547,15 +594,30 @@ public StoreService(
 }
 ```
 
-**A member declared on a parameter takes access levels and attributes only,** as TypeScript's and Kotlin's parameter properties do: an access modifier, an accessor list whose `set` or `init` may take a narrower access level, such as `{ get; private set; }`, and attributes. Accessor bodies, `willSet`, `didSet`, `via`, `lazy`, computed properties and `static` go on a member in the class body:
+**A member declared on a parameter is a property like one declared in the class body,** as Kotlin's parameter properties are: its access levels, accessors, accessor bodies, observers, behaviors and attributes, and a default after its accessors and behaviors, which the call may leave out. A default before the accessors, as PHP orders a promoted property, is a compile error that says to write it after them. The argument is a write while the constructor runs, so a `set` body and the behaviors run on it, and on the default too, while the observers wait until the object is built, as section 6.2 says. A parameter without a default is required by every call, so `required` on one is a compile error. A computed property and `lazy` compute their own value, and a parameter receives one, and `static` belongs to no one object, so each goes on a member in the class body:
 
 <!-- example parameter-member-limits: members in Ledger -->
 ```csharp
 public Ledger(
-    public Money balance { get; } via Tracked,                     // compile error: declare balance in the class body to give it via
-    public string name { get; set => field = value.trim(); },      // compile error: declare name in the class body to give it an accessor body
+    public string name { get; set => field = value.trim(); } = "",   // compiles: the argument runs through set
+    public string slug => this.name.trim(),                          // compile error: a parameter cannot be a computed property
 ) { }
 ```
+
+<!-- example optional-parameter-properties -->
+```csharp
+public class GatewayEvent
+{
+    public GatewayEvent(
+        public string type { get; },                // compiles: a required property
+        public string rawBody { get; } = "",        // compiles: an optional property, "" when the call leaves it out
+    ) { }
+}
+```
+<!-- run optional-parameter-properties
+GatewayEvent paid = new GatewayEvent("charge.succeeded");
+paid.rawBody;   // ""
+-->
 
 **A constructor marked `required`** is one that `new Self(…)` can call on the class and on every subclass. Section 25 gives its rules.
 
@@ -826,7 +888,7 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 - **`Object` bounds a type parameter to any object,** `<TValue : Object>`, as C#'s `where T : class` and TypeScript's `T extends object` do. It is a bound alone.
 - **A bound may name another type parameter,** `<TPart : TItem>`, as C#'s `where TPart : TItem` and Java's and TypeScript's `<U extends T>` do. A `TPart` then goes wherever a `TItem` goes. It is a bound alone, as in Java, and a bound that leads back to its own type parameter, such as `<TItem : TItem>`, is a compile error, as in C#.
 - **A type parameter with no bound may hold `null`,** so it is bounded by `Any?`.
-- **A generic class can't implement PHP's `Serializable`,** and the error points to `__serialize` and `__unserialize`.
+- **A generic class can't implement PHP's `Serializable`,** because its `serialize` drops the type arguments. The error says to leave `Serializable` out: an object serialized as it is keeps its type arguments.
 - **A class value with type arguments can't be a `Map` key,** because `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` share the plain class name.
 
 <!-- example type-parameter-bounds: members -->
@@ -959,6 +1021,33 @@ copy.add(line);           // changes only copy
 - plain PHP writes a PHP# property
 
 At each crossing, the runtime checks every element once and throws a `TypeError` that names the element. An `int` where PHP# expects a `float` does not throw: it becomes a `float` (section 24). A call from PHP# to PHP# checks nothing at runtime, because the checker proved it.
+
+**A plain PHP array keyed by `int` alone arrives as a `List`, renumbered,** as Kotlin reads a Java `List`. PHP keeps an array's keys when a function such as `array_filter` drops elements, so plain PHP's `array<int, Person>` holds a list whose keys may have gaps. PHP# reads it as a `List<Person>` wherever it arrives, a return, a property read, an argument from a plain PHP caller and a property plain PHP writes, and its first element is at `0`. A place declared `Map<int, Person>` keeps the keys plain PHP gave. An array keyed by `string` or by `int|string` stays a `Map`.
+
+<!-- example plain-list-arrival -->
+```php
+class Shelf
+{
+    /** @return array<int, Line> */
+    public static function kept(): array { return array_filter([new Line(), null]); }
+}
+```
+
+<!-- example plain-list-arrival: statements -->
+```csharp
+for (const line of Shelf.kept()) { … }       // compiles: plain PHP's array<int, Line> is a List<Line>
+List<Line> kept = Shelf.kept();             // compiles: kept[0] is the first kept line, whatever its key was
+Map<int, Line> byKey = Shelf.kept();        // compiles: the Map keeps plain PHP's keys
+```
+
+**A `List` is not a `Map`, so a `List` value where only a `Map` is declared is a compile error,** as a `List` literal is: its keys are only its positions. A plain PHP value is the exception, since it holds the keys plain PHP gave it.
+
+<!-- example list-not-map: statements
+List<int> sizes = [3, 5];
+-->
+```csharp
+Map<int, int> bySize = sizes;                 // compile error: a List is not a Map: its keys are only its positions
+```
 
 `as` to a collection type checks every element too, wherever the value came from, and gives null if any element is wrong (section 21).
 
@@ -1118,7 +1207,7 @@ for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is a 
 **Map keys:** anything with `==` and `hash()` (section 19) keys a `Map` and joins a `Set`, as in Swift, Rust, Java and Kotlin.
 
 - A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type, as in `const [Status status, int n]`, stays allowed. An inferred `Map`, such as a `groupBy` result, gives its keys back the same way.
-- Plain PHP receives the `Map` itself, or a PHP array where its parameter's declared type names `array`. A PHP array's keys are `int` or `string`, so passing a `Map` keyed by anything else to such a parameter is a compile error that names the parameter and the key type. `counts.count()` counts any `Map`, whatever its keys.
+- Plain PHP receives the `Map` itself, or a PHP array where its parameter's declared type names `array`. A PHP array's keys are `int` or `string`, so a `Map` keyed by a backed enum passes each case's backing value as its key, as an array crossing the other way gives each backing value as its case. Passing a `Map` keyed by anything else to such a parameter is a compile error that names the parameter and the key type. `counts.count()` counts any `Map`, whatever its keys.
 
 <!-- example enum-map-keys -->
 ```csharp
@@ -1647,7 +1736,7 @@ List<int> sorted = numbers.sortedBy(n => n);
 sorted;   // [1, 2, 3]
 -->
 
-In a plain PHP class with both a property and a method of that name, the property wins, as in PHP.
+A plain PHP class may have both a property and a method of one name. Reading the name gives the property, as in PHP, except where the code takes the read as a function and the property's type doesn't fit that function type. There the read gives the method's value, as in `names.map(gadget.label)`, where `label` is both a `string` property and a method.
 
 **A field or property holding a `Function` is called like a method** when the class has no method with that name. A `.sharp` class cannot declare a method and a field or property with the same name, so `this.discount(…)` always has one meaning.
 
@@ -2102,11 +2191,13 @@ const sku = new Sku("A-12");
 const label = `Sku: ${sku}`;   // Sku declares toString(): "Sku: A-12"
 ```
 
-A plain PHP file keeps PHP's own interpolation.
+A plain PHP file keeps PHP's own interpolation. It converts an object of a class that declares `toString()`, or takes it from an interface's default body (section 22), to the text a template shows, as `(string) $sku` and `"Sku: {$sku}"` do, as Java's and Kotlin's string conversion calls `toString()`.
+
+**A `toString()` is always `string toString()`:** an instance method with no required parameter that returns `string`, as Java's and Kotlin's `toString()` override `Object`'s and `Any`'s. A template and every conversion to text call it with no arguments, so any other `toString()` a type declares is a compile error that names the signature to write, "`Sku.toString()` returns `int`, and PHP# shows a value as text by the `string` its `toString()` returns.", and so is a template of a plain PHP class whose `toString()` is not that one.
 
 **Plain strings:** `"…"` and `'…'` never interpolate, so braces and `$` inside them are literal.
 
-PHP's backtick shell execution is removed. `shell_exec()` stays.
+PHP's backtick shell execution is removed, and so is `shell_exec()`. A program runs through `Process.run(program, arguments)` (section 29), which takes its arguments as a list, so no shell reads them.
 
 ## 19. Equality, comparison and operators
 
@@ -2152,6 +2243,7 @@ public class Money
 ```
 
 <!-- example operators: statements
+public class Order : DatabaseEntity { public Order(int id) : super(id) { } }
 Order order = new Order(1);
 Order sameOrderLoadedAgain = new Order(1);
 Cart cart = new Cart();
@@ -2938,7 +3030,23 @@ import Vendor.Pdf.render;                                     // compile error: 
 public class Draft { }
 ```
 
-**A plain PHP constant is read through its namespace the same way.** `global.PHP_EOL` reads PHP's constant, and `Pdf.DEFAULT_DPI` reads the library's after `import Vendor.Pdf;`. A bare uppercase name is always the code's own constant, so a bare PHP constant such as `PHP_EOL` is a compile error that says to write `global.PHP_EOL`:
+**A PHP built-in's failure is the value it returns,** as `global.iconv("UTF-8", "ASCII", text)` returns `false` for text that has a letter ASCII lacks. A call of a built-in whose return type holds `false` or `null` silences the warning for that failure, so an error handler that skips silenced warnings, as Laravel's, Symfony's and PHPUnit's do, never turns it into an exception, and the code tests the value, as Go tests a returned error:
+
+<!-- example built-in-failures -->
+```csharp
+public class Codes
+{
+    public string? ascii(string text) => global.iconv("UTF-8", "ASCII", text) is string converted ? converted : null;   // compiles: "café" gives null, with no warning
+    public string? silenced(string text) => @(global.iconv("UTF-8", "ASCII", text)) is string converted ? converted : null;   // compile error: PHP# has no @ before a value
+}
+```
+<!-- run built-in-failures
+Codes codes = new Codes();
+codes.ascii("abc");   // "abc"
+codes.ascii("café");  // null
+-->
+
+**A plain PHP constant is read through its namespace the same way.** `global.CURLOPT_TIMEOUT` reads the constant of PHP's curl extension, and `Pdf.DEFAULT_DPI` reads the library's after `import Vendor.Pdf;`. A bare uppercase name is always the code's own constant, so a bare PHP constant such as `CURLOPT_TIMEOUT` is a compile error that says to write `global.CURLOPT_TIMEOUT`. A value the standard library gives is read from it, as `Int.MAX` and `Int.MIN` give the `int` bounds:
 
 <!-- example library-constants -->
 ```php
@@ -2956,10 +3064,10 @@ import Vendor.Pdf;
 
 public class Layout
 {
-    public string line(string text) => text + global.PHP_EOL;     // compiles: PHP's constant is read through global
-    public int largest() => global.PHP_INT_MAX;                   // compiles
+    public int timeout() => global.CURLOPT_TIMEOUT;               // compiles: PHP's constant is read through global
+    public int largest() => Int.MAX;                              // compiles: the standard library gives the int bounds
     public int dpi() => Pdf.DEFAULT_DPI;                          // compiles: the library's constant is read through its namespace
-    public string bare(string text) => text + PHP_EOL;            // compile error: write global.PHP_EOL
+    public int bare() => CURLOPT_TIMEOUT;                         // compile error: write global.CURLOPT_TIMEOUT
 }
 ```
 
@@ -3147,7 +3255,7 @@ a ** b                       // int. Throws ArithmeticError at runtime when b < 
 ```
 
 - Division by zero throws `DivisionByZeroError`.
-- `global.PHP_INT_MIN / -1` throws `ArithmeticError`, because the result overflows.
+- `Int.MIN / -1` throws `ArithmeticError`, because the result overflows.
 - `/=` follows the same rules.
 - Like `+` (section 18), what `/` does is chosen from the operand types the checker sees.
 
@@ -3906,7 +4014,7 @@ extern now uses Clock;               // compile error: name the function through
 - `Http` replaces curl.
 - `Files` replaces every file function outside standard output and standard error.
 - `Console` replaces printing to standard output and standard error.
-- `Process` replaces `exit`.
+- `Process` replaces `exit` and `shell_exec()`.
 - `Clock` replaces `time()`.
 - `Random` replaces `random_int`.
 - `Cache` replaces the APCu functions.

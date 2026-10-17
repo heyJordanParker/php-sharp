@@ -1,0 +1,13 @@
+namespace ParameterProperties;
+
+public class Ledger
+{
+    public int changes { get; private set; } = 0;
+
+    public Ledger(
+        public string name { get; set => field = value.trim(); } = "  anon  ",
+        public int total { get; set; didSet => this.changes += 1; } = 0,
+        public string label { get; set; } via Upper = "x",
+        public string tag { get; set; } via Upper, Bracketed<int> = "t",
+    ) { }
+}

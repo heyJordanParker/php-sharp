@@ -1,0 +1,8 @@
+namespace Nevers;
+
+import Exception;
+
+public class BadInput : Exception
+{
+    public BadInput(string reason) : super(reason) { }
+}

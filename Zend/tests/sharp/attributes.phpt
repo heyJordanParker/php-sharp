@@ -3,6 +3,7 @@ PHP# attributes on a class, its members and their parameters read through Reflec
 --FILE--
 <?php
 
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
 require __DIR__ . '/Attributes.inc';
 require __DIR__ . '/Product.sharp';
 

@@ -1,0 +1,27 @@
+namespace BackedKeys;
+
+import Lib.Size;
+import Lib.Standing;
+import Lib.Tally;
+
+// Each `Map` keyed by a backed enum reaches plain PHP's `array` with each case's backing value as its key.
+public class Roll
+{
+    public string described()
+    {
+        Map<Standing, int> counts = [Standing.Active: 2, Standing.Closed: 1];
+
+        return Tally.describe(counts);
+    }
+
+    public string sized() => Tally.describe([Size.Small: "s", Size.Large: "l"]);
+
+    public string spread()
+    {
+        List<Map<Standing, int>> rolls = [[Standing.Active: 1], [Standing.Closed: 2]];
+
+        return Tally.each(...rolls);
+    }
+
+    public string maybe(Map<Standing, int>? counts) => Tally.maybe(counts);
+}

@@ -83,13 +83,14 @@ use crate::error::AnalysisError;
 use crate::expression::array::check_sharp_literal_kind;
 use crate::expression::array::get_set_literal_type;
 use crate::expression::instantiation::report_missing_type_arguments;
-use crate::resolver::class_name::report_unknown_sharp_class;
+use crate::resolver::class_name::report_missing_class;
 use crate::resolver::property::localize_property_type;
 use crate::resolver::property::resolve_declared_property;
 use crate::statement::analyze_statements;
 use crate::statement::attributes::AttributeTarget;
 use crate::statement::attributes::analyze_attributes;
 use crate::statement::class_like::method::analyze_constructor_initializer;
+use crate::statement::class_like::property::analyze_behaviors;
 use crate::statement::class_like::property::analyze_property_hook;
 use crate::statement::class_like::r#struct::report_class_held_by_key;
 use crate::statement::r#return::handle_return_value;
@@ -465,10 +466,11 @@ pub fn takes_declared_type(expression: &Expression<'_>) -> bool {
     ) || is_member_read(expression)
 }
 
-/// Whether `expression` reads a member, `x.m` or `Class.m`, which in PHP# is a method value when the class declares
-/// no property `m` (spec section 14.3).
+/// Whether `expression` reads a member, `x.m`, `x?.m` or `Class.m`, which in PHP# is a method value when the class
+/// declares no property `m`, or when the code takes it as a function the property's type does not fit (spec section
+/// 14.3).
 pub fn is_member_read(expression: &Expression<'_>) -> bool {
-    matches!(expression.unparenthesized(), Expression::Access(Access::Property(_)))
+    matches!(expression.unparenthesized(), Expression::Access(Access::Property(_) | Access::NullSafeProperty(_)))
 }
 
 /// Joins the type each variable a closure captured by reference has at the end of the closure into its type in the
@@ -650,13 +652,14 @@ where
                     .map(|return_type| return_type.type_union.clone())
                     .or_else(|| artifacts.lambda_result.clone());
                 expect_type(context, &mut artifacts, value, declared.as_ref());
-                if let Some(return_type) = return_type {
-                    check_sharp_literal_kind(context, value, &return_type.type_union);
-                }
 
                 block_context.flags.set_inside_return(true);
                 value.analyze(context, block_context, &mut artifacts)?;
                 block_context.flags.set_inside_return(false);
+                // A lambda's result is checked against the function type that takes it, as a declared return type is.
+                if let Some(declared) = &declared {
+                    check_sharp_literal_kind(context, Some(block_context), &artifacts, value, declared);
+                }
                 block_context.conditionally_referenced_variable_ids.clear();
 
                 let value_type =
@@ -691,14 +694,18 @@ where
                 _ => ("function", function_metadata.name),
             };
 
-            report_missing_return(
-                context,
-                kind,
-                name,
-                function_metadata.name_span.unwrap_or(function_metadata.span),
-                body.span(),
-                &expanded_type,
-            );
+            if context.dialect.is_sharp() && expanded_type.is_never() {
+                report_never_returning(context, name, &body);
+            } else {
+                report_missing_return(
+                    context,
+                    kind,
+                    name,
+                    function_metadata.name_span.unwrap_or(function_metadata.span),
+                    body.span(),
+                    &expanded_type,
+                );
+            }
         }
     }
 
@@ -935,9 +942,14 @@ where
         )?;
 
         if let Some(default_value) = parameter_node.default_value.as_ref() {
-            block_context.in_constant_expression(|block_context| {
-                default_value.value.analyze(context, block_context, artifacts)
-            })?;
+            // Spec section 9: a PHP# default is any expression, which runs each time a call leaves the argument out.
+            if context.dialect.is_sharp() {
+                default_value.value.analyze(context, block_context, artifacts)?;
+            } else {
+                block_context.in_constant_expression(|block_context| {
+                    default_value.value.analyze(context, block_context, artifacts)
+                })?;
+            }
 
             // PHP# writes `mixed` as `Any`, which never holds null, so its default is checked too.
             if !parameter_metadata.flags.is_variadic()
@@ -981,6 +993,9 @@ where
             let property_name = php_variable_name(parameter_node.variable.name);
             for hook in &hook_list.hooks {
                 analyze_property_hook(hook, property_name, context, block_context, artifacts)?;
+            }
+            if let Some(behaviors) = &parameter_node.behaviors {
+                analyze_behaviors(behaviors, property_name, context, block_context, artifacts);
             }
         }
     }
@@ -1032,6 +1047,31 @@ pub(crate) fn report_missing_return<A>(
             .with_note(format!("A {kind} that does not explicitly return a value will implicitly return `null`."))
             .with_help(help_message),
     );
+}
+
+/// Spec section 7: a PHP# `never` method whose `body` can return: a block that reaches its closing brace, its last
+/// byte, or an expression body whose value it returns.
+fn report_never_returning<A>(context: &mut Context<'_, '_, A>, name: Word, body: &FunctionLikeBody<'_, '_>)
+where
+    A: Arena,
+{
+    let issue = match body {
+        FunctionLikeBody::Expression(value) | FunctionLikeBody::ExpressionStatement(value) => {
+            Issue::error(format!("`{name}` is `never`, and its body returns a value."))
+                .with_annotation(Annotation::primary(value.span()).with_message("Returned here."))
+                .with_help("Throw instead, as in `=> throw new ValueError(\"…\")`, or call a `never` method.")
+        }
+        FunctionLikeBody::Statements(_, body) => Issue::error(format!(
+            "`{name}` is `never`, and it reaches its closing brace when no `throw` runs before it."
+        ))
+        .with_annotation(
+            Annotation::primary(body.from_start(body.end.backward(1)))
+                .with_message("It returns here when no `throw` runs."),
+        )
+        .with_help("End every path with a `throw` or a call of a `never` method."),
+    };
+
+    context.collector.report_with_code(IssueCode::MissingReturnStatement, issue);
 }
 
 /// Checks if a type is a single unresolved template parameter with a mixed bound.
@@ -1956,7 +1996,7 @@ fn check_parameter_default_value<'ctx, 'arena, A>(
 ) where
     A: Arena,
 {
-    check_sharp_literal_kind(context, default_expression, declared_type);
+    check_sharp_literal_kind(context, None, artifacts, default_expression, declared_type);
 
     // A PHP# type holds null only when it is written with `?`, so its `Any` and its type parameters are checked and it
     // has no implicitly nullable parameter.
@@ -2055,27 +2095,17 @@ pub(crate) fn report_undefined_type<A>(context: &mut Context<'_, '_, A>, name: W
 where
     A: Arena,
 {
-    if report_unknown_sharp_class(context, name.as_bytes(), span) {
+    if report_missing_class(context, name.as_bytes(), span) {
         return;
     }
 
-    let issue = if context.dialect.is_sharp() {
-        let name = display_class_like_name(context, name);
-        Issue::error(format!("Cannot find type `{name}`."))
-            .with_annotation(
-                Annotation::primary(span).with_message(format!("`{name}` is not defined in the current codebase")),
-            )
-            .with_note("This error occurs when a type is referenced but not found in any analyzed source files or stubs.")
-            .with_help("Verify the type name is spelled correctly, the file containing it is included in analysis, and the file imports it with `import`.")
-    } else {
-        Issue::error(format!("Cannot find class, interface, enum, or type alias `{name}`."))
-            .with_annotation(
-                Annotation::primary(span).with_message(format!("`{name}` is not defined in the current codebase")),
-            )
-            .with_note("This error occurs when a type is referenced but not found in any analyzed source files or stubs.")
-            .with_note("If this type comes from an optional dependency or extension, you can safely suppress this issue using `@mago-ignore` or `@mago-expect`.")
-            .with_help("Verify the type name is spelled correctly, the file containing it is included in analysis, and any required `use` statements are present.")
-    };
+    let issue = Issue::error(format!("Cannot find class, interface, enum, or type alias `{name}`."))
+        .with_annotation(
+            Annotation::primary(span).with_message(format!("`{name}` is not defined in the current codebase")),
+        )
+        .with_note("This error occurs when a type is referenced but not found in any analyzed source files or stubs.")
+        .with_note("If this type comes from an optional dependency or extension, you can safely suppress this issue using `@mago-ignore` or `@mago-expect`.")
+        .with_help("Verify the type name is spelled correctly, the file containing it is included in analysis, and any required `use` statements are present.");
     context.collector.report_with_code(IssueCode::NonExistentClassLike, issue);
 }
 

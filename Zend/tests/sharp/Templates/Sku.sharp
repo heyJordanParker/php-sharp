@@ -1,0 +1,8 @@
+namespace Templates;
+
+public class Sku
+{
+    public Sku(public string code { get; }) { }
+
+    public string toString() => this.code;
+}

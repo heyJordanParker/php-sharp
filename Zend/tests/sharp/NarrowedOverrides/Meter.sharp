@@ -1,0 +1,13 @@
+namespace NarrowedOverrides;
+
+import Lib.Gauge;
+
+// Each override narrows the type of a typed plain PHP property.
+public class Meter : Gauge
+{
+    protected override string label { get; set; } = "meter";
+
+    public override int level { get; set; } = 3;
+
+    public string read() => `${this.label} ${this.level}`;
+}

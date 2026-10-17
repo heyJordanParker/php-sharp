@@ -1,0 +1,50 @@
+namespace KeywordNames;
+
+import LogicException;
+import Lib.Behavior;
+
+public class Form : Behavior
+{
+    public string name { get; } = "form";
+
+    // The parent names its parameter `event`, so the override names it `@event`.
+    public override string submit(string form, string @event) => `${form}:${@event}`;
+
+    // `@this` names a parameter and a local, and a bare `this` stays the object the method runs on.
+    public string label(string @this)
+    {
+        const @class = @this.trim();
+        Function<string(string)> wrap = (string @match) => `[${@match}]`;
+        try
+        {
+            throw new LogicException(@class);
+        }
+        catch (LogicException @catch)
+        {
+            return `${wrap(@catch.getMessage())}${this.name}`;
+        }
+    }
+
+    public string each(List<string> words)
+    {
+        let @default = "";
+        for (const @case of words)
+        {
+            @default = `${@default}${@case}`;
+        }
+
+        return @default;
+    }
+
+    public string tested(Any value) => value is string @return ? @return : "none";
+
+    public string wrapped(string word)
+    {
+        Function<string(string)> wrap = (string @this) => `<${@this}>`;
+
+        return wrap(word);
+    }
+
+    // A name before `:` is never the object, so `this:` names the parameter `@this` as `@this:` does.
+    public string named() => `${this.submit(form: "a", @event: "b")} ${this.submit(event: "c", form: "d")} ${this.label(@this: " e ")} ${this.label(this: " f ")}`;
+}

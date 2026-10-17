@@ -39,11 +39,16 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for Continue<'arena> {
 
         let available_levels = block_context.break_types.len() as u64;
         if available_levels == 0 {
+            // A `.sharp` file has no `switch`, so its message names only a loop, in the words `break` gets.
+            let message = if context.dialect.is_sharp() {
+                "A `continue` stands only inside a loop."
+            } else {
+                "Continue statement used outside of loop."
+            };
             context.collector.report_with_code(
                 IssueCode::InvalidContinue,
-                Issue::error("Continue statement used outside of loop.").with_annotation(
-                    Annotation::primary(self.span())
-                        .with_message("Continue statement must be inside a loop.".to_string()),
+                Issue::error(message).with_annotation(
+                    Annotation::primary(self.span()).with_message("Continue statement must be inside a loop."),
                 ),
             );
 
@@ -138,17 +143,7 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for Continue<'arena> {
             }
 
             let Some(loop_scope) = loop_scope_ref else {
-                context.collector.report_with_code(
-                    IssueCode::InvalidContinue,
-                    Issue::error("Continue statement used outside of loop.").with_annotation(
-                        Annotation::primary(self.span())
-                            .with_message("Continue statement must be inside a loop.".to_string()),
-                    ),
-                );
-
-                block_context.flags.set_has_returned(true);
-
-                return Ok(());
+                unreachable!("each part of a loop runs with its scope, so a `continue` finds the loop it targets")
             };
 
             loop_scope.final_actions.insert(ControlAction::Continue);

@@ -4,6 +4,7 @@ PHP# throws ArithmeticError when - overflows
 <?php
 
 require __DIR__ . '/attempt.inc';
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
 require __DIR__ . '/Overflow.sharp';
 
 attempt(fn () => Demo\Overflow::sub(PHP_INT_MIN + 1, 1));

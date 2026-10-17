@@ -8,9 +8,9 @@ public struct MailMessage
         public List<MailAddress> to { get; },
         public string subject { get; },
         public string textBody { get; },
-        public string? htmlBody = null { get; },
-        public List<MailAddress> cc = [] { get; },
-        public List<MailAddress> bcc = [] { get; },
-        public MailAddress? replyTo = null { get; },
+        public string? htmlBody { get; } = null,
+        public List<MailAddress> cc { get; } = [],
+        public List<MailAddress> bcc { get; } = [],
+        public MailAddress? replyTo { get; } = null,
     ) { }
 }

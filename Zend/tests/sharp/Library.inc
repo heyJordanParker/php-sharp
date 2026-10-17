@@ -29,7 +29,7 @@ class Library
 
     public static function square(float $side): float { return \Sharp\Math\Math::pow($side, 2.0); }
 
-    public static function decode(string $json): mixed { return \json_decode($json, true, 512, \JSON_THROW_ON_ERROR); }
+    public static function decode(string $json): mixed { return @\json_decode($json, true, 512, \JSON_THROW_ON_ERROR); }
 
     public static function digest(string $data): string { return \sha1($data); }
 
@@ -37,7 +37,7 @@ class Library
 
     public static function hexadecimal(string $data): string { return \bin2hex($data); }
 
-    public static function checks(string $password, string $hash): bool { return \password_verify($password, $hash); }
+    public static function checks(string $password, string $hash): bool { return @\password_verify($password, $hash); }
 
     public static function serialize(mixed $value): string { return \serialize($value); }
 

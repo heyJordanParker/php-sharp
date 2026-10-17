@@ -1,0 +1,25 @@
+namespace KeywordNames;
+
+import LogicException;
+
+// Each name here is one PHP gives a superglobal, and each stays PHP#'s own.
+public class Request
+{
+    public Request(public string _SERVER { get; }) { }
+
+    public string read(string GLOBALS)
+    {
+        const _GET = `${GLOBALS}!`;
+        Function<string(string)> wrap = (string _POST) => `${_POST}${_GET}`;
+        try
+        {
+            throw new LogicException(_GET);
+        }
+        catch (LogicException _ENV)
+        {
+            return `${wrap(_ENV.getMessage())} ${this._SERVER}`;
+        }
+    }
+
+    public string named() => this.read(GLOBALS: "n");
+}

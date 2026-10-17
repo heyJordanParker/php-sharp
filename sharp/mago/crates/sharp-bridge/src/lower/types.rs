@@ -24,6 +24,8 @@ use mago_codex::ttype::atomic::object::TObject;
 use mago_codex::ttype::atomic::object::named::TNamedObject;
 use mago_codex::ttype::atomic::scalar::TScalar;
 use mago_codex::ttype::atomic::scalar::class_like_string::TClassLikeString;
+use mago_codex::ttype::comparator::ComparisonResult;
+use mago_codex::ttype::comparator::union_comparator;
 use mago_codex::ttype::comparator::union_comparator::can_expression_types_be_identical;
 use mago_codex::ttype::get_array_parameters;
 use mago_codex::ttype::get_mixed;
@@ -136,6 +138,25 @@ impl<'analysis> Types<'analysis> {
                 expression.span()
             )
         })
+    }
+
+    /// Whether `value`, a call of plain PHP or a read of a property plain PHP declares, may be an `int`-keyed array
+    /// whose keys have gaps, which the analysis reads as a `List`, as `get_sharp_received_type` says: plain PHP declares
+    /// a keyed array, and the analysis types the value as a `List`. A node the lowering builds has no type.
+    pub(crate) fn arrives_as_list(&self, value: &Expression) -> bool {
+        let is_list =
+            |atomic: &TAtomic| matches!(atomic, TAtomic::Array(TArray::List(list)) if list.tuple_names.is_none());
+        let declared = match value.unparenthesized() {
+            Expression::Call(_) => self
+                .plain_php_call(value)
+                .and_then(|(_, metadata)| metadata.return_type_metadata.as_ref().map(|declared| &declared.type_union)),
+            Expression::Access(Access::Property(_)) => self.property_type(value),
+            _ => unreachable!("the lowering asks this only of a plain PHP call or property read"),
+        };
+
+        declared.is_some_and(|declared| {
+            declared.types.iter().any(|atomic| matches!(atomic, TAtomic::Array(TArray::Keyed(_))))
+        }) && self.artifacts.get_expression_type(value).is_some_and(|r#type| r#type.types.iter().any(is_list))
     }
 
     /// Whether the collection `expression` may hold a `Map`, whose element a loop reads as its entry, spec section 17.
@@ -628,14 +649,18 @@ impl<'analysis> Types<'analysis> {
     /// result holds a `float`, an `Any` or an `Object`, spec section 24: plain PHP's `int` becomes the `float`, and its
     /// null or non-object is refused where it enters.
     pub(crate) fn call_check(&self, call: &Expression) -> Option<(String, String)> {
-        if let Some(name) = self.unchecked_result_call(call) {
-            let r#type = self.artifacts.get_expression_type(call)?;
+        self.call_check_as(call, self.artifacts.get_expression_type(call)?)
+    }
 
+    /// [`Self::call_check`], with the result checked as `r#type`: the `Map` a place declares, which keeps the keys of a
+    /// plain PHP array the checker reads as a `List`, as the place makes it a `Map` of them.
+    pub(crate) fn call_check_as(&self, call: &Expression, r#type: &TUnion) -> Option<(String, String)> {
+        if let Some(name) = self.unchecked_result_call(call) {
             return needs_result_check(r#type)
                 .then(|| (text(r#type, self.codebase, Parameter::Index), format!("{name}()")));
         }
         let (name, metadata) = self.plain_php_call(call)?;
-        let text = self.checked_text(self.artifacts.get_expression_type(call)?, metadata.flags.is_user_defined())?;
+        let text = self.checked_text(r#type, metadata.flags.is_user_defined())?;
 
         Some((text, name))
     }
@@ -806,10 +831,11 @@ impl<'analysis> Types<'analysis> {
         let r#type = &metadata.type_metadata.as_ref()?.type_union;
 
         // A property of a PHP enum, which only PHP# declares, a computed one, carries its type text always, which tells
-        // the engine the enum may hold it, spec section 31.
+        // the engine the enum may hold it, spec section 31, and so does one that runs with a wider plain PHP type.
         let is_enum = self.codebase.get_class_like(class).is_some_and(|class| class.kind.is_enum());
+        let always = is_enum || self.narrowed_root_type(class, property).is_some();
 
-        self.checked_text(r#type, true).or_else(|| is_enum.then(|| type_text(r#type, self.codebase)))
+        self.checked_text(r#type, true).or_else(|| always.then(|| type_text(r#type, self.codebase)))
     }
 
     /// `r#type` as the type text an entry check tests a value from plain PHP against, when part of it is an `Any`, which
@@ -1112,6 +1138,17 @@ impl<'analysis> Types<'analysis> {
             .collect()
     }
 
+    /// Whether the read `read` of a plain PHP class's member gives the value of its method where the class also
+    /// declares a property of that name, spec section 14.3, as the analysis resolved it where the code takes the read
+    /// as a function the property's type does not fit.
+    pub(crate) fn reads_method_over_property(&self, read: &Expression) -> bool {
+        matches!(read, Expression::Access(_))
+            && matches!(
+                self.artifacts.get_callees(read).next(),
+                Some(CallTarget::FunctionLike { callee: FunctionLikeIdentifier::Method(..), .. })
+            )
+    }
+
     /// The full name of the plain PHP function the read `read` gives the value of, spec section 14.3, as
     /// `global.strtoupper` and `Pdf.render` read one, as the analysis resolved it. None for any other read.
     pub(crate) fn function_value(&self, read: &Expression) -> Option<Word> {
@@ -1337,6 +1374,18 @@ impl<'analysis> Types<'analysis> {
             .is_some_and(|metadata| metadata.flags.is_mutation_free())
     }
 
+    /// Whether the method call `call`, null-safe or not, runs a `List` method that changes its receiver, one
+    /// `Sharp\Internal\ListMethods` does not declare mutation-free, as `add` and `remove`.
+    pub(crate) fn changes_list(&self, call: &Expression) -> bool {
+        let Some(("List", method)) = self.collection_method(call) else {
+            return false;
+        };
+
+        self.codebase
+            .get_method(b"Sharp\\Internal\\ListMethods", &method)
+            .is_some_and(|metadata| !metadata.flags.is_mutation_free())
+    }
+
     /// Whether the method call `call`, null-safe or not, runs a lazy operation of a PHP# `Iterable<T>`, spec section 12,
     /// which `Sharp\Internal\IterableMethods` declares and the engine's `Sharp\Sequence` runs.
     pub(crate) fn is_lazy_operation(&self, call: &Expression) -> bool {
@@ -1357,6 +1406,34 @@ impl<'analysis> Types<'analysis> {
         };
 
         Some(self.codebase.get_function(function.as_bytes()).map_or(*function, |metadata| metadata.original_name))
+    }
+
+    /// Whether `function`, a plain PHP function, is one of PHP's built-ins whose declared return type holds its failure,
+    /// `false` or `null`, as `hex2bin` returns `string|false`. PHP# reads the failure from that value, so PHP's warning
+    /// for the same failure only repeats it, and the call runs without it. A built-in that takes a function, as
+    /// `call_user_func` and `array_reduce` do, runs that function's code inside the call, whose warnings are no failure of
+    /// the built-in, so it keeps its warnings, as a plain PHP library's own function does.
+    pub(crate) fn returns_its_failure(&self, function: Word) -> bool {
+        self.codebase.get_function(function.as_bytes()).is_some_and(|metadata| {
+            metadata.flags.is_built_in()
+                && !metadata.parameters.iter().any(|parameter| {
+                    [parameter.get_type_declaration_metadata(), parameter.get_type_metadata()]
+                        .into_iter()
+                        .flatten()
+                        .any(|declared| declared.type_union.has_callable())
+                })
+                && metadata
+                    .return_type_declaration_metadata
+                    .as_ref()
+                    .or(metadata.return_type_metadata.as_ref())
+                    .is_some_and(|returned| {
+                        returned.type_union.types.iter().any(|atomic| match atomic {
+                            TAtomic::Null | TAtomic::Mixed(_) => true,
+                            TAtomic::Scalar(scalar) => scalar.is_false() || scalar.is_general_bool(),
+                            _ => false,
+                        })
+                    })
+        })
     }
 
     /// The full name of the plain PHP constant the read `read` reaches through its namespace, as `global.PHP_EOL` and
@@ -1480,7 +1557,7 @@ impl<'analysis> Types<'analysis> {
             DeclarationKind::StaticProperty
         } else {
             DeclarationKind::Property {
-                typed: self.root_property(class, &variable).type_declaration_metadata.is_some(),
+                typed: self.root_property(class, &variable).1.type_declaration_metadata.is_some(),
             }
         };
 
@@ -1492,9 +1569,34 @@ impl<'analysis> Types<'analysis> {
         })
     }
 
-    /// The root declaration of the property `variable` that `class` declares or inherits: the one in the class whose
-    /// parent does not declare it.
-    fn root_property(&self, class: &[u8], variable: &[u8]) -> &'analysis PropertyMetadata {
+    /// The type the root declaration of the property `property` of the fully qualified class name `class` writes, when
+    /// that root is a typed plain PHP property and `class` declares the property with a narrower type, spec section
+    /// 6.1. PHP keeps a property's type through every override as the class links, so the property runs with it, and
+    /// its own type checks each write. None for any other property, which runs with the type it writes.
+    pub(crate) fn narrowed_root_type(&self, class: &[u8], property: &[u8]) -> Option<&'analysis TUnion> {
+        let variable = [b"$", property].concat();
+        let own =
+            &self.codebase.get_declaring_property(class, &variable)?.type_declaration_metadata.as_ref()?.type_union;
+        let (root_class, root) = self.root_property(class, &variable);
+        let root_type = &root.type_declaration_metadata.as_ref()?.type_union;
+        let is_plain = !self.codebase.get_class_like(root_class.as_bytes())?.flags.is_sharp();
+
+        (is_plain
+            && !union_comparator::is_contained_by(
+                self.codebase,
+                root_type,
+                own,
+                false,
+                false,
+                false,
+                &mut ComparisonResult::default(),
+            ))
+        .then_some(root_type)
+    }
+
+    /// The root declaration of the property `variable` that `class` declares or inherits, the one in the class whose
+    /// parent does not declare it, with that class.
+    fn root_property(&self, class: &[u8], variable: &[u8]) -> (Word, &'analysis PropertyMetadata) {
         let declaring = |class: &[u8]| self.codebase.get_declaring_property_class(class, variable);
         let mut root =
             declaring(class).unwrap_or_else(|| unreachable!("`{}` declares or inherits the property", word(class)));
@@ -1507,9 +1609,12 @@ impl<'analysis> Types<'analysis> {
             root = parent;
         }
 
-        self.codebase
+        let metadata = self
+            .codebase
             .get_declaring_property(root.as_bytes(), variable)
-            .unwrap_or_else(|| unreachable!("`{root}` declares the property"))
+            .unwrap_or_else(|| unreachable!("`{root}` declares the property"));
+
+        (root, metadata)
     }
 
     /// The class declaring the static method `name` a PHP# operator on operands of the types `operands` runs as, as the

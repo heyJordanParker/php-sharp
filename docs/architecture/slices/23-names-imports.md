@@ -75,7 +75,7 @@ What already suggests the keyword: every statement head (`If`, `IF`, `RETURN`, `
 
 ### Waiting on Jordan
 
-- **P1. A PHP# override of a plain PHP method whose parameter is named after a PHP# keyword.** `handle(Object event)` over `handle(object $event)` is "`event` is a PHP# keyword, so it can't name a parameter.", and `handle(Object happened)` is "Parameter #1 of `Renamed.handle` is named `happened` but parent `Listener.handle` names it `event`". The Slice keeps both.
+- **P1. A PHP# override of a plain PHP method whose parameter is named after a PHP# keyword.** Built in the singles PR: `handle(Object @event)` over `handle(object $event)` keeps the parent's name, and a bare `handle(Object event)` is "`event` is a keyword; write `@event`."
 
 ## Mechanism
 
