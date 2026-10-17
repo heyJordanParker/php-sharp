@@ -31,6 +31,20 @@ namespace Lib {
         }
     }
 
+    // A class whose own code passes names to its `...` method, which a PHP# subclass overrides.
+    class Html
+    {
+        public function render(): string
+        {
+            return $this->wrap('div', class: 'box', id: 'main');
+        }
+
+        public function wrap(string $name, string ...$attributes): string
+        {
+            return $name . json_encode($attributes);
+        }
+    }
+
     #[\Attribute(\Attribute::TARGET_ALL)]
     final class Generic
     {

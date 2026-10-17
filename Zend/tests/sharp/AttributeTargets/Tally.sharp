@@ -1,0 +1,24 @@
+namespace AttributeTargets;
+
+import Lib.Entity;
+
+// An auto accessor with attributes runs as a hook over the storage, so a `Map`'s index writes and `remove` reach the
+// storage through it, as they reach an auto-property's.
+public class Tally
+{
+    public Map<string, int> read { [Entity("read")] get; set; } = [:];
+
+    public Map<string, int> written { get; [Entity("written")] set; } = [:];
+
+    public int count()
+    {
+        this.read["a"] = 1;
+        this.read["b"] = 2;
+        this.read.remove("a");
+        this.written["c"] = 3;
+        this.written["d"] = 4;
+        this.written.remove("c");
+
+        return this.read.count() * 10 + this.written.count();
+    }
+}

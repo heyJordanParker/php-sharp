@@ -4927,6 +4927,49 @@ void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *tex
 	}
 }
 
+/* Throws for the names plain PHP passed a PHP# `...` parameter, which is a List and has no names, so no name or value
+ * is lost, spec section 16: "`Wrapper.wrap` takes `...attributes` by position, and was given `class:` and `id:`." */
+ZEND_COLD void sharp_refuse_named_variadic(const zend_function *func, const HashTable *named)
+{
+	smart_str message = {0};
+	smart_str_appendc(&message, '`');
+	const zend_string *full = func->common.scope ? func->common.scope->name : func->common.function_name;
+	const char *last = zend_memrchr(ZSTR_VAL(full), '\\', ZSTR_LEN(full));
+	const char *name = last ? last + 1 : ZSTR_VAL(full);
+	size_t length = ZSTR_VAL(full) + ZSTR_LEN(full) - name;
+	if (!func->common.scope) {
+		smart_str_appendl(&message, name, length);
+	} else if (zend_string_equals_literal_ci(func->common.function_name, "__construct")) {
+		smart_str_appends(&message, "new ");
+		smart_str_appendl(&message, name, length);
+	} else {
+		smart_str_appendl(&message, name, length);
+		smart_str_appendc(&message, '.');
+		smart_str_append(&message, func->common.function_name);
+	}
+	smart_str_appends(&message, "` takes `...");
+	smart_str_append(&message, func->common.arg_info[func->common.num_args].name);
+	smart_str_appends(&message, "` by position, and was given ");
+
+	uint32_t count = zend_hash_num_elements(named);
+	uint32_t i = 0;
+	zend_string *key;
+	ZEND_HASH_MAP_FOREACH_STR_KEY(named, key) {
+		if (i > 0) {
+			smart_str_appends(&message, i + 1 == count ? " and " : ", ");
+		}
+		smart_str_appendc(&message, '`');
+		smart_str_append(&message, key);
+		smart_str_appends(&message, ":`");
+		i++;
+	} ZEND_HASH_FOREACH_END();
+	smart_str_appendc(&message, '.');
+	smart_str_0(&message);
+
+	zend_throw_error(NULL, "%s", ZSTR_VAL(message.s));
+	smart_str_free(&message);
+}
+
 bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval *text, void **cache)
 {
 	const sharp_type *expected = sharp_type_list_of_frame(text,

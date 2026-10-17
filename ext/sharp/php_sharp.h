@@ -206,6 +206,10 @@ zend_class_entry *sharp_new_class(const zval *created, const sharp_type **argume
  * becomes a float. */
 void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *text, void **cache);
 
+/* Throws an Error for the arguments `named`, which plain PHP passed by name to the `...` parameter of `func`, a PHP#
+ * function, since a PHP# `...` parameter is a List, which has no names. ZEND_RECV_VARIADIC runs it on entry. */
+ZEND_COLD void sharp_refuse_named_variadic(const zend_function *func, const HashTable *named);
+
 /* Whether `value` is of the one type the type text list `text` spells, spelled for the frame `execute_data` runs as
  * sharp_type_check_arguments spells it. Throws PHP's TypeError for a function's return value when not, since the value is
  * a plain PHP call's result, naming the call as the literal after `text` names it. An int it accepts for a float becomes

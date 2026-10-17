@@ -19,11 +19,11 @@ Attributes use square brackets and follow C#'s rules:
 - positional and named arguments
 - an argument is a constant: a literal, a constant, `typeof(Class)`, a list or map literal of constants, or a `new` of a class whose arguments are constants too, as PHP and Java's nested annotations take; PHP creates the object each time it reads the attribute, and an argument that runs code is a compile error
 - no parentheses when there are no arguments: `[Searchable]`
-- explicit targets, which name the part of the declaration a bracket goes on, as in C#: `type:` on a type, `method:` on a method, a lambda or an accessor, `param:` on a parameter and on the value `set` or `init` takes, `field:` on a field, a constant or an enum case, `property:` and `field:` on a property, and `param:`, `property:` and `field:` on a constructor parameter that declares a property, where an untargeted bracket goes on both the parameter and the property
-- `[return: NotNull]` is a compile error: PHP keeps no attributes on a return value
-- on every declaration C# takes one on: a class, an interface, an enum and its cases, an event, a constant, a field, a property, an interface property, a method, an interface method with or without a default body, a parameter, a lambda written with parentheses, as in `[Searchable] (int n) => n * 2`, and an accessor, as in `[Searchable] get;`
-- an accessor of a get-only auto-property or of a static auto-property takes none, because PHP runs that property without accessors, and neither does `willSet` or `didSet`, which runs inside `set`: put the attribute on the property, or give the accessor a body
-- a type parameter takes none: PHP erases it, so an attribute there has nowhere to go
+- explicit targets, which name the part of the declaration a bracket goes on, as in C#: `type:` on a type, `type:` or `event:` on an event, `method:` on a method, an operator, a named constructor, a lambda or an accessor, `param:` on a parameter and on the value `set` or `init` takes, `field:` on a field, a constant or an enum case, `property:` and `field:` on a property, and `param:`, `property:` and `field:` on a parameter that declares a property, a constructor's, an event's or a data case's, where an untargeted bracket goes on both the parameter and the property
+- a return value takes no attributes: put them on the method, with no target, so `[return: NotNull]` is a compile error
+- on every declaration C# takes one on: a class, an interface, an enum and its cases, an event, a constant, a field, a property, an interface property, a method, an interface method with or without a default body, an operator, a named constructor, a parameter, a lambda written with parentheses, as in `[Searchable] (int n) => n * 2`, and an accessor, as in `[Searchable] get;`, a static or get-only auto-property's included
+- `willSet` and `didSet` take none, since they run inside `set`: put the attribute on `set`
+- a type parameter takes no attributes: put them on the declaration that declares it
 
 <!-- example attribute-arguments: members -->
 ```csharp
@@ -72,9 +72,9 @@ public Function<int(int)> twice() => [Searchable] (int n) => n * 2;  // compiles
 [property: Field(label: "Total")]
 public int total { [Searchable] get; [param: Field(label: "Amount")] set; } = 0;  // compiles: Searchable on get, Field on what set takes
 
-public int count { [Searchable] get; } = 0;            // compile error: a get-only auto-property runs without accessors
+public int count { [Searchable] get; } = 0;            // compiles: on the get of a get-only auto-property
 
-[return: Searchable] public string label() => "";     // compile error: PHP keeps no attributes on a return value
+[return: Searchable] public string label() => "";     // compile error: a return value takes no attributes, so put them on the method
 ```
 
 <!-- example attribute-type-parameters -->
@@ -82,7 +82,7 @@ public int count { [Searchable] get; } = 0;            // compile error: a get-o
 // app/Shelf.sharp
 namespace App;
 
-public class Shelf<[Searchable] TItem>        // compile error: PHP erases a type parameter
+public class Shelf<[Searchable] TItem>        // compile error: a type parameter takes no attributes, so put them on Shelf
 {
 }
 ```
@@ -1860,7 +1860,9 @@ load().name;                 // "Ada"
 loaded.name;                 // "Ada"
 -->
 
-A read typed `Any?` this way warns until an `as`, an `is` or a `match` states its type, as in `Contact? owner = subscription.owner as Contact;`.
+A read typed `Any?` this way warns until an `as`, an `is` or a `match` states its type, as in `Contact? owner = subscription.owner as Contact;`. A write to such a property takes any value and warns nothing. A read after a write is still what `__get` gives back, so `row.count = "7"; return row.count;` reads `Any?`, not `string`.
+
+A declared property the code can't read, such as an Eloquent model's protected `table` or `hidden`, is the property `__get` reads, as plain PHP reads it from outside the class.
 
 **A `.sharp` class whose plain PHP parent defines `__get` has those properties too,** as a PHP# Eloquent model has the relations it loaded, by the same rules.
 
@@ -2193,7 +2195,7 @@ Amount price = new Amount { value: 500, currency };     // short for currency: c
 
 **Any parameter can be named at a call,** including a call into plain PHP. An override keeps every parameter name of the method it overrides (section 22), so a name means the same parameter on every class.
 
-**A named argument that matches no other parameter of plain PHP fills its `...` parameter under its name,** as PHP collects it, on a method, a static method, a constructor, a function and an attribute. The `...` parameter's element type checks each value, as it checks a positional one. A PHP# `...` parameter is a `List` (section 7), which takes no names, and a function built into PHP refuses them, so a named argument that matches no parameter there is a compile error.
+**A named argument that matches no other parameter of plain PHP fills its `...` parameter under its name,** as PHP collects it, on a method, a static method, a constructor, a function and an attribute. The `...` parameter's element type checks each value, as it checks a positional one. A PHP# `...` parameter is a `List` (section 7), which has no names, and a function built into PHP takes its `...` values by position, so a named argument that matches no parameter there is a compile error. Plain PHP that passes names to a PHP# `...` parameter, an override's included, throws on entry, with "`Wrapper.wrap` takes `...attributes` by position, and was given `class:` and `id:`.", so no name or value is lost.
 
 <!-- example named-variadics -->
 ```php
@@ -2218,7 +2220,7 @@ public class Catalog<TItem : DatabaseEntity>
 
     public static int sum(int ...values) => values.count();
 
-    public int total() => Catalog<TItem>.sum(first: 1, second: 2);          // compile error: sum's ...values is a List<int>, and a List takes no names
+    public int total() => Catalog<TItem>.sum(first: 1, second: 2);          // compile error: sum takes its ...values by position
 }
 ```
 

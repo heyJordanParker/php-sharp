@@ -17,10 +17,17 @@ public class Ledger
 
     public static int opened { [Entity("opened")] get => 1; }
 
+    public static int counter { [Entity("counted")] get; [param: Entity("next")] set; } = 0;
+
+    public string code { [Entity("coded")] get; }
+
     public Ledger(
         [param: Entity("given")] [property: Entity("kept")] public int id { get; },
         public int stock { [Entity("stocked")] get; set; },
-    ) { }
+    )
+    {
+        this.code = `L${id}`;
+    }
 
     [method: Entity("run")]
     public int run([param: Entity("times")] int times) => times;
