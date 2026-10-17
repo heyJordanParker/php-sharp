@@ -1,0 +1,27 @@
+namespace AttributeTargets;
+
+import Lib.Entity;
+
+// An attribute target names the part of a declaration its list goes on, spec section 1, and an accessor carries its
+// attributes on its hook, or on the hidden method a static property's accessor runs as.
+[type: Entity("ledger")]
+public class Ledger
+{
+    [field: Entity("limit")]
+    public const int LIMIT = 3;
+
+    [property: Entity("total")]
+    public int total { [Entity("read")] get; [method: Entity("write")] [param: Entity("amount")] set; } = 0;
+
+    public string name { [Entity("named")] get => field; set; } = "";
+
+    public static int opened { [Entity("opened")] get => 1; }
+
+    public Ledger(
+        [param: Entity("given")] [property: Entity("kept")] public int id { get; },
+        public int stock { [Entity("stocked")] get; set; },
+    ) { }
+
+    [method: Entity("run")]
+    public int run([param: Entity("times")] int times) => times;
+}

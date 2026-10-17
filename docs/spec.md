@@ -19,8 +19,11 @@ Attributes use square brackets and follow C#'s rules:
 - positional and named arguments
 - an argument is a constant: a literal, a constant, `typeof(Class)`, a list or map literal of constants, or a `new` of a class whose arguments are constants too, as PHP and Java's nested annotations take; PHP creates the object each time it reads the attribute, and an argument that runs code is a compile error
 - no parentheses when there are no arguments: `[Searchable]`
-- explicit targets: `[return: NotNull]`
-- on every declaration C# takes one on: a class, an interface, an enum and its cases, an event, a constant, a field, a property, an interface property, a method, an interface method with or without a default body, a parameter, and a lambda written with parentheses, as in `[Searchable] (int n) => n * 2`
+- explicit targets, which name the part of the declaration a bracket goes on, as in C#: `type:` on a type, `method:` on a method, a lambda or an accessor, `param:` on a parameter and on the value `set` or `init` takes, `field:` on a field, a constant or an enum case, `property:` and `field:` on a property, and `param:`, `property:` and `field:` on a constructor parameter that declares a property, where an untargeted bracket goes on both the parameter and the property
+- `[return: NotNull]` is a compile error: PHP keeps no attributes on a return value
+- on every declaration C# takes one on: a class, an interface, an enum and its cases, an event, a constant, a field, a property, an interface property, a method, an interface method with or without a default body, a parameter, a lambda written with parentheses, as in `[Searchable] (int n) => n * 2`, and an accessor, as in `[Searchable] get;`
+- an accessor of a get-only auto-property or of a static auto-property takes none, because PHP runs that property without accessors, and neither does `willSet` or `didSet`, which runs inside `set`: put the attribute on the property, or give the accessor a body
+- a type parameter takes none: PHP erases it, so an attribute there has nowhere to go
 
 <!-- example attribute-arguments: members -->
 ```csharp
@@ -62,6 +65,26 @@ public event Paid(int orderId);           // compiles: on the event
 public const int LIMIT = 3;                                        // compiles: on a constant
 
 public Function<int(int)> twice() => [Searchable] (int n) => n * 2;  // compiles: on a lambda
+```
+
+<!-- example attribute-targets: members -->
+```csharp
+[property: Field(label: "Total")]
+public int total { [Searchable] get; [param: Field(label: "Amount")] set; } = 0;  // compiles: Searchable on get, Field on what set takes
+
+public int count { [Searchable] get; } = 0;            // compile error: a get-only auto-property runs without accessors
+
+[return: Searchable] public string label() => "";     // compile error: PHP keeps no attributes on a return value
+```
+
+<!-- example attribute-type-parameters -->
+```csharp
+// app/Shelf.sharp
+namespace App;
+
+public class Shelf<[Searchable] TItem>        // compile error: PHP erases a type parameter
+{
+}
 ```
 
 <!-- example attribute-objects -->
