@@ -2,7 +2,11 @@
 
 use Queued\Payloads;
 
-/** `$value` on one line: each entry of a Map, each element of a Set or a List, and an object's class and fields. */
+/**
+ * `$value` on one line: each entry of a Map or of a keyed array, each element of a Set or a list, and an object's class
+ * and fields. Plain PHP reads a Map or a Set as its PHP array, spec section 12, unless the Map holds keys no PHP array
+ * holds.
+ */
 function shown(mixed $value): string
 {
     if ($value instanceof Sharp\Map) {
@@ -16,7 +20,12 @@ function shown(mixed $value): string
     return match (true) {
         $value instanceof Sharp\Set => 'Set[' . implode(', ', array_map(shown(...), $value->toList())) . ']',
         $value instanceof UnitEnum => $value::class . '.' . $value->name,
-        is_array($value) => '[' . implode(', ', array_map(shown(...), $value)) . ']',
+        is_array($value) && array_is_list($value) => '[' . implode(', ', array_map(shown(...), $value)) . ']',
+        is_array($value) => '[' . implode(', ', array_map(
+            static fn (int|string $key, mixed $held): string => shown($key) . ' => ' . shown($held),
+            array_keys($value),
+            $value,
+        )) . ']',
         is_object($value) => $value::class . '(' . implode(', ', array_map(shown(...), get_object_vars($value))) . ')',
         default => var_export($value, true),
     };
@@ -94,7 +103,8 @@ function rows(): array
             [$keyBack, $back] = read_back([$key, new Sharp\Map([$key, 'held'])]);
             return shown($back) . ' ' . var_export($back[$keyBack], true) . ' ' . var_export($back[$key], true);
         },
-        'the form serialize writes' => fn () => serialize(Payloads::counts()) . ' ' . serialize(Payloads::tags()),
+        // Plain PHP gets a Map of string keys and a Set as PHP arrays, spec section 12, so the objects come from new.
+        'the form serialize writes' => fn () => serialize(new Sharp\Map(['tea', 2, 'jam', 5])) . ' ' . serialize(new Sharp\Set(['vip', 'new'])),
         'a read-back in a fresh process' => function () {
             $payload = serialize([Payloads::counts(), Payloads::bySpeed(), Payloads::shipment(), Payloads::ledger(),
                 Payloads::tags(), Payloads::byParcel(), Payloads::byCourier()]);
@@ -114,13 +124,14 @@ function rows(): array
         'Sharp.Data.PhpSerializer, which allows no class by default' => fn () => shown(Payloads::throughSerializer(Payloads::counts())),
         'PhpSerializer allowing a class by its PHP# name' => fn () => shown(Payloads::throughSerializerAllowing(Payloads::crate(), ['Queued.Crate'])),
         'allowed_classes => false, which still checks each key\'s class' => fn () => shown(unserialize(serialize([Payloads::tags(), Payloads::byParcel()]), ['allowed_classes' => false])),
+        // A Map keyed by an enum without backing values reaches plain PHP as the Map itself, spec section 12.
         '__unserialize on a Map that holds entries' => function () {
-            $map = Payloads::counts();
-            $map->__unserialize(['bun', 3]);
+            $map = Payloads::bySpeed();
+            $map->__unserialize([Queued\Speed::Standard, 3]);
             return shown($map);
         },
         'a second constructor call on a Set that holds entries' => function () {
-            $set = Payloads::tags();
+            $set = new Sharp\Set(['vip', 'new']);
             $set->__construct(['old']);
             return shown($set);
         },

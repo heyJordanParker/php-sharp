@@ -1,0 +1,70 @@
+namespace Demo;
+
+import Label;
+
+[Label("paid", config: ["variant": "success"])]
+public class Holdings
+{
+    public const Map<string, int> LIMITS = ["card": 100];
+
+    public const Set<string> CODES = ["a", "b"];
+
+    public const Iterable<int> STEPS = [1, 2];
+
+    public const [int, string] PAIR = [7, "seven"];
+
+    public Map<string, string> payload { get; set; } = ["id": "p1"];
+
+    public Set<string> codes { get; set; } = ["a", "b"];
+
+    public List<Map<string, int>> rows { get; set; } = [["a": 1]];
+
+    public Map<string, string>? extra { get; set; } = null;
+
+    public Map<string, string> computed => this.payload;
+
+    public Map<string, string> hooked { get; set => field = value; } = ["h": "1"];
+
+    public static Map<string, int> counts { get; set; } = ["c": 1];
+
+    public int limitOf(string kind) => Holdings.LIMITS[kind] ?? 0;
+
+    public static int stepsTotal()
+    {
+        int total = 0;
+        for (const step of Holdings.STEPS) {
+            total += step;
+        }
+
+        return total;
+    }
+
+    public static bool hasCode(string code) => Holdings.CODES.contains(code);
+
+    public static string constantClasses()
+    {
+        Map<string, int> limits = Holdings.LIMITS;
+        Set<string> codes = Holdings.CODES;
+
+        return `${global.get_class(limits)} ${global.get_class(codes)}`;
+    }
+
+    public static string pairText()
+    {
+        const [number, word] = Holdings.PAIR;
+
+        return `${number} ${word}`;
+    }
+
+    // A plain PHP parameter that takes only an object takes the Map or the Set itself.
+    public string payloadClass() => global.get_class(this.payload);
+
+    public string firstRowClass() => global.get_class(this.rows[0]);
+
+    public static string countsClass() => global.get_class(Holdings.counts);
+
+    public int accepted(Map<string, string> given) => given.count();
+
+    // A PHP array holds no `List` key, so plain PHP gets this Map itself.
+    public Map<List<int>, int> listKeyed() => [[1, 2]: 1];
+}

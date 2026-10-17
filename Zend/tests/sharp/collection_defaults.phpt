@@ -23,6 +23,6 @@ require __DIR__ . '/harness/PlainDefault.inc';
 --EXPECTF--
 each object its own Map: {"tea":2} {"jam":1}
 each object its own Set: ["start","tea","pie"] ["start","bun"]
-a static Map starts empty: {} {}
+a static Map starts empty: [] []
 
 Fatal error: New expressions are not supported in this context in %sPlainDefault.inc on line 6

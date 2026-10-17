@@ -91,6 +91,10 @@ class Crossings
 
     public static string applied(Function<string(Map<string, int>)> each, Map<string, int> prices) => each(prices);
 
+    // A PHP# lambda behind a function type takes the Map itself, not a PHP array it would build a Map from again.
+    public static string appliedOwn(Map<string, int> prices) =>
+        Crossings.applied(values => `${global.spl_object_id(values) == global.spl_object_id(prices)}`, prices);
+
     public static List<string> named(Map<string|Level, int> counts) => [`${counts.count()}`, `${counts["5"] ?? -1}`, `${counts.has("5")}`];
 
     public static string joined(Iterable<string> names)
@@ -126,6 +130,20 @@ class Crossings
 
     // Until it is held as an `Iterable<T>`, a plain PHP class keeps its own methods.
     public static int lazyCount(Any? last) => global.lazy_names(last).count();
+
+    public static Map<Level, int?> limits() => [Level.Low: 5, Level.High: null];
+
+    public static Map<string, int> sizes() => ["b": 2, "a": 1];
+
+    public static Set<string> tagged() => ["a", "b"];
+
+    public static List<Map<string, int>> shelves() => [["a": 1]];
+
+    public static Map<string, int> lambdaSizes() => (() => Crossings.sizes())();
+
+    public static Function<Map<string, int>()> sizer() => () => ["s": 1];
+
+    public static string sent(Envelope envelope) => global.send_headers(envelope.headers);
 
     public static string pair([string name, int count] given) => `${given.name} ${given.count}`;
 

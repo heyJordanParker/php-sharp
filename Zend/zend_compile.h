@@ -261,7 +261,12 @@ typedef struct _zend_oparray_context {
 /* has #[\Override] attribute                             |     |     |     */
 #define ZEND_ACC_OVERRIDE                (1 << 28) /*     |  X  |  X  |     */
 /*                                                        |     |     |     */
-/* Property Flags (unused: 16-27,29...)                   |     |     |     */
+/* PHP#: the property's type or the function's result     |     |     |     */
+/* holds a Map or a Set, which plain PHP gets as its PHP  |     |     |     */
+/* array, see ext/sharp                                   |     |     |     */
+#define ZEND_ACC_SHARP_CROSSING          (1 << 30) /*     |  X  |  X  |     */
+/*                                                        |     |     |     */
+/* Property Flags (unused: 16-27,29,31)                   |     |     |     */
 /* ===========                                            |     |     |     */
 /*                                                        |     |     |     */
 /* Promoted property / parameter                          |     |     |     */
@@ -355,7 +360,7 @@ typedef struct _zend_oparray_context {
 /* objects' type arguments, see ext/sharp                 |     |     |     */
 #define ZEND_ACC_SHARP_GENERIC           (1U << 31) /* X  |     |     |     */
 /*                                                        |     |     |     */
-/* Function Flags (unused: 30)                            |     |     |     */
+/* Function Flags (unused: none)                          |     |     |     */
 /* ==============                                         |     |     |     */
 /*                                                        |     |     |     */
 /* Function returning by reference                        |     |     |     */
@@ -1191,6 +1196,11 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  * in one test, so a plain PHP property pays at most one bit test for the check.
  *   flags of zend_property_info                               upstream: the ZEND_ACC_* property flags
  *
+ * ZEND_ACC_SHARP_CROSSING: the property's #[\Sharp\Crossing] plans a Map or a Set its type holds, so a read from plain
+ * PHP gives the PHP array of its value, spec section 12, and a read's cache slot keeps no offset for plain PHP code.
+ * On a function, the bridge sets it when its result holds a Map or a Set, and each return emits ZEND_SHARP_RETURN_ARRAY.
+ *   flags of zend_property_info and fn_flags of zend_op_array  upstream: the ZEND_ACC_* property and function flags
+ *
  * ZEND_ACC_SHARP_GENERIC: the class declares that hidden slot, so == and serialize read type arguments only
  * from objects of such a class. Inheritance never copies it.
  *   ce_flags of zend_class_entry                              upstream: the ZEND_ACC_* class flags
@@ -1226,6 +1236,18 @@ ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_TYPED & (ZEND_ACC_PPP_MASK|ZEND_ACC_PPP_SET_
 		|ZEND_ACC_FINAL|ZEND_ACC_ABSTRACT|ZEND_ACC_READONLY|ZEND_ACC_PROMOTED|ZEND_ACC_VIRTUAL|ZEND_ACC_DEPRECATED
 		|ZEND_ACC_OVERRIDE|ZEND_ACC_SHARP_HIDDEN)),
 	"ZEND_ACC_SHARP_TYPED overlaps a ZEND_ACC_* flag in the flags of zend_property_info");
+ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_CROSSING & (ZEND_ACC_PPP_MASK|ZEND_ACC_PPP_SET_MASK|ZEND_ACC_CHANGED|ZEND_ACC_STATIC
+		|ZEND_ACC_FINAL|ZEND_ACC_ABSTRACT|ZEND_ACC_READONLY|ZEND_ACC_PROMOTED|ZEND_ACC_VIRTUAL|ZEND_ACC_DEPRECATED
+		|ZEND_ACC_OVERRIDE|ZEND_ACC_SHARP_HIDDEN|ZEND_ACC_SHARP_TYPED|ZEND_ACC_FIELD)),
+	"ZEND_ACC_SHARP_CROSSING overlaps a ZEND_ACC_* flag in the flags of zend_property_info");
+ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_CROSSING & (ZEND_ACC_PPP_MASK|ZEND_ACC_CHANGED|ZEND_ACC_STATIC|ZEND_ACC_FINAL
+		|ZEND_ACC_ABSTRACT|ZEND_ACC_IMMUTABLE|ZEND_ACC_HAS_TYPE_HINTS|ZEND_ACC_TOP_LEVEL|ZEND_ACC_PRELOADED
+		|ZEND_ACC_DEPRECATED|ZEND_ACC_RETURN_REFERENCE|ZEND_ACC_HAS_RETURN_TYPE|ZEND_ACC_VARIADIC
+		|ZEND_ACC_HAS_FINALLY_BLOCK|ZEND_ACC_EARLY_BINDING|ZEND_ACC_USES_THIS|ZEND_ACC_CALL_VIA_TRAMPOLINE
+		|ZEND_ACC_NEVER_CACHE|ZEND_ACC_TRAIT_CLONE|ZEND_ACC_CTOR|ZEND_ACC_CLOSURE|ZEND_ACC_FAKE_CLOSURE
+		|ZEND_ACC_GENERATOR|ZEND_ACC_DONE_PASS_TWO|ZEND_ACC_HEAP_RT_CACHE|ZEND_ACC_COMPILE_TIME_EVAL|ZEND_ACC_PTR_OPS
+		|ZEND_ACC_NODISCARD|ZEND_ACC_STRICT_TYPES|ZEND_ACC_OVERRIDE)),
+	"ZEND_ACC_SHARP_CROSSING overlaps a ZEND_ACC_* flag in the fn_flags of zend_op_array");
 ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_GENERIC & (ZEND_ACC_INTERFACE|ZEND_ACC_TRAIT|ZEND_ACC_ANON_CLASS|ZEND_ACC_LINKED
 		|ZEND_ACC_IMPLICIT_ABSTRACT_CLASS|ZEND_ACC_FINAL|ZEND_ACC_EXPLICIT_ABSTRACT_CLASS|ZEND_ACC_IMMUTABLE
 		|ZEND_ACC_HAS_TYPE_HINTS|ZEND_ACC_TOP_LEVEL|ZEND_ACC_PRELOADED|ZEND_ACC_DEPRECATED|ZEND_ACC_CONSTANTS_UPDATED

@@ -36,7 +36,7 @@ class Tagged
             ((object) $tags)->any(fn ($tag) => $tag === "5"),
             ((object) $tags)->first(fn ($tag) => \strlen($tag) > 2),
             ((object) $tags)->sortedBy(fn ($tag) => $tag),
-            \implode(",", \iterator_to_array($tags, false)),
+            \implode(",", \Sharp\Internal\arrayOf($tags)),
         ];
     }
 

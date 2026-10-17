@@ -51,7 +51,7 @@ object(Sharp\Map)#%d (1) {
     int(2)
   }
 }
-object(Sharp\Set)#%d (2) {
+array(2) {
   [0]=>
   object(Demo\Spot)#%d (2) {
     ["x"]=>

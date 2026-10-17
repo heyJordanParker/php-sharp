@@ -876,6 +876,11 @@ ZEND_FUNCTION(get_object_vars)
 				continue;
 			}
 
+			/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+			if (!is_dynamic && Z_TYPE_P(value) != IS_PTR && sharp_cross_slot_read(&tmp, zobj, value)) {
+				value = &tmp;
+			}
+
 			if (Z_ISREF_P(value) && Z_REFCOUNT_P(value) == 1) {
 				value = Z_REFVAL_P(value);
 			}

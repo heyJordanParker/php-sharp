@@ -4740,6 +4740,25 @@ ZEND_FUNCTION(Sharp_Internal_equals)
 	RETURN_BOOL(zend_string_equals(Z_STR_P(value), Z_STR_P(other)));
 }
 
+/* Spec section 12: PHP# passes plain PHP `\Sharp\Internal\arrayOf($value)`, the PHP array sharp_array_of gives. Through
+ * a function value, `$receiver` is the function the value goes to, and a closure of PHP# takes the value as it is. */
+ZEND_FUNCTION(Sharp_Internal_arrayOf)
+{
+	zval *value, *receiver = NULL;
+
+	ZEND_PARSE_PARAMETERS_START(1, 2)
+		Z_PARAM_ZVAL(value)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_ZVAL(receiver)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (receiver && Z_TYPE_P(receiver) == IS_OBJECT && Z_OBJCE_P(receiver) == zend_ce_closure
+			&& sharp_function_is_sharp(zend_get_closure_method_def(Z_OBJ_P(receiver)))) {
+		RETURN_COPY_DEREF(value);
+	}
+	sharp_array_of(return_value, value);
+}
+
 /* Throws the Error for the type arguments of a frame that ZEND_SHARP_TYPE_ARGS could not spell. */
 static ZEND_COLD void sharp_type_list_unknown_error(void)
 {
@@ -4975,8 +4994,7 @@ bool sharp_property_accepts(const zend_property_info *info, zval *value, zend_ob
 			&& writer->func->common.prop_info->prototype == info->prototype) {
 		writer = writer->prev_execute_data;
 	}
-	if (writer && writer->func && ZEND_USER_CODE(writer->func->type)
-			&& sharp_is_sharp_file(writer->func->op_array.filename)) {
+	if (writer && sharp_function_is_sharp(writer->func)) {
 		return true;
 	}
 	if (!object && sharp_property_is_open(info)) {
@@ -7151,6 +7169,140 @@ bool sharp_cross_property(const zend_property_info *info, zval *value)
 	return true;
 }
 
+/* Puts in `result` the PHP array of the Map or Set `object`, each value as sharp_array_of gives it, and gives whether
+ * every key of a Map is one a PHP array holds: an int, a string, or a backed enum case as its backing value. Otherwise
+ * `result` is undefined, and `unheld` points at the first key that is none of them. */
+static bool sharp_table_array(zval *result, zend_object *object, zval **unheld)
+{
+	sharp_table *table = sharp_table_of(object);
+	array_init_size(result, table->size);
+	SHARP_TABLE_FOREACH(table, bucket) {
+		zval *key = &bucket->key, converted;
+		if (object->ce == sharp_ce_set) {
+			sharp_array_of(&converted, key);
+			zend_hash_next_index_insert_new(Z_ARRVAL_P(result), &converted);
+			continue;
+		}
+		if (Z_TYPE_P(key) == IS_OBJECT && (Z_OBJCE_P(key)->ce_flags & ZEND_ACC_ENUM)
+				&& Z_OBJCE_P(key)->enum_backing_type != IS_UNDEF) {
+			key = zend_enum_fetch_case_value(Z_OBJ_P(key));
+		}
+		if (Z_TYPE_P(key) != IS_LONG && Z_TYPE_P(key) != IS_STRING) {
+			zval_ptr_dtor(result);
+			ZVAL_UNDEF(result);
+			*unheld = key;
+			return false;
+		}
+		sharp_array_of(&converted, &bucket->value);
+		if (Z_TYPE_P(key) == IS_LONG) {
+			zend_hash_index_update(Z_ARRVAL_P(result), Z_LVAL_P(key), &converted);
+		} else {
+			zend_symtable_update(Z_ARRVAL_P(result), Z_STR_P(key), &converted);
+		}
+	} SHARP_TABLE_FOREACH_END();
+
+	return true;
+}
+
+void sharp_array_of(zval *result, zval *value)
+{
+	ZVAL_DEREF(value);
+	if (SHARP_IS_TABLE(value)) {
+		zval *unheld;
+		if (!sharp_table_array(result, Z_OBJ_P(value), &unheld)) {
+			ZVAL_COPY(result, value);
+		} else if (zend_hash_num_elements(Z_ARRVAL_P(result)) != sharp_table_of(Z_OBJ_P(value))->size) {
+			/* Two keys are one PHP array key, as "5" and 5 are, or "active" and a case backed by it. */
+			zval_ptr_dtor(result);
+			ZVAL_COPY(result, value);
+		}
+		return;
+	}
+	if (Z_TYPE_P(value) != IS_ARRAY || zend_hash_num_elements(Z_ARRVAL_P(value)) == 0) {
+		ZVAL_COPY(result, value);
+		return;
+	}
+
+	/* A PHP array that holds itself through a reference is plain PHP's, and keeps what it holds. */
+	HashTable *array = Z_ARRVAL_P(value);
+	if (GC_IS_RECURSIVE(array)) {
+		ZVAL_COPY(result, value);
+		return;
+	}
+	GC_TRY_PROTECT_RECURSION(array);
+	HashTable *converted = NULL;
+	zend_ulong index;
+	zend_string *name;
+	zval *element;
+	ZEND_HASH_FOREACH_KEY_VAL(array, index, name, element) {
+		zval *held = element;
+		ZVAL_DEREF(held);
+		if (!SHARP_IS_COLLECTION(held)) {
+			continue;
+		}
+		zval crossed;
+		sharp_array_of(&crossed, held);
+		if (!converted && Z_TYPE(crossed) == Z_TYPE_P(held)
+				&& (Z_TYPE(crossed) == IS_ARRAY ? Z_ARR(crossed) == Z_ARR_P(held) : Z_OBJ(crossed) == Z_OBJ_P(held))) {
+			zval_ptr_dtor(&crossed);
+			continue;
+		}
+		if (!converted) {
+			converted = zend_array_dup(array);
+		}
+		if (name) {
+			zend_hash_update(converted, name, &crossed);
+		} else {
+			zend_hash_index_update(converted, index, &crossed);
+		}
+	} ZEND_HASH_FOREACH_END();
+	GC_TRY_UNPROTECT_RECURSION(array);
+
+	if (converted) {
+		ZVAL_ARR(result, converted);
+	} else {
+		ZVAL_COPY(result, value);
+	}
+}
+
+void sharp_cross_read(zval *value)
+{
+	zval array;
+	sharp_array_of(&array, value);
+	zval_ptr_dtor(value);
+	ZVAL_COPY_VALUE(value, &array);
+}
+
+bool sharp_cross_slot_read(zval *array, zend_object *object, zval *slot)
+{
+	zval *value = slot;
+	ZVAL_DEREF(value);
+	if (Z_TYPE_P(value) != IS_ARRAY && Z_TYPE_P(value) != IS_OBJECT) {
+		return false;
+	}
+	const zend_property_info *info = zend_get_property_info_for_slot(object, slot);
+	if (!info || !(info->flags & ZEND_ACC_SHARP_CROSSING) || sharp_runs_sharp_code()) {
+		return false;
+	}
+	sharp_array_of(array, value);
+
+	return true;
+}
+
+void sharp_cross_array_cast(zval *result, zend_object *object)
+{
+	if (UNEXPECTED(zend_object_is_lazy_proxy(object) && zend_lazy_object_initialized(object))) {
+		object = zend_lazy_object_get_instance(object);
+	}
+	for (int i = 0; i < object->ce->default_properties_count; i++) {
+		zval *slot = &object->properties_table[i], array;
+		if (sharp_cross_slot_read(&array, object, slot)) {
+			SEPARATE_ARRAY(result);
+			zend_symtable_update(Z_ARRVAL_P(result), zend_get_property_info_for_slot(object, slot)->name, &array);
+		}
+	}
+}
+
 static HashTable *sharp_table_get_gc(zend_object *object, zval **table, int *n)
 {
 	zend_get_gc_buffer *buffer = zend_get_gc_buffer_create();
@@ -7564,36 +7716,17 @@ ZEND_METHOD(Sharp_Table, jsonSerialize)
 	object_and_properties_init(return_value, zend_standard_class_def, encoded);
 }
 
-/* A PHP array of the entries, when every key is an int or a string, which is all a PHP array key can be. A Set's
- * array is the list of its elements. */
+/* The PHP array sharp_array_of gives, when every key is one a PHP array holds. */
 ZEND_METHOD(Sharp_Table, toArray)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
 
-	zend_object *object = Z_OBJ_P(ZEND_THIS);
-	sharp_table *table = sharp_table_of(object);
-	HashTable *array = zend_new_array(table->size);
-	SHARP_TABLE_FOREACH(table, bucket) {
-		if (object->ce == sharp_ce_set) {
-			Z_TRY_ADDREF(bucket->key);
-			zend_hash_next_index_insert_new(array, &bucket->key);
-			continue;
-		}
-		Z_TRY_ADDREF(bucket->value);
-		if (Z_TYPE(bucket->key) == IS_LONG) {
-			zend_hash_index_update(array, Z_LVAL(bucket->key), &bucket->value);
-		} else if (Z_TYPE(bucket->key) == IS_STRING) {
-			zend_symtable_update(array, Z_STR(bucket->key), &bucket->value);
-		} else {
-			zval_ptr_dtor(&bucket->value);
-			zend_array_release(array);
-			zend_value_error("A PHP array key is an int or a string, and this Map holds a key of type %s",
-				Z_TYPE(bucket->key) == IS_OBJECT ? ZSTR_VAL(Z_OBJCE(bucket->key)->name) : zend_zval_value_name(&bucket->key));
-			RETURN_THROWS();
-		}
-	} SHARP_TABLE_FOREACH_END();
-
-	RETURN_ARR(array);
+	zval *unheld;
+	if (!sharp_table_array(return_value, Z_OBJ_P(ZEND_THIS), &unheld)) {
+		zend_value_error("A PHP array key is an int or a string, and this Map holds a key of type %s",
+			Z_TYPE_P(unheld) == IS_OBJECT ? ZSTR_VAL(Z_OBJCE_P(unheld)->name) : zend_zval_value_name(unheld));
+		RETURN_THROWS();
+	}
 }
 
 /* The List of each stored key, or of each value, in insertion order. */

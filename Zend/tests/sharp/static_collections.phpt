@@ -58,14 +58,9 @@ array(2) {
   [1]=>
   string(5) "notes"
 }
-object(Sharp\Map)#6 (1) {
-  [0]=>
-  array(2) {
-    [0]=>
-    string(3) "pie"
-    [1]=>
-    int(7)
-  }
+array(1) {
+  ["pie"]=>
+  int(7)
 }
 array(5) {
   [0]=>

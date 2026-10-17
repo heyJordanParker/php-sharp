@@ -11,6 +11,28 @@ extern zend_module_entry sharp_module_entry;
 /* Whether `filename` names a PHP# source file, which ends in `.sharp`. */
 bool sharp_is_sharp_file(const zend_string *filename);
 
+/* Whether `func` is PHP# code, a function a .sharp file declares. Plain PHP code and an internal function are not. */
+static zend_always_inline bool sharp_function_is_sharp(const zend_function *func)
+{
+	return func && ZEND_USER_CODE(func->type) && sharp_is_sharp_file(func->op_array.filename);
+}
+
+/* Whether the code of `frame` is PHP#, which gets a PHP# Map or Set as the object: the nearest frame of code from it,
+ * past the internal functions that code called, such as get_object_vars() or ReflectionProperty::getValue(). */
+static zend_always_inline bool sharp_code_at(const zend_execute_data *frame)
+{
+	while (frame && (!frame->func || !ZEND_USER_CODE(frame->func->type))) {
+		frame = frame->prev_execute_data;
+	}
+	return frame && sharp_is_sharp_file(frame->func->op_array.filename);
+}
+
+/* Whether the code running now is PHP#, see sharp_code_at(). */
+static zend_always_inline bool sharp_runs_sharp_code(void)
+{
+	return sharp_code_at(EG(current_execute_data));
+}
+
 /* The VM makes the Sharp\Collection receiver of a PHP# method call on a collection with these, see
  * ZEND_SHARP_OPERATOR in Zend/zend_compile.h: an array, a List, or a Sharp\Map or Sharp\Set object, see
  * SHARP_IS_COLLECTION. The receiver may point at a local of the calling frame, so a backtrace never
@@ -33,6 +55,25 @@ void sharp_separate(zval *holder);
  * it did. sharp_crosses_property says whether the property has such a plan. */
 bool sharp_crosses_property(const zend_property_info *info);
 bool sharp_cross_property(const zend_property_info *info, zval *value);
+
+/* Spec section 12: puts in `result` the value plain PHP receives for `value`. A Map is a PHP array of its entries, with
+ * a backed enum key as its backing value, and a Set is the list of its elements. Each Map and Set a PHP array, a Map or a
+ * Set holds converts the same way, and a PHP array that holds none is itself. A Map with a key no PHP array holds, a
+ * class, a struct, a collection or an enum without backing values, is itself, the one collection plain PHP receives as
+ * the object, and so is a Map two of whose keys are one PHP array key, as "5" and 5 are. Any other value is itself. */
+void sharp_array_of(zval *result, zval *value);
+
+/* Makes `value`, which a property whose type holds a Map or a Set gives plain PHP code, what sharp_array_of gives. */
+void sharp_cross_read(zval *value);
+
+/* Puts in `array` what plain PHP code reads from `slot`, a declared property slot of `object`, and gives true, when its
+ * property has ZEND_ACC_SHARP_CROSSING and code outside a .sharp file runs now. Gives false and leaves `array` alone
+ * otherwise. get_object_vars() and foreach read slots through it. */
+bool sharp_cross_slot_read(zval *array, zend_object *object, zval *slot);
+
+/* Makes each property of `object` that `result`, the (array) cast of `object`, holds under its mangled name, what plain
+ * PHP code reads from it, by sharp_cross_slot_read(). */
+void sharp_cross_array_cast(zval *result, zend_object *object);
 
 #define SHARP_IS_TABLE(value) \
 	(Z_TYPE_P(value) == IS_OBJECT && (Z_OBJCE_P(value) == sharp_ce_map || Z_OBJCE_P(value) == sharp_ce_set))

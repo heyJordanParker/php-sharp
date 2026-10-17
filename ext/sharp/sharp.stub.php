@@ -141,6 +141,8 @@ function keep(string $key, \Closure $compute): mixed {}
 
 function equals(mixed $value, mixed $other): bool {}
 
+function arrayOf(mixed $value, mixed $receiver = null): mixed {}
+
 function readModule(string $path): void {}
 
 function testModule(string $class, array $bindings): void {}
