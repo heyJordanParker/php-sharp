@@ -1,0 +1,7 @@
+namespace AttributePlaces;
+
+import Lib.Entity;
+
+// An event carries its attributes on the class it runs as, spec section 1.
+[Entity("on the event")]
+public event Paid(int orderId);

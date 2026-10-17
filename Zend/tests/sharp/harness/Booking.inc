@@ -31,6 +31,25 @@ final class Booking
     }
 }
 
+// A plain PHP parent whose `__get` serves the relations its subclass loaded, as Eloquent's Model does, typed by an
+// `@property-read` line for one of them.
+/** @property-read Guest $guest */
+abstract class Lodging
+{
+    /** @var array<string, Guest> */
+    private array $loaded;
+
+    public function __construct()
+    {
+        $this->loaded = ['guest' => new Guest('Ada'), 'host' => new Guest('Grace')];
+    }
+
+    public function __get(string $name): mixed
+    {
+        return $this->loaded[$name] ?? null;
+    }
+}
+
 final class Guest
 {
     public function __construct(public string $name)

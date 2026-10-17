@@ -19,7 +19,7 @@ Attributes use square brackets and follow C#'s rules:
 - positional and named arguments
 - no parentheses when there are no arguments: `[Searchable]`
 - explicit targets: `[return: NotNull]`
-- on an interface method, with or without a default body, as on a class method
+- on every declaration C# takes one on: a class, an interface, an enum and its cases, an event, a constant, a field, a property, an interface property, a method, an interface method with or without a default body, a parameter, and a lambda written with parentheses, as in `[Searchable] (int n) => n * 2`
 
 <!-- example attribute-arguments: members -->
 ```csharp
@@ -27,19 +27,40 @@ Attributes use square brackets and follow C#'s rules:
 public string name { get; set; } = "";
 ```
 
-<!-- example attribute-interface-methods -->
+<!-- example attribute-interfaces -->
 ```csharp
 // app/Labeled.sharp
 namespace App;
 
-public interface Labeled
+[Searchable]
+public interface Labeled                  // compiles: on the interface
 {
     [Field(label: "Name", searchable: true)]
     string label();                       // compiles
 
     [Field(label: "Title")]
     string title() => "Untitled";         // compiles: with a default body too
+
+    [Field(label: "Size")]
+    int size { get; }                     // compiles: on its property
 }
+```
+
+<!-- example attribute-events -->
+```csharp
+// app/Paid.sharp
+namespace App;
+
+[Searchable]
+public event Paid(int orderId);           // compiles: on the event
+```
+
+<!-- example attribute-constants-and-lambdas: members -->
+```csharp
+[Field(label: "Limit")]
+public const int LIMIT = 3;                                        // compiles: on a constant
+
+public Function<int(int)> twice() => [Searchable] (int n) => n * 2;  // compiles: on a lambda
 ```
 
 Named arguments use `label: "Name"`, the same "name: value" form used everywhere in the language (section 16). C#'s `Label = "Name"` is not allowed.
@@ -1754,7 +1775,7 @@ sorted;   // [1, 2, 3]
 
 A plain PHP class may have both a property and a method of one name. Reading the name gives the property, as in PHP, except where the code takes the read as a function and the property's type doesn't fit that function type. There the read gives the method's value, as in `names.map(gadget.label)`, where `label` is both a `string` property and a method.
 
-**A plain PHP class that defines `__get` has the properties it reads,** as an Eloquent model has the relations it loaded. A property's type is the one the class's `@property` or `@property-read` line gives it, and `Any?` without one. `subscription.contact` reads the property, as `$subscription->contact` does in PHP, even when the class has a method `contact`. By the rule above, the read gives the method's value only where the code takes it as a function. `subscription.contact()` calls the method.
+**A plain PHP class that defines `__get` has the properties it reads,** as an Eloquent model has the relations it loaded. A property's type is the one an `@property` or `@property-read` line on the class or its parents gives it, and `Any?` without one. `subscription.contact` reads the property, as `$subscription->contact` does in PHP, even when the class has a method `contact`. By the rule above, the read gives the method's value only where the code takes it as a function. `subscription.contact()` calls the method.
 
 <!-- example magic-properties -->
 ```php
@@ -1782,6 +1803,34 @@ contact.name;                // "contact"
 (owner as Contact)?.name;    // "owner"
 load().name;                 // "Ada"
 loaded.name;                 // "Ada"
+-->
+
+A read typed `Any?` this way warns until an `as`, an `is` or a `match` states its type, as in `Contact? owner = subscription.owner as Contact;`.
+
+**A `.sharp` class whose plain PHP parent defines `__get` has those properties too,** as a PHP# Eloquent model has the relations it loaded, by the same rules.
+
+<!-- example magic-property-models -->
+```php
+abstract class Model
+{
+    public function __get(string $name): mixed { $loaded = new Contact(); $loaded->name = $name; return $loaded; }
+}
+```
+
+<!-- example magic-property-models -->
+```csharp
+// app/Booking.sharp
+namespace App;
+
+public class Booking : Model
+{
+    public Contact guest() => new Contact();
+
+    public string guestName() => (this.guest as Contact)?.name ?? "";   // compiles: the property __get reads
+}
+```
+<!-- run magic-property-models
+new Booking().guestName();    // "guest"
 -->
 
 **A field or property holding a `Function` is called like a method** when the class has no method with that name. A `.sharp` class cannot declare a method and a field or property with the same name, so `this.discount(…)` always has one meaning.
