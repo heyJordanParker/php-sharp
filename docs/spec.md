@@ -2230,7 +2230,7 @@ PHP's backtick shell execution is removed, and so is `shell_exec()`. A program r
 - **`===`** is true only for the same object. It works on classes only, and cannot be overridden.
 - **`Set`** hashes a struct, enum, string, number or collection by its value, and an object by its class's `hash()`. A struct that declares `hash()` is hashed by it.
 
-**Two sets are `==` when they hold the same elements, in any order,** as in Kotlin, Java, Swift and Python. Two equal sets hash alike whatever their order, so a `Set` keys a `Map` and joins a `Set`. A set never equals a list:
+**Two sets are `==` when they hold the same elements, in any order,** as in Kotlin, Java, Swift and Python. Two equal sets hash alike whatever their order, so a `Set` keys a `Map` and joins a `Set`. A literal takes its collection type from where it lands (section 12), so a list literal compared with a set is a set, as in Swift:
 
 <!-- example set-equality: statements -->
 ```csharp
@@ -2239,9 +2239,21 @@ Set<int> b = [2, 1];
 Set<int> c = [1, 2, 3];
 a == b;                              // true: the same elements, in any order
 a == c;                              // false
-a == [1, 2];                         // compile error: a List is not a Set
+a == [2, 1];                         // true: the literal is a Set
+a == [];                             // false: the empty Set holds no element
 Map<Set<int>, string> names = [a: "pair"];
 names[b] ?? "none";                  // "pair": b hashes as a does
+```
+
+**A union that holds a collection beside another type compares by the value it holds,** as each of its types compares:
+
+<!-- example union-equality: statements -->
+```csharp
+Set<int>|int either = [2, 1];
+Set<int> pair = [1, 2];
+either == pair;                      // true: either holds a Set of the same elements
+either == 1;                         // false: either holds a Set, not an int
+pair == 1;                           // compile error: a Set never equals an int
 ```
 
 **Operators** are declared once on a type and inherited by its subclasses:

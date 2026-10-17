@@ -1,8 +1,10 @@
 <?php
 
 use SetValues\Badge;
+use SetValues\Grid;
 use SetValues\Labels;
 use SetValues\Report;
+use SetValues\Rows;
 use SetValues\Tagged;
 
 /** Binds the standard library's dispatcher, as its module does, and loads each of its classes the first time code names it, as events.inc does. */
@@ -52,6 +54,29 @@ function rows(): array
             $counted = new Badge\Counted(['vip' => 3]);
             return [Report::matched($counted), $counted->counts::class];
         },
+        'an event checks the elements plain PHP passes' => fn () => new Tagged([1, 2], 9),
+        'a case checks the elements plain PHP passes' => fn () => new Badge\Marked([1, 2]),
+        'an event with a List<Set<int>>, built in plain PHP and in PHP#' => function () {
+            $rows = new Rows(1, [[1, 2]]);
+            return [get_debug_type($rows->rows[0]), Report::rowsOf($rows), Report::rowsFromSharp()];
+        },
+        'a case with a List<Set<int>>, built in plain PHP' => function () {
+            $nested = new Badge\Nested([[1, 2]]);
+            return [get_debug_type($nested->rows[0]), Report::matched($nested), Report::sameNested()];
+        },
+        'a struct whose only collection is a List<Set<int>>' => fn () => [
+            get_debug_type((new Grid([[1, 2]]))->rows[0]),
+            Report::sameGrids(new Grid([[1, 2]]), new Grid([[2, 1]])),
+            Report::gridCount(),
+        ],
+        'a list literal where a Set is expected, at any depth' => fn () => [
+            Report::literals([1, 2]),
+            Report::literalGroups(),
+            Report::literalArguments(),
+            Report::literalSearch([[1, 2]]),
+        ],
+        'a Set<Set<int|string>>' => fn () => Report::mixedGroups(),
+        'a union that holds a collection' => fn () => [Report::unionRows(), Report::eitherRows()],
     ];
 }
 
