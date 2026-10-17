@@ -56,7 +56,7 @@ Each decides what a user writes. Each has its proposal and its answer. Where the
      - **Accessor bodies:** build. The argument is a write during the constructor, so a `set` body runs on it, as section 6.2 runs `set` for every constructor write. The default is the argument when the call leaves it out, so `set` runs on the default too. A body property's initial value runs no `set` (spec line 213), and this is the one place the two differ.
      - **`willSet` and `didSet`:** build, and run on every write after the constructor, as on a body property.
      - **`via`:** builds. The behaviors are created before the argument is stored, and the argument runs through each `set`.
-     - **`required`:** a compile error, "A constructor parameter is required unless it has a default: remove `required`." A parameter without a default is already required by every call.
+     - **`required`:** a compile error, "A parameter is required unless it has a default: remove `required`.", on a constructor's parameter and on a method's, and the one error there. A parameter without a default is already required by every call.
      - **Computed bodies, `lazy` and `static`:** stay compile errors, each with the reason the checker gives today. A computed body and `lazy` compute their own value, and a parameter receives one. A parameter belongs to one object.
      - **`readonly`:** stays refused, as it is on a body property (spec line 1463). The two already match.
    - Only the approved list: `via` and the observers stay refused on a parameter, with spec line 395's reason.
@@ -126,15 +126,25 @@ Map<string, Person> m = users.byName(); runs: a Sharp\Map
 
 ```diff
  // analyzer/src/invocation/return_type_fetcher.rs, fetch_declared_invocation_return_type
-     if function_like_metadata.is_some_and(|metadata| metadata.flags.is_sharp()) {
-         resulting_type = known_type_or_error(resulting_type);
-         if !context.dialect.is_sharp() {
-             resulting_type = get_php_received_type(&resulting_type, context.codebase);
+-    if function_like_metadata.is_some_and(|metadata| metadata.flags.is_sharp()) {
+-        resulting_type = known_type_or_error(resulting_type);
+-        if !context.dialect.is_sharp() {
+-            resulting_type = get_php_received_type(&resulting_type, context.codebase);
++    match function_like_metadata {
++        Some(metadata) if metadata.flags.is_sharp() => {
++            resulting_type = known_type_or_error(resulting_type);
++            if !context.dialect.is_sharp() {
++                resulting_type = get_php_received_type(&resulting_type, context.codebase);
++            }
++        }
++        Some(_) if context.dialect.is_sharp() && !matches!(…, Some(FunctionLikeIdentifier::Method(class, _)) if is_prelude_stub(*class)) => {
++            resulting_type = get_sharp_received_type(&resulting_type);
          }
-+    } else if context.dialect.is_sharp() {
-+        resulting_type = get_sharp_received_type(&resulting_type, context.codebase);
++        _ => {}
      }
 ```
+
+Only a target with plain PHP metadata gets the received type. A PHP# function value has no declaration, so a lambda passed for a `Function<Map<int, V>()>` returns the `Map` its type writes, and one whose body returns a `List` is refused as question 4 refuses a `List` in a `Map` place.
 
 The same two lines go beside `get_php_received_type`'s calls in `resolver/property.rs` (`find_property_in_class`) and `resolver/static_property.rs` (`find_static_property_in_class`), for a property plain PHP declares.
 
@@ -144,7 +154,7 @@ At run time a `List` is a PHP array and a `Map` is a `Sharp\Map` (`get_collectio
 \is_array($crossing#1 = \App\Probe\Users::all()) ? \array_values($crossing#1) : $crossing#1
 ```
 
-`array_values` returns a packed array with no gaps as it is, by reference count (`ext/standard/array.c:4639`), so a real list pays nothing. In a `Map<int, T>` place, `Lowering::crossed_value` already builds `\Sharp\Map::from($crossing#1)` from the raw value, before any renumbering, so the keys stay. Question 3 adds the same renumbering where a plain PHP caller passes an argument or writes a property: `sharp_type_accepts` in `ext/sharp/` already turns an `int` into a `float` in place at those crossings, and renumbers there the same way.
+A plain PHP property is a `List` for writes too: a write through it, as `users.names.add("cy")`, `users.names[0] = "zed"` or `Users.tags.add("z")`, sets the property to its renumbered value first and then changes it in place, `[$users->names = renumbered($users->names), $users->names->add("cy")][1]` (`Lowering::renumbered_first`), and an assignment target is never renumbered. `array_values` returns a packed array with no gaps as it is, by reference count (`ext/standard/array.c:4639`), so a real list pays nothing. In a `Map<int, T>` place, `Lowering::crossed_value` already builds `\Sharp\Map::from($crossing#1)` from the raw value, before any renumbering, so the keys stay. Question 3 adds the same renumbering where a plain PHP caller passes an argument or writes a property: `sharp_type_accepts` in `ext/sharp/` already turns an `int` into a `float` in place at those crossings, and renumbers there the same way.
 
 **Reuses:** `get_php_received_type`'s shape and call sites, `Lowering::plain_value`, `Lowering::crossed_value`, `sharp_type_accepts`.
 
@@ -174,7 +184,7 @@ behavior.submit(form: form, event: e);                 compiles
 **Mechanism.**
 
 - **The lexer.** In a `.sharp` file, `@` directly before a letter is one identifier token whose span starts at `@` and whose name is the word after it (question 1). `@(` and `@ ` stay error control.
-- **The parser** already reads a keyword where a local, parameter, `catch` variable or pattern variable is named (`parse_local_identifier`, `is_identifier_maybe_reserved`), so it needs no change.
+- **The parser** already reads a keyword where a local, parameter, `catch` variable or pattern variable is named (`parse_local_identifier`, `is_identifier_maybe_reserved`). It also reads one as a lone lambda parameter, as `match => 1` (`is_at_lambda`, a literal `true`, `false` or `null` excepted), so the checker refuses it with its message. A named argument `this:` names the parameter `@this` (`parse_argument_name`), since a name before `:` is never the object.
 - **The checker.** `check_local_name` in `semantics/src/internal/checker/sharp.rs` refuses a keyword unless the byte before the name is `@`. Its message becomes the approved one:
 
 ```diff
@@ -353,8 +363,6 @@ docs/
 └── architecture/slices/singles.md            this note
 sharp/
 ├── baseline/spec/                            drops §9/parameter-member-limits, §18/template-to-string, §19/operators
-├── harness/Illuminate/Support/Collection.php new: the generic stub item 1's example calls, all() and keyBy()
-├── harness/Illuminate/Database/Eloquent/Model.php   a static all() that returns a Collection, for User.all()
 ├── composer/library/Sharp/
 │   ├── Data/{Binary,Compression,Hex,PhpSerializer}.sharp, Environment.sharp, Text/Regex.sharp
 │   │                                         @global.x(…) is @(global.x(…)) (Q1)
@@ -425,7 +433,10 @@ A plain PHP project's analysis stays the same: every change is under `context.di
 # Found, not fixed
 
 1. **`mago compile` panics on `while (value is List<int> items) { return items.count(); }`:** "panicked at crates/names/src/lib.rs:184:72: resolved name not found at position". Probe `p8-while-panic`. #151's `Database.sharp` writes this form, so #151 may carry a fix.
-2. **A `List` value in a `Map` place compiles and throws at run time** (question 4), unless team-lead puts it in this PR.
-3. **A method parameter's default refuses a call and `new`:** `int a(int x = global.time())` and `int d(Money m = new Money(0, "USD"))` are "This expression is not supported yet in PHP#." Probe `p4/app/Probe/Defaults.sharp`.
-4. **The engine's `TypeError` for a plain return names PHP's form:** "`App\Probe\Users::gappy()`: Return value must be of type List<App.Probe.Person>, array returned". Probe `p1`, `gappyFirst`.
-5. **A plain PHP object never converts a PHP# `toString()`** (question 7).
+2. **The engine's `TypeError` for a plain return names PHP's form:** "`App\Probe\Users::gappy()`: Return value must be of type List<App.Probe.Person>, array returned". Probe `p1`, `gappyFirst`.
+3. **A host error handler that ignores silencing turns a built-in's failure warning into an exception.** A failure warning is silenced, so the handlers of Laravel, Symfony and PHPUnit skip it. Suppressing it in the engine, for a handler that ignores silencing, waits until after v1.
+4. **An enum's `toString()` doesn't reach plain PHP's string conversion.** PHP refuses `__toString()` on an enum, so a plain PHP `(string) Status::Paid` stays an error while a PHP# template shows the text.
+5. **Laravel's typed `keyBy` cases.** `Map<int, User> byId = users.keyBy("id").all();` and `User.all()` need a generic `Illuminate\Support\Collection` and an Eloquent `Model` stub in `sharp/harness`, which this PR does not add.
+6. **Messages that teach PHP,** already on master, as `check_local_name`'s "PHP forbids `$this`" (sweep 10).
+7. **`global.shell_exec(…)` gets follow-on errors** after its "wrapped by the standard library" one: `falsable-return-statement` and `invalid-return-statement`, since the refused call keeps PHP's return type.
+8. **`super<HasLabel>.label()` as a whole expression body panics `mago compile`,** on master too: `takes_receiver` in `sharp-bridge/src/lower/inline.rs` asks the type of `super<HasLabel>`, which the analysis gives none, and leaves out only `super` and `Self`.

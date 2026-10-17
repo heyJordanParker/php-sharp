@@ -11,6 +11,7 @@ namespace Demo {
 }
 
 namespace {
+    require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
     require __DIR__ . '/harness/Functions.inc';
     require __DIR__ . '/Interop.sharp';
 

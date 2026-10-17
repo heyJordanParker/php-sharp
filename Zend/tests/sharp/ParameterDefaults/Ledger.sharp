@@ -10,6 +10,8 @@ public class Ledger
 
     public int stamped(Stamp stamp = new Stamp(7)) => stamp.value;
 
+    public int sized(int size = new Stamp(8).value) => size;
+
     public int counted(string text = global.str_repeat("ab", 2)) => global.strlen(text);
 
     public int issued(int count = Stamp.seeds) => count;

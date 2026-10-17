@@ -63,7 +63,7 @@ const @emit = 1;            // compiles: @ makes a keyword a name
 const match = 1;            // compile error: match is a keyword; write @match
 ```
 
-**`@this` is a name like any other,** and a bare `this` stays the object the method runs on. PHP# has no other `@`: a call's failure is the value it returns (section 23).
+**`@this` is a name like any other,** and a bare `this` stays the object the method runs on. A name before `:` is never the object, so the named argument `this:` passes the parameter `@this`, as `class:` passes `@class`. PHP# has no other `@`: a call's failure is the value it returns (section 23).
 
 **Any word, PHP# keywords included, names a method or a property with no mark,** as in JavaScript and TypeScript, because a member's name is written only after `.` or where it is declared. Locals, parameters, `catch` variables and pattern variables take a keyword's name with `@`, so a plain PHP method's `$event` parameter is `@event` in PHP#:
 
@@ -481,7 +481,7 @@ public int total(List<int> prices)
 }
 ```
 
-**A method that never returns declares the return type `never`,** as TypeScript's `never`, Kotlin's `Nothing` and Rust's `!` do. Every path through its body ends in a `throw` or in a call of another `never` method, and a path that reaches the closing brace is a compile error. A call of one ends the block it is in, as `throw` does, so a statement after it never runs, and `input ?? fail(…)` has the type of `input`. An override of a `never` method returns `never` too. `never` is only a return type: a parameter, a property, a local or a type argument of `never` is a compile error.
+**A method that never returns declares the return type `never`,** as TypeScript's `never`, Kotlin's `Nothing` and Rust's `!` do. Every path through its body ends in a `throw` or in a call of another `never` method, and a path that reaches the closing brace is a compile error. A call of one ends the block it is in, as `throw` does, so a statement after it never runs, and `input ?? fail(…)` has the type of `input`. An override of a `never` method returns `never` too. `never` is only a whole return type: a parameter, a property, a local or a type argument of `never` is a compile error, a return type's type argument included, as in `List<never>`. An expression body returns its value, so a `never` method with one, as `never stop() => 1;`, is a compile error unless the expression never finishes, as `=> throw new ValueError("stopped")` does.
 
 <!-- example never-methods: members -->
 ```csharp
@@ -594,7 +594,7 @@ public StoreService(
 }
 ```
 
-**A member declared on a parameter is a property like one declared in the class body,** as Kotlin's parameter properties are: its access levels, accessors, accessor bodies, observers, behaviors and attributes, and a default after its accessors, which the call may leave out. The argument is a write while the constructor runs, so a `set` body and the behaviors run on it, and on the default too, while the observers wait until the object is built, as section 6.2 says. A parameter without a default is required by every call, so `required` on one is a compile error. A computed property and `lazy` compute their own value, and a parameter receives one, and `static` belongs to no one object, so each goes on a member in the class body:
+**A member declared on a parameter is a property like one declared in the class body,** as Kotlin's parameter properties are: its access levels, accessors, accessor bodies, observers, behaviors and attributes, and a default after its accessors and behaviors, which the call may leave out. A default before the accessors, as PHP orders a promoted property, is a compile error that says to write it after them. The argument is a write while the constructor runs, so a `set` body and the behaviors run on it, and on the default too, while the observers wait until the object is built, as section 6.2 says. A parameter without a default is required by every call, so `required` on one is a compile error. A computed property and `lazy` compute their own value, and a parameter receives one, and `static` belongs to no one object, so each goes on a member in the class body:
 
 <!-- example parameter-member-limits: members in Ledger -->
 ```csharp
@@ -2191,7 +2191,9 @@ const sku = new Sku("A-12");
 const label = `Sku: ${sku}`;   // Sku declares toString(): "Sku: A-12"
 ```
 
-A plain PHP file keeps PHP's own interpolation. It converts an object of a class that declares `toString()` to the text a template shows, as `(string) $sku` and `"Sku: {$sku}"` do, as Java's and Kotlin's string conversion calls `toString()`.
+A plain PHP file keeps PHP's own interpolation. It converts an object of a class that declares `toString()`, or takes it from an interface's default body (section 22), to the text a template shows, as `(string) $sku` and `"Sku: {$sku}"` do, as Java's and Kotlin's string conversion calls `toString()`.
+
+**A `toString()` is always `string toString()`:** an instance method with no required parameter that returns `string`, as Java's and Kotlin's `toString()` override `Object`'s and `Any`'s. A template and every conversion to text call it with no arguments, so any other `toString()` a type declares is a compile error that names the signature to write, "`Sku.toString()` returns `int`, and PHP# shows a value as text by the `string` its `toString()` returns.", and so is a template of a plain PHP class whose `toString()` is not that one.
 
 **Plain strings:** `"…"` and `'…'` never interpolate, so braces and `$` inside them are literal.
 
@@ -3028,7 +3030,7 @@ import Vendor.Pdf.render;                                     // compile error: 
 public class Draft { }
 ```
 
-**A PHP built-in's failure is the value it returns,** as `global.iconv("UTF-8", "ASCII", text)` returns `false` for text that has a letter ASCII lacks. A call of a built-in whose return type holds `false` or `null` raises no warning for that failure, so an error handler that turns warnings into exceptions never sees it, and the code tests the value, as Go tests a returned error:
+**A PHP built-in's failure is the value it returns,** as `global.iconv("UTF-8", "ASCII", text)` returns `false` for text that has a letter ASCII lacks. A call of a built-in whose return type holds `false` or `null` silences the warning for that failure, so an error handler that skips silenced warnings, as Laravel's, Symfony's and PHPUnit's do, never turns it into an exception, and the code tests the value, as Go tests a returned error:
 
 <!-- example built-in-failures -->
 ```csharp

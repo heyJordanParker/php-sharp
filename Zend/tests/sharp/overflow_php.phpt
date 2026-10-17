@@ -4,6 +4,7 @@ PHP# arithmetic throws on overflow while the same PHP arithmetic in the same req
 <?php
 
 require __DIR__ . '/attempt.inc';
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
 require __DIR__ . '/Overflow.sharp';
 
 final class PhpOverflow

@@ -1,5 +1,5 @@
 --TEST--
-PHP# `@` before a keyword makes it a name: an override keeps a plain PHP parent's `$event` as `@event`, which a named argument `event:` reaches from plain PHP and PHP#, and `@this` names a parameter, a lambda parameter and a local beside the object `this`, as names PHP gives its superglobals run beside them
+PHP# `@` before a keyword makes it a name: an override keeps a plain PHP parent's `$event` as `@event`, which a named argument `event:` reaches from plain PHP and PHP#, and `@this` names a parameter, which a named argument `this:` reaches from PHP#, a lambda parameter and a local beside the object `this`, as names PHP gives its superglobals run beside them
 --FILE--
 <?php
 require __DIR__ . '/harness/Behavior.inc';
@@ -40,7 +40,7 @@ matched
 abc
 text none
 <a>
-a:b d:c [e]form
+a:b d:c [e]form [f]form
 Unknown named parameter $this
 srv
 g!g! srv

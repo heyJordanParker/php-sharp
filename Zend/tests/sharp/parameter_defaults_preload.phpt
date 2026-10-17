@@ -16,7 +16,7 @@ if (PHP_OS_FAMILY == 'Windows') die('skip Preloading is not supported on Windows
 var_dump(class_exists(ParameterDefaults\Ledger::class, false));
 $ledger = new ParameterDefaults\Ledger();
 var_dump($ledger->made->value, $ledger->seeded(), $ledger->seeded(b: 10), $ledger->stamped(), $ledger->counted());
-var_dump(ParameterDefaults\Stamp::hidden());
+var_dump(ParameterDefaults\Stamp::hidden(), $ledger->sized());
 ?>
 --EXPECT--
 bool(true)
@@ -26,3 +26,4 @@ int(53)
 int(7)
 int(4)
 int(7)
+int(8)

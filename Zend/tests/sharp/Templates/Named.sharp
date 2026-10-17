@@ -1,0 +1,9 @@
+namespace Templates;
+
+// An interface whose default body gives each class that implements it toString().
+public interface Named
+{
+    string name() readonly;
+
+    string toString() => `named ${this.name()}`;
+}

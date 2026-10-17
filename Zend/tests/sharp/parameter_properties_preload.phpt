@@ -1,5 +1,5 @@
 --TEST--
-A preloaded PHP# constructor parameter's property runs its set body, its observers and its behaviors
+A preloaded PHP# constructor parameter's property runs its set body, its observers and its behaviors, generic ones too
 --INI--
 opcache.enable=1
 opcache.enable_cli=1
@@ -19,7 +19,7 @@ var_dump($ledger->name, $ledger->label, $ledger->changes);
 $ledger->total = 6;
 var_dump($ledger->changes);
 $defaulted = new ParameterProperties\Ledger();
-var_dump($defaulted->name, $defaulted->label);
+var_dump($defaulted->name, $defaulted->label, $defaulted->tag);
 ?>
 --EXPECT--
 bool(true)
@@ -29,3 +29,4 @@ int(0)
 int(1)
 string(4) "anon"
 string(1) "X"
+string(3) "[T]"

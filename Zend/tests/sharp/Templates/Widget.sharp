@@ -1,0 +1,8 @@
+namespace Templates;
+
+public class Widget : Named
+{
+    public string name() readonly => "widget";
+
+    public string shown() => `Widget: ${this}`;
+}

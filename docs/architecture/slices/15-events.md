@@ -215,7 +215,7 @@ public class ImmediateDispatcher : Dispatcher
 }
 ```
 
-The parameter is `emitted`, because `event` is a PHP# keyword: "`event` is a PHP# keyword, so it can't name a parameter."
+The parameter is `emitted`. `event` is a PHP# keyword, so a parameter takes that name only as `@event`: a bare `event` is "`event` is a keyword; write `@event`."
 
 ```diff
  // sharp/composer/library/Sharp/Module.sharp

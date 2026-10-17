@@ -28,6 +28,6 @@ bool(true)
 x:y
 [hi]form
 ab text <a>
-a:b d:c [e]form
+a:b d:c [e]form [f]form
 srv n!n! srv
 bool(true)

@@ -16,5 +16,5 @@ class Interop
 
     public static function freeAbove(): int { return \Lib\Shipping\FREE_ABOVE; }
 
-    public static function largest(): int { return \PHP_INT_MAX; }
+    public static function largest(): int { return \Sharp\Int::MAX; }
 }

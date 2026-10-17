@@ -45,5 +45,6 @@ public class Form : Behavior
         return wrap(word);
     }
 
-    public string named() => `${this.submit(form: "a", @event: "b")} ${this.submit(event: "c", form: "d")} ${this.label(@this: " e ")}`;
+    // A name before `:` is never the object, so `this:` names the parameter `@this` as `@this:` does.
+    public string named() => `${this.submit(form: "a", @event: "b")} ${this.submit(event: "c", form: "d")} ${this.label(@this: " e ")} ${this.label(this: " f ")}`;
 }
