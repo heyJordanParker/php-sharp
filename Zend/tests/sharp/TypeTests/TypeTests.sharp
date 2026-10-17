@@ -1,0 +1,53 @@
+namespace TypeTests;
+
+public class TypeTests
+{
+    public static List<bool> tested()
+    {
+        Any? pair = [1, "a"];
+        Any? triple = [1, "a", 2];
+        Any? swapped = ["a", 1];
+        Any? number = 5;
+        Any? rush = typeof(RushOrder);
+        Any? invoice = typeof(Invoice);
+        Any? text = "hello";
+        Any? spelled = "TypeTests\\RushOrder";
+        Any? order = new RushOrder();
+        return [
+            pair is int|[int, string],
+            triple is int|[int, string],
+            swapped is int|[int, string],
+            number is int|[int, string] n && n is int,
+            TypeTests.label(pair),
+            (triple as [int, string]) == null,
+            (swapped as [int, string]) == null,
+            (number as [int, string]|int) is int,
+            (text as [int, string]|int) == null,
+            match (pair) { int|[int, string] p => p is [1, "a"], default => false },
+            match (swapped) { int|[int, string] p => true, default => false },
+            rush is Class<Order>,
+            invoice is Class<Order>,
+            text is Class<Order>,
+            order is Class<Order>,
+            spelled is Class<Order>,
+            (rush as Class<Order>) == typeof(RushOrder),
+            (invoice as Class<Order>) == null,
+            (text as Class<Order>) == null,
+            match (rush) { Class<Order> type => type == typeof(RushOrder), default => false },
+            rush is int|Class<Order>,
+            order is Object,
+            rush is Object,
+            (number as Object) == null,
+        ];
+    }
+
+    private static bool label(Any? value)
+    {
+        const kept = value as [int, string];
+        if (kept == null) {
+            return false;
+        }
+        const [count, label] = kept;
+        return count == 1 && label == "a";
+    }
+}
