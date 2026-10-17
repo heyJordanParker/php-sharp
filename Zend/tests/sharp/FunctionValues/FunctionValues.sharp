@@ -8,6 +8,7 @@ public class FunctionValues
     public static Function<int(int)> scale { get; set; } = (int n) => n * 3;
     private Function<int(int)> step = (int n) => n + 10;
     private Function<int(int)> doubler = FunctionValues.twice;
+    private Function<int(int)> rate = (int n) => n;
 
     public Function<int(int)> times(int by) => (int n) => n * by;
 
@@ -137,5 +138,13 @@ public class FunctionValues
             Callbacks.describe(allowed.contains),
             Callbacks.describe(prices.has),
         ];
+    }
+
+    public void setRate(Function<int(int) uses none> rate) => this.rate = rate;
+
+    public int storedRate()
+    {
+        this.setRate((int n) => n * 4);
+        return this.rate(5);
     }
 }
