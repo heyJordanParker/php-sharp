@@ -98,7 +98,7 @@ A service's id is its PHP# type in lowercase, as codex's `service_id` writes it 
 
 - Before it builds a class, it reads the modules of the class's folder and of each folder above it, up to the project root that holds `.sharp/`. It reads each module file once per request, and stops at a module that throws as it loads, which it reads again the next time.
 - With `SHARP_ENV` set, it also reads the `Module.<SHARP_ENV>.sharp` beside each `Module.sharp`, and the environment module wins outside a test.
-- The standard library's `autoload.php` reads the library's module once per request, through `Sharp\Internal\readModule`.
+- The standard library's `autoload.php` names the library's module through `Sharp\Internal\readModule` whenever the engine runs, inside Composer's own process too. The container reads it once per request, at its first module lookup and before any other module, so `vendor/autoload.php` loads before anything is compiled.
 - It builds only what a binding binds, and the class of each listener `emit` runs, a new one for every event whatever lifetime a module gives it (spec section 15). It builds a class through its constructor and calls a binding's closure. Either way, it fills each parameter with the service its `Service` attribute, or else its class, names. It reads the parameters from the function's own argument information, with no reflection.
 - It runs a module file in a symbol table of its own. `zend_execute` would give the PHP code that called the engine one, which a tracing-JIT frame never frees, and `emit` and `Container::get` are both called from PHP code.
 - `emit` resolves one `Sharp.Dispatcher` for the whole app, whoever emits: a running test's module binding first, whatever its namespace, then the app's top module that binds it, which `mago compile` names in `.sharp/listeners.php`, then the standard library's `ImmediateDispatcher` (spec section 15). The checker refuses a binding of it in any other app module, and each of two top modules of the same depth.
@@ -122,7 +122,7 @@ final class ContainerError extends \Error { }                  // a failure of t
 public static T run<T>(Function<T()> body) => Internal.runScoped(body);
 ```
 
-**Tests.** A test file's module applies while a test of a class the file declares runs, as Spring applies a test class's own `@TestConfiguration`. The test needs no code, and the project adds nothing to `phpunit.xml`. The class's `__sharpStartTest` calls `Sharp\Internal\startTest($class)` before PHPUnit sets a test up, and its `__sharpEndTest` calls `Sharp\Internal\endTest()` after the test finishes, in PHPUnit's own process and in the child process of `#[RunInSeparateProcess]` or `processIsolation`. While a test runs, its module comes before the base modules and the environment modules don't apply, even with `SHARP_ENV` set, so a test runs exactly the set of services the checker checks. Each test builds its services again. `sharp/phpunit/` is a Composer project whose PHP# test class runs under the PHPUnit version its `composer.lock` pins, and CI runs it with `sharp/bin/test --phpunit`.
+**Tests.** A test file's module applies while a test of a class the file declares runs, as Spring applies a test class's own `@TestConfiguration`. The test needs no code, and `phpunit.xml` only lists the PHP# test files, as `<directory suffix="Test.sharp">tests</directory>` (spec section 27). The class's `__sharpStartTest` calls `Sharp\Internal\startTest($class)` before PHPUnit sets a test up, and its `__sharpEndTest` calls `Sharp\Internal\endTest()` after the test finishes, in PHPUnit's own process and in the child process of `#[RunInSeparateProcess]` or `processIsolation`. While a test runs, its module comes before the base modules and the environment modules don't apply, even with `SHARP_ENV` set, so a test runs exactly the set of services the checker checks. Each test builds its services again. `sharp/phpunit/` is a Composer project whose PHP# test class runs under the PHPUnit version its `composer.lock` pins, and CI runs it with `sharp/bin/test --phpunit`. That check compiles the project from nothing compiled, through a mago extension host that loads `vendor/autoload.php` on the engine.
 
 **PSR-11.** `Sharp\Psr\Container` implements `Psr\Container\ContainerInterface` over `Sharp\Container`. It throws `Sharp\Psr\NotFoundException` for an id no module binds, and `Sharp\Psr\ContainerException`, with the engine's `Sharp\ContainerError` as its previous, for a service the container can't build. A constructor's own exception passes through unchanged. The engine can't implement an interface Composer loads after it starts, so the adapter is PHP, and the Composer package requires `psr/container`.
 
@@ -153,15 +153,16 @@ ext/sharp/
 sharp/composer/
 ├── composer.json                       requires psr/container, and psr/event-dispatcher for slices/15-events.md;
 │                                       maps Sharp\Psr\ to src/Psr/
-├── autoload.php                        reads the library's module
+├── autoload.php                        names the library's module, which the container reads at its first lookup
 ├── library/Sharp/Module.sharp          new: binds Environment and Dispatcher for every namespace
 ├── library/Sharp/Scope.sharp           Scope.run, which a long-running host calls for each unit of work
 ├── src/Psr/Container.php               new: Sharp\Psr\Container, PSR-11 over Sharp\Container
 ├── src/Psr/ContainerException.php      new: PSR-11's error for a service the container can't build
 └── src/Psr/NotFoundException.php       new: PSR-11's not-found error
 sharp/phpunit/                          new: a PHP# test class under real PHPUnit, in one process, in a separate
-                                        process and with process isolation, which sharp/bin/test --phpunit runs
-sharp/bin/test                          --phpunit
+                                        process and with process isolation, which sharp/bin/test --phpunit runs;
+                                        extension-host.php loads vendor/autoload.php in mago's extension host
+sharp/bin/test                          --phpunit, which compiles sharp/phpunit from nothing compiled
 sharp/docker/                           the image installs composer, php-xml and unzip
 Zend/tests/sharp/
 ├── Container.inc                       the app the container tests build, with the library's module
@@ -177,6 +178,8 @@ Zend/tests/sharp/
 ├── container_phpunit.phpt              new: the methods PHPUnit runs around a test, in this process and a child one
 ├── container_psr.phpt                  new: the PSR-11 adapter and its errors
 ├── library_autoload.inc                the package holds the library's module
+├── library_autoload_uncompiled.phpt    vendor/autoload.php loads before anything is compiled
+├── library_autoload_composer_container.phpt   a script in Composer's own process builds a service
 ├── environment.phpt                    Environment.require
 └── project.inc                         a test project's files may sit in folders
 docs/
