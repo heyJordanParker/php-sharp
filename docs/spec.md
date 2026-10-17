@@ -265,7 +265,7 @@ private static int hits = 0;                     // compiles
 private static int misses;                       // compile error: give misses an initial value
 public static string? region { get; set; } = null;   // compiles: starts as null
 public static string? zone { get; set; }         // compile error: give zone an initial value
-private static int started = global.time();      // compiles: runs once, when the app first uses the class's statics
+private static List<int> sizes = [10, 25].map(size => size * 2);   // compiles: runs once, when the app first uses the class's statics
 public static int limit { get; } = 10;           // compiles: get-only, set only by its initial value
 ```
 
@@ -462,7 +462,7 @@ public void grant(User user) { … }
 public void grant(Page page) { … }                    // compile error: grant is declared twice. Name each by what it takes, as in grantPageAccess
 ```
 
-**A statement that can never run is a compile error,** as Java's "unreachable statement" and Zig's "unreachable code" are. A statement after `return`, `throw`, `global.exit(…)`, `break` or `continue` in the same block never runs, and neither does one after an `if` whose every branch ends the block, or after a loop that never ends, such as a `do` whose body ends the block. The error names the line that ends the block, and says to delete the statement or move it above that line. The block of an `if` or a `for … of` whose condition never finishes, as `if (global.exit(1))`, never runs either, and the error says to write the condition as its own statement in place of the `if` or the `for`.
+**A statement that can never run is a compile error,** as Java's "unreachable statement" and Zig's "unreachable code" are. A statement after `return`, `throw`, `break`, `continue` or a call that never returns in the same block never runs, and neither does one after an `if` whose every branch ends the block, or after a loop that never ends, such as a `do` whose body ends the block. The error names the line that ends the block, and says to delete the statement or move it above that line. The block of an `if` or a `for … of` whose condition never finishes, as `if (throw new ValueError("empty"))`, never runs either, and the error says to write the condition as its own statement in place of the `if` or the `for`.
 
 <!-- example unreachable-statements: members -->
 ```csharp
@@ -539,11 +539,13 @@ public class Receipt
     public int larger(int a, int b) => Math.max(a, b);                      // compiles
     public string body(Map<string, Any> payload) => Json.encode(payload);   // compiles
     public string raw(string name) => trim(name);                           // compile error: write name.trim()
+    public string rawGlobal(string name) => global.trim(name);              // compile error: write name.trim()
 }
 ```
 
 - **Every PHP built-in function is a standard library method,** so calling one by its bare name from `.sharp` code is a compile error that names the method. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
-- **A built-in the standard library has no method for is called through PHP's root namespace,** as `global.levenshtein(a, b)` (section 23), and the standard library calls PHP the same way.
+- **A built-in the standard library has no method for is called through PHP's root namespace,** as `global.levenshtein(a, b)` (section 23).
+- **A built-in the standard library has a method for is reached only through that method.** Outside the standard library, `global.trim(name)` is a compile error that names `name.trim()`, as the bare call is, and so is the value `global.trim`, as in `names.map(global.trim)`. The standard library's own methods call PHP through `global`, and a built-in PHP# syntax replaces keeps its `global.` call, as `global.strval(1)`.
 - **PHP's constants are read through its root namespace too,** as `global.CURLOPT_TIMEOUT` (section 23). A bare `CURLOPT_TIMEOUT` is a compile error, because a bare uppercase name is always the code's own constant. A value the standard library gives, as `Int.MAX`, is read from it.
 
 **Output and exit go through the standard library.** `echo` and `print` are removed, and output goes through `Console` (section 29). `die` is removed, because `die("…")` prints its message and exits with status 0, which reports success. Exiting goes through `Process`.
@@ -1205,7 +1207,7 @@ for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is a 
 **Map keys:** anything with `==` and `hash()` (section 19) keys a `Map` and joins a `Set`, as in Swift, Rust, Java and Kotlin.
 
 - A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type, as in `const [Status status, int n]`, stays allowed. An inferred `Map`, such as a `groupBy` result, gives its keys back the same way.
-- Plain PHP receives the `Map` itself, or a PHP array where its parameter's declared type names `array`. A PHP array's keys are `int` or `string`, so a `Map` keyed by a backed enum passes each case's backing value as its key, as an array crossing the other way gives each backing value as its case. Passing a `Map` keyed by anything else to such a parameter is a compile error that names the parameter and the key type. `counts.count()` counts any `Map`, where PHP's `global.count(counts)` takes only one keyed by `int` or `string`.
+- Plain PHP receives the `Map` itself, or a PHP array where its parameter's declared type names `array`. A PHP array's keys are `int` or `string`, so a `Map` keyed by a backed enum passes each case's backing value as its key, as an array crossing the other way gives each backing value as its case. Passing a `Map` keyed by anything else to such a parameter is a compile error that names the parameter and the key type. `counts.count()` counts any `Map`, whatever its keys.
 
 <!-- example enum-map-keys -->
 ```csharp
@@ -3026,20 +3028,20 @@ import Vendor.Pdf.render;                                     // compile error: 
 public class Draft { }
 ```
 
-**A PHP built-in's failure is the value it returns,** as `global.hex2bin(text)` returns `false` for text that is not hexadecimal. A call of a built-in whose return type holds `false` or `null` raises no warning for that failure, so an error handler that turns warnings into exceptions never sees it, and the code tests the value, as Go tests a returned error:
+**A PHP built-in's failure is the value it returns,** as `global.iconv("UTF-8", "ASCII", text)` returns `false` for text that has a letter ASCII lacks. A call of a built-in whose return type holds `false` or `null` raises no warning for that failure, so an error handler that turns warnings into exceptions never sees it, and the code tests the value, as Go tests a returned error:
 
 <!-- example built-in-failures -->
 ```csharp
 public class Codes
 {
-    public string? decode(string text) => global.hex2bin(text) is string data ? data : null;   // compiles: "zz" gives null, with no warning
-    public string? silenced(string text) => @(global.hex2bin(text)) is string data ? data : null;   // compile error: PHP# has no @ before a value
+    public string? ascii(string text) => global.iconv("UTF-8", "ASCII", text) is string converted ? converted : null;   // compiles: "café" gives null, with no warning
+    public string? silenced(string text) => @(global.iconv("UTF-8", "ASCII", text)) is string converted ? converted : null;   // compile error: PHP# has no @ before a value
 }
 ```
 <!-- run built-in-failures
 Codes codes = new Codes();
-codes.decode("616263");  // "abc"
-codes.decode("zz");      // null
+codes.ascii("abc");   // "abc"
+codes.ascii("café");  // null
 -->
 
 **A plain PHP constant is read through its namespace the same way.** `global.CURLOPT_TIMEOUT` reads the constant of PHP's curl extension, and `Pdf.DEFAULT_DPI` reads the library's after `import Vendor.Pdf;`. A bare uppercase name is always the code's own constant, so a bare PHP constant such as `CURLOPT_TIMEOUT` is a compile error that says to write `global.CURLOPT_TIMEOUT`. A value the standard library gives is read from it, as `Int.MAX` and `Int.MIN` give the `int` bounds:
@@ -3212,7 +3214,7 @@ public User find(int|string id)
 ```
 
 - `is` narrows a union (section 21). After a branch that tested one type and returned, the code below it sees the types left.
-- `List`, `Map` and `Set` can't share a union, because they share PHP's one array kind and the literal rules need to know which one a place holds.
+- `List`, `Map` and `Set` can't share a union: a type is one collection, as in C#, Java, Kotlin and Swift. Take each as its own parameter, or as an enum with one case that holds each.
 - Alternatives that belong to the domain stay enums (section 20) and sealed interfaces (section 20.1).
 
 **A union that holds null is written `(int|string)?`,** with the same `?` as any other type. `int|string|null` is a compile error that names `(int|string)?`, and `int|null` one that names `int?`.
@@ -4002,7 +4004,7 @@ extern now uses Clock;               // compile error: name the function through
 - **An object a declared plain PHP call returns carries that call's effect,** so `StripeClient.charges()` returns an object with `Http`, and calling it fits `uses Http`. An `extern` on the returned class itself wins over the inherited effect.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way.
-- **PHP's own built-in functions and exception classes come declared.** PHP#'s Composer package ships an `extern global.…` declaration for each function, so `global.levenshtein(a, b)` is pure and `global.fopen(path, "r")` has `Files`. Each built-in exception class is declared pure, so pure code may `throw new ValueError("empty")`.
+- **PHP's own built-in functions and exception classes come declared.** PHP#'s Composer package ships an `extern global.…` declaration for each function, so `global.levenshtein(a, b)` is pure, and the `global.fopen(path, "r")` that the standard library's `Files` calls has `Files`. Each built-in exception class is declared pure, so pure code may `throw new ValueError("empty")`.
 
 **The standard library's ten effect classes replace PHP's built-ins for their effects:**
 
@@ -4094,6 +4096,7 @@ The standard library's ten effect classes, listed above, are `foreign` classes. 
 **PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS` are compile errors. For the environment and the command-line arguments, the error names `Environment`. For request data, it names a parameter that takes it. PHP# has no global variables, so for `$GLOBALS` it names a constructor or method parameter that takes the value. The process environment arrives as `Environment`, a standard `foreign` class like `Clock` and `Random`:
 
 - `string? variable(string name)` reads an environment variable, or gives null when it is not set.
+- `Map<string, string> variables()` reads every environment variable, by name, on every call.
 - `List<string> arguments { get; }` holds the command-line arguments, starting with the script's name.
 - `string currentDirectory()` reads the directory the process runs in on every call, as Go's `os.Getwd()` and Rust's `env::current_dir()` do.
 - `void changeDirectory(string path)` changes the directory the process runs in.
@@ -4306,7 +4309,7 @@ Take a `Function<string() uses Environment>`, whose type states the effects it m
 
 The standard library's collection methods (section 12) take on the effects of their functions this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
 
-**Plain PHP can run any function it is given,** as `global.array_map(f, list)` and `global.array_filter(list, f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => global.time()` to `global.call_user_func` has the effect `Clock`.
+**Plain PHP can run any function it is given,** as `global.usort(list, f)` and `global.call_user_func(f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => this.clock.now()` to `global.call_user_func` has the effect `Clock`.
 
 **Code with a body writes no `uses`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function it is given, and its body and declaration show all four. The checker works out each method's effects, and its errors name them, as in "`Gauge.level` calls `Clock.now`, which has the effect `Clock`". A `uses` that names a function parameter, with or without a body, is a parse error that says to delete it.
 

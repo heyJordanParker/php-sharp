@@ -11,8 +11,8 @@ class Cart
     {
         this.items = [new Item("tea", 3)];
         this.items.add(extra[0]);
-        this.counts["items"] = global.count(this.items);
-        this.counts["extra"] = global.count(extra);
+        this.counts["items"] = this.items.count();
+        this.counts["extra"] = extra.count();
         let total = this.items[0].cents;
         for (const item of this.items) {
             total += item.cents;
@@ -42,7 +42,7 @@ class Cart
 
     public bool has(int cents)
     {
-        return global.in_array(cents, this.prices(), true);
+        return this.prices().contains(cents);
     }
 
     public List<int> withPrices(List<int> before, List<int> after)
@@ -56,7 +56,7 @@ class Cart
         for (const item of this.items) {
             total += item.cents;
         }
-        return [total, global.count(this.items)];
+        return [total, this.items.count()];
     }
 
     public string described()

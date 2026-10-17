@@ -42,7 +42,7 @@ class Cart
 
     public function has(int $cents): bool
     {
-        return @\in_array($cents, $this->prices(), true);
+        return \array_find_key($this->prices(), (fn ($value) => fn ($element) => $element === $value)($cents)) !== null;
     }
 
     public function withPrices(array $before, array $after): array

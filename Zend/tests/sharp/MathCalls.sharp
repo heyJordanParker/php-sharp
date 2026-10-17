@@ -17,4 +17,18 @@ class MathCalls
     public static float roundTo(float x, int precision) => Math.round(x, precision);
 
     public static float pow(float base, float exponent) => Math.pow(base, exponent);
+
+    public static int max(int a, int b) => Math.max(a, b);
+
+    public static int min(int a, int b) => Math.min(a, b);
+
+    public static int maxOf(int first, List<int> rest) => Math.max(first, ...rest);
+
+    public static int minOf(int first, List<int> rest) => Math.min(first, ...rest);
+
+    public static int maxOfNone(int first) => Math.max(first, ...[]);
+
+    public static int maxOne(int only) => Math.max(only);
+
+    public static int minOne(int only) => Math.min(only);
 }

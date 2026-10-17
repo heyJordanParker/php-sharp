@@ -12,6 +12,6 @@ enum Suit
 
     public static int size()
     {
-        return global.count(Suit.cases());
+        return Suit.cases().count();
     }
 }

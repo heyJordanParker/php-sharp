@@ -346,10 +346,32 @@ Members: same opcodes and lines in 10 op arrays, same signatures in 1 classes
 Site/Page: same opcodes and lines in 9 op arrays, same signatures in 1 classes
 Site/Shape: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Site/Square: same opcodes and lines in 3 op arrays, same signatures in 1 classes
-Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in 1 classes
+Collections/Cart: different opcodes and lines in 10 op arrays, same signatures in 1 classes
   check  Demo\Cart::fill string("List<Demo.Item>")
   check  Demo\Cart::withPrices string("List<int>, List<int>")
+  .sharp L0045 0006 BIND_LEXICAL T3 CV1($element#2)
+  .sharp L0045 0000 CV0($value#1) = RECV 1
+  .sharp L0045 0001 BIND_STATIC CV1($element#2)
+  .sharp L0045 0003 BIND_LEXICAL T2 CV0($value#1)
+  .sharp 0006 BIND_LEXICAL T3 CV1($element#2)
+  .sharp 0000 CV0($value#1) = RECV 1
+  .sharp 0001 BIND_STATIC CV1($element#2)
+  .sharp 0003 BIND_LEXICAL T2 CV0($value#1)
+  .sharp 0000 CV0($element#2) = RECV 1
+  .sharp 0001 BIND_STATIC CV1($value#1)
+  .sharp 0002 T2 = IS_IDENTICAL CV0($element#2) CV1($value#1)
   .sharp     Property [ private Sharp\Map $counts = new \Sharp\Map() ]
+  .php   L0045 0006 BIND_LEXICAL T3 CV1($element)
+  .php   L0045 0000 CV0($value) = RECV 1
+  .php   L0045 0001 BIND_STATIC CV1($element)
+  .php   L0045 0003 BIND_LEXICAL T2 CV0($value)
+  .php   0006 BIND_LEXICAL T3 CV1($element)
+  .php   0000 CV0($value) = RECV 1
+  .php   0001 BIND_STATIC CV1($element)
+  .php   0003 BIND_LEXICAL T2 CV0($value)
+  .php   0000 CV0($element) = RECV 1
+  .php   0001 BIND_STATIC CV1($value)
+  .php   0002 T2 = IS_IDENTICAL CV0($element) CV1($value)
   .php       Property [ private Sharp\Map $counts ]
 Collections/Item: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures in 1 classes
@@ -487,114 +509,114 @@ Lambdas: different opcodes and lines in 36 op arrays, same signatures in 1 class
   .php   0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
 Cashier: different opcodes and lines in 8 op arrays, same signatures in 1 classes
   check  Demo\Cashier::receipt string("List<int>, Any?, Any?")
-  .sharp      ; (lines=63, args=3, vars=7, tmps=31)
-  .sharp L0022 0037 T25 = SHARP_VERIFY_TYPE_ARGS V24 string("List<int>")
-  .sharp L0022 0038 ASSIGN CV6($recorded) T25
-  .sharp L0024 0039 T27 = CAST (object) CV4($paid)
-  .sharp L0024 0040 INIT_METHOD_CALL 1 T27 string("map")
-  .sharp L0024 0041 INIT_METHOD_CALL 0 THIS string("format")
-  .sharp L0024 0042 T28 = CALLABLE_CONVERT
-  .sharp L0024 0043 SEND_VAL_EX T28 1
-  .sharp L0024 0044 V29 = DO_FCALL
-  .sharp L0024 0045 T30 = FRAMELESS_ICALL_2(implode) string(",") V29
-  .sharp L0024 0046 T31 = INIT_ARRAY 5 (packed) T30 NEXT
-  .sharp L0025 0047 T32 = CAST (string) CV5($total)
-  .sharp L0025 0048 T31 = ADD_ARRAY_ELEMENT T32 NEXT
-  .sharp L0026 0049 T33 = CAST (string) CV3($count)
-  .sharp L0026 0050 T31 = ADD_ARRAY_ELEMENT T33 NEXT
-  .sharp L0027 0051 T34 = FRAMELESS_ICALL_2(implode) string(",") CV6($recorded)
-  .sharp L0027 0052 T31 = ADD_ARRAY_ELEMENT T34 NEXT
-  .sharp L0028 0053 T35 = FETCH_OBJ_R CV2($ledger) string("scale")
-  .sharp L0028 0054 INIT_DYNAMIC_CALL 1 T35
-  .sharp L0028 0055 SEND_VAR_EX CV5($total) 1
-  .sharp L0028 0056 V36 = DO_FCALL
-  .sharp L0028 0057 T37 = CAST (string) V36
-  .sharp L0028 0058 T31 = ADD_ARRAY_ELEMENT T37 NEXT
-  .sharp L0028 0059 VERIFY_RETURN_TYPE T31
-  .sharp L0028 0060 RETURN T31
-  .sharp L0030 0061 VERIFY_RETURN_TYPE
-  .sharp L0030 0062 RETURN null
-  .sharp      ; (lines=63, args=3, vars=7, tmps=31)
-  .sharp 0037 T25 = SHARP_VERIFY_TYPE_ARGS V24 string("List<int>")
-  .sharp 0038 ASSIGN CV6($recorded) T25
-  .sharp 0039 T27 = CAST (object) CV4($paid)
-  .sharp 0040 INIT_METHOD_CALL 1 T27 string("map")
-  .sharp 0041 INIT_METHOD_CALL 0 THIS string("format")
-  .sharp 0042 T28 = CALLABLE_CONVERT
-  .sharp 0043 SEND_VAL_EX T28 1
-  .sharp 0044 V29 = DO_FCALL
-  .sharp 0045 T30 = FRAMELESS_ICALL_2(implode) string(",") V29
-  .sharp 0046 T31 = INIT_ARRAY 5 (packed) T30 NEXT
-  .sharp 0047 T32 = CAST (string) CV5($total)
-  .sharp 0048 T31 = ADD_ARRAY_ELEMENT T32 NEXT
-  .sharp 0049 T33 = CAST (string) CV3($count)
-  .sharp 0050 T31 = ADD_ARRAY_ELEMENT T33 NEXT
-  .sharp 0051 T34 = FRAMELESS_ICALL_2(implode) string(",") CV6($recorded)
-  .sharp 0052 T31 = ADD_ARRAY_ELEMENT T34 NEXT
-  .sharp 0053 T35 = FETCH_OBJ_R CV2($ledger) string("scale")
-  .sharp 0054 INIT_DYNAMIC_CALL 1 T35
-  .sharp 0055 SEND_VAR_EX CV5($total) 1
-  .sharp 0056 V36 = DO_FCALL
-  .sharp 0057 T37 = CAST (string) V36
-  .sharp 0058 T31 = ADD_ARRAY_ELEMENT T37 NEXT
-  .sharp 0059 VERIFY_RETURN_TYPE T31
-  .sharp 0060 RETURN T31
-  .sharp 0061 VERIFY_RETURN_TYPE
-  .sharp 0062 RETURN null
-  .sharp      31: 0047 - 0060 (tmp/var)
-  .php        ; (lines=62, args=3, vars=7, tmps=30)
-  .php   L0022 0037 ASSIGN CV6($recorded) V24
-  .php   L0024 0038 T26 = CAST (object) CV4($paid)
-  .php   L0024 0039 INIT_METHOD_CALL 1 T26 string("map")
-  .php   L0024 0040 INIT_METHOD_CALL 0 THIS string("format")
-  .php   L0024 0041 T27 = CALLABLE_CONVERT
-  .php   L0024 0042 SEND_VAL_EX T27 1
-  .php   L0024 0043 V28 = DO_FCALL
-  .php   L0024 0044 T29 = FRAMELESS_ICALL_2(implode) string(",") V28
-  .php   L0024 0045 T30 = INIT_ARRAY 5 (packed) T29 NEXT
-  .php   L0025 0046 T31 = CAST (string) CV5($total)
-  .php   L0025 0047 T30 = ADD_ARRAY_ELEMENT T31 NEXT
-  .php   L0026 0048 T32 = CAST (string) CV3($count)
-  .php   L0026 0049 T30 = ADD_ARRAY_ELEMENT T32 NEXT
-  .php   L0027 0050 T33 = FRAMELESS_ICALL_2(implode) string(",") CV6($recorded)
-  .php   L0027 0051 T30 = ADD_ARRAY_ELEMENT T33 NEXT
-  .php   L0028 0052 T34 = FETCH_OBJ_R CV2($ledger) string("scale")
-  .php   L0028 0053 INIT_DYNAMIC_CALL 1 T34
-  .php   L0028 0054 SEND_VAR_EX CV5($total) 1
-  .php   L0028 0055 V35 = DO_FCALL
-  .php   L0028 0056 T36 = CAST (string) V35
-  .php   L0028 0057 T30 = ADD_ARRAY_ELEMENT T36 NEXT
-  .php   L0028 0058 VERIFY_RETURN_TYPE T30
-  .php   L0028 0059 RETURN T30
-  .php   L0030 0060 VERIFY_RETURN_TYPE
-  .php   L0030 0061 RETURN null
-  .php        ; (lines=62, args=3, vars=7, tmps=30)
-  .php   0037 ASSIGN CV6($recorded) V24
-  .php   0038 T26 = CAST (object) CV4($paid)
-  .php   0039 INIT_METHOD_CALL 1 T26 string("map")
-  .php   0040 INIT_METHOD_CALL 0 THIS string("format")
-  .php   0041 T27 = CALLABLE_CONVERT
-  .php   0042 SEND_VAL_EX T27 1
-  .php   0043 V28 = DO_FCALL
-  .php   0044 T29 = FRAMELESS_ICALL_2(implode) string(",") V28
-  .php   0045 T30 = INIT_ARRAY 5 (packed) T29 NEXT
-  .php   0046 T31 = CAST (string) CV5($total)
-  .php   0047 T30 = ADD_ARRAY_ELEMENT T31 NEXT
-  .php   0048 T32 = CAST (string) CV3($count)
-  .php   0049 T30 = ADD_ARRAY_ELEMENT T32 NEXT
-  .php   0050 T33 = FRAMELESS_ICALL_2(implode) string(",") CV6($recorded)
-  .php   0051 T30 = ADD_ARRAY_ELEMENT T33 NEXT
-  .php   0052 T34 = FETCH_OBJ_R CV2($ledger) string("scale")
-  .php   0053 INIT_DYNAMIC_CALL 1 T34
-  .php   0054 SEND_VAR_EX CV5($total) 1
-  .php   0055 V35 = DO_FCALL
-  .php   0056 T36 = CAST (string) V35
-  .php   0057 T30 = ADD_ARRAY_ELEMENT T36 NEXT
-  .php   0058 VERIFY_RETURN_TYPE T30
-  .php   0059 RETURN T30
-  .php   0060 VERIFY_RETURN_TYPE
-  .php   0061 RETURN null
-  .php        30: 0046 - 0059 (tmp/var)
+  .sharp      ; (lines=61, args=3, vars=7, tmps=30)
+  .sharp L0022 0035 T24 = SHARP_VERIFY_TYPE_ARGS V23 string("List<int>")
+  .sharp L0022 0036 ASSIGN CV6($recorded) T24
+  .sharp L0024 0037 T26 = CAST (object) CV4($paid)
+  .sharp L0024 0038 INIT_METHOD_CALL 1 T26 string("map")
+  .sharp L0024 0039 INIT_METHOD_CALL 0 THIS string("format")
+  .sharp L0024 0040 T27 = CALLABLE_CONVERT
+  .sharp L0024 0041 SEND_VAL_EX T27 1
+  .sharp L0024 0042 V28 = DO_FCALL
+  .sharp L0024 0043 T29 = FRAMELESS_ICALL_2(implode) string(",") V28
+  .sharp L0024 0044 T30 = INIT_ARRAY 5 (packed) T29 NEXT
+  .sharp L0025 0045 T31 = CAST (string) CV5($total)
+  .sharp L0025 0046 T30 = ADD_ARRAY_ELEMENT T31 NEXT
+  .sharp L0026 0047 T32 = CAST (string) CV3($count)
+  .sharp L0026 0048 T30 = ADD_ARRAY_ELEMENT T32 NEXT
+  .sharp L0027 0049 T33 = FRAMELESS_ICALL_2(implode) string(",") CV6($recorded)
+  .sharp L0027 0050 T30 = ADD_ARRAY_ELEMENT T33 NEXT
+  .sharp L0028 0051 T34 = FETCH_OBJ_R CV2($ledger) string("scale")
+  .sharp L0028 0052 INIT_DYNAMIC_CALL 1 T34
+  .sharp L0028 0053 SEND_VAR_EX CV5($total) 1
+  .sharp L0028 0054 V35 = DO_FCALL
+  .sharp L0028 0055 T36 = CAST (string) V35
+  .sharp L0028 0056 T30 = ADD_ARRAY_ELEMENT T36 NEXT
+  .sharp L0028 0057 VERIFY_RETURN_TYPE T30
+  .sharp L0028 0058 RETURN T30
+  .sharp L0030 0059 VERIFY_RETURN_TYPE
+  .sharp L0030 0060 RETURN null
+  .sharp      ; (lines=61, args=3, vars=7, tmps=30)
+  .sharp 0035 T24 = SHARP_VERIFY_TYPE_ARGS V23 string("List<int>")
+  .sharp 0036 ASSIGN CV6($recorded) T24
+  .sharp 0037 T26 = CAST (object) CV4($paid)
+  .sharp 0038 INIT_METHOD_CALL 1 T26 string("map")
+  .sharp 0039 INIT_METHOD_CALL 0 THIS string("format")
+  .sharp 0040 T27 = CALLABLE_CONVERT
+  .sharp 0041 SEND_VAL_EX T27 1
+  .sharp 0042 V28 = DO_FCALL
+  .sharp 0043 T29 = FRAMELESS_ICALL_2(implode) string(",") V28
+  .sharp 0044 T30 = INIT_ARRAY 5 (packed) T29 NEXT
+  .sharp 0045 T31 = CAST (string) CV5($total)
+  .sharp 0046 T30 = ADD_ARRAY_ELEMENT T31 NEXT
+  .sharp 0047 T32 = CAST (string) CV3($count)
+  .sharp 0048 T30 = ADD_ARRAY_ELEMENT T32 NEXT
+  .sharp 0049 T33 = FRAMELESS_ICALL_2(implode) string(",") CV6($recorded)
+  .sharp 0050 T30 = ADD_ARRAY_ELEMENT T33 NEXT
+  .sharp 0051 T34 = FETCH_OBJ_R CV2($ledger) string("scale")
+  .sharp 0052 INIT_DYNAMIC_CALL 1 T34
+  .sharp 0053 SEND_VAR_EX CV5($total) 1
+  .sharp 0054 V35 = DO_FCALL
+  .sharp 0055 T36 = CAST (string) V35
+  .sharp 0056 T30 = ADD_ARRAY_ELEMENT T36 NEXT
+  .sharp 0057 VERIFY_RETURN_TYPE T30
+  .sharp 0058 RETURN T30
+  .sharp 0059 VERIFY_RETURN_TYPE
+  .sharp 0060 RETURN null
+  .sharp      30: 0045 - 0058 (tmp/var)
+  .php        ; (lines=60, args=3, vars=7, tmps=29)
+  .php   L0022 0035 ASSIGN CV6($recorded) V23
+  .php   L0024 0036 T25 = CAST (object) CV4($paid)
+  .php   L0024 0037 INIT_METHOD_CALL 1 T25 string("map")
+  .php   L0024 0038 INIT_METHOD_CALL 0 THIS string("format")
+  .php   L0024 0039 T26 = CALLABLE_CONVERT
+  .php   L0024 0040 SEND_VAL_EX T26 1
+  .php   L0024 0041 V27 = DO_FCALL
+  .php   L0024 0042 T28 = FRAMELESS_ICALL_2(implode) string(",") V27
+  .php   L0024 0043 T29 = INIT_ARRAY 5 (packed) T28 NEXT
+  .php   L0025 0044 T30 = CAST (string) CV5($total)
+  .php   L0025 0045 T29 = ADD_ARRAY_ELEMENT T30 NEXT
+  .php   L0026 0046 T31 = CAST (string) CV3($count)
+  .php   L0026 0047 T29 = ADD_ARRAY_ELEMENT T31 NEXT
+  .php   L0027 0048 T32 = FRAMELESS_ICALL_2(implode) string(",") CV6($recorded)
+  .php   L0027 0049 T29 = ADD_ARRAY_ELEMENT T32 NEXT
+  .php   L0028 0050 T33 = FETCH_OBJ_R CV2($ledger) string("scale")
+  .php   L0028 0051 INIT_DYNAMIC_CALL 1 T33
+  .php   L0028 0052 SEND_VAR_EX CV5($total) 1
+  .php   L0028 0053 V34 = DO_FCALL
+  .php   L0028 0054 T35 = CAST (string) V34
+  .php   L0028 0055 T29 = ADD_ARRAY_ELEMENT T35 NEXT
+  .php   L0028 0056 VERIFY_RETURN_TYPE T29
+  .php   L0028 0057 RETURN T29
+  .php   L0030 0058 VERIFY_RETURN_TYPE
+  .php   L0030 0059 RETURN null
+  .php        ; (lines=60, args=3, vars=7, tmps=29)
+  .php   0035 ASSIGN CV6($recorded) V23
+  .php   0036 T25 = CAST (object) CV4($paid)
+  .php   0037 INIT_METHOD_CALL 1 T25 string("map")
+  .php   0038 INIT_METHOD_CALL 0 THIS string("format")
+  .php   0039 T26 = CALLABLE_CONVERT
+  .php   0040 SEND_VAL_EX T26 1
+  .php   0041 V27 = DO_FCALL
+  .php   0042 T28 = FRAMELESS_ICALL_2(implode) string(",") V27
+  .php   0043 T29 = INIT_ARRAY 5 (packed) T28 NEXT
+  .php   0044 T30 = CAST (string) CV5($total)
+  .php   0045 T29 = ADD_ARRAY_ELEMENT T30 NEXT
+  .php   0046 T31 = CAST (string) CV3($count)
+  .php   0047 T29 = ADD_ARRAY_ELEMENT T31 NEXT
+  .php   0048 T32 = FRAMELESS_ICALL_2(implode) string(",") CV6($recorded)
+  .php   0049 T29 = ADD_ARRAY_ELEMENT T32 NEXT
+  .php   0050 T33 = FETCH_OBJ_R CV2($ledger) string("scale")
+  .php   0051 INIT_DYNAMIC_CALL 1 T33
+  .php   0052 SEND_VAR_EX CV5($total) 1
+  .php   0053 V34 = DO_FCALL
+  .php   0054 T35 = CAST (string) V34
+  .php   0055 T29 = ADD_ARRAY_ELEMENT T35 NEXT
+  .php   0056 VERIFY_RETURN_TYPE T29
+  .php   0057 RETURN T29
+  .php   0058 VERIFY_RETURN_TYPE
+  .php   0059 RETURN null
+  .php        29: 0044 - 0057 (tmp/var)
 Roster: different opcodes and lines in 8 op arrays, same signatures in 1 classes
   check  Demo\Roster::report string("Map<Lib.Standing, int>")
   .sharp L0007 0000 CV0($key#1) = RECV 1
@@ -1571,7 +1593,7 @@ Signatures: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Accessors/Address: same opcodes and lines in 5 op arrays, same signatures in 1 classes
 Accessors/Product: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Parcel: same opcodes and lines in 3 op arrays, same signatures in 1 classes
-Exits: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+Exits: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Positions: same opcodes and lines in 5 op arrays, same signatures in 1 classes
 Deploy: same opcodes and lines in 6 op arrays, same signatures in 1 classes
 Tags: same opcodes and lines in 2 op arrays, same signatures in 1 classes

@@ -2,12 +2,14 @@ namespace Demo;
 
 class Exits
 {
-    public static void stop(int code)
+    public Exits(private Process process, private Console console) { }
+
+    public void stop(int code)
     {
         try {
-            global.exit(code);
+            this.process.exit(code);
         } finally {
-            global.printf("finally\n");
+            this.console.write("finally\n");
         }
     }
 }
