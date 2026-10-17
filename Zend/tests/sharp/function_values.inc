@@ -20,6 +20,7 @@ function function_values(): array
             ...$values->methodValues(),
             $values->nestedCounterPasses(),
             ...$values->crossings(),
+            $values->storedRate(),
         ];
     }
 
