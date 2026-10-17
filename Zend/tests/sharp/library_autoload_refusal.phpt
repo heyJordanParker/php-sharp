@@ -9,9 +9,9 @@ foreach (['psr4', 'classmap'] as $layout) {
 ?>
 --EXPECT--
 == psr4
-Error: The PHP# standard library 0.1.0 was built for other native bodies than PHP# engine <engine version> has. Install the same PHP# version of both.
+Error: This project's PHP# library is 0.1.0, and the PHP# engine is <engine version>. Install PHP# 0.1.0, or require heyjordanparker/php-sharp-composer <engine version>.
 0 .sharp files included
 == classmap
 class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\Text"]
-Error: The PHP# standard library 0.1.0 was built for other native bodies than PHP# engine <engine version> has. Install the same PHP# version of both.
+Error: This project's PHP# library is 0.1.0, and the PHP# engine is <engine version>. Install PHP# 0.1.0, or require heyjordanparker/php-sharp-composer <engine version>.
 0 .sharp files included

@@ -20,10 +20,10 @@ Error: This project needs the PHP# engine, and this is plain PHP. Install php-sh
 == other native bodies
 booted, with no library class declared
 class map handed to Composer: []
-Error: The PHP# standard library 0.1.0 was built for other native bodies than PHP# engine <engine version> has. Install the same PHP# version of both.
+Error: This project's PHP# library is 0.1.0, and the PHP# engine is <engine version>. Install PHP# 0.1.0, or require heyjordanparker/php-sharp-composer <engine version>.
 0 .sharp files included
 == a missing native body
 booted, with no library class declared
 class map handed to Composer: []
-Error: The PHP# standard library 0.1.0 declares the native body Text.missing, which PHP# engine <engine version> does not have. Install the same PHP# version of both.
+Error: This project's PHP# library is 0.1.0, and the PHP# engine is <engine version>. Install PHP# 0.1.0, or require heyjordanparker/php-sharp-composer <engine version>.
 0 .sharp files included
