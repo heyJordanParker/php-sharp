@@ -56,7 +56,7 @@ class Pantry
 
     public Map<string, int> restock(string name)
     {
-        this.sizes.add(global.count(this.sizes));
+        this.sizes.add(this.sizes.count());
         this.stock.remove(name);
         return this.stock;
     }
@@ -164,6 +164,26 @@ class Pantry
     public static int last(List<int> sizes)
     {
         return sizes.last();
+    }
+
+    public static int largest(List<int> sizes) => sizes.max();
+
+    public static int smallest(List<int> sizes) => sizes.min();
+
+    public static int counted(bool listed, List<int> sizes, Map<string, int> stock)
+    {
+        let held = listed ? sizes : stock;
+        return held.count();
+    }
+
+    public static string shared(bool listed, List<string> names, Map<string, int> stock, Set<string> tags)
+    {
+        let held = listed ? names : stock;
+        let kept = listed ? names : tags;
+        const removed = held.remove("tea");
+        const found = kept.contains("pie");
+        kept.clear();
+        return `${removed} ${held.count()} ${found} ${kept.count()}`;
     }
 
     public static int? position(List<int> sizes, int size)

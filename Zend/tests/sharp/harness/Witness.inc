@@ -14,4 +14,10 @@ final class Witness
             (self::$look)($object);
         }
     }
+
+    /** Prints the text, so a test's expected output shows where PHP# code ran, a static's hook included. */
+    public static function say(string $text): void
+    {
+        echo $text;
+    }
 }

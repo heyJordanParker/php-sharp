@@ -1,15 +1,17 @@
 namespace Observed;
 
+import Lib.Witness;
+
 public class Account
 {
-    public int balance { get; set; willSet => global.printf("will %d from %d\n", value, field); didSet => global.printf("did %d\n", field); } = 1;
-    public string name { get; set { global.printf("set [%s]\n", value); field = global.trim(value); } didSet => global.printf("named %s\n", field); } = "  start  ";
-    public string note { get; set { global.printf("set note\n"); field = value; } } = global.str_repeat(" ", 2);
-    public static int opened { get; set; didSet => global.printf("opened %d\n", field); } = global.intdiv(4, 2);
+    public int balance { get; set; willSet => Witness.say(global.sprintf("will %d from %d\n", value, field)); didSet => Witness.say(global.sprintf("did %d\n", field)); } = 1;
+    public string name { get; set { Witness.say(global.sprintf("set [%s]\n", value)); field = value.trim(); } didSet => Witness.say(global.sprintf("named %s\n", field)); } = "  start  ";
+    public string note { get; set { Witness.say("set note\n"); field = value; } } = global.str_repeat(" ", 2);
+    public static int opened { get; set; didSet => Witness.say(global.sprintf("opened %d\n", field)); } = global.intdiv(4, 2);
 
     public Account(string name)
     {
-        global.printf("constructor [%s] [%s]\n", this.name, this.note);
+        Witness.say(global.sprintf("constructor [%s] [%s]\n", this.name, this.note));
         this.name = name;
         this.balance = 2;
         this.audit();

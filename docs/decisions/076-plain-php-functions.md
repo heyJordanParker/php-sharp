@@ -1,5 +1,7 @@
 # 76. Calling plain PHP functions
 
+Superseded in part by [decision 80](080-global-calls-of-replaced-functions.md): outside the standard library, a call through `global` of a function the standard library replaces is a compile error with its bare call's message, as `global.trim(name)` names `name.trim()`. Only the standard library calls such a function, so it is no longer "the same way, with no exemption".
+
 ## Decision
 
 A plain PHP function is called through its namespace, as a member. After `import Vendor.Pdf;`, the call is `Pdf.render(html)`. A function in PHP's root namespace is called as `global.now()`. Calling a function by its bare name, and importing a single function, are compile errors. `extern` names a function the same way, as `extern Pdf.render uses Files;` and `extern global.now uses Clock;`.

@@ -2,24 +2,24 @@
 
 class PhpForms
 {
-    public function __construct(private \Sharp\Environment $environment) { }
+    public function __construct(private \Sharp\Environment $environment, private \Sharp\Console $console, private \Sharp\Process $process) { }
 
     public \Sharp\Position $origin { get => new \Sharp\Position(__FILE__, 7, 31, 'Demo.PhpForms.origin'); }
 
     public function report(int $pruned): void
     {
-        \printf("Pruned %d carts" . \PHP_EOL, $pruned);
+        $this->console->writeLine("Pruned {$pruned} carts");
     }
 
     public function warn(string $message): void
     {
-        \fwrite(\STDERR, $message . \PHP_EOL);
+        $this->console->writeError($message . "\n");
     }
 
     public function fail(string $message, int $code): void
     {
         $this->warn($message);
-        exit($code);
+        $this->process->exit($code);
     }
 
     public function setting(string $name): string { return $this->environment->variable($name) ?? "unset"; }

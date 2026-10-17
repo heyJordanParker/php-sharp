@@ -67,6 +67,14 @@ namespace {
         attempt(function () use ($shelf) { Demo\Pantry::empty($shelf); return [$shelf->lines, $shelf->writes]; });
         attempt(fn () => Demo\Pantry::last([4, 5]));
         attempt(fn () => Demo\Pantry::last([]));
+        // max and min are the largest and smallest element, and throw on an empty list as last does.
+        attempt(fn () => Demo\Pantry::largest([4, -9, 5]));
+        attempt(fn () => Demo\Pantry::smallest([4, -9, 5]));
+        attempt(fn () => Demo\Pantry::largest([]));
+        attempt(fn () => Demo\Pantry::smallest([]));
+        // count runs on a local that may hold the List or the Map.
+        attempt(fn () => Demo\Pantry::counted(true, [1, 2, 3], ['tea' => 1]));
+        attempt(fn () => Demo\Pantry::counted(false, [1, 2, 3], ['tea' => 1]));
         attempt(fn () => Demo\Pantry::position([4, 5, 5], 5));
         attempt(fn () => Demo\Pantry::position([4, 5], 9));
         attempt(fn () => Demo\Pantry::holds([4, 5], 5));
@@ -91,6 +99,11 @@ namespace {
     }
 
     echo $output;
+
+    // remove, contains and clear on a value that may be a List or another collection run the List's or the
+    // collection's own. They run once, after the rounds, so the objects they make leave the numbers above as they are.
+    attempt(fn () => Demo\Pantry::shared(true, ['tea', 'pie'], ['tea' => 1, 'pie' => 2], ['cake']));
+    attempt(fn () => Demo\Pantry::shared(false, ['tea', 'pie'], ['tea' => 1, 'pie' => 2], ['cake']));
 
     // A collection kept for reuse lets go of the object whose property it changed when its call returns.
     $basket = new Lib\Basket();

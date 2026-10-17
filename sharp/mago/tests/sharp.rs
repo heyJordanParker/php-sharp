@@ -616,12 +616,26 @@ fn analyze_reports_an_extern_method_in_a_project_file() {
 fn analyze_reports_extern_and_silence_in_a_project_file_under_sharp() {
     assert_eq!(
         page_errors(
-            "namespace Sharp.Mine;\n\npublic static class Page\n{\n    public static extern string slug(string title);\n\n    public static string quiet(string title) => @global.trim(title);\n}\n"
+            "namespace Sharp.Mine;\n\npublic static class Page\n{\n    public static extern string slug(string title);\n\n    public static string quiet(string title) => @global.strtoupper(title);\n}\n"
         ),
         [
             library_namespace_error("Sharp.Mine"),
             "src/App/Page.sharp:5:33:error - native-body-outside-library: Only the standard library declares native bodies: give `slug` a body.".to_string(),
             "src/App/Page.sharp:7:49:error - silence-outside-library: `@` hides PHP's warnings, and only the standard library uses it: handle the failure where it happens.".to_string(),
+        ]
+    );
+}
+
+/// The refusal of `@` leaves the call it silences analyzed, so one run reports both refusals.
+#[test]
+fn analyze_reports_silence_and_the_refusal_of_the_call_it_silences() {
+    assert_eq!(
+        page_errors(
+            "namespace App;\n\npublic static class Page\n{\n    public static int quiet(List<int> items) => @global.count(items);\n}\n"
+        ),
+        [
+            "src/App/Page.sharp:5:50:error - wrapped-function: `count` is wrapped by the standard library: write `items.count()`.",
+            "src/App/Page.sharp:5:49:error - silence-outside-library: `@` hides PHP's warnings, and only the standard library uses it: handle the failure where it happens.",
         ]
     );
 }

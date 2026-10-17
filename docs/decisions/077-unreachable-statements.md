@@ -1,5 +1,7 @@
 # 77. Statements that never run
 
+Superseded in part by [decision 80](080-global-calls-of-replaced-functions.md): outside the standard library, `global.exit(…)` below is a compile error that names `process.exit(…)`, so the form that ends a block there is a call that never returns.
+
 ## Decision
 
 A statement that can never run is a compile error. That covers every form that ends a block: a statement after `return`, `throw`, `global.exit(…)`, `break` or `continue` in the same block, one after an `if` whose every branch ends the block, one after a loop that never ends, such as a `do` whose body ends the block with no `break` or `continue`, and a block after a condition that never finishes.

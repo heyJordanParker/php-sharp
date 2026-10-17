@@ -2,24 +2,24 @@ namespace Demo;
 
 public class PhpForms
 {
-    public PhpForms(private Environment environment) { }
+    public PhpForms(private Environment environment, private Console console, private Process process) { }
 
     public Position origin => Position.current();
 
     public void report(int pruned)
     {
-        global.printf("Pruned %d carts" + global.PHP_EOL, pruned);
+        this.console.writeLine(`Pruned ${pruned} carts`);
     }
 
     public void warn(string message)
     {
-        global.fwrite(global.STDERR, message + global.PHP_EOL);
+        this.console.writeError(message + "\n");
     }
 
     public void fail(string message, int code)
     {
         this.warn(message);
-        global.exit(code);
+        this.process.exit(code);
     }
 
     public string setting(string name) => this.environment.variable(name) ?? "unset";

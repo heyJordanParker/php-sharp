@@ -2,12 +2,14 @@
 
 class Exits
 {
-    public static function stop(int $code): void
+    public function __construct(private \Sharp\Process $process, private \Sharp\Console $console) { }
+
+    public function stop(int $code): void
     {
         try {
-            exit($code);
+            $this->process->exit($code);
         } finally {
-            \printf("finally\n");
+            $this->console->write("finally\n");
         }
     }
 }

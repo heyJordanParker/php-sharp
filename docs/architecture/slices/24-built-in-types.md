@@ -7,7 +7,7 @@ Spec section 24, and section 5's rule for a member with no access modifier. This
 Most of section 24 already holds on master: integer overflow, `**`, `/`, the int-to-float compile errors, the plain PHP int-to-float conversion at entry, the casts and their refusals, `null` defaults, unions, and the `Any` checks. Six examples fail, and probing every rule line found nine more gaps:
 
 - **`Object` is refused everywhere** with "This type is not supported yet in PHP#.", and a member read on it is only PHP's warning. Section 10's `struct-parse-object` fails on the same refusal.
-- **`Json.encode` does not exist.** The engine's `Sharp\Map` and `Sharp\Set` already serialize as JSON object and array, so `global.json_encode` gives every value section 24 claims, `{"counts":{}}` included. Section 23's `standard-library-import` fails on the same missing method.
+- **`Json.encode` does not exist.** The engine's `Sharp\Map` and `Sharp\Set` already serialize as JSON object and array, so PHP's `json_encode` gives every value section 24 claims, `{"counts":{}}` included. Only the standard library calls it through `global`, since [decision 80](../../decisions/080-global-calls-of-replaced-functions.md) refuses `global.json_encode` everywhere else. Section 23's `standard-library-import` fails on the same missing method.
 - **`int|string|null` is refused as "not supported yet"** instead of the error that names `(int|string)?`.
 - **A property, a constant and a named constructor with no access modifier are refused as "not supported yet".** So are a field and a constant that declare several names.
 - **No naming warning exists.** `TotalIn`, `due_date`, `maxLines` and `case paid` compile with no warning. `mago lint` skips `.sharp` files, and `mago compile` prints no warnings.
@@ -170,7 +170,7 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 | 3053 | `Object row = Rows.withId(1)` | Refused: "This type is not supported yet in PHP#." | Decision 1 |
 | 3057 | A struct's `parse` reads an object | Works in section 10. Not reached here | None new |
 | 3059 | `Json.encode(payload)` | Refused: "Method `Json.encode` does not exist." | Library (decision 10) |
-| 3064 | A JSON object is a `Map` literal or a struct | Works at runtime: `global.json_encode` of a struct gives `{"id":1,"number":"A-1"}` | None new |
+| 3064 | A JSON object is a `Map` literal or a struct | Works at runtime: PHP's `json_encode` of a struct gives `{"id":1,"number":"A-1"}` | None new |
 | 3065 | A `Map` is an object and a `List` an array wherever it is | Works at runtime: `{}`, `[]`, `{"counts":{}}`, `{"counts":[]}`, and `{"0":"a","1":"b"}` for `[0: "a", 1: "b"]`. An enum key gives `{"paid":1}` | `Json.encode` (decision 10) |
 | 10:673 | A struct key's JSON text is its `toString()`, and no `toString()` is a compile error | Wrong: "JsonException: A JSON object key is text, and App\Username is not" at runtime, and no compile error | Engine and analyzer (decision 10) |
 

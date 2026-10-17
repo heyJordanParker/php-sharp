@@ -6793,6 +6793,146 @@ fn last_is_the_last_element_and_throws_on_an_empty_list() {
 }
 
 /// ```php
+/// $stock = \is_array($stock) ? new \Sharp\Set($stock) : $stock;
+/// $held = $listed ? $names : $stock;
+/// return (\is_array($held) ? \in_array('tea', $held, true) : $held->contains('tea')) && \count($held) > 0;
+/// ```
+///
+/// A method a `List` shares with a `Map` or a `Set` runs on a value that may be either: the `List`'s PHP on the array
+/// when the value is one, and the collection's own method otherwise. `count` needs no test, as PHP's `\count` counts
+/// a `Map` and a `Set` too.
+#[test]
+fn a_shared_list_method_on_a_value_that_may_be_another_collection_tests_for_the_list() {
+    assert_eq!(
+        Lowered::new(
+            "namespace App.Tenant;\n\nclass Report\n{\n    public bool run(bool listed, List<string> names, Set<string> stock)\n    {\n        let held = listed ? names : stock;\n        return held.contains(\"tea\") && held.count() > 0;\n    }\n}\n"
+        )
+        .body(),
+        indoc! {r#"
+            STMT_LIST
+              ASSIGN
+                VAR
+                  ZVAL "stock"
+                CONDITIONAL
+                  CALL
+                    ZVAL "is_array"
+                    ARG_LIST
+                      VAR
+                        ZVAL "stock"
+                  NEW
+                    ZVAL "Sharp\\Set"
+                    ARG_LIST
+                      VAR
+                        ZVAL "stock"
+                  VAR
+                    ZVAL "stock"
+              ASSIGN
+                VAR
+                  ZVAL "held"
+                CONDITIONAL
+                  VAR
+                    ZVAL "listed"
+                  VAR
+                    ZVAL "names"
+                  VAR
+                    ZVAL "stock"
+              RETURN
+                AND
+                  CONDITIONAL [1]
+                    CALL
+                      ZVAL "is_array"
+                      ARG_LIST
+                        VAR
+                          ZVAL "held"
+                    CALL
+                      ZVAL "in_array"
+                      ARG_LIST
+                        ZVAL "tea"
+                        VAR
+                          ZVAL "held"
+                        ZVAL true
+                    METHOD_CALL
+                      VAR
+                        ZVAL "held"
+                      ZVAL "contains"
+                      ARG_LIST
+                        ZVAL "tea"
+                  GREATER
+                    CALL
+                      ZVAL "count"
+                      ARG_LIST
+                        VAR
+                          ZVAL "held"
+                    ZVAL 0
+        "#}
+    );
+}
+
+/// ```php
+/// return (($sizes === []) ? throw new \OutOfRangeException('The list is empty.') : \max($sizes))
+///     + (((${'receiver#1'} = $this->make()) === []) ? throw new \OutOfRangeException('The list is empty.') : \max(${'receiver#1'}));
+/// ```
+///
+/// A `List<int>`'s `max()` and `min()` are its largest and smallest element, PHP's `\max` and `\min` on the array,
+/// and throw `OutOfRangeException` on an empty list, as `last()` does, where PHP's throw a `ValueError`.
+#[test]
+fn max_and_min_are_the_largest_and_smallest_element_and_throw_on_an_empty_list() {
+    for method in ["max", "min"] {
+        assert_eq!(
+            Lowered::new(&format!(
+                "namespace App.Tenant;\n\nclass Report\n{{\n    public List<int> make() => [1];\n\n    public int run(List<int> sizes) => sizes.{method}() + this.make().{method}();\n}}\n"
+            ))
+            .body(),
+            format!(
+                indoc! {r#"
+                    STMT_LIST
+                      RETURN
+                        BINARY_OP [1]
+                          CONDITIONAL [1]
+                            BINARY_OP [16]
+                              VAR
+                                ZVAL "sizes"
+                              ARRAY [3]
+                            THROW
+                              NEW
+                                ZVAL "OutOfRangeException"
+                                ARG_LIST
+                                  ZVAL "The list is empty."
+                            CALL
+                              ZVAL "{method}"
+                              ARG_LIST
+                                VAR
+                                  ZVAL "sizes"
+                          CONDITIONAL [1]
+                            BINARY_OP [16]
+                              ASSIGN
+                                VAR
+                                  ZVAL "receiver#1"
+                                METHOD_CALL
+                                  VAR
+                                    ZVAL "this"
+                                  ZVAL "make"
+                                  ARG_LIST
+                              ARRAY [3]
+                            THROW
+                              NEW
+                                ZVAL "OutOfRangeException"
+                                ARG_LIST
+                                  ZVAL "The list is empty."
+                            CALL
+                              ZVAL "{method}"
+                              ARG_LIST
+                                VAR
+                                  ZVAL "receiver#1"
+                "#},
+                method = method
+            ),
+            "{method}"
+        );
+    }
+}
+
+/// ```php
 /// $tags->insert(0, 'a');
 /// $removed = ((${'index#1'} = \array_search('a', $tags, true)) !== false) && $tags->removeAt(${'index#1'}) === null;
 /// $tags = [];
@@ -8318,7 +8458,7 @@ fn a_null_safe_lazy_operation_is_a_conditional_over_the_sequence_call() {
 #[test]
 fn a_variadic_or_operator_set_parameter_becomes_a_set_before_the_body_runs() {
     let lowered = Lowered::new(
-        "namespace App.Tenant;\n\nclass Order\n{\n    public int many(Set<string> ...groups) => global.count(groups);\n\n    public static readonly Order operator +(Order order, Set<string> tags) => order;\n\n    public int maybe(Set<string>? ...groups) => global.count(groups);\n}\n",
+        "namespace App.Tenant;\n\nclass Order\n{\n    public int many(Set<string> ...groups) => groups.count();\n\n    public static readonly Order operator +(Order order, Set<string> tags) => order;\n\n    public int maybe(Set<string>? ...groups) => groups.count();\n}\n",
     );
     let body = |name: &str| lowered.render(lowered.child(lowered.method_named(name), 2));
 
@@ -8360,11 +8500,11 @@ fn a_variadic_or_operator_set_parameter_becomes_a_set_before_the_body_runs() {
                     VAR
                       ZVAL "groups"
               RETURN
-                CALL
+                METHOD_CALL
+                  VAR
+                    ZVAL "groups"
                   ZVAL "count"
                   ARG_LIST
-                    VAR
-                      ZVAL "groups"
         "#}
     );
     assert_eq!(
@@ -8430,11 +8570,11 @@ fn a_variadic_or_operator_set_parameter_becomes_a_set_before_the_body_runs() {
                     VAR
                       ZVAL "groups"
               RETURN
-                CALL
+                METHOD_CALL
+                  VAR
+                    ZVAL "groups"
                   ZVAL "count"
                   ARG_LIST
-                    VAR
-                      ZVAL "groups"
         "#}
     );
 }
@@ -9069,7 +9209,7 @@ fn a_generic_class_type_is_its_class_and_a_class_value_type_is_string() {
 
             public Class<Model>? load(Class<Model> type, Class<Model>? other = null) { return other; }
 
-            public PaginatedList<Order>? page(PaginatedList<Order> rows) { return global.count(this.elements) > 0 ? rows : null; }
+            public PaginatedList<Order>? page(PaginatedList<Order> rows) { return this.elements.count() > 0 ? rows : null; }
         }
     "},
         &[(
@@ -9130,7 +9270,7 @@ fn a_generic_class_type_is_its_class_and_a_class_value_type_is_string() {
                 null
             SHARP_TYPE_ARGS
               ZVAL [256] "Lib\\PaginatedList"
-              ZVAL "Lib.PaginatedList<Lib.Order>?"
+              ZVAL "Function<Lib.PaginatedList<Lib.Order>?(Lib.PaginatedList<Lib.Order>)>"
         "#}
     );
 }
@@ -9572,7 +9712,7 @@ fn a_lambda_takes_union_and_variadic_parameters_and_a_spread_call() {
     assert_eq!(
         body_in(
             "int run(List<int> extra)",
-            "        const pick = (int|string key, (int|Calc)? fallback, int ...rest) => global.count(rest);\n        return pick(1, null, ...extra);\n",
+            "        const pick = (int|string key, (int|Calc)? fallback, int ...rest) => rest.count();\n        return pick(1, null, ...extra);\n",
             &[("src/Lib/Calc.php", "<?php namespace Lib; final class Calc {}")]
         ),
         indoc! {r#"
@@ -9616,7 +9756,7 @@ fn a_lambda_takes_union_and_variadic_parameters_and_a_spread_call() {
                         ZVAL "rest"
                   SHARP_TYPE_ARGS
                     null
-                    ZVAL "int"
+                    ZVAL "Function<int(int|string, (Lib.Calc|int)?, int)>"
                   null
               RETURN
                 CALL
@@ -19070,7 +19210,7 @@ fn a_catch_clause_of_a_type_parameter_tests_its_type_argument() {
 }
 
 /// ```php
-/// return \strlen(\Vendor\Pdf\render(\sprintf("%d", \count($extra, mode: 0))));
+/// return \strlen(\Vendor\Pdf\render(\sprintf("%s", \str_pad("x", length: $extra))));
 /// ```
 ///
 /// Spec section 23 calls a plain PHP function through its namespace: `global.strlen(…)` a function of PHP's root
@@ -19079,7 +19219,7 @@ fn a_catch_clause_of_a_type_parameter_tests_its_type_argument() {
 #[test]
 fn a_call_through_a_namespace_is_a_call_of_its_plain_php_function() {
     let lowered = Lowered::with(
-        "namespace App.Tenant;\n\nimport Vendor.Pdf;\n\nclass Report\n{\n    public int run(List<int> extra)\n    {\n        return global.strlen(Pdf.render(global.sprintf(\"%d\", global.count(extra, mode: 0))));\n    }\n}\n",
+        "namespace App.Tenant;\n\nimport Vendor.Pdf;\n\nclass Report\n{\n    public int run(int extra)\n    {\n        return global.strlen(Pdf.render(global.sprintf(\"%s\", global.str_pad(\"x\", length: extra))));\n    }\n}\n",
         &[(
             "src/Vendor/Pdf/functions.php",
             "<?php namespace Vendor\\Pdf; function render(string $html): string { return $html; }",
@@ -19100,15 +19240,15 @@ fn a_call_through_a_namespace_is_a_call_of_its_plain_php_function() {
                         CALL
                           ZVAL "sprintf"
                           ARG_LIST
-                            ZVAL "%d"
+                            ZVAL "%s"
                             CALL
-                              ZVAL "count"
+                              ZVAL "str_pad"
                               ARG_LIST
-                                VAR
-                                  ZVAL "extra"
+                                ZVAL "x"
                                 NAMED_ARG
-                                  ZVAL "mode"
-                                  ZVAL 0
+                                  ZVAL "length"
+                                  VAR
+                                    ZVAL "extra"
         "#}
     );
 }
@@ -19172,11 +19312,14 @@ fn a_global_call_named_like_a_method_of_its_class_is_a_call_of_the_global_functi
 /// ```
 ///
 /// PHP 8.4 makes `exit` a function, so `global.exit(…)` is a call of the global function `exit`, named with
-/// `ZEND_NAME_FQ`, which is 0, as php-src's grammar builds `exit(…)`.
+/// `ZEND_NAME_FQ`, which is 0, as php-src's grammar builds `exit(…)`. Only the standard library calls it, as
+/// `Process.exit` does.
 #[test]
 fn exit_is_a_call_of_the_global_function_exit() {
+    let halt = "namespace Sharp;\n\npublic class Halt\n{\n    public void run(int extra)\n    {\n        global.exit(extra);\n    }\n}\n";
+
     assert_eq!(
-        body("        global.exit(extra);\n"),
+        Lowered::named("vendor/heyjordanparker/php-sharp-composer/library/Sharp/Halt.sharp", halt).body(),
         indoc! {r#"
             STMT_LIST
               CALL
@@ -21706,7 +21849,7 @@ fn a_backed_enum_is_a_final_enum_class_with_its_backing_type_cases_and_methods()
 #[test]
 fn a_pure_enum_is_a_final_enum_class_of_unit_cases_without_a_backing_type() {
     let lowered = Lowered::new(
-        "enum Suit\n{\n    case Hearts;\n    case Spades;\n\n    public string label() => this.name;\n\n    public static int size() => global.count(Suit.cases());\n}\n",
+        "enum Suit\n{\n    case Hearts;\n    case Spades;\n\n    public string label() => this.name;\n\n    public static int size() => Suit.cases().count();\n}\n",
     );
 
     assert_eq!(
@@ -21761,7 +21904,7 @@ fn a_pure_enum_is_a_final_enum_class_of_unit_cases_without_a_backing_type() {
                               ARG_LIST
                     SHARP_TYPE_ARGS
                       ZVAL [1] "int"
-                      ZVAL "int"
+                      ZVAL "Function<int()>"
                     null
                 null
                 null

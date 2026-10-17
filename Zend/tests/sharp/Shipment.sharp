@@ -53,6 +53,6 @@ class Shipment
 
     public static int kinds()
     {
-        return global.count(Stage.cases());
+        return Stage.cases().count();
     }
 }
