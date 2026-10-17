@@ -2,13 +2,14 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: sharp/bin/test [--linux] [--zts] [--opcache] [--repeat] [--passes] [--census] [--spec] [--differential] [--phpunit] [--upstream | paths...]" >&2
+  echo "usage: sharp/bin/test [--linux] [--zts | --installed] [--opcache] [--repeat] [--passes] [--census] [--spec] [--differential] [--phpunit] [--upstream | paths...]" >&2
   exit 2
 }
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 linux=false
 zts=false
+installed=false
 opcache=false
 repeat=false
 passes=false
@@ -23,6 +24,7 @@ for arg in "$@"; do
   case "$arg" in
     --linux) linux=true; continue ;;
     --zts) zts=true ;;
+    --installed) installed=true ;;
     --opcache) opcache=true ;;
     --repeat) repeat=true ;;
     --passes) passes=true ;;
@@ -40,6 +42,9 @@ done
 if $upstream && [[ ${#tests[@]} -gt 0 ]]; then
   usage
 fi
+if $installed && { $linux || $zts; }; then
+  usage
+fi
 
 if $linux; then
   exec "$root/sharp/docker/run" "${container_command[@]}"
@@ -55,21 +60,26 @@ os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 build_dir="$root/sharp/build/$os-$(uname -m)"
 # mago doesn't depend on thread safety, so both builds' tests use the one in the other build's folder.
 mago_dir="$build_dir/mago"
-build_command=sharp/bin/build
+rebuild="Run sharp/bin/build"
 if $zts; then
   build_dir+=-zts
-  build_command+=" --zts"
+  rebuild+=" --zts"
 fi
 php="$build_dir/sapi/cli/php"
+# The engine a runtime image installs runs with the php.ini and conf.d it ships, so the extensions they enable load.
+if $installed; then
+  php="$(command -v php)" || { echo "--installed tests the php on the PATH, and there is none." >&2; exit 1; }
+  rebuild="Install this tree's engine"
+fi
 if [[ ! -x "$php" ]]; then
-  echo "$php is missing. Run $build_command first." >&2
+  echo "$php is missing. $rebuild first." >&2
   exit 1
 fi
 
 version="$(sed -n 's/^#define PHP_SHARP_VERSION "\(.*\)"$/\1/p' "$root/ext/sharp/php_sharp.h")"
 engine_version="$("$php" -n --ri sharp | sed -n 's/^Version => //p')"
 if [[ "$engine_version" != "$version" ]]; then
-  echo "The built engine is $engine_version, but the tree is $version. Run $build_command." >&2
+  echo "The engine $php is $engine_version, but the tree is $version. $rebuild." >&2
   exit 1
 fi
 
