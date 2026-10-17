@@ -1518,6 +1518,18 @@ Function<void(Order)>? onPaid = null
 public Function<bool(Order)> eligibleFor(Account account)
 ```
 
+**A function fits a function type when it takes every parameter the type passes,** as in C#, Kotlin, Swift and Java. A function for a type that returns `void` gives no value, and the result of a call that returns `void` is no value to use:
+
+<!-- example function-fit: statements
+List<int> seen = [];
+-->
+```csharp
+Function<int(int, int)> pair = (int a) => a;        // compile error: Function<int(int, int)> takes 2 parameters, and this lambda takes 1
+Function<void(int)> sink = (int n) => n * 2;        // compile error: this lambda gives a value
+Function<void(int)> record = (int n) => seen.add(n);
+const kept = seen.clear();                          // compile error: seen.clear() returns nothing
+```
+
 **Any expression that gives a function is called the same way,** with the arguments in parentheses after it, as in C#, TypeScript, Kotlin and Swift: a list element, a call's result, a conditional or a lambda.
 
 <!-- example function-calls: statements
@@ -1617,6 +1629,21 @@ List<int> seen = [];
 const add = seen.add;                       // compile error: write a lambda that calls it, as in value => seen.add(value)
 const record = (int value) => seen.add(value);
 ```
+
+**A plain PHP function that changes a variable it is given, or reads the variables of the code that calls it, is no function value,** since PHP# passes every argument by value. A call that would pass it a PHP# variable to change is an error too, and names the method that does the work where there is one:
+
+<!-- example by-reference-functions: statements
+List<int> numbers = [3, 1, 2];
+-->
+```csharp
+const sort = global.sort;                   // compile error: global.sort changes the variable it is given
+const pack = global.compact;                // compile error: global.compact reads the caller's variables
+global.array_push(numbers, 4);              // compile error: write numbers.add(…)
+List<int> sorted = numbers.sortedBy(n => n);
+```
+<!-- run by-reference-functions
+sorted;   // [1, 2, 3]
+-->
 
 In a plain PHP class with both a property and a method of that name, the property wins, as in PHP.
 
@@ -4114,7 +4141,7 @@ Take a `Function<string() uses Environment>`, whose type states the effects it m
 
 The standard library's collection methods (section 12) take on the effects of their functions this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
 
-**Plain PHP can run any function it is given,** as `global.array_map(f, list)` and `global.usort(list, f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => global.time()` to `global.call_user_func` has the effect `Clock`.
+**Plain PHP can run any function it is given,** as `global.array_map(f, list)` and `global.array_filter(list, f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => global.time()` to `global.call_user_func` has the effect `Clock`.
 
 **Code with a body writes no `uses`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function it is given, and its body and declaration show all four. The checker works out each method's effects, and the editor displays them. A `uses` that names a function parameter, with or without a body, is a parse error that says to delete it.
 
