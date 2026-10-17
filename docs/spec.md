@@ -2,6 +2,8 @@
 
 PHP# is a language that runs on PHP's engine and calls plain PHP freely, as Kotlin runs on the JVM and calls Java. This file is the single source of truth for PHP# syntax and rules.
 
+**No PHP# rule makes code write around how PHP# runs on PHP's engine.** A PHP# developer never needs to know what a PHP# construct compiles to. Plain PHP libraries are called as libraries, as Kotlin calls Java libraries.
+
 [decisions/](decisions/) records why each rule was chosen.
 
 - Every rule here was approved by the Architect.
@@ -538,7 +540,7 @@ public class Receipt
 
 - **Every PHP built-in function is a standard library method,** so calling one by its bare name from `.sharp` code is a compile error that names the method. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
 - **A built-in the standard library has no method for is called through PHP's root namespace,** as `global.levenshtein(a, b)` (section 23), and the standard library calls PHP the same way.
-- **PHP's constants are read through its root namespace too,** as `global.PHP_EOL` (section 23). A bare `PHP_EOL` is a compile error, because a bare uppercase name is always the code's own constant.
+- **PHP's constants are read through its root namespace too,** as `global.CURLOPT_TIMEOUT` (section 23). A bare `CURLOPT_TIMEOUT` is a compile error, because a bare uppercase name is always the code's own constant. A value the standard library gives, as `Int.MAX`, is read from it.
 
 **Output and exit go through the standard library.** `echo` and `print` are removed, and output goes through `Console` (section 29). `die` is removed, because `die("…")` prints its message and exits with status 0, which reports success. Exiting goes through `Process`.
 
@@ -880,7 +882,7 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 - **`Object` bounds a type parameter to any object,** `<TValue : Object>`, as C#'s `where T : class` and TypeScript's `T extends object` do. It is a bound alone.
 - **A bound may name another type parameter,** `<TPart : TItem>`, as C#'s `where TPart : TItem` and Java's and TypeScript's `<U extends T>` do. A `TPart` then goes wherever a `TItem` goes. It is a bound alone, as in Java, and a bound that leads back to its own type parameter, such as `<TItem : TItem>`, is a compile error, as in C#.
 - **A type parameter with no bound may hold `null`,** so it is bounded by `Any?`.
-- **A generic class can't implement PHP's `Serializable`,** and the error points to `__serialize` and `__unserialize`.
+- **A generic class can't implement PHP's `Serializable`,** because its `serialize` drops the type arguments. The error says to leave `Serializable` out: an object serialized as it is keeps its type arguments.
 - **A class value with type arguments can't be a `Map` key,** because `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` share the plain class name.
 
 <!-- example type-parameter-bounds: members -->
@@ -2947,7 +2949,7 @@ import Vendor.Pdf.render;                                     // compile error: 
 public class Draft { }
 ```
 
-**A plain PHP constant is read through its namespace the same way.** `global.PHP_EOL` reads PHP's constant, and `Pdf.DEFAULT_DPI` reads the library's after `import Vendor.Pdf;`. A bare uppercase name is always the code's own constant, so a bare PHP constant such as `PHP_EOL` is a compile error that says to write `global.PHP_EOL`:
+**A plain PHP constant is read through its namespace the same way.** `global.CURLOPT_TIMEOUT` reads the constant of PHP's curl extension, and `Pdf.DEFAULT_DPI` reads the library's after `import Vendor.Pdf;`. A bare uppercase name is always the code's own constant, so a bare PHP constant such as `CURLOPT_TIMEOUT` is a compile error that says to write `global.CURLOPT_TIMEOUT`. A value the standard library gives is read from it, as `Int.MAX` and `Int.MIN` give the `int` bounds:
 
 <!-- example library-constants -->
 ```php
@@ -2965,10 +2967,10 @@ import Vendor.Pdf;
 
 public class Layout
 {
-    public string line(string text) => text + global.PHP_EOL;     // compiles: PHP's constant is read through global
-    public int largest() => global.PHP_INT_MAX;                   // compiles
+    public int timeout() => global.CURLOPT_TIMEOUT;               // compiles: PHP's constant is read through global
+    public int largest() => Int.MAX;                              // compiles: the standard library gives the int bounds
     public int dpi() => Pdf.DEFAULT_DPI;                          // compiles: the library's constant is read through its namespace
-    public string bare(string text) => text + PHP_EOL;            // compile error: write global.PHP_EOL
+    public int bare() => CURLOPT_TIMEOUT;                         // compile error: write global.CURLOPT_TIMEOUT
 }
 ```
 
@@ -3143,7 +3145,7 @@ a ** b                       // int. Throws ArithmeticError at runtime when b < 
 ```
 
 - Division by zero throws `DivisionByZeroError`.
-- `global.PHP_INT_MIN / -1` throws `ArithmeticError`, because the result overflows.
+- `Int.MIN / -1` throws `ArithmeticError`, because the result overflows.
 - `/=` follows the same rules.
 - Like `+` (section 18), what `/` does is chosen from the operand types the checker sees.
 

@@ -1,0 +1,19 @@
+namespace IntBounds;
+
+import ArithmeticError;
+
+public class Bounds
+{
+    public static int largest() => Int.MAX;
+
+    public static int smallest() => Int.MIN;
+
+    public static string overflow()
+    {
+        try {
+            return `${Int.MIN / -1}`;
+        } catch (ArithmeticError failure) {
+            return "overflows";
+        }
+    }
+}
