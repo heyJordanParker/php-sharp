@@ -1,0 +1,11 @@
+namespace Queued;
+
+public class Ledger
+{
+    public Map<string, int> totals { get; set; } = [:];
+
+    public void record(string line, int amount)
+    {
+        this.totals[line] = (this.totals[line] ?? 0) + amount;
+    }
+}

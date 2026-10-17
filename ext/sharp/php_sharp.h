@@ -267,10 +267,10 @@ bool sharp_property_accepts(const zend_property_info *info, zval *value, zend_ob
  * parameter of its class, since a write through a reference has no object to spell the type for. */
 bool sharp_property_refuses_reference(const zend_property_info *info);
 
-/* Whether each property of `object` whose PHP# type names a type parameter of its class takes its value, spelled for
- * the object's type arguments, as sharp_property_accepts decides. unserialize reads the type arguments after the
- * properties, so it checks those properties once it has read the whole object. */
-bool sharp_object_open_properties_accept(zend_object *object);
+/* Whether each property of `object` with a PHP# type takes its value, spelled for the object's type arguments, as
+ * sharp_property_accepts decides. unserialize reads the type arguments after the properties, and fills each Map and Set
+ * the object holds after the whole payload, so it checks the object's properties once those are filled. */
+bool sharp_object_properties_accept(zend_object *object);
 
 /* An object of a generic PHP# class keeps its type arguments in a declared property of this name, which carries
  * ZEND_ACC_SHARP_HIDDEN. It holds null until PHP# code, unserialize or the first read stores the IS_PTR of an interned

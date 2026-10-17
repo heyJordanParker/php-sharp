@@ -30,6 +30,8 @@
  * __wakeup/__unserialize should be called */
 #define VAR_WAKEUP_FLAG 1
 #define VAR_UNSERIALIZE_FLAG 2
+/* PHP#: an object whose PHP# properties are checked once each Map and Set it holds is filled. */
+#define VAR_SHARP_CHECK_FLAG 3
 
 /* Each element is encoded using at least 2 characters. */
 #define IS_FAKE_ELEM_COUNT(num_elems, serialized_len) \
@@ -304,6 +306,13 @@ PHPAPI void var_destroy(php_unserialize_data_t *var_hashx)
 				} else {
 					GC_ADD_FLAGS(Z_OBJ_P(zv), IS_OBJ_DESTRUCTOR_CALLED);
 				}
+			} else if (Z_EXTRA_P(zv) == VAR_SHARP_CHECK_FLAG) {
+				/* PHP#: the object came before the __unserialize of each Map and Set it holds, so its properties'
+				 * PHP# types check now, with every entry in place. */
+				if (delayed_call_failed || !sharp_object_properties_accept(Z_OBJ_P(zv))) {
+					delayed_call_failed = 1;
+					GC_ADD_FLAGS(Z_OBJ_P(zv), IS_OBJ_DESTRUCTOR_CALLED);
+				}
 			}
 
 			i_zval_ptr_dtor(zv);
@@ -364,7 +373,9 @@ static inline int unserialize_allowed_class(
 {
 	HashTable *classes = (*var_hashx)->allowed_classes;
 
-	if(classes == NULL) {
+	/* PHP#: a Map or a Set is a value, as an array is, so allowed_classes never refuses one. Each key's class still
+	 * goes through this check. */
+	if (classes == NULL || zend_string_equals_literal(lcname, "sharp\\map") || zend_string_equals_literal(lcname, "sharp\\set")) {
 		return 1;
 	}
 	if(!zend_hash_num_elements(classes)) {
@@ -629,7 +640,7 @@ static zend_always_inline int process_nested_object_data(UNSERIALIZE_PARAMETER, 
 	}
 
 	/* PHP#: a PHP# property's type may name the class's type parameters, which the object's type arguments, read after
-	 * its properties, spell. */
+	 * its properties, spell, and a Map or a Set it holds gets its entries after the whole payload. */
 	uint32_t sharp_typed = 0;
 
 	while (elements-- > 0) {
@@ -780,8 +791,11 @@ second_try:
 		}
 	}
 
-	if (UNEXPECTED(sharp_typed) && !sharp_object_open_properties_accept(obj)) {
-		goto failure;
+	if (UNEXPECTED(sharp_typed)) {
+		/* After the __unserialize of each Map and Set inside the object, which their own data queued first. */
+		zval *check = var_tmp_var(var_hash);
+		ZVAL_OBJ_COPY(check, obj);
+		Z_EXTRA_P(check) = VAR_SHARP_CHECK_FLAG;
 	}
 
 	if (var_hash) {

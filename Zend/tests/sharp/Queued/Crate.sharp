@@ -1,0 +1,10 @@
+namespace Queued;
+
+public struct Crate
+{
+    public Crate(
+        public Map<int, string> byNumber { get; },
+        public Set<Speed> speeds { get; },
+        public List<Map<string, int>> batches { get; },
+    ) { }
+}
