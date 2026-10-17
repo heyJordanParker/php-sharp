@@ -64,7 +64,7 @@ class Signatures
 
     public static function spread(int $first, int ...$values): int
     {
-        return Signatures::sum($first, ...$values) + \max($first, ...$values);
+        return Signatures::sum($first, ...$values) + @\max($first, ...$values);
     }
 
     public static function made(int ...$values): int|string

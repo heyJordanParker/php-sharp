@@ -15,7 +15,7 @@ class Cashier
     {
         $count = 0;
         $paid = ((object) ((object) ((object) $prices)->filter(fn ($price) => $price > 0))->map(fn ($price) => ($this->discount)($price)))->sortedBy(fn ($price) => -$price);
-        $total = \array_reduce($paid, function (int $sum, int $price) use (&$count) {
+        $total = @\array_reduce($paid, function (int $sum, int $price) use (&$count) {
             $count += 1;
             return $sum + $price;
         }, 0);

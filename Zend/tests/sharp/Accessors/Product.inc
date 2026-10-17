@@ -18,7 +18,7 @@ class Product
             $this->price = $value;
         }
     }
-    public private(set) int $stock = 0 { set { $this->stock = \max(0, $value); } }
+    public private(set) int $stock = 0 { set { $this->stock = @\max(0, $value); } }
     public array $tags = []
     {
         get => $this->tags;

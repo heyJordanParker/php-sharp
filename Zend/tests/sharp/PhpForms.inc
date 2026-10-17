@@ -13,7 +13,7 @@ class PhpForms
 
     public function warn(string $message): void
     {
-        \fwrite(\STDERR, $message . \PHP_EOL);
+        @\fwrite(\STDERR, $message . \PHP_EOL);
     }
 
     public function fail(string $message, int $code): void
