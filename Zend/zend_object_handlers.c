@@ -2498,6 +2498,16 @@ try_again:
 found:
 				if (has_set_exists == ZEND_PROPERTY_NOT_EMPTY) {
 					result = zend_is_true(value);
+					/* PHP#: plain PHP code reads a Map or a Set of such a property as its PHP array, which is empty
+					 * when the object is. */
+					zval *held = value;
+					ZVAL_DEREF(held);
+					zend_long count;
+					if (UNEXPECTED(prop_info && (prop_info->flags & ZEND_ACC_SHARP_CROSSING)) && SHARP_IS_TABLE(held)
+							&& !sharp_runs_sharp_code() && Z_OBJ_HT_P(held)->count_elements
+							&& Z_OBJ_HT_P(held)->count_elements(Z_OBJ_P(held), &count) == SUCCESS) {
+						result = count != 0;
+					}
 				} else if (has_set_exists < ZEND_PROPERTY_NOT_EMPTY) {
 					ZEND_ASSERT(has_set_exists == ZEND_PROPERTY_ISSET);
 					ZVAL_DEREF(value);

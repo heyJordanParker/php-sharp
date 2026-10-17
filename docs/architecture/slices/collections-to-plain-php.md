@@ -107,27 +107,27 @@ The bridge's three forms of the argument crossing collapse into this call. `Lowe
 
 PHP evaluates both as constant expressions, which can call no function, so the bridge writes the array itself. A `Map` literal there lowers to a PHP array literal, `["variant": "success"]` to `['variant' => 'success']`, and a `Set` literal to a list. A backed enum key lowers to `Status::Paid->value`, which PHP takes in a constant expression.
 
-`Lowering::attribute_arguments` and `Lowering::constant` lower their values this way. A PHP# read of a `Map` or `Set` constant, `Payment.LIMITS`, arrives through `Lowering::crossed`, the arrival a plain PHP array already takes into a `Map` place: `\is_array($c) ? \Sharp\Map::from($c) : $c`. A PHP# attribute class gets the array at a `Map` parameter, which lowers to `\Sharp\Map|array` and makes the `Map` before its body runs, as it does for any plain PHP caller.
+`Lowering::attribute_arguments` and `Lowering::constant` lower their values this way. A PHP# read of a `Map` or `Set` constant, `Payment.LIMITS`, makes the object once through `Lowering::crossed`, the arrival a plain PHP array already takes into a `Map` place, and keeps it under the constant's own key: `\Sharp\Internal\keep('App\Payment::LIMITS#constant') ?? \Sharp\Internal\keep('App\Payment::LIMITS#constant', static fn () => …)`. Every later read shares that object, as it shares any `Map`. Inside a constant expression, as a constant's value, a literal element, an attribute argument or a default, the read is the bare `\App\Payment::LIMITS`, its PHP array, since PHP takes no call there. A property's or a parameter's crossing makes the object of that array. A PHP# attribute class gets the array at a `Map` parameter, which lowers to `\Sharp\Map|array` and makes the `Map` before its body runs, as it does for any plain PHP caller.
 
 ## The return crossing: engine
 
-A PHP# function whose declared result holds a `Map` or a `Set` gives plain PHP the array. The bridge marks such a function with a flag, and `zend_compile_return` compiles each of its returns through a new opcode before `ZEND_RETURN` (decision 2). The opcode runs `sharp_array_of` when the frame's caller is not PHP# code, with the test `ZEND_SHARP_RECV_TYPE_ARGS` already makes of its caller: `!sharp_is_sharp_file(caller->func->op_array.filename)`. An internal caller, such as `array_map` calling a PHP# lambda, counts as plain PHP. The declared PHP return type stays `\Sharp\Map`, since the conversion runs after `ZEND_VERIFY_RETURN_TYPE`, so the reflected return type is question 4.
+A PHP# function whose declared result can hold a `Map` or a `Set` gives plain PHP the array: a `Map`, a `Set`, a collection that holds one, `Any`, `Any?`, a type parameter or an `Iterable`. A `Map` whose key type has no PHP array form, or lets two keys be one PHP array key, is no such result, and plain PHP gets it as the `Map`. The bridge marks the result's type with `ZEND_SHARP_RESULT_CROSSES`, the attr of its `SHARP_TYPE_ARGS`, and declares a `Map` result `\Sharp\Map|array`, so a plain PHP class can implement or override it. The compiler keeps the mark for the function it compiles, and `zend_compile_return` and `zend_compile_yield` compile each return and each yielded value through a new opcode (decision 2). No `fn_flags` bit carries it. The opcode runs `sharp_array_of` when the frame's caller is not PHP# code, with the test `ZEND_SHARP_RECV_TYPE_ARGS` already makes of its caller. An internal caller, such as `array_map` calling a PHP# lambda, counts as plain PHP. Reflection reports the result's type as `array` (question 4).
 
 ## The property read crossing: engine
 
-A read of a property whose `#[\Sharp\Crossing]` plan names a `Map` or a `Set`, made by code outside a `.sharp` file, gives the array of the value the property holds.
+A read of a crossing property, made by plain PHP code, gives the array of the value the property holds. The bridge decides which properties cross when it compiles them, as it decides results: a property whose type can hold a `Map` or a `Set`, as a result's can, carries `#[\Sharp\Crossing(plan)]`, and the engine flags it `ZEND_ACC_SHARP_CROSSING` in the property's own flags. A `Map` whose key type lets two keys be one PHP array key carries `#[\Sharp\Crossing(plan, false)]`: its plan still crosses a PHP array in, and plain PHP reads the `Map`. An `Any?`, a type parameter or an `Iterable` carries a `null` plan, since nothing it holds crosses back.
 
 - `zend_get_property_offset` gives such a property, when the executing code is plain PHP and the access is a read, the slow path it gives a hooked property. A PHP# opline keeps the slot offset in its cache slot.
 - `zend_std_read_property` runs `sharp_array_of` on the value it read, after a `get` hook when the property has one. A computed property and one with a `get` body are crossed after their PHP# body runs.
 - A write and an index write keep today's path: `$payment->payload = [...]` crosses in through the plan, and `$payment->payload['k'] = 'v'` changes the `Map` in place.
 - A static read, `Ledger::$counts`, crosses the same way in `zend_fetch_static_property_address`'s read.
-- `zend_fetch_prop_type` in the optimizer types a plain PHP op_array's read of such a property as an array, and the JIT's `zend_get_known_property_info` leaves it to the VM handler, so a plain PHP subclass's `$this->payload` is never read inline from the slot.
+- `zend_fetch_prop_type` in the optimizer types a plain PHP op_array's read of such a property as an array, and the JIT's `zend_get_known_property_info` leaves it to the VM handler, so a plain PHP subclass's `$this->payload` is never read inline from the slot. The inference keeps such a read's result counted, `MAY_BE_RC1`, unless it resolves the property and finds no crossing, so the JIT frees the array each read builds.
 
-Which other plain PHP readers cross is question 3.
+Which other plain PHP readers cross is question 3. Beyond its answer, `empty()`, `get_mangled_object_vars`, `get_class_vars`, `array_walk` and `ArrayIterator` over the object, and `ReflectionClass::getStaticPropertyValue` and `getStaticProperties` cross too.
 
 ## The reflected property type: engine
 
-`ReflectionProperty::getType()`, `hasType()` and `getSettableType()` report a property with a `Map` or `Set` plan as `array`, and `?array` when it is nullable. The engine keeps `Sharp\Map` as the property's declared PHP type, which every write and the optimizer still read.
+`ReflectionProperty::getType()`, `hasType()` and `getSettableType()` report a flagged property's `Sharp\Map` or `Sharp\Set` type as `array`, and `?array` when it is nullable. A property the bridge did not flag, such as a `Map` whose keys can collide, reports `Sharp\Map`. A parameter or a result reports `array` where its type is `\Sharp\Map|array`. The engine keeps `Sharp\Map` as the property's declared PHP type, which every write and the optimizer still read.
 
 ## The `Any?` return: bridge
 
@@ -145,7 +145,8 @@ A method's return type that lowers to `mixed` lowers to no PHP return type: `Any
 
 ```diff
 -- Plain PHP receives the `Map` itself, or a PHP array where its parameter's declared type names `array`. A PHP array's keys are `int` or `string`, so a `Map` keyed by a backed enum passes each case's backing value as its key, as an array crossing the other way gives each backing value as its case. Passing a `Map` keyed by anything else to such a parameter is a compile error that names the parameter and the key type. `counts.count()` counts any `Map`, whatever its keys.
-+- Plain PHP receives a PHP# collection as a PHP array wherever it crosses: a return, an argument, a property read, a constant and an attribute argument. A `List` is a list, a `Map` is an array keyed by its keys, a `Set` is a list of its elements, and each collection inside converts the same way. Reflection reports the property's type as `array`. PHP# code keeps the `Map` it holds. A PHP array's keys are `int` or `string`, so a `Map` keyed by a backed enum gives each case's backing value as its key, as an array crossing the other way gives each backing value as its case. Passing a `Map` keyed by anything else to a parameter declared `array` is a compile error that names the parameter and the key type. `counts.count()` counts any `Map`, whatever its keys.
++- Plain PHP receives a `Map` or a `Set` as a PHP array wherever it gets one: a result, a value a generator yields, an argument, a property it reads, a constant and an attribute's argument, and so does each `Map` and `Set` a `List` holds. That holds where the declared type is `Any`, `Any?`, a type parameter or an `Iterable` too. […]
++- A PHP array's keys are `int` or `string`, so a `Map` keyed by a backed enum gives each case's backing value as its key, as an array crossing the other way gives each backing value as its case. Two other kinds of `Map` reach plain PHP as the `Map` itself, the only collections plain PHP receives as objects, decided by the key type the code declares. One is keyed by anything else: a class, a struct, a collection or an enum without backing values. The other has a key type that unites two of `int`, `string` and backed enums, as `int|string` or a backed enum beside its backing type does, since two of its keys can be one PHP array key, as `5` and `"5"` are. Passing either to a plain PHP parameter that names `array` is a compile error that names the parameter and the key type. `counts.count()` counts any `Map`, whatever its keys.
 ```
 
 Decision 027's two sentences that say plain PHP receives "the `Sharp\Map` itself" change the same way.
@@ -157,7 +158,7 @@ Decision 027's two sentences that say plain PHP receives "the `Sharp\Map` itself
 The other costs:
 
 - **A PHP# method that returns a `Map` or a `Set`** runs the new opcode at each return: one load of the caller frame and a 6-byte compare of its file name's end. `ZEND_SHARP_RECV_TYPE_ARGS` makes the same test today at each call of a method whose parameters it checks.
-- **A PHP# read of a `Map` or `Set` constant** builds the `Map` from the array on each read, linear in its entries, since a PHP class constant holds no object.
+- **A PHP# read of a `Map` or `Set` constant** builds the `Map` from the array once, linear in its entries, since a PHP class constant holds no object, and each later read is one lookup of the kept object.
 - **Plain PHP pays one array build per read,** linear in the entries and the collections inside them. A plain PHP loop that reads `$payment->payload['id']` 1000 times builds the array 1000 times. Its copy is plain PHP's own, as a PHP array's always is.
 
 Two shapes were weighed and left:
@@ -173,7 +174,7 @@ Each decides what a user writes or what plain PHP receives. Each has its proposa
    - **Proposed:** plain PHP receives the `Sharp\Map` itself for such a `Map`, the one exception, with a spec line that says so. The compile error into an `array` parameter stays.
    - A compile error on every public or protected property, public method result, constant and attribute argument whose type holds such a `Map`. PHP#-only code could then not expose one.
    - A list of `[key, value]` pairs, as `var_dump` shows a `Map` today.
-   - **Answered: as proposed,** stated in the spec line.
+   - **Answered: as proposed,** stated in the spec line. The review added the other exception, decided by the key type: a `Map` whose key type unites two of `int`, `string` and backed enums, as `int|string` does, stays the `Map`, and is refused into an `array` parameter, since two of its keys can be one PHP array key.
 2. **A plain PHP parameter whose type takes no array,** such as `\Countable`, `\Traversable`, `object`, `\JsonSerializable` or an interface. PHP throws `TypeError` for an array there.
    - **Proposed:** the object, as today, with a spec line that names it.
    - A compile error that names the parameter and its type.
@@ -228,8 +229,9 @@ sharp/mago/crates/sharp-bridge/
 │                                    arrayOf; array_from, array_of_each, backed_key_array and iterator_to_array
 │                                    deleted; attribute_arguments and constant write a Map or Set literal as a PHP
 │                                    array; a constant read arrives through crossed; method_declaration lowers a
-│                                    `mixed` return to none; a method whose result holds a Map or Set carries the
-│                                    flag; the forwarding method (Q7)
+│                                    `mixed` return to none; a result that can hold a Map or Set carries
+│                                    ZEND_SHARP_RESULT_CROSSES and a `\Sharp\Map|array` type; the forwarding method
+│                                    (Q7)
 ├── src/lower/types.rs            <- PlainParameter::takes_array; whether a type holds a Map or Set at any depth;
 │                                    the plain PHP parent methods an interface's signature refuses (Q7)
 └── tests/lower.rs                <- every iterator_to_array row moves to arrayOf; a row per new lowering
@@ -243,7 +245,7 @@ Zend/
 ├── zend_object_handlers.c        <- zend_get_property_offset sends a plain PHP read of a crossing property to the
 │                                    slow path; zend_std_read_property crosses it; get_object_vars and (array) (Q3)
 ├── zend_execute.c                <- a plain PHP static read crosses
-├── zend_compile.c                <- a flagged function's return runs the new opcode
+├── zend_compile.c                <- each return and yield of a marked result runs the new opcode
 ├── zend_vm_def.h                 <- the new opcode; zend_vm_execute.h, zend_vm_opcodes.{c,h} regenerated
 ├── Optimizer/zend_inference.c    <- the opcode's result, and a plain PHP read of a crossing property, may be an
 │                                    array

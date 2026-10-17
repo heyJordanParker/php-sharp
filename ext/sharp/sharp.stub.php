@@ -137,7 +137,7 @@ function accepts(string $type, mixed &$value, string $path, array &$problems): b
 
 function &statics(string $class, string $key, ?string $field = null): array {}
 
-function keep(string $key, \Closure $compute): mixed {}
+function keep(string $key, ?\Closure $compute = null): mixed {}
 
 function equals(mixed $value, mixed $other): bool {}
 

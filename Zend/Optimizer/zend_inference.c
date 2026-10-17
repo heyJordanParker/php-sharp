@@ -3889,12 +3889,15 @@ static zend_always_inline zend_result _zend_update_type_info(
 							ce = ssa->var_info[ssa_op->op1_use].ce;
 						}
 						/* Unset properties will resort back to __get/__set */
+						/* PHP#: plain PHP code may read a property whose type holds a Map or a Set, which gives it a
+						 * new PHP array, so only a property it resolves to one that never crosses keeps its value. */
 						if (ce
 						 && !ce->create_object
 						 && ce->default_object_handlers->read_property == zend_std_read_property
 						 && !ce->__get
 						 && !ce->num_hooked_props
 						 && (opline->op1_type != IS_UNUSED || (ce->ce_flags & ZEND_ACC_FINAL))
+						 && (prop_info || sharp_function_is_sharp((const zend_function *) op_array))
 						 && !result_may_be_separated(ssa, ssa_op)) {
 							tmp &= ~MAY_BE_RC1;
 						}
@@ -3924,8 +3927,9 @@ static zend_always_inline zend_result _zend_update_type_info(
 		case ZEND_FETCH_STATIC_PROP_W:
 		case ZEND_FETCH_STATIC_PROP_UNSET:
 		case ZEND_FETCH_STATIC_PROP_FUNC_ARG:
-			tmp = zend_fetch_prop_type(script,
-				zend_fetch_static_prop_info(script, op_array, ssa, opline), &ce);
+		{
+			const zend_property_info *prop_info = zend_fetch_static_prop_info(script, op_array, ssa, opline);
+			tmp = zend_fetch_prop_type(script, prop_info, &ce);
 			if (opline->opcode != ZEND_FETCH_STATIC_PROP_R
 					&& opline->opcode != ZEND_FETCH_STATIC_PROP_IS) {
 				tmp |= MAY_BE_REF | MAY_BE_INDIRECT;
@@ -3934,7 +3938,10 @@ static zend_always_inline zend_result _zend_update_type_info(
 				}
 				ce = NULL;
 			} else {
-				if (!result_may_be_separated(ssa, ssa_op)) {
+				/* PHP#: plain PHP code may read a static whose type holds a Map or a Set, which gives it a new PHP
+				 * array, so only a static it resolves to one that never crosses keeps its value. */
+				if ((prop_info || sharp_function_is_sharp((const zend_function *) op_array))
+						&& !result_may_be_separated(ssa, ssa_op)) {
 					tmp &= ~MAY_BE_RC1;
 				}
 				if (opline->opcode == ZEND_FETCH_STATIC_PROP_IS) {
@@ -3954,6 +3961,7 @@ static zend_always_inline zend_result _zend_update_type_info(
 				UPDATE_SSA_OBJ_TYPE(ce, 1, ssa_op->result_def);
 			}
 			break;
+		}
 		case ZEND_FRAMELESS_ICALL_1:
 		case ZEND_FRAMELESS_ICALL_2:
 		case ZEND_FRAMELESS_ICALL_3:
@@ -4636,11 +4644,6 @@ uint32_t zend_get_return_info_from_signature_only(
 			| MAY_BE_RC1 | MAY_BE_RCN;
 		*ce = NULL;
 		*ce_is_instanceof = false;
-	}
-
-	/* PHP#: ZEND_SHARP_RETURN_ARRAY gives plain PHP the PHP array of a Map or a Set the function returns. */
-	if (UNEXPECTED(ZEND_USER_CODE(func->type) && (func->common.fn_flags & ZEND_ACC_SHARP_CROSSING))) {
-		type |= MAY_BE_ARRAY | MAY_BE_ARRAY_KEY_ANY | MAY_BE_ARRAY_OF_ANY | MAY_BE_RC1 | MAY_BE_RCN;
 	}
 
 	/* For generators RETURN_REFERENCE refers to the yielded values. */

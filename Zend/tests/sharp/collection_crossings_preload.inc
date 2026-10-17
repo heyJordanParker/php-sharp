@@ -2,6 +2,7 @@
 
 require __DIR__ . '/harness/Arrays.inc';
 require __DIR__ . '/Crossings/Level.sharp';
+require __DIR__ . '/Crossings/Weather.sharp';
 require __DIR__ . '/Crossings/Holdings.sharp';
 require __DIR__ . '/Crossings/Crossings.sharp';
 
@@ -25,6 +26,25 @@ function preloaded_rows(Demo\Holdings $holdings): mixed
 function preloaded_counts(): mixed
 {
     return Demo\Holdings::$counts;
+}
+
+function preloaded_counts_index(): mixed
+{
+    return Demo\Holdings::$counts['c'];
+}
+
+function preloaded_payload_index(Demo\Holdings $holdings): mixed
+{
+    return $holdings->payload['id'];
+}
+
+// A plain PHP subclass whose index read of its parent's property the optimizer and the JIT resolve.
+final class PreloadedHoldings extends Demo\Holdings
+{
+    public function ownPayloadIndex(): mixed
+    {
+        return $this->payload['id'];
+    }
 }
 
 function preloaded_sizes(): mixed

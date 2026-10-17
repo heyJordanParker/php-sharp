@@ -27,6 +27,17 @@ public class Holdings
 
     public static Map<string, int> counts { get; set; } = ["c": 1];
 
+    public Map<string, int> none { get; set; } = [:];
+
+    // A PHP array holds no case of an enum without backing values, so plain PHP gets this Map itself.
+    public Map<Weather, int> forecast { get; set; } = [Weather.Sunny: 1];
+
+    public Any? loose { get; set; } = ["k": 1];
+
+    public Iterable<Map<string, int>> shelved { get; set; } = [["s": 1]];
+
+    public static Map<string|Level, int> mixedCounts { get; set; } = ["low": 1];
+
     public int limitOf(string kind) => Holdings.LIMITS[kind] ?? 0;
 
     public static int stepsTotal()
@@ -67,4 +78,37 @@ public class Holdings
 
     // A PHP array holds no `List` key, so plain PHP gets this Map itself.
     public Map<List<int>, int> listKeyed() => [[1, 2]: 1];
+
+    // Neither does a PHP array hold a Map whose key type lets two keys be one PHP array key, as "low" and Level.Low
+    // are, so plain PHP gets this Map itself whatever keys it holds.
+    public Map<string|Level, int> collided() => ["low": 1, Level.Low: 2];
+
+    public Map<string|Level, int> distinct() => ["high": 1, Level.Low: 2];
+
+    public Map<Weather, int> weatherCounts() => [Weather.Rainy: 2];
+
+    public Map<string, Map<List<int>, int>> nestedListKeyed() => ["a": [[1]: 1]];
+
+    public Iterable<Map<string, int>> generated()
+    {
+        yield ["g": 1];
+        yield ["h": 2];
+    }
+
+    public static Any anyResult() => ["k": 1];
+
+    public virtual Map<string, int> tally() => ["t": 1];
+
+    public string tallyClass() => global.get_class(this.tally());
+
+    // Each PHP array a plain PHP generator yields, held as an Iterable<Map<string, int>>.
+    public static string plainRows()
+    {
+        Iterable<Map<string, int>> rows = global.price_rows();
+        let seen = "";
+        for (const row of rows) {
+            seen = `${seen}${global.get_class(row)}:${row.count()} `;
+        }
+        return seen;
+    }
 }

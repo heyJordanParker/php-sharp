@@ -2670,10 +2670,6 @@ propagate_arg:
 					zend_arg_info *ret_info = func->common.arg_info - 1;
 					uint32_t ret_type = zend_fetch_arg_info_type(NULL, ret_info, &ce);
 
-					/* PHP#: ZEND_SHARP_RETURN_ARRAY gives plain PHP the PHP array of a Map or a Set. */
-					if (UNEXPECTED(func->common.fn_flags & ZEND_ACC_SHARP_CROSSING)) {
-						ret_type |= MAY_BE_ARRAY | MAY_BE_ARRAY_KEY_ANY | MAY_BE_ARRAY_OF_ANY | MAY_BE_RC1 | MAY_BE_RCN;
-					}
 					ssa_var_info[ssa_ops[idx-1].result_def].type &= ret_type;
 				}
 			}

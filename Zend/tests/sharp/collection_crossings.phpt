@@ -56,13 +56,39 @@ final class PlainMorphable implements Demo\Morphable
     }
 }
 
-// A plain PHP subclass of a PHP# class reads its parent's Map property as plain PHP.
+// A plain PHP subclass of a PHP# class reads its parent's Map property as plain PHP, and overrides a method whose
+// result is a Map with one that returns a PHP array.
 final class PlainHoldings extends Holdings
 {
     public function ownPayload(): mixed
     {
         return $this->payload;
     }
+
+    public function ownPayloadIndex(): mixed
+    {
+        return $this->payload['id'];
+    }
+
+    public function tally(): array
+    {
+        return ['p' => 2];
+    }
+}
+
+// A plain PHP class implements a PHP# interface method whose result is a Map, typed as reflection gives it.
+final class PlainSource implements Demo\Source
+{
+    public function data(): array
+    {
+        return ['a' => 1];
+    }
+}
+
+// A plain PHP index read of a PHP# static Map.
+function counts_index(): mixed
+{
+    return Holdings::$counts['c'];
 }
 
 // Each round runs every row, so the JIT variants compile them before the last round, whose output is printed.
@@ -194,9 +220,71 @@ for ($round = 0; $round < 100; $round++) {
     // An interface method a plain PHP parent's untyped method implements, and an `Any?` result without a PHP type.
     echo 'a plain PHP parent implements a PHP# interface: ', (new Demo\Bill())->label(), "\n";
     echo 'a plain PHP class implements an Any? result: ', (new PlainMorphable())->label(), "\n";
+    $plainSource = new PlainSource();
+    echo 'a plain PHP class implements a Map result: ', received($plainSource->data(), (new ReflectionMethod(Demo\Source::class, 'data'))->getReturnType()), "\n";
+    $plainHoldings = new PlainHoldings();
+    echo 'a plain PHP class overrides a Map result: ', received($plainHoldings->tally(), (new ReflectionMethod(Holdings::class, 'tally'))->getReturnType()), ', PHP# reads its own: ', $holdings->tallyClass(), "\n";
+    echo 'a plain PHP index read: ', counts_index(), ' ', $plainHoldings->ownPayloadIndex(), "\n";
+
+    // A yield, and a Map in an `Any`, a type parameter's or an `Iterable` place.
+    $yielded = [];
+    foreach ($holdings->generated() as $value) {
+        $yielded[] = received($value);
+    }
+    echo 'a PHP# generator yields: ', implode(' / ', $yielded), "\n";
+    echo 'an Any result: ', received(Holdings::anyResult()), "\n";
+    echo 'an Any? property: ', received($holdings->loose, property_type(Holdings::class, 'loose')), "\n";
+    echo 'an Iterable<Map> property: ', received($holdings->shelved, property_type(Holdings::class, 'shelved')), ' of ', get_debug_type($holdings->shelved[0]), "\n";
+    $held = Demo\Held::ofMap();
+    echo 'a type parameter property and result: ', received($held->value), ' / ', received($held->get()), "\n";
+    echo 'a plain PHP generator into an Iterable<Map>: ', rtrim(Holdings::plainRows()), "\n";
+
+    // A Map no PHP array holds stays the Map at every crossing, as reflection says.
+    $holdingsResult = fn (string $method) => (new ReflectionMethod(Holdings::class, $method))->getReturnType();
+    echo 'a Map keyed by an enum without backing values: ', received($holdings->forecast, property_type(Holdings::class, 'forecast')), ' / ', received($holdings->weatherCounts(), $holdingsResult('weatherCounts')), "\n";
+    echo 'a Map whose keys can collide: ', received($holdings->collided(), $holdingsResult('collided')), ' / ', received($holdings->distinct()), ' / ', received(Holdings::$mixedCounts, property_type(Holdings::class, 'mixedCounts')), "\n";
+    echo 'a Map holding a Map keyed by a List: ', received($holdings->nestedListKeyed(), $holdingsResult('nestedListKeyed')), "\n";
+
+    // Every other reader of a property, and empty().
+    echo 'empty() of a Map property: ', var_export(empty($holdings->none), true), ' ', var_export(empty($holdings->payload), true), "\n";
+    $walked = null;
+    array_walk($holdings, function ($value, $property) use (&$walked) {
+        if ($property === 'payload') {
+            $walked = $value;
+        }
+    });
+    echo 'array_walk() over the object: ', received($walked), "\n";
+    $iterated = received((new ArrayIterator($holdings))['payload']);
+    echo 'an ArrayIterator over the object: ', $iterated, "\n";
+    echo 'get_mangled_object_vars(): ', received(get_mangled_object_vars($holdings)['payload']), "\n";
+    $class = new ReflectionClass(Holdings::class);
+    echo 'ReflectionClass::getStaticPropertyValue(): ', received($class->getStaticPropertyValue('counts')), "\n";
+    echo 'ReflectionClass::getStaticProperties(): ', received($class->getStaticProperties()['counts']), "\n";
+    echo 'get_class_vars(): ', received(get_class_vars(Holdings::class)['counts']), "\n";
+
+    // A Map or a Set constant read where PHP evaluates a constant expression.
+    $copies = new Demo\Copies();
+    echo 'a constant copied into a constant, a literal and a static: ', Demo\Copies::reads(), "\n";
+    echo 'a constant as a property default: ', $copies->limitsClass(), ' / ', received($copies->limits), "\n";
+    echo 'a constant as a parameter default: ', $copies->sized(), "\n";
+    $copiesLabel = (new ReflectionClass(Demo\Copies::class))->getAttributes(Label::class)[0];
+    echo 'a constant as an attribute argument: ', received($copiesLabel->newInstance()->config), "\n";
+    echo 'constants plain PHP reads: ', received(Demo\Copies::COPY), ' / ', received(Demo\Copies::NESTED), ' / ', received(Demo\Copies::$codes), "\n";
     $output = ob_get_clean();
 }
 echo $output;
+
+// PHP# reads a Map constant through the object it made once, so a read costs about what a static read does.
+$fastest = static function (string $method): float {
+    $times = [];
+    for ($run = 0; $run < 3; $run++) {
+        $start = hrtime(true);
+        Demo\Rates::$method(20000);
+        $times[] = hrtime(true) - $start;
+    }
+    return min($times);
+};
+echo 'a Map constant read takes at most five static reads: ', var_export($fastest('fromConstant') <= 5 * $fastest('fromStatic'), true), "\n";
 ?>
 --EXPECTF--
 array ["tea",5]
@@ -277,3 +365,30 @@ an Iterable constant: array, is_array true, [1,2], typed iterable, PHP# sums it:
 a tuple constant: array, is_array true, [7,"seven"], typed array, PHP# unpacks it: 7 seven
 a plain PHP parent implements a PHP# interface: record:7
 a plain PHP class implements an Any? result: plain:3
+a plain PHP class implements a Map result: array, is_array true, {"a":1}, typed array
+a plain PHP class overrides a Map result: array, is_array true, {"p":2}, typed array, PHP# reads its own: Sharp\Map
+a plain PHP index read: 1 p1
+a PHP# generator yields: array, is_array true, {"g":1} / array, is_array true, {"h":2}
+an Any result: array, is_array true, {"k":1}
+an Any? property: array, is_array true, {"k":1}, typed mixed
+an Iterable<Map> property: array, is_array true, [{"s":1}], typed iterable of array
+a type parameter property and result: array, is_array true, {"h":1} / array, is_array true, {"h":1}
+a plain PHP generator into an Iterable<Map>: Sharp\Map:1 Sharp\Map:2
+a Map keyed by an enum without backing values: Sharp\Map, is_array false, refused by array_merge, typed Sharp\Map / Sharp\Map, is_array false, refused by array_merge, typed Sharp\Map
+a Map whose keys can collide: Sharp\Map, is_array false, refused by array_merge, typed Sharp\Map / Sharp\Map, is_array false, refused by array_merge / Sharp\Map, is_array false, refused by array_merge, typed Sharp\Map
+a Map holding a Map keyed by a List: Sharp\Map, is_array false, refused by array_merge, typed Sharp\Map
+empty() of a Map property: true false
+array_walk() over the object: array, is_array true, {"id":"p1"}
+
+Deprecated: ArrayIterator::__construct(): Using an object as a backing array for ArrayIterator is deprecated, as it allows violating class constraints and invariants in %s on line %d
+an ArrayIterator over the object: array, is_array true, {"id":"p1"}
+get_mangled_object_vars(): array, is_array true, {"id":"p1"}
+ReflectionClass::getStaticPropertyValue(): array, is_array true, {"c":1}
+ReflectionClass::getStaticProperties(): array, is_array true, {"c":1}
+get_class_vars(): array, is_array true, {"c":1}
+a constant copied into a constant, a literal and a static: Sharp\Map 1 Sharp\Map Sharp\Set
+a constant as a property default: Sharp\Map / array, is_array true, {"card":100}
+a constant as a parameter default: Sharp\Map 1
+a constant as an attribute argument: array, is_array true, {"card":100}
+constants plain PHP reads: array, is_array true, {"card":100} / array, is_array true, {"inner":{"card":100}} / array, is_array true, ["a","b"]
+a Map constant read takes at most five static reads: true

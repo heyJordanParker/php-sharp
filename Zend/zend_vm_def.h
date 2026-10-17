@@ -8973,9 +8973,9 @@ ZEND_VM_HANDLER(216, ZEND_SHARP_LEAVE, ANY, ANY)
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
-/* PHP#: the value a function whose result holds a Map or a Set returns, see ZEND_ACC_SHARP_CROSSING. Its caller, past
- * the internal functions between them, gets the PHP array of each Map and Set in it when that caller is plain PHP,
- * spec section 12, and the value itself when it is PHP#. */
+/* PHP#: the value a function whose result may hold a Map or a Set returns or yields, see ZEND_SHARP_RESULT_CROSSES. Its
+ * caller, or the code that resumed the generator, past the internal functions between them, gets the PHP array of each
+ * Map and Set in it when that code is plain PHP, spec section 12, and the value itself when it is PHP#. */
 ZEND_VM_HANDLER(217, ZEND_SHARP_RETURN_ARRAY, CONST|TMPVAR|CV, ANY)
 {
 	USE_OPLINE

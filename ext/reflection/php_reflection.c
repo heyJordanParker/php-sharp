@@ -1563,11 +1563,14 @@ static reflection_type_kind get_type_kind(zend_type type) {
 	return NAMED_TYPE;
 }
 
-/* PHP#: plain PHP code passes and receives a Map or a Set of a PHP# declaration, from the file `filename`, as a PHP
- * array, spec section 12, so a type that names only Sharp\Map and Sharp\Set, with any builtin types, reads as array. */
-static zend_type reflection_sharp_type(zend_type type, const zend_string *filename)
+/* PHP#: plain PHP code passes and receives a Map or a Set as a PHP array where the declaration says so, spec section
+ * 12: a parameter or a result whose type names Sharp\Map or Sharp\Set beside array, and a property whose `crossing`
+ * says plain PHP reads it so, ZEND_ACC_SHARP_CROSSING. Such a type, which names only Sharp\Map and Sharp\Set with any
+ * builtin types, reads as array. A Map without a PHP array, as one keyed by a class, reads as Sharp\Map. */
+static zend_type reflection_sharp_type(zend_type type, bool crossing)
 {
-	if (!ZEND_TYPE_IS_COMPLEX(type) || ZEND_TYPE_IS_INTERSECTION(type) || !filename || !sharp_is_sharp_file(filename)) {
+	if (!ZEND_TYPE_IS_COMPLEX(type) || ZEND_TYPE_IS_INTERSECTION(type)
+			|| !(crossing || (ZEND_TYPE_PURE_MASK(type) & MAY_BE_ARRAY))) {
 		return type;
 	}
 	const zend_type *single;
@@ -1582,16 +1585,10 @@ static zend_type reflection_sharp_type(zend_type type, const zend_string *filena
 	return (zend_type) ZEND_TYPE_INIT_MASK(ZEND_TYPE_PURE_MASK(type) | MAY_BE_ARRAY);
 }
 
-/* The file a property is declared in, or NULL for an internal class's. */
-static const zend_string *reflection_property_file(const zend_property_info *prop)
+/* Whether plain PHP reads the property `prop` with each Map and Set it holds as its PHP array. */
+static bool reflection_property_crosses(const zend_property_info *prop)
 {
-	return prop->ce->type == ZEND_USER_CLASS ? prop->ce->info.user.filename : NULL;
-}
-
-/* The file a function is declared in, or NULL for an internal function. */
-static const zend_string *reflection_function_file(const zend_function *fptr)
-{
-	return ZEND_USER_CODE(fptr->type) ? fptr->op_array.filename : NULL;
+	return (prop->flags & ZEND_ACC_SHARP_CROSSING) != 0;
 }
 
 /* {{{ reflection_type_factory */
@@ -2933,7 +2930,7 @@ ZEND_METHOD(ReflectionParameter, getType)
 	if (!ZEND_TYPE_IS_SET(param->arg_info->type)) {
 		RETURN_NULL();
 	}
-	reflection_type_factory(reflection_sharp_type(param->arg_info->type, reflection_function_file(param->fptr)), return_value, 1);
+	reflection_type_factory(reflection_sharp_type(param->arg_info->type, false), return_value, 1);
 }
 /* }}} */
 
@@ -3801,7 +3798,7 @@ ZEND_METHOD(ReflectionFunctionAbstract, getReturnType)
 		RETURN_NULL();
 	}
 
-	reflection_type_factory(reflection_sharp_type(fptr->common.arg_info[-1].type, reflection_function_file(fptr)), return_value, 1);
+	reflection_type_factory(reflection_sharp_type(fptr->common.arg_info[-1].type, false), return_value, 1);
 }
 /* }}} */
 
@@ -4343,6 +4340,13 @@ ZEND_METHOD(ReflectionClass, getStaticProperties)
 
 		/* enforce read only access */
 		ZVAL_DEREF(prop);
+		/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+		if (UNEXPECTED(reflection_property_crosses(prop_info)) && !sharp_runs_sharp_code()) {
+			zval array;
+			sharp_array_of(&array, prop);
+			zend_hash_update(Z_ARRVAL_P(return_value), key, &array);
+			continue;
+		}
 		Z_TRY_ADDREF_P(prop);
 
 		zend_hash_update(Z_ARRVAL_P(return_value), key, prop);
@@ -4369,11 +4373,18 @@ ZEND_METHOD(ReflectionClass, getStaticPropertyValue)
 	}
 
 	const zend_class_entry *old_scope = EG(fake_scope);
+	zend_property_info *prop_info = NULL;
 	EG(fake_scope) = ce;
-	prop = zend_std_get_static_property(ce, name, BP_VAR_IS);
+	prop = zend_std_get_static_property_with_info(ce, name, BP_VAR_IS, &prop_info);
 	EG(fake_scope) = old_scope;
 
 	if (prop && !Z_ISUNDEF_P(prop)) {
+		/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+		if (prop_info && UNEXPECTED(reflection_property_crosses(prop_info)) && !sharp_runs_sharp_code()) {
+			ZVAL_DEREF(prop);
+			sharp_array_of(return_value, prop);
+			return;
+		}
 		RETURN_COPY_DEREF(prop);
 	}
 
@@ -6661,7 +6672,7 @@ ZEND_METHOD(ReflectionProperty, getType)
 		RETURN_NULL();
 	}
 
-	reflection_type_factory(reflection_sharp_type(ref->prop->type, reflection_property_file(ref->prop)), return_value, 1);
+	reflection_type_factory(reflection_sharp_type(ref->prop->type, reflection_property_crosses(ref->prop)), return_value, 1);
 }
 /* }}} */
 
@@ -6693,7 +6704,7 @@ ZEND_METHOD(ReflectionProperty, getSettableType)
 		if (!ZEND_TYPE_IS_SET(arg_info->type)) {
 			RETURN_NULL();
 		}
-		reflection_type_factory(reflection_sharp_type(arg_info->type, reflection_property_file(prop)), return_value, 1);
+		reflection_type_factory(reflection_sharp_type(arg_info->type, reflection_property_crosses(prop)), return_value, 1);
 		return;
 	}
 
@@ -6701,7 +6712,7 @@ ZEND_METHOD(ReflectionProperty, getSettableType)
 	if (!ZEND_TYPE_IS_SET(ref->prop->type)) {
 		RETURN_NULL();
 	}
-	reflection_type_factory(reflection_sharp_type(ref->prop->type, reflection_property_file(prop)), return_value, 1);
+	reflection_type_factory(reflection_sharp_type(ref->prop->type, reflection_property_crosses(prop)), return_value, 1);
 }
 
 /* {{{ Returns whether property has a type */

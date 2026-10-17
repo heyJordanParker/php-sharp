@@ -43,6 +43,13 @@ function price_list(): array
     return ['tea' => 3, '5' => 1];
 }
 
+/** @return Generator<int, array<string, int>> */
+function price_rows(): Generator
+{
+    yield ['a' => 1];
+    yield ['b' => 2, 'c' => 3];
+}
+
 // Plain PHP functions whose parameter names an object type a Sharp\Map or a Sharp\Set has.
 function count_of_countable(Countable $values): string
 {

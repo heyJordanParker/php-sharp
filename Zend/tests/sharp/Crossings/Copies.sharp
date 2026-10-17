@@ -1,0 +1,23 @@
+namespace Demo;
+
+import Label;
+
+// Each place PHP evaluates a constant expression reads a Map or a Set constant of another class.
+[Label("copies", config: Holdings.LIMITS)]
+public class Copies
+{
+    public const Map<string, int> COPY = Holdings.LIMITS;
+
+    public const Map<string, Map<string, int>> NESTED = ["inner": Holdings.LIMITS];
+
+    public Map<string, int> limits { get; set; } = Holdings.LIMITS;
+
+    public static Set<string> codes { get; set; } = Holdings.CODES;
+
+    public string sized(Map<string, int> given = Holdings.LIMITS) => `${global.get_class(given)} ${given.count()}`;
+
+    public string limitsClass() => global.get_class(this.limits);
+
+    public static string reads() =>
+        `${global.get_class(Copies.COPY)} ${Copies.COPY.count()} ${global.get_class(Copies.NESTED["inner"] ?? [:])} ${global.get_class(Copies.codes)}`;
+}

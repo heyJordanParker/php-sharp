@@ -28,6 +28,7 @@ for ($round = 0; $round < 100; $round++) {
     echo 'count() of a property: ', preloaded_payload_count($holdings), "\n";
     echo 'a List<Map> property: ', received(preloaded_rows($holdings)), "\n";
     echo 'a static property: ', received(preloaded_counts()), "\n";
+    echo 'index reads: ', preloaded_counts_index(), ' ', preloaded_payload_index($holdings), ' ', (new PreloadedHoldings())->ownPayloadIndex(), "\n";
     echo 'a return: ', received(preloaded_sizes()), "\n";
     echo 'array_merge() of a return: ', received(preloaded_sizes_merged()), "\n";
     echo 'a constant: ', received(preloaded_limits()), "\n";
@@ -42,6 +43,7 @@ a property: array {"id":"p1"}
 count() of a property: 1
 a List<Map> property: array [{"a":1}]
 a static property: array {"c":1}
+index reads: 1 p1 p1
 a return: array {"b":2,"a":1}
 array_merge() of a return: array {"b":2,"a":1,"c":3}
 a constant: array {"card":100}

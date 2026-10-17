@@ -70,7 +70,7 @@ public class Repository
         return true;
     }
 
-    public static Map<int|string, Any?> locals<T>(T item) => global.get_defined_vars();
+    public static Any? locals<T>(T item) => global.get_defined_vars();
 
     public static Box<Order> wrapped(Wrapper wrapper, Order order) => wrapper.wrap(order);
 

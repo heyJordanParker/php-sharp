@@ -81,7 +81,7 @@ class Tagged
         return [$copied, $kept, $added, $this->calls, $named, $this->tags->toList(), ((object) $maybe)?->add("x"), ((object) $maybe)?->contains("x"), ((object) $maybe)?->count()];
     }
 
-    private function copy(): \Sharp\Set { return $this->tags; }
+    private function copy(): \Sharp\Set|array { return $this->tags; }
 
     private function next(): string
     {
