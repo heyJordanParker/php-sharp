@@ -2381,31 +2381,84 @@ ZEND_METHOD(Sharp_Sequence, take)
 	sharp_sequence_new(return_value, SHARP_SEQUENCE_TAKE, ZEND_THIS)->count = count;
 }
 
-ZEND_METHOD(Sharp_Sequence, toList)
+/* Appends each value the Sequence `sequence` gives to the array `list`. Returns false when reading threw. */
+static bool sharp_sequence_append(zval *sequence, zval *list)
 {
-	ZEND_PARSE_PARAMETERS_NONE();
-
 	sharp_sequence_iterator *iterator =
-		(sharp_sequence_iterator *) sharp_sequence_get_iterator(sharp_ce_sequence, ZEND_THIS, 0);
+		(sharp_sequence_iterator *) sharp_sequence_get_iterator(sharp_ce_sequence, sequence, 0);
 	if (!iterator) {
-		RETURN_THROWS();
+		return false;
 	}
 
-	zval list;
-	array_init(&list);
 	sharp_sequence_iterator_next(iterator, true);
 	while (!EG(exception) && !Z_ISUNDEF(iterator->value)) {
 		Z_TRY_ADDREF(iterator->value);
-		zend_hash_next_index_insert_new(Z_ARRVAL(list), &iterator->value);
+		zend_hash_next_index_insert_new(Z_ARRVAL_P(list), &iterator->value);
 		sharp_sequence_iterator_next(iterator, false);
 	}
 	zend_iterator_dtor(&iterator->it);
 
-	if (EG(exception)) {
+	return !EG(exception);
+}
+
+ZEND_METHOD(Sharp_Sequence, toList)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	zval list;
+	array_init(&list);
+	if (!sharp_sequence_append(ZEND_THIS, &list)) {
 		zval_ptr_dtor(&list);
 		RETURN_THROWS();
 	}
 	RETURN_COPY_VALUE(&list);
+}
+
+/* Spec section 12: a List's flatMap, the elements of each Iterable the function gives, in order, each read as a
+ * Sequence reads its source. */
+ZEND_METHOD(Sharp_Collection, flatMap)
+{
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_array *elements = sharp_collection_read(ZEND_THIS);
+	if (!elements) {
+		RETURN_THROWS();
+	}
+
+	zval flat, part, sequence;
+	zval *element;
+	array_init(&flat);
+	ZEND_HASH_FOREACH_VAL(elements, element) {
+		if (!sharp_collection_call(&fci, &fcc, element, &part)) {
+			break;
+		}
+		if (Z_TYPE(part) != IS_ARRAY
+			&& (Z_TYPE(part) != IS_OBJECT || !instanceof_function(Z_OBJCE(part), zend_ce_traversable))) {
+			zend_type_error(
+				"flatMap() takes a function that gives an Iterable, and it gave %s", zend_zval_value_name(&part));
+			zval_ptr_dtor(&part);
+			break;
+		}
+		sharp_sequence_new(&sequence, SHARP_SEQUENCE_FROM, &part);
+		zval_ptr_dtor(&part);
+		bool appended = sharp_sequence_append(&sequence, &flat);
+		zval_ptr_dtor(&sequence);
+		if (!appended) {
+			break;
+		}
+	} ZEND_HASH_FOREACH_END();
+	zend_array_release(elements);
+
+	if (EG(exception)) {
+		zval_ptr_dtor(&flat);
+		RETURN_THROWS();
+	}
+	RETURN_COPY_VALUE(&flat);
 }
 
 ZEND_METHOD(Sharp_Sequence, getIterator)

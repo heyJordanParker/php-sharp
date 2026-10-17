@@ -7,7 +7,7 @@ class Page
 
     public Page(string name) => this.name = name;
 
-    public string slug => global.strtolower(this.name);
+    public string slug => this.name.lowercase();
     protected int doubled => this.views * 2;
     private string title => global.ucfirst(this.name);
 

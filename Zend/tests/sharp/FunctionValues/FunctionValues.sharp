@@ -66,7 +66,7 @@ public class FunctionValues
             [2, 4].filter(seen.contains),
             tidy(),
             exclaim("!"),
-            ["a", "b"].map(global.strtoupper),
+            ["a", "b"].map(global.ucfirst),
             firstTwo(2).toList(),
         ];
     }

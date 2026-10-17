@@ -3,7 +3,7 @@ namespace Preloaded;
 public class Registry
 {
     public static int size { get; } = 3;
-    public static string label { get; } = global.strtoupper("ready");
+    public static string label { get; } = "ready".uppercase();
     private static int started = global.strlen("four");
 
     public static int total() => Registry.size + Registry.started;
