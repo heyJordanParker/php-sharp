@@ -17,6 +17,7 @@ Attributes use square brackets and follow C#'s rules:
 - several attributes in one bracket: `[Field("Name"), Searchable]`
 - several brackets on one declaration
 - positional and named arguments
+- an argument is a constant: a literal, a constant, `typeof(Class)`, a list or map literal of constants, or a `new` of a class whose arguments are constants too, as PHP and Java's nested annotations take; PHP creates the object each time it reads the attribute, and an argument that runs code is a compile error
 - no parentheses when there are no arguments: `[Searchable]`
 - explicit targets: `[return: NotNull]`
 - on every declaration C# takes one on: a class, an interface, an enum and its cases, an event, a constant, a field, a property, an interface property, a method, an interface method with or without a default body, a parameter, and a lambda written with parentheses, as in `[Searchable] (int n) => n * 2`
@@ -61,6 +62,35 @@ public event Paid(int orderId);           // compiles: on the event
 public const int LIMIT = 3;                                        // compiles: on a constant
 
 public Function<int(int)> twice() => [Searchable] (int n) => n * 2;  // compiles: on a lambda
+```
+
+<!-- example attribute-objects -->
+```php
+#[\Attribute(\Attribute::TARGET_ALL)]
+final class Route { public function __construct(public string $path, public array $middleware = []) {} }
+
+final class Throttle { public function __construct(public int $perMinute) {} }
+
+#[\Attribute(\Attribute::TARGET_ALL)]
+final class Type { public function __construct(public mixed $of, public bool $nullable = false) {} }
+```
+
+<!-- example attribute-objects -->
+```csharp
+// app/OrdersController.sharp
+namespace App;
+
+[Route("/orders", middleware: [new Throttle(perMinute: 60)])]         // compiles: Route receives a Throttle object
+public class OrdersController
+{
+    [Type(of: [new Type(typeof(Order), nullable: true)])]             // compiles: Type receives a list holding one Type object
+    public Order? order { get; } = null;
+
+    [Route("/limited", middleware: [new Throttle(this.limit())])]     // compile error: an attribute argument is a constant or a new of constants, and this.limit() runs code
+    public void limited() { }
+
+    private int limit() => 60;
+}
 ```
 
 Named arguments use `label: "Name"`, the same "name: value" form used everywhere in the language (section 16). C#'s `Label = "Name"` is not allowed.
