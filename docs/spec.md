@@ -2168,7 +2168,34 @@ Amount price = new Amount { value: 500, currency };     // short for currency: c
 
 **Any parameter can be named at a call,** including a call into plain PHP. An override keeps every parameter name of the method it overrides (section 22), so a name means the same parameter on every class.
 
-A named argument that matches no parameter is a compile error, also on a method that takes any number of arguments (section 7).
+**A named argument that matches no other parameter of plain PHP fills its `...` parameter under its name,** as PHP collects it, on a method, a static method, a constructor, a function and an attribute. The `...` parameter's element type checks each value, as it checks a positional one. A PHP# `...` parameter is a `List` (section 7), which takes no names, and a function built into PHP refuses them, so a named argument that matches no parameter there is a compile error.
+
+<!-- example named-variadics -->
+```php
+#[\Attribute(\Attribute::TARGET_ALL)]
+final class Generic { public function __construct(string ...$types) {} }
+
+final class Html
+{
+    public static function tag(string $name, string ...$attributes): string { return $name . ' ' . implode(',', array_keys($attributes)); }
+}
+```
+
+<!-- example named-variadics -->
+```csharp
+// app/Catalog.sharp
+namespace App;
+
+[Generic(Item: typeof(DatabaseEntity))]                        // compiles: Generic(string ...$types) receives ["Item" => DatabaseEntity]
+public class Catalog<TItem : DatabaseEntity>
+{
+    public string home() => Html.tag("a", href: "/home", title: "Home");   // compiles: tag(string $name, string ...$attributes) receives ["href" => "/home", "title" => "Home"]
+
+    public static int sum(int ...values) => values.count();
+
+    public int total() => Catalog<TItem>.sum(first: 1, second: 2);          // compile error: sum's ...values is a List<int>, and a List takes no names
+}
+```
 
 <!-- example named-arguments: statements
 Image image = new Image();
