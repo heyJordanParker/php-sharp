@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   # CI_PASSED is this workflow's one required check, so the workflow always runs, and LINUX,
-  # LINUX_ZTS, HOSTS and MACOS skip a change to documentation alone. docs/spec.md, README.md and
+  # LINUX_ZTS, HOSTS, PHP_EXTENSIONS and MACOS skip a change to documentation alone. docs/spec.md, README.md and
   # sharp/spec-self-test.md count as code, because LINUX compiles and runs their examples.
   CHANGES:
     runs-on: ubuntu-24.04
@@ -223,6 +223,75 @@ jobs:
           tar -xf "$RUNNER_TEMP/hosts-zts.tar"
       - name: Serve the fixture from php-fpm and FrankenPHP
         run: sharp/bin/hosts --linux
+  # Each runtime image, with the extensions a typical Laravel app installs on top, installed the way such an app's
+  # Dockerfile does. The engine changes PHP's internal structures, so an extension can stop building or loading.
+  PHP_EXTENSIONS:
+    needs: CHANGES
+    if: needs.CHANGES.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    # One host's failure leaves the other's result in the log.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - file: sharp/docker/runtime/Dockerfile
+            php: php
+          - file: sharp/docker/runtime/frankenphp.Dockerfile
+            php: frankenphp php-cli
+    # The image builds FROM base-images.yml's copies, as IMAGE's does.
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie-slim
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
+      EXTENSIONS: bcmath exif gd imagick intl pcntl pdo_pgsql pgsql redis-5.3.7 zip
+    steps:
+      - name: git checkout
+        uses: actions/checkout@v6
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Rust cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            sharp/build/cargo
+            sharp/build/rustup
+          key: SHARP_LINUX_RUST-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
+      - name: Mago cache
+        uses: actions/cache@v5
+        with:
+          path: sharp/build/*/mago
+          key: SHARP_LINUX_MAGO-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.lock') }}
+      - name: Build the image
+        run: git archive HEAD | docker build --build-arg BASE_IMAGE --build-arg GOLANG_IMAGE --file "${{ matrix.file }}" --tag php-sharp -
+      # rustup comes after the extensions, so they build as in the app's image, and lets sharp/bin/test build mago.
+      - name: Install the extensions
+        run: |
+          docker build --build-arg EXTENSIONS --tag php-sharp-extensions - <<'DOCKERFILE'
+          FROM php-sharp
+          COPY --from=ghcr.io/mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /usr/local/bin/
+          ARG EXTENSIONS
+          RUN install-php-extensions $EXTENSIONS
+          RUN apt-get update && apt-get install -y --no-install-recommends rustup && apt-get dist-clean
+          DOCKERFILE
+      - name: Check that php -m lists each extension, and call into each one from ${{ matrix.php }}
+        run: docker run --rm --volume "$PWD:/src" --workdir /src php-sharp-extensions ${{ matrix.php }} sharp/bin/php-extensions $EXTENSIONS
+      # The container mounts the tree and its caches as sharp/docker/run does.
+      - name: Test PHP# with the extensions loaded
+        run: |
+          docker run --rm --init \
+            --user "$(id -u):$(id -g)" \
+            --ulimit stack=8388608:-1 \
+            --env CARGO_HOME=/src/sharp/build/cargo \
+            --env RUSTUP_HOME=/src/sharp/build/rustup \
+            --env XDG_CACHE_HOME=/src/sharp/build/cache \
+            --volume "$PWD:/src" \
+            --workdir /src \
+            php-sharp-extensions sharp/bin/test --installed --opcache --repeat --passes
   MACOS:
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true'
@@ -266,13 +335,13 @@ jobs:
   # from Composer on plain PHP.
   CI_PASSED:
     if: always()
-    needs: [CHANGES, LINUX, LINUX_ZTS, HOSTS, MACOS]
+    needs: [CHANGES, LINUX, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS]
     runs-on: ubuntu-24.04
     steps:
       - name: Every job passed, or skipped a change to documentation alone
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # release/v1
         with:
-          allowed-skips: LINUX, LINUX_ZTS, HOSTS, MACOS
+          allowed-skips: LINUX, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS
           jobs: ${{ toJSON(needs) }}
   COMPOSER:
     needs: [LINUX, MACOS]
@@ -330,7 +399,7 @@ jobs:
   # docker-library names 8.5-fpm and 8.5-zts.
   IMAGE:
     if: github.ref_type == 'tag'
-    needs: [LINUX, LINUX_ZTS, HOSTS, MACOS]
+    needs: [LINUX, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS]
     strategy:
       matrix:
         include:
