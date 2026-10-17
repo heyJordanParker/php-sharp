@@ -186,6 +186,10 @@ for ($round = 0; $round < 100; $round++) {
     echo 'a Map constant: ', received(Holdings::LIMITS, (new ReflectionClassConstant(Holdings::class, 'LIMITS'))->getType()), "\n";
     echo 'a Set constant: ', received(Holdings::CODES, (new ReflectionClassConstant(Holdings::class, 'CODES'))->getType()), "\n";
     echo 'PHP# reads its Map constant: ', $holdings->limitOf('card'), "\n";
+    echo 'PHP# reads its Set constant as a Set: ', var_export(Holdings::hasCode('a'), true), ' ', var_export(Holdings::hasCode('z'), true), "\n";
+    echo 'PHP# holds its constants as their types: ', Holdings::constantClasses(), "\n";
+    echo 'an Iterable constant: ', received(Holdings::STEPS, (new ReflectionClassConstant(Holdings::class, 'STEPS'))->getType()), ', PHP# sums it: ', Holdings::stepsTotal(), "\n";
+    echo 'a tuple constant: ', received(Holdings::PAIR, (new ReflectionClassConstant(Holdings::class, 'PAIR'))->getType()), ', PHP# unpacks it: ', Holdings::pairText(), "\n";
 
     // An interface method a plain PHP parent's untyped method implements, and an `Any?` result without a PHP type.
     echo 'a plain PHP parent implements a PHP# interface: ', (new Demo\Bill())->label(), "\n";
@@ -267,5 +271,9 @@ a Map attribute argument, built: array, is_array true, {"variant":"success"}
 a Map constant: array, is_array true, {"card":100}, typed array
 a Set constant: array, is_array true, ["a","b"], typed array
 PHP# reads its Map constant: 100
+PHP# reads its Set constant as a Set: true false
+PHP# holds its constants as their types: Sharp\Map Sharp\Set
+an Iterable constant: array, is_array true, [1,2], typed iterable, PHP# sums it: 3
+a tuple constant: array, is_array true, [7,"seven"], typed array, PHP# unpacks it: 7 seven
 a plain PHP parent implements a PHP# interface: record:7
 a plain PHP class implements an Any? result: plain:3
