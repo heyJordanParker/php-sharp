@@ -14313,6 +14313,24 @@ static int zend_jit_class_guard(zend_jit_ctx *jit, const zend_op *opline, ir_ref
 	return 1;
 }
 
+/* The property info a write to the slot of prop_info checks, which the object's own class holds. It is prop_info itself
+ * when ce is immutable and no subclass redeclares the property. PHP#: a PHP# subclass may redeclare a plain PHP
+ * property with a narrower PHP# type, which only its own info carries, so an object of it is checked by that. */
+static ir_ref jit_object_prop_info(zend_jit_ctx *jit, ir_ref obj_ref, const zend_class_entry *ce, zend_property_info *prop_info)
+{
+	if (ce && (ce->ce_flags & ZEND_ACC_IMMUTABLE)
+	 && ((ce->ce_flags & ZEND_ACC_FINAL) || (prop_info->flags & (ZEND_ACC_FINAL|ZEND_ACC_PRIVATE)))) {
+		return ir_CONST_ADDR(prop_info);
+	}
+
+	int prop_info_offset =
+		(((prop_info->offset - (sizeof(zend_object) - sizeof(zval))) / sizeof(zval)) * sizeof(void*));
+	ir_ref ref = ir_LOAD_A(ir_ADD_OFFSET(obj_ref, offsetof(zend_object, ce)));
+	ref = ir_LOAD_A(ir_ADD_OFFSET(ref, offsetof(zend_class_entry, properties_info_table)));
+
+	return ir_LOAD_A(ir_ADD_OFFSET(ref, prop_info_offset));
+}
+
 static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
                               const zend_op        *opline,
                               const zend_op_array  *op_array,
@@ -14670,16 +14688,7 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 
 				ir_ref if_reference = ir_IF(ir_EQ(prop_type_ref, ir_CONST_U32(IS_REFERENCE_EX)));
 				ir_IF_FALSE(if_reference);
-				if (ce && ce->ce_flags & ZEND_ACC_IMMUTABLE) {
-					ref = ir_CONST_ADDR(prop_info);
-				} else {
-					int prop_info_offset =
-						(((prop_info->offset - (sizeof(zend_object) - sizeof(zval))) / sizeof(zval)) * sizeof(void*));
-
-					ref = ir_LOAD_A(ir_ADD_OFFSET(obj_ref, offsetof(zend_object, ce)));
-					ref = ir_LOAD_A(ir_ADD_OFFSET(ref, offsetof(zend_class_entry, properties_info_table)));
-					ref = ir_LOAD_A(ir_ADD_OFFSET(ref, prop_info_offset));
-				}
+				ref = jit_object_prop_info(jit, obj_ref, ce, prop_info);
 				jit_SET_EX_OPLINE(jit, opline);
 				ir_CALL_3(IR_VOID, ir_CONST_FC_FUNC(zend_jit_create_typed_ref),
 					prop_ref,
@@ -15126,16 +15135,7 @@ static int zend_jit_assign_obj(zend_jit_ctx         *jit,
 
 			// JIT: value = zend_assign_to_typed_prop(prop_info, property_val, value EXECUTE_DATA_CC);
 			jit_SET_EX_OPLINE(jit, opline);
-			if (ce && ce->ce_flags & ZEND_ACC_IMMUTABLE) {
-				ref = ir_CONST_ADDR(prop_info);
-			} else {
-				int prop_info_offset =
-					(((prop_info->offset - (sizeof(zend_object) - sizeof(zval))) / sizeof(zval)) * sizeof(void*));
-
-				ref = ir_LOAD_A(ir_ADD_OFFSET(obj_ref, offsetof(zend_object, ce)));
-				ref = ir_LOAD_A(ir_ADD_OFFSET(ref, offsetof(zend_class_entry, properties_info_table)));
-				ref = ir_LOAD_A(ir_ADD_OFFSET(ref, prop_info_offset));
-			}
+			ref = jit_object_prop_info(jit, obj_ref, ce, prop_info);
 			if (Z_MODE(val_addr) == IS_REG) {
 				zend_jit_addr real_addr = ZEND_ADDR_MEM_ZVAL(ZREG_FP, (opline+1)->op1.var);
 				if (!zend_jit_spill_store_inv(jit, val_addr, real_addr, val_info)) {
@@ -15485,16 +15485,7 @@ static int zend_jit_assign_obj_op(zend_jit_ctx         *jit,
 			prop_addr = ZEND_ADDR_REF_ZVAL(prop_ref);
 
 			// JIT: value = zend_assign_to_typed_prop(prop_info, property_val, value EXECUTE_DATA_CC);
-			if (ce && ce->ce_flags & ZEND_ACC_IMMUTABLE) {
-				ref = ir_CONST_ADDR(prop_info);
-			} else {
-				int prop_info_offset =
-					(((prop_info->offset - (sizeof(zend_object) - sizeof(zval))) / sizeof(zval)) * sizeof(void*));
-
-				ref = ir_LOAD_A(ir_ADD_OFFSET(obj_ref, offsetof(zend_object, ce)));
-				ref = ir_LOAD_A(ir_ADD_OFFSET(ref, offsetof(zend_class_entry, properties_info_table)));
-				ref = ir_LOAD_A(ir_ADD_OFFSET(ref, prop_info_offset));
-			}
+			ref = jit_object_prop_info(jit, obj_ref, ce, prop_info);
 
 			ir_CALL_4(IR_VOID, ir_CONST_FC_FUNC(zend_jit_assign_op_to_typed_prop),
 				prop_ref,
@@ -15876,16 +15867,7 @@ static int zend_jit_incdec_obj(zend_jit_ctx         *jit,
 			may_throw = 1;
 			jit_SET_EX_OPLINE(jit, opline);
 
-			if (ce && ce->ce_flags & ZEND_ACC_IMMUTABLE) {
-				ref = ir_CONST_ADDR(prop_info);
-			} else {
-				int prop_info_offset =
-					(((prop_info->offset - (sizeof(zend_object) - sizeof(zval))) / sizeof(zval)) * sizeof(void*));
-
-				ref = ir_LOAD_A(ir_ADD_OFFSET(obj_ref, offsetof(zend_object, ce)));
-				ref = ir_LOAD_A(ir_ADD_OFFSET(ref, offsetof(zend_class_entry, properties_info_table)));
-				ref = ir_LOAD_A(ir_ADD_OFFSET(ref, prop_info_offset));
-			}
+			ref = jit_object_prop_info(jit, obj_ref, ce, prop_info);
 
 			if (opline->result_type == IS_UNUSED) {
 				switch (opline->opcode) {
