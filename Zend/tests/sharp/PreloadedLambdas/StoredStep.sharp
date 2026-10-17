@@ -1,0 +1,8 @@
+namespace PreloadedLambdas;
+
+public class StoredStep
+{
+    private Function<int(int)> step = (int n) => n + 100;
+
+    public int run() => this.step(8);
+}
