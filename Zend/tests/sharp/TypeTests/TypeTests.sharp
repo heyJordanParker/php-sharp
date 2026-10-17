@@ -13,6 +13,10 @@ public class TypeTests
         Any? text = "hello";
         Any? spelled = "TypeTests\\RushOrder";
         Any? order = new RushOrder();
+        Any? empty = "";
+        Any? integer = typeof(int);
+        Any? boxed = typeof(Box<Order>);
+        Any? dotted = "TypeTests.RushOrder";
         return [
             pair is int|[int, string],
             triple is int|[int, string],
@@ -38,7 +42,30 @@ public class TypeTests
             order is Object,
             rush is Object,
             (number as Object) == null,
+            text is Class<Object>,
+            empty is Class<Any>,
+            text is Class<Any?>,
+            rush is Class<Any>,
+            integer is Class<Any>,
+            boxed is Class<Box>,
+            boxed is Class<Object>,
+            dotted is Class<Order>,
+            match (dotted) { Class<Order> type => new (type)() is RushOrder, default => false },
+            pair is [int, string]|int,
+            swapped is [int, string]|int,
+            pair is [int, string] p && p[1] == "a",
+            TypeTests.unpacked(pair),
+            TypeTests.unpacked(swapped),
         ];
+    }
+
+    private static bool unpacked(Any? value)
+    {
+        if (value is [int, string]) {
+            const [count, label] = value;
+            return count == 1 && label == "a";
+        }
+        return false;
     }
 
     private static bool label(Any? value)

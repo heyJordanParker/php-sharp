@@ -44,3 +44,17 @@ bool(true)
 21: true
 22: false
 23: true
+24: false
+25: false
+26: false
+27: true
+28: true
+29: true
+30: true
+31: true
+32: true
+33: true
+34: false
+35: true
+36: true
+37: false

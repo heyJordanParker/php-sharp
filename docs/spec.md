@@ -2680,18 +2680,19 @@ swapped as [int, string];                    // null: the element types differ
 pair is int|[int, string];                   // true
 ```
 
-**`Class<T>` tests that a value is a class value of `T` or of a class that extends or implements `T`.** A class value is the string that names its class, as PHP's `Order::class` is, so a string that names such a class passes too:
+**`Class<T>` tests that a value is a class value of `T` or of a class that extends or implements `T`.** A string that holds a class's full name, as `"App.RushOrder"`, is that class's class value, so it passes too. A string that names no class never passes, not even `Class<Object>`:
 
 <!-- example class-value-tests: statements -->
 ```csharp
 Any? rush = typeof(RushOrder);
 Any? customer = typeof(Customer);
-Any? named = "App\\RushOrder";
+Any? named = "App.RushOrder";
 Any? text = "rush";
 rush is Class<Order>;                        // true: RushOrder extends Order
 customer is Class<Order>;                    // false
 named is Class<Order>;                       // true: the string names RushOrder
 text is Class<Order>;                        // false: no class is named rush
+text is Class<Object>;                       // false
 (rush as Class<Order>) == typeof(RushOrder); // true
 ```
 

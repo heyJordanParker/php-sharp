@@ -2,4 +2,5 @@ namespace TypeTests;
 
 public class Order
 {
+    public required Order() { }
 }
