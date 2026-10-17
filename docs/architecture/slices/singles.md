@@ -290,9 +290,9 @@ The same holds beyond `catch`. `p3`'s `throw new LogicException(message)` in nam
 - `expression/instantiation.rs:444`, `resolver/class_constant.rs:449`, `statement/try.rs:644`, `statement/attributes/mod.rs:142`, `statement/class_like/property.rs:308` (a behavior)
 - `statement/class_like/mod.rs:1775`, `:2138` and `:2183` (a header's base class, interface and trait)
 
-In a `.sharp` file each fallback becomes `report_undefined_type`'s message, "Cannot find type `App.Probe.OutOfRangeError`." `report_unknown_sharp_class` gains a fourth case for the suggestion: a short name with the same stem as one default name, with `Error` and `Exception` swapped, gets the help "Did you mean `OutOfRangeException`?". A `catch` clause whose type was reported reads as `Throwable`, as it already does for a reported name, so `no-valid-catch-type-found` is not reported a second time.
+In a `.sharp` file each fallback, `report_undefined_type` and `report_non_existent_class_like` (`nameof`, `typeof`, a static read) call `report_missing_class`, which runs `report_unknown_sharp_class` and otherwise reports "Cannot find type `App.Probe.OutOfRangeError`." with the help "Did you mean `OutOfRangeException`?" when the short name with `Error` and `Exception` swapped names a class the file reaches by its bare name. A `catch` clause whose type was reported reads as `Throwable`, as it already does for a reported name, so `no-valid-catch-type-found` is not reported a second time, and a `new` of a missing class has the refused type, so its use adds no second error.
 
-**Reuses:** `report_unknown_sharp_class`, `report_undefined_type`, `display_class_like_name`.
+**Reuses:** `report_unknown_sharp_class`, the refused type `TAtomic::Error`.
 
 ## 8. `x is Map<K, V> row` binds the converted value (effects builder)
 
