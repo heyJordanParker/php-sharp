@@ -1,0 +1,30 @@
+namespace Arrivals;
+
+import Lib.Users;
+
+public class Roster
+{
+    public int first(Users users)
+    {
+        List<int> ids = users.ids();
+        return ids[0];
+    }
+
+    public int cachedFirst(Users users) => users.cached[0];
+
+    public int count(Users users) => users.ids().count();
+
+    public List<int> keys(Users users)
+    {
+        Map<int, int> byId = users.ids();
+        return byId.keys();
+    }
+
+    public List<int> listed(Users users) => users.listed();
+
+    public List<int> held { get; set; } = [];
+
+    public int firstOf(List<int> items) => items[0];
+
+    public int heldFirst() => this.held[0];
+}

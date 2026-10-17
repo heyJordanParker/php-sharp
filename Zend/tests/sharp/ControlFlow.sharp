@@ -61,7 +61,8 @@ class ControlFlow
         for (const price of Prices.listed()) {
             total += price * factor;
         }
-        for (let [slot, price] of Prices.all()) {
+        Map<int, int> slots = Prices.all();
+        for (let [slot, price] of slots) {
             total += slot;
             price = 0;
         }

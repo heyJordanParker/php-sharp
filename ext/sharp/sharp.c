@@ -4519,6 +4519,27 @@ static void sharp_type_convert(const sharp_type *type, zval *value)
 	} ZEND_HASH_FOREACH_END();
 }
 
+/* Spec section 12: plain PHP's array keyed by int alone, such as array_filter gives, enters a `List` place renumbered,
+ * as PHP# renumbers it where it reads one. The three crossings take it so: an argument from plain PHP, the result of a
+ * plain PHP call PHP# checks, and a property plain PHP writes. A list is taken as it is, and an array with a string key
+ * is no list. */
+static void sharp_type_renumber(const sharp_type *type, zval *value)
+{
+	if (type->built_in != SHARP_BUILT_IN_LIST || Z_TYPE_P(value) != IS_ARRAY || zend_array_is_list(Z_ARRVAL_P(value))) {
+		return;
+	}
+	zend_string *name;
+	ZEND_HASH_FOREACH_STR_KEY(Z_ARRVAL_P(value), name) {
+		if (name) {
+			return;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	HashTable *renumbered = zend_array_to_list(Z_ARRVAL_P(value));
+	zval_ptr_dtor(value);
+	ZVAL_ARR(value, renumbered);
+}
+
 bool sharp_type_accepts(const sharp_type *type, zval *value, sharp_type_problems *problems)
 {
 	/* A value that holds without converting an int is taken in one walk. */
@@ -4880,6 +4901,7 @@ void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *tex
 
 		/* A PHP# parameter is never by reference, and every call derefs a by-value argument. */
 		ZEND_ASSERT(!Z_ISREF_P(value));
+		sharp_type_renumber(expected->members[i], value);
 		if (!sharp_type_accepts(expected->members[i], value, NULL)) {
 			if (!EG(exception)) {
 				sharp_type_argument_error(execute_data, i + 1, expected->members[i], value);
@@ -4912,6 +4934,7 @@ bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval 
 	}
 
 	const sharp_type *type = expected->members[0];
+	sharp_type_renumber(type, value);
 	if (!sharp_type_accepts(type, value, NULL)) {
 		if (!EG(exception)) {
 			/* Worded as PHP's TypeError for a function's return value. */
@@ -4970,6 +4993,7 @@ bool sharp_property_accepts(const zend_property_info *info, zval *value, zend_ob
 	}
 
 	const sharp_type *type = list->members[0];
+	sharp_type_renumber(type, value);
 	if (sharp_type_accepts(type, value, NULL)) {
 		const sharp_type *iterable = sharp_type_lazily_checked(type, value);
 		if (iterable) {

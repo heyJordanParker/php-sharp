@@ -974,6 +974,33 @@ copy.add(line);           // changes only copy
 
 At each crossing, the runtime checks every element once and throws a `TypeError` that names the element. An `int` where PHP# expects a `float` does not throw: it becomes a `float` (section 24). A call from PHP# to PHP# checks nothing at runtime, because the checker proved it.
 
+**A plain PHP array keyed by `int` alone arrives as a `List`, renumbered,** as Kotlin reads a Java `List`. PHP keeps an array's keys when a function such as `array_filter` drops elements, so plain PHP's `array<int, Person>` holds a list whose keys may have gaps. PHP# reads it as a `List<Person>` wherever it arrives, a return, a property read, an argument from a plain PHP caller and a property plain PHP writes, and its first element is at `0`. A place declared `Map<int, Person>` keeps the keys plain PHP gave. An array keyed by `string` or by `int|string` stays a `Map`.
+
+<!-- example plain-list-arrival -->
+```php
+class Shelf
+{
+    /** @return array<int, Line> */
+    public static function kept(): array { return array_filter([new Line(), null]); }
+}
+```
+
+<!-- example plain-list-arrival: statements -->
+```csharp
+for (const line of Shelf.kept()) { … }       // compiles: plain PHP's array<int, Line> is a List<Line>
+List<Line> kept = Shelf.kept();             // compiles: kept[0] is the first kept line, whatever its key was
+Map<int, Line> byKey = Shelf.kept();        // compiles: the Map keeps plain PHP's keys
+```
+
+**A `List` is not a `Map`, so a `List` value where only a `Map` is declared is a compile error,** as a `List` literal is: its keys are only its positions. A plain PHP value is the exception, since it holds the keys plain PHP gave it.
+
+<!-- example list-not-map: statements
+List<int> sizes = [3, 5];
+-->
+```csharp
+Map<int, int> bySize = sizes;                 // compile error: a List is not a Map: its keys are only its positions
+```
+
 `as` to a collection type checks every element too, wherever the value came from, and gives null if any element is wrong (section 21).
 
 <!-- example element-checks: statements
