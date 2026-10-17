@@ -1,0 +1,14 @@
+namespace Demo;
+
+public class FunctionShelf<T>
+{
+    private static Function<T(T)> shared = (T value) => value;
+
+    public static void keep(T kept)
+    {
+        FunctionShelf<T>.shared = (T value) => kept;
+    }
+
+    // Spec section 14.3 and section 11: each list of type arguments has its own static field and its own function.
+    public static T run(T value) => FunctionShelf<T>.shared(value);
+}

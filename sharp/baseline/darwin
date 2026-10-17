@@ -3,7 +3,6 @@ SKIPPED	Zend/tests/bug46701.phpt
 SKIPPED	Zend/tests/bug62097.phpt
 SKIPPED	Zend/tests/bug67436/bug67436.phpt
 SKIPPED	Zend/tests/bug70173.phpt
-SKIPPED	Zend/tests/bug71930.phpt
 SKIPPED	Zend/tests/comparison/compare_001.phpt
 SKIPPED	Zend/tests/comparison/compare_002.phpt
 SKIPPED	Zend/tests/comparison/compare_003.phpt

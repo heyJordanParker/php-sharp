@@ -1607,6 +1607,36 @@ Function<void(Order)>? onPaid = null
 public Function<bool(Order)> eligibleFor(Account account)
 ```
 
+**A function fits a function type when it takes every parameter the type passes,** as in C#, Kotlin, Swift and Java. A function for a type that returns `void` gives no value, and the result of a call that returns `void` is no value to use:
+
+<!-- example function-fit: statements
+List<int> seen = [];
+-->
+```csharp
+Function<int(int, int)> pair = (int a) => a;        // compile error: Function<int(int, int)> takes 2 parameters, and this lambda takes 1
+Function<void(int)> sink = (int n) => n * 2;        // compile error: this lambda gives a value
+Function<void(int)> record = (int n) => seen.add(n);
+const kept = seen.clear();                          // compile error: seen.clear() returns nothing
+```
+
+**Any expression that gives a function is called the same way,** with the arguments in parentheses after it, as in C#, TypeScript, Kotlin and Swift: a list element, a call's result, a conditional or a lambda.
+
+<!-- example function-calls: statements
+List<Function<int(int)>> steps = [(int n) => n + 1, (int n) => n * 2];
+bool doubles = true;
+-->
+```csharp
+const adder = (int a) => (int b) => a + b;
+int first = steps[0](5);                             // 6
+int picked = (doubles ? steps[1] : steps[0])(5);     // 10
+int sum = adder(2)(3);                               // 5
+```
+<!-- run function-calls
+first;    // 6
+picked;   // 10
+sum;      // 5
+-->
+
 ### 14.2 Lambdas
 
 A lambda is written as a bare arrow. Parameter types are optional when the checker can infer them.
@@ -1636,7 +1666,7 @@ increment();   // count is now 1
 count;   // 1
 -->
 
-A lambda that calls `add`, `set` or `remove` on a captured variable changes the variable itself:
+A lambda that changes a captured collection, with `add`, `insert`, `remove`, `clear` or an index write, changes the variable itself:
 
 <!-- example capture-and-change: statements
 List<int> numbers = [1, 2, 3];
@@ -1660,6 +1690,49 @@ List<string> names = ["Spring Sale"];
 ```csharp
 names.map(Str.slug);
 ```
+
+A method of a `List`, `Map` or `Set`, an extension method (section 26) and a plain PHP function are values the same way, as in `allowed.contains`, `name.trim` and `global.strtoupper`. A collection is a value (section 12), so a collection's method value holds the collection as it was when the value was made, as C# copies a struct into a delegate made from its method:
+
+<!-- example method-value-kinds: statements
+List<int> allowed = [1, 3];
+List<string> names = ["tea", "jam"];
+-->
+```csharp
+const has = allowed.contains;
+allowed.add(5);
+List<int> kept = [1, 2, 5].filter(allowed.contains);   // [1, 5]
+List<string> loud = names.map(global.strtoupper);      // ["TEA", "JAM"]
+```
+<!-- run method-value-kinds
+has(5);        // false
+kept;          // [1, 5]
+loud;          // ["TEA", "JAM"]
+-->
+
+**A method that changes a collection is no function value**, since it would change only that copy, as Swift refuses the value of a `mutating` method. A lambda that calls it changes the collection itself:
+
+<!-- example changing-method-values: statements
+List<int> seen = [];
+-->
+```csharp
+const add = seen.add;                       // compile error: write a lambda that calls it, as in value => seen.add(value)
+const record = (int value) => seen.add(value);
+```
+
+**A plain PHP function that changes a variable it is given, or reads the variables of the code that calls it, is no function value,** since PHP# passes every argument by value. A call that would pass it a PHP# variable to change is an error too, and names the method that does the work where there is one:
+
+<!-- example by-reference-functions: statements
+List<int> numbers = [3, 1, 2];
+-->
+```csharp
+const sort = global.sort;                   // compile error: global.sort changes the variable it is given
+const pack = global.compact;                // compile error: global.compact reads the caller's variables
+global.array_push(numbers, 4);              // compile error: write numbers.add(…)
+List<int> sorted = numbers.sortedBy(n => n);
+```
+<!-- run by-reference-functions
+sorted;   // [1, 2, 3]
+-->
 
 In a plain PHP class with both a property and a method of that name, the property wins, as in PHP.
 
@@ -1702,7 +1775,7 @@ public void renewAll(List<int> customerIds, string plan)
 **A `?` or a null check that cannot matter is a compile error,** because it misstates the code. Section 24 gives the rule for `?`.
 
 - a null check, `?.` or `??` on a value whose type has no `?`
-- a nullable return type on a method that never returns null
+- a nullable return type on a method no subclass can override that never returns null
 
 <!-- example needless-null-checks: members
 private Customer customer = new Customer();
@@ -2998,7 +3071,7 @@ public class Layout
 
 **The standard library lives under one root, `Sharp`,** with the standard library namespaces `Sharp.Text`, `Sharp.Math`, `Sharp.Json`, `Sharp.IO`, `Sharp.Time`, `Sharp.Net` and `Sharp.Data`, as .NET has `System.*` and Rust has `std::*`.
 
-**Only `Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin. `Error` is the one default name that nothing shadows (section 31):
+**`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin. `Error` is the one default name that nothing shadows (section 31):
 
 <!-- example own-namespace-shadows -->
 ```csharp
@@ -3020,6 +3093,19 @@ public class Release
 {
     public string stage() => Environment.stage();                   // compiles: Environment is App.Shop.Environment, with no import
     public string? region(Environment environment) => environment.variable("AWS_REGION");   // compile error: App.Shop.Environment declares no variable
+}
+```
+
+**PHP's standard exception classes need no import either,** as Java's `java.lang` exceptions and Kotlin's need none. A bare `ValueError`, `OutOfRangeException` or any other exception class in PHP's root namespace names PHP's own. A class of the same name that the file declares or imports, or one in the file's own namespace, shadows it by the same rule:
+
+<!-- example standard-exceptions -->
+```csharp
+// app/Shop/Gauge.sharp
+namespace App.Shop;
+
+public class Gauge
+{
+    public int first(List<int> values) => values.count() > 0 ? values[0] : throw new ValueError("empty");   // compiles: ValueError is PHP's, with no import
 }
 ```
 
@@ -3858,7 +3944,7 @@ theorem receiptMatchesRefunds : App.Tenant.Store.Module.receiptMatchesRefunds :=
 - **A rule lives with the namespace it constrains.** "Shared never reaches Tenant" goes in `app/Shared/Module.lean`. A rule about the whole application goes in `app/Module.lean`.
 - **Names match exactly.** Translated code keeps its PHP# names in Lean, with no prefix.
 - **A failed rule is reported on the code that breaks it,** such as the offending `import` line, not only as a failed theorem.
-- **The editor shows,** above each method, the laws that mention it.
+- **The checker names the law in each error about it,** as in `Law addKeepsCurrency is not proven.`
 
 ## 29. Effects
 
@@ -3916,7 +4002,7 @@ extern now uses Clock;               // compile error: name the function through
 - **An object a declared plain PHP call returns carries that call's effect,** so `StripeClient.charges()` returns an object with `Http`, and calling it fits `uses Http`. An `extern` on the returned class itself wins over the inherited effect.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way.
-- **PHP's own built-in functions come declared.** PHP#'s Composer package ships an `extern global.…` declaration for each one, so `global.levenshtein(a, b)` is pure and `global.fopen(path, "r")` has `Files`.
+- **PHP's own built-in functions and exception classes come declared.** PHP#'s Composer package ships an `extern global.…` declaration for each function, so `global.levenshtein(a, b)` is pure and `global.fopen(path, "r")` has `Files`. Each built-in exception class is declared pure, so pure code may `throw new ValueError("empty")`.
 
 **The standard library's ten effect classes replace PHP's built-ins for their effects:**
 
@@ -3931,7 +4017,21 @@ extern now uses Clock;               // compile error: name the function through
 - `Mail` replaces `mail()`.
 - `Environment` replaces `getenv()` and PHP's other environment functions.
 
-Calling a replaced function directly is a compile error that names the method (section 8). **A PHP built-in class, such as `PDO` or `DateTime`, is refused the same way,** and the error names the standard library type that replaces it, such as `Database` or `Date`.
+Calling a replaced function directly is a compile error that names the method (section 8). **A PHP built-in class the standard library replaces, such as `PDO` or `DateTimeImmutable`, may be imported and named** to hold, pass, return and read what a library gives. Creating one, with `new` or a static factory such as `DateTimeImmutable.createFromFormat(…)`, is a compile error that names the standard library member to use instead, such as `clock.now()` on the `Clock` a constructor takes, or `database.query(…)` on the `Database`:
+
+<!-- example wrapped-class -->
+```csharp
+// app/Shop/Stamp.sharp
+namespace App.Shop;
+
+import DateTimeImmutable;
+
+public class Stamp
+{
+    public string year(DateTimeImmutable moment) => moment.format("Y");      // compiles: code holds and reads one a library gives
+    public DateTimeImmutable now() => new DateTimeImmutable();               // compile error: read the time with clock.now() on the Clock your constructor takes
+}
+```
 
 <!-- example pure-interface -->
 ```csharp
@@ -3991,7 +4091,7 @@ The standard library's ten effect classes, listed above, are `foreign` classes. 
 
 **`Events` is the effect of `emit`** (section 15). It is the one standard effect that is not a `foreign` class: a method has it when its body emits, and no object carries it.
 
-**PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS` are compile errors. For the environment and the command-line arguments, the error names `Environment`. For request data, it names a parameter that takes it. The process environment arrives as `Environment`, a standard `foreign` class like `Clock` and `Random`:
+**PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS` are compile errors. For the environment and the command-line arguments, the error names `Environment`. For request data, it names a parameter that takes it. PHP# has no global variables, so for `$GLOBALS` it names a constructor or method parameter that takes the value. The process environment arrives as `Environment`, a standard `foreign` class like `Clock` and `Random`:
 
 - `string? variable(string name)` reads an environment variable, or gives null when it is not set.
 - `List<string> arguments { get; }` holds the command-line arguments, starting with the script's name.
@@ -4026,13 +4126,27 @@ public class CheckoutController
     public string origin() => _SERVER["HTTP_HOST"];             // compile error: take the request data as a parameter
 }
 ```
+
+A module binds `Deploy`, and the standard library's module gives it the app's `Environment` (section 32):
+
+<!-- example environment -->
+```csharp
+// app/Module.sharp
+namespace App;
+
+module
+{
+    transient Deploy = Deploy;   // every class that takes a Deploy gets one with the app's Environment
+}
+```
 <!-- run environment
-new Deploy(new Environment()).target();   // throws OutOfRangeException
+public ExampleRun(private Deploy deploy) { }
+this.deploy.target();   // throws OutOfRangeException
 -->
 
 `Deploy` holds an `Environment`, so it has that effect (see the rule on a class's effects below).
 
-**A `foreign` object reaches other code only through constructors:**
+**A `foreign` object is an ordinary type in a constructor, a method parameter and a return value:**
 
 <!-- example foreign-constructor -->
 ```csharp
@@ -4042,12 +4156,25 @@ public class TenantCache
 }
 ```
 
-- **A class's effects** are the `foreign` classes it holds, directly or through its fields, the effects of the plain PHP its methods call, and the events its methods emit. The checker works them out from field and constructor types and from method bodies. Nothing is written down.
-- **A `foreign` object** is created in a module binding (section 32), as often as its binding's lifetime decides, and handed down through constructors. Creating one anywhere else, or storing one in a static, is a compile error.
+<!-- example foreign-parameter -->
+```csharp
+// app/Shop/Stamp.sharp
+namespace App.Shop;
 
-**Pure code** reaches no `foreign` object, emits no event, calls no plain PHP unless an `extern` declares it pure, and changes nothing it was given (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code, and Lean cannot see inside `foreign` classes or plain PHP.
+import Sharp.Time.Date;
 
-**Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types, except the function type of a method's parameter, which takes on what each call passes (below). Every implementation is held to what the declaration allows:
+public class Stamp
+{
+    public string stampedWith(Clock clock) => Date.format(clock.now(), "Y-m-d");   // compiles: the method has the effect Clock
+}
+```
+
+- **A class's effects** are the `foreign` classes it holds, directly or through its fields, or that its methods take, the effects of the plain PHP its methods call, and the events its methods emit. A method that calls a `foreign` object it takes has that effect, as when it calls one it holds, and a caller that uses one a method returns has the effect at that call. The checker works them out from field, constructor and parameter types and from method bodies. Nothing is written down.
+- **A `foreign` object** is created in a module binding (section 32), as often as its binding's lifetime decides, and passed on through constructors, method parameters and return values. Creating one anywhere else in PHP# code, or storing one in a static, is a compile error. Plain PHP creates one as it creates any object.
+
+**Pure code** reaches no `foreign` object, emits no event, and calls no plain PHP unless an `extern` declares it pure. Pure limits only what code reaches outside the program, so a pure method may change its own object and its arguments. `readonly` after the parameters is what promises a method changes nothing, as in `T peek() readonly;`, and it holds every implementation to that (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code that changes nothing it was given, so a law that reaches a change is a compile error naming the method, and Lean cannot see inside `foreign` classes or plain PHP.
+
+**Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types, except the function type of a method's parameter, which takes on what each call passes (below). A declaration that overrides another is held to it: a sub-interface may narrow its parent's `uses`, and a `uses` that widens it is a compile error at the declaration. Every implementation is held to what the declaration allows:
 
 <!-- example effectful-declarations: members -->
 ```csharp
@@ -4150,7 +4277,7 @@ public class StoreCheckout : Checkout
 
 **A method takes on the effects of each function it is given.** A parameter whose function type states no effects, as `f` in `map(Function<TResult(T)> f)`, has at each call the effects of the function that call passes. The method has its body's own effects plus those, and nothing is written, as with Swift's `rethrows` and Kotlin's inline lambdas, and as a call to plain PHP takes on the effects of each lambda passed to it.
 
-**Such a parameter runs only inside the call,** as a Swift closure parameter does without `@escaping`. Storing it in a field, a collection or a new object, returning it, and capturing it in a lambda that escapes are compile errors that name the type to take instead. Calling it, and passing it on to another method's function parameter, are allowed. A local may hold it, and the local is held to the same rules.
+**Such a parameter runs only inside the call,** as a Swift closure parameter does without `@escaping`. Storing it in a field, a collection or a new object, returning it, and capturing it in a lambda that escapes are compile errors that name the type to take instead: the type of the field or parameter that receives it when that type states effects, and otherwise its own type with `uses …`. Calling it, and passing it on to another method's function parameter, are allowed. A local may hold it, and the local is held to the same rules.
 
 <!-- example function-effects: statements in Carts<T>
 List<Cart> carts = [new Cart()];
@@ -4164,7 +4291,7 @@ public Charge charge(Cart cart, Function<Cart(Cart)> prepare)
     => this.gateway.charge(prepare(cart));                            // Http, plus prepare's effects
 
 public Holder keep(Function<string()> body)
-    => new Holder(body);                                              // compile error: body can't be stored; take a Function<string() uses Environment>
+    => new Holder(body);                                              // compile error: body can't be stored; take the Function<string() uses Environment> that Holder's constructor takes
 
 carts.map(c => c.total);                                              // pure
 carts.map(c => this.gateway.charge(c));                               // has Http
@@ -4179,9 +4306,9 @@ Take a `Function<string() uses Environment>`, whose type states the effects it m
 
 The standard library's collection methods (section 12) take on the effects of their functions this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
 
-**Plain PHP can run any function it is given,** as `global.array_map(f, list)` and `global.usort(list, f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => global.time()` to `global.call_user_func` has the effect `Clock`.
+**Plain PHP can run any function it is given,** as `global.array_map(f, list)` and `global.array_filter(list, f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => global.time()` to `global.call_user_func` has the effect `Clock`.
 
-**Code with a body writes no `uses`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function it is given, and its body and declaration show all four. The checker works out each method's effects, and the editor displays them. A `uses` that names a function parameter, with or without a body, is a parse error that says to delete it.
+**Code with a body writes no `uses`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function it is given, and its body and declaration show all four. The checker works out each method's effects, and its errors name them, as in "`Gauge.level` calls `Clock.now`, which has the effect `Clock`". A `uses` that names a function parameter, with or without a body, is a parse error that says to delete it.
 
 ## 30. Tuples
 
@@ -4313,7 +4440,7 @@ module
 - **A binding's value is a class or one expression.** A class, such as `SmtpMailer`, is built through its main constructor (section 9.1). A class binds to itself to be created, as `SendReceipt` does.
 - **A binding names the services it needs as parameters, and its value is one expression over them,** as Dagger's `@Provides` methods do. The container passes each parameter the service bound to its type, so `RedisStore` above gets the app's `Environment`, which the standard library's module binds for every namespace. An expression is for a value no binding gives, such as `RedisStore`'s URL.
 - **A module stays declarative:** one expression per binding, and no statements, loops or methods.
-- **A `foreign` object is created in a module binding** (section 29). The binding's lifetime decides how often one is created, and it reaches classes only through constructors.
+- **A `foreign` object is created in a module binding** (section 29). The binding's lifetime decides how often one is created, and the container passes it to classes through their constructors.
 - **A module also states the laws that span its classes** (section 28).
 
 **The host defines each lifetime, as ASP.NET Core's host does.** A `singleton` lives as long as the host runs the app. A `scoped` binding lives for one scope, which the host starts and ends, such as one HTTP request, one queued job or one console command run. A `transient` binding is created each time a class needs one.

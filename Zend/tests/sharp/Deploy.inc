@@ -6,11 +6,6 @@ class Deploy
     {
     }
 
-    public static function create(): \Demo\Deploy
-    {
-        return new \Demo\Deploy(new \Sharp\Environment());
-    }
-
     public function variable(string $name): ?string
     {
         return $this->environment->variable($name);

@@ -140,7 +140,7 @@ A "not supported yet" refusal never satisfies a `compile error` line, because it
 
 <!-- example refusal: members -->
 ```csharp
-public void bump(&count) { }   // compile error: a parameter takes a value, not a reference
+public Cart fresh() => new Cart;   // compile error: write new Cart()
 ```
 <!-- expect refusal
 line 1 expects a compile error, and the checker reports: …not supported yet…
