@@ -1,0 +1,32 @@
+namespace SharedNames;
+
+import Lib.Gadget;
+extern Gadget.label;
+
+// A plain PHP class's method of the same name as its property is its value where the code takes a function the
+// property's type does not fit.
+public class Labels
+{
+    public string read(Gadget gadget) => gadget.label;
+
+    public List<string> mapped(Gadget gadget) => ["a ", "b "].map(gadget.label);
+
+    public string typed(Gadget gadget)
+    {
+        Function<string(string)> labeller = gadget.label;
+
+        return labeller("c ");
+    }
+
+    public string? maybe(Gadget? gadget)
+    {
+        Function<string(string)>? labeller = gadget?.label;
+
+        if (labeller == null) {
+            return null;
+        }
+
+        return labeller("d ");
+    }
+
+    public bool heldFunction(Gadget gadget) => gadget.format == null;}

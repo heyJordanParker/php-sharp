@@ -1734,7 +1734,7 @@ List<int> sorted = numbers.sortedBy(n => n);
 sorted;   // [1, 2, 3]
 -->
 
-In a plain PHP class with both a property and a method of that name, the property wins, as in PHP.
+A plain PHP class may have both a property and a method of one name. Reading the name gives the property, as in PHP, except where the code takes the read as a function and the property's type doesn't fit that function type. There the read gives the method's value, as in `names.map(gadget.label)`, where `label` is both a `string` property and a method.
 
 **A field or property holding a `Function` is called like a method** when the class has no method with that name. A `.sharp` class cannot declare a method and a field or property with the same name, so `this.discount(…)` always has one meaning.
 
