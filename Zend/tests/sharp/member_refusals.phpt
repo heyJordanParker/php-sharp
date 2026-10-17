@@ -19,7 +19,7 @@ public class Refusals
 
     public string swapped(string name) => name.replace("a", 2);
 
-    public int compared(string name) => name.compareTo("a");
+    public int compared(string name) => name.shuffled("a");
 
     public List<int> values(List<Map<string, int>> shelves) => shelves.flatMap(shelf => shelf);
 
@@ -36,7 +36,7 @@ remove_project($root);
 CompileError: Refusals.sharp has 6 errors:
 line 5: Invalid argument type for argument #1 of `string.contains`: expected `string`, but found `int`.
 line 7: Invalid argument type for argument #2 of `string.replace`: expected `string`, but found `int`.
-line 9: Method `compareTo` does not exist on `string`.
+line 9: Method `shuffled` does not exist on `string`.
 line 11: Invalid return type for method `Refusals.values`: expected `List<int>`, but found `List<[string, int]>`.
 line 13: Invalid return type for method `Refusals.keys`: expected `List<string>`, but found `List<[string, int]>`.
 line 15: Invalid argument type for argument #1 of `List<List<int>>.flatMap`: expected `Function<Iterable<Any?>(List<int>)>`, but found `Function<int(List<int>)>`.

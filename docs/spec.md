@@ -2238,7 +2238,6 @@ A plain PHP file keeps PHP's own interpolation. It converts an object of a class
 "a,b".split("");                          // throws: "`split` needs a delimiter, and it is empty."
 "a:b".split(":", -1);                     // throws: "`split` takes a limit of 0 or more, and it is negative."
 "hello".contains(1);                      // compile error: contains takes a string
-"hello".compareTo("a");                   // compile error: a string has no compareTo
 global.str_contains("hello", "ell");      // compile error: write "hello".contains(…)
 ```
 
