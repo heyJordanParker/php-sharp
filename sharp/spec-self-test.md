@@ -283,15 +283,28 @@ public class Ticket { }
 line … of the generated app/Seat.sharp, from the marker's setup or wrapper: …
 -->
 
-A signature that ends in `uses` and the function parameters it names gets a body, with or without its `;`, as a library declaration such as `List.map`'s is written:
+A method signature written with its `;` and no body, as the standard library declares `List.map`, gets a body, since a class holds no method without one. A field, an abstract method and a method with an `=>` body keep their `;`:
 
-<!-- example uses-signature: members -->
+<!-- example bodyless-signature: members -->
 ```csharp
-public int twice(Function<int(int)> f) uses f;
-public int thrice(Function<int(int)> f) uses f
-public int quoted(Function<int(int)> f) uses f readonly;
+public int twice(int n);
+public int quoted(int n) readonly;
+private int count = 2;
+public int less(int n) => n - 2;
 ```
-<!-- expect uses-signature -->
+<!-- expect bodyless-signature -->
+
+A line that starts with `=>` continues the signature above it, so the method keeps its body there and the line's annotation is the method's:
+
+<!-- example arrow-continuation: statements -->
+```csharp
+public int twice(int n)
+    => n * 2;
+public int less(int n)
+    => n - "two";        // compile error
+this.twice(3);           // 6
+```
+<!-- expect arrow-continuation -->
 
 A line holding only `…` that ends a function's body becomes a throw, so a body that returns a value still compiles. Anywhere else it is dropped, so a statement after it still runs:
 

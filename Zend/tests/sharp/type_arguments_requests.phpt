@@ -1,5 +1,5 @@
 --TEST--
-Type texts from unserialize, and type arguments a new spells from this's, last one request, so a worker that reads or nests new ones in every request keeps its size
+Type texts from unserialize, and type arguments a new spells from this's, last one PHP request, so a php-fpm worker that reads or nests new ones in every request keeps its size
 --SKIPIF--
 <?php
 if (getenv('SKIP_SLOW_TESTS')) die('skip slow test');

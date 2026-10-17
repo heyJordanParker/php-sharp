@@ -17,9 +17,11 @@ The approved language rules live in [docs/spec.md](../docs/spec.md), and the rea
 Run every command from the repository root.
 
 ```sh
-sharp/bin/build                 # incremental build of sharp/build/<os>-<arch>/sapi/cli/php
+sharp/bin/build                 # incremental build of sharp/build/<os>-<arch>/sapi/cli/php and sapi/fpm/php-fpm
 sharp/bin/build --clean         # rebuild from scratch
+sharp/bin/build --zts           # the thread-safe build, in sharp/build/<os>-<arch>-zts, installed into its install/
 sharp/bin/test                  # run the PHP# suite, Zend/tests/sharp/
+sharp/bin/test --zts            # run it on the thread-safe build
 sharp/bin/test Zend/tests/foo   # run these .phpt files or directories instead
 sharp/bin/test --opcache        # also run with the opcache file cache, priming it and then using it
 sharp/bin/test --repeat         # also run each test twice in one process, the second time from opcache shared memory
@@ -29,7 +31,12 @@ sharp/bin/test --spec           # also compile and run every code example in doc
 sharp/bin/test --differential   # also check that php -l compiles every Zend/tests/sharp/*.sharp file
 sharp/bin/test --phpunit        # also run the PHP# test class in sharp/phpunit/ under PHPUnit
 sharp/bin/test --upstream       # run Zend/tests, ext/reflection, ext/tokenizer and ext/opcache
+sharp/bin/hosts --linux         # serve sharp/hosts/ from php-fpm and FrankenPHP, and compare with sharp/hosts/expected/
 ```
+
+`--zts` builds with `--enable-zts --enable-embed --disable-zend-signals`, as docker-library's `zts` images do, so FrankenPHP and other threaded hosts can link its `libphp`. Its tests use the `mago` in the other build's folder. Apple Silicon has no thread-safe JIT, so there the `*_jit_*` tests fail on it, and Linux runs them.
+
+`sharp/bin/hosts` runs on Linux, so `--linux` runs it in the `sharp/docker/` image. It needs `sharp/bin/build`, `sharp/bin/test` and `sharp/bin/build --zts` first, for `php-fpm`, `mago` and the installed thread-safe engine. It builds FrankenPHP v1.13.0 with Go against that engine into `sharp/build/<os>-<arch>-zts/frankenphp/`, then requests the fixture's paths from php-fpm, through `cgi-fcgi`, and from one FrankenPHP worker: the lifetimes twice, `/types` 1,000 times, `/flood` past the type limit, `/words`, a type the program makes that no request made before, then `/types` and `/` again. Each host's output must equal `sharp/hosts/expected/<host>.txt`, where only the static's count differs. Four more workers then serve 400 requests, 32 at once, in one process.
 
 `sharp/bin/test` first compares the version the built engine prints in `php --ri sharp` with `PHP_SHARP_VERSION` in `ext/sharp/php_sharp.h`, and refuses to run until `sharp/bin/build` rebuilds an engine that differs.
 
@@ -65,33 +72,36 @@ A `compile error` line needs the error its rule gives: a "not supported yet" ref
 
 On a pull request, the `SPEC_GUARD` job runs the base commit's `sharp/bin/spec --base <commit>`, from the base branch's `.github/workflows/completes.yml` on `pull_request_target`, so a pull request never runs or changes its own comparison. A feature pull request changes the spec, its examples and `sharp/baseline/spec` together with its code. `GUARDED` in `sharp/bin/spec` names what measures the examples, `sharp/bin/spec` itself, and a pull request that changes any other file leaves it exactly as the base has it. Markdown never runs, so a Markdown file may change beside it. A pull request that adds or changes a file in `sharp/harness/` lists it in its body, and its review checks that no stub makes an example pass falsely. The guard lists changed files with `--no-renames`, so a renamed guarded file shows its old path, and it fails on a symbolic link at a file it reads or guards, naming the path only. The fingerprint covers the whole example but its id: its section, and every block's marker line, setup, fence language, code and run comment. An example the base has with the same fingerprint, under its id or another, never joins the list, except that a renamed example takes over its old id's entry. An `ignore` on code the base checked counts as an entry.
 
-## Runtime image
+## Runtime images
 
-`sharp/docker/runtime/` holds docker-library's `php:8.5-fpm-trixie` recipe, built from this repository's source instead of the php.net tarball, with `ext/sharp` built in. It keeps docker-library's layout, so `docker-php-ext-*` and `install-php-extensions` work unchanged and an app switches to PHP# by changing only its `FROM` line. The `docker-php-*` scripts are verbatim copies. Compare them and the Dockerfile with docker-library's `8.5/trixie/fpm` on every merge from upstream.
+`sharp/docker/runtime/Dockerfile` holds docker-library's `php:8.5-fpm-trixie` recipe, built from this repository's source instead of the php.net tarball, with `ext/sharp` built in. It keeps docker-library's layout, so `docker-php-ext-*` and `install-php-extensions` work unchanged and an app switches to PHP# by changing only its `FROM` line. The `docker-php-*` scripts are verbatim copies. Compare them and the Dockerfile with docker-library's `8.5/trixie/fpm` on every merge from upstream.
+
+`sharp/docker/runtime/frankenphp.Dockerfile` builds the engine with docker-library's `8.5/trixie/zts` recipe, then runs FrankenPHP v1.13.0's own Dockerfile stages on it, as FrankenPHP's images build on `php:8.5-zts-trixie`. Go 1.27, `e-dant/watcher` 0.14.5 and `install-php-extensions` 2.12.0 are pinned where FrankenPHP takes the latest. Compare it with docker-library's `8.5/trixie/zts` and FrankenPHP's `Dockerfile` on every merge from either.
 
 The build context is the git tree, the same one CI builds from:
 
 ```sh
 git archive HEAD | docker build -f sharp/docker/runtime/Dockerfile -t php-sharp -
+git archive HEAD | docker build -f sharp/docker/runtime/frankenphp.Dockerfile -t php-sharp:frankenphp -
 ```
 
 ## Composer
 
 `sharp/composer/` is the Composer plugin `heyjordanparker/php-sharp-composer`. Composer's autoloader then tries `.sharp` after `.php` by the PSR-4 rules, the way it tries `.hh` on HHVM. Composer's class map scanner reads only `<?php` files, so on `composer dump-autoload --optimize` the plugin writes every `.sharp` file under a PSR-4 folder to `vendor/composer/autoload_sharp.php`, and the autoloader reads it. The package's autoloader includes every `.sharp` class itself, never Composer's, so on plain PHP the first one stops with "This project needs the PHP# engine" before its source can reach the output.
 
-`sharp/composer/library/Sharp/Builtins.sharp` gives each PHP built-in function its effect, as `extern global.fopen uses Files;`. `sharp/bin/builtins` writes it from PHPStan's php-8-stubs, at the version and SHA-256 it pins, for every PHP 8.5 function in PHP's root namespace that Mago's prelude in `sharp/mago/crates/prelude/` declares. `RULES` in the script maps each function to its effects, or to none, by its extension and name, and the run fails on a function no rule covers. `sharp/bin/builtins --self-test` checks that each rule gives the effect of its row in `ROWS`, and that removing the rule changes that row. The Linux job runs both and fails when the file differs from the committed one.
+`sharp/composer/library/Sharp/Builtins.sharp` gives each PHP built-in function its effect, as `extern global.fopen uses Files;`. `sharp/bin/builtins` writes it from PHPStan's php-8-stubs, at the version and SHA-256 it pins, for every PHP 8.5 function in PHP's root namespace that Mago's prelude in `sharp/mago/crates/prelude/` declares. `RULES` in the script maps each function to its effects, or to none, by its extension and name, and the run fails on a function no rule covers. The file also declares pure each PHP 8.5 exception class the prelude declares, as `extern ValueError;`: `Exception`, `Error` and every class whose parents reach one of them. `sharp/bin/builtins --self-test` checks that each rule gives the effect of its row in `ROWS`, and that removing the rule changes that row. The Linux job runs both and fails when the file differs from the committed one.
 
 `sharp/composer/` is the plugin's source of truth. Composer installs it from `heyJordanParker/php-sharp-composer`, a read-only split that CI rewrites from this folder's history, the way Symfony splits its components. Change the plugin here, never in the split.
 
 ## macOS dependencies
 
 ```sh
-brew install autoconf bison re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
+brew install autoconf bison curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
 ```
 
 ## CI
 
-`.github/workflows/sharp.yml` builds and tests on Linux in the `sharp/docker/` image and on `macos-latest`, for every push and pull request to `master` that changes more than documentation. The Linux job runs `sharp/bin/test --phpunit` too, so a PHP# test class runs under real PHPUnit on every change. It also fails when a generated file differs from the committed one, when `ext/sharp/sharp_unit.h` differs from the header `sharp/mago/` generates from `Zend/zend_ast.h`, or when `ext/sharp/Cargo.lock` or `sharp/mago/Cargo.lock` names a local `path+file://` or `git+file://` source.
+`.github/workflows/sharp.yml` builds and tests on Linux in the `sharp/docker/` image and on `macos-latest`, for every push and pull request to `master` that changes more than documentation. The Linux job runs `sharp/bin/test --phpunit` too, so a PHP# test class runs under real PHPUnit on every change. `LINUX_ZTS` builds with `--zts` and runs `--opcache --repeat --passes`, the JIT included. `HOSTS` runs `sharp/bin/hosts` with the `php-fpm` and `mago` `LINUX` built and the engine `LINUX_ZTS` installed, which each keeps as a tar artifact, so it builds no engine. It also fails when a generated file differs from the committed one, when `ext/sharp/sharp_unit.h` differs from the header `sharp/mago/` generates from `Zend/zend_ast.h`, or when `ext/sharp/Cargo.lock` or `sharp/mago/Cargo.lock` names a local `path+file://` or `git+file://` source.
 
 `.github/workflows/mago.yml` runs Mago's own gates in `sharp/mago/` on every push and pull request: formatting, clippy and the workspace tests on Linux with stable and nightly Rust and on macOS with stable Rust, a release build, `typos`, and patch coverage. Its `plain-php` job runs on `ubuntu-latest` and `macos-latest` with the runner's own PHP. It installs `heyjordanparker/php-sharp-composer` from `sharp/composer/` and `heyjordanparker/mago-sharp` from `sharp/mago/`, with the `mago` that job built, then runs `mago analyze` and `mago compile` on a one-class `.sharp` project. Its `ci-passed` job passes when all of them pass.
 
@@ -99,11 +109,11 @@ brew install autoconf bison re2c pkgconf icu4c libiconv libpq libsodium libzip o
 
 A pull request body line such as `Completes: §6.1, §9` claims those sections are done. The `COMPLETES` job in `.github/workflows/completes.yml` runs the base commit's `sharp/bin/spec --completes` on the merge commit whenever the body is opened, edited or pushed to. It fails on a `Completes:` line in any other form, such as `**Completes:** §6`, on a section with no checked example, and on a section `sharp/baseline/spec` still lists. `§9` covers `§9.1`.
 
-`master` takes changes only through a pull request whose `CI_PASSED`, `ci-passed`, `SPEC_GUARD` and `COMPLETES` checks pass. A repository ruleset enforces it for every account, admins included, and refuses force pushes and deletion. `CI_PASSED` passes when `LINUX` and `MACOS` pass, or skip on a pull request that changes documentation alone.
+`master` takes changes only through a pull request whose `CI_PASSED`, `ci-passed`, `SPEC_GUARD` and `COMPLETES` checks pass. A repository ruleset enforces it for every account, admins included, and refuses force pushes and deletion. `CI_PASSED` passes when `LINUX`, `LINUX_ZTS`, `HOSTS` and `MACOS` pass, or skip on a pull request that changes documentation alone.
 
 PHP# and Mago release together at one version. `PHP_SHARP_VERSION` in `ext/sharp/php_sharp.h` and the `version` in `sharp/mago/Cargo.toml` must match. Pushing a full version tag, such as `v0.4.0`, runs `.github/workflows/release.yml`. It fails unless both versions equal the tag, runs Mago's gates, builds `mago` for each platform, and publishes the archives, their attestations and Mago's source archives as the tag's GitHub release. `install.sh`, `mago self-update` and the Composer package `heyjordanparker/mago-sharp` download `mago` from these releases.
 
-The same tag runs `LINUX` and `MACOS`, and when they pass, the `IMAGE` job publishes the runtime image as `ghcr.io/heyjordanparker/php-sharp:<version>`, never as `latest`, for `linux/amd64` and `linux/arm64`. Each platform builds on its own native runner through `docker/github-builder`.
+The same tag runs `LINUX`, `LINUX_ZTS`, `HOSTS` and `MACOS`, and when they pass, the `IMAGE` job publishes both runtime images, php-fpm's as `ghcr.io/heyjordanparker/php-sharp:<version>` and FrankenPHP's as `ghcr.io/heyjordanparker/php-sharp:<version>-frankenphp`, never as `latest`, for `linux/amd64` and `linux/arm64`. Each platform builds on its own native runner through `docker/github-builder`.
 
 On a push to `master` or a tag, once `LINUX` and `MACOS` pass or skip a change to documentation alone, the `COMPOSER` job splits `sharp/composer/` with `splitsh-lite` and pushes the result to the same branch or tag of `heyJordanParker/php-sharp-composer`. It pushes with the split repository's deploy key, kept in the `PHP_SHARP_COMPOSER_DEPLOY_KEY` Actions secret. The split repository's webhook tells Packagist to update `heyjordanparker/php-sharp-composer`, so a tag here becomes a plugin release of the same version. The same job splits `sharp/mago/` and pushes it to the same branch or tag of `heyJordanParker/mago-sharp`, a read-only mirror, with the `MAGO_SHARP_DEPLOY_KEY` secret, so Packagist updates `heyjordanparker/mago-sharp`. It never forces, and it skips a branch the split doesn't contain, as [docs/architecture/mago.md](../docs/architecture/mago.md) says.
 

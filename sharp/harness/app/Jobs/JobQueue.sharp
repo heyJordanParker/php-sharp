@@ -1,0 +1,6 @@
+namespace App.Jobs;
+
+public class JobQueue
+{
+    public List<Job> pending() => [];
+}

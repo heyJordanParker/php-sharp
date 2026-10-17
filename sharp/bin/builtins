@@ -1,9 +1,10 @@
 #!/usr/bin/env php
 <?php
 // Writes sharp/composer/library/Sharp/Builtins.sharp: one `extern global.name` line for each function PHP 8.5 builds in
-// that Mago's prelude declares, with the effect RULES give it. PHPStan's php-8-stubs list the functions, and each stub's
-// folder names its extension. `--self-test` checks that every rule gives its row's effect, and that removing the rule
-// changes that row.
+// that Mago's prelude declares, with the effect RULES give it, then one pure `extern Name` line for each exception class
+// PHP 8.5 builds in that the prelude declares, spec section 29. PHPStan's php-8-stubs list the functions and classes,
+// and each stub's folder names its extension. `--self-test` checks that every rule gives its row's effect, and that
+// removing the rule changes that row.
 
 declare(strict_types=1);
 
@@ -384,12 +385,13 @@ function selfTest(): never
 }
 
 /**
- * @return array<string, true> the lowercase names of the functions in PHP's root namespace that Mago's prelude declares.
- * Mago reports `global.name` as missing for any other function, such as oci8's and imap's, so those get no line.
+ * @return array{array<string, true>, array<string, true>} the lowercase names of the functions in PHP's root namespace,
+ * and the lowercase full names of the classes, that Mago's prelude declares. Mago reports `global.name` as missing for
+ * any other function, such as oci8's and imap's, and an import of any other class, so those get no line.
  */
-function checkerFunctions(string $root): array
+function checkerNames(string $root): array
 {
-    $names = [];
+    [$names, $classes] = [[], []];
     foreach (glob("$root/sharp/mago/crates/prelude/assets/extensions/*.php") as $path) {
         $tokens = array_values(array_filter(
             PhpToken::tokenize(file_get_contents($path)),
@@ -411,14 +413,50 @@ function checkerFunctions(string $root): array
                 if (preg_match('~^\w+$~', $name)) {
                     $names[strtolower($name)] = true;
                 }
+            } elseif ($token->is(T_CLASS) && $depth === $namespaceDepth && !$tokens[$index - 1]->is([T_DOUBLE_COLON, T_NEW])) {
+                $class = $tokens[$index + 1]->text;
+                $classes[strtolower($namespace === '' ? $class : "$namespace\\$class")] = true;
             }
         }
     }
-    if ($names === []) {
-        fail('sharp/mago/crates/prelude/assets/extensions declares no function.');
+    if ($names === [] || $classes === []) {
+        fail('sharp/mago/crates/prelude/assets/extensions declares no function or no class.');
     }
 
-    return $names;
+    return [$names, $classes];
+}
+
+/**
+ * @return list<string> the full names of the exception classes PHP builds in that the prelude declares: `Exception`,
+ * `Error` and every class whose parents reach one of them, in name order.
+ */
+function exceptionClasses(PHPStan\Php8StubsMap $map, string $stubs, array $checker): array
+{
+    // Each class's full name and the lowercase full name of its parent. A stub names its parent in full, as `\Error`.
+    $declared = [];
+    foreach ($map->classes as $lowercase => $path) {
+        $stub = file_get_contents("$stubs/$path");
+        // An interface, an enum or a trait is not a class.
+        if (!preg_match('~^(?:\w+ )*class (\w+)(?: extends \\\\([\w\\\\]+))?~m', $stub, $class)) {
+            continue;
+        }
+        $namespace = preg_match('~^namespace ([\w\\\\]+);~m', $stub, $match) ? "$match[1]\\" : '';
+        $declared[$lowercase] = [$namespace . $class[1], isset($class[2]) ? strtolower($class[2]) : null];
+    }
+
+    $classes = [];
+    foreach ($declared as $lowercase => [$name]) {
+        $current = $lowercase;
+        while ($current !== null && $current !== 'exception' && $current !== 'error') {
+            $current = $declared[$current][1] ?? null;
+        }
+        if ($current !== null && isset($checker[$lowercase])) {
+            $classes[] = $name;
+        }
+    }
+    sort($classes, SORT_STRING);
+
+    return $classes;
 }
 
 /** Downloads the pinned php-8-stubs into sharp/build, once, and returns its folder. */
@@ -456,10 +494,11 @@ $root = dirname(__DIR__, 2);
 $stubs = stubs($root);
 require "$stubs/Php8StubsMap.php";
 
-$checker = checkerFunctions($root);
+[$checker, $checkerClasses] = checkerNames($root);
+$map = new PHPStan\Php8StubsMap(PHP_VERSION_ID_TARGET);
 $lines = [];
 $unclassified = [];
-foreach ((new PHPStan\Php8StubsMap(PHP_VERSION_ID_TARGET))->functions as $lowercase => $path) {
+foreach ($map->functions as $lowercase => $path) {
     if (!isset($checker[$lowercase])) {
         continue;
     }
@@ -486,11 +525,41 @@ if ($unclassified !== []) {
 }
 ksort($lines, SORT_STRING);
 
+// A class in PHP's root namespace is a standard exception, which a .sharp file names with no import (spec section 23).
+// A class in a namespace is imported, and one whose short name another class has, as FFI\Exception shares Exception's,
+// under its full name with each part capitalized, as the checker's help names an aliased import.
+$exceptions = exceptionClasses($map, $stubs, $checkerClasses);
+$shortNames = array_count_values(array_map(static fn (string $class): string => basename(str_replace('\\', '/', $class)), $exceptions));
+[$imports, $externs] = [[], []];
+foreach ($exceptions as $class) {
+    // A bare `Error` names the standard library's `Sharp.Error` (spec section 31), so PHP# code never names PHP's.
+    if ($class === 'Error') {
+        continue;
+    }
+    $short = basename(str_replace('\\', '/', $class));
+    $alias = str_contains($class, '\\') && $shortNames[$short] > 1 ? implode('', array_map(ucfirst(...), explode('\\', $class))) : null;
+    if (str_contains($class, '\\')) {
+        $imports[] = 'import ' . str_replace('\\', '.', $class) . ($alias === null ? '' : " as $alias") . ';';
+    }
+    $externs[] = 'extern ' . ($alias ?? $short) . ';';
+}
+// A date or a time zone is a value once created, and a .sharp file outside the standard library never creates one
+// (wrapped-class, spec section 29), so holding and reading one is pure. Without the line, each would carry the
+// effects of every declared call that returns one, as `date_create_immutable`'s `Clock`.
+foreach (['DateTimeImmutable', 'DateTimeZone'] as $class) {
+    $imports[] = "import $class;";
+    $externs[] = "extern $class;";
+}
+// A date's text may say "now", so each member that reads one reads the clock.
+foreach (['__construct', 'createFromFormat', 'modify'] as $member) {
+    $externs[] = "extern DateTimeImmutable.$member uses Clock;";
+}
+
 $license = file_get_contents("$stubs/LICENSE");
 $notice = implode("\n", array_map(static fn (string $line): string => rtrim("// $line"), explode("\n", trim($license))));
 file_put_contents(
     "$root/sharp/composer/library/Sharp/Builtins.sharp",
     '// Generated by sharp/bin/builtins from PHPStan\'s php-8-stubs ' . STUBS_VERSION . " for PHP 8.5. Do not edit.\n"
-    . "// The list of functions comes from php-8-stubs, under this license:\n//\n$notice\n\nnamespace Sharp;\n\n"
-    . implode("\n", $lines) . "\n",
+    . "// The list of functions and classes comes from php-8-stubs, under this license:\n//\n$notice\n\nnamespace Sharp;\n\n"
+    . implode("\n", $imports) . "\n\n" . implode("\n", $lines) . "\n\n" . implode("\n", $externs) . "\n",
 );

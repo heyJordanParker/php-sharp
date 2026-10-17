@@ -6,3 +6,7 @@
 /phpunit/.sharp/
 # Its tests are sources, not the files run-tests.php writes from a .phpt test.
 !/phpunit/tests/**/*.php
+
+# The hosts fixture's packages and compiled files, written by sharp/bin/hosts
+/hosts/vendor/
+/hosts/.sharp/

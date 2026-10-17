@@ -10,7 +10,7 @@ production --force
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Environment.sharp';
 require __DIR__ . '/Deploy.sharp';
 
-$deploy = Demo\Deploy::create();
+$deploy = new Demo\Deploy(new Sharp\Environment());
 var_dump($deploy->variable('SHARP_REGION'), $deploy->variable('SHARP_UNSET_REGION'));
 var_dump($deploy->arguments() === $argv);
 echo implode(' ', array_slice($deploy->arguments(), 1)), ' ', $deploy->target(), "\n";
@@ -30,6 +30,13 @@ try {
 var_dump(getcwd() === $start);
 
 var_dump($environment->require('SHARP_REGION'));
+$environment->setVariable('SHARP_SET_REGION', 'us-east-2');
+var_dump($environment->variable('SHARP_SET_REGION'), getenv('SHARP_SET_REGION'));
+try {
+    $environment->setVariable('SHARP=BROKEN', 'x');
+} catch (ValueError $e) {
+    echo $e->getMessage(), "\n";
+}
 try {
     $environment->require('SHARP_UNSET_REGION');
 } catch (ValueError $e) {
@@ -38,7 +45,7 @@ try {
 
 $code = 'require ' . var_export(__DIR__ . '/../../../sharp/composer/library/Sharp/Environment.sharp', true) . ';'
     . ' require ' . var_export(__DIR__ . '/Deploy.sharp', true) . ';'
-    . ' try { Demo\Deploy::create()->target(); } catch (OutOfRangeException $e) { echo get_class($e), "\n"; }';
+    . ' try { (new Demo\Deploy(new Sharp\Environment()))->target(); } catch (OutOfRangeException $e) { echo get_class($e), "\n"; }';
 echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' ' . getenv('TEST_PHP_EXTRA_ARGS') . ' -r ' . escapeshellarg($code) . ' 2>&1');
 
 try {
@@ -69,6 +76,9 @@ bool(true)
 RuntimeException: Environment.changeDirectory: the directory "<dir>/missing" cannot be entered
 bool(true)
 string(9) "eu-west-1"
+string(9) "us-east-2"
+string(9) "us-east-2"
+Environment.setVariable: the name "SHARP=BROKEN" holds "=" or is empty
 Environment.require: the environment variable "SHARP_UNSET_REGION" is not set
 OutOfRangeException
 Cannot modify readonly property Sharp\Environment::$arguments

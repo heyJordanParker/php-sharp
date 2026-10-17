@@ -2,7 +2,7 @@
 
 ## Decision
 
-PHP# has no superglobals. `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS` are compile errors that read "PHP# has no superglobals; take a Request". Request data arrives as an object, such as a framework's `Request`. The standard library adds `Environment`, a `foreign` class with a standard effect of the same name, which has `variable(name)`, `arguments` and `currentDirectory`. `getenv()` and PHP's other environment built-ins carry the `Environment` effect.
+PHP# has no superglobals. `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS` are compile errors that read "PHP# has no superglobals; take a Request", or "take an Environment" for `$_ENV` and for `$_SERVER["argv"]` and `$_SERVER["argc"]`. Request data arrives as an object, such as a framework's `Request`. The standard library adds `Environment`, a `foreign` class with a standard effect of the same name, which has `variable(name)`, `arguments` and `currentDirectory`. `getenv()` and PHP's other environment built-ins carry the `Environment` effect.
 
 ## Options
 

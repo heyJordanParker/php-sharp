@@ -2,10 +2,9 @@ namespace App;
 
 import LogicException;
 
-// Creating one is pure, so `…` fits wherever the spec leaves code out, pure code included.
-extern LogicException;
-
-// What an example's `…` compiles to: code the spec leaves out, which throws if it ever runs.
+// What an example's `…` compiles to: code the spec leaves out, which throws if it ever runs. Creating one is pure,
+// because the standard library declares `LogicException` pure, so `…` fits wherever the spec leaves code out, pure code
+// included.
 public class Elided : LogicException
 {
     public static Any value()

@@ -1,0 +1,17 @@
+namespace Demo;
+
+// Reads rows through the Database its constructor takes, as PHP# code does.
+public class Ledger
+{
+    public Ledger(private Database database) { }
+
+    public List<string> skus()
+        => this.database.query("SELECT sku FROM orders ORDER BY id").map(row => row.get("sku") is string sku ? sku : "");
+
+    public int? cheapest()
+    {
+        const row = this.database.queryFirst("SELECT cents FROM orders ORDER BY cents");
+
+        return row?.get("cents") is int cents ? cents : null;
+    }
+}

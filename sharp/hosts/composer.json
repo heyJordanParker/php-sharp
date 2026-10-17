@@ -1,0 +1,30 @@
+{
+    "name": "heyjordanparker/php-sharp-hosts-fixture",
+    "description": "A PHP# app that php-fpm and FrankenPHP's worker mode each serve, to show each lifetime under each host.",
+    "license": "PHP-3.01",
+    "require": {
+        "heyjordanparker/php-sharp-composer": "*@dev"
+    },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../composer",
+            "options": {
+                "symlink": false,
+                "versions": {
+                    "heyjordanparker/php-sharp-composer": "dev-master"
+                }
+            }
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "heyjordanparker/php-sharp-composer": true
+        }
+    }
+}

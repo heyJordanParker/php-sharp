@@ -214,6 +214,12 @@ Each row reads back a value that only the write it tests puts there:
 - `type_arguments_call_plain.phpt`: a plain PHP `Counter::track()` changes the bounds' key, `Any?`.
 - `type_arguments_reflection_properties.phpt`: the views above, and `Counter::$count` and the store's name are undeclared.
 
+## How long a run-time type lives
+
+- **The process's tables keep each type code spells,** which its source bounds: `sharp_types`, `sharp_type_lists` and `sharp_class_values`, under `SHARP_TYPES_LOCK`. They are the engine's one process-wide mutable state, by design. Per-thread tables would intern each code type once per thread and lose the pointer equality `sharp_type_equals` takes for two persistent types.
+- **The request's tables keep each type first read from input or made by a substitution,** as `unserialize` reads one and `Node<List<T>>` makes one: `SHARP_G(request_types)`, `SHARP_G(request_type_lists)` and `SHARP_G(request_class_values)`. They live as long as the PHP request, which is the app: one HTTP request under php-fpm, the whole worker under FrankenPHP's worker mode or Octane. C# keeps each generic instantiation its runtime makes for the process's life the same way. The program bounds them, and a worker reuses them on its next request.
+- **Only input that invents new type texts could grow them without limit, so the first two hold at most 65,536 types read from input,** `SHARP_TYPE_INPUT_LIMIT`, which `SHARP_G(request_input_types)` counts. The third indexes the class values among them. Past it, a new type text fails in `unserialize` as other bad input does, and each type they hold keeps working. A type code or a substitution spells always interns, since the source and the program bound those. `sharp_type_intern` takes which of the three made the text, as a `sharp_type_source`. `type_arguments_limit.phpt` and the `/flood` and `/words` requests of `sharp/bin/hosts` show it.
+
 ## R5: a class value that carries its type arguments
 
 `typeof(PaginatedList<Order>)` is a `Class<PaginatedList<Order>>`, and `new (pages)()` creates a `PaginatedList<Order>`, spec section 25. Plain PHP receives the plain class name `App\PaginatedList`, spec section 11.
