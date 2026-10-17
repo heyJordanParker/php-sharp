@@ -259,7 +259,7 @@ private static int hits = 0;                     // compiles
 private static int misses;                       // compile error: give misses an initial value
 public static string? region { get; set; } = null;   // compiles: starts as null
 public static string? zone { get; set; }         // compile error: give zone an initial value
-private static int started = global.time();      // compiles: runs once, when the app first uses the class's statics
+private static List<int> sizes = [10, 25].map(size => size * 2);   // compiles: runs once, when the app first uses the class's statics
 public static int limit { get; } = 10;           // compiles: get-only, set only by its initial value
 ```
 
@@ -456,7 +456,7 @@ public void grant(User user) { … }
 public void grant(Page page) { … }                    // compile error: grant is declared twice. Name each by what it takes, as in grantPageAccess
 ```
 
-**A statement that can never run is a compile error,** as Java's "unreachable statement" and Zig's "unreachable code" are. A statement after `return`, `throw`, `global.exit(…)`, `break` or `continue` in the same block never runs, and neither does one after an `if` whose every branch ends the block, or after a loop that never ends, such as a `do` whose body ends the block. The error names the line that ends the block, and says to delete the statement or move it above that line. The block of an `if` or a `for … of` whose condition never finishes, as `if (global.exit(1))`, never runs either, and the error says to write the condition as its own statement in place of the `if` or the `for`.
+**A statement that can never run is a compile error,** as Java's "unreachable statement" and Zig's "unreachable code" are. A statement after `return`, `throw`, `break`, `continue` or a call that never returns in the same block never runs, and neither does one after an `if` whose every branch ends the block, or after a loop that never ends, such as a `do` whose body ends the block. The error names the line that ends the block, and says to delete the statement or move it above that line. The block of an `if` or a `for … of` whose condition never finishes, as `if (throw new ValueError("empty"))`, never runs either, and the error says to write the condition as its own statement in place of the `if` or the `for`.
 
 <!-- example unreachable-statements: members -->
 ```csharp
@@ -3823,7 +3823,7 @@ extern now uses Clock;               // compile error: name the function through
 - **An object a declared plain PHP call returns carries that call's effect,** so `StripeClient.charges()` returns an object with `Http`, and calling it fits `uses Http`. An `extern` on the returned class itself wins over the inherited effect.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way.
-- **PHP's own built-in functions and exception classes come declared.** PHP#'s Composer package ships an `extern global.…` declaration for each function, so `global.levenshtein(a, b)` is pure and `global.fopen(path, "r")` has `Files`. Each built-in exception class is declared pure, so pure code may `throw new ValueError("empty")`.
+- **PHP's own built-in functions and exception classes come declared.** PHP#'s Composer package ships an `extern global.…` declaration for each function, so `global.levenshtein(a, b)` is pure, and the `global.fopen(path, "r")` that the standard library's `Files` calls has `Files`. Each built-in exception class is declared pure, so pure code may `throw new ValueError("empty")`.
 
 **The standard library's ten effect classes replace PHP's built-ins for their effects:**
 
@@ -3915,6 +3915,7 @@ The standard library's ten effect classes, listed above, are `foreign` classes. 
 **PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS` are compile errors. For the environment and the command-line arguments, the error names `Environment`. For request data, it names a parameter that takes it. PHP# has no global variables, so for `$GLOBALS` it names a constructor or method parameter that takes the value. The process environment arrives as `Environment`, a standard `foreign` class like `Clock` and `Random`:
 
 - `string? variable(string name)` reads an environment variable, or gives null when it is not set.
+- `Map<string, string> variables()` reads every environment variable, by name, on every call.
 - `List<string> arguments { get; }` holds the command-line arguments, starting with the script's name.
 - `string currentDirectory()` reads the directory the process runs in on every call, as Go's `os.Getwd()` and Rust's `env::current_dir()` do.
 - `void changeDirectory(string path)` changes the directory the process runs in.
@@ -4127,7 +4128,7 @@ Take a `Function<string() uses Environment>`, whose type states the effects it m
 
 The standard library's collection methods (section 12) take on the effects of their functions this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
 
-**Plain PHP can run any function it is given,** as `global.usort(list, f)` and `global.call_user_func(f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => global.time()` to `global.call_user_func` has the effect `Clock`.
+**Plain PHP can run any function it is given,** as `global.usort(list, f)` and `global.call_user_func(f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => this.clock.now()` to `global.call_user_func` has the effect `Clock`.
 
 **Code with a body writes no `uses`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function it is given, and its body and declaration show all four. The checker works out each method's effects, and its errors name them, as in "`Gauge.level` calls `Clock.now`, which has the effect `Clock`". A `uses` that names a function parameter, with or without a body, is a parse error that says to delete it.
 

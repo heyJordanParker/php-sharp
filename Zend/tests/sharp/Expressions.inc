@@ -38,7 +38,7 @@ class Expressions
 
     public static function describe(string $label, Countable $items): string
     {
-        $token = \random_bytes(((object) $items)->count());
+        $token = \str_pad("", ((object) $items)->count(), "x");
         return \sprintf("%s has %d items and a %d-byte token", $label, ((object) $items)->count(), \strlen($token));
     }
 

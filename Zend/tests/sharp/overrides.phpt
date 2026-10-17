@@ -4,6 +4,7 @@ PHP# properties open with virtual and abstract, an override is a property, a pro
 <?php
 require __DIR__ . '/harness/Model.inc';
 require __DIR__ . '/harness/fixture.inc';
+require __DIR__ . '/harness/Witness.inc';
 fixture('Overrides');
 
 $square = new Overrides\Square();

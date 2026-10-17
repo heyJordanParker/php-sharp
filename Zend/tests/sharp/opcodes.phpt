@@ -1553,7 +1553,7 @@ Signatures: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Accessors/Address: same opcodes and lines in 5 op arrays, same signatures in 1 classes
 Accessors/Product: same opcodes and lines in 11 op arrays, same signatures in 1 classes
 Parcel: same opcodes and lines in 3 op arrays, same signatures in 1 classes
-Exits: same opcodes and lines in 2 op arrays, same signatures in 1 classes
+Exits: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Positions: same opcodes and lines in 5 op arrays, same signatures in 1 classes
 Deploy: same opcodes and lines in 6 op arrays, same signatures in 1 classes
 Tags: same opcodes and lines in 2 op arrays, same signatures in 1 classes

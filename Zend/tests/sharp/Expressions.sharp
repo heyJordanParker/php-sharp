@@ -38,7 +38,7 @@ class Expressions
 
     public static string describe(string label, Countable items)
     {
-        const token = global.random_bytes(items.count());
+        const token = global.str_pad("", items.count(), "x");
         return global.sprintf("%s has %d items and a %d-byte token", label, items.count(), global.strlen(token));
     }
 

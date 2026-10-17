@@ -107,6 +107,13 @@ Three findings shape the work more than the code does:
    - **A `List<int>` has `max()` and `min()`,** declared in `Sharp\Internal\ListMethods` beside `sumOf` with `@where T is int`, and lowered as `last()` is: `($list === [] ? throw new \OutOfRangeException("The list is empty.") : \max($list))`. A list of another element type reads "`max` needs elements of type `int`, and this is a `List<string>`." `Tally.sharp` writes `Pager.sizes().max()`.
    - **`sizeof` and `key_exists` get rows,** naming `{a}.count()` and `` `{b}.has({a})` on a `Map` ``.
 
+9. **#151's effect rows and the environment rows** (team-lead, Queue 6):
+   - **#151's rows join decision 7's check unchanged.** `global.printf("x")`, `global.exit(1)`, `global.time()` and `global.file_put_contents(path, text)` name `console.write(…)`, `process.exit(…)`, `clock.now()` and `files.write(…)` or `files.append(…)`, as their bare calls do. A project without the standard library has no member to name, so its `global.exit(1)` still compiles.
+   - **The `global.exit` status check is gone.** Every `global.exit(…)` outside the standard library gets the bare `exit`'s message, so `global.exit("failed")` names `process.exit(…)` once instead of being refused twice. Inside the library, `Process.exit(int code)` types the status. `global.die` keeps its own refusal, with the note "`global.die("…")` prints the message and exits with status 0, which reports success."
+   - **Section 6 line 262** initializes a static with `[10, 25].map(size => size * 2)`. **Section 7 line 459** lists `return`, `throw`, `break`, `continue` and a call that never returns, and gives `if (throw new ValueError("empty"))` as a condition that never finishes. `process.exit(…)` joins them when the singles PR makes it a `never` method (Jordan answer 4).
+   - **`Environment` gains `Map<string, string> variables()`,** which reads every variable on each call, for `getenv()` with no name, which `global.` no longer reaches. `getenv` names `environment.variable(…)` or `environment.variables()`, `apache_getenv` names `environment.variable(…)`, `apache_setenv` names `environment.setVariable(…)`, and `getopt` names `environment.arguments`. A row names a property with `$`, as `$arguments`. A read of `$argv` names `environment.arguments`, and `$argc` names `environment.arguments.count()`. A parameter named `$argv` reads nothing, so it keeps "PHP# variables have no `$`: write `argv`."
+   - **The observer and override fixtures trace through `Lib\Witness::say`,** because a static's hook has no object to hold a `Console`. `Exits` and `PhpForms` take a `Console` and a `Process`.
+
 ## Answers
 
 From team-lead in Queue 1.
@@ -118,6 +125,7 @@ From team-lead in Queue 1.
 - **team-lead 1:** a row for a function only one kind has names that kind (decision 3).
 - **team-lead 2:** this PR lands after #151. It merges master once #151 is on it, then adds the effect rows and `output-and-exit`, and opens with `Completes: §8`.
 - **team-lead 3:** `library_math_preload.phpt` and `library_math.inc` are approved.
+- **team-lead, Queue 6:** #151's rows keep their shape. `getenv` names `environment.variable(name)`, and `getopt` and `$argv` name `environment.arguments`. A function with no member gets one following `Environment`'s names (decision 9).
 
 ## Questions as asked
 
@@ -212,20 +220,24 @@ Each is outside section 8 and blocks none of its rules.
 
 - **`<` and `>` on an unbounded type parameter compile, and run PHP's comparison (sections 11 and 19).** `public static T of<T>(T a, T b) => a > b ? a : b;` compiles. `Larger.of("10", "9")` gives `"10"`, where section 19 line 2118 orders `"10"` before `"9"`, and PHP# itself gives `true` for `"10" < "9"`. `Larger.of(a, b)` on a class with no `operator <=>` compiles and runs, while `a < b` on that class is refused with "`<` cannot compare `Larger` with `Larger`: `Larger` declares no `operator <=>`."
 - **A `float` passed to an `int` parameter gets mago's generic wording (section 24).** `float largerFloat(float a, float b) => Math.max(a, b)` with decision 1's `max` reports "Possible argument type mismatch … expected `int`, but possibly received `float`. The provided type `float` overlaps with `int` but is not fully contained." for each argument, then "`int` is not `float`: convert with (float) Math.max(a, b)".
+- **A non-negative `int` parameter is named as `int` (section 24).** `global.str_repeat("x", items.count())` reports "Possible argument type mismatch for argument #2 of `global.str_repeat`: expected `int`, but possibly received `int`.", because `str_repeat` takes `int<0, max>` and the message prints both as `int`.
+- **Decision 76 says "The standard library calls PHP the same way, with no exemption."** Since decision 7, the standard library is the one place a `global.` call of a replaced function compiles.
 
 ## Files
 
 ```text
 docs/
 ├── architecture/slices/08-functions.md                          new: this note
-└── spec.md                                                      section 12 line 1119 and section 29 line 4064 (decision 7)
+└── spec.md                                                      sections 6, 7, 12, 24 and 29 (decisions 7, 8 and 9)
 sharp/
 ├── baseline/spec/§7/variadic-parameters                         deleted (decision 5)
 ├── baseline/spec/§8/standard-library-calls                      deleted (decision 5)
 ├── composer/library/Sharp/Math/Math.sharp                       max and min (decision 1)
+├── composer/library/Sharp/Environment.sharp                     variables() (decision 9)
 └── mago/
     ├── crates/analyzer/
-    │   ├── src/expression/call/function_call.rs                 REPLACEMENTS rows; Replacement::CollectionMethod; the global. refusal (decisions 2, 3, 7, 8)
+    │   ├── src/expression/call/function_call.rs                 REPLACEMENTS rows; Replacement::CollectionMethod; the global. refusal; a property member; no exit status check (decisions 2, 3, 7, 8, 9)
+    │   ├── src/statement/mod.rs, src/statement/loop/mod.rs, src/context/scope/loop_scope.rs  a throw as the example of a condition that never finishes (decision 9)
     │   ├── src/expression/call/method_call.rs                   no refusal on several collections; the object one in PHP# words; a call on an Any refused once (decision 8)
     │   ├── src/expression/mod.rs                                a list pattern's own count call stays unreported
     │   ├── src/resolver/method.rs                               count on an empty value; the PHP# words of a @where refusal (decision 8)
@@ -234,8 +246,10 @@ sharp/
     ├── crates/prelude/assets/extensions/sharp.php               ListMethods max() and min() (decision 8)
     ├── crates/sharp-bridge/src/lower.rs                         max and min lowered as last is; a shared List method tests for the List (decision 8)
     ├── crates/sharp-bridge/src/lower/types.rs                   list_method_on_several_collections (decision 8)
-    ├── crates/semantics/tests/fixtures/slice/                   Report.sharp and Suit.sharp moved to members (decision 7)
-    ├── crates/sharp-bridge/tests/lower.rs                       sources moved to members (decision 7); max and min (decision 8)
+    ├── crates/semantics/src/internal/checker/sharp.rs           $argv and $argc name Environment's arguments (decision 9)
+    ├── crates/semantics/tests/sharp.rs                          the $argv and $argc test (decision 9)
+    ├── crates/semantics/tests/fixtures/slice/                   Report.sharp and Suit.sharp moved to members (decisions 7 and 9)
+    ├── crates/sharp-bridge/tests/lower.rs                       sources moved to members (decision 7); max and min (decision 8); global.exit lowered from a standard library file (decision 9)
     └── tests/sharp.rs                                           @global.strtoupper in place of @global.trim (decision 7)
 Zend/tests/sharp/
 ├── MathCalls.sharp                                              calls max and min
@@ -243,7 +257,9 @@ Zend/tests/sharp/
 ├── library_math.inc                                             new: the preload script
 ├── library_math_preload.phpt                                    new: the same rows, preloaded
 ├── CollectionMethods/Pantry.sharp, collection_methods*.{inc,phpt}  max, min, and count, remove, contains and clear on a List or another collection (decision 8)
-└── every fixture that called a replaced function through global., its PHP twin and its driver (decision 7)
+├── environment.phpt                                             variables() (decision 9)
+├── harness/Witness.inc                                          say(), for the hook fixtures (decision 9)
+└── every fixture that called a replaced function through global., its PHP twin and its driver (decisions 7 and 9)
 ```
 
 The bridge and the engine need no change. The new rows and the `global.` refusal run only in a `.sharp` file: each check runs only when `context.dialect.is_sharp()`. `Math.sharp` is a `.sharp` file of the standard library. A plain PHP project's analysis does not change: `mago analyze` on a plain PHP project that calls `\max`, `min`, `\array_filter`, `\in_array`, `str_getcsv`, `\trim` and `count` reports "No issues found."

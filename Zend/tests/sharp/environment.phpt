@@ -1,5 +1,5 @@
 --TEST--
-PHP# Environment reads the process's variables, a variable that must be set, command-line arguments and current directory
+PHP# Environment reads the process's variables one at a time and all at once, a variable that must be set, command-line arguments and current directory
 --ENV--
 SHARP_REGION=eu-west-1
 --ARGS--
@@ -32,6 +32,8 @@ var_dump(getcwd() === $start);
 var_dump($environment->require('SHARP_REGION'));
 $environment->setVariable('SHARP_SET_REGION', 'us-east-2');
 var_dump($environment->variable('SHARP_SET_REGION'), getenv('SHARP_SET_REGION'));
+$variables = $environment->variables();
+var_dump($variables['SHARP_REGION'], $variables['SHARP_SET_REGION'], iterator_to_array($variables) === getenv());
 try {
     $environment->setVariable('SHARP=BROKEN', 'x');
 } catch (ValueError $e) {
@@ -78,6 +80,9 @@ bool(true)
 string(9) "eu-west-1"
 string(9) "us-east-2"
 string(9) "us-east-2"
+string(9) "eu-west-1"
+string(9) "us-east-2"
+bool(true)
 Environment.setVariable: the name "SHARP=BROKEN" holds "=" or is empty
 Environment.require: the environment variable "SHARP_UNSET_REGION" is not set
 OutOfRangeException
