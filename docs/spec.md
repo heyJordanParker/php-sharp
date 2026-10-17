@@ -2193,7 +2193,7 @@ A plain PHP file keeps PHP's own interpolation. It converts an object of a class
 
 **Plain strings:** `"…"` and `'…'` never interpolate, so braces and `$` inside them are literal.
 
-PHP's backtick shell execution is removed. `shell_exec()` stays.
+PHP's backtick shell execution is removed, and so is `shell_exec()`. A program runs through `Process.run(program, arguments)` (section 29), which takes its arguments as a list, so no shell reads them.
 
 ## 19. Equality, comparison and operators
 
@@ -4010,7 +4010,7 @@ extern now uses Clock;               // compile error: name the function through
 - `Http` replaces curl.
 - `Files` replaces every file function outside standard output and standard error.
 - `Console` replaces printing to standard output and standard error.
-- `Process` replaces `exit`.
+- `Process` replaces `exit` and `shell_exec()`.
 - `Clock` replaces `time()`.
 - `Random` replaces `random_int`.
 - `Cache` replaces the APCu functions.
