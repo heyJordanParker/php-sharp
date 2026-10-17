@@ -113,7 +113,7 @@ The precedents are .NET `Environment.Exit` and `Process.RunAndCaptureText`, whic
 ```csharp
 public foreign class Process
 {
-    public void exit(int code);                      // maps exit. Ends the run, skipping every finally.
+    public never exit(int code);                     // maps exit. Ends the run, skipping every finally.
 
     public int id();                                 // maps getmypid. This process's id.
 
