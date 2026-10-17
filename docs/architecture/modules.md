@@ -179,7 +179,8 @@ Zend/tests/sharp/
 ├── container_psr.phpt                  new: the PSR-11 adapter and its errors
 ├── library_autoload.inc                the package holds the library's module
 ├── library_autoload_uncompiled.phpt    vendor/autoload.php loads before anything is compiled
-├── library_autoload_composer_container.phpt   a script in Composer's own process builds a service
+├── library_autoload_composer_container.phpt   a script in Composer's own process builds a service, or gets
+│                                              requireNative's refusal on a mismatched engine, also preloaded
 ├── environment.phpt                    Environment.require
 └── project.inc                         a test project's files may sit in folders
 docs/

@@ -87,6 +87,9 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	HashTable scoped_listeners;
 	zend_ulong next_scoped_listener;
 	char *compile_command;
+	/* The refusal Sharp\Internal\requireNative threw for the standard library this request, which every .sharp file
+	 * the request loads after it throws too, or NULL. */
+	zend_string *native_refusal;
 	/* Undefined until the request runs its compile command, then the checker report the command printed, or null. */
 	zval compile_command_report;
 	zval arguments;
@@ -850,6 +853,12 @@ static zend_op_array *sharp_compile_file(zend_file_handle *file_handle, int type
 {
 	if (!file_handle->filename || !sharp_is_sharp_file(file_handle->filename)) {
 		return sharp_next_compile_file(file_handle, type);
+	}
+	/* Whatever loads the file: a .php file mago compile wrote, Composer's class map or PSR-4, a preload script or a
+	 * require. */
+	if (SHARP_G(native_refusal)) {
+		zend_throw_error(NULL, "%s", ZSTR_VAL(SHARP_G(native_refusal)));
+		return NULL;
 	}
 
 	return zend_compile_file_with(file_handle, type, sharp_parse);
@@ -2427,6 +2436,17 @@ static bool sharp_native_has_body(const zend_string *body)
 	return false;
 }
 
+/* Throws the refusal, and keeps it for sharp_compile_file, which throws it for every .sharp file the request loads
+ * after it. */
+static ZEND_COLD void sharp_refuse_native(zend_string *refusal)
+{
+	if (SHARP_G(native_refusal)) {
+		zend_string_release(SHARP_G(native_refusal));
+	}
+	SHARP_G(native_refusal) = refusal;
+	zend_throw_error(NULL, "%s", ZSTR_VAL(refusal));
+}
+
 /* The standard library's autoload.php passes the SHARP_NATIVE it was built with, the native bodies it declares and its
  * package's version when vendor/autoload.php loads it, as Composer's platform_check.php checks the platform before
  * anything loads. A body is named by its full PHP# name, as Sharp.Text.Text.slug, and a refusal shows it as Text.slug. */
@@ -2456,15 +2476,15 @@ static ZEND_FUNCTION(Sharp_Internal_requireNative)
 			const char *name = Z_STRVAL_P(body);
 			const char *method = zend_memrchr(name, '.', Z_STRLEN_P(body));
 			const char *owner = method ? zend_memrchr(name, '.', method - name) : NULL;
-			zend_throw_error(NULL, "The PHP# standard library %s declares the native body %s, which PHP# engine "
-				PHP_SHARP_VERSION " does not have. Install the same PHP# version of both.",
-				ZSTR_VAL(version), owner ? owner + 1 : name);
+			sharp_refuse_native(zend_strpprintf(0, "The PHP# standard library %s declares the native body %s, which PHP# "
+				"engine " PHP_SHARP_VERSION " does not have. Install the same PHP# version of both.",
+				ZSTR_VAL(version), owner ? owner + 1 : name));
 			RETURN_THROWS();
 		}
 	} ZEND_HASH_FOREACH_END();
 
-	zend_throw_error(NULL, "The PHP# standard library %s was built for other native bodies than PHP# engine "
-		PHP_SHARP_VERSION " has. Install the same PHP# version of both.", ZSTR_VAL(version));
+	sharp_refuse_native(zend_strpprintf(0, "The PHP# standard library %s was built for other native bodies than PHP# "
+		"engine " PHP_SHARP_VERSION " has. Install the same PHP# version of both.", ZSTR_VAL(version)));
 }
 
 ZEND_METHOD(Sharp_Position, __construct)
@@ -8059,6 +8079,7 @@ static PHP_RINIT_FUNCTION(sharp)
 	/* Each entry points at a live Sharp\Listening, which removes it when it stops, and holds no reference. */
 	zend_hash_init(&SHARP_G(scoped_listeners), 0, NULL, NULL, false);
 	SHARP_G(next_scoped_listener) = 0;
+	SHARP_G(native_refusal) = NULL;
 	ZVAL_UNDEF(&SHARP_G(compile_command_report));
 	zend_hash_init(&SHARP_G(container_bindings), 8, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(container_environment), 8, NULL, ZVAL_PTR_DTOR, false);
@@ -8119,6 +8140,10 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 		listening->number = 0;
 	} ZEND_HASH_FOREACH_END();
 	zend_hash_destroy(&SHARP_G(scoped_listeners));
+	if (SHARP_G(native_refusal)) {
+		zend_string_release(SHARP_G(native_refusal));
+		SHARP_G(native_refusal) = NULL;
+	}
 	zval_ptr_dtor(&SHARP_G(compile_command_report));
 	zval_ptr_dtor(&SHARP_G(arguments));
 	ZVAL_UNDEF(&SHARP_G(arguments));
