@@ -392,7 +392,7 @@ public class Trimmed : Behavior<string>
 - A behavior is a class that implements `Behavior<T>` for the property's type, and its constructor takes no arguments. A behavior for another type, an interface, an abstract class, or a constructor that needs an argument is a compile error.
 - `via` names a type, so a generic behavior takes its type arguments as every type does (section 11): `via Logged<string>` creates each behavior as `new Logged<string>()`.
 - A behavior's `get` and `set` are the property's accessors. Each may have any effect, and a read or write of the property carries it (section 29). `set` may write the behavior's own fields, and `get` writes none, as no `get` body writes `this` (section 6.1).
-- `via` goes on an instance auto-property with `get; set;`. A property in an interface or an `abstract` one has no storage to run around, a static one has no object to keep behaviors in, and one with an accessor body already says how it reads and writes, so each is a compile error. A constructor parameter takes no `via`: declare the property in the class body.
+- `via` goes on an instance auto-property with `get; set;`. A property in an interface or an `abstract` one has no storage to run around, a static one has no object to keep behaviors in, and one with an accessor body already says how it reads and writes, so each is a compile error.
 - Each object creates its own behaviors with `new` when it is constructed, before any initial value, and keeps each one in a hidden slot. A copy made with `with`, or with plain PHP's `clone`, creates its own too, so two objects never share a behavior's state.
 - A write runs each behavior's `set` in the order they are written, then stores the result. A read runs each behavior's `get` the other way, so the first behavior wraps the rest. The initial value is a write, so it runs through each `set`, which never sees the object (section 6).
 
@@ -561,15 +561,30 @@ public StoreService(
 }
 ```
 
-**A member declared on a parameter takes access levels and attributes only,** as TypeScript's and Kotlin's parameter properties do: an access modifier, an accessor list whose `set` or `init` may take a narrower access level, such as `{ get; private set; }`, and attributes. Accessor bodies, `willSet`, `didSet`, `via`, `lazy`, computed properties and `static` go on a member in the class body:
+**A member declared on a parameter is a property like one declared in the class body,** as Kotlin's parameter properties are: its access levels, accessors, accessor bodies, observers, behaviors and attributes, and a default after its accessors, which the call may leave out. The argument is a write while the constructor runs, so a `set` body and the behaviors run on it, and on the default too, while the observers wait until the object is built, as section 6.2 says. A parameter without a default is required by every call, so `required` on one is a compile error. A computed property and `lazy` compute their own value, and a parameter receives one, and `static` belongs to no one object, so each goes on a member in the class body:
 
 <!-- example parameter-member-limits: members in Ledger -->
 ```csharp
 public Ledger(
-    public Money balance { get; } via Tracked,                     // compile error: declare balance in the class body to give it via
-    public string name { get; set => field = value.trim(); },      // compile error: declare name in the class body to give it an accessor body
+    public string name { get; set => field = value.trim(); } = "",   // compiles: the argument runs through set
+    public string slug => this.name.trim(),                          // compile error: a parameter cannot be a computed property
 ) { }
 ```
+
+<!-- example optional-parameter-properties -->
+```csharp
+public class GatewayEvent
+{
+    public GatewayEvent(
+        public string type { get; },                // compiles: a required property
+        public string rawBody { get; } = "",        // compiles: an optional property, "" when the call leaves it out
+    ) { }
+}
+```
+<!-- run optional-parameter-properties
+GatewayEvent paid = new GatewayEvent("charge.succeeded");
+paid.rawBody;   // ""
+-->
 
 **A constructor marked `required`** is one that `new Self(…)` can call on the class and on every subclass. Section 25 gives its rules.
 
