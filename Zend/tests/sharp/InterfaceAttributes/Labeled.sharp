@@ -1,0 +1,15 @@
+namespace InterfaceAttributes;
+
+import Lib.Entity;
+import Lib.Field;
+
+// An interface method carries its attributes, with or without a default body, spec section 1.
+public interface Labeled
+{
+    [Field("shown in lists", limit: 2)]
+    string label();
+
+    [Entity("shown in headings")]
+    [Field]
+    string title() => "Untitled";
+}

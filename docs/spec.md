@@ -19,11 +19,27 @@ Attributes use square brackets and follow C#'s rules:
 - positional and named arguments
 - no parentheses when there are no arguments: `[Searchable]`
 - explicit targets: `[return: NotNull]`
+- on an interface method, with or without a default body, as on a class method
 
 <!-- example attribute-arguments: members -->
 ```csharp
 [Field(label: "Name", render: Render.Heading, searchable: true)]
 public string name { get; set; } = "";
+```
+
+<!-- example attribute-interface-methods -->
+```csharp
+// app/Labeled.sharp
+namespace App;
+
+public interface Labeled
+{
+    [Field(label: "Name", searchable: true)]
+    string label();                       // compiles
+
+    [Field(label: "Title")]
+    string title() => "Untitled";         // compiles: with a default body too
+}
 ```
 
 Named arguments use `label: "Name"`, the same "name: value" form used everywhere in the language (section 16). C#'s `Label = "Name"` is not allowed.
@@ -1737,6 +1753,36 @@ sorted;   // [1, 2, 3]
 -->
 
 A plain PHP class may have both a property and a method of one name. Reading the name gives the property, as in PHP, except where the code takes the read as a function and the property's type doesn't fit that function type. There the read gives the method's value, as in `names.map(gadget.label)`, where `label` is both a `string` property and a method.
+
+**A plain PHP class that defines `__get` has the properties it reads,** as an Eloquent model has the relations it loaded. A property's type is the one the class's `@property` or `@property-read` line gives it, and `Any?` without one. `subscription.contact` reads the property, as `$subscription->contact` does in PHP, even when the class has a method `contact`. By the rule above, the read gives the method's value only where the code takes it as a function. `subscription.contact()` calls the method.
+
+<!-- example magic-properties -->
+```php
+/** @property-read Contact $contact */
+class Subscription
+{
+    public function contact(): Contact { return new Contact(); }
+    public function owner(): Contact { return new Contact(); }
+    public function __get(string $name): mixed { $loaded = new Contact(); $loaded->name = $name; return $loaded; }
+}
+```
+
+<!-- example magic-properties: statements
+extern Subscription.owner;
+Subscription subscription = new Subscription();
+-->
+```csharp
+Contact contact = subscription.contact;              // compiles: the @property-read line types it
+const owner = subscription.owner;                    // compiles: Any?
+Function<Contact()> load = subscription.owner;       // compiles: the method, where a function is taken
+Contact loaded = subscription.owner();               // compiles: calls the method
+```
+<!-- run magic-properties
+contact.name;                // "contact"
+(owner as Contact)?.name;    // "owner"
+load().name;                 // "Ada"
+loaded.name;                 // "Ada"
+-->
 
 **A field or property holding a `Function` is called like a method** when the class has no method with that name. A `.sharp` class cannot declare a method and a field or property with the same name, so `this.discount(…)` always has one meaning.
 
