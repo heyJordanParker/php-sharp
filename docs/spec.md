@@ -3834,6 +3834,9 @@ app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mag
 ```
 
 - **A deploy** runs `vendor/bin/mago compile` before the code runs.
+- **`mago compile` writes a `.php` file beside each of the project's `.sharp` files that declares a type,** as `StoreService.php` beside `StoreService.sharp`. So PHP code that finds classes by listing `*.php` files and naming each class by its path, as route-attribute and event discovery do, finds PHP# classes too, the way Java's classpath scanners find Kotlin classes. The file only loads its `.sharp` file through the engine, and on plain PHP it throws the "needs the PHP# engine" error. Once its `.sharp` file is deleted, it declares nothing until the next compile deletes it. Nobody edits it: a `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, and the next compile rewrites or deletes the file with its source. In a git repository, `mago compile` lists in `.git/info/exclude` the files no `.gitignore` already ignores.
+- **A `.sharp` file in an `autoload-dev` folder, and a package's in `vendor/`, gets no `.php` file.** A test class keeps one file, because PHPUnit loads a test class only from the file it lists, so `phpunit.xml` lists the PHP# tests as `<directory suffix="Test.sharp">tests</directory>`.
+- **Editors hide the `.php` files:** VS Code through `"files.exclude": {"**/*.php": {"when": "$(basename).sharp"}}`, and PhpStorm through file nesting of `.php` under `.sharp`.
 - **A type error, or a broken structure rule (section 28), stops the file from running.** So does a law without a proof, a gap, or a proof whose law was deleted, each a compile error that names it.
 - **A rule that reads the whole project's structure can lag in development** until the next full compile. At deploy, `mago compile` checks every rule exactly.
 
@@ -4286,7 +4289,7 @@ public class StoreCheckout : Checkout
 
 **A method takes on the effects of each function it is given.** A parameter whose function type states no effects, as `f` in `map(Function<TResult(T)> f)`, has at each call the effects of the function that call passes. The method has its body's own effects plus those, and nothing is written, as with Swift's `rethrows` and Kotlin's inline lambdas, and as a call to plain PHP takes on the effects of each lambda passed to it.
 
-**Such a parameter runs only inside the call,** as a Swift closure parameter does without `@escaping`. Storing it in a field, a collection or a new object, returning it, and capturing it in a lambda that escapes are compile errors that name the type to take instead: the type of the field or parameter that receives it when that type states effects, and otherwise its own type with `uses …`. Calling it, and passing it on to another method's function parameter, are allowed. A local may hold it, and the local is held to the same rules.
+**Such a parameter runs only inside the call,** as a Swift closure parameter does without `@escaping`. Storing it in a field, a collection or a new object, returning it, and capturing it in a lambda that escapes are compile errors that name the type to take instead: the type of the field or parameter that receives it when that type states effects, its own type with `uses none` when that type is pure, and otherwise its own type with `uses none` or with the effects it may have. Calling it, and passing it on to another method's function parameter, are allowed. A local may hold it, and the local is held to the same rules.
 
 <!-- example function-effects: statements in Carts<T>
 List<Cart> carts = [new Cart()];
@@ -4307,11 +4310,47 @@ carts.map(c => this.gateway.charge(c));                               // has Htt
 ```
 
 ```text
-`body` can't be stored in a new object: its type states no effects.
+`body` can't be stored in a new object: it takes on each caller's effects.
 Take a `Function<string() uses Environment>`, whose type states the effects it may have.
 ```
 
 **A parameter whose function type states its effects keeps them as a cap.** `Function<Charge(Cart) uses Http>` accepts a function with `Http` or no effects, and the method has `Http` from calling it. Such a parameter may be stored, returned and captured, as any function value may.
+
+**`uses none` states that a function type is pure.** It is the empty effect list, and goes wherever a function type's `uses` goes. A parameter of `Function<int(int) uses none>` takes only a pure function, so passing it a function with an effect is a compile error at the call, and the method may store, return and capture it, as one whose type states effects. A function type without `uses` anywhere but a method's parameter is pure already, so `uses none` there says nothing new. `uses none` beside another effect, as in `uses none, Http`, is a compile error, and so is `uses none` on a method, which is pure without `uses`. An override's function parameter takes on each caller's effects wherever the parameter it overrides does, a plain PHP `callable` or `Closure` parameter included, because a call through the overridden method may pass a function with any effect.
+
+<!-- example pure-function-parameters: statements
+namespace App.Shop;
+import App.Cart;
+import App.PaymentGateway;
+import App.StripeGateway;
+Pricing pricing = new Pricing();
+private Rates rates = new Rates();
+public class Rates
+{
+    private PaymentGateway gateway = new StripeGateway();
+
+    public int convert(int cents)
+    {
+        this.gateway.charge(new Cart());
+        return cents;
+    }
+}
+-->
+```csharp
+public class Pricing
+{
+    private Function<int(int)> rate = (cents) => cents;          // a field: no uses means pure, as today
+
+    public void setRate(Function<int(int) uses none> rate)
+        => this.rate = rate;                                      // compiles: the type states it's pure
+
+    public void apply(Function<int(int)> step)
+        => this.rate = step;                                      // compile error: step takes on its caller's effects, so it can't be stored; take a Function<int(int) uses none>
+}
+
+pricing.setRate((cents) => cents * 2);                            // compiles: a pure lambda
+pricing.setRate((cents) => this.rates.convert(cents));            // compile error: setRate takes a pure function, and this one has Http
+```
 
 The standard library's collection methods (section 12) take on the effects of their functions this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
 
