@@ -6068,6 +6068,12 @@ static void zend_compile_return(zend_ast *ast, bool leave) /* {{{ */
 			expr_ast ? &expr_node : NULL, CG(active_op_array)->arg_info - 1, 0);
 	}
 
+	/* PHP#: the result holds a Map or a Set, which a plain PHP caller gets as its PHP array, after the return type
+	 * that names them passed it. */
+	if (expr_ast && !is_generator && !by_ref && (CG(active_op_array)->fn_flags & ZEND_ACC_SHARP_CROSSING)) {
+		zend_emit_op_tmp(&expr_node, ZEND_SHARP_RETURN_ARRAY, &expr_node, NULL);
+	}
+
 	if (leave) {
 		zend_emit_op(NULL, ZEND_SHARP_LEAVE, NULL, NULL);
 	}
@@ -8359,6 +8365,9 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 				if (override_attribute) {
 					prop->flags |= ZEND_ACC_OVERRIDE;
 				}
+				if (sharp_crosses_property(prop)) {
+					prop->flags |= ZEND_ACC_SHARP_CROSSING;
+				}
 			}
 		}
 	}
@@ -9354,6 +9363,9 @@ static void zend_compile_prop_decl(zend_ast *ast, zend_ast *type_ast, uint32_t f
 			zend_attribute *override_attribute = zend_get_attribute_str(info->attributes, "override", sizeof("override")-1);
 			if (override_attribute) {
 				info->flags |= ZEND_ACC_OVERRIDE;
+			}
+			if (sharp_crosses_property(info)) {
+				info->flags |= ZEND_ACC_SHARP_CROSSING;
 			}
 		}
 

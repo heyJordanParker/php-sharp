@@ -29,7 +29,7 @@ class Library
 
     public static function square(float $side): float { return \Sharp\Math\Math::pow($side, 2.0); }
 
-    public static function decode(string $json): mixed { return @\json_decode($json, true, 512, \JSON_THROW_ON_ERROR); }
+    public static function decode(string $json) { return @\json_decode($json, true, 512, \JSON_THROW_ON_ERROR); }
 
     public static function digest(string $data): string { return \sha1($data); }
 

@@ -36,122 +36,47 @@ foreach ($invalid as $call) {
 --EXPECT--
 bool(true)
 bool(false)
-object(Sharp\Map)#1 (3) {
+array(3) {
   [0]=>
-  array(2) {
-    [0]=>
-    int(0)
-    [1]=>
-    string(15) "ann@example.com"
-  }
+  string(15) "ann@example.com"
   [1]=>
-  array(2) {
-    [0]=>
-    int(1)
-    [1]=>
-    string(3) "ann"
-  }
+  string(3) "ann"
   [2]=>
-  array(2) {
-    [0]=>
-    int(2)
-    [1]=>
-    string(7) "example"
-  }
+  string(7) "example"
 }
-object(Sharp\Map)#1 (4) {
+array(4) {
   [0]=>
-  array(2) {
-    [0]=>
-    int(0)
-    [1]=>
-    string(15) "ann@example.com"
-  }
+  string(15) "ann@example.com"
+  ["user"]=>
+  string(3) "ann"
   [1]=>
-  array(2) {
-    [0]=>
-    string(4) "user"
-    [1]=>
-    string(3) "ann"
-  }
+  string(3) "ann"
   [2]=>
-  array(2) {
-    [0]=>
-    int(1)
-    [1]=>
-    string(3) "ann"
-  }
-  [3]=>
-  array(2) {
-    [0]=>
-    int(2)
-    [1]=>
-    string(7) "example"
-  }
+  string(7) "example"
 }
 NULL
 array(2) {
   [0]=>
-  object(Sharp\Map)#2 (4) {
+  array(4) {
     [0]=>
-    array(2) {
-      [0]=>
-      int(0)
-      [1]=>
-      string(2) "1a"
-    }
+    string(2) "1a"
+    ["digit"]=>
+    string(1) "1"
     [1]=>
-    array(2) {
-      [0]=>
-      string(5) "digit"
-      [1]=>
-      string(1) "1"
-    }
+    string(1) "1"
     [2]=>
-    array(2) {
-      [0]=>
-      int(1)
-      [1]=>
-      string(1) "1"
-    }
-    [3]=>
-    array(2) {
-      [0]=>
-      int(2)
-      [1]=>
-      string(1) "a"
-    }
+    string(1) "a"
   }
   [1]=>
-  object(Sharp\Map)#3 (4) {
+  array(4) {
     [0]=>
-    array(2) {
-      [0]=>
-      int(0)
-      [1]=>
-      string(2) "2b"
-    }
+    string(2) "2b"
+    ["digit"]=>
+    string(1) "2"
     [1]=>
-    array(2) {
-      [0]=>
-      string(5) "digit"
-      [1]=>
-      string(1) "2"
-    }
+    string(1) "2"
     [2]=>
-    array(2) {
-      [0]=>
-      int(1)
-      [1]=>
-      string(1) "2"
-    }
-    [3]=>
-    array(2) {
-      [0]=>
-      int(2)
-      [1]=>
-      string(1) "b"
-    }
+    string(1) "b"
   }
 }
 string(5) "a b c"

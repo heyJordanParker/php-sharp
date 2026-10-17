@@ -1,0 +1,6 @@
+namespace Demo;
+
+public struct Envelope
+{
+    public Envelope(public Map<string, string> headers { get; }) { }
+}

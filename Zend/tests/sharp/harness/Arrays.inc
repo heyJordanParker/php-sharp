@@ -171,3 +171,31 @@ final class ArrayCounter
         return get_debug_type($counts) . ' ' . count($counts);
     }
 }
+
+function send_headers(array $headers): string
+{
+    return json_encode($headers);
+}
+
+// A plain PHP attribute whose argument names array, which a PHP# Map argument fills.
+#[Attribute(Attribute::TARGET_ALL)]
+final class Label
+{
+    public function __construct(public string $text, public array $config = [])
+    {
+    }
+}
+
+// A plain PHP parent whose methods declare no return type, as Eloquent's Model::getKey() declares none.
+class Record
+{
+    public function getKey()
+    {
+        return 7;
+    }
+
+    public function getMorphClass()
+    {
+        return 'record';
+    }
+}

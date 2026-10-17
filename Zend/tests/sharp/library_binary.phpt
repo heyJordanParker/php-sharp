@@ -19,29 +19,14 @@ try {
 ?>
 --EXPECT--
 string(12) "123478564142"
-object(Sharp\Map)#1 (2) {
-  [0]=>
-  array(2) {
-    [0]=>
-    string(5) "first"
-    [1]=>
-    int(4660)
-  }
-  [1]=>
-  array(2) {
-    [0]=>
-    string(6) "second"
-    [1]=>
-    int(22136)
-  }
+array(2) {
+  ["first"]=>
+  int(4660)
+  ["second"]=>
+  int(22136)
 }
-object(Sharp\Map)#1 (1) {
-  [0]=>
-  array(2) {
-    [0]=>
-    int(1)
-    [1]=>
-    int(256)
-  }
+array(1) {
+  [1]=>
+  int(256)
 }
 ValueError: Binary.unpack: the data does not fit the format

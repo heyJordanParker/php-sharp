@@ -1,5 +1,5 @@
 --TEST--
-A Map or a Set crosses into a plain PHP parameter that names array as a PHP array, and into one that names an object type as the object, a PHP array crosses back into a Map, a PHP list enters a tuple when its length and elements match, and a Map enters an Iterable as its entries
+A Map or a Set reaches plain PHP as a PHP array at every crossing, and as the object where only an object fits, a PHP array crosses back into a Map, a PHP list enters a tuple when its length and elements match, and a Map enters an Iterable as its entries
 --FILE--
 <?php
 require __DIR__ . '/harness/Arrays.inc';
@@ -7,16 +7,62 @@ require __DIR__ . '/harness/fixture.inc';
 fixture('Crossings');
 
 use Demo\Crossings;
+use Demo\Envelope;
+use Demo\Holdings;
 use Sharp\Map;
 use Sharp\Set;
 
-function show(Map $map): string
+function show(iterable $map): string
 {
     $entries = [];
     foreach ($map as $key => $value) {
         $entries[] = var_export($key, true) . ' => ' . $value;
     }
     return implode(', ', $entries);
+}
+
+// What plain PHP received: its type, whether is_array() takes it, what array_merge() makes of it, and the type
+// reflection gives the place it came from.
+function received(mixed $value, ?ReflectionType $type = null): string
+{
+    try {
+        $merged = json_encode(array_merge($value));
+    } catch (TypeError) {
+        $merged = 'refused by array_merge';
+    }
+
+    return get_debug_type($value) . ', is_array ' . var_export(is_array($value), true) . ', ' . $merged
+        . ($type === null ? '' : ", typed $type");
+}
+
+function property_type(string $class, string $property): ?ReflectionType
+{
+    return (new ReflectionProperty($class, $property))->getType();
+}
+
+// A plain PHP class that implements a PHP# interface's `Any?` result without a return type.
+final class PlainMorphable implements Demo\Morphable
+{
+    use Demo\Morphable\Defaults;
+
+    public function getKey()
+    {
+        return 3;
+    }
+
+    public function getMorphClass(): string
+    {
+        return 'plain';
+    }
+}
+
+// A plain PHP subclass of a PHP# class reads its parent's Map property as plain PHP.
+final class PlainHoldings extends Holdings
+{
+    public function ownPayload(): mixed
+    {
+        return $this->payload;
+    }
 }
 
 // Each round runs every row, so the JIT variants compile them before the last round, whose output is printed.
@@ -34,7 +80,8 @@ for ($round = 0; $round < 100; $round++) {
     echo implode("\n", Crossings::objects(new Map(['tea', 3, '5', 1]), new Set(['a', 'b']))), "\n";
     echo 'a plain PHP closure a local holds: ', Crossings::counted(new Map(['a', 1, 'b', 2])), "\n";
     echo 'a plain PHP object a local holds: ', Crossings::invoked(new Map(['a', 1, 'b', 2])), "\n";
-    echo 'a PHP# function type passes the object: ', Crossings::applied(fn ($values) => get_debug_type($values), new Map(['a', 1])), "\n";
+    echo 'a plain PHP closure behind a PHP# function type: ', Crossings::applied(fn ($values) => get_debug_type($values), new Map(['a', 1])), "\n";
+    echo 'a PHP# lambda behind a PHP# function type takes the same Map: ', Crossings::appliedOwn(new Map(['a', 1])), "\n";
     echo 'a PHP array into a Map<string|Level, int> parameter: ', json_encode(Crossings::named(['5' => 1])), "\n";
     // A lazy plain PHP source is checked element by element as a loop reads it, so a bad element throws at the
     // read and not before, and the source is never read ahead.
@@ -75,6 +122,74 @@ for ($round = 0; $round < 100; $round++) {
     } catch (TypeError $e) {
         echo get_class($e), ': ', $e->getMessage(), "\n";
     }
+
+    // A return.
+    $returned = fn (string $method) => (new ReflectionMethod(Crossings::class, $method))->getReturnType();
+    echo 'a returned Map: ', received(Crossings::sizes(), $returned('sizes')), "\n";
+    echo 'a returned Set: ', received(Crossings::tagged(), $returned('tagged')), "\n";
+    echo 'a returned List<Map>: ', received(Crossings::shelves(), $returned('shelves')), "\n";
+    echo 'a Map a PHP# lambda returns: ', received((Crossings::sizer())()), "\n";
+    echo 'a Map a PHP# method returns from its own call: ', received(Crossings::lambdaSizes()), "\n";
+    $limits = [];
+    foreach (Crossings::limits() as $limit => $count) {
+        $limits[] = var_export($limit, true) . '=' . var_export($count, true);
+    }
+    echo 'a returned Map keyed by a backed enum: ', implode(' ', $limits), "\n";
+    echo 'a returned Map is identical to its PHP array: ', var_export(Crossings::sizes() === ['b' => 2, 'a' => 1], true), "\n";
+    $sizes = Crossings::sizes();
+    ksort($sizes);
+    echo 'ksort() sorts a returned Map: ', json_encode($sizes), "\n";
+    $holdings = new Holdings();
+    echo 'a returned Map keyed by a List stays the Map: ', received($holdings->listKeyed()), "\n";
+
+    // An argument.
+    $envelope = new Envelope(['To' => 'a@b.co']);
+    echo "a struct's Map property into an array parameter, from plain PHP: ", send_headers($envelope->headers), "\n";
+    echo "a struct's Map property into an array parameter, from PHP#: ", Crossings::sent($envelope), "\n";
+
+    // A property read, and each reader of an object's properties.
+    echo 'a Map property: ', received($holdings->payload, property_type(Holdings::class, 'payload')), "\n";
+    echo 'a Set property: ', received($holdings->codes, property_type(Holdings::class, 'codes')), "\n";
+    echo 'a List<Map> property: ', received($holdings->rows, property_type(Holdings::class, 'rows')), "\n";
+    echo 'a nullable Map property: ', received($holdings->extra, property_type(Holdings::class, 'extra')), "\n";
+    echo 'a computed Map property: ', received($holdings->computed, property_type(Holdings::class, 'computed')), "\n";
+    echo 'a hooked Map property: ', received($holdings->hooked, property_type(Holdings::class, 'hooked')), "\n";
+    echo 'a static Map property: ', received(Holdings::$counts, property_type(Holdings::class, 'counts')), "\n";
+    echo 'a Map property isset: ', var_export(isset($holdings->payload['id']), true), "\n";
+    echo 'get_object_vars(): ', received(get_object_vars($holdings)['payload']), "\n";
+    echo 'an (array) cast: ', received(((array) $holdings)['payload']), "\n";
+    $read = null;
+    foreach ($holdings as $property => $value) {
+        if ($property === 'payload') {
+            $read = $value;
+        }
+    }
+    echo 'foreach over the object: ', received($read), "\n";
+    echo 'ReflectionProperty::getValue(): ', received((new ReflectionProperty(Holdings::class, 'payload'))->getValue($holdings)), "\n";
+    echo 'ReflectionProperty::getValue() of a static: ', received((new ReflectionProperty(Holdings::class, 'counts'))->getValue()), "\n";
+    echo 'a plain PHP subclass reads $this->payload: ', received((new PlainHoldings())->ownPayload()), "\n";
+
+    // PHP# reads its own property as the object, and a write from plain PHP crosses in.
+    echo 'PHP# reads its Map property: ', $holdings->payloadClass(), ' ', $holdings->firstRowClass(), ' ', Holdings::countsClass(), "\n";
+    $written = new Holdings();
+    $written->payload = ['id' => 'p2'];
+    $written->rows = [['b' => 2]];
+    Holdings::$counts = ['d' => 4];
+    echo 'PHP# reads what plain PHP wrote: ', $written->payloadClass(), ' ', $written->firstRowClass(), ' ', Holdings::countsClass(), ' ', json_encode($written->payload), "\n";
+    Holdings::$counts = ['c' => 1];
+
+    // A parameter's type, an attribute's argument and a constant.
+    echo 'a Map parameter: ', (new ReflectionMethod(Holdings::class, 'accepted'))->getParameters()[0]->getType(), ' ', $holdings->accepted(['a' => 'b']), "\n";
+    $label = (new ReflectionClass(Holdings::class))->getAttributes(Label::class)[0];
+    echo 'a Map attribute argument: ', received($label->getArguments()['config']), "\n";
+    echo 'a Map attribute argument, built: ', received($label->newInstance()->config), "\n";
+    echo 'a Map constant: ', received(Holdings::LIMITS, (new ReflectionClassConstant(Holdings::class, 'LIMITS'))->getType()), "\n";
+    echo 'a Set constant: ', received(Holdings::CODES, (new ReflectionClassConstant(Holdings::class, 'CODES'))->getType()), "\n";
+    echo 'PHP# reads its Map constant: ', $holdings->limitOf('card'), "\n";
+
+    // An interface method a plain PHP parent's untyped method implements, and an `Any?` result without a PHP type.
+    echo 'a plain PHP parent implements a PHP# interface: ', (new Demo\Bill())->label(), "\n";
+    echo 'a plain PHP class implements an Any? result: ', (new PlainMorphable())->label(), "\n";
     $output = ob_get_clean();
 }
 echo $output;
@@ -83,16 +198,16 @@ echo $output;
 array ["tea",5]
 array [0,1]
 array ["tea",5]
-Sharp\Map
-Sharp\Map
-Sharp\Set
+array
+array
+array
 a plain PHP write leaves the Map: 'tea' => 3 / 'tea' => 3
-a plain PHP result into a Map local: 'tea' => 3, '5' => 1, 'jam' => 5
-a plain PHP result into a Map return: 'tea' => 3, '5' => 1
+a plain PHP result into a Map local: 'tea' => 3, 5 => 1, 'jam' => 5
+a plain PHP result into a Map return: 'tea' => 3, 5 => 1
 Map methods on a plain PHP result: 3 / 1 / true / tea,5 / 2
-a plain PHP result in a local without a type: true 1 true Sharp\Map
+a plain PHP result in a local without a type: true 1 true array
 a loop over a plain PHP result keyed by string: true:tea=3 true:5=1 true:tea=3 true:5=1 true:tea true:5
-a PHP array into a Map<string, int> parameter: '5' => 1, 'x' => 2
+a PHP array into a Map<string, int> parameter: 5 => 1, 'x' => 2
 Sharp\Map 2
 Sharp\Set 2
 Sharp\Map {"tea":3,"5":1}
@@ -100,7 +215,8 @@ Sharp\Set
 Sharp\Map 2
 a plain PHP closure a local holds: array 2
 a plain PHP object a local holds: array 2
-a PHP# function type passes the object: Sharp\Map
+a plain PHP closure behind a PHP# function type: array
+a PHP# lambda behind a PHP# function type takes the same Map: true
 a PHP array into a Map<string|Level, int> parameter: ["1","1","true"]
 a lazy plain PHP source into an Iterable<string> parameter: tea jam cake pie 4
 TypeError: Demo\Crossings::joined(): Argument #1 ($names) must be of type Iterable<string>, Generator given: [2] expected string, got int 3, after 3 names
@@ -118,3 +234,38 @@ a Map into an Iterable<[string, int]> parameter: tea=3 pie=7
 a list of tuples into an Iterable<[string, int]> parameter: tea=3 
 a Map a PHP# call passes on: tea:3 pie:7 tea=3 pie=7 
 TypeError: Demo\Crossings::entries(): Argument #1 ($given) must be of type Iterable<[string, int]>, Sharp.Map given: [0][1] expected int, got string 'x', called in %s on line %d
+a returned Map: array, is_array true, {"b":2,"a":1}, typed array
+a returned Set: array, is_array true, ["a","b"], typed array
+a returned List<Map>: array, is_array true, [{"a":1}], typed array
+a Map a PHP# lambda returns: array, is_array true, {"s":1}
+a Map a PHP# method returns from its own call: array, is_array true, {"b":2,"a":1}
+a returned Map keyed by a backed enum: 'low'=5 'high'=NULL
+a returned Map is identical to its PHP array: true
+ksort() sorts a returned Map: {"a":1,"b":2}
+a returned Map keyed by a List stays the Map: Sharp\Map, is_array false, refused by array_merge
+a struct's Map property into an array parameter, from plain PHP: {"To":"a@b.co"}
+a struct's Map property into an array parameter, from PHP#: {"To":"a@b.co"}
+a Map property: array, is_array true, {"id":"p1"}, typed array
+a Set property: array, is_array true, ["a","b"], typed array
+a List<Map> property: array, is_array true, [{"a":1}], typed array
+a nullable Map property: null, is_array false, refused by array_merge, typed ?array
+a computed Map property: array, is_array true, {"id":"p1"}, typed array
+a hooked Map property: array, is_array true, {"h":"1"}, typed array
+a static Map property: array, is_array true, {"c":1}, typed array
+a Map property isset: true
+get_object_vars(): array, is_array true, {"id":"p1"}
+an (array) cast: array, is_array true, {"id":"p1"}
+foreach over the object: array, is_array true, {"id":"p1"}
+ReflectionProperty::getValue(): array, is_array true, {"id":"p1"}
+ReflectionProperty::getValue() of a static: array, is_array true, {"c":1}
+a plain PHP subclass reads $this->payload: array, is_array true, {"id":"p1"}
+PHP# reads its Map property: Sharp\Map Sharp\Map Sharp\Map
+PHP# reads what plain PHP wrote: Sharp\Map Sharp\Map Sharp\Map {"id":"p2"}
+a Map parameter: array 1
+a Map attribute argument: array, is_array true, {"variant":"success"}
+a Map attribute argument, built: array, is_array true, {"variant":"success"}
+a Map constant: array, is_array true, {"card":100}, typed array
+a Set constant: array, is_array true, ["a","b"], typed array
+PHP# reads its Map constant: 100
+a plain PHP parent implements a PHP# interface: record:7
+a plain PHP class implements an Any? result: plain:3

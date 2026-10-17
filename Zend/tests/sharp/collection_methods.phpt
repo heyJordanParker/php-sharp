@@ -13,35 +13,20 @@ array(3) {
   [2]=>
   int(4)
 }
-object(Sharp\Map)#3 (1) {
-  [0]=>
-  array(2) {
-    [0]=>
-    string(1) "5"
-    [1]=>
-    int(7)
-  }
+array(1) {
+  [5]=>
+  int(7)
 }
 int(2)
 NULL
 NULL
 int(7)
 NULL
-object(Sharp\Map)#3 (2) {
+array(2) {
   [0]=>
-  array(2) {
-    [0]=>
-    int(0)
-    [1]=>
-    int(5)
-  }
+  int(5)
   [1]=>
-  array(2) {
-    [0]=>
-    int(1)
-    [1]=>
-    int(6)
-  }
+  int(6)
 }
 array(2) {
   [0]=>
@@ -49,38 +34,23 @@ array(2) {
   [1]=>
   int(2)
 }
-object(Sharp\Map)#3 (1) {
+array(1) {
   [0]=>
   array(2) {
     [0]=>
-    int(0)
+    int(1)
     [1]=>
-    array(2) {
-      [0]=>
-      int(1)
-      [1]=>
-      int(2)
-    }
+    int(2)
   }
 }
 OutOfRangeException: Undefined array key 2 in Pantry.sharp on line 54
-object(Sharp\Map)#6 (1) {
-  [0]=>
-  array(2) {
-    [0]=>
-    string(3) "pie"
-    [1]=>
-    int(7)
-  }
+array(1) {
+  ["pie"]=>
+  int(7)
 }
-object(Sharp\Map)#6 (1) {
-  [0]=>
-  array(2) {
-    [0]=>
-    string(3) "pie"
-    [1]=>
-    int(7)
-  }
+array(1) {
+  ["pie"]=>
+  int(7)
 }
 array(3) {
   [0]=>
@@ -245,7 +215,7 @@ array(3) {
   [2]=>
   int(2)
 }
-object(Sharp\Set)#9 (3) {
+array(3) {
   [0]=>
   int(3)
   [1]=>
@@ -263,21 +233,11 @@ array(4) {
   [3]=>
   int(1)
 }
-object(Sharp\Map)#10 (2) {
-  [0]=>
-  array(2) {
-    [0]=>
-    string(3) "tea"
-    [1]=>
-    int(3)
-  }
-  [1]=>
-  array(2) {
-    [0]=>
-    string(3) "pie"
-    [1]=>
-    int(7)
-  }
+array(2) {
+  ["tea"]=>
+  int(3)
+  ["pie"]=>
+  int(7)
 }
 bool(true)
 bool(false)
