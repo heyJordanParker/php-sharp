@@ -2,3 +2,7 @@
 paths = ["app", "tests", "vendor/heyjordanparker"]
 includes = ["vendor"]
 extensions = ["php", "sharp"]
+
+[extension-hosts.local]
+workers = 1
+command = ["php", "extension-host.php"]
