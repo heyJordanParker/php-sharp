@@ -145,5 +145,5 @@ try {
 echo "Kept alive\n";
 unset($kept);
 
-// The JIT compiled every PHP# operator itself, with no call to a VM handler.
-var_dump(opcache_get_status()['jit']['sharp_operator_vm_calls']);
+// The JIT compiled every PHP# operator itself, with no call to a VM handler. Only a debug build counts the calls.
+var_dump(opcache_get_status()['jit']['sharp_operator_vm_calls'] ?? []);
