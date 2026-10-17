@@ -491,6 +491,31 @@ public static never stop(bool urgent)
 }                                                                            // compile error: stop is never, and it reaches its closing brace when no throw runs before it
 ```
 
+**A parameter's default is any expression,** as in Kotlin, Swift and TypeScript, and it runs each time a call leaves the argument out, from PHP# and from plain PHP alike, so `new` gives each call its own object. It runs before the method, so a default that reads `this` or another parameter is a compile error.
+
+<!-- example parameter-defaults -->
+```csharp
+public class Tickets
+{
+    private static int issued = 0;
+
+    public static int next()
+    {
+        Tickets.issued += 1;
+        return Tickets.issued;
+    }
+
+    public static int take(int number = Tickets.next()) => number;   // compiles: next() runs each time a call leaves number out
+
+    public static int after(int start, int end = start + 1) => end;  // compile error: a default runs before the method, so start is not there yet
+}
+```
+<!-- run parameter-defaults
+Tickets.take();     // 1
+Tickets.take(10);   // 10
+Tickets.take();     // 2
+-->
+
 ## 8. Functions
 
 There are no top-level functions. Shared code lives in static methods on a class.

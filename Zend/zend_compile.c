@@ -255,16 +255,22 @@ void zend_assert_valid_class_name(const zend_string *name, const char *type) /* 
 }
 /* }}} */
 
-static bool zend_is_sharp_type_class(const zend_string *unqualified_name)
+/* Whether the file being compiled is a .sharp file. */
+static bool zend_compiling_sharp_file(void)
 {
 	const zend_string *file = CG(compiled_filename);
 
+	return file && ZSTR_LEN(file) > strlen(".sharp")
+		&& memcmp(ZSTR_VAL(file) + ZSTR_LEN(file) - strlen(".sharp"), ".sharp", strlen(".sharp")) == 0;
+}
+
+static bool zend_is_sharp_type_class(const zend_string *unqualified_name)
+{
 	return FC(current_namespace) && zend_string_equals_literal(FC(current_namespace), "Sharp")
 		&& (zend_string_equals_literal(unqualified_name, "Int")
 			|| zend_string_equals_literal(unqualified_name, "Float")
 			|| zend_string_equals_literal(unqualified_name, "Bool"))
-		&& file && ZSTR_LEN(file) > strlen(".sharp")
-		&& memcmp(ZSTR_VAL(file) + ZSTR_LEN(file) - strlen(".sharp"), ".sharp", strlen(".sharp")) == 0;
+		&& zend_compiling_sharp_file();
 }
 
 typedef struct _builtin_type_info {
@@ -11992,7 +11998,6 @@ typedef struct {
 static bool zend_is_sharp_collection_default(const zend_ast *ast, const const_expr_context *ctx)
 {
 	const zend_ast *class_ast = ast->child[0];
-	const zend_string *file = CG(compiled_filename);
 
 	if (!ctx->property_default || class_ast->kind != ZEND_AST_ZVAL || class_ast->attr != ZEND_NAME_FQ
 			|| Z_TYPE_P(zend_ast_get_zval((zend_ast *) class_ast)) != IS_STRING) {
@@ -12001,8 +12006,16 @@ static bool zend_is_sharp_collection_default(const zend_ast *ast, const const_ex
 	const zend_string *class_name = zend_ast_get_str((zend_ast *) class_ast);
 
 	return (zend_string_equals_literal_ci(class_name, "Sharp\\Map") || zend_string_equals_literal_ci(class_name, "Sharp\\Set"))
-		&& file && ZSTR_LEN(file) > strlen(".sharp")
-		&& memcmp(ZSTR_VAL(file) + ZSTR_LEN(file) - strlen(".sharp"), ".sharp", strlen(".sharp")) == 0;
+		&& zend_compiling_sharp_file();
+}
+
+/* A PHP# parameter default is any expression, which a .sharp file lowers to a static closure called with no arguments,
+ * `(static function () { return …; })()`, so evaluating the default runs it each time a call leaves the argument out. */
+static bool zend_is_sharp_computed_default(const zend_ast *ast, const const_expr_context *ctx)
+{
+	return ctx->allow_dynamic && ast->child[0]->kind == ZEND_AST_CLOSURE
+		&& ast->child[1]->kind == ZEND_AST_ARG_LIST && zend_ast_get_list(ast->child[1])->children == 0
+		&& zend_compiling_sharp_file();
 }
 
 static void zend_compile_const_expr(zend_ast **ast_ptr, void *context) /* {{{ */
@@ -12051,6 +12064,12 @@ static void zend_compile_const_expr(zend_ast **ast_ptr, void *context) /* {{{ */
 			/* Return, because we do not want to traverse the children. */
 			return;
 		case ZEND_AST_CALL:
+			if (zend_is_sharp_computed_default(ast, ctx)) {
+				zend_compile_const_expr_closure(&ast->child[0]);
+				/* The closure is compiled, and the call has no arguments to traverse. */
+				return;
+			}
+			ZEND_FALLTHROUGH;
 		case ZEND_AST_STATIC_CALL:
 			zend_compile_const_expr_fcc(ast_ptr);
 			break;

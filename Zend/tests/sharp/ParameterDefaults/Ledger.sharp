@@ -1,0 +1,22 @@
+namespace ParameterDefaults;
+
+import LogicException;
+
+public class Ledger
+{
+    public Ledger(public Stamp made { get; } = new Stamp(Stamp.seed())) { }
+
+    public int seeded(int a = Stamp.seed(), int b = 2) => a + b;
+
+    public int stamped(Stamp stamp = new Stamp(7)) => stamp.value;
+
+    public int counted(string text = global.str_repeat("ab", 2)) => global.strlen(text);
+
+    public int issued(int count = Stamp.seeds) => count;
+
+    public bool plain(Shade shade = Shade.Plain) => shade == Shade.Plain;
+
+    public int failing(int value = Ledger.fail()) => value;
+
+    private static int fail() => throw new LogicException("no default");
+}
