@@ -35,10 +35,13 @@ foreach (['To: ann@example.com, Bo <bo@example.com>', 'Cc: cc@example.com', 'Rep
 }
 unlink(__DIR__ . '/effect_mail.eml');
 
-try {
-    new MailAddress('not an address');
-} catch (ValueError $e) {
-    echo $e::class, ': ', $e->getMessage(), "\n";
+// A line break in a display name would start a header of its own, as `Bcc:`.
+foreach ([fn () => new MailAddress('not an address'), fn () => new MailAddress('ann@example.com', "Ann\r\nBcc: eve@example.com"), fn () => new MailAddress('ann@example.com', "Ann\nBcc: eve@example.com")] as $refused) {
+    try {
+        $refused();
+    } catch (ValueError $e) {
+        echo $e::class, ': ', $e->getMessage(), "\n";
+    }
 }
 ?>
 --EXPECT--
@@ -55,3 +58,5 @@ bool(true)
 bool(true)
 bool(true)
 ValueError: MailAddress: "not an address" is not a valid address
+ValueError: MailAddress: the name of "ann@example.com" holds a line break
+ValueError: MailAddress: the name of "ann@example.com" holds a line break

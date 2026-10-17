@@ -30,6 +30,13 @@ try {
 var_dump(getcwd() === $start);
 
 var_dump($environment->require('SHARP_REGION'));
+$environment->setVariable('SHARP_SET_REGION', 'us-east-2');
+var_dump($environment->variable('SHARP_SET_REGION'), getenv('SHARP_SET_REGION'));
+try {
+    $environment->setVariable('SHARP=BROKEN', 'x');
+} catch (ValueError $e) {
+    echo $e->getMessage(), "\n";
+}
 try {
     $environment->require('SHARP_UNSET_REGION');
 } catch (ValueError $e) {
@@ -69,6 +76,9 @@ bool(true)
 RuntimeException: Environment.changeDirectory: the directory "<dir>/missing" cannot be entered
 bool(true)
 string(9) "eu-west-1"
+string(9) "us-east-2"
+string(9) "us-east-2"
+Environment.setVariable: the name "SHARP=BROKEN" holds "=" or is empty
 Environment.require: the environment variable "SHARP_UNSET_REGION" is not set
 OutOfRangeException
 Cannot modify readonly property Sharp\Environment::$arguments

@@ -550,6 +550,10 @@ foreach (['DateTimeImmutable', 'DateTimeZone'] as $class) {
     $imports[] = "import $class;";
     $externs[] = "extern $class;";
 }
+// A date's text may say "now", so each member that reads one reads the clock.
+foreach (['__construct', 'createFromFormat', 'modify'] as $member) {
+    $externs[] = "extern DateTimeImmutable.$member uses Clock;";
+}
 
 $license = file_get_contents("$stubs/LICENSE");
 $notice = implode("\n", array_map(static fn (string $line): string => rtrim("// $line"), explode("\n", trim($license))));

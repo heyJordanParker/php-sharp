@@ -45,6 +45,14 @@ try {
 } catch (ValueError $e) {
     echo $e::class, ': ', $e->getMessage(), "\n";
 }
+// A line break in a header's name or value would start a header of its own.
+foreach ([fn () => new HttpRequest(HttpMethod::Get, "$base/", ["X-Token\r\nX-Admin" => 'yes']), fn () => new HttpRequest(HttpMethod::Get, "$base/", ['X-Token' => "abc\nX-Admin: yes"])] as $refused) {
+    try {
+        $refused();
+    } catch (ValueError $e) {
+        echo $e::class, ': ', $e->getMessage(), "\n";
+    }
+}
 foreach ([new HttpRequest(HttpMethod::Get, "$base/slow", timeout: Duration::ofMilliseconds(200)), new HttpRequest(HttpMethod::Get, 'http://localhost:1/')] as $failing) {
     try {
         $http->send($failing);
@@ -71,5 +79,7 @@ int(404)
 string(4) "gone"
 bool(false)
 ValueError: Http.send: "not a url" is not a valid URL
+ValueError: HttpRequest: a header name holds a line break
+ValueError: HttpRequest: the value of the header "X-Token" holds a line break
 RuntimeException: names the URL and the failure
 RuntimeException: names the URL and the failure

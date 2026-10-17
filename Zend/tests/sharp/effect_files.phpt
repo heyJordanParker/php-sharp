@@ -16,6 +16,13 @@ $files->write($file, "one\r\ntwo\n");
 $files->append($file, "three\n");
 var_dump(json_encode($files->read($file)), $files->readLines($file), $files->size($file), $files->exists($file));
 var_dump(abs($files->lastModified($file) - time()) <= 5);
+// Lines read one at a time, each line ending dropped, and null for a missing file.
+$lazy = $files->readLinesLazily($file);
+foreach ($lazy as $line) {
+    echo $line, '|';
+}
+echo "\n";
+var_dump($lazy instanceof Generator, $files->readLinesLazily("$folder/missing.txt"));
 
 $files->copy($file, "$folder/copy.txt");
 $files->move("$folder/copy.txt", "$folder/moved.txt");
@@ -72,6 +79,9 @@ array(3) {
 int(15)
 bool(true)
 bool(true)
+one|two|three|
+bool(true)
+NULL
 array(3) {
   [0]=>
   string(9) "moved.txt"

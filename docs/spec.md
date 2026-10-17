@@ -3912,7 +3912,7 @@ The standard library's ten effect classes, listed above, are `foreign` classes. 
 
 **`Events` is the effect of `emit`** (section 15). It is the one standard effect that is not a `foreign` class: a method has it when its body emits, and no object carries it.
 
-**PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS` are compile errors. For the environment and the command-line arguments, the error names `Environment`. For request data, it names a parameter that takes it. The process environment arrives as `Environment`, a standard `foreign` class like `Clock` and `Random`:
+**PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS` are compile errors. For the environment and the command-line arguments, the error names `Environment`. For request data, it names a parameter that takes it. PHP# has no global variables, so for `$GLOBALS` it names a constructor or method parameter that takes the value. The process environment arrives as `Environment`, a standard `foreign` class like `Clock` and `Random`:
 
 - `string? variable(string name)` reads an environment variable, or gives null when it is not set.
 - `List<string> arguments { get; }` holds the command-line arguments, starting with the script's name.
@@ -3995,7 +3995,7 @@ public class Stamp
 
 **Pure code** reaches no `foreign` object, emits no event, and calls no plain PHP unless an `extern` declares it pure. Pure limits only what code reaches outside the program, so a pure method may change its own object and its arguments. `readonly` after the parameters is what promises a method changes nothing, as in `T peek() readonly;`, and it holds every implementation to that (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code that changes nothing it was given, so a law that reaches a change is a compile error naming the method, and Lean cannot see inside `foreign` classes or plain PHP.
 
-**Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types, except the function type of a method's parameter, which takes on what each call passes (below). Every implementation is held to what the declaration allows:
+**Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types, except the function type of a method's parameter, which takes on what each call passes (below). A declaration that overrides another is held to it: a sub-interface may narrow its parent's `uses`, and a `uses` that widens it is a compile error at the declaration. Every implementation is held to what the declaration allows:
 
 <!-- example effectful-declarations: members -->
 ```csharp
@@ -4098,7 +4098,7 @@ public class StoreCheckout : Checkout
 
 **A method takes on the effects of each function it is given.** A parameter whose function type states no effects, as `f` in `map(Function<TResult(T)> f)`, has at each call the effects of the function that call passes. The method has its body's own effects plus those, and nothing is written, as with Swift's `rethrows` and Kotlin's inline lambdas, and as a call to plain PHP takes on the effects of each lambda passed to it.
 
-**Such a parameter runs only inside the call,** as a Swift closure parameter does without `@escaping`. Storing it in a field, a collection or a new object, returning it, and capturing it in a lambda that escapes are compile errors that name the type to take instead. Calling it, and passing it on to another method's function parameter, are allowed. A local may hold it, and the local is held to the same rules.
+**Such a parameter runs only inside the call,** as a Swift closure parameter does without `@escaping`. Storing it in a field, a collection or a new object, returning it, and capturing it in a lambda that escapes are compile errors that name the type to take instead: the type of the field or parameter that receives it when that type states effects, and otherwise its own type with `uses …`. Calling it, and passing it on to another method's function parameter, are allowed. A local may hold it, and the local is held to the same rules.
 
 <!-- example function-effects: statements in Carts<T>
 List<Cart> carts = [new Cart()];
@@ -4108,7 +4108,7 @@ private PaymentGateway gateway = new StripeGateway();
 // in the standard library's List<T>
 public List<TResult> map<TResult>(Function<TResult(T)> f)                                   // map takes on the effects of the f it calls
 public Charge charge(Cart cart, Function<Cart(Cart)> prepare) => this.gateway.charge(prepare(cart));   // Http, plus prepare's effects
-public Holder keep(Function<string()> body) => new Holder(body);                            // compile error: body can't be stored; take a Function<string() uses Environment>
+public Holder keep(Function<string()> body) => new Holder(body);                            // compile error: body can't be stored; take the Function<string() uses Environment> that Holder's constructor takes
 carts.map(c => c.total);                                                                    // pure
 carts.map(c => this.gateway.charge(c));                                                     // has Http
 ```
