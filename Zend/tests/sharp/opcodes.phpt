@@ -1,5 +1,7 @@
 --TEST--
 PHP# compiles each .sharp fixture to the opcodes, lines and signatures of its PHP twin
+--SKIPIF--
+<?php if (!getenv('TEST_PHPDBG_EXECUTABLE')) die('skip phpdbg is missing, as in the php-fpm image'); ?>
 --FILE--
 <?php
 
