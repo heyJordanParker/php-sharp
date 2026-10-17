@@ -393,7 +393,7 @@ function read_block(array $block): array
             + (int) ($quote !== null) - (int) $inside;
         $trimmed = ltrim($bare);
         $continues = $previous !== null && ($depth > 0 || $trimmed === '' || str_starts_with($trimmed, '{')
-            || str_starts_with($trimmed, ':') || preg_match('~^\[.*\]$~', ltrim($previous)));
+            || str_starts_with($trimmed, ':') || str_starts_with($trimmed, '=>') || preg_match('~^\[.*\]$~', ltrim($previous)));
         if (!$continues && trim($code) !== '') {
             $construct = $index;
         }
@@ -425,15 +425,14 @@ function complete(string $code, string $language, bool $top, bool $last_of_const
     if (trim($code) === '') {
         return '';
     }
-    // A signature may end in the function parameters whose effects it has, as `List.map`'s `… uses f` does.
-    // `readonly` comes last, after `uses` (section 13).
-    $uses = '\s+uses\s+\w+(?:\s*,\s*\w+)*';
-    $tail = "\)(?:$uses)?(?:\s+readonly)?";
-    if ($top && $last_of_construct && $language === 'sharp' && preg_match("~\){$uses}(?:\s+readonly)?;\s*$~", $code)) {
-        // A library declaration such as `public List<TResult> map<TResult>(Function<TResult(T)> f) uses f;` has no
-        // body, and a class holds no method without one.
+    // A library declaration such as `public List<TResult> map<TResult>(Function<TResult(T)> f);` has no body, and a
+    // class holds no method without one, so it loses its `;` and gets one below. A field, an abstract method, an event
+    // and a method with an `=>` body keep theirs. `readonly` is a method's last clause (section 13).
+    if ($top && $last_of_construct && $language === 'sharp' && !preg_match(TYPE_DECLARATION, ltrim($code))
+        && preg_match('~^\s*(?:\[.*\]\s*)*(?:(?:public|private|protected|internal|static|virtual|override|final)\s+)+(?!.*\babstract\b)(?!.*=>)[^=(]*\b\w+(?:<[^>]*>)?\(.*\)(?:\s+readonly)?;\s*$~', $code)) {
         $code = preg_replace('~;\s*$~', '', $code);
     }
+    $tail = '\)(?:\s+readonly)?';
     if ($top && $last_of_construct && $language === 'sharp' && !preg_match('~[;{},(\[]$|=>$~', rtrim($code))) {
         $signature = preg_match("~^\s*(?:\[.*\]\s*)*(?:(?:public|private|protected|internal|static|abstract|virtual|override|final|readonly)\s+)+.*{$tail}$~", $code)
             || preg_match("~^\s*[\w<>?,|() \[\].]+\s+\w+(?:<[^>]*>)?\(.*{$tail}$~", $code);
@@ -531,15 +530,17 @@ function build_files(array $block, int $index, array $read, array $blank): array
     $lines = [];
     $count = count($read);
     foreach ($read as $i => $line) {
+        // A line a run leaves out is no next line, so a signature whose `=> …` line is left out still gets a body.
         $next = null;
         for ($j = $i + 1; $j < $count && $next === null; $j++) {
-            $next = trim($read[$j]['code']) === '' ? null : $j;
+            $next = trim($read[$j]['code']) === '' || isset($blank[$j]) ? null : $j;
         }
         $top = $line['depth'] === 0 && $line['delta'] === 0;
         $last = $next === null || $read[$next]['construct'] !== $line['construct'];
         $ends_body = trim($line['code']) === '…' && $next !== null && str_starts_with(ltrim($read[$next]['code']), '}') && is_body($read, $i);
         $code = isset($blank[$i]) ? '' : complete($line['code'], $language, $top, $last, $next === null ? null : $read[$next]['code'], $ends_body);
-        if ($top && !isset($blank[$i]) && run_line($block, $line)) {
+        // A line runs where the line that starts its construct runs. A blank line before the first construct has none.
+        if ($top && !isset($blank[$i]) && run_line($block, $read[$line['construct']] ?? $line)) {
             $code = observe($code, outcome_key($index, $i), $line['expect'], $language);
         }
         $lines[] = [$code, [$index, $i]];
@@ -708,10 +709,13 @@ function where(array $block, int $i): string
     return "$block[document]:" . $block['at'][$i];
 }
 
-/** Whether a run records line $line: a whole top-level statement of a statements block, or of a plain PHP script. */
-function runs(array $block, array $line): bool
+/**
+ * Whether a run records line $i of a block: a whole top-level statement of a statements block, or of a plain PHP script.
+ * A line goes where the line that starts its construct goes, so an `=> …` line after a signature stays a member's.
+ */
+function runs(array $block, array $read, int $i): bool
 {
-    return $line['depth'] === 0 && $line['delta'] === 0 && run_line($block, $line);
+    return $read[$i]['depth'] === 0 && $read[$i]['delta'] === 0 && run_line($block, $read[$read[$i]['construct']]);
 }
 
 /**
@@ -1088,7 +1092,7 @@ function check_run(array $example, array $reads, string $outcomes): array
     foreach ($example['blocks'] as $b => $block) {
         foreach ($reads[$b] as $i => $line) {
             $expect = $line['expect'];
-            if (!in_array($expect['kind'], RUNTIME, true) || !runs($block, $line)) {
+            if (!in_array($expect['kind'], RUNTIME, true) || !runs($block, $reads[$b], $i)) {
                 continue;
             }
             $where = where($block, $i);
@@ -1118,14 +1122,14 @@ function check_reached(array $example, array $reads): void
     $restated = [];
     foreach ($example['blocks'] as $b => $block) {
         foreach ($reads[$b] as $i => $line) {
-            if ($i >= ($block['run_from'] ?? PHP_INT_MAX) && in_array($line['expect']['kind'], RUNTIME, true) && runs($block, $line)) {
+            if ($i >= ($block['run_from'] ?? PHP_INT_MAX) && in_array($line['expect']['kind'], RUNTIME, true) && runs($block, $reads[$b], $i)) {
                 $restated[] = $line['expect'];
             }
         }
     }
     foreach ($example['blocks'] as $b => $block) {
         foreach ($reads[$b] as $i => $line) {
-            if (in_array($line['expect']['kind'], RUNTIME, true) && !runs($block, $line) && !in_array($line['expect'], $restated, true)) {
+            if (in_array($line['expect']['kind'], RUNTIME, true) && !runs($block, $reads[$b], $i) && !in_array($line['expect'], $restated, true)) {
                 fail(where($block, $i) . ": no run reaches the claim `// $line[comment]`. Add a line that shows it to a `" . RUN_MARKER . "$example[id]` comment after the block.");
             }
         }
@@ -1332,9 +1336,9 @@ function measure(string $root, string $work, array $examples): array
 
         $runs_here = false;
         foreach ($example['blocks'] as $b => $block) {
-            foreach ($reads[$id][$b] as $line) {
+            foreach ($reads[$id][$b] as $i => $line) {
                 $runs_here = $runs_here || ($block['language'] === 'php' && $block['shape'] === 'statements')
-                    || (in_array($line['expect']['kind'], RUNTIME, true) && runs($block, $line));
+                    || (in_array($line['expect']['kind'], RUNTIME, true) && runs($block, $reads[$id][$b], $i));
             }
         }
         if ($runs_here && $results[$id] === []) {

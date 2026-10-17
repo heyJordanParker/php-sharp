@@ -31,6 +31,8 @@ public foreign class Environment
 
     public string? variable(string name);            // maps getenv. null when the variable is not set.
 
+    public void setVariable(string name, string value); // maps putenv. ValueError for an empty name or one with "=". RuntimeException when it can't be set.
+
     public string currentDirectory();                // maps getcwd. RuntimeException when the directory can't be read.
 
     public void changeDirectory(string path);        // maps chdir. RuntimeException when the directory can't be entered.
@@ -41,7 +43,7 @@ public foreign class Environment
 }
 ```
 
-`putenv` has no member.
+PHP's other environment functions, such as `gethostname`, `php_uname` and the `ini_*` family, have the effect `Environment` and no member.
 
 ## Clock
 
@@ -69,7 +71,7 @@ The precedent is .NET `System.Random`: `Next(min, max)` with `max` excluded, `Ne
 ```csharp
 public foreign class Random
 {
-    public Random(int? seed = null);                 // maps mt_srand, srand. Seeded for a fake in tests, secure without a seed.
+    public Random(int? seed = null);                 // maps mt_srand, srand, written `new Random(…)` in a module binding. Seeded for a fake in tests, secure without a seed.
 
     public int nextInt(int min, int max);            // maps random_int, rand, mt_rand. min ≤ n < max, and min when they are equal. ValueError when max < min.
 
@@ -139,9 +141,11 @@ public foreign class Files
 
     public List<string>? readLines(string path);     // maps file. The lines without their endings, null when the file doesn't exist.
 
+    public Iterable<string>? readLinesLazily(string path); // maps fopen, fread, fclose, feof, fseek, ftell, rewind. The same lines, read one at a time as a loop reaches them.
+
     public void write(string path, string contents); // maps file_put_contents. Replaces the file. RuntimeException when unwritable.
 
-    public void append(string path, string contents); // adds to the end, as file_put_contents with FILE_APPEND does
+    public void append(string path, string contents); // maps fopen, flock, ftruncate, fflush with write. Adds to the end, as file_put_contents with FILE_APPEND does
 
     public bool exists(string path);                 // maps file_exists, is_file, is_readable
 
@@ -163,11 +167,11 @@ public foreign class Files
 
     public int? lastModified(string path);           // maps filemtime, filectime, fileatime, stat. A Unix timestamp, null when missing.
 
-    public string temporaryFile();                   // maps tempnam, sys_get_temp_dir. A new empty file's path.
+    public string temporaryFile();                   // maps tempnam, sys_get_temp_dir, tmpfile. A new empty file's path.
 }
 ```
 
-The file-handle functions (`fopen`, `fclose`, `fread`, `fseek`, `ftell`, `feof`, `flock`, `ftruncate`, `fflush`, `rewind` and `tmpfile`) have no member. A User who streams a file declares them, as in `extern global.fopen uses Files;`. These functions have no member either: `chmod`, `chown`, `touch`, `realpath`, `symlink`, `link`, `is_link`, `fileperms`, `disk_free_space` and `is_writable`.
+`fwrite`, `fputs` and `fgets` keep `Console`'s rows, since their handle is standard output or input as often as a file. These functions have no member: `chmod`, `chown`, `touch`, `realpath`, `symlink`, `link`, `is_link`, `fileperms`, `disk_free_space` and `is_writable`.
 
 ## Http
 
@@ -178,8 +182,7 @@ public foreign class Http
 {
     public HttpResponse get(string url);             // a GET. ValueError when Url.isValid refuses the URL. RuntimeException when the connection fails or times out.
 
-    public HttpResponse send(HttpRequest request);   // maps curl_init, curl_setopt, curl_setopt_array, curl_exec, curl_getinfo, curl_close,
-                                                     // curl_multi_init, curl_multi_exec, fsockopen, stream_socket_client. The same failures as get.
+    public HttpResponse send(HttpRequest request);   // maps every curl_* function, fsockopen, stream_socket_client. The same failures as get.
 }
 
 public enum HttpMethod : string
@@ -205,21 +208,21 @@ A JSON request body needs `Json.encode`, which the library doesn't have yet.
 
 ## Cache
 
-No PHP built-in carries `Cache`, so no table row maps to it. The store is a SQLite file through PDO SQLite, which the runtime image ships, the way .NET's SQL Server distributed cache keeps entries in a table. The precedent is .NET `IDistributedCache`, with `Get`, `Set` and `Remove`. Values are strings, which in PHP# also cover bytes, so a User encodes a structured value with `Json`.
+The APCu functions map to it, each to the member that does its work and the rest of the family to `get`, `set` and `remove`. APCu is no PHP built-in, so `Builtins.sharp` declares none of them, while PHP's own `opcache_*` functions carry `Cache`. The store is a SQLite file through PDO SQLite, which the runtime image ships, the way .NET's SQL Server distributed cache keeps entries in a table. The precedent is .NET `IDistributedCache`, with `Get`, `Set` and `Remove`. Values are strings, which in PHP# also cover bytes, so a User encodes a structured value with `Json`.
 
 ```csharp
 public foreign class Cache
 {
     public Cache(string path);                       // the SQLite file. A module sets it.
 
-    public string? get(string key);                  // null on a miss or an expired entry. ValueError for an empty key.
+    public string? get(string key);                  // maps apcu_fetch, apcu_exists, apcu_key_info. null on a miss or an expired entry. ValueError for an empty key.
 
-    public void set(string key, string value, Duration? expiresAfter = null);   // RuntimeException when the store is unwritable.
+    public void set(string key, string value, Duration? expiresAfter = null);   // maps apcu_store, apcu_add. RuntimeException when the store is unwritable.
 
-    public void remove(string key);                  // a missing key is not an error
+    public void remove(string key);                  // maps apcu_delete. A missing key is not an error
 
     public string getOrCreate(string key, Function<string()> create, Duration? expiresAfter = null);
-                                                     // each call takes on the effects of the create it passes
+                                                     // maps apcu_entry. Each call takes on the effects of the create it passes
 }
 ```
 
@@ -274,7 +277,7 @@ public foreign class Database
 }
 ```
 
-The `pg_*` and `mysqli_*` families hold about 150 functions. Each maps to the nearest member.
+The `pg_*` and `mysqli_*` families hold about 230 functions. A connect function maps to `new Database(…)` in a module binding, each function with a nearer member maps to it, and the rest of each family maps to `query` and `execute`.
 
 ## New types
 

@@ -1,18 +1,15 @@
 namespace Demo;
 
-import SplFileObject;
-
 public class Import
 {
     public Import(private List<Row> pending, private Row latest)
     {
     }
 
-    public static Iterable<List<string>> rows(string path)
+    public static Iterable<List<string>> rows(Files files, string path)
     {
-        const file = new SplFileObject(path);
-        while (!file.eof()) {
-            const text = global.rtrim(file.fgets());
+        const lines = files.readLines(path) ?? throw new RuntimeException(`${path} does not exist`);
+        for (const text of lines) {
             if (text != "") {
                 yield global.explode(",", text);
             }

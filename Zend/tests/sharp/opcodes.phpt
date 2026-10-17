@@ -1533,7 +1533,7 @@ Accessors/Product: same opcodes and lines in 11 op arrays, same signatures in 1 
 Parcel: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Exits: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 Positions: same opcodes and lines in 5 op arrays, same signatures in 1 classes
-Deploy: same opcodes and lines in 7 op arrays, same signatures in 1 classes
+Deploy: same opcodes and lines in 6 op arrays, same signatures in 1 classes
 Tags: same opcodes and lines in 2 op arrays, same signatures in 1 classes
   check  Demo\Tags::of string("List<string>|string")
 PhpForms: same opcodes and lines in 15 op arrays, same signatures in 1 classes
