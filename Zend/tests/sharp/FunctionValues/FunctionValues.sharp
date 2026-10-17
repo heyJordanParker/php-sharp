@@ -1,0 +1,141 @@
+namespace Demo;
+
+import Lib.Callbacks;
+
+public class FunctionValues
+{
+    private static Function<int(int)> round = (int n) => n - 1;
+    public static Function<int(int)> scale { get; set; } = (int n) => n * 3;
+    private Function<int(int)> step = (int n) => n + 10;
+    private Function<int(int)> doubler = FunctionValues.twice;
+
+    public Function<int(int)> times(int by) => (int n) => n * by;
+
+    public static int twice(int n) => n * 2;
+
+    public int plus(int value) => value + 10;
+
+    // Spec section 14.1: any expression that gives a function is called, and section 14.3's static field or property
+    // that holds one is called through its class.
+    public List<Any?> calls()
+    {
+        List<Function<int(int)>> steps = [(int n) => n + 1, (int n) => n * 2];
+        Map<string, Function<int(int)>> named = ["negate": (int n) => -n];
+        const adder = (int a) => (int b) => a + b;
+        bool doubles = true;
+        FunctionShelf<int>.keep(21);
+        FunctionShelf<string>.keep("hi!");
+        return [
+            steps[0](5),
+            steps[1](5),
+            named.get("negate")?.(5),
+            named.get("missing")?.(5),
+            this.times(4)(5),
+            (doubles ? steps[1] : steps[0])(5),
+            ((int n) => n * n)(5),
+            adder(2)(3),
+            (this.step)(5),
+            FunctionValues.round(5),
+            FunctionValues.scale(5),
+            FunctionShelf<int>.run(3),
+            FunctionShelf<string>.run("hi"),
+        ];
+    }
+
+    // Spec section 14.3: a method of a collection, an extension method and a plain PHP function named without
+    // parentheses is a function value, and a collection's value holds the collection as it was when it was made.
+    public List<Any?> methodValues()
+    {
+        List<int> allowed = [1, 3];
+        Map<string, int> prices = ["tea": 4];
+        Set<int> seen = [2];
+        Iterable<int> numbers = [1, 2, 3];
+        const has = allowed.contains;
+        const size = allowed.count;
+        const hasCoffee = prices.has;
+        allowed.add(5);
+        prices["coffee"] = 1;
+        const tidy = "  a  ".trim;
+        const exclaim = "hey".exclaim;
+        const firstTwo = numbers.take;
+        return [
+            [1, 2, 3, 5].filter(allowed.contains),
+            has(5),
+            size(),
+            hasCoffee("coffee"),
+            [2, 4].filter(seen.contains),
+            tidy(),
+            exclaim("!"),
+            ["a", "b"].map(global.strtoupper),
+            firstTwo(2).toList(),
+        ];
+    }
+
+    // Spec section 14.2: a lambda captures the variable itself, and each pass of a loop has its own variable.
+    public List<int> forOfPasses()
+    {
+        List<Function<int()>> seen = [];
+        for (let n of [1, 2, 3]) {
+            n *= 10;
+            seen.add(() => n);
+        }
+        return seen.map(f => f());
+    }
+
+    public List<int> forCounterPasses()
+    {
+        List<Function<int()>> seen = [];
+        for (let i = 0; i < 6; i++) {
+            if (i == 1) { continue; }
+            if (i == 4) { break; }
+            seen.add(() => i);
+        }
+        return seen.map(f => f());
+    }
+
+    public List<int> forCounterChangedByALambda()
+    {
+        List<Function<int()>> seen = [];
+        for (let i = 0; i < 6; i++) {
+            const skip = () => { i += 1; };
+            skip();
+            seen.add(() => i);
+        }
+        return seen.map(f => f());
+    }
+
+    // A `for` inside a loop gives each pass of both loops its own counter, through `continue` and `break`.
+    public List<int> nestedCounterPasses()
+    {
+        List<Function<int()>> seen = [];
+        for (let i = 0; i < 4; i++) {
+            if (i == 2) { continue; }
+            for (let j = 0; j < 4; j++) {
+                if (j == 1) { continue; }
+                if (j == 3) { break; }
+                seen.add(() => i * 10 + j);
+            }
+            if (i == 3) { break; }
+        }
+        return seen.map(f => f());
+    }
+
+    // Spec section 14.3 with plain PHP: a method value is a field's initial value, a function value goes to a plain PHP
+    // `callable` or `\Closure` with no docblock and into its `?\Closure` static property, and a value plain PHP reads
+    // shows its parameters' names and types.
+    public List<Any?> crossings()
+    {
+        List<int> allowed = [1, 3];
+        Map<string, int> prices = ["tea": 4];
+        Callbacks.handler = (int n) => n * 7;
+        return [
+            this.doubler(4),
+            Callbacks.apply(this.plus, 3),
+            Callbacks.applyClosure(global.abs, -4),
+            Callbacks.runHandler(3),
+            Callbacks.describe("hey".exclaim),
+            Callbacks.describe(allowed.contains),
+            Callbacks.describe(prices.has),
+        ];
+    }
+}
