@@ -246,7 +246,7 @@ jobs:
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie-slim
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
-      EXTENSIONS: bcmath exif gd imagick intl pcntl pdo_pgsql pgsql redis-5.3.7 zip
+      EXTENSIONS: bcmath exif gd imagick intl pcntl pdo_pgsql pgsql redis zip
     steps:
       - name: git checkout
         uses: actions/checkout@v6
