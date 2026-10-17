@@ -1518,6 +1518,36 @@ Function<void(Order)>? onPaid = null
 public Function<bool(Order)> eligibleFor(Account account)
 ```
 
+**A function fits a function type when it takes every parameter the type passes,** as in C#, Kotlin, Swift and Java. A function for a type that returns `void` gives no value, and the result of a call that returns `void` is no value to use:
+
+<!-- example function-fit: statements
+List<int> seen = [];
+-->
+```csharp
+Function<int(int, int)> pair = (int a) => a;        // compile error: Function<int(int, int)> takes 2 parameters, and this lambda takes 1
+Function<void(int)> sink = (int n) => n * 2;        // compile error: this lambda gives a value
+Function<void(int)> record = (int n) => seen.add(n);
+const kept = seen.clear();                          // compile error: seen.clear() returns nothing
+```
+
+**Any expression that gives a function is called the same way,** with the arguments in parentheses after it, as in C#, TypeScript, Kotlin and Swift: a list element, a call's result, a conditional or a lambda.
+
+<!-- example function-calls: statements
+List<Function<int(int)>> steps = [(int n) => n + 1, (int n) => n * 2];
+bool doubles = true;
+-->
+```csharp
+const adder = (int a) => (int b) => a + b;
+int first = steps[0](5);                             // 6
+int picked = (doubles ? steps[1] : steps[0])(5);     // 10
+int sum = adder(2)(3);                               // 5
+```
+<!-- run function-calls
+first;    // 6
+picked;   // 10
+sum;      // 5
+-->
+
 ### 14.2 Lambdas
 
 A lambda is written as a bare arrow. Parameter types are optional when the checker can infer them.
@@ -1547,7 +1577,7 @@ increment();   // count is now 1
 count;   // 1
 -->
 
-A lambda that calls `add`, `set` or `remove` on a captured variable changes the variable itself:
+A lambda that changes a captured collection, with `add`, `insert`, `remove`, `clear` or an index write, changes the variable itself:
 
 <!-- example capture-and-change: statements
 List<int> numbers = [1, 2, 3];
@@ -1571,6 +1601,49 @@ List<string> names = ["Spring Sale"];
 ```csharp
 names.map(Str.slug);
 ```
+
+A method of a `List`, `Map` or `Set`, an extension method (section 26) and a plain PHP function are values the same way, as in `allowed.contains`, `name.trim` and `global.strtoupper`. A collection is a value (section 12), so a collection's method value holds the collection as it was when the value was made, as C# copies a struct into a delegate made from its method:
+
+<!-- example method-value-kinds: statements
+List<int> allowed = [1, 3];
+List<string> names = ["tea", "jam"];
+-->
+```csharp
+const has = allowed.contains;
+allowed.add(5);
+List<int> kept = [1, 2, 5].filter(allowed.contains);   // [1, 5]
+List<string> loud = names.map(global.strtoupper);      // ["TEA", "JAM"]
+```
+<!-- run method-value-kinds
+has(5);        // false
+kept;          // [1, 5]
+loud;          // ["TEA", "JAM"]
+-->
+
+**A method that changes a collection is no function value**, since it would change only that copy, as Swift refuses the value of a `mutating` method. A lambda that calls it changes the collection itself:
+
+<!-- example changing-method-values: statements
+List<int> seen = [];
+-->
+```csharp
+const add = seen.add;                       // compile error: write a lambda that calls it, as in value => seen.add(value)
+const record = (int value) => seen.add(value);
+```
+
+**A plain PHP function that changes a variable it is given, or reads the variables of the code that calls it, is no function value,** since PHP# passes every argument by value. A call that would pass it a PHP# variable to change is an error too, and names the method that does the work where there is one:
+
+<!-- example by-reference-functions: statements
+List<int> numbers = [3, 1, 2];
+-->
+```csharp
+const sort = global.sort;                   // compile error: global.sort changes the variable it is given
+const pack = global.compact;                // compile error: global.compact reads the caller's variables
+global.array_push(numbers, 4);              // compile error: write numbers.add(…)
+List<int> sorted = numbers.sortedBy(n => n);
+```
+<!-- run by-reference-functions
+sorted;   // [1, 2, 3]
+-->
 
 In a plain PHP class with both a property and a method of that name, the property wins, as in PHP.
 
@@ -1613,7 +1686,7 @@ public void renewAll(List<int> customerIds, string plan)
 **A `?` or a null check that cannot matter is a compile error,** because it misstates the code. Section 24 gives the rule for `?`.
 
 - a null check, `?.` or `??` on a value whose type has no `?`
-- a nullable return type on a method that never returns null
+- a nullable return type on a method no subclass can override that never returns null
 
 <!-- example needless-null-checks: members
 private Customer customer = new Customer();
@@ -4127,7 +4200,7 @@ Take a `Function<string() uses Environment>`, whose type states the effects it m
 
 The standard library's collection methods (section 12) take on the effects of their functions this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
 
-**Plain PHP can run any function it is given,** as `global.array_map(f, list)` and `global.usort(list, f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => global.time()` to `global.call_user_func` has the effect `Clock`.
+**Plain PHP can run any function it is given,** as `global.array_map(f, list)` and `global.array_filter(list, f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => global.time()` to `global.call_user_func` has the effect `Clock`.
 
 **Code with a body writes no `uses`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function it is given, and its body and declaration show all four. The checker works out each method's effects, and its errors name them, as in "`Gauge.level` calls `Clock.now`, which has the effect `Clock`". A `uses` that names a function parameter, with or without a body, is a parse error that says to delete it.
 
