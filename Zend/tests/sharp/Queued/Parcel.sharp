@@ -1,0 +1,6 @@
+namespace Queued;
+
+public struct Parcel
+{
+    public Parcel(public int grams { get; }, public Speed speed { get; }) { }
+}

@@ -1,0 +1,56 @@
+namespace Queued;
+
+import Sharp.Data.PhpSerializer;
+
+// The values a queued job or a cached entry holds, and the PHP# reads of each one unserialize gives back.
+public class Payloads
+{
+    public static Map<string, int> counts() => ["tea": 2, "jam": 5];
+
+    public static Map<Speed, int> bySpeed() => [Speed.Express: 1, Speed.Standard: 3];
+
+    public static List<Map<string, int>> batches() => [["tea": 1], ["jam": 2, "bun": 3]];
+
+    public static Shipment shipment() => new Shipment(["fragile": 1], [3, 4]);
+
+    public static Ledger ledger()
+    {
+        const ledger = new Ledger();
+        ledger.record("packed", 2);
+
+        return ledger;
+    }
+
+    public static Set<string> tags() => ["vip", "new"];
+
+    public static Map<string, int> nothing() => [:];
+
+    public static Map<Parcel, string> byParcel() => [new Parcel(250, Speed.Express): "small"];
+
+    public static Map<Courier, string> byCourier() => [new Courier(7): "north"];
+
+    public static Crate crate() => new Crate([3: "c"], [Speed.Express], [["tea": 1]]);
+
+    public static Box<int> box() => new Box<int>(["tea": 1]);
+
+    public static Any? throughSerializer(Any? value) => PhpSerializer.unserialize(PhpSerializer.serialize(value));
+
+    public static Any? throughSerializerAllowing(Any? value, List<string> allowedClasses)
+        => PhpSerializer.unserialize(PhpSerializer.serialize(value), allowedClasses);
+
+    public static bool holdsCounts(Any value) => value is Map<string, int>;
+
+    public static bool holdsBatches(Any value) => value is List<Map<string, int>>;
+
+    public static bool holdsTags(Any value) => value is Set<string>;
+
+    public static int? express(Map<Speed, int> counts) => counts.get(Speed.Express);
+
+    public static bool sameShipment(Shipment shipment) => shipment == Payloads.shipment();
+
+    public static bool tagged(Set<string> tags) => tags.contains("vip");
+
+    public static string? parcel(Map<Parcel, string> labels) => labels.get(new Parcel(250, Speed.Express));
+
+    public static string? courier(Map<Courier, string> labels) => labels.get(new Courier(7));
+}
