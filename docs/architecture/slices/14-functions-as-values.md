@@ -94,6 +94,13 @@ No spec line. `(&value) => value` is "A by-reference parameter is not supported 
 
 - **Proposed:** a compile error that names PHP#'s way: "PHP# has no by-reference parameter: return the new value, or let the lambda change a variable it captures."
 
+### Q10. A method value of a method that changes the collection
+
+Found while building Q5. Q5's copy means `numbers.forEach(seen.add)` would add to a copy of `seen` and leave `seen` empty, with no error.
+
+- **Built:** refused, as Swift refuses the value of a `mutating` method and Rust has no value of a method that takes `&mut self` without a closure: "`seen.add` changes the collection, and a function value holds a copy of it: write a lambda that calls it, as in `value => seen.add(value)`." A refusal can be lifted later without breaking code that compiles.
+- Allow it, as C# allows a delegate of a struct's method, which changes the boxed copy. The value then changes only its copy. TypeScript reads `seen.push` too, and its call throws, because the value lost its `this`.
+
 ## Waiting on Jordan
 
 - **Whether `uses none` states a pure function type.** Not built. Today a function type with no `uses` is pure (section 29), and after #136 a function parameter with no `uses` takes on its argument's effects.
@@ -138,7 +145,7 @@ The states are **works**, **refused** (rejected, with its message), **silently a
 | L2 | 1523: parameter types are optional when the checker can infer them | works where a function type or a generic call gives them (`LambdaForms.sharp:7`, `13`, `18`). Silently accepted where nothing does: `const identity = x => x;` and `Any f = x => x;` compile with `x` as `Any?` (`LambdaUninferred.sharp:7`, `19`). `(a, b) => a + b` is refused only by its body: "Left operand in binary operation has type `Any?`." (`:13`) | Gap 4 | `missing-parameter-type`, `closure_parameter_types` |
 | L3 | 1538: a lambda captures the variables it uses, with no `use` list, the variable itself | works, engine included: `incremented 1`, a write after the lambda is made is seen (`seesLaterWrite 5`), `this` is read when called (`readsThis 20`), a counter outlives its method (`captureOutlivesCall 3`), two lambdas share one variable (`sharedBetweenTwo 2`), a `const` loop variable gives each pass its own (`loopPasses 123`). A write to a captured `const` is refused: "Cannot assign to `total`: it is declared with `const`." (`CaptureConst.sharp:8`). Missing for a loop variable that changes: "This capture of a loop variable that changes is not supported yet in PHP#." (`NotSupportedYet.sharp:11`, `21`) | Gap 6 | the unset-before-assignment of a captured `let` |
 | L4 | 1550: `add`, `set` or `remove` on a captured variable changes it | works: `listAdd 3`, `listRemove 2`, `setAdd 1`, `mapRemove 0`, and index writes `listIndexWrite 9`, `mapIndexWrite 1` (`captures.php`). No collection has `set` (Q7) | spec wording, Q7 | |
-| M1 | 1565: a method named without parentheses is a function value | works for a plain PHP static `Plain.shout`, a PHP# static `Item.doubled`, `this.plus`, `item.priceIn`, a stored value, a returned value and a generic static method (`methods.php`: `A,B`, `2,4`, `11,12`, `4,4`, `8`, `101`, `Closure 10`; `generic.php`: `1,2`, `4`). A wrong type is refused (`MethodValueErrors.sharp:7`), and so is an effect the type doesn't list: "`Remote.fetch` has the effect `Http`, so a `Function<int()>` cannot hold it." (`:13`). Missing for a collection's method (`MethodValueKinds.sharp:5`) and a built-in type's or extension's method (`ExtensionMethodValue.sharp:5`). A plain PHP function is refused (Q6) | Gap 5, Q5, Q6 | `method_value` and `returning_closure` in the bridge |
+| M1 | 1565: a method named without parentheses is a function value | works for a plain PHP static `Plain.shout`, a PHP# static `Item.doubled`, `this.plus`, `item.priceIn`, a stored value, a returned value and a generic static method (`methods.php`: `A,B`, `2,4`, `11,12`, `4,4`, `8`, `101`, `Closure 10`; `generic.php`: `1,2`, `4`). A wrong type is refused (`MethodValueErrors.sharp:7`), and so is an effect the type doesn't list: "`Remote.fetch` has the effect `Http`, so a `Function<int()>` cannot hold it." (`:13`). Missing for a collection's method (`MethodValueKinds.sharp:5`) and a built-in type's or extension's method (`ExtensionMethodValue.sharp:5`). A plain PHP function is refused (Q6) | Gap 5, Q5, Q6, Q10 | `method_value`, `returning_closure` and `collection_call`'s inline PHP in the bridge, `record_call_target`, #136's `method_value` in `effects/summary.rs` |
 | M2 | 1565: it is found when the code runs, so it works when the class lives in another file | works: `Demo\Plain` and `Demo\Item` autoload only when `map` runs the value (`methods.php`: `plainStatic autoload Demo\Plain`) | nothing to build | PHP's first-class callable |
 | M3 | 1565: PHP writes this as `Str::slug(...)` | refused, but as "This expression is not supported yet in PHP#." (`PhpFirstClass.sharp:5`) | Gap 7: "PHP# writes a method value without `(...)`: `Item.doubled`." | `report_unsupported`'s PHP forms |
 | M4 | 1575: in a plain PHP class with a property and a method of one name, the property wins | works: `plain.label` gives `property` (`methods.php`) | nothing to build | |
@@ -191,9 +198,10 @@ Section 4's line 149 points here: `Class.y` without a call reads a static method
 
 PHP's first-class callable binds an object's method only. A collection runs as a PHP array, a `string` as a PHP string, and an extension method as a static method that takes its receiver first, so none has a PHP spelling.
 
-- **Analyzer:** `resolve_extension` returns the member, not "call it as `trim(…)`", for an extension method read without parentheses, and `resolve_method_targets`' collection branch returns a collection method's metadata for a read. `resolve_method_value` types each as its method's function type without the receiver.
-- **Bridge:** the value is the closure `method_value` already writes for a generic method, and the call inside it is the extension's or the collection's own lowering on `$receiver`: `extension_access` for `name.trim`, which gives `trim($receiver)`, and `collection_call` for `allowed.contains`. The receiver is read once, where the value is named, so Q5's answer holds: a collection is copied when it is named, as PHP copies an array into a closure's `use`.
-- **Effects:** #136's `method_value` in `effects/summary.rs` records an extension member's effects as a method's.
+- **Analyzer:** a read that reaches no computed property gives `resolve_extension`'s `Extension::Value`, the extension method the receiver picks as a call picks it, and `resolve_extension_value` in `resolver/property.rs` types it as the static method's closure without its first parameter, with the block's type parameters the receiver gives and the method's own from the function type. A read of a `List`, `Map`, `Set` or `Iterable` goes to `resolve_collection_method_value`, which resolves on every collection `get_receiver_collections` finds, the declared ones included, as a call does (`get_receiver_atomics` now holds that rule for both), and types it with `resolve_method_value`. A tuple keeps its named elements. `global.strtoupper` and `Pdf.render` are `resolve_function_value`'s closure of the function (Q6). Each read records what it runs with `record_call_target` at its span, and such a read is never memoized, so every read records it. A call of an extension method's value is checked against the value's own signature, not the static method's.
+- **Bridge:** `receiver_closure` writes `(function ($receiver) { return function (...$arguments) use ($receiver) { return <call>; }; })($target)`, the shape `method_value` writes for a generic method. An extension method's value calls `\Class::member($receiver, ...$arguments)`. A collection method the lowering writes as PHP runs that PHP from `inlined_collection_method`, split out of `collection_call`, on `CollectionReceiver::Hidden`, with `$value` as its one parameter where it has one, as `\in_array($value, $receiver, true)`. Any other collection method runs `$receiver->has(...$arguments)` on `Sharp\Collection`, and an `Iterable`'s on `\Sharp\Sequence::from($receiver)`. A function value is `\strtoupper(...)`. The receiver is read once, where the value is named, so Q5's answer holds: a `List`, `Map` or `Set` is copied there, and `has(5)` after `allowed.add(5)` is `false` in the engine, a `Map` included.
+- **Effects:** #136's `method_value` in `effects/summary.rs` records an extension method's value as a call with the receiver as its first argument, and `function_value_runs` gives a function's value the effects its `extern` declares, as a call of it has, wherever it is passed. `function_values_must_fit_their_types` names it `global.strtolower`.
+- **Q10, a method that changes the collection:** its value would change only the copy Q5 gives it, so `seen.add` is refused, as Swift refuses the value of a `mutating` method: "`seen.add` changes the collection, and a function value holds a copy of it: write a lambda that calls it, as in `value => seen.add(value)`." A method without `@mutation-free` in the prelude's `ListMethods`, `MapMethods` and `SetMethods` changes it. The spec's `changing-method-values` example shows it.
 
 ## Gap 6: a lambda that captures a loop variable that changes
 
@@ -225,7 +233,8 @@ sharp/mago/crates/
 │   │                                      deleted (Gap 6)
 │   └── tests/sharp.rs
 ├── analyzer/
-│   ├── src/resolver/method.rs           <- a collection method read without parentheses (Gap 5)
+│   ├── src/resolver/method.rs           <- get_receiver_atomics and get_receiver_collections: the collections a
+│   │                                      call and a method value resolve on (Gap 5)
 │   ├── src/resolver/static_method.rs    <- a static call of a static property holding a function (Gap 2)
 │   ├── src/resolver/static_property.rs  <- resolve_called_static_property (Gap 2)
 │   ├── src/invocation/mod.rs, src/invocation/arguments.rs, src/invocation/analyzer.rs
@@ -234,9 +243,17 @@ sharp/mago/crates/
 │   │                                    <- report_untyped_lambda_parameters (Gap 4), report_value_for_void (Q3)
 │   ├── src/statement/class_like/property.rs
 │   │                                    <- an initial value takes its declared type (Gap 4)
-│   ├── src/resolver/extension.rs        <- an extension method read without parentheses is its member (Gap 5)
-│   ├── src/resolver/property.rs         <- resolve_method_value types a collection's or an extension's
-│   │                                      method without its receiver (Gap 5)
+│   ├── src/resolver/extension.rs        <- Extension::Value, an extension method read without parentheses (Gap 5)
+│   ├── src/resolver/property.rs         <- resolve_collection_method_value with Q10's refusal,
+│   │                                      resolve_extension_value and resolve_function_value (Gap 5, Q6)
+│   ├── src/expression/constant_access.rs
+│   │                                    <- global.strtoupper read without parentheses is its value (Q6)
+│   ├── src/expression/access/property_access.rs
+│   │                                    <- a method value's read is never memoized (Gap 5)
+│   ├── src/expression/call/function_call.rs
+│   │                                    <- an extension method's value is called by its own signature (Gap 5)
+│   ├── src/effects/summary.rs, src/effects/check.rs
+│   │                                    <- function_value_runs, an extension method value's receiver (Gap 5, Q6)
 │   ├── src/expression/call/static_method_call.rs
 │   │                                    <- records CallTarget::Property for Gap 2's call
 │   ├── src/expression/arrow_function.rs, src/expression/closure.rs
@@ -246,9 +263,11 @@ sharp/mago/crates/
 │   └── tests/sharp.rs
 ├── sharp-bridge/
 │   ├── src/lower.rs                     <- a call of any expression (Gap 1); a static property's call
-│   │                                      (Gap 2); a collection's and an extension's method value through
-│   │                                      returning_closure (Gap 5); a fresh loop variable in each pass (Gap 6)
-│   ├── src/lower/types.rs               <- closure_parameters and function_value_name take any callee (Gap 1)
+│   │                                      (Gap 2); receiver_closure, collection_method_value and
+│   │                                      inlined_collection_method, an extension's and a function's value
+│   │                                      (Gap 5, Q6); a fresh loop variable in each pass (Gap 6)
+│   ├── src/lower/types.rs               <- closure_parameters and function_value_name take any callee (Gap 1);
+│   │                                      is_extension_method_value, function_value, value_parameter_type (Gap 5)
 │   └── tests/lower.rs
 sharp/composer/library/Sharp/InvalidFields.sharp
                                          <- its private `message` method renamed `describe` (Gap 3)
@@ -256,14 +275,16 @@ Zend/tests/sharp/
 ├── FunctionValues/
 │   ├── FunctionValues.sharp             <- new: Gap 1's calls, Gap 2's static fields, Gap 5's method values,
 │   │                                       Gap 6's loops
-│   └── FunctionShelf.sharp              <- new: a generic class's static field holding a function (Gap 2)
-├── function_values.inc                  <- new: loads the folder with fixture(), runs each row twice, so the
-│                                           JIT variants compile it first
+│   ├── FunctionShelf.sharp              <- new: a generic class's static field holding a function (Gap 2)
+│   └── Shouting.sharp                   <- new: an extension method whose value runs (Gap 5)
+├── function_values.inc                  <- new: loads the folder with fixture() and `Sharp\Text\Text`, runs each
+│                                           row twice, so the JIT variants compile it first
 ├── function_values.phpt                 <- new
-├── function_values_preload.inc          <- new: the folder's files, for opcache.preload
+├── function_values_preload.inc          <- new: the folder's files and `Sharp\Text\Text`, for opcache.preload
 └── function_values_preload.phpt         <- new: the same rows under opcache preloading
-docs/spec.md                             <- section 14 as Q1, Q3, Q7 and Q8 answer: Q1's line and its example
-                                            `function-calls`; line 1550; line 1616
+docs/spec.md                             <- section 14 as Q1, Q3, Q5, Q6, Q7, Q8 and Q10 answer: Q1's line and its
+                                            example `function-calls`; the method value kinds and the examples
+                                            `method-value-kinds` and `changing-method-values`; line 1550; line 1616
 docs/architecture/slices/14-functions-as-values.md   <- this note
 ```
 
@@ -275,11 +296,13 @@ The PHP the bridge emits:
 ($steps[0])(1)                                                                  <- steps[0](1)
 ($this->make())(1)                                                              <- this.make()(1)
 (StaticFunctionField::$shared)(5)                                               <- StaticFunctionField.shared(5)
+(function ($receiver) { return function ($value) use ($receiver) {
+    return \in_array($value, $receiver, true); }; })($allowed)                  <- allowed.contains, without parentheses
 (function ($receiver) { return function (...$arguments) use ($receiver) {
-    return <what allowed.contains(x) lowers to, on $receiver>; }; })($allowed)  <- allowed.contains, without parentheses
+    return $receiver->has(...$arguments); }; })($prices)                        <- prices.has, without parentheses
 (function ($receiver) { return function (...$arguments) use ($receiver) {
-    return trim($receiver); }; })($name)                                        <- name.trim, without parentheses: the
-                                                                                   library's inline form of name.trim()
+    return \Sharp\Text\Text::trim($receiver, ...$arguments); }; })($name)       <- name.trim, without parentheses
+\strtoupper(...)                                                                <- global.strtoupper, without parentheses
 foreach ($values as $value#1) { unset($value); $value = $value#1; … }           <- for (let value of values), captured
 for ($step = 0; $step < 3; $step++) {
     do { … } while (false);
@@ -291,10 +314,10 @@ for ($step = 0; $step < 3; $step++) {
 
 team-lead approves these. Everything not here is tactical.
 
-- **New engine test files:** the folder `Zend/tests/sharp/FunctionValues/` with `FunctionValues.sharp` and `FunctionShelf.sharp`, and `function_values.inc`, `function_values.phpt`, `function_values_preload.inc` and `function_values_preload.phpt`.
-- **No new issue code.** Gap 3 reuses `name-already-in-use`, Gap 4 reuses `missing-parameter-type`, Q3's refusals reuse `invalid-argument`, `invalid-property-default-value`, `invalid-local-assignment-value` and, for a `void` type's value, `invalid-return-statement`, and the semantics refusals carry no code, as every semantics refusal.
+- **New engine test files:** the folder `Zend/tests/sharp/FunctionValues/` with `FunctionValues.sharp`, `FunctionShelf.sharp` and `Shouting.sharp`, and `function_values.inc`, `function_values.phpt`, `function_values_preload.inc` and `function_values_preload.phpt`.
+- **No new issue code.** Gap 3 reuses `name-already-in-use`, Gap 4 reuses `missing-parameter-type`, Q3's refusals reuse `invalid-argument`, `invalid-property-default-value`, `invalid-local-assignment-value` and, for a `void` type's value, `invalid-return-statement`, Q10's refusal reuses `invalid-property-access`, the code the same read gets on master, and the semantics refusals carry no code, as every semantics refusal.
 - **No new node, type, engine function, library class or harness file.**
-- **The spec:** one line and one example under section 14.1 if Q1 is accepted, and the wording of lines 1550 and 1616.
+- **The spec:** one line and one example under section 14.1, the method value kinds with Q5's copy and Q10's refusal under section 14.3 with two examples, and the wording of lines 1550 and 1616.
 
 # The tests
 
@@ -314,11 +337,13 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 - `a_call_of_a_property_holding_a_function_is_checked_against_its_function_type` grows the rows a static field, a static property, a generic class's static field, a wrong argument to each, and a private static read from outside (M5).
 - `a_call_of_a_property_holding_a_function_records_the_property` grows a static row (M5).
 - `a_member_named_as_an_inherited_member_is_an_error` (new, M6): rows a field below a method, a property below a method, a method below a field, a method below a constructor-declared property, two levels down, a plain PHP parent's property and method; accepted rows a `private` ancestor member and a plain PHP class with both.
-- `a_method_value_passed_to_a_collection_method_types_its_result` grows the rows `allowed.contains`, `prices.has`, `seen.contains` on a `Set`, `name.trim`, an imported extension method, and Q6's `global.strtoupper` (M1).
+- `a_method_value_of_a_collection_an_extension_or_a_plain_php_function_has_its_function_type` (new, M1): rows `allowed.contains`, `prices.has`, `seen.contains` on a `Set`, `allowed.count`, `title.trim`, an imported extension method and Q6's `global.strtoupper` and `global.strlen`, each also in a function type it doesn't fit, and a call of an inferred extension method value with a wrong argument. `an_imported_extension_is_a_member_of_its_receiver`'s `title.slug` row is now its value, and `a_read_through_a_name_that_reaches_no_constant_is_refused` drops its two function rows.
+- `a_method_value_of_a_collection_method_that_changes_the_collection_is_refused` (new, Q10): rows `List.add`, `List.insert`, `Map.remove` and `Set.clear`, each with its lambda.
+- `a_function_or_extension_method_value_has_its_effects_where_it_runs` (new, M1 with section 29): a function value through a function parameter and through plain PHP, an extension method value through a collection method, and a function without an `extern` in a type that lists effects.
 
-**`sharp/mago/crates/sharp-bridge/tests/lower.rs`:** one tree per row of "The PHP the bridge emits", and `a_loop_variable_a_lambda_captures_is_fresh_in_each_pass` (new, L3) with the three loops of the deleted semantics test.
+**`sharp/mago/crates/sharp-bridge/tests/lower.rs`:** one tree per row of "The PHP the bridge emits": `a_collection_method_value_is_a_closure_over_the_collection` and `an_extension_method_or_plain_php_function_value_calls_what_it_names` for Gap 5 and Q6, a second read of one value included, and `a_loop_variable_a_lambda_captures_is_fresh_in_each_pass` (new, L3) with the three loops of the deleted semantics test.
 
-**Engine, `Zend/tests/sharp/`:** `function_values.phpt` runs one row per form of T4, M5's static field, M1's new method values with Q5's copy, and L3's loops: `for (let step …)` gives `0,1,2`, and a `for … of` variable changed after its lambda is made gives the changed value. `sharp/bin/test --opcache --repeat --passes` runs it and `function_values_preload.phpt` in every opcache mode, and a `USE_ZEND_ALLOC=0 MallocScribble=1` loop runs both, since the preloaded classes share their closures.
+**Engine, `Zend/tests/sharp/`:** `function_values.phpt` runs one row per form of T4, M5's static field, M1's new method values with Q5's copy, `has(5)` and `size()` after `allowed.add(5)` and `hasCoffee("coffee")` after a `Map` write, and L3's loops: `for (let step …)` gives `0,1,2`, and a `for … of` variable changed after its lambda is made gives the changed value. `sharp/bin/test --opcache --repeat --passes` runs it and `function_values_preload.phpt` in every opcache mode, and a `USE_ZEND_ALLOC=0 MallocScribble=1` loop runs both, since the preloaded classes share their closures.
 
 **The spec:** `sharp/bin/spec` shows every section 14 example passing, Q1's `function-calls` included, and `sharp/bin/spec --completes` passes on a body with `Completes: §14`.
 

@@ -35,6 +35,35 @@ public class FunctionValues
         ];
     }
 
+    // Spec section 14.3: a method of a collection, an extension method and a plain PHP function named without
+    // parentheses is a function value, and a collection's value holds the collection as it was when it was made.
+    public List<Any?> methodValues()
+    {
+        List<int> allowed = [1, 3];
+        Map<string, int> prices = ["tea": 4];
+        Set<int> seen = [2];
+        Iterable<int> numbers = [1, 2, 3];
+        const has = allowed.contains;
+        const size = allowed.count;
+        const hasCoffee = prices.has;
+        allowed.add(5);
+        prices["coffee"] = 1;
+        const tidy = "  a  ".trim;
+        const exclaim = "hey".exclaim;
+        const firstTwo = numbers.take;
+        return [
+            [1, 2, 3, 5].filter(allowed.contains),
+            has(5),
+            size(),
+            hasCoffee("coffee"),
+            [2, 4].filter(seen.contains),
+            tidy(),
+            exclaim("!"),
+            ["a", "b"].map(global.strtoupper),
+            firstTwo(2).toList(),
+        ];
+    }
+
     // Spec section 14.2: a lambda captures the variable itself, and each pass of a loop has its own variable.
     public List<int> forOfPasses()
     {

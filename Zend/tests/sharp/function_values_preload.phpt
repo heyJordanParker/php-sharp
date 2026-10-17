@@ -1,5 +1,5 @@
 --TEST--
-A preloaded PHP# class calls any expression that gives a function and a static field holding one, and gives each loop pass its own captured variable
+A preloaded PHP# class calls any expression that gives a function and a static field holding one, gives each loop pass its own captured variable, and runs the value of a collection method, an extension method and a plain PHP function, a collection's on the collection as it was
 --INI--
 opcache.enable=1
 opcache.enable_cli=1
@@ -36,3 +36,12 @@ foreach (function_values() as $index => $row) {
 13: [10,20,30]
 14: [0,2,3]
 15: [1,3,5]
+16: [1,3,5]
+17: false
+18: 2
+19: false
+20: [2]
+21: "a"
+22: "HEY!"
+23: ["A","B"]
+24: [1,2]

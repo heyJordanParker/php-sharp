@@ -1590,6 +1590,34 @@ List<string> names = ["Spring Sale"];
 names.map(Str.slug);
 ```
 
+A method of a `List`, `Map` or `Set`, an extension method (section 26) and a plain PHP function are values the same way, as in `allowed.contains`, `name.trim` and `global.strtoupper`. A collection is a value (section 12), so a collection's method value holds the collection as it was when the value was made, as C# copies a struct into a delegate made from its method:
+
+<!-- example method-value-kinds: statements
+List<int> allowed = [1, 3];
+List<string> names = ["tea", "jam"];
+-->
+```csharp
+const has = allowed.contains;
+allowed.add(5);
+List<int> kept = [1, 2, 5].filter(allowed.contains);   // [1, 5]
+List<string> loud = names.map(global.strtoupper);      // ["TEA", "JAM"]
+```
+<!-- run method-value-kinds
+has(5);        // false
+kept;          // [1, 5]
+loud;          // ["TEA", "JAM"]
+-->
+
+**A method that changes a collection is no function value**, since it would change only that copy, as Swift refuses the value of a `mutating` method. A lambda that calls it changes the collection itself:
+
+<!-- example changing-method-values: statements
+List<int> seen = [];
+-->
+```csharp
+const add = seen.add;                       // compile error: write a lambda that calls it, as in value => seen.add(value)
+const record = (int value) => seen.add(value);
+```
+
 In a plain PHP class with both a property and a method of that name, the property wins, as in PHP.
 
 **A field or property holding a `Function` is called like a method** when the class has no method with that name. A `.sharp` class cannot declare a method and a field or property with the same name, so `this.discount(…)` always has one meaning.
