@@ -1,5 +1,5 @@
 --TEST--
-PHP# calls any expression that gives a function and a static field holding one, gives each loop pass its own captured variable, and runs the value of a collection method, an extension method and a plain PHP function, a collection's on the collection as it was, and passes function values to plain PHP callbacks with their parameters' names and types
+PHP# calls any expression that gives a function and a static field holding one, gives each loop pass its own captured variable, and runs the value of a collection method, an extension method and a plain PHP function, a collection's on the collection as it was, and passes function values to plain PHP callbacks with their parameters' names and types, and a setter stores the pure function its `uses none` parameter takes
 --FILE--
 <?php
 require __DIR__ . '/function_values.inc';
@@ -42,3 +42,4 @@ foreach (function_values() as $index => $row) {
 30: "string $tail"
 31: "int $value"
 32: "string $key"
+33: 20
