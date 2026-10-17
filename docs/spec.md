@@ -52,17 +52,20 @@ const plan = this.plan();   // type inferred, cannot be reassigned
 const Plan plan = …;        // type written, cannot be reassigned
 ```
 
-**A PHP# keyword, such as `let`, `match` or `emit`, can't name a local. Every other word can,** such as `empty`, `list` and `print`:
+**A PHP# keyword, such as `let`, `match` or `emit`, names a local only with `@` before it,** as C#'s `@class` does. Every other word names one as it is, such as `empty`, `list` and `print`:
 
 <!-- example keyword-names: statements -->
 ```csharp
 const list = [1, 2, 3];     // compiles: PHP# has no list keyword
 let empty = true;           // compiles
 const print = "draft";      // compiles
-const match = 1;            // compile error: match is a PHP# keyword
+const @emit = 1;            // compiles: @ makes a keyword a name
+const match = 1;            // compile error: match is a keyword; write @match
 ```
 
-**Any word, PHP# keywords included, names a method or a property with no mark,** as in JavaScript and TypeScript, because a member's name is written only after `.` or where it is declared. Locals, parameters, `catch` variables and pattern variables can't take a keyword's name:
+**`@this` is a name like any other,** and a bare `this` stays the object the method runs on. PHP# has no other `@`: a call's failure is the value it returns (section 23).
+
+**Any word, PHP# keywords included, names a method or a property with no mark,** as in JavaScript and TypeScript, because a member's name is written only after `.` or where it is declared. Locals, parameters, `catch` variables and pattern variables take a keyword's name with `@`, so a plain PHP method's `$event` parameter is `@event` in PHP#:
 
 <!-- example keyword-members -->
 ```csharp
@@ -82,7 +85,8 @@ Rule rule = new Rule();
 ```csharp
 rule.match("paid");                                 // true
 rule.event;                                         // "paid"
-const event = "paid";                               // compile error: a local can't take a keyword's name
+const match = "paid";                               // compile error: match is a keyword; write @match
+const @event = "paid";                              // compiles
 ```
 
 **PHP# keywords are lowercase only,** as in C#, Java, Kotlin, Swift, TypeScript, Go and Rust. `Self` (section 25) is the one capitalized keyword, as it is in Rust and Swift. A capitalized keyword is an ordinary name, so `class Event` and `class Struct` are valid. Where no such name exists, as for `TRUE` or `Return`, the error suggests the lowercase keyword:
@@ -2948,6 +2952,22 @@ import Vendor.Pdf.render;                                     // compile error: 
 
 public class Draft { }
 ```
+
+**A PHP built-in's failure is the value it returns,** as `global.hex2bin(text)` returns `false` for text that is not hexadecimal. A call of a built-in whose return type holds `false` or `null` raises no warning for that failure, so an error handler that turns warnings into exceptions never sees it, and the code tests the value, as Go tests a returned error:
+
+<!-- example built-in-failures -->
+```csharp
+public class Codes
+{
+    public string? decode(string text) => global.hex2bin(text) is string data ? data : null;   // compiles: "zz" gives null, with no warning
+    public string? silenced(string text) => @(global.hex2bin(text)) is string data ? data : null;   // compile error: PHP# has no @ before a value
+}
+```
+<!-- run built-in-failures
+Codes codes = new Codes();
+codes.decode("616263");  // "abc"
+codes.decode("zz");      // null
+-->
 
 **A plain PHP constant is read through its namespace the same way.** `global.CURLOPT_TIMEOUT` reads the constant of PHP's curl extension, and `Pdf.DEFAULT_DPI` reads the library's after `import Vendor.Pdf;`. A bare uppercase name is always the code's own constant, so a bare PHP constant such as `CURLOPT_TIMEOUT` is a compile error that says to write `global.CURLOPT_TIMEOUT`. A value the standard library gives is read from it, as `Int.MAX` and `Int.MIN` give the `int` bounds:
 
