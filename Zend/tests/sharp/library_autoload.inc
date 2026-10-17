@@ -7,6 +7,8 @@
 // of the interface App/Timed.sharp declares, or App\Ticking\Defaults of an interface without a default body, through a
 // plain PHP class, or App\Stamp, whose type line starts with an attribute. The class map lists the classes the package's
 // Composer plugin finds in each file, which it prints. With composer, Composer itself requires autoload.php, as it does to load a plugin.
+// With uncompiled, autoload.php is required before mago compiles the project, as on a fresh clone, and the project's
+// module binds App\Greeting through the library's Environment, which Sharp\Container then builds.
 
 namespace Composer\Plugin {
     if (($argv[5] ?? null) === 'composer') {
@@ -114,7 +116,13 @@ namespace {
     @mkdir("$package/stubs/App", 0777, true);
     file_put_contents("$package/stubs/App/Failed.sharp", "namespace App;\n\nimport Lib.Failed;\n\nextern event Failed;\n");
     file_put_contents("$package/mago.toml", "[source]\npaths = [\"src\", \"library\"]\nextensions = [\"sharp\"]\n");
-    run_mago($package);
+    $uncompiled = ($argv[5] ?? null) === 'uncompiled';
+    if ($uncompiled) {
+        file_put_contents("$package/src/App/Greeting.sharp", "namespace App;\n\npublic class Greeting\n{\n    public Greeting(private string text) { }\n\n    public string now() => this.text;\n}\n");
+        file_put_contents("$package/src/App/Module.sharp", "namespace App;\n\nmodule\n{\n    singleton Greeting(Environment environment) = new Greeting(environment.variable(\"SHARP_GREETING\") ?? \"no greeting\");\n}\n");
+    } else {
+        run_mago($package);
+    }
 
     $library = "$root/sharp/composer/library/Sharp";
     if ($layout === 'classmap') {
@@ -138,6 +146,9 @@ namespace {
         require "$package/autoload.php";
         echo 'booted, with ', class_exists('Sharp\Text\Text', false) ? 'a' : 'no', " library class declared\n";
         echo 'class map handed to Composer: ', json_encode(array_keys($loader->classMap)), "\n";
+        if ($uncompiled) {
+            run_mago($package);
+        }
         echo match ($class) {
             'Sharp\Text\Text' => \Sharp\Text\Text::slug('A B'),
             'App\Tick\Now' => (new $class('noon'))->at . (class_exists('App\Tick', false) ? ', with its enum' : ''),
@@ -148,6 +159,7 @@ namespace {
             'App\Ticking\Defaults' => interface_exists(\App\Ticking::class)
                 ? (new class implements \App\Ticking { use \App\Ticking\Defaults; })->now()
                 : 'no interface',
+            'App\Greeting' => (new Sharp\Container())->get($class)->now(),
             default => (new $class())->now(),
         }, "\n";
     } catch (Error $error) {

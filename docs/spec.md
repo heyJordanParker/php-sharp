@@ -3860,6 +3860,9 @@ app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mag
 ```
 
 - **A deploy** runs `vendor/bin/mago compile` before the code runs.
+- **`mago compile` writes a `.php` file beside each of the project's `.sharp` files that declares a type,** as `StoreService.php` beside `StoreService.sharp`. So PHP code that finds classes by listing `*.php` files and naming each class by its path, as route-attribute and event discovery do, finds PHP# classes too, the way Java's classpath scanners find Kotlin classes. The file only loads its `.sharp` file through the engine, and on plain PHP it throws the "needs the PHP# engine" error. Once its `.sharp` file is deleted, it declares nothing until the next compile deletes it. Nobody edits it: a `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, and the next compile rewrites or deletes the file with its source. In a git repository, `mago compile` lists in `.git/info/exclude` the files no `.gitignore` already ignores.
+- **A `.sharp` file in an `autoload-dev` folder, and a package's in `vendor/`, gets no `.php` file.** A test class keeps one file, because PHPUnit loads a test class only from the file it lists, so `phpunit.xml` lists the PHP# tests as `<directory suffix="Test.sharp">tests</directory>`.
+- **Editors hide the `.php` files:** VS Code through `"files.exclude": {"**/*.php": {"when": "$(basename).sharp"}}`, and PhpStorm through file nesting of `.php` under `.sharp`.
 - **A type error, or a broken structure rule (section 28), stops the file from running.** So does a law without a proof, a gap, or a proof whose law was deleted, each a compile error that names it.
 - **A rule that reads the whole project's structure can lag in development** until the next full compile. At deploy, `mago compile` checks every rule exactly.
 
