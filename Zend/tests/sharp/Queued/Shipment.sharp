@@ -1,0 +1,6 @@
+namespace Queued;
+
+public struct Shipment
+{
+    public Shipment(public Map<string, int> labels { get; }, public List<int> parcels { get; }) { }
+}

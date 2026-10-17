@@ -7400,6 +7400,10 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Table_list, 0, 0, IS_ARRAY, 0)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Table___unserialize, 0, 1, IS_VOID, 0)
+	ZEND_ARG_TYPE_INFO(0, data, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Table_offsetExists, 0, 1, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, offset, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
@@ -7623,8 +7627,48 @@ ZEND_METHOD(Sharp_Set, toList)
 	sharp_table_list(INTERNAL_FUNCTION_PARAM_PASSTHRU, true);
 }
 
+/* Each entry, key then value, in insertion order: the list __construct takes, which __unserialize runs on. */
+ZEND_METHOD(Sharp_Map, __serialize)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	sharp_table *table = sharp_table_of(Z_OBJ_P(ZEND_THIS));
+	HashTable *keys_and_values = zend_new_array(table->size * 2);
+	SHARP_TABLE_FOREACH(table, bucket) {
+		Z_TRY_ADDREF(bucket->key);
+		zend_hash_next_index_insert_new(keys_and_values, &bucket->key);
+		Z_TRY_ADDREF(bucket->value);
+		zend_hash_next_index_insert_new(keys_and_values, &bucket->value);
+	} SHARP_TABLE_FOREACH_END();
+
+	RETURN_ARR(keys_and_values);
+}
+
 /* A Map literal's entries, key then value, in the order the literal writes them, so a later key replaces an earlier
- * one. A PHP# Map literal lowers to `new \Sharp\Map([$k1, $v1, ...])`, which a .sharp property default may hold. */
+ * one. A PHP# Map literal lowers to `new \Sharp\Map([$k1, $v1, ...])`, which a .sharp property default may hold.
+ * __unserialize takes the list __serialize wrote. False after an exception. */
+static bool sharp_map_fill(zend_object *map, HashTable *keys_and_values)
+{
+	if (zend_hash_num_elements(keys_and_values) % 2 != 0 || !zend_array_is_list(keys_and_values)) {
+		zend_argument_value_error(1, "must be a list of keys each followed by its value");
+		return false;
+	}
+
+	sharp_table *table = sharp_table_of(map);
+	zval *key = NULL, *element;
+	ZEND_HASH_FOREACH_VAL(keys_and_values, element) {
+		if (!key) {
+			key = element;
+		} else if (!sharp_table_put(table, key, element)) {
+			return false;
+		} else {
+			key = NULL;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return true;
+}
+
 ZEND_METHOD(Sharp_Map, __construct)
 {
 	HashTable *keys_and_values = NULL;
@@ -7634,25 +7678,22 @@ ZEND_METHOD(Sharp_Map, __construct)
 		Z_PARAM_ARRAY_HT(keys_and_values)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (!keys_and_values) {
-		return;
-	}
-	if (zend_hash_num_elements(keys_and_values) % 2 != 0 || !zend_array_is_list(keys_and_values)) {
-		zend_argument_value_error(1, "must be a list of keys each followed by its value");
+	if (keys_and_values && !sharp_map_fill(Z_OBJ_P(ZEND_THIS), keys_and_values)) {
 		RETURN_THROWS();
 	}
+}
 
-	sharp_table *table = sharp_table_of(Z_OBJ_P(ZEND_THIS));
-	zval *key = NULL, *element;
-	ZEND_HASH_FOREACH_VAL(keys_and_values, element) {
-		if (!key) {
-			key = element;
-		} else if (!sharp_table_put(table, key, element)) {
-			RETURN_THROWS();
-		} else {
-			key = NULL;
-		}
-	} ZEND_HASH_FOREACH_END();
+ZEND_METHOD(Sharp_Map, __unserialize)
+{
+	HashTable *data;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ARRAY_HT(data)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_map_fill(Z_OBJ_P(ZEND_THIS), data)) {
+		RETURN_THROWS();
+	}
 }
 
 /* A PHP array's entries, under the keys PHP holds them by. */
@@ -7683,7 +7724,22 @@ ZEND_METHOD(Sharp_Map, from)
 }
 
 /* An array's elements, each once, in their first order: a PHP# Set literal's, as `new \Sharp\Set([...])` lowers it,
- * and a PHP array's where plain PHP passes one for a Set. */
+ * a PHP array's where plain PHP passes one for a Set, and the list toList wrote as __serialize, which __unserialize
+ * takes. False after an exception. */
+static bool sharp_set_fill(zend_object *set, HashTable *values)
+{
+	sharp_table *table = sharp_table_of(set);
+	zval null, *element;
+	ZVAL_NULL(&null);
+	ZEND_HASH_FOREACH_VAL(values, element) {
+		if (!sharp_table_put(table, element, &null)) {
+			return false;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return true;
+}
+
 ZEND_METHOD(Sharp_Set, __construct)
 {
 	HashTable *values = NULL;
@@ -7693,22 +7749,28 @@ ZEND_METHOD(Sharp_Set, __construct)
 		Z_PARAM_ARRAY_HT(values)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (!values) {
-		return;
+	if (values && !sharp_set_fill(Z_OBJ_P(ZEND_THIS), values)) {
+		RETURN_THROWS();
 	}
+}
 
-	sharp_table *table = sharp_table_of(Z_OBJ_P(ZEND_THIS));
-	zval null, *element;
-	ZVAL_NULL(&null);
-	ZEND_HASH_FOREACH_VAL(values, element) {
-		if (!sharp_table_put(table, element, &null)) {
-			RETURN_THROWS();
-		}
-	} ZEND_HASH_FOREACH_END();
+ZEND_METHOD(Sharp_Set, __unserialize)
+{
+	HashTable *data;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ARRAY_HT(data)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_set_fill(Z_OBJ_P(ZEND_THIS), data)) {
+		RETURN_THROWS();
+	}
 }
 
 static const zend_function_entry class_Sharp_Map_methods[] = {
 	ZEND_ME(Sharp_Map, __construct, arginfo_class_Sharp_Map___construct, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Map, __serialize, arginfo_class_Sharp_Table_list, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Map, __unserialize, arginfo_class_Sharp_Table___unserialize, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Map, from, arginfo_class_Sharp_Map_from, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
 	ZEND_RAW_FENTRY("getIterator", zim_Sharp_Table_getIterator, arginfo_class_Sharp_Table_getIterator, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_RAW_FENTRY("count", zim_Sharp_Table_count, arginfo_class_Sharp_Table_count, ZEND_ACC_PUBLIC, NULL, NULL)
@@ -7725,6 +7787,8 @@ static const zend_function_entry class_Sharp_Map_methods[] = {
 
 static const zend_function_entry class_Sharp_Set_methods[] = {
 	ZEND_ME(Sharp_Set, __construct, arginfo_class_Sharp_Set___construct, ZEND_ACC_PUBLIC)
+	ZEND_RAW_FENTRY("__serialize", zim_Sharp_Set_toList, arginfo_class_Sharp_Table_list, ZEND_ACC_PUBLIC, NULL, NULL)
+	ZEND_ME(Sharp_Set, __unserialize, arginfo_class_Sharp_Table___unserialize, ZEND_ACC_PUBLIC)
 	ZEND_RAW_FENTRY("getIterator", zim_Sharp_Table_getIterator, arginfo_class_Sharp_Table_getIterator, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_RAW_FENTRY("count", zim_Sharp_Table_count, arginfo_class_Sharp_Table_count, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_RAW_FENTRY("jsonSerialize", zim_Sharp_Table_jsonSerialize, arginfo_class_Sharp_Table_jsonSerialize, ZEND_ACC_PUBLIC, NULL, NULL)
@@ -7738,14 +7802,15 @@ static const zend_function_entry class_Sharp_Set_methods[] = {
 };
 
 /* As WeakMap does, the class implements ArrayAccess and IteratorAggregate through its own handlers: the index runs
- * through read_dimension and the others, and a loop through get_iterator. */
+ * through read_dimension and the others, and a loop through get_iterator. As ArrayObject does, it serializes through
+ * __serialize and __unserialize. */
 static zend_class_entry *register_class_Sharp_Table(const char *name, const zend_function_entry *methods)
 {
 	zend_class_entry ce;
 
 	INIT_CLASS_ENTRY_EX(ce, name, strlen(name), methods);
 	zend_class_entry *registered = zend_register_internal_class_with_flags(&ce, NULL,
-		ZEND_ACC_FINAL | ZEND_ACC_NO_DYNAMIC_PROPERTIES | ZEND_ACC_NOT_SERIALIZABLE);
+		ZEND_ACC_FINAL | ZEND_ACC_NO_DYNAMIC_PROPERTIES);
 	zend_class_implements(registered, 4, zend_ce_arrayaccess, zend_ce_aggregate, zend_ce_countable, php_json_serializable_ce);
 	registered->create_object = sharp_table_create;
 	registered->get_iterator = sharp_table_get_iterator;

@@ -880,6 +880,8 @@ inbox.holds(orders, message);   // compiles: TItem is inferred as Order, and val
 
 A collection's elements are still checked where it enters from plain PHP (section 12).
 
+**`serialize` keeps a collection,** so a queued job or a cached value may hold one. `unserialize` gives a `Map` back as a `Map` and a `Set` as a `Set`, with the same entries in the same order, alone or inside a `List`, a struct or a class, in the same process or a fresh one. A collection's type arguments are the types of its elements, so the copy is a `Map<string, int>` exactly when the original is.
+
 **Declaring type parameters:**
 
 - **Names start with `T`:** `TItem`, `TKey`.
