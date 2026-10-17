@@ -1,10 +1,11 @@
 {
     "name": "heyjordanparker/php-sharp-phpunit-fixture",
-    "description": "A PHP# project whose test class runs under PHPUnit with its test module.",
+    "description": "A PHP# project whose test class runs under PHPUnit with its test module, and whose mago extension host loads vendor/autoload.php.",
     "license": "PHP-3.01",
     "require-dev": {
         "heyjordanparker/php-sharp-composer": "*@dev",
-        "phpunit/phpunit": "11.5.57"
+        "phpunit/phpunit": "11.5.57",
+        "revolt/event-loop": "1.0.9"
     },
     "repositories": [
         {
