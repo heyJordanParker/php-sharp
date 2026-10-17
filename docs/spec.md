@@ -475,6 +475,22 @@ public int total(List<int> prices)
 }
 ```
 
+**A method that never returns declares the return type `never`,** as TypeScript's `never`, Kotlin's `Nothing` and Rust's `!` do. Every path through its body ends in a `throw` or in a call of another `never` method, and a path that reaches the closing brace is a compile error. A call of one ends the block it is in, as `throw` does, so a statement after it never runs, and `input ?? fail(…)` has the type of `input`. An override of a `never` method returns `never` too. `never` is only a return type: a parameter, a property, a local or a type argument of `never` is a compile error.
+
+<!-- example never-methods: members -->
+```csharp
+public static never fail(string reason) => throw new BadPayload(reason);   // compiles
+
+public string name(string? input) => input ?? Example.fail("name");         // compiles: the result is a string
+
+public static never stop(bool urgent)
+{
+    if (urgent) {
+        throw new BadPayload("stopped");
+    }
+}                                                                            // compile error: stop is never, and it reaches its closing brace when no throw runs before it
+```
+
 ## 8. Functions
 
 There are no top-level functions. Shared code lives in static methods on a class.
