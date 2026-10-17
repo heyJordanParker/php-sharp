@@ -57,7 +57,14 @@ The `tsc` model: the compiler emits a file beside each source, where every tool 
 
 declare(strict_types=1);
 
-function_exists('Sharp\Internal\requireNative') || throw new Error('This project needs the PHP# engine, and this is plain PHP. Install php-sharp, or run the ghcr.io/heyjordanparker/php-sharp image.');
+if (!is_file(__DIR__ . '/SharpController.sharp')) {
+    return;
+}
+
+function_exists('Sharp\Internal\requireNative')
+    || throw new Error(
+        'This project needs the PHP# engine, and this is plain PHP. Install php-sharp, or run the ghcr.io/heyjordanparker/php-sharp image.',
+    );
 
 require_once __DIR__ . '/SharpController.sharp';
 ```
@@ -136,22 +143,44 @@ sharp/mago/
 ├── src/commands/compile.rs              before it compiles, writes <Name>.php beside each project .sharp file that
 │                                        declares a type, outside vendor/ and autoload-dev folders, rewrites only a
 │                                        file that starts with its own comment, deletes such a file whose .sharp is
-│                                        gone, and refuses a hand-written <Name>.php beside a .sharp
-├── src/utils/git.rs                     exclude: the checkout's block in git rev-parse --git-path info/exclude
-└── tests/compile.rs                     rows: written, kept current, deleted with its source, refused beside a hand-
-                                         written file, never written into vendor/, none in autoload-dev, every unit
-                                         still current after it, the exclude block in a clone and in a worktree
+│                                        gone, found in the folders of the sources and of the last compile's units,
+│                                        and refuses a hand-written <Name>.php beside a .sharp, in any case
+├── src/utils/mod.rs                     write_by_rename, moved from compile.rs: a new file's mode, 0644 under the
+│                                        usual umask, not tempfile's 0600
+├── src/utils/git.rs                     exclude: the checkout's block in git rev-parse --git-path info/exclude, for
+│                                        the paths no .gitignore ignores; drops blocks of gone or ignored folders
+├── crates/prelude/assets/extensions/sharp.php   Sharp\Container and Sharp\ContainerError for plain PHP
+├── crates/analyzer/tests/sharp.rs       row: plain PHP knows the container
+└── tests/compile.rs                     rows: written, kept current, deleted with its source whatever the analyzer
+                                         loads, refused beside a hand-written file in any case, named exactly like
+                                         its source, never written into vendor/, none in autoload-dev, mago fmt and
+                                         lint pass, every unit still current after it, readable by other users, the
+                                         exclude block in a clone and in a worktree, no block for ignored files,
+                                         stale blocks dropped
 ext/sharp/
 └── sharp.c                              the container_library global; readModule records the path, and
                                          sharp_container_read_folders and sharp_container_binding read it first
+sharp/composer/
+├── autoload.php                         names the library's module whenever the engine runs, in Composer's too
+└── src/Plugin.php                       composer run-script post-autoload-dump leaves the class map as it is
+sharp/phpunit/
+├── extension-host.php                   new: mago's extension host, which loads vendor/autoload.php
+├── mago.toml                            starts it
+└── composer.json, composer.lock         revolt/event-loop, which the SDK's worker runs on
+sharp/bin/test                           --phpunit compiles from nothing compiled, and runs composer run-script
+sharp/.gitignore                         the hosts fixture's <Name>.php files
 Zend/tests/sharp/
 ├── library_autoload.inc                 uncompiled: requires autoload.php before mago compiles
 ├── library_autoload_uncompiled.phpt     new: vendor/autoload.php loads with nothing compiled, then PHP# code resolves
 │                                        Environment through the library's module
-└── discovery.phpt                       new: a *.php scanner over a folder holding a .sharp class finds and loads it
+├── library_autoload_composer_container.phpt   new: a post-autoload-dump callback in Composer's own process builds
+│                                        a service, its class loaded through Greeting.php
+└── discovery.phpt                       new: a *.php scanner over a folder holding a .sharp class finds and loads it,
+                                         and finds no class through the file of a deleted source
 sharp/README.md                          the Composer section names the .php files
 docs/
 ├── spec.md                              section 27: the <Name>.php rule, autoload-dev and vendor/, the editors
+├── decisions/029-typed-compilation.md   a deploy's compile also writes decision 81's files
 ├── decisions/081-discovery.md           new: Solution A, with B and the rejected Solutions
 └── architecture/modules.md              when the library's module is read; phpunit.xml lists Test.sharp
 ```
@@ -187,6 +216,8 @@ Each one decides what appears in a user's project. The note recommends and decid
 2. **A `.php` link to a `.sharp` file prints the PHP# source.** Composer's PSR-4 finds the link, the engine compiles it as PHP because of its name, and the source reaches the output. A user who tries a link to fix discovery leaks code. Probe: [the link](#the-link).
 3. **A package's PHP# classes get no `.php` file** (question 3, not now). A package that discovers its own classes by listing its folders, as one that loads its console commands from a folder, misses them. Probe: put a `.sharp` command class in `vendor/acme/tools/src/Commands/`, run `mago compile`, and list that folder's `*.php` files.
 4. **An extension host that runs the project's own PHP# code fails until a first compile without it** (question 4, not now). The library's module no longer stops `vendor/autoload.php`, but a host that boots the app and loads a project class meets "isn't compiled". Probe: the extension-host fixture with a worker that calls `App\Greeting::text()` after it requires `vendor/autoload.php`, on a fresh tree.
+5. **A new PHP# class is not found by a scanner until a full compile** (after v1). Only `mago compile` writes the `.php` files. The engine's on-demand compile through `sharp.compile_command` compiles a stale file and writes none, so a class added in development stays out of every listing until the next full compile.
+6. **Inside Composer's own process, an engine the installed library does not match runs a PHP# class its `.php` file loads.** Composer's process skips `requireNative`, so `composer install` runs on any engine, and the plugin's loader checks the engine before the first `.sharp` file it includes. Composer's own loader includes the `.php` file instead, which loads the `.sharp` file directly, so a post-autoload-dump callback on a mismatched engine runs the class until it calls a missing native body. A separate process, as `@php artisan`, still refuses at `vendor/autoload.php`.
 
 ## What was built
 
@@ -197,6 +228,16 @@ team-lead's answers changed the design in three places:
 - **Each checkout keeps its own block in `.git/info/exclude`,** named by its path, because a repository's worktrees share that file, and one worktree's compile would otherwise drop another's paths.
 
 `mago compile` writes the `.php` files before it compiles, because a compiled file stamps the `.php` file a default class's name could name in its folder as an input. Written after, they made `Zend/tests/sharp/NamesImports/Printer.sharp` out of date (`names_imports.phpt` failed).
+
+The review of #160 changed these:
+
+- **A `.php` file whose source is gone declares nothing.** It returns before its `require_once`, so a scanner finds no class through it, as on master.
+- **`autoload.php` names the library's module whenever the engine runs,** inside Composer's own process too. A post-autoload-dump callback there loads a PHP# class through its `.php` file, which skips the plugin's loader, and the container then found no binding of `Sharp\Environment`.
+- **The orphans are found on disk,** in the folders of the sources and of the last compile's units, by the file's own first line. A project whose analyzer loads only `.sharp` files deleted none.
+- **The exclude block lists only the files no `.gitignore` ignores.** `sharp/bin/spec`'s projects sit in the ignored `sharp/build/`, the engine suite's in `Zend/tests/`, which `**/tests/**/*.php` ignores, and the hosts fixture's in `sharp/hosts/app/`, which `sharp/.gitignore` now ignores. A block whose folder is gone or ignored is dropped, and the file is replaced by rename: parallel spec runs had left 210 blocks and torn lines in the shared `.git/info/exclude`.
+- **The file is in `mago fmt`'s layout,** and the refusal names the class in PHP# terms and the file by its exact name, whatever its case.
+- **Written files get a new file's mode,** `0644` under the usual umask. `tempfile` gave `0600`, which a PHP-FPM pool user cannot read.
+- **`sharp/phpunit` runs an extension host** that loads `vendor/autoload.php`, and `sharp/bin/test --phpunit` compiles it from nothing compiled.
 
 ## Evidence
 

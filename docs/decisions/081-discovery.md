@@ -4,9 +4,11 @@
 
 `mago compile` writes a `.php` file beside each of the project's `.sharp` files that declares a type, as `StoreService.php` beside `StoreService.sharp`. The file only loads its `.sharp` file through the engine, and on plain PHP it throws the "needs the PHP# engine" error, so no source reaches the output. PHP code that lists a folder's `*.php` files and names each class by its path, as Spatie's route attributes, Laravel's console kernel and Laravel's event discovery do, finds and loads the PHP# class with no change of its own.
 
-Nobody edits the file. A `.php` file someone wrote beside a `.sharp` file is a compile error, the next compile rewrites a changed file and deletes the file of a removed source, and in a git repository `mago compile` lists the files in a block of `.git/info/exclude`, one per checkout. Editors hide them, as they hide `tsc`'s `.js` files: VS Code through `files.exclude` with `"when": "$(basename).sharp"`, PhpStorm through file nesting.
+Nobody edits the file. A `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, because PHP names a class whatever its case. The next compile rewrites a changed file and deletes the file of a removed source, which until then declares nothing. In a git repository, `mago compile` lists the files no `.gitignore` already ignores in a block of `.git/info/exclude`, one per checkout. Editors hide them, as they hide `tsc`'s `.js` files: VS Code through `"files.exclude": {"**/*.php": {"when": "$(basename).sharp"}}`, PhpStorm through file nesting.
 
 A `.sharp` file in an `autoload-dev` folder gets no file, so a test class keeps one file: PHPUnit loads a test class only from the file it lists, and a project lists its PHP# tests with `suffix="Test.sharp"`. A package in `vendor/` gets none, because nothing is written into `vendor/` (decision 29).
+
+Decision 29's compiled output still lives in one folder, `.sharp/`. A deploy's `mago compile` writes the `.php` files beside the sources too.
 
 ## Options
 
