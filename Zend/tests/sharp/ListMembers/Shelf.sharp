@@ -1,0 +1,31 @@
+namespace ListMembers;
+
+public class Shelf
+{
+    public static List<int> flat(List<List<int>> rows) => rows.flatMap(row => row);
+
+    public static List<string> tags(List<Set<string>> groups) => groups.flatMap(group => group);
+
+    public static List<int> doubled(List<List<int>> rows) => rows.flatMap(row => Shelf.twice(row));
+
+    public static List<int> flatWith(List<int> items, Function<Iterable<int>(int)> spread) => items.flatMap(spread);
+
+    public static Iterable<int> twice(List<int> row)
+    {
+        for (const n of row) {
+            yield n;
+            yield n;
+        }
+    }
+
+    public static List<string> fromSet(Set<string> tags) => tags.toList();
+
+    public static List<int> fromValues(Map<string, int> counts) => counts.values().toList();
+
+    public static List<int> copied(List<int> items)
+    {
+        List<int> copy = items.toList();
+        copy.add(9);
+        return [items.count(), copy.count()];
+    }
+}

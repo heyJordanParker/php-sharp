@@ -1341,6 +1341,22 @@ plans.filter(p => p.active);          // Map<string, Plan>, keys kept
 
 `contains`, a `List`'s `remove`, `indexOf` and `Set<T>` need `==` on the element type (section 19). Without it, they are a compile error.
 
+**`flatMap` and `toList()`:** a `List`'s `flatMap` gives, in order, the elements of each `Iterable` its function gives, as Kotlin's does. `toList()` gives the elements of any `Iterable` as a `List` of their own, a `Set`'s and a `Map`'s values included:
+
+<!-- example flat-map-to-list: statements
+List<List<int>> rows = [[1, 2], [], [3]];
+List<List<int>> none = [];
+Set<string> tags = ["vip", "new"];
+Map<string, int> stock = ["tea": 3, "pie": 7];
+-->
+```csharp
+rows.flatMap(row => row);              // [1, 2, 3]
+none.flatMap(row => row);              // []
+tags.toList();                         // ["vip", "new"]
+stock.values().toList();               // [3, 7]
+rows.flatMap(row => row.count());      // compile error: an int is no Iterable
+```
+
 The complete method list is specified with the standard library.
 
 **`Iterable<T>` is anything a loop can read,** and it compiles to PHP's `iterable`. `List<T>` and `Set<T>` are `Iterable<T>`. A `Map<TKey, TValue>` is an `Iterable<[TKey, TValue]>` of its entries, and `values()` gives its values (section 17):
@@ -1695,7 +1711,7 @@ List<string> names = ["Spring Sale"];
 names.map(Str.slug);
 ```
 
-A method of a `List`, `Map` or `Set`, an extension method (section 26) and a plain PHP function are values the same way, as in `allowed.contains`, `name.trim` and `global.strtoupper`. A collection is a value (section 12), so a collection's method value holds the collection as it was when the value was made, as C# copies a struct into a delegate made from its method:
+A method of a `List`, `Map` or `Set`, an extension method (section 26) and a plain PHP function are values the same way, as in `allowed.contains`, `name.trim` and `global.ucfirst`. A collection is a value (section 12), so a collection's method value holds the collection as it was when the value was made, as C# copies a struct into a delegate made from its method:
 
 <!-- example method-value-kinds: statements
 List<int> allowed = [1, 3];
@@ -1705,12 +1721,12 @@ List<string> names = ["tea", "jam"];
 const has = allowed.contains;
 allowed.add(5);
 List<int> kept = [1, 2, 5].filter(allowed.contains);   // [1, 5]
-List<string> loud = names.map(global.strtoupper);      // ["TEA", "JAM"]
+List<string> capitalized = names.map(global.ucfirst);  // ["Tea", "Jam"]
 ```
 <!-- run method-value-kinds
 has(5);        // false
 kept;          // [1, 5]
-loud;          // ["TEA", "JAM"]
+capitalized;   // ["Tea", "Jam"]
 -->
 
 **A method that changes a collection is no function value**, since it would change only that copy, as Swift refuses the value of a `mutating` method. A lambda that calls it changes the collection itself:
@@ -2198,6 +2214,25 @@ A plain PHP file keeps PHP's own interpolation. It converts an object of a class
 **A `toString()` is always `string toString()`:** an instance method with no required parameter that returns `string`, as Java's and Kotlin's `toString()` override `Object`'s and `Any`'s. A template and every conversion to text call it with no arguments, so any other `toString()` a type declares is a compile error that names the signature to write, "`Sku.toString()` returns `int`, and PHP# shows a value as text by the `string` its `toString()` returns.", and so is a template of a plain PHP class whose `toString()` is not that one.
 
 **Plain strings:** `"…"` and `'…'` never interpolate, so braces and `$` inside them are literal.
+
+**Text methods:** a `string` has Kotlin's text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so a case change reaches every letter. `replace` replaces every match, as Kotlin's does. `split` keeps the empty text after a trailing delimiter, and an empty delimiter throws `ValueError`:
+
+<!-- example text-methods: statements -->
+```csharp
+"hello".contains("ell");                  // true
+"hello".contains("xyz");                  // false
+"ÉCOLE".lowercase();                      // "école"
+"école".uppercase();                      // "ÉCOLE"
+"hello".startsWith("he");                 // true
+"hello".startsWith("lo");                 // false
+"hello".endsWith("lo");                   // true
+"hello".endsWith("he");                   // false
+"banana".replace("a", "o");               // "bonono"
+"a,b,".split(",");                        // ["a", "b", ""]
+"a,b".split("");                          // throws: "Text.split: the delimiter is empty"
+"hello".contains(1);                      // compile error: contains takes a string
+global.str_contains("hello", "ell");      // compile error: write "hello".contains(…)
+```
 
 PHP's backtick shell execution is removed, and so is `shell_exec()`. A program runs through `Process.run(program, arguments)` (section 29), which takes its arguments as a list, so no shell reads them.
 

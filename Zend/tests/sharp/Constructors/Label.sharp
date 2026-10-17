@@ -6,6 +6,6 @@ class Label
 
     public Label.shouting(string text) : this(text)
     {
-        this.text = global.strtoupper(text);
+        this.text = text.uppercase();
     }
 }

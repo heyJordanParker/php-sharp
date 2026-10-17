@@ -2,7 +2,7 @@ namespace Store;
 
 class Address
 {
-    protected string region { get => global.strtoupper(field); }
+    protected string region { get => field.uppercase(); }
     public string city { get; set => field = global.ucfirst(value.trim()); }
 
     public Address(string city, string region)
