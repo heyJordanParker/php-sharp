@@ -233,7 +233,9 @@ jobs:
     permissions:
       contents: read
       packages: read
+    # One host's failure leaves the other's result in the log.
     strategy:
+      fail-fast: false
       matrix:
         include:
           - file: sharp/docker/runtime/Dockerfile
