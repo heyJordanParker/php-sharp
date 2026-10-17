@@ -27,8 +27,10 @@ use mago_span::Span;
 use mago_syntax::cst::Access;
 use mago_syntax::cst::Argument;
 use mago_syntax::cst::ArrayElement;
+use mago_syntax::cst::ArrowFunction;
 use mago_syntax::cst::Assignment;
 use mago_syntax::cst::AssignmentOperator;
+use mago_syntax::cst::AttributeList;
 use mago_syntax::cst::Binary;
 use mago_syntax::cst::BinaryOperator;
 use mago_syntax::cst::BinaryPattern;
@@ -40,6 +42,7 @@ use mago_syntax::cst::Class;
 use mago_syntax::cst::ClassLikeConstant;
 use mago_syntax::cst::ClassLikeMember;
 use mago_syntax::cst::ClassLikeMemberSelector;
+use mago_syntax::cst::Closure;
 use mago_syntax::cst::ComparisonPattern;
 use mago_syntax::cst::CompositeString;
 use mago_syntax::cst::Conditional;
@@ -176,8 +179,8 @@ const OBJECT: &[u8] = b"Object";
 /// - A static class, `public static class Text`, as spec sections 26 and 29 write it: `static` and an optional
 ///   `public`, no header and no constructor, and only constants and static members. The bridge lowers it to a final
 ///   PHP class.
-/// - An interface: an optional `public`, a name, optional type parameters, an optional `: Interface` header, methods
-///   and properties, with no attributes, other modifiers, `extends` or fields. An interface method has optional type
+/// - An interface: attributes, an optional `public`, a name, optional type parameters, an optional `: Interface` header,
+///   methods and properties, with no other modifiers, `extends` or fields. An interface method has optional type
 ///   parameters, parameters, a return type and no body, as spec section 29 writes `Money quote(Cart cart);`, or a
 ///   default body, a block or `=> expr;`, as spec section 22 writes `string designKey() => …;`, checked as a class
 ///   method's body. A property is written `int orderId { get; }` or `List<string> claims { get; set; }`. Every
@@ -206,10 +209,14 @@ const OBJECT: &[u8] = b"Object";
 ///   class and interface by its short name, and a generic one with its type arguments, as in `: PaginatedList<Order>`,
 ///   whose type arguments are a parameter's types. Any other type, a type parameter, `List`, `Map` and `Class`
 ///   included, is not supported yet.
-/// - Attributes: on a class, an enum, an enum case, a method, a field, a property and a parameter, written `[Name]` or
-///   `[Name(arguments)]`, several in one list, as in `[Field("Name"), Searchable]`, or in several lists. An argument
-///   is positional or named, and is a constant expression as a parameter default is, list and map literals included.
-///   PHP's own check reports a spread argument. An attribute target, as in `[return: NotNull]`, is a parse error.
+/// - Attributes: on a class, an interface, an enum, an enum case, an event, a constant, a method, an interface method, a
+///   field, a property, an accessor, a parameter and a lambda with its parameters in parentheses, written `[Name]` or
+///   `[Name(arguments)]`, several in one list, as in `[Field("Name"), Searchable]`, or in several lists. A list may
+///   open with a target, as in `[param: Trimmed]`, which `check_attribute_target` checks, and an accessor PHP holds no
+///   hook or method for takes none, as `check_accessors` decides. An argument is positional or named, and is a
+///   constant expression as a parameter default is, list and map literals included, or a `new` of a class by its name
+///   whose arguments are such values, as `check_attribute_object` decides. Anything else is an error that names the
+///   rule. PHP's own check reports a spread argument. An attribute on a type parameter is a parse error.
 /// - A constant: an optional `public`, `protected` or `private`, an optional type from the types below but `void`, one
 ///   name, and a value as a parameter default is. Several names in one declaration are an error.
 /// - A field: an optional `private` or `protected`, an optional `static`, a type, one name and an optional initial
@@ -730,7 +737,7 @@ fn enter(node: Node<'_, '_>, place: Place, context: &mut Context<'_, '_, '_>) ->
         }
         // `check_struct_declaration` reports every modifier but `public`. A struct's members are a class's.
         (Node::Modifier(modifier), Place::Struct) => matches!(modifier, Modifier::Public(_)).then_some(Place::Struct),
-        (Node::AttributeList(_), Place::Struct) => Some(Attribute),
+        (Node::AttributeList(list), Place::Struct) => check_attribute_target(list, context),
         (Node::ClassLikeMember(_), Place::Struct) => enter(node, Class, context),
         // The walk checks a class's, an interface's, an enum's and an event's name in `check_class_name`.
         (Node::Interface(_), File) => Some(Interface),
@@ -958,16 +965,33 @@ fn enter(node: Node<'_, '_>, place: Place, context: &mut Context<'_, '_, '_>) ->
             Node::FunctionLikeReturnTypeHint(_) | Node::On(_) | Node::MethodBody(_) | Node::MethodAbstractBody(_),
             Signature,
         ) => Some(Signature),
-        (Node::AttributeList(_), Class | Enum | Method | FieldOrProperty | Parameter) => Some(Attribute),
+        (
+            Node::AttributeList(list),
+            Class | Interface | Enum | Place::Event | ClassConstant | Method | Signature | FieldOrProperty | Parameter
+            | Lambda,
+        ) => check_attribute_target(list, context),
         (
             Node::Attribute(_)
             | Node::PartialArgumentList(_)
             | Node::PartialArgument(PartialArgument::Positional(_) | PartialArgument::Named(_)),
             Attribute,
         ) => Some(Attribute),
-        // PHP refuses a spread in attribute arguments, and `check_attribute_list` reports it.
+        // PHP refuses a spread in attribute arguments, and `check_attribute_list` reports it, as `check_attribute_object`
+        // does in a `new`'s arguments.
         (Node::PositionalArgument(argument), Attribute) => argument.ellipsis.is_none().then_some(Constant),
         (Node::NamedArgument(_), Attribute) => Some(Constant),
+        (Node::Expression(Expression::Instantiation(instantiation)), Constant)
+            if context.slice_places.contains(&Some(Attribute)) =>
+        {
+            check_attribute_object(instantiation, context)
+        }
+        (
+            Node::Instantiation(_)
+            | Node::Expression(Expression::Identifier(Identifier::Local(_)))
+            | Node::ArgumentList(_)
+            | Node::Argument(_),
+            Attribute,
+        ) => Some(Attribute),
 
         (Node::ClassLikeMember(ClassLikeMember::Method(_) | ClassLikeMember::Law(_)), Class | Enum) => Some(place),
         (Node::ClassLikeMember(ClassLikeMember::Extension(extension)), Class | Interface | Enum) => {
@@ -2257,12 +2281,158 @@ fn enter(node: Node<'_, '_>, place: Place, context: &mut Context<'_, '_, '_>) ->
         ) => Some(FunctionCall),
         (Node::ArgumentList(_), FunctionCall) => Some(Body),
 
+        (Node::Expression(_), Constant) if context.slice_places.contains(&Some(Attribute)) => {
+            report_attribute_argument(node.span(), context);
+
+            None
+        }
         _ => {
             report_unsupported(node, place, context);
 
             None
         }
     }
+}
+
+/// Spec section 1: an attribute list's target, as `return:` in `[return: NotNull]`, names a part of its declaration,
+/// as C# allows: `type:` on a type, `method:` and `return:` on a method, a lambda or an accessor, `param:` on a
+/// parameter and on `set` or `init`, `field:` on a field, a constant, an enum case and a property with storage,
+/// `property:` on a property, and `property:` and `field:` on a constructor parameter that declares one. PHP holds
+/// each part but a return value, where it keeps no attributes.
+fn check_attribute_target(list: &AttributeList, context: &mut Context<'_, '_, '_>) -> Option<Place> {
+    let Some(target) = &list.target else {
+        return Some(Place::Attribute);
+    };
+    // The declaration that holds the list. The walk keeps no member on its ancestors, so the file names it.
+    let holds = |lists: &Sequence<AttributeList>| lists.iter().any(|held| held.span() == list.span());
+    let declaration = Node::Program(context.program).filter_map(|node| -> Option<(&str, &[&str])> {
+        match node {
+            Node::Class(class) if holds(&class.attribute_lists) => Some(("a class", &["type"])),
+            Node::Interface(interface) if holds(&interface.attribute_lists) => Some(("an interface", &["type"])),
+            Node::Enum(r#enum) if holds(&r#enum.attribute_lists) => Some(("an enum", &["type"])),
+            Node::Struct(r#struct) if holds(&r#struct.attribute_lists) => Some(("a struct", &["type"])),
+            Node::Event(event) if holds(&event.attribute_lists) => Some(("an event", &["type"])),
+            Node::Method(method) if holds(&method.attribute_lists) => Some(("a method", &["method", "return"])),
+            Node::Closure(Closure { attribute_lists, .. })
+            | Node::ArrowFunction(ArrowFunction { attribute_lists, .. })
+                if holds(attribute_lists) =>
+            {
+                Some(("a lambda", &["method", "return"]))
+            }
+            Node::ClassLikeConstant(constant) if holds(&constant.attribute_lists) => Some(("a constant", &["field"])),
+            Node::EnumCase(case) if holds(&case.attribute_lists) => Some(("an enum case", &["field"])),
+            Node::Property(Property::Plain(field)) if holds(&field.attribute_lists) => Some(("a field", &["field"])),
+            Node::Property(Property::Hooked(property)) if holds(&property.attribute_lists) => Some(
+                if context.names.has_storage(&property.hook_list)
+                    && !property.modifiers.contains_abstract()
+                    && !is_in_interface(context.program, property.span())
+                {
+                    ("a property", &["property", "field"])
+                } else {
+                    ("a property without storage", &["property"])
+                },
+            ),
+            Node::Property(Property::Computed(property)) if holds(&property.attribute_lists) => {
+                Some(("a property without storage", &["property"]))
+            }
+            Node::FunctionLikeParameter(parameter) if holds(&parameter.attribute_lists) => {
+                Some(if parameter.is_promoted_property() {
+                    ("a parameter that declares a property", &["param", "property", "field"])
+                } else {
+                    ("a parameter", &["param"])
+                })
+            }
+            Node::PropertyHook(accessor) if holds(&accessor.attribute_lists) => Some(if accessor.is_setter() {
+                ("`set` and `init`", &["method", "param", "return"])
+            } else {
+                ("`get`", &["method", "return"])
+            }),
+            _ => None,
+        }
+    });
+    let Some((declaration, targets)) = declaration.into_iter().next() else {
+        unreachable!("an attribute list is on a declaration `enter` places");
+    };
+
+    let written = BytesDisplay(target.name.value);
+    if !targets.iter().any(|named| named.as_bytes() == target.name.value) {
+        let targets: Vec<String> = targets.iter().map(|named| format!("`{named}:`")).collect();
+        context.report(
+            Issue::error(format!(
+                "`{written}:` names no part of {declaration}, whose targets are {}.",
+                targets.join(", ")
+            ))
+            .with_annotation(Annotation::primary(target.span()).with_message("Written here.")),
+        );
+
+        return None;
+    }
+    if target.name.value == b"return" {
+        context.report(
+            Issue::error("PHP keeps no attributes on a return value, so `return:` has nowhere to put them.")
+                .with_annotation(Annotation::primary(target.span()).with_message("Written here."))
+                .with_help("Put them on the declaration itself, with no target."),
+        );
+
+        return None;
+    }
+
+    Some(Place::Attribute)
+}
+
+/// Spec section 1: an attribute argument may create an object of a class it names, from arguments that are constants or
+/// more such objects, as PHP and Java's nested annotations take, and PHP creates it each time it reads the attribute. A
+/// named constructor, an object initializer and a spread run code there. PHP creates the object with no PHP# code to
+/// give it type arguments, so a generic class's object is an error.
+fn check_attribute_object(instantiation: &Instantiation, context: &mut Context<'_, '_, '_>) -> Option<Place> {
+    if let Some(type_arguments) = &instantiation.type_arguments {
+        context.report(
+            Issue::error(format!(
+                "An attribute argument cannot create an object of a generic class, as `{}` does: PHP creates it without its type arguments.",
+                BytesDisplay(context.get_code_snippet(instantiation))
+            ))
+            .with_annotation(Annotation::primary(type_arguments.span()).with_message("Written here.")),
+        );
+
+        return None;
+    }
+
+    let names_class = matches!(instantiation.class, Expression::Identifier(Identifier::Local(class))
+        if !context.names.is_type_parameter(class));
+    if !names_class
+        || instantiation.constructor.is_some()
+        || instantiation.initializer.is_some()
+        || instantiation.argument_list.is_none()
+    {
+        report_attribute_argument(instantiation.span(), context);
+
+        return None;
+    }
+
+    let spreads: Vec<Span> = instantiation
+        .argument_list
+        .iter()
+        .flat_map(|list| list.arguments.iter())
+        .filter_map(|argument| match argument {
+            Argument::Positional(positional) if positional.ellipsis.is_some() => Some(positional.span()),
+            _ => None,
+        })
+        .collect();
+    for spread in &spreads {
+        report_attribute_argument(*spread, context);
+    }
+
+    spreads.is_empty().then_some(Place::Attribute)
+}
+
+fn report_attribute_argument(span: Span, context: &mut Context<'_, '_, '_>) {
+    context.report(
+        Issue::error(format!(
+            "An attribute argument is a constant or a `new` of constants, and `{}` is neither.",
+            BytesDisplay(context.get_code_snippet(span))
+        ))
+        .with_annotation(Annotation::primary(span).with_message("Written here.")),
+    );
 }
 
 /// Whether the slice has a method, with the refusal's message and note when it does not. Each rule keeps out a method
@@ -2880,23 +3050,22 @@ fn check_property_parameter(
 
 /// Whether the slice has an interface property: a type, a name and `{ get; }` or `{ get; set; }`, which PHP runs as a
 /// public interface property its classes give, as an event's parameters give `OrderEvent`'s `orderId`, spec section
-/// 15. A class gives one stated with `set` a `set` too, which the analyzer checks. An access modifier, on the property
-/// or on an accessor, keeps it in the slice, and `enter` reports the modifier where the walk reaches it.
+/// 15. A class gives one stated with `set` a `set` too, which the analyzer checks. Each accessor may take attributes,
+/// which PHP keeps on its abstract hook, spec section 1. An access modifier, on the property or on an accessor, keeps
+/// it in the slice, and `enter` reports the modifier where the walk reaches it.
 fn is_interface_property(property: &HookedProperty) -> bool {
     let is_access = |modifier: &Modifier| {
         matches!(modifier, Modifier::Public(_) | Modifier::Protected(_) | Modifier::Private(_) | Modifier::Internal(_))
     };
     let is_stated = |accessor: &PropertyHook, name: &[u8]| {
         accessor.name.value == name
-            && accessor.attribute_lists.is_empty()
             && accessor.ampersand.is_none()
             && accessor.modifiers.iter().all(is_access)
             && accessor.parameter_list.is_none()
             && matches!(accessor.body, PropertyHookBody::Abstract(_))
     };
 
-    property.attribute_lists.is_empty()
-        && property.var.is_none()
+    property.var.is_none()
         && property.modifiers.iter().all(is_access)
         && property.hint.is_some()
         && matches!(property.item, PropertyItem::Abstract(_))
@@ -3249,8 +3418,40 @@ fn check_accessors(
             report_not_supported(
                 accessor.span(),
                 "accessor",
-                "A PHP# property's accessors are `get` and `set` or `init`, each written `;`, `=> expr;` or with a block body, and `set` and `init` may take `private`, `protected` or `internal`. The observers `willSet` and `didSet` take a body.",
+                "A PHP# property's accessors are `get` and `set` or `init`, each with optional attributes and written `;`, `=> expr;` or with a block body, and `set` and `init` may take `private`, `protected` or `internal`. The observers `willSet` and `didSet` take a body.",
                 context,
+            );
+        } else if let (Some(first), Some(last)) = (accessor.attribute_lists.first(), accessor.attribute_lists.last())
+            && !modifiers.contains_abstract()
+            && !accessors.hooks.iter().any(|hook| matches!(hook.body, PropertyHookBody::Concrete(_)))
+            && (accessors.is_readonly() || modifiers.contains_static())
+        {
+            let (runs_as, help) = if modifiers.contains_static() {
+                (
+                    "a static auto-property runs as a plain PHP static, which has no accessors",
+                    "Put the attribute on the property, or give an accessor a body.",
+                )
+            } else {
+                (
+                    "a get-only auto-property runs as a PHP `readonly` property, which takes no hooks",
+                    "Put the attribute on the property, or give the property `set` or `init`.",
+                )
+            };
+            context.report(
+                Issue::error(format!("`{}` has no place for an attribute: {runs_as}.", BytesDisplay(name)))
+                    .with_annotation(Annotation::primary(first.span().join(last.span())).with_message("Written here."))
+                    .with_help(help),
+            );
+        } else if accessor.is_observer()
+            && let (Some(first), Some(last)) = (accessor.attribute_lists.first(), accessor.attribute_lists.last())
+        {
+            let observer = BytesDisplay(name);
+            context.report(
+                Issue::error(format!(
+                    "`{observer}` runs inside the `set` accessor, so it has no place of its own for an attribute."
+                ))
+                .with_annotation(Annotation::primary(first.span().join(last.span())).with_message("Written here."))
+                .with_help("Put the attribute on `set`."),
             );
         } else if accessor.is_observer() && !accessors.hooks.iter().any(|hook| hook.name.value == b"set") {
             let observer = BytesDisplay(name);
@@ -3299,11 +3500,10 @@ fn check_accessors(
 }
 
 /// Whether the slice has an accessor: `get`, `set` or `init`, or an observer with a body, `willSet` or `didSet`
-/// (spec section 6.2), without attributes, `&` or a parameter list, where only `set` and `init` take an access
+/// (spec section 6.2), with optional attributes and without `&` or a parameter list, where only `set` and `init` take an access
 /// modifier, `private`, `protected`, `internal` or `public`, which `check_accessors` compares with the property's.
 fn is_slice_accessor(accessor: &PropertyHook) -> bool {
-    accessor.attribute_lists.is_empty()
-        && accessor.ampersand.is_none()
+    accessor.ampersand.is_none()
         && accessor.parameter_list.is_none()
         && match accessor.modifiers.as_slice() {
             [] if accessor.is_observer() => matches!(accessor.body, PropertyHookBody::Concrete(_)),
@@ -5435,10 +5635,10 @@ fn supported(place: Place) -> &'static str {
             "A PHP# class has attributes, an optional `public`, `abstract` or `final`, a name, optional type parameters as in `<out TItem : DatabaseEntity>`, an optional `: Base, Interface` header, constants, fields, properties, methods, named constructors, operators, laws and, in a static class, extensions, with no other modifiers, `extends` or `implements`."
         }
         Place::Interface => {
-            "A PHP# interface has an optional `public`, a name, optional type parameters as in `<in TItem>`, an optional `: Interface` header, methods and get-only properties, as in `int orderId { get; }`, with no attributes, other modifiers, `extends`, constants or other properties."
+            "A PHP# interface has attributes, an optional `public`, a name, optional type parameters as in `<in TItem>`, an optional `: Interface` header, methods and get-only properties, as in `int orderId { get; }`, with no other modifiers, `extends`, constants or other properties."
         }
         Place::Signature => {
-            "A PHP# interface method has no modifier, optional type parameters, parameters, a return type of `int`, `float`, `bool`, `string`, `Any`, `void`, `never`, a class or a type parameter, a generic type as in `List<T>` or `PaginatedList<Order>`, or `Self`, each but `void` and `never` nullable as in `int?`, or a union of them but `void` and `never`, as in `int|string`, and no body or a default body."
+            "A PHP# interface method has attributes, no modifier, optional type parameters, parameters, a return type of `int`, `float`, `bool`, `string`, `Any`, `void`, `never`, a class or a type parameter, a generic type as in `List<T>` or `PaginatedList<Order>`, or `Self`, each but `void` and `never` nullable as in `int?`, or a union of them but `void` and `never`, as in `int|string`, and no body or a default body."
         }
         Place::Enum => {
             "A PHP# enum has attributes, an optional `public`, a name, optional type parameters as in `<T, TError : Error>` when it has no backing type, an optional `: string, Interface` header whose `int` or `string` comes first, constants, cases, computed properties, methods and laws, with no other modifiers or `implements`. A case of a backed enum has a value, as in `case None = \"none\";`, and a case of any other enum may carry data, as in `case Paid(string transactionId);`."
@@ -5460,7 +5660,7 @@ fn supported(place: Place) -> &'static str {
             "A PHP# field is `private` or `protected`, and a property has the accessors `get` and an optional `set` or `init`, each `;`, `=> expr;` or a block. Both may be `static`, and have a type of `int`, `float`, `bool`, `string`, `Any`, a class or a type parameter, a generic type as in `List<T>` or `PaginatedList<Order>`, `Function<R(P)>`, or a tuple as in `[Money, int]`, nullable as in `int?` or not, or a union of them as in `int|string`, a name, and an optional initial value."
         }
         Place::ClassConstant => {
-            "A PHP# constant has `public`, `protected` or `private`, an optional type of `int`, `float`, `bool`, `string`, `Any` or a class, nullable as in `int?` or not, or a union of them as in `int|string`, one name, and a constant value."
+            "A PHP# constant has attributes, `public`, `protected` or `private`, an optional type of `int`, `float`, `bool`, `string`, `Any` or a class, nullable as in `int?` or not, or a union of them as in `int|string`, one name, and a constant value."
         }
         Place::Method => {
             "A PHP# method takes `public`, `protected`, `private`, `static`, `abstract`, `virtual` and `override`, a constructor also `required`, optional type parameters as in `<TItem : DatabaseEntity>`, parameters, and a return type of `int`, `float`, `bool`, `string`, `Any`, `void`, `never`, a class or a type parameter, a generic type as in `List<T>` or `PaginatedList<Order>`, `Function<R(P)>`, a tuple as in `[Money, int]` or `Self`, each but `void` and `never` nullable as in `int?`, or a union of them but `void` and `never`, as in `int|string`, and an optional `on` clause after the parameters, as in `on OrderPaid, OrderRefunded`."
@@ -5484,7 +5684,7 @@ fn supported(place: Place) -> &'static str {
             "A PHP# attribute is a class name with optional positional and named arguments, as in `[Field(\"Name\", searchable: true)]`."
         }
         Place::Constant => {
-            "A parameter default, an attribute argument, a constant's value, an enum case's value or a pattern's value is a literal, a constant, `typeof(Class)`, a list or map literal, or arithmetic, comparison, logical and `??` operators on them."
+            "A parameter default, a constant's value, an enum case's value or a pattern's value is a literal, a constant, `typeof(Class)`, a list or map literal, or arithmetic, comparison, logical and `??` operators on them."
         }
         Place::Pattern => {
             "A PHP# pattern is a type of `int`, `float`, `string`, `bool`, `Any`, a class, a collection as in `List<int>`, or a union of them as in `int|string`, with an optional name, as in `int count`, a case with its fields, as in `PaymentResult.Paid(string transactionId)`, a class with properties, as in `Paid { amount: > 0 } big`, a constant, a comparison such as `< 10`, a properties pattern such as `{ total: > 0 }`, a list pattern such as `[Line first, ...List<Line> rest]`, or patterns joined by `and`, `or` and `not`."

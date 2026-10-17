@@ -17,13 +17,103 @@ Attributes use square brackets and follow C#'s rules:
 - several attributes in one bracket: `[Field("Name"), Searchable]`
 - several brackets on one declaration
 - positional and named arguments
+- an argument is a constant: a literal, a constant, `typeof(Class)`, a list or map literal of constants, or a `new` of a class whose arguments are constants too, as PHP and Java's nested annotations take; PHP creates the object each time it reads the attribute, and an argument that runs code is a compile error
 - no parentheses when there are no arguments: `[Searchable]`
-- explicit targets: `[return: NotNull]`
+- explicit targets, which name the part of the declaration a bracket goes on, as in C#: `type:` on a type, `method:` on a method, a lambda or an accessor, `param:` on a parameter and on the value `set` or `init` takes, `field:` on a field, a constant or an enum case, `property:` and `field:` on a property, and `param:`, `property:` and `field:` on a constructor parameter that declares a property, where an untargeted bracket goes on both the parameter and the property
+- `[return: NotNull]` is a compile error: PHP keeps no attributes on a return value
+- on every declaration C# takes one on: a class, an interface, an enum and its cases, an event, a constant, a field, a property, an interface property, a method, an interface method with or without a default body, a parameter, a lambda written with parentheses, as in `[Searchable] (int n) => n * 2`, and an accessor, as in `[Searchable] get;`
+- an accessor of a get-only auto-property or of a static auto-property takes none, because PHP runs that property without accessors, and neither does `willSet` or `didSet`, which runs inside `set`: put the attribute on the property, or give the accessor a body
+- a type parameter takes none: PHP erases it, so an attribute there has nowhere to go
 
 <!-- example attribute-arguments: members -->
 ```csharp
 [Field(label: "Name", render: Render.Heading, searchable: true)]
 public string name { get; set; } = "";
+```
+
+<!-- example attribute-interfaces -->
+```csharp
+// app/Labeled.sharp
+namespace App;
+
+[Searchable]
+public interface Labeled                  // compiles: on the interface
+{
+    [Field(label: "Name", searchable: true)]
+    string label();                       // compiles
+
+    [Field(label: "Title")]
+    string title() => "Untitled";         // compiles: with a default body too
+
+    [Field(label: "Size")]
+    int size { get; }                     // compiles: on its property
+}
+```
+
+<!-- example attribute-events -->
+```csharp
+// app/Paid.sharp
+namespace App;
+
+[Searchable]
+public event Paid(int orderId);           // compiles: on the event
+```
+
+<!-- example attribute-constants-and-lambdas: members -->
+```csharp
+[Field(label: "Limit")]
+public const int LIMIT = 3;                                        // compiles: on a constant
+
+public Function<int(int)> twice() => [Searchable] (int n) => n * 2;  // compiles: on a lambda
+```
+
+<!-- example attribute-targets: members -->
+```csharp
+[property: Field(label: "Total")]
+public int total { [Searchable] get; [param: Field(label: "Amount")] set; } = 0;  // compiles: Searchable on get, Field on what set takes
+
+public int count { [Searchable] get; } = 0;            // compile error: a get-only auto-property runs without accessors
+
+[return: Searchable] public string label() => "";     // compile error: PHP keeps no attributes on a return value
+```
+
+<!-- example attribute-type-parameters -->
+```csharp
+// app/Shelf.sharp
+namespace App;
+
+public class Shelf<[Searchable] TItem>        // compile error: PHP erases a type parameter
+{
+}
+```
+
+<!-- example attribute-objects -->
+```php
+#[\Attribute(\Attribute::TARGET_ALL)]
+final class Route { public function __construct(public string $path, public array $middleware = []) {} }
+
+final class Throttle { public function __construct(public int $perMinute) {} }
+
+#[\Attribute(\Attribute::TARGET_ALL)]
+final class Type { public function __construct(public mixed $of, public bool $nullable = false) {} }
+```
+
+<!-- example attribute-objects -->
+```csharp
+// app/OrdersController.sharp
+namespace App;
+
+[Route("/orders", middleware: [new Throttle(perMinute: 60)])]         // compiles: Route receives a Throttle object
+public class OrdersController
+{
+    [Type(of: [new Type(typeof(Order), nullable: true)])]             // compiles: Type receives a list holding one Type object
+    public Order? order { get; } = null;
+
+    [Route("/limited", middleware: [new Throttle(this.limit())])]     // compile error: an attribute argument is a constant or a new of constants, and this.limit() runs code
+    public void limited() { }
+
+    private int limit() => 60;
+}
 ```
 
 Named arguments use `label: "Name"`, the same "name: value" form used everywhere in the language (section 16). C#'s `Label = "Name"` is not allowed.
@@ -1740,6 +1830,64 @@ sorted;   // [1, 2, 3]
 
 A plain PHP class may have both a property and a method of one name. Reading the name gives the property, as in PHP, except where the code takes the read as a function and the property's type doesn't fit that function type. There the read gives the method's value, as in `names.map(gadget.label)`, where `label` is both a `string` property and a method.
 
+**A plain PHP class that defines `__get` has the properties it reads,** as an Eloquent model has the relations it loaded. A property's type is the one an `@property` or `@property-read` line on the class or its parents gives it, and `Any?` without one. `subscription.contact` reads the property, as `$subscription->contact` does in PHP, even when the class has a method `contact`. By the rule above, the read gives the method's value only where the code takes it as a function. `subscription.contact()` calls the method.
+
+<!-- example magic-properties -->
+```php
+/** @property-read Contact $contact */
+class Subscription
+{
+    public function contact(): Contact { return new Contact(); }
+    public function owner(): Contact { return new Contact(); }
+    public function __get(string $name): mixed { $loaded = new Contact(); $loaded->name = $name; return $loaded; }
+}
+```
+
+<!-- example magic-properties: statements
+extern Subscription.owner;
+Subscription subscription = new Subscription();
+-->
+```csharp
+Contact contact = subscription.contact;              // compiles: the @property-read line types it
+const owner = subscription.owner;                    // compiles: Any?
+Function<Contact()> load = subscription.owner;       // compiles: the method, where a function is taken
+Contact loaded = subscription.owner();               // compiles: calls the method
+```
+<!-- run magic-properties
+contact.name;                // "contact"
+(owner as Contact)?.name;    // "owner"
+load().name;                 // "Ada"
+loaded.name;                 // "Ada"
+-->
+
+A read typed `Any?` this way warns until an `as`, an `is` or a `match` states its type, as in `Contact? owner = subscription.owner as Contact;`.
+
+**A `.sharp` class whose plain PHP parent defines `__get` has those properties too,** as a PHP# Eloquent model has the relations it loaded, by the same rules.
+
+<!-- example magic-property-models -->
+```php
+abstract class Model
+{
+    public function __get(string $name): mixed { $loaded = new Contact(); $loaded->name = $name; return $loaded; }
+}
+```
+
+<!-- example magic-property-models -->
+```csharp
+// app/Booking.sharp
+namespace App;
+
+public class Booking : Model
+{
+    public Contact guest() => new Contact();
+
+    public string guestName() => (this.guest as Contact)?.name ?? "";   // compiles: the property __get reads
+}
+```
+<!-- run magic-property-models
+new Booking().guestName();    // "guest"
+-->
+
 **A field or property holding a `Function` is called like a method** when the class has no method with that name. A `.sharp` class cannot declare a method and a field or property with the same name, so `this.discount(…)` always has one meaning.
 
 <!-- example function-fields: statements
@@ -2045,7 +2193,34 @@ Amount price = new Amount { value: 500, currency };     // short for currency: c
 
 **Any parameter can be named at a call,** including a call into plain PHP. An override keeps every parameter name of the method it overrides (section 22), so a name means the same parameter on every class.
 
-A named argument that matches no parameter is a compile error, also on a method that takes any number of arguments (section 7).
+**A named argument that matches no other parameter of plain PHP fills its `...` parameter under its name,** as PHP collects it, on a method, a static method, a constructor, a function and an attribute. The `...` parameter's element type checks each value, as it checks a positional one. A PHP# `...` parameter is a `List` (section 7), which takes no names, and a function built into PHP refuses them, so a named argument that matches no parameter there is a compile error.
+
+<!-- example named-variadics -->
+```php
+#[\Attribute(\Attribute::TARGET_ALL)]
+final class Generic { public function __construct(string ...$types) {} }
+
+final class Html
+{
+    public static function tag(string $name, string ...$attributes): string { return $name . ' ' . implode(',', array_keys($attributes)); }
+}
+```
+
+<!-- example named-variadics -->
+```csharp
+// app/Catalog.sharp
+namespace App;
+
+[Generic(Item: typeof(DatabaseEntity))]                        // compiles: Generic(string ...$types) receives ["Item" => DatabaseEntity]
+public class Catalog<TItem : DatabaseEntity>
+{
+    public string home() => Html.tag("a", href: "/home", title: "Home");   // compiles: tag(string $name, string ...$attributes) receives ["href" => "/home", "title" => "Home"]
+
+    public static int sum(int ...values) => values.count();
+
+    public int total() => Catalog<TItem>.sum(first: 1, second: 2);          // compile error: sum's ...values is a List<int>, and a List takes no names
+}
+```
 
 <!-- example named-arguments: statements
 Image image = new Image();

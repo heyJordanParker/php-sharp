@@ -1,0 +1,19 @@
+namespace AttributePlaces;
+
+import Lib.Entity;
+import Lib.Field;
+
+// An interface, its methods, with or without a default body, and its properties carry their attributes, spec section 1.
+[Entity("on the interface")]
+public interface Labeled
+{
+    [Field("shown in lists", limit: 2)]
+    string label();
+
+    [Entity("shown in headings")]
+    [Field]
+    string title() => "Untitled";
+
+    [Field("on the property")]
+    int size { get; }
+}

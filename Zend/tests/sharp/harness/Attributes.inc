@@ -24,6 +24,23 @@ namespace Lib {
         {
         }
     }
+
+    // An attribute that takes objects, as a framework's route takes its middleware.
+    #[\Attribute(\Attribute::TARGET_ALL)]
+    final class Route
+    {
+        public function __construct(public string $path, public array $middleware = [], public mixed $options = null)
+        {
+        }
+    }
+
+    // A plain PHP object an attribute argument creates.
+    final class Throttle
+    {
+        public function __construct(public int $perMinute, public ?object $window = null)
+        {
+        }
+    }
 }
 
 namespace Demo {
