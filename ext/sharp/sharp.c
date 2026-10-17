@@ -108,6 +108,8 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	HashTable container_bindings;
 	HashTable container_environment;
 	HashTable container_modules;
+	/* The file of the standard library's module, which Sharp\Internal\readModule names, or NULL. */
+	zend_string *container_library;
 	HashTable container_tests;
 	HashTable *container_test;
 	HashTable container_singletons;
@@ -5814,13 +5816,23 @@ static void sharp_container_read(const char *path, HashTable *bindings)
 	zend_hash_destroy(&module);
 }
 
+/* Reads the standard library's module, once, before any other module and any binding is read, so a request that
+ * resolves no service never needs it compiled. */
+static void sharp_container_read_library(void)
+{
+	if (SHARP_G(container_library)) {
+		sharp_container_read(ZSTR_VAL(SHARP_G(container_library)), &SHARP_G(container_bindings));
+	}
+}
+
 /* Reads the modules of file's folder and of each folder above it up to its project's root: a folder's
  * Module.<SHARP_ENV>.sharp among the environment modules, and its Module.sharp among the base modules. It stops at
  * the first module that throws. */
 static void sharp_container_read_folders(const zend_string *file)
 {
+	sharp_container_read_library();
 	size_t root;
-	if (!sharp_find_root(file, &root)) {
+	if (EG(exception) || !sharp_find_root(file, &root)) {
 		return;
 	}
 
@@ -5893,6 +5905,10 @@ static zval *sharp_container_first_row(zval *modules, const zend_class_entry *re
  * alone. */
 static zval *sharp_container_binding(const zend_string *id, const zend_string *namespace, const zend_class_entry *requester)
 {
+	sharp_container_read_library();
+	if (EG(exception)) {
+		return NULL;
+	}
 	size_t length = ZSTR_LEN(namespace);
 
 	while (true) {
@@ -6194,8 +6210,8 @@ ZEND_FUNCTION(Sharp_Internal_runScoped)
 	sharp_scope_release(scope);
 }
 
-/* Spec section 32: the standard library's autoloader adds the library's module, whose file is at path, as the
- * container adds the module of a folder. */
+/* Spec section 32: the standard library's autoloader names the library's module, whose file is at path. The container
+ * reads it at its first module lookup, before any other module, so autoload.php loads before anything is compiled. */
 ZEND_FUNCTION(Sharp_Internal_readModule)
 {
 	zend_string *path;
@@ -6209,7 +6225,10 @@ ZEND_FUNCTION(Sharp_Internal_readModule)
 		zend_throw_error(NULL, "Sharp\\Internal\\readModule: no module file at %s", ZSTR_VAL(path));
 		RETURN_THROWS();
 	}
-	sharp_container_read(ZSTR_VAL(path), &SHARP_G(container_bindings));
+	if (SHARP_G(container_library)) {
+		zend_string_release(SHARP_G(container_library));
+	}
+	SHARP_G(container_library) = zend_string_copy(path);
 }
 
 /* Spec section 32: a test file's module, the rows bindings holds, applies while a test of the class named class runs.
@@ -8097,6 +8116,7 @@ static PHP_RINIT_FUNCTION(sharp)
 	zend_hash_init(&SHARP_G(container_bindings), 8, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(container_environment), 8, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(container_modules), 8, NULL, NULL, false);
+	SHARP_G(container_library) = NULL;
 	zend_hash_init(&SHARP_G(container_tests), 8, NULL, ZVAL_PTR_DTOR, false);
 	SHARP_G(container_test) = NULL;
 	zend_hash_init(&SHARP_G(container_singletons), 8, NULL, ZVAL_PTR_DTOR, false);
@@ -8138,6 +8158,10 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 	zend_hash_destroy(&SHARP_G(container_bindings));
 	zend_hash_destroy(&SHARP_G(container_environment));
 	zend_hash_destroy(&SHARP_G(container_modules));
+	if (SHARP_G(container_library)) {
+		zend_string_release(SHARP_G(container_library));
+		SHARP_G(container_library) = NULL;
+	}
 	SHARP_G(container_test) = NULL;
 	zend_hash_destroy(&SHARP_G(container_tests));
 	zend_hash_destroy(&SHARP_G(listener_tables));
