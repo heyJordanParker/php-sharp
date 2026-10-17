@@ -1,0 +1,12 @@
+namespace Templates;
+
+public enum Grade
+{
+    case Gold;
+    case Silver;
+
+    public string toString() => match (this) {
+        Grade.Gold => "gold",
+        Grade.Silver => "silver",
+    };
+}

@@ -1,0 +1,6 @@
+namespace Templates;
+
+public class Label
+{
+    public string show(Sku sku, Grade grade) => `Sku: ${sku}, grade: ${grade}`;
+}

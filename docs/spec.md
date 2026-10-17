@@ -2027,7 +2027,7 @@ const sku = new Sku("A-12");
 const label = `Sku: ${sku}`;   // Sku declares toString(): "Sku: A-12"
 ```
 
-A plain PHP file keeps PHP's own interpolation.
+A plain PHP file keeps PHP's own interpolation. It converts an object of a class that declares `toString()` to the text a template shows, as `(string) $sku` and `"Sku: {$sku}"` do, as Java's and Kotlin's string conversion calls `toString()`.
 
 **Plain strings:** `"…"` and `'…'` never interpolate, so braces and `$` inside them are literal.
 
@@ -2077,6 +2077,7 @@ public class Money
 ```
 
 <!-- example operators: statements
+public class Order : DatabaseEntity { public Order(int id) : super(id) { } }
 Order order = new Order(1);
 Order sameOrderLoadedAgain = new Order(1);
 Cart cart = new Cart();
