@@ -5033,12 +5033,12 @@ bool sharp_property_refuses_reference(const zend_property_info *info)
 	return true;
 }
 
-bool sharp_object_open_properties_accept(zend_object *object)
+bool sharp_object_properties_accept(zend_object *object)
 {
 	for (uint32_t i = 0; i < object->ce->default_properties_count; i++) {
 		zend_property_info *info = object->ce->properties_info_table[i];
 		zval *slot = OBJ_PROP_NUM(object, i);
-		if (info && sharp_property_is_open(info) && Z_TYPE_P(slot) != IS_UNDEF
+		if (info && info->sharp_type && Z_TYPE_P(slot) != IS_UNDEF
 				&& !sharp_property_accepts(info, slot, object, false)) {
 			return false;
 		}
@@ -7644,17 +7644,36 @@ ZEND_METHOD(Sharp_Map, __serialize)
 	RETURN_ARR(keys_and_values);
 }
 
+/* Whether `list` holds each key followed by its value. */
+static bool sharp_is_keys_and_values(HashTable *list)
+{
+	return zend_hash_num_elements(list) % 2 == 0 && zend_array_is_list(list);
+}
+
+/* The table of `object`, a Map or a Set that holds no entry yet, or NULL after the Error for one that holds some: a
+ * method that fills it again would change every holder of a shared one, as offsetSet would. */
+static sharp_table *sharp_table_to_fill(zend_object *object)
+{
+	sharp_table *table = sharp_table_of(object);
+	if (table->size) {
+		zend_throw_error(NULL, "A %s that holds entries is written through its index, which copies a shared one first",
+			ZSTR_VAL(object->ce->name));
+		return NULL;
+	}
+
+	return table;
+}
+
 /* A Map literal's entries, key then value, in the order the literal writes them, so a later key replaces an earlier
  * one. A PHP# Map literal lowers to `new \Sharp\Map([$k1, $v1, ...])`, which a .sharp property default may hold.
  * __unserialize takes the list __serialize wrote. False after an exception. */
 static bool sharp_map_fill(zend_object *map, HashTable *keys_and_values)
 {
-	if (zend_hash_num_elements(keys_and_values) % 2 != 0 || !zend_array_is_list(keys_and_values)) {
-		zend_argument_value_error(1, "must be a list of keys each followed by its value");
+	sharp_table *table = sharp_table_to_fill(map);
+	if (!table) {
 		return false;
 	}
 
-	sharp_table *table = sharp_table_of(map);
 	zval *key = NULL, *element;
 	ZEND_HASH_FOREACH_VAL(keys_and_values, element) {
 		if (!key) {
@@ -7678,7 +7697,14 @@ ZEND_METHOD(Sharp_Map, __construct)
 		Z_PARAM_ARRAY_HT(keys_and_values)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (keys_and_values && !sharp_map_fill(Z_OBJ_P(ZEND_THIS), keys_and_values)) {
+	if (!keys_and_values) {
+		return;
+	}
+	if (!sharp_is_keys_and_values(keys_and_values)) {
+		zend_argument_value_error(1, "must be a list of keys each followed by its value");
+		RETURN_THROWS();
+	}
+	if (!sharp_map_fill(Z_OBJ_P(ZEND_THIS), keys_and_values)) {
 		RETURN_THROWS();
 	}
 }
@@ -7691,6 +7717,10 @@ ZEND_METHOD(Sharp_Map, __unserialize)
 		Z_PARAM_ARRAY_HT(data)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_is_keys_and_values(data)) {
+		zend_value_error("A serialized Map must hold each key followed by its value");
+		RETURN_THROWS();
+	}
 	if (!sharp_map_fill(Z_OBJ_P(ZEND_THIS), data)) {
 		RETURN_THROWS();
 	}
@@ -7728,7 +7758,11 @@ ZEND_METHOD(Sharp_Map, from)
  * takes. False after an exception. */
 static bool sharp_set_fill(zend_object *set, HashTable *values)
 {
-	sharp_table *table = sharp_table_of(set);
+	sharp_table *table = sharp_table_to_fill(set);
+	if (!table) {
+		return false;
+	}
+
 	zval null, *element;
 	ZVAL_NULL(&null);
 	ZEND_HASH_FOREACH_VAL(values, element) {
@@ -7762,6 +7796,10 @@ ZEND_METHOD(Sharp_Set, __unserialize)
 		Z_PARAM_ARRAY_HT(data)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!zend_array_is_list(data)) {
+		zend_value_error("A serialized Set must hold a list of its elements");
+		RETURN_THROWS();
+	}
 	if (!sharp_set_fill(Z_OBJ_P(ZEND_THIS), data)) {
 		RETURN_THROWS();
 	}

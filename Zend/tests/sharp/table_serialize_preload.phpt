@@ -39,5 +39,16 @@ Queued\Ledger(Map['packed': 2, 'shipped': 1])
 Set['vip', 'new'] true
 Map[Queued\Parcel(250, Queued\Speed.Express): 'small'] small
 Map[Queued\Courier(7): 'north'] north
-a bad key count: ValueError: Sharp\Map::__unserialize(): Argument #1 ($data) must be a list of keys each followed by its value
+a bad key count: ValueError: A serialized Map must hold each key followed by its value
+a Set under named keys: ValueError: A serialized Set must hold a list of its elements
 a wrong type, a Set where a Map is declared: TypeError: Cannot assign Sharp.Set to property Queued\Shipment::$labels of type Map<string, int>
+a wrong value in a class field: TypeError: Cannot assign Sharp.Map to property Queued\Ledger::$totals of type Map<string, int>: ["packed"] expected int, got string 'two'
+a wrong key in a struct field: TypeError: Cannot assign Sharp.Map to property Queued\Shipment::$labels of type Map<string, int>: [9] key expected string, got int 9
+a wrong element in a Set field: TypeError: Cannot assign Sharp.Set to property Queued\Crate::$speeds of type Set<Queued.Speed>: [0] expected Queued.Speed, got int 5
+a wrong value inside a List<Map<string, int>> field: TypeError: Cannot assign array to property Queued\Crate::$batches of type List<Map<string, int>>: [0]["tea"] expected int, got string 'x'
+a generic class field: TypeError: Cannot assign Sharp.Map to property Queued\Box::$held of type Map<string, int>: ["tea"] expected int, got string 'x'
+Sharp.Data.PhpSerializer, which allows no class by default: Map['tea': 2, 'jam': 5]
+PhpSerializer allowing a class by its PHP# name: Queued\Crate(Map[3: 'c'], Set[Queued\Speed.Express], [Map['tea': 1]])
+allowed_classes => false, which still checks each key's class: [Set['vip', 'new'], Map[__PHP_Incomplete_Class('Queued\\Parcel', 250, Queued\Speed.Express): 'small']]
+__unserialize on a Map that holds entries: Error: A Sharp\Map that holds entries is written through its index, which copies a shared one first
+a second constructor call on a Set that holds entries: Error: A Sharp\Set that holds entries is written through its index, which copies a shared one first

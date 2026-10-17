@@ -104,8 +104,37 @@ function rows(): array
                 . escapeshellarg(base64_encode($payload)) . ' 2>&1');
         },
         'a bad key count' => fn () => shown(unserialize('O:9:"Sharp\Map":3:{i:0;s:3:"tea";i:1;i:2;i:2;s:3:"jam";}')),
-        'a wrong type, a Set where a Map is declared' => fn () => shown(unserialize(str_replace('O:9:"Sharp\Map"', 'O:9:"Sharp\Set"', serialize(Payloads::shipment())))),
+        'a Set under named keys' => fn () => shown(unserialize('O:9:"Sharp\Set":1:{s:1:"a";s:3:"vip";}')),
+        'a wrong type, a Set where a Map is declared' => fn () => shown(tampered(Payloads::shipment(), 'O:9:"Sharp\Map"', 'O:9:"Sharp\Set"')),
+        'a wrong value in a class field' => fn () => shown(tampered(Payloads::ledger(), 'i:1;i:2;}', 'i:1;s:3:"two";}')),
+        'a wrong key in a struct field' => fn () => shown(tampered(Payloads::shipment(), 's:7:"fragile";', 'i:9;')),
+        'a wrong element in a Set field' => fn () => shown(tampered(Payloads::crate(), 'E:20:"Queued\Speed:Express";', 'i:5;')),
+        'a wrong value inside a List<Map<string, int>> field' => fn () => shown(tampered(Payloads::crate(), 's:3:"tea";i:1;i:1;}}}', 's:3:"tea";i:1;s:1:"x";}}}')),
+        'a generic class field' => fn () => shown(tampered(Payloads::box(), 'i:1;i:1;}', 'i:1;s:1:"x";}')),
+        'Sharp.Data.PhpSerializer, which allows no class by default' => fn () => shown(Payloads::throughSerializer(Payloads::counts())),
+        'PhpSerializer allowing a class by its PHP# name' => fn () => shown(Payloads::throughSerializerAllowing(Payloads::crate(), ['Queued.Crate'])),
+        'allowed_classes => false, which still checks each key\'s class' => fn () => shown(unserialize(serialize([Payloads::tags(), Payloads::byParcel()]), ['allowed_classes' => false])),
+        '__unserialize on a Map that holds entries' => function () {
+            $map = Payloads::counts();
+            $map->__unserialize(['bun', 3]);
+            return shown($map);
+        },
+        'a second constructor call on a Set that holds entries' => function () {
+            $set = Payloads::tags();
+            $set->__construct(['old']);
+            return shown($set);
+        },
     ];
+}
+
+/** unserialize of the bytes serialize writes for `$value`, with `$search` replaced, which they must hold. */
+function tampered(mixed $value, string $search, string $replace): mixed
+{
+    $serialized = serialize($value);
+    if (!str_contains($serialized, $search)) {
+        throw new LogicException("$serialized holds no $search");
+    }
+    return unserialize(str_replace($search, $replace, $serialized));
 }
 
 /** Each row's name and what it printed, or the exception it threw. */

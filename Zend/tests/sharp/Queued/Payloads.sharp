@@ -1,5 +1,7 @@
 namespace Queued;
 
+import Sharp.Data.PhpSerializer;
+
 // The values a queued job or a cached entry holds, and the PHP# reads of each one unserialize gives back.
 public class Payloads
 {
@@ -26,6 +28,15 @@ public class Payloads
     public static Map<Parcel, string> byParcel() => [new Parcel(250, Speed.Express): "small"];
 
     public static Map<Courier, string> byCourier() => [new Courier(7): "north"];
+
+    public static Crate crate() => new Crate([3: "c"], [Speed.Express], [["tea": 1]]);
+
+    public static Box<int> box() => new Box<int>(["tea": 1]);
+
+    public static Any? throughSerializer(Any? value) => PhpSerializer.unserialize(PhpSerializer.serialize(value));
+
+    public static Any? throughSerializerAllowing(Any? value, List<string> allowedClasses)
+        => PhpSerializer.unserialize(PhpSerializer.serialize(value), allowedClasses);
 
     public static bool holdsCounts(Any value) => value is Map<string, int>;
 
