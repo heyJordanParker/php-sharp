@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls every method of Sharp.Text.Text, Text.fromByte throws ValueError for a value that is not a byte, parseCsv reads one CSV line, where a quoted field keeps its comma and a blank line is one empty field, case changes and split work on characters, replace replaces every match, and split keeps the empty text after a trailing delimiter and throws ValueError for an empty delimiter
+A PHP# class calls every method of Sharp.Text.Text, Text.fromByte throws ValueError for a value that is not a byte, parseCsv reads one CSV line, where a quoted field keeps its comma and a blank line is one empty field, case changes and split work on characters, replace replaces every match and throws ValueError for empty text to replace, split keeps the empty text after a trailing delimiter, gives at most a positive limit's parts, the last holding the rest, and every part for a limit of 0, and throws ValueError for an empty delimiter or a negative limit
 --FILE--
 <?php
 require __DIR__ . '/library_text.inc';
@@ -29,10 +29,15 @@ var_dump(Demo\TextCalls::replace('banana', 'a', 'o'), Demo\TextCalls::replace('b
 foreach ([['a,b,', ','], ['é–Ü', '–'], ['abc', ',']] as [$text, $delimiter]) {
     echo json_encode(Demo\TextCalls::split($text, $delimiter), JSON_UNESCAPED_UNICODE), "\n";
 }
-try {
-    Demo\TextCalls::split('abc', '');
-} catch (ValueError $error) {
-    echo get_class($error), ': ', $error->getMessage(), "\n";
+foreach ([['a:b:c', 2], ['a:b:c', 1], ['a:b:c', 0], ['a:b:c', 5], ['é:Ü:ß', 2]] as [$text, $limit]) {
+    echo json_encode(Demo\TextCalls::splitAtMost($text, ':', $limit), JSON_UNESCAPED_UNICODE), "\n";
+}
+foreach ([fn () => Demo\TextCalls::split('abc', ''), fn () => Demo\TextCalls::splitAtMost('a:b', ':', -1), fn () => Demo\TextCalls::replace('abc', '', '-')] as $refused) {
+    try {
+        $refused();
+    } catch (ValueError $error) {
+        echo get_class($error), ': ', $error->getMessage(), "\n";
+    }
 }
 ?>
 --EXPECT--
@@ -61,4 +66,11 @@ string(6) "banana"
 ["a","b",""]
 ["é","Ü"]
 ["abc"]
-ValueError: Text.split: the delimiter is empty
+["a","b:c"]
+["a:b:c"]
+["a","b","c"]
+["a","b","c"]
+["é","Ü:ß"]
+ValueError: `split` needs a delimiter, and it is empty.
+ValueError: `split` takes a limit of 0 or more, and it is negative.
+ValueError: `replace` needs text to replace, and it is empty.

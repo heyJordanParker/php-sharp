@@ -1341,20 +1341,24 @@ plans.filter(p => p.active);          // Map<string, Plan>, keys kept
 
 `contains`, a `List`'s `remove`, `indexOf` and `Set<T>` need `==` on the element type (section 19). Without it, they are a compile error.
 
-**`flatMap` and `toList()`:** a `List`'s `flatMap` gives, in order, the elements of each `Iterable` its function gives, as Kotlin's does. `toList()` gives the elements of any `Iterable` as a `List` of their own, a `Set`'s and a `Map`'s values included:
+**`flatMap` and `toList()`:** a `List`'s `flatMap` gives, in order, the elements of each `Iterable` its function gives, as Kotlin's does. `toList()` gives the elements of any `Iterable` as a `List` of their own. A `Map` is an `Iterable` of its `[key, value]` entries, so both give a `Map`'s entries, as Kotlin's `Map.toList()` gives its pairs:
 
 <!-- example flat-map-to-list: statements
 List<List<int>> rows = [[1, 2], [], [3]];
 List<List<int>> none = [];
 Set<string> tags = ["vip", "new"];
 Map<string, int> stock = ["tea": 3, "pie": 7];
+List<Map<string, int>> shelves = [stock, ["jam": 1]];
 -->
 ```csharp
 rows.flatMap(row => row);              // [1, 2, 3]
 none.flatMap(row => row);              // []
 tags.toList();                         // ["vip", "new"]
+stock.toList();                        // [["tea", 3], ["pie", 7]]
 stock.values().toList();               // [3, 7]
+shelves.flatMap(shelf => shelf);       // [["tea", 3], ["pie", 7], ["jam", 1]]
 rows.flatMap(row => row.count());      // compile error: an int is no Iterable
+List<int> counts = shelves.flatMap(shelf => shelf);   // compile error: the entries are [string, int]
 ```
 
 The complete method list is specified with the standard library.
@@ -2215,7 +2219,7 @@ A plain PHP file keeps PHP's own interpolation. It converts an object of a class
 
 **Plain strings:** `"…"` and `'…'` never interpolate, so braces and `$` inside them are literal.
 
-**Text methods:** a `string` has Kotlin's text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so a case change reaches every letter. `replace` replaces every match, as Kotlin's does. `split` keeps the empty text after a trailing delimiter, and an empty delimiter throws `ValueError`:
+**Text methods:** a `string` has Kotlin's text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so a case change reaches every letter. `replace` replaces every match, as Kotlin's does. `split` keeps the empty text after a trailing delimiter, and takes Kotlin's `limit`: 0, its default, gives every part, and a positive limit gives at most that many, the last holding the rest. Empty text to replace, an empty delimiter and a negative limit each throw `ValueError`:
 
 <!-- example text-methods: statements -->
 ```csharp
@@ -2228,9 +2232,13 @@ A plain PHP file keeps PHP's own interpolation. It converts an object of a class
 "hello".endsWith("lo");                   // true
 "hello".endsWith("he");                   // false
 "banana".replace("a", "o");               // "bonono"
+"banana".replace("", "o");                // throws: "`replace` needs text to replace, and it is empty."
 "a,b,".split(",");                        // ["a", "b", ""]
-"a,b".split("");                          // throws: "Text.split: the delimiter is empty"
+"a:b:c".split(":", 2);                    // ["a", "b:c"]
+"a,b".split("");                          // throws: "`split` needs a delimiter, and it is empty."
+"a:b".split(":", -1);                     // throws: "`split` takes a limit of 0 or more, and it is negative."
 "hello".contains(1);                      // compile error: contains takes a string
+"hello".compareTo("a");                   // compile error: a string has no compareTo
 global.str_contains("hello", "ell");      // compile error: write "hello".contains(…)
 ```
 

@@ -1,5 +1,5 @@
 --TEST--
-Preloading keeps the string members of Sharp.Text.Text: contains, lowercase, uppercase, startsWith, endsWith, replace and split, which throws ValueError for an empty delimiter
+Preloading keeps the string members of Sharp.Text.Text: contains, lowercase, uppercase, startsWith, endsWith, replace, which throws ValueError for empty text to replace, and split, which takes a limit and throws ValueError for an empty delimiter
 --INI--
 opcache.enable=1
 opcache.enable_cli=1
@@ -24,10 +24,13 @@ var_dump(TextCalls::lowercase('ÉCOLE'), TextCalls::uppercase('école'));
 var_dump(TextCalls::startsWith('hello', 'he'), TextCalls::endsWith('hello', 'he'));
 var_dump(TextCalls::replace('banana', 'a', 'o'));
 echo json_encode(TextCalls::split('a,b,', ',')), "\n";
-try {
-    TextCalls::split('abc', '');
-} catch (ValueError $error) {
-    echo get_class($error), ': ', $error->getMessage(), "\n";
+echo json_encode(TextCalls::splitAtMost('a:b:c', ':', 2)), "\n";
+foreach ([fn () => TextCalls::split('abc', ''), fn () => TextCalls::replace('abc', '', '-')] as $refused) {
+    try {
+        $refused();
+    } catch (ValueError $error) {
+        echo get_class($error), ': ', $error->getMessage(), "\n";
+    }
 }
 ?>
 --EXPECT--
@@ -41,4 +44,6 @@ bool(true)
 bool(false)
 string(6) "bonono"
 ["a","b",""]
-ValueError: Text.split: the delimiter is empty
+["a","b:c"]
+ValueError: `split` needs a delimiter, and it is empty.
+ValueError: `replace` needs text to replace, and it is empty.

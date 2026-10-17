@@ -10,6 +10,8 @@ public class Shelf
 
     public static List<int> flatWith(List<int> items, Function<Iterable<int>(int)> spread) => items.flatMap(spread);
 
+    public static List<[string, int]> entries(List<Map<string, int>> shelves) => shelves.flatMap(shelf => shelf);
+
     public static Iterable<int> twice(List<int> row)
     {
         for (const n of row) {
@@ -21,6 +23,12 @@ public class Shelf
     public static List<string> fromSet(Set<string> tags) => tags.toList();
 
     public static List<int> fromValues(Map<string, int> counts) => counts.values().toList();
+
+    public static List<[string, int]> fromMap(Map<string, int> counts) => counts.toList();
+
+    public static List<[string, int]> fromFirstMap(List<Map<string, int>> shelves) => shelves[0].toList();
+
+    public static List<string> fromFirstSet(List<Set<string>> groups) => groups[0].toList();
 
     public static List<int> copied(List<int> items)
     {

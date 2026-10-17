@@ -23,4 +23,6 @@ class TextCalls
     public static string replace(string text, string old, string @new) => text.replace(old, @new);
 
     public static List<string> split(string text, string delimiter) => text.split(delimiter);
+
+    public static List<string> splitAtMost(string text, string delimiter, int limit) => text.split(delimiter, limit);
 }
