@@ -7,6 +7,8 @@
 # Its tests are sources, not the files run-tests.php writes from a .phpt test.
 !/phpunit/tests/**/*.php
 
-# The hosts fixture's packages and compiled files, written by sharp/bin/hosts
+# The hosts fixture's packages and compiled files, written by sharp/bin/hosts, and the PHP file mago compile writes
+# beside each of its PHP# classes
 /hosts/vendor/
 /hosts/.sharp/
+/hosts/app/**/*.php

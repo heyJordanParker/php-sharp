@@ -1,0 +1,10 @@
+namespace Queued;
+
+public class Courier
+{
+    public Courier(public int id { get; }) { }
+
+    public static bool operator ==(Courier a, Courier b) => a.id == b.id;
+
+    public int hash() => this.id;
+}

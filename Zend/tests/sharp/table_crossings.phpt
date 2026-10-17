@@ -95,7 +95,6 @@ $rows = [
         $map = new Map();
         $map->extra = 1;
     },
-    'not serializable' => fn () => serialize(new Map()),
     'a clone is equal and apart' => function () {
         $map = new Map(['a', 1]);
         $copy = clone $map;
@@ -145,7 +144,6 @@ offsetSet refuses a call: Error: A Sharp\Map is written through its index, which
 offsetUnset refuses a call: Error: A Sharp\Set is written through its index, which copies a shared one first
 a loop by reference: Error: A Map can't be looped over by reference
 no dynamic property: Error: Cannot create dynamic property Sharp\Map::$extra
-not serializable: Exception: Serialization of 'Sharp\Map' is not allowed
 a clone is equal and apart: [{"a":1},{"a":1,"b":2}]
 object(Sharp\Map)#%d (1) {
   [0]=>

@@ -70,7 +70,7 @@ A reference to a property whose type names a type parameter is refused, since th
 
 A closed type's reference keeps PHP's typed reference check through `sharp_type`.
 
-`unserialize` checks each typed property it fills, as PHP has since 7.4, through `zend_verify_prop_assignable_by_ref` in `process_nested_object_data`. A closed PHP# type checks there. A type that names a type parameter checks once the object's last entry is read, since `serialize` writes the type arguments after the properties: `sharp_object_open_properties_accept` spells each such property's type for the object and refuses "Cannot assign App.Box<Checks.Customer> to property Checks\Rack::$own of type App.Box<App.Order>?".
+`unserialize` checks each typed property it fills, as PHP has since 7.4, through `zend_verify_prop_assignable_by_ref` in `process_nested_object_data`. A closed PHP# type checks there. Every PHP# type checks again once the whole payload is read, since `serialize` writes the type arguments after the properties and `unserialize` fills each `Map` and `Set` last: `var_destroy` runs `sharp_object_properties_accept` after the `__unserialize` of each collection the object holds, which spells each property's type for the object and refuses "Cannot assign App.Box<Checks.Customer> to property Checks\Rack::$own of type App.Box<App.Order>?".
 
 ### What a property's check leaves unchecked
 
