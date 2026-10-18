@@ -2435,6 +2435,17 @@ static const zend_property_info *lookup_prop_info(const zend_class_entry *ce, ze
 	return NULL;
 }
 
+/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array, so its declared type says
+ * nothing of what such a read gives there. */
+static const zend_property_info *zend_sharp_prop_info_of(const zend_op_array *op_array, const zend_property_info *prop_info)
+{
+	if (prop_info && UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_CROSSING)
+			&& !sharp_function_is_sharp((const zend_function *) op_array)) {
+		return NULL;
+	}
+	return prop_info;
+}
+
 static const zend_property_info *zend_fetch_prop_info(const zend_op_array *op_array, zend_ssa *ssa, const zend_op *opline, const zend_ssa_op *ssa_op)
 {
 	const zend_property_info *prop_info = NULL;
@@ -2455,7 +2466,7 @@ static const zend_property_info *zend_fetch_prop_info(const zend_op_array *op_ar
 			}
 		}
 	}
-	return prop_info;
+	return zend_sharp_prop_info_of(op_array, prop_info);
 }
 
 static const zend_property_info *zend_fetch_static_prop_info(const zend_script *script, const zend_op_array *op_array, const zend_ssa *ssa, const zend_op *opline)
@@ -2491,7 +2502,7 @@ static const zend_property_info *zend_fetch_static_prop_info(const zend_script *
 			}
 		}
 	}
-	return prop_info;
+	return zend_sharp_prop_info_of(op_array, prop_info);
 }
 
 static uint32_t zend_fetch_prop_type(const zend_script *script, const zend_property_info *prop_info, zend_class_entry **pce)
@@ -3438,6 +3449,19 @@ static zend_always_inline zend_result _zend_update_type_info(
 			UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
 			COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->result_def);
 			break;
+		case ZEND_SHARP_RETURN_ARRAY:
+			/* op1's value, dereferenced, or for plain PHP the PHP array of a Map or a Set it holds. */
+			tmp = t1 & ~(MAY_BE_UNDEF|MAY_BE_REF);
+			if (t1 & MAY_BE_UNDEF) {
+				tmp |= MAY_BE_NULL;
+			}
+			if (t1 & (MAY_BE_ARRAY|MAY_BE_OBJECT)) {
+				tmp |= MAY_BE_ARRAY|MAY_BE_ARRAY_KEY_ANY|MAY_BE_ARRAY_OF_ANY;
+			}
+			tmp |= MAY_BE_RC1|MAY_BE_RCN;
+			UPDATE_SSA_TYPE(tmp, ssa_op->result_def);
+			UPDATE_SSA_OBJ_TYPE(NULL, 0, ssa_op->result_def);
+			break;
 		case ZEND_SHARP_IS_TYPE:
 			UPDATE_SSA_TYPE(MAY_BE_FALSE|MAY_BE_TRUE, ssa_op->result_def);
 			break;
@@ -3865,12 +3889,15 @@ static zend_always_inline zend_result _zend_update_type_info(
 							ce = ssa->var_info[ssa_op->op1_use].ce;
 						}
 						/* Unset properties will resort back to __get/__set */
+						/* PHP#: plain PHP code may read a property whose type holds a Map or a Set, which gives it a
+						 * new PHP array, so only a property it resolves to one that never crosses keeps its value. */
 						if (ce
 						 && !ce->create_object
 						 && ce->default_object_handlers->read_property == zend_std_read_property
 						 && !ce->__get
 						 && !ce->num_hooked_props
 						 && (opline->op1_type != IS_UNUSED || (ce->ce_flags & ZEND_ACC_FINAL))
+						 && (prop_info || sharp_function_is_sharp((const zend_function *) op_array))
 						 && !result_may_be_separated(ssa, ssa_op)) {
 							tmp &= ~MAY_BE_RC1;
 						}
@@ -3900,8 +3927,9 @@ static zend_always_inline zend_result _zend_update_type_info(
 		case ZEND_FETCH_STATIC_PROP_W:
 		case ZEND_FETCH_STATIC_PROP_UNSET:
 		case ZEND_FETCH_STATIC_PROP_FUNC_ARG:
-			tmp = zend_fetch_prop_type(script,
-				zend_fetch_static_prop_info(script, op_array, ssa, opline), &ce);
+		{
+			const zend_property_info *prop_info = zend_fetch_static_prop_info(script, op_array, ssa, opline);
+			tmp = zend_fetch_prop_type(script, prop_info, &ce);
 			if (opline->opcode != ZEND_FETCH_STATIC_PROP_R
 					&& opline->opcode != ZEND_FETCH_STATIC_PROP_IS) {
 				tmp |= MAY_BE_REF | MAY_BE_INDIRECT;
@@ -3910,7 +3938,10 @@ static zend_always_inline zend_result _zend_update_type_info(
 				}
 				ce = NULL;
 			} else {
-				if (!result_may_be_separated(ssa, ssa_op)) {
+				/* PHP#: plain PHP code may read a static whose type holds a Map or a Set, which gives it a new PHP
+				 * array, so only a static it resolves to one that never crosses keeps its value. */
+				if ((prop_info || sharp_function_is_sharp((const zend_function *) op_array))
+						&& !result_may_be_separated(ssa, ssa_op)) {
 					tmp &= ~MAY_BE_RC1;
 				}
 				if (opline->opcode == ZEND_FETCH_STATIC_PROP_IS) {
@@ -3930,6 +3961,7 @@ static zend_always_inline zend_result _zend_update_type_info(
 				UPDATE_SSA_OBJ_TYPE(ce, 1, ssa_op->result_def);
 			}
 			break;
+		}
 		case ZEND_FRAMELESS_ICALL_1:
 		case ZEND_FRAMELESS_ICALL_2:
 		case ZEND_FRAMELESS_ICALL_3:

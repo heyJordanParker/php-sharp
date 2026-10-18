@@ -7,6 +7,10 @@ opcache.enable=1
 opcache.enable_cli=1
 opcache.jit=function
 opcache.jit_buffer_size=32M
+--SKIPIF--
+<?php
+if (ini_get('opcache.jit') === false) die('skip JIT is not available');
+?>
 --FILE--
 <?php
 echo opcache_get_status()['jit']['on'] ? "jit on\n" : "jit off\n";

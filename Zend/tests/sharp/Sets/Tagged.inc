@@ -36,7 +36,7 @@ class Tagged
             ((object) $tags)->any(fn ($tag) => $tag === "5"),
             ((object) $tags)->first(fn ($tag) => \strlen($tag) > 2),
             ((object) $tags)->sortedBy(fn ($tag) => $tag),
-            \implode(",", \iterator_to_array($tags, false)),
+            \implode(",", \Sharp\Internal\arrayOf($tags)),
         ];
     }
 
@@ -81,7 +81,7 @@ class Tagged
         return [$copied, $kept, $added, $this->calls, $named, $this->tags->toList(), ((object) $maybe)?->add("x"), ((object) $maybe)?->contains("x"), ((object) $maybe)?->count()];
     }
 
-    private function copy(): \Sharp\Set { return $this->tags; }
+    private function copy(): \Sharp\Set|array { return $this->tags; }
 
     private function next(): string
     {

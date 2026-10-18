@@ -1950,6 +1950,11 @@ ZEND_VM_C_LABEL(copy_deref):
 		 && SHARP_IS_COLLECTION(EX_VAR(opline->result.var))) {
 			sharp_collection_of_static_property(EX_VAR(opline->result.var), prop, prop_info);
 		}
+		/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+		if ((type == BP_VAR_R || type == BP_VAR_IS) && prop != &EG(uninitialized_zval)
+		 && UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_CROSSING) && !sharp_function_is_sharp(EX(func))) {
+			sharp_cross_read(EX_VAR(opline->result.var));
+		}
 	} else {
 		ZVAL_INDIRECT(EX_VAR(opline->result.var), prop);
 	}
@@ -6827,6 +6832,10 @@ ZEND_VM_COLD_CONST_HANDLER(51, ZEND_CAST, CONST|TMP|VAR|CV, ANY, TYPE)
 
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, OP1_TYPE);
+				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+				if (OP1_TYPE != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
+					sharp_cross_array_cast(result, Z_OBJ_P(expr));
+				}
 			} else {
 				ZEND_ASSERT(opline->extended_value == IS_OBJECT);
 				zend_cast_zval_to_object(result, expr, OP1_TYPE);
@@ -7362,9 +7371,11 @@ ZEND_VM_HELPER(zend_fe_fetch_object_helper, ANY, ANY)
 	HashPosition pos;
 	Bucket *p;
 	zend_object_iterator *iter;
+	zval crossed;
 
 	array = EX_VAR(opline->op1.var);
 	SAVE_OPLINE();
+	ZVAL_UNDEF(&crossed);
 
 	ZEND_ASSERT(Z_TYPE_P(array) == IS_OBJECT);
 	if ((iter = zend_iterator_unwrap(array)) == NULL) {
@@ -7387,6 +7398,11 @@ ZEND_VM_HELPER(zend_fe_fetch_object_helper, ANY, ANY)
 					value_type = Z_TYPE_INFO_P(value);
 					if (EXPECTED(value_type != IS_UNDEF)
 					 && EXPECTED(zend_check_property_access(Z_OBJ_P(array), p->key, 0) == SUCCESS)) {
+						/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+						if (UNEXPECTED(sharp_cross_slot_read(&crossed, Z_OBJ_P(array), value))) {
+							value = &crossed;
+							value_type = Z_TYPE_INFO(crossed);
+						}
 						break;
 					}
 				} else if (EXPECTED(Z_OBJCE_P(array)->default_properties_count == 0)
@@ -7467,6 +7483,7 @@ ZEND_VM_C_LABEL(fe_fetch_r_exit):
 			GC_ADDREF(gc);
 		}
 	}
+	zval_ptr_dtor(&crossed);
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
@@ -8958,6 +8975,26 @@ ZEND_VM_HANDLER(216, ZEND_SHARP_LEAVE, ANY, ANY)
 	SAVE_OPLINE();
 	cleanup_unfinished_calls(execute_data, op_num);
 	zend_sharp_cleanup_leave_vars(execute_data, op_num);
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+}
+
+/* PHP#: the value a function whose result may hold a Map or a Set returns or yields, see ZEND_SHARP_RESULT_CROSSES. Its
+ * caller, or the code that resumed the generator, past the internal functions between them, gets the PHP array of each
+ * Map and Set in it when that code is plain PHP, spec section 12, and the value itself when it is PHP#. */
+ZEND_VM_HANDLER(217, ZEND_SHARP_RETURN_ARRAY, CONST|TMPVAR|CV, ANY)
+{
+	USE_OPLINE
+	zval *value;
+
+	SAVE_OPLINE();
+	value = GET_OP1_ZVAL_PTR(BP_VAR_R);
+	ZVAL_DEREF(value);
+	if (sharp_code_at(EX(prev_execute_data))) {
+		ZVAL_COPY(EX_VAR(opline->result.var), value);
+	} else {
+		sharp_array_of(EX_VAR(opline->result.var), value);
+	}
+	FREE_OP1();
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 

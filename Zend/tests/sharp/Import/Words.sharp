@@ -7,7 +7,7 @@ public static class Words
         public Iterable<string> letters()
         {
             yield text;
-            yield global.strtoupper(text);
+            yield text.uppercase();
         }
     }
 }

@@ -27,7 +27,7 @@ class Product
         {
             $this->tags = [];
             foreach ($value as $tag) {
-                $this->tags->add(\strtolower($tag)); // PHP# makes the array a Sharp\Collection
+                $this->tags->add(\mb_strtolower($tag, 'UTF-8')); // PHP# makes the array a Sharp\Collection
             }
         }
     }

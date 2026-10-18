@@ -11,6 +11,10 @@ opcache.jit_hot_func=1
 opcache.jit_hot_loop=1
 opcache.jit_hot_return=1
 opcache.jit_hot_side_exit=1
+--SKIPIF--
+<?php
+if (ini_get('opcache.jit') === false) die('skip JIT is not available');
+?>
 --FILE--
 <?php
 echo opcache_get_status()['jit']['on'] ? "jit on\n" : "jit off\n";
