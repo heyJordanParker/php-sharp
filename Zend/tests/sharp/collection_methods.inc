@@ -39,8 +39,6 @@ namespace {
         attempt(fn () => Demo\Tray::filled());
         attempt(fn () => Demo\Link::after(new Demo\Link(1), 2));
         attempt(fn () => Demo\Link::after(null, 2));
-        attempt(fn () => Demo\Link::further(new Demo\Link(1))->value);
-        attempt(fn () => Demo\Link::further(null));
         attempt(fn () => Demo\Link::skipped(new Demo\Link(1))->value);
         attempt(fn () => Demo\Link::skipped(null));
         attempt(fn () => Demo\Link::label(new Demo\Link(1), new ArrayObject([1, 2])));

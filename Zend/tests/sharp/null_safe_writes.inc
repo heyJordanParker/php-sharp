@@ -66,6 +66,20 @@ function null_safe_rows(): array
 
             return ['finds' => $orders->finds, 'fees' => $writes->fees, 'order' => null_safe_state($order)];
         }),
+        'a local receiver is written as it was tested' => $each(static function (?Order $order) use ($writes): ?array {
+            $writes($order)->cleared($order);
+            $writes($order)->inline($order);
+
+            return null_safe_state($order);
+        }),
+        'a write past ?. through an index' => $each(static function (?Order $order) use ($writes): ?array {
+            if ($order !== null) {
+                $order->items[] = new Item('sku-1');
+            }
+            $writes($order)->chained($order);
+
+            return $order === null ? null : ['sku' => $order->items[0]->sku];
+        }),
         'a set body runs only when the write happens' => $each(static function (?Order $order) use ($writes): array {
             $before = Order::$labelSets;
             $writes($order)->labels($order);

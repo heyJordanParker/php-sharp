@@ -1929,7 +1929,7 @@ The field or property is read before the arguments run, as in Java, C#, TypeScri
 
 - **`a ?? b`:** `b` when `a` is null.
 - **`a ??= b`:** assigns `b` only when `a` is null.
-- **`a?.b`:** reads `b`, or gives null when `a` is null. PHP writes this as `?->`.
+- **`a?.b`:** reads `b`, or gives null when `a` is null. PHP writes this as `?->`. A null `a` skips the rest of the chain, as in C#, Kotlin and Swift, so in `a?.items[0].name` only `a` may be null, and a second `?.` on a link that is never null is an error.
 - **`a?.b = c`:** writes `b` only when `a` is not null, as `=`, every compound assignment, `++`, `--` and an index write such as `a?.tags["vip"] = true` do.
 - **`f?.(x)`:** calls `f` only when it is not null.
 - **`a ?? throw …`, `a ?? return`, `a ?? continue` and `a ?? break`:** leave when `a` is null. `return` takes a value when the method returns one.
@@ -1950,7 +1950,9 @@ public void renewAll(List<int> customerIds, string plan)
 }
 ```
 
-**A write through `?.` happens only when every `?.` receiver on its left is not null,** as in C# 14, Kotlin and Swift. When one is null, nothing is written, and neither the right side nor a `set` body runs. Each receiver runs once, so `this.orders.find(id)?.note = "gift"` calls `find` once.
+**A write through `?.` happens only when every `?.` receiver on its left is not null,** as in C# 14, Kotlin and Swift. When one is null, nothing is written, and neither the right side nor a `set` body runs. Each receiver runs once, and the write goes to the object it tested, so `this.orders.find(id)?.note = "gift"` calls `find` once.
+
+**An index into a collection that may be null is an error,** read or written, as a member read on a value that may be null is. Test the collection first, as in `if (tags != null)`.
 
 <!-- example null-safe-writes: statements
 public class Customer { public string name { get; set; } = ""; }

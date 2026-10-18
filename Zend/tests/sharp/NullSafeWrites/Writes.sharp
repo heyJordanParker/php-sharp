@@ -55,6 +55,27 @@ public class Writes
         this.orders.find(id)?.total += this.fee();
     }
 
+    public void cleared(Order? start)
+    {
+        Order? order = start;
+        const clear = () => {
+            order = null;
+            return "cleared";
+        };
+        order?.note = clear();
+    }
+
+    public void inline(Order? start)
+    {
+        Order? order = start;
+        order?.gift = (order = null);
+    }
+
+    public void chained(Order? order)
+    {
+        order?.items[0].sku = "renamed";
+    }
+
     public void labels(Order? order)
     {
         order?.label = "L";

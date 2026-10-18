@@ -25,14 +25,9 @@ class Nulls
         return $filled + $value;
     }
 
-    public function itself(): \Demo\Nulls
-    {
-        return $this;
-    }
-
     public function through(?\Demo\Nulls $other, ?int $value): ?int
     {
-        return ((object) $other)?->same($value) ?? ((object) ((object) $other)?->itself())?->either(7, null);
+        return ((object) $other)?->same($value) ?? ((object) $other)?->either(7, null);
     }
 
     public function size(?\Demo\Box $box): ?int
