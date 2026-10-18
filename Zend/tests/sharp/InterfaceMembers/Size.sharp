@@ -1,0 +1,9 @@
+namespace InterfaceMembers;
+
+public enum Size : int
+{
+    case Small = 1;
+    case Large = 3;
+
+    public static int operator <=>(Size a, Size b) => a.value <=> b.value;
+}

@@ -1,0 +1,53 @@
+namespace InterfaceMembers;
+
+public static class Report
+{
+    public static List<string> currencies() => [Priced.CURRENCY, Book.CURRENCY];
+
+    public static List<Any> constantForms() => [Priced.LAST, Priced.LOCAL, Priced.SIZED, Priced.SMALL, (Priced.DOUBLE)(4)];
+
+    public static List<string> labels() => [new Book(250).label, new Rare(250).label];
+
+    public static List<Any> priced(Priced a, Priced b) => [a < b, a <= b, a > b, a >= b, a <=> b];
+
+    public static List<Any> books() => [new Book(1) < new Book(2), new Book(1) <=> new Book(2)];
+
+    public static List<Any> rares() => [new Rare(1) < new Rare(2), new Rare(1) <=> new Rare(2)];
+
+    public static List<int> sorted(List<Priced> items) => items.sortedBy(item => item).map(item => item.cents);
+
+    public static List<int> rareSorted(List<Rare> items) => items.sortedBy(item => item).map(item => item.cents);
+
+    public static List<Any> either(Rare r, Book b, Priced p) => [r < b, b < r, r <=> p, p <=> r];
+
+    public static List<Any> gems(Gem a, Gem b) => [a < b, a <=> b];
+
+    public static List<Any> cash() => [Cash.Penny < Cash.Dime, Cash.Dime <=> Cash.Penny, Cash.Penny.label];
+
+    public static List<int> mixedSorted() => [new Book(3), new Rare(1), new Book(2)].sortedBy(item => item).map(item => item.cents);
+
+    public static List<int> keyed(Measure a, Measure b)
+    {
+        Map<Measure, string> names = [:];
+        names[a] = "a";
+        names[b] = "b";
+        return [new Set<Measure>([a, b]).count(), names.count(), [a].toSet().contains(b) ? 1 : 0];
+    }
+
+    public static List<Any> sizes() => [Size.Small < Size.Large, Size.Large <= Size.Small, Size.Small <=> Size.Large];
+
+    public static List<Any> coins() => [
+        Coin.Gold(3, "Royal") == Coin.Gold(3, "Perth"),
+        Coin.Gold(3, "Royal") != Coin.Gold(4, "Royal"),
+        Coin.Copper == Coin.Copper,
+        new Set<Coin>([Coin.Gold(3, "Royal"), Coin.Gold(3, "Perth"), Coin.Copper]).count(),
+    ];
+
+    public static List<Any> measures(Measure a, Measure b, Measure? none)
+    {
+        Measure sum = a + b;
+        Measure total = a;
+        total += b;
+        return [sum.grams, (-a).grams, total.grams, a == b, a != b, none == null, none == a, a == none, sum == total];
+    }
+}

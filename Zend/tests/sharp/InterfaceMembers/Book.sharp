@@ -1,0 +1,11 @@
+namespace InterfaceMembers;
+
+public class Book : Priced
+{
+    public int cents { get; }
+
+    public Book(int cents)
+    {
+        this.cents = cents;
+    }
+}

@@ -2111,7 +2111,11 @@ ZEND_API zend_function *zend_std_get_static_method(zend_class_entry *ce, zend_st
 		if (UNEXPECTED(fbc->common.fn_flags & ZEND_ACC_ABSTRACT)) {
 			zend_abstract_method_call(fbc);
 			goto fail;
-		} else if (UNEXPECTED(fbc->common.scope->ce_flags & ZEND_ACC_TRAIT)) {
+		} else if (UNEXPECTED(fbc->common.scope->ce_flags & ZEND_ACC_TRAIT)
+				/* PHP#: an interface's operator is a static method of the interface's trait, which each use calls on
+				 * the trait itself, spec section 19. */
+				&& !(fbc->common.scope->type == ZEND_USER_CLASS
+					&& sharp_is_sharp_file(fbc->common.scope->info.user.filename))) {
 			zend_error(E_DEPRECATED,
 				"Calling static trait method %s::%s is deprecated, "
 				"it should only be called on a class using the trait",

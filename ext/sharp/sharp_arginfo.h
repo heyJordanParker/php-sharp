@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 3a2e4796da4447ed088a507560c3272630a80f0b */
+ * Stub hash: d6e4268d291614dfd8269414ae9a88f8787bb0e5 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -155,6 +155,7 @@ ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_sortedBy, 0, 1, IS_ARRAY, 0)
 	ZEND_ARG_OBJ_INFO(0, selector, Closure, 0)
+	ZEND_ARG_OBJ_INFO_WITH_DEFAULT_VALUE(0, comparison, Closure, 1, "null")
 ZEND_END_ARG_INFO()
 
 #define arginfo_class_Sharp_Sequence___construct arginfo_class_Sharp_Collection___construct

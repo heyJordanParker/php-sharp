@@ -2786,10 +2786,86 @@ twice == twice;                  // compile error: a function has no ==
 ```
 
 - **Overloadable operators:** `+ - * / % **`, unary `-`, `==` and `<=>`. No other operator can be overloaded.
+- **A class, a struct, an enum and an interface declare operators** by the same rules. An interface writes `static` alone, as it writes every member bare, and its operator applies to every implementer (section 22).
+- **An operator is chosen from the types of both sides,** as in C#. Of the operators the two types and their interfaces declare, the most specific one that takes both sides runs, whichever side comes first. Two that take both, where neither is more specific, are a compile error at the use. `sortedBy` orders as `<` on two of its keys does.
 - **`!=`** is derived from `==`.
 - **`< > <= >=` and sorting** are derived from `<=>`.
 - **Strings compare byte by byte,** as in Go. `<`, `>` and `sort` put `"10"` before `"9"` and capitals before lowercase, so `"10" < "9"` is true and `"Zebra" < "apple"` is true. The order agrees with `==`. `compareTo` gives -1, 0 or 1 in the same order, so `"b".compareTo("a")` is 1.
 - **`==` and `hash()` go together:** declaring `==` without `hash()` is a compile error, because `Set` needs both.
+
+An enum orders its cases only when it declares `<=>`:
+
+<!-- example enum-operators -->
+```csharp
+public enum Size : int
+{
+    case Small = 1;
+    case Large = 3;
+    public static int operator <=>(Size a, Size b) => a.value <=> b.value;   // compiles: Size.Small < Size.Large is true
+}
+```
+
+<!-- example enum-operators: statements -->
+```csharp
+Size.Small < Size.Large;                  // true
+Size.Large <=> Size.Small;                // 1
+Status.Active < Status.Paused;            // compile error: Status declares no <=>, so its cases have no order
+```
+
+Two interfaces that each declare an operator for a class make it pick one:
+
+<!-- example operator-choice -->
+```csharp
+// app/Weighed.sharp
+namespace App;
+
+public interface Weighed
+{
+    int grams { get; }
+    int hash();
+    static bool operator ==(Weighed a, Weighed b) => a.grams == b.grams;
+}
+```
+
+<!-- example operator-choice -->
+```csharp
+// app/Valued.sharp
+namespace App;
+
+public interface Valued
+{
+    int cents { get; }
+    int hash();
+    static bool operator ==(Valued a, Valued b) => a.cents == b.cents;
+}
+```
+
+<!-- example operator-choice -->
+```csharp
+// app/Parcel.sharp
+namespace App;
+
+public class Parcel : Valued, Weighed
+{
+    public int cents { get; }
+    public int grams { get; }
+    public Parcel(int cents, int grams) { this.cents = cents; this.grams = grams; }
+    public int hash() => this.grams;
+}
+```
+
+<!-- example operator-choice: statements -->
+```csharp
+Parcel light = new Parcel(500, 100);
+Parcel heavy = new Parcel(500, 900);
+light == heavy;                         // compile error: Valued and Weighed each declare an == that takes two Parcels
+Valued lightPrice = light;
+lightPrice == heavy;                    // true: only Valued's == takes a Valued
+Weighed lightWeight = light;
+lightWeight == heavy;                   // false: only Weighed's == takes a Weighed
+```
+
+Declaring `public static bool operator ==(Parcel a, Parcel b)` in `Parcel` gives two `Parcel`s their own `==`, which is more specific than either interface's.
 
 **`==` and `!=` on a nullable type are lifted,** as C#'s operators on nullable values and Kotlin's `==` are. Null equals only null. Two non-null values use the type's own `==`, including a declared `operator ==`, so an `operator ==` takes two non-null values and never sees a null. `x != null` is the normal null check, and it never runs user code. `x is null` and `x is not null` stay valid as ordinary patterns (section 21).
 
@@ -2922,7 +2998,7 @@ public enum CheckoutState
 A case with a value and a case with data in one enum is a compile error. Swift enforces the same rule.
 
 - **Each case is its own type,** so a method can take `PaymentResult.Paid` alone.
-- **Two cases are `==`** when they are the same case and each field is `==`, as two structs are (section 19). A case with a field that has no `==` gives its enum no `==`.
+- **Two cases are `==`** when they are the same case and each field is `==`, as two structs are (section 19). A case with a field that has no `==` gives its enum no `==`. An enum that declares its own `==` compares its cases by it instead, as a struct does.
 - **A not-backed enum may declare type parameters,** with bounds and without `in` or `out`, as `enum Lookup<T> { case Found(T value); case Missing; }`. A backed enum declares none.
 - **A case of a generic enum** is the type `Lookup<int>.Found`. A case takes its type arguments as a static method call does (section 11), so `Lookup<int> lookup = Lookup.Missing;` and `Lookup<int>.Missing` both compile. A pattern names the bare case, as in `lookup is Lookup.Found(int value)`, and takes the type arguments of the value it tests.
 - **A plain case of a generic enum is one object for each list of type arguments,** so `Lookup<int>.Missing` and `Lookup<string>.Missing` are two objects, as each list has its own static fields.
@@ -3512,6 +3588,97 @@ class LegacyPage implements HasDesign
     }
 }
 ```
+
+**An interface also holds constants and operators,** and no storage:
+
+<!-- example interface-constants-and-operators -->
+```csharp
+// app/Priced.sharp
+namespace App;
+
+public interface Priced
+{
+    const string CURRENCY = "USD";                                     // compiles: an interface constant, read as Priced.CURRENCY
+    int cents { get; }                                                 // compiles: abstract, each class gives it
+    string label => `${this.cents} ${Priced.CURRENCY}`;                // compiles: a default body built from the interface's own members
+    static int operator <=>(Priced a, Priced b) => a.cents <=> b.cents;   // compiles: every Priced compares by cents, so a < b works
+    int count { get; } = 0;                                            // compile error: an interface holds no storage, so it gives no initial value
+    law cheapFirst(Priced a, Priced b) => a.cents <= b.cents || a > b;  // compile error: a law is proved against code, and any class may implement an interface later
+}
+```
+
+Each class that implements `Priced`, without its two refused lines, gets its constant, its default body and its operator:
+
+<!-- example interface-members-in-classes -->
+```csharp
+// app/Book.sharp
+namespace App;
+
+public class Book : Priced
+{
+    public int cents { get; }
+    public Book(int cents) { this.cents = cents; }
+}
+```
+
+<!-- example interface-members-in-classes -->
+```csharp
+// app/Rare.sharp
+namespace App;
+
+public class Rare : Priced
+{
+    public int cents { get; }
+    public Rare(int cents) { this.cents = cents; }
+    public override string label => "rare";                                  // replaces the default body
+    public static int operator <=>(Rare a, Rare b) => b.cents <=> a.cents;   // two Rares compare by it, the dearest first
+}
+```
+
+<!-- example interface-members-in-classes: statements -->
+```csharp
+Priced.CURRENCY;                       // "USD"
+Book.CURRENCY;                         // "USD": an implementer reads it too
+new Book(250).label;                   // "250 USD": the default body
+new Rare(250).label;                   // "rare": Rare's own
+Priced cheap = new Book(100);
+Priced dear = new Book(900);
+cheap < dear;                          // true: the interface's <=>
+cheap <=> dear;                        // -1
+new Rare(100) < new Rare(900);         // false: Rare's own <=> wins for two Rares
+new Rare(100) < new Book(900);         // true: only the interface's <=> takes a Rare and a Book
+List<Priced> mixed = [new Rare(900), new Rare(100)];
+mixed.sortedBy(item => item).map(item => item.cents);   // [100, 900]: sortedBy orders as < on two Priced does
+```
+
+<!-- example interface-members-in-classes -->
+```php
+// app/LegacyBook.php
+namespace App;
+
+class LegacyBook implements Priced
+{
+    use Priced\Defaults;                                    // gets the default bodies, without which this class is a compile error
+
+    public function __construct(public int $cents) {}
+
+    public string $label {                                  // runs label's default body
+        get => $this->{'label@App\Priced'}();
+    }
+}
+```
+
+<!-- example interface-members-in-classes: statements -->
+```php
+(new App\LegacyBook(250))->label;      // "250 USD"
+App\Priced::CURRENCY;                  // "USD"
+```
+
+- An interface constant follows a class constant's rules, and is read through the interface or any class that implements it.
+- An interface holds no storage, so a property it states gives no initial value, and a computed property's expression is its default body.
+- An interface states no law: a law is proved against the code of a class or an enum, and any class may implement an interface later.
+- An interface's operator applies to every implementer, a plain PHP class included, as section 19 chooses every operator: from the types of both sides, the most specific one runs.
+- A plain PHP class that implements an interface with default bodies uses `<Interface>\Defaults`, or it is a compile error that names the trait.
 
 **A plain PHP trait** is listed in the header with the base class and interfaces, and it is also a type. It works everywhere an interface does:
 

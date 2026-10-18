@@ -11,6 +11,10 @@ extern zend_module_entry sharp_module_entry;
 /* Whether `filename` names a PHP# source file, which ends in `.sharp`. */
 bool sharp_is_sharp_file(const zend_string *filename);
 
+/* The operators == each class the request compared objects of compares them by, keyed by the class's address, which
+ * sharp_table.c fills and the request frees when it ends. */
+HashTable *sharp_equality_operators(void);
+
 /* Whether `func` is PHP# code, a function a .sharp file declares. Plain PHP code and an internal function are not. */
 static zend_always_inline bool sharp_function_is_sharp(const zend_function *func)
 {
