@@ -2,7 +2,7 @@
 
 ## Decision
 
-PHP# has no superglobals. `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS` are compile errors that read "PHP# has no superglobals; take a Request", or "take an Environment" for `$_ENV` and for `$_SERVER["argv"]` and `$_SERVER["argc"]`. Request data arrives as an object, such as a framework's `Request`. The standard library adds `Environment`, a `foreign` class with a standard effect of the same name, which has `variable(name)`, `arguments` and `currentDirectory`. `getenv()` and PHP's other environment built-ins carry the `Environment` effect.
+PHP# has no superglobals. `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS`, with or without `$`, fail as a typo does. Request data arrives as an object, such as a framework's `Request`. The standard library adds `Environment`, a `foreign` class with a standard effect of the same name, which has `variable(name)`, `arguments` and `currentDirectory`. `getenv()` and PHP's other environment built-ins carry the `Environment` effect.
 
 ## Options
 
@@ -16,7 +16,7 @@ public class Deploy
     public string target() => this.environment.arguments[1];                           // compiles
 }
 
-public string origin() => _SERVER["HTTP_HOST"];                                        // compile error: PHP# has no superglobals; take a Request
+public string origin() => _SERVER["HTTP_HOST"];                                        // parse error
 ```
 
 Every input a class reads arrives through its constructor or its parameters, so its signature shows that it reads the environment, and a test passes a fake `Environment`.

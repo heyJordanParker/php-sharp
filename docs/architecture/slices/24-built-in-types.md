@@ -23,10 +23,10 @@ The Slice builds all of it in one PR, after #135 and #136.
 
 ## Decisions team-lead approves
 
-1. **`Object` is a type wherever a type goes.** The Slice ports the `Object` part of mago-sharp `feat/slice-lazy-and-types` commit `6cb10255b9` onto master's files: `is_slice_type` takes `Hint::Object` written `Object`, and any other spelling (`object`, `OBJECT`) is "PHP# writes `Object` for PHP's `object`.". In a `.sharp` file, `ambiguous-object-property-access` and `ambiguous-object-method-access` are errors, where PHP keeps them as warnings. The bridge lowers `Object` to PHP's `object`. The engine's `SHARP_BUILT_IN_OBJECT` already tests it in a collection and in `is`.
+1. **`Object` is a type wherever a type goes.** The Slice ports the `Object` part of mago-sharp `feat/slice-lazy-and-types` commit `6cb10255b9` onto master's files: `is_slice_type` takes `Hint::Object` written `Object`, and PHP's `object` fails as a typo does. In a `.sharp` file, `ambiguous-object-property-access` and `ambiguous-object-method-access` are errors, where PHP keeps them as warnings. The bridge lowers `Object` to PHP's `object`. The engine's `SHARP_BUILT_IN_OBJECT` already tests it in a collection and in `is`.
 2. **A misspelled built-in type is an error that names the PHP# spelling.** Section 24 line 2879 makes the built-in types lowercase and every other type capitalized. The semantic check reports:
    - `Void`, `Int`, `Float`, `Bool`, `String`, `Null` and `any`: "PHP# writes the type `int`." (each with its own spelling). `Int`, `Float` and `Bool` resolve to the standard library's static classes today, so the check runs where a type names `Sharp.Int`, `Sharp.Float` or `Sharp.Bool`.
-   - `array`: "PHP# has no `array`: write `List<T>` or `Map<TKey, TValue>`." and `callable`: "PHP# has no `callable`: write `Function<R(P)>`." Both are "This type is not supported yet" today. `mixed` keeps its existing error, and `iterable` is #135's.
+   - `array`, `callable`, `mixed` and `iterable` fail as a typo does.
    - Question 3 decides `null` alone, `never`, `false` and `true`.
 3. **A union that holds null is an error that names the form to write.** `check_union`'s `Hint::Null` arm stops calling `report_not_supported` and reports "A union that holds null is written `(int|string)?`.", built from the union's other members. `int|null` names `int?`.
 4. **A member with no access modifier is private, for properties, constants and named constructors.** This is #135's rule for methods, applied to the other three:
@@ -57,7 +57,7 @@ The Slice builds all of it in one PR, after #135 and #136.
 13. **Harness changes:**
     - `naming-cases` declares `Invoice<TLine : Line>` and `InvoicePaid(…, Money amount)` in `App.Billing`, which has no `Line` and no `Money`. The harness gains `app/Billing/Line.sharp` and `app/Billing/Money.sharp`, two empty public classes. `LineTotals.sharp` and `PriceTotals.sharp` import `App.Line` and `App.Money`, and the Slice checks that the import still wins in those files.
     - `sharp/spec-self-test.md`'s `refusal` example writes a property with no access modifier after #135. Decision 4 makes that compile, so the example writes a by-reference parameter, which stays "not supported yet".
-14. **A class cast gets a parse message that names `as`.** `(Admin) user` is a refusal today, but its message is "Parse error encountered during parsing" and "A PHP# field needs a type, as in `private int count = 0;`". The parser reports "PHP# has no class casts: write `user as Admin`." where a parenthesized class name is followed by an expression, as line 3044 says.
+14. **A class cast is one parse error.** `(Admin) user` is a refusal today, but it gives two errors, "Parse error encountered during parsing" and "A PHP# field needs a type, as in `private int count = 0;`". The parser reports one, the error a typo gets, at the `(`, where a parenthesized class name is followed by an expression, as line 3044 says.
 
 ## Questions for Jordan
 
@@ -113,7 +113,7 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 | 2879 | `Void` is not a type | Silently accepted: `public Void capitalVoid()` compiles and runs as `void` | Semantics (decision 2) |
 | 2879 | `String`, `any` are not types | Refused as a missing class: "Cannot find type `String`.", "Cannot find type `any`." | Semantics names the spelling (decision 2) |
 | 2879 | `object`, `array`, `callable` are not PHP# types | Refused: "This type is not supported yet in PHP#." | Semantics names the PHP# type (decisions 1 and 2) |
-| 2879 | `mixed` is not a PHP# type | Works: "PHP# has no `mixed`: write `Any?`, or `Any` for a value that is never null." | None new |
+| 2879 | `mixed` is not a PHP# type | Works: fails as a typo does | None new |
 | 2879 | `null` alone, `never`, `false`, `true` | Refused: "This type is not supported yet in PHP#." | Question 3 |
 | 2879, 2747 | A declared type starts with a capital letter | Works: "`badCase` must start with a capital letter: …" for a class, an enum and an event | None new |
 | 2883 | Type parameters are PascalCase | Works as an error: "A type parameter's name is `T`, or `T` and a capital letter, as in `TItem`." | None new |
@@ -161,7 +161,7 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 | 3043 | `tryParse` takes a `string` and gives null where `parse` throws | Wrong as above. Gives null on `"abc"` and `"1.5"` | Library (decision 6) |
 | 3044 | A class narrows only with `as` or `as … ?? throw` | Works. `(Admin) user` is refused with "Parse error encountered during parsing" and "A PHP# field needs a type" | Parser message (decision 14) |
 | 3045 | No user-defined conversion operators | Works: "`operator int` cannot be declared: only `+ - * / % **`, unary `-`, `==` and `<=>` can." | None new |
-| 3046, 3047 | `(bool)`, `(array)`, `(object)` and the cast aliases don't exist | Works: each names its replacement, as "PHP# has no `(array)`: write a struct's `parse(order)` for an object, or `List.wrap(order)` for a value." | None new |
+| 3046, 3047 | `(bool)`, `(array)`, `(object)` and the cast aliases don't exist | Works: each fails as a typo does | None new |
 
 ## Replacing `(array)` and `(object)`, and JSON
 
@@ -257,7 +257,7 @@ docs/
 ├── decisions/035-object.md                   <- global.spl_object_id
 └── architecture/slices/24-built-in-types.md  <- this note
 sharp/mago/crates/
-├── syntax/src/parser/…                       <- "PHP# has no class casts: write `user as Admin`." (decision 14)
+├── syntax/src/parser/…                       <- a class cast's one parse error (decision 14)
 ├── semantics/
 │   ├── Cargo.toml                            <- mago-casing
 │   └── src/internal/checker/sharp.rs         <- Object; misspelled built-in types; the nullable-union error;

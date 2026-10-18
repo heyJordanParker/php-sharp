@@ -12,7 +12,7 @@ PHP's magic constants `__DIR__`, `__FILE__`, `__LINE__`, `__FUNCTION__`, `__METH
 const stubs = Position.current().directory + "/stubs";                  // compiles
 public static void logSlow(string message, Position caller = Position.current()) { … }
 Reports.logSlow("slow query");                                          // compiles; runs: caller is this call's own position
-const here = __FILE__;                                                  // compile error: write Position.current().file
+const here = __FILE__;                                                  // parse error
 ```
 
 One value carries every fact about a place in the source, and the same value reports a caller's position when it is a parameter's default.

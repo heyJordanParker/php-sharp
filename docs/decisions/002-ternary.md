@@ -11,7 +11,7 @@ The ternary is `c ? a : b` only. PHP's two-operand `a ?: b` is gone, because `??
 ```csharp
 const label = order.paid ? "Paid" : "Open";   // compiles: order.paid is a bool
 const name = user.nickname ?? user.email;     // compiles; runs: email only when nickname is null, so "" stays ""
-const name = user.nickname ?: user.email;     // compile error: PHP# has no ?:
+const name = user.nickname ?: user.email;     // parse error
 ```
 
 ### Rejected: keep PHP's `a ?: b`

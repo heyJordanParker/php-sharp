@@ -14,7 +14,7 @@ The effect checker works on master. `crates/analyzer/src/effects/` records each 
   - storing a `uses f` parameter, on `feat/hosts` (waiting for Jordan)
 - **Two messages say the wrong thing:**
   - a bare call of a replaced function names `global.time(…)`, not the effect class member (line 3759)
-  - `_ENV` gets "take a Request", not `Environment` (line 3819)
+  - `_ENV` gets the message of the other superglobals, which fail as a typo does since Jordan's ruling of 10-18 (line 3819)
 - **`uses f` is refused on master and works on `feat/hosts`** (#136), which also removes `§29/function-effects`. This Slice builds on it and adds nothing to it.
 - **"The editor displays them" (line 3997) has no editor.** `mago --help` lists no language server, and section 28's lens (line 3686) is unbuilt for the same reason.
 - **A law cannot reason about list code (line 3993).** The list code stays pure, but `law doubledKeepsCount(List<int> xs) => ListLaws.doubled(xs).count() == xs.count();` gets "Mago does not translate collections to Lean."
@@ -45,7 +45,7 @@ The Slice builds all of section 29 in one php-sharp PR, after #136 merges and af
    - Line 3759: a bare call of a function an effect class replaces names the member on the object a constructor takes, as `29-effect-classes.md` writes it: "write `clock.now()` on the `Clock` your constructor takes". `REPLACEMENTS` in `expression/call/function_call.rs` gains one row per mapped function, and `member_form` writes an instance member that way.
    - Lines 3939 to 3942: an undeclared call names the class and offers the declaration's own effects, as the spec's message does: "Declare its effect in a .sharp file, such as `extern Mailchimp uses Http;`". Today the help offers `extern Mailchimp.addListMember;`.
    - `new ValueError("empty")` names `ValueError`, the class `new` names. Today it names `Error`, the class that declares the constructor, and offers `extern Error;`.
-   - Line 3819: `_ENV`, and a `_SERVER` read of `"argv"` or `"argc"`, name `Environment`. Every other superglobal keeps "take a Request".
+   - Line 3819: every superglobal, `_ENV` and `_SERVER`'s `"argv"` and `"argc"` included, fails as a typo does (Jordan, 10-18).
 9. **A law reasons about list code (line 3993).** `crates/sharp-lean` refuses every collection with `unmodeled-construct`, and every lambda too: `issues.rs` holds "Mago does not translate collections to Lean." and "Mago does not translate lambdas to Lean." The options:
    - **A.** This PR translates a `List` to Lean's `List`, a lambda to a Lean `fun`, and the collection methods whose Lean function means the same, such as `map`, `filter` and `count` to `List.map`, `List.filter` and `List.length`. Every other construct stays refused by name.
    - **B.** Section 28's translator owns it, and line 3993's law clause stays refused by name until then.
@@ -144,9 +144,7 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 
 | Line | Rule | State on master | Mechanism | Reuses |
 |---|---|---|---|---|
-| 3819 | Each of the nine superglobals is a compile error | Works: `_SERVER`, `_GET`, `_POST`, `_COOKIE`, `_FILES`, `_REQUEST`, `_SESSION`, `_ENV` and `GLOBALS` each get "PHP# has no superglobals; take a Request" | None new | `report_superglobal` |
-| 3819 | For the environment and the arguments, the error names `Environment` | Wrong: `_ENV["HOME"]` and `_SERVER["argv"]` get "take a Request". `Environment` appears only in the note | Message, decision 8 | `report_superglobal`, `standard_class` |
-| 3819 | For request data, it names a parameter | Works: "take a Request" | None new | |
+| 3819 | Each of the nine superglobals is a compile error | Works: `_SERVER`, `_GET`, `_POST`, `_COOKIE`, `_FILES`, `_REQUEST`, `_SESSION`, `_ENV` and `GLOBALS` each fail as a typo does | None new | `report_unsupported` |
 | 3821 to 3825 | `variable`, `arguments`, `currentDirectory`, `changeDirectory`, `require` and its message | Works: each has a row in `Zend/tests/sharp/environment.phpt` | None new | |
 | 3827 to 3856 | `environment`: `region`, `target`, the `throws`, and `_SERVER` refused | Works: the example passes, run line included | None new. Question 2 | |
 | 3858 | `Deploy` holds an `Environment`, so it has that effect | Works: a method that reads it, directly or through a getter, gets "reaches `Getter.region`, which calls `Environment.variable` with the effect `Environment`" | None new | |
@@ -269,7 +267,7 @@ sharp/mago/
 │   ├── code.rs                         <- ForeignOutsideModule, WrappedClass
 │   └── tests/sharp.rs                  <- one test per rule below
 ├── crates/codex/src/scanner/function_like.rs  <- TAKES_ON_EFFECTS on the collection stubs' \Closure parameters
-├── crates/semantics/src/internal/checker/sharp.rs  <- report_superglobal names Environment for _ENV and argv
+├── crates/semantics/src/internal/checker/sharp.rs  <- every superglobal fails as a typo does
 ├── crates/semantics/tests/sharp.rs     <- the superglobal rows
 └── crates/sharp-lean/src/translate/body.rs  <- decision 9: a List, a lambda, map, filter and count in Lean
 sharp/bin/builtins                      <- declares every built-in exception class (decision 10)

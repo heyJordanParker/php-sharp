@@ -273,7 +273,7 @@ Question 1's answer: section 5's `internal` is built whole in this PR, once team
 | 162 | A member is never more visible than its class | Not checked, because no class is narrower than `public` today | The analyzer's reach of a member is the narrower of its own and its class's, as C#'s effective accessibility is |
 | 164 | Too narrow is a compile error at the caller | Works for `private` and `protected`. None for `internal` | Line 157's check, with the caller's namespace in the message: "`Hidden` is internal to `App.Tenant.Store`, and `App.Tenant.Other` is outside it." |
 | 165 | Too wide is a warning, for example a `public` member nothing outside its namespace uses | None: `Wide.unusedOutside` is `public` and used only in its class, and `mago analyze` reports nothing | `too_wide_members` in `statement/class_like/unused_members.rs` warns on a `public` member that nothing outside its namespace and the ones below it uses, its own class's uses and a member nothing uses included. It reads every file's uses, so it runs once after `Effects::solve`, in `IncrementalAnalysisService::run_analyzer_selective` and `AnalysisService::oneshot`. It runs in a project only, a package whose `composer.json` says `"type": "project"` (Jordan's ruling): the loader sets `File::is_project`, and the codex marks the file's PHP# class-likes `MetadataFlags::PROJECT` |
-| 166 | There is no named reach, such as `internal(App\Tenant)` | Refused with 8 generic "Parse error encountered during parsing" (`NamedReach`) | A named parse error at the `(`: "`internal` takes no namespace: move the shared helper to the parent namespace." |
+| 166 | There is no named reach, such as `internal(App\Tenant)` | Refused with 8 generic "Parse error encountered during parsing" (`NamedReach`) | One parse error at the `(`, the error a typo gets, and the declaration parses on as `internal` |
 | 183 | An interface member is as visible as its interface | Not checked (`InternalInterface` with no modifier is unreachable by no rule) | Line 162's effective reach, for interface members too |
 | 184 | Interface members are exempt from the too-wide warning | Holds trivially today | Line 165's warning skips interface members |
 
@@ -299,8 +299,7 @@ sharp/mago/crates/
 │   ├── cst/node.rs, walker/mod.rs           <- Node::NameOf, Node::BehaviorList
 │   ├── cst/cst/modifier.rs                  <- ModifierSequenceExt::contains_internal
 │   ├── token/mod.rs                         <- "nameof" joins SHARP_KEYWORDS (question 9)
-│   ├── error.rs                             <- ParseError::UntypedPropertyInSharp(Span), "write the type";
-│   │                                           ParseError::NamedReachInSharp(Span), "`internal` takes no namespace"
+│   ├── error.rs                             <- ParseError::UntypedPropertyInSharp(Span), "write the type"
 │   └── parser/internal/
 │       ├── name_of.rs                       <- added: is_at_name_of, parse_name_of
 │       └── class_like/property.rs           <- parse_optional_behavior_list replaces skip_via_clause
