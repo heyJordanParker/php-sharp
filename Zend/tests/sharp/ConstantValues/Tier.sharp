@@ -4,4 +4,11 @@ public enum Tier
 {
     case Free;
     case Seats(int count);
+
+    public const Tier DEFAULT = Tier.Free;
+
+    public static int seatCount() => match (Tier.Seats(3)) {
+        Tier.Seats(int count) => count,
+        default => 0,
+    };
 }

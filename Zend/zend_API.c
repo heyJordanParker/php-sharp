@@ -1589,6 +1589,13 @@ ZEND_API zend_result zend_update_class_constants(zend_class_entry *class_type) /
 					}
 				}
 
+				/* A .sharp constant's computed value runs when the constant is first read, as a fetch does for any
+				 * constant still unevaluated. Its code may create an object of this class or a subclass, which fills
+				 * this table first, as a data enum's `const Tier DEFAULT = Tier.Free;` creates its plain case. */
+				if (zend_ast_is_sharp_computed_value(Z_ASTVAL(c->value))) {
+					continue;
+				}
+
 				val = &c->value;
 				if (UNEXPECTED(zend_update_class_constant(c, name, c->ce) != SUCCESS)) {
 					return FAILURE;

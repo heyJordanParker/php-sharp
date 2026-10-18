@@ -8,6 +8,12 @@ use ConstantValues\Tier;
 
 function constant_values(): string
 {
+    try {
+        $outside = Billing::PRICED_PLAN;
+    } catch (OutOfRangeException $e) {
+        $outside = get_class($e) . ': ' . $e->getMessage();
+    }
+
     $method = new ReflectionMethod(Forms::class, 'described');
     $route = $method->getAttributes(Lib\Route::class)[0]->newInstance();
     $field = $method->getAttributes(Lib\Field::class)[0]->newInstance();
@@ -24,13 +30,22 @@ function constant_values(): string
             (Billing::DOUBLE)(5),
             Billing::currentRate(),
             Billing::planKind(),
+            $outside,
+            Billing::TIER_LABEL,
+            Billing::GRACE_LABEL,
         ],
         'plain PHP' => [
             Billing::PLANS,
             Billing::DEFAULT_PLAN === Plan::Free,
             Billing::DEFAULT_TIER === Tier\Free::instance(),
         ],
-        'data case' => [Billing::freeTier(), Billing::freeTierMatches(), (new Billing())->fieldsFree()],
+        'data case' => [
+            Billing::freeTier(),
+            Billing::freeTierMatches(),
+            (new Billing())->fieldsFree(),
+            Tier::DEFAULT === Tier\Free::instance(),
+            Tier::seatCount(),
+        ],
         'enum cases' => array_map(fn (Code $code) => $code->value, Code::cases()),
         'attribute' => [
             $route->path,

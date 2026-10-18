@@ -13,6 +13,9 @@ public class Billing
     public const string DEFAULT_KEY = Plan.Free.value;
     public const Function<int(int)> DOUBLE = (int x) => x * 2;
     public const Class<Plan> PLAN_KIND = typeof(Plan);
+    public const string PRICED_PLAN = Billing.PLANS[(int)(Billing.PRICE_CENTS / 100)];
+    public const string TIER_LABEL = match (Billing.DEFAULT_TIER) { Tier.Free => "free tier", default => "seats" };
+    public const string GRACE_LABEL = match (Billing.GRACE_DAYS) { int days when days > 1 => `${days} days`, default => "1 day" };
     private static int rate = Rates.current();
     private static Tier sharedTier = Tier.Free;
     private Tier tier = Tier.Free;

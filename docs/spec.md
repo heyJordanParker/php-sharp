@@ -204,12 +204,19 @@ Return;                         // compile error: no name Return exists; did you
   - `global`
   - superglobals such as `$_SERVER` and `$GLOBALS` (section 29)
 
-**A constant's value is any expression built from constants:** literals, constants and enum cases read through their class name, a case's `value` and `name`, list and map literals, an index, a template, `c ? a : b`, `(int)`, `(float)` and `(string)`, the operators, and a lambda that captures nothing. A call runs code, so it is a compile error that names the call, and a static field takes its place, since a static field's initial value may call code:
+**A constant's value is any expression built from constants:** literals, constants and enum cases read through their class name, a backed case's `value`, the `name` of a case of an enum whose cases carry no data, list and map literals, an index, a template of strings and numbers, `c ? a : b`, a `match` with constant arms, `(int)`, `(float)` and `(string)`, the operators, and a lambda that captures nothing. Any other expression runs code, as a call, a `new` and a template of an object's `toString()` do, so it is a compile error that names it, and a static field takes its place, since a static field's initial value may call code:
 
 <!-- example constant-values
 public static class Rates
 {
     public static int current() => 3;
+}
+
+public class Money
+{
+    public int cents { get; }
+
+    public Money(int cents) { this.cents = cents; }
 }
 -->
 ```csharp
@@ -230,7 +237,12 @@ public class Billing {
     public const Plan DEFAULT_PLAN = Plan.Free;                            // compiles: a case
     public const string DEFAULT_KEY = Plan.Free.value;                     // compiles: a case's value
     public const Function<int(int)> DOUBLE = (int x) => x * 2;             // compiles: a lambda that captures nothing
+    public const string PLAN_LABEL = match (Billing.DEFAULT_PLAN) {        // compiles: a match on constants
+        Plan.Free => "free plan",
+        default => "paid plan",
+    };
     public const int RATE = Rates.current();                               // compile error: a constant's value is known before the code runs, and Rates.current() runs code
+    public const Money PRICE = new Money(999);                             // compile error: a constant's value is known before the code runs, and new Money(999) runs code
     private static int rate = Rates.current();                             // compiles: a static field's initial value may call code
 }
 ```
@@ -252,6 +264,7 @@ Billing.PRICE_CENTS;                 // 999
 Billing.DEFAULT_PLAN == Plan.Free;   // true
 Billing.DEFAULT_KEY;                 // "free"
 (Billing.DOUBLE)(4);                 // 8
+Billing.PLAN_LABEL;                  // "free plan"
 -->
 
 A case is a constant also when other cases of its enum carry data, and a constant that holds it holds the one object the case is, so it is `==` to the case and `is` matches it:
@@ -273,7 +286,19 @@ Defaults.TIER == Tier.Free;                                  // true
 Defaults.TIER is Tier.Free;                                  // true
 ```
 
-An attribute argument, an enum case's value and a pattern's value take the same forms, and a parameter's default is any expression (section 7). A lambda in any of them that captures a local or names `this` is a compile error that names what it captures.
+A constant whose value reads its way back to it never gets a value, so it is a compile error that names the constants on the way:
+
+<!-- example constant-cycle -->
+```csharp
+namespace App.Loops;
+
+public class Loop {
+    public const int C = Loop.D + 1;   // compile error: `Loop.C` refers back to itself through `Loop.D`
+    public const int D = Loop.C + 1;   // compile error: `Loop.D` refers back to itself through `Loop.C`
+}
+```
+
+An attribute argument, an enum case's value and a pattern's value take the same forms, and a parameter's default is any expression (section 7). An attribute argument also takes a `new` of a class with such arguments (section 1), and a pattern's value takes no lambda, since a function has no `==` (section 19). A lambda that captures a local or names `this` is a compile error that names what it captures.
 
 ## 3. Scope
 
