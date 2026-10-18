@@ -1,0 +1,10 @@
+namespace Intersections;
+
+public class Parcel : Shippable, Billable
+{
+    public Parcel() { }
+
+    public int weight() => 2;
+
+    public int amount() => 30;
+}

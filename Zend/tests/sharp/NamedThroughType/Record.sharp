@@ -1,0 +1,14 @@
+namespace NamedThroughType;
+
+// Each row of named_through_type.inc: `new TItem.fromJson(…)` calls the `required` named constructor of the type
+// argument the code runs with.
+public class Record
+{
+    public string id { get; set; } = "";
+
+    public Record() { }
+
+    public required Record.fromJson(Map<string, string> json) : this() { this.id = `record ${json["id"] ?? ""}`; }
+
+    public virtual string kind() => "record";
+}

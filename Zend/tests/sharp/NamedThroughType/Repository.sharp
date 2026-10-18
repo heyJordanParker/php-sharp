@@ -1,0 +1,15 @@
+namespace NamedThroughType;
+
+public class Repository<TItem : Record>
+{
+    public Repository() { }
+
+    public TItem load(Map<string, string> json) => new TItem.fromJson(json);
+
+    public static string run()
+    {
+        const invoice = new Repository<Invoice>().load(["id": "7"]);
+        const record = new Repository<Record>().load(["id": "8"]);
+        return `${invoice.kind()} ${invoice.id}, ${record.kind()} ${record.id}`;
+    }
+}

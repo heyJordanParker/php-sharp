@@ -1,0 +1,28 @@
+namespace SelfMembers;
+
+// Each row of self_members.inc: `Self.name` reads and writes a member of the class the code is called on.
+public class Store
+{
+    public const string TABLE = "items";
+    public static virtual int count { get; set; } = 0;
+    public static List<string> seen { get; set; } = [];
+
+    public Store() { }
+
+    public static string table() => Self.TABLE;
+
+    public static int bump()
+    {
+        Self.count += 1;
+        Self.count++;
+        return Self.count;
+    }
+
+    public static int record()
+    {
+        Self.seen.add(Self.TABLE);
+        return Self.seen.count();
+    }
+
+    public string tableOfThis() => Self.TABLE;
+}
