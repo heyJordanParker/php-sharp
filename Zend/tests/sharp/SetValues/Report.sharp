@@ -1,0 +1,158 @@
+namespace SetValues;
+
+// Each row of set_values.inc: two sets are == when they hold equal elements, in any order, in every place a Set is.
+public class Report
+{
+    public static List<string> heard { get; set; } = [];
+
+    public static bool same(Set<int> a, Set<int> b) => a == b;
+
+    public static bool different(Set<int> a, Set<int> b) => a != b;
+
+    public static bool inAnyOrder() => Report.same([1, 2], [2, 1]);
+
+    public static bool sizesDiffer() => Report.different([1, 2], [1, 2, 3]);
+
+    public static bool elementsDiffer() => Report.different([1, 2], [1, 3]);
+
+    public static bool lifted(Set<int>? a, Set<int>? b) => a == b;
+
+    public static bool rows(List<Set<int>> a, List<Set<int>> b) => a == b;
+
+    public static bool named(Map<string, Set<int>> a, Map<string, Set<int>> b) => a == b;
+
+    public static bool groups(Set<Set<int>> a, Set<Set<int>> b) => a == b;
+
+    public static bool rowsInAnyOrder()
+    {
+        List<Set<int>> a = [[1, 2], [3]];
+        List<Set<int>> b = [[2, 1], [3]];
+
+        return a == b;
+    }
+
+    public static bool holds(List<Set<int>> rows, Set<int> row) => rows.contains(row);
+
+    public static bool holdsInAnyOrder()
+    {
+        List<Set<int>> rows = [[1, 2], [3]];
+        Set<int> row = [2, 1];
+
+        return rows.contains(row);
+    }
+
+    public static int? at(List<Set<int>> rows, Set<int> row) => rows.indexOf(row);
+
+    public static int left(List<Set<int>> rows, Set<int> row)
+    {
+        rows.remove(row);
+
+        return rows.count();
+    }
+
+    public static int distinct(List<Set<int>> rows) => rows.toSet().count();
+
+    public static bool labels(Labels a, Labels b) => a == b;
+
+    public static int distinctLabels(List<Labels> all) => all.toSet().count();
+
+    public static Set<string> tags() => ["new", "vip"];
+
+    public static string described(Tagged e) => `${e.id} ${e.tags.count()} ${e.tags.contains("vip") ? "vip" : "plain"} ${e.tags == Report.tags() ? "same" : "other"}`;
+
+    public static List<string> emitted()
+    {
+        Report.heard = [];
+        const listening = Events.on<Tagged>(e => Report.heard.add(Report.described(e)));
+        emit new Tagged(["vip", "new", "vip"], 7);
+
+        return Report.heard;
+    }
+
+    public static string matched(Badge badge) => match (badge) {
+        Badge.Marked(Set<string> tags) => `marked ${tags.count()} ${tags == Report.tags() ? "same" : "other"}`,
+        Badge.Counted(Map<string, int> counts) => `counted ${counts["vip"] ?? 0}`,
+        Badge.Nested(List<Set<int>> rows) => `nested ${rows.count()} ${rows.contains([2, 1])}`,
+        Badge.Blank => "blank",
+    };
+
+    public static string marked() => Report.matched(Badge.Marked(["vip", "new"]));
+
+    public static bool sameBadges() => Badge.Marked(["vip", "new"]) == Badge.Marked(["new", "vip"]);
+
+    public static bool sameNested() => Badge.Nested([[1, 2]]) == Badge.Nested([[2, 1]]);
+
+    public static bool holdsTags(Any? value) => value is Set<string>;
+
+    public static bool holdsCounts(Any? value) => value is Map<string, int>;
+
+    public static bool holdsRow(Any? value) => value is Set<int>;
+
+    public static bool taggedHolds(Tagged e) => Report.holdsTags(e.tags);
+
+    public static bool badgeHolds(Badge badge) => match (badge) {
+        Badge.Marked(Set<string> tags) => Report.holdsTags(tags),
+        Badge.Counted(Map<string, int> counts) => Report.holdsCounts(counts),
+        Badge.Nested(List<Set<int>> rows) => Report.holdsRow(rows[0]),
+        Badge.Blank => false,
+    };
+
+    public static bool rowsHold(Rows e) => Report.holdsRow(e.rows[0]);
+
+    public static bool gridHolds(Grid grid) => Report.holdsRow(grid.rows[0]);
+
+    public static string rowsOf(Rows e)
+    {
+        List<Set<int>> rows = [[1, 2]];
+
+        return `${e.rows.count()} ${e.rows.contains([2, 1])} ${e.rows == rows}`;
+    }
+
+    public static string rowsFromSharp() => Report.rowsOf(new Rows(1, [[2, 1]]));
+
+    public static bool sameGrids(Grid a, Grid b) => a == b;
+
+    public static int gridCount() => new Grid([[1, 2], [3]]).rows.count();
+
+    public static List<bool> literals(Set<int> a) => [a == [2, 1], a == [], a != [3]];
+
+    public static int literalGroups()
+    {
+        Set<Set<int>> groups = [[1, 2], [2, 1]];
+
+        return groups.count();
+    }
+
+    public static bool literalArguments() => Report.rows([[1, 2], [3]], [[2, 1], [3]]);
+
+    public static bool literalSearch(List<Set<int>> rows) => rows.contains([2, 1]);
+
+    public static int mixedGroups()
+    {
+        Set<int|string> mixed = [1, "1"];
+        Set<Set<int|string>> sets = [mixed, ["1", 1], [2]];
+
+        return mixed.count() * 10 + sets.count();
+    }
+
+    public static List<bool> unions(Set<int>|int either, List<Set<int>|int> rows, int|[int, string] tuple)
+    {
+        Set<int> pair = [2, 1];
+
+        return [either == pair, either == 1, rows.contains(either), tuple == 1, tuple == [1, "a"]];
+    }
+
+    public static List<List<bool>> unionRows()
+    {
+        Set<int> tags = [1, 2];
+
+        return [Report.unions(tags, [[2, 1], 5], [1, "a"]), Report.unions(1, [5, 1], 1)];
+    }
+
+    public static bool sameEither(Either a, Either b) => a == b;
+
+    public static List<bool> eitherRows() => [
+        Report.sameEither(new Either([1, 2]), new Either([2, 1])),
+        Report.sameEither(new Either(1), new Either([1])),
+    ];
+}
