@@ -44,28 +44,29 @@ function rows(): array
         'an event with a Set parameter, emitted and heard' => fn () => Report::emitted(),
         'an event built in plain PHP' => function () {
             $tagged = new Tagged(['vip', 'new'], 8);
-            return [Report::described($tagged), $tagged->tags::class];
+            return [Report::described($tagged), Report::taggedHolds($tagged), $tagged->tags];
         },
         'a case with a Set field, built and matched' => function () {
             $marked = new Badge\Marked(['new', 'vip']);
-            return [Report::marked(), Report::matched($marked), $marked->tags::class, Report::sameBadges()];
+            return [Report::marked(), Report::matched($marked), Report::badgeHolds($marked), $marked->tags, Report::sameBadges()];
         },
         'a case with a Map field, built in plain PHP' => function () {
             $counted = new Badge\Counted(['vip' => 3]);
-            return [Report::matched($counted), $counted->counts::class];
+            return [Report::matched($counted), Report::badgeHolds($counted), $counted->counts];
         },
         'an event checks the elements plain PHP passes' => fn () => new Tagged([1, 2], 9),
         'a case checks the elements plain PHP passes' => fn () => new Badge\Marked([1, 2]),
         'an event with a List<Set<int>>, built in plain PHP and in PHP#' => function () {
             $rows = new Rows(1, [[1, 2]]);
-            return [get_debug_type($rows->rows[0]), Report::rowsOf($rows), Report::rowsFromSharp()];
+            return [Report::rowsHold($rows), $rows->rows, Report::rowsOf($rows), Report::rowsFromSharp()];
         },
         'a case with a List<Set<int>>, built in plain PHP' => function () {
             $nested = new Badge\Nested([[1, 2]]);
-            return [get_debug_type($nested->rows[0]), Report::matched($nested), Report::sameNested()];
+            return [Report::badgeHolds($nested), $nested->rows, Report::matched($nested), Report::sameNested()];
         },
         'a struct whose only collection is a List<Set<int>>' => fn () => [
-            get_debug_type((new Grid([[1, 2]]))->rows[0]),
+            Report::gridHolds(new Grid([[1, 2]])),
+            (new Grid([[1, 2]]))->rows,
             Report::sameGrids(new Grid([[1, 2]]), new Grid([[2, 1]])),
             Report::gridCount(),
         ],

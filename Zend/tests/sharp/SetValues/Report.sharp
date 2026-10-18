@@ -82,6 +82,25 @@ public class Report
 
     public static bool sameNested() => Badge.Nested([[1, 2]]) == Badge.Nested([[2, 1]]);
 
+    public static bool holdsTags(Any? value) => value is Set<string>;
+
+    public static bool holdsCounts(Any? value) => value is Map<string, int>;
+
+    public static bool holdsRow(Any? value) => value is Set<int>;
+
+    public static bool taggedHolds(Tagged e) => Report.holdsTags(e.tags);
+
+    public static bool badgeHolds(Badge badge) => match (badge) {
+        Badge.Marked(Set<string> tags) => Report.holdsTags(tags),
+        Badge.Counted(Map<string, int> counts) => Report.holdsCounts(counts),
+        Badge.Nested(List<Set<int>> rows) => Report.holdsRow(rows[0]),
+        Badge.Blank => false,
+    };
+
+    public static bool rowsHold(Rows e) => Report.holdsRow(e.rows[0]);
+
+    public static bool gridHolds(Grid grid) => Report.holdsRow(grid.rows[0]);
+
     public static string rowsOf(Rows e)
     {
         List<Set<int>> rows = [[1, 2]];
