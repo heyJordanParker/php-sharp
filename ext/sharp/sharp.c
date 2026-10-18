@@ -1085,7 +1085,10 @@ void sharp_collection_of_property(zval *result, zend_object *object, zend_string
 
 	GC_ADDREF(object);
 	collection->owner = object;
-	if (slot && slot >= object->properties_table && slot < object->properties_table + object->ce->default_properties_count) {
+	bool declared = slot && slot >= object->properties_table
+		&& slot < object->properties_table + object->ce->default_properties_count;
+	const zend_property_info *info = declared && Z_ISREF_P(slot) ? zend_get_property_info_for_slot(object, slot) : NULL;
+	if (declared && !(info && (info->flags & ZEND_ACC_SHARP_CROSSING))) {
 		collection->slot = slot;
 		zval_ptr_dtor(&array);
 	} else {
@@ -1263,6 +1266,20 @@ static void sharp_collection_write_back(sharp_collection *collection)
 		collection->owner->handlers->write_property(collection->owner, collection->property, &collection->value, NULL);
 	}
 	EG(fake_scope) = scope;
+}
+
+static void sharp_collection_write_dimension(zend_object *object, zval *offset, zval *value)
+{
+	sharp_collection *collection = sharp_collection_from(object);
+	zval *held = sharp_collection_change(collection);
+	if (!held) {
+		return;
+	}
+	ZEND_ASSERT(Z_TYPE_P(held) == IS_OBJECT);
+	Z_OBJ_HT_P(held)->write_dimension(Z_OBJ_P(held), offset, value);
+	if (!EG(exception)) {
+		sharp_collection_write_back(collection);
+	}
 }
 
 ZEND_METHOD(Sharp_Collection, __construct)
@@ -5229,6 +5246,17 @@ static bool sharp_property_is_open(const zend_property_info *info)
 	return info->sharp_type && memchr(ZSTR_VAL(info->sharp_type), '$', ZSTR_LEN(info->sharp_type));
 }
 
+/* Each check spells the property's text for the object's class and type arguments once a request. */
+static const sharp_type *sharp_property_type(const zend_property_info *info, zend_object *object)
+{
+	zval text;
+	ZVAL_STR(&text, info->sharp_type);
+	void *cache[4] = {NULL};
+	const sharp_type *list = sharp_type_list_of_frame(&text, object, NULL, true, info->ce, cache);
+
+	return list ? list->members[0] : NULL;
+}
+
 bool sharp_property_accepts(const zend_property_info *info, zval *value, zend_object *object, bool reference)
 {
 	/* A hook writes its own property's storage for the code that set the property. */
@@ -5244,16 +5272,10 @@ bool sharp_property_accepts(const zend_property_info *info, zval *value, zend_ob
 		return true;
 	}
 
-	/* Each check spells the property's text for the object's class and type arguments once a request. */
-	zval text;
-	ZVAL_STR(&text, info->sharp_type);
-	void *cache[4] = {NULL};
-	const sharp_type *list = sharp_type_list_of_frame(&text, object, NULL, true, info->ce, cache);
-	if (!list) {
+	const sharp_type *type = sharp_property_type(info, object);
+	if (!type) {
 		return false;
 	}
-
-	const sharp_type *type = list->members[0];
 	sharp_type_renumber(type, value);
 	if (sharp_type_accepts(type, value, NULL)) {
 		const sharp_type *iterable = sharp_type_lazily_checked(type, value);
@@ -5266,7 +5288,8 @@ bool sharp_property_accepts(const zend_property_info *info, zval *value, zend_ob
 			smart_str_free(&given);
 			sharp_sequence_check(value, iterable, head);
 		}
-		return Z_TYPE_P(value) != IS_ARRAY || !sharp_crosses_property(info) || sharp_cross_property(info, value);
+		return Z_TYPE_P(value) != IS_ARRAY || (reference && (info->flags & ZEND_ACC_SHARP_CROSSING))
+			|| !sharp_crosses_property(info) || sharp_cross_property(info, value);
 	}
 	if (!EG(exception)) {
 		smart_str given = {0};
@@ -7700,6 +7723,114 @@ void sharp_cross_array_cast(zval *result, zend_object *object)
 	}
 }
 
+static bool sharp_plan_rebuilds(const zval *plan)
+{
+	if (Z_TYPE_P(plan) != IS_ARRAY) {
+		return false;
+	}
+	const zval *inner = zend_hash_index_find(Z_ARRVAL_P(plan), zend_hash_num_elements(Z_ARRVAL_P(plan)) - 1);
+
+	return Z_TYPE_P(inner) == IS_NULL || sharp_plan_rebuilds(inner);
+}
+
+static bool sharp_property_rebuilds(const zend_property_info *info)
+{
+	zend_attribute *crossing = sharp_crossing_of(info);
+	zval plan;
+	if (!crossing || zend_get_attribute_value(&plan, crossing, 0, info->ce) == FAILURE) {
+		return false;
+	}
+	bool rebuilds = sharp_plan_rebuilds(&plan);
+	zval_ptr_dtor(&plan);
+
+	return rebuilds;
+}
+
+bool sharp_property_takes_reference(zval *slot, const zend_property_info *info)
+{
+	if (sharp_property_refuses_reference(info)) {
+		return false;
+	}
+	if ((info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_STATIC)) != ZEND_ACC_SHARP_CROSSING || sharp_runs_sharp_code()) {
+		return true;
+	}
+	if (sharp_property_rebuilds(info)) {
+		sharp_cross_read(slot);
+	}
+
+	return !EG(exception);
+}
+
+static bool sharp_reference_holds(const zend_property_info *info, zval *value)
+{
+	const sharp_type *type = info->sharp_type ? sharp_property_type(info, NULL) : NULL;
+	if (info->sharp_type && !type) {
+		return false;
+	}
+	if (type) {
+		sharp_type_renumber(type, value);
+	}
+	if (type && !sharp_type_accepts(type, value, NULL)) {
+		if (!EG(exception)) {
+			smart_str given = {0};
+			sharp_value_type_text(&given, value);
+			zend_string *problem = sharp_first_problem(type, value);
+			zend_type_error("Reference held by property %s::$%s of type %s holds %s%s", ZSTR_VAL(info->ce->name),
+				zend_get_unmangled_property_name(info->name), ZSTR_VAL(type->text), ZSTR_VAL(given.s), ZSTR_VAL(problem));
+			zend_string_release(problem);
+			smart_str_free(&given);
+		}
+		return false;
+	}
+	if (sharp_cross_property(info, value)) {
+		return true;
+	}
+	if (!EG(exception)) {
+		zend_throw_error(NULL, "Cannot rebuild property %s::$%s from the array its reference holds",
+			ZSTR_VAL(info->ce->name), zend_get_unmangled_property_name(info->name));
+	}
+
+	return false;
+}
+
+zval *sharp_property_from_reference(zval *slot, const zend_property_info *info, zval *rv)
+{
+	zend_reference *reference = Z_REF_P(slot);
+	ZVAL_COPY(rv, &reference->val);
+	if (!sharp_reference_holds(info, rv) || GC_REFCOUNT(reference) > 1) {
+		return rv;
+	}
+
+	ZEND_REF_DEL_TYPE_SOURCE(reference, (zend_property_info *) info);
+	zval_ptr_dtor(slot);
+	ZVAL_COPY_VALUE(slot, rv);
+
+	return slot;
+}
+
+bool sharp_property_for_write(zval *result, zend_object *object, zval *slot, const zend_property_info *info)
+{
+	if (!object || !sharp_runs_sharp_code()) {
+		return true;
+	}
+	zval value;
+	if (sharp_property_from_reference(slot, info, &value) == slot) {
+		return true;
+	}
+	if (EG(exception)) {
+		zval_ptr_dtor(&value);
+		return false;
+	}
+
+	const char *unmangled = zend_get_unmangled_property_name(info->name);
+	zend_string *name = zend_string_init(unmangled, strlen(unmangled), false);
+	ZVAL_COPY_VALUE(result, &value);
+	sharp_collection_of_property(result, object, name, NULL);
+	zend_string_release(name);
+
+	return true;
+}
+
 static HashTable *sharp_table_get_gc(zend_object *object, zval **table, int *n)
 {
 	zend_get_gc_buffer *buffer = zend_get_gc_buffer_create();
@@ -8473,6 +8604,7 @@ static PHP_MINIT_FUNCTION(sharp)
 	sharp_collection_handlers.free_obj = sharp_collection_free;
 	sharp_collection_handlers.clone_obj = NULL;
 	sharp_collection_handlers.read_dimension = sharp_collection_read_dimension;
+	sharp_collection_handlers.write_dimension = sharp_collection_write_dimension;
 	sharp_ce_collection->default_object_handlers = &sharp_collection_handlers;
 
 	sharp_ce_sequence = register_class_Sharp_Sequence(zend_ce_aggregate);

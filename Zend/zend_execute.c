@@ -3522,6 +3522,11 @@ static zend_never_inline bool zend_handle_fetch_obj_flags(
 {
 	switch (flags) {
 		case ZEND_FETCH_DIM_WRITE:
+			if (UNEXPECTED(Z_ISREF_P(ptr)) && prop_info && UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_CROSSING)
+					&& UNEXPECTED(!sharp_property_for_write(result, obj, ptr, prop_info))) {
+				if (result) ZVAL_ERROR(result);
+				return 0;
+			}
 			if (promotes_to_array(ptr)) {
 				if (!prop_info) {
 					break;
@@ -3538,7 +3543,7 @@ static zend_never_inline bool zend_handle_fetch_obj_flags(
 				if (!prop_info) {
 					break;
 				}
-				if (sharp_property_refuses_reference(prop_info)) {
+				if (UNEXPECTED(!sharp_property_takes_reference(ptr, prop_info))) {
 					if (result) ZVAL_ERROR(result);
 					return 0;
 				}
@@ -3633,7 +3638,7 @@ static zend_always_inline void zend_fetch_property_address(zval *result, zval *c
 					}
 					flags &= ZEND_FETCH_OBJ_FLAGS;
 					if (flags) {
-						zend_handle_fetch_obj_flags(result, ptr, NULL, prop_info, flags);
+						zend_handle_fetch_obj_flags(result, ptr, zobj, prop_info, flags);
 					}
 				}
 				return;
@@ -3690,7 +3695,7 @@ static zend_always_inline void zend_fetch_property_address(zval *result, zval *c
 	if (flags) {
 		zend_property_info *prop_info = CACHED_PTR_EX(cache_slot + 2);
 		if (prop_info && ZEND_TYPE_IS_SET(prop_info->type)) {
-			if (UNEXPECTED(!zend_handle_fetch_obj_flags(result, ptr, NULL, prop_info, flags))) {
+			if (UNEXPECTED(!zend_handle_fetch_obj_flags(result, ptr, zobj, prop_info, flags))) {
 				goto end;
 			}
 		}
@@ -4049,9 +4054,11 @@ ZEND_API bool ZEND_FASTCALL zend_verify_ref_assignable_zval(zend_reference *ref,
 	const zend_property_info *first_prop = NULL;
 	zval coerced_value;
 	ZVAL_UNDEF(&coerced_value);
+	bool crossing = false;
 
 	ZEND_ASSERT(Z_TYPE_P(zv) != IS_REFERENCE);
 	ZEND_REF_FOREACH_TYPE_SOURCES(ref, prop) {
+		crossing |= (prop->flags & ZEND_ACC_SHARP_CROSSING) != 0;
 		int result = i_zend_verify_type_assignable_zval(prop, zv, strict, true);
 		if (result == 0) {
 type_error:
@@ -4101,6 +4108,10 @@ conflicting_coercion_error:
 	if (!Z_ISUNDEF(coerced_value)) {
 		zval_ptr_dtor(zv);
 		ZVAL_COPY_VALUE(zv, &coerced_value);
+	}
+	if (UNEXPECTED(crossing)) {
+		sharp_cross_read(zv);
+		return !EG(exception);
 	}
 
 	return 1;

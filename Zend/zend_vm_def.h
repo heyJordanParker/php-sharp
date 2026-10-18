@@ -2180,7 +2180,9 @@ ZEND_VM_HOT_OBJ_HANDLER(82, ZEND_FETCH_OBJ_R, CONST|TMPVAR|UNUSED|THIS|CV, CONST
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 ZEND_VM_C_LABEL(fetch_obj_r_simple):
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (!ZEND_VM_SPEC || (OP1_TYPE & (IS_TMP_VAR|IS_VAR)) != 0) {
 							ZEND_VM_C_GOTO(fetch_obj_r_copy);
 						} else {
@@ -2397,7 +2399,9 @@ ZEND_VM_COLD_CONST_HANDLER(91, ZEND_FETCH_OBJ_IS, CONST|TMPVAR|UNUSED|THIS|CV, C
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 ZEND_VM_C_LABEL(fetch_obj_is_simple):
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (!ZEND_VM_SPEC || (OP1_TYPE & (IS_TMP_VAR|IS_VAR)) != 0) {
 							ZEND_VM_C_GOTO(fetch_obj_is_copy);
 						} else {
@@ -7662,7 +7666,7 @@ ZEND_VM_HANDLER(126, ZEND_FE_FETCH_RW, VAR, ANY, JMP_ADDR)
 										UNDEF_RESULT();
 										HANDLE_EXCEPTION();
 									}
-									if (UNEXPECTED(sharp_property_refuses_reference(prop_info))) {
+									if (UNEXPECTED(!sharp_property_takes_reference(value, prop_info))) {
 										UNDEF_RESULT();
 										HANDLE_EXCEPTION();
 									}
