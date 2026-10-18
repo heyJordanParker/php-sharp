@@ -27,7 +27,7 @@ class Product
         {
             field = [];
             for (const tag of value) {
-                field.add(global.strtolower(tag));
+                field.add(tag.lowercase());
             }
         }
     } = [];
