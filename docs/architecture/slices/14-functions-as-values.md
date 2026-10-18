@@ -33,7 +33,7 @@ Spec lines 1512 and 1594: a function type is a type like any other, and `f?.(x)`
 
 Spec line 1512: "One name covers every case." `callable` fails as a typo does. A bare `Closure` is "Cannot find type `Closure`.", but after `import Closure;` it compiles as a type, reads as `Function<Any?(Any?)>`, refuses `(int a) => a`, and reaches `Closure.fromCallable` (`ImportedClosure.sharp:7`, `11`, `15`).
 
-- **Proposed:** `Closure` as a type in a `.sharp` file is refused: "PHP# has no `Closure`: write `Function<R(P)>`." A `.sharp` file can still call a plain PHP method that returns a `Closure`, and gets the function type its docblock gives.
+- **Proposed:** `Closure` names no class in a `.sharp` file, so it and `import Closure;` get what a name nothing declares gets. A `.sharp` file can still call a plain PHP method that returns a `Closure`, and gets the function type its docblock gives.
 - Allow it as any imported plain PHP class. Users then choose between two names for one thing, one of them PHP's.
 
 ### Q3. How closely a lambda fits its function type

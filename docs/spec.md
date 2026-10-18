@@ -1937,7 +1937,7 @@ List<int> numbers = [3, 1, 2];
 -->
 ```csharp
 const sort = global.sort;                   // compile error: global.sort changes the variable it is given
-const pack = global.compact;                // compile error: global.compact reads the caller's variables
+const args = global.func_get_args;          // compile error: global.func_get_args reads the caller's variables
 global.array_push(numbers, 4);              // compile error: write numbers.add(…)
 List<int> sorted = numbers.sortedBy(n => n);
 ```
