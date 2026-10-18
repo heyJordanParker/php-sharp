@@ -7,9 +7,6 @@
 #include "zend_enum.h"
 
 #define SHARP_TABLE_INVALID ((uint32_t) -1)
-/* The declared operators == two objects' classes, parents and interfaces may give them: the test fixtures give at most
- * three, so 32 leaves room for any real hierarchy. */
-#define SHARP_EQUALITY_CANDIDATES 32
 #define SHARP_TABLE_HEAD(table, hash) ((table)->lookup[(hash) & ((table)->capacity - 1)])
 
 static void sharp_table_reset_lookup(sharp_table *table)
@@ -245,6 +242,20 @@ static zend_function *sharp_method(zend_class_entry *ce, const char *name, size_
 	return zend_hash_str_find_ptr(&ce->function_table, name, length);
 }
 
+/* A declared operator == two objects may compare by, with the class each of its parameters takes. A class is found
+ * once it is loaded, and no object is an instance of a class that is not. */
+typedef struct {
+	zend_function *function;
+	zend_class_entry *takes[2];
+} sharp_equality;
+
+/* The operators == a class, its parent classes and its PHP# interfaces declare, each once. */
+typedef struct {
+	uint32_t count;
+	uint32_t capacity;
+	sharp_equality operators[];
+} sharp_class_equalities;
+
 /* The operator == the PHP# interface `iface` declares, spec section 19: the static method `op_Equality@Iface` of its
  * trait `Iface\Defaults`, which no class replaces, or NULL. */
 static zend_function *sharp_interface_equality(const zend_class_entry *iface)
@@ -271,64 +282,79 @@ static zend_function *sharp_interface_equality(const zend_class_entry *iface)
 	return declared && (declared->common.fn_flags & ZEND_ACC_STATIC) ? declared : NULL;
 }
 
-/* Adds `function` to the `count` candidates `found` holds, once. Past SHARP_EQUALITY_CANDIDATES it throws. */
-static void sharp_equality_candidate(zend_function **found, uint32_t *count, zend_function *function)
+/* Adds `function` to the operators `*found` holds, once, growing it as it fills. */
+static void sharp_class_equality_add(sharp_class_equalities **found, zend_function *function)
 {
-	for (uint32_t i = 0; i < *count; i++) {
-		if (found[i] == function) {
+	for (uint32_t i = 0; i < (*found)->count; i++) {
+		if ((*found)->operators[i].function == function) {
 			return;
 		}
 	}
-	if (*count == SHARP_EQUALITY_CANDIDATES) {
-		if (!EG(exception)) {
-			zend_throw_error(NULL, "PHP# compares two objects by at most %d declared operators ==, and %s adds another",
-				SHARP_EQUALITY_CANDIDATES, ZSTR_VAL(function->common.scope->name));
-		}
-		return;
+	if ((*found)->count == (*found)->capacity) {
+		(*found)->capacity *= 2;
+		*found = erealloc(*found, sizeof(sharp_class_equalities) + (*found)->capacity * sizeof(sharp_equality));
 	}
-	found[(*count)++] = function;
+	(*found)->operators[(*found)->count++] = (sharp_equality) {function, {NULL, NULL}};
 }
 
-/* The operators == the class `ce`, its parent classes and its PHP# interfaces declare, added to `found`. */
-static void sharp_equality_candidates(zend_class_entry *ce, zend_function **found, uint32_t *count)
+/* The operators == objects of `ce` compare by, found the first time the request compares one and kept until it ends,
+ * so a Set or a Map of them looks no name up again. */
+static sharp_class_equalities *sharp_class_equalities_of(zend_class_entry *ce)
 {
+	HashTable *known = sharp_equality_operators();
+	zend_ulong key = (zend_ulong) (uintptr_t) ce;
+	sharp_class_equalities *found = zend_hash_index_find_ptr(known, key);
+	if (found) {
+		return found;
+	}
+
+	found = emalloc(sizeof(sharp_class_equalities) + 2 * sizeof(sharp_equality));
+	found->count = 0;
+	found->capacity = 2;
 	for (zend_class_entry *declaring = ce; declaring; declaring = declaring->parent) {
 		zend_function *own = sharp_method(declaring, "op_equality", strlen("op_equality"));
 		if (own && own->common.scope == declaring && (own->common.fn_flags & ZEND_ACC_STATIC)) {
-			sharp_equality_candidate(found, count, own);
+			sharp_class_equality_add(&found, own);
 		}
 	}
 	for (uint32_t i = 0; i < ce->num_interfaces; i++) {
 		zend_function *declared = sharp_interface_equality(ce->interfaces[i]);
 		if (declared) {
-			sharp_equality_candidate(found, count, declared);
+			sharp_class_equality_add(&found, declared);
 		}
 	}
+
+	return zend_hash_index_add_new_ptr(known, key, found);
 }
 
-/* The class whose instances a parameter of `function` takes: the class it names, or, for a `mixed` one, as a struct's
- * generated == takes, the class that declares `function`, whose own instances it compares. NULL for a parameter that
- * takes no object, such as an `int` or a union. */
-static zend_class_entry *sharp_parameter_class(const zend_function *function, uint32_t position)
+/* The class whose instances the parameter at `position` of `equality` takes: the class it names, or, for a `mixed`
+ * one, as a struct's generated == takes, the class that declares it, whose own instances it compares. NULL for a
+ * parameter that takes no object, such as an `int` or a union, or names a class not loaded yet. */
+static zend_class_entry *sharp_equality_parameter(sharp_equality *equality, uint32_t position)
 {
-	const zend_type *type = &function->common.arg_info[position].type;
-
-	if (ZEND_TYPE_HAS_NAME(*type)) {
-		return zend_lookup_class_ex(ZEND_TYPE_NAME(*type), NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+	if (equality->takes[position]) {
+		return equality->takes[position];
 	}
 
-	return !ZEND_TYPE_IS_SET(*type) || ZEND_TYPE_PURE_MASK(*type) == MAY_BE_ANY ? function->common.scope : NULL;
+	const zend_type *type = &equality->function->common.arg_info[position].type;
+	if (ZEND_TYPE_HAS_NAME(*type)) {
+		equality->takes[position] = zend_lookup_class_ex(ZEND_TYPE_NAME(*type), NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+	} else if (!ZEND_TYPE_IS_SET(*type) || ZEND_TYPE_PURE_MASK(*type) == MAY_BE_ANY) {
+		equality->takes[position] = equality->function->common.scope;
+	}
+
+	return equality->takes[position];
 }
 
-/* Whether `function`'s two parameters take `a` and `b`. */
-static bool sharp_equality_takes(const zend_function *function, zend_object *a, zend_object *b)
+/* Whether the two parameters of `equality` take `a` and `b`. */
+static bool sharp_equality_takes(sharp_equality *equality, zend_object *a, zend_object *b)
 {
-	if (function->common.num_args < 2) {
+	if (equality->function->common.num_args < 2) {
 		return false;
 	}
 	zend_object *objects[2] = {a, b};
 	for (uint32_t position = 0; position < 2; position++) {
-		zend_class_entry *taken = sharp_parameter_class(function, position);
+		zend_class_entry *taken = sharp_equality_parameter(equality, position);
 		if (!taken || !instanceof_function(objects[position]->ce, taken)) {
 			return false;
 		}
@@ -337,13 +363,29 @@ static bool sharp_equality_takes(const zend_function *function, zend_object *a, 
 	return true;
 }
 
-/* Whether each parameter of `narrow` takes no more than the parameter of `wide` in its position. Both take the two
- * objects, so each names a class. */
-static bool sharp_equality_narrower(const zend_function *narrow, const zend_function *wide)
+/* Whether each parameter of `narrow` takes no more than the parameter of `wide` in its position. Both take the same two
+ * objects, so each has its class. */
+static bool sharp_equality_narrower(const sharp_equality *narrow, const sharp_equality *wide)
 {
 	for (uint32_t position = 0; position < 2; position++) {
-		if (!instanceof_function(sharp_parameter_class(narrow, position), sharp_parameter_class(wide, position))) {
+		if (!instanceof_function(narrow->takes[position], wide->takes[position])) {
 			return false;
+		}
+	}
+
+	return true;
+}
+
+/* Whether `candidate` takes no more than every operator of `sides` that takes `a` and `b`. */
+static bool sharp_equality_narrowest(
+	const sharp_equality *candidate, sharp_class_equalities *const sides[2], zend_object *a, zend_object *b)
+{
+	for (uint32_t side = 0; side < 2 && sides[side]; side++) {
+		for (uint32_t i = 0; i < sides[side]->count; i++) {
+			sharp_equality *other = &sides[side]->operators[i];
+			if (sharp_equality_takes(other, a, b) && !sharp_equality_narrower(candidate, other)) {
+				return false;
+			}
 		}
 	}
 
@@ -356,27 +398,17 @@ static bool sharp_equality_narrower(const zend_function *narrow, const zend_func
  * compare by the interface's ==, as a Set or a Map of the interface keys them. NULL when none takes both, or two tie. */
 static zend_function *sharp_object_equality(zend_object *a, zend_object *b)
 {
-	zend_function *found[SHARP_EQUALITY_CANDIDATES];
-	uint32_t count = 0;
+	sharp_class_equalities *const sides[2] = {
+		sharp_class_equalities_of(a->ce),
+		b->ce == a->ce ? NULL : sharp_class_equalities_of(b->ce),
+	};
 
-	sharp_equality_candidates(a->ce, found, &count);
-	if (b->ce != a->ce) {
-		sharp_equality_candidates(b->ce, found, &count);
-	}
-
-	uint32_t fitting = 0;
-	for (uint32_t i = 0; i < count; i++) {
-		if (sharp_equality_takes(found[i], a, b)) {
-			found[fitting++] = found[i];
-		}
-	}
-	for (uint32_t i = 0; i < fitting; i++) {
-		bool narrowest = true;
-		for (uint32_t j = 0; j < fitting && narrowest; j++) {
-			narrowest = sharp_equality_narrower(found[i], found[j]);
-		}
-		if (narrowest) {
-			return found[i];
+	for (uint32_t side = 0; side < 2 && sides[side]; side++) {
+		for (uint32_t i = 0; i < sides[side]->count; i++) {
+			sharp_equality *candidate = &sides[side]->operators[i];
+			if (sharp_equality_takes(candidate, a, b) && sharp_equality_narrowest(candidate, sides, a, b)) {
+				return candidate->function;
+			}
 		}
 	}
 
@@ -484,9 +516,6 @@ bool sharp_hash(zval *value, uint32_t *hash)
 			zend_function *declared = sharp_method(object->ce, "hash", strlen("hash"));
 			if (declared && !(declared->common.fn_flags & ZEND_ACC_STATIC) && sharp_object_equality(object, object)) {
 				return sharp_hash_declared(object, declared, hash);
-			}
-			if (EG(exception)) {
-				return false;
 			}
 			if (instanceof_function(object->ce, sharp_ce_struct)) {
 				return sharp_hash_struct(object, hash);
@@ -596,9 +625,6 @@ bool sharp_equal(zval *a, zval *b, bool *equal)
 			}
 			/* A declared operator ==, a struct's generated one and an interface's, chosen as PHP#'s == chooses one. */
 			zend_function *declared = sharp_object_equality(left, right);
-			if (EG(exception)) {
-				return false;
-			}
 			if (!declared) {
 				*equal = false;
 				return true;

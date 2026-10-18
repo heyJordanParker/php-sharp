@@ -116,6 +116,8 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	sharp_fiber_scopes container_main_scopes;
 	/* The operator <=> the running sortedBy orders two keys by, spec section 19, or NULL when the keys declare none. */
 	zend_function *sort_comparison;
+	/* See sharp_equality_operators, NULL until the request compares an object. */
+	HashTable *equality_operators;
 ZEND_END_MODULE_GLOBALS(sharp)
 
 ZEND_DECLARE_MODULE_GLOBALS(sharp)
@@ -327,9 +329,9 @@ static bool sharp_hash_file(const char *path, uint8_t hash[16])
 	return true;
 }
 
-static void sharp_free_stamp(zval *stamp)
+static void sharp_free_pointer(zval *pointer)
 {
-	efree(Z_PTR_P(stamp));
+	efree(Z_PTR_P(pointer));
 }
 
 static int sharp_compare_names(Bucket *a, Bucket *b)
@@ -906,6 +908,16 @@ bool sharp_is_sharp_file(const zend_string *filename)
 
 	return ZSTR_LEN(filename) > length
 		&& memcmp(ZSTR_VAL(filename) + ZSTR_LEN(filename) - length, SHARP_FILE_EXTENSION, length) == 0;
+}
+
+HashTable *sharp_equality_operators(void)
+{
+	if (!SHARP_G(equality_operators)) {
+		ALLOC_HASHTABLE(SHARP_G(equality_operators));
+		zend_hash_init(SHARP_G(equality_operators), 8, NULL, sharp_free_pointer, false);
+	}
+
+	return SHARP_G(equality_operators);
 }
 
 static zend_op_array *sharp_compile_file(zend_file_handle *file_handle, int type)
@@ -8706,7 +8718,7 @@ static PHP_GSHUTDOWN_FUNCTION(sharp)
 
 static PHP_RINIT_FUNCTION(sharp)
 {
-	zend_hash_init(&SHARP_G(request_stamps), 8, NULL, sharp_free_stamp, false);
+	zend_hash_init(&SHARP_G(request_stamps), 8, NULL, sharp_free_pointer, false);
 	zend_hash_init(&SHARP_G(listener_tables), 0, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(event_listeners), 0, NULL, ZVAL_PTR_DTOR, false);
 	/* Each entry points at a live Sharp\Listening, which removes it when it stops, and holds no reference. */
@@ -8785,6 +8797,7 @@ static ZEND_MODULE_POST_ZEND_DEACTIVATE_D(sharp)
 {
 	sharp_type_request_table_free(&SHARP_G(request_spelled_lists));
 	sharp_type_request_table_free(&SHARP_G(request_class_values));
+	sharp_type_request_table_free(&SHARP_G(equality_operators));
 	sharp_type_request_table_free(&SHARP_G(request_type_lists));
 	sharp_type_request_table_free(&SHARP_G(request_types));
 	SHARP_G(request_input_types) = 0;
