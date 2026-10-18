@@ -1,0 +1,7 @@
+namespace ConstantValues;
+
+public enum Tier
+{
+    case Free;
+    case Seats(int count);
+}

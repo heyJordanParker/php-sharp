@@ -17,7 +17,7 @@ Attributes use square brackets and follow C#'s rules:
 - several attributes in one bracket: `[Field("Name"), Searchable]`
 - several brackets on one declaration
 - positional and named arguments
-- an argument is a constant: a literal, a constant, `typeof(Class)`, a list or map literal of constants, or a `new` of a class whose arguments are constants too, as PHP and Java's nested annotations take; PHP creates the object each time it reads the attribute, and an argument that runs code is a compile error
+- an argument is built from constants, as a constant's value is (section 2), or is a `new` of a class whose arguments are constants too, as PHP and Java's nested annotations take; PHP creates the object each time it reads the attribute, and an argument that runs code is a compile error
 - no parentheses when there are no arguments: `[Searchable]`
 - explicit targets, which name the part of the declaration a bracket goes on, as in C#: `type:` on a type, `type:` or `event:` on an event, `method:` on a method, an operator, a named constructor, a lambda or an accessor, `param:` on a parameter and on the value `set` or `init` takes, `field:` on a field, a constant or an enum case, `property:` and `field:` on a property, and `param:`, `property:` and `field:` on a parameter that declares a property, a constructor's, an event's or a data case's, where an untargeted bracket goes on both the parameter and the property
 - a return value takes no attributes: put them on the method, with no target, so `[return: NotNull]` is a compile error
@@ -203,6 +203,77 @@ Return;                         // compile error: no name Return exists; did you
   - `extract()`
   - `global`
   - superglobals such as `$_SERVER` and `$GLOBALS` (section 29)
+
+**A constant's value is any expression built from constants:** literals, constants and enum cases read through their class name, a case's `value` and `name`, list and map literals, an index, a template, `c ? a : b`, `(int)`, `(float)` and `(string)`, the operators, and a lambda that captures nothing. A call runs code, so it is a compile error that names the call, and a static field takes its place, since a static field's initial value may call code:
+
+<!-- example constant-values
+public static class Rates
+{
+    public static int current() => 3;
+}
+-->
+```csharp
+namespace App.Trials;
+
+public enum Plan : string {
+    case Free = "free";
+    case Pro = "pro";
+}
+
+public class Billing {
+    public const int TRIAL_DAYS = 14;
+    public const int GRACE_DAYS = Billing.TRIAL_DAYS > 7 ? 3 : 1;          // compiles: ? : on constants
+    public const List<string> PLANS = ["free", "pro"];
+    public const string FIRST_PLAN = Billing.PLANS[0];                     // compiles: an index into a constant
+    public const string TRIAL_LABEL = `Trial: ${Billing.TRIAL_DAYS} days`; // compiles: a template of constants
+    public const int PRICE_CENTS = (int)(9.99 * 100);                      // compiles: a cast of a constant
+    public const Plan DEFAULT_PLAN = Plan.Free;                            // compiles: a case
+    public const string DEFAULT_KEY = Plan.Free.value;                     // compiles: a case's value
+    public const Function<int(int)> DOUBLE = (int x) => x * 2;             // compiles: a lambda that captures nothing
+    public const int RATE = Rates.current();                               // compile error: a constant's value is known before the code runs, and Rates.current() runs code
+    private static int rate = Rates.current();                             // compiles: a static field's initial value may call code
+}
+```
+
+Plain PHP reads the same values, a `List` or `Map` constant as its PHP array (section 12):
+
+<!-- example constant-values: statements -->
+```php
+App\Trials\Billing::PLANS;                                         // ["free", "pro"]
+App\Trials\Billing::DEFAULT_PLAN === App\Trials\Plan::Free;        // true
+```
+<!-- run constant-values
+import App.Trials.Billing;
+import App.Trials.Plan;
+Billing.GRACE_DAYS;                  // 3
+Billing.FIRST_PLAN;                  // "free"
+Billing.TRIAL_LABEL;                 // "Trial: 14 days"
+Billing.PRICE_CENTS;                 // 999
+Billing.DEFAULT_PLAN == Plan.Free;   // true
+Billing.DEFAULT_KEY;                 // "free"
+(Billing.DOUBLE)(4);                 // 8
+-->
+
+A case is a constant also when other cases of its enum carry data, and a constant that holds it holds the one object the case is, so it is `==` to the case and `is` matches it:
+
+<!-- example constant-data-cases: statements -->
+```csharp
+public enum Tier
+{
+    case Free;
+    case Seats(int count);
+}
+
+public class Defaults
+{
+    public const Tier TIER = Tier.Free;                      // compiles: a case of an enum whose other cases carry data
+}
+
+Defaults.TIER == Tier.Free;                                  // true
+Defaults.TIER is Tier.Free;                                  // true
+```
+
+An attribute argument, an enum case's value and a pattern's value take the same forms, and a parameter's default is any expression (section 7). A lambda in any of them that captures a local or names `this` is a compile error that names what it captures.
 
 ## 3. Scope
 

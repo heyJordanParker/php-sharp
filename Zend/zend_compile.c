@@ -12063,11 +12063,13 @@ static bool zend_is_sharp_collection_default(const zend_ast *ast, const const_ex
 		&& zend_compiling_sharp_file();
 }
 
-/* A PHP# parameter default is any expression, which a .sharp file lowers to a static closure called with no arguments,
- * `(static function () { return …; })()`, so evaluating the default runs it each time a call leaves the argument out. */
-static bool zend_is_sharp_computed_default(const zend_ast *ast, const const_expr_context *ctx)
+/* A .sharp file lowers a value PHP evaluates as a constant expression, and that PHP builds only while code runs, to a
+ * static closure called with no arguments, `(static function () { return …; })()`, so evaluating the expression runs
+ * it: a parameter default, which is any expression, each time a call leaves the argument out, and a constant's value or
+ * a field's initial value, such as a template or a plain case of an enum that runs as classes, once. */
+static bool zend_is_sharp_computed_value(const zend_ast *ast)
 {
-	return ctx->allow_dynamic && ast->child[0]->kind == ZEND_AST_CLOSURE
+	return ast->child[0]->kind == ZEND_AST_CLOSURE
 		&& ast->child[1]->kind == ZEND_AST_ARG_LIST && zend_ast_get_list(ast->child[1])->children == 0
 		&& zend_compiling_sharp_file();
 }
@@ -12118,7 +12120,7 @@ static void zend_compile_const_expr(zend_ast **ast_ptr, void *context) /* {{{ */
 			/* Return, because we do not want to traverse the children. */
 			return;
 		case ZEND_AST_CALL:
-			if (zend_is_sharp_computed_default(ast, ctx)) {
+			if (zend_is_sharp_computed_value(ast)) {
 				zend_compile_const_expr_closure(&ast->child[0]);
 				/* The closure is compiled, and the call has no arguments to traverse. */
 				return;

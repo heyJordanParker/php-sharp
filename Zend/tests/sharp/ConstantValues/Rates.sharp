@@ -1,0 +1,6 @@
+namespace ConstantValues;
+
+public static class Rates
+{
+    public static int current() => 3;
+}
