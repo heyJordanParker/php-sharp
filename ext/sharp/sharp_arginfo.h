@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 7f99940d7e0987b51d50e378b499654c23682512 */
+ * Stub hash: 3a2e4796da4447ed088a507560c3272630a80f0b */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -14,14 +14,19 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_statics, 1, 2, IS
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, field, IS_STRING, 1, "null")
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_keep, 0, 2, IS_MIXED, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_keep, 0, 1, IS_MIXED, 0)
 	ZEND_ARG_TYPE_INFO(0, key, IS_STRING, 0)
-	ZEND_ARG_OBJ_INFO(0, compute, Closure, 0)
+	ZEND_ARG_OBJ_INFO_WITH_DEFAULT_VALUE(0, compute, Closure, 1, "null")
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_equals, 0, 2, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
 	ZEND_ARG_TYPE_INFO(0, other, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_arrayOf, 0, 1, IS_MIXED, 0)
+	ZEND_ARG_TYPE_INFO(0, value, IS_MIXED, 0)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, receiver, IS_MIXED, 0, "null")
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_readModule, 0, 1, IS_VOID, 0)
@@ -200,6 +205,7 @@ ZEND_FUNCTION(Sharp_Internal_accepts);
 ZEND_FUNCTION(Sharp_Internal_statics);
 ZEND_FUNCTION(Sharp_Internal_keep);
 ZEND_FUNCTION(Sharp_Internal_equals);
+ZEND_FUNCTION(Sharp_Internal_arrayOf);
 ZEND_FUNCTION(Sharp_Internal_readModule);
 ZEND_FUNCTION(Sharp_Internal_testModule);
 ZEND_FUNCTION(Sharp_Internal_startTest);
@@ -254,6 +260,7 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "statics"), zif_Sharp_Internal_statics, arginfo_Sharp_Internal_statics, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "keep"), zif_Sharp_Internal_keep, arginfo_Sharp_Internal_keep, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "equals"), zif_Sharp_Internal_equals, arginfo_Sharp_Internal_equals, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "arrayOf"), zif_Sharp_Internal_arrayOf, arginfo_Sharp_Internal_arrayOf, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "readModule"), zif_Sharp_Internal_readModule, arginfo_Sharp_Internal_readModule, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "testModule"), zif_Sharp_Internal_testModule, arginfo_Sharp_Internal_testModule, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "startTest"), zif_Sharp_Internal_startTest, arginfo_Sharp_Internal_startTest, 0, NULL, NULL)

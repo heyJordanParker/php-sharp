@@ -8,7 +8,7 @@ use App\Order;
 use Calls\Repository;
 
 $order = new Order(1);
-var_dump(Repository::locals($order)->keys());
+var_dump(array_keys(Repository::locals($order)));
 $held = Repository::orderHeld($order);
 var_dump($held);
 $reflection = new ReflectionFunction($held);

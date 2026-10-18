@@ -23,10 +23,10 @@ use mago_codex::ttype::comparator::union_comparator::can_expression_types_be_ide
 use mago_codex::ttype::comparator::union_comparator::is_contained_by;
 use mago_codex::ttype::expander::get_signature_of_function_like_identifier;
 use mago_codex::ttype::get_array_parameters;
-use mago_codex::ttype::get_backed_enum;
 use mago_codex::ttype::get_iterable_value_parameter;
 use mago_codex::ttype::get_mixed;
 use mago_codex::ttype::get_never;
+use mago_codex::ttype::get_php_array_key_type;
 use mago_codex::ttype::template::TemplateResult;
 use mago_codex::ttype::template::inferred_type_replacer;
 use mago_codex::ttype::union::TUnion;
@@ -94,8 +94,9 @@ fn shareable_part(union: &TUnion, is_sharp: bool) -> Option<Cow<'_, TUnion>> {
 /// Spec section 12 passes a `Map` to a plain PHP parameter whose declared type names `array` as a PHP array, whose
 /// keys are `int` or `string`, and a backed enum's cases as their backing values. A `Map` keyed by anything else, as a
 /// unit enum, a struct or a `float`, has no such array, where PHP would cast or refuse each key, so its call is refused
-/// here rather than failing where it runs. Returns the type plain PHP receives, `input_type` with each backed enum key
-/// its backing type, or None when it refused the call.
+/// here rather than failing where it runs. A `Map` whose two keys are one PHP array key, as `5` and `"5"` are, fails
+/// where it crosses, since only its data shows that. Returns the type plain PHP receives, `input_type` with each backed
+/// enum key its backing type, or None when it refused the call.
 pub(super) fn check_array_crossing<'input, A>(
     context: &mut Context<'_, '_, A>,
     input_type: &'input TUnion,
@@ -117,17 +118,14 @@ where
     }) else {
         return Some(Cow::Borrowed(input_type));
     };
-    if key_type.is_always_array_key(true) {
-        return Some(Cow::Borrowed(input_type));
-    }
-    let backing_types: Option<Vec<TAtomic>> = key_type
-        .types
-        .iter()
-        .map(|atomic| get_backed_enum(atomic, context.codebase, Dialect::Sharp)?.enum_type.clone())
-        .collect();
-    if let Some(backing_types) = backing_types {
+    let array_key_type = get_php_array_key_type(&key_type, context.codebase)
+        .filter(|array_key_type| array_key_type.is_always_array_key(true));
+    if let Some(array_key_type) = array_key_type {
+        if matches!(array_key_type, Cow::Borrowed(_)) {
+            return Some(Cow::Borrowed(input_type));
+        }
         let crossed = TAtomic::Array(TArray::Keyed(TKeyedArray::new_with_parameters(
-            Arc::new(TUnion::from_vec(backing_types)),
+            Arc::new(array_key_type.into_owned()),
             Arc::new(value_type),
         )));
         let types = input_type

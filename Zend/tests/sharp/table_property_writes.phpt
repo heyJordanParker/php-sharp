@@ -24,7 +24,8 @@ for ($round = 0; $round < 100; $round++) {
     $larder->bins = ['5'];
     $larder->crates = ['box' => [['ripe' => 7]]];
     $larder->aisles = [1 => 8];
-    echo 'the objects: ', implode(' ', array_map(get_debug_type(...), [$larder->stock, $larder->labels, $larder->ripeness, $larder->shelves, $larder->spare, $larder->counted, Larder::$shared, Larder::$tags, $larder->bins, $larder->crates, $larder->crates['box'][0], $larder->aisles])), "\n";
+    // Plain PHP reads each back as its PHP array, spec section 12, and PHP# reads each as the object.
+    echo 'plain PHP reads them back: ', implode(' ', array_map(get_debug_type(...), [$larder->stock, $larder->labels, $larder->ripeness, $larder->shelves, $larder->spare, $larder->counted, Larder::$shared, Larder::$tags, $larder->bins, $larder->crates, $larder->crates['box'][0], $larder->aisles])), "\n";
     echo 'PHP# reads them back: ', implode(' ', $larder->read()), "\n";
 
     $larder->stock['6'] = 6;
@@ -71,12 +72,12 @@ for ($round = 0; $round < 100; $round++) {
 echo $output;
 ?>
 --EXPECT--
-the objects: Sharp\Map Sharp\Set Sharp\Map Sharp\Map Sharp\Map Sharp\Map Sharp\Map Sharp\Set Sharp\Set Sharp\Map Sharp\Map Sharp\Map
+plain PHP reads them back: array array array array array array array array array array array array
 PHP# reads them back: 1 true 3 2 4 1:6 5 true true 7 8
 index writes: [{"5":1,"sku":2,"6":6},["5","tag","new"],{"5":5,"7":7},["5","new"]]
-through a reference: Sharp\Map {"8":8}
-assigned by reference: Sharp\Map Sharp\Map
-through reflection: Sharp\Map {"10":10}
+through a reference: array {"8":8}
+assigned by reference: array Sharp\Map
+through reflection: array {"10":10}
 a value no case backs: Cannot assign array to property Demo\Larder::$ripeness of type Map<Demo.Ripeness, int>: ["rotten"] key expected Demo.Ripeness, got string 'rotten', kept {"ripe":3}
 a nested value no case backs: Cannot assign array to property Demo\Larder::$crates of type Map<string, List<Map<Demo.Ripeness, int>>>: ["box"][1]["rotten"] key expected Demo.Ripeness, got string 'rotten', kept {"box":[{"ripe":7}]}
 a string key of an int-backed enum: Cannot assign array to property Demo\Larder::$aisles of type Map<Demo.Aisle, int>: ["first"] key expected Demo.Aisle, got string 'first'

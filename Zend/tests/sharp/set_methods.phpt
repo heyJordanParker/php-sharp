@@ -117,7 +117,7 @@ array(7) {
   bool(true)
 }
 TypeError: Demo\Tagged::strings(): Argument #1 ($tags) must be of type Set<string>, array given: [0] expected string, got float 1.5, called in %s on line %d in Tagged.sharp on line 18
-object(Sharp\Set)#14 (2) {
+array(2) {
   [0]=>
   int(3)
   [1]=>
@@ -161,7 +161,7 @@ array(13) {
     int(9)
   }
 }
-object(Sharp\Set)#13 (1) {
+array(1) {
   [0]=>
   string(3) "vip"
 }
@@ -215,7 +215,7 @@ array(9) {
   [8]=>
   NULL
 }
-object(Sharp\Set)#11 (2) {
+array(2) {
   [0]=>
   string(1) "b"
   [1]=>

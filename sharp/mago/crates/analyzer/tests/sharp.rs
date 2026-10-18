@@ -10829,6 +10829,29 @@ fn a_map_keyed_by_an_object_is_refused_where_plain_php_takes_an_array() {
     );
 }
 
+/// Spec section 12: a `Map` whose key type lets two keys be one PHP array key, as `int|string` lets `5` and `"5"`, or a
+/// backed enum beside its backing type, passes where plain PHP takes an array. Only its data shows whether two of its
+/// keys are one, so the crossing checks that when it runs. The PHP array plain PHP gives, as `get_object_vars`'s, is
+/// such a `Map`, and passes back to plain PHP.
+#[test]
+fn a_map_whose_keys_can_collide_passes_where_plain_php_takes_an_array() {
+    let sharp = "namespace Demo;\n\nimport Lib.Sink;\nimport Lib.Status;\n\nclass Tally\n{\n    public int total(Map<int|string, int> mixed, Map<string|Status, int> named, Map<Status, int> counts)\n    {\n        return Sink.plain(mixed) + Sink.plain(named) + Sink.plain(counts) + Sink.plain(global.get_object_vars(this));\n    }\n}\n";
+    let sink = "<?php\n\nnamespace Lib;\n\nfinal class Sink\n{\n    public static function plain(array $counts): int\n    {\n        return count($counts);\n    }\n}\n";
+
+    assert_eq!(
+        analyze(
+            &PLUGIN_REGISTRY,
+            settings(),
+            ("src/Demo/Tally.sharp", sharp),
+            &[("src/Lib/Status.php", STATUS), ("src/Lib/Sink.php", sink)]
+        )
+        .iter()
+        .map(|issue| format!("{} {}", located(sharp, issue), issue.message))
+        .collect::<Vec<_>>(),
+        Vec::<String>::new()
+    );
+}
+
 /// Spec sections 11 and 12 check a value from plain PHP where it enters PHP#. So where PHP# takes a `Map`, as a
 /// parameter or a property, instance or static, plain PHP passes or writes the keys a PHP array holds there: a
 /// backed enum's backing values, and an `int` beside a `string`, as PHP holds the key `'5'` as `5`, which PHP# turns
@@ -16294,6 +16317,25 @@ fn a_constant_and_an_enum_case_are_named_as_sharp_writes_them() {
             "12:37 invalid-return-statement Invalid return type for method `Order.first`: expected `Status`, but found `null`. | This has type `null` | The type `null` returned here is not compatible with the declared return type `Status`. | Change the return value to match `Status`, or update the method's return type declaration.",
             "14:40 non-existent-property `Order.NOPE` does not exist. | This names no constant, case or static property | The class `Order` has no constant, case or static property named `NOPE`",
             "14:34 invalid-return-statement Invalid return type for method `Order.limit`: expected `int`, but found `null`. | This has type `null` | The type `null` returned here is not compatible with the declared return type `int`. | Change the return value to match `int`, or update the method's return type declaration.",
+        ]
+    );
+}
+
+/// An `Iterable` or a tuple constant takes a list literal whose elements fit its type, and refuses one whose elements
+/// don't, as a collection constant does.
+#[test]
+fn an_iterable_or_a_tuple_constant_checks_its_elements() {
+    let sharp = "namespace Demo;\n\nclass Order\n{\n    public const Iterable<int> STEPS = [1, 2];\n\n    public const [int, string] PAIR = [1, \"a\"];\n\n    public const Iterable<int> WORDS = [\"a\"];\n\n    public const [int, string] SWAPPED = [\"a\", 1];\n}\n";
+    let refused: Vec<String> = worded(("src/Demo/Order.sharp", sharp), &[])
+        .into_iter()
+        .map(|issue| issue.split(" | ").next().unwrap_or_default().to_owned())
+        .collect();
+
+    assert_eq!(
+        refused,
+        [
+            "9:40 invalid-constant-value Value for constant `Order.WORDS` is not assignable to its declared type.",
+            "11:42 invalid-constant-value Value for constant `Order.SWAPPED` is not assignable to its declared type.",
         ]
     );
 }

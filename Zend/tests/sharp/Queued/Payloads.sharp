@@ -5,11 +5,7 @@ import Sharp.Data.PhpSerializer;
 // The values a queued job or a cached entry holds, and the PHP# reads of each one unserialize gives back.
 public class Payloads
 {
-    public static Map<string, int> counts() => ["tea": 2, "jam": 5];
-
     public static Map<Speed, int> bySpeed() => [Speed.Express: 1, Speed.Standard: 3];
-
-    public static List<Map<string, int>> batches() => [["tea": 1], ["jam": 2, "bun": 3]];
 
     public static Shipment shipment() => new Shipment(["fragile": 1], [3, 4]);
 
@@ -20,10 +16,6 @@ public class Payloads
 
         return ledger;
     }
-
-    public static Set<string> tags() => ["vip", "new"];
-
-    public static Map<string, int> nothing() => [:];
 
     public static Map<Parcel, string> byParcel() => [new Parcel(250, Speed.Express): "small"];
 
@@ -37,6 +29,19 @@ public class Payloads
 
     public static Any? throughSerializerAllowing(Any? value, List<string> allowedClasses)
         => PhpSerializer.unserialize(PhpSerializer.serialize(value), allowedClasses);
+
+    // The class PHP# holds `value` as, or each field's for an object other than a Map or a Set. Plain PHP reads a Map or
+    // a Set, and a field that holds one, as its PHP array, spec section 12, so a row reads the classes through PHP#.
+    public static string kinds(Any? value)
+    {
+        if (global.is_object(value) && !global.is_iterable(value)) {
+            return global.implode(" ", global.get_object_vars(value).values().map(Payloads.kinds));
+        }
+        return global.get_debug_type(value);
+    }
+
+    public static string serializedKinds(Any? value, List<string> allowedClasses)
+        => Payloads.kinds(PhpSerializer.unserialize(PhpSerializer.serialize(value), allowedClasses));
 
     public static bool holdsCounts(Any value) => value is Map<string, int>;
 
