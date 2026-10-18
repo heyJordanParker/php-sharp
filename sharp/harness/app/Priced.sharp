@@ -1,0 +1,9 @@
+namespace App;
+
+public interface Priced
+{
+    const string CURRENCY = "USD";
+    int cents { get; }
+    string label => `${this.cents} ${Priced.CURRENCY}`;
+    static int operator <=>(Priced a, Priced b) => a.cents <=> b.cents;
+}
