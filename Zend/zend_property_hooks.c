@@ -210,7 +210,12 @@ static void zho_declared_it_fetch_current(zend_object_iterator *iter)
 				ZEND_REF_ADD_TYPE_SOURCE(Z_REF_P(property), prop_info);
 			}
 		}
-		ZVAL_COPY(&hooked_iter->current_data, property);
+		/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+		if (!hooked_iter->by_ref && UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_CROSSING) && !sharp_runs_sharp_code()) {
+			sharp_array_of(&hooked_iter->current_data, property);
+		} else {
+			ZVAL_COPY(&hooked_iter->current_data, property);
+		}
 	}
 
 	if (ZSTR_VAL(prop_info->name)[0] == '\0') {

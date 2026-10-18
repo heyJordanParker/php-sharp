@@ -5,7 +5,7 @@
 const LIBRARY_MODULE = [
     'Module', 'Dispatcher', 'ImmediateDispatcher', 'Environment', 'Clock', 'Random', 'Console', 'Process',
     'ProcessResult', 'Files', 'Http', 'Mail', 'Time/Duration', 'Net/HttpMethod', 'Net/HttpRequest', 'Net/HttpResponse',
-    'Net/MailAddress', 'Net/MailMessage', 'Net/Url', 'Net/Email',
+    'Net/MailAddress', 'Net/MailMessage', 'Net/Url', 'Net/Email', 'Text/Text',
 ];
 
 function compile_project(string $name, array $files): string

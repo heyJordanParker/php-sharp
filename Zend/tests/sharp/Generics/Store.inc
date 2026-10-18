@@ -23,7 +23,7 @@ class Store
     /** @template T
      *  @param list<T> $items
      *  @return T */
-    public function first(array $items): mixed { return $items[0]; }
+    public function first(array $items) { return $items[0]; }
 
     /** @template TItem of DatabaseEntity&Shareable
      *  @param TItem $item */

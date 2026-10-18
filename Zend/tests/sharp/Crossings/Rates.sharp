@@ -1,0 +1,27 @@
+namespace Demo;
+
+// The same ten entries as a constant and as a static, read the same way.
+public class Rates
+{
+    public const Map<string, int> RATES = ["a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "h": 8, "i": 9, "j": 10];
+
+    public static Map<string, int> rates { get; set; } = ["a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "h": 8, "i": 9, "j": 10];
+
+    public static int fromConstant(int times)
+    {
+        int total = 0;
+        for (int i = 0; i < times; i++) {
+            total += Rates.RATES["c"] ?? 0;
+        }
+        return total;
+    }
+
+    public static int fromStatic(int times)
+    {
+        int total = 0;
+        for (int i = 0; i < times; i++) {
+            total += Rates.rates["c"] ?? 0;
+        }
+        return total;
+    }
+}

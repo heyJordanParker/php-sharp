@@ -11,10 +11,11 @@ $tags = ['sale', 'new'];
 var_dump(Demo\Tags::of($tags) === $tags);
 $counts = new Sharp\Map(['a', 1]);
 $wrapped = Demo\Wraps::counts($counts);
-echo 'a Map: ', count($wrapped), ' element, ', get_debug_type($wrapped[0]), ', the same Map: ', var_export($wrapped[0] === $counts, true), "\n";
+// The list reaches plain PHP as a PHP array, and the Map or the Set in it as its own PHP array.
+echo 'a Map: ', count($wrapped), ' element, ', json_encode($wrapped[0]), "\n";
 $marks = new Sharp\Set(['x', 'y']);
 $wrapped = Demo\Wraps::marks($marks);
-echo 'a Set: ', count($wrapped), ' element, ', get_debug_type($wrapped[0]), ', the same Set: ', var_export($wrapped[0] === $marks, true), "\n";
+echo 'a Set: ', count($wrapped), ' element, ', json_encode($wrapped[0]), "\n";
 var_dump(Sharp\List::wrap(null), Sharp\List::wrap(['id' => 7]));
 var_dump((new ReflectionClass(Sharp\List::class))->isFinal());
 ?>
@@ -24,8 +25,8 @@ array(1) {
   string(4) "sale"
 }
 bool(true)
-a Map: 1 element, Sharp\Map, the same Map: true
-a Set: 1 element, Sharp\Set, the same Set: true
+a Map: 1 element, {"a":1}
+a Set: 1 element, ["x","y"]
 array(1) {
   [0]=>
   NULL

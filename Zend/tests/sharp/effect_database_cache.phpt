@@ -67,10 +67,10 @@ unlink($path);
 int(0)
 int(2)
 int(2)
-string(9) "Sharp\Map"
+string(5) "array"
 array(0) {
 }
-string(9) "Sharp\Map"
+string(5) "array"
 NULL
 array(2) {
   [0]=>

@@ -95,6 +95,7 @@ namespace {
     @mkdir("$package/src/App", 0777, true);
     @mkdir("$package/library/Sharp/Time", 0777, true);
     @mkdir("$package/library/Sharp/Net", 0777, true);
+    @mkdir("$package/library/Sharp/Text", 0777, true);
     copy("$root/sharp/composer/autoload.php", "$package/autoload.php");
     file_put_contents("$package/composer.json", '{"name": "heyjordanparker/php-sharp-composer"}');
     foreach (LIBRARY_MODULE as $library) {

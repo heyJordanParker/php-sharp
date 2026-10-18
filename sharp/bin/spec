@@ -30,6 +30,8 @@ const PACKAGE_FOLDER = 'vendor/heyjordanparker/php-sharp-composer';
 const MARKER = '<!-- example ';
 const RUN_MARKER = '<!-- run ';
 const REFUSAL = 'not supported yet';
+// The checker's refusal of a construct no rule names, which says nothing about the rule a line states.
+const GENERIC_REFUSAL = '~^This .+ is not part of PHP#\.$~';
 const RUNTIME = ['value', 'throws', 'message'];
 // The errors mago reports at a construct's first line for the whole construct, by code, or by message when the code is
 // the generic `semantics`. Only these move to the `compile error` line inside the construct. A new one joins in a PR of its own.
@@ -747,8 +749,9 @@ function run_line(array $block, array $line): bool
 }
 
 /**
- * @return list<string> the full name of every type a file declares at its top level, and of the trait of each PHP#
- * interface's default bodies, `HasDesign\Defaults`, which the interface's file declares (spec section 22)
+ * @return list<string> the full name of every type a file declares at its top level, of the trait of each PHP#
+ * interface's default bodies, `HasDesign\Defaults`, which the interface's file declares (spec section 22), and of each
+ * case of an enum whose cases carry data, `Badge\Marked`, which the enum's file declares (spec section 20)
  */
 function declared_names(string $contents, string $language): array
 {
@@ -756,12 +759,19 @@ function declared_names(string $contents, string $language): array
     preg_match_all($language === 'php'
         ? '~^(?:(?:abstract|final|readonly)\s+)*(class|interface|trait|enum)\s+(\w+)~m'
         : '~^(?:(?:public|private|protected|internal|abstract|final|sealed|static|readonly|foreign)\s+)*(class|struct|enum|interface|event|trait)\s+(\w+)~m', $contents, $found, PREG_SET_ORDER);
+    preg_match_all('~^\s*case\s+(\w+)\s*(\()?~m', $contents, $cases, PREG_SET_ORDER);
+    $carries_data = array_filter($cases, static fn (array $case): bool => isset($case[2])) !== [];
 
     $names = [];
     foreach ($found as [, $kind, $name]) {
         $names[] = ltrim("$namespace\\$name", '\\');
         if ($language === 'sharp' && $kind === 'interface') {
             $names[] = ltrim("$namespace\\$name\\Defaults", '\\');
+        }
+        if ($language === 'sharp' && $kind === 'enum' && $carries_data) {
+            foreach ($cases as [, $case]) {
+                $names[] = ltrim("$namespace\\$name\\$case", '\\');
+            }
         }
     }
 
@@ -1050,10 +1060,11 @@ function check_compile(array $example, array $reads, array $files, array $varian
         $where = where($block, $i);
         $parse = $error['code'] === 'parse';
         $unreadable = $parse && str_starts_with($error['message'], 'Parse error encountered');
-        // A refusal says the feature is missing, and a missing class says the setup is: neither is the rule the line states.
-        // A missing class the marked line names itself is the line's own error, as `on OrderPayed` names no event. mago
-        // quotes the missing name last.
-        $missing = str_contains($error['message'], REFUSAL) || $error['code'] === 'non-existent-class-like'
+        // A refusal says the feature is missing or names no rule, and a missing class says the setup is: none is the rule
+        // the line states. A missing class the marked line names itself is the line's own error, as `on OrderPayed` names
+        // no event. mago quotes the missing name last.
+        $missing = str_contains($error['message'], REFUSAL) || preg_match(GENERIC_REFUSAL, $error['message']) === 1
+            || $error['code'] === 'non-existent-class-like'
             && !($kind === 'error' && preg_match('~.*`(?:[^`]*[\\\\.])?(\w+)`~s', $error['message'], $m) && preg_match('~\b' . $m[1] . '\b~', $read[$i]['bare']));
         if (($kind === 'error' && !$unreadable && !$missing) || ($kind === 'parse' && $parse)) {
             $claimed["$b:$i"] = true;

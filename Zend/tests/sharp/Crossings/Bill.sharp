@@ -1,0 +1,6 @@
+namespace Demo;
+
+import Record;
+
+// A plain PHP parent's methods without a return type implement the interface's typed ones.
+public class Bill : Record, Morphable { }

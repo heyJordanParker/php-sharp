@@ -768,6 +768,15 @@ ZEND_API zval *zend_std_read_property(zend_object *zobj, zend_string *name, int 
 	/* make zend_get_property_info silent if we have getter - we may want to use it */
 	property_offset = zend_get_property_offset(zobj->ce, name, (type == BP_VAR_IS) || (zobj->ce->__get != NULL), cache_slot, &prop_info);
 
+	/* PHP#: code outside a .sharp file reads a property whose type holds a Map or a Set as its PHP array, spec section
+	 * 12. Its cache slot keeps no offset, so each of its reads comes back here, and a PHP# read keeps the slot's. */
+	bool crossing = UNEXPECTED(prop_info && (prop_info->flags & ZEND_ACC_SHARP_CROSSING))
+		&& (type == BP_VAR_R || type == BP_VAR_IS) && !sharp_runs_sharp_code();
+	if (crossing && cache_slot) {
+		CACHE_PTR_EX(cache_slot, NULL);
+		cache_slot = NULL;
+	}
+
 	if (EXPECTED(IS_VALID_PROPERTY_OFFSET(property_offset))) {
 try_again:
 		retval = OBJ_PROP(zobj, property_offset);
@@ -1035,6 +1044,15 @@ uninit_error:
 	retval = &EG(uninitialized_zval);
 
 exit:
+	if (UNEXPECTED(crossing) && retval != &EG(uninitialized_zval)) {
+		zval array;
+		sharp_array_of(&array, retval);
+		if (retval == rv) {
+			zval_ptr_dtor(rv);
+		}
+		ZVAL_COPY_VALUE(rv, &array);
+		retval = rv;
+	}
 	return retval;
 }
 /* }}} */
@@ -2480,6 +2498,16 @@ try_again:
 found:
 				if (has_set_exists == ZEND_PROPERTY_NOT_EMPTY) {
 					result = zend_is_true(value);
+					/* PHP#: plain PHP code reads a Map or a Set of such a property as its PHP array, which is empty
+					 * when the object is. */
+					zval *held = value;
+					ZVAL_DEREF(held);
+					zend_long count;
+					if (UNEXPECTED(prop_info && (prop_info->flags & ZEND_ACC_SHARP_CROSSING)) && SHARP_IS_TABLE(held)
+							&& !sharp_runs_sharp_code() && Z_OBJ_HT_P(held)->count_elements
+							&& Z_OBJ_HT_P(held)->count_elements(Z_OBJ_P(held), &count) == SUCCESS) {
+						result = count != 0;
+					}
 				} else if (has_set_exists < ZEND_PROPERTY_NOT_EMPTY) {
 					ZEND_ASSERT(has_set_exists == ZEND_PROPERTY_ISSET);
 					ZVAL_DEREF(value);

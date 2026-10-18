@@ -1,0 +1,10 @@
+namespace Demo;
+
+public interface Morphable
+{
+    Any? getKey();
+
+    string getMorphClass();
+
+    string label() => `${this.getMorphClass()}:${this.getKey() as int ?? 0}`;
+}
