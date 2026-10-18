@@ -138,9 +138,9 @@ line 1 expects a compile error, and the checker accepts it
 
 A "not supported yet" refusal never satisfies a `compile error` line, because it says the feature is missing:
 
-<!-- example refusal: members -->
+<!-- example refusal: statements -->
 ```csharp
-public const int LIMIT = true ? 1 : 2;   // compile error: a constant's value has no `? :`
+while (true) { break 2; }   // compile error: a loop is left one level at a time
 ```
 <!-- expect refusal
 line 1 expects a compile error, and the checker reports: …not supported yet…

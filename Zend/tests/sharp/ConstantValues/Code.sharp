@@ -1,0 +1,10 @@
+namespace ConstantValues;
+
+public enum Code : string
+{
+    case Grace = Billing.GRACE_DAYS > 2 ? "long" : "short";
+    case Second = Billing.PLANS[1];
+    case Label = `trial-${Billing.TRIAL_DAYS}`;
+    case Price = (string)Billing.PRICE_CENTS;
+    case Key = Plan.Free.value;
+}
