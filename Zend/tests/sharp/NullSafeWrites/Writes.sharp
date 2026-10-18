@@ -1,0 +1,95 @@
+namespace NullSafeWrites;
+
+public class Writes
+{
+    public int fees { get; private set; } = 0;
+
+    public Writes(private Orders orders) { }
+
+    public void block(int id, Item item)
+    {
+        Order? order = this.orders.find(id);
+        order?.note = "gift";
+        order?.items.add(item);
+        order?.total += this.fee();
+        order?.customer.name = "Ada";
+    }
+
+    public void compound(Order? order)
+    {
+        order?.total -= 1;
+        order?.total *= 3;
+        order?.total /= 2;
+        order?.total %= 5;
+        order?.total **= 2;
+        order?.ratio /= 4.0;
+        order?.bits &= 6;
+        order?.bits |= 1;
+        order?.bits ^= 2;
+        order?.bits <<= 2;
+        order?.bits >>= 1;
+        order?.note += "!";
+        order?.gift ??= "card";
+    }
+
+    public void steps(Order? order)
+    {
+        order?.total++;
+        order?.total++;
+        ++order?.total;
+        --order?.total;
+    }
+
+    public void indexes(Order? order)
+    {
+        order?.tags["vip"] = true;
+        order?.counts[0] += 5;
+        order?.counts[1]++;
+        order?.stock["a"] = 1;
+        order?.stock["b"] ??= 2;
+    }
+
+    public void once(int id)
+    {
+        this.orders.find(id)?.note = "found";
+        this.orders.find(id)?.total += this.fee();
+    }
+
+    public void cleared(Order? start)
+    {
+        Order? order = start;
+        const clear = () => {
+            order = null;
+            return "cleared";
+        };
+        order?.note = clear();
+    }
+
+    public void inline(Order? start)
+    {
+        Order? order = start;
+        order?.gift = (order = null);
+    }
+
+    public void chained(Order? order)
+    {
+        order?.items[0].sku = "renamed";
+    }
+
+    public void labels(Order? order)
+    {
+        order?.label = "L";
+        order?.label += "!";
+    }
+
+    public string? written(Order? order) => order?.note = "kept";
+
+    public int? stepped(Order? order) => order?.total++;
+
+    private int fee()
+    {
+        this.fees++;
+
+        return 5;
+    }
+}

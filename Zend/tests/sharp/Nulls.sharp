@@ -25,14 +25,9 @@ class Nulls
         return filled + value;
     }
 
-    public Nulls itself()
-    {
-        return this;
-    }
-
     public int? through(Nulls? other, int? value)
     {
-        return other?.same(value) ?? other?.itself()?.either(7, null);
+        return other?.same(value) ?? other?.either(7, null);
     }
 
     public int? size(Box? box)
