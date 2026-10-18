@@ -613,6 +613,19 @@ again:
 			break;
 
 		case IS_OBJECT: {
+			if (UNEXPECTED(SHARP_IS_TABLE(struc))) {
+				zval array;
+				sharp_array_of(&array, struc);
+				if (Z_TYPE(array) == IS_ARRAY) {
+					zend_result exported = php_var_export_ex(&array, level, buf);
+					zval_ptr_dtor(&array);
+					return exported;
+				}
+				zval_ptr_dtor(&array);
+				if (EG(exception)) {
+					return FAILURE;
+				}
+			}
 			/* Check if this is already recursing on the object before calling zend_get_properties_for,
 			 * to allow infinite recursion detection to work even if classes return temporary arrays,
 			 * and to avoid the need to update the properties table in place to reflect the state

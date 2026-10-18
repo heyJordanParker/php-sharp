@@ -1052,6 +1052,9 @@ exit:
 		}
 		ZVAL_COPY_VALUE(rv, &array);
 		retval = rv;
+	} else if (UNEXPECTED(Z_ISREF_P(retval)) && retval != rv && prop_info
+			&& (prop_info->flags & ZEND_ACC_SHARP_CROSSING) && (type == BP_VAR_R || type == BP_VAR_IS)) {
+		retval = sharp_property_from_reference(retval, prop_info, rv);
 	}
 	return retval;
 }

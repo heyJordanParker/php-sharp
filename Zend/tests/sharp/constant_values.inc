@@ -23,6 +23,7 @@ function constant_values(): string
             Billing::doubled(4),
             (Billing::DOUBLE)(5),
             Billing::currentRate(),
+            Billing::planKind(),
         ],
         'plain PHP' => [
             Billing::PLANS,

@@ -12,6 +12,7 @@ public class Billing
     public const Tier DEFAULT_TIER = Tier.Free;
     public const string DEFAULT_KEY = Plan.Free.value;
     public const Function<int(int)> DOUBLE = (int x) => x * 2;
+    public const Class<Plan> PLAN_KIND = typeof(Plan);
     private static int rate = Rates.current();
     private static Tier sharedTier = Tier.Free;
     private Tier tier = Tier.Free;
@@ -27,4 +28,6 @@ public class Billing
     public static bool freePlan() => Billing.DEFAULT_PLAN == Plan.Free;
 
     public static int doubled(int value) => (Billing.DOUBLE)(value);
+
+    public static bool planKind() => Billing.PLAN_KIND == typeof(Plan);
 }

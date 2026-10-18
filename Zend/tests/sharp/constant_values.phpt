@@ -11,5 +11,5 @@ echo constant_values(), "\n";
 echo constant_values(), "\n";
 ?>
 --EXPECT--
-{"constants":[3,"free","Trial: 14 days",999,true,"free",8,10,3],"plain PHP":[["free","pro"],true,true],"data case":[true,true,true],"enum cases":["long","pro","trial-14","999","free"],"attribute":["Trial: 14 days","free",true,8,"free",999],"defaults":"3 free Trial: 14 days 999 true free 8","patterns":["grace","price","other",true,true,true,true]}
-{"constants":[3,"free","Trial: 14 days",999,true,"free",8,10,3],"plain PHP":[["free","pro"],true,true],"data case":[true,true,true],"enum cases":["long","pro","trial-14","999","free"],"attribute":["Trial: 14 days","free",true,8,"free",999],"defaults":"3 free Trial: 14 days 999 true free 8","patterns":["grace","price","other",true,true,true,true]}
+{"constants":[3,"free","Trial: 14 days",999,true,"free",8,10,3,true],"plain PHP":[["free","pro"],true,true],"data case":[true,true,true],"enum cases":["long","pro","trial-14","999","free"],"attribute":["Trial: 14 days","free",true,8,"free",999],"defaults":"3 free Trial: 14 days 999 true free 8","patterns":["grace","price","other",true,true,true,true]}
+{"constants":[3,"free","Trial: 14 days",999,true,"free",8,10,3,true],"plain PHP":[["free","pro"],true,true],"data case":[true,true,true],"enum cases":["long","pro","trial-14","999","free"],"attribute":["Trial: 14 days","free",true,8,"free",999],"defaults":"3 free Trial: 14 days 999 true free 8","patterns":["grace","price","other",true,true,true,true]}
