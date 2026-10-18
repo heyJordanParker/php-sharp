@@ -2,6 +2,10 @@
 The tracing JIT records no operand type for an IS_PTR, which is no PHP type: a generic call's type arguments, the hidden local that holds them, and a lambda's capture of it
 --EXTENSIONS--
 opcache
+--SKIPIF--
+<?php
+if (ini_get('opcache.jit') === false) die('skip JIT is not available');
+?>
 --FILE--
 <?php
 // The trace dump prints each operand type the tracer recorded after a `;`. The type arguments a generic call's op1, a

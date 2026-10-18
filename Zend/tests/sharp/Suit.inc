@@ -7,7 +7,7 @@ enum Suit
 
     public function label(): string
     {
-        return \strtolower($this->name);
+        return \mb_strtolower($this->name, 'UTF-8');
     }
 
     public static function size(): int

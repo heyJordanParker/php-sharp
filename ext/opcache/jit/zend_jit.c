@@ -652,6 +652,10 @@ static zend_property_info* zend_get_known_property_info(const zend_op_array *op_
 	    info->hooks) {
 		return NULL;
 	}
+	/* PHP#: plain PHP code reads this property's Map or Set as its PHP array, which only the VM's handler gives. */
+	if (UNEXPECTED(info->flags & ZEND_ACC_SHARP_CROSSING) && !sharp_function_is_sharp((const zend_function *) op_array)) {
+		return NULL;
+	}
 
 	if (info->flags & ZEND_ACC_PUBLIC) {
 		return info;
@@ -685,7 +689,8 @@ static zend_property_info* zend_get_known_static_property_info(const zend_op_arr
 		if (zv) {
 			zend_property_info *prop_info = Z_PTR_P(zv);
 
-			if (prop_info->flags & ZEND_ACC_STATIC) {
+			if ((prop_info->flags & ZEND_ACC_STATIC)
+			 && (!(prop_info->flags & ZEND_ACC_SHARP_CROSSING) || sharp_function_is_sharp((const zend_function *) op_array))) {
 				if (prop_info->ce == op_array->scope
 				 || (prop_info->flags & ZEND_ACC_PUBLIC)
 				 || ((prop_info->flags & ZEND_ACC_PROTECTED)

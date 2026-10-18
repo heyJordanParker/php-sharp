@@ -365,6 +365,7 @@ void zend_oparray_context_begin(zend_oparray_context *prev_context, zend_op_arra
 	CG(context).in_jmp_frameless_branch = false;
 	CG(context).active_property_info_name = NULL;
 	CG(context).active_property_hook_kind = (zend_property_hook_kind)-1;
+	CG(context).sharp_crossing_result = false;
 }
 /* }}} */
 
@@ -5533,13 +5534,17 @@ static uint32_t zend_add_sharp_open_type_text(zend_ast *text_ast)
 /* The PHP type `type_ast` of a property, a promoted parameter or a function's result. A ZEND_AST_SHARP_TYPE_ARGS wraps
  * the PHP type of a property whose PHP# type a write from plain PHP checks, and the result type of a PHP# method or
  * lambda, with the type text, the property's type or the function's whole type, which may name type parameters as `$i`
- * and `#i`, interned into `sharp_type`. A closed text is checked here. */
+ * and `#i`, interned into `sharp_type`. A closed text is checked here. A result whose ZEND_SHARP_RESULT_CROSSES PHP#
+ * can't write has no text. */
 static zend_ast *zend_sharp_declared_type(zend_ast *type_ast, zend_string **sharp_type)
 {
 	if (!type_ast || type_ast->kind != ZEND_AST_SHARP_TYPE_ARGS) {
 		return type_ast;
 	}
 
+	if (!type_ast->child[1]) {
+		return type_ast->child[0];
+	}
 	zend_string *text = zend_ast_get_str(type_ast->child[1]);
 	if (!sharp_type_list_names(ZSTR_VAL(text), ZSTR_LEN(text))) {
 		zend_sharp_type_text(type_ast->child[1]);
@@ -6066,6 +6071,12 @@ static void zend_compile_return(zend_ast *ast, bool leave) /* {{{ */
 	if (!is_generator && (CG(active_op_array)->fn_flags & ZEND_ACC_HAS_RETURN_TYPE)) {
 		zend_emit_return_type_check(
 			expr_ast ? &expr_node : NULL, CG(active_op_array)->arg_info - 1, 0);
+	}
+
+	/* PHP#: the result may hold a Map or a Set, which a plain PHP caller gets as its PHP array, after the return type
+	 * that names them passed it. */
+	if (expr_ast && !is_generator && !by_ref && CG(context).sharp_crossing_result) {
+		zend_emit_op_tmp(&expr_node, ZEND_SHARP_RETURN_ARRAY, &expr_node, NULL);
 	}
 
 	if (leave) {
@@ -8359,6 +8370,9 @@ static void zend_compile_params(zend_ast *ast, zend_ast *return_type_ast, uint32
 				if (override_attribute) {
 					prop->flags |= ZEND_ACC_OVERRIDE;
 				}
+				if (sharp_property_reads_as_array(prop)) {
+					prop->flags |= ZEND_ACC_SHARP_CROSSING;
+				}
 			}
 		}
 	}
@@ -8828,6 +8842,8 @@ static zend_op_array *zend_compile_func_decl_ex(
 	memset(&info, 0, sizeof(closure_info));
 
 	init_op_array(op_array, ZEND_USER_FUNCTION, INITIAL_OP_ARRAY_SIZE);
+	bool sharp_crossing_result = return_type_ast && return_type_ast->kind == ZEND_AST_SHARP_TYPE_ARGS
+		&& (return_type_ast->attr & ZEND_SHARP_RESULT_CROSSES);
 	return_type_ast = zend_sharp_declared_type(return_type_ast, &op_array->sharp_type);
 
 	if (CG(compiler_options) & ZEND_COMPILE_PRELOAD) {
@@ -8868,6 +8884,7 @@ static zend_op_array *zend_compile_func_decl_ex(
 	zend_oparray_context_begin(&orig_oparray_context, op_array);
 	CG(context).active_property_info_name = property_info_name;
 	CG(context).active_property_hook_kind = hook_kind;
+	CG(context).sharp_crossing_result = sharp_crossing_result;
 
 	if (decl->child[4]) {
 		int target = ZEND_ATTRIBUTE_TARGET_FUNCTION;
@@ -9206,6 +9223,26 @@ static void zend_compile_property_hooks(
 
 static void zend_property_default_to_zval(zval *result, zend_ast **ast_ptr);
 
+/* PHP#: whether the attribute list `attr_ast` holds #[\Sharp\Crossing], which the bridge puts on a property whose type
+ * holds a Map or a Set. */
+static bool zend_sharp_has_crossing(zend_ast *attr_ast)
+{
+	if (!attr_ast) {
+		return false;
+	}
+	zend_ast_list *groups = zend_ast_get_list(attr_ast);
+	for (uint32_t i = 0; i < groups->children; i++) {
+		zend_ast_list *group = zend_ast_get_list(groups->child[i]);
+		for (uint32_t j = 0; j < group->children; j++) {
+			if (zend_string_equals_literal_ci(zend_ast_get_str(group->child[j]->child[0]), "Sharp\\Crossing")) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 static void zend_compile_prop_decl(zend_ast *ast, zend_ast *type_ast, uint32_t flags, zend_ast *attr_ast, zend_string *sharp_type) /* {{{ */
 {
 	zend_ast_list *list = zend_ast_get_list(ast);
@@ -9293,6 +9330,16 @@ static void zend_compile_prop_decl(zend_ast *ast, zend_ast *type_ast, uint32_t f
 		if (*value_ast_ptr) {
 			zend_property_default_to_zval(&value_zv, value_ast_ptr);
 
+			/* PHP#: a Map or Set default the compiler folded into the PHP array a constant holds is built when the
+			 * class's defaults first are, as a default that reads a constant of a class not yet known is, so the
+			 * property's #[\Sharp\Crossing] makes the object of it. */
+			if (Z_TYPE(value_zv) == IS_ARRAY && ZEND_TYPE_IS_COMPLEX(type)
+					&& !zend_is_valid_default_value(type, &value_zv) && zend_sharp_has_crossing(attr_ast)) {
+				zend_ast *folded = zend_ast_create_zval(&value_zv);
+				ZVAL_AST(&value_zv, zend_ast_copy(folded));
+				zend_ast_destroy(folded);
+			}
+
 			if (ZEND_TYPE_IS_SET(type) && !Z_CONSTANT(value_zv)
 					&& !zend_is_valid_default_value(type, &value_zv)) {
 				zend_string *str = zend_type_to_string(type);
@@ -9354,6 +9401,9 @@ static void zend_compile_prop_decl(zend_ast *ast, zend_ast *type_ast, uint32_t f
 			zend_attribute *override_attribute = zend_get_attribute_str(info->attributes, "override", sizeof("override")-1);
 			if (override_attribute) {
 				info->flags |= ZEND_ACC_OVERRIDE;
+			}
+			if (sharp_property_reads_as_array(info)) {
+				info->flags |= ZEND_ACC_SHARP_CROSSING;
 			}
 		}
 
@@ -11148,6 +11198,10 @@ static void zend_compile_yield(znode *result, zend_ast *ast) /* {{{ */
 			zend_compile_var(&value_node, value_ast, BP_VAR_W, 1);
 		} else {
 			zend_compile_expr(&value_node, value_ast);
+			/* PHP#: plain PHP code that resumes the generator gets each Map and Set the value holds as its PHP array. */
+			if (CG(context).sharp_crossing_result) {
+				zend_emit_op_tmp(&value_node, ZEND_SHARP_RETURN_ARRAY, &value_node, NULL);
+			}
 		}
 		value_node_ptr = &value_node;
 	}
