@@ -1,0 +1,22 @@
+namespace AttributePlaces;
+
+import Lib.Field;
+
+// A constant and a lambda carry their attributes, spec section 1.
+public class Limits
+{
+    [Field("on the constant")]
+    public const int MAX = 3;
+
+    public Function<int(int)> twice() => [Field("on the lambda")] (int n) => n * 2;
+
+    public Function<int()> counted()
+    {
+        let count = 0;
+
+        return [Field("on the block lambda")] () => {
+            count += 1;
+            return count;
+        };
+    }
+}

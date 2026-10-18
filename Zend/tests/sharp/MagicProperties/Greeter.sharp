@@ -1,0 +1,23 @@
+namespace MagicProperties;
+
+import Lib.Booking;
+import Lib.Guest;
+extern Booking.host;
+
+// A plain PHP class that defines `__get` has the properties it reads, typed by its `@property-read` lines and `Any?`
+// otherwise, and its method of a property's name is the value where the code takes a function.
+public class Greeter
+{
+    public string typed(Booking booking) => booking.guest.name;
+
+    public string untyped(Booking booking) => (booking.host as Guest)?.name ?? "nobody";
+
+    public string taken(Booking booking)
+    {
+        Function<Guest()> host = booking.host;
+
+        return host().name;
+    }
+
+    public string called(Booking booking) => booking.host().name;
+}

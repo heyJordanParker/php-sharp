@@ -1,0 +1,19 @@
+namespace AttributeObjects;
+
+import Lib.Route;
+import Lib.Throttle;
+
+// An attribute argument creates objects from constant arguments, spec section 1: a plain PHP one, a PHP# one, one
+// inside another, and ones in a list and in a `Map`.
+[Route("/orders", middleware: [new Throttle(perMinute: 60)])]
+public class Orders
+{
+    [Route("/window", middleware: [new Window(30)])]
+    public int windowed() => 1;
+
+    [Route("/nested", middleware: [new Throttle(10, window: new Window(5))])]
+    public int nested() => 2;
+
+    [Route("/map", options: ["limit": new Throttle(5)])]
+    public int mapped() => 3;
+}
