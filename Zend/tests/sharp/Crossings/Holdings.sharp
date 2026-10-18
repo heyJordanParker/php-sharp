@@ -79,11 +79,35 @@ public class Holdings
     // A PHP array holds no `List` key, so plain PHP gets this Map itself.
     public Map<List<int>, int> listKeyed() => [[1, 2]: 1];
 
-    // Neither does a PHP array hold a Map whose key type lets two keys be one PHP array key, as "low" and Level.Low
-    // are, so plain PHP gets this Map itself whatever keys it holds.
+    // A PHP array keeps one entry for two keys that are one PHP array key, as "low" and Level.Low are, or 5 and "5",
+    // so the crossing of such a Map throws a ValueError. One whose keys are each their own PHP array key crosses.
     public Map<string|Level, int> collided() => ["low": 1, Level.Low: 2];
 
     public Map<string|Level, int> distinct() => ["high": 1, Level.Low: 2];
+
+    public static Any? collidedFirstKey()
+    {
+        Map<int|string, string> codes = [5: "a", "5": "b"];
+        return global.array_key_first(codes);
+    }
+
+    public static Any collidedAny()
+    {
+        Map<int|string, string> codes = [5: "a", "5": "b"];
+        return codes;
+    }
+
+    public static Map<int|string, string> mixedKeys() => [5: "a", "x": "b"];
+
+    public static Map<int|string, string> mixedCodes { get; set; } = [:];
+
+    public static void collideCodes()
+    {
+        Holdings.mixedCodes = [5: "a", "5": "b"];
+    }
+
+    // The PHP array get_object_vars gives, a Map<int|string, Any?> in PHP#, passes back to plain PHP.
+    public static Any? firstPropertyName(Holdings holdings) => global.array_key_first(global.get_object_vars(holdings));
 
     public Map<Weather, int> weatherCounts() => [Weather.Rainy: 2];
 

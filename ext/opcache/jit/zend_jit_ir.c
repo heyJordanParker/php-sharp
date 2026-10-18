@@ -16301,8 +16301,12 @@ static int zend_jit_fetch_static_prop(zend_jit_ctx *jit, const zend_op *opline, 
 			ir_ref if_held = ir_IF(ir_UGE(jit_Z_TYPE(jit, res_addr), ir_CONST_U8(IS_ARRAY)));
 			ir_IF_TRUE_cold(if_held);
 			// JIT: zend_jit_sharp_static_read(EX_VAR(opline->result.var), CACHED_PTR(cache_slot + sizeof(void *) * 2));
+			jit_SET_EX_OPLINE(jit, opline);
 			ir_CALL_2(IR_VOID, ir_CONST_FC_FUNC(zend_jit_sharp_static_read), jit_ZVAL_ADDR(jit, res_addr),
 				ir_LOAD_A(ir_ADD_OFFSET(ir_LOAD_A(jit_EX(run_time_cache)), cache_slot + sizeof(void*) * 2)));
+			/* A Map two of whose keys are one PHP array key throws. The result keeps the Map, which the exception handler
+			 * frees as this opline's result. */
+			zend_jit_check_exception(jit);
 			ir_MERGE_WITH_EMPTY_FALSE(if_held);
 		}
 	} else {

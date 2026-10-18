@@ -62,10 +62,9 @@ bool sharp_cross_property(const zend_property_info *info, zval *value);
 /* Spec section 12: puts in `result` the value plain PHP receives for `value`. A Map is a PHP array of its entries, with
  * a backed enum key as its backing value, and a Set is the list of its elements. Each Map and Set a PHP array, a Map or a
  * Set holds converts the same way, and a PHP array that holds none is itself. A Map with a key no PHP array holds, a
- * class, a struct, a collection or an enum without backing values, is itself. The bridge decides from the declared type
- * which values reach this, so a Map declared with a key type that lets two keys be one PHP array key, as `int|string`
- * does, reaches it only where an `Any`, a type parameter or an `Iterable` holds it, and then keeps the last of two such
- * keys. Any other value is itself. */
+ * class, a struct, a collection or an enum without backing values, is itself. A Map two of whose keys are one PHP array
+ * key, as 5 and "5" are, or a backed enum case and its backing value, throws a ValueError that names both, since a PHP
+ * array would keep only one of them, and `result` is then the value itself. Any other value is itself. */
 void sharp_array_of(zval *result, zval *value);
 
 /* Makes `value`, which a property whose type holds a Map or a Set gives plain PHP code, what sharp_array_of gives. */

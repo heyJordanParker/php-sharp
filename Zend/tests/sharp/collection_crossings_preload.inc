@@ -61,3 +61,18 @@ function preloaded_limits(): mixed
 {
     return Demo\Holdings::LIMITS;
 }
+
+// What plain PHP gets from `$read`, a read of a Map two of whose keys are one PHP array key: the ValueError it throws.
+function preloaded_refused(Closure $read): string
+{
+    try {
+        return get_debug_type($read());
+    } catch (ValueError $e) {
+        return $e->getMessage();
+    }
+}
+
+function preloaded_mixed_codes(): mixed
+{
+    return Demo\Holdings::$mixedCodes;
+}

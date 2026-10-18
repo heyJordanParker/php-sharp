@@ -21,6 +21,7 @@ function received(mixed $value): string
 }
 
 $holdings = new Demo\Holdings();
+Demo\Holdings::collideCodes();
 // Each round runs every read, so the JIT variants compile them before the last round, whose output is printed.
 for ($round = 0; $round < 100; $round++) {
     ob_start();
@@ -33,6 +34,9 @@ for ($round = 0; $round < 100; $round++) {
     echo 'array_merge() of a return: ', received(preloaded_sizes_merged()), "\n";
     echo 'a constant: ', received(preloaded_limits()), "\n";
     echo 'PHP# reads its own: ', $holdings->payloadClass(), ' ', $holdings->firstRowClass(), ' ', Demo\Holdings::countsClass(), "\n";
+    echo 'a static property holding 5 and "5": ', preloaded_refused(preloaded_mixed_codes(...)), "\n";
+    echo 'a return holding 5 and "5": ', preloaded_refused(Demo\Holdings::collidedAny(...)), "\n";
+    echo 'a return holding "low" and its case: ', preloaded_refused($holdings->collided(...)), "\n";
     $output = ob_get_clean();
 }
 echo $output;
@@ -48,3 +52,6 @@ a return: array {"b":2,"a":1}
 array_merge() of a return: array {"b":2,"a":1,"c":3}
 a constant: array {"card":100}
 PHP# reads its own: Sharp\Map Sharp\Map Sharp\Map
+a static property holding 5 and "5": This `Map` holds both `5` and `"5"`, which plain PHP keeps as one key, so it can't become a plain PHP array
+a return holding 5 and "5": This `Map` holds both `5` and `"5"`, which plain PHP keeps as one key, so it can't become a plain PHP array
+a return holding "low" and its case: This `Map` holds both `"low"` and `Demo.Level.Low`, which plain PHP keeps as one key, so it can't become a plain PHP array

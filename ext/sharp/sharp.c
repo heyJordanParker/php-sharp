@@ -7270,37 +7270,107 @@ bool sharp_cross_property(const zend_property_info *info, zval *value)
 	return true;
 }
 
+/* Appends the Map key `key` as PHP# writes it: `5`, `"5"`, or a backed enum case as `Shop.Level.Low`. */
+static ZEND_COLD void sharp_key_text(smart_str *text, const zval *key)
+{
+	if (Z_TYPE_P(key) == IS_LONG) {
+		smart_str_append_long(text, Z_LVAL_P(key));
+	} else if (Z_TYPE_P(key) == IS_STRING) {
+		smart_str_appendc(text, '"');
+		smart_str_append(text, Z_STR_P(key));
+		smart_str_appendc(text, '"');
+	} else {
+		sharp_object_text(text, Z_OBJ_P(key));
+		smart_str_appendc(text, '.');
+		smart_str_append(text, Z_STR_P(zend_enum_fetch_case_name(Z_OBJ_P(key))));
+	}
+}
+
+/* Throws for the Map `object`, whose PHP array lost an entry: two of its keys are one PHP array key, as 5 and "5" are,
+ * or a backed enum case and its backing value. The exception names the first two such keys. A Map carries no key type
+ * when it runs, so the message names none. */
+static ZEND_COLD void sharp_table_refuse_collision(zend_object *object)
+{
+	sharp_table *table = sharp_table_of(object);
+	HashTable seen;
+	zend_hash_init(&seen, table->size, NULL, NULL, false);
+	smart_str message = {0};
+	SHARP_TABLE_FOREACH(table, bucket) {
+		zval *key = &bucket->key, *array_key = key;
+		if (Z_TYPE_P(key) == IS_OBJECT) {
+			array_key = zend_enum_fetch_case_value(Z_OBJ_P(key));
+		}
+		bool is_index = Z_TYPE_P(array_key) == IS_LONG;
+		zval *first = is_index
+			? zend_hash_index_find(&seen, Z_LVAL_P(array_key))
+			: zend_symtable_find(&seen, Z_STR_P(array_key));
+		if (!first) {
+			zval held;
+			ZVAL_PTR(&held, key);
+			if (is_index) {
+				zend_hash_index_add_new(&seen, Z_LVAL_P(array_key), &held);
+			} else {
+				zend_symtable_add_new(&seen, Z_STR_P(array_key), &held);
+			}
+		} else {
+			smart_str_appends(&message, "This `Map` holds both `");
+			sharp_key_text(&message, Z_PTR_P(first));
+			smart_str_appends(&message, "` and `");
+			sharp_key_text(&message, key);
+			smart_str_appends(&message, "`, which plain PHP keeps as one key, so it can't become a plain PHP array");
+			break;
+		}
+	} SHARP_TABLE_FOREACH_END();
+	zend_hash_destroy(&seen);
+	smart_str_0(&message);
+	zend_value_error("%s", ZSTR_VAL(message.s));
+	smart_str_free(&message);
+}
+
 /* Puts in `result` the PHP array of the Map or Set `object`, each value as sharp_array_of gives it, and gives whether
- * every key of a Map is one a PHP array holds: an int, a string, or a backed enum case as its backing value. Otherwise
- * `result` is undefined, and `unheld` points at the first key that is none of them. */
+ * it could. A Map key a PHP array holds is an int, a string, or a backed enum case as its backing value. On false,
+ * `result` is undefined, and `unheld` points at the first key that is none of them, or is NULL after an exception:
+ * a value's own crossing threw, or two keys of the Map are one PHP array key, as 5 and "5" are. A PHP array would keep
+ * only one of those two entries, so the crossing throws rather than drop one, and only when the array came out with
+ * fewer entries than the Map. */
 static bool sharp_table_array(zval *result, zend_object *object, zval **unheld)
 {
 	sharp_table *table = sharp_table_of(object);
+	bool is_set = object->ce == sharp_ce_set;
+	*unheld = NULL;
 	array_init_size(result, table->size);
 	SHARP_TABLE_FOREACH(table, bucket) {
 		zval *key = &bucket->key, converted;
-		if (object->ce == sharp_ce_set) {
-			sharp_array_of(&converted, key);
-			zend_hash_next_index_insert_new(Z_ARRVAL_P(result), &converted);
-			continue;
-		}
-		if (Z_TYPE_P(key) == IS_OBJECT && (Z_OBJCE_P(key)->ce_flags & ZEND_ACC_ENUM)
+		if (!is_set && Z_TYPE_P(key) == IS_OBJECT && (Z_OBJCE_P(key)->ce_flags & ZEND_ACC_ENUM)
 				&& Z_OBJCE_P(key)->enum_backing_type != IS_UNDEF) {
 			key = zend_enum_fetch_case_value(Z_OBJ_P(key));
 		}
-		if (Z_TYPE_P(key) != IS_LONG && Z_TYPE_P(key) != IS_STRING) {
-			zval_ptr_dtor(result);
-			ZVAL_UNDEF(result);
+		if (!is_set && Z_TYPE_P(key) != IS_LONG && Z_TYPE_P(key) != IS_STRING) {
 			*unheld = key;
-			return false;
+			break;
 		}
-		sharp_array_of(&converted, &bucket->value);
-		if (Z_TYPE_P(key) == IS_LONG) {
+		sharp_array_of(&converted, is_set ? key : &bucket->value);
+		if (UNEXPECTED(EG(exception))) {
+			zval_ptr_dtor(&converted);
+			break;
+		}
+		if (is_set) {
+			zend_hash_next_index_insert_new(Z_ARRVAL_P(result), &converted);
+		} else if (Z_TYPE_P(key) == IS_LONG) {
 			zend_hash_index_update(Z_ARRVAL_P(result), Z_LVAL_P(key), &converted);
 		} else {
 			zend_symtable_update(Z_ARRVAL_P(result), Z_STR_P(key), &converted);
 		}
 	} SHARP_TABLE_FOREACH_END();
+
+	if (!*unheld && !EG(exception) && UNEXPECTED(zend_hash_num_elements(Z_ARRVAL_P(result)) < table->size)) {
+		sharp_table_refuse_collision(object);
+	}
+	if (*unheld || EG(exception)) {
+		zval_ptr_dtor(result);
+		ZVAL_UNDEF(result);
+		return false;
+	}
 
 	return true;
 }
@@ -7339,6 +7409,10 @@ void sharp_array_of(zval *result, zval *value)
 		}
 		zval crossed;
 		sharp_array_of(&crossed, held);
+		if (UNEXPECTED(EG(exception))) {
+			zval_ptr_dtor(&crossed);
+			break;
+		}
 		if (!converted && Z_TYPE(crossed) == Z_TYPE_P(held)
 				&& (Z_TYPE(crossed) == IS_ARRAY ? Z_ARR(crossed) == Z_ARR_P(held) : Z_OBJ(crossed) == Z_OBJ_P(held))) {
 			zval_ptr_dtor(&crossed);
@@ -7355,7 +7429,10 @@ void sharp_array_of(zval *result, zval *value)
 	} ZEND_HASH_FOREACH_END();
 	GC_TRY_UNPROTECT_RECURSION(array);
 
-	if (converted) {
+	if (converted && UNEXPECTED(EG(exception))) {
+		zend_array_destroy(converted);
+		ZVAL_COPY(result, value);
+	} else if (converted) {
 		ZVAL_ARR(result, converted);
 	} else {
 		ZVAL_COPY(result, value);
@@ -7820,6 +7897,9 @@ ZEND_METHOD(Sharp_Table, toArray)
 
 	zval *unheld;
 	if (!sharp_table_array(return_value, Z_OBJ_P(ZEND_THIS), &unheld)) {
+		if (!unheld) {
+			RETURN_THROWS();
+		}
 		zend_value_error("A PHP array key is an int or a string, and this Map holds a key of type %s",
 			Z_TYPE_P(unheld) == IS_OBJECT ? ZSTR_VAL(Z_OBJCE_P(unheld)->name) : zend_zval_value_name(unheld));
 		RETURN_THROWS();

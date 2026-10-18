@@ -35,6 +35,16 @@ function received(mixed $value, ?ReflectionType $type = null): string
         . ($type === null ? '' : ", typed $type");
 }
 
+// What plain PHP received from `$read`, or the ValueError a Map two of whose keys are one PHP array key throws.
+function received_or_refused(Closure $read, ?ReflectionType $type = null): string
+{
+    try {
+        return received($read(), $type);
+    } catch (ValueError $e) {
+        return 'ValueError: ' . $e->getMessage();
+    }
+}
+
 function property_type(string $class, string $property): ?ReflectionType
 {
     return (new ReflectionProperty($class, $property))->getType();
@@ -242,8 +252,15 @@ for ($round = 0; $round < 100; $round++) {
     // A Map no PHP array holds stays the Map at every crossing, as reflection says.
     $holdingsResult = fn (string $method) => (new ReflectionMethod(Holdings::class, $method))->getReturnType();
     echo 'a Map keyed by an enum without backing values: ', received($holdings->forecast, property_type(Holdings::class, 'forecast')), ' / ', received($holdings->weatherCounts(), $holdingsResult('weatherCounts')), "\n";
-    echo 'a Map whose keys can collide: ', received($holdings->collided(), $holdingsResult('collided')), ' / ', received($holdings->distinct()), ' / ', received(Holdings::$mixedCounts, property_type(Holdings::class, 'mixedCounts')), "\n";
     echo 'a Map holding a Map keyed by a List: ', received($holdings->nestedListKeyed(), $holdingsResult('nestedListKeyed')), "\n";
+
+    // A Map whose key type lets two keys be one PHP array key crosses as its array, and throws when two of them are.
+    echo 'a Map holding a case and its backing value: ', received_or_refused(fn () => $holdings->collided()), "\n";
+    echo 'a Map holding 5 and "5" into an array parameter: ', received_or_refused(fn () => Holdings::collidedFirstKey()), "\n";
+    echo 'a Map holding 5 and "5" in an Any result: ', received_or_refused(fn () => Holdings::collidedAny()), "\n";
+    echo 'a Map holding 5 and "5" read by arrayOf: ', received_or_refused(fn () => Sharp\Internal\arrayOf(new Map([5, 'a', '5', 'b']))), "\n";
+    echo 'a Map whose keys can collide but do not: ', received($holdings->distinct(), $holdingsResult('distinct')), ' / ', received(Holdings::mixedKeys(), $holdingsResult('mixedKeys')), ' / ', received(Holdings::$mixedCounts, property_type(Holdings::class, 'mixedCounts')), "\n";
+    echo 'a PHP array from plain PHP passed back to it: ', Holdings::firstPropertyName($holdings), "\n";
 
     // Every other reader of a property, and empty().
     echo 'empty() of a Map property: ', var_export(empty($holdings->none), true), ' ', var_export(empty($holdings->payload), true), "\n";
@@ -375,8 +392,13 @@ an Iterable<Map> property: array, is_array true, [{"s":1}], typed iterable of ar
 a type parameter property and result: array, is_array true, {"h":1} / array, is_array true, {"h":1}
 a plain PHP generator into an Iterable<Map>: Sharp\Map:1 Sharp\Map:2
 a Map keyed by an enum without backing values: Sharp\Map, is_array false, refused by array_merge, typed Sharp\Map / Sharp\Map, is_array false, refused by array_merge, typed Sharp\Map
-a Map whose keys can collide: Sharp\Map, is_array false, refused by array_merge, typed Sharp\Map / Sharp\Map, is_array false, refused by array_merge / Sharp\Map, is_array false, refused by array_merge, typed Sharp\Map
 a Map holding a Map keyed by a List: Sharp\Map, is_array false, refused by array_merge, typed Sharp\Map
+a Map holding a case and its backing value: ValueError: This `Map` holds both `"low"` and `Demo.Level.Low`, which plain PHP keeps as one key, so it can't become a plain PHP array
+a Map holding 5 and "5" into an array parameter: ValueError: This `Map` holds both `5` and `"5"`, which plain PHP keeps as one key, so it can't become a plain PHP array
+a Map holding 5 and "5" in an Any result: ValueError: This `Map` holds both `5` and `"5"`, which plain PHP keeps as one key, so it can't become a plain PHP array
+a Map holding 5 and "5" read by arrayOf: ValueError: This `Map` holds both `5` and `"5"`, which plain PHP keeps as one key, so it can't become a plain PHP array
+a Map whose keys can collide but do not: array, is_array true, {"high":1,"low":2}, typed array / array, is_array true, {"0":"a","x":"b"}, typed array / array, is_array true, {"low":1}, typed array
+a PHP array from plain PHP passed back to it: payload
 empty() of a Map property: true false
 array_walk() over the object: array, is_array true, {"id":"p1"}
 

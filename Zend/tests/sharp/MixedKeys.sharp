@@ -13,13 +13,15 @@ class MixedKeys
         return tally;
     }
 
-    public static List<int> read(Map<string|Standing, int> tally)
+    public static List<int> read()
     {
+        Map<string|Standing, int> tally = MixedKeys.tally();
         return [tally.get("active") ?? 0, tally[Standing.Active] ?? 0, tally.keys().count(), tally.count()];
     }
 
-    public static List<string> described(Map<string|Standing, int> tally)
+    public static List<string> described()
     {
+        Map<string|Standing, int> tally = MixedKeys.tally();
         List<string> lines = [];
         for (const [key, n] of tally) {
             if (key is Standing status) {
