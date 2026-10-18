@@ -912,7 +912,15 @@ static zend_op_array *sharp_compile_file(zend_file_handle *file_handle, int type
 		return sharp_next_compile_file(file_handle, type);
 	}
 
-	return zend_compile_file_with(file_handle, type, sharp_parse);
+	zend_op_array *op_array = zend_compile_file_with(file_handle, type, sharp_parse);
+
+	/* A file the engine refuses was never included, so a later require_once compiles it again and gives the same
+	 * refusal, where PHP would skip it and leave its classes undeclared. */
+	if (!op_array && file_handle->opened_path) {
+		zend_hash_del(&EG(included_files), file_handle->opened_path);
+	}
+
+	return op_array;
 }
 
 /* The revision is the low 63 bits of the compiled file's key, which changes whenever its code may. It runs the

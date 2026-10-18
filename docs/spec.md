@@ -2700,7 +2700,7 @@ public enum Badge
 }
 
 Badge badge = Badge.Marked(["vip", "new"]);                                           // compiles: the literal becomes a Set
-bool same = badge == Badge.Marked(["new", "vip"]);                                    // compiles: the same case with the same elements is ==
+bool same = badge == Badge.Marked(["new", "vip"]);                                    // true: the same case with the same elements is ==
 int count = match (badge) { Badge.Marked(Set<string> tags) => tags.count(), Badge.Blank => 0 };   // compiles
 ```
 
