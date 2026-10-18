@@ -397,6 +397,11 @@ static zend_always_inline zend_ast_op_array *zend_ast_get_op_array(zend_ast *ast
 	return (zend_ast_op_array *) ast;
 }
 
+/* A .sharp file's computed value, `(static function () { return …; })()`, once its closure is compiled. */
+static zend_always_inline bool zend_ast_is_sharp_computed_value(const zend_ast *ast) {
+	return ast->kind == ZEND_AST_CALL && ast->child[0]->kind == ZEND_AST_OP_ARRAY;
+}
+
 static zend_always_inline zend_string *zend_ast_get_constant_name(zend_ast *ast) {
 	ZEND_ASSERT(ast->kind == ZEND_AST_CONSTANT);
 	ZEND_ASSERT(Z_TYPE(((zend_ast_zval *) ast)->val) == IS_STRING);
