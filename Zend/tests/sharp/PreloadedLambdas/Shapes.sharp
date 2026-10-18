@@ -1,8 +1,9 @@
 namespace PreloadedLambdas;
 
-public class Shapes
+public class Shapes : Labeled
 {
     private int base = 5;
+    public string column { get; } = "shapes";
 
     public int capturesNothing()
     {

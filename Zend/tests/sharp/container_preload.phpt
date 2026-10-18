@@ -39,7 +39,7 @@ $use = static fn (string $who): string => '<?php require ' . var_export(__DIR__ 
 file_put_contents("$root/preload.php", $use('preload'));
 file_put_contents("$root/request.php", $use('request'));
 
-echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n -d opcache.enable=1 -d opcache.enable_cli=1'
+echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n ' . getenv('TEST_PHP_EXTRA_ARGS') . ' -d opcache.enable=1 -d opcache.enable_cli=1'
     . ' -d ' . escapeshellarg("opcache.preload=$root/preload.php") . ' ' . escapeshellarg("$root/request.php") . ' 2>&1');
 remove_project($root);
 ?>

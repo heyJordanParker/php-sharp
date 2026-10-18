@@ -1,11 +1,13 @@
 <?php
 
+require __DIR__ . '/PreloadedLambdas/Labeled.sharp';
 require __DIR__ . '/PreloadedLambdas/Shapes.sharp';
 require __DIR__ . '/PreloadedLambdas/StoredStep.sharp';
 
 function lambda_shapes(): string
 {
     $shapes = new PreloadedLambdas\Shapes();
+    $stored = new PreloadedLambdas\StoredStep();
 
     return implode(' ', [
         $shapes->capturesNothing(),
@@ -13,7 +15,9 @@ function lambda_shapes(): string
         $shapes->usesThis(),
         PreloadedLambdas\Shapes::inStaticMethod(),
         $shapes->passedToPlainPhp(),
-        (new PreloadedLambdas\StoredStep())->run(),
+        $stored->run(),
+        $shapes->label(),
+        $stored->label(),
     ]);
 }
 

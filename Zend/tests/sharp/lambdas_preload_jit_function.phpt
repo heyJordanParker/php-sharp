@@ -11,6 +11,7 @@ opcache
 --SKIPIF--
 <?php
 if (PHP_OS_FAMILY == 'Windows') die('skip Preloading is not supported on Windows');
+if (ini_get('opcache.jit') === false) die('skip JIT is not available');
 ?>
 --FILE--
 <?php
@@ -20,5 +21,5 @@ echo lambda_shapes(), "\n";
 ?>
 --EXPECT--
 jit on
-8 12 8 8 8 108
-8 12 8 8 8 108
+8 12 8 8 8 108 label:shapes label:stored
+8 12 8 8 8 108 label:shapes label:stored

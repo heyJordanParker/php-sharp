@@ -1,8 +1,9 @@
 namespace PreloadedLambdas;
 
-public class StoredStep
+public class StoredStep : Labeled
 {
     private Function<int(int)> step = (int n) => n + 100;
+    public string column { get; } = "stored";
 
     public int run() => this.step(8);
 }
