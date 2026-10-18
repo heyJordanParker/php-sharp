@@ -2141,17 +2141,37 @@ ZEND_API zend_function *zend_std_get_static_method(zend_class_entry *ce, zend_st
 /* PHP#: PHP gives a static only a constant default, so a PHP# class sets each static whose initial value isn't constant
  * in its hidden private static method `#statics`. It runs once each request, when the request first builds the class's
  * statics, after their constant defaults, so a class opcache preloads gets the values in every request too. A
- * `#statics` the class inherits sets only its parent's statics, which the parent's own build sets. */
+ * `#statics` the class inherits sets only its parent's statics, which the parent's own build sets. The static
+ * constructor of spec section 6 runs as the `#statics` that sets those values first, and its class keeps how it went,
+ * see sharp_static_constructor_state. */
 ZEND_API zend_result zend_class_init_sharp_statics(zend_class_entry *class_type) /* {{{ */
 {
 	zend_function *initializer = zend_hash_str_find_ptr(&class_type->function_table, ZEND_STRL("#statics"));
+	bool runs = initializer && initializer->common.scope == class_type;
 
-	if (EXPECTED(!initializer) || initializer->common.scope != class_type) {
-		return SUCCESS;
+	if (runs) {
+		zend_call_known_function(initializer, NULL, class_type, NULL, 0, NULL, NULL);
 	}
-	zend_call_known_function(initializer, NULL, class_type, NULL, 0, NULL, NULL);
+	zval *state = sharp_static_constructor_state(class_type);
+	if (UNEXPECTED(state)) {
+		if (runs && EG(exception) && !zend_is_unwind_exit(EG(exception))) {
+			ZVAL_OBJ_COPY(state, EG(exception));
+		} else {
+			ZVAL_NULL(state);
+		}
+	}
 
-	return EG(exception) ? FAILURE : SUCCESS;
+	return runs && EG(exception) ? FAILURE : SUCCESS;
+}
+/* }}} */
+
+/* PHP#: whether the static constructor of `ce` still runs, see sharp_static_constructor_state. The place of a static
+ * read or written then is not cached, so a use after the constructor threw finds the Error that names the failure. */
+ZEND_API bool zend_sharp_static_constructor_runs(zend_class_entry *ce) /* {{{ */
+{
+	zval *state = sharp_static_constructor_state(ce);
+
+	return UNEXPECTED(state) && Z_TYPE_P(state) == IS_TRUE;
 }
 /* }}} */
 
@@ -2243,6 +2263,13 @@ undeclared_property:
 		if (UNEXPECTED(EG(exception))) {
 			return NULL;
 		}
+	}
+
+	/* PHP#: a static constructor that threw makes every later use of its class's statics throw, spec section 6. */
+	zval *state = sharp_static_constructor_state(property_info->ce);
+	if (UNEXPECTED(state) && Z_TYPE_P(state) == IS_OBJECT) {
+		sharp_throw_static_constructor_failure(property_info->ce, NULL, Z_OBJ_P(state));
+		return NULL;
 	}
 
 	ret = CE_STATIC_MEMBERS(ce) + property_info->offset;

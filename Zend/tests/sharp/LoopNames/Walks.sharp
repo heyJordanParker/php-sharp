@@ -1,0 +1,97 @@
+namespace LoopNames;
+
+public static class Walks
+{
+    /// The story's loop: a void line continues the order, a line over the limit leaves both loops, and a plain
+    /// `break` leaves only the lines.
+    public static List<string> orders(List<List<int>> orders, int limit)
+    {
+        List<string> seen = [];
+        orders: for (const order of orders)
+        {
+            for (const line of order)
+            {
+                if (line == 0) { continue orders; }
+                if (line > limit) { break orders; }
+                if (line < 0) { break; }
+                seen.add(`${line}`);
+            }
+            seen.add("|");
+        }
+        return seen;
+    }
+
+    public static List<string> counters(int rows)
+    {
+        List<string> seen = [];
+        rows: for (let row = 0; row < rows; row++)
+        {
+            let column = 0;
+            while (true)
+            {
+                column++;
+                if (column == 2 && row == 1) { continue rows; }
+                if (column == 2 && row == 3) { break rows; }
+                if (column == 3) { break; }
+                seen.add(`${row}.${column}`);
+            }
+            seen.add("|");
+        }
+        return seen;
+    }
+
+    public static List<string> whiles(int rows)
+    {
+        List<string> seen = [];
+        let row = 0;
+        rows: while (row < rows)
+        {
+            row++;
+            let column = 0;
+            do
+            {
+                column++;
+                if (column == 2 && row == 2) { continue rows; }
+                if (column == 2 && row == 4) { break rows; }
+                seen.add(`${row}.${column}`);
+            } while (column < 3);
+            seen.add("|");
+        }
+        return seen;
+    }
+
+    public static List<string> dos(int rows)
+    {
+        List<string> seen = [];
+        let row = 0;
+        rows: do
+        {
+            row++;
+            for (const column of [1, 2, 3])
+            {
+                if (column == 2 && row == 2) { continue rows; }
+                if (column == 2 && row == 4) { break rows; }
+                seen.add(`${row}.${column}`);
+            }
+            seen.add("|");
+        } while (row < rows);
+        return seen;
+    }
+
+    /// A lambda captures the counter, so each pass of the `for` has its own, and `continue steps` from the inner loop
+    /// still moves the counter into the next pass's variable.
+    public static List<int> fresh(int steps)
+    {
+        List<Function<int()>> shows = [];
+        steps: for (let step = 0; step < steps; step++)
+        {
+            shows.add(() => step);
+            for (const tries of [1, 2])
+            {
+                if (step == 1) { continue steps; }
+                if (step == 3) { break steps; }
+            }
+        }
+        return shows.map(show => show());
+    }
+}

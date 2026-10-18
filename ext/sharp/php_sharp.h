@@ -298,6 +298,21 @@ extern zend_string *sharp_type_arguments_key;
  * \Sharp\Internal\statics() reads it. */
 extern zend_string *sharp_statics_key;
 
+/* Spec section 6: a PHP# class with a static constructor declares a static property of this name, which carries
+ * ZEND_ACC_SHARP_HIDDEN. It holds true until the class's statics are set up, then null once the static constructor
+ * returns, or the object it threw. */
+extern zend_string *sharp_static_constructor_key;
+
+/* The slot of the class `ce` declares with sharp_static_constructor_key in its statics, or NULL when `ce` has no
+ * static constructor or its statics are not built yet. */
+zval *sharp_static_constructor_state(zend_class_entry *ce);
+
+/* Throws the Error a use of the statics of `ce` throws once its static constructor threw `failure`, which names the
+ * class as PHP# writes it, with `type_arguments` when the statics are a generic class's for those, and the failure,
+ * which it chains as the previous throwable. */
+ZEND_COLD void sharp_throw_static_constructor_failure(
+	const zend_class_entry *ce, const zend_string *type_arguments, zend_object *failure);
+
 /* Whether `name` is sharp_type_arguments_key, which also names the hidden local a PHP# generic method keeps its own
  * type arguments in as an IS_PTR. Its name starts with NUL, so no PHP variable names it, and nothing that lists a
  * frame's or a closure's variables to user code lists it. */

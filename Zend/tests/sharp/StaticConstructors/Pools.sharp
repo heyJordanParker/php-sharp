@@ -1,0 +1,10 @@
+namespace StaticConstructors;
+
+public static class Pools
+{
+    public static int ofInt() => Pool<int>.made;
+
+    public static int ofString() => Pool<string>.made;
+
+    public static int ofFloat() => Pool<float>.made;
+}
