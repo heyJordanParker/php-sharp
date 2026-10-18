@@ -3932,45 +3932,92 @@ static const sharp_type *sharp_class_value_type(const zend_string *value)
 	return type;
 }
 
-/* Whether the string `value` is a class value of `Class<type>`, for a `type` that is no class, spec section 25: the
- * class value of a type that fits `type`, as the checker lets `Class<X>` fit `Class<Y>` when `X` fits `Y`, so a
- * `Class<int|string>` takes `int`, `string` and `int|string`. The class value of such a type is the text `typeof` gives
- * it, which reads only as typeof spells it, and that of a class is its name, `App\Order`, which reads as `App.Order`. */
-static bool sharp_class_value_fits(const zend_string *value, const sharp_type *type)
+/* The class the string `value` names, as PHP writes its name, `App\Order`, or as PHP# does, `App.Order`, loaded as
+ * sharp_type_class loads it. NULL for a string that names no class. */
+static zend_class_entry *sharp_class_value_class(const zend_string *value)
 {
-	zend_string *text = zend_string_init(ZSTR_VAL(value), ZSTR_LEN(value), false);
-	for (size_t i = 0; i < ZSTR_LEN(text); i++) {
-		if (ZSTR_VAL(text)[i] == '\\') {
-			ZSTR_VAL(text)[i] = '.';
+	zend_string *name = sharp_type_class_name(ZSTR_VAL(value), ZSTR_LEN(value), false);
+	zend_class_entry *ce = ZSTR_LEN(name) ? sharp_type_class(name) : NULL;
+	zend_string_release_ex(name, false);
+
+	return ce;
+}
+
+/* The type the string `value` is the class value of, read with `reader`, whose arena holds it, or NULL for a string that
+ * reads as no whole type. The class value of a type that is no class is the text `typeof` gives it, which reads only as
+ * typeof spells it, and that of a class is its name, `App\Order`, which reads as `App.Order`. */
+static sharp_type_node *sharp_class_value_read(const zend_string *value, sharp_type_reader *reader)
+{
+	char *text = zend_arena_alloc(&reader->arena, ZSTR_LEN(value));
+	for (size_t i = 0; i < ZSTR_LEN(value); i++) {
+		text[i] = ZSTR_VAL(value)[i] == '\\' ? '.' : ZSTR_VAL(value)[i];
+	}
+	*reader = sharp_type_reader_of(text, ZSTR_LEN(value), reader->arena);
+	reader->depth_left = SHARP_TYPE_INPUT_DEPTH;
+	sharp_type_node *given = sharp_type_read(reader);
+
+	return given && reader->at == reader->end && !reader->names ? given : NULL;
+}
+
+/* Whether each class `node` and the types inside it name exists, as sharp_type_class loads it. */
+static bool sharp_type_node_names_classes(sharp_type_node *node)
+{
+	for (sharp_type_node *member = node->first; member; member = member->next) {
+		if (!sharp_type_node_names_classes(member)) {
+			return false;
 		}
 	}
 
-	sharp_type_reader reader = sharp_type_reader_of(ZSTR_VAL(text), ZSTR_LEN(text), zend_arena_create(1024));
-	reader.depth_left = SHARP_TYPE_INPUT_DEPTH;
-	sharp_type_node *given = sharp_type_read(&reader);
-	bool fits = given && reader.at == reader.end && !reader.names
-		&& sharp_type_argument_takes(type, given, '+', &reader);
+	return node->kind != SHARP_TYPE_NAMED || !node->name || sharp_type_node_class(node);
+}
+
+/* Whether the string `value` is a class value of `Class<type>`, for a `type` that is no class, spec section 25: the
+ * class value of a type that fits `type`, as the checker lets `Class<X>` fit `Class<Y>` when `X` fits `Y`, so a
+ * `Class<int|string>` takes `int`, `string` and `int|string`. */
+static bool sharp_class_value_fits(const zend_string *value, const sharp_type *type)
+{
+	sharp_type_reader reader = sharp_type_reader_of(NULL, 0, zend_arena_create(1024));
+	sharp_type_node *given = sharp_class_value_read(value, &reader);
+	bool fits = given && sharp_type_argument_takes(type, given, '+', &reader);
 	zend_arena_destroy(reader.arena);
-	zend_string_release_ex(text, false);
 
 	return fits;
 }
 
+/* Whether the string `value` is the class value of a type: one with type arguments sharp_class_values knows, or a text
+ * that reads as a type whose every class exists. */
+static bool sharp_class_value_names_type(const zend_string *value)
+{
+	if (sharp_class_value_type(value)) {
+		return true;
+	}
+	sharp_type_reader reader = sharp_type_reader_of(NULL, 0, zend_arena_create(1024));
+	sharp_type_node *given = sharp_class_value_read(value, &reader);
+	bool names = given && sharp_type_node_names_classes(given);
+	zend_arena_destroy(reader.arena);
+
+	return names;
+}
+
 /* Whether the string `value` is a class value of `Class<type>`, spec section 11: it names `type`'s class or a class that
  * extends or implements it, and the type arguments it carries give that class type arguments `type` takes. A class name
- * plain PHP writes carries none, so it gives its class's bounds, as an object plain PHP creates does. A `Class` of a type
- * that is no class, as `Class<int>` or `Class<int|string>`, takes what sharp_class_value_fits takes. `Class<Any?>`,
- * `Class<Object>` and a `Class` of a type parameter no type argument resolves take any string. */
+ * plain PHP writes carries none, so it gives its class's bounds, as an object plain PHP creates does. A `Class` of a
+ * class with no type arguments written, as `Class<Box>` of a generic `Box`, takes the class with any type arguments.
+ * `Class<Object>` takes the class value of any class. A `Class` of a type that is no class, as `Class<int>` or
+ * `Class<int|string>`, takes what sharp_class_value_fits takes, and `Class<Any?>` and a `Class` of a type parameter no
+ * type argument resolves take the class value of any type. A string that names no type is no class value. */
 static bool sharp_class_value_is(const zval *value, const sharp_type *type)
 {
 	if (Z_TYPE_P(value) != IS_STRING) {
 		return false;
 	}
 	const sharp_type *held = type->kind == SHARP_TYPE_NULLABLE ? type->members[0] : type;
+	if (held->kind == SHARP_TYPE_NAMED && held->built_in == SHARP_BUILT_IN_OBJECT) {
+		return sharp_class_value_class(Z_STR_P(value)) != NULL;
+	}
 	if (held->kind == SHARP_TYPE_NAMED
-		&& (held->built_in == SHARP_BUILT_IN_ANY || held->built_in == SHARP_BUILT_IN_OBJECT
-			|| zend_string_equals_literal(held->text, SHARP_TYPE_UNRESOLVED))) {
-		return true;
+		&& (held->built_in == SHARP_BUILT_IN_ANY || zend_string_equals_literal(held->text, SHARP_TYPE_UNRESOLVED))) {
+		return sharp_class_value_names_type(Z_STR_P(value));
 	}
 	if (type->kind != SHARP_TYPE_NAMED || !type->class_name) {
 		return sharp_class_value_fits(Z_STR_P(value), type);
@@ -3978,7 +4025,7 @@ static bool sharp_class_value_is(const zval *value, const sharp_type *type)
 
 	/* A class value is text, so the class it names may not be loaded yet. That class loads each class it extends or
 	 * implements, so `type`'s class is loaded whenever it is one of them. */
-	zend_class_entry *given = sharp_type_class(Z_STR_P(value));
+	zend_class_entry *given = sharp_class_value_class(Z_STR_P(value));
 	zend_class_entry *ce = given ? zend_lookup_class_ex(type->class_name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD) : NULL;
 	if (!ce || !instanceof_function(given, ce)) {
 		return false;
@@ -4781,8 +4828,12 @@ zend_class_entry *sharp_new_class(const zval *created, const sharp_type **argume
 		type = sharp_class_value_type(Z_STR_P(created));
 		if (!type) {
 			*arguments = NULL;
+			/* A class value is the class's name as PHP writes it, `App\Order`, or as PHP# does, `App.Order`. */
+			zend_string *name = sharp_type_class_name(Z_STRVAL_P(created), Z_STRLEN_P(created), false);
+			zend_class_entry *ce = zend_fetch_class(name, ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
+			zend_string_release_ex(name, false);
 
-			return zend_fetch_class(Z_STR_P(created), ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
+			return ce;
 		}
 	} else if (Z_TYPE_P(created) == IS_PTR) {
 		const sharp_type *list = Z_PTR_P(created);

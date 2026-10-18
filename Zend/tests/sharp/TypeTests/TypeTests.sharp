@@ -1,0 +1,80 @@
+namespace TypeTests;
+
+public class TypeTests
+{
+    public static List<bool> tested()
+    {
+        Any? pair = [1, "a"];
+        Any? triple = [1, "a", 2];
+        Any? swapped = ["a", 1];
+        Any? number = 5;
+        Any? rush = typeof(RushOrder);
+        Any? invoice = typeof(Invoice);
+        Any? text = "hello";
+        Any? spelled = "TypeTests\\RushOrder";
+        Any? order = new RushOrder();
+        Any? empty = "";
+        Any? integer = typeof(int);
+        Any? boxed = typeof(Box<Order>);
+        Any? dotted = "TypeTests.RushOrder";
+        return [
+            pair is int|[int, string],
+            triple is int|[int, string],
+            swapped is int|[int, string],
+            number is int|[int, string] n && n is int,
+            TypeTests.label(pair),
+            (triple as [int, string]) == null,
+            (swapped as [int, string]) == null,
+            (number as [int, string]|int) is int,
+            (text as [int, string]|int) == null,
+            match (pair) { int|[int, string] p => p is [1, "a"], default => false },
+            match (swapped) { int|[int, string] p => true, default => false },
+            rush is Class<Order>,
+            invoice is Class<Order>,
+            text is Class<Order>,
+            order is Class<Order>,
+            spelled is Class<Order>,
+            (rush as Class<Order>) == typeof(RushOrder),
+            (invoice as Class<Order>) == null,
+            (text as Class<Order>) == null,
+            match (rush) { Class<Order> type => type == typeof(RushOrder), default => false },
+            rush is int|Class<Order>,
+            order is Object,
+            rush is Object,
+            (number as Object) == null,
+            text is Class<Object>,
+            empty is Class<Any>,
+            text is Class<Any?>,
+            rush is Class<Any>,
+            integer is Class<Any>,
+            boxed is Class<Box>,
+            boxed is Class<Object>,
+            dotted is Class<Order>,
+            match (dotted) { Class<Order> type => new (type)() is RushOrder, default => false },
+            pair is [int, string]|int,
+            swapped is [int, string]|int,
+            pair is [int, string] p && p[1] == "a",
+            TypeTests.unpacked(pair),
+            TypeTests.unpacked(swapped),
+        ];
+    }
+
+    private static bool unpacked(Any? value)
+    {
+        if (value is [int, string]) {
+            const [count, label] = value;
+            return count == 1 && label == "a";
+        }
+        return false;
+    }
+
+    private static bool label(Any? value)
+    {
+        const kept = value as [int, string];
+        if (kept == null) {
+            return false;
+        }
+        const [count, label] = kept;
+        return count == 1 && label == "a";
+    }
+}
