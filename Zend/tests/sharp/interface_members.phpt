@@ -1,5 +1,5 @@
 --TEST--
-A PHP# interface's constant reads through the interface and each implementer, its default property body runs unless a class overrides it, and its operators apply to every implementer, plain PHP's through the Defaults trait, while a class's own operator for two of its values wins, and an enum orders its cases by the operator it declares
+A PHP# interface's constant reads through the interface and each implementer, its default property body runs unless a class overrides it, and each operator use runs the most specific operator the static types of both operands declare, in every operand order, for enums, unions and sub-interfaces, as sortedBy, Set and Map do
 --FILE--
 <?php
 require __DIR__ . '/harness/fixture.inc';
@@ -17,9 +17,14 @@ two Rares as Priced, by the interface: [true,true,false,false,-1]
 two Books, by the interface: [true,-1]
 two Rares, by their own: [false,1]
 a plain PHP class as Priced: [false,false,true,true,1]
-sortedBy, by the interface and by Rare: [[1,2,3],[3,2,1]]
+sortedBy agrees with <: Priced by the interface, Rare by its own: [[1,2,3],[1,2,3],[3,2,1]]
+a Rare and a Book, in either order, by the interface: [true,false,-1,1]
+two Gems by the sub-interface, and as Priced: [[false,1],[true,true,false,false,-1]]
+an enum gets the interface operator: [true,1,"1 USD"]
+sortedBy on a list of Books and Rares: [1,2,3]
+a Set and a Map of Measure key by its ==: [1,1,1]
 enum cases: [true,false,-1]
 an enum compares its cases by its own ==: [true,true,true,2]
 an interface ==, + and unary -: [7,-2,7,false,true,true,false,false,true]
 plain PHP reads the constant and the default body: ["USD","250 USD"]
-the trait holds the operator twice: ["op_Comparison","op_Comparison@InterfaceMembers\\Priced"]
+the trait holds the operator once: ["op_Comparison@InterfaceMembers\\Priced"]

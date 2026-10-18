@@ -114,6 +114,8 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	HashTable *container_test;
 	HashTable container_singletons;
 	sharp_fiber_scopes container_main_scopes;
+	/* The operator <=> the running sortedBy orders two keys by, spec section 19, or NULL when the keys declare none. */
+	zend_function *sort_comparison;
 ZEND_END_MODULE_GLOBALS(sharp)
 
 ZEND_DECLARE_MODULE_GLOBALS(sharp)
@@ -2042,27 +2044,17 @@ ZEND_METHOD(Sharp_Collection, associateBy)
 }
 
 /* Orders two [key, element] pairs by key. A null key sorts before every other key, as Kotlin's sortedBy puts it, since
- * PHP's <=> compares null with a number as two bools, which is no order. Two other keys order as PHP#'s <=> does: two
- * objects by the op_Comparison the left key's class declares or inherits, else the right key's, two strings by their
- * bytes, and other keys as PHP's <=> does. Equal keys keep their original order, which zend_hash_sort keeps in each
- * bucket's extra space, so the sort is stable as Kotlin's is. A call that throws leaves the exception for sortedBy to
- * throw. */
+ * PHP's <=> compares null with a number as two bools, which is no order. Two other keys order as PHP#'s < on two keys
+ * of the key type does: by SHARP_G(sort_comparison), the operator <=> the checker chose for that type, two strings by
+ * their bytes, and other keys as PHP's <=> does. Equal keys keep their original order, which zend_hash_sort keeps in
+ * each bucket's extra space, so the sort is stable as Kotlin's is. A call that throws leaves the exception for sortedBy
+ * to throw. */
 static int sharp_collection_compare_keys(Bucket *a, Bucket *b)
 {
 	zval *left = zend_hash_index_find(Z_ARRVAL(a->val), 0);
 	zval *right = zend_hash_index_find(Z_ARRVAL(b->val), 0);
-	zend_class_entry *scope = NULL;
-	zend_function *comparison = NULL;
+	zend_function *comparison = SHARP_G(sort_comparison);
 	int result;
-
-	if (Z_TYPE_P(left) == IS_OBJECT && Z_TYPE_P(right) == IS_OBJECT) {
-		scope = Z_OBJCE_P(left);
-		comparison = zend_hash_str_find_ptr(&scope->function_table, ZEND_STRL("op_comparison"));
-		if (!comparison) {
-			scope = Z_OBJCE_P(right);
-			comparison = zend_hash_str_find_ptr(&scope->function_table, ZEND_STRL("op_comparison"));
-		}
-	}
 
 	if (Z_TYPE_P(left) == IS_NULL || Z_TYPE_P(right) == IS_NULL) {
 		result = (Z_TYPE_P(left) != IS_NULL) - (Z_TYPE_P(right) != IS_NULL);
@@ -2071,7 +2063,7 @@ static int sharp_collection_compare_keys(Bucket *a, Bucket *b)
 		ZVAL_COPY_VALUE(&keys[0], left);
 		ZVAL_COPY_VALUE(&keys[1], right);
 		ZVAL_UNDEF(&order);
-		zend_call_known_function(comparison, NULL, scope, &order, 2, keys, NULL);
+		zend_call_known_function(comparison, NULL, comparison->common.scope, &order, 2, keys, NULL);
 		result = Z_TYPE(order) == IS_LONG ? ZEND_NORMALIZE_BOOL(Z_LVAL(order)) : 0;
 	} else if (Z_TYPE_P(left) == IS_STRING && Z_TYPE_P(right) == IS_STRING) {
 		result = ZEND_NORMALIZE_BOOL(zend_binary_zval_strcmp(left, right));
@@ -2090,9 +2082,12 @@ ZEND_METHOD(Sharp_Collection, sortedBy)
 {
 	zend_fcall_info fci;
 	zend_fcall_info_cache fcc;
+	zend_object *comparison = NULL;
 
-	ZEND_PARSE_PARAMETERS_START(1, 1)
+	ZEND_PARSE_PARAMETERS_START(1, 2)
 		Z_PARAM_FUNC(fci, fcc)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_OBJ_OF_CLASS_OR_NULL(comparison, zend_ce_closure)
 	ZEND_PARSE_PARAMETERS_END();
 
 	zend_array *elements = sharp_collection_read(ZEND_THIS);
@@ -2116,7 +2111,11 @@ ZEND_METHOD(Sharp_Collection, sortedBy)
 	zend_array_release(elements);
 
 	if (!EG(exception)) {
+		/* A key's operator may sort a list of its own, so the outer sort's comparison comes back after it. */
+		zend_function *outer = SHARP_G(sort_comparison);
+		SHARP_G(sort_comparison) = comparison ? (zend_function *) zend_get_closure_method_def(comparison) : NULL;
 		zend_hash_sort(Z_ARRVAL(pairs), sharp_collection_compare_keys, true);
+		SHARP_G(sort_comparison) = outer;
 	}
 	if (EG(exception)) {
 		zval_ptr_dtor(&pairs);
@@ -8713,6 +8712,7 @@ static PHP_RINIT_FUNCTION(sharp)
 	/* Each entry points at a live Sharp\Listening, which removes it when it stops, and holds no reference. */
 	zend_hash_init(&SHARP_G(scoped_listeners), 0, NULL, NULL, false);
 	SHARP_G(next_scoped_listener) = 0;
+	SHARP_G(sort_comparison) = NULL;
 	ZVAL_UNDEF(&SHARP_G(compile_command_report));
 	zend_hash_init(&SHARP_G(container_bindings), 8, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(container_environment), 8, NULL, ZVAL_PTR_DTOR, false);

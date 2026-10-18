@@ -416,6 +416,6 @@ Nothing in sections 12, 17 and 30.
 # Found outside the Slice
 
 - **Ruling 7.6 of `12-collection-methods.md` no longer holds.** Its source lines ("The same holds for a `List` index") left the spec in `cc3258a319`. Decision 3 deletes what it built, and that note's ruling stays as the record of why it was built.
-- **`sortedBy` refuses an enum key:** "`sortedBy` orders numbers, strings and classes that declare `operator <=>`, and `Status` is none of them." Section 19 decides whether an enum orders, not section 12.
+- **`sortedBy` refuses an enum key:** "`sortedBy` orders numbers, strings, and classes and enums that declare `operator <=>`, and `Status` is none of them." Section 19 decides whether an enum orders, not section 12.
 - **Section 5's default for properties, constants and named constructors** stays refused as "not supported yet" (question 7).
 - **A plain PHP `array` is a `Map<int|string, Any?>`,** so one loop variable over it is the entry `[int|string, Any?]`, as over any `Map`, and `for (const [i, item] of rows)` reads its keys and values. A plain PHP result documented `list<T>` is a `List<T>`, whose loop variable is each element.

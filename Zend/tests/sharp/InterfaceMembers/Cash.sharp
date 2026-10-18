@@ -1,0 +1,9 @@
+namespace InterfaceMembers;
+
+public enum Cash : int, Priced
+{
+    case Penny = 1;
+    case Dime = 10;
+
+    public int cents => this.value;
+}

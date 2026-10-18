@@ -45,15 +45,24 @@ function rows(): array
         'two Books, by the interface' => fn () => Report::books(),
         'two Rares, by their own' => fn () => Report::rares(),
         'a plain PHP class as Priced' => fn () => Report::priced(new LegacyBook(5), new Book(2)),
-        'sortedBy, by the interface and by Rare' => fn () => [
+        'sortedBy agrees with <: Priced by the interface, Rare by its own' => fn () => [
             Report::sorted([new Book(3), new LegacyBook(1), new Book(2)]),
             Report::sorted([new Rare(1), new Rare(3), new Rare(2)]),
+            Report::rareSorted([new Rare(1), new Rare(3), new Rare(2)]),
         ],
+        'a Rare and a Book, in either order, by the interface' => fn () => Report::either(new Rare(1), new Book(2), new Book(2)),
+        'two Gems by the sub-interface, and as Priced' => fn () => [
+            Report::gems(new InterfaceMembers\Gem(1), new InterfaceMembers\Gem(2)),
+            Report::priced(new InterfaceMembers\Gem(1), new InterfaceMembers\Gem(2)),
+        ],
+        'an enum gets the interface operator' => fn () => Report::cash(),
+        'sortedBy on a list of Books and Rares' => fn () => Report::mixedSorted(),
+        'a Set and a Map of Measure key by its ==' => fn () => Report::keyed(new Weight(1000), new InterfaceMembers\Kilo(1)),
         'enum cases' => fn () => Report::sizes(),
         'an enum compares its cases by its own ==' => fn () => Report::coins(),
         'an interface ==, + and unary -' => fn () => Report::measures(new Weight(2), new Weight(5), null),
         'plain PHP reads the constant and the default body' => fn () => [Priced::CURRENCY, (new LegacyBook(250))->label],
-        'the trait holds the operator twice' => fn () => array_map(
+        'the trait holds the operator once' => fn () => array_map(
             static fn (ReflectionMethod $method): string => $method->name,
             (new ReflectionClass(Priced\Defaults::class))->getMethods(ReflectionMethod::IS_STATIC),
         ),

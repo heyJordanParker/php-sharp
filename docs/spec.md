@@ -2546,7 +2546,8 @@ twice == twice;                  // compile error: a function has no ==
 ```
 
 - **Overloadable operators:** `+ - * / % **`, unary `-`, `==` and `<=>`. No other operator can be overloaded.
-- **A class, a struct, an enum and an interface declare operators** by the same rules. An interface writes `static` alone, as it writes every member bare, and its operator applies to every implementer (section 22). A class's own operator for the same pair of types wins over its interface's.
+- **A class, a struct, an enum and an interface declare operators** by the same rules. An interface writes `static` alone, as it writes every member bare, and its operator applies to every implementer (section 22).
+- **An operator is chosen from the types of both sides,** as in C#. Of the operators the two types and their interfaces declare, the most specific one that takes both sides runs, whichever side comes first. Two that take both, where neither is more specific, are a compile error at the use. `sortedBy` orders as `<` on two of its keys does.
 - **`!=`** is derived from `==`.
 - **`< > <= >=` and sorting** are derived from `<=>`.
 - **Strings compare byte by byte,** as in Go. `<`, `>` and `sort` put `"10"` before `"9"` and capitals before lowercase, so `"10" < "9"` is true and `"Zebra" < "apple"` is true. The order agrees with `==`. `compareTo` gives -1, 0 or 1 in the same order, so `"b".compareTo("a")` is 1.
@@ -2570,6 +2571,61 @@ Size.Small < Size.Large;                  // true
 Size.Large <=> Size.Small;                // 1
 Status.Active < Status.Paused;            // compile error: Status declares no <=>, so its cases have no order
 ```
+
+Two interfaces that each declare an operator for a class make it pick one:
+
+<!-- example operator-choice -->
+```csharp
+// app/Weighed.sharp
+namespace App;
+
+public interface Weighed
+{
+    int grams { get; }
+    int hash();
+    static bool operator ==(Weighed a, Weighed b) => a.grams == b.grams;
+}
+```
+
+<!-- example operator-choice -->
+```csharp
+// app/Valued.sharp
+namespace App;
+
+public interface Valued
+{
+    int cents { get; }
+    int hash();
+    static bool operator ==(Valued a, Valued b) => a.cents == b.cents;
+}
+```
+
+<!-- example operator-choice -->
+```csharp
+// app/Parcel.sharp
+namespace App;
+
+public class Parcel : Valued, Weighed
+{
+    public int cents { get; }
+    public int grams { get; }
+    public Parcel(int cents, int grams) { this.cents = cents; this.grams = grams; }
+    public int hash() => this.grams;
+}
+```
+
+<!-- example operator-choice: statements -->
+```csharp
+Parcel light = new Parcel(500, 100);
+Parcel heavy = new Parcel(500, 900);
+light == heavy;                         // compile error: Valued and Weighed each declare an == that takes two Parcels
+Valued lightPrice = light;
+lightPrice == heavy;                    // true: only Valued's == takes a Valued
+Weighed lightWeight = light;
+lightWeight == heavy;                   // false: only Weighed's == takes a Weighed
+```
+
+Declaring `public static bool operator ==(Parcel a, Parcel b)` in `Parcel` gives two `Parcel`s their own `==`, which is more specific than either interface's.
 
 **`==` and `!=` on a nullable type are lifted,** as C#'s operators on nullable values and Kotlin's `==` are. Null equals only null. Two non-null values use the type's own `==`, including a declared `operator ==`, so an `operator ==` takes two non-null values and never sees a null. `x != null` is the normal null check, and it never runs user code. `x is null` and `x is not null` stay valid as ordinary patterns (section 21).
 
@@ -3336,6 +3392,9 @@ Priced dear = new Book(900);
 cheap < dear;                          // true: the interface's <=>
 cheap <=> dear;                        // -1
 new Rare(100) < new Rare(900);         // false: Rare's own <=> wins for two Rares
+new Rare(100) < new Book(900);         // true: only the interface's <=> takes a Rare and a Book
+List<Priced> mixed = [new Rare(900), new Rare(100)];
+mixed.sortedBy(item => item).map(item => item.cents);   // [100, 900]: sortedBy orders as < on two Priced does
 ```
 
 <!-- example interface-members-in-classes -->
@@ -3345,7 +3404,7 @@ namespace App;
 
 class LegacyBook implements Priced
 {
-    use Priced\Defaults;                                    // gets the default bodies and the operator
+    use Priced\Defaults;                                    // gets the default bodies, without which this class is a compile error
 
     public function __construct(public int $cents) {}
 
@@ -3364,7 +3423,8 @@ App\Priced::CURRENCY;                  // "USD"
 - An interface constant follows a class constant's rules, and is read through the interface or any class that implements it.
 - An interface holds no storage, so a property it states gives no initial value, and a computed property's expression is its default body.
 - An interface states no law: a law is proved against the code of a class or an enum, and any class may implement an interface later.
-- An interface's operator compiles into `<Interface>\Defaults` as well, so every PHP# implementer, and each plain PHP class that uses the trait, gets it.
+- An interface's operator applies to every implementer, a plain PHP class included, as section 19 chooses every operator: from the types of both sides, the most specific one runs.
+- A plain PHP class that implements an interface with default bodies uses `<Interface>\Defaults`, or it is a compile error that names the trait.
 
 **A plain PHP trait** is listed in the header with the base class and interfaces, and it is also a type. It works everywhere an interface does:
 

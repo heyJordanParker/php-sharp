@@ -14,6 +14,24 @@ public static class Report
 
     public static List<int> sorted(List<Priced> items) => items.sortedBy(item => item).map(item => item.cents);
 
+    public static List<int> rareSorted(List<Rare> items) => items.sortedBy(item => item).map(item => item.cents);
+
+    public static List<Any> either(Rare r, Book b, Priced p) => [r < b, b < r, r <=> p, p <=> r];
+
+    public static List<Any> gems(Gem a, Gem b) => [a < b, a <=> b];
+
+    public static List<Any> cash() => [Cash.Penny < Cash.Dime, Cash.Dime <=> Cash.Penny, Cash.Penny.label];
+
+    public static List<int> mixedSorted() => [new Book(3), new Rare(1), new Book(2)].sortedBy(item => item).map(item => item.cents);
+
+    public static List<int> keyed(Measure a, Measure b)
+    {
+        Map<Measure, string> names = [:];
+        names[a] = "a";
+        names[b] = "b";
+        return [new Set<Measure>([a, b]).count(), names.count(), [a].toSet().contains(b) ? 1 : 0];
+    }
+
     public static List<Any> sizes() => [Size.Small < Size.Large, Size.Large <= Size.Small, Size.Small <=> Size.Large];
 
     public static List<Any> coins() => [
