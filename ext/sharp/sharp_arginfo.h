@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: cf43c6a5dc9855f8fad890afc576f040c1186b14 */
+ * Stub hash: 3a2e4796da4447ed088a507560c3272630a80f0b */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -133,6 +133,8 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_map, 0, 1
 	ZEND_ARG_OBJ_INFO(0, transform, Closure, 0)
 ZEND_END_ARG_INFO()
 
+#define arginfo_class_Sharp_Collection_flatMap arginfo_class_Sharp_Collection_map
+
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_class_Sharp_Collection_sumOf, 0, 1, MAY_BE_LONG|MAY_BE_DOUBLE)
 	ZEND_ARG_OBJ_INFO(0, selector, Closure, 0)
 ZEND_END_ARG_INFO()
@@ -232,6 +234,7 @@ ZEND_METHOD(Sharp_Collection, values);
 ZEND_METHOD(Sharp_Collection, toList);
 ZEND_METHOD(Sharp_Collection, filter);
 ZEND_METHOD(Sharp_Collection, map);
+ZEND_METHOD(Sharp_Collection, flatMap);
 ZEND_METHOD(Sharp_Collection, sumOf);
 ZEND_METHOD(Sharp_Collection, first);
 ZEND_METHOD(Sharp_Collection, any);
@@ -290,6 +293,7 @@ static const zend_function_entry class_Sharp_Collection_methods[] = {
 	ZEND_ME(Sharp_Collection, toList, arginfo_class_Sharp_Collection_toList, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, filter, arginfo_class_Sharp_Collection_filter, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, map, arginfo_class_Sharp_Collection_map, ZEND_ACC_PUBLIC)
+	ZEND_ME(Sharp_Collection, flatMap, arginfo_class_Sharp_Collection_flatMap, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, sumOf, arginfo_class_Sharp_Collection_sumOf, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, first, arginfo_class_Sharp_Collection_first, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Collection, any, arginfo_class_Sharp_Collection_any, ZEND_ACC_PUBLIC)

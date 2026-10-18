@@ -1344,6 +1344,26 @@ plans.filter(p => p.active);          // Map<string, Plan>, keys kept
 
 `contains`, a `List`'s `remove`, `indexOf` and `Set<T>` need `==` on the element type (section 19). Without it, they are a compile error.
 
+**`flatMap` and `toList()`:** a `List`'s `flatMap` gives, in order, the elements of each `Iterable` its function gives, as Kotlin's does. `toList()` gives the elements of any `Iterable` as a `List` of their own. A `Map` is an `Iterable` of its `[key, value]` entries, so both give a `Map`'s entries, as Kotlin's `Map.toList()` gives its pairs:
+
+<!-- example flat-map-to-list: statements
+List<List<int>> rows = [[1, 2], [], [3]];
+List<List<int>> none = [];
+Set<string> tags = ["vip", "new"];
+Map<string, int> stock = ["tea": 3, "pie": 7];
+List<Map<string, int>> shelves = [stock, ["jam": 1]];
+-->
+```csharp
+rows.flatMap(row => row);              // [1, 2, 3]
+none.flatMap(row => row);              // []
+tags.toList();                         // ["vip", "new"]
+stock.toList();                        // [["tea", 3], ["pie", 7]]
+stock.values().toList();               // [3, 7]
+shelves.flatMap(shelf => shelf);       // [["tea", 3], ["pie", 7], ["jam", 1]]
+rows.flatMap(row => row.count());      // compile error: an int is no Iterable
+List<int> counts = shelves.flatMap(shelf => shelf);   // compile error: the entries are [string, int]
+```
+
 The complete method list is specified with the standard library.
 
 **`Iterable<T>` is anything a loop can read,** and it compiles to PHP's `iterable`. `List<T>` and `Set<T>` are `Iterable<T>`. A `Map<TKey, TValue>` is an `Iterable<[TKey, TValue]>` of its entries, and `values()` gives its values (section 17):
@@ -1698,7 +1718,7 @@ List<string> names = ["Spring Sale"];
 names.map(Str.slug);
 ```
 
-A method of a `List`, `Map` or `Set`, an extension method (section 26) and a plain PHP function are values the same way, as in `allowed.contains`, `name.trim` and `global.strtoupper`. A collection is a value (section 12), so a collection's method value holds the collection as it was when the value was made, as C# copies a struct into a delegate made from its method:
+A method of a `List`, `Map` or `Set`, an extension method (section 26) and a plain PHP function are values the same way, as in `allowed.contains`, `name.trim` and `global.ucfirst`. A collection is a value (section 12), so a collection's method value holds the collection as it was when the value was made, as C# copies a struct into a delegate made from its method:
 
 <!-- example method-value-kinds: statements
 List<int> allowed = [1, 3];
@@ -1708,12 +1728,12 @@ List<string> names = ["tea", "jam"];
 const has = allowed.contains;
 allowed.add(5);
 List<int> kept = [1, 2, 5].filter(allowed.contains);   // [1, 5]
-List<string> loud = names.map(global.strtoupper);      // ["TEA", "JAM"]
+List<string> capitalized = names.map(global.ucfirst);  // ["Tea", "Jam"]
 ```
 <!-- run method-value-kinds
 has(5);        // false
 kept;          // [1, 5]
-loud;          // ["TEA", "JAM"]
+capitalized;   // ["Tea", "Jam"]
 -->
 
 **A method that changes a collection is no function value**, since it would change only that copy, as Swift refuses the value of a `mutating` method. A lambda that calls it changes the collection itself:
@@ -2202,6 +2222,28 @@ A plain PHP file keeps PHP's own interpolation. It converts an object of a class
 
 **Plain strings:** `"…"` and `'…'` never interpolate, so braces and `$` inside them are literal.
 
+**Text methods:** a `string` has Kotlin's text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so a case change reaches every letter. `replace` replaces every match, as Kotlin's does. `split` keeps the empty text after a trailing delimiter, and takes Kotlin's `limit`: 0, its default, gives every part, and a positive limit gives at most that many, the last holding the rest. Empty text to replace, an empty delimiter and a negative limit each throw `ValueError`:
+
+<!-- example text-methods: statements -->
+```csharp
+"hello".contains("ell");                  // true
+"hello".contains("xyz");                  // false
+"ÉCOLE".lowercase();                      // "école"
+"école".uppercase();                      // "ÉCOLE"
+"hello".startsWith("he");                 // true
+"hello".startsWith("lo");                 // false
+"hello".endsWith("lo");                   // true
+"hello".endsWith("he");                   // false
+"banana".replace("a", "o");               // "bonono"
+"banana".replace("", "o");                // throws: "`replace` needs text to replace, and it is empty."
+"a,b,".split(",");                        // ["a", "b", ""]
+"a:b:c".split(":", 2);                    // ["a", "b:c"]
+"a,b".split("");                          // throws: "`split` needs a delimiter, and it is empty."
+"a:b".split(":", -1);                     // throws: "`split` takes a limit of 0 or more, and it is negative."
+"hello".contains(1);                      // compile error: contains takes a string
+global.str_contains("hello", "ell");      // compile error: write "hello".contains(…)
+```
+
 PHP's backtick shell execution is removed, and so is `shell_exec()`. A program runs through `Process.run(program, arguments)` (section 29), which takes its arguments as a list, so no shell reads them.
 
 ## 19. Equality, comparison and operators
@@ -2668,6 +2710,35 @@ Any? doubled = (int x) => x * 2;
 doubled is Function<int(int)>;               // true
 doubled is Function<string(string)>;         // false: the parameter and result types differ
 Legacy.doubler() is Function<int(int)>;      // compile error: the type of Legacy.doubler()'s function is unknown
+```
+
+**A tuple type tests the number of elements and each element's type,** as `List<int>` tests each element. A pattern that starts with `[` is a list pattern, which tests the same, so a tuple type is written in `as` and as a member of a union:
+
+<!-- example tuple-tests: statements -->
+```csharp
+Any? pair = [1, "a"];
+Any? triple = [1, "a", 2];
+Any? swapped = ["a", 1];
+pair as [int, string];                       // [1, "a"]
+triple as [int, string];                     // null: three elements
+swapped as [int, string];                    // null: the element types differ
+pair is int|[int, string];                   // true
+```
+
+**`Class<T>` tests that a value is a class value of `T` or of a class that extends or implements `T`.** A string that holds a class's full name, as `"App.RushOrder"`, is that class's class value, so it passes too. A string that names no class never passes, not even `Class<Object>`:
+
+<!-- example class-value-tests: statements -->
+```csharp
+Any? rush = typeof(RushOrder);
+Any? customer = typeof(Customer);
+Any? named = "App.RushOrder";
+Any? text = "rush";
+rush is Class<Order>;                        // true: RushOrder extends Order
+customer is Class<Order>;                    // false
+named is Class<Order>;                       // true: the string names RushOrder
+text is Class<Order>;                        // false: no class is named rush
+text is Class<Object>;                       // false
+(rush as Class<Order>) == typeof(RushOrder); // true
 ```
 
 **Boolean operators:** `&&`, `||` and `!` exist only in expressions. PHP's `and`, `or` and `xor` operators are removed, so `=` can no longer bind before `and`.
