@@ -1,0 +1,11 @@
+namespace InterfaceMembers;
+
+public class Kilo : Measure
+{
+    public int grams { get; }
+
+    public Kilo(int kilos)
+    {
+        this.grams = kilos * 1000;
+    }
+}

@@ -58,7 +58,7 @@ final class Collection
 
     public function associateBy(\Closure $key): Map {}
 
-    public function sortedBy(\Closure $selector): array {}
+    public function sortedBy(\Closure $selector, ?\Closure $comparison = null): array {}
 }
 
 /**

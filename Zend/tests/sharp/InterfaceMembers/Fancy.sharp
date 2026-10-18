@@ -1,0 +1,6 @@
+namespace InterfaceMembers;
+
+public interface Fancy : Priced
+{
+    static int operator <=>(Fancy a, Fancy b) => b.cents <=> a.cents;
+}

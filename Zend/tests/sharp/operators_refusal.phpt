@@ -137,7 +137,7 @@ line 63: Write `not (Paid or Refunded)`, or `(not Paid) or Refunded`.
 line 71: A type pattern is never nullable: null never matches a type.
 line 77: This pattern never matches the value it tests.
 line 81: `while` takes a `bool`, but this is `int`.
-line 87: `<` orders numbers, strings and classes that declare `operator <=>`, and `bool` is none of them.
-line 89: `<` orders numbers, strings and classes that declare `operator <=>`, and `Status` is none of them.
-line 91: `<=>` orders numbers, strings and classes that declare `operator <=>`, and `Status` is none of them.
-line 93: `<` orders numbers, strings and classes that declare `operator <=>`, and `List<int>` is none of them.
+line 87: `<` orders numbers, strings, and classes and enums that declare `operator <=>`, and `bool` is none of them.
+line 89: `<` orders numbers, strings, and classes and enums that declare `operator <=>`, and `Status` is none of them.
+line 91: `<=>` orders numbers, strings, and classes and enums that declare `operator <=>`, and `Status` is none of them.
+line 93: `<` orders numbers, strings, and classes and enums that declare `operator <=>`, and `List<int>` is none of them.

@@ -1,0 +1,10 @@
+namespace InterfaceMembers;
+
+public interface Measure
+{
+    int grams { get; }
+    int hash() => this.grams;
+    static bool operator ==(Measure a, Measure b) => a.grams == b.grams;
+    static Measure operator +(Measure a, Measure b) => new Weight(a.grams + b.grams);
+    static Measure operator -(Measure a) => new Weight(-a.grams);
+}

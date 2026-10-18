@@ -62,7 +62,7 @@ class Operators
         return $left;
     }
 
-    public function byPrice(array $lines): array { return ((object) $lines)->sortedBy(fn ($l) => $l->price); }
+    public function byPrice(array $lines): array { return ((object) $lines)->sortedBy(fn ($l) => $l->price, \Billing\Money::op_Comparison(...)); }
 
     public function byCode(array $codes): array { return ((object) $codes)->sortedBy(fn ($code) => $code); }
 

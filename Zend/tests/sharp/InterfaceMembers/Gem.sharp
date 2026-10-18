@@ -1,0 +1,11 @@
+namespace InterfaceMembers;
+
+public class Gem : Fancy
+{
+    public int cents { get; }
+
+    public Gem(int cents)
+    {
+        this.cents = cents;
+    }
+}

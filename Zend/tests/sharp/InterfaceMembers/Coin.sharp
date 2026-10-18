@@ -1,0 +1,12 @@
+namespace InterfaceMembers;
+
+public enum Coin
+{
+    case Gold(int grams, string mint);
+    case Copper;
+
+    public int hash() => this is Coin.Gold(int grams, string mint) ? grams : 0;
+
+    public static bool operator ==(Coin a, Coin b) =>
+        a is Coin.Copper && b is Coin.Copper || a is Coin.Gold(int x, string m) && b is Coin.Gold(int y, string n) && x == y;
+}

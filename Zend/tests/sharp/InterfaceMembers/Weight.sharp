@@ -1,0 +1,11 @@
+namespace InterfaceMembers;
+
+public class Weight : Measure
+{
+    public int grams { get; }
+
+    public Weight(int grams)
+    {
+        this.grams = grams;
+    }
+}

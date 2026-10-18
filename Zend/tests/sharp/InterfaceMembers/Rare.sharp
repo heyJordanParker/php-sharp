@@ -1,0 +1,15 @@
+namespace InterfaceMembers;
+
+public class Rare : Priced
+{
+    public int cents { get; }
+
+    public Rare(int cents)
+    {
+        this.cents = cents;
+    }
+
+    public override string label => "rare";
+
+    public static int operator <=>(Rare a, Rare b) => b.cents <=> a.cents;
+}
