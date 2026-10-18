@@ -803,6 +803,11 @@ static void add_class_vars(zend_class_entry *scope, zend_class_entry *ce, bool s
 			}
 		}
 
+		/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+		if (UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_CROSSING) && !sharp_runs_sharp_code()) {
+			sharp_cross_read(prop);
+		}
+
 		zend_hash_add_new(Z_ARRVAL_P(return_value), key, prop);
 	} ZEND_HASH_FOREACH_END();
 }
@@ -876,6 +881,11 @@ ZEND_FUNCTION(get_object_vars)
 				continue;
 			}
 
+			/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+			if (!is_dynamic && Z_TYPE_P(value) != IS_PTR && sharp_cross_slot_read(&tmp, zobj, value)) {
+				value = &tmp;
+			}
+
 			if (Z_ISREF_P(value) && Z_REFCOUNT_P(value) == 1) {
 				value = Z_REFVAL_P(value);
 			}
@@ -941,7 +951,9 @@ ZEND_FUNCTION(get_mangled_object_vars)
 		(obj->ce->default_properties_count ||
 		 obj->handlers != &std_object_handlers ||
 		 GC_IS_RECURSIVE(properties)));
-	RETURN_ARR(properties);
+	RETVAL_ARR(properties);
+	/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array, as (array) does. */
+	sharp_cross_array_cast(return_value, obj);
 }
 /* }}} */
 

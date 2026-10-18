@@ -11,7 +11,7 @@ public class Import
         const lines = files.readLines(path) ?? throw new RuntimeException(`${path} does not exist`);
         for (const text of lines) {
             if (text != "") {
-                yield global.explode(",", text);
+                yield text.split(",");
             }
         }
     }

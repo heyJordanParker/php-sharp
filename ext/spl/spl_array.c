@@ -114,6 +114,19 @@ static inline bool spl_array_is_object(spl_array_object *intern) /* {{{ */
 }
 /* }}} */
 
+/* PHP#: puts in `rv` what plain PHP code reads from `slot` when it is a declared property slot of the object `intern`
+ * reads, as sharp_cross_slot_read gives it, and gives whether it did. */
+static bool spl_array_crossed_slot(spl_array_object *intern, zval *slot, zval *rv)
+{
+	if (Z_TYPE(intern->array) != IS_OBJECT || (intern->ar_flags & (SPL_ARRAY_IS_SELF|SPL_ARRAY_USE_OTHER))) {
+		return false;
+	}
+	zend_object *object = Z_OBJ(intern->array);
+
+	return slot >= object->properties_table && slot < object->properties_table + object->ce->default_properties_count
+		&& sharp_cross_slot_read(rv, object, slot);
+}
+
 static zend_result spl_array_skip_protected(spl_array_object *intern, HashTable *aht);
 
 static zend_never_inline void spl_array_create_ht_iter(HashTable *ht, spl_array_object* intern) /* {{{ */
@@ -442,6 +455,11 @@ static zval *spl_array_read_dimension_ex(int check_inherited, zend_object *objec
 	}
 
 	ret = spl_array_get_dimension_ptr(check_inherited, intern, object->ce->name, offset, type);
+
+	/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
+	if ((type == BP_VAR_R || type == BP_VAR_IS) && spl_array_crossed_slot(intern, ret, rv)) {
+		return rv;
+	}
 
 	/* When in a write context,
 	 * ZE has to be fooled into thinking this is in a reference set

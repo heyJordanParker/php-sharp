@@ -6,5 +6,5 @@ public class Upper : Behavior<string>
 {
     public string get(string value) => value;
 
-    public string set(string value) => global.strtoupper(value);
+    public string set(string value) => value.uppercase();
 }

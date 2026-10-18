@@ -102,10 +102,6 @@ Found while building Q5. Q5's copy means `numbers.forEach(seen.add)` would add t
 - **Built:** refused, as Swift refuses the value of a `mutating` method and Rust has no value of a method that takes `&mut self` without a closure: "`seen.add` changes the collection, and a function value holds a copy of it: write a lambda that calls it, as in `value => seen.add(value)`." A refusal can be lifted later without breaking code that compiles.
 - Allow it, as C# allows a delegate of a struct's method, which changes the boxed copy. The value then changes only its copy. TypeScript reads `seen.push` too, and its call throws, because the value lost its `this`.
 
-## Waiting on Jordan
-
-- **Whether `uses none` states a pure function type.** Not built. Today a function type with no `uses` is pure (section 29), and after #136 a function parameter with no `uses` takes on its argument's effects.
-
 ## Existing work, and how the Slice reuses it
 
 - **The function type and lambdas** came with mago-sharp's syntax work: `Function<R(P)>` in `crates/syntax`, the bare arrow, `check_lambda_captures`, and the bridge's arrow function or closure with a `use` list. Reused unchanged but for the loop capture (Gap 6).

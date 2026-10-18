@@ -7,6 +7,10 @@ opcache.enable=1
 opcache.enable_cli=1
 opcache.jit=function
 opcache.jit_buffer_size=32M
+--SKIPIF--
+<?php
+if (ini_get('opcache.jit') === false) die('skip JIT is not available');
+?>
 --FILE--
 <?php
 echo 'jit ', opcache_get_status()['jit']['on'] ? 'on' : 'off', "\n";
@@ -14,128 +18,58 @@ require __DIR__ . '/enum_keys.inc';
 ?>
 --EXPECTF--
 jit on
-object(Sharp\Map)#7 (1) {
-  [0]=>
-  array(2) {
-    [0]=>
-    enum(Lib\Standing::Active)
-    [1]=>
-    int(2)
-  }
+array(1) {
+  ["active"]=>
+  int(2)
 }
-object(Sharp\Map)#2 (1) {
-  [0]=>
-  array(2) {
-    [0]=>
-    enum(Lib\Standing::Active)
-    [1]=>
-    int(0)
-  }
+array(1) {
+  ["active"]=>
+  int(0)
 }
-object(Sharp\Map)#11 (1) {
-  [0]=>
-  array(2) {
-    [0]=>
-    enum(Lib\Standing::Closed)
-    [1]=>
-    int(3)
-  }
+array(1) {
+  ["closed"]=>
+  int(3)
 }
-object(Sharp\Map)#11 (1) {
-  [0]=>
-  array(2) {
-    [0]=>
-    enum(Lib\Standing::Active)
-    [1]=>
-    int(1)
-  }
+array(1) {
+  ["active"]=>
+  int(1)
 }
-object(Sharp\Map)#11 (1) {
-  [0]=>
-  array(2) {
-    [0]=>
-    enum(Lib\Standing::Closed)
-    [1]=>
-    int(2)
-  }
+array(1) {
+  ["closed"]=>
+  int(2)
 }
-object(Sharp\Map)#11 (1) {
-  [0]=>
-  array(2) {
-    [0]=>
-    enum(Lib\Standing::Active)
-    [1]=>
-    int(0)
-  }
+array(1) {
+  ["active"]=>
+  int(0)
 }
-object(Sharp\Map)#11 (2) {
-  [0]=>
-  array(2) {
-    [0]=>
-    enum(Lib\Size::Small)
-    [1]=>
-    string(5) "small"
-  }
+array(2) {
   [1]=>
-  array(2) {
-    [0]=>
-    enum(Lib\Size::Large)
-    [1]=>
-    string(5) "large"
-  }
+  string(5) "small"
+  [2]=>
+  string(5) "large"
 }
-object(Sharp\Map)#11 (1) {
-  [0]=>
-  array(2) {
-    [0]=>
-    enum(Lib\Code::Five)
-    [1]=>
-    int(5)
-  }
+array(1) {
+  [5]=>
+  int(5)
 }
 int(3)
 NULL
-object(Sharp\Map)#11 (1) {
-  [0]=>
-  array(2) {
-    [0]=>
-    enum(Lib\Standing::Closed)
-    [1]=>
-    int(4)
+array(1) {
+  ["closed"]=>
+  int(4)
+}
+array(1) {
+  ["closed"]=>
+  array(1) {
+    [2]=>
+    int(1)
   }
 }
-object(Sharp\Map)#11 (1) {
-  [0]=>
-  array(2) {
-    [0]=>
-    enum(Lib\Standing::Closed)
-    [1]=>
-    object(Sharp\Map)#4 (1) {
-      [0]=>
-      array(2) {
-        [0]=>
-        enum(Lib\Size::Large)
-        [1]=>
-        int(1)
-      }
-    }
-  }
-}
-object(Sharp\Map)#4 (2) {
-  [0]=>
-  array(2) {
-    [0]=>
-    string(6) "Active"
-    [1]=>
-    int(3)
-  }
-  [1]=>
-  array(2) {
-    [0]=>
-    string(6) "Closed"
-    [1]=>
-    int(4)
-  }
+array(2) {
+  ["Active"]=>
+  int(3)
+  ["Closed"]=>
+  int(4)
 }
 TypeError: Demo\Headcount::byName(): Argument #1 ($counts) must be of type Map<Lib.Standing, int>, array given: ["missing"] key expected Lib.Standing, got string 'missing', called in %s on line %d in Headcount.sharp on line 67
 array(2) {
@@ -144,28 +78,18 @@ array(2) {
   [1]=>
   string(3) "tea"
 }
-object(Sharp\Map)#11 (2) {
-  [0]=>
-  array(2) {
+array(2) {
+  ["active"]=>
+  array(1) {
     [0]=>
-    enum(Lib\Standing::Active)
-    [1]=>
-    array(1) {
-      [0]=>
-      int(1)
-    }
+    int(1)
   }
-  [1]=>
+  ["closed"]=>
   array(2) {
     [0]=>
-    enum(Lib\Standing::Closed)
+    int(2)
     [1]=>
-    array(2) {
-      [0]=>
-      int(2)
-      [1]=>
-      int(3)
-    }
+    int(3)
   }
 }
 array(2) {

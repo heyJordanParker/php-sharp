@@ -1209,7 +1209,10 @@ for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is a 
 **Map keys:** anything with `==` and `hash()` (section 19) keys a `Map` and joins a `Set`, as in Swift, Rust, Java and Kotlin.
 
 - A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type, as in `const [Status status, int n]`, stays allowed. An inferred `Map`, such as a `groupBy` result, gives its keys back the same way.
-- Plain PHP receives the `Map` itself, or a PHP array where its parameter's declared type names `array`. A PHP array's keys are `int` or `string`, so a `Map` keyed by a backed enum passes each case's backing value as its key, as an array crossing the other way gives each backing value as its case. Passing a `Map` keyed by anything else to such a parameter is a compile error that names the parameter and the key type. `counts.count()` counts any `Map`, whatever its keys.
+- Plain PHP receives a `Map` or a `Set` as a PHP array wherever it gets one: a result, a value a generator yields, an argument, a property it reads, a constant and an attribute's argument, and so does each `Map` and `Set` a `List` holds. That holds where the declared type is `Any`, `Any?`, a type parameter or an `Iterable` too. A `Map` is the array of its entries and a `Set` the list of its elements. A property it reads through `get_object_vars`, `get_mangled_object_vars`, `get_class_vars`, an `(array)` cast, `foreach`, `array_walk` or an `ArrayIterator` over the object, `ReflectionProperty::getValue` and `ReflectionClass`'s static property reads is the array too, `empty()` tests that array, and reflection gives each such property, parameter and result the type `array`. PHP# code reading its own property still gets the `Map`, and a PHP array plain PHP writes there becomes one again.
+- A PHP array's keys are `int` or `string`, so a `Map` keyed by a backed enum gives each case's backing value as its key, as an array crossing the other way gives each backing value as its case. A `Map` keyed by anything else, a class, a struct, a collection or an enum without backing values, reaches plain PHP as the `Map` itself, the one collection plain PHP receives as the object. Passing it to a plain PHP parameter that names `array` is a compile error that names the parameter and the key type. `counts.count()` counts any `Map`, whatever its keys.
+- Every other `Map` crosses as a PHP array, as one keyed by `int|string` or by a backed enum beside its backing type does. When two of its keys would become one PHP array key, as `5` and `"5"` do, or a backed enum case and its backing value, the crossing throws a `ValueError` that names both keys: "This `Map` holds both `5` and `"5"`, which plain PHP keeps as one key, so it can't become a plain PHP array". A case is named as `Shop.Level.Low`. It never keeps one entry and drops the other. Only the keys a `Map` holds show this, so the check runs where the `Map` crosses, and a `Map` with no two such keys costs nothing extra.
+- A plain PHP parameter that takes only objects, such as `\Countable`, `\Traversable`, `object` or an interface, takes the `Map` or the `Set` itself. One that names `array`, `iterable` or `mixed`, or declares no type, takes the PHP array. A function value gives a `Map` or a `Set` as a PHP array when the closure behind it is plain PHP, and as itself when it is PHP#.
 
 <!-- example enum-map-keys -->
 ```csharp
@@ -1340,6 +1343,26 @@ plans.filter(p => p.active);          // Map<string, Plan>, keys kept
 ```
 
 `contains`, a `List`'s `remove`, `indexOf` and `Set<T>` need `==` on the element type (section 19). Without it, they are a compile error.
+
+**`flatMap` and `toList()`:** a `List`'s `flatMap` gives, in order, the elements of each `Iterable` its function gives, as Kotlin's does. `toList()` gives the elements of any `Iterable` as a `List` of their own. A `Map` is an `Iterable` of its `[key, value]` entries, so both give a `Map`'s entries, as Kotlin's `Map.toList()` gives its pairs:
+
+<!-- example flat-map-to-list: statements
+List<List<int>> rows = [[1, 2], [], [3]];
+List<List<int>> none = [];
+Set<string> tags = ["vip", "new"];
+Map<string, int> stock = ["tea": 3, "pie": 7];
+List<Map<string, int>> shelves = [stock, ["jam": 1]];
+-->
+```csharp
+rows.flatMap(row => row);              // [1, 2, 3]
+none.flatMap(row => row);              // []
+tags.toList();                         // ["vip", "new"]
+stock.toList();                        // [["tea", 3], ["pie", 7]]
+stock.values().toList();               // [3, 7]
+shelves.flatMap(shelf => shelf);       // [["tea", 3], ["pie", 7], ["jam", 1]]
+rows.flatMap(row => row.count());      // compile error: an int is no Iterable
+List<int> counts = shelves.flatMap(shelf => shelf);   // compile error: the entries are [string, int]
+```
 
 The complete method list is specified with the standard library.
 
@@ -1695,7 +1718,7 @@ List<string> names = ["Spring Sale"];
 names.map(Str.slug);
 ```
 
-A method of a `List`, `Map` or `Set`, an extension method (section 26) and a plain PHP function are values the same way, as in `allowed.contains`, `name.trim` and `global.strtoupper`. A collection is a value (section 12), so a collection's method value holds the collection as it was when the value was made, as C# copies a struct into a delegate made from its method:
+A method of a `List`, `Map` or `Set`, an extension method (section 26) and a plain PHP function are values the same way, as in `allowed.contains`, `name.trim` and `global.ucfirst`. A collection is a value (section 12), so a collection's method value holds the collection as it was when the value was made, as C# copies a struct into a delegate made from its method:
 
 <!-- example method-value-kinds: statements
 List<int> allowed = [1, 3];
@@ -1705,12 +1728,12 @@ List<string> names = ["tea", "jam"];
 const has = allowed.contains;
 allowed.add(5);
 List<int> kept = [1, 2, 5].filter(allowed.contains);   // [1, 5]
-List<string> loud = names.map(global.strtoupper);      // ["TEA", "JAM"]
+List<string> capitalized = names.map(global.ucfirst);  // ["Tea", "Jam"]
 ```
 <!-- run method-value-kinds
 has(5);        // false
 kept;          // [1, 5]
-loud;          // ["TEA", "JAM"]
+capitalized;   // ["Tea", "Jam"]
 -->
 
 **A method that changes a collection is no function value**, since it would change only that copy, as Swift refuses the value of a `mutating` method. A lambda that calls it changes the collection itself:
@@ -2214,6 +2237,28 @@ A plain PHP file keeps PHP's own interpolation. It converts an object of a class
 **A `toString()` is always `string toString()`:** an instance method with no required parameter that returns `string`, as Java's and Kotlin's `toString()` override `Object`'s and `Any`'s. A template and every conversion to text call it with no arguments, so any other `toString()` a type declares is a compile error that names the signature to write, "`Sku.toString()` returns `int`, and PHP# shows a value as text by the `string` its `toString()` returns.", and so is a template of a plain PHP class whose `toString()` is not that one.
 
 **Plain strings:** `"…"` and `'…'` never interpolate, so braces and `$` inside them are literal.
+
+**Text methods:** a `string` has Kotlin's text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so a case change reaches every letter. `replace` replaces every match, as Kotlin's does. `split` keeps the empty text after a trailing delimiter, and takes Kotlin's `limit`: 0, its default, gives every part, and a positive limit gives at most that many, the last holding the rest. Empty text to replace, an empty delimiter and a negative limit each throw `ValueError`:
+
+<!-- example text-methods: statements -->
+```csharp
+"hello".contains("ell");                  // true
+"hello".contains("xyz");                  // false
+"ÉCOLE".lowercase();                      // "école"
+"école".uppercase();                      // "ÉCOLE"
+"hello".startsWith("he");                 // true
+"hello".startsWith("lo");                 // false
+"hello".endsWith("lo");                   // true
+"hello".endsWith("he");                   // false
+"banana".replace("a", "o");               // "bonono"
+"banana".replace("", "o");                // throws: "`replace` needs text to replace, and it is empty."
+"a,b,".split(",");                        // ["a", "b", ""]
+"a:b:c".split(":", 2);                    // ["a", "b:c"]
+"a,b".split("");                          // throws: "`split` needs a delimiter, and it is empty."
+"a:b".split(":", -1);                     // throws: "`split` takes a limit of 0 or more, and it is negative."
+"hello".contains(1);                      // compile error: contains takes a string
+global.str_contains("hello", "ell");      // compile error: write "hello".contains(…)
+```
 
 PHP's backtick shell execution is removed, and so is `shell_exec()`. A program runs through `Process.run(program, arguments)` (section 29), which takes its arguments as a list, so no shell reads them.
 
@@ -2722,6 +2767,35 @@ Any? doubled = (int x) => x * 2;
 doubled is Function<int(int)>;               // true
 doubled is Function<string(string)>;         // false: the parameter and result types differ
 Legacy.doubler() is Function<int(int)>;      // compile error: the type of Legacy.doubler()'s function is unknown
+```
+
+**A tuple type tests the number of elements and each element's type,** as `List<int>` tests each element. A pattern that starts with `[` is a list pattern, which tests the same, so a tuple type is written in `as` and as a member of a union:
+
+<!-- example tuple-tests: statements -->
+```csharp
+Any? pair = [1, "a"];
+Any? triple = [1, "a", 2];
+Any? swapped = ["a", 1];
+pair as [int, string];                       // [1, "a"]
+triple as [int, string];                     // null: three elements
+swapped as [int, string];                    // null: the element types differ
+pair is int|[int, string];                   // true
+```
+
+**`Class<T>` tests that a value is a class value of `T` or of a class that extends or implements `T`.** A string that holds a class's full name, as `"App.RushOrder"`, is that class's class value, so it passes too. A string that names no class never passes, not even `Class<Object>`:
+
+<!-- example class-value-tests: statements -->
+```csharp
+Any? rush = typeof(RushOrder);
+Any? customer = typeof(Customer);
+Any? named = "App.RushOrder";
+Any? text = "rush";
+rush is Class<Order>;                        // true: RushOrder extends Order
+customer is Class<Order>;                    // false
+named is Class<Order>;                       // true: the string names RushOrder
+text is Class<Order>;                        // false: no class is named rush
+text is Class<Object>;                       // false
+(rush as Class<Order>) == typeof(RushOrder); // true
 ```
 
 **Boolean operators:** `&&`, `||` and `!` exist only in expressions. PHP's `and`, `or` and `xor` operators are removed, so `=` can no longer bind before `and`.
@@ -4344,7 +4418,7 @@ public class StoreCheckout : Checkout
 
 **A method takes on the effects of each function it is given.** A parameter whose function type states no effects, as `f` in `map(Function<TResult(T)> f)`, has at each call the effects of the function that call passes. The method has its body's own effects plus those, and nothing is written, as with Swift's `rethrows` and Kotlin's inline lambdas, and as a call to plain PHP takes on the effects of each lambda passed to it.
 
-**Such a parameter runs only inside the call,** as a Swift closure parameter does without `@escaping`. Storing it in a field, a collection or a new object, returning it, and capturing it in a lambda that escapes are compile errors that name the type to take instead: the type of the field or parameter that receives it when that type states effects, and otherwise its own type with `uses …`. Calling it, and passing it on to another method's function parameter, are allowed. A local may hold it, and the local is held to the same rules.
+**Such a parameter runs only inside the call,** as a Swift closure parameter does without `@escaping`. Storing it in a field, a collection or a new object, returning it, and capturing it in a lambda that escapes are compile errors that name the type to take instead: the type of the field or parameter that receives it when that type states effects, its own type with `uses none` when that type is pure, and otherwise its own type with `uses none` or with the effects it may have. Calling it, and passing it on to another method's function parameter, are allowed. A local may hold it, and the local is held to the same rules.
 
 <!-- example function-effects: statements in Carts<T>
 List<Cart> carts = [new Cart()];
@@ -4365,11 +4439,47 @@ carts.map(c => this.gateway.charge(c));                               // has Htt
 ```
 
 ```text
-`body` can't be stored in a new object: its type states no effects.
+`body` can't be stored in a new object: it takes on each caller's effects.
 Take a `Function<string() uses Environment>`, whose type states the effects it may have.
 ```
 
 **A parameter whose function type states its effects keeps them as a cap.** `Function<Charge(Cart) uses Http>` accepts a function with `Http` or no effects, and the method has `Http` from calling it. Such a parameter may be stored, returned and captured, as any function value may.
+
+**`uses none` states that a function type is pure.** It is the empty effect list, and goes wherever a function type's `uses` goes. A parameter of `Function<int(int) uses none>` takes only a pure function, so passing it a function with an effect is a compile error at the call, and the method may store, return and capture it, as one whose type states effects. A function type without `uses` anywhere but a method's parameter is pure already, so `uses none` there says nothing new. `uses none` beside another effect, as in `uses none, Http`, is a compile error, and so is `uses none` on a method, which is pure without `uses`. An override's function parameter takes on each caller's effects wherever the parameter it overrides does, a plain PHP `callable` or `Closure` parameter included, because a call through the overridden method may pass a function with any effect.
+
+<!-- example pure-function-parameters: statements
+namespace App.Shop;
+import App.Cart;
+import App.PaymentGateway;
+import App.StripeGateway;
+Pricing pricing = new Pricing();
+private Rates rates = new Rates();
+public class Rates
+{
+    private PaymentGateway gateway = new StripeGateway();
+
+    public int convert(int cents)
+    {
+        this.gateway.charge(new Cart());
+        return cents;
+    }
+}
+-->
+```csharp
+public class Pricing
+{
+    private Function<int(int)> rate = (cents) => cents;          // a field: no uses means pure, as today
+
+    public void setRate(Function<int(int) uses none> rate)
+        => this.rate = rate;                                      // compiles: the type states it's pure
+
+    public void apply(Function<int(int)> step)
+        => this.rate = step;                                      // compile error: step takes on its caller's effects, so it can't be stored; take a Function<int(int) uses none>
+}
+
+pricing.setRate((cents) => cents * 2);                            // compiles: a pure lambda
+pricing.setRate((cents) => this.rates.convert(cents));            // compile error: setRate takes a pure function, and this one has Http
+```
 
 The standard library's collection methods (section 12) take on the effects of their functions this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
 
