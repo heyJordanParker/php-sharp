@@ -51,7 +51,7 @@ extern PHP_JSON_API zend_class_entry *php_json_exception_ce;
 SHARP_KINDS(SHARP_KIND_IS_ZEND_KIND)
 ZEND_STATIC_ASSERT(SHARP_T_FILE == T_FILE, "SHARP_T_FILE differs from T_FILE");
 
-ZEND_STATIC_ASSERT(sizeof(sharp_unit_header) == 104, "a .sharpc header is 104 bytes");
+ZEND_STATIC_ASSERT(sizeof(sharp_unit_header) == 128, "a .sharpc header is 128 bytes");
 ZEND_STATIC_ASSERT(sizeof(sharp_input) == 40, "a .sharpc input is 40 bytes");
 ZEND_STATIC_ASSERT(sizeof(sharp_node) == 56, "a .sharpc node is 56 bytes");
 
@@ -271,6 +271,7 @@ typedef enum {
 	SHARP_CURRENT,
 	SHARP_NOT_COMPILED,
 	SHARP_OTHER_ENGINE,
+	SHARP_OTHER_LIBRARY,
 	SHARP_OUT_OF_DATE,
 } sharp_state;
 
@@ -548,6 +549,50 @@ static bool sharp_input_current(const sharp_compiled *compiled, const sharp_inpu
 	return current;
 }
 
+/* Whether a compiled file was compiled against a standard library built for this engine's native bodies: its native
+ * fingerprint is SHARP_NATIVE, or all zero, as a project without the standard library compiles. Every loader reaches
+ * this through sharp_check, opcache's revalidation too, through sharp_compiled_revision. */
+static bool sharp_native_current(const uint8_t fingerprint[16])
+{
+	static const char digits[] = "0123456789abcdef";
+	static const uint8_t none[16] = {0};
+	char hex[32];
+
+	if (memcmp(fingerprint, none, sizeof(none)) == 0) {
+		return true;
+	}
+	for (int i = 0; i < 16; i++) {
+		hex[2 * i] = digits[fingerprint[i] >> 4];
+		hex[2 * i + 1] = digits[fingerprint[i] & 15];
+	}
+
+	return memcmp(hex, SHARP_NATIVE, sizeof(hex)) == 0;
+}
+
+/* The refusal of a standard library built for other native bodies than this engine's, which names the version Composer
+ * installed it at, without a leading v, and the two fixes. version is empty when Composer reports none. */
+static zend_string *sharp_native_refusal(const char *version, size_t length)
+{
+	if (length > 1 && version[0] == 'v' && version[1] >= '0' && version[1] <= '9') {
+		version++;
+		length--;
+	}
+	if (length == 0) {
+		return zend_string_init(ZEND_STRL("This project's PHP# library was built for another PHP# engine than "
+			PHP_SHARP_VERSION ". Require heyjordanparker/php-sharp-composer " PHP_SHARP_VERSION
+			", or install the PHP# engine the library was built for."), 0);
+	}
+	if (zend_binary_strcmp(version, length, ZEND_STRL(PHP_SHARP_VERSION)) == 0) {
+		return zend_string_init(ZEND_STRL("This project's PHP# library and the PHP# engine are both " PHP_SHARP_VERSION
+			", but were built from different sources. Rebuild the PHP# engine, or reinstall"
+			" heyjordanparker/php-sharp-composer."), 0);
+	}
+
+	return zend_strpprintf(0, "This project's PHP# library is %.*s, and the PHP# engine is " PHP_SHARP_VERSION
+		". Install PHP# %.*s, or require heyjordanparker/php-sharp-composer " PHP_SHARP_VERSION ".",
+		(int) length, version, (int) length, version);
+}
+
 static bool sharp_offsets_fit(const sharp_unit_header *header, const sharp_unit *unit)
 {
 	if (header->root >= header->node_count) {
@@ -599,6 +644,12 @@ static sharp_state sharp_check(sharp_compiled *compiled, const char *source, siz
 	compiled->unit.texts = (const char *) (compiled->unit.children + header->children_count);
 	compiled->unit.root = header->root;
 
+	if (!sharp_text_fits(header, header->library_version)) {
+		return SHARP_NOT_COMPILED;
+	}
+	if (!sharp_native_current(header->native_fingerprint)) {
+		return SHARP_OTHER_LIBRARY;
+	}
 	if (source) {
 		uint8_t hash[16];
 		PHP_XXH3_128_CTX context = {0};
@@ -737,6 +788,15 @@ static ZEND_COLD void sharp_refuse(const sharp_compiled *compiled, sharp_state s
 			zend_throw_exception_ex(zend_ce_compile_error, 0,
 				"%s was compiled for a different PHP# engine. Install the mago-sharp release that matches this engine.", name);
 			break;
+		case SHARP_OTHER_LIBRARY: {
+			const sharp_unit_header *header = (const sharp_unit_header *) ZSTR_VAL(compiled->bytes);
+			zend_string *refusal = sharp_native_refusal(
+				compiled->unit.texts + header->library_version.offset, header->library_version.len);
+
+			zend_throw_exception(zend_ce_compile_error, ZSTR_VAL(refusal), 0);
+			zend_string_release(refusal);
+			break;
+		}
 		case SHARP_OUT_OF_DATE:
 			zend_throw_exception_ex(zend_ce_compile_error, 0,
 				"%s is out of date (%.*s changed). Run vendor/bin/mago compile.", name, (int) compiled->changed_length, compiled->changed);
@@ -2528,19 +2588,11 @@ ZEND_METHOD(Sharp_Sequence, getIterator)
 	zend_create_internal_iterator_zval(return_value, ZEND_THIS);
 }
 
-static bool sharp_native_has_body(const zend_string *body)
-{
-	for (const char *const *own = sharp_native_bodies; *own; own++) {
-		if (zend_string_equals_cstr(body, *own, strlen(*own))) {
-			return true;
-		}
-	}
-	return false;
-}
-
 /* The standard library's autoload.php passes the SHARP_NATIVE it was built with, the native bodies it declares and its
  * package's version when vendor/autoload.php loads it, as Composer's platform_check.php checks the platform before
- * anything loads. A body is named by its full PHP# name, as Sharp.Text.Text.slug, and a refusal shows it as Text.slug. */
+ * anything loads, and its plugin passes them after each install. Every version of the library calls it with these three
+ * arguments, so an engine of any version refuses a library of any other with its own message. SHARP_NATIVE covers the
+ * native bodies, so this engine reads none of them. */
 static ZEND_FUNCTION(Sharp_Internal_requireNative)
 {
 	zend_string *fingerprint;
@@ -2552,30 +2604,14 @@ static ZEND_FUNCTION(Sharp_Internal_requireNative)
 		Z_PARAM_ARRAY_HT(bodies)
 		Z_PARAM_STR(version)
 	ZEND_PARSE_PARAMETERS_END();
+	(void) bodies;
 
-	if (zend_string_equals_literal(fingerprint, SHARP_NATIVE)) {
-		return;
+	if (!zend_string_equals_literal(fingerprint, SHARP_NATIVE)) {
+		zend_string *refusal = sharp_native_refusal(ZSTR_VAL(version), ZSTR_LEN(version));
+
+		zend_throw_error(NULL, "%s", ZSTR_VAL(refusal));
+		zend_string_release(refusal);
 	}
-
-	zval *body;
-	ZEND_HASH_FOREACH_VAL(bodies, body) {
-		if (Z_TYPE_P(body) != IS_STRING) {
-			zend_argument_type_error(2, "must contain only strings, %s given", zend_zval_value_name(body));
-			RETURN_THROWS();
-		}
-		if (!sharp_native_has_body(Z_STR_P(body))) {
-			const char *name = Z_STRVAL_P(body);
-			const char *method = zend_memrchr(name, '.', Z_STRLEN_P(body));
-			const char *owner = method ? zend_memrchr(name, '.', method - name) : NULL;
-			zend_throw_error(NULL, "The PHP# standard library %s declares the native body %s, which PHP# engine "
-				PHP_SHARP_VERSION " does not have. Install the same PHP# version of both.",
-				ZSTR_VAL(version), owner ? owner + 1 : name);
-			RETURN_THROWS();
-		}
-	} ZEND_HASH_FOREACH_END();
-
-	zend_throw_error(NULL, "The PHP# standard library %s was built for other native bodies than PHP# engine "
-		PHP_SHARP_VERSION " has. Install the same PHP# version of both.", ZSTR_VAL(version));
 }
 
 ZEND_METHOD(Sharp_Position, __construct)
