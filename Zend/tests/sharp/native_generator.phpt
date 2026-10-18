@@ -20,11 +20,18 @@ echo [file_get_contents($header), file_get_contents($library)] === $first ? 'sam
 preg_match('/^#define SHARP_NATIVE "([0-9a-f]{32})"$/m', $first[0], $define);
 $fingerprint = native_generator_fingerprint($copy);
 echo $define[1] === $fingerprint ? 'one' : 'two', " SHARP_NATIVE in sharp_native.h and native.php\n";
-preg_match('/^static const char \*const sharp_native_bodies\[\] = \{\n((?:\t"[^"\n]+",\n)*)\tNULL\n\};$/m', $first[0], $table);
-preg_match_all('/"([^"]+)"/', $table[1], $engine);
+// Each function the engine registers, as `ZEND_NS_NAME("Sharp\\Internal\\Text\\Text", "slug")`, is the body
+// Sharp.Text.Text.slug, but requireNative.
+preg_match_all('/ZEND_NS_NAME\("Sharp([^"]*)", "([^"]+)"\)/', $first[0], $entries, PREG_SET_ORDER);
+$engine = [];
+foreach ($entries as [, $namespace, $name]) {
+    if ($name !== 'requireNative') {
+        $engine[] = implode('.', ['Sharp', ...array_slice(explode('\\\\', $namespace), 2), $name]);
+    }
+}
 preg_match("/^    'bodies' => \[\n((?:        '[^'\n]+',\n)*)    \],$/m", $first[1], $list);
 preg_match_all("/'([^']+)'/", $list[1], $declared);
-echo $engine[1] !== [] && $engine[1] === $declared[1] ? 'one' : 'two', " list of native bodies in sharp_native.h and native.php\n";
+echo $engine !== [] && $engine === $declared[1] ? 'one' : 'two', " list of native bodies in sharp_native.h's functions and native.php\n";
 
 file_put_contents("$copy/ext/sharp/src/lib.rs", "\n", FILE_APPEND);
 $status = native_generator_run($copy);
@@ -49,7 +56,7 @@ first run exits with 0
 second run exits with 0
 same files on the second run
 one SHARP_NATIVE in sharp_native.h and native.php
-one list of native bodies in sharp_native.h and native.php
+one list of native bodies in sharp_native.h's functions and native.php
 run after the edit exits with 0
 new SHARP_NATIVE after a Rust source changed
 same SHARP_NATIVE with the fixture lock

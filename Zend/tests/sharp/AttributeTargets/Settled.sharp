@@ -1,0 +1,6 @@
+namespace AttributeTargets;
+
+import Lib.Entity;
+
+// An event's parameter declares a property, so its attributes name the parameter, the property or both.
+public event Settled([param: Entity("order")] int orderId, [property: Entity("amount")] int amount, [Entity("both")] string currency);

@@ -12,7 +12,8 @@ var_dump(Catalog::paged(), Catalog::listed(), Catalog::written(), Catalog::infer
 var_dump(Catalog::fed(), Catalog::checked(), Catalog::firstId(), Catalog::shared(), Catalog::loaded());
 
 echo new ReflectionMethod(Paging\PaginatedList::class, 'first')->getReturnType(), "\n";
-echo new ReflectionMethod(Paging\Store::class, 'first')->getReturnType(), "\n";
+// A result of an unbounded type parameter is mixed, which declares no PHP type, so a plain PHP override fits.
+echo new ReflectionMethod(Paging\Store::class, 'first')->getReturnType() ?? 'no return type', "\n";
 echo new ReflectionMethod(Paging\Store::class, 'share')->getParameters()[0]->getType(), "\n";
 echo new ReflectionMethod(Paging\Store::class, 'load')->getParameters()[0]->getType(), "\n";
 echo new ReflectionClass(Paging\OrderPage::class)->getParentClass()->name, "\n";
@@ -30,7 +31,7 @@ int(1)
 string(9) "/orders/4"
 int(5)
 Paging\DatabaseEntity
-mixed
+no return type
 Paging\DatabaseEntity&Paging\Shareable
 string
 Paging\PaginatedList

@@ -49,9 +49,11 @@ function compiled(string $file, string $prelude): string
 }
 
 /**
- * `$listing` without the one opcode PHP# adds on purpose: a SHARP_RECV_TYPE_ARGS with no result, which checks the
- * parameters of a call from plain PHP that its PHP twin's types can't check. Each op array loses it and counts one
- * line less, and every op number after it, in an op line, a jump, a live range or a try block, is one lower. Each check lands in
+ * `$listing` without the two opcodes PHP# adds on purpose: a SHARP_RECV_TYPE_ARGS with no result, which checks the
+ * parameters of a call from plain PHP that its PHP twin's types can't check, and a SHARP_RETURN_ARRAY, which gives a
+ * plain PHP caller the PHP array of a Map or a Set its PHP twin returns as it is. Each op array loses them and counts
+ * one line less for each, and every op number after one, in an op line, a jump, a live range or a try block, is one
+ * lower. A SHARP_RETURN_ARRAY's result counts one temporary less, and its operand takes its place. Each check lands in
  * `$checks` by its op array, once for both listings.
  */
 function without_checks(string $listing, array &$checks): string
@@ -59,6 +61,7 @@ function without_checks(string $listing, array &$checks): string
     $lines = explode("\n", $listing);
     $header = -1;
     $dropped = [];
+    $returned = [];
     $renumber = static function (array $op) use (&$dropped): string {
         return sprintf('%04d', (int) $op[0] - count(array_filter($dropped, static fn (int $at): bool => $at < (int) $op[0])));
     };
@@ -67,13 +70,24 @@ function without_checks(string $listing, array &$checks): string
         if (preg_match('~^(\S.*):$~', $line, $name) && preg_match('~^ {5}; \(lines=~', $lines[$index + 1] ?? '')) {
             $header = count($kept) + 1;
             $dropped = [];
+            $returned = [];
             $op_array = $name[1];
         } elseif ($header >= 0 && preg_match('~^(?:L\d{4} )?(\d{4}) SHARP_RECV_TYPE_ARGS (.*)$~', $line, $check)) {
             $dropped[] = (int) $check[1];
             $checks[$op_array] = $check[2];
             $kept[$header] = preg_replace_callback('~lines=(\d+)~', static fn (array $count): string => 'lines=' . ($count[1] - 1), $kept[$header]);
             continue;
-        } elseif ($dropped && preg_match('~^(?:L\d{4} )?\d{4} |^ +(?:\d+: )?\d{4}[ ,]~', $line)) {
+        } elseif ($header >= 0 && preg_match('~^(?:L\d{4} )?(\d{4}) (T\d+) = SHARP_RETURN_ARRAY (.*)$~', $line, $crossing)) {
+            $dropped[] = (int) $crossing[1];
+            $returned[$crossing[2]] = $crossing[3];
+            $kept[$header] = preg_replace_callback('~lines=(\d+)(.*tmps=)(\d+)~', static fn (array $count): string
+                => 'lines=' . ($count[1] - 1) . $count[2] . ($count[3] - 1), $kept[$header]);
+            continue;
+        }
+        if ($returned) {
+            $line = preg_replace_callback('~\bT\d+\b~', static fn (array $result): string => $returned[$result[0]] ?? $result[0], $line);
+        }
+        if ($dropped && preg_match('~^(?:L\d{4} )?\d{4} |^ +(?:\d+: )?\d{4}[ ,]~', $line)) {
             $line = preg_replace_callback('~(?<![\w(])\d{4}(?![\w)])~', $renumber, $line);
         }
         $kept[] = $line;
@@ -1971,12 +1985,11 @@ Generics/Store: different opcodes and lines in 7 op arrays, same signatures in 1
   .sharp L0020 0013 RETURN null
   .sharp L0021 0014 VERIFY_RETURN_TYPE
   .sharp L0021 0015 RETURN null
-  .sharp      ; (lines=6, args=1, vars=2, tmps=1)
+  .sharp      ; (lines=5, args=1, vars=2, tmps=1)
   .sharp L0026 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Any?")
   .sharp L0026 0002 T2 = FETCH_DIM_R CV0($items) int(0)
   .sharp L0026 0003 RETURN T2
-  .sharp L0026 0004 VERIFY_RETURN_TYPE
-  .sharp L0026 0005 RETURN null
+  .sharp L0026 0004 RETURN null
   .sharp      ; (lines=9, args=1, vars=2, tmps=2)
   .sharp L0030 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity & Paging.Shareable")
   .sharp L0030 0002 T2 = CAST (object) CV0($item)
@@ -2002,12 +2015,11 @@ Generics/Store: different opcodes and lines in 7 op arrays, same signatures in 1
   .sharp 0015 RETURN null
   .sharp      4: 0004 - 0009 (loop)
   .sharp      4: 0011 - 0012 (loop)
-  .sharp      ; (lines=6, args=1, vars=2, tmps=1)
+  .sharp      ; (lines=5, args=1, vars=2, tmps=1)
   .sharp 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Any?")
   .sharp 0002 T2 = FETCH_DIM_R CV0($items) int(0)
   .sharp 0003 RETURN T2
-  .sharp 0004 VERIFY_RETURN_TYPE
-  .sharp 0005 RETURN null
+  .sharp 0004 RETURN null
   .sharp      ; (lines=9, args=1, vars=2, tmps=2)
   .sharp 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity & Paging.Shareable")
   .sharp 0002 T2 = CAST (object) CV0($item)
@@ -2031,11 +2043,10 @@ Generics/Store: different opcodes and lines in 7 op arrays, same signatures in 1
   .php   L0020 0012 RETURN null
   .php   L0021 0013 VERIFY_RETURN_TYPE
   .php   L0021 0014 RETURN null
-  .php        ; (lines=5, args=1, vars=1, tmps=1)
+  .php        ; (lines=4, args=1, vars=1, tmps=1)
   .php   L0026 0001 T1 = FETCH_DIM_R CV0($items) int(0)
   .php   L0026 0002 RETURN T1
-  .php   L0026 0003 VERIFY_RETURN_TYPE
-  .php   L0026 0004 RETURN null
+  .php   L0026 0003 RETURN null
   .php        ; (lines=8, args=1, vars=1, tmps=2)
   .php   L0030 0001 T1 = CAST (object) CV0($item)
   .php   L0030 0002 INIT_METHOD_CALL 0 T1 string("link")
@@ -2060,11 +2071,10 @@ Generics/Store: different opcodes and lines in 7 op arrays, same signatures in 1
   .php   0014 RETURN null
   .php        3: 0003 - 0008 (loop)
   .php        3: 0010 - 0011 (loop)
-  .php        ; (lines=5, args=1, vars=1, tmps=1)
+  .php        ; (lines=4, args=1, vars=1, tmps=1)
   .php   0001 T1 = FETCH_DIM_R CV0($items) int(0)
   .php   0002 RETURN T1
-  .php   0003 VERIFY_RETURN_TYPE
-  .php   0004 RETURN null
+  .php   0003 RETURN null
   .php        ; (lines=8, args=1, vars=1, tmps=2)
   .php   0001 T1 = CAST (object) CV0($item)
   .php   0002 INIT_METHOD_CALL 0 T1 string("link")

@@ -23,8 +23,8 @@ bool(true)
 a Map<string, int>: Map['tea': 2, 'jam': 5] true
 a Map keyed by an enum: Map[Queued\Speed.Express: 1, Queued\Speed.Standard: 3] 1
 a Map nested in a List: [Map['tea': 1], Map['jam': 2, 'bun': 3]] true
-a struct field: Queued\Shipment(Map['fragile': 1], [3, 4]) true
-a class field: Queued\Ledger(Map['packed': 2, 'shipped': 1]) Queued\Ledger(Map['packed': 2])
+a struct field: Queued\Shipment(['fragile' => 1], [3, 4]) Sharp\Map array true
+a class field: Queued\Ledger(['packed' => 2, 'shipped' => 1]) Sharp\Map Queued\Ledger(['packed' => 2])
 a Set: Set['vip', 'new'] true true
 an empty Map: Map[] 0 true
 a Map keyed by a struct: Map[Queued\Parcel(250, Queued\Speed.Express): 'small'] small
@@ -34,8 +34,8 @@ the form serialize writes: O:9:"Sharp\Map":4:{i:0;s:3:"tea";i:1;i:2;i:2;s:3:"jam
 a read-back in a fresh process: 7 values
 Map['tea': 2, 'jam': 5] true
 Map[Queued\Speed.Express: 1, Queued\Speed.Standard: 3] 1 true
-Queued\Shipment(Map['fragile': 1], [3, 4]) true
-Queued\Ledger(Map['packed': 2, 'shipped': 1])
+Queued\Shipment(['fragile' => 1], [3, 4]) Sharp\Map array true
+Queued\Ledger(['packed' => 2, 'shipped' => 1]) Sharp\Map
 Set['vip', 'new'] true
 Map[Queued\Parcel(250, Queued\Speed.Express): 'small'] small
 Map[Queued\Courier(7): 'north'] north
@@ -47,8 +47,8 @@ a wrong key in a struct field: TypeError: Cannot assign Sharp.Map to property Qu
 a wrong element in a Set field: TypeError: Cannot assign Sharp.Set to property Queued\Crate::$speeds of type Set<Queued.Speed>: [0] expected Queued.Speed, got int 5
 a wrong value inside a List<Map<string, int>> field: TypeError: Cannot assign array to property Queued\Crate::$batches of type List<Map<string, int>>: [0]["tea"] expected int, got string 'x'
 a generic class field: TypeError: Cannot assign Sharp.Map to property Queued\Box::$held of type Map<string, int>: ["tea"] expected int, got string 'x'
-Sharp.Data.PhpSerializer, which allows no class by default: Map['tea': 2, 'jam': 5]
-PhpSerializer allowing a class by its PHP# name: Queued\Crate(Map[3: 'c'], Set[Queued\Speed.Express], [Map['tea': 1]])
+Sharp.Data.PhpSerializer, which allows no class by default: ['tea' => 2, 'jam' => 5] Sharp\Map
+PhpSerializer allowing a class by its PHP# name: Queued\Crate([3 => 'c'], [Queued\Speed.Express], [['tea' => 1]]) Sharp\Map Sharp\Set array
 allowed_classes => false, which still checks each key's class: [Set['vip', 'new'], Map[__PHP_Incomplete_Class('Queued\\Parcel', 250, Queued\Speed.Express): 'small']]
 __unserialize on a Map that holds entries: Error: A Sharp\Map that holds entries is written through its index, which copies a shared one first
 a second constructor call on a Set that holds entries: Error: A Sharp\Set that holds entries is written through its index, which copies a shared one first

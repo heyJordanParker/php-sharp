@@ -1,0 +1,10 @@
+namespace AttributeTargets;
+
+import Lib.Entity;
+
+// A data case's parameter declares a property, so its attributes name the parameter, the property or both.
+public enum Payment
+{
+    case Paid([param: Entity("given")] [field: Entity("kept")] string transactionId);
+    case Open;
+}

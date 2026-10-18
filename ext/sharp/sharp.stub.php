@@ -46,6 +46,8 @@ final class Collection
 
     public function map(\Closure $transform): array {}
 
+    public function flatMap(\Closure $transform): array {}
+
     public function sumOf(\Closure $selector): int|float {}
 
     public function first(\Closure $predicate): mixed {}
@@ -137,9 +139,11 @@ function accepts(string $type, mixed &$value, string $path, array &$problems): b
 
 function &statics(string $class, string $key, ?string $field = null): array {}
 
-function keep(string $key, \Closure $compute): mixed {}
+function keep(string $key, ?\Closure $compute = null): mixed {}
 
 function equals(mixed $value, mixed $other): bool {}
+
+function arrayOf(mixed $value, mixed $receiver = null): mixed {}
 
 function readModule(string $path): void {}
 

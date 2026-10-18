@@ -1,0 +1,138 @@
+namespace Demo;
+
+import Label;
+
+[Label("paid", config: ["variant": "success"])]
+public class Holdings
+{
+    public const Map<string, int> LIMITS = ["card": 100];
+
+    public const Set<string> CODES = ["a", "b"];
+
+    public const Iterable<int> STEPS = [1, 2];
+
+    public const [int, string] PAIR = [7, "seven"];
+
+    public Map<string, string> payload { get; set; } = ["id": "p1"];
+
+    public Set<string> codes { get; set; } = ["a", "b"];
+
+    public List<Map<string, int>> rows { get; set; } = [["a": 1]];
+
+    public Map<string, string>? extra { get; set; } = null;
+
+    public Map<string, string> computed => this.payload;
+
+    public Map<string, string> hooked { get; set => field = value; } = ["h": "1"];
+
+    public static Map<string, int> counts { get; set; } = ["c": 1];
+
+    public Map<string, int> none { get; set; } = [:];
+
+    // A PHP array holds no case of an enum without backing values, so plain PHP gets this Map itself.
+    public Map<Weather, int> forecast { get; set; } = [Weather.Sunny: 1];
+
+    public Any? loose { get; set; } = ["k": 1];
+
+    public Iterable<Map<string, int>> shelved { get; set; } = [["s": 1]];
+
+    public static Map<string|Level, int> mixedCounts { get; set; } = ["low": 1];
+
+    public int limitOf(string kind) => Holdings.LIMITS[kind] ?? 0;
+
+    public static int stepsTotal()
+    {
+        int total = 0;
+        for (const step of Holdings.STEPS) {
+            total += step;
+        }
+
+        return total;
+    }
+
+    public static bool hasCode(string code) => Holdings.CODES.contains(code);
+
+    public static string constantClasses()
+    {
+        Map<string, int> limits = Holdings.LIMITS;
+        Set<string> codes = Holdings.CODES;
+
+        return `${global.get_class(limits)} ${global.get_class(codes)}`;
+    }
+
+    public static string pairText()
+    {
+        const [number, word] = Holdings.PAIR;
+
+        return `${number} ${word}`;
+    }
+
+    // A plain PHP parameter that takes only an object takes the Map or the Set itself.
+    public string payloadClass() => global.get_class(this.payload);
+
+    public string firstRowClass() => global.get_class(this.rows[0]);
+
+    public static string countsClass() => global.get_class(Holdings.counts);
+
+    public int accepted(Map<string, string> given) => given.count();
+
+    // A PHP array holds no `List` key, so plain PHP gets this Map itself.
+    public Map<List<int>, int> listKeyed() => [[1, 2]: 1];
+
+    // A PHP array keeps one entry for two keys that are one PHP array key, as "low" and Level.Low are, or 5 and "5",
+    // so the crossing of such a Map throws a ValueError. One whose keys are each their own PHP array key crosses.
+    public Map<string|Level, int> collided() => ["low": 1, Level.Low: 2];
+
+    public Map<string|Level, int> distinct() => ["high": 1, Level.Low: 2];
+
+    public static Any? collidedFirstKey()
+    {
+        Map<int|string, string> codes = [5: "a", "5": "b"];
+        return global.array_key_first(codes);
+    }
+
+    public static Any collidedAny()
+    {
+        Map<int|string, string> codes = [5: "a", "5": "b"];
+        return codes;
+    }
+
+    public static Map<int|string, string> mixedKeys() => [5: "a", "x": "b"];
+
+    public static Map<int|string, string> mixedCodes { get; set; } = [:];
+
+    public static void collideCodes()
+    {
+        Holdings.mixedCodes = [5: "a", "5": "b"];
+    }
+
+    // The PHP array get_object_vars gives, a Map<int|string, Any?> in PHP#, passes back to plain PHP.
+    public static Any? firstPropertyName(Holdings holdings) => global.array_key_first(global.get_object_vars(holdings));
+
+    public Map<Weather, int> weatherCounts() => [Weather.Rainy: 2];
+
+    public Map<string, Map<List<int>, int>> nestedListKeyed() => ["a": [[1]: 1]];
+
+    public Iterable<Map<string, int>> generated()
+    {
+        yield ["g": 1];
+        yield ["h": 2];
+    }
+
+    public static Any anyResult() => ["k": 1];
+
+    public virtual Map<string, int> tally() => ["t": 1];
+
+    public string tallyClass() => global.get_class(this.tally());
+
+    // Each PHP array a plain PHP generator yields, held as an Iterable<Map<string, int>>.
+    public static string plainRows()
+    {
+        Iterable<Map<string, int>> rows = global.price_rows();
+        let seen = "";
+        for (const row of rows) {
+            seen = `${seen}${global.get_class(row)}:${row.count()} `;
+        }
+        return seen;
+    }
+}

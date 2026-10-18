@@ -49,9 +49,3 @@ static const zend_function_entry sharp_native_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal\\Text\\Text", "slug"), zif_Sharp_Internal_Text_Text_slug, arginfo_Sharp_Internal_Text_Text_slug, 0, NULL, NULL)
 	ZEND_FE_END
 };
-
-static const char *const sharp_native_bodies[] = {
-	"Sharp.Environment.commandLine",
-	"Sharp.Text.Text.slug",
-	NULL
-};

@@ -1493,6 +1493,10 @@ static zend_result php_array_walk(
 
 	/* Iterate through hash */
 	do {
+		/* PHP#: the PHP array a callback that takes a property's value by value gets, see below. */
+		zval crossed;
+		ZVAL_UNDEF(&crossed);
+
 		/* Retrieve value */
 		zv = zend_hash_get_current_data_ex(target_hash, &pos);
 		if (zv == NULL) {
@@ -1511,7 +1515,13 @@ static zend_result php_array_walk(
 			if (Z_TYPE_P(zv) != IS_REFERENCE && Z_TYPE_P(array) == IS_OBJECT) {
 				zend_property_info *prop_info =
 					zend_get_typed_property_info_for_slot(Z_OBJ_P(array), zv);
-				if (prop_info) {
+				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array, so a
+				 * callback that takes the value gets that array. */
+				if (prop_info && UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_CROSSING) && !recursive
+						&& !ARG_SHOULD_BE_SENT_BY_REF(context->fci_cache.function_handler, 1)
+						&& !sharp_runs_sharp_code()) {
+					sharp_array_of(&crossed, zv);
+				} else if (prop_info) {
 					if (UNEXPECTED(sharp_property_refuses_reference(prop_info))) {
 						result = FAILURE;
 						break;
@@ -1523,7 +1533,9 @@ static zend_result php_array_walk(
 		}
 
 		/* Ensure the value is a reference. Otherwise the location of the value may be freed. */
-		ZVAL_MAKE_REF(zv);
+		if (Z_ISUNDEF(crossed)) {
+			ZVAL_MAKE_REF(zv);
+		}
 
 		/* Retrieve key */
 		zend_hash_get_current_key_zval_ex(target_hash, &args[1], &pos);
@@ -1559,7 +1571,11 @@ static zend_result php_array_walk(
 			}
 			zval_ptr_dtor(&ref);
 		} else {
-			ZVAL_COPY(&args[0], zv);
+			if (Z_ISUNDEF(crossed)) {
+				ZVAL_COPY(&args[0], zv);
+			} else {
+				ZVAL_COPY_VALUE(&args[0], &crossed);
+			}
 
 			/* Call the userland function */
 			result = zend_call_function(&fci, &context->fci_cache);

@@ -11,6 +11,28 @@ extern zend_module_entry sharp_module_entry;
 /* Whether `filename` names a PHP# source file, which ends in `.sharp`. */
 bool sharp_is_sharp_file(const zend_string *filename);
 
+/* Whether `func` is PHP# code, a function a .sharp file declares. Plain PHP code and an internal function are not. */
+static zend_always_inline bool sharp_function_is_sharp(const zend_function *func)
+{
+	return func && ZEND_USER_CODE(func->type) && sharp_is_sharp_file(func->op_array.filename);
+}
+
+/* Whether the code of `frame` is PHP#, which gets a PHP# Map or Set as the object: the nearest frame of code from it,
+ * past the internal functions that code called, such as get_object_vars() or ReflectionProperty::getValue(). */
+static zend_always_inline bool sharp_code_at(const zend_execute_data *frame)
+{
+	while (frame && (!frame->func || !ZEND_USER_CODE(frame->func->type))) {
+		frame = frame->prev_execute_data;
+	}
+	return frame && sharp_is_sharp_file(frame->func->op_array.filename);
+}
+
+/* Whether the code running now is PHP#, see sharp_code_at(). */
+static zend_always_inline bool sharp_runs_sharp_code(void)
+{
+	return sharp_code_at(EG(current_execute_data));
+}
+
 /* The VM makes the Sharp\Collection receiver of a PHP# method call on a collection with these, see
  * ZEND_SHARP_OPERATOR in Zend/zend_compile.h: an array, a List, or a Sharp\Map or Sharp\Set object, see
  * SHARP_IS_COLLECTION. The receiver may point at a local of the calling frame, so a backtrace never
@@ -30,9 +52,32 @@ void sharp_separate(zval *holder);
 
 /* Spec section 12: a PHP array plain PHP writes to a property PHP# declares a Map or a Set crosses into that object, as
  * the property's #[\Sharp\Crossing] plans it, where the engine coerces a value for a typed property. Returns whether
- * it did. sharp_crosses_property says whether the property has such a plan. */
+ * it did. sharp_crosses_property says whether the property has such an attribute, and sharp_property_reads_as_array
+ * whether plain PHP reads each Map and Set its value holds as its PHP array, which the compiler marks with
+ * ZEND_ACC_SHARP_CROSSING. */
 bool sharp_crosses_property(const zend_property_info *info);
+bool sharp_property_reads_as_array(const zend_property_info *info);
 bool sharp_cross_property(const zend_property_info *info, zval *value);
+
+/* Spec section 12: puts in `result` the value plain PHP receives for `value`. A Map is a PHP array of its entries, with
+ * a backed enum key as its backing value, and a Set is the list of its elements. Each Map and Set a PHP array, a Map or a
+ * Set holds converts the same way, and a PHP array that holds none is itself. A Map with a key no PHP array holds, a
+ * class, a struct, a collection or an enum without backing values, is itself. A Map two of whose keys are one PHP array
+ * key, as 5 and "5" are, or a backed enum case and its backing value, throws a ValueError that names both, since a PHP
+ * array would keep only one of them, and `result` is then the value itself. Any other value is itself. */
+void sharp_array_of(zval *result, zval *value);
+
+/* Makes `value`, which a property whose type holds a Map or a Set gives plain PHP code, what sharp_array_of gives. */
+void sharp_cross_read(zval *value);
+
+/* Puts in `array` what plain PHP code reads from `slot`, a declared property slot of `object`, and gives true, when its
+ * property has ZEND_ACC_SHARP_CROSSING and code outside a .sharp file runs now. Gives false and leaves `array` alone
+ * otherwise. get_object_vars() and foreach read slots through it. */
+bool sharp_cross_slot_read(zval *array, zend_object *object, zval *slot);
+
+/* Makes each property of `object` that `result`, the (array) cast of `object`, holds under its mangled name, what plain
+ * PHP code reads from it, by sharp_cross_slot_read(). */
+void sharp_cross_array_cast(zval *result, zend_object *object);
 
 #define SHARP_IS_TABLE(value) \
 	(Z_TYPE_P(value) == IS_OBJECT && (Z_OBJCE_P(value) == sharp_ce_map || Z_OBJCE_P(value) == sharp_ce_set))
@@ -205,6 +250,10 @@ zend_class_entry *sharp_new_class(const zval *created, const sharp_type **argume
  * method's own type parameters unresolved, since only a call from plain PHP is checked. An int it accepts for a float
  * becomes a float. */
 void sharp_type_check_arguments(zend_execute_data *execute_data, const zval *text, void **cache);
+
+/* Throws an Error for the arguments `named`, which plain PHP passed by name to the `...` parameter of `func`, a PHP#
+ * function, since a PHP# `...` parameter is a List, which has no names. ZEND_RECV_VARIADIC runs it on entry. */
+ZEND_COLD void sharp_refuse_named_variadic(const zend_function *func, const HashTable *named);
 
 /* Whether `value` is of the one type the type text list `text` spells, spelled for the frame `execute_data` runs as
  * sharp_type_check_arguments spells it. Throws PHP's TypeError for a function's return value when not, since the value is

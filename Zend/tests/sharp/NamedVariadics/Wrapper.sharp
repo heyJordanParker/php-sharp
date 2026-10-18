@@ -1,0 +1,12 @@
+namespace NamedVariadics;
+
+import Lib.Html;
+
+// A PHP# `...` parameter is a `List`, which has no names, so plain PHP that passes it names throws on entry, spec
+// section 16, and no name or value is lost: an override of a plain PHP method's and a PHP# method's.
+public class Wrapper : Html
+{
+    public override string wrap(string name, string ...attributes) => `${name}${attributes.count()}`;
+
+    public static int sum(int ...values) => values.count();
+}

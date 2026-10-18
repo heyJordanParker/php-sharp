@@ -17,13 +17,103 @@ Attributes use square brackets and follow C#'s rules:
 - several attributes in one bracket: `[Field("Name"), Searchable]`
 - several brackets on one declaration
 - positional and named arguments
+- an argument is a constant: a literal, a constant, `typeof(Class)`, a list or map literal of constants, or a `new` of a class whose arguments are constants too, as PHP and Java's nested annotations take; PHP creates the object each time it reads the attribute, and an argument that runs code is a compile error
 - no parentheses when there are no arguments: `[Searchable]`
-- explicit targets: `[return: NotNull]`
+- explicit targets, which name the part of the declaration a bracket goes on, as in C#: `type:` on a type, `type:` or `event:` on an event, `method:` on a method, an operator, a named constructor, a lambda or an accessor, `param:` on a parameter and on the value `set` or `init` takes, `field:` on a field, a constant or an enum case, `property:` and `field:` on a property, and `param:`, `property:` and `field:` on a parameter that declares a property, a constructor's, an event's or a data case's, where an untargeted bracket goes on both the parameter and the property
+- a return value takes no attributes: put them on the method, with no target, so `[return: NotNull]` is a compile error
+- on every declaration C# takes one on: a class, an interface, an enum and its cases, an event, a constant, a field, a property, an interface property, a method, an interface method with or without a default body, an operator, a named constructor, a parameter, a lambda written with parentheses, as in `[Searchable] (int n) => n * 2`, and an accessor, as in `[Searchable] get;`, a static or get-only auto-property's included
+- `willSet` and `didSet` take none, since they run inside `set`: put the attribute on `set`
+- a type parameter takes no attributes: put them on the declaration that declares it
 
 <!-- example attribute-arguments: members -->
 ```csharp
 [Field(label: "Name", render: Render.Heading, searchable: true)]
 public string name { get; set; } = "";
+```
+
+<!-- example attribute-interfaces -->
+```csharp
+// app/Labeled.sharp
+namespace App;
+
+[Searchable]
+public interface Labeled                  // compiles: on the interface
+{
+    [Field(label: "Name", searchable: true)]
+    string label();                       // compiles
+
+    [Field(label: "Title")]
+    string title() => "Untitled";         // compiles: with a default body too
+
+    [Field(label: "Size")]
+    int size { get; }                     // compiles: on its property
+}
+```
+
+<!-- example attribute-events -->
+```csharp
+// app/Paid.sharp
+namespace App;
+
+[Searchable]
+public event Paid(int orderId);           // compiles: on the event
+```
+
+<!-- example attribute-constants-and-lambdas: members -->
+```csharp
+[Field(label: "Limit")]
+public const int LIMIT = 3;                                        // compiles: on a constant
+
+public Function<int(int)> twice() => [Searchable] (int n) => n * 2;  // compiles: on a lambda
+```
+
+<!-- example attribute-targets: members -->
+```csharp
+[property: Field(label: "Total")]
+public int total { [Searchable] get; [param: Field(label: "Amount")] set; } = 0;  // compiles: Searchable on get, Field on what set takes
+
+public int count { [Searchable] get; } = 0;            // compiles: on the get of a get-only auto-property
+
+[return: Searchable] public string label() => "";     // compile error: a return value takes no attributes, so put them on the method
+```
+
+<!-- example attribute-type-parameters -->
+```csharp
+// app/Shelf.sharp
+namespace App;
+
+public class Shelf<[Searchable] TItem>        // compile error: a type parameter takes no attributes, so put them on Shelf
+{
+}
+```
+
+<!-- example attribute-objects -->
+```php
+#[\Attribute(\Attribute::TARGET_ALL)]
+final class Route { public function __construct(public string $path, public array $middleware = []) {} }
+
+final class Throttle { public function __construct(public int $perMinute) {} }
+
+#[\Attribute(\Attribute::TARGET_ALL)]
+final class Type { public function __construct(public mixed $of, public bool $nullable = false) {} }
+```
+
+<!-- example attribute-objects -->
+```csharp
+// app/OrdersController.sharp
+namespace App;
+
+[Route("/orders", middleware: [new Throttle(perMinute: 60)])]         // compiles: Route receives a Throttle object
+public class OrdersController
+{
+    [Type(of: [new Type(typeof(Order), nullable: true)])]             // compiles: Type receives a list holding one Type object
+    public Order? order { get; } = null;
+
+    [Route("/limited", middleware: [new Throttle(this.limit())])]     // compile error: an attribute argument is a constant or a new of constants, and this.limit() runs code
+    public void limited() { }
+
+    private int limit() => 60;
+}
 ```
 
 Named arguments use `label: "Name"`, the same "name: value" form used everywhere in the language (section 16). C#'s `Label = "Name"` is not allowed.
@@ -1209,7 +1299,10 @@ for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is a 
 **Map keys:** anything with `==` and `hash()` (section 19) keys a `Map` and joins a `Set`, as in Swift, Rust, Java and Kotlin.
 
 - A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type, as in `const [Status status, int n]`, stays allowed. An inferred `Map`, such as a `groupBy` result, gives its keys back the same way.
-- Plain PHP receives the `Map` itself, or a PHP array where its parameter's declared type names `array`. A PHP array's keys are `int` or `string`, so a `Map` keyed by a backed enum passes each case's backing value as its key, as an array crossing the other way gives each backing value as its case. Passing a `Map` keyed by anything else to such a parameter is a compile error that names the parameter and the key type. `counts.count()` counts any `Map`, whatever its keys.
+- Plain PHP receives a `Map` or a `Set` as a PHP array wherever it gets one: a result, a value a generator yields, an argument, a property it reads, a constant and an attribute's argument, and so does each `Map` and `Set` a `List` holds. That holds where the declared type is `Any`, `Any?`, a type parameter or an `Iterable` too. A `Map` is the array of its entries and a `Set` the list of its elements. A property it reads through `get_object_vars`, `get_mangled_object_vars`, `get_class_vars`, an `(array)` cast, `foreach`, `array_walk` or an `ArrayIterator` over the object, `ReflectionProperty::getValue` and `ReflectionClass`'s static property reads is the array too, `empty()` tests that array, and reflection gives each such property, parameter and result the type `array`. PHP# code reading its own property still gets the `Map`, and a PHP array plain PHP writes there becomes one again.
+- A PHP array's keys are `int` or `string`, so a `Map` keyed by a backed enum gives each case's backing value as its key, as an array crossing the other way gives each backing value as its case. A `Map` keyed by anything else, a class, a struct, a collection or an enum without backing values, reaches plain PHP as the `Map` itself, the one collection plain PHP receives as the object. Passing it to a plain PHP parameter that names `array` is a compile error that names the parameter and the key type. `counts.count()` counts any `Map`, whatever its keys.
+- Every other `Map` crosses as a PHP array, as one keyed by `int|string` or by a backed enum beside its backing type does. When two of its keys would become one PHP array key, as `5` and `"5"` do, or a backed enum case and its backing value, the crossing throws a `ValueError` that names both keys: "This `Map` holds both `5` and `"5"`, which plain PHP keeps as one key, so it can't become a plain PHP array". A case is named as `Shop.Level.Low`. It never keeps one entry and drops the other. Only the keys a `Map` holds show this, so the check runs where the `Map` crosses, and a `Map` with no two such keys costs nothing extra.
+- A plain PHP parameter that takes only objects, such as `\Countable`, `\Traversable`, `object` or an interface, takes the `Map` or the `Set` itself. One that names `array`, `iterable` or `mixed`, or declares no type, takes the PHP array. A function value gives a `Map` or a `Set` as a PHP array when the closure behind it is plain PHP, and as itself when it is PHP#.
 
 <!-- example enum-map-keys -->
 ```csharp
@@ -1340,6 +1433,26 @@ plans.filter(p => p.active);          // Map<string, Plan>, keys kept
 ```
 
 `contains`, a `List`'s `remove`, `indexOf` and `Set<T>` need `==` on the element type (section 19). Without it, they are a compile error.
+
+**`flatMap` and `toList()`:** a `List`'s `flatMap` gives, in order, the elements of each `Iterable` its function gives, as Kotlin's does. `toList()` gives the elements of any `Iterable` as a `List` of their own. A `Map` is an `Iterable` of its `[key, value]` entries, so both give a `Map`'s entries, as Kotlin's `Map.toList()` gives its pairs:
+
+<!-- example flat-map-to-list: statements
+List<List<int>> rows = [[1, 2], [], [3]];
+List<List<int>> none = [];
+Set<string> tags = ["vip", "new"];
+Map<string, int> stock = ["tea": 3, "pie": 7];
+List<Map<string, int>> shelves = [stock, ["jam": 1]];
+-->
+```csharp
+rows.flatMap(row => row);              // [1, 2, 3]
+none.flatMap(row => row);              // []
+tags.toList();                         // ["vip", "new"]
+stock.toList();                        // [["tea", 3], ["pie", 7]]
+stock.values().toList();               // [3, 7]
+shelves.flatMap(shelf => shelf);       // [["tea", 3], ["pie", 7], ["jam", 1]]
+rows.flatMap(row => row.count());      // compile error: an int is no Iterable
+List<int> counts = shelves.flatMap(shelf => shelf);   // compile error: the entries are [string, int]
+```
 
 The complete method list is specified with the standard library.
 
@@ -1695,7 +1808,7 @@ List<string> names = ["Spring Sale"];
 names.map(Str.slug);
 ```
 
-A method of a `List`, `Map` or `Set`, an extension method (section 26) and a plain PHP function are values the same way, as in `allowed.contains`, `name.trim` and `global.strtoupper`. A collection is a value (section 12), so a collection's method value holds the collection as it was when the value was made, as C# copies a struct into a delegate made from its method:
+A method of a `List`, `Map` or `Set`, an extension method (section 26) and a plain PHP function are values the same way, as in `allowed.contains`, `name.trim` and `global.ucfirst`. A collection is a value (section 12), so a collection's method value holds the collection as it was when the value was made, as C# copies a struct into a delegate made from its method:
 
 <!-- example method-value-kinds: statements
 List<int> allowed = [1, 3];
@@ -1705,12 +1818,12 @@ List<string> names = ["tea", "jam"];
 const has = allowed.contains;
 allowed.add(5);
 List<int> kept = [1, 2, 5].filter(allowed.contains);   // [1, 5]
-List<string> loud = names.map(global.strtoupper);      // ["TEA", "JAM"]
+List<string> capitalized = names.map(global.ucfirst);  // ["Tea", "Jam"]
 ```
 <!-- run method-value-kinds
 has(5);        // false
 kept;          // [1, 5]
-loud;          // ["TEA", "JAM"]
+capitalized;   // ["Tea", "Jam"]
 -->
 
 **A method that changes a collection is no function value**, since it would change only that copy, as Swift refuses the value of a `mutating` method. A lambda that calls it changes the collection itself:
@@ -1739,6 +1852,66 @@ sorted;   // [1, 2, 3]
 -->
 
 A plain PHP class may have both a property and a method of one name. Reading the name gives the property, as in PHP, except where the code takes the read as a function and the property's type doesn't fit that function type. There the read gives the method's value, as in `names.map(gadget.label)`, where `label` is both a `string` property and a method.
+
+**A plain PHP class that defines `__get` has the properties it reads,** as an Eloquent model has the relations it loaded. A property's type is the one an `@property` or `@property-read` line on the class or its parents gives it, and `Any?` without one. `subscription.contact` reads the property, as `$subscription->contact` does in PHP, even when the class has a method `contact`. By the rule above, the read gives the method's value only where the code takes it as a function. `subscription.contact()` calls the method.
+
+<!-- example magic-properties -->
+```php
+/** @property-read Contact $contact */
+class Subscription
+{
+    public function contact(): Contact { return new Contact(); }
+    public function owner(): Contact { return new Contact(); }
+    public function __get(string $name): mixed { $loaded = new Contact(); $loaded->name = $name; return $loaded; }
+}
+```
+
+<!-- example magic-properties: statements
+extern Subscription.owner;
+Subscription subscription = new Subscription();
+-->
+```csharp
+Contact contact = subscription.contact;              // compiles: the @property-read line types it
+const owner = subscription.owner;                    // compiles: Any?
+Function<Contact()> load = subscription.owner;       // compiles: the method, where a function is taken
+Contact loaded = subscription.owner();               // compiles: calls the method
+```
+<!-- run magic-properties
+contact.name;                // "contact"
+(owner as Contact)?.name;    // "owner"
+load().name;                 // "Ada"
+loaded.name;                 // "Ada"
+-->
+
+A read typed `Any?` this way warns until an `as`, an `is` or a `match` states its type, as in `Contact? owner = subscription.owner as Contact;`. A write to such a property takes any value and warns nothing. A read after a write is still what `__get` gives back, so `row.count = "7"; return row.count;` reads `Any?`, not `string`.
+
+A declared property the code can't read, such as an Eloquent model's protected `table` or `hidden`, is the property `__get` reads, as plain PHP reads it from outside the class.
+
+**A `.sharp` class whose plain PHP parent defines `__get` has those properties too,** as a PHP# Eloquent model has the relations it loaded, by the same rules.
+
+<!-- example magic-property-models -->
+```php
+abstract class Model
+{
+    public function __get(string $name): mixed { $loaded = new Contact(); $loaded->name = $name; return $loaded; }
+}
+```
+
+<!-- example magic-property-models -->
+```csharp
+// app/Booking.sharp
+namespace App;
+
+public class Booking : Model
+{
+    public Contact guest() => new Contact();
+
+    public string guestName() => (this.guest as Contact)?.name ?? "";   // compiles: the property __get reads
+}
+```
+<!-- run magic-property-models
+new Booking().guestName();    // "guest"
+-->
 
 **A field or property holding a `Function` is called like a method** when the class has no method with that name. A `.sharp` class cannot declare a method and a field or property with the same name, so `this.discount(…)` always has one meaning.
 
@@ -1850,6 +2023,22 @@ public class Receipts
 ```
 
 **Declaring:** `event` declares an event type. `public event OrderPaid(int orderId, Money amount);` declares `OrderPaid`, a class whose parameters become get-only properties, as C#'s positional records and Kotlin's data classes do.
+
+**A parameter takes any type,** a collection too. A list literal passed for a `Set` parameter becomes a `Set`, as it does for a method's parameter (section 12):
+
+<!-- example event-set-parameter -->
+```csharp
+// app/OrderTagged.sharp
+namespace App;
+
+public event OrderTagged(int orderId, Set<string> tags);
+```
+
+<!-- example event-set-parameter: statements -->
+```csharp
+const tagged = new OrderTagged(1, ["vip", "new", "vip"]);
+tagged.tags.count();                 // 2: the literal became a Set, which holds "vip" once
+```
 
 **No type nests.** Every type, events and interfaces included, is declared at file level in its own file (section 27). An interface that several events share, such as `OrderEvent`, is declared the same way. An event lives in the namespace of the code it describes:
 
@@ -2045,7 +2234,34 @@ Amount price = new Amount { value: 500, currency };     // short for currency: c
 
 **Any parameter can be named at a call,** including a call into plain PHP. An override keeps every parameter name of the method it overrides (section 22), so a name means the same parameter on every class.
 
-A named argument that matches no parameter is a compile error, also on a method that takes any number of arguments (section 7).
+**A named argument that matches no other parameter of plain PHP fills its `...` parameter under its name,** as PHP collects it, on a method, a static method, a constructor, a function and an attribute. The `...` parameter's element type checks each value, as it checks a positional one. A PHP# `...` parameter is a `List` (section 7), which has no names, and a function built into PHP takes its `...` values by position, so a named argument that matches no parameter there is a compile error. Plain PHP that passes names to a PHP# `...` parameter, an override's included, throws on entry, with "`Wrapper.wrap` takes `...attributes` by position, and was given `class:` and `id:`.", so no name or value is lost.
+
+<!-- example named-variadics -->
+```php
+#[\Attribute(\Attribute::TARGET_ALL)]
+final class Generic { public function __construct(string ...$types) {} }
+
+final class Html
+{
+    public static function tag(string $name, string ...$attributes): string { return $name . ' ' . implode(',', array_keys($attributes)); }
+}
+```
+
+<!-- example named-variadics -->
+```csharp
+// app/Catalog.sharp
+namespace App;
+
+[Generic(Item: typeof(DatabaseEntity))]                        // compiles: Generic(string ...$types) receives ["Item" => DatabaseEntity]
+public class Catalog<TItem : DatabaseEntity>
+{
+    public string home() => Html.tag("a", href: "/home", title: "Home");   // compiles: tag(string $name, string ...$attributes) receives ["href" => "/home", "title" => "Home"]
+
+    public static int sum(int ...values) => values.count();
+
+    public int total() => Catalog<TItem>.sum(first: 1, second: 2);          // compile error: sum takes its ...values by position
+}
+```
 
 <!-- example named-arguments: statements
 Image image = new Image();
@@ -2199,6 +2415,28 @@ A plain PHP file keeps PHP's own interpolation. It converts an object of a class
 
 **Plain strings:** `"…"` and `'…'` never interpolate, so braces and `$` inside them are literal.
 
+**Text methods:** a `string` has Kotlin's text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so a case change reaches every letter. `replace` replaces every match, as Kotlin's does. `split` keeps the empty text after a trailing delimiter, and takes Kotlin's `limit`: 0, its default, gives every part, and a positive limit gives at most that many, the last holding the rest. Empty text to replace, an empty delimiter and a negative limit each throw `ValueError`:
+
+<!-- example text-methods: statements -->
+```csharp
+"hello".contains("ell");                  // true
+"hello".contains("xyz");                  // false
+"ÉCOLE".lowercase();                      // "école"
+"école".uppercase();                      // "ÉCOLE"
+"hello".startsWith("he");                 // true
+"hello".startsWith("lo");                 // false
+"hello".endsWith("lo");                   // true
+"hello".endsWith("he");                   // false
+"banana".replace("a", "o");               // "bonono"
+"banana".replace("", "o");                // throws: "`replace` needs text to replace, and it is empty."
+"a,b,".split(",");                        // ["a", "b", ""]
+"a:b:c".split(":", 2);                    // ["a", "b:c"]
+"a,b".split("");                          // throws: "`split` needs a delimiter, and it is empty."
+"a:b".split(":", -1);                     // throws: "`split` takes a limit of 0 or more, and it is negative."
+"hello".contains(1);                      // compile error: contains takes a string
+global.str_contains("hello", "ell");      // compile error: write "hello".contains(…)
+```
+
 PHP's backtick shell execution is removed, and so is `shell_exec()`. A program runs through `Process.run(program, arguments)` (section 29), which takes its arguments as a list, so no shell reads them.
 
 ## 19. Equality, comparison and operators
@@ -2213,6 +2451,32 @@ PHP's backtick shell execution is removed, and so is `shell_exec()`. A program r
 - **`Any?`** compared with `==` against a struct, enum, string, number or collection compares by value, and is false when the types differ.
 - **`===`** is true only for the same object. It works on classes only, and cannot be overridden.
 - **`Set`** hashes a struct, enum, string, number or collection by its value, and an object by its class's `hash()`. A struct that declares `hash()` is hashed by it.
+
+**Two sets are `==` when they hold the same elements, in any order,** as in Kotlin, Java, Swift and Python. Two equal sets hash alike whatever their order, so a `Set` keys a `Map` and joins a `Set`. A literal takes its collection type from where it lands (section 12), so a list literal compared with a set is a set, as in Swift:
+
+<!-- example set-equality: statements -->
+```csharp
+Set<int> a = [1, 2];
+Set<int> b = [2, 1];
+Set<int> c = [1, 2, 3];
+a == b;                              // true: the same elements, in any order
+a == c;                              // false
+a == [2, 1];                         // true: the literal is a Set
+a == [];                             // false: the empty Set holds no element
+Map<Set<int>, string> names = [a: "pair"];
+names[b] ?? "none";                  // "pair": b hashes as a does
+```
+
+**A union that holds a collection beside another type compares by the value it holds,** as each of its types compares:
+
+<!-- example union-equality: statements -->
+```csharp
+Set<int>|int either = [2, 1];
+Set<int> pair = [1, 2];
+either == pair;                      // true: either holds a Set of the same elements
+either == 1;                         // false: either holds a Set, not an int
+pair == 1;                           // compile error: a Set never equals an int
+```
 
 **Operators** are declared once on a type and inherited by its subclasses:
 
@@ -2424,6 +2688,21 @@ A case with a value and a case with data in one enum is a compile error. Swift e
 - **A plain case of a generic enum is one object for each list of type arguments,** so `Lookup<int>.Missing` and `Lookup<string>.Missing` are two objects, as each list has its own static fields.
 - **At runtime,** each case is a real class, so Reflection sees it.
 - **The checker** rejects a `match` over the enum that misses a case.
+
+**A field takes any type,** a collection too. A list literal passed for a `Set` field becomes a `Set`, so a case compares its sets by their elements:
+
+<!-- example case-set-field: statements -->
+```csharp
+public enum Badge
+{
+    case Marked(Set<string> tags);
+    case Blank;
+}
+
+Badge badge = Badge.Marked(["vip", "new"]);                                           // compiles: the literal becomes a Set
+bool same = badge == Badge.Marked(["new", "vip"]);                                    // true: the same case with the same elements is ==
+int count = match (badge) { Badge.Marked(Set<string> tags) => tags.count(), Badge.Blank => 0 };   // compiles
+```
 
 ### 20.1 Sealed interfaces
 
@@ -2665,6 +2944,35 @@ Any? doubled = (int x) => x * 2;
 doubled is Function<int(int)>;               // true
 doubled is Function<string(string)>;         // false: the parameter and result types differ
 Legacy.doubler() is Function<int(int)>;      // compile error: the type of Legacy.doubler()'s function is unknown
+```
+
+**A tuple type tests the number of elements and each element's type,** as `List<int>` tests each element. A pattern that starts with `[` is a list pattern, which tests the same, so a tuple type is written in `as` and as a member of a union:
+
+<!-- example tuple-tests: statements -->
+```csharp
+Any? pair = [1, "a"];
+Any? triple = [1, "a", 2];
+Any? swapped = ["a", 1];
+pair as [int, string];                       // [1, "a"]
+triple as [int, string];                     // null: three elements
+swapped as [int, string];                    // null: the element types differ
+pair is int|[int, string];                   // true
+```
+
+**`Class<T>` tests that a value is a class value of `T` or of a class that extends or implements `T`.** A string that holds a class's full name, as `"App.RushOrder"`, is that class's class value, so it passes too. A string that names no class never passes, not even `Class<Object>`:
+
+<!-- example class-value-tests: statements -->
+```csharp
+Any? rush = typeof(RushOrder);
+Any? customer = typeof(Customer);
+Any? named = "App.RushOrder";
+Any? text = "rush";
+rush is Class<Order>;                        // true: RushOrder extends Order
+customer is Class<Order>;                    // false
+named is Class<Order>;                       // true: the string names RushOrder
+text is Class<Order>;                        // false: no class is named rush
+text is Class<Object>;                       // false
+(rush as Class<Order>) == typeof(RushOrder); // true
 ```
 
 **Boolean operators:** `&&`, `||` and `!` exist only in expressions. PHP's `and`, `or` and `xor` operators are removed, so `=` can no longer bind before `and`.

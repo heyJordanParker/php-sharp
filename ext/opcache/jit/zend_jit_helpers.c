@@ -3586,6 +3586,15 @@ static void ZEND_FASTCALL zend_jit_post_dec_obj_helper(zend_object *zobj, zend_s
 	}
 }
 
+/* PHP#: plain PHP code reads the static property `info`, when its type holds a Map or a Set, as its PHP array. `info`
+ * is NULL for a property no fetch cached. */
+static void ZEND_FASTCALL zend_jit_sharp_static_read(zval *result, const zend_property_info *info)
+{
+	if (info && UNEXPECTED(info->flags & ZEND_ACC_SHARP_CROSSING)) {
+		sharp_cross_read(result);
+	}
+}
+
 static void ZEND_FASTCALL zend_jit_uninit_static_prop(void)
 {
 	zend_execute_data *execute_data = EG(current_execute_data);

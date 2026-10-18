@@ -7,7 +7,7 @@ enum Suit
 
     public string label()
     {
-        return global.strtolower(this.name);
+        return this.name.lowercase();
     }
 
     public static int size()

@@ -36,7 +36,7 @@ class Tagged
             ((object) $tags)->any(fn ($tag) => $tag === "5"),
             ((object) $tags)->first(fn ($tag) => \strlen($tag) > 2),
             ((object) $tags)->sortedBy(fn ($tag) => $tag),
-            \implode(",", \iterator_to_array($tags, false)),
+            \implode(",", \Sharp\Internal\arrayOf($tags)),
         ];
     }
 
@@ -81,7 +81,7 @@ class Tagged
         return [$copied, $kept, $added, $this->calls, $named, $this->tags->toList(), ((object) $maybe)?->add("x"), ((object) $maybe)?->contains("x"), ((object) $maybe)?->count()];
     }
 
-    private function copy(): \Sharp\Set { return $this->tags; }
+    private function copy(): \Sharp\Set|array { return $this->tags; }
 
     private function next(): string
     {
@@ -96,7 +96,7 @@ class Tagged
         $size = function (\Sharp\Set|array $tags) { $tags = \is_array($tags) ? new \Sharp\Set($tags) : $tags;
             return ((object) $tags)->count();
         };
-        return [$check(new \Sharp\Set($names)), $check([$prefix]), $size(["a", "a", "b"])];
+        return [$check(new \Sharp\Set($names)), $check(new \Sharp\Set([$prefix])), $size(new \Sharp\Set(["a", "a", "b"]))];
     }
 
     public static function groups(\Sharp\Set|array ...$groups): array { $groups = \array_map(fn ($collection) => \is_array($collection) ? new \Sharp\Set($collection) : $collection, $groups);
