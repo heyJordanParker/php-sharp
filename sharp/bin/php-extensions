@@ -1,0 +1,137 @@
+#!/usr/bin/env php
+<?php
+// Checks that each PHP extension named on the command line loads into this engine: `php -m` lists it, and a call into
+// it from this process answers. No server runs, so a database or cache client connects to a closed port and checks
+// that the failure comes from its own driver.
+
+function expect(mixed $actual, mixed $expected, string $call): string
+{
+    if ($actual !== $expected) {
+        throw new RuntimeException("$call returned " . var_export($actual, true) . ', not ' . var_export($expected, true));
+    }
+
+    return "$call returned " . var_export($actual, true);
+}
+
+function present(array $classes, array $functions = []): string
+{
+    $missing = array_merge(
+        array_filter($classes, fn (string $class) => !class_exists($class)),
+        array_filter($functions, fn (string $function) => !function_exists($function)),
+    );
+    if ($missing !== []) {
+        throw new RuntimeException('missing ' . implode(', ', $missing));
+    }
+
+    return implode(', ', array_merge($classes, $functions)) . ' present';
+}
+
+$closed = 'host=127.0.0.1 port=1 connect_timeout=5';
+
+$calls = [
+    'bcmath' => fn () => expect(bcadd('0.1', '0.2', 1), '0.3', "bcadd('0.1', '0.2', 1)"),
+    'exif' => fn () => expect(exif_tagname(0x010F), 'Make', 'exif_tagname(0x010F)'),
+    'gd' => function () {
+        ob_start();
+        imagepng(imagecreatetruecolor(3, 2));
+        return expect(imagesx(imagecreatefromstring(ob_get_clean())), 3, 'imagesx() of a 3x2 PNG imagepng() wrote');
+    },
+    'imagick' => function () {
+        $image = new Imagick();
+        $image->newImage(3, 2, 'white', 'png');
+        $read = new Imagick();
+        $read->readImageBlob($image->getImageBlob());
+        return expect($read->getImageWidth(), 3, 'Imagick::getImageWidth() of a 3x2 PNG Imagick wrote');
+    },
+    'intl' => fn () => expect(
+        (new NumberFormatter('de_DE', NumberFormatter::DECIMAL))->format(1234.5),
+        '1.234,5',
+        "NumberFormatter('de_DE')->format(1234.5)",
+    ),
+    'pcntl' => function () {
+        $handler = function (int $signal): void {};
+        pcntl_signal(SIGUSR1, $handler);
+        return expect(pcntl_signal_get_handler(SIGUSR1) === $handler, true, 'pcntl_signal_get_handler(SIGUSR1) === the handler pcntl_signal() set');
+    },
+    'pdo_pgsql' => function () use ($closed) {
+        $present = present([Pdo\Pgsql::class]);
+        expect(in_array('pgsql', PDO::getAvailableDrivers(), true), true, "in_array('pgsql', PDO::getAvailableDrivers())");
+        try {
+            new PDO('pgsql:' . str_replace(' ', ';', $closed));
+        } catch (PDOException $exception) {
+            return "$present; " . expect(
+                str_starts_with($exception->getMessage(), 'SQLSTATE[08006]'),
+                true,
+                "str_starts_with() of the PDOException new PDO() threw on a closed port, 'SQLSTATE[08006]'",
+            );
+        }
+        throw new RuntimeException('new PDO() on a closed port connected');
+    },
+    'pgsql' => function () use ($closed) {
+        $present = present([PgSql\Connection::class, PgSql\Result::class], ['pg_connect', 'pg_query_params', 'pg_fetch_assoc']);
+        expect(@pg_connect($closed, PGSQL_CONNECT_FORCE_NEW), false, 'pg_connect() on a closed port');
+        return "$present; " . expect(
+            str_starts_with(error_get_last()['message'], 'pg_connect(): Unable to connect to PostgreSQL server'),
+            true,
+            "str_starts_with() of the warning pg_connect() gave on a closed port, 'pg_connect(): Unable to connect to PostgreSQL server'",
+        );
+    },
+    'redis' => function () {
+        $present = present([Redis::class, RedisCluster::class, RedisSentinel::class, RedisException::class]);
+        $redis = new Redis();
+        expect($redis->isConnected(), false, 'new Redis()->isConnected()');
+        try {
+            $redis->connect('127.0.0.1', 1, 5);
+        } catch (RedisException $exception) {
+            return "$present; " . expect($exception->getMessage(), 'Connection refused', 'Redis::connect() on a closed port threw a RedisException whose getMessage()');
+        }
+        throw new RuntimeException('Redis::connect() on a closed port connected');
+    },
+    'zip' => function () {
+        $path = tempnam(sys_get_temp_dir(), 'zip');
+        $zip = new ZipArchive();
+        $zip->open($path, ZipArchive::OVERWRITE);
+        $zip->addFromString('a.txt', 'zipped');
+        $zip->close();
+        $zip->open($path);
+        $read = $zip->getFromName('a.txt');
+        $zip->close();
+        unlink($path);
+        return expect($read, 'zipped', 'ZipArchive::getFromName() of an entry ZipArchive wrote');
+    },
+];
+
+// FrankenPHP's php-cli puts its own name before the script's in $argv.
+$names = array_slice($argv, array_search($_SERVER['SCRIPT_FILENAME'], $argv, true) + 1);
+if ($names === []) {
+    fwrite(STDERR, "usage: sharp/bin/php-extensions <extension>...\n");
+    exit(2);
+}
+
+exec('php -m', $listed, $status);
+echo "== php -m\n", implode("\n", $listed), "\n== each extension, from ", PHP_BINARY, "\n";
+
+$failed = [];
+foreach ($names as $name) {
+    try {
+        if ($status !== 0 || !in_array($name, $listed, true)) {
+            throw new RuntimeException('php -m does not list it');
+        }
+        if (!extension_loaded($name)) {
+            throw new RuntimeException('it is not loaded in this process');
+        }
+        if (!isset($calls[$name])) {
+            throw new RuntimeException('sharp/bin/php-extensions has no call into it');
+        }
+        $answer = $calls[$name]();
+        echo "PASS $name: $answer\n";
+    } catch (Throwable $exception) {
+        echo "FAIL $name: ", $exception->getMessage(), "\n";
+        $failed[] = $name;
+    }
+}
+
+if ($failed !== []) {
+    fwrite(STDERR, 'Failed: ' . implode(', ', $failed) . "\n");
+    exit(1);
+}
