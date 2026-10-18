@@ -89,11 +89,11 @@ CompileError: Torn.sharp has 2 errors:
 line 5: Parse error encountered during parsing
 line 5: Parse error encountered during parsing
 CompileError: Wrong.sharp has 2 errors:
-line 5: PHP# has no `echo`: write `console.write(text)` on the `Console` your constructor takes.
+line 5: Parse error encountered during parsing
 line 5: `Wrong.run` is declared twice: a class has one method per name, with no overloading by argument types.
 CompileError: app/Orders/Order.sharp has 3 errors:
 line 12: Invalid return type for method `Order.total`: expected `int`, but found `string`.
-line 19: PHP# has no `echo`: write `console.write(text)` on the `Console` your constructor takes.
+line 19: Parse error encountered during parsing
 line 31: Invalid return type for method `Order.label`: expected `string`, but found `int`.
 run
 run

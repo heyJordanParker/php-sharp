@@ -80,7 +80,7 @@ Each decides what a user writes. Each has its proposal and its answer, which the
 6. **A collection keys a `Map` and joins a `Set` when its elements have `==`,** as section 19 says. The checker's key rule accepts a `List`, `Map` or `Set` whose every type argument has `==` and `hash()`, and its message names them. The engine needs no change: `sharp_hash` already hashes an array by its elements in order and a `Map` or `Set` by its entries in any order, and `sharp_equal` compares them (`sharp_table.c`, lines 309 to 337 and `sharp_equal_arrays`), for a collection inside a struct key. A stored `Map` or `Set` key is shared, so a later write to the original separates the writer, and the key never changes.
 7. **A lazy plain PHP source is checked as it is read.** Every crossing runs through `sharp_type_accepts`, which already turns an `int` into a `float` in place. Its `Iterable` arm will put a `Sharp\Sequence` that checks each element against `T` in place of a `Traversable`, so a bad element throws `TypeError` at the loop that reads it. An array, a `Sharp\Set` and a `Sharp\Map` are checked whole, and a `Sharp\Map` is then read through a `Sharp\Sequence` of its entries.
 8. **Section 5's default reaches methods** (question 7). `scan_method` gives a `.sharp` method without a modifier `Visibility::Private`, as `scan_properties` does (`property.rs:241`). The bridge gives it `ZEND_ACC_PRIVATE`, as `Lowering::property` does (`lower.rs:2699`). `is_slice_method` loses its refusal, and `Lowering::method` its `unreachable!`.
-9. **`=>` in a literal names its replacement.** "`EqualGreaterThan` is PHP syntax that PHP# does not have" will read "PHP# writes a `Map` entry as `key: value`: `=>` is the lambda arrow."
+9. **`=>` in a literal fails as a typo does,** at the `=>`.
 10. **Decisions 026 and 033 match the spec.** 026 still says `lines[0] = line` is a compile error, names `set`, and has a `Map` loop give values. 033 still says a `Map` is an `Iterable<TValue>`.
 
 One new engine class, `Sharp\Sequence`. No new issue code, no new crate.
@@ -141,7 +141,7 @@ The states are **works**, **refused** (an error that names the feature as missin
 | C7 | a call from PHP# to PHP# checks nothing at run time | works: `element-checks` passes | none | |
 | C8 | `as` to a collection type checks every element, null if any is wrong | works: `[new Line(), "x"] as List<Line>` gave `NULL` | none | |
 | C9 | literals: `[a, b]` a `List`, `["pro": pro]` a `Map`, `[:]` an empty `Map`, a declared `Set` | works: `collection-literals` passes | none | |
-| C10 | PHP's `["key" => value]` is not used | refused, with a message that names a token: "`EqualGreaterThan` is PHP syntax that PHP# does not have" | checker (decision 9) | |
+| C10 | PHP's `["key" => value]` is not used | fails as a typo does, at the `=>` | parser (decision 9) | |
 | C11 | an empty literal with no declared type is a compile error | works: "An empty literal needs a type: write `List<T> messages = []`." | none | |
 | C12 | a literal of the other collection is a compile error at a declaration, an assignment, a default, a return or an argument | works at all five: "`[]` is an empty List. An empty Map is written `[:]`." | none | |
 | C13 | a `List` spread appends in order | works: `[...open, ...closed]` gave `[1, 2, 3]` | none | |
@@ -200,9 +200,9 @@ The states are **works**, **refused** (an error that names the feature as missin
 | L8 | a `const` loop variable may have its type written | works; `[string key, int n]` over a `Map<Status, int>` and `Plan line` over a `List<Line>` are refused | none | |
 | L9 | `let` with a written type is a parse error | works: "Parse error encountered during parsing" | none | |
 | L10 | a written `string` key over a `Map<string, TValue>` reads back as a `string` | works: `"5"` arrived as `string '5'` | none | |
-| L11 | `for (x in y)` is a compile error that names `of` | works: "PHP# loops over a collection with `of`, as in `for (const line of lines)`." | none | |
+| L11 | `for (x in y)` is a parse error | works: fails as a typo does, at the `in` | none | |
 | L12 | `while`, `do … while` and C's `for` keep their form | works | none | |
-| L13 | PHP's `foreach` is removed | works: "`foreach` is PHP syntax: PHP# loops over a collection with `for … of`" | none | |
+| L13 | PHP's `foreach` is removed | works: fails as a typo does | none | |
 | L14 | every body is written in braces | works: `braces` passes | none | |
 | L15 | (no line) `?? continue` in a loop's condition | runs the condition again while the value is null | a spec line (question 4) | the `Leave` check of #131 |
 

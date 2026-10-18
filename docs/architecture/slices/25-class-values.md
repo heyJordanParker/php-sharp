@@ -42,7 +42,7 @@ The Slice is one php-sharp pull request. It builds the parts that need nothing f
    - `self-return` and `required-constructors` declare a `DatabaseEntity` whose constructor is `required(Row row)`. The harness `DatabaseEntity` cannot have it: every line that writes `new Order()` would break. So `self-return`'s hidden setup adds `public class Order : DatabaseEntity { public Order(Row row) : super(row) { } }`, and `required-constructors`' first marker becomes a template whose setup declares `DatabaseEntity`, as the self-return block does. Today the harness `Order` fails beside `self-return`'s `DatabaseEntity`: "`App.Order` must declare a constructor that calls `App.DatabaseEntity`'s with `: super(…)`."
 7. **Smaller refusals named in section 25's words,** each a refusal today:
    - `Self copy = new Self();` is a generic parse error. The parser reads `Self` as a local's type, and `check_self_type` reports "`Self` is only a return type in PHP#." as it does for a parameter and a property.
-   - `Order::class` got "`::` is PHP syntax: PHP# writes static access with `.`". The parser now reports "`Order::class` is PHP syntax: PHP# writes `typeof(Order)`", and for a lowercase name, which spec section 24 makes a value, "`order::class` is PHP syntax: PHP# writes `Class.of(order)`".
+   - `Order::class` fails as a typo does, at the `::`.
 8. **`docs/decisions/041-typeof-value.md` follows the spec.** It still decides `typeof(order)`, which commit `4ad060046` replaced with `Class.of(order)` on Jordan's ruling.
 
 ## Rulings
@@ -122,7 +122,7 @@ The states are **works**, **refused** (rejected, with its message), **silently a
 |---|---|---|---|---|---|
 | 2776 | `typeof(X)` is typed `Class<X>` | missing: `Class<Order> type = typeof(Order);` is "This type is not supported yet in PHP#." (`TypeOfTypes.sharp:7`). `typeof(X)` itself works | works for one type that is not nullable or a union, which is "This type is not supported yet in PHP#." | #102, and Slice for a nullable or union type and a written `Class` of any type, ruling 5 | `TypeOf`, `TClassLikeString` |
 | 2776 | it works on every type parameter, a method's included | missing: a generic method is a parse error (`Generic.sharp:5`) | works: `string name<TItem>() => typeof(TItem)` compiles | #102 | |
-| 2776 | PHP's `Order::class` is removed | refused: "`::` is PHP syntax: PHP# writes static access with `.`" (`PhpForms.sharp:5`) | the same | Slice, decision 7: the help names `typeof(Order)` | the parser's `::` refusal |
+| 2776 | PHP's `Order::class` is removed | refused at the `::` (`PhpForms.sharp:5`) | fails as a typo does | Slice, decision 7 | the parser's `::` refusal |
 | 2793 | `typeof(TItem)` works for any type argument, `int` included | missing: parse error | works | #102 | |
 | 2793 | it creates objects only when the bound is a class | missing: parse error | works: `new (type)()` in `blank<TItem>` is "`TItem` can stand for a type that is not a class." (`Generic.sharp:16`), `make<TItem : Order>` compiles | #102 | |
 | 2814 | `typeof` takes a type only | silently accepted: `typeof(order)` on a parameter `order` compiles (`TypeOfTypes.sharp:26`) | silently accepted | Slice, decision 2 | `LocalScopes`, `check_binding_errors` |
@@ -140,8 +140,8 @@ The states are **works**, **refused** (rejected, with its message), **silently a
 | 2886 | a class value of a generic class carries its type arguments or leaves them out; `new (any)()` on an open one is an error | missing: parse error | works, the example fails only on the missing harness class `PaginatedList` | #102, decision 6 | |
 | 2903 | two class values are equal when they name the same class with the same type arguments | works for classes without type arguments, engine included. Missing for `Box<T>`: parse error | works: `class-value-equality` passes on #102's engine | #102 | `\Sharp\Internal\equals` |
 | 2914 | `Self` is the class a static method was called on | works, engine included | the same | nothing to build | `check_self_type`, the bridge's `static` |
-| 2914 | it replaces PHP's `static` | refused: `new static()` is "PHP# writes `Self` for PHP's `static`." (`PhpNewStatic.sharp:7`) | the same | nothing to build | `report_php_static` |
-| 2914 | PHP's `self` is removed | refused: "PHP# has no `self`: write the class's own name, `PhpSelf`, for the declaring class, or `Self` for the class a static method is called on." (`PhpSelf.sharp:5`) | the same | nothing to build | `report_php_self` |
+| 2914 | it replaces PHP's `static` | refused: `new static()` (`PhpNewStatic.sharp:7`) | fails as a typo does | nothing to build | `report_unsupported` |
+| 2914 | PHP's `self` is removed | refused (`PhpSelf.sharp:5`) | fails as a typo does | nothing to build | `report_unsupported` |
 | 2930 | `Self` replaces the C# workaround `class Order : Entity<Order>` | prose, no rule | | | |
 | 2932 | `Self` is written only as a return type, and as `new Self(…)` and `Self.m()` in bodies | works for a return type, `new Self()` and `Self.count()` (`SelfForms.sharp:7`, `11`) | the same | nothing to build | |
 | 2932 | a `Self` parameter is a compile error | refused: "`Self` is only a return type in PHP#." (`SelfForms.sharp:15`), and a property too (`SelfForms.sharp:17`). A local is a generic parse error (`SelfLocal.sharp:9`) | the same | Slice, decision 7, for the local | `check_self_type` |
