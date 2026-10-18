@@ -1930,6 +1930,7 @@ The field or property is read before the arguments run, as in Java, C#, TypeScri
 - **`a ?? b`:** `b` when `a` is null.
 - **`a ??= b`:** assigns `b` only when `a` is null.
 - **`a?.b`:** reads `b`, or gives null when `a` is null. PHP writes this as `?->`.
+- **`a?.b = c`:** writes `b` only when `a` is not null, as `=`, every compound assignment, `++`, `--` and an index write such as `a?.tags["vip"] = true` do.
 - **`f?.(x)`:** calls `f` only when it is not null.
 - **`a ?? throw …`, `a ?? return`, `a ?? continue` and `a ?? break`:** leave when `a` is null. `return` takes a value when the method returns one.
 
@@ -1947,6 +1948,26 @@ public void renewAll(List<int> customerIds, string plan)
         this.charge(customer, price);
     }
 }
+```
+
+**A write through `?.` happens only when every `?.` receiver on its left is not null,** as in C# 14, Kotlin and Swift. When one is null, nothing is written, and neither the right side nor a `set` body runs. Each receiver runs once, so `this.orders.find(id)?.note = "gift"` calls `find` once.
+
+<!-- example null-safe-writes: statements
+public class Customer { public string name { get; set; } = ""; }
+public class Item { }
+public class Order { public string note { get; set; } = ""; public List<Item> items { get; set; } = []; public int total { get; set; } = 0; public Customer customer { get; } = new Customer(); }
+public class Orders { public Order? find(int id) => id == 1 ? new Order() : null; }
+private Orders orders = new Orders();
+private int fee() => 5;
+int id = 1;
+Item item = new Item();
+-->
+```csharp
+Order? order = this.orders.find(id);                 // null when no order has this id
+order?.note = "gift";                                // compiles: sets note when order exists, does nothing when it's null
+order?.items.add(item);                              // compiles: already allowed today, a call through ?.
+order?.total += this.fee();                          // compiles: fee() runs only when order exists
+order?.customer.name = "Ada";                        // compiles: skips when order is null; customer is not nullable
 ```
 
 **A `?` or a null check that cannot matter is a compile error,** because it misstates the code. Section 24 gives the rule for `?`.

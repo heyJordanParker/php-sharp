@@ -1,0 +1,15 @@
+namespace NullSafeWrites;
+
+public class Orders
+{
+    public int finds { get; private set; } = 0;
+
+    public Orders(private Order? stored) { }
+
+    public Order? find(int id)
+    {
+        this.finds++;
+
+        return id == 1 ? this.stored : null;
+    }
+}

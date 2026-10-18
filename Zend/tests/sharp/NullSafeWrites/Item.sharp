@@ -1,0 +1,6 @@
+namespace NullSafeWrites;
+
+public class Item
+{
+    public Item(public string sku { get; }) { }
+}
