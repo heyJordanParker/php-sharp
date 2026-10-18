@@ -156,6 +156,16 @@ class Crossings
         return joined;
     }
 
+    public static string unioned(Set<string>|int given) => given is Set<string> ? `${global.get_class(given)} ${global.implode(",", given.toList())}` : `int ${given}`;
+
+    public static string mapOrInt(Map<string, int>|int given) => given is Map<string, int> ? `${global.get_class(given)} ${given["a"] ?? -1}` : `int ${given}`;
+
+    public static Iterable<int> doubled(Iterable<int> numbers) => numbers.map(number => number * 2);
+
+    public static Iterable<Map<string, int>> keyed(Iterable<int> numbers) => numbers.map(number => ["n": number]);
+
+    public static string cartonPayloadClass(Carton carton) => global.get_class(carton.payload);
+
     public static string ownEntries(Map<string, int> counts)
     {
         let joined = "";

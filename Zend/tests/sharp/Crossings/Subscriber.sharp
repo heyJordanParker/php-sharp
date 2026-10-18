@@ -1,0 +1,10 @@
+namespace Demo;
+
+import Hiding;
+
+public class Subscriber : Hiding
+{
+    protected override List<string> hidden { get => field; set; } = ["password"];
+
+    public string hiddenText() => global.implode(",", this.hidden);
+}
