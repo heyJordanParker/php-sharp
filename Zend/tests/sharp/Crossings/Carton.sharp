@@ -1,0 +1,64 @@
+namespace Demo;
+
+public class Carton
+{
+    public Map<string, int> payload { get; set; } = ["b": 2, "a": 1];
+
+    public Set<string> codes { get; set; } = ["b", "a"];
+
+    public string payloadText() =>
+        `${global.get_class(this.payload)} ${global.implode(",", this.payload.keys())}=${global.implode(",", this.payload.values())}`;
+
+    public string codesText() => `${global.get_class(this.codes)} ${global.implode(",", this.codes.toList())}`;
+
+    public int payloadAt(string key) => this.payload[key] ?? -1;
+
+    public bool readsOnePayload() => global.spl_object_id(this.payload) == global.spl_object_id(this.payload);
+
+    public void putPayload(string key, int value)
+    {
+        this.payload[key] = value;
+    }
+
+    public void replacePayload()
+    {
+        this.payload = ["z": 26];
+    }
+
+    public Carton copied() => this with { codes: ["c"] };
+
+    public Map<Level, int> levels { get; set; } = [Level.Low: 1];
+
+    public int putLevel()
+    {
+        this.levels[Level.High] = 2;
+
+        return this.levels.count();
+    }
+
+    public Map<int|string, string> mixedKeys { get; set; } = [:];
+
+    public int putMixedKeys()
+    {
+        this.mixedKeys[5] = "a";
+        this.mixedKeys["5"] = "b";
+
+        return this.mixedKeys.count();
+    }
+
+    public Map<string, Set<string>> tags { get; set; } = [:];
+
+    public void tagA()
+    {
+        this.tags["a"] = ["x"];
+    }
+
+    public Set<string>|int picked { get; set => field = value; } = 0;
+
+    public string pickedText()
+    {
+        const picked = this.picked;
+
+        return picked is Set<string> ? `${global.get_class(picked)} ${global.implode(",", picked.toList())}` : "int";
+    }
+}

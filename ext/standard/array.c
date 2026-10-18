@@ -1522,7 +1522,7 @@ static zend_result php_array_walk(
 						&& !sharp_runs_sharp_code()) {
 					sharp_array_of(&crossed, zv);
 				} else if (prop_info) {
-					if (UNEXPECTED(sharp_property_refuses_reference(prop_info))) {
+					if (UNEXPECTED(!sharp_property_takes_reference(zv, prop_info))) {
 						result = FAILURE;
 						break;
 					}

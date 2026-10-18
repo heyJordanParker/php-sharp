@@ -114,16 +114,23 @@ static inline bool spl_array_is_object(spl_array_object *intern) /* {{{ */
 }
 /* }}} */
 
+static zend_object *spl_array_backing_object(spl_array_object *intern)
+{
+	if (Z_TYPE(intern->array) != IS_OBJECT || (intern->ar_flags & (SPL_ARRAY_IS_SELF|SPL_ARRAY_USE_OTHER))) {
+		return NULL;
+	}
+
+	return Z_OBJ(intern->array);
+}
+
 /* PHP#: puts in `rv` what plain PHP code reads from `slot` when it is a declared property slot of the object `intern`
  * reads, as sharp_cross_slot_read gives it, and gives whether it did. */
 static bool spl_array_crossed_slot(spl_array_object *intern, zval *slot, zval *rv)
 {
-	if (Z_TYPE(intern->array) != IS_OBJECT || (intern->ar_flags & (SPL_ARRAY_IS_SELF|SPL_ARRAY_USE_OTHER))) {
-		return false;
-	}
-	zend_object *object = Z_OBJ(intern->array);
+	zend_object *object = spl_array_backing_object(intern);
 
-	return slot >= object->properties_table && slot < object->properties_table + object->ce->default_properties_count
+	return object && slot >= object->properties_table
+		&& slot < object->properties_table + object->ce->default_properties_count
 		&& sharp_cross_slot_read(rv, object, slot);
 }
 
@@ -739,7 +746,11 @@ PHP_METHOD(ArrayObject, getArrayCopy)
 		RETURN_THROWS();
 	}
 
-	RETURN_ARR(zend_array_dup(spl_array_get_hash_table(intern)));
+	RETVAL_ARR(zend_array_dup(spl_array_get_hash_table(intern)));
+	zend_object *backing = spl_array_backing_object(intern);
+	if (backing) {
+		sharp_cross_array_cast(return_value, backing);
+	}
 } /* }}} */
 
 static HashTable *spl_array_get_properties_for(zend_object *object, zend_prop_purpose purpose) /* {{{ */
@@ -1547,6 +1558,7 @@ PHP_METHOD(ArrayObject, __debugInfo)
 typedef struct _spl_array_iterator {
 	zend_object_iterator it;
 	bool by_ref;
+	zval crossed;
 } spl_array_iterator;
 
 static zend_result spl_array_next_ex(spl_array_object *intern, HashTable *aht) /* {{{ */
@@ -1572,6 +1584,7 @@ static zend_result spl_array_next(spl_array_object *intern) /* {{{ */
 static void spl_array_it_dtor(zend_object_iterator *iter) /* {{{ */
 {
 	zval_ptr_dtor(&iter->data);
+	zval_ptr_dtor(&((spl_array_iterator *) iter)->crossed);
 }
 /* }}} */
 
@@ -1610,11 +1623,19 @@ static zval *spl_array_it_get_current_data(zend_object_iterator *iter) /* {{{ */
 					ZSTR_VAL(prop_info->ce->name), ZSTR_VAL(key));
 				return NULL;
 			}
-			if (UNEXPECTED(sharp_property_refuses_reference(prop_info))) {
+			if (UNEXPECTED(!sharp_property_takes_reference(data, prop_info))) {
 				return NULL;
 			}
 			ZVAL_NEW_REF(data, data);
 			ZEND_REF_ADD_TYPE_SOURCE(Z_REF_P(data), prop_info);
+		}
+	}
+	if (data && !array_iter->by_ref) {
+		zval crossed;
+		if (spl_array_crossed_slot(object, data, &crossed)) {
+			zval_ptr_dtor(&array_iter->crossed);
+			ZVAL_COPY_VALUE(&array_iter->crossed, &crossed);
+			return &array_iter->crossed;
 		}
 	}
 	return data;
@@ -1684,6 +1705,7 @@ static zend_object_iterator *spl_array_get_iterator(zend_class_entry *ce, zval *
 	ZVAL_OBJ_COPY(&iterator->it.data, Z_OBJ_P(object));
 	iterator->it.funcs = &spl_array_it_funcs;
 	iterator->by_ref = by_ref;
+	ZVAL_UNDEF(&iterator->crossed);
 
 	return &iterator->it;
 }
@@ -1775,6 +1797,9 @@ PHP_METHOD(ArrayIterator, current)
 		if (Z_TYPE_P(entry) == IS_UNDEF) {
 			RETURN_NULL();
 		}
+	}
+	if (spl_array_crossed_slot(intern, entry, return_value)) {
+		return;
 	}
 	RETURN_COPY_DEREF(entry);
 }

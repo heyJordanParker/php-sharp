@@ -140,7 +140,7 @@ A "not supported yet" refusal never satisfies a `compile error` line, because it
 
 <!-- example refusal: members -->
 ```csharp
-public Cart fresh() => new Cart;   // compile error: write new Cart()
+public const int LIMIT = true ? 1 : 2;   // compile error: a constant's value has no `? :`
 ```
 <!-- expect refusal
 line 1 expects a compile error, and the checker reports: …not supported yet…

@@ -1,0 +1,14 @@
+namespace Demo;
+
+import Hiding;
+
+public class Withholder : Hiding
+{
+    protected override List<string> hidden
+    {
+        get { return field; }
+        set;
+    } = ["token"];
+
+    public string hiddenText() => global.implode(",", this.hidden);
+}
