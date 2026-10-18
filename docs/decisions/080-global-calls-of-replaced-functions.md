@@ -2,7 +2,7 @@
 
 ## Decision
 
-Outside the standard library, a call through `global` of a plain PHP function the standard library replaces is a compile error with its bare call's message. The message names the member that does the function's work, as `global.trim(name)` names `name.trim()`, `global.printf(…)` names `console.write(…)` on the `Console` your constructor takes, and `global.exit(1)` names `process.exit(…)` on the `Process`. `global.die(…)` names `console.writeError(text)`, then `process.exit(1)`, as a bare `die` does.
+Outside the standard library, a call through `global` of a plain PHP function the standard library replaces is a compile error with its bare call's message. The message names the member that does the function's work, as `global.trim(name)` names `name.trim()`, `global.printf(…)` names `console.write(…)` on the `Console` your constructor takes, and `global.exit(1)` names `process.exit(…)` on the `Process`. `global.die(…)` names `console.writeError(text)`, then `process.exit(1)`.
 
 A read of such a function as a value, as `names.map(global.trim)`, names the same member and says to pass a lambda that makes the call.
 

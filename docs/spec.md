@@ -20,10 +20,10 @@ Attributes use square brackets and follow C#'s rules:
 - an argument is built from constants, as a constant's value is (section 2), or is a `new` of a class whose arguments are constants too, as PHP and Java's nested annotations take; PHP creates the object each time it reads the attribute, and an argument that runs code is a compile error
 - no parentheses when there are no arguments: `[Searchable]`
 - explicit targets, which name the part of the declaration a bracket goes on, as in C#: `type:` on a type, `type:` or `event:` on an event, `method:` on a method, an operator, a named constructor, a lambda or an accessor, `param:` on a parameter and on the value `set` or `init` takes, `field:` on a field, a constant or an enum case, `property:` and `field:` on a property, and `param:`, `property:` and `field:` on a parameter that declares a property, a constructor's, an event's or a data case's, where an untargeted bracket goes on both the parameter and the property
-- a return value takes no attributes: put them on the method, with no target, so `[return: NotNull]` is a compile error
+- an attribute always describes a declaration, so a return value takes none, and `[return: NotNull]` is a parse error
 - on every declaration C# takes one on: a class, an interface, an enum and its cases, an event, a constant, a field, a property, an interface property, a method, an interface method with or without a default body, an operator, a named constructor, a parameter, a lambda written with parentheses, as in `[Searchable] (int n) => n * 2`, and an accessor, as in `[Searchable] get;`, a static or get-only auto-property's included
 - `willSet` and `didSet` take none, since they run inside `set`: put the attribute on `set`
-- a type parameter takes no attributes: put them on the declaration that declares it
+- a type parameter takes no attributes, so `<[Marker] T>` is a parse error
 
 <!-- example attribute-arguments: members -->
 ```csharp
@@ -74,7 +74,7 @@ public int total { [Searchable] get; [param: Field(label: "Amount")] set; } = 0;
 
 public int count { [Searchable] get; } = 0;            // compiles: on the get of a get-only auto-property
 
-[return: Searchable] public string label() => "";     // compile error: a return value takes no attributes, so put them on the method
+[return: Searchable] public string label() => "";     // parse error
 ```
 
 <!-- example attribute-type-parameters -->
@@ -82,9 +82,7 @@ public int count { [Searchable] get; } = 0;            // compiles: on the get o
 // app/Shelf.sharp
 namespace App;
 
-public class Shelf<[Searchable] TItem>        // compile error: a type parameter takes no attributes, so put them on Shelf
-{
-}
+public class Shelf<[Searchable] TItem> { }    // parse error
 ```
 
 <!-- example attribute-objects -->
@@ -752,8 +750,8 @@ public class Prune
     }
 }
 
-echo "Pruned";                                               // compile error: write console.write(text)
-print "Pruned";                                              // compile error: write console.write(text)
+echo "Pruned";                                               // parse error
+print "Pruned";                                              // parse error
 printf("Pruned");                                            // compile error: write console.write(text)
 public void stop() { exit(1); }                              // compile error: write process.exit(1)
 public void fail() { die("Prune failed"); }                  // compile error: write the message with console.writeError, then process.exit(1)
@@ -1939,7 +1937,7 @@ List<int> numbers = [3, 1, 2];
 -->
 ```csharp
 const sort = global.sort;                   // compile error: global.sort changes the variable it is given
-const pack = global.compact;                // compile error: global.compact reads the caller's variables
+const args = global.func_get_args;          // compile error: global.func_get_args reads the caller's variables
 global.array_push(numbers, 4);              // compile error: write numbers.add(…)
 List<int> sorted = numbers.sortedBy(n => n);
 ```
@@ -3443,7 +3441,7 @@ public class Draft { }
 public class Codes
 {
     public string? ascii(string text) => global.iconv("UTF-8", "ASCII", text) is string converted ? converted : null;   // compiles: "café" gives null, with no warning
-    public string? silenced(string text) => @(global.iconv("UTF-8", "ASCII", text)) is string converted ? converted : null;   // compile error: PHP# has no @ before a value
+    public string? silenced(string text) => @(global.iconv("UTF-8", "ASCII", text)) is string converted ? converted : null;   // parse error
 }
 ```
 <!-- run built-in-failures
@@ -3737,8 +3735,8 @@ string email = "ada@example.com";
 OrderRow order = OrderRow.parse(row);             // replaces (array)row: a struct reads an object's public properties (section 10)
 Map<string, Any> payload = ["id": 1, "email": email];
 string json = Json.encode(payload);               // {"id":1,"email":"…"}: replaces json_encode((object)[…])
-const data = (array)row;                          // compile error: write OrderRow.parse(row)
-const point = (object)["x": 1];                   // compile error: write a Map literal, or a struct
+const data = (array)row;                          // parse error
+const point = (object)["x": 1];                   // parse error
 ```
 
 - **A JSON object** is a `Map` literal for a one-off payload, and a declared struct for a shape that repeats.
@@ -4213,7 +4211,7 @@ public class Reports
     }
 }
 
-const here = __FILE__;                                           // compile error: write Position.current().file
+const here = __FILE__;                                           // parse error
 Log.info("charged", ["class": typeof(Order)]);                   // compiles: replaces __CLASS__
 ```
 
@@ -4537,7 +4535,7 @@ import Illuminate.Http.Request;
 public class CheckoutController
 {
     public string host(Request request) => request.getHost();   // compiles: the request arrives as a parameter
-    public string origin() => _SERVER["HTTP_HOST"];             // compile error: take the request data as a parameter
+    public string origin() => _SERVER["HTTP_HOST"];             // parse error
 }
 ```
 
