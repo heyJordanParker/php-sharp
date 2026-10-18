@@ -23,6 +23,7 @@ run_rows();
 bool(true)
 bool(true)
 Priced.CURRENCY and Book.CURRENCY: ["USD","USD"]
+an interface constant takes every constant-value form: ["EUR","euro","near 9","Small",8]
 a default body and an override: ["250 USD","rare"]
 two Priced values: [true,true,false,false,-1]
 two Rares as Priced, by the interface: [true,true,false,false,-1]

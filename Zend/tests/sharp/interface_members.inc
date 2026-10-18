@@ -39,6 +39,7 @@ function rows(): array
 {
     return [
         'Priced.CURRENCY and Book.CURRENCY' => fn () => Report::currencies(),
+        'an interface constant takes every constant-value form' => fn () => Report::constantForms(),
         'a default body and an override' => fn () => Report::labels(),
         'two Priced values' => fn () => Report::priced(new Book(1), new Book(2)),
         'two Rares as Priced, by the interface' => fn () => Report::priced(new Rare(1), new Rare(2)),

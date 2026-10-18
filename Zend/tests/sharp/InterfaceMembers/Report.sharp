@@ -4,6 +4,8 @@ public static class Report
 {
     public static List<string> currencies() => [Priced.CURRENCY, Book.CURRENCY];
 
+    public static List<Any> constantForms() => [Priced.LAST, Priced.LOCAL, Priced.SIZED, Priced.SMALL, (Priced.DOUBLE)(4)];
+
     public static List<string> labels() => [new Book(250).label, new Rare(250).label];
 
     public static List<Any> priced(Priced a, Priced b) => [a < b, a <= b, a > b, a >= b, a <=> b];
