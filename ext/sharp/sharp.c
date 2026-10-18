@@ -1025,7 +1025,10 @@ void sharp_collection_of_property(zval *result, zend_object *object, zend_string
 
 	GC_ADDREF(object);
 	collection->owner = object;
-	if (slot && slot >= object->properties_table && slot < object->properties_table + object->ce->default_properties_count) {
+	bool declared = slot && slot >= object->properties_table
+		&& slot < object->properties_table + object->ce->default_properties_count;
+	const zend_property_info *info = declared && Z_ISREF_P(slot) ? zend_get_property_info_for_slot(object, slot) : NULL;
+	if (declared && !(info && (info->flags & ZEND_ACC_SHARP_CROSSING))) {
 		collection->slot = slot;
 		zval_ptr_dtor(&array);
 	} else {
@@ -5187,7 +5190,8 @@ bool sharp_property_accepts(const zend_property_info *info, zval *value, zend_ob
 			smart_str_free(&given);
 			sharp_sequence_check(value, iterable, head);
 		}
-		return Z_TYPE_P(value) != IS_ARRAY || !sharp_crosses_property(info) || sharp_cross_property(info, value);
+		return Z_TYPE_P(value) != IS_ARRAY || (reference && (info->flags & ZEND_ACC_SHARP_CROSSING))
+			|| !sharp_crosses_property(info) || sharp_cross_property(info, value);
 	}
 	if (!EG(exception)) {
 		smart_str given = {0};
@@ -7619,6 +7623,35 @@ void sharp_cross_array_cast(zval *result, zend_object *object)
 			zend_symtable_update(Z_ARRVAL_P(result), zend_get_property_info_for_slot(object, slot)->name, &array);
 		}
 	}
+}
+
+bool sharp_cross_reference(zval *slot, const zend_property_info *info)
+{
+	if ((info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_STATIC)) != ZEND_ACC_SHARP_CROSSING || sharp_runs_sharp_code()) {
+		return true;
+	}
+	sharp_cross_read(slot);
+
+	return !EG(exception);
+}
+
+zval *sharp_property_from_reference(zval *slot, const zend_property_info *info, zval *rv)
+{
+	zend_reference *reference = Z_REF_P(slot);
+	if (GC_REFCOUNT(reference) > 1) {
+		ZVAL_COPY(rv, &reference->val);
+		sharp_cross_property(info, rv);
+		return rv;
+	}
+
+	zval value;
+	ZVAL_COPY(&value, &reference->val);
+	ZEND_REF_DEL_TYPE_SOURCE(reference, (zend_property_info *) info);
+	zval_ptr_dtor(slot);
+	ZVAL_COPY_VALUE(slot, &value);
+	sharp_cross_property(info, slot);
+
+	return slot;
 }
 
 static HashTable *sharp_table_get_gc(zend_object *object, zval **table, int *n)

@@ -308,12 +308,70 @@ $ledger->rows = [['b' => 2]];
 echo $ledger->firstRowType();   // array; expected Sharp\Map
 ```
 
-# Found, not fixed
+# Built here from the second round
 
-**`var_export` of a `Sharp\Map` loses its entries,** which waits until after v1. It printed `\Sharp\Map::__set_state(array())` for `["variant": "strong"]`, so the exported code holds no entry. This Slice makes plain PHP meet a `Map` only where question 1 or 2 keeps the object.
+Six places still gave plain PHP the object after #163. Each now gets the array form `sharp_array_of` gives, through #163's crossing, and PHP# code still reads its own `Map`, `Set` or `List` with no copy. The rows below run in `collection_readers.phpt` on this fixture, under no JIT, the function JIT and the tracing JIT, each with and without preloading.
+
+```csharp
+public class Carton
+{
+    public Map<string, int> payload { get; set; } = ["b": 2, "a": 1];
+    public Set<string> codes { get; set; } = ["b", "a"];
+}
+```
+
+**1. A by-reference read of a crossing property.** Plain PHP's `ksort($box->payload)`, `$r = &$box->payload`, `foreach ($box->payload as &$v)` and `array_walk($box->payload, …)` threw or changed nothing.
+
+- The first plain PHP reference turns the property slot into a typed reference to the array form. `sharp_cross_reference` does it at each place PHP makes a property reference: `zend_handle_fetch_obj_flags` and the JIT's copy of it, `zend_jit_create_typed_ref`, `FE_FETCH_RW`, `array_walk`, `ArrayIterator` and a hooked object's by-reference iterator.
+- A write through the reference is checked against the property's PHP# type, and the reference keeps the array form. `$r = 'x'` throws the `TypeError` that names `Map<string, int>`.
+- PHP# reads the property while plain PHP holds the reference, and gets the `Map` made from the array. Once plain PHP drops the reference, the next PHP# read puts the `Map` back into the slot, so later reads share one object again. `sharp_property_from_reference` does both. The VM's and the JIT's inline reads send a reference slot of a crossing property to `zend_std_read_property`, which calls it.
+- A PHP# index write, `this.payload[key] = value`, while plain PHP holds the reference, writes the property through `write_property`, so the reference sees it.
 
 ```php
-var_export((new ReflectionEnumBackedCase(App\Shade::class, 'Dark'))->getAttributes()[0]->getArguments()['config']);
+ksort($box->payload);
+echo $box->payloadText();   // Sharp\Map a,b=1,2
+```
+
+**2. A plain PHP parent appends to a property its PHP# subclass declares with `get => field`.** Eloquent's `$this->hidden[] = 'secret'` threw "Indirect modification". A property whose only body is `get => field` now lowers to plain storage, as an auto-property does, so PHP changes the array in place.
+
+**3. A PHP array into a union parameter that holds a `Set` or a `Map`.** `Set<string>|int` lowered to `\Sharp\Set|int`, which refused the array. It now lowers to `\Sharp\Set|int|array`, as a lone `Set` lowers to `\Sharp\Set|array`, and the parameter's crossing makes the `Set`. A union that holds a `List` is the union as written, since a `List` is a PHP array already.
+
+**4. An `ArrayIterator` over a PHP# object.** `foreach` and `current()` gave `Sharp\Map`. Both now give each crossing property's array form.
+
+**5. A lazy `Iterable` stays lazy when it crosses.** Plain PHP gets a `Traversable`, the `Sharp\Sequence`, and each element crosses by #163's rule as plain PHP reads it, so a `Map` element arrives as its array. A plain PHP source is read in step with plain PHP's loop. The bridge declares an `Iterable<T>` result `iterable`. A function that needs an array, such as `array_map`, gets one from `iterator_to_array`, as it does for a Generator. Master already behaves so, and the rows guard it. Reading a lazy `Iterable` into an array where it crosses would read a `cursor()` stream whole, and break spec section 12's rule that `is Iterable<T>` reads no element of a lazy source.
+
+**6. `var_export` of a `Map` or a `Set`** printed `\Sharp\Map::__set_state(array())`, code that rebuilds no entry. It now prints the array form, alone or inside an exported object. This changes question 3's answer for `var_export` only. `serialize`, `var_dump` and `print_r` still keep the object.
+
+# Found, not fixed
+
+Each probe ran on this branch and on master `7ba42a1797`, with the same result on both.
+
+**A static crossing property by reference still gives the object.** `sharp_cross_reference` skips a static property, because the static read path has no `sharp_property_from_reference` step yet. Fixing it takes that step in `zend_fetch_static_property_address` and in the JIT's static property read.
+
+```php
+ksort(Demo\Holdings::$counts);   // TypeError: ksort(): Argument #1 ($array) must be of type array, Sharp\Map given
+$r = &Demo\Holdings::$counts;    // get_debug_type($r) is Sharp\Map
+```
+
+**Assigning a plain PHP variable by reference into a crossing property makes that variable a `Map`.** The assignment crosses the array in through the plan, and the `Map` replaces the array in the variable the reference shares.
+
+```php
+$array = ['q' => 1];
+$box->payload = &$array;
+echo get_debug_type($array);     // Sharp\Map
+```
+
+**A plain PHP element write into a `Map` is not checked against the `Map`'s value type.** A whole-array write is checked. An element write, made directly or through a reference, stores any value.
+
+```php
+$box->payload['k'] = 'x';        // no TypeError on a Map<string, int>
+echo $box->payloadText();        // Sharp\Map b,a,k=2,1,x
+```
+
+**`var_export` of a `Map` with no array form still prints no entry,** since question 1 keeps such a `Map` the object.
+
+```php
+var_export((new Demo\Holdings())->forecast);   // a Map<Weather, int>
 // \Sharp\Map::__set_state(array(
 // ))
 ```

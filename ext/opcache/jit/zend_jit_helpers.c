@@ -2294,6 +2294,10 @@ static zend_never_inline bool zend_handle_fetch_obj_flags(
 					}
 					ZVAL_NULL(ptr);
 				}
+				if (UNEXPECTED(!sharp_cross_reference(ptr, prop_info))) {
+					if (result) ZVAL_ERROR(result);
+					return 0;
+				}
 				if (ZEND_TYPE_IS_SET(prop_info->type)) {
 					ZVAL_NEW_REF(ptr, ptr);
 					ZEND_REF_ADD_TYPE_SOURCE(Z_REF_P(ptr), prop_info);
@@ -2382,7 +2386,7 @@ static void ZEND_FASTCALL zend_jit_check_array_promotion(zval *val, zend_propert
 static void ZEND_FASTCALL zend_jit_create_typed_ref(zval *val, zend_property_info *prop, zval *result)
 {
 	if (!Z_ISREF_P(val)) {
-		if (sharp_property_refuses_reference(prop)) {
+		if (sharp_property_refuses_reference(prop) || UNEXPECTED(!sharp_cross_reference(val, prop))) {
 			ZVAL_ERROR(result);
 			return;
 		}

@@ -79,6 +79,9 @@ bool sharp_cross_slot_read(zval *array, zend_object *object, zval *slot);
  * PHP code reads from it, by sharp_cross_slot_read(). */
 void sharp_cross_array_cast(zval *result, zend_object *object);
 
+bool sharp_cross_reference(zval *slot, const zend_property_info *info);
+zval *sharp_property_from_reference(zval *slot, const zend_property_info *info, zval *rv);
+
 #define SHARP_IS_TABLE(value) \
 	(Z_TYPE_P(value) == IS_OBJECT && (Z_OBJCE_P(value) == sharp_ce_map || Z_OBJCE_P(value) == sharp_ce_set))
 #define SHARP_IS_COLLECTION(value) (Z_TYPE_P(value) == IS_ARRAY || SHARP_IS_TABLE(value))

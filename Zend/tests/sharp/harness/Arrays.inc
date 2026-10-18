@@ -193,6 +193,16 @@ final class Label
     }
 }
 
+class Hiding
+{
+    protected $hidden = [];
+
+    public function hide(string $name): void
+    {
+        $this->hidden[] = $name;
+    }
+}
+
 // A plain PHP parent whose methods declare no return type, as Eloquent's Model::getKey() declares none.
 class Record
 {

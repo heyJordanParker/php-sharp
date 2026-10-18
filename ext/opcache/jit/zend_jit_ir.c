@@ -14518,6 +14518,12 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 		ir_IF_FALSE_cold(if_def);
 		ir_END_list(slow_inputs);
 		ir_IF_TRUE(if_def);
+		if (opline->opcode != ZEND_FETCH_OBJ_W && sharp_function_is_sharp((const zend_function *) op_array)) {
+			ir_ref if_reference = ir_IF(ir_EQ(prop_type_ref, ir_CONST_U8(IS_REFERENCE)));
+			ir_IF_TRUE_cold(if_reference);
+			ir_END_list(slow_inputs);
+			ir_IF_FALSE(if_reference);
+		}
 		prop_addr = ZEND_ADDR_REF_ZVAL(prop_ref);
 		if (opline->opcode == ZEND_FETCH_OBJ_W
 		 && (!ce ||	ce_is_instanceof || (ce->ce_flags & (ZEND_ACC_HAS_TYPE_HINTS|ZEND_ACC_TRAIT)))) {
@@ -14621,6 +14627,23 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 			ir_IF_FALSE_cold(if_def);
 			ir_END_list(slow_inputs);
 			ir_IF_TRUE(if_def);
+		}
+		if (opline->opcode != ZEND_FETCH_OBJ_W && (prop_info->flags & ZEND_ACC_SHARP_CROSSING)) {
+			ir_ref is_reference = ir_EQ(jit_Z_TYPE_INFO(jit, prop_addr), ir_CONST_U32(IS_REFERENCE_EX));
+			if (JIT_G(trigger) == ZEND_JIT_ON_HOT_TRACE) {
+				int32_t exit_point = zend_jit_trace_get_exit_point(opline, ZEND_JIT_EXIT_TO_VM);
+				const void *exit_addr = zend_jit_trace_get_exit_addr(exit_point);
+
+				if (!exit_addr) {
+					return 0;
+				}
+				ir_GUARD_NOT(is_reference, ir_CONST_ADDR(exit_addr));
+			} else {
+				ir_ref if_reference = ir_IF(is_reference);
+				ir_IF_TRUE_cold(if_reference);
+				ir_END_list(slow_inputs);
+				ir_IF_FALSE(if_reference);
+			}
 		}
 		if (opline->opcode == ZEND_FETCH_OBJ_W && (prop_info->flags & ZEND_ACC_READONLY)) {
 			ir_ref if_prop_obj = ir_IF(ir_CALL_1(IR_BOOL, ir_CONST_FC_FUNC(zend_jit_fetch_obj_w_copies), prop_ref));

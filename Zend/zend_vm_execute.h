@@ -7016,7 +7016,9 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -7198,7 +7200,9 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -9808,7 +9812,9 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -9989,7 +9995,9 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -12578,7 +12586,9 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -12760,7 +12770,9 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -17242,7 +17254,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_R_S
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -17423,7 +17437,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_IS_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -18788,7 +18804,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_R_S
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -18968,7 +18986,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_IS_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -20240,7 +20260,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_R_S
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -20421,7 +20443,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_IS_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -24458,7 +24482,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FE_FETCH_RW_S
 										UNDEF_RESULT();
 										HANDLE_EXCEPTION();
 									}
-									if (UNEXPECTED(sharp_property_refuses_reference(prop_info))) {
+									if (UNEXPECTED(sharp_property_refuses_reference(prop_info))
+									 || UNEXPECTED(!sharp_cross_reference(value, prop_info))) {
 										UNDEF_RESULT();
 										HANDLE_EXCEPTION();
 									}
@@ -35495,7 +35520,9 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -35722,7 +35749,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_IS_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -37863,7 +37892,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_R_S
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -38082,7 +38113,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_IS_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -40791,7 +40824,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_R_S
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -41013,7 +41048,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_IS_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -45416,7 +45453,9 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -45643,7 +45682,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_IS_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -49608,7 +49649,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_R_S
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -49827,7 +49870,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_IS_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -55386,7 +55431,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_R_S
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -55608,7 +55655,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_IS_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -64230,7 +64279,9 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -64412,7 +64463,9 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -67022,7 +67075,9 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -67203,7 +67258,9 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -69690,7 +69747,9 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -69872,7 +69931,9 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -74354,7 +74415,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_R_SPEC_T
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -74535,7 +74598,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_IS_SPEC_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -75900,7 +75965,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_R_SPEC_T
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -76080,7 +76147,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_IS_SPEC_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -77252,7 +77321,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_R_SPEC_T
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -77433,7 +77504,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_IS_SPEC_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -81470,7 +81543,8 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FE_FETCH_RW_SPEC_V
 										UNDEF_RESULT();
 										HANDLE_EXCEPTION();
 									}
-									if (UNEXPECTED(sharp_property_refuses_reference(prop_info))) {
+									if (UNEXPECTED(sharp_property_refuses_reference(prop_info))
+									 || UNEXPECTED(!sharp_cross_reference(value, prop_info))) {
 										UNDEF_RESULT();
 										HANDLE_EXCEPTION();
 									}
@@ -92507,7 +92581,9 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -92734,7 +92810,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_IS_SPEC_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -94875,7 +94953,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_R_SPEC_U
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -95094,7 +95174,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_IS_SPEC_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -97803,7 +97885,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_R_SPEC_U
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -98025,7 +98109,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_IS_SPEC_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -102428,7 +102514,9 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -102655,7 +102743,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_IS_SPEC_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -106620,7 +106710,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_R_SPEC_C
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -106839,7 +106931,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_IS_SPEC_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -112296,7 +112390,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_R_SPEC_C
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -112518,7 +112614,9 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_IS_SPEC_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_is_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)) {
+					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
+					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {

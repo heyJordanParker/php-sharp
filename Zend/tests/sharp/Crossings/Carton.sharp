@@ -1,0 +1,27 @@
+namespace Demo;
+
+public class Carton
+{
+    public Map<string, int> payload { get; set; } = ["b": 2, "a": 1];
+
+    public Set<string> codes { get; set; } = ["b", "a"];
+
+    public string payloadText() =>
+        `${global.get_class(this.payload)} ${global.implode(",", this.payload.keys())}=${global.implode(",", this.payload.values())}`;
+
+    public string codesText() => `${global.get_class(this.codes)} ${global.implode(",", this.codes.toList())}`;
+
+    public int payloadAt(string key) => this.payload[key] ?? -1;
+
+    public bool readsOnePayload() => global.spl_object_id(this.payload) == global.spl_object_id(this.payload);
+
+    public void putPayload(string key, int value)
+    {
+        this.payload[key] = value;
+    }
+
+    public void replacePayload()
+    {
+        this.payload = ["z": 26];
+    }
+}

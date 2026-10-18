@@ -3550,6 +3550,10 @@ static zend_never_inline bool zend_handle_fetch_obj_flags(
 					}
 					ZVAL_NULL(ptr);
 				}
+				if (UNEXPECTED(!sharp_cross_reference(ptr, prop_info))) {
+					if (result) ZVAL_ERROR(result);
+					return 0;
+				}
 
 				ZVAL_NEW_REF(ptr, ptr);
 				ZEND_REF_ADD_TYPE_SOURCE(Z_REF_P(ptr), prop_info);
@@ -4001,7 +4005,7 @@ static zend_always_inline int i_zend_verify_type_assignable_zval(
 
 	/* A PHP array crosses into a PHP# Map or Set property, in strict mode too, as zend_coerce_for_property does. */
 	if (ZEND_TYPE_IS_COMPLEX(type) && zv_type == IS_ARRAY && sharp_crosses_property(info)) {
-		return -1;
+		return reference && (info->flags & ZEND_ACC_SHARP_CROSSING) ? 1 : -1;
 	}
 
 	type_mask = ZEND_TYPE_FULL_MASK(type);
@@ -4049,9 +4053,11 @@ ZEND_API bool ZEND_FASTCALL zend_verify_ref_assignable_zval(zend_reference *ref,
 	const zend_property_info *first_prop = NULL;
 	zval coerced_value;
 	ZVAL_UNDEF(&coerced_value);
+	bool crossing = false;
 
 	ZEND_ASSERT(Z_TYPE_P(zv) != IS_REFERENCE);
 	ZEND_REF_FOREACH_TYPE_SOURCES(ref, prop) {
+		crossing |= (prop->flags & ZEND_ACC_SHARP_CROSSING) != 0;
 		int result = i_zend_verify_type_assignable_zval(prop, zv, strict, true);
 		if (result == 0) {
 type_error:
@@ -4101,6 +4107,10 @@ conflicting_coercion_error:
 	if (!Z_ISUNDEF(coerced_value)) {
 		zval_ptr_dtor(zv);
 		ZVAL_COPY_VALUE(zv, &coerced_value);
+	}
+	if (UNEXPECTED(crossing)) {
+		sharp_cross_read(zv);
+		return !EG(exception);
 	}
 
 	return 1;

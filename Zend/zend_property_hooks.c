@@ -202,7 +202,8 @@ static void zho_declared_it_fetch_current(zend_object_iterator *iter)
 					ZSTR_VAL(prop_info->ce->name), zend_get_unmangled_property_name(prop_info->name));
 				return;
 			}
-			if (UNEXPECTED(sharp_property_refuses_reference(prop_info))) {
+			if (UNEXPECTED(sharp_property_refuses_reference(prop_info))
+			 || UNEXPECTED(!sharp_cross_reference(property, prop_info))) {
 				return;
 			}
 			ZVAL_MAKE_REF(property);
