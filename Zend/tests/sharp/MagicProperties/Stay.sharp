@@ -1,0 +1,28 @@
+namespace MagicProperties;
+
+import Lib.Guest;
+import Lib.Lodging;
+
+// A PHP# class whose plain PHP parent defines `__get` has the properties it reads too, typed by its parent's
+// `@property-read` lines and `Any?` otherwise, ahead of its own method of a property's name.
+public class Stay : Lodging
+{
+    public Stay() : super() { }
+
+    public Guest guest() => new Guest("the guest relation");
+
+    public Guest host() => new Guest("the host relation");
+
+    public string typed() => this.guest.name;
+
+    public string untyped() => (this.host as Guest)?.name ?? "nobody";
+
+    public string taken()
+    {
+        Function<Guest()> host = this.host;
+
+        return host().name;
+    }
+
+    public string called() => this.host().name;
+}

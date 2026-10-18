@@ -5906,6 +5906,11 @@ ZEND_VM_HANDLER(164, ZEND_RECV_VARIADIC, NUM, UNUSED)
 		zend_string *name;
 		zval *param;
 		zend_arg_info *arg_info = &EX(func)->common.arg_info[EX(func)->common.num_args];
+		/* A PHP# `...` parameter is a List, which has no names. */
+		if (UNEXPECTED(sharp_is_sharp_file(EX(func)->op_array.filename))) {
+			sharp_refuse_named_variadic(EX(func), EX(extra_named_params));
+			HANDLE_EXCEPTION();
+		}
 		if (ZEND_TYPE_IS_SET(arg_info->type)) {
 			SEPARATE_ARRAY(params);
 			ZEND_HASH_MAP_FOREACH_STR_KEY_VAL(EX(extra_named_params), name, param) {
