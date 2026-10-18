@@ -119,7 +119,8 @@ A read of a crossing property, made by plain PHP code, gives the array of the va
 
 - `zend_get_property_offset` gives such a property, when the executing code is plain PHP and the access is a read, the slow path it gives a hooked property. A PHP# opline keeps the slot offset in its cache slot.
 - `zend_std_read_property` runs `sharp_array_of` on the value it read, after a `get` hook when the property has one. A computed property and one with a `get` body are crossed after their PHP# body runs.
-- A write and an index write keep today's path: `$payment->payload = [...]` crosses in through the plan, and `$payment->payload['k'] = 'v'` changes the `Map` in place.
+- A plain PHP write and index write keep today's path: `$payment->payload = [...]` crosses in through the plan, and `$payment->payload['k'] = 'v'` changes the `Map` in place.
+- A PHP# index write, `this.payload[k] = v`, changes the `Map` the slot holds, inline as today. A slot that holds plain PHP's reference leaves the inline path: `zend_handle_fetch_obj_flags` and the JIT's copy of it call `sharp_property_for_write`, which gives the write the `Map` rebuilt from the reference's array, so its keys keep their PHP# types. The `Map` then writes itself back through `write_property`, which stores its array form in the reference, so plain PHP sees the write.
 - A static read, `Ledger::$counts`, crosses the same way in `zend_fetch_static_property_address`'s read.
 - `zend_fetch_prop_type` in the optimizer types a plain PHP op_array's read of such a property as an array, and the JIT's `zend_get_known_property_info` leaves it to the VM handler, so a plain PHP subclass's `$this->payload` is never read inline from the slot. The inference keeps such a read's result counted, `MAY_BE_RC1`, unless it resolves the property and finds no crossing, so the JIT frees the array each read builds.
 
@@ -164,6 +165,7 @@ The other costs:
 
 - **A PHP# method that returns a `Map` or a `Set`** runs the new opcode at each return: one load of the caller frame and a 6-byte compare of its file name's end. `ZEND_SHARP_RECV_TYPE_ARGS` makes the same test today at each call of a method whose parameters it checks.
 - **A PHP# read of a `Map` or `Set` constant** builds the `Map` from the array once, linear in its entries, since a PHP class constant holds no object, and each later read is one lookup of the kept object.
+- **A PHP# index write of a `Map` property** with no reference in its slot pays one more compare of the slot's type in the VM. Under either JIT it pays none, since the JIT folds the reference test into the compare it made on master. A loop of 1,000,000 `this.counts["k"] = i` writes on debug builds, as the median of 10 alternating runs of 7, took 77.0 ms against master's 75.7 ms with no JIT, 45.1 ms against 45.5 ms under the function JIT, and 40.5 ms against 41.6 ms under the tracing JIT.
 - **Plain PHP pays one array build per read,** linear in the entries and the collections inside them. A plain PHP loop that reads `$payment->payload['id']` 1000 times builds the array 1000 times. Its copy is plain PHP's own, as a PHP array's always is.
 
 Two shapes were weighed and left:
@@ -322,31 +324,40 @@ public class Carton
 
 **1. A by-reference read of a crossing property.** Plain PHP's `ksort($box->payload)`, `$r = &$box->payload`, `foreach ($box->payload as &$v)` and `array_walk($box->payload, …)` threw or changed nothing.
 
-- The first plain PHP reference turns the property slot into a typed reference to the array form. `sharp_cross_reference` does it at each place PHP makes a property reference: `zend_handle_fetch_obj_flags` and the JIT's copy of it, `zend_jit_create_typed_ref`, `FE_FETCH_RW`, `array_walk`, `ArrayIterator` and a hooked object's by-reference iterator.
-- A write through the reference is checked against the property's PHP# type, and the reference keeps the array form. `$r = 'x'` throws the `TypeError` that names `Map<string, int>`.
-- PHP# reads the property while plain PHP holds the reference, and gets the `Map` made from the array. Once plain PHP drops the reference, the next PHP# read puts the `Map` back into the slot, so later reads share one object again. `sharp_property_from_reference` does both. The VM's and the JIT's inline reads send a reference slot of a crossing property to `zend_std_read_property`, which calls it.
-- A PHP# index write, `this.payload[key] = value`, while plain PHP holds the reference, writes the property through `write_property`, so the reference sees it.
+- The first plain PHP reference to an instance property turns its slot into a typed reference to the array form. `sharp_property_takes_reference` does it at each place PHP makes a property reference: `zend_handle_fetch_obj_flags` and the JIT's copy of it, `zend_jit_create_typed_ref`, `FE_FETCH_RW`, `array_walk`, `ArrayIterator` and a hooked object's by-reference iterator. It first runs `sharp_property_refuses_reference`, the generics slice's refusal, so the pair is one call.
+- It converts only when the property's `#[\Sharp\Crossing]` plan rebuilds every `Map` and `Set` the value can hold. A plan part that may hold a collection no plan rebuilds is `false`: the values of a `Map<string, Any>` are. A top-level `null` plan, as an `Any?`, a type parameter or an `Iterable` carries, rebuilds nothing. Such a property's reference holds the PHP# value itself, so the value is never left an array for good.
+- A whole-array write through the reference is checked against the property's PHP# type, and the reference keeps the array form. `$r = 'x'` throws the `TypeError` that names `Map<string, int>`.
+- PHP# reads the property while plain PHP holds the reference, and gets the `Map` made from the array. `sharp_reference_holds` checks the array first, so an element plain PHP wrote through the reference that does not fit throws at each read: "Reference held by property Demo\Carton::$payload of type Map<string, int> holds array: ["k"] expected int, got string 'x'". A key no `Level` case backs throws the same way and never reaches the enum's `from`. Once plain PHP drops the reference, the next PHP# read puts the `Map` back into the slot, so later reads share one object again. `sharp_property_from_reference` does both. The VM's and the JIT's inline reads send a reference slot of a crossing property to `zend_std_read_property`, which calls it.
+- `clone` and `with` copy a reference slot of a crossing property as the PHP# value `sharp_property_from_reference` gives, so the copy never shares plain PHP's reference. `zend_objects_clone_members` does it.
+- A PHP# index write while plain PHP holds the reference runs as "The property read crossing: engine" says. An enum key after `ksort` and the keys `5` and `"5"` of a `Map<int|string, string>` keep their PHP# types, and a `Map<string, Set<string>>` given `this.tags["a"] = ["x"]` leaves `$r['a']` an array.
 
 ```php
 ksort($box->payload);
 echo $box->payloadText();   // Sharp\Map a,b=1,2
 ```
 
-**2. A plain PHP parent appends to a property its PHP# subclass declares with `get => field`.** Eloquent's `$this->hidden[] = 'secret'` threw "Indirect modification". A property whose only body is `get => field` now lowers to plain storage, as an auto-property does, so PHP changes the array in place.
+**2. A plain PHP parent appends to a property its PHP# subclass declares with `get => field`.** Eloquent's `$this->hidden[] = 'secret'` threw "Indirect modification". A property whose only body is `get => field` or `get { return field; }`, with no attribute, now lowers to plain storage, as an auto-property does, so PHP changes the array in place. It stays a hook when a parent class declares a `get` hook for the property, since PHP copies the parent's hook into a child that declares none: `Quiet : Shouter` overrides `word { get => field; }` and reads `b`, where storage alone would run `Shouter`'s `strtoupper` and read `B`. `Types::inherits_getter` walks the parents.
 
-**3. A PHP array into a union parameter that holds a `Set` or a `Map`.** `Set<string>|int` lowered to `\Sharp\Set|int`, which refused the array. It now lowers to `\Sharp\Set|int|array`, as a lone `Set` lowers to `\Sharp\Set|array`, and the parameter's crossing makes the `Set`. A union that holds a `List` is the union as written, since a `List` is a PHP array already.
+**3. A PHP array into a union parameter that holds a `Set` or a `Map`.** `Set<string>|int` lowered to `\Sharp\Set|int`, which refused the array. It now lowers to `\Sharp\Set|int|array`, as a lone `Set` lowers to `\Sharp\Set|array`, and the parameter's crossing makes the `Set`. A union that holds a `List` is the union as written, since a `List` is a PHP array already. One predicate, `Lowering::takes_php_array`, decides it for a parameter, a promoted constructor parameter, a `set` body's parameter and the setter it lowers to, so `Set<string>|int picked { get; set => field = value; }` takes `['a']` and holds a `Set`.
 
-**4. An `ArrayIterator` over a PHP# object.** `foreach` and `current()` gave `Sharp\Map`. Both now give each crossing property's array form.
+**4. An `ArrayIterator` over a PHP# object.** `foreach`, `current()` and `getArrayCopy()` gave `Sharp\Map`. Each now gives each crossing property's array form.
 
 **5. A lazy `Iterable` stays lazy when it crosses.** Plain PHP gets a `Traversable`, the `Sharp\Sequence`, and each element crosses by #163's rule as plain PHP reads it, so a `Map` element arrives as its array. A plain PHP source is read in step with plain PHP's loop. The bridge declares an `Iterable<T>` result `iterable`. A function that needs an array, such as `array_map`, gets one from `iterator_to_array`, as it does for a Generator. Master already behaves so, and the rows guard it. Reading a lazy `Iterable` into an array where it crosses would read a `cursor()` stream whole, and break spec section 12's rule that `is Iterable<T>` reads no element of a lazy source.
 
 **6. `var_export` of a `Map` or a `Set`** printed `\Sharp\Map::__set_state(array())`, code that rebuilds no entry. It now prints the array form, alone or inside an exported object. This changes question 3's answer for `var_export` only. `serialize`, `var_dump` and `print_r` still keep the object.
 
+## Accepted as is
+
+- While plain PHP holds a live reference, each PHP# read rebuilds the `Map` from the array, so two reads give two objects.
+- Once plain PHP drops the reference, the next PHP# read puts the rebuilt `Map` back into the slot with no copy, and later reads share it.
+- Between a `ksort` and the next PHP# read, `var_dump`, `serialize` and `==` see the array the slot holds.
+- A `Set`'s array form takes duplicates through the reference: `$r[] = 'c'` twice leaves `$r` `["b","a","c","c"]`, and PHP# reads `Set b,a,c`, as a whole-array write of `['c', 'c']` gives one `c`.
+
 # Found, not fixed
 
-Each probe ran on this branch and on master `7ba42a1797`, with the same result on both.
+Each probe ran on this branch and on master `27626cb117`. The results match except where an entry says otherwise.
 
-**A static crossing property by reference still gives the object.** `sharp_cross_reference` skips a static property, because the static read path has no `sharp_property_from_reference` step yet. Fixing it takes that step in `zend_fetch_static_property_address` and in the JIT's static property read.
+**A static crossing property by reference still gives the object.** `sharp_property_takes_reference` skips a static property, because the static read path has no `sharp_property_from_reference` step yet. Fixing it takes that step in `zend_fetch_static_property_address` and in the JIT's static property read.
 
 ```php
 ksort(Demo\Holdings::$counts);   // TypeError: ksort(): Argument #1 ($array) must be of type array, Sharp\Map given
@@ -361,11 +372,21 @@ $box->payload = &$array;
 echo get_debug_type($array);     // Sharp\Map
 ```
 
-**A plain PHP element write into a `Map` is not checked against the `Map`'s value type.** A whole-array write is checked. An element write, made directly or through a reference, stores any value.
+**A plain PHP element write made directly into a `Map` property is not checked against the `Map`'s value type.** A whole-array write is checked. An element write through a reference is checked at the next PHP# read on this branch, where master stored it unchecked.
 
 ```php
 $box->payload['k'] = 'x';        // no TypeError on a Map<string, int>
 echo $box->payloadText();        // Sharp\Map b,a,k=2,1,x
+```
+
+**A reference to an `ArrayObject` offset over a PHP# object is an untyped reference to the property.** The same reference to a plain PHP typed property takes a value of any type and aborts a debug build when the object is freed, on master too, so it is PHP's own gap in a path PHP 8.5 deprecates. On this branch PHP# then reads the property through `sharp_reference_holds`, which refuses a value that does not fit. On master that read returns the array.
+
+```php
+$view = @new ArrayObject($box);
+$r = &$view['payload'];          // get_debug_type($r) is Sharp\Map
+$r = ['k' => 'x'];
+$box->payloadText();             // TypeError: Reference held by property Demo\Carton::$payload of type Map<string, int> holds array: ["k"] expected int, got string 'x'
+// Assertion failed: (source_list->ptr == prop), function zend_ref_del_type_source, in a debug build when $box is freed
 ```
 
 **`var_export` of a `Map` with no array form still prints no entry,** since question 1 keeps such a `Map` the object.

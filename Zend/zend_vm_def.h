@@ -7666,8 +7666,7 @@ ZEND_VM_HANDLER(126, ZEND_FE_FETCH_RW, VAR, ANY, JMP_ADDR)
 										UNDEF_RESULT();
 										HANDLE_EXCEPTION();
 									}
-									if (UNEXPECTED(sharp_property_refuses_reference(prop_info))
-									 || UNEXPECTED(!sharp_cross_reference(value, prop_info))) {
+									if (UNEXPECTED(!sharp_property_takes_reference(value, prop_info))) {
 										UNDEF_RESULT();
 										HANDLE_EXCEPTION();
 									}

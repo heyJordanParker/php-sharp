@@ -2266,6 +2266,11 @@ static zend_never_inline bool zend_handle_fetch_obj_flags(
 {
 	switch (flags) {
 		case ZEND_FETCH_DIM_WRITE:
+			if (UNEXPECTED(Z_ISREF_P(ptr)) && prop_info && UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_CROSSING)
+					&& UNEXPECTED(!sharp_property_for_write(result, obj, ptr, prop_info))) {
+				if (result) ZVAL_ERROR(result);
+				return 0;
+			}
 			if (promotes_to_array(ptr)) {
 				if (!prop_info) {
 					break;
@@ -2282,7 +2287,7 @@ static zend_never_inline bool zend_handle_fetch_obj_flags(
 				if (!prop_info) {
 					break;
 				}
-				if (sharp_property_refuses_reference(prop_info)) {
+				if (UNEXPECTED(!sharp_property_takes_reference(ptr, prop_info))) {
 					if (result) ZVAL_ERROR(result);
 					return 0;
 				}
@@ -2293,10 +2298,6 @@ static zend_never_inline bool zend_handle_fetch_obj_flags(
 						return 0;
 					}
 					ZVAL_NULL(ptr);
-				}
-				if (UNEXPECTED(!sharp_cross_reference(ptr, prop_info))) {
-					if (result) ZVAL_ERROR(result);
-					return 0;
 				}
 				if (ZEND_TYPE_IS_SET(prop_info->type)) {
 					ZVAL_NEW_REF(ptr, ptr);
@@ -2386,7 +2387,7 @@ static void ZEND_FASTCALL zend_jit_check_array_promotion(zval *val, zend_propert
 static void ZEND_FASTCALL zend_jit_create_typed_ref(zval *val, zend_property_info *prop, zval *result)
 {
 	if (!Z_ISREF_P(val)) {
-		if (sharp_property_refuses_reference(prop) || UNEXPECTED(!sharp_cross_reference(val, prop))) {
+		if (UNEXPECTED(!sharp_property_takes_reference(val, prop))) {
 			ZVAL_ERROR(result);
 			return;
 		}

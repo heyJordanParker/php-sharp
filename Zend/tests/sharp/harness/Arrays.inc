@@ -193,6 +193,13 @@ final class Label
     }
 }
 
+class Shouter
+{
+    public string $word = 'b' {
+        get => strtoupper($this->word);
+    }
+}
+
 class Hiding
 {
     protected $hidden = [];

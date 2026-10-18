@@ -26,6 +26,7 @@
 #include "zend_exceptions.h"
 #include "zend_weakrefs.h"
 #include "zend_lazy_objects.h"
+#include "ext/sharp/php_sharp.h"
 
 static zend_always_inline void _zend_object_std_init(zend_object *object, zend_class_entry *ce)
 {
@@ -205,8 +206,20 @@ ZEND_API void ZEND_FASTCALL zend_objects_clone_members(zend_object *new_object, 
 
 		do {
 			i_zval_ptr_dtor(dst);
-			ZVAL_COPY_VALUE_PROP(dst, src);
-			zval_add_ref(dst);
+			zend_property_info *crossing = UNEXPECTED(Z_ISREF_P(src)) && ZEND_REF_HAS_TYPE_SOURCES(Z_REF_P(src))
+				? zend_get_property_info_for_slot_self(old_object, src) : NULL;
+			if (UNEXPECTED(crossing && (crossing->flags & ZEND_ACC_SHARP_CROSSING))) {
+				zval value;
+				zval *held = sharp_property_from_reference(src, crossing, &value);
+				ZVAL_COPY_VALUE(dst, held);
+				if (held != &value) {
+					Z_TRY_ADDREF_P(dst);
+				}
+				Z_PROP_FLAG_P(dst) = Z_PROP_FLAG_P(src);
+			} else {
+				ZVAL_COPY_VALUE_PROP(dst, src);
+				zval_add_ref(dst);
+			}
 			if (has_clone_method) {
 				/* Unconditionally add the IS_PROP_REINITABLE flag to avoid a potential cache miss of property_info */
 				Z_PROP_FLAG_P(dst) |= IS_PROP_REINITABLE;

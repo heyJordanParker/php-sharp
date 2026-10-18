@@ -114,16 +114,23 @@ static inline bool spl_array_is_object(spl_array_object *intern) /* {{{ */
 }
 /* }}} */
 
+static zend_object *spl_array_backing_object(spl_array_object *intern)
+{
+	if (Z_TYPE(intern->array) != IS_OBJECT || (intern->ar_flags & (SPL_ARRAY_IS_SELF|SPL_ARRAY_USE_OTHER))) {
+		return NULL;
+	}
+
+	return Z_OBJ(intern->array);
+}
+
 /* PHP#: puts in `rv` what plain PHP code reads from `slot` when it is a declared property slot of the object `intern`
  * reads, as sharp_cross_slot_read gives it, and gives whether it did. */
 static bool spl_array_crossed_slot(spl_array_object *intern, zval *slot, zval *rv)
 {
-	if (Z_TYPE(intern->array) != IS_OBJECT || (intern->ar_flags & (SPL_ARRAY_IS_SELF|SPL_ARRAY_USE_OTHER))) {
-		return false;
-	}
-	zend_object *object = Z_OBJ(intern->array);
+	zend_object *object = spl_array_backing_object(intern);
 
-	return slot >= object->properties_table && slot < object->properties_table + object->ce->default_properties_count
+	return object && slot >= object->properties_table
+		&& slot < object->properties_table + object->ce->default_properties_count
 		&& sharp_cross_slot_read(rv, object, slot);
 }
 
@@ -739,7 +746,11 @@ PHP_METHOD(ArrayObject, getArrayCopy)
 		RETURN_THROWS();
 	}
 
-	RETURN_ARR(zend_array_dup(spl_array_get_hash_table(intern)));
+	RETVAL_ARR(zend_array_dup(spl_array_get_hash_table(intern)));
+	zend_object *backing = spl_array_backing_object(intern);
+	if (backing) {
+		sharp_cross_array_cast(return_value, backing);
+	}
 } /* }}} */
 
 static HashTable *spl_array_get_properties_for(zend_object *object, zend_prop_purpose purpose) /* {{{ */
@@ -1612,8 +1623,7 @@ static zval *spl_array_it_get_current_data(zend_object_iterator *iter) /* {{{ */
 					ZSTR_VAL(prop_info->ce->name), ZSTR_VAL(key));
 				return NULL;
 			}
-			if (UNEXPECTED(sharp_property_refuses_reference(prop_info))
-			 || UNEXPECTED(!sharp_cross_reference(data, prop_info))) {
+			if (UNEXPECTED(!sharp_property_takes_reference(data, prop_info))) {
 				return NULL;
 			}
 			ZVAL_NEW_REF(data, data);

@@ -24487,8 +24487,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FE_FETCH_RW_S
 										UNDEF_RESULT();
 										HANDLE_EXCEPTION();
 									}
-									if (UNEXPECTED(sharp_property_refuses_reference(prop_info))
-									 || UNEXPECTED(!sharp_cross_reference(value, prop_info))) {
+									if (UNEXPECTED(!sharp_property_takes_reference(value, prop_info))) {
 										UNDEF_RESULT();
 										HANDLE_EXCEPTION();
 									}
@@ -81553,8 +81552,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FE_FETCH_RW_SPEC_V
 										UNDEF_RESULT();
 										HANDLE_EXCEPTION();
 									}
-									if (UNEXPECTED(sharp_property_refuses_reference(prop_info))
-									 || UNEXPECTED(!sharp_cross_reference(value, prop_info))) {
+									if (UNEXPECTED(!sharp_property_takes_reference(value, prop_info))) {
 										UNDEF_RESULT();
 										HANDLE_EXCEPTION();
 									}

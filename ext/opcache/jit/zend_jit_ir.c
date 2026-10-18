@@ -14332,6 +14332,23 @@ static ir_ref jit_object_prop_info(zend_jit_ctx *jit, ir_ref obj_ref, const zend
 	return ir_LOAD_A(ir_ADD_OFFSET(ref, prop_info_offset));
 }
 
+static ir_ref jit_sharp_type_is_plain(zend_jit_ctx *jit, ir_ref type)
+{
+	return ir_ULT(ir_SUB_U8(type, ir_CONST_U8(1)), ir_CONST_U8(IS_REFERENCE - 1));
+}
+
+static ir_ref jit_sharp_slot_is_plain(zend_jit_ctx *jit, ir_ref type_info, bool crossing, bool write)
+{
+	if (write) {
+		return ir_ULT(ir_SUB_U32(type_info, ir_CONST_U32(IS_ARRAY_EX)), ir_CONST_U32(IS_OBJECT_EX - IS_ARRAY_EX + 1));
+	}
+	if (crossing) {
+		return jit_sharp_type_is_plain(jit, ir_TRUNC_U8(type_info));
+	}
+
+	return type_info;
+}
+
 static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
                               const zend_op        *opline,
                               const zend_op_array  *op_array,
@@ -14514,16 +14531,11 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 		}
 		prop_ref = ir_ADD_A(obj_ref, offset_ref);
 		prop_type_ref = jit_Z_TYPE_ref(jit, prop_ref);
-		ir_ref if_def = ir_IF(prop_type_ref);
+		ir_ref if_def = ir_IF(sharp_function_is_sharp((const zend_function *) op_array)
+			? jit_sharp_type_is_plain(jit, prop_type_ref) : prop_type_ref);
 		ir_IF_FALSE_cold(if_def);
 		ir_END_list(slow_inputs);
 		ir_IF_TRUE(if_def);
-		if (opline->opcode != ZEND_FETCH_OBJ_W && sharp_function_is_sharp((const zend_function *) op_array)) {
-			ir_ref if_reference = ir_IF(ir_EQ(prop_type_ref, ir_CONST_U8(IS_REFERENCE)));
-			ir_IF_TRUE_cold(if_reference);
-			ir_END_list(slow_inputs);
-			ir_IF_FALSE(if_reference);
-		}
 		prop_addr = ZEND_ADDR_REF_ZVAL(prop_ref);
 		if (opline->opcode == ZEND_FETCH_OBJ_W
 		 && (!ce ||	ce_is_instanceof || (ce->ce_flags & (ZEND_ACC_HAS_TYPE_HINTS|ZEND_ACC_TRAIT)))) {
@@ -14609,6 +14621,8 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 	} else {
 		prop_ref = ir_ADD_OFFSET(obj_ref, prop_info->offset);
 		prop_addr = ZEND_ADDR_REF_ZVAL(prop_ref);
+		bool crossing = (prop_info->flags & ZEND_ACC_SHARP_CROSSING) != 0;
+		bool crossing_write = crossing && opline->opcode == ZEND_FETCH_OBJ_W;
 		if (JIT_G(trigger) == ZEND_JIT_ON_HOT_TRACE) {
 			if (opline->opcode == ZEND_FETCH_OBJ_W || !(res_info & MAY_BE_GUARD) || !JIT_G(current_frame)) {
 				/* perform IS_UNDEF check only after result type guard (during deoptimization) */
@@ -14619,31 +14633,25 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 					return 0;
 				}
 				prop_type_ref = jit_Z_TYPE_INFO(jit, prop_addr);
-				ir_GUARD(prop_type_ref, ir_CONST_ADDR(exit_addr));
+				ir_GUARD(jit_sharp_slot_is_plain(jit, prop_type_ref, crossing, crossing_write), ir_CONST_ADDR(exit_addr));
+				crossing = false;
 			}
 		} else {
 			prop_type_ref = jit_Z_TYPE_INFO(jit, prop_addr);
-			ir_ref if_def = ir_IF(prop_type_ref);
+			ir_ref if_def = ir_IF(jit_sharp_slot_is_plain(jit, prop_type_ref, crossing, crossing_write));
 			ir_IF_FALSE_cold(if_def);
 			ir_END_list(slow_inputs);
 			ir_IF_TRUE(if_def);
+			crossing = false;
 		}
-		if (opline->opcode != ZEND_FETCH_OBJ_W && (prop_info->flags & ZEND_ACC_SHARP_CROSSING)) {
-			ir_ref is_reference = ir_EQ(jit_Z_TYPE_INFO(jit, prop_addr), ir_CONST_U32(IS_REFERENCE_EX));
-			if (JIT_G(trigger) == ZEND_JIT_ON_HOT_TRACE) {
-				int32_t exit_point = zend_jit_trace_get_exit_point(opline, ZEND_JIT_EXIT_TO_VM);
-				const void *exit_addr = zend_jit_trace_get_exit_addr(exit_point);
+		if (crossing) {
+			int32_t exit_point = zend_jit_trace_get_exit_point(opline, ZEND_JIT_EXIT_TO_VM);
+			const void *exit_addr = zend_jit_trace_get_exit_addr(exit_point);
 
-				if (!exit_addr) {
-					return 0;
-				}
-				ir_GUARD_NOT(is_reference, ir_CONST_ADDR(exit_addr));
-			} else {
-				ir_ref if_reference = ir_IF(is_reference);
-				ir_IF_TRUE_cold(if_reference);
-				ir_END_list(slow_inputs);
-				ir_IF_FALSE(if_reference);
+			if (!exit_addr) {
+				return 0;
 			}
+			ir_GUARD_NOT(ir_EQ(jit_Z_TYPE_INFO(jit, prop_addr), ir_CONST_U32(IS_REFERENCE_EX)), ir_CONST_ADDR(exit_addr));
 		}
 		if (opline->opcode == ZEND_FETCH_OBJ_W && (prop_info->flags & ZEND_ACC_READONLY)) {
 			ir_ref if_prop_obj = ir_IF(ir_CALL_1(IR_BOOL, ir_CONST_FC_FUNC(zend_jit_fetch_obj_w_copies), prop_ref));
@@ -14691,7 +14699,7 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 			uint32_t flags = opline->extended_value & ZEND_FETCH_OBJ_FLAGS;
 
 			if (flags == ZEND_FETCH_DIM_WRITE) {
-				if ((ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_ARRAY) == 0) {
+				if ((ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_ARRAY) == 0 && !crossing_write) {
 					if (!prop_type_ref) {
 						prop_type_ref = jit_Z_TYPE_INFO(jit, prop_addr);
 					}

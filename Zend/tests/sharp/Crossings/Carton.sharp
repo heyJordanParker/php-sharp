@@ -24,4 +24,41 @@ public class Carton
     {
         this.payload = ["z": 26];
     }
+
+    public Carton copied() => this with { codes: ["c"] };
+
+    public Map<Level, int> levels { get; set; } = [Level.Low: 1];
+
+    public int putLevel()
+    {
+        this.levels[Level.High] = 2;
+
+        return this.levels.count();
+    }
+
+    public Map<int|string, string> mixedKeys { get; set; } = [:];
+
+    public int putMixedKeys()
+    {
+        this.mixedKeys[5] = "a";
+        this.mixedKeys["5"] = "b";
+
+        return this.mixedKeys.count();
+    }
+
+    public Map<string, Set<string>> tags { get; set; } = [:];
+
+    public void tagA()
+    {
+        this.tags["a"] = ["x"];
+    }
+
+    public Set<string>|int picked { get; set => field = value; } = 0;
+
+    public string pickedText()
+    {
+        const picked = this.picked;
+
+        return picked is Set<string> ? `${global.get_class(picked)} ${global.implode(",", picked.toList())}` : "int";
+    }
 }

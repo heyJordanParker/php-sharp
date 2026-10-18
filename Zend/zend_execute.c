@@ -3522,6 +3522,11 @@ static zend_never_inline bool zend_handle_fetch_obj_flags(
 {
 	switch (flags) {
 		case ZEND_FETCH_DIM_WRITE:
+			if (UNEXPECTED(Z_ISREF_P(ptr)) && prop_info && UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_CROSSING)
+					&& UNEXPECTED(!sharp_property_for_write(result, obj, ptr, prop_info))) {
+				if (result) ZVAL_ERROR(result);
+				return 0;
+			}
 			if (promotes_to_array(ptr)) {
 				if (!prop_info) {
 					break;
@@ -3538,7 +3543,7 @@ static zend_never_inline bool zend_handle_fetch_obj_flags(
 				if (!prop_info) {
 					break;
 				}
-				if (sharp_property_refuses_reference(prop_info)) {
+				if (UNEXPECTED(!sharp_property_takes_reference(ptr, prop_info))) {
 					if (result) ZVAL_ERROR(result);
 					return 0;
 				}
@@ -3549,10 +3554,6 @@ static zend_never_inline bool zend_handle_fetch_obj_flags(
 						return 0;
 					}
 					ZVAL_NULL(ptr);
-				}
-				if (UNEXPECTED(!sharp_cross_reference(ptr, prop_info))) {
-					if (result) ZVAL_ERROR(result);
-					return 0;
 				}
 
 				ZVAL_NEW_REF(ptr, ptr);
@@ -3637,7 +3638,7 @@ static zend_always_inline void zend_fetch_property_address(zval *result, zval *c
 					}
 					flags &= ZEND_FETCH_OBJ_FLAGS;
 					if (flags) {
-						zend_handle_fetch_obj_flags(result, ptr, NULL, prop_info, flags);
+						zend_handle_fetch_obj_flags(result, ptr, zobj, prop_info, flags);
 					}
 				}
 				return;
@@ -3694,7 +3695,7 @@ static zend_always_inline void zend_fetch_property_address(zval *result, zval *c
 	if (flags) {
 		zend_property_info *prop_info = CACHED_PTR_EX(cache_slot + 2);
 		if (prop_info && ZEND_TYPE_IS_SET(prop_info->type)) {
-			if (UNEXPECTED(!zend_handle_fetch_obj_flags(result, ptr, NULL, prop_info, flags))) {
+			if (UNEXPECTED(!zend_handle_fetch_obj_flags(result, ptr, zobj, prop_info, flags))) {
 				goto end;
 			}
 		}
@@ -4005,7 +4006,7 @@ static zend_always_inline int i_zend_verify_type_assignable_zval(
 
 	/* A PHP array crosses into a PHP# Map or Set property, in strict mode too, as zend_coerce_for_property does. */
 	if (ZEND_TYPE_IS_COMPLEX(type) && zv_type == IS_ARRAY && sharp_crosses_property(info)) {
-		return reference && (info->flags & ZEND_ACC_SHARP_CROSSING) ? 1 : -1;
+		return -1;
 	}
 
 	type_mask = ZEND_TYPE_FULL_MASK(type);
