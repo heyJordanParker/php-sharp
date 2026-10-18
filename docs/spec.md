@@ -2709,6 +2709,35 @@ doubled is Function<string(string)>;         // false: the parameter and result 
 Legacy.doubler() is Function<int(int)>;      // compile error: the type of Legacy.doubler()'s function is unknown
 ```
 
+**A tuple type tests the number of elements and each element's type,** as `List<int>` tests each element. A pattern that starts with `[` is a list pattern, which tests the same, so a tuple type is written in `as` and as a member of a union:
+
+<!-- example tuple-tests: statements -->
+```csharp
+Any? pair = [1, "a"];
+Any? triple = [1, "a", 2];
+Any? swapped = ["a", 1];
+pair as [int, string];                       // [1, "a"]
+triple as [int, string];                     // null: three elements
+swapped as [int, string];                    // null: the element types differ
+pair is int|[int, string];                   // true
+```
+
+**`Class<T>` tests that a value is a class value of `T` or of a class that extends or implements `T`.** A string that holds a class's full name, as `"App.RushOrder"`, is that class's class value, so it passes too. A string that names no class never passes, not even `Class<Object>`:
+
+<!-- example class-value-tests: statements -->
+```csharp
+Any? rush = typeof(RushOrder);
+Any? customer = typeof(Customer);
+Any? named = "App.RushOrder";
+Any? text = "rush";
+rush is Class<Order>;                        // true: RushOrder extends Order
+customer is Class<Order>;                    // false
+named is Class<Order>;                       // true: the string names RushOrder
+text is Class<Order>;                        // false: no class is named rush
+text is Class<Object>;                       // false
+(rush as Class<Order>) == typeof(RushOrder); // true
+```
+
 **Boolean operators:** `&&`, `||` and `!` exist only in expressions. PHP's `and`, `or` and `xor` operators are removed, so `=` can no longer bind before `and`.
 
 **Conditions are `bool`.** `if`, `while`, `do … while`, `for`, `? :`, `&&`, `||`, `!` and `match`'s `when` take a `bool`. Any other type is a compile error, so PHP's truthiness never applies:
