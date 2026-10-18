@@ -1,0 +1,36 @@
+namespace ConstantValues;
+
+public class Billing
+{
+    public const int TRIAL_DAYS = 14;
+    public const int GRACE_DAYS = Billing.TRIAL_DAYS > 7 ? 3 : 1;
+    public const List<string> PLANS = ["free", "pro"];
+    public const string FIRST_PLAN = Billing.PLANS[0];
+    public const string TRIAL_LABEL = `Trial: ${Billing.TRIAL_DAYS} days`;
+    public const int PRICE_CENTS = (int)(9.99 * 100);
+    public const Plan DEFAULT_PLAN = Plan.Free;
+    public const Tier DEFAULT_TIER = Tier.Free;
+    public const string DEFAULT_KEY = Plan.Free.value;
+    public const Function<int(int)> DOUBLE = (int x) => x * 2;
+    public const Class<Plan> PLAN_KIND = typeof(Plan);
+    public const string PRICED_PLAN = Billing.PLANS[(int)(Billing.PRICE_CENTS / 100)];
+    public const string TIER_LABEL = match (Billing.DEFAULT_TIER) { Tier.Free => "free tier", default => "seats" };
+    public const string GRACE_LABEL = match (Billing.GRACE_DAYS) { int days when days > 1 => `${days} days`, default => "1 day" };
+    private static int rate = Rates.current();
+    private static Tier sharedTier = Tier.Free;
+    private Tier tier = Tier.Free;
+
+    public static int currentRate() => Billing.rate;
+
+    public bool fieldsFree() => this.tier == Tier.Free && Billing.sharedTier == Tier.Free;
+
+    public static bool freeTier() => Billing.DEFAULT_TIER == Tier.Free;
+
+    public static bool freeTierMatches() => Billing.DEFAULT_TIER is Tier.Free;
+
+    public static bool freePlan() => Billing.DEFAULT_PLAN == Plan.Free;
+
+    public static int doubled(int value) => (Billing.DOUBLE)(value);
+
+    public static bool planKind() => Billing.PLAN_KIND == typeof(Plan);
+}

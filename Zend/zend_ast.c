@@ -1065,8 +1065,7 @@ ZEND_API zend_result ZEND_FASTCALL zend_ast_evaluate_inner(
 				return FAILURE;
 			}
 
-			/* A .sharp file's computed parameter default, `(static function () { return …; })()`, runs its closure. */
-			if (ast->kind == ZEND_AST_CALL && ast->child[0]->kind == ZEND_AST_OP_ARRAY) {
+			if (zend_ast_is_sharp_computed_value(ast)) {
 				zval closure;
 				zend_create_closure(&closure, (zend_function *) zend_ast_get_op_array(ast->child[0])->op_array, scope, scope, NULL);
 				ctx->had_side_effects = true;

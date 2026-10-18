@@ -1,0 +1,36 @@
+namespace ConstantValues;
+
+import Lib.Field;
+import Lib.Route;
+
+public class Forms
+{
+    [Route(`Trial: ${Billing.TRIAL_DAYS} days`, middleware: [Billing.PLANS[0], Tier.Free], options: (int x) => x * 2)]
+    [Field(Plan.Free.value, limit: Billing.TRIAL_DAYS > 7 ? (int)(9.99 * 100) : 1)]
+    public static string described(
+        int grace = Billing.TRIAL_DAYS > 7 ? 3 : 1,
+        string first = Billing.PLANS[0],
+        string label = `Trial: ${Billing.TRIAL_DAYS} days`,
+        int cents = (int)(9.99 * 100),
+        Tier tier = Tier.Free,
+        string key = Plan.Free.value,
+        Function<int(int)> twice = (int x) => x * 2
+    ) => `${grace} ${first} ${label} ${cents} ${tier == Tier.Free} ${key} ${twice(4)}`;
+
+    public static string grade(int days)
+    {
+        return match (days) {
+            == (Billing.TRIAL_DAYS > 7 ? 3 : 1) => "grace",
+            == (int)(9.99 * 100) => "price",
+            default => "other",
+        };
+    }
+
+    public static bool first(string plan) => plan is Billing.PLANS[0];
+
+    public static bool label(string text) => text is == `Trial: ${Billing.TRIAL_DAYS} days`;
+
+    public static bool free(Tier tier) => tier is Tier.Free;
+
+    public static bool key(string plan) => plan is == Plan.Free.value;
+}
