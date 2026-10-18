@@ -233,7 +233,6 @@ ZEND_END_ARG_INFO()
 C;
 $wrappers = "static ZEND_FUNCTION(Sharp_Internal_requireNative);\n";
 $entries = "\tZEND_RAW_FENTRY(ZEND_NS_NAME(\"Sharp\\\\Internal\", \"requireNative\"), zif_Sharp_Internal_requireNative, arginfo_Sharp_Internal_requireNative, 0, NULL, NULL)\n";
-$bodyNames = '';
 $bodyItems = '';
 foreach ($externs as $extern) {
     $path = explode('.', $extern['class']);
@@ -248,7 +247,6 @@ foreach ($externs as $extern) {
     $arginfos .= "\n" . arginfo($function, $extern['return'], $extern['parameters']);
     $wrappers .= "\n" . wrapper($function, $native, $extern);
     $entries .= "\tZEND_RAW_FENTRY(ZEND_NS_NAME(\"" . implode('\\\\', ['Sharp', 'Internal', ...$path]) . "\", \"$extern[name]\"), zif_$function, arginfo_$function, 0, NULL, NULL)\n";
-    $bodyNames .= "\t\"$extern[class].$extern[name]\",\n";
     $bodyItems .= "        '$extern[class].$extern[name]',\n";
 }
 
@@ -264,10 +262,6 @@ $arginfos
 $wrappers
 static const zend_function_entry sharp_native_functions[] = {
 $entries	ZEND_FE_END
-};
-
-static const char *const sharp_native_bodies[] = {
-$bodyNames	NULL
 };
 
 C);

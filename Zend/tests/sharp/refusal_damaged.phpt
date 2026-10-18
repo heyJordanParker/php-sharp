@@ -8,7 +8,7 @@ $root = compile_project('damaged', ['Shop.sharp' => SHOP, 'Counter.sharp' => COU
 $compiled = "$root/.sharp/Shop.sharpc";
 $bytes = file_get_contents($compiled);
 ['inputs' => $inputs, 'nodes' => $nodes] = unpack('Vinputs/Vnodes', $bytes, 80);
-$first_node = 104 + 40 * $inputs;
+$first_node = 128 + 40 * $inputs;
 $first_child = $first_node + 56 * $nodes;
 
 foreach ([
@@ -18,6 +18,7 @@ foreach ([
     'a root past the nodes' => fn () => overwrite($compiled, 92, pack('V', $nodes)),
     'a child past the nodes' => fn () => overwrite($compiled, $first_child, pack('V', $nodes)),
     'a text past the texts' => fn () => overwrite($compiled, $first_node + 48, pack('V', 0x7fffffff)),
+    "a library version past the texts" => fn () => overwrite($compiled, 120, pack('V', 0x7fffffff)),
 ] as $damage => $write) {
     file_put_contents($compiled, $bytes);
     $write();
@@ -33,3 +34,4 @@ shorter than a header: CompileError: Shop.sharp isn't compiled. Run vendor/bin/m
 a root past the nodes: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
 a child past the nodes: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
 a text past the texts: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
+a library version past the texts: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.

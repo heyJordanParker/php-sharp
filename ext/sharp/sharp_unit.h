@@ -12,7 +12,7 @@
 #endif
 
 #define SHARP_UNIT_MAGIC "\x53\x48\x41\x52\x50\x43\x00\x00"
-#define SHARP_UNIT_ABI "\x88\x20\x5d\xd0\x3a\x07\xd3\xb4\x4e\x4d\xb3\x55\xa2\xa7\x6e\xee"
+#define SHARP_UNIT_ABI "\xc1\x5c\x23\x4e\xae\x37\x65\xfb\x4b\xe1\x94\x93\x45\x6f\x85\x9f"
 
 #define SHARP_KINDS(X) \
   X(ZVAL) \
@@ -306,6 +306,12 @@ typedef enum sharp_value sharp_value;
 typedef uint8_t sharp_value;
 #endif // __STDC_VERSION__ >= 202311L
 
+// `len` bytes of UTF-8 at `offset` in the unit's texts, not NUL-terminated.
+typedef struct {
+  uint32_t offset;
+  uint32_t len;
+} sharp_str;
+
 // The first bytes of a `.sharpc` file. Every 16-byte hash is xxh3-128 in canonical big-endian order.
 typedef struct {
   // `SHARP_UNIT_MAGIC`.
@@ -325,13 +331,13 @@ typedef struct {
   uint32_t root;
   uint32_t texts_size;
   uint32_t facts_size;
+  // The native fingerprint of the standard library the file was compiled against, which the engine compares with
+  // its own `SHARP_NATIVE`. All zero when the project holds no standard library.
+  uint8_t native_fingerprint[16];
+  // The version Composer installed that standard library at, which the engine's refusal names. Empty when Composer
+  // reports none.
+  sharp_str library_version;
 } sharp_unit_header;
-
-// `len` bytes of UTF-8 at `offset` in the unit's texts, not NUL-terminated.
-typedef struct {
-  uint32_t offset;
-  uint32_t len;
-} sharp_str;
 
 // A file whose edit makes the compiled file's source due for a check.
 typedef struct {
