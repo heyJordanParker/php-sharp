@@ -1,0 +1,9 @@
+namespace AttributeTargets;
+
+import Lib.Entity;
+
+// An interface property's accessors are PHP's abstract hooks, which carry their attributes.
+public interface Sized
+{
+    int size { [Entity("measured")] get; [param: Entity("new size")] set; }
+}

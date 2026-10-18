@@ -1,0 +1,19 @@
+namespace NamedVariadics;
+
+import Lib.Generic;
+import Lib.Markup;
+import Lib.Sized;
+
+// A named argument that matches no other parameter of plain PHP fills its `...` parameter under its name, spec
+// section 16: a static method's, a method's, a constructor's, a function's and an attribute's.
+[Generic(Item: typeof(Page))]
+public class Page
+{
+    public static string tagged() => Markup.tag("a", href: "/home", title: "Home");
+
+    public static string opened() => new Markup().open("a", "x", href: "/home");
+
+    public static string sized() => new Sized(name: "box", width: 3, height: 4).describe();
+
+    public static string called() => global.markup_attributes("a", href: "/home");
+}
