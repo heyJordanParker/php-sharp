@@ -60,7 +60,7 @@ Every PHP# property checks through PHP's typed property path, one path for every
 - A write from a `.sharp` file is never checked, since the checker proved it. A hook writing its own property's storage counts as the code that set the property, so a write through a `set` body is checked on the value it stores.
 - The set-hook check that `VERIFY_TYPE_ARGS [1]` marked is gone.
 
-A reference to a property whose type names a type parameter is refused, since the reference would hold no type to check a later write against: "Cannot take a reference to `Checks\Rack::$own`: its type depends on the object's type arguments". `sharp_property_refuses_reference` runs wherever the engine makes a property a reference:
+A reference to a property whose type names a type parameter is refused, since the reference would hold no type to check a later write against: "Cannot take a reference to `Checks\Rack::$own`: its type depends on the object's type arguments". `sharp_property_refuses_reference` runs wherever the engine makes a property a reference, inside `sharp_property_takes_reference` everywhere but `$rack->own = &$box` and `unserialize`:
 - `&$rack->own`, in the VM's and both JITs' fetch.
 - `$rack->own = &$box`.
 - `foreach ($rack as &$value)`, over a plain object and over one with hooks.
