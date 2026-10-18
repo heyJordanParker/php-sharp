@@ -1,5 +1,5 @@
 --TEST--
-A standard library whose every native body exists in the engine but whose SHARP_NATIVE differs refuses when autoload.php is required, naming the package's version without a leading v, or unknown when Composer does not report it, and the engine's version
+A standard library whose every native body exists in the engine but whose SHARP_NATIVE differs refuses when autoload.php is required, naming the package's version without a leading v and the engine's, or only the engine's when Composer does not report the package
 --FILE--
 <?php
 foreach (['0.1.0', 'v0.1.0', 'absent'] as $version) {
@@ -9,11 +9,11 @@ foreach (['0.1.0', 'v0.1.0', 'absent'] as $version) {
 ?>
 --EXPECT--
 == package 0.1.0
-Error: The PHP# standard library 0.1.0 was built for other native bodies than PHP# engine <engine version> has. Install the same PHP# version of both.
+Error: This project's PHP# library is 0.1.0, and the PHP# engine is <engine version>. Install PHP# 0.1.0, or require heyjordanparker/php-sharp-composer <engine version>.
 0 .sharp files included
 == package v0.1.0
-Error: The PHP# standard library 0.1.0 was built for other native bodies than PHP# engine <engine version> has. Install the same PHP# version of both.
+Error: This project's PHP# library is 0.1.0, and the PHP# engine is <engine version>. Install PHP# 0.1.0, or require heyjordanparker/php-sharp-composer <engine version>.
 0 .sharp files included
 == package absent
-Error: The PHP# standard library unknown was built for other native bodies than PHP# engine <engine version> has. Install the same PHP# version of both.
+Error: This project's PHP# library was built for another PHP# engine than <engine version>. Require heyjordanparker/php-sharp-composer <engine version>, or install the PHP# engine the library was built for.
 0 .sharp files included

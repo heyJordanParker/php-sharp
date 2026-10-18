@@ -1,0 +1,6 @@
+namespace SetValues;
+
+public struct Grid
+{
+    public Grid(public List<Set<int>> rows { get; }) { }
+}

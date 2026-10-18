@@ -8,7 +8,7 @@ The standard library lives under one root, `Sharp`, with the standard library na
 
 A PHP function is reached through the type it works on, as an extension method such as `name.trim()`. Otherwise it goes through a static class in its standard library namespace, such as `Math.max(a, b)`. The compiler inlines a standard-library method whose body is one call, so `name.trim()` runs as `trim($name)`. Once the standard library wraps a PHP function, calling that function from `.sharp` code outside the standard library is a compile error that names the method. Functions not wrapped yet stay callable.
 
-`extern` means "implemented outside PHP#", both for a plain PHP declaration and for a native body. A native body is written in Rust behind a C interface and compiled into the engine. Only the standard library declares native bodies. One generator writes the C header from the `.sharp` declarations, and the engine refuses to start if a declared native body is missing.
+`extern` means "implemented outside PHP#", both for a plain PHP declaration and for a native body. A native body is written in Rust behind a C interface and compiled into the engine. Only the standard library declares native bodies. One generator writes the C header from the `.sharp` declarations, with a fingerprint of the native bodies, and the engine refuses a library built for another fingerprint.
 
 ## Options
 

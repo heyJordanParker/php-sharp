@@ -2024,6 +2024,22 @@ public class Receipts
 
 **Declaring:** `event` declares an event type. `public event OrderPaid(int orderId, Money amount);` declares `OrderPaid`, a class whose parameters become get-only properties, as C#'s positional records and Kotlin's data classes do.
 
+**A parameter takes any type,** a collection too. A list literal passed for a `Set` parameter becomes a `Set`, as it does for a method's parameter (section 12):
+
+<!-- example event-set-parameter -->
+```csharp
+// app/OrderTagged.sharp
+namespace App;
+
+public event OrderTagged(int orderId, Set<string> tags);
+```
+
+<!-- example event-set-parameter: statements -->
+```csharp
+const tagged = new OrderTagged(1, ["vip", "new", "vip"]);
+tagged.tags.count();                 // 2: the literal became a Set, which holds "vip" once
+```
+
 **No type nests.** Every type, events and interfaces included, is declared at file level in its own file (section 27). An interface that several events share, such as `OrderEvent`, is declared the same way. An event lives in the namespace of the code it describes:
 
 <!-- example standalone-event -->
@@ -2436,6 +2452,32 @@ PHP's backtick shell execution is removed, and so is `shell_exec()`. A program r
 - **`===`** is true only for the same object. It works on classes only, and cannot be overridden.
 - **`Set`** hashes a struct, enum, string, number or collection by its value, and an object by its class's `hash()`. A struct that declares `hash()` is hashed by it.
 
+**Two sets are `==` when they hold the same elements, in any order,** as in Kotlin, Java, Swift and Python. Two equal sets hash alike whatever their order, so a `Set` keys a `Map` and joins a `Set`. A literal takes its collection type from where it lands (section 12), so a list literal compared with a set is a set, as in Swift:
+
+<!-- example set-equality: statements -->
+```csharp
+Set<int> a = [1, 2];
+Set<int> b = [2, 1];
+Set<int> c = [1, 2, 3];
+a == b;                              // true: the same elements, in any order
+a == c;                              // false
+a == [2, 1];                         // true: the literal is a Set
+a == [];                             // false: the empty Set holds no element
+Map<Set<int>, string> names = [a: "pair"];
+names[b] ?? "none";                  // "pair": b hashes as a does
+```
+
+**A union that holds a collection beside another type compares by the value it holds,** as each of its types compares:
+
+<!-- example union-equality: statements -->
+```csharp
+Set<int>|int either = [2, 1];
+Set<int> pair = [1, 2];
+either == pair;                      // true: either holds a Set of the same elements
+either == 1;                         // false: either holds a Set, not an int
+pair == 1;                           // compile error: a Set never equals an int
+```
+
 **Operators** are declared once on a type and inherited by its subclasses:
 
 <!-- example operators -->
@@ -2646,6 +2688,21 @@ A case with a value and a case with data in one enum is a compile error. Swift e
 - **A plain case of a generic enum is one object for each list of type arguments,** so `Lookup<int>.Missing` and `Lookup<string>.Missing` are two objects, as each list has its own static fields.
 - **At runtime,** each case is a real class, so Reflection sees it.
 - **The checker** rejects a `match` over the enum that misses a case.
+
+**A field takes any type,** a collection too. A list literal passed for a `Set` field becomes a `Set`, so a case compares its sets by their elements:
+
+<!-- example case-set-field: statements -->
+```csharp
+public enum Badge
+{
+    case Marked(Set<string> tags);
+    case Blank;
+}
+
+Badge badge = Badge.Marked(["vip", "new"]);                                           // compiles: the literal becomes a Set
+bool same = badge == Badge.Marked(["new", "vip"]);                                    // compiles: the same case with the same elements is ==
+int count = match (badge) { Badge.Marked(Set<string> tags) => tags.count(), Badge.Blank => 0 };   // compiles
+```
 
 ### 20.1 Sealed interfaces
 
