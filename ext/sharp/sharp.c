@@ -1157,9 +1157,9 @@ static zval *sharp_collection_change(sharp_collection *collection)
 	return held;
 }
 
-/* The table of a Map or a Set the receiver reads, or of the one a change writes when change is true,
- * or NULL after an Error for a List, which has no such method. */
-static sharp_table *sharp_collection_table(zval *this_ptr, bool change)
+/* The Map or the Set the receiver reads, or the one a change writes when change is true, or NULL
+ * after an Error for a List, which has no such method. */
+static zend_object *sharp_collection_table_object(zval *this_ptr, bool change)
 {
 	sharp_collection *collection = sharp_collection_from(Z_OBJ_P(this_ptr));
 	zval *held = change ? sharp_collection_change(collection) : sharp_collection_array(collection);
@@ -1172,7 +1172,15 @@ static sharp_table *sharp_collection_table(zval *this_ptr, bool change)
 		return NULL;
 	}
 
-	return sharp_table_of(Z_OBJ_P(held));
+	return Z_OBJ_P(held);
+}
+
+/* The table of the Map or the Set sharp_collection_table_object gives. */
+static sharp_table *sharp_collection_table(zval *this_ptr, bool change)
+{
+	zend_object *object = sharp_collection_table_object(this_ptr, change);
+
+	return object ? sharp_table_of(object) : NULL;
 }
 
 /* Runs a property's set hook once with the changed array, in the caller's scope, or throws for a
@@ -1535,8 +1543,8 @@ ZEND_METHOD(Sharp_Collection, count)
 	RETURN_LONG(Z_TYPE_P(held) == IS_ARRAY ? zend_hash_num_elements(Z_ARRVAL_P(held)) : sharp_table_of(Z_OBJ_P(held))->size);
 }
 
-/* A Map's keys or values and a Set's toList: the List of its keys, its values or its elements, each
- * as it was stored, in insertion order. */
+/* A Map's keys or values: the List of its keys or its values, each as it was stored, in insertion
+ * order. */
 static void sharp_collection_list(INTERNAL_FUNCTION_PARAMETERS, bool values)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
@@ -1563,9 +1571,41 @@ ZEND_METHOD(Sharp_Collection, values)
 	sharp_collection_list(INTERNAL_FUNCTION_PARAM_PASSTHRU, true);
 }
 
+/* The List a Map's or a Set's toList gives, which var_dump shows too: a Map's entries, each the tuple
+ * [key, value] (spec sections 12 and 30), since a key need not be a PHP array key, and a Set's
+ * elements, in insertion order. */
+static HashTable *sharp_table_to_list(zend_object *object)
+{
+	sharp_table *table = sharp_table_of(object);
+	HashTable *list = zend_new_array(table->size);
+
+	SHARP_TABLE_FOREACH(table, bucket) {
+		zval listed;
+		if (object->ce == sharp_ce_map) {
+			array_init_size(&listed, 2);
+			Z_TRY_ADDREF(bucket->key);
+			Z_TRY_ADDREF(bucket->value);
+			zend_hash_next_index_insert_new(Z_ARRVAL(listed), &bucket->key);
+			zend_hash_next_index_insert_new(Z_ARRVAL(listed), &bucket->value);
+		} else {
+			ZVAL_COPY(&listed, &bucket->key);
+		}
+		zend_hash_next_index_insert_new(list, &listed);
+	} SHARP_TABLE_FOREACH_END();
+
+	return list;
+}
+
 ZEND_METHOD(Sharp_Collection, toList)
 {
-	sharp_collection_list(INTERNAL_FUNCTION_PARAM_PASSTHRU, false);
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	zend_object *object = sharp_collection_table_object(ZEND_THIS, false);
+	if (!object) {
+		RETURN_THROWS();
+	}
+
+	RETURN_ARR(sharp_table_to_list(object));
 }
 
 /* A PHP# method call on an index of a List reads the element through the collection that holds it,
@@ -2383,31 +2423,84 @@ ZEND_METHOD(Sharp_Sequence, take)
 	sharp_sequence_new(return_value, SHARP_SEQUENCE_TAKE, ZEND_THIS)->count = count;
 }
 
-ZEND_METHOD(Sharp_Sequence, toList)
+/* Appends each value the Sequence `sequence` gives to the array `list`. Returns false when reading threw. */
+static bool sharp_sequence_append(zval *sequence, zval *list)
 {
-	ZEND_PARSE_PARAMETERS_NONE();
-
 	sharp_sequence_iterator *iterator =
-		(sharp_sequence_iterator *) sharp_sequence_get_iterator(sharp_ce_sequence, ZEND_THIS, 0);
+		(sharp_sequence_iterator *) sharp_sequence_get_iterator(sharp_ce_sequence, sequence, 0);
 	if (!iterator) {
-		RETURN_THROWS();
+		return false;
 	}
 
-	zval list;
-	array_init(&list);
 	sharp_sequence_iterator_next(iterator, true);
 	while (!EG(exception) && !Z_ISUNDEF(iterator->value)) {
 		Z_TRY_ADDREF(iterator->value);
-		zend_hash_next_index_insert_new(Z_ARRVAL(list), &iterator->value);
+		zend_hash_next_index_insert_new(Z_ARRVAL_P(list), &iterator->value);
 		sharp_sequence_iterator_next(iterator, false);
 	}
 	zend_iterator_dtor(&iterator->it);
 
-	if (EG(exception)) {
+	return !EG(exception);
+}
+
+ZEND_METHOD(Sharp_Sequence, toList)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	zval list;
+	array_init(&list);
+	if (!sharp_sequence_append(ZEND_THIS, &list)) {
 		zval_ptr_dtor(&list);
 		RETURN_THROWS();
 	}
 	RETURN_COPY_VALUE(&list);
+}
+
+/* Spec section 12: a List's flatMap, the elements of each Iterable the function gives, in order, each read as a
+ * Sequence reads its source. */
+ZEND_METHOD(Sharp_Collection, flatMap)
+{
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_array *elements = sharp_collection_read(ZEND_THIS);
+	if (!elements) {
+		RETURN_THROWS();
+	}
+
+	zval flat, part, sequence;
+	zval *element;
+	array_init(&flat);
+	ZEND_HASH_FOREACH_VAL(elements, element) {
+		if (!sharp_collection_call(&fci, &fcc, element, &part)) {
+			break;
+		}
+		if (Z_TYPE(part) != IS_ARRAY
+			&& (Z_TYPE(part) != IS_OBJECT || !instanceof_function(Z_OBJCE(part), zend_ce_traversable))) {
+			zend_type_error(
+				"flatMap() takes a function that gives an Iterable, and it gave %s", zend_zval_value_name(&part));
+			zval_ptr_dtor(&part);
+			break;
+		}
+		sharp_sequence_new(&sequence, SHARP_SEQUENCE_FROM, &part);
+		zval_ptr_dtor(&part);
+		bool appended = sharp_sequence_append(&sequence, &flat);
+		zval_ptr_dtor(&sequence);
+		if (!appended) {
+			break;
+		}
+	} ZEND_HASH_FOREACH_END();
+	zend_array_release(elements);
+
+	if (EG(exception)) {
+		zval_ptr_dtor(&flat);
+		RETURN_THROWS();
+	}
+	RETURN_COPY_VALUE(&flat);
 }
 
 ZEND_METHOD(Sharp_Sequence, getIterator)
@@ -7234,29 +7327,12 @@ static HashTable *sharp_table_get_gc(zend_object *object, zval **table, int *n)
 	return NULL;
 }
 
-/* A Map as a list of [key, value] pairs, since a key need not be a PHP array key, and a Set as a list of its
- * elements. */
+/* A Map as a list of [key, value] pairs and a Set as a list of its elements, as toList gives them. */
 static HashTable *sharp_table_get_debug_info(zend_object *object, int *is_temp)
 {
-	sharp_table *table = sharp_table_of(object);
-	HashTable *entries = zend_new_array(table->size);
-
-	SHARP_TABLE_FOREACH(table, bucket) {
-		zval entry;
-		if (object->ce == sharp_ce_map) {
-			array_init_size(&entry, 2);
-			Z_TRY_ADDREF(bucket->key);
-			Z_TRY_ADDREF(bucket->value);
-			zend_hash_next_index_insert_new(Z_ARRVAL(entry), &bucket->key);
-			zend_hash_next_index_insert_new(Z_ARRVAL(entry), &bucket->value);
-		} else {
-			ZVAL_COPY(&entry, &bucket->key);
-		}
-		zend_hash_next_index_insert_new(entries, &entry);
-	} SHARP_TABLE_FOREACH_END();
 	*is_temp = 1;
 
-	return entries;
+	return sharp_table_to_list(object);
 }
 
 /* PHP's == on two Maps or two Sets is PHP#'s: the same entries regardless of order. */
@@ -7692,9 +7768,12 @@ ZEND_METHOD(Sharp_Map, values)
 	sharp_table_list(INTERNAL_FUNCTION_PARAM_PASSTHRU, false);
 }
 
-ZEND_METHOD(Sharp_Set, toList)
+/* A Map's toList and a Set's: the List of its entries or its elements (sharp_table_to_list). */
+ZEND_METHOD(Sharp_Table, toList)
 {
-	sharp_table_list(INTERNAL_FUNCTION_PARAM_PASSTHRU, true);
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	RETURN_ARR(sharp_table_to_list(Z_OBJ_P(ZEND_THIS)));
 }
 
 /* Each entry, key then value, in insertion order: the list __construct takes, which __unserialize runs on. */
@@ -7886,6 +7965,7 @@ static const zend_function_entry class_Sharp_Map_methods[] = {
 	ZEND_RAW_FENTRY("toArray", zim_Sharp_Table_toArray, arginfo_class_Sharp_Table_list, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_ME(Sharp_Map, keys, arginfo_class_Sharp_Table_list, ZEND_ACC_PUBLIC)
 	ZEND_ME(Sharp_Map, values, arginfo_class_Sharp_Table_list, ZEND_ACC_PUBLIC)
+	ZEND_RAW_FENTRY("toList", zim_Sharp_Table_toList, arginfo_class_Sharp_Table_list, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_RAW_FENTRY("offsetExists", zim_Sharp_Table_offsetExists, arginfo_class_Sharp_Table_offsetExists, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_RAW_FENTRY("offsetGet", zim_Sharp_Table_offsetGet, arginfo_class_Sharp_Table_offsetGet, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_RAW_FENTRY("offsetSet", zim_Sharp_Table_offsetSet, arginfo_class_Sharp_Table_offsetSet, ZEND_ACC_PUBLIC, NULL, NULL)
@@ -7895,13 +7975,13 @@ static const zend_function_entry class_Sharp_Map_methods[] = {
 
 static const zend_function_entry class_Sharp_Set_methods[] = {
 	ZEND_ME(Sharp_Set, __construct, arginfo_class_Sharp_Set___construct, ZEND_ACC_PUBLIC)
-	ZEND_RAW_FENTRY("__serialize", zim_Sharp_Set_toList, arginfo_class_Sharp_Table_list, ZEND_ACC_PUBLIC, NULL, NULL)
+	ZEND_RAW_FENTRY("__serialize", zim_Sharp_Table_toList, arginfo_class_Sharp_Table_list, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_ME(Sharp_Set, __unserialize, arginfo_class_Sharp_Table___unserialize, ZEND_ACC_PUBLIC)
 	ZEND_RAW_FENTRY("getIterator", zim_Sharp_Table_getIterator, arginfo_class_Sharp_Table_getIterator, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_RAW_FENTRY("count", zim_Sharp_Table_count, arginfo_class_Sharp_Table_count, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_RAW_FENTRY("jsonSerialize", zim_Sharp_Table_jsonSerialize, arginfo_class_Sharp_Table_jsonSerialize, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_RAW_FENTRY("toArray", zim_Sharp_Table_toArray, arginfo_class_Sharp_Table_list, ZEND_ACC_PUBLIC, NULL, NULL)
-	ZEND_ME(Sharp_Set, toList, arginfo_class_Sharp_Table_list, ZEND_ACC_PUBLIC)
+	ZEND_RAW_FENTRY("toList", zim_Sharp_Table_toList, arginfo_class_Sharp_Table_list, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_RAW_FENTRY("offsetExists", zim_Sharp_Table_offsetExists, arginfo_class_Sharp_Table_offsetExists, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_RAW_FENTRY("offsetGet", zim_Sharp_Table_offsetGet, arginfo_class_Sharp_Table_offsetGet, ZEND_ACC_PUBLIC, NULL, NULL)
 	ZEND_RAW_FENTRY("offsetSet", zim_Sharp_Table_offsetSet, arginfo_class_Sharp_Table_offsetSet, ZEND_ACC_PUBLIC, NULL, NULL)

@@ -4,6 +4,6 @@ public static class Shouting
 {
     extension(string text)
     {
-        public string exclaim(string tail) => global.strtoupper(text) + tail;
+        public string exclaim(string tail) => text.uppercase() + tail;
     }
 }

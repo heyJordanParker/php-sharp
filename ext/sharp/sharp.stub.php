@@ -46,6 +46,8 @@ final class Collection
 
     public function map(\Closure $transform): array {}
 
+    public function flatMap(\Closure $transform): array {}
+
     public function sumOf(\Closure $selector): int|float {}
 
     public function first(\Closure $predicate): mixed {}

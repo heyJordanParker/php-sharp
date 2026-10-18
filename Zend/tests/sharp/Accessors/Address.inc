@@ -2,7 +2,7 @@
 
 class Address
 {
-    protected string $region { get => \strtoupper($this->region); }
+    protected string $region { get => \mb_strtoupper($this->region, 'UTF-8'); }
     public string $city { set { $this->city = \ucfirst(\trim($value)); } }
 
     public function __construct(string $city, string $region)
