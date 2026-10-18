@@ -1,0 +1,12 @@
+namespace PreloadedLambdas;
+
+public interface Labeled
+{
+    string column { get; }
+
+    string label()
+    {
+        const tag = (string prefix) => `${prefix}${this.column}`;
+        return tag("label:");
+    }
+}

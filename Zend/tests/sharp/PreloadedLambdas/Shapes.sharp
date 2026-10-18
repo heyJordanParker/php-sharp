@@ -1,0 +1,37 @@
+namespace PreloadedLambdas;
+
+public class Shapes : Labeled
+{
+    private int base = 5;
+    public string column { get; } = "shapes";
+
+    public int capturesNothing()
+    {
+        const seven = () => 7;
+        return seven() + 1;
+    }
+
+    public int capturesLocal()
+    {
+        int by = 3;
+        const times = (int n) => n * by;
+        return times(4);
+    }
+
+    public int usesThis()
+    {
+        const plus = (int n) => n + this.base;
+        return plus(3);
+    }
+
+    public static int inStaticMethod()
+    {
+        const minus = (int n) => n - 1;
+        return minus(9);
+    }
+
+    public Any passedToPlainPhp()
+    {
+        return global.call_user_func((int n) => n * 2, 4);
+    }
+}
