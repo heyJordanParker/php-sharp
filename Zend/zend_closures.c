@@ -804,7 +804,7 @@ static void zend_create_closure_ex(zval *res, zend_function *func, zend_class_en
 			if (!ptr
 			 && (func->common.fn_flags & ZEND_ACC_CLOSURE)
 			 && (func->common.scope == scope ||
-			     !(func->common.fn_flags & ZEND_ACC_IMMUTABLE))) {
+			     !(func->common.fn_flags & (ZEND_ACC_IMMUTABLE|ZEND_ACC_PRELOADED)))) {
 				/* If a real closure is used for the first time, we create a shared runtime cache
 				 * and remember which scope it is for. */
 				if (func->common.scope != scope) {
