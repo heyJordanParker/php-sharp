@@ -1,0 +1,18 @@
+namespace NullSafeWrites;
+
+public class Order
+{
+    public static int labelSets { get; private set; } = 0;
+
+    public string note { get; set; } = "";
+    public string? gift { get; set; } = null;
+    public int total { get; set; } = 10;
+    public float ratio { get; set; } = 8.0;
+    public int bits { get; set; } = 12;
+    public List<Item> items { get; set; } = [];
+    public List<int> counts { get; set; } = [1, 2];
+    public Map<string, bool> tags { get; set; } = [:];
+    public Map<string, int> stock { get; set { Order.labelSets++; field = value; } } = [:];
+    public Customer customer { get; } = new Customer();
+    public string label { get; set { Order.labelSets++; field = value; } } = "";
+}

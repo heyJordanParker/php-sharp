@@ -214,7 +214,7 @@ echo 'a check and another opcode: ', without_checks($added, $checks) === $twin ?
 ?>
 --EXPECT--
 Calc: same opcodes and lines in 4 op arrays, same signatures in 1 classes
-Nulls: same opcodes and lines in 17 op arrays, same signatures in 1 classes
+Nulls: same opcodes and lines in 16 op arrays, same signatures in 1 classes
 ControlFlow: different opcodes and lines in 6 op arrays, same signatures in 1 classes
   .sharp      ; (lines=35, args=1, vars=6, tmps=18)
   .sharp L0061 0004 T8 = SHARP_VERIFY_TYPE_ARGS V7 string("List<int>")
