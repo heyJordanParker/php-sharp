@@ -32,7 +32,7 @@ The states are **works**, **fails example**, **silently accepted** (code the spe
 | # | Line | Rule | State on master | Layer | Reuses |
 |---|---|---|---|---|---|
 | K1 | 86 | Keywords are lowercase only | works: `is_sharp_keyword` compares exactly | none | |
-| K2 | 86 | `Self` is the one capitalized keyword | works: `public Self same()` compiles, `self` gets "PHP# has no `self`" | none | |
+| K2 | 86 | `Self` is the one capitalized keyword | works: `public Self same()` compiles, `self` fails as a typo does | none | |
 | K3 | 86, 93 | A capitalized keyword is an ordinary name: `class Event`, `class Struct` | works: `class Struct`, `Event`, `Return`, `If`, `Throw` compile, `Return.make()`, `If.make()`, `Return r = new Return();`, locals `Match`, `Event` and a parameter `Return` compile, and the engine creates `App\N\Return`, `App\N\If` and `App\N\Throw` | none | |
 | K4 | 86, 99, 100 | Where no such name exists, the error suggests the lowercase keyword | **fails example** `keyword-case`: line 99's error is lost (G1). **Wrong error** for `THIS`, `This`, `SUPER` ("Undefined constant"), `SELF` ("Cannot find type"), `Typeof(…)`, `Nameof(…)` ("Function `global.Typeof` does not exist"), `Exit(1)` ("write `global.exit(…)`"), `Case Paid;` ("Enum `Cases` cannot have properties"). **Parse error** for `value IS int`, `value As int`, `Public class Heads`, and the second error of `public Struct Point` | semantics, parser | `MiscasedKeywordInSharp`, `miscased_construct_follows`, `check_constant_access` |
 

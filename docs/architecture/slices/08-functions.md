@@ -111,7 +111,7 @@ Three findings shape the work more than the code does:
    - **#151's rows join decision 7's check unchanged.** `global.printf("x")`, `global.exit(1)`, `global.time()` and `global.file_put_contents(path, text)` name `console.write(…)`, `process.exit(…)`, `clock.now()` and `files.write(…)` or `files.append(…)`, as their bare calls do. A project without the standard library has no member to name, so its `global.exit(1)` still compiles.
    - **The `global.exit` status check is gone.** Every `global.exit(…)` outside the standard library gets the bare `exit`'s message, so `global.exit("failed")` names `process.exit(…)` once instead of being refused twice. Inside the library, `Process.exit(int code)` types the status. `global.die` keeps its own refusal, `wrapped-function` at "Called here." as every `global.` refusal, with the bare `die`'s note "`die("…")` prints the message and exits with status 0, which reports success."
    - **Section 6 line 262** initializes a static with `[10, 25].map(size => size * 2)`. **Section 7 line 459** lists `return`, `throw`, `break`, `continue` and a call that never returns, and gives `if (throw new ValueError("empty"))` as a condition that never finishes. `process.exit(…)` joins them when the singles PR makes it a `never` method (Jordan answer 4).
-   - **`Environment` gains `Map<string, string> variables()`,** which reads every variable on each call, for `getenv()` with no name, which `global.` no longer reaches. `getenv` names `environment.variable(…)` or `environment.variables()`, `apache_getenv` names `environment.variable(…)`, `apache_setenv` names `environment.setVariable(…)`, and `getopt` names `environment.arguments`. A row names a property with `$`, as `$arguments`. A read of `$argv` names `environment.arguments`, and `$argc` names `environment.arguments.count()`. A parameter named `$argv` reads nothing, so it keeps "PHP# variables have no `$`: write `argv`."
+   - **`Environment` gains `Map<string, string> variables()`,** which reads every variable on each call, for `getenv()` with no name, which `global.` no longer reaches. `getenv` names `environment.variable(…)` or `environment.variables()`, `apache_getenv` names `environment.variable(…)`, `apache_setenv` names `environment.setVariable(…)`, and `getopt` names `environment.arguments`. A row names a property with `$`, as `$arguments`. `$argv` and `$argc` fail as a typo does, as every `$` name does.
    - **The observer and override fixtures trace through `Lib\Witness::say`,** because a static's hook has no object to hold a `Console`. `Exits` and `PhpForms` take a `Console` and a `Process`.
 
 10. **#157's review** (team-lead, Queue 7), with the reviewer's probes as rows:
@@ -179,7 +179,7 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 
 | Line | Rule | State on master | Mechanism | Reuses |
 |---|---|---|---|---|
-| 480 | There are no top-level functions | Works: `function helper(): int { … }` at file level and `function inner()` inside a method body each get "PHP# has no top-level functions: move `helper` into a class as a static method." `function (int x) { … }` and `fn (int x) => x` get "PHP# writes a lambda as a bare arrow without `fn` or `function`" | None new | semantics `sharp.rs` |
+| 480 | There are no top-level functions | Works: `function helper(): int { … }` at file level, `function inner()` inside a method body, `function (int x) { … }` and `fn (int x) => x` each fail as a typo does, at `function` or `fn` | None new | the parser |
 | 480 | Shared code lives in static methods on a class | Works: every probe class above is static methods | None new | |
 
 ## Reaching a PHP function
@@ -201,13 +201,13 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 
 | Line | Rule | State on master | Mechanism | Reuses |
 |---|---|---|---|---|
-| 502, 520 | `echo` is removed: write `console.write(text)` | Refused: "PHP# has no `echo`: write `global.printf` or `global.fwrite`.", also for `echo "a", "b";`. #151 rewords it to `console.write(text)` | #151 | `REMOVED_CONSTRUCTS` |
-| 502, 521 | `print` is removed | Refused, the same message. #151 rewords it | #151 | `REMOVED_CONSTRUCTS` |
+| 502, 520 | `echo` is removed: write `console.write(text)` | Fails as a typo does, also for `echo "a", "b";` | None new | `report_unsupported` |
+| 502, 521 | `print` is removed | Fails as a typo does | None new | `report_unsupported` |
 | 522 | `printf("Pruned")` is a compile error: write `console.write(text)` | Refused: "write `global.printf(…)`". #151's row names `console.write` | #151 | `REPLACEMENTS` |
 | 502, 523 | `exit(1)` is a compile error: write `process.exit(1)` | Refused: "write `global.exit(…)`", also for a bare `exit;`. #151's row names `process.exit(…)` | #151 | `report_bare_function_call` from `exit.rs` |
-| 502, 524 | `die("…")` is removed: write the message with `console.writeError`, then `process.exit(1)` | Refused: "PHP# has no `die`: write the message to STDERR, then `global.exit(1)`.", also for a bare `die;`. #151 rewords it | #151 | `REMOVED_CONSTRUCTS` |
+| 502, 524 | `die("…")` is removed: write the message with `console.writeError`, then `process.exit(1)` | Refused: `die` is a plain name, so `die("…")` calls a function that does not exist, and a bare `die;` reads a constant that does not exist | None new | the analyzer's unknown names |
 | 502 | `die`'s status-0 exit is not reachable another way | Works: `global.die("…")` and `global.exit("Prune failed")` are refused with the same `die` message | None new | `function_call.rs`'s string-status check |
-| 502 | Output goes through `Console` | Works for bare calls and constructs. A `.sharp` file's `?>` is refused, "`?>` is PHP syntax: a `.sharp` file has no closing tag, so delete it", so no inline text prints. `global.printf` and `global.var_dump` compile | Jordan question 3 | |
+| 502 | Output goes through `Console` | Works for bare calls and constructs. A `.sharp` file's `?>` fails as a typo does, so no inline text prints. `global.printf` and `global.var_dump` compile | Jordan question 3 | |
 | 508 to 516 | `this.console.writeError`, `this.process.exit(1)`, `this.console.writeLine` | **Not built:** "Cannot find type `Console`." | #151 | |
 | 527 | Exiting skips every `finally` block | Works for `global.exit`: `try { global.exit(3); } finally { … }` exited with status 3 and never printed "finally ran". `Process.exit` waits on #151 | None new | PHP's `exit` |
 | 527, section 7 line 459 | A statement after an exit never runs | Works for `global.exit(1)`. A `void` method that exits is not seen as ending the block | Jordan question 4 | `unevaluated-code` |

@@ -2,7 +2,9 @@
 
 Superseded in part by [decision 76](076-plain-php-functions.md): a bare call such as `fwrite(…)`, `exit(1)` or `printf(…)` below is a compile error. A bare `STDERR` or `PHP_EOL` is a compile error too, and the constant is written `global.STDERR`. A statement after a call that never returns never runs, which [decision 77](077-unreachable-statements.md) makes a compile error.
 
-Superseded in part by [decision 80](080-global-calls-of-replaced-functions.md): outside the standard library, the call through `global`, as `global.exit(1)` or `global.printf(…)`, is a compile error too. The standard library's effect classes (spec section 29) carry output and exit, so each error names the member to write: `console.write(…)` for `printf`, `console.write(…)` or `console.writeError(…)` for `fwrite`, and `process.exit(…)` for `exit`. The error for `echo` and `print` names `console.write(text)`, and the error for `die` and `global.die` names `console.writeError(text)`, then `process.exit(1)`.
+Superseded in part by [decision 80](080-global-calls-of-replaced-functions.md): outside the standard library, the call through `global`, as `global.exit(1)` or `global.printf(…)`, is a compile error too. The standard library's effect classes (spec section 29) carry output and exit, so each error names the member to write: `console.write(…)` for `printf`, `console.write(…)` or `console.writeError(…)` for `fwrite`, and `process.exit(…)` for `exit`. The error for `global.die` names `console.writeError(text)`, then `process.exit(1)`.
+
+Superseded in part by Jordan's ruling of 10-18: a form PHP# never writes fails as a typo does, so `echo` and `print` are parse errors, and `die` is a plain name, so `die("…")` calls a function that does not exist.
 
 ## Decision
 
@@ -16,8 +18,8 @@ Output and exit are function calls only. `echo` and `print` are removed, with a 
 fwrite(STDERR, "Prune failed" + PHP_EOL);    // compiles
 exit(1);                                     // compiles; runs: ends the process with status 1, skipping every finally block
 printf("Pruned %d carts" + PHP_EOL, pruned); // compiles
-echo "Pruned";                               // compile error: write printf or fwrite
-die("Prune failed");                         // compile error: write the message to STDERR, then exit(1)
+echo "Pruned";                               // parse error
+die("Prune failed");                         // compile error: there is no function die
 ```
 
 Every way to write output or end the process is an ordinary call, so the effect system sees it, and no form reports success while it prints a failure.

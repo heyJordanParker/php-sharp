@@ -36,7 +36,7 @@ The compiler never sees a property in a string, so a rename of `total` breaks th
 ### Rejected: Kotlin's `Order::total`
 
 ```csharp
-query.orderBy(Order::total);                // parse error: PHP# has no ::
+query.orderBy(Order::total);                // parse error
 ```
 
 PHP# removed `::`, and every member access uses `.` (section 4).
