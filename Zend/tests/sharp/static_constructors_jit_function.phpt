@@ -34,3 +34,10 @@ each type argument runs it once: [1,1,1,["initial value","static constructor","r
 a type argument whose static constructor threw: RuntimeException: pool is full
 a later use of it: Error: The static constructor of StaticConstructors.Pool<float> threw RuntimeException: pool is full (previous RuntimeException: pool is full)
 another type argument still runs: 1
+new, a computed constant and a field default run no static constructor: [4,5,4,["pool"]]
+the first use of a static runs it: [0,["ticket"]]
+a derived class runs its base class's static constructor first: RuntimeException: broken
+in that order: ["base","broken"]
+use 1 of an inherited static after the static constructor threw: Error: The static constructor of StaticConstructors.Broken threw RuntimeException: broken (previous RuntimeException: broken)
+use 2 of an inherited static after the static constructor threw: Error: The static constructor of StaticConstructors.Broken threw RuntimeException: broken (previous RuntimeException: broken)
+the base class keeps its own statics: 1

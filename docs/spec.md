@@ -437,9 +437,9 @@ public class Profile
 }
 ```
 
-**A static field or property with storage needs an initial value, whatever its type.** No constructor sets it, so the error names that one fix.
+**A static field or property with storage needs an initial value, whatever its type,** so it holds a value of its type before any code reads it, the static constructor included.
 
-**A static lives as long as the app runs, and its initial value runs once, when the app first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. Under php-fpm the app runs for one request. Under a long-running host, such as Octane or FrankenPHP's worker mode, each request sees what the last one left, as in C#, TypeScript and Rust. A host that runs several workers runs one app in each. A get-only static is set only by its initial value. A throw there reaches the code that first used the statics and runs nothing again. The static it left unset, and each after it whose initial value runs as code, throws an `Error` when it is read, or written with a compound assignment, `++` or `--`, until a write sets it, in a generic class too.
+**A static lives as long as the app runs, and its initial value runs once, when the app first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. Under php-fpm the app runs for one request. Under a long-running host, such as Octane or FrankenPHP's worker mode, each request sees what the last one left, as in C#, TypeScript and Rust. A host that runs several workers runs one app in each. A get-only static is set only by its initial value and by its class's static constructor. In a class without a static constructor, a throw in an initial value reaches the code that first used the statics and runs nothing again. The static it left unset, and each after it whose initial value runs as code, throws an `Error` when it is read, or written with a compound assignment, `++` or `--`, until a write sets it, in a generic class too.
 
 **Plain PHP reaches a static with an accessor body, a computed body or an observer only through a method,** because PHP has no hooks on a static property. Reading or writing it directly from plain PHP is PHP's access error.
 
@@ -450,10 +450,10 @@ private static int misses;                       // compile error: give misses a
 public static string? region { get; set; } = null;   // compiles: starts as null
 public static string? zone { get; set; }         // compile error: give zone an initial value
 private static List<int> sizes = [10, 25].map(size => size * 2);   // compiles: runs once, when the app first uses the class's statics
-public static int limit { get; } = 10;           // compiles: get-only, set only by its initial value
+public static int limit { get; } = 10;           // compiles: get-only, set only by its initial value and the static constructor
 ```
 
-**A static constructor, `static Rates() { … }`, sets up its class's statics,** as C#'s does. It runs once, right after the statics' initial values, in the same first use of the class's statics, so it never runs while no code uses one. It may fill several statics, and it may run setup that fills none. The app runs it and no code calls it, so it takes no modifier but `static` and no parameters, and a class has one, as in C#. Each type argument of a generic class runs it once, for its own statics (section 11). A long-running host keeps the statics between requests, so it runs the static constructor once for the app.
+**A static constructor, `static Rates() { … }`, sets up its class's statics,** as C#'s does. It runs once, right after the statics' initial values, in the same first use of the class's statics, so it never runs while no code uses one, as Swift's static properties and Rust's `LazyLock` start at their first use: `new` and a constant read use no static. A use of a derived class's statics, its base class's included, runs the base class's static constructor first, then its own. It may fill several statics, and it may run setup that fills none. It writes its class's get-only statics too, as C#'s assigns a `static readonly` field, and a lambda in it does not. The app runs it and no code calls it, so it takes no modifier but `static` and no parameters, and a class has one, as in C#. Each type argument of a generic class runs it once, for its own statics (section 11). A long-running host keeps the statics between requests, so it runs the static constructor once for the app.
 
 <!-- example static-constructor -->
 ```csharp
@@ -463,12 +463,14 @@ public static class Rates
 {
     private static Map<string, int> byCurrency = [:];
     private static int fallback = 100;
+    public static string home { get; } = "";
 
     static Rates()                                       // compiles: runs once, right after the statics' initial values
     {
         Rates.byCurrency["USD"] = 100;
         Rates.byCurrency["EUR"] = 92;
         Rates.fallback = Rates.byCurrency["USD"] ?? 0;
+        Rates.home = "USD";                              // compiles: the static constructor sets a get-only static
     }
 
     public static int of(string currency) => Rates.byCurrency[currency] ?? Rates.fallback;
@@ -478,6 +480,7 @@ public static class Rates
 import App.Pricing.Rates;
 Rates.of("EUR");   // 92
 Rates.of("GBP");   // 100
+Rates.home;        // "USD"
 -->
 
 <!-- example static-constructor-limits: members in Ledger -->
@@ -486,7 +489,7 @@ public static Ledger() { }       // compile error: a static constructor takes no
 static Ledger(int start) { }     // compile error: a static constructor takes no parameters, and a class has one
 ```
 
-**A throw in a static constructor makes every later use of its class's statics throw,** as C#'s `TypeInitializationException` does. With a static constructor, the statics' initial values run as its first part, as C#'s type initializer runs them, so a throw in either reaches the code that first used the statics. Every later use, a read or a write, throws an `Error` that names the class and the failure, and carries the failure as its previous throwable:
+**A throw in a static constructor makes every later use of its class's statics throw,** as C#'s `TypeInitializationException` does. With a static constructor, the statics' initial values run as its first part, as C#'s type initializer runs them, so a throw in either reaches the code that first used the statics. Every later use, a read or a write, through the class or a class derived from it, throws an `Error` that names the class and the failure, and carries the failure as its previous throwable:
 
 <!-- example static-constructor-failure -->
 ```csharp
@@ -2992,6 +2995,31 @@ public enum Amount
     case Some(int cents);                        // compile error: the field cents shares its name with the property Amount.cents
 
     public int cents => 0;
+}
+```
+
+**Every case is a value of each interface its enum names,** so each case gives each property the interface states, by a field of that name or by a property of its enum, and the enum gives each method. A case that gives a property no value is a compile error that names the case and the interface's property:
+
+<!-- example case-interface-members -->
+```csharp
+// app/Labelled.sharp
+namespace App;
+
+public interface Labelled
+{
+    string label { get; }
+}
+```
+
+<!-- example case-interface-members -->
+```csharp
+// app/Note.sharp
+namespace App;
+
+public enum Note : Labelled
+{
+    case Untitled;                               // compile error: the case Note.Untitled does not give label, which Labelled states
+    case Titled(string label);                   // compiles: its field gives label
 }
 ```
 

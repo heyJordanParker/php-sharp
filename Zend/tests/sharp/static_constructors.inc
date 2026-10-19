@@ -1,10 +1,13 @@
 <?php
 
+use StaticConstructors\Base;
+use StaticConstructors\Broken;
 use StaticConstructors\Flaky;
 use StaticConstructors\Journal;
 use StaticConstructors\Pools;
 use StaticConstructors\Rates;
 use StaticConstructors\Registry;
+use StaticConstructors\Ticket;
 
 function used(string $label, callable $use): void
 {
@@ -32,3 +35,14 @@ used('each type argument runs it once', fn () => [Pools::ofInt(), Pools::ofStrin
 used('a type argument whose static constructor threw', fn () => Pools::ofFloat());
 used('a later use of it', fn () => Pools::ofFloat());
 used('another type argument still runs', fn () => Pools::ofInt());
+used(
+    'new, a computed constant and a field default run no static constructor',
+    fn () => [(new Ticket())->size(), Ticket::MAX, (new Ticket())->size(), array_slice(Journal::$lines, -1)],
+);
+used('the first use of a static runs it', fn () => [Ticket::readIssued(), array_slice(Journal::$lines, -1)]);
+used('a derived class runs its base class\'s static constructor first', fn () => Broken::inherited());
+used('in that order', fn () => array_slice(Journal::$lines, -2));
+for ($use = 1; $use <= 2; $use++) {
+    used("use $use of an inherited static after the static constructor threw", fn () => Broken::inherited());
+}
+used('the base class keeps its own statics', fn () => (new ReflectionProperty(Base::class, 'baseCount'))->getValue());
