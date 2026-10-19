@@ -1,0 +1,21 @@
+namespace StaticConstructors;
+
+public static class Rates
+{
+    private static Map<string, int> byCurrency = [:];
+    private static int fallback = Journal.note("initial value", 100);
+    public static int runs { get; set; } = 0;
+
+    static Rates()
+    {
+        Journal.note("static constructor", 0);
+        Rates.byCurrency["USD"] = 100;
+        Rates.byCurrency["EUR"] = 92;
+        Rates.fallback = Rates.byCurrency["USD"] ?? 0;
+        Rates.runs++;
+    }
+
+    public static int of(string currency) => Rates.byCurrency[currency] ?? Rates.fallback;
+
+    public static string hello() => "hello";
+}

@@ -1,0 +1,16 @@
+namespace StaticConstructors;
+
+import RuntimeException;
+
+public class Pool<T>
+{
+    public static int made { get; set; } = 0;
+
+    static Pool()
+    {
+        Pool<T>.made = Journal.note("pool", Pool<T>.made + 1);
+        if (Journal.lines.count() > 5) {
+            throw new RuntimeException("pool is full");
+        }
+    }
+}

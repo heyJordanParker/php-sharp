@@ -437,9 +437,9 @@ public class Profile
 }
 ```
 
-**A static field or property with storage needs an initial value, whatever its type.** No constructor sets it, so the error names that one fix.
+**A static field or property with storage needs an initial value, whatever its type,** so it holds a value of its type before any code reads it, the static constructor included.
 
-**A static lives as long as the app runs, and its initial value runs once, when the app first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. Under php-fpm the app runs for one request. Under a long-running host, such as Octane or FrankenPHP's worker mode, each request sees what the last one left, as in C#, TypeScript and Rust. A host that runs several workers runs one app in each. A get-only static is set only by its initial value. A throw there reaches the code that first used the statics and runs nothing again. The static it left unset, and each after it whose initial value runs as code, throws an `Error` when it is read, or written with a compound assignment, `++` or `--`, until a write sets it, in a generic class too.
+**A static lives as long as the app runs, and its initial value runs once, when the app first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. Under php-fpm the app runs for one request. Under a long-running host, such as Octane or FrankenPHP's worker mode, each request sees what the last one left, as in C#, TypeScript and Rust. A host that runs several workers runs one app in each. A get-only static is set only by its initial value and by its class's static constructor. In a class without a static constructor, a throw in an initial value reaches the code that first used the statics and runs nothing again. The static it left unset, and each after it whose initial value runs as code, throws an `Error` when it is read, or written with a compound assignment, `++` or `--`, until a write sets it, in a generic class too.
 
 **Plain PHP reaches a static with an accessor body, a computed body or an observer only through a method,** because PHP has no hooks on a static property. Reading or writing it directly from plain PHP is PHP's access error.
 
@@ -450,8 +450,70 @@ private static int misses;                       // compile error: give misses a
 public static string? region { get; set; } = null;   // compiles: starts as null
 public static string? zone { get; set; }         // compile error: give zone an initial value
 private static List<int> sizes = [10, 25].map(size => size * 2);   // compiles: runs once, when the app first uses the class's statics
-public static int limit { get; } = 10;           // compiles: get-only, set only by its initial value
+public static int limit { get; } = 10;           // compiles: get-only, set only by its initial value and the static constructor
 ```
+
+**A static constructor, `static Rates() { … }`, sets up its class's statics,** as C#'s does. It runs once, right after the statics' initial values, in the same first use of the class's statics, so it never runs while no code uses one, as Swift's static properties and Rust's `LazyLock` start at their first use: `new` and a constant read use no static. A use of a derived class's statics, its base class's included, runs the base class's static constructor first, then its own. It may fill several statics, and it may run setup that fills none. It writes its class's get-only statics too, as C#'s assigns a `static readonly` field, and a lambda in it does not. The app runs it and no code calls it, so it takes no modifier but `static` and no parameters, and a class has one, as in C#. Each type argument of a generic class runs it once, for its own statics (section 11). A long-running host keeps the statics between requests, so it runs the static constructor once for the app.
+
+<!-- example static-constructor -->
+```csharp
+namespace App.Pricing;
+
+public static class Rates
+{
+    private static Map<string, int> byCurrency = [:];
+    private static int fallback = 100;
+    public static string home { get; } = "";
+
+    static Rates()                                       // compiles: runs once, right after the statics' initial values
+    {
+        Rates.byCurrency["USD"] = 100;
+        Rates.byCurrency["EUR"] = 92;
+        Rates.fallback = Rates.byCurrency["USD"] ?? 0;
+        Rates.home = "USD";                              // compiles: the static constructor sets a get-only static
+    }
+
+    public static int of(string currency) => Rates.byCurrency[currency] ?? Rates.fallback;
+}
+```
+<!-- run static-constructor
+import App.Pricing.Rates;
+Rates.of("EUR");   // 92
+Rates.of("GBP");   // 100
+Rates.home;        // "USD"
+-->
+
+<!-- example static-constructor-limits: members in Ledger -->
+```csharp
+public static Ledger() { }       // compile error: a static constructor takes no modifier but static
+static Ledger(int start) { }     // compile error: a static constructor takes no parameters, and a class has one
+```
+
+**A throw in a static constructor makes every later use of its class's statics throw,** as C#'s `TypeInitializationException` does. With a static constructor, the statics' initial values run as its first part, as C#'s type initializer runs them, so a throw in either reaches the code that first used the statics. Every later use, a read or a write, through the class or a class derived from it, throws an `Error` that names the class and the failure, and carries the failure as its previous throwable:
+
+<!-- example static-constructor-failure -->
+```csharp
+namespace App.Feeds;
+
+import RuntimeException;
+
+public static class Feed
+{
+    private static int polls = 0;
+
+    static Feed()                                        // compiles
+    {
+        throw new RuntimeException("offline");
+    }
+
+    public static int poll() => Feed.polls;
+}
+```
+<!-- run static-constructor-failure
+import App.Feeds.Feed;
+Feed.poll();   // throws: "offline"
+Feed.poll();   // throws: "The static constructor of App.Feeds.Feed threw RuntimeException: offline"
+-->
 
 ### 6.1 Property features
 
@@ -2646,6 +2708,32 @@ These keep their C and PHP form:
 
 PHP's `foreach` is removed.
 
+**A loop can take a name, as `orders: for (…)`, which only `break` and `continue` read,** as in Java, Kotlin, Swift, Rust and TypeScript. `break orders;` leaves the loop named `orders` from a loop inside it, and `continue orders;` goes on with that loop's next pass. The name is optional, and a plain `break` or `continue` means the innermost loop. A loop name that no `break` or `continue` names is a compile error, as an unused label is in Go. So is a name a loop around it already has, and a `break` or `continue` that names no loop around it, as in Java. A count after `break` or `continue`, as `break 2`, is a parse error, as in Java, Kotlin, Swift and TypeScript, since the name says which loop it leaves.
+
+<!-- example loop-names: statements
+List<List<int>> orders = [[1, 2], [3, 0, 4], [5, -1, 6], [7, 99]];
+let total = 0;
+-->
+```csharp
+orders: for (const order of orders) {        // compiles: an optional loop name
+    for (const line of order) {
+        if (line == 0) { continue orders; }      // continues the outer loop
+        if (line > 50) { break orders; }         // leaves the outer loop
+        if (line < 0) { break; }                 // a plain break leaves the innermost loop
+        total += line;
+    }
+}
+total;                                           // 18
+```
+
+<!-- example loop-name-limits: statements
+bool running = true;
+-->
+```csharp
+unused: while (running) { running = false; }   // compile error: no break or continue names the loop unused
+while (running) { break 2; }                   // parse error: break takes a loop's name, not a count
+```
+
 **`?? continue` in a loop's own condition skips to the loop's next check,** as `continue` does anywhere in the loop (section 14.4). The condition runs again, so the body runs only for a value that is not null, and `?? break` ends the loop at the first null instead. A source that stays null keeps the loop running, as `while (true) { continue; }` does.
 
 <!-- example continue-in-condition: statements in Feed
@@ -3101,6 +3189,44 @@ public enum Badge
 Badge badge = Badge.Marked(["vip", "new"]);                                           // compiles: the literal becomes a Set
 bool same = badge == Badge.Marked(["new", "vip"]);                                    // true: the same case with the same elements is ==
 int count = match (badge) { Badge.Marked(Set<string> tags) => tags.count(), Badge.Blank => 0 };   // compiles
+```
+
+**A field is a member of its case, and a case has every member of its enum,** so a field named like a property or a method of its enum is a compile error that names both, as Kotlin refuses a subclass property that hides its parent's and C# refuses two members of one name. One name means one member (section 4):
+
+<!-- example case-field-names -->
+```csharp
+public enum Amount
+{
+    case None;
+    case Some(int cents);                        // compile error: the field cents shares its name with the property Amount.cents
+
+    public int cents => 0;
+}
+```
+
+**Every case is a value of each interface its enum names,** so each case gives each property the interface states, by a field of that name or by a property of its enum, and the enum gives each method. A case that gives a property no value is a compile error that names the case and the interface's property:
+
+<!-- example case-interface-members -->
+```csharp
+// app/Labelled.sharp
+namespace App;
+
+public interface Labelled
+{
+    string label { get; }
+}
+```
+
+<!-- example case-interface-members -->
+```csharp
+// app/Note.sharp
+namespace App;
+
+public enum Note : Labelled
+{
+    case Untitled;                               // compile error: the case Note.Untitled does not give label, which Labelled states
+    case Titled(string label);                   // compiles: its field gives label
+}
 ```
 
 ### 20.1 Sealed interfaces

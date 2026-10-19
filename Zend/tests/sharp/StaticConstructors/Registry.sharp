@@ -1,0 +1,13 @@
+namespace StaticConstructors;
+
+public class Registry
+{
+    private static int opened = 0;
+
+    static Registry()
+    {
+        Journal.note("registered", 0);
+    }
+
+    public static int count() => Registry.opened;
+}

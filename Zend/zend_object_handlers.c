@@ -2141,17 +2141,78 @@ ZEND_API zend_function *zend_std_get_static_method(zend_class_entry *ce, zend_st
 /* PHP#: PHP gives a static only a constant default, so a PHP# class sets each static whose initial value isn't constant
  * in its hidden private static method `#statics`. It runs once each request, when the request first builds the class's
  * statics, after their constant defaults, so a class opcache preloads gets the values in every request too. A
- * `#statics` the class inherits sets only its parent's statics, which the parent's own build sets. */
+ * `#statics` the class inherits sets only its parent's statics, which the parent's own build sets. A class with a static
+ * constructor, spec section 6, runs its `#statics` at the first use of its statics instead, see
+ * zend_sharp_static_constructors, so `new` and a constant read never run it. */
 ZEND_API zend_result zend_class_init_sharp_statics(zend_class_entry *class_type) /* {{{ */
 {
 	zend_function *initializer = zend_hash_str_find_ptr(&class_type->function_table, ZEND_STRL("#statics"));
 
-	if (EXPECTED(!initializer) || initializer->common.scope != class_type) {
+	if (EXPECTED(!initializer) || initializer->common.scope != class_type
+	 || sharp_static_constructor_state(class_type)) {
 		return SUCCESS;
 	}
 	zend_call_known_function(initializer, NULL, class_type, NULL, 0, NULL, NULL);
 
 	return EG(exception) ? FAILURE : SUCCESS;
+}
+/* }}} */
+
+/* PHP#: runs, at the first use of the statics of `ce`, whose statics are built, the static constructor of each class
+ * from the topmost one above `ce` down to `ce` that has one and has not run it, as the `#statics` that sets its
+ * statics' initial values first, spec section 6. Its state goes from true to false while it runs, so a use of the
+ * statics inside it runs it no second time, then to null once it returns, or to what it threw. A throw reaches the
+ * caller as EG(exception). Returns what an earlier run of one of them threw, with that class in `failed`, or NULL. */
+static zend_object *zend_sharp_static_constructors(zend_class_entry *ce, zend_class_entry **failed) /* {{{ */
+{
+	if (ce->parent) {
+		zend_object *failure = zend_sharp_static_constructors(ce->parent, failed);
+		if (failure || EG(exception)) {
+			return failure;
+		}
+	}
+
+	zval *state = sharp_static_constructor_state(ce);
+	if (EXPECTED(!state)) {
+		return NULL;
+	}
+	if (Z_TYPE_P(state) == IS_TRUE) {
+		zend_function *initializer = zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("#statics"));
+		ZVAL_FALSE(state);
+		if (initializer && initializer->common.scope == ce) {
+			zend_call_known_function(initializer, NULL, ce, NULL, 0, NULL, NULL);
+		}
+		if (EG(exception) && !zend_is_unwind_exit(EG(exception))) {
+			ZVAL_OBJ_COPY(state, EG(exception));
+		} else {
+			ZVAL_NULL(state);
+		}
+
+		return NULL;
+	}
+	if (UNEXPECTED(Z_TYPE_P(state) == IS_OBJECT)) {
+		*failed = ce;
+
+		return Z_OBJ_P(state);
+	}
+
+	return NULL;
+}
+/* }}} */
+
+/* PHP#: whether the static constructor of `ce`, or of a class above it, has not returned yet, see
+ * zend_sharp_static_constructors. The place of a static of `ce` read or written then is not cached, so each use of it
+ * reaches the check that runs the constructor or names its failure. */
+ZEND_API bool zend_sharp_static_constructor_runs(zend_class_entry *ce) /* {{{ */
+{
+	for (; ce; ce = ce->parent) {
+		zval *state = sharp_static_constructor_state(ce);
+		if (UNEXPECTED(state) && Z_TYPE_P(state) != IS_NULL) {
+			return true;
+		}
+	}
+
+	return false;
 }
 /* }}} */
 
@@ -2243,6 +2304,18 @@ undeclared_property:
 		if (UNEXPECTED(EG(exception))) {
 			return NULL;
 		}
+	}
+
+	/* PHP#: the first use of the statics of the class the code names runs its static constructors, and once one threw,
+	 * every later use throws, whichever class declares the static, spec section 6. */
+	zend_class_entry *failed = NULL;
+	zend_object *failure = zend_sharp_static_constructors(ce, &failed);
+	if (UNEXPECTED(EG(exception))) {
+		return NULL;
+	}
+	if (UNEXPECTED(failure)) {
+		sharp_throw_static_constructor_failure(failed, NULL, failure);
+		return NULL;
 	}
 
 	ret = CE_STATIC_MEMBERS(ce) + property_info->offset;

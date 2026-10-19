@@ -1,0 +1,14 @@
+namespace StaticConstructors;
+
+public class Base
+{
+    protected static int baseCount = 0;
+
+    static Base()
+    {
+        Journal.note("base", 0);
+        Base.baseCount = 1;
+    }
+
+    public Base() { }
+}
