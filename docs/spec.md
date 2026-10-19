@@ -3695,6 +3695,39 @@ page.designLabel;                                           // "design design", 
 - A computed property's default body runs on each read, so it takes no `static` and no `lazy`. An enum declares no stored property; a computed property is allowed, static or not, and an enum takes an interface's computed default as a class does. Every enum already has `name`, and a backed enum `value`, so no computed property takes either name.
 - A PHP# interface with default bodies compiles to a PHP interface plus a PHP trait named `<Interface>\Defaults` that holds the default bodies, as Kotlin nests `DefaultImpls` in an interface. A plain PHP class that implements it must also `use` that trait to get the defaults. PHP# code never names the trait, so section 23's rule that a class cannot share its full name with a namespace does not apply to it.
 
+**An interface property may state `init` in place of `set`,** as C# 9 lets an interface state it: `string kind { get; init; }`. A class or a struct gives it with `init`, as C# requires (CS8853), and an event gives it through its parameter, which `new` sets once. Code sets it only while its object is created, and reads it through the interface. Any other accessor list an interface property states gets what that list gets on a class property:
+
+<!-- example interface-init -->
+```csharp
+// app/Tagged.sharp
+namespace App;
+
+public interface Tagged
+{
+    string kind { get; init; }                              // compiles
+    string note { get; set; init; }                         // compile error: a property is written by set or by init, not both
+}
+```
+
+<!-- example interface-init -->
+```csharp
+// app/Badge.sharp
+namespace App;
+
+public class Badge : Tagged
+{
+    public string kind { get; init; } = "plain";            // compiles: Tagged states kind with init, and { get; set; } is a compile error
+    public string note { get; set; } = "";
+}
+```
+
+<!-- example interface-init: statements -->
+```csharp
+Tagged tagged = new Badge { kind: "sale" };
+tagged.kind;                                                // "sale"
+tagged.kind = "new";                                        // compile error: kind is set only while its object is created
+```
+
 **A class has one method per name, whatever it inherits** (section 7). When two places give a class a body for the same method, the class writes the method itself, as Kotlin requires. The places are two interfaces' default bodies, a default body and a plain PHP trait, two header traits, or a default body and the base class. Until the class writes it, the class is a compile error that names both places. Inside its own methods, the class runs one interface's default body with `super<Interface>`:
 
 <!-- example one-body-per-method -->

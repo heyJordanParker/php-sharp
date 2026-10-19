@@ -1,0 +1,6 @@
+namespace InterfaceInit;
+
+public class Boxed : Sized
+{
+    public int max { get; init; } = 1;
+}

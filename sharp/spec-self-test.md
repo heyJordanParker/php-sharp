@@ -136,19 +136,6 @@ int a = 3;   // compile error: three is an int
 line 1 expects a compile error, and the checker accepts it
 -->
 
-A "not supported yet" refusal never satisfies a `compile error` line, because it says the feature is missing:
-
-<!-- example refusal -->
-```csharp
-public interface Sized
-{
-    int max { get; init; }   // compile error: an interface property has no init
-}
-```
-<!-- expect refusal
-line 3 expects a compile error, and the checker reports: …not supported yet…
--->
-
 A missing class satisfies a `compile error` line only when that line writes the missing name itself:
 
 <!-- example missing-class-named-here: members -->

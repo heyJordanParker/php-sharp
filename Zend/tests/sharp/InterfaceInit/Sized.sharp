@@ -1,0 +1,6 @@
+namespace InterfaceInit;
+
+public interface Sized
+{
+    int max { get; init; }
+}

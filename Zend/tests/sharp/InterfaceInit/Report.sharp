@@ -1,0 +1,19 @@
+namespace InterfaceInit;
+
+public static class Report
+{
+    /// Each class kind sets `max` while its object is created, and the interface reads it.
+    public static List<int> made()
+    {
+        List<Sized> sized = [new Boxed { max: 3 }, new Boxed(), new Packed { max: 4 }, new Sizes(5)];
+        return sized.map(each => each.max);
+    }
+
+    /// `with` copies an object and sets its `init` property on the copy.
+    public static List<int> copied()
+    {
+        const boxed = new Boxed { max: 6 };
+        const copy = boxed with { max: 7 };
+        return [boxed.max, copy.max];
+    }
+}

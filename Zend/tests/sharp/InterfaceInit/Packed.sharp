@@ -1,0 +1,6 @@
+namespace InterfaceInit;
+
+public struct Packed : Sized
+{
+    public int max { get; init; } = 1;
+}

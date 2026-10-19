@@ -1,0 +1,25 @@
+--TEST--
+A preloaded PHP# interface property stated `{ get; init; }` runs as in a request with no preloading
+--INI--
+opcache.enable=1
+opcache.enable_cli=1
+opcache.optimization_level=-1
+opcache.preload={PWD}/interface_init_preload.inc
+--EXTENSIONS--
+opcache
+--SKIPIF--
+<?php
+if (PHP_OS_FAMILY == 'Windows') die('skip Preloading is not supported on Windows');
+?>
+--FILE--
+<?php
+var_dump(interface_exists(InterfaceInit\Sized::class, false), class_exists(InterfaceInit\Report::class, false));
+require __DIR__ . '/interface_init.inc';
+?>
+--EXPECT--
+bool(true)
+bool(true)
+set while each object is created, read through the interface: [3,1,4,5]
+a copy sets it: [6,7]
+plain PHP sees the interface property get-only: false
+plain PHP writes it after creation: Cannot modify protected(set) property InterfaceInit\Boxed::$max from global scope
