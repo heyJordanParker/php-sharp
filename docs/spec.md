@@ -3958,6 +3958,7 @@ App\Priced::CURRENCY;                  // "USD"
 - An interface states no law: a law is proved against the code of a class or an enum, and any class may implement an interface later.
 - An interface's operator applies to every implementer, a plain PHP class included, as section 19 chooses every operator: from the types of both sides, the most specific one runs.
 - A plain PHP class that implements an interface with default bodies uses `<Interface>\Defaults`, or it is a compile error that names the trait.
+- A plain PHP class that extends or implements a PHP# type satisfies it as a PHP# class does: each member it declares or inherits fits the member it implements or overrides, or `mago compile` refuses the class's file. `mago compile` checks a plain PHP file only there, as `kotlinc` checks a Java class only where it meets a Kotlin declaration, and every other error in the file stays `mago analyze`'s, as in a plain PHP project.
 
 **A plain PHP trait** is listed in the header with the base class and interfaces, and it is also a type. It works everywhere an interface does:
 
@@ -4953,7 +4954,13 @@ Log.info("charged", ["class": typeof(Order)]);                   // compiles: re
 - A call that spreads a list whose elements may be a `Position`, as a `List<Any>`, gives the position of the parameter's declaration too, because the list may fill the parameter. A spread of any other list gives the caller's position.
 - The parameter takes the whole position. A default that only uses it, as `int line = Position.current().line` or `int next = Position.current().line + 1`, is a compile error: write `Position caller = Position.current()`.
 
-**A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. A pragma, `mago.toml`'s `ignore` or the baseline can hide a warning, never an error.
+**A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. A pragma, `mago.toml`'s `ignore` or the baseline can hide a warning, never one of the language's errors. They can hide an error of an extension host's rule, whose code names its host, as `acme/no-raw-sql`, as C#'s `#pragma warning disable` hides an analyzer's error and ESLint's `eslint-disable-next-line` hides a plugin's rule.
+
+<!-- example pragma-never-hides-a-language-error: members -->
+```csharp
+// @mago-expect analysis:invalid-return-statement
+public int total() => "one";                                    // compile error: the pragma hides no error of the language
+```
 
 **`vendor/bin/mago compile` compiles the project.** It checks every `.sharp` file, vendor packages included. It also creates a missing `.lean` file beside a class that has a law (section 28.1), and never rewrites an existing one.
 
@@ -4970,6 +4977,8 @@ app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mag
 - **A `.sharp` file in an `autoload-dev` folder, and a package's in `vendor/`, gets no `.php` file.** A test class keeps one file, because PHPUnit loads a test class only from the file it lists, so `phpunit.xml` lists the PHP# tests as `<directory suffix="Test.sharp">tests</directory>`.
 - **Editors hide the `.php` files:** VS Code through `"files.exclude": {"**/*.php": {"when": "$(basename).sharp"}}`, and PhpStorm through file nesting of `.php` under `.sharp`.
 - **A type error, or a broken structure rule (section 28), stops the file from running.** So does a law without a proof, a gap, or a proof whose law was deleted, each a compile error that names it.
+- **A plain PHP class that doesn't satisfy a PHP# type it extends or implements stops `mago compile`** (section 22), whatever `ignore` entry or baseline entry targets the error, and `mago compile` still writes every accepted `.sharp` file.
+- **An extension host loads the project's own classes, on a fresh tree and after any change.** Before a host starts, `mago compile` and `mago analyze`, `--watch` included, compile each `.sharp` file whose compiled file is missing or out of date without the hosts, as a Roslyn source generator sees the compilation's own symbols and a Kotlin compiler plugin sees the module's own classes. `mago compile` then checks the project with its hosts and writes what they accept.
 - **A rule that reads the whole project's structure can lag in development** until the next full compile. At deploy, `mago compile` checks every rule exactly.
 
 ## 28. Verification
