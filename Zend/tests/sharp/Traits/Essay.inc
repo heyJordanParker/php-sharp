@@ -5,12 +5,12 @@ use Lib\HasSlug;
 
 class Essay extends Document implements Linked
 {   use HasSlug;
-    public function link(): string
+    final public function link(): string
     {
         return $this->path();
     }
 
-    public function name(): string
+    final public function name(): string
     {
         return $this->slug;
     }

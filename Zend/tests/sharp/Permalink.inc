@@ -4,5 +4,5 @@
 
 class Permalink
 {
-    public static function of(string $title): string { return \Sharp\Internal\Text\Text\slug($title); }
+    final public static function of(string $title): string { return \Sharp\Internal\Text\Text\slug($title); }
 }

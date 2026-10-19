@@ -6,7 +6,7 @@ abstract class Shape
 
     abstract protected function name(): string;
 
-    public function describe(): string
+    final public function describe(): string
     {
         return $this->name();
     }

@@ -4,7 +4,7 @@ use Lib\Standing;
 
 class Roster
 {
-    public static function report(\Sharp\Map|array $members): array { $members = \is_array($members) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [Standing::from((string) $key), $value], \array_keys($members), $members))) : $members;
+    final public static function report(\Sharp\Map|array $members): array { $members = \is_array($members) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [Standing::from((string) $key), $value], \array_keys($members), $members))) : $members;
 
         $ranked = ((object) $members)->sortedBy(fn ($n) => -$n);
         $tens = ((object) $members)->map(fn ($n) => $n * 10);

@@ -5,5 +5,5 @@ class Repository
     /** @template TItem of DatabaseEntity
      *  @param Query<TItem> $query
      *  @return PaginatedList<TItem> */
-    public function list(Query $query): PaginatedList { return new PaginatedList(((object) $query)->rows()); }
+    final public function list(Query $query): PaginatedList { return new PaginatedList(((object) $query)->rows()); }
 }
