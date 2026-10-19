@@ -1,0 +1,29 @@
+namespace Intersections;
+
+// Each row of intersections.inc: `&` joins classes and interfaces wherever a type goes, and a value is of it only when
+// it is of every type it joins.
+public class Desk
+{
+    public (Shippable & Billable)? last { get; set; } = null;
+
+    public Desk() { }
+
+    public int cost(Shippable & Billable item) => item.weight() * item.amount();
+
+    public Shippable & Billable keep(Any item) => item as Shippable & Billable ?? new Parcel();
+
+    public string test(Any item) => item is Shippable & Billable both ? `both ${both.weight() + both.amount()}` : "not both";
+
+    public int local()
+    {
+        Shippable & Billable held = new Parcel();
+        return held.amount();
+    }
+
+    // `&` binds tighter than `|`, so a union holds the intersection, and parentheses change nothing.
+    public string sort(Shippable & Billable | Desk item) => item is Desk ? "desk" : "both";
+
+    public string grouped((Shippable & Billable) | Desk item) => item is Desk ? "desk" : "both";
+
+    public bool either(Any item) => item is Shippable & Billable | Desk;
+}

@@ -1,0 +1,6 @@
+namespace Intersections;
+
+public interface Billable
+{
+    int amount();
+}

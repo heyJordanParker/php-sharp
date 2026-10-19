@@ -6873,33 +6873,68 @@ static HashTable *sharp_listener_table(const char *path, size_t root_length)
 	return Z_ARRVAL_P(known);
 }
 
-/* Whether a listener of the type named type hears an event of the class event: the class itself, or a class or
- * interface it extends. A class the event extends is loaded with it, so a type that isn't loaded is none of them. */
-static bool sharp_hears(zend_class_entry *event, zend_string *type)
+/* Whether a listener of the type type hears the event: an object of the type's class, or of a class that extends it or
+ * implements it, with the type arguments the type writes, as `is` tests them, spec section 15. The type is a class's
+ * name, a generic event with its type arguments in the type text the listener table writes, as
+ * `App.Saved<App.Order>`, or the class value Events.on holds. A class the event extends is loaded with it, so a type
+ * that isn't loaded is none of them. */
+static bool sharp_hears(zend_object *event, zend_string *type)
 {
+	const sharp_type *generic = sharp_class_value_type(type);
+
+	if (!generic && memchr(ZSTR_VAL(type), '<', ZSTR_LEN(type))) {
+		const sharp_type *list = sharp_type_list(ZSTR_VAL(type), ZSTR_LEN(type));
+		if (!list) {
+			return false;
+		}
+		generic = list->members[0];
+	}
+	if (generic) {
+		return sharp_object_is(event, generic);
+	}
 	zend_class_entry *listed = zend_lookup_class_ex(type, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
 
-	return listed && instanceof_function(event, listed);
+	return listed && instanceof_function(event->ce, listed);
 }
 
-/* The listeners of an event class, in the table's order: each row that lists a type the class is. The table is the one
- * in the .sharp folder above the file that declares the class, so an extern event in vendor/ finds its project's table.
- * The rows are kept for the request, since the table and every class it names are fixed for it. Throws and returns
- * NULL when the table is damaged. */
-static HashTable *sharp_listeners_of(zend_class_entry *event)
+/* The listeners of an event, in the table's order: each row that lists a type the event is. The table is the one in the
+ * .sharp folder above the file that declares the event's class, so an extern event in vendor/ finds its project's
+ * table. The rows are kept for the request under the event's class, and for an event of a generic class under its type
+ * arguments too, since the table and every class it names are fixed for it. Throws and returns NULL when the table is
+ * damaged. */
+static HashTable *sharp_listeners_of(zend_object *event)
 {
-	zend_ulong key = (zend_ulong) (uintptr_t) event;
+	zend_class_entry *ce = event->ce;
+	zend_ulong key = (zend_ulong) (uintptr_t) ce;
 	zval *known = zend_hash_index_find(&SHARP_G(event_listeners), key);
+	zend_string *arguments = NULL;
 	zval listeners, *row, *type;
 	HashTable *table;
 	size_t root_length;
 
-	if (known) {
+	/* An event of a generic class keeps its rows under its type arguments' text, and one plain PHP created without
+	 * them under "". A lazy proxy's initializer runs here, and can throw. */
+	if (ce->ce_flags & ZEND_ACC_SHARP_GENERIC) {
+		const sharp_type *own = sharp_type_arguments(event);
+		if (UNEXPECTED(EG(exception))) {
+			return NULL;
+		}
+		arguments = own ? own->text : ZSTR_EMPTY_ALLOC();
+		if (!known) {
+			zval by_arguments;
+			array_init(&by_arguments);
+			known = zend_hash_index_add_new(&SHARP_G(event_listeners), key, &by_arguments);
+		}
+		zval *rows = zend_hash_find(Z_ARRVAL_P(known), arguments);
+		if (rows) {
+			return Z_ARRVAL_P(rows);
+		}
+	} else if (known) {
 		return Z_ARRVAL_P(known);
 	}
 	array_init(&listeners);
-	if (event->type == ZEND_USER_CLASS && sharp_find_root(event->info.user.filename, &root_length)) {
-		table = sharp_listener_table(ZSTR_VAL(event->info.user.filename), root_length);
+	if (ce->type == ZEND_USER_CLASS && sharp_find_root(ce->info.user.filename, &root_length)) {
+		table = sharp_listener_table(ZSTR_VAL(ce->info.user.filename), root_length);
 		if (!table) {
 			zval_ptr_dtor(&listeners);
 			return NULL;
@@ -6913,6 +6948,9 @@ static HashTable *sharp_listeners_of(zend_class_entry *event)
 				}
 			} ZEND_HASH_FOREACH_END();
 		} ZEND_HASH_FOREACH_END();
+	}
+	if (arguments) {
+		return Z_ARRVAL_P(zend_hash_add_new(Z_ARRVAL_P(known), arguments, &listeners));
 	}
 
 	return Z_ARRVAL_P(zend_hash_index_add_new(&SHARP_G(event_listeners), key, &listeners));
@@ -6987,7 +7025,7 @@ static void sharp_add_listener(zval *listeners, zval *row, zend_ulong scoped)
  * function runs nothing. Throws and returns false when the table is damaged. */
 static bool sharp_listeners_for(zval *event, zval *listeners)
 {
-	HashTable *rows = sharp_listeners_of(Z_OBJCE_P(event));
+	HashTable *rows = sharp_listeners_of(Z_OBJ_P(event));
 	zval *row;
 	sharp_listening *listening;
 	zend_ulong number;
@@ -7000,7 +7038,7 @@ static bool sharp_listeners_for(zval *event, zval *listeners)
 		sharp_add_listener(listeners, row, 0);
 	} ZEND_HASH_FOREACH_END();
 	ZEND_HASH_FOREACH_NUM_KEY_PTR(&SHARP_G(scoped_listeners), number, listening) {
-		if (sharp_hears(Z_OBJCE_P(event), listening->type)) {
+		if (sharp_hears(Z_OBJ_P(event), listening->type)) {
 			sharp_add_listener(listeners, NULL, number);
 		}
 	} ZEND_HASH_FOREACH_END();

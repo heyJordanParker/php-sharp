@@ -1,0 +1,7 @@
+namespace NamedThroughType;
+
+// An abstract class below `Record` declares no `fromJson`: `required` passes down to each class below it.
+public abstract class Document : Record
+{
+    public Document() : super() { }
+}

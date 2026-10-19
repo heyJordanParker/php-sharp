@@ -1,0 +1,17 @@
+namespace GenericEvents;
+
+// Each row of generic_events.inc: `on Saved<Order>` hears only a `Saved<Order>`, and `on EntityEvent` every `Saved<…>`.
+public class Hears
+{
+    public static List<string> log { get; set; } = [];
+
+    public void orders(Saved<Order> e) on Saved<Order> { Hears.log.add(`order ${e.entity.id}`); }
+
+    public void invoices(Saved<Invoice> e) on Saved<Invoice> { Hears.log.add(`invoice ${e.entity.id}`); }
+
+    public void entities(EntityEvent e) on EntityEvent { Hears.log.add("entity"); }
+
+    public static Listening watchOrders() => Events.on<Saved<Order>>(e => Hears.log.add(`scoped ${e.entity.id}`));
+
+    public static Saved<Invoice> invoiceSaved(int id) => new Saved<Invoice>(new Invoice(id));
+}

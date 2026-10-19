@@ -138,12 +138,15 @@ line 1 expects a compile error, and the checker accepts it
 
 A "not supported yet" refusal never satisfies a `compile error` line, because it says the feature is missing:
 
-<!-- example refusal: members -->
+<!-- example refusal -->
 ```csharp
-public void pair(Order & Line both) { }   // compile error: a parameter has one type
+public interface Sized
+{
+    int max { get; init; }   // compile error: an interface property has no init
+}
 ```
 <!-- expect refusal
-line 1 expects a compile error, and the checker reports: …not supported yet…
+line 3 expects a compile error, and the checker reports: …not supported yet…
 -->
 
 A missing class satisfies a `compile error` line only when that line writes the missing name itself:

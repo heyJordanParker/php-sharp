@@ -1,0 +1,10 @@
+namespace NamedThroughType;
+
+public class Receipt : Document
+{
+    public Receipt() : super() { }
+
+    public Receipt.fromJson(Map<string, string> json) : this() { this.id = `receipt ${json["id"] ?? ""}`; }
+
+    public override string kind() => "receipt";
+}

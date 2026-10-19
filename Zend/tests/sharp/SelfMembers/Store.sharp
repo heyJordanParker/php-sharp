@@ -1,0 +1,40 @@
+namespace SelfMembers;
+
+// Each row of self_members.inc: `Self.name` reads and writes a member of the class the code is called on.
+public class Store
+{
+    public const string TABLE = "items";
+    public static virtual int count { get; set; } = 0;
+    public static List<string> seen { get; set; } = [];
+
+    public Store() { }
+
+    public static string table() => Self.TABLE;
+
+    public static int bump()
+    {
+        Self.count += 1;
+        Self.count++;
+        return Self.count;
+    }
+
+    public static int record()
+    {
+        Self.seen.add(Self.TABLE);
+        return Self.seen.count();
+    }
+
+    public string tableOfThis() => Self.TABLE;
+
+    public static virtual string name() => "store";
+
+    // A default runs where the call left the argument out, on the class the call ran on.
+    public static string pick(string table = Self.TABLE) => table;
+
+    public static string pickName(string name = Self.name()) => name;
+
+    // `Self.TABLE` in a pattern is the value of the class the code is called on, as `Store.TABLE` is `Store`'s.
+    public static bool isTable(Any value) => value is Self.TABLE;
+
+    public static string arm(Any value) => match (value) { Self.TABLE => "own table", Store.TABLE => "store table", default => "other" };
+}

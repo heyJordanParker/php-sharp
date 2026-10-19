@@ -1,0 +1,11 @@
+namespace GenericEvents;
+
+public class Order : Entity
+{
+    public Order(int id) : super(id) { }
+
+    public void save()
+    {
+        emit new Saved<Order>(this);
+    }
+}
