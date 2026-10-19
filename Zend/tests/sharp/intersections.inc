@@ -49,4 +49,8 @@ for ($run = 0; $run < 2; $run++) {
     row('is, of a value that is both and of one that is not', fn () => [$desk->test(new PlainBoth()), $desk->test(new PlainShippable())]);
     row('a local of the intersection', fn () => $desk->local());
     row('the type reflection reports', fn () => (string) (new ReflectionMethod(Desk::class, 'cost'))->getParameters()[0]->getType());
+    row('a union that holds an intersection, as a parameter', fn () => [$desk->sort(new PlainBoth()), $desk->sort($desk), $desk->grouped(new Parcel())]);
+    row('a plain PHP class that is only Shippable, as the union', fn () => $desk->sort(new PlainShippable()));
+    row('is, of the union that holds an intersection', fn () => [$desk->either(new PlainBoth()), $desk->either($desk), $desk->either(new PlainShippable())]);
+    row('the union type reflection reports', fn () => [(string) (new ReflectionMethod(Desk::class, 'sort'))->getParameters()[0]->getType(), (string) (new ReflectionMethod(Desk::class, 'grouped'))->getParameters()[0]->getType()]);
 }

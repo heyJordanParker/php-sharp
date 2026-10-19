@@ -822,7 +822,8 @@ let artifact = new Artifact.fromJson(json);
 - The dependency container always uses the main constructor (section 32).
 - A class has one main constructor, as it has one method per name (section 7).
 - A static method that looks up an existing object, such as `Journey.forUuid`, stays a static method.
-- A named constructor marked `required`, as in `public required Artifact.fromJson(string json)`, is one every subclass declares, so `new TItem.fromJson(…)` can call it through a type parameter (section 11).
+- A named constructor marked `required`, as in `public required Artifact.fromJson(string json)`, is one every subclass declares, so `new TItem.fromJson(…)` and `new Self.fromJson(…)` can call it (sections 11 and 25).
+- An abstract class has no objects of its own, so a named constructor it declares is `required`, the one each subclass declares, as Swift's abstract base declares a `required init`.
 
 **A subclass's constructor always calls its parent's with `: super(…)`,** as in `public Order(Row row) : super(row) { }`, even when the parent's takes no arguments, as Kotlin always writes `: Document()`. A constructor without the call is a compile error:
 
@@ -1127,7 +1128,12 @@ public class Box<T>
 public TBox refill<TBox : Box<int>>(TBox box) => box.withValue(5);   // compiles: withValue returns a TBox
 ```
 
-**`new TItem.fromJson(…)` calls a named constructor (section 9.1) through a type parameter,** on the type argument the code runs with, as Swift's `T(json:)` calls a `required init`. The bound marks that named constructor `required`, as it marks the main constructor for `new Self(…)` (section 25). A named constructor is not inherited, so every subclass with objects of its own declares each `required` one above it, which keeps its parameters, and leaving one out is a compile error. Calling a named constructor that is not `required` through a type parameter is a compile error that names it:
+**`new TItem.fromJson(…)` calls a named constructor (section 9.1) through a type parameter,** on the type argument the code runs with, as Swift's `T(json:)` calls a `required init`. The bound marks that named constructor `required`, as it marks the main constructor for `new Self(…)` (section 25). A named constructor is not inherited, so every subclass with objects of its own declares each `required` one above it, which keeps its parameters, and leaving one out is a compile error.
+
+- **`required` passes down,** as Swift's `required init` does. A bound anywhere below the class that marks it `required` accepts the call, and an abstract class in between declares none of its own.
+- **`new Self.fromJson(…)` calls the `required` one of the class the code was called on** (section 25).
+- **A plain PHP class declares no named constructor,** so a plain PHP class as the type argument of a type parameter the code calls one through is a compile error that names the class and the constructor.
+- **Calling a named constructor that is not `required` through a type parameter** is a compile error that names it:
 
 <!-- example type-parameter-named-constructors -->
 ```csharp
@@ -1140,6 +1146,51 @@ public class Record
     public Record() { }
     public required Record.fromJson(Map<string, string> json) : this() { this.id = json["id"] ?? ""; }
     public Record.blank() : this() { }
+    public static Self parse(Map<string, string> json) => new Self.fromJson(json);   // compiles: the fromJson of the class parse was called on
+}
+```
+
+<!-- example type-parameter-named-constructors -->
+```csharp
+// app/Records/Document.sharp
+namespace App.Records;
+
+public abstract class Document : Record   // compiles: an abstract class declares no fromJson of its own
+{
+    public Document() : super() { }
+}
+```
+
+<!-- example type-parameter-named-constructors -->
+```csharp
+// app/Records/Receipt.sharp
+namespace App.Records;
+
+public class Receipt : Document
+{
+    public Receipt() : super() { }
+    public Receipt.fromJson(Map<string, string> json) : this() { this.id = "receipt " + (json["id"] ?? ""); }
+}
+```
+
+<!-- example type-parameter-named-constructors -->
+```csharp
+// app/Records/Documents.sharp
+namespace App.Records;
+
+public class Documents<TDocument : Document>
+{
+    public TDocument load(Map<string, string> json) => new TDocument.fromJson(json);   // compiles: Record requires fromJson above Document
+}
+```
+
+<!-- example type-parameter-named-constructors -->
+```php
+// app/Records/PlainRecord.php
+namespace App\Records;
+
+class PlainRecord extends Record
+{
 }
 ```
 
@@ -1164,14 +1215,19 @@ public class Repository<TItem : Record>
 {
     public TItem load(Map<string, string> json) => new TItem.fromJson(json);   // compiles: a TItem, created by its type argument's fromJson
     public TItem empty() => new TItem.blank();                                 // compile error: Record.blank is not required, so a subclass may lack it
+    public Record plain() => new Repository<PlainRecord>().load([:]);         // compile error: PlainRecord keeps no fromJson of its own
 }
 ```
 <!-- run type-parameter-named-constructors
+import App.Records.Documents;
 import App.Records.Invoice;
+import App.Records.Receipt;
 import App.Records.Record;
 import App.Records.Repository;
 new Repository<Invoice>().load(["id": "7"]).id;   // "invoice 7"
 new Repository<Record>().load(["id": "8"]).id;    // "8"
+new Documents<Receipt>().load(["id": "9"]).id;    // "receipt 9"
+Invoice.parse(["id": "6"]).id;                    // "invoice 6"
 -->
 
 <!-- example required-named-constructors -->
@@ -1194,6 +1250,19 @@ namespace App.Ledger;
 public class Refund : Entry   // compile error: Refund must declare fromJson, which Entry requires
 {
     public Refund() : super() { }
+}
+```
+
+<!-- example required-named-constructors -->
+```csharp
+// app/Ledger/Posting.sharp
+namespace App.Ledger;
+
+public abstract class Posting
+{
+    public Posting() { }
+    public required Posting.fromJson(string json) : this() { }   // compiles: the fromJson each subclass declares
+    public Posting.blank() : this() { }                          // compile error: an abstract class declares only required named constructors
 }
 ```
 
@@ -2310,6 +2379,7 @@ public void log(OrderPaid e, Logger logger) on OrderPaid { … }          // com
 
 - **`on Saved<Order>` hears only a `Saved<Order>`,** never a `Saved<Invoice>`. `Events.on<Saved<Order>>` hears the same.
 - **A bare `on Saved` is a compile error** that says to name the type arguments.
+- **`on Saved<T>` with a type parameter is a compile error,** since a listener runs for one type its class names, so it names the type, as in `on Saved<Order>`, or listens on an interface the event implements.
 - **A listener on an interface the event implements hears every `Saved<…>`.**
 
 <!-- example generic-events -->
@@ -2355,6 +2425,19 @@ public class Audit
     public void deliver(Saved<Order> e) on Saved<Order> { … }       // hears a Saved<Order> only
     public void record(EntityEvent e) on EntityEvent { … }          // hears every Saved<…>
     public void any(Saved<Order> e) on Saved { … }                  // compile error: name Saved's type argument, as in Saved<Order>
+}
+```
+
+<!-- example generic-events -->
+```csharp
+// app/Saving/Tracker.sharp
+namespace App.Saving;
+
+import App.DatabaseEntity;
+
+public class Tracker<T : DatabaseEntity>
+{
+    public void heard(Saved<T> e) on Saved<T> { … }                 // compile error: name the type it hears, as in Saved<Order>
 }
 ```
 
@@ -3963,6 +4046,9 @@ public int|string|null find2()                 // compile error: write (int|stri
 **An intersection type joins classes and interfaces with `&`,** such as `Shippable & Billable`, anywhere a type goes: a property, a parameter, a return type, a local and a pattern (section 21). A value is of it only when it is of every type it joins, as in TypeScript's intersections and Swift's protocol compositions. A call from plain PHP that passes a value of only some of the types throws `TypeError`.
 
 - **`&` joins classes and interfaces only.** `int & string` is a compile error at each member that is neither.
+- **`&` joins at most one class,** with any number of interfaces, as Swift's `Order & Shareable` and Java's `<T extends Order & Shareable>` do. `Parcel & Box`, two classes, is a compile error.
+- **A type written twice in one `&` is a compile error,** as it is in a union.
+- **`&` binds tighter than `|`,** as in TypeScript, so `Shippable & Billable | Box` is the union of the intersection and `Box`. Parentheses, as in `(Shippable & Billable) | Box`, change nothing.
 - **An intersection that holds null is written `(Shippable & Billable)?`,** as Swift writes `(A & B)?`. `Shippable & Billable?` is a compile error that names it.
 
 <!-- example intersection-types -->
@@ -4014,7 +4100,11 @@ public class Desk
     public (Shippable & Billable)? last { get; set; } = null;           // compiles: holds both or null
     public int cost(Shippable & Billable item) => item.weight() * item.amount();
     public Shippable & Billable keep(Shippable & Billable item) => item;
+    public string sort(Shippable & Billable | Box item) => item is Box ? "box" : "both";       // compiles: & binds tighter than |
+    public string grouped((Shippable & Billable) | Box item) => item is Box ? "box" : "both";  // compiles: the same type
     public int count(int & string amount) => 0;                         // compile error: & joins classes and interfaces only
+    public int both(Parcel & Box item) => 0;                            // compile error: & joins at most one class
+    public int twice(Shippable & Shippable item) => 0;                  // compile error: Shippable is written twice
     public void hold(Shippable & Billable? item) { }                    // compile error: write (Shippable & Billable)?
     public int box() => this.cost(new Box());                           // compile error: a Box is Shippable, not Billable
 }
@@ -4024,6 +4114,7 @@ public class Desk
 ```php
 (new App\Shipping\Desk())->cost(new App\Shipping\Parcel());   // 60
 (new App\Shipping\Desk())->cost(new App\Shipping\Box());      // throws TypeError: cost takes a Shippable & Billable
+(new App\Shipping\Desk())->sort(new App\Shipping\Box());      // "box"
 ```
 
 **Integer overflow throws `ArithmeticError`** at the operation that overflows, as in Swift and C#'s `checked`. PHP's silent change to `float` does not happen in PHP# code. A shift is not an overflow: `<<` drops the bits it shifts out, and a shift by a negative count throws `ArithmeticError` (section 19).
@@ -4383,7 +4474,13 @@ const order = Order.fromSchema(value, caller);   // typed as Order
 public bool same(Self other) { … }   // compile error: Self is a return type only
 ```
 
-**`Self.name` reads and writes a constant or a static member of the class the code was called on,** as Swift's `Self.name` does, so a subclass's own constant answers a call made on the subclass, and plain PHP calling the method on the subclass gets the same answer. A constant's value reads no class a call picks, so `Self.name` in one is a compile error:
+**`Self.name` reads and writes a constant or a static member of the class the code was called on,** as Swift's `Self.name` does, so a subclass's own constant answers a call made on the subclass, and plain PHP calling the method on the subclass gets the same answer.
+
+- **A parameter's default runs on the class the call ran on,** so `string table = Self.TABLE` gives a call on the subclass the subclass's `TABLE`.
+- **A pattern of `Self.TABLE` tests the value of the class the code was called on,** as `Store.TABLE` tests `Store`'s.
+- **A private member is the declaring class's own,** and a subclass has none, so `Self.KEY` on a private `KEY` is a compile error that names `Store.KEY`. A `protected` member is each subclass's.
+- **A static method's value keeps its class's type arguments,** so `Counter<int>.bump` and `Self.bump` in `Counter<T>` run `bump` with them, as a call does.
+- **A constant's value reads no class a call picks,** so `Self.name` in one is a compile error:
 
 <!-- example self-members -->
 ```csharp
@@ -4394,6 +4491,7 @@ public class Store
 {
     public const string TABLE = "items";
     public const string LABEL = Self.TABLE;                  // compile error: a constant reads no class a call picks
+    private const string KEY = "store";
     public static int opened { get; set; } = 0;
 
     public static string table()
@@ -4401,6 +4499,10 @@ public class Store
         Self.opened += 1;
         return Self.TABLE;                                   // the TABLE of the class table was called on
     }
+
+    public static string pick(string table = Self.TABLE) => table;   // the TABLE of the class pick was called on
+    public static bool holds(Any value) => value is Self.TABLE;     // tests the TABLE of the class holds was called on
+    public static string key() => Self.KEY;                  // compile error: a subclass has no private KEY: write Store.KEY
 }
 ```
 
@@ -4420,6 +4522,8 @@ public class OrderStore : Store
 App\Tables\Store::table();        // "items"
 App\Tables\OrderStore::table();   // "orders": plain PHP called it on the subclass
 App\Tables\Store::$opened;        // 2
+App\Tables\OrderStore::pick();    // "orders"
+App\Tables\OrderStore::holds("orders");   // true
 ```
 
 **`new Self(…)` compiles only when the class's constructor is marked `required`.** `Self` can be any subclass, so every class below it keeps a constructor that `new Self(…)` can call:

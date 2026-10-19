@@ -12,4 +12,7 @@ for ($run = 0; $run < 2; $run++) {
     echo 'plain PHP reads the statics: ', Store::$count, ' ', OrderStore::$count, "\n";
     echo 'Self.seen.add, which both classes share: ', Store::record(), ' ', OrderStore::record(), ' ', implode(',', Store::$seen), "\n";
     echo 'Self.count of each type argument: ', Counter::run(), "\n";
+    echo 'the values Counter<Store>.bump and Self.bump keep their type arguments: ', Counter::values(), "\n";
+    echo 'a default of Self.TABLE and Self.name(): ', Store::pick(), ' ', OrderStore::pick(), ' ', Store::pickName(), ' ', OrderStore::pickName(), "\n";
+    echo 'a pattern of Self.TABLE: ', var_export(Store::isTable('items'), true), ' ', var_export(OrderStore::isTable('orders'), true), ' ', var_export(OrderStore::isTable('items'), true), ' ', OrderStore::arm('orders'), ', ', OrderStore::arm('items'), "\n";
 }

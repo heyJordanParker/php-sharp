@@ -6,4 +6,6 @@ public class OrderStore : Store
     public static override int count { get; set; } = 5;
 
     public OrderStore() : super() { }
+
+    public static override string name() => "order store";
 }

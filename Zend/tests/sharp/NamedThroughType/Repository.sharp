@@ -12,4 +12,14 @@ public class Repository<TItem : Record>
         const record = new Repository<Record>().load(["id": "8"]);
         return `${invoice.kind()} ${invoice.id}, ${record.kind()} ${record.id}`;
     }
+
+    // A bound below `Record`, an abstract one included, accepts `new TDocument.fromJson(…)`.
+    public static TDocument document<TDocument : Document>(Map<string, string> json) => new TDocument.fromJson(json);
+
+    public static string below()
+    {
+        const receipt = new Repository<Receipt>().load(["id": "3"]);
+        const document = Repository<Record>.document<Receipt>(["id": "4"]);
+        return `${receipt.kind()} ${receipt.id}, ${document.kind()} ${document.id}`;
+    }
 }

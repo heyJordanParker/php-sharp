@@ -16,11 +16,24 @@ public class Counter<T>
 
     public int read() => Self.count;
 
+    // The value of a static method keeps the type arguments of its class.
+    public static Function<int()> bumper() => Self.bump;
+
     public static string run()
     {
         Counter<Store>.bump();
         Counter<Store>.bump();
         Counter<OrderStore>.bump();
+        return `${new Counter<Store>().read()} ${new Counter<OrderStore>().read()}`;
+    }
+
+    public static string values()
+    {
+        Function<int()> named = Counter<Store>.bump;
+        Function<int()> own = Counter<OrderStore>.bumper();
+        named();
+        own();
+        own();
         return `${new Counter<Store>().read()} ${new Counter<OrderStore>().read()}`;
     }
 }

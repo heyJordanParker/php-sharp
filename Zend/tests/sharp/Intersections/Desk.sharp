@@ -19,4 +19,11 @@ public class Desk
         Shippable & Billable held = new Parcel();
         return held.amount();
     }
+
+    // `&` binds tighter than `|`, so a union holds the intersection, and parentheses change nothing.
+    public string sort(Shippable & Billable | Desk item) => item is Desk ? "desk" : "both";
+
+    public string grouped((Shippable & Billable) | Desk item) => item is Desk ? "desk" : "both";
+
+    public bool either(Any item) => item is Shippable & Billable | Desk;
 }
