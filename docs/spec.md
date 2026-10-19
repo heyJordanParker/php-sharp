@@ -708,7 +708,7 @@ public void grant(User user) { … }
 public void grant(Page page) { … }                    // compile error: grant is declared twice. Name each by what it takes, as in grantPageAccess
 ```
 
-**A statement that can never run is a compile error,** as Java's "unreachable statement" and Zig's "unreachable code" are. A statement after `return`, `throw`, `break`, `continue` or a call that never returns in the same block never runs, and neither does one after an `if` whose every branch ends the block, or after a loop that never ends, such as a `do` whose body ends the block. The error names the line that ends the block, and says to delete the statement or move it above that line. The block of an `if` or a `for … of` whose condition never finishes, as `if (throw new ValueError("empty"))`, never runs either, and the error says to write the condition as its own statement in place of the `if` or the `for`.
+**A statement that can never run is a compile error,** as Java's "unreachable statement" and Zig's "unreachable code" are. A statement after `return`, `throw`, `break`, `continue` or a call that never returns in the same block never runs, and neither does one after an `if` whose every branch ends the block, or after a loop that never ends, such as a `do` whose body ends the block. A loop's condition alone never ends it only when it is the constant `true`, as in `while (true)` and `for (let i = 0; true; i++)`, judged from what it says and not from what a pass narrows it to, as TypeScript and Kotlin judge it, so a `do … while (again)` on a `bool` local ends once `again` is false. The error names the line that ends the block, and says to delete the statement or move it above that line. The block of an `if` or a `for … of` whose condition never finishes, as `if (throw new ValueError("empty"))`, never runs either, and the error says to write the condition as its own statement in place of the `if` or the `for`.
 
 <!-- example unreachable-statements: members -->
 ```csharp
@@ -725,6 +725,22 @@ public int total(List<int> prices)
     return sum;
     sum = 0;                                  // compile error: return ends the block, so this never runs
 }
+
+public int passes(bool again)
+{
+    int count = 0;
+    do {
+        count = count + 1;
+    } while (again);
+    return count;                             // compiles: the loop ends once again is false
+}
+
+public int firstStep()
+{
+    for (let step = 0; true; step++) {
+        return step;
+    }
+}                                             // compiles: the loop never ends on its condition, so no return follows it
 ```
 
 **A method that never returns declares the return type `never`,** as TypeScript's `never`, Kotlin's `Nothing` and Rust's `!` do. Every path through its body ends in a `throw` or in a call of another `never` method, and a path that reaches the closing brace is a compile error. A call of one ends the block it is in, as `throw` does, so a statement after it never runs, and `input ?? fail(…)` has the type of `input`. An override of a `never` method returns `never` too. `never` is only a whole return type: a parameter, a property, a local or a type argument of `never` is a compile error, a return type's type argument included, as in `List<never>`. An expression body returns its value, so a `never` method with one, as `never stop() => 1;`, is a compile error unless the expression never finishes, as `=> throw new ValueError("stopped")` does.
@@ -1410,7 +1426,7 @@ copy.add(line);           // changes only copy
 
 At each crossing, the runtime checks every element once and throws a `TypeError` that names the element. An `int` where PHP# expects a `float` does not throw: it becomes a `float` (section 24). A call from PHP# to PHP# checks nothing at runtime, because the checker proved it.
 
-**A plain PHP array keyed by `int` alone arrives as a `List`, renumbered,** as Kotlin reads a Java `List`. PHP keeps an array's keys when a function such as `array_filter` drops elements, so plain PHP's `array<int, Person>` holds a list whose keys may have gaps. PHP# reads it as a `List<Person>` wherever it arrives, a return, a property read, an argument from a plain PHP caller and a property plain PHP writes, and its first element is at `0`. A place declared `Map<int, Person>` keeps the keys plain PHP gave. A shape whose keys are all `int`, as `list{int, int}` or `array{0: int, 1: int}`, is a `List` too, of its elements in order, and so is each array keyed by `int` alone that a shape's field, a `Map`'s value or a `List`'s element holds. An array keyed by `string` or by `int|string` stays a `Map`.
+**A plain PHP array keyed by `int` alone arrives as a `List`, renumbered,** as Kotlin reads a Java `List`. PHP keeps an array's keys when a function such as `array_filter` drops elements, so plain PHP's `array<int, Person>` holds a list whose keys may have gaps. PHP# reads it as a `List<Person>` wherever it arrives, a return, a property read, an argument from a plain PHP caller and a property plain PHP writes, and its first element is at `0`. A place declared `Map<int, Person>` keeps the keys plain PHP gave. A shape whose keys are all `int`, as `list{int, int}` or `array{0: int, 1: int}`, is a `List` too, of its elements in order, and so is each array keyed by `int` alone that a shape's field, a `Map`'s value or a `List`'s element holds. An array keyed by `string` or by `int|string` stays a `Map`, and a value plain PHP types as a list or a map, as `list<int>|array<string, int>`, keeps the keys it holds, so no `string` key is ever lost.
 
 <!-- example plain-list-arrival -->
 ```php
@@ -4950,7 +4966,7 @@ app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mag
 ```
 
 - **A deploy** runs `vendor/bin/mago compile` before the code runs.
-- **`mago compile` writes a `.php` file beside each of the project's `.sharp` files that declares a type,** as `StoreService.php` beside `StoreService.sharp`. So PHP code that finds classes by listing `*.php` files and naming each class by its path, as route-attribute and event discovery do, finds PHP# classes too, the way Java's classpath scanners find Kotlin classes. The file loads its `.sharp` file through the engine, and on plain PHP it throws the "needs the PHP# engine" error. It ends with the type's declaration in an `if (false)` that never runs, naming the type and its kind, so PHP code that reads `*.php` source, as Composer's class map generator and Symfony's attribute routing do, finds the type too, the way tools read a TypeScript `.d.ts` file. The engine declares the type once, from the `.sharp` file, and the checker reads the `.sharp` file and never the `.php` file. Once its `.sharp` file is deleted, it declares nothing until the next compile deletes it. Nobody edits it: a `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, and the next compile rewrites or deletes the file with its source. In a git repository, `mago compile` lists in `.git/info/exclude` the files no `.gitignore` already ignores. It finds that file by reading `.git` itself, in a clone and in a worktree, so it needs no `git` program. When it can't write the file, as with a read-only `.git`, it warns which files git shows as untracked and how to fix it.
+- **`mago compile` writes a `.php` file beside each of the project's `.sharp` files that declares a type,** as `StoreService.php` beside `StoreService.sharp`. So PHP code that finds classes by listing `*.php` files and naming each class by its path, as route-attribute and event discovery do, finds PHP# classes too, the way Java's classpath scanners find Kotlin classes. The file loads its `.sharp` file through the engine, and on plain PHP it throws the "needs the PHP# engine" error. It ends with the type's declaration in an `if (false)` that never runs, naming the type and its kind, so PHP code that reads `*.php` source, as Composer's class map generator and Symfony's attribute routing do, finds the type too, the way tools read a TypeScript `.d.ts` file. A type named after a word PHP reserves, as `Case` or `Match`, gets the file without the declaration, which PHP would refuse, so a tool that reads source never finds it, and Composer's PSR-4 rule still loads it. The engine declares the type once, from the `.sharp` file, and the checker reads the `.sharp` file and never the `.php` file. Once its `.sharp` file is deleted, it declares nothing until the next compile deletes it. Nobody edits it: a `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, and the next compile rewrites or deletes the file with its source. In a git repository, `mago compile` lists in `.git/info/exclude` the files no `.gitignore` already ignores. It finds that file by reading `.git` itself, in a clone and in a worktree, so it needs no `git` program. When git refuses to read the repository, as one another user owns, the compile still succeeds, lists every file there, and warns with git's reason. When it can't write the file, as with a read-only `.git/info` folder, it warns which files git shows as untracked and which folder to make writable.
 - **A `.sharp` file in an `autoload-dev` folder, and a package's in `vendor/`, gets no `.php` file.** A test class keeps one file, because PHPUnit loads a test class only from the file it lists, so `phpunit.xml` lists the PHP# tests as `<directory suffix="Test.sharp">tests</directory>`.
 - **Editors hide the `.php` files:** VS Code through `"files.exclude": {"**/*.php": {"when": "$(basename).sharp"}}`, and PhpStorm through file nesting of `.php` under `.sharp`.
 - **A type error, or a broken structure rule (section 28), stops the file from running.** So does a law without a proof, a gap, or a proof whose law was deleted, each a compile error that names it.

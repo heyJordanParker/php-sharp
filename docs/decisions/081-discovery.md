@@ -15,7 +15,11 @@ if (false) {
 }
 ```
 
-The declaration names the type and the kind PHP's reflection gives it: `interface`, `enum` for an enum that runs as a PHP enum, and `class` for a class, a struct, an event and an enum whose cases carry data. `mago compile` writes the installed standard library's native fingerprint into each compiled file, and the engine refuses a compiled file whose fingerprint is not its own, whatever loads it: the `.php` file, a `require`, the plugin's loader, opcache or preloading. Composer's own process runs on any engine, so `composer install` runs there and prints the refusal as an error line. PHP code that lists a folder's `*.php` files and names each class by its path, as Spatie's route attributes, Laravel's console kernel and Laravel's event discovery do, finds and loads the PHP# class with no change of its own.
+The declaration names the type and the kind PHP's reflection gives it: `interface`, `enum` for an enum that runs as a PHP enum, and `class` for a class, a struct, an event and an enum whose cases carry data.
+
+A type named after a word PHP reserves, compared ignoring case, as `Case`, `Match`, `Print`, `Function`, `Echo`, `Include` or `Global`, gets the file without the declaration. Spec section 1 makes a capitalized keyword an ordinary PHP# name, but PHP refuses a reserved word as a type's name even in a declaration that never runs, so the file would not parse. No PHP source can declare such a type, so no source scanner finds it: Symfony's attribute routing reads the word after `class` as the keyword's token, not as a name, and Composer's class map lists only what PHP source declares. The file still parses and loads the type, through Composer's PSR-4 rule and through PHP code that names a class by its path. A project whose class map is authoritative, built with `--classmap-authoritative`, never reaches PSR-4, so it loads such a type only once it is named otherwise.
+
+`mago compile` writes the installed standard library's native fingerprint into each compiled file, and the engine refuses a compiled file whose fingerprint is not its own, whatever loads it: the `.php` file, a `require`, the plugin's loader, opcache or preloading. Composer's own process runs on any engine, so `composer install` runs there and prints the refusal as an error line. PHP code that lists a folder's `*.php` files and names each class by its path, as Spatie's route attributes, Laravel's console kernel and Laravel's event discovery do, finds and loads the PHP# class with no change of its own.
 
 Nobody edits the file. A `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, because PHP names a class whatever its case. The next compile rewrites a changed file and deletes the file of a removed source, which until then declares nothing. In a git repository, `mago compile` lists the files no `.gitignore` already ignores in a block of `.git/info/exclude`, one per checkout. Editors hide them, as they hide `tsc`'s `.js` files: VS Code through `"files.exclude": {"**/*.php": {"when": "$(basename).sharp"}}`, PhpStorm through file nesting.
 
@@ -42,6 +46,10 @@ Composer's class map generator matches `class Order` in the code that `php_strip
 ### Rejected: the declaration in a comment
 
 `php_strip_whitespace` and every tokenizer drop comments, so no scanner would see it.
+
+### Rejected: a reserved name's declaration after `__halt_compiler();`
+
+PHP never reads past `__halt_compiler();`, so `class Case {}` there parses, and Composer's class map, which strips strings and comments but not what follows the halt, would list it. Symfony's tokens read it as inline text, so attribute routing still finds nothing, and the class map would depend on Composer's cleaner not knowing a part of PHP's grammar.
 
 ### Rejected: a declaration that runs
 

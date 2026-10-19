@@ -2216,21 +2216,6 @@ ZEND_API bool zend_sharp_static_constructor_runs(zend_class_entry *ce) /* {{{ */
 }
 /* }}} */
 
-/* Whether the class's constant defaults are evaluated in this request, as zend_update_class_constants reads it. */
-static bool zend_class_constants_updated(const zend_class_entry *class_type) /* {{{ */
-{
-	if (class_type->ce_flags & ZEND_ACC_CONSTANTS_UPDATED) {
-		return true;
-	}
-	if (ZEND_MAP_PTR(class_type->mutable_data) == NULL) {
-		return false;
-	}
-	const zend_class_mutable_data *mutable_data = ZEND_MAP_PTR_GET_IMM(class_type->mutable_data);
-
-	return mutable_data && (mutable_data->ce_flags & ZEND_ACC_CONSTANTS_UPDATED);
-}
-/* }}} */
-
 ZEND_API void zend_class_init_statics(zend_class_entry *class_type) /* {{{ */
 {
 	int i;
