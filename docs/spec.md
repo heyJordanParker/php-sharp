@@ -3629,7 +3629,7 @@ These are compile errors, whether the parent is PHP# or plain PHP:
 
 - a missing `override`
 - `override` when the parent has no such method
-- overriding a PHP# method that is not `virtual` or `abstract`
+- overriding a PHP# method that is not `virtual` or `abstract`, in PHP# or in a plain PHP class: the engine runs that method as PHP's `final` one, as Kotlin emits a member that is not `open` as a final JVM method, so it refuses a plain PHP class that replaces it when it links the class
 - overriding a plain PHP method marked `final`
 - an override that renames a parameter of the method it overrides. The error names both names.
 
