@@ -1,0 +1,19 @@
+namespace StaticConstructors;
+
+public class Ticket
+{
+    public const int MAX = Limits.BASE + 1;
+    private int capacity = Limits.BASE;
+    private static int issued = 0;
+
+    static Ticket()
+    {
+        Journal.note("ticket", 0);
+    }
+
+    public Ticket() { }
+
+    public int size() => this.capacity;
+
+    public static int readIssued() => Ticket.issued;
+}

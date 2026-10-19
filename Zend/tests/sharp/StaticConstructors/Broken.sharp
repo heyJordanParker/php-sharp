@@ -1,0 +1,18 @@
+namespace StaticConstructors;
+
+import RuntimeException;
+
+public class Broken : Base
+{
+    private static int own = 0;
+
+    static Broken()
+    {
+        Journal.note("broken", Broken.own);
+        throw new RuntimeException("broken");
+    }
+
+    public Broken() : super() { }
+
+    public static int inherited() => Broken.baseCount;
+}

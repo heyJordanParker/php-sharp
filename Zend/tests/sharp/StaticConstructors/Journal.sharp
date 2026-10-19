@@ -1,0 +1,13 @@
+namespace StaticConstructors;
+
+public static class Journal
+{
+    public static List<string> lines { get; set; } = [];
+
+    public static int note(string line, int value)
+    {
+        Journal.lines.add(line);
+
+        return value;
+    }
+}

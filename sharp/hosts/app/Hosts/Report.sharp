@@ -4,6 +4,14 @@ public class Report
 {
     private static int served = 0;
     private static int lastVisit = 0;
+    private static int setUps = 0;
+
+    // Spec section 6: the static constructor runs once for the app, so a host that keeps the app between requests runs
+    // it in the first request alone.
+    static Report()
+    {
+        Report.setUps = Report.setUps + 1;
+    }
 
     public Report(private Visit visit, private Visit again, private Counter counter, private Counter other) { }
 
@@ -16,6 +24,7 @@ public class Report
         return `served: ${Report.served}\n`
             + (this.visit.number == this.again.number ? "scoped: one object in the request\n" : "scoped: two objects in the request\n")
             + (fresh ? "scoped: new in this request\n" : "scoped: kept from the last request\n")
-            + (this.counter.number == this.other.number ? "singleton: one object\n" : "singleton: two objects\n");
+            + (this.counter.number == this.other.number ? "singleton: one object\n" : "singleton: two objects\n")
+            + `static constructor runs in the app: ${Report.setUps}\n`;
     }
 }

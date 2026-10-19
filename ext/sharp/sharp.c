@@ -2707,6 +2707,7 @@ typedef enum {
 
 zend_string *sharp_type_arguments_key;
 zend_string *sharp_statics_key;
+zend_string *sharp_static_constructor_key;
 
 static HashTable sharp_types;
 static HashTable sharp_type_lists;
@@ -4865,6 +4866,51 @@ ZEND_FUNCTION(Sharp_Internal_accepts)
 	RETURN_BOOL(accepts);
 }
 
+zval *sharp_static_constructor_state(zend_class_entry *ce)
+{
+	zend_property_info *info = zend_hash_find_ptr(&ce->properties_info, sharp_static_constructor_key);
+	if (EXPECTED(!info) || info->ce != ce || !(info->flags & ZEND_ACC_SHARP_HIDDEN) || !CE_STATIC_MEMBERS(ce)) {
+		return NULL;
+	}
+
+	zval *state = CE_STATIC_MEMBERS(ce) + info->offset;
+	ZVAL_DEINDIRECT(state);
+
+	return state;
+}
+
+/* Spec section 6, as C#'s TypeInitializationException: `The static constructor of App.Rates threw
+ * RuntimeException: rates are down`, with the failure as its previous throwable. */
+ZEND_COLD void sharp_throw_static_constructor_failure(
+	const zend_class_entry *ce, const zend_string *type_arguments, zend_object *failure)
+{
+	smart_str class = {0};
+	for (size_t i = 0; i < ZSTR_LEN(ce->name); i++) {
+		smart_str_appendc(&class, ZSTR_VAL(ce->name)[i] == '\\' ? '.' : ZSTR_VAL(ce->name)[i]);
+	}
+	if (type_arguments) {
+		smart_str_appendc(&class, '<');
+		smart_str_append(&class, type_arguments);
+		smart_str_appendc(&class, '>');
+	}
+	smart_str_0(&class);
+	smart_str thrown = {0};
+	sharp_object_text(&thrown, failure);
+	smart_str_0(&thrown);
+	zval rv;
+	zend_string *message = zval_get_string(zend_read_property_ex(
+		zend_get_exception_base(failure), failure, ZSTR_KNOWN(ZEND_STR_MESSAGE), true, &rv));
+
+	zend_throw_error(NULL, "The static constructor of %s threw %s: %s",
+		ZSTR_VAL(class.s), ZSTR_VAL(thrown.s), ZSTR_VAL(message));
+	GC_ADDREF(failure);
+	zend_exception_set_previous(EG(exception), failure);
+
+	zend_string_release(message);
+	smart_str_free(&thrown);
+	smart_str_free(&class);
+}
+
 /* Spec section 11: each type argument of a generic class has its own statics, which every PHP# access reads and
  * writes through this, with the text of the access's type arguments, as
  * `\Sharp\Internal\statics(\App\Counter::class, 'App.Order')['count']`. Returns by reference the entry of the class's
@@ -4872,8 +4918,10 @@ ZEND_FUNCTION(Sharp_Internal_accepts)
  * starts as a copy of the defaults under the key "", and the call that adds it runs the class's hidden `#init` with
  * the type arguments `key` spells, which sets each initial value that runs as code, as C# runs a closed type's static
  * initializer on its first use. A throw there reaches this call's caller and leaves the entry as it is, so nothing
- * runs again. An access that reads the static `field`, which such a throw can leave out of the entry, names it, and
- * throws PHP's own error for a typed static read before it is set, as a class that isn't generic does. */
+ * runs again. In a class with a static constructor, which `#init` runs last, the throw stays in place of the entry,
+ * and each later call throws the Error that names it, spec section 6. An access that reads the static `field`, which
+ * such a throw can leave out of the entry, names it, and throws PHP's own error for a typed static read before it is
+ * set, as a class that isn't generic does. */
 ZEND_FUNCTION(Sharp_Internal_statics)
 {
 	zend_class_entry *ce = NULL;
@@ -4903,6 +4951,10 @@ ZEND_FUNCTION(Sharp_Internal_statics)
 	ZVAL_DEINDIRECT(store);
 	SEPARATE_ARRAY(store);
 	zval *entry = zend_hash_find(Z_ARRVAL_P(store), key);
+	if (UNEXPECTED(entry && Z_TYPE_P(entry) == IS_OBJECT)) {
+		sharp_throw_static_constructor_failure(ce, key, Z_OBJ_P(entry));
+		RETURN_THROWS();
+	}
 	if (!entry) {
 		zend_function *init = zend_hash_str_find_ptr(&ce->function_table, ZEND_STRL("#init"));
 		const sharp_type *arguments = NULL;
@@ -4922,11 +4974,19 @@ ZEND_FUNCTION(Sharp_Internal_statics)
 			zval type_arguments;
 			ZVAL_PTR(&type_arguments, (void *) arguments);
 			zend_call_known_function(init, NULL, ce, NULL, 1, &type_arguments, NULL);
-			if (UNEXPECTED(EG(exception))) {
-				RETURN_THROWS();
-			}
 			store = CE_STATIC_MEMBERS(ce) + info->offset;
 			ZVAL_DEINDIRECT(store);
+			if (UNEXPECTED(EG(exception))) {
+				/* Spec section 6: what a static constructor threw stays in place of the entry, which every later
+				 * use of these statics names. */
+				if (sharp_static_constructor_state(ce) && !zend_is_unwind_exit(EG(exception))) {
+					SEPARATE_ARRAY(store);
+					entry = zend_hash_find_known_hash(Z_ARRVAL_P(store), key);
+					zval_ptr_dtor(entry);
+					ZVAL_OBJ_COPY(entry, EG(exception));
+				}
+				RETURN_THROWS();
+			}
 			entry = zend_hash_find_known_hash(Z_ARRVAL_P(store), key);
 		}
 	}
@@ -8678,6 +8738,8 @@ static PHP_MINIT_FUNCTION(sharp)
 
 	sharp_type_arguments_key = zend_string_init_interned("\0<sharp>\0types", sizeof("\0<sharp>\0types") - 1, true);
 	sharp_statics_key = zend_string_init_interned("\0<sharp>\0statics", sizeof("\0<sharp>\0statics") - 1, true);
+	sharp_static_constructor_key = zend_string_init_interned(
+		"\0<sharp>\0static constructor", sizeof("\0<sharp>\0static constructor") - 1, true);
 	zend_hash_init(&sharp_types, 64, NULL, sharp_type_free, true);
 	zend_hash_init(&sharp_type_lists, 64, NULL, sharp_type_free, true);
 	zend_hash_init(&sharp_class_values, 8, NULL, NULL, true);

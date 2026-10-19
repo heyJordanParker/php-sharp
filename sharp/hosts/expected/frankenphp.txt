@@ -3,11 +3,13 @@ served: 1
 scoped: one object in the request
 scoped: new in this request
 singleton: one object
+static constructor runs in the app: 1
 GET /
 served: 2
 scoped: one object in the request
 scoped: new in this request
 singleton: one object
+static constructor runs in the app: 1
 GET /types, 1,000 times
 types: the same after unserialize
 memory: the same after the 1,000th request as after the 2nd
@@ -22,3 +24,4 @@ served: 3
 scoped: one object in the request
 scoped: new in this request
 singleton: one object
+static constructor runs in the app: 1

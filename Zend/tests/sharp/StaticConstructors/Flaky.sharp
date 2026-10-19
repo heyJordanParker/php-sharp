@@ -1,0 +1,16 @@
+namespace StaticConstructors;
+
+import RuntimeException;
+
+public static class Flaky
+{
+    public static int hits { get; set; } = 0;
+
+    static Flaky()
+    {
+        Flaky.hits = Flaky.touch();
+        throw new RuntimeException("rates are down");
+    }
+
+    public static int touch() => Flaky.hits + 1;
+}
