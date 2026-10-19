@@ -1,0 +1,6 @@
+namespace GenericEvents;
+
+public class Entity
+{
+    public Entity(public int id { get; }) { }
+}

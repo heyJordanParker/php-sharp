@@ -1,0 +1,10 @@
+namespace NamedThroughType;
+
+public class Invoice : Record
+{
+    public Invoice() : super() { }
+
+    public Invoice.fromJson(Map<string, string> json) : this() { this.id = `invoice ${json["id"] ?? ""}`; }
+
+    public override string kind() => "invoice";
+}

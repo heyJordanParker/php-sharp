@@ -1066,8 +1066,14 @@ ZEND_API zend_result ZEND_FASTCALL zend_ast_evaluate_inner(
 			}
 
 			if (zend_ast_is_sharp_computed_value(ast)) {
+				/* A parameter default runs in the frame of the call that left its argument out, so `Self` in it
+				 * names the class that call ran on, spec section 25. Any other value runs with its class. */
+				zend_execute_data *frame = EG(current_execute_data);
+				zend_class_entry *called_scope = frame && frame->func && ZEND_USER_CODE(frame->func->type)
+					&& frame->func->common.scope == scope && frame->opline->opcode == ZEND_RECV_INIT
+					? zend_get_called_scope(frame) : scope;
 				zval closure;
-				zend_create_closure(&closure, (zend_function *) zend_ast_get_op_array(ast->child[0])->op_array, scope, scope, NULL);
+				zend_create_closure(&closure, (zend_function *) zend_ast_get_op_array(ast->child[0])->op_array, scope, called_scope, NULL);
 				ctx->had_side_effects = true;
 				ZVAL_UNDEF(result);
 				call_user_function(NULL, NULL, &closure, result, 0, NULL);

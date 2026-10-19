@@ -1,0 +1,11 @@
+namespace GenericEvents;
+
+public class Invoice : Entity
+{
+    public Invoice(int id) : super(id) { }
+
+    public void save()
+    {
+        emit new Saved<Invoice>(this);
+    }
+}
