@@ -12,7 +12,7 @@ class Members
     private static int $count = 0;
     public static private(set) ?string $last = "none";
 
-    public static function touch(): void
+    final public static function touch(): void
     {
         Members::$count = 5;
         Members::$count++;
@@ -22,43 +22,43 @@ class Members
         Members::$last = "touched";
     }
 
-    public static function start(): int
+    final public static function start(): int
     {
         return Members::START;
     }
 
-    public static function order(): Order
+    final public static function order(): Order
     {
         return Order::Descending;
     }
 
-    public static function pick(Order $order = Order::Descending): Order
+    final public static function pick(Order $order = Order::Descending): Order
     {
         return $order;
     }
 
-    public static function label(): string
+    final public static function label(): string
     {
         return Registry::$label;
     }
 
-    public static function version(): int
+    final public static function version(): int
     {
         return Registry::VERSION;
     }
 
-    public static function bump(): int
+    final public static function bump(): int
     {
         Members::$count += 1;
         return Members::$count;
     }
 
-    public static function late(): int
+    final public static function late(): int
     {
         return Registry::$late;
     }
 
-    public static function ones(): int
+    final public static function ones(): int
     {
         $count = 0;
         foreach (Registry::$items as $index => $item) {

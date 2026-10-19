@@ -7,5 +7,5 @@ class Feed
     {
     }
     /** @return TItem */
-    public function next(): DatabaseEntity { return $this->items[0]; }
+    final public function next(): DatabaseEntity { return $this->items[0]; }
 }

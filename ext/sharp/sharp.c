@@ -44,7 +44,8 @@ extern PHP_JSON_API zend_class_entry *php_json_exception_ce;
 #define SHARP_COMPILED_FOLDER ".sharp"
 /* How the path of an input that stands for the .sharp files of its folder ends: the bridge's unit::SOURCE_LISTING. */
 #define SHARP_SOURCE_LISTING "/*.sharp"
-#define SHARP_LISTENER_TABLE SHARP_COMPILED_FOLDER "/listeners.php"
+#define SHARP_LISTENERS "listeners.php"
+#define SHARP_LISTENER_TABLE SHARP_COMPILED_FOLDER "/" SHARP_LISTENERS
 
 #define SHARP_KIND_IS_ZEND_KIND(kind) \
 	ZEND_STATIC_ASSERT((zend_ast_kind) SHARP_AST_##kind == ZEND_AST_##kind, "SHARP_AST_" #kind " differs from ZEND_AST_" #kind);
@@ -434,11 +435,58 @@ static bool sharp_holds_compiled_folder(const char *folder, size_t length)
 	return holds;
 }
 
+static zend_string *sharp_environment_variable(const char *name, size_t name_length);
+
+/* The folder an extension host's worker reads the project's compiled files from: mago starts each worker of a host with
+ * SHARP_ROOT, the project's root, and SHARP_COMPILED, the folder outside the project where it compiled the project for
+ * its hosts, so a host loads the project's classes on a fresh or read-only checkout, and a file `mago compile` refused
+ * never runs from the project's .sharp folder. Returns the folder, and the root's length in root_length, when the path
+ * of length bytes is in that project, or NULL. */
+static zend_string *sharp_host_compiled(const char *path, size_t length, size_t *root_length)
+{
+	zend_string *root = sharp_environment_variable("SHARP_ROOT", sizeof("SHARP_ROOT") - 1);
+	zend_string *folder = NULL;
+
+	if (root && ZSTR_LEN(root) > 0 && ZSTR_LEN(root) < length && path[ZSTR_LEN(root)] == '/'
+			&& memcmp(path, ZSTR_VAL(root), ZSTR_LEN(root)) == 0) {
+		folder = sharp_environment_variable("SHARP_COMPILED", sizeof("SHARP_COMPILED") - 1);
+		*root_length = ZSTR_LEN(root);
+	}
+	if (root) {
+		zend_string_release(root);
+	}
+
+	return folder;
+}
+
+/* The folder that holds the compiled files of the project whose root is the first root_length bytes of the path of
+ * length bytes: the host's folder for a worker of an extension host, else the project's .sharp folder. */
+static zend_string *sharp_compiled_folder(const char *path, size_t length, size_t root_length)
+{
+	size_t host_root_length;
+	zend_string *host = sharp_host_compiled(path, length, &host_root_length);
+
+	if (host && host_root_length == root_length) {
+		return host;
+	}
+	if (host) {
+		zend_string_release(host);
+	}
+
+	return zend_string_concat3(path, root_length, "/", 1, SHARP_COMPILED_FOLDER, sizeof(SHARP_COMPILED_FOLDER) - 1);
+}
+
 static bool sharp_find_root(const zend_string *source, size_t *root_length)
 {
 	const char *path = ZSTR_VAL(source);
 	size_t folder = ZSTR_LEN(source);
+	zend_string *host = sharp_host_compiled(path, folder, root_length);
 	zval root;
+
+	if (host) {
+		zend_string_release(host);
+		return true;
+	}
 
 	do {
 		zval *known;
@@ -470,12 +518,13 @@ static bool sharp_find_root(const zend_string *source, size_t *root_length)
 static zend_string *sharp_read_compiled(const sharp_compiled *compiled)
 {
 	const char *source = ZSTR_VAL(compiled->source);
-	zend_string *path = zend_strpprintf(0, "%.*s/" SHARP_COMPILED_FOLDER "%.*sc",
-		(int) compiled->root_length, source,
+	zend_string *folder = sharp_compiled_folder(source, ZSTR_LEN(compiled->source), compiled->root_length);
+	zend_string *path = zend_strpprintf(0, "%s%.*sc", ZSTR_VAL(folder),
 		(int) (ZSTR_LEN(compiled->source) - compiled->root_length), source + compiled->root_length);
 	php_stream *stream;
 	zend_string *bytes;
 
+	zend_string_release(folder);
 	stream = php_stream_open_wrapper(ZSTR_VAL(path), "rb", STREAM_DISABLE_OPEN_BASEDIR, NULL);
 	zend_string_release(path);
 	if (!stream) {
@@ -809,6 +858,27 @@ static ZEND_COLD void sharp_refuse(const sharp_compiled *compiled, sharp_state s
 	}
 }
 
+/* Decodes the checker report stream holds into the request's report for its refusals, and closes stream. A report that
+ * is no JSON leaves null. */
+static void sharp_decode_report(php_stream *stream)
+{
+	zend_string *printed = php_stream_copy_to_mem(stream, PHP_STREAM_COPY_ALL, false);
+
+	php_stream_close(stream);
+	if (printed) {
+		php_json_parser parser;
+
+		php_json_parser_init(&parser, &SHARP_G(compile_command_report), ZSTR_VAL(printed), ZSTR_LEN(printed),
+			PHP_JSON_OBJECT_AS_ARRAY, PHP_JSON_PARSER_DEFAULT_DEPTH);
+		/* As php_json_decode_ex() does, a failed parse leaves null, whatever the parser built. */
+		if (php_json_parse(&parser) != 0) {
+			zval_ptr_dtor(&SHARP_G(compile_command_report));
+			ZVAL_NULL(&SHARP_G(compile_command_report));
+		}
+		zend_string_release(printed);
+	}
+}
+
 /* Runs sharp.compile_command through /bin/sh in the project root, the first root_length bytes of path, and waits for
  * it however long it takes. The command runs with MAGO_REPORTING_FORMAT=json, and the checker report it prints is
  * decoded for the request's refusals. What it prints goes to a temporary file, read once it exits: a pipe would also
@@ -841,23 +911,30 @@ static void sharp_run_compile_command(const char *path, size_t root_length)
 	}
 	efree(root);
 	if (output) {
-		zend_string *printed;
-
 		php_stream_rewind(output);
-		printed = php_stream_copy_to_mem(output, PHP_STREAM_COPY_ALL, false);
-		php_stream_close(output);
-		if (printed) {
-			php_json_parser parser;
+		sharp_decode_report(output);
+	}
+}
 
-			php_json_parser_init(&parser, &SHARP_G(compile_command_report), ZSTR_VAL(printed), ZSTR_LEN(printed),
-				PHP_JSON_OBJECT_AS_ARRAY, PHP_JSON_PARSER_DEFAULT_DEPTH);
-			/* As php_json_decode_ex() does, a failed parse leaves null, whatever the parser built. */
-			if (php_json_parse(&parser) != 0) {
-				zval_ptr_dtor(&SHARP_G(compile_command_report));
-				ZVAL_NULL(&SHARP_G(compile_command_report));
-			}
-			zend_string_release(printed);
-		}
+/* For a worker of an extension host, reads report.json, the checker's report mago wrote beside the files it compiled
+ * for the hosts, for the refusal of each file it could not compile. */
+static void sharp_read_host_report(const sharp_compiled *compiled)
+{
+	size_t root_length;
+	zend_string *folder = sharp_host_compiled(ZSTR_VAL(compiled->source), ZSTR_LEN(compiled->source), &root_length);
+	zend_string *path;
+	php_stream *report;
+
+	if (!folder) {
+		return;
+	}
+	ZVAL_NULL(&SHARP_G(compile_command_report));
+	path = zend_string_concat2(ZSTR_VAL(folder), ZSTR_LEN(folder), "/report.json", sizeof("/report.json") - 1);
+	report = php_stream_open_wrapper(ZSTR_VAL(path), "rb", STREAM_DISABLE_OPEN_BASEDIR, NULL);
+	zend_string_release(path);
+	zend_string_release(folder);
+	if (report) {
+		sharp_decode_report(report);
 	}
 }
 
@@ -879,6 +956,9 @@ static int sharp_parse(void)
 		sharp_release(&compiled);
 		sharp_locate(&compiled, filename);
 		state = sharp_check(&compiled, source, source_length);
+	}
+	if (state != SHARP_CURRENT && compiled.rooted && Z_ISUNDEF(SHARP_G(compile_command_report))) {
+		sharp_read_host_report(&compiled);
 	}
 	if (state != SHARP_CURRENT) {
 		sharp_refuse(&compiled, state);
@@ -6915,7 +6995,7 @@ static void sharp_read_listener_table(zend_string *path, bool past_opcache, zval
 	}
 }
 
-/* The listener table in the .sharp folder at the root, the first root_length bytes of path, read once per request
+/* The listener table in the compiled folder of the root, the first root_length bytes of path, read once per request
  * through zend_compile_file, so opcache serves it. A missing table lists no listener and no dispatcher. With
  * sharp.compile_command set, the table is read past opcache, since this request or an earlier one may have rewritten
  * it, and a table whose inputs changed since mago compile wrote it makes the request run the command, as an
@@ -6923,8 +7003,11 @@ static void sharp_read_listener_table(zend_string *path, bool past_opcache, zval
  * damaged. */
 static HashTable *sharp_listener_table(const char *path, size_t root_length)
 {
-	zend_string *table_path = zend_string_concat3(path, root_length, "/", 1, SHARP_LISTENER_TABLE, sizeof(SHARP_LISTENER_TABLE) - 1);
+	zend_string *folder = sharp_compiled_folder(path, strlen(path), root_length);
+	zend_string *table_path = zend_string_concat2(ZSTR_VAL(folder), ZSTR_LEN(folder), "/" SHARP_LISTENERS, sizeof("/" SHARP_LISTENERS) - 1);
 	zval *known = zend_hash_find(&SHARP_G(listener_tables), table_path);
+
+	zend_string_release(folder);
 	bool developing = SHARP_G(compile_command) && *SHARP_G(compile_command);
 	zval table;
 

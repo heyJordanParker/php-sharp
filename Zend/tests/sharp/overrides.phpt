@@ -95,16 +95,11 @@ try {
     echo $error->getMessage(), "\n";
 }
 
-// A plain PHP subclass, as a test double, overrides a closed PHP# property and a closed method: PHP# checks only
-// `.sharp` code, and the engine runs closed members as open ones.
+// A plain PHP subclass, as a test double, overrides a closed PHP# property: PHP# checks only `.sharp` code. A closed
+// method runs as a `final` one, so the subclass inherits `name()`, closed_methods_final.phpt shows.
 class LegacyFigure extends Overrides\Figure
 {
     protected string $title = 'legacy';
-
-    public function name(): string
-    {
-        return 'old ' . $this->title;
-    }
 }
 echo (new LegacyFigure())->name(), ' ', (new Overrides\Figure())->name(), "\n";
 ?>
@@ -139,4 +134,4 @@ NULL
 bool(true)
 bool(false)
 Cannot modify readonly property Overrides\Member::$note
-old legacy figure
+legacy figure

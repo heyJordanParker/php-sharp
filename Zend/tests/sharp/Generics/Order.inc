@@ -2,5 +2,5 @@
 
 class Order extends DatabaseEntity implements Shareable
 {
-    public function link(): string { return "/orders/{$this->id}"; }
+    final public function link(): string { return "/orders/{$this->id}"; }
 }

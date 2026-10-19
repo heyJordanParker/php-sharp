@@ -2,5 +2,5 @@
 
 class EntityValidator implements Validator
 {
-    public function validate(DatabaseEntity $item): bool { return $item->id > 0; }
+    final public function validate(DatabaseEntity $item): bool { return $item->id > 0; }
 }

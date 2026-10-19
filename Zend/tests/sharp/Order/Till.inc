@@ -2,7 +2,7 @@
 
 class Till
 {
-    public function ring(): int
+    final public function ring(): int
     {
         $order = new \Demo\Order(1, 2, "A1");
         ((object) $order)->add(3);

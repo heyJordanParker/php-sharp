@@ -68,6 +68,7 @@ use mago_server::Settings as ServerSettings;
 use crate::commands::args::baseline_reporting::BaselineReportingArgs;
 use crate::commands::args::substitution::Substitution;
 use crate::commands::args::substitution::SubstitutionArgs;
+use crate::commands::compile::compile_for_hosts;
 use crate::commands::outcome::CommandOutcome;
 use crate::commands::stdin_input;
 use crate::config::Configuration;
@@ -303,8 +304,9 @@ impl AnalyzeCommand {
         let load_inputs_start = trace_enabled.then(Instant::now);
         let mut prelude_duration = None;
         let mut load_database_duration = None;
+        let (extension_hosts, _) = compile_for_hosts(&configuration)?;
         let external_analyzer = start_external_analyzer(
-            &configuration.extension_hosts,
+            &extension_hosts,
             configuration.php_version,
             configuration.threads,
             &configuration.analyzer.plugins,
@@ -436,8 +438,9 @@ impl AnalyzeCommand {
             analyze_the_whole_workspace_without_paths(&mut orchestrator);
             orchestrator.add_exclude_patterns(configuration.analyzer.excludes.iter());
 
+            let (extension_hosts, _) = compile_for_hosts(&configuration)?;
             if let Some(external_analyzer) = initialize_external_analyzer(
-                &configuration.extension_hosts,
+                &extension_hosts,
                 configuration.php_version,
                 configuration.threads,
                 &configuration.analyzer.plugins,
@@ -555,6 +558,11 @@ impl AnalyzeCommand {
             tracing::info!("Detected {} file change(s), re-analyzing...", changed_file_ids.len());
 
             *server.database_mut() = watcher.database().clone().into_static();
+            // A host's worker keeps each class it loaded, as PHP declares a class once, so a change the hosts' compile
+            // takes in starts every worker again, as a dev server restarts a worker when a module it loaded changes.
+            if compile_for_hosts(configuration)?.1 {
+                return Ok(WatchOutcome::Restart("a PHP# file the extension hosts load changed".to_owned()));
+            }
 
             let mut issues = server.analyze_incremental(&changed_file_ids)?.issues;
             issues.filter_out_ignored(&ignore_set, |file_id| {

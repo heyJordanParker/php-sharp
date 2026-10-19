@@ -855,6 +855,10 @@ final class InvocationCallKindHook implements NodeAnalysisHook
     {
         $call = CallExpression::fromNode($context->source, $context->node);
         InvocationAudit::record('call-kind-' . self::describe($context, $call));
+        // A PHP# call of a plain PHP function names the function at its callee, `render` in `Pdf.render()`.
+        if ($call->isFunction() && getenv('MAGO_INVOCATION_FUNCTION_NAMES') === '1') {
+            InvocationAudit::record('function-' . ($context->source->getResolvedName($call->callee)->name ?? ''));
+        }
 
         $receiver = $call->receiver === null ? null : CallExpression::fromExpression($context->source, $call->receiver);
         if ($receiver !== null) {
@@ -864,10 +868,10 @@ final class InvocationCallKindHook implements NodeAnalysisHook
 
     public static function describe(NodeAnalysisContext $context, CallExpression $call): string
     {
-        $name = $call->getName($context->source) ?? throw new RuntimeException(
-            'A call-kind hook received an unnamed call.',
-        );
+        // A call of a function value, `$twice(1)`, names no function.
+        $name = $call->getName($context->source) ?? 'unnamed';
         $kind = match (true) {
+            $call->isFunction() => 'function',
             $call->isStaticMethod() => 'static',
             $call->isMethod() => 'instance',
             default => 'other',
@@ -1011,6 +1015,7 @@ $registerIssueFilter = getenv('MAGO_INVOCATION_ISSUE_FILTER') === '1';
 $callKindTargets = match (true) {
     getenv('MAGO_INVOCATION_CALL_KINDS') === '1' => [NodeKind::MethodCall, NodeKind::StaticMethodCall],
     getenv('MAGO_INVOCATION_STATIC_CALL_KINDS') === '1' => [NodeKind::StaticMethodCall],
+    getenv('MAGO_INVOCATION_FUNCTION_CALL_KINDS') === '1' => [NodeKind::FunctionCall],
     default => [],
 };
 $registerMethodCallHook = getenv('MAGO_INVOCATION_METHOD_CALL_HOOK') === '1';

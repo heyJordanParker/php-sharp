@@ -50,6 +50,7 @@ Each one decides what users write. The note recommends, and decides none.
 4. **Line 2397: can an enum's header name a plain PHP trait?** "It works everywhere an interface does", an enum header takes interfaces, and PHP enums can `use` traits that have no properties. Recommended: yes, with PHP's rule that the trait has no properties as the error.
 5. **Line 2431: which traits does Reflection list?** Lowered to `use`, `ReflectionClass::getTraitNames()` and `class_uses()` list a class's own header traits and its `Defaults` traits, and a subclass lists neither, as PHP lists traits. `getInterfaceNames()` does list inherited interfaces. Recommended: keep PHP's lists as they are, `Defaults` traits included, because Laravel's `class_uses_recursive` already covers the inherited case.
 6. **Line 2253: is a closed PHP# method closed to a plain PHP subclass at runtime?** `mago analyze` reports "Cannot override final method `App\DatabaseEntity::hash()`" for the plain PHP subclass, and the engine runs its replacement, which returned `99`. Recommended: keep it open at runtime, as master does, so PHPUnit and Mockery can still mock a PHP# class.
+   Decided in the review of #181: closed at runtime too. The bridge lowers a closed method `final`, as Kotlin emits a member that is not `open` as a final JVM method, so the engine refuses a plain PHP subclass that replaces it, and `mago compile` refuses that subclass first. A test double replaces only `virtual` methods, as Mockito replaces only `open` Kotlin members without the `all-open` plugin.
 7. **Not in the spec: method modifier pairs that C# refuses.** Master compiles each of these with no error: `private virtual` (CS0621), `virtual override` (CS0113), `abstract virtual` (CS0503), `static virtual` and `static override` (CS0112), and a `virtual` method in a `final` class (CS0549). Recommended: refuse each one with C#'s rule. `virtual` on an interface method is a generic parse error today, and becomes "An interface method takes no modifier".
 
 ## How the states were observed
@@ -95,7 +96,7 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 
 | Line | Rule | State on master | Mechanism |
 |---|---|---|---|
-| 2253 | A method is closed unless `virtual` or `abstract` | Works for PHP# subclasses: `override` of `Base.save` gets `override-final-method`. A plain PHP subclass replaces it at runtime (question 6) | None new. `scan_method` marks the method final to the analyzer |
+| 2253 | A method is closed unless `virtual` or `abstract` | Works for PHP# subclasses: `override` of `Base.save` gets `override-final-method`. A plain PHP subclass replaces it at runtime (question 6) | `scan_method` marks the method final to the analyzer, and the bridge lowers it `final`, so the engine refuses a plain PHP subclass that replaces it |
 | 2253 | A subclass replaces a method only with `override` | Works: `MissingOverride.label` gets `missing-override-attribute`, and so does `AbstractWithoutOverride.render` | None new. `check_override_attribute` |
 | 2262, 2274 | `virtual` opens a method, `override` replaces it | Works: `GoodChild` compiles, and the engine runs `Article.label()` | None new |
 | 2253 | Modifier pairs the spec does not state | Silently accepted (question 7) | Semantics, after question 7 |

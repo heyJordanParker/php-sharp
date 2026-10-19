@@ -7,7 +7,7 @@ class Guide extends Essay
         $this->slug = "setup";
     }
 
-    public function topic(): string
+    final public function topic(): string
     {
         return $this->slug;
     }

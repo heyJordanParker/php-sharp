@@ -11,9 +11,9 @@ class Page
     protected int $doubled { get => $this->views * 2; }
     private string $title { get => \ucfirst($this->name); }
 
-    public function link(): string { return \sprintf("/page/%s", $this->slug); }
-    public function visit(): void { $this->views++; }
-    public function seen(): int { return $this->doubled; }
-    public static function home(): string { return "/"; }
-    public function heading(): string { return \sprintf("%s (%d)", $this->title, $this->views); }
+    final public function link(): string { return \sprintf("/page/%s", $this->slug); }
+    final public function visit(): void { $this->views++; }
+    final public function seen(): int { return $this->doubled; }
+    final public static function home(): string { return "/"; }
+    final public function heading(): string { return \sprintf("%s (%d)", $this->title, $this->views); }
 }

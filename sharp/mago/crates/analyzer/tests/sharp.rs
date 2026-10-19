@@ -1568,7 +1568,7 @@ fn a_default_body_sees_only_its_interface_and_a_plain_php_class_gets_it_through_
     assert_eq!(
         worded(("src/Legacy/LegacyPage.php", php), &[("src/App/HasDesign.sharp", sharp)]),
         [
-            "14:7 unimplemented-abstract-method `Legacy\\Bare` implements `App\\HasDesign` without its default bodies: write `use \\App\\HasDesign\\Defaults;` in `Legacy\\Bare`. | Declared here. | A plain PHP class gets the default bodies of the PHP# interface `App\\HasDesign` through the trait `App\\HasDesign\\Defaults`."
+            "14:7 unimplemented-abstract-method `Legacy\\Bare` implements `App\\HasDesign` without its default bodies: write `use \\App\\HasDesign\\Defaults;` in `Legacy\\Bare`. | Declared here. | `App\\HasDesign` is declared here. | A plain PHP class gets the default bodies of the PHP# interface `App\\HasDesign` through the trait `App\\HasDesign\\Defaults`."
         ]
     );
 }
@@ -13604,11 +13604,12 @@ fn a_renamed_parameter_is_widened_too() {
     );
 }
 
-/// A PHP# member is closed to a PHP# subclass unless it is `virtual` or `abstract`, but PHP# checks only `.sharp` code,
-/// so a plain PHP subclass, a test double included, overrides a closed property and a closed method with no report.
-/// A PHP# subclass that does the same keeps both reports.
+/// A PHP# member is closed unless it is `virtual` or `abstract`. The engine runs a closed method as a `final` one, as
+/// Kotlin emits a member that is not `open` final, so a plain PHP subclass that replaces it is refused as PHP refuses
+/// one that replaces a `final` method, while it still overrides a closed property with no report. A PHP# subclass
+/// keeps both reports.
 #[test]
-fn a_plain_php_subclass_overrides_a_closed_member_with_no_report() {
+fn a_plain_php_subclass_is_refused_replacing_a_closed_method_and_overrides_a_closed_property() {
     let shape = "namespace App;\n\npublic class Shape\n{\n    protected string title { get; set; } = \"shape\";\n\n    public string name() => this.title;\n}\n";
     let legacy_title =
         "<?php\n\nnamespace App;\n\nclass LegacyShape extends Shape\n{\n    protected string $title = 'legacy';\n}\n";
@@ -13621,11 +13622,24 @@ fn a_plain_php_subclass_overrides_a_closed_member_with_no_report() {
     );
     assert_eq!(
         codes(&issues(("src/App/LegacyShape.php", legacy_name), &[("src/App/Shape.sharp", shape)])),
-        Vec::<&str>::new()
+        ["override-final-method"]
     );
     assert_eq!(
         codes(&issues(("src/App/Square.sharp", sharp), &[("src/App/Shape.sharp", shape)])),
         ["override-final-method", "override-final-property"]
+    );
+}
+
+/// A PHP# type states a property, not its hooks, so a plain PHP class that lacks the property a PHP# interface states
+/// is told of the property as PHP writes it, `$label`, never of a `get` hook the PHP# source never writes.
+#[test]
+fn a_plain_php_class_missing_a_php_sharp_property_is_told_of_the_property() {
+    let labelled = "namespace App;\n\npublic interface Labelled\n{\n    string label { get; }\n}\n";
+    let note = "<?php\n\nnamespace App;\n\nfinal class Note implements Labelled\n{\n}\n";
+
+    assert_eq!(
+        messages(("src/App/Note.php", note), &[("src/App/Labelled.sharp", labelled)]),
+        ["Class `App\\Note` does not implement the property `$label`."]
     );
 }
 

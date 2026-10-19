@@ -13,7 +13,7 @@ class Order
         $this->count = $base;
     }
 
-    public function add(int $amount): int
+    final public function add(int $amount): int
     {
         $this->count += $amount;
         $this->total = $this->count * $this->base;

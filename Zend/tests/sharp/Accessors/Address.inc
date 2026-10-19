@@ -11,7 +11,7 @@ class Address
         $this->region = $region;
     }
 
-    public function label(): string
+    final public function label(): string
     {
         return \sprintf("%s, %s", $this->city, $this->region);
     }

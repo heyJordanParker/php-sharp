@@ -17,5 +17,5 @@ class Grade
         return $a->score <=> $b->score;
     }
 
-    public static function ranked(array $grades): array { return ((object) $grades)->sortedBy(fn ($grade) => $grade, \Billing\Grade::op_Comparison(...)); }
+    final public static function ranked(array $grades): array { return ((object) $grades)->sortedBy(fn ($grade) => $grade, \Billing\Grade::op_Comparison(...)); }
 }

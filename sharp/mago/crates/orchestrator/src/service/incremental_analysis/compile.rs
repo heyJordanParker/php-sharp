@@ -28,6 +28,7 @@ use mago_database::file::FileId;
 use mago_database::file::FileType;
 use mago_names::resolver::NameResolver;
 use mago_names::short_name;
+use mago_reporting::Annotation;
 use mago_reporting::Issue;
 use mago_reporting::IssueCollection;
 use mago_reporting::Level;
@@ -66,7 +67,8 @@ const VENDOR: &[u8] = b"vendor/";
 /// The input that changes whenever Composer changes `vendor/`.
 const COMPOSER_LOCK: &[u8] = b"composer.lock";
 
-/// What [`IncrementalAnalysisService::compile`] made of one `.sharp` file.
+/// What [`IncrementalAnalysisService::compile`] made of one `.sharp` file, or of a plain PHP file whose class the
+/// engine would refuse to link.
 #[derive(Debug)]
 pub enum Compilation {
     /// The bytes of its `.sharpc` file.
@@ -183,7 +185,8 @@ impl IncrementalAnalysisService {
             .map(|module| DispatcherModule { file: module.file, namespace })
     }
 
-    /// Compiles each `.sharp` file of the last analysis, in file name order.
+    /// Compiles each `.sharp` file of the last analysis, in file name order, then refuses each plain PHP file whose
+    /// class the engine would refuse to link, as [`Self::unlinkable_plain_php_classes`] finds them.
     ///
     /// A file is accepted when the analysis reported no error-level issue in it. The standard library's files, those
     /// `File::is_standard_library` marks, lower first, and the others inline their forms.
@@ -210,6 +213,11 @@ impl IncrementalAnalysisService {
     ///
     /// Each compiled file's header names `standard_library`, the standard library the project compiles against.
     ///
+    /// `refusing` keeps, of the error-level issues the analysis reported, those that refuse their file: the ones no
+    /// `ignore` entry or baseline entry hides for `mago compile`, or none for the compile the extension hosts load the
+    /// project's classes from. A file whose errors refuse nothing lowers as far as its code allows, as `tsc` emits
+    /// despite type errors, and a file whose lowering fails on them is refused with them.
+    ///
     /// # Errors
     ///
     /// Returns [`OrchestratorError`] when no analysis ran yet, when re-analyzing a file fails, or when `stamp`, `rules`
@@ -220,6 +228,7 @@ impl IncrementalAnalysisService {
         mut rules: impl FnMut(&[u8]) -> std::io::Result<Vec<Vec<u8>>>,
         check: impl FnOnce(Vec<Translation>, &[String]) -> std::io::Result<HashMap<FileId, IssueCollection>>,
         standard_library: &Library,
+        refusing: impl FnOnce(IssueCollection) -> IssueCollection,
     ) -> Result<Vec<(FileId, Compilation)>, OrchestratorError> {
         if !self.initialized {
             return Err(OrchestratorError::General("analyze() must be called before compile()".to_string()));
@@ -232,28 +241,41 @@ impl IncrementalAnalysisService {
             .collect();
         files.sort_unstable_by(|a, b| a.name.cmp(&b.name));
 
-        let mut errors: HashMap<FileId, IssueCollection> = HashMap::default();
-        for issue in self.collect_all_issues() {
-            if issue.level == Level::Error
-                && let Some(span) = issue.primary_span()
-            {
-                errors.entry(span.file_id).or_default().push(issue);
+        let by_file = |issues: IssueCollection| {
+            let mut by_file: HashMap<FileId, IssueCollection> = HashMap::default();
+            for issue in issues {
+                if let Some(span) = issue.primary_span() {
+                    by_file.entry(span.file_id).or_default().push(issue);
+                }
             }
-        }
+
+            by_file
+        };
+        let reported: IssueCollection =
+            self.collect_all_issues().into_iter().filter(|issue| issue.level == Level::Error).collect();
+        let errors = by_file(refusing(reported.clone()));
+        let mut unrefused = by_file(reported);
+        unrefused.retain(|file_id, _| !errors.contains_key(file_id));
 
         let session = self.plugin_registry.create_external_analysis_session(self.database.files());
         let (library, rest): (Vec<_>, Vec<_>) = files.iter().partition(|file| file.is_standard_library);
         let reach = Reach::new(&self.codebase, &self.native_symbol_references);
         let effects = self.effects();
 
-        let lowered_library =
-            self.lower_all(&library, &InlineForms::default(), &errors, &reach, &effects, session.as_ref())?;
+        let lowered_library = self.lower_all(
+            &library,
+            &InlineForms::default(),
+            (&errors, &unrefused),
+            &reach,
+            &effects,
+            session.as_ref(),
+        )?;
         let forms: InlineForms = lowered_library
             .iter()
             .filter_map(|lowered| lowered.as_ref().ok())
             .flat_map(|(_, forms, _)| forms.iter().cloned())
             .collect();
-        let lowered_rest = self.lower_all(&rest, &forms, &errors, &reach, &effects, session.as_ref())?;
+        let lowered_rest = self.lower_all(&rest, &forms, (&errors, &unrefused), &reach, &effects, session.as_ref())?;
         let mut translations = Vec::new();
         let mut lowered: HashMap<FileId, Result<LoweredUnit, IssueCollection>> = library
             .iter()
@@ -418,8 +440,49 @@ impl IncrementalAnalysisService {
 
             compiled.push((file.id, compilation));
         }
+        compiled.extend(self.unlinkable_plain_php_classes(&errors));
 
         Ok(compiled)
+    }
+
+    /// Refuses each plain PHP file that declares a class extending or implementing a PHP# type that it doesn't satisfy,
+    /// spec section 22: each error the analysis reports at the class's declaration that names a PHP# declaration, as a
+    /// missing `Defaults` trait or a member whose signature doesn't fit the PHP# member it implements, a case the engine
+    /// refuses when it links the class. The analysis names the class in each error of its declaration's checks. Every
+    /// other error in a plain PHP file stays the analysis's, as kotlinc checks a Java type only where it meets a Kotlin
+    /// declaration and leaves every other Java error to javac.
+    fn unlinkable_plain_php_classes(&self, errors: &HashMap<FileId, IssueCollection>) -> Vec<(FileId, Compilation)> {
+        let in_sharp_file = |annotation: &Annotation| {
+            self.database.get(&annotation.span.file_id).is_ok_and(|file| Dialect::of(&file).is_sharp())
+        };
+        let names_sharp_type =
+            |name: &Word| self.codebase.get_class_like(name.as_bytes()).is_some_and(|class| class.flags.is_sharp());
+        let declarations: HashSet<_> = self
+            .codebase
+            .class_likes
+            .values()
+            .filter(|class| class.all_parent_classes.iter().chain(&class.all_parent_interfaces).any(names_sharp_type))
+            .filter(|class| {
+                self.database
+                    .get(&class.span.file_id)
+                    .is_ok_and(|file| file.file_type == FileType::Host && !Dialect::of(&file).is_sharp())
+            })
+            .map(|class| class.name_span.unwrap_or(class.span))
+            .collect();
+
+        let mut refused: HashMap<FileId, IssueCollection> = HashMap::default();
+        for issue in errors.values().flat_map(IssueCollection::iter) {
+            if let Some(declaration) =
+                issue.annotations.iter().find(|annotation| declarations.contains(&annotation.span))
+                && issue.annotations.iter().any(in_sharp_file)
+            {
+                refused.entry(declaration.span.file_id).or_default().push(issue.clone());
+            }
+        }
+        let mut refused: Vec<(FileId, IssueCollection)> = refused.into_iter().collect();
+        refused.sort_unstable_by_key(|(file_id, _)| self.database.get(file_id).map(|file| file.name.clone()).ok());
+
+        refused.into_iter().map(|(file_id, issues)| (file_id, Compilation::Refused(issues))).collect()
     }
 
     /// What each file's analysis read from other files: each declaration it read through its signature, each method
@@ -598,13 +661,15 @@ impl IncrementalAnalysisService {
         Effects::solve(&self.codebase, &summaries)
     }
 
-    /// Lowers each of `files` with `forms` to inline, and translates it to Lean as far as `reach` asks, the files the
-    /// analysis reported `errors` in refused.
+    /// Lowers each of `files` with `forms` to inline, and translates it to Lean as far as `reach` asks, the files with
+    /// errors that refuse them refused. A file with only `unrefused` errors lowers as far as its code allows: the
+    /// lowering assumes a program the checker accepted, so one it can't lower is refused with those errors, as
+    /// rust-analyzer turns a panic on broken code into a failed request.
     fn lower_all(
         &self,
         files: &[&Arc<File>],
         forms: &InlineForms,
-        errors: &HashMap<FileId, IssueCollection>,
+        (errors, unrefused): (&HashMap<FileId, IssueCollection>, &HashMap<FileId, IssueCollection>),
         reach: &Reach,
         effects: &Effects,
         session: Option<&ExternalAnalysisSession>,
@@ -632,11 +697,20 @@ impl IncrementalAnalysisService {
                 });
 
                 Ok(match check(file, program, names, &artifacts, &self.codebase, effects, forms, &issues) {
-                    Ok(checked) => Ok((
-                        LoweredUnit { unit: lower(&checked), namespace_classes, reaches_extension },
-                        inline_forms(&checked),
-                        translate(&checked, reach),
-                    )),
+                    Ok(checked) => {
+                        let lowered = || {
+                            (
+                                LoweredUnit { unit: lower(&checked), namespace_classes, reaches_extension },
+                                inline_forms(&checked),
+                                translate(&checked, reach),
+                            )
+                        };
+                        match unrefused.get(&file.id) {
+                            None => Ok(lowered()),
+                            Some(errors) => std::panic::catch_unwind(std::panic::AssertUnwindSafe(lowered))
+                                .map_err(|_| errors.clone()),
+                        }
+                    }
                     Err(Refusal::Parse(errors)) => Err(errors.iter().map(Issue::from).collect()),
                     Err(Refusal::Compile(errors)) => Err(IssueCollection::from(errors)),
                 })
@@ -966,7 +1040,9 @@ mod tests {
         service: &mut IncrementalAnalysisService,
         stamp: impl FnMut(&[u8]) -> std::io::Result<Option<Input>>,
     ) -> std::collections::BTreeMap<String, Compilation> {
-        let compiled = service.compile(stamp, module_leans, proved, &Library::default()).expect("the compile runs");
+        let compiled = service
+            .compile(stamp, module_leans, proved, &Library::default(), |issues| issues)
+            .expect("the compile runs");
         let database = service.database();
 
         compiled
@@ -1035,7 +1111,8 @@ mod tests {
         let mut service = analyzed(&database);
         let library = Library { native_fingerprint: [0x2d; 16], version: b"0.3.2".to_vec() };
 
-        let compiled = service.compile(empty_stamp, module_leans, proved, &library).expect("the compile runs");
+        let compiled =
+            service.compile(empty_stamp, module_leans, proved, &library, |issues| issues).expect("the compile runs");
 
         assert_eq!(compiled.len(), 1, "{compiled:?}");
         let (file_id, Compilation::Accepted(bytes)) = &compiled[0] else {
@@ -1944,6 +2021,7 @@ mod tests {
                     Ok(HashMap::default())
                 },
                 &Library::default(),
+                |issues| issues,
             )
             .expect("the compile runs");
 
@@ -1972,6 +2050,7 @@ mod tests {
                     Ok(HashMap::from_iter([(money, issues)]))
                 },
                 &Library::default(),
+                |issues| issues,
             )
             .expect("the compile runs");
 
@@ -1992,7 +2071,13 @@ mod tests {
         let mut service = analyzed(&database);
 
         let error = service
-            .compile(empty_stamp, module_leans, |_, _| Err(std::io::Error::other("lake crashed")), &Library::default())
+            .compile(
+                empty_stamp,
+                module_leans,
+                |_, _| Err(std::io::Error::other("lake crashed")),
+                &Library::default(),
+                |issues| issues,
+            )
             .expect_err("the Lean step failed");
 
         assert_eq!(error.to_string(), "The Lean step failed: lake crashed.");
@@ -2026,6 +2111,7 @@ mod tests {
                     Ok(HashMap::default())
                 },
                 &Library::default(),
+                |issues| issues,
             )
             .expect("the compile runs");
 

@@ -18,7 +18,7 @@ class Product
 
     #[Action(true, -1.5)]
     #[Retry(3)]
-    public function restock(#[Field("amount")] int $amount): int
+    final public function restock(#[Field("amount")] int $amount): int
     {
         $this->stock += $amount;
         return $this->stock;

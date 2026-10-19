@@ -7,6 +7,7 @@ namespace Mago\Sdk\Syntax;
 use Mago\Sdk\Exception\InvalidArgumentException;
 
 use function count;
+use function in_array;
 use function str_starts_with;
 
 /**
@@ -32,6 +33,7 @@ final class CallExpression
         public readonly ?Node $member,
         array $arguments,
         private readonly bool $static,
+        private readonly bool $function,
     ) {
         $this->arguments = $arguments;
     }
@@ -81,14 +83,31 @@ final class CallExpression
             );
         }
 
-        // A PHP# static call, `Calc.make()`, is a method call whose receiver is a bare name Mago bound to a class.
+        // Mago names a class at the member of `PaymentResult.Declined(…)`, which builds that enum case, spec section 20,
+        // as `new PaymentResult\Declined(…)` does: no call of a function or a method.
+        $memberName = $member === null ? null : $source->getResolvedName($member);
+        $builds = $memberName?->binding === Binding::ClassName;
+        // A PHP# static call is a method call whose receiver is a bare name Mago bound to a class, `Calc.make()`, the
+        // enclosing class, `Self.cap()`, as PHP's `static::cap()`, or its parent, `super.save()` or
+        // `super<HasLabel>.label()`, as PHP's `parent::save()`.
         $static =
             $node->kind === NodeKind::StaticMethodCall
             || $node->kind === NodeKind::MethodCall
-            && $callee->kind === NodeKind::ConstantAccess
-            && $source->getResolvedName($callee)?->binding === Binding::ClassName;
+            && !$builds
+            && (
+                $callee->kind === NodeKind::ConstantAccess
+                && $source->getResolvedName($callee)?->binding === Binding::ClassName
+                || $callee->kind === NodeKind::Keyword
+                && in_array($source->getText($callee), ['Self', 'super'], true)
+                || $callee->kind === NodeKind::SuperOf
+            );
+        // A PHP# call of a plain PHP function, `global.max()` or `Pdf.render()`, is a method call whose member Mago
+        // names as the function.
+        if ($member !== null && $memberName !== null && !$builds) {
+            return new self($node, $member, null, $member, $arguments, false, true);
+        }
 
-        return new self($node, $callee, $function ? null : $callee, $member, $arguments, $static);
+        return new self($node, $callee, $function || $builds ? null : $callee, $member, $arguments, $static, $function);
     }
 
     public static function fromExpression(SourceFile $source, Node $node): ?self
@@ -114,7 +133,7 @@ final class CallExpression
 
     public function isFunction(): bool
     {
-        return $this->node->kind === NodeKind::FunctionCall;
+        return $this->function;
     }
 
     public function isStaticMethod(): bool
@@ -127,12 +146,14 @@ final class CallExpression
         return (
             ($this->node->kind === NodeKind::MethodCall || $this->node->kind === NodeKind::NullSafeMethodCall)
             && !$this->static
+            && !$this->function
+            && $this->receiver !== null
         );
     }
 
     public function getName(SourceFile $source): ?string
     {
-        if ($this->isFunction()) {
+        if ($this->member === null) {
             $callee = $this->callee;
             while ($callee->kind === NodeKind::ConstantAccess || $callee->kind === NodeKind::Expression) {
                 $next = $source->getChildren($callee)[0] ?? null;
@@ -142,19 +163,18 @@ final class CallExpression
                 $callee = $next;
             }
 
+            // A PHP# call of a local, `twice(1)`, calls the function value it holds, which has no name, as `$twice(1)`
+            // has none: Mago names no function there.
             return match ($callee->kind) {
                 NodeKind::Identifier,
                 NodeKind::LocalIdentifier,
                 NodeKind::QualifiedIdentifier,
                 NodeKind::FullyQualifiedIdentifier,
-                    => $source->getText($callee),
+                    => $source->getResolvedName($callee) === null ? null : $source->getText($callee),
                 default => null,
             };
         }
 
-        if ($this->member === null) {
-            return null;
-        }
         $selector = $source->getChildren($this->member)[0] ?? null;
 
         if ($selector === null || $selector->kind !== NodeKind::LocalIdentifier) {

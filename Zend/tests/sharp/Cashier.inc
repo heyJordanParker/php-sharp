@@ -11,7 +11,7 @@ class Cashier
         $this->discount = fn ($cents) => $cents - \intdiv($cents * $percent, 100);
     }
 
-    public function receipt(array $prices, Cashier $other, Ledger $ledger): array
+    final public function receipt(array $prices, Cashier $other, Ledger $ledger): array
     {
         $count = 0;
         $paid = ((object) ((object) ((object) $prices)->filter(fn ($price) => $price > 0))->map(fn ($price) => ($this->discount)($price)))->sortedBy(fn ($price) => -$price);

@@ -1263,6 +1263,15 @@ where
         }))
         .collect();
 
+    let links_to_sharp = !context.dialect.is_sharp()
+        && class_like_metadata.all_parent_classes.iter().chain(&class_like_metadata.all_parent_interfaces).any(
+            |parent| context.codebase.get_class_like(parent.as_bytes()).is_some_and(|parent| parent.flags.is_sharp()),
+        );
+    let class_span = name_span.unwrap_or(declaration_span);
+    if links_to_sharp {
+        context.collector.start_recording();
+    }
+
     if class_like_metadata.flags.is_sharp() {
         check_sharp_reached_twice(context, class_like_metadata, inheritance_ast, &mut checked_signatures);
     }
@@ -1456,15 +1465,22 @@ where
                     } else if !is_implemented {
                         let fqcn = parent_metadata.original_name;
                         let hook_span = hook_metadata.span;
-                        let missing_hook = format!("{property_name}::{hook_name}()");
-                        let abstract_hook = format!("{fqcn}::{property_name}::{hook_name}()");
+                        // A PHP# type states a property, not its hooks, so a plain PHP class meets the property
+                        // as PHP writes it, `$label`, which the PHP# type's `label { get; }` lowers to.
+                        let (member, missing_hook, abstract_hook) = if parent_metadata.flags.is_sharp() {
+                            ("property", format!("{property_name}"), format!("{fqcn}::{property_name}"))
+                        } else {
+                            (
+                                "abstract property hook",
+                                format!("{property_name}::{hook_name}()"),
+                                format!("{fqcn}::{property_name}::{hook_name}()"),
+                            )
+                        };
                         let property = display_property_name(context, *property_name);
 
                         context.collector.report_with_code(
                             IssueCode::UnimplementedAbstractPropertyHook,
-                            Issue::error(format!(
-                                "Class `{name}` does not implement the abstract property hook `{missing_hook}`.",
-                            ))
+                            Issue::error(format!("Class `{name}` does not implement the {member} `{missing_hook}`."))
                             .with_annotation(
                                 Annotation::primary(name_span.unwrap_or(declaration_span))
                                     .with_message(format!("`{name}` is not abstract and must implement this hook")),
@@ -1536,6 +1552,9 @@ where
     }
     check_class_like_properties(context, class_like_metadata);
     check_docblock_declared_members(context, class_like_metadata, declaration_span);
+    if links_to_sharp {
+        report_in_class(context, class_span, name);
+    }
 
     let mut scope = ScopeContext::new(ReferenceOrigin::Symbol((class_like_metadata.name, mago_word::empty_word())));
     scope.set_class_like(Some(class_like_metadata));
@@ -1666,7 +1685,13 @@ where
 
     // Check trait constant overrides AFTER constants have been analyzed
     // so we can compare their inferred values
+    if links_to_sharp {
+        context.collector.start_recording();
+    }
     check_class_like_constants(context, class_like_metadata, members);
+    if links_to_sharp {
+        report_in_class(context, class_span, name);
+    }
 
     if has_complete_hierarchy {
         crate::readonly::finalize_class_writes(context, artifacts, class_like_metadata);
@@ -1681,6 +1706,24 @@ where
     }
 
     Ok(())
+}
+
+/// Reports the issues recorded since `start_recording` for a plain PHP class that extends or implements a PHP# type,
+/// each error with an annotation at `class_span` that names the class, as a signature check's has. The engine links the
+/// class against the PHP# type, spec section 22, and `mago compile` refuses each error in it that names the class and a
+/// PHP# declaration, as `IncrementalAnalysisService::unlinkable_plain_php_classes` finds them.
+fn report_in_class<A>(context: &mut Context<'_, '_, A>, class_span: Span, name: Word)
+where
+    A: Arena,
+{
+    let issues = context.collector.finish_recording().unwrap_or_default();
+    context.collector.extend(issues.into_iter().map(|issue| {
+        if issue.level < Level::Error || issue.annotations.iter().any(|annotation| annotation.span == class_span) {
+            return issue;
+        }
+
+        issue.with_annotation(Annotation::secondary(class_span).with_message(format!("In class `{name}`")))
+    }));
 }
 
 /// Reports each static of a PHP# class-like named like a member of `Class`, spec section 25, as TypeScript's error 2699
@@ -1819,6 +1862,10 @@ where
                 interface.original_name, defaults.original_name
             ))
             .with_annotation(Annotation::primary(span).with_message("Declared here."))
+            .with_annotation(
+                Annotation::secondary(interface.name_span.unwrap_or(interface.span))
+                    .with_message(format!("`{}` is declared here.", interface.original_name)),
+            )
             .with_note(format!(
                 "A plain PHP class gets the default bodies of the PHP# interface `{}` through the trait `{}`.",
                 interface.original_name, defaults.original_name
@@ -2059,6 +2106,10 @@ fn check_class_like_extends<'ctx, 'arena, A>(
                     IssueCode::InvalidStruct,
                     Issue::error(format!("`{extended_name}` is a struct, which can't be inherited."))
                         .with_annotation(Annotation::primary(extended_type.span()).with_message("Inherited here."))
+                        .with_annotation(
+                            Annotation::secondary(extended_class_span)
+                                .with_message(format!("`{extended_name}` is declared a `struct` here.")),
+                        )
                         .with_note("A struct is a value, so no class extends it."),
                 );
             } else if extended_class_metadata.flags.is_static() {
@@ -4281,6 +4332,11 @@ fn report_signature_compatibility_issue<'ctx, A>(
         let method_name = child_method.original_name;
 
         (display_sharp_member(child_name, method_name), display_sharp_member(parent_name, method_name))
+    } else if parent_class.flags.is_sharp() {
+        // A PHP# method is named as the PHP that calls it writes it, `getKey()`, not as the codebase keys it.
+        let method_name = child_method.original_name;
+
+        (format!("{child_name}::{method_name}()"), format!("{parent_name}::{method_name}()"))
     } else {
         (format!("{child_name}::{method_name}()"), format!("{parent_name}::{method_name}()"))
     };
@@ -4288,11 +4344,8 @@ fn report_signature_compatibility_issue<'ctx, A>(
     use method_signature::SignatureCompatibilityIssue;
 
     match incompatibility {
-        // PHP# checks only `.sharp` code, and the engine runs a closed PHP# method as an open one, so a plain PHP
-        // subclass, a test double included, overrides it.
-        SignatureCompatibilityIssue::FinalMethodOverride
-            if !context.dialect.is_sharp() && parent_class.flags.is_sharp() => {}
-        // A PHP# method is closed unless it is `virtual`, spec section 22, and only an override is written `final`.
+        // A PHP# method is closed unless it is `virtual`, spec section 22, and only an override is written `final`. The
+        // engine runs a closed method as a `final` one, so a plain PHP subclass doesn't replace it either.
         SignatureCompatibilityIssue::FinalMethodOverride if parent_class.flags.is_sharp() => {
             let reason = if parent_class.overridden_method_ids.contains_key(&method_name) {
                 "is `final`"

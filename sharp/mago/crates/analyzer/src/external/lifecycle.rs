@@ -6,6 +6,7 @@ use std::sync::OnceLock;
 use foldhash::HashMap;
 use foldhash::HashSet;
 use mago_codex::metadata::CodebaseMetadata;
+use mago_codex::metadata::class_like::ClassLikeMetadata;
 use mago_codex::reference::ReferenceOrigin;
 use mago_codex::reference::SymbolReferenceKind;
 use mago_codex::reference::SymbolReferences;
@@ -25,6 +26,9 @@ use mago_reporting::Level;
 use mago_span::HasSpan;
 use mago_span::Position;
 use mago_span::Span;
+use mago_syntax::cst::ClassLikeMemberSelector;
+use mago_syntax::cst::ConstantAccess;
+use mago_syntax::cst::Hint;
 use mago_syntax::cst::Node;
 use mago_syntax::cst::NodeKind;
 use mago_syntax::cst::Program;
@@ -41,6 +45,9 @@ use crate::analysis_result::AnalysisResult;
 use crate::artifacts::AnalysisArtifacts;
 use crate::artifacts::ResolvedMethodCall;
 use crate::plugin::hook::StaticCall;
+use crate::utils::names::member_namespace;
+use crate::utils::names::namespace_function_name;
+use crate::utils::names::namespace_member;
 
 use super::ExternalAnalysisSession;
 use super::ExternalPlugin;
@@ -168,7 +175,10 @@ struct NodeAnalysisTarget<'ast, 'arena> {
     node: Node<'ast, 'arena>,
     requirements: u8,
     targeted_hook_routes: Vec<u32>,
-    is_sharp_static_call: bool,
+    /// The kind of node a PHP# method call means when it is not a method call: [`NodeKind::StaticMethodCall`] for
+    /// `Calc.make()`, [`NodeKind::FunctionCall`] for `global.max()` or `Pdf.render()`, and
+    /// [`NodeKind::Instantiation`] for `PaymentResult.Declined(…)`, which builds an enum case.
+    meaning: Option<NodeKind>,
 }
 
 struct NodeAnalysisPlan<'ast, 'arena> {
@@ -212,12 +222,27 @@ fn build_node_analysis_plan<'ast, 'arena>(
         let span = node.span();
         let mut requested = requirements.requirements(kind);
         let mut targeted_hook_routes = Vec::new();
-        // A PHP# static call, `Calc.make()`, is a method call whose object the binder bound to a class. A hook that
-        // targets static calls receives it, as it receives `Calc::make()` in PHP.
-        let is_sharp_static_call = program.dialect.is_sharp()
-            && matches!(node, Node::MethodCall(call) if StaticCall::from_method_call(call, resolved_names).is_some());
-        if is_sharp_static_call {
-            requested |= requirements.requirements(NodeKind::StaticMethodCall);
+        // A PHP# call is the kind of call it means, as the analyzer reads it: `global.max()` and `Pdf.render()` after
+        // `import Vendor.Pdf;` call a plain PHP function, and `Calc.make()`, whose object the binder bound to a class,
+        // a static method. A hook that targets that kind receives it, as it receives `max()` or `Calc::make()` in PHP.
+        // `PaymentResult.Declined(…)` builds an enum case, spec section 20, as `new PaymentResult\Declined(…)` does.
+        let meaning = match node {
+            Node::MethodCall(call) if program.dialect.is_sharp() => {
+                if namespace_function_name(resolved_names, codebase, call).is_some() {
+                    Some(NodeKind::FunctionCall)
+                } else if let Some(class) = resolved_names.static_call_class(call)
+                    && let ClassLikeMemberSelector::Identifier(member) = &call.method
+                    && built_data_case(resolved_names, codebase, class, member.value).is_some()
+                {
+                    Some(NodeKind::Instantiation)
+                } else {
+                    StaticCall::from_method_call(call, resolved_names).map(|_| NodeKind::StaticMethodCall)
+                }
+            }
+            _ => None,
+        };
+        if let Some(meaning) = meaning {
+            requested |= requirements.requirements(meaning);
         }
 
         if is_method_call_kind(kind)
@@ -245,17 +270,12 @@ fn build_node_analysis_plan<'ast, 'arena>(
         }
 
         if requirements.targets()[kind as usize]
-            || is_sharp_static_call && requirements.targets()[NodeKind::StaticMethodCall as usize]
+            || meaning.is_some_and(|meaning| requirements.targets()[meaning as usize])
             || !targeted_hook_routes.is_empty()
         {
             let index = targets.len();
             by_node.insert((kind, span.start.offset, span.end.offset), index);
-            targets.push(NodeAnalysisTarget {
-                node,
-                requirements: requested,
-                targeted_hook_routes,
-                is_sharp_static_call,
-            });
+            targets.push(NodeAnalysisTarget { node, requirements: requested, targeted_hook_routes, meaning });
         }
 
         let start = stack.len();
@@ -264,6 +284,95 @@ fn build_node_analysis_plan<'ast, 'arena>(
     }
 
     NodeAnalysisPlan { targets, by_node }
+}
+
+/// The names the analysis finds a PHP# file writes where name resolution alone can't tell, as a host reads them in
+/// PHP, each as `(start, end, name, binding)` with the binding code of [`SourceSnapshot::rename`]:
+///
+/// - `Pdf.render()` and `Pdf.DEFAULT_DPI` after `import Vendor.Pdf;`, where no class is named `Vendor\Pdf`, name the
+///   namespace `Vendor\Pdf` at `Pdf` and its function `Vendor\Pdf\render` or constant `Vendor\Pdf\DEFAULT_DPI` at the
+///   member, as `Pdf\render()` does in PHP. `global.max()` names `max` already, spec section 23.
+/// - `PaymentResult.Declined(reason: "expired")` builds the case `Declined` of the enum `PaymentResult`, spec section
+///   20, so it names the class the case runs as at `Declined`, as `new PaymentResult\Declined(…)` does.
+/// - The pattern `PaymentResult.Paid(string id)` names the enum `PaymentResult` at `PaymentResult`, as the value
+///   pattern `Plan.Starter` names `Plan`, and its case has no name of its own.
+///
+/// None in a PHP file.
+fn analyzed_names(
+    program: &Program<'_>,
+    resolved_names: &ResolvedNames<'_>,
+    codebase: &CodebaseMetadata,
+) -> Vec<(u32, u32, Vec<u8>, u8)> {
+    let mut names = Vec::new();
+    if !program.dialect.is_sharp() {
+        return names;
+    }
+
+    let mut stack = vec![Node::Program(program)];
+    while let Some(node) = stack.pop() {
+        if let Node::TypePattern(pattern) = node
+            && let Hint::Identifier(hint) = &pattern.hint
+            && let Some(case) = data_case(codebase, resolved_names.get(hint))
+            && let Some(r#enum) = case.direct_parent_class.and_then(|name| codebase.get_class_like(name.as_bytes()))
+            && let Some(dot) = hint.value().iter().rposition(|byte| *byte == b'.')
+        {
+            let start = hint.span().start.offset;
+            names.push((start, start + dot as u32, r#enum.original_name.as_bytes().to_vec(), SNAPSHOT_CLASS_BINDING));
+        }
+
+        let class_member = match node {
+            Node::MethodCall(call) => resolved_names.static_call_class(call).map(|class| (class, &call.method)),
+            Node::PropertyAccess(access) => {
+                resolved_names.static_property_class(access).map(|class| (class, &access.property))
+            }
+            _ => None,
+        };
+        if let Some((class, ClassLikeMemberSelector::Identifier(member))) = class_member {
+            let member_span = (member.span.start.offset, member.span.end.offset);
+            if matches!(node, Node::MethodCall(_))
+                && let Some(case) = built_data_case(resolved_names, codebase, class, member.value)
+            {
+                names.push((
+                    member_span.0,
+                    member_span.1,
+                    case.original_name.as_bytes().to_vec(),
+                    SNAPSHOT_CLASS_BINDING,
+                ));
+            } else if class.name.value() != b"global"
+                && let Some(namespace) = member_namespace(resolved_names, codebase, &class.name, member.value)
+            {
+                let span = class.name.span();
+                names.push((span.start.offset, span.end.offset, namespace.as_bytes().to_vec(), 0));
+                let full_name = namespace_member(namespace, member.value);
+                names.push((member_span.0, member_span.1, full_name.as_bytes().to_vec(), 0));
+            }
+        }
+
+        node.visit_children(|child| stack.push(child));
+    }
+
+    names
+}
+
+/// The binding code a snapshot's resolved name carries for a class, as `SourceSnapshot` writes `Binding::Class`.
+const SNAPSHOT_CLASS_BINDING: u8 = 1;
+
+/// The class a case of an enum with data runs as, spec section 20, when `name` names one.
+fn data_case<'codebase>(codebase: &'codebase CodebaseMetadata, name: &[u8]) -> Option<&'codebase ClassLikeMetadata> {
+    codebase.get_class_like(name).filter(|case| case.flags.is_enum_case_class())
+}
+
+/// The class of the case a PHP# `Enum.Case(…)` builds, spec section 20, when `class` names an enum with data and
+/// `member` one of its cases.
+fn built_data_case<'codebase>(
+    resolved_names: &ResolvedNames<'_>,
+    codebase: &'codebase CodebaseMetadata,
+    class: &ConstantAccess<'_>,
+    member: &[u8],
+) -> Option<&'codebase ClassLikeMetadata> {
+    let enum_name = resolved_names.get(&class.name);
+
+    data_case(codebase, &[enum_name, b"\\", member].concat())
 }
 
 fn is_method_call_kind(kind: mago_syntax::cst::NodeKind) -> bool {
@@ -356,12 +465,14 @@ impl FileAnalysisSnapshot {
         let dialect = program.dialect;
         let node_analysis_plan = node_analysis_requirements
             .map(|requirements| build_node_analysis_plan(program, artifacts, resolved_names, codebase, requirements));
-        let source = SourceSnapshot::complete_with_target_filter(program, resolved_names, |node| {
+        let analyzed = analyzed_names(program, resolved_names, codebase);
+        let mut source = SourceSnapshot::complete_with_target_filter(program, resolved_names, |node| {
             node_analysis_plan.as_ref().is_some_and(|plan| plan.configuration(node).is_some())
         })
         .map_err(|error| {
             protocol(format!("failed to retain syntax for `{}`: {error}", String::from_utf8_lossy(&file.name)))
         })?;
+        source.rename(&analyzed);
         let matched_target_count = source.target_count();
 
         let mut source_writer = PayloadWriter::with_capacity(source.encoded_len());
@@ -384,7 +495,8 @@ impl FileAnalysisSnapshot {
                     String::from_utf8_lossy(&file.name)
                 ))
             })?;
-            if let Some(target_source) = target_source {
+            if let Some(mut target_source) = target_source {
+                target_source.rename(&analyzed);
                 let target_count = target_source.target_count();
                 if target_count != matched_target_count {
                     return Err(protocol(format!(
@@ -558,7 +670,10 @@ fn write_target_analysis(
         for route in &target.targeted_hook_routes {
             writer.write_u32(*route);
         }
-        writer.write_bool(target.is_sharp_static_call);
+        writer.write_bool(target.meaning.is_some());
+        if let Some(meaning) = target.meaning {
+            writer.write_u16(meaning as u16);
+        }
     }
 
     Ok(())
@@ -1761,6 +1876,8 @@ mod tests {
     use super::GET_INFERRED_RETURN_TYPES;
     use super::GET_INFERRED_YIELD_KEY_TYPES;
     use super::GET_INFERRED_YIELD_VALUE_TYPES;
+    use super::analyzed_names;
+    use super::build_node_analysis_plan;
     use super::class_like_matches_hook;
     use super::encode_after_file_analysis_request;
     use super::handle_analysis_query;
@@ -1882,6 +1999,83 @@ mod tests {
                     "analysis query {operation}"
                 );
             }
+        });
+    }
+
+    /// A PHP# file whose calls mean a plain PHP function and an enum case, and whose pattern names a case.
+    const PAY: (&str, &str) = (
+        "src/App/Pay.sharp",
+        "namespace App;\n\nimport Vendor.Pdf;\n\npublic enum PaymentResult\n{\n    case Paid(string id);\n    case Declined(string reason);\n}\n\npublic class Pay\n{\n    public static PaymentResult decline() => PaymentResult.Declined(reason: \"expired\");\n\n    public static string id(PaymentResult result) => match (result) {\n        PaymentResult.Paid(string id) => id,\n        PaymentResult.Declined(string why) => why,\n    };\n\n    public static string render() => Pdf.render(\"x\");\n\n    public static int dpi() => Pdf.DEFAULT_DPI;\n}\n",
+    );
+
+    /// A plain PHP namespace with a function and a constant, and no class of its name.
+    const PDF: (&str, &str) = (
+        "src/Vendor/pdf.php",
+        "<?php\n\nnamespace Vendor\\Pdf;\n\nconst DEFAULT_DPI = 300;\n\nfunction render(string $html): string\n{\n    return $html;\n}\n",
+    );
+
+    /// A host reads each PHP# form as the PHP that means it: `Pdf.render("x")` calls the function `Vendor\Pdf\render`
+    /// and `PaymentResult.Declined(…)` builds the case, so their targets carry those kinds and reach the hooks of
+    /// function calls and of `new`, while a class declaration means only itself. The snapshot names what only the
+    /// codebase tells: the namespace and its members at `Pdf.render` and `Pdf.DEFAULT_DPI`, the case's class at a
+    /// built case, and the enum at a pattern of its case. A plain PHP file names nothing more.
+    #[test]
+    fn a_sharp_file_sends_each_form_as_the_php_that_means_it() {
+        analyzed(&[PAY, PDF], |analysis| {
+            let mut targets = [false; NodeKind::COUNT];
+            let mut requirements = [0; NodeKind::COUNT];
+            for kind in [NodeKind::FunctionCall, NodeKind::Instantiation, NodeKind::Class] {
+                targets[kind as usize] = true;
+                requirements[kind as usize] = NODE_REQUIREMENTS_ALL;
+            }
+            let requirements = NodeAnalysisRequirements::new(&targets, &requirements, Arc::from([]), Arc::from([]));
+            let plan = build_node_analysis_plan(
+                analysis.program,
+                analysis.artifacts,
+                analysis.names,
+                analysis.codebase,
+                &requirements,
+            );
+            let snapshot = FileAnalysisSnapshot::new(
+                analysis.file(),
+                analysis.program,
+                analysis.names,
+                analysis.artifacts,
+                analysis.codebase,
+                Some(&requirements),
+                true,
+            )
+            .expect("the file should snapshot");
+            let code = &analysis.file().contents;
+            let mut named = analyzed_names(analysis.program, analysis.names, analysis.codebase)
+                .into_iter()
+                .map(|(start, end, name, binding)| {
+                    let written = String::from_utf8_lossy(&code[start as usize..end as usize]).into_owned();
+                    (written, String::from_utf8_lossy(&name).into_owned(), binding)
+                })
+                .collect::<Vec<_>>();
+            named.sort();
+
+            assert_eq!(
+                plan.targets.iter().map(|target| target.meaning).collect::<Vec<_>>(),
+                [None, Some(NodeKind::Instantiation), Some(NodeKind::FunctionCall)]
+            );
+            assert!(snapshot.has_node_analysis_targets(), "the class and the calls are node-analysis targets");
+            assert_eq!(
+                named,
+                [
+                    ("DEFAULT_DPI".to_owned(), "Vendor\\Pdf\\DEFAULT_DPI".to_owned(), 0),
+                    ("Declined".to_owned(), "App\\PaymentResult\\Declined".to_owned(), 1),
+                    ("PaymentResult".to_owned(), "App\\PaymentResult".to_owned(), 1),
+                    ("PaymentResult".to_owned(), "App\\PaymentResult".to_owned(), 1),
+                    ("Pdf".to_owned(), "Vendor\\Pdf".to_owned(), 0),
+                    ("Pdf".to_owned(), "Vendor\\Pdf".to_owned(), 0),
+                    ("render".to_owned(), "Vendor\\Pdf\\render".to_owned(), 0),
+                ]
+            );
+        });
+        analyzed(&[PDF], |analysis| {
+            assert!(analyzed_names(analysis.program, analysis.names, analysis.codebase).is_empty());
         });
     }
 
