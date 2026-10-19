@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls every method of Sharp.Text.Text, Text.fromByte throws ValueError for a value that is not a byte, parseCsv reads one CSV line, where a quoted field keeps its comma and a blank line is one empty field, case changes and split work on characters, replace replaces every match and throws ValueError for empty text to replace, split keeps the empty text after a trailing delimiter, gives at most a positive limit's parts, the last holding the rest, and every part for a limit of 0, and throws ValueError for an empty delimiter or a negative limit
+A PHP# class calls every method of Sharp.Text.Text, Text.fromByte throws ValueError for a value that is not a byte, parseCsv reads one CSV line, where a quoted field keeps its comma and a blank line is one empty field, case changes and split work on characters, replace replaces every match and throws ValueError for empty text to replace, split keeps the empty text after a trailing delimiter, gives at most a positive limit's parts, the last holding the rest, and every part for a limit of 0, and throws ValueError for an empty delimiter or a negative limit, and join puts the separator between a List<string>'s parts
 --FILE--
 <?php
 require __DIR__ . '/library_text.inc';
@@ -31,6 +31,9 @@ foreach ([['a,b,', ','], ['é–Ü', '–'], ['abc', ',']] as [$text, $delimiter
 }
 foreach ([['a:b:c', 2], ['a:b:c', 1], ['a:b:c', 0], ['a:b:c', 5], ['é:Ü:ß', 2]] as [$text, $limit]) {
     echo json_encode(Demo\TextCalls::splitAtMost($text, ':', $limit), JSON_UNESCAPED_UNICODE), "\n";
+}
+foreach ([[['a', 'b', 'c'], ', '], [['é', 'Ü'], '–'], [['solo'], ', '], [[], ', '], [['a', 'b'], '']] as [$parts, $separator]) {
+    var_dump(Demo\TextCalls::join($parts, $separator));
 }
 foreach ([fn () => Demo\TextCalls::split('abc', ''), fn () => Demo\TextCalls::splitAtMost('a:b', ':', -1), fn () => Demo\TextCalls::replace('abc', '', '-')] as $refused) {
     try {
@@ -71,6 +74,11 @@ string(6) "banana"
 ["a","b","c"]
 ["a","b","c"]
 ["é","Ü:ß"]
+string(7) "a, b, c"
+string(7) "é–Ü"
+string(4) "solo"
+string(0) ""
+string(2) "ab"
 ValueError: `split` needs a delimiter, and it is empty.
 ValueError: `split` takes a limit of 0 or more, and it is negative.
 ValueError: `replace` needs text to replace, and it is empty.

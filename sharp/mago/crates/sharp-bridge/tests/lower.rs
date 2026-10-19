@@ -371,6 +371,29 @@ fn child_body(signature: &str, statements: &str, base: &str) -> String {
     Lowered::with(&method_in("Report : Base", signature, statements), &[("src/App/Tenant/Base.php", base)]).body()
 }
 
+/// A `match` arm the analysis finds never runs, past an arm every tuple matches or behind a guard that is always false,
+/// and the `default` a PHP# `match` needs there, lower with the rest: the analysis types them as it types any arm.
+#[test]
+fn an_arm_that_never_runs_lowers_as_any_arm() {
+    let lowered = body(
+        "        const [int, int] pair = [5, 6];\n        const first = match (pair) { [int a, ...List<int> rest] => a + rest.count(), default => -1 };\n        const second = match (extra) { int n when false => -n, default => 0 };\n        return first + match (pair) { [int a, ...List<int> rest] => a, [int a, int b] => -b, default => -extra };\n",
+    );
+
+    assert!(
+        lowered.contains("        MATCH_ARM\n          null\n          UNARY_MINUS\n            ZVAL 1\n  ASSIGN\n"),
+        "{lowered}"
+    );
+    assert!(
+        lowered
+            .contains("              ZVAL false\n          UNARY_MINUS\n            VAR\n              ZVAL \"n\"\n"),
+        "{lowered}"
+    );
+    assert!(
+        lowered.ends_with("            UNARY_MINUS\n              VAR\n                ZVAL \"b\"\n          MATCH_ARM\n            null\n            UNARY_MINUS\n              VAR\n                ZVAL \"extra\"\n"),
+        "{lowered}"
+    );
+}
+
 /// ```php
 /// $base = 2; $base = 3;
 /// ```
@@ -391,11 +414,19 @@ fn php_syntax_returns_a_parse_error_and_no_nodes() {
     assert_eq!(lowered.nodes().len(), 0);
 }
 
+/// An interface property stated `{ get; init; }` runs as PHP's `{ get; }`, since PHP gives the `set` hook of an
+/// interface only a public `set`, and the analyzer checks that each class gives `init`.
 #[test]
-fn a_construct_outside_the_slice_returns_its_not_supported_error() {
-    let lowered = Lowered::new("namespace App;\n\ninterface Sized\n{\n    int max { get; init; }\n}\n");
+fn an_interface_property_stated_with_init_runs_as_get_only() {
+    let files = lowered_each(
+        &[("src/App/Sized.sharp", "namespace App;\n\ninterface Sized\n{\n    int max { get; init; }\n}\n")],
+        &[],
+    );
 
-    assert_eq!(lowered.diagnostics(), ["5:5 compile error: This class member is not supported yet in PHP#."]);
+    assert_eq!(
+        member_in(&files, "Sized", &[0, 1, 0, 3]),
+        "STMT_LIST\n  PROPERTY_HOOK \"get\" @5-5\n    null\n    null\n    null\n    null\n    null\n"
+    );
 }
 
 /// Spec section 2: each of the 43 PHP keywords PHP# doesn't use is a plain name, and so is a word that means something
@@ -7747,7 +7778,7 @@ fn list_insert_remove_and_clear_change_the_list_where_it_lives() {
 /// change through it is a `Sharp\Collection` method on the index: `clear`, a `Set`'s `add`, and `put` for a write
 /// into a `Map` element, whose `??=` puts only for a missing key. An index that runs something is held in a hidden
 /// variable, so it runs once. A null-safe method that runs as PHP reads a missing `Map` key as null. Each parameter
-/// first makes each `Set` and `Map` plain PHP gave as an array the object.
+/// first makes each `Set` and `Map` plain PHP gave as an array the object, and renumbers each `List` a `Map` holds.
 #[test]
 fn a_change_through_a_list_index_runs_a_collection_method_on_the_index() {
     assert_eq!(
@@ -7906,14 +7937,14 @@ fn a_change_through_a_list_index_runs_a_collection_method_on_the_index() {
                                   PARAM_LIST
                                     PARAM
                                       null
-                                      ZVAL "key#1"
+                                      ZVAL "key#2"
                                       null
                                       null
                                       null
                                       null
                                     PARAM
                                       null
-                                      ZVAL "value#2"
+                                      ZVAL "value#3"
                                       null
                                       null
                                       null
@@ -7923,11 +7954,11 @@ fn a_change_through_a_list_index_runs_a_collection_method_on_the_index() {
                                     ARRAY_ELEM
                                       CAST [6]
                                         VAR
-                                          ZVAL "key#1"
+                                          ZVAL "key#2"
                                       null
                                     ARRAY_ELEM
                                       VAR
-                                        ZVAL "value#2"
+                                        ZVAL "value#3"
                                       null
                                   null
                                   null
@@ -7936,8 +7967,36 @@ fn a_change_through_a_list_index_runs_a_collection_method_on_the_index() {
                                   ARG_LIST
                                     VAR
                                       ZVAL "stock"
-                                VAR
-                                  ZVAL "stock"
+                                CALL
+                                  ZVAL "array_map"
+                                  ARG_LIST
+                                    ARROW_FUNC "" @7-7
+                                      PARAM_LIST
+                                        PARAM
+                                          null
+                                          ZVAL "element#1"
+                                          null
+                                          null
+                                          null
+                                          null
+                                      null
+                                      CONDITIONAL
+                                        CALL
+                                          ZVAL "is_array"
+                                          ARG_LIST
+                                            VAR
+                                              ZVAL "element#1"
+                                        CALL
+                                          ZVAL "array_values"
+                                          ARG_LIST
+                                            VAR
+                                              ZVAL "element#1"
+                                        VAR
+                                          ZVAL "element#1"
+                                      null
+                                      null
+                                    VAR
+                                      ZVAL "stock"
                   VAR
                     ZVAL "stock"
               METHOD_CALL

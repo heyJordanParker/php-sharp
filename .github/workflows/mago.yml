@@ -206,8 +206,10 @@ jobs:
           done
 
   # Installs heyjordanparker/mago-sharp from what git archive ships, the way Packagist ships it, and
-  # heyjordanparker/php-sharp-composer from sharp/composer, on the runner's own PHP. Then runs mago on a
-  # one-class .sharp project with the binary the job before built.
+  # heyjordanparker/php-sharp-composer from sharp/composer, on the runner's own PHP. A package that requires
+  # upstream's carthage-software/mago at the release this checker left from, as an extension host does,
+  # installs no second checker, and one that requires a later release installs nothing. Then runs mago on
+  # a one-class .sharp project with the binary the job before built.
   plain-php:
     needs: [build-and-test, release-build]
     strategy:
@@ -278,6 +280,31 @@ jobs:
           SHARP
           composer require --no-interaction heyjordanparker/php-sharp-composer:@dev
           composer require --no-interaction --dev "heyjordanparker/mago-sharp:$version"
+          mkdir -p "$RUNNER_TEMP/upstream-host"
+          cat > "$RUNNER_TEMP/upstream-host/composer.json" <<'JSON'
+          {
+              "name": "probe/upstream-host",
+              "version": "0.1.0",
+              "require": { "carthage-software/mago": "^1.50" }
+          }
+          JSON
+          composer config repositories.upstream-host path "$RUNNER_TEMP/upstream-host"
+          composer require --no-interaction --dev probe/upstream-host:0.1.0
+          test ! -e vendor/carthage-software/mago
+          # A host that needs a later upstream release than the one this checker left from gets no install.
+          mkdir -p "$RUNNER_TEMP/later-host"
+          cat > "$RUNNER_TEMP/later-host/composer.json" <<'JSON'
+          {
+              "name": "probe/later-host",
+              "version": "0.1.0",
+              "require": { "carthage-software/mago": "^1.57" }
+          }
+          JSON
+          composer config repositories.later-host path "$RUNNER_TEMP/later-host"
+          if composer require --no-interaction --dev probe/later-host:0.1.0; then
+            echo "A host that requires carthage-software/mago ^1.57 installed beside mago-sharp." >&2
+            exit 1
+          fi
           binary_dir="vendor/heyjordanparker/mago-sharp/composer/bin/$version/mago-$version-$(rustc -vV | sed -n 's/^host: //p')"
           mkdir -p "$binary_dir"
           install -m 755 "$RUNNER_TEMP/mago/mago" "$binary_dir/mago"

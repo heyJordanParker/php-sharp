@@ -3287,6 +3287,36 @@ fn a_named_break_or_continue_leaves_or_continues_the_loop_it_names() {
     assert_eq!(issues(("src/Demo/Levels.php", php), &[]), ["11:23 invalid-break"]);
 }
 
+/// A loop whose body always leaves past it, through `return`, or a `break` or `continue` that names a loop around it,
+/// never checks its condition after a pass, so it ends only when the condition fails before the first one: the code
+/// after it runs with what the locals held before the loop, narrowed by the failed condition, and never with `never`.
+/// Plain PHP's `break 2` and `continue 2` are the same.
+#[test]
+fn a_loop_whose_body_always_leaves_past_it_ends_with_the_locals_it_began_with() {
+    let sharp = "namespace Demo;\n\nclass Rows\n{\n    public static int named(List<int> rows, int? limit)\n    {\n        let total = 0;\n        orders: for (const row of rows) {\n            while (limit != null) {\n                total = row + limit;\n                break orders;\n            }\n            Rows.note(limit);\n        }\n        return total;\n    }\n\n    public static int returned(List<int> rows, int? limit)\n    {\n        for (const row of rows) {\n            while (limit != null) {\n                return row + limit;\n            }\n            Rows.note(limit);\n        }\n        return 0;\n    }\n\n    public static int continued(List<int> rows, int? limit)\n    {\n        let total = 0;\n        orders: for (const row of rows) {\n            while (limit != null) {\n                total = row + limit;\n                continue orders;\n            }\n            Rows.note(limit);\n        }\n        return total;\n    }\n\n    public static int stepped(List<int> rows, int? limit)\n    {\n        let total = 0;\n        orders: for (const row of rows) {\n            for (let step = 0; limit != null; step++) {\n                total = row + step;\n                continue orders;\n            }\n            Rows.note(limit);\n        }\n        return total;\n    }\n\n    private static void note(int? limit)\n    {\n    }\n}\n";
+    let php = "<?php\n\nnamespace Demo;\n\nfinal class Rows\n{\n    /** @param list<int> $rows */\n    public static function levels(array $rows, ?int $limit): int\n    {\n        $total = 0;\n        foreach ($rows as $row) {\n            while ($limit !== null) {\n                $total = $row + $limit;\n                break 2;\n            }\n            self::none($limit);\n        }\n        return $total;\n    }\n\n    public static function returned(?int $limit): int\n    {\n        while ($limit !== null) {\n            return $limit;\n        }\n        self::none($limit);\n        return 0;\n    }\n\n    public static function passes(?int $limit): void\n    {\n        while ($limit !== null) {\n            $limit = $limit > 3 ? null : $limit + 1;\n        }\n        self::none($limit);\n    }\n\n    /** @param list<int> $rows */\n    public static function continued(array $rows, ?int $limit): int\n    {\n        $total = 0;\n        foreach ($rows as $row) {\n            while ($limit !== null) {\n                $total = $row + $limit;\n                continue 2;\n            }\n            self::none($limit);\n        }\n        return $total;\n    }\n\n    private static function none(null $limit): void\n    {\n    }\n}\n";
+
+    assert_eq!(
+        (issues(("src/Demo/Rows.sharp", sharp), &[]), issues(("src/Demo/Rows.php", php), &[])),
+        (Vec::<String>::new(), Vec::<String>::new())
+    );
+}
+
+/// A loop never ends on its condition only when that condition is the constant `true`, judged from its words before any
+/// pass, as TypeScript and Kotlin judge it: a `for` whose condition is `true` never ends, as `while (true)` doesn't, so
+/// it needs no `return` after it, and a `do … while` on a `bool` local ends once the local is false, whatever the last
+/// pass narrowed it to, so the statement after it runs. Plain PHP's loops are the same.
+#[test]
+fn a_loop_never_ends_on_its_condition_only_when_the_condition_is_true() {
+    let sharp = "namespace Demo;\n\nclass Passes\n{\n    public static int again(bool again)\n    {\n        let passes = 0;\n        do {\n            passes = passes + 1;\n        } while (again);\n        return passes;\n    }\n\n    public static int counted()\n    {\n        for (let step = 0; true; step++) {\n            return step;\n        }\n    }\n}\n";
+    let php = "<?php\n\nnamespace Demo;\n\nfinal class Passes\n{\n    public static function again(bool $again): int\n    {\n        $passes = 0;\n        do {\n            $passes = $passes + 1;\n        } while ($again);\n        return $passes;\n    }\n\n    public static function counted(): int\n    {\n        for ($step = 0; true; $step++) {\n            return $step;\n        }\n    }\n}\n";
+
+    assert_eq!(
+        (refusals(("src/Demo/Passes.sharp", sharp), &[]), issues(("src/Demo/Passes.php", php), &[])),
+        (Vec::<String>::new(), Vec::<String>::new())
+    );
+}
+
 /// Spec section 7 refuses a statement that can never run, as Java and Zig do: one after `return`, `throw`, a call that
 /// never returns, `break` or `continue` in its block, one after an `if` whose every branch ends the block, one after
 /// a loop that never ends, and a block after a condition that never finishes, which is refused at the condition. The
@@ -9265,6 +9295,17 @@ fn a_plain_php_int_keyed_array_arrives_as_a_list() {
         issues(("src/App/Roster.sharp", sharp), &[("src/App/Users.php", users), ("src/App/Person.php", person)]),
         ["16:30 invalid-local-assignment-value", "17:31 invalid-local-assignment-value"]
     );
+}
+
+/// Spec section 12: plain PHP's array keyed by `int` alone arrives as a `List` wherever it sits in the value that
+/// arrives: a shape whose keys are all ints, as `array{0: int, 1: int}`, the field of a shape and the value of a
+/// collection typed `array<int, T>`. So a list pattern and `is List<int>` match it, as they match plain PHP's `list<int>`.
+#[test]
+fn a_plain_php_int_keyed_shape_or_field_arrives_as_a_list() {
+    let pivot = "<?php\n\nnamespace App;\n\nfinal class Pivot\n{\n    /** @return array{0: int, 1: int} */\n    public function pair(): array { return [5, 6]; }\n\n    /** @return array{attached: array<int, int>} */\n    public function changes(): array { return ['attached' => [5]]; }\n\n    /** @return array<string, array<int, int>> */\n    public function grouped(): array { return []; }\n\n    /** @return list{int, int} */\n    public function listed(): array { return [5, 6]; }\n}\n";
+    let sharp = "namespace App;\n\nclass Reader\n{\n    public int read(Pivot pivot, Any? changed)\n    {\n        List<int> pair = pivot.pair();\n        List<int> attached = pivot.changes().get(\"attached\") ?? [];\n        List<int> grouped = pivot.grouped()[\"a\"] ?? [];\n        const sum = match (pivot.pair()) { [int a, int b] => a + b, default => 0 };\n        const listed = match (pivot.listed()) { [int a, int b] => a + b, default => 0 };\n        return changed is List<int> ? sum + listed + pair[0] + attached.count() + grouped.count() : sum;\n    }\n}\n";
+
+    assert_eq!(issues(("src/App/Reader.sharp", sharp), &[("src/App/Pivot.php", pivot)]), [] as [&str; 0]);
 }
 
 /// Spec section 12: a `List` is not a `Map`, so a `List` value where only a `Map` is declared is refused, as a `List`
@@ -22410,6 +22451,77 @@ fn a_class_gives_an_interface_property_stated_with_set_a_set() {
         worded(fixed, &[settable]),
         [
             "5:16 incompatible-property-access `Fixed` gives `total` get-only, and `Settable` states it with `set`. | Given here. | Stated here. | Declare `total` with `{ get; set; }`."
+        ]
+    );
+}
+
+/// Team-lead's ruling of 10-19, as C# 9 lets an interface state an `init` accessor: a PHP# interface states a property
+/// `{ get; init; }`, and a class or a struct gives it `{ get; init; }`, as C# requires (CS8853). An event gives it
+/// through its parameter, set once, by `new`, as a C# record's positional property is `init`. A class that gives it
+/// with `set` or get-only is refused, and so is a write through the interface after the object is created.
+#[test]
+fn a_class_gives_an_interface_property_stated_with_init_an_init() {
+    let sized =
+        ("app/Shop/Sized.sharp", "namespace App.Shop;\n\npublic interface Sized\n{\n    int max { get; init; }\n}\n");
+    let boxed = (
+        "app/Shop/Boxed.sharp",
+        "namespace App.Shop;\n\npublic class Boxed : Sized\n{\n    public int max { get; init; } = 1;\n\n    public static int made()\n    {\n        const boxed = new Boxed { max: 3 };\n        return boxed.max;\n    }\n}\n",
+    );
+    let packed = (
+        "app/Shop/Packed.sharp",
+        "namespace App.Shop;\n\npublic struct Packed : Sized\n{\n    public int max { get; init; } = 1;\n}\n",
+    );
+    let event = ("app/Shop/Sizes.sharp", "namespace App.Shop;\n\npublic event Sizes(int max) : Sized;\n");
+    let settable = (
+        "app/Shop/Crate.sharp",
+        "namespace App.Shop;\n\npublic class Crate : Sized\n{\n    public int max { get; set; } = 1;\n}\n",
+    );
+    let fixed = (
+        "app/Shop/Tray.sharp",
+        "namespace App.Shop;\n\npublic class Tray : Sized\n{\n    public int max { get; } = 1;\n}\n",
+    );
+    let guarded = (
+        "app/Shop/Case.sharp",
+        "namespace App.Shop;\n\npublic class Case : Sized\n{\n    public int max { get; private set; } = 1;\n}\n",
+    );
+    let missing = ("app/Shop/Bin.sharp", "namespace App.Shop;\n\npublic class Bin : Sized\n{\n}\n");
+    let written = (
+        "app/Shop/Resize.sharp",
+        "namespace App.Shop;\n\npublic class Resize\n{\n    public static void grow(Sized sized)\n    {\n        sized.max = 2;\n    }\n}\n",
+    );
+
+    assert_eq!(worded(sized, &[]), Vec::<String>::new());
+    assert_eq!(worded(boxed, &[sized]), Vec::<String>::new());
+    assert_eq!(worded(packed, &[sized]), Vec::<String>::new());
+    assert_eq!(worded(event, &[sized]), Vec::<String>::new());
+    assert_eq!(
+        worded(settable, &[sized]),
+        [
+            "5:16 incompatible-property-access `Crate` gives `max` with `set`, and `Sized` states it with `init`. | Given here. | Stated here. | Declare `max` with `{ get; init; }`."
+        ]
+    );
+    assert_eq!(
+        worded(fixed, &[sized]),
+        [
+            "5:16 incompatible-property-access `Tray` gives `max` get-only, and `Sized` states it with `init`. | Given here. | Stated here. | Declare `max` with `{ get; init; }`."
+        ]
+    );
+    assert_eq!(
+        worded(guarded, &[sized]),
+        [
+            "5:16 incompatible-property-access `Case` gives `max` with `private set`, and `Sized` states it with `init`. | Given here. | Stated here. | Declare `max` with `{ get; init; }`."
+        ]
+    );
+    assert_eq!(
+        worded(missing, &[sized]),
+        [
+            "3:14 unimplemented-abstract-property-hook `Bin` does not give `max`, which `Sized` states. | Declared here. | Stated here. | Add the property `public int max { get; init; }`."
+        ]
+    );
+    assert_eq!(
+        worded(written, &[sized]),
+        [
+            "7:15 invalid-property-write `max` is set only while the object is created. | Written here. | Set it on `this` in a constructor or a named constructor."
         ]
     );
 }

@@ -446,6 +446,7 @@ ZEND_API void zend_declare_class_constant_stringl(zend_class_entry *ce, const ch
 ZEND_API void zend_declare_class_constant_string(zend_class_entry *ce, const char *name, size_t name_length, const char *value);
 
 ZEND_API zend_result zend_update_class_constant(zend_class_constant *c, const zend_string *name, zend_class_entry *scope);
+ZEND_API bool zend_class_constants_updated(const zend_class_entry *class_type);
 ZEND_API zend_result zend_update_class_constants(zend_class_entry *class_type);
 ZEND_API HashTable *zend_separate_class_constants_table(zend_class_entry *class_type);
 

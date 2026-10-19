@@ -383,7 +383,7 @@ ZEND_API zend_object *zend_lazy_object_mark_as_initialized(zend_object *obj)
 
 	zend_class_entry *ce = obj->ce;
 
-	ZEND_ASSERT(ce->ce_flags & ZEND_ACC_CONSTANTS_UPDATED);
+	ZEND_ASSERT(zend_class_constants_updated(ce));
 
 	zval *default_properties_table = CE_DEFAULT_PROPERTIES_TABLE(ce);
 	zval *properties_table = obj->properties_table;
@@ -579,7 +579,7 @@ ZEND_API zend_object *zend_lazy_object_init(zend_object *obj)
 
 	zend_class_entry *ce = obj->ce;
 
-	ZEND_ASSERT(ce->ce_flags & ZEND_ACC_CONSTANTS_UPDATED);
+	ZEND_ASSERT(zend_class_constants_updated(ce));
 
 	if (zend_object_is_lazy_proxy(obj)) {
 		return zend_lazy_object_init_proxy(obj);

@@ -202,6 +202,14 @@ for ($round = 0; $round < 100; $round++) {
     }
     echo 'foreach over the object: ', received($read), "\n";
     echo 'ReflectionProperty::getValue(): ', received((new ReflectionProperty(Holdings::class, 'payload'))->getValue($holdings)), "\n";
+    // isInitialized() and setValue() find the property's offset, which getValue() and getRawValue() then read from.
+    $reflected = new ReflectionProperty(Holdings::class, 'payload');
+    echo 'ReflectionProperty::isInitialized(): ', var_export($reflected->isInitialized($holdings), true), "\n";
+    echo 'ReflectionProperty::getValue() after isInitialized(): ', received($reflected->getValue($holdings)), "\n";
+    echo 'ReflectionProperty::getRawValue() after isInitialized(): ', received($reflected->getRawValue($holdings)), "\n";
+    $reflected = new ReflectionProperty(Holdings::class, 'payload');
+    $reflected->setValue($holdings, ['id' => 'p1']);
+    echo 'ReflectionProperty::getValue() after setValue(): ', received($reflected->getValue($holdings)), "\n";
     echo 'ReflectionProperty::getValue() of a static: ', received((new ReflectionProperty(Holdings::class, 'counts'))->getValue()), "\n";
     echo 'a plain PHP subclass reads $this->payload: ', received((new PlainHoldings())->ownPayload()), "\n";
 
@@ -366,6 +374,10 @@ get_object_vars(): array, is_array true, {"id":"p1"}
 an (array) cast: array, is_array true, {"id":"p1"}
 foreach over the object: array, is_array true, {"id":"p1"}
 ReflectionProperty::getValue(): array, is_array true, {"id":"p1"}
+ReflectionProperty::isInitialized(): true
+ReflectionProperty::getValue() after isInitialized(): array, is_array true, {"id":"p1"}
+ReflectionProperty::getRawValue() after isInitialized(): array, is_array true, {"id":"p1"}
+ReflectionProperty::getValue() after setValue(): array, is_array true, {"id":"p1"}
 ReflectionProperty::getValue() of a static: array, is_array true, {"c":1}
 a plain PHP subclass reads $this->payload: array, is_array true, {"id":"p1"}
 PHP# reads its Map property: Sharp\Map Sharp\Map Sharp\Map

@@ -1591,6 +1591,26 @@ static bool reflection_property_crosses(const zend_property_info *prop)
 	return (prop->flags & ZEND_ACC_SHARP_CROSSING) != 0;
 }
 
+/* Whether a read of `ref` on an object of `ce` takes the slot at the offset its cache slot holds. read_property gives
+ * plain PHP code a property that crosses as its PHP array, and caches no offset for it, but isInitialized() and
+ * setValue() cache one, so plain PHP's read of such a property goes through read_property. */
+static bool reflection_reads_cached_offset(const property_reference *ref, const zend_class_entry *ce)
+{
+	return ref->cache_slot[0] == ce
+		&& !(ref->prop && UNEXPECTED(reflection_property_crosses(ref->prop)) && !sharp_runs_sharp_code());
+}
+
+/* After a read of `ref` on an object of `ce`, puts back the class read_property took out of its cache slot for a
+ * property that crosses, so isInitialized() finds the offset that read cached, as it finds one after a read of any
+ * other property, and plain PHP's lazy proxy gives what a plain array property gives. */
+static void reflection_keep_read_cache(property_reference *ref, zend_class_entry *ce)
+{
+	if (ref->prop && UNEXPECTED(reflection_property_crosses(ref->prop)) && !sharp_runs_sharp_code()
+			&& ref->cache_slot[0] == NULL) {
+		ref->cache_slot[0] = ce;
+	}
+}
+
 /* {{{ reflection_type_factory */
 static void reflection_type_factory(zend_type type, zval *object, bool legacy_behavior)
 {
@@ -6178,7 +6198,7 @@ ZEND_METHOD(ReflectionProperty, getValue)
 			RETURN_THROWS();
 		}
 
-		if (ref->cache_slot[0] == Z_OBJCE_P(object)) {
+		if (reflection_reads_cached_offset(ref, Z_OBJCE_P(object))) {
 			uintptr_t prop_offset = (uintptr_t) ref->cache_slot[1];
 
 			if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
@@ -6194,6 +6214,7 @@ ZEND_METHOD(ReflectionProperty, getValue)
 		member_p = Z_OBJ_P(object)->handlers->read_property(Z_OBJ_P(object),
 				ref->unmangled_name, BP_VAR_R, ref->cache_slot, &rv);
 		EG(fake_scope) = old_scope;
+		reflection_keep_read_cache(ref, Z_OBJCE_P(object));
 
 		if (member_p != &rv) {
 			RETURN_COPY_DEREF(member_p);
@@ -6286,7 +6307,7 @@ ZEND_METHOD(ReflectionProperty, getRawValue)
 		RETURN_THROWS();
 	}
 
-	if (ref->cache_slot[0] == Z_OBJCE_P(object)) {
+	if (reflection_reads_cached_offset(ref, Z_OBJCE_P(object))) {
 		uintptr_t prop_offset = (uintptr_t) ref->cache_slot[1];
 
 		if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
@@ -6313,6 +6334,7 @@ ZEND_METHOD(ReflectionProperty, getRawValue)
 				Z_OBJ_P(object), ref->unmangled_name, BP_VAR_R,
 				ref->cache_slot, &rv);
 		EG(fake_scope) = old_scope;
+		reflection_keep_read_cache(ref, Z_OBJCE_P(object));
 
 		if (member_p != &rv) {
 			RETURN_COPY_DEREF(member_p);

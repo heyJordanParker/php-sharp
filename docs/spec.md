@@ -708,7 +708,7 @@ public void grant(User user) { … }
 public void grant(Page page) { … }                    // compile error: grant is declared twice. Name each by what it takes, as in grantPageAccess
 ```
 
-**A statement that can never run is a compile error,** as Java's "unreachable statement" and Zig's "unreachable code" are. A statement after `return`, `throw`, `break`, `continue` or a call that never returns in the same block never runs, and neither does one after an `if` whose every branch ends the block, or after a loop that never ends, such as a `do` whose body ends the block. The error names the line that ends the block, and says to delete the statement or move it above that line. The block of an `if` or a `for … of` whose condition never finishes, as `if (throw new ValueError("empty"))`, never runs either, and the error says to write the condition as its own statement in place of the `if` or the `for`.
+**A statement that can never run is a compile error,** as Java's "unreachable statement" and Zig's "unreachable code" are. A statement after `return`, `throw`, `break`, `continue` or a call that never returns in the same block never runs, and neither does one after an `if` whose every branch ends the block, or after a loop that never ends, such as a `do` whose body ends the block. A loop's condition alone never ends it only when it is the constant `true`, as in `while (true)` and `for (let i = 0; true; i++)`, judged from what it says and not from what a pass narrows it to, as TypeScript and Kotlin judge it, so a `do … while (again)` on a `bool` local ends once `again` is false. The error names the line that ends the block, and says to delete the statement or move it above that line. The block of an `if` or a `for … of` whose condition never finishes, as `if (throw new ValueError("empty"))`, never runs either, and the error says to write the condition as its own statement in place of the `if` or the `for`.
 
 <!-- example unreachable-statements: members -->
 ```csharp
@@ -725,6 +725,22 @@ public int total(List<int> prices)
     return sum;
     sum = 0;                                  // compile error: return ends the block, so this never runs
 }
+
+public int passes(bool again)
+{
+    int count = 0;
+    do {
+        count = count + 1;
+    } while (again);
+    return count;                             // compiles: the loop ends once again is false
+}
+
+public int firstStep()
+{
+    for (let step = 0; true; step++) {
+        return step;
+    }
+}                                             // compiles: the loop never ends on its condition, so no return follows it
 ```
 
 **A method that never returns declares the return type `never`,** as TypeScript's `never`, Kotlin's `Nothing` and Rust's `!` do. Every path through its body ends in a `throw` or in a call of another `never` method, and a path that reaches the closing brace is a compile error. A call of one ends the block it is in, as `throw` does, so a statement after it never runs, and `input ?? fail(…)` has the type of `input`. An override of a `never` method returns `never` too. `never` is only a whole return type: a parameter, a property, a local or a type argument of `never` is a compile error, a return type's type argument included, as in `List<never>`. An expression body returns its value, so a `never` method with one, as `never stop() => 1;`, is a compile error unless the expression never finishes, as `=> throw new ValueError("stopped")` does.
@@ -1410,7 +1426,7 @@ copy.add(line);           // changes only copy
 
 At each crossing, the runtime checks every element once and throws a `TypeError` that names the element. An `int` where PHP# expects a `float` does not throw: it becomes a `float` (section 24). A call from PHP# to PHP# checks nothing at runtime, because the checker proved it.
 
-**A plain PHP array keyed by `int` alone arrives as a `List`, renumbered,** as Kotlin reads a Java `List`. PHP keeps an array's keys when a function such as `array_filter` drops elements, so plain PHP's `array<int, Person>` holds a list whose keys may have gaps. PHP# reads it as a `List<Person>` wherever it arrives, a return, a property read, an argument from a plain PHP caller and a property plain PHP writes, and its first element is at `0`. A place declared `Map<int, Person>` keeps the keys plain PHP gave. An array keyed by `string` or by `int|string` stays a `Map`.
+**A plain PHP array keyed by `int` alone arrives as a `List`, renumbered,** as Kotlin reads a Java `List`. PHP keeps an array's keys when a function such as `array_filter` drops elements, so plain PHP's `array<int, Person>` holds a list whose keys may have gaps. PHP# reads it as a `List<Person>` wherever it arrives, a return, a property read, an argument from a plain PHP caller and a property plain PHP writes, and its first element is at `0`. A place declared `Map<int, Person>` keeps the keys plain PHP gave. A shape whose keys are all `int`, as `list{int, int}` or `array{0: int, 1: int}`, is a `List` too, of its elements in order, and so is each array keyed by `int` alone that a shape's field, a `Map`'s value or a `List`'s element holds. An array keyed by `string` or by `int|string` stays a `Map`, and a value plain PHP types as a list or a map, as `list<int>|array<string, int>`, keeps the keys it holds, so no `string` key is ever lost.
 
 <!-- example plain-list-arrival -->
 ```php
@@ -1418,6 +1434,12 @@ class Shelf
 {
     /** @return array<int, Line> */
     public static function kept(): array { return array_filter([new Line(), null]); }
+
+    /** @return array{0: int, 1: int} */
+    public static function pair(): array { return [5, 6]; }
+
+    /** @return array{attached: array<int, int>} */
+    public static function changes(): array { return ['attached' => array_filter([0, 7, 8])]; }
 }
 ```
 
@@ -1426,6 +1448,9 @@ class Shelf
 for (const line of Shelf.kept()) { … }       // compiles: plain PHP's array<int, Line> is a List<Line>
 List<Line> kept = Shelf.kept();             // compiles: kept[0] is the first kept line, whatever its key was
 Map<int, Line> byKey = Shelf.kept();        // compiles: the Map keeps plain PHP's keys
+List<int> pair = Shelf.pair();              // compiles: an int-keyed shape is a List
+const sum = match (Shelf.pair()) { [int a, int b] => a + b, default => 0 };   // compiles: sum is 11
+List<int> attached = Shelf.changes().get("attached") ?? [];   // compiles: attached[0] is 7
 ```
 
 **A `List` is not a `Map`, so a `List` value where only a `Map` is declared is a compile error,** as a `List` literal is: its keys are only its positions. A plain PHP value is the exception, since it holds the keys plain PHP gave it.
@@ -1595,7 +1620,7 @@ for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is a 
 **Map keys:** anything with `==` and `hash()` (section 19) keys a `Map` and joins a `Set`, as in Swift, Rust, Java and Kotlin.
 
 - A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type, as in `const [Status status, int n]`, stays allowed. An inferred `Map`, such as a `groupBy` result, gives its keys back the same way.
-- Plain PHP receives a `Map` or a `Set` as a PHP array wherever it gets one: a result, a value a generator yields, an argument, a property it reads, a constant and an attribute's argument, and so does each `Map` and `Set` a `List` holds. That holds where the declared type is `Any`, `Any?`, a type parameter or an `Iterable` too. A `Map` is the array of its entries and a `Set` the list of its elements. A property it reads through `get_object_vars`, `get_mangled_object_vars`, `get_class_vars`, an `(array)` cast, `foreach`, `array_walk` or an `ArrayIterator` over the object, `ReflectionProperty::getValue` and `ReflectionClass`'s static property reads is the array too, `empty()` tests that array, `var_export` prints it, and reflection gives each such property, parameter and result the type `array`. A reference plain PHP takes to an instance property whose type names each `Map` and `Set` it can hold, as `Map<string, Set<int>>` does and `Map<string, Any>` does not, is a reference to that array, as `ksort`, `$r = &$order->tags` and `foreach` by reference take one, and each array assigned through it must fit the property's type. PHP# code reading its own property still gets the `Map`, and a PHP array plain PHP writes there, directly or through a reference, becomes one again. A lazy `Iterable` reaches plain PHP as a `Traversable`, unread, and each element crosses as plain PHP reads it.
+- Plain PHP receives a `Map` or a `Set` as a PHP array wherever it gets one: a result, a value a generator yields, an argument, a property it reads, a constant and an attribute's argument, and so does each `Map` and `Set` a `List` holds. That holds where the declared type is `Any`, `Any?`, a type parameter or an `Iterable` too. A `Map` is the array of its entries and a `Set` the list of its elements. A property it reads through `get_object_vars`, `get_mangled_object_vars`, `get_class_vars`, an `(array)` cast, `foreach`, `array_walk` or an `ArrayIterator` over the object, `ReflectionProperty::getValue` and `getRawValue`, after an `isInitialized()` or a `setValue()` too, and `ReflectionClass`'s static property reads is the array too, `empty()` tests that array, `var_export` prints it, and reflection gives each such property, parameter and result the type `array`. A reference plain PHP takes to an instance property whose type names each `Map` and `Set` it can hold, as `Map<string, Set<int>>` does and `Map<string, Any>` does not, is a reference to that array, as `ksort`, `$r = &$order->tags` and `foreach` by reference take one, and each array assigned through it must fit the property's type. PHP# code reading its own property still gets the `Map`, and a PHP array plain PHP writes there, directly or through a reference, becomes one again. A lazy `Iterable` reaches plain PHP as a `Traversable`, unread, and each element crosses as plain PHP reads it.
 - A PHP array's keys are `int` or `string`, so a `Map` keyed by a backed enum gives each case's backing value as its key, as an array crossing the other way gives each backing value as its case. A `Map` keyed by anything else, a class, a struct, a collection or an enum without backing values, reaches plain PHP as the `Map` itself, the one collection plain PHP receives as the object. Passing it to a plain PHP parameter that names `array` is a compile error that names the parameter and the key type. `counts.count()` counts any `Map`, whatever its keys.
 - Every other `Map` crosses as a PHP array, as one keyed by `int|string` or by a backed enum beside its backing type does. When two of its keys would become one PHP array key, as `5` and `"5"` do, or a backed enum case and its backing value, the crossing throws a `ValueError` that names both keys: "This `Map` holds both `5` and `"5"`, which plain PHP keeps as one key, so it can't become a plain PHP array". A case is named as `Shop.Level.Low`. It never keeps one entry and drops the other. Only the keys a `Map` holds show this, so the check runs where the `Map` crosses, and a `Map` with no two such keys costs nothing extra.
 - A plain PHP parameter that takes only objects, such as `\Countable`, `\Traversable`, `object` or an interface, takes the `Map` or the `Set` itself. One that names `array`, `iterable` or `mixed`, or declares no type, takes the PHP array. A function value gives a `Map` or a `Set` as a PHP array when the closure behind it is plain PHP, and as itself when it is PHP#.
@@ -1748,6 +1773,18 @@ stock.values().toList();               // [3, 7]
 shelves.flatMap(shelf => shelf);       // [["tea", 3], ["pie", 7], ["jam", 1]]
 rows.flatMap(row => row.count());      // compile error: an int is no Iterable
 List<int> counts = shelves.flatMap(shelf => shelf);   // compile error: the entries are [string, int]
+```
+
+**`join` puts a separator between the strings of a `List<string>`,** as Rust's `[String].join`, JavaScript's `join` and Swift's `joined(separator:)` do. Only a list of strings has it, so a list of anything else maps its elements to text first:
+
+<!-- example list-join: statements
+List<string> tags = ["vip", "new"];
+List<int> ids = [3, 5];
+-->
+```csharp
+tags.join(", ");                            // "vip, new"
+ids.map(id => `#${id}`).join(" ");          // "#3 #5"
+ids.join(", ");                             // compile error: only a List<string> has join
 ```
 
 The complete method list is specified with the standard library.
@@ -3674,6 +3711,39 @@ page.designLabel;                                           // "design design", 
 - A computed property's default body runs on each read, so it takes no `static` and no `lazy`. An enum declares no stored property; a computed property is allowed, static or not, and an enum takes an interface's computed default as a class does. Every enum already has `name`, and a backed enum `value`, so no computed property takes either name.
 - A PHP# interface with default bodies compiles to a PHP interface plus a PHP trait named `<Interface>\Defaults` that holds the default bodies, as Kotlin nests `DefaultImpls` in an interface. A plain PHP class that implements it must also `use` that trait to get the defaults. PHP# code never names the trait, so section 23's rule that a class cannot share its full name with a namespace does not apply to it.
 
+**An interface property may state `init` in place of `set`,** as C# 9 lets an interface state it: `string kind { get; init; }`. A class or a struct gives it with `init`, as C# requires (CS8853), and an event gives it through its parameter, which `new` sets once. Code sets it only while its object is created, and reads it through the interface. Any other accessor list an interface property states gets what that list gets on a class property:
+
+<!-- example interface-init -->
+```csharp
+// app/Tagged.sharp
+namespace App;
+
+public interface Tagged
+{
+    string kind { get; init; }                              // compiles
+    string note { get; set; init; }                         // compile error: a property is written by set or by init, not both
+}
+```
+
+<!-- example interface-init -->
+```csharp
+// app/Badge.sharp
+namespace App;
+
+public class Badge : Tagged
+{
+    public string kind { get; init; } = "plain";            // compiles: Tagged states kind with init, and { get; set; } is a compile error
+    public string note { get; set; } = "";
+}
+```
+
+<!-- example interface-init: statements -->
+```csharp
+Tagged tagged = new Badge { kind: "sale" };
+tagged.kind;                                                // "sale"
+tagged.kind = "new";                                        // compile error: kind is set only while its object is created
+```
+
 **A class has one method per name, whatever it inherits** (section 7). When two places give a class a body for the same method, the class writes the method itself, as Kotlin requires. The places are two interfaces' default bodies, a default body and a plain PHP trait, two header traits, or a default body and the base class. Until the class writes it, the class is a compile error that names both places. Inside its own methods, the class runs one interface's default body with `super<Interface>`:
 
 <!-- example one-body-per-method -->
@@ -4896,7 +4966,7 @@ app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mag
 ```
 
 - **A deploy** runs `vendor/bin/mago compile` before the code runs.
-- **`mago compile` writes a `.php` file beside each of the project's `.sharp` files that declares a type,** as `StoreService.php` beside `StoreService.sharp`. So PHP code that finds classes by listing `*.php` files and naming each class by its path, as route-attribute and event discovery do, finds PHP# classes too, the way Java's classpath scanners find Kotlin classes. The file only loads its `.sharp` file through the engine, and on plain PHP it throws the "needs the PHP# engine" error. Once its `.sharp` file is deleted, it declares nothing until the next compile deletes it. Nobody edits it: a `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, and the next compile rewrites or deletes the file with its source. In a git repository, `mago compile` lists in `.git/info/exclude` the files no `.gitignore` already ignores.
+- **`mago compile` writes a `.php` file beside each of the project's `.sharp` files that declares a type,** as `StoreService.php` beside `StoreService.sharp`. So PHP code that finds classes by listing `*.php` files and naming each class by its path, as route-attribute and event discovery do, finds PHP# classes too, the way Java's classpath scanners find Kotlin classes. The file loads its `.sharp` file through the engine, and on plain PHP it throws the "needs the PHP# engine" error. It ends with the type's declaration in an `if (false)` that never runs, naming the type and its kind, so PHP code that reads `*.php` source, as Composer's class map generator and Symfony's attribute routing do, finds the type too, the way tools read a TypeScript `.d.ts` file. A type named after a word PHP reserves, as `Case` or `Match`, gets the file without the declaration, which PHP would refuse, so a tool that reads source never finds it, and Composer's PSR-4 rule still loads it. The engine declares the type once, from the `.sharp` file, and the checker reads the `.sharp` file and never the `.php` file. Once its `.sharp` file is deleted, it declares nothing until the next compile deletes it. Nobody edits it: a `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, and the next compile rewrites or deletes the file with its source. In a git repository, `mago compile` lists in `.git/info/exclude` the files no `.gitignore` already ignores. It finds that file by reading `.git` itself, in a clone and in a worktree, so it needs no `git` program. When git refuses to read the repository, as one another user owns, the compile still succeeds, lists every file there, and warns with git's reason. When it can't write the file, as with a read-only `.git/info` folder, it warns which files git shows as untracked and which folder to make writable.
 - **A `.sharp` file in an `autoload-dev` folder, and a package's in `vendor/`, gets no `.php` file.** A test class keeps one file, because PHPUnit loads a test class only from the file it lists, so `phpunit.xml` lists the PHP# tests as `<directory suffix="Test.sharp">tests</directory>`.
 - **Editors hide the `.php` files:** VS Code through `"files.exclude": {"**/*.php": {"when": "$(basename).sharp"}}`, and PhpStorm through file nesting of `.php` under `.sharp`.
 - **A type error, or a broken structure rule (section 28), stops the file from running.** So does a law without a proof, a gap, or a proof whose law was deleted, each a compile error that names it.

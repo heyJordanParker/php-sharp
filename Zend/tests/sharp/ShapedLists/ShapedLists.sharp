@@ -1,0 +1,30 @@
+namespace Demo;
+
+public class ShapedLists
+{
+    public static List<string> read()
+    {
+        const changes = Pivot.changes();
+        const attached = changes.get("attached");
+        const kept = changes.get("kept");
+        const Any pair = Pivot.pair();
+        const either = Pivot.either();
+        const eithers = Pivot.eithers();
+        const [int, int] tuple = [5, 6];
+
+        return [
+            `an int-keyed shape is List<int>: ${pair is List<int>}`,
+            `an int-keyed shape matches [int a, int b]: ${match (Pivot.pair()) { [int a, int b] => a + b, default => 0 }}`,
+            `a list shape matches [int a, int b]: ${match (Pivot.listed()) { [int a, int b] => a + b, default => 0 }}`,
+            `an int-keyed shape matches [int a, ...List<int> rest]: ${match (Pivot.pair()) { [int a, ...List<int> rest] => a + rest.count(), default => -1 }}`,
+            `a tuple matches [int a, ...List<int> rest]: ${match (tuple) { [int a, ...List<int> rest] => a + rest.count(), default => -1 }}`,
+            `an arm after one every tuple matches never runs: ${match (tuple) { [int a, ...List<int> rest] => a, [int a, int b] => -b, default => -1 }}`,
+            `a shape's array<int, int> field is List<int>: ${attached is List<int>}`,
+            `a field array_filter left gaps in is List<int>: ${kept is List<int>}, first ${(kept ?? [0])[0]}`,
+            `a constant array<int, int> with gaps arrives renumbered: ${Pivot.gapped()[0]}`,
+            `a constant shape keyed from 1 arrives renumbered: ${Pivot.fromOne()[0]}`,
+            `a list or a map keeps its keys: ${Pivot.json(either)}`,
+            `a map of lists or maps keeps each one's keys: ${Pivot.json(eithers.get("a"))} ${Pivot.json(eithers.get("b"))}`,
+        ];
+    }
+}

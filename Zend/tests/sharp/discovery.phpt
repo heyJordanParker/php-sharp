@@ -48,6 +48,15 @@ public class GoneController
 {
 }
 SHARP,
+    'app/Kinds/Shape.sharp' => "namespace App.Kinds;\n\npublic interface Shape\n{\n}\n",
+    'app/Kinds/Size.sharp' => "namespace App.Kinds;\n\npublic enum Size\n{\n    case Small;\n    case Large;\n}\n",
+    'app/Kinds/Outcome.sharp' => "namespace App.Kinds;\n\npublic enum Outcome\n{\n    case Paid(string id);\n    case Declined;\n}\n",
+    'app/Kinds/Spot.sharp' => "namespace App.Kinds;\n\npublic struct Spot\n{\n    public Spot(public int x { get; }) { }\n}\n",
+    'app/Kinds/Placed.sharp' => "namespace App.Kinds;\n\npublic event Placed(int orderId);\n",
+    ...array_merge(...array_map(
+        static fn (string $name): array => ["app/Keywords/$name.sharp" => "namespace App.Keywords;\n\npublic class $name\n{\n    public string label() => \"$name\";\n}\n"],
+        ['Case', 'Match', 'Print', 'Function', 'Echo', 'Include', 'Global'],
+    )),
 ]);
 // A source deleted since the last compile leaves its PHP file, which declares nothing until the next compile deletes it.
 unlink("$root/app/Http/Controllers/GoneController.sharp");
@@ -83,6 +92,46 @@ foreach ($listings as $listing => $paths) {
     echo "$listing:\n  ", implode("\n  ", $found), "\n";
 }
 
+// A tool that reads PHP source and finds the type its tokens declare, as Composer's class map and Symfony's attribute
+// routing do, finds each PHP# type in its PHP file, of the kind reflection gives it, and the engine declares it once.
+$read = static function (string $path): string {
+    $namespace = '';
+    $tokens = PhpToken::tokenize(file_get_contents($path));
+    foreach ($tokens as $index => $token) {
+        if ($token->is(T_NAMESPACE)) {
+            $namespace = $tokens[$index + 2]->text . '\\';
+        }
+        if ($token->is([T_CLASS, T_INTERFACE, T_ENUM])) {
+            return "$token->text $namespace{$tokens[$index + 2]->text}";
+        }
+    }
+
+    return 'no type';
+};
+$kind = static function (string $type): string {
+    $reflection = new ReflectionClass($type);
+
+    return $reflection->isInterface() ? 'interface' : ($reflection->isEnum() ? 'enum' : 'class');
+};
+$read_files = glob("$root/app/{Http/Controllers,Kinds}/*.php", GLOB_BRACE);
+sort($read_files);
+foreach ($read_files as $path) {
+    $stated = $read($path);
+    $type = explode(' ', $stated)[1] ?? null;
+    $loaded = $type !== null && (class_exists($type) || interface_exists($type)) ? 'reflection: ' . $kind($type) : 'no type loads';
+    echo substr($path, strlen("$root/")), ": $stated, $loaded\n";
+}
+
+// PHP refuses a keyword as a class name, even in a declaration that never runs, so the PHP file of a type named after
+// one states no declaration, and parses and loads as every other.
+$keyword_files = glob("$root/app/Keywords/*.php");
+sort($keyword_files);
+foreach ($keyword_files as $path) {
+    $lint = trim(shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n -l ' . escapeshellarg($path) . ' 2>&1'));
+    $type = 'App\\Keywords\\' . basename($path, '.php');
+    echo substr($path, strlen("$root/")), ': ', str_starts_with($lint, 'No syntax errors') ? 'parses' : $lint, ', ', $read($path), ', ', (new $type())->label(), "\n";
+}
+
 remove_project($root);
 ?>
 --EXPECT--
@@ -94,3 +143,18 @@ glob:
   App\Http\Controllers\GoneController (no class)
   App\Http\Controllers\PlainController /plain
   App\Http\Controllers\SharpController /sharp
+app/Http/Controllers/GoneController.php: class App\Http\Controllers\GoneController, no type loads
+app/Http/Controllers/PlainController.php: class App\Http\Controllers\PlainController, reflection: class
+app/Http/Controllers/SharpController.php: class App\Http\Controllers\SharpController, reflection: class
+app/Kinds/Outcome.php: class App\Kinds\Outcome, reflection: class
+app/Kinds/Placed.php: class App\Kinds\Placed, reflection: class
+app/Kinds/Shape.php: interface App\Kinds\Shape, reflection: interface
+app/Kinds/Size.php: enum App\Kinds\Size, reflection: enum
+app/Kinds/Spot.php: class App\Kinds\Spot, reflection: class
+app/Keywords/Case.php: parses, no type, Case
+app/Keywords/Echo.php: parses, no type, Echo
+app/Keywords/Function.php: parses, no type, Function
+app/Keywords/Global.php: parses, no type, Global
+app/Keywords/Include.php: parses, no type, Include
+app/Keywords/Match.php: parses, no type, Match
+app/Keywords/Print.php: parses, no type, Print

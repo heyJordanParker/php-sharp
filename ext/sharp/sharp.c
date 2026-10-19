@@ -4752,25 +4752,113 @@ static void sharp_type_convert(const sharp_type *type, zval *value)
 	} ZEND_HASH_FOREACH_END();
 }
 
-/* Spec section 12: plain PHP's array keyed by int alone, such as array_filter gives, enters a `List` place renumbered,
- * as PHP# renumbers it where it reads one. The three crossings take it so: an argument from plain PHP, the result of a
- * plain PHP call PHP# checks, and a property plain PHP writes. A list is taken as it is, and an array with a string key
- * is no list. */
-static void sharp_type_renumber(const sharp_type *type, zval *value)
+/* Whether a value of `type` is or holds a `List`, in a `Map`'s values or at a tuple's position, which plain PHP's array
+ * keyed by int alone enters renumbered. */
+static bool sharp_type_holds_list(const sharp_type *type)
 {
-	if (type->built_in != SHARP_BUILT_IN_LIST || Z_TYPE_P(value) != IS_ARRAY || zend_array_is_list(Z_ARRVAL_P(value))) {
-		return;
+	if (type->kind == SHARP_TYPE_NULLABLE) {
+		return sharp_type_holds_list(type->members[0]);
+	}
+	if (type->kind == SHARP_TYPE_TUPLE) {
+		for (uint32_t i = 0; i < type->count; i++) {
+			if (sharp_type_holds_list(type->members[i])) {
+				return true;
+			}
+		}
+		return false;
+	}
+	if (type->kind != SHARP_TYPE_NAMED || type->class_name) {
+		return false;
+	}
+
+	return type->built_in == SHARP_BUILT_IN_LIST
+		|| (type->built_in == SHARP_BUILT_IN_MAP && sharp_type_holds_list(type->members[1]));
+}
+
+/* Whether `array` is keyed by int alone with a gap or out of order, as array_filter leaves an array. */
+static bool sharp_array_needs_renumbering(HashTable *array)
+{
+	if (zend_array_is_list(array)) {
+		return false;
 	}
 	zend_string *name;
-	ZEND_HASH_FOREACH_STR_KEY(Z_ARRVAL_P(value), name) {
+	ZEND_HASH_FOREACH_STR_KEY(array, name) {
 		if (name) {
-			return;
+			return false;
 		}
 	} ZEND_HASH_FOREACH_END();
 
-	HashTable *renumbered = zend_array_to_list(Z_ARRVAL_P(value));
-	zval_ptr_dtor(value);
-	ZVAL_ARR(value, renumbered);
+	return true;
+}
+
+/* The type of the element at `position` of `type`, `T?` read as `T`, which sharp_type_renumber walks: NULL past a
+ * tuple's last position and for a type that holds no `List`. */
+static const sharp_type *sharp_type_renumbered_element(const sharp_type *type, uint32_t position)
+{
+	if (type->kind == SHARP_TYPE_NULLABLE) {
+		type = type->members[0];
+	}
+	if (type->kind == SHARP_TYPE_TUPLE && position >= type->count) {
+		return NULL;
+	}
+	const sharp_type *element = sharp_type_element_at(type, position);
+
+	return element && sharp_type_holds_list(element) ? element : NULL;
+}
+
+/* Whether sharp_type_renumber changes `value`. */
+static bool sharp_type_renumbers(const sharp_type *type, const zval *value)
+{
+	ZVAL_DEREF(value);
+	if (Z_TYPE_P(value) != IS_ARRAY || !sharp_type_holds_list(type)) {
+		return false;
+	}
+	const sharp_type *place = type->kind == SHARP_TYPE_NULLABLE ? type->members[0] : type;
+	if (place->kind == SHARP_TYPE_NAMED && place->built_in == SHARP_BUILT_IN_LIST
+			&& sharp_array_needs_renumbering(Z_ARRVAL_P(value))) {
+		return true;
+	}
+
+	uint32_t position = 0;
+	zval *element;
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(value), element) {
+		const sharp_type *at = sharp_type_renumbered_element(type, position++);
+		if (at && sharp_type_renumbers(at, element)) {
+			return true;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return false;
+}
+
+/* Spec section 12: plain PHP's array keyed by int alone, such as array_filter gives, enters a `List` place renumbered,
+ * as PHP# renumbers it where it reads one, and so does each such array in it that `type` places in a `List`: a `Map`'s
+ * value, a `List`'s element and a tuple's element. The three crossings take it so: an argument from plain PHP, the
+ * result of a plain PHP call PHP# checks, and a property plain PHP writes. A list is taken as it is, and an array with
+ * a string key is no list. An array is separated only when it changes. */
+static void sharp_type_renumber(const sharp_type *type, zval *value)
+{
+	if (!sharp_type_renumbers(type, value)) {
+		return;
+	}
+	ZVAL_DEREF(value);
+	const sharp_type *place = type->kind == SHARP_TYPE_NULLABLE ? type->members[0] : type;
+	if (place->kind == SHARP_TYPE_NAMED && place->built_in == SHARP_BUILT_IN_LIST
+			&& sharp_array_needs_renumbering(Z_ARRVAL_P(value))) {
+		HashTable *renumbered = zend_array_to_list(Z_ARRVAL_P(value));
+		zval_ptr_dtor(value);
+		ZVAL_ARR(value, renumbered);
+	}
+
+	SEPARATE_ARRAY(value);
+	uint32_t position = 0;
+	zval *element;
+	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(value), element) {
+		const sharp_type *at = sharp_type_renumbered_element(type, position++);
+		if (at) {
+			sharp_type_renumber(at, element);
+		}
+	} ZEND_HASH_FOREACH_END();
 }
 
 bool sharp_type_accepts(const sharp_type *type, zval *value, sharp_type_problems *problems)

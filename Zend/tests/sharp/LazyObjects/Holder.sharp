@@ -1,0 +1,10 @@
+namespace LazyObjects;
+
+public class Holder
+{
+    public List<int> items { get; set; } = [1, 2];
+
+    public Map<string, int> counts { get; set; } = ["a": 1];
+
+    public Set<string> tags { get; set; } = ["x"];
+}

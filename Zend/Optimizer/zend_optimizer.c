@@ -286,6 +286,9 @@ bool zend_optimizer_update_op1_const(zend_op_array *op_array,
 		case ZEND_SEPARATE:
 		case ZEND_SEND_VAR_NO_REF:
 		case ZEND_SEND_VAR_NO_REF_EX:
+		/* PHP#: the value a plain PHP call gives is checked where it arrives, so a call the optimizer folds into a
+		 * constant, as a preloaded one that returns a literal, keeps the value it checks in its TMP. */
+		case ZEND_SHARP_VERIFY_TYPE_ARGS:
 			return 0;
 		case ZEND_CATCH:
 			REQUIRES_STRING(val);
