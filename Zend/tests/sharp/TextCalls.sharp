@@ -25,4 +25,6 @@ class TextCalls
     public static List<string> split(string text, string delimiter) => text.split(delimiter);
 
     public static List<string> splitAtMost(string text, string delimiter, int limit) => text.split(delimiter, limit);
+
+    public static string join(List<string> parts, string separator) => parts.join(separator);
 }

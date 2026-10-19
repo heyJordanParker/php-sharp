@@ -1,0 +1,20 @@
+namespace Demo;
+
+public class ShapedLists
+{
+    public static List<string> read()
+    {
+        const changes = Pivot.changes();
+        const attached = changes.get("attached");
+        const kept = changes.get("kept");
+        const Any pair = Pivot.pair();
+
+        return [
+            `an int-keyed shape is List<int>: ${pair is List<int>}`,
+            `an int-keyed shape matches [int a, int b]: ${match (Pivot.pair()) { [int a, int b] => a + b, default => 0 }}`,
+            `a list shape matches [int a, int b]: ${match (Pivot.listed()) { [int a, int b] => a + b, default => 0 }}`,
+            `a shape's array<int, int> field is List<int>: ${attached is List<int>}`,
+            `a field array_filter left gaps in is List<int>: ${kept is List<int>}, first ${(kept ?? [0])[0]}`,
+        ];
+    }
+}

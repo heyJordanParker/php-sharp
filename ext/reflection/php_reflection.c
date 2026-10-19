@@ -1591,6 +1591,15 @@ static bool reflection_property_crosses(const zend_property_info *prop)
 	return (prop->flags & ZEND_ACC_SHARP_CROSSING) != 0;
 }
 
+/* Whether a read of `ref` on an object of `ce` takes the slot at the offset its cache slot holds. read_property gives
+ * plain PHP code a property that crosses as its PHP array, and caches no offset for it, but isInitialized() and
+ * setValue() cache one, so plain PHP's read of such a property goes through read_property. */
+static bool reflection_reads_cached_offset(const property_reference *ref, const zend_class_entry *ce)
+{
+	return ref->cache_slot[0] == ce
+		&& !(ref->prop && UNEXPECTED(reflection_property_crosses(ref->prop)) && !sharp_runs_sharp_code());
+}
+
 /* {{{ reflection_type_factory */
 static void reflection_type_factory(zend_type type, zval *object, bool legacy_behavior)
 {
@@ -6178,7 +6187,7 @@ ZEND_METHOD(ReflectionProperty, getValue)
 			RETURN_THROWS();
 		}
 
-		if (ref->cache_slot[0] == Z_OBJCE_P(object)) {
+		if (reflection_reads_cached_offset(ref, Z_OBJCE_P(object))) {
 			uintptr_t prop_offset = (uintptr_t) ref->cache_slot[1];
 
 			if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
@@ -6286,7 +6295,7 @@ ZEND_METHOD(ReflectionProperty, getRawValue)
 		RETURN_THROWS();
 	}
 
-	if (ref->cache_slot[0] == Z_OBJCE_P(object)) {
+	if (reflection_reads_cached_offset(ref, Z_OBJCE_P(object))) {
 		uintptr_t prop_offset = (uintptr_t) ref->cache_slot[1];
 
 		if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
