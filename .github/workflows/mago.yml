@@ -23,8 +23,9 @@ jobs:
         exclude:
           - { os: macos-latest, rust: nightly }
 
-    # The macOS leg runs on the self-hosted Mac runners, except for a fork's pull request: the repository is public.
-    runs-on: ${{ matrix.os == 'macos-latest' && !github.event.pull_request.head.repo.fork && 'macos-arm64-local' || matrix.os }}
+    # The macOS leg runs on the self-hosted Mac runners, except for a pull request from another repository: this one is
+    # public. head.repo.fork can't tell, because this repository is itself a fork of php/php-src.
+    runs-on: ${{ matrix.os == 'macos-latest' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'macos-arm64-local' || matrix.os }}
 
     permissions:
       contents: read
@@ -133,7 +134,7 @@ jobs:
         run: ./target/release/mago analyze --reporting-format=github
 
   release-build:
-    runs-on: ${{ !github.event.pull_request.head.repo.fork && 'macos-arm64-local' || 'macos-latest' }}
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'macos-arm64-local' || 'macos-latest' }}
 
     permissions:
       contents: read
@@ -219,7 +220,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
 
-    runs-on: ${{ matrix.os == 'macos-latest' && !github.event.pull_request.head.repo.fork && 'macos-arm64-local' || matrix.os }}
+    runs-on: ${{ matrix.os == 'macos-latest' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'macos-arm64-local' || matrix.os }}
 
     permissions:
       contents: read

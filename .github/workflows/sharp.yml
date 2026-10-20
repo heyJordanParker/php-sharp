@@ -327,9 +327,10 @@ jobs:
   MACOS:
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true'
-    # The self-hosted Mac runners run it, except for a fork's pull request: the repository is public. A job never
-    # installs on them, so they check that Homebrew already has the build's formulae and build without ccache.
-    runs-on: ${{ !github.event.pull_request.head.repo.fork && 'macos-arm64-local' || 'macos-latest' }}
+    # The self-hosted Mac runners run it, except for a pull request from another repository: this one is public, and
+    # head.repo.fork can't tell, because it is itself a fork of php/php-src. A job never installs on them, so they
+    # check that Homebrew already has the build's formulae and build without ccache.
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'macos-arm64-local' || 'macos-latest' }}
     timeout-minutes: 60
     env:
       FORMULAE: autoconf bison curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
