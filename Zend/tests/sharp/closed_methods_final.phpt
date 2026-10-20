@@ -29,10 +29,10 @@ foreach ($classes as $class => $method) {
     file_put_contents("$root/$class.php", "<?php\nnamespace Demo;\nclass $class extends Base\n{\n    $method\n}\n");
 }
 file_put_contents("$root/mago.toml", "[source]\npaths = [\".\"]\nextensions = [\"sharp\", \"php\"]\n");
-exec(escapeshellarg(getenv('TEST_MAGO_EXECUTABLE')) . ' --no-version-check --colors never --workspace ' . escapeshellarg($root) . ' compile 2>&1', $output, $status);
+exec('MAGO_REPORTING_FORMAT=emacs ' . escapeshellarg(getenv('TEST_MAGO_EXECUTABLE')) . ' --no-version-check --colors never --workspace ' . escapeshellarg($root) . ' compile 2>&1', $output, $status);
 echo "mago compile exits $status\n";
 foreach ($output as $line) {
-    if (preg_match('/^(\w+\.php):\d+:\d+: error\[([\w-]+)\]: (.*)$/', $line, $match)) {
+    if (preg_match('/^(\w+\.php):\d+:\d+:error - ([\w-]+): (.*)$/', $line, $match)) {
         echo "$match[1] $match[2]: $match[3]\n";
     }
 }
