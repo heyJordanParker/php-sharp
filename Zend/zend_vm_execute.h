@@ -7927,9 +7927,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_RECV_TY
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: gives the value op1 holds on in its TMP result once it is of the type its CONST op2 spells, as
+/* PHP#: gives the value op1 holds on in its TMP result once it is of the first type its CONST op2 spells, as
  * ZEND_SHARP_RECV_TYPE_ARGS checks an argument, an int as a float where the type takes one. The literal after the text
- * names what takes the value. A value of the wrong type throws a TypeError. Four cache slots follow the text. */
+ * names what takes the value. A value of the wrong type throws a TypeError, which names the second type the text spells
+ * where it has one. Four cache slots follow the text. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_CLASS_CONSTANT_SPEC_CONST_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	zend_class_entry *ce, *scope;
@@ -11737,9 +11738,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_RECV_TY
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: gives the value op1 holds on in its TMP result once it is of the type its CONST op2 spells, as
+/* PHP#: gives the value op1 holds on in its TMP result once it is of the first type its CONST op2 spells, as
  * ZEND_SHARP_RECV_TYPE_ARGS checks an argument, an int as a float where the type takes one. The literal after the text
- * names what takes the value. A value of the wrong type throws a TypeError. Four cache slots follow the text. */
+ * names what takes the value. A value of the wrong type throws a TypeError, which names the second type the text spells
+ * where it has one. Four cache slots follow the text. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_ADD_ARRAY_ELEMENT_SPEC_CONST_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -37090,9 +37092,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_RECV_TY
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: gives the value op1 holds on in its TMP result once it is of the type its CONST op2 spells, as
+/* PHP#: gives the value op1 holds on in its TMP result once it is of the first type its CONST op2 spells, as
  * ZEND_SHARP_RECV_TYPE_ARGS checks an argument, an int as a float where the type takes one. The literal after the text
- * names what takes the value. A value of the wrong type throws a TypeError. Four cache slots follow the text. */
+ * names what takes the value. A value of the wrong type throws a TypeError, which names the second type the text spells
+ * where it has one. Four cache slots follow the text. */
 static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_CONSTANT_SPEC_UNUSED_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -40171,9 +40174,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SHARP_RECV_TY
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: gives the value op1 holds on in its TMP result once it is of the type its CONST op2 spells, as
+/* PHP#: gives the value op1 holds on in its TMP result once it is of the first type its CONST op2 spells, as
  * ZEND_SHARP_RECV_TYPE_ARGS checks an argument, an int as a float where the type takes one. The literal after the text
- * names what takes the value. A value of the wrong type throws a TypeError. Four cache slots follow the text. */
+ * names what takes the value. A value of the wrong type throws a TypeError, which names the second type the text spells
+ * where it has one. Four cache slots follow the text. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_INIT_ARRAY_SPEC_UNUSED_UNUSED_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	zval *array;
@@ -65194,9 +65198,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_RECV_TYPE_AR
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: gives the value op1 holds on in its TMP result once it is of the type its CONST op2 spells, as
+/* PHP#: gives the value op1 holds on in its TMP result once it is of the first type its CONST op2 spells, as
  * ZEND_SHARP_RECV_TYPE_ARGS checks an argument, an int as a float where the type takes one. The literal after the text
- * names what takes the value. A value of the wrong type throws a TypeError. Four cache slots follow the text. */
+ * names what takes the value. A value of the wrong type throws a TypeError, which names the second type the text spells
+ * where it has one. Four cache slots follow the text. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_CLASS_CONSTANT_SPEC_CONST_CONST_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	zend_class_entry *ce, *scope;
@@ -68902,9 +68907,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_RECV_TYPE_AR
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: gives the value op1 holds on in its TMP result once it is of the type its CONST op2 spells, as
+/* PHP#: gives the value op1 holds on in its TMP result once it is of the first type its CONST op2 spells, as
  * ZEND_SHARP_RECV_TYPE_ARGS checks an argument, an int as a float where the type takes one. The literal after the text
- * names what takes the value. A value of the wrong type throws a TypeError. Four cache slots follow the text. */
+ * names what takes the value. A value of the wrong type throws a TypeError, which names the second type the text spells
+ * where it has one. Four cache slots follow the text. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_ADD_ARRAY_ELEMENT_SPEC_CONST_UNUSED_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -94155,9 +94161,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_RECV_TYPE_AR
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: gives the value op1 holds on in its TMP result once it is of the type its CONST op2 spells, as
+/* PHP#: gives the value op1 holds on in its TMP result once it is of the first type its CONST op2 spells, as
  * ZEND_SHARP_RECV_TYPE_ARGS checks an argument, an int as a float where the type takes one. The literal after the text
- * names what takes the value. A value of the wrong type throws a TypeError. Four cache slots follow the text. */
+ * names what takes the value. A value of the wrong type throws a TypeError, which names the second type the text spells
+ * where it has one. Four cache slots follow the text. */
 static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_CONSTANT_SPEC_UNUSED_CONST_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -97236,9 +97243,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SHARP_RECV_TYPE_AR
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: gives the value op1 holds on in its TMP result once it is of the type its CONST op2 spells, as
+/* PHP#: gives the value op1 holds on in its TMP result once it is of the first type its CONST op2 spells, as
  * ZEND_SHARP_RECV_TYPE_ARGS checks an argument, an int as a float where the type takes one. The literal after the text
- * names what takes the value. A value of the wrong type throws a TypeError. Four cache slots follow the text. */
+ * names what takes the value. A value of the wrong type throws a TypeError, which names the second type the text spells
+ * where it has one. Four cache slots follow the text. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_INIT_ARRAY_SPEC_UNUSED_UNUSED_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	zval *array;

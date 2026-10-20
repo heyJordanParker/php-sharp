@@ -4598,13 +4598,23 @@ static bool sharp_type_table_holds(
 	return holds;
 }
 
+/* Whether `type` is `Any?`, which every value is of. */
+static bool sharp_type_is_any_value(const sharp_type *type)
+{
+	return type->kind == SHARP_TYPE_NULLABLE && type->members[0]->kind == SHARP_TYPE_NAMED
+		&& !type->members[0]->class_name && type->members[0]->built_in == SHARP_BUILT_IN_ANY;
+}
+
 /* Whether `value`, an array, or the Sharp\Map or Sharp\Set of a `Map` or a `Set`, is of the collection `type`, each
- * element checked by sharp_type_holds. */
+ * element checked by sharp_type_holds. A collection of `Any?`, as `List<Any?>`, holds each element without a walk. */
 static bool sharp_type_collection_holds(
 	const sharp_type *type, const zval *value, sharp_holds_mode mode, sharp_type_problems *problems)
 {
+	const sharp_type *keys = type->built_in == SHARP_BUILT_IN_MAP ? type->members[0] : NULL;
+	const sharp_type *elements = sharp_type_elements(type);
+	bool walked = !sharp_type_is_any_value(elements) || (keys && !sharp_type_is_any_value(keys));
 	if (Z_TYPE_P(value) == IS_OBJECT) {
-		return sharp_type_table_holds(type, Z_OBJ_P(value), mode, problems);
+		return !walked || sharp_type_table_holds(type, Z_OBJ_P(value), mode, problems);
 	}
 	if (type->built_in == SHARP_BUILT_IN_LIST && !zend_array_is_list(Z_ARRVAL_P(value))) {
 		if (problems) {
@@ -4612,9 +4622,10 @@ static bool sharp_type_collection_holds(
 		}
 		return false;
 	}
+	if (!walked) {
+		return true;
+	}
 
-	const sharp_type *keys = type->built_in == SHARP_BUILT_IN_MAP ? type->members[0] : NULL;
-	const sharp_type *elements = sharp_type_elements(type);
 	bool holds = true;
 	zend_ulong index;
 	zend_string *name;
@@ -5460,15 +5471,18 @@ bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval 
 	}
 
 	const sharp_type *type = expected->members[0];
+	/* The error names the type the code wrote, which a second type in the list spells where the check reads less of the
+	 * value than that type says. */
+	const sharp_type *shown = expected->count > 1 ? expected->members[1] : type;
 	sharp_type_renumber(type, value);
 	if (!sharp_type_accepts(type, value, NULL)) {
 		if (!EG(exception)) {
 			/* Worded as PHP's TypeError for a function's return value. */
 			smart_str given = {0};
 			sharp_value_type_text(&given, value);
-			zend_string *problem = sharp_first_problem(type, value);
+			zend_string *problem = sharp_first_problem(shown, value);
 			zend_type_error("%s: Return value must be of type %s, %s returned%s",
-				Z_STRVAL_P(text + 1), ZSTR_VAL(type->text), ZSTR_VAL(given.s), ZSTR_VAL(problem));
+				Z_STRVAL_P(text + 1), ZSTR_VAL(shown->text), ZSTR_VAL(given.s), ZSTR_VAL(problem));
 			zend_string_release(problem);
 			smart_str_free(&given);
 		}
@@ -5479,7 +5493,7 @@ bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval 
 		smart_str given = {0};
 		sharp_value_type_text(&given, value);
 		zend_string *head = zend_strpprintf(0, "%s: Return value must be of type %s, %s returned: ",
-			Z_STRVAL_P(text + 1), ZSTR_VAL(type->text), ZSTR_VAL(given.s));
+			Z_STRVAL_P(text + 1), ZSTR_VAL(shown->text), ZSTR_VAL(given.s));
 		smart_str_free(&given);
 		sharp_sequence_check(value, iterable, head);
 	}

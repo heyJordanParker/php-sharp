@@ -1,0 +1,57 @@
+namespace CallerChecked;
+
+public static class Calls
+{
+    public static string through(Taggable owner) => owner.morphToMany("Tag", "through").name;
+
+    public static string nullSafe(Taggable? owner) => owner?.morphToMany("Tag", "null-safe").name ?? "none";
+
+    public static string concrete(Contact contact)
+    {
+        Relation tags = contact.morphToMany("Tag", "concrete");
+        return tags.name;
+    }
+
+    public static string subclass(Article article) => article.morphToMany("Tag", "subclass").name;
+
+    public static string viaThis(Article article) => article.viaThis();
+
+    public static string fail(Taggable owner)
+    {
+        owner.fail("stopped");
+    }
+
+    public static string ids(Taggable owner) => `${owner.ids().count()}`;
+
+    public static string labels(Taggable owner) => `${owner.labels().count()}`;
+
+    public static string counts(Taggable owner) => `${owner.counts().count()}`;
+
+    public static string stream(Taggable owner)
+    {
+        int total = 0;
+        for (const int id of owner.stream())
+        {
+            total += id;
+        }
+        return `${total}`;
+    }
+
+    public static string pair(Taggable owner)
+    {
+        [List<int>, string] pair = owner.pair();
+        return `${pair[0].count()} ${pair[1]}`;
+    }
+
+    public static string first(IntSource source)
+    {
+        int value = Repo<int>.first(source);
+        return `${value + 1}`;
+    }
+
+    public static string readFrom(IntSource source)
+    {
+        int value = Generic.readFrom(source);
+        return `${value + 1}`;
+    }
+}

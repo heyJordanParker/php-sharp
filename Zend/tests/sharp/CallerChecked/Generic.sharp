@@ -1,0 +1,6 @@
+namespace CallerChecked;
+
+public static class Generic
+{
+    public static T readFrom<T>(Source<T> source) => source.read();
+}

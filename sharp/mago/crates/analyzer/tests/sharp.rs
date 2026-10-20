@@ -13650,13 +13650,13 @@ fn a_plain_php_subclass_is_refused_replacing_a_closed_method_and_overrides_a_clo
     );
 }
 
-/// The engine links a plain PHP class against the PHP# methods it implements or overrides whatever declares the method
-/// it takes, the class or a package in `vendor/`, so an untyped method under a typed one is refused from each, named as
-/// PHP declares the type: `Self` as `static`, and an `Any?` override of a typed plain PHP method as the `mixed` PHP
-/// requires of it. A package's docblock is not PHP's declaration, and an `Any?` result that overrides nothing declares
-/// no PHP type, so an untyped method fits it.
+/// Spec section 22: each PHP# call of a PHP# interface's member checks its result, so a plain PHP class implements a
+/// typed member with a method that declares no return type, whether the class or a package in `vendor/` declares it.
+/// The engine links a plain PHP class against the PHP# class methods it overrides as PHP does, so an untyped method under
+/// a typed one is refused, named as PHP declares the type: an `Any?` override of a typed plain PHP method as the `mixed`
+/// PHP requires of it.
 #[test]
-fn a_plain_php_class_is_refused_an_untyped_method_under_a_typed_php_sharp_one_wherever_it_is_declared() {
+fn a_plain_php_class_takes_an_untyped_method_under_an_interface_member_and_is_refused_one_under_a_class_method() {
     let relates = "namespace App;\n\npublic interface Relates\n{\n    Self forget(string relation);\n\n    Any? getMorphClass();\n}\n";
     let app_row = "<?php\n\nnamespace App;\n\nclass AppRow implements Relates\n{\n    public function forget($relation)\n    {\n        return $this;\n    }\n\n    public function getMorphClass()\n    {\n        return 'row';\n    }\n}\n";
     let model = "<?php\n\nnamespace Acme;\n\nabstract class Model\n{\n    /** @return $this */\n    public function forget($relation)\n    {\n        return $this;\n    }\n\n    public function getMorphClass()\n    {\n        return 'row';\n    }\n}\n";
@@ -13672,20 +13672,13 @@ fn a_plain_php_class_is_refused_an_untyped_method_under_a_typed_php_sharp_one_wh
             .collect()
     };
 
-    assert_eq!(
-        refused(("src/App/AppRow.php", app_row), &[("src/App/Relates.sharp", relates)]),
-        [
-            "`App\\AppRow::forget()` must declare a return type compatible with `static` declared by `App\\Relates::forget()` | Add a return type declaration compatible with `static`."
-        ]
-    );
+    assert_eq!(refused(("src/App/AppRow.php", app_row), &[("src/App/Relates.sharp", relates)]), Vec::<String>::new());
     assert_eq!(
         refused(
             ("src/App/VendorRow.php", vendor_row),
             &[("src/App/Relates.sharp", relates), ("vendor/acme/model/src/Model.php", model)]
         ),
-        [
-            "`App\\VendorRow::forget()` must declare a return type compatible with `static` declared by `App\\Relates::forget()` | `App\\VendorRow` takes `forget()` from a package, so declare it in `App\\VendorRow` with a return type compatible with `static`."
-        ]
+        Vec::<String>::new()
     );
     assert_eq!(
         refused(
@@ -13694,6 +13687,57 @@ fn a_plain_php_class_is_refused_an_untyped_method_under_a_typed_php_sharp_one_wh
         ),
         [
             "`App\\LegacyReport::shape()` must declare a return type compatible with `mixed` declared by `App\\Report::shape()` | Add a return type declaration compatible with `mixed`."
+        ]
+    );
+}
+
+/// Spec section 22: a call of a plain PHP class's method that declares no return type, under a PHP# interface's member,
+/// is a call of the member, typed as the member declares it, on the class and on `this` of a PHP# subclass, with the
+/// member's type argument where the class gives one. The class takes one type for the method, so members of its
+/// interfaces that declare different results refuse it, as Kotlin refuses a class that inherits conflicting members, and
+/// members that agree, as a sub-interface's redeclaration of its parent's member does, take it.
+#[test]
+fn a_call_of_a_plain_class_method_under_an_interface_member_takes_the_members_type() {
+    let taggable = "namespace App;\n\npublic interface Taggable\n{\n    Relation relate(string name);\n}\n";
+    let named = "namespace App;\n\npublic interface Named\n{\n    string relate(string name);\n}\n";
+    let tagged = "namespace App;\n\npublic interface Tagged : Taggable\n{\n    Relation relate(string name);\n}\n";
+    let relation = "namespace App;\n\npublic class Relation\n{\n    public Relation() { }\n}\n";
+    let source = "namespace App;\n\npublic interface Source<T>\n{\n    T read();\n}\n";
+    let model = "<?php\n\nnamespace Acme;\n\nabstract class Model\n{\n    public function relate($name)\n    {\n        return null;\n    }\n\n    public function read()\n    {\n        return 1;\n    }\n}\n";
+    let contact = "<?php\n\nnamespace App;\n\n/** @implements Source<int> */\nclass Contact extends \\Acme\\Model implements Taggable, Tagged, Source\n{\n}\n";
+    let calls = "namespace App;\n\npublic static class Calls\n{\n    public static Relation relate(Contact contact) => contact.relate(\"tags\");\n\n    public static int read(Contact contact) => contact.read();\n}\n";
+    let article = "namespace App;\n\npublic class Article : Contact\n{\n    public Article() { }\n\n    public Relation tags() => this.relate(\"tags\");\n}\n";
+    let conflicting =
+        "<?php\n\nnamespace App;\n\nclass Conflicting extends \\Acme\\Model implements Taggable, Named\n{\n}\n";
+    let library: &[(&'static str, &'static str)] = &[
+        ("src/App/Taggable.sharp", taggable),
+        ("src/App/Tagged.sharp", tagged),
+        ("src/App/Relation.sharp", relation),
+        ("src/App/Source.sharp", source),
+        ("vendor/acme/model/src/Model.php", model),
+        ("src/App/Contact.php", contact),
+    ];
+
+    assert_eq!(issues(("src/App/Calls.sharp", calls), library), Vec::<String>::new());
+    assert_eq!(issues(("src/App/Article.sharp", article), library), Vec::<String>::new());
+    assert_eq!(issues(("src/App/Contact.php", contact), &library[..5]), Vec::<String>::new());
+    assert_eq!(
+        analyze(
+            &PLUGIN_REGISTRY,
+            settings(),
+            ("src/App/Conflicting.php", conflicting),
+            &[
+                ("src/App/Taggable.sharp", taggable),
+                ("src/App/Named.sharp", named),
+                ("src/App/Relation.sharp", relation),
+                ("vendor/acme/model/src/Model.php", model),
+            ],
+        )
+        .iter()
+        .map(|issue| format!("{} | {}", issue.message, issue.help.as_deref().unwrap_or_default()))
+        .collect::<Vec<_>>(),
+        [
+            "`App\\Conflicting` takes `relate()` from `Acme\\Model`, which declares no return type, under members that declare different return types: `string` of `App\\Named::relate()` and `App\\Relation` of `App\\Taggable::relate()`. | Make the members declare one return type, or declare `relate()` in the class with a return type."
         ]
     );
 }

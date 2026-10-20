@@ -6230,9 +6230,10 @@ ZEND_VM_HANDLER(212, ZEND_SHARP_RECV_TYPE_ARGS, CONST|UNUSED, CONST|UNUSED, CACH
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: gives the value op1 holds on in its TMP result once it is of the type its CONST op2 spells, as
+/* PHP#: gives the value op1 holds on in its TMP result once it is of the first type its CONST op2 spells, as
  * ZEND_SHARP_RECV_TYPE_ARGS checks an argument, an int as a float where the type takes one. The literal after the text
- * names what takes the value. A value of the wrong type throws a TypeError. Four cache slots follow the text. */
+ * names what takes the value. A value of the wrong type throws a TypeError, which names the second type the text spells
+ * where it has one. Four cache slots follow the text. */
 ZEND_VM_HANDLER(213, ZEND_SHARP_VERIFY_TYPE_ARGS, TMPVAR|CV, CONST, CACHE_SLOT)
 {
 	USE_OPLINE
