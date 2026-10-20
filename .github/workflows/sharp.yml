@@ -238,10 +238,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # php-fpm answers FastCGI on port 9000 for the app in /var/www/html.
           - file: sharp/docker/runtime/Dockerfile
             php: php
+            docker-run: --publish 9000:9000 --volume "$RUNNER_TEMP/public:/var/www/html:ro"
+            request: SCRIPT_FILENAME=/var/www/html/index.php REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000
+            sapi: fpm-fcgi
+          # FrankenPHP's default Caddyfile serves the app in /app/public on https://localhost, with its own certificate.
           - file: sharp/docker/runtime/frankenphp.Dockerfile
             php: frankenphp php-cli
+            docker-run: --publish 8443:443 --volume "$RUNNER_TEMP/public:/app/public:ro"
+            request: curl --silent --show-error --fail --insecure https://localhost:8443/
+            sapi: frankenphp
     # The image builds FROM base-images.yml's copies, as IMAGE's does.
     env:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie-slim
@@ -268,6 +276,29 @@ jobs:
           key: SHARP_LINUX_MAGO-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.lock') }}
       - name: Build the image
         run: git archive HEAD | docker build --build-arg BASE_IMAGE --build-arg GOLANG_IMAGE --file "${{ matrix.file }}" --tag php-sharp -
+      - name: Install cgi-fcgi
+        if: matrix.sapi == 'fpm-fcgi'
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libfcgi-bin
+      # The image starts on its own default command, as an app's container does, and serves the app's page. A wrong
+      # entrypoint stops the container here, before IMAGE publishes it.
+      - name: Start the image on its default command and request a page from ${{ matrix.sapi }}
+        run: |
+          mkdir "$RUNNER_TEMP/public"
+          echo '<?php echo "Served by ", PHP_SAPI, PHP_EOL;' > "$RUNNER_TEMP/public/index.php"
+          docker run --detach --name server ${{ matrix.docker-run }} php-sharp
+          for ((second = 1; ; second++)); do
+            if response="$(${{ matrix.request }} 2>&1)" && grep -qx 'Served by ${{ matrix.sapi }}' <<< "$response"; then
+              echo "$response"
+              break
+            fi
+            if [[ "$(docker inspect --format '{{.State.Running}}' server)" != true || $second == 30 ]]; then
+              docker logs server
+              echo "::error::The image's default command stopped, or served no page in 30 seconds. Its log is above, and the last request printed: $response"
+              exit 1
+            fi
+            sleep 1
+          done
+          docker rm --force server
       # rustup comes after the extensions, so they build as in the app's image, and lets sharp/bin/test build mago.
       - name: Install the extensions
         run: |
