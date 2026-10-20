@@ -2,7 +2,7 @@
 
 class ControlFlow
 {
-    final public static function sign(int $value): string
+    public static function sign(int $value): string
     {
         if ($value > 0) {
             return "positive";
@@ -13,7 +13,7 @@ class ControlFlow
         }
     }
 
-    final public static function countdown(int $start): int
+    public static function countdown(int $start): int
     {
         $steps = 0;
         while ($start > 0) {
@@ -26,7 +26,7 @@ class ControlFlow
         return $steps;
     }
 
-    final public static function sumOdd(int $limit): int
+    public static function sumOdd(int $limit): int
     {
         $total = 0;
         $n = 0;
@@ -43,7 +43,7 @@ class ControlFlow
         return $total;
     }
 
-    final public static function sumTo(int $limit): int
+    public static function sumTo(int $limit): int
     {
         $total = 0;
         for ($i = 1; $i <= $limit; $i++) {
@@ -55,7 +55,7 @@ class ControlFlow
         return $total;
     }
 
-    final public static function weigh(int $factor): int
+    public static function weigh(int $factor): int
     {
         $total = 0;
         foreach (Prices::listed() as $price) {

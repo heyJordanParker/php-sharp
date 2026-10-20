@@ -6,22 +6,22 @@ class Deploy
     {
     }
 
-    final public function variable(string $name): ?string
+    public function variable(string $name): ?string
     {
         return $this->environment->variable($name);
     }
 
-    final public function arguments(): array
+    public function arguments(): array
     {
         return $this->environment->arguments;
     }
 
-    final public function target(): string
+    public function target(): string
     {
         return $this->environment->arguments[1];
     }
 
-    final public function folder(): string
+    public function folder(): string
     {
         return $this->environment->currentDirectory();
     }

@@ -10,12 +10,12 @@ class Order extends Model
     #[\Override] public $timestamps = false;
     #[\Override] protected int $perPage = 20;
 
-    final public function tableName(): string
+    public function tableName(): string
     {
         return $this->table;
     }
 
-    final public function pageSize(): int
+    public function pageSize(): int
     {
         return $this->perPage;
     }

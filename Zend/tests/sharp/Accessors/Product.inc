@@ -34,12 +34,12 @@ class Product
     public private(set) array $ratings = [];
     public int $rating = 0 { get => $this->rating; set { $this->ratings->add($value); } }
 
-    final public function tag(string $tag): void
+    public function tag(string $tag): void
     {
         $this->tags->add($tag); // PHP# makes the array a Sharp\Collection
     }
 
-    final public function restock(int $count): void
+    public function restock(int $count): void
     {
         $this->stock = $this->stock + $count;
     }

@@ -11,5 +11,5 @@ abstract class DatabaseEntity
 
     public static function op_Equality(?\Billing\DatabaseEntity $a, ?\Billing\DatabaseEntity $b): bool { if ($a === null || $b === null) { return $a === $b; } return $a->id === $b->id; }
 
-    final public function hash(): int { return $this->id; }
+    public function hash(): int { return $this->id; }
 }

@@ -9,12 +9,12 @@ class Task
         $this->priority = \Demo\Priority::from($level);
     }
 
-    final public function rank(): int
+    public function rank(): int
     {
         return $this->priority->value;
     }
 
-    final public static function parse(int $level): ?\Demo\Priority
+    public static function parse(int $level): ?\Demo\Priority
     {
         return \Demo\Priority::tryFrom($level);
     }

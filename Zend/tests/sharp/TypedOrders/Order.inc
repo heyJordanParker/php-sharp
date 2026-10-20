@@ -6,7 +6,7 @@ class Order extends TypedModel
 {
     #[\Override] protected string $table = "orders";
 
-    final public function tableName(): string
+    public function tableName(): string
     {
         return $this->table;
     }

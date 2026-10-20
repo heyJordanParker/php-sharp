@@ -19,7 +19,7 @@ class Money
         return $a->cents === $b->cents && $a->currency === $b->currency;
     }
 
-    final public function hash(): int { return $this->cents; }
+    public function hash(): int { return $this->cents; }
 
     public static function op_Comparison(\Billing\Money $a, \Billing\Money $b): int { return $a->currency === $b->currency ? $a->cents <=> $b->cents : \strcmp($a->currency, $b->currency) <=> 0; }
 

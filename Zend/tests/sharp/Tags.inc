@@ -2,7 +2,7 @@
 
 class Tags
 {
-    final public static function of(string|array $value): array
+    public static function of(string|array $value): array
     {
         return \Sharp\List::wrap($value);
     }

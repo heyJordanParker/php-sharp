@@ -10,7 +10,7 @@ class Store
     /** @template TItem of DatabaseEntity
      *  @param list<TItem> $items
      *  @return TItem|null */
-    final public static function pick(array $items, int $id): ?DatabaseEntity
+    public static function pick(array $items, int $id): ?DatabaseEntity
     {
         foreach ($items as $item) {
             if ($item->id === $id) {
@@ -23,15 +23,15 @@ class Store
     /** @template T
      *  @param list<T> $items
      *  @return T */
-    final public function first(array $items) { return $items[0]; }
+    public function first(array $items) { return $items[0]; }
 
     /** @template TItem of DatabaseEntity&Shareable
      *  @param TItem $item */
-    final public function share(DatabaseEntity&Shareable $item): string { return ((object) $item)->link(); }
+    public function share(DatabaseEntity&Shareable $item): string { return ((object) $item)->link(); }
     /** @param class-string<DatabaseEntity> $type */
-    final public function save(string $type, DatabaseEntity $entity): void { $this->saved[\sprintf("%s#%d", $type, $entity->id)] = $entity; }
+    public function save(string $type, DatabaseEntity $entity): void { $this->saved[\sprintf("%s#%d", $type, $entity->id)] = $entity; }
     /** @param class-string<DatabaseEntity> $type */
-    final public function load(string $type, int $id): ?DatabaseEntity { return $this->saved[\sprintf("%s#%d", $type, $id)] ?? null; }
+    public function load(string $type, int $id): ?DatabaseEntity { return $this->saved[\sprintf("%s#%d", $type, $id)] ?? null; }
     /** @return class-string<DatabaseEntity> */
-    final public function kind(string $name): string { return $this->kinds[$name] ?? Order::class; }
+    public function kind(string $name): string { return $this->kinds[$name] ?? Order::class; }
 }

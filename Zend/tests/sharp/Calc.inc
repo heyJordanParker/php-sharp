@@ -2,17 +2,17 @@
 
 class Calc
 {
-    final public static function make(int $start): int
+    public static function make(int $start): int
     {
         return $start * 10;
     }
 
-    final public function twice(int $value): int
+    public function twice(int $value): int
     {
         return $value * 2;
     }
 
-    final public function run(int $value): int
+    public function run(int $value): int
     {
         $total = $this->twice($value);
         $total += \Demo\Calc::make(2);

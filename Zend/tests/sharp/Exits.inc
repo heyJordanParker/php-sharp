@@ -4,7 +4,7 @@ class Exits
 {
     public function __construct(private \Sharp\Process $process, private \Sharp\Console $console) { }
 
-    final public function stop(int $code): void
+    public function stop(int $code): void
     {
         try {
             $this->process->exit($code);

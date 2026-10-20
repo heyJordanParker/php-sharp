@@ -15,7 +15,7 @@ class Tagged
 
     }
 
-    final public static function strings(\Sharp\Set|array $tags): array { $tags = \is_array($tags) ? new \Sharp\Set($tags) : $tags;
+    public static function strings(\Sharp\Set|array $tags): array { $tags = \is_array($tags) ? new \Sharp\Set($tags) : $tags;
 
         $added = ((object) $tags)->add("vip"); // PHP# makes the Set a Sharp\Collection
         $again = ((object) $tags)->add("vip");
@@ -28,7 +28,7 @@ class Tagged
         return [$added, $again, $removed, $absent, ((object) $tags)->contains("5"), ((object) $tags)->contains("new"), ((object) $tags)->count(), ((object) $tags)->toList(), $joined];
     }
 
-    final public static function reads(\Sharp\Set|array $tags): array { $tags = \is_array($tags) ? new \Sharp\Set($tags) : $tags;
+    public static function reads(\Sharp\Set|array $tags): array { $tags = \is_array($tags) ? new \Sharp\Set($tags) : $tags;
 
         return [
             ((object) ((object) $tags)->filter(fn ($tag) => $tag !== "vip"))->toList(),
@@ -40,15 +40,15 @@ class Tagged
         ];
     }
 
-    final public static function missing(\Sharp\Set|array $tags): string { $tags = \is_array($tags) ? new \Sharp\Set($tags) : $tags; return ((object) $tags)->first(fn ($tag) => $tag === "none"); }
+    public static function missing(\Sharp\Set|array $tags): string { $tags = \is_array($tags) ? new \Sharp\Set($tags) : $tags; return ((object) $tags)->first(fn ($tag) => $tag === "none"); }
 
-    final public static function ints(\Sharp\Set|array $ids): array { $ids = \is_array($ids) ? new \Sharp\Set($ids) : $ids;
+    public static function ints(\Sharp\Set|array $ids): array { $ids = \is_array($ids) ? new \Sharp\Set($ids) : $ids;
 
         $more = new \Sharp\Set([3, 1, 3]);
         return [((object) $ids)->add(4), ((object) $ids)->add(4), ((object) $ids)->remove(7), ((object) $ids)->contains(2), ((object) $ids)->toList(), ((object) $more)->toList(), ((object) $ids)->sumOf(fn ($id) => $id)];
     }
 
-    final public static function cases(\Sharp\Set|array $states): array { $states = \is_array($states) ? new \Sharp\Set($states) : $states;
+    public static function cases(\Sharp\Set|array $states): array { $states = \is_array($states) ? new \Sharp\Set($states) : $states;
 
         $sizes = new \Sharp\Set([Size::Large, Size::Small, Size::Large]);
         $closed = ((object) $states)->add(Standing::Closed);
@@ -58,7 +58,7 @@ class Tagged
         return [$closed, $active, $has, $removed, ((object) $states)->toList(), ((object) $sizes)->toList(), ((object) $sizes)->contains(Size::Small)];
     }
 
-    final public function properties(Standing $state): array
+    public function properties(Standing $state): array
     {
         $vip = $this->tags->add("vip");
         $again = $this->tags->add("vip");
@@ -70,7 +70,7 @@ class Tagged
         return [$vip, $again, $removed, $tags, $added, $twice, $dropped, $this->states->contains($state), $this->writes, $this->sizes->add(4), $this->sizes->contains(4), $this->ids->add(9), $this->ids->toList()];
     }
 
-    final public function once(\Sharp\Set|array|null $maybe): array { $maybe = \is_array($maybe) ? new \Sharp\Set($maybe) : $maybe;
+    public function once(\Sharp\Set|array|null $maybe): array { $maybe = \is_array($maybe) ? new \Sharp\Set($maybe) : $maybe;
 
         $copy = $this->copy();
         $copied = ((object) $copy)->add("copy");
@@ -89,7 +89,7 @@ class Tagged
         return "n{$this->calls}";
     }
 
-    final public static function lambdas(array $names): array
+    public static function lambdas(array $names): array
     {
         $prefix = "v";
         $check = function (\Sharp\Set|array $tags) use ($prefix) { $tags = \is_array($tags) ? new \Sharp\Set($tags) : $tags; return ((object) $tags)->contains($prefix); };
@@ -99,7 +99,7 @@ class Tagged
         return [$check(new \Sharp\Set($names)), $check(new \Sharp\Set([$prefix])), $size(new \Sharp\Set(["a", "a", "b"]))];
     }
 
-    final public static function groups(\Sharp\Set|array ...$groups): array { $groups = \array_map(fn ($collection) => \is_array($collection) ? new \Sharp\Set($collection) : $collection, $groups);
+    public static function groups(\Sharp\Set|array ...$groups): array { $groups = \array_map(fn ($collection) => \is_array($collection) ? new \Sharp\Set($collection) : $collection, $groups);
 
         $found = [];
         foreach ($groups as $group) {
@@ -108,7 +108,7 @@ class Tagged
         return $found;
     }
 
-    final public static function maybe(\Sharp\Set|array|null ...$groups): array { $groups = \array_map(fn ($collection) => \is_array($collection) ? new \Sharp\Set($collection) : $collection, $groups);
+    public static function maybe(\Sharp\Set|array|null ...$groups): array { $groups = \array_map(fn ($collection) => \is_array($collection) ? new \Sharp\Set($collection) : $collection, $groups);
 
         $found = [];
         foreach ($groups as $group) {

@@ -6,7 +6,7 @@ class Lambdas
 {
     private int $base = 10;
 
-    final public function run(int $extra): int
+    public function run(int $extra): int
     {
         $count = 0;
         $twice = fn (int $a) => $a * $extra;
@@ -20,12 +20,12 @@ class Lambdas
         return $count;
     }
 
-    final public static function doubled(array $numbers, int $by): array
+    public static function doubled(array $numbers, int $by): array
     {
         return ((object) $numbers)->map(fn ($n) => $n * $by);
     }
 
-    final public static function passes(int $times): string
+    public static function passes(int $times): string
     {
         $marks = [fn () => 0];
         while ($times > 0) {
@@ -40,7 +40,7 @@ class Lambdas
         return \implode(",", ((object) $marks)->map(fn ($read) => $read()));
     }
 
-    final public static function pipeline(array $numbers, \Sharp\Map|array $prices): array { $prices = \is_array($prices) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [(string) $key, $value], \array_keys($prices), $prices))) : $prices; // PHP# makes the array a Map, its keys strings
+    public static function pipeline(array $numbers, \Sharp\Map|array $prices): array { $prices = \is_array($prices) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [(string) $key, $value], \array_keys($prices), $prices))) : $prices; // PHP# makes the array a Map, its keys strings
 
         $odd = ((object) $numbers)->filter(fn ($n) => $n % 2 === 1);
         $labels = ((object) $odd)->map(fn ($n) => (string) ($n * 10));
@@ -56,9 +56,9 @@ class Lambdas
         ];
     }
 
-    final public static function total(array $numbers): int { return ((object) $numbers)->sumOf(fn ($n) => $n * 2) + ((object) $numbers)->first(fn ($n) => $n > 2) + (((object) $numbers)->any(fn ($n) => $n > 9) ? 1 : 0); }
+    public static function total(array $numbers): int { return ((object) $numbers)->sumOf(fn ($n) => $n * 2) + ((object) $numbers)->first(fn ($n) => $n > 2) + (((object) $numbers)->any(fn ($n) => $n > 9) ? 1 : 0); }
 
-    final public static function failures(array $numbers): array
+    public static function failures(array $numbers): array
     {
         $messages = [];
         try {
@@ -74,7 +74,7 @@ class Lambdas
         return $messages;
     }
 
-    final public static function captured(array $numbers): array
+    public static function captured(array $numbers): array
     {
         $seen = $numbers;
         $kept = ((object) $seen)->filter(function ($n) use (&$seen) {
@@ -87,7 +87,7 @@ class Lambdas
         return [\count($kept), $grown, $size()];
     }
 
-    final public function nested(int $extra): int
+    public function nested(int $extra): int
     {
         $outer = function (int $a) use ($extra) {
             $inner = fn ($b) => $a + $b + $extra + $this->base;
@@ -96,7 +96,7 @@ class Lambdas
         return $outer(2);
     }
 
-    final public static function scaled(array $numbers): array { return ((object) $numbers)->map(Lambdas::twice(...)); }
+    public static function scaled(array $numbers): array { return ((object) $numbers)->map(Lambdas::twice(...)); }
 
     private static function twice(int $n): int { return $n * 2; }
 }
