@@ -40,6 +40,12 @@ jobs:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
 
+      - name: show the Rust toolchain on PATH
+        run: |
+          type -a rustc cargo
+          rustc --version
+          cargo --version
+
       - name: cache rust toolchain
         uses: Swatinem/rust-cache@v2
         with:
