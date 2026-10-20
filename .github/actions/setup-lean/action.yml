@@ -15,7 +15,7 @@ runs:
         echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
         for attempt in 1 2 3; do
           # elan-init only sets the default toolchain, so the toolchain install is what downloads Lean.
-          if curl -sSfL https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain "$toolchain"; then
+          if curl -sSfL https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --no-modify-path --default-toolchain "$toolchain"; then
             if elan toolchain install "$toolchain" && lake +"$toolchain" --version && lean +"$toolchain" --version; then
               exit 0
             fi

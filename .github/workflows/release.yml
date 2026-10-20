@@ -24,11 +24,33 @@ defaults:
     working-directory: sharp/mago
 
 jobs:
-  # Every other job needs crate_metadata, which needs ci, so a release builds only from a commit CI passes on.
+  # Every other job needs crate_metadata, which needs ci, so a release builds only a commit whose Mago CI already
+  # passed on master. The suite does not run again here.
   ci:
-    uses: ./.github/workflows/mago.yml
+    name: Mago CI passed on master
+    runs-on: ubuntu-latest
     permissions:
-      contents: read
+      actions: read
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: The commit's ci-passed check passed on master
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mago.yml/runs?head_sha=$GITHUB_SHA&branch=master&event=push" --jq '.workflow_runs[0].id // empty')
+          if [[ -z $run ]]; then
+            echo "::error::Mago CI never ran on master for commit $GITHUB_SHA, so its ci-passed check is missing. Release a commit that master's Mago CI passed."
+            exit 1
+          fi
+          jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=100")
+          if [[ $(jq -r '.jobs[] | select(.name == "ci-passed") | .conclusion' <<< "$jobs") != success ]]; then
+            failed=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | "\(.name): \(.conclusion // .status)"] | join(", ")' <<< "$jobs")
+            echo "::error::Commit $GITHUB_SHA has not passed Mago CI's ci-passed check on master ($failed): $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
+            exit 1
+          fi
+          echo "Commit $GITHUB_SHA passed Mago CI's ci-passed check on master: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
 
   crate_metadata:
     name: extract crate metadata
@@ -158,39 +180,39 @@ jobs:
       matrix:
         job:
           # Each job in this matrix defines a build target. The following custom keys control the pipeline steps:
-          # - `test: true`: Enables the test suite to be run for this build. Only targets mago.yml never tests set it.
+          # - `smoke: true`: Smoke-checks the built binary. Only targets the job's runner can execute set it.
           # - `wasm: true`: Triggers an additional WebAssembly build and packaging for this release.
 
-          ## macOS: aarch64, x86_64
+          ## macOS: aarch64, x86_64, on the self-hosted Apple silicon runners. The x86_64 binary runs under Rosetta.
           - {
               target: aarch64-apple-darwin,
-              os: macos-latest,
-              test: false,
+              os: macos-arm64-local,
+              smoke: true,
               pgo: true,
             }
           - {
               target: x86_64-apple-darwin,
-              os: macos-latest,
-              test: true,
+              os: macos-arm64-local,
+              smoke: true,
               pgo: true,
             }
           ## Linux: aarch64, x86_64
-          - { target: aarch64-unknown-linux-gnu, os: ubuntu-latest, test: false }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-latest, smoke: false }
           - {
               target: aarch64-unknown-linux-musl,
               os: ubuntu-latest,
-              test: false,
+              smoke: false,
             }
           - {
               target: x86_64-unknown-linux-gnu,
               os: ubuntu-latest,
-              test: false,
+              smoke: true,
               wasm: true,
             }
           - {
               target: x86_64-unknown-linux-musl,
               os: ubuntu-latest,
-              test: true,
+              smoke: true,
               pgo: true,
             }
 
@@ -234,7 +256,7 @@ jobs:
         if: matrix.job.pgo
         uses: actions/cache@v4
         with:
-          path: ~/.cargo/bin/cargo-pgo
+          path: ${{ env.CARGO_HOME }}/bin/cargo-pgo
           key: cargo-pgo-${{ runner.os }}
 
       - name: install PGO tools
@@ -285,8 +307,9 @@ jobs:
           cargo -V
           rustc -V
 
+      # setup-php brew-installs PHP on macOS, so the self-hosted runners use their Homebrew PHP and Composer instead.
       - name: setup PHP for PGO profiling
-        if: matrix.job.pgo
+        if: matrix.job.pgo && runner.environment == 'github-hosted'
         uses: shivammathur/setup-php@v2
         with:
           php-version: "8.3"
@@ -335,14 +358,44 @@ jobs:
           echo "binary for target '${{ matrix.job.target }}' requires the following GLIBC versions:"
           strings "${{ steps.bin.outputs.BIN_PATH }}" | grep GLIBC_ || echo "No GLIBC version strings found."
 
-      - name: Install elan and Lean
-        if: matrix.job.test
-        uses: ./.github/actions/setup-lean
-
-      - name: run tests
-        if: matrix.job.test
+      # The ci job already required the full suite to pass, so this checks only the binary this job publishes, as
+      # mago.yml's plain-php job checks the one CI built.
+      - name: The binary prints the release's version, and analyzes and compiles a one-class PHP# project
+        if: matrix.job.smoke
         shell: bash
-        run: $BUILD_CMD test --workspace --locked --target=${{ matrix.job.target }}
+        env:
+          VERSION: ${{ needs.crate_metadata.outputs.version }}
+        run: |
+          mago="$PWD/${{ steps.bin.outputs.BIN_PATH }}"
+          output=$("$mago" --version)
+          if [[ "$output" != "mago $VERSION" ]]; then
+            echo "::error::The built mago prints \"$output\", not \"mago $VERSION\"."
+            exit 1
+          fi
+          project="$RUNNER_TEMP/project"
+          mkdir -p "$project/src/App"
+          cd "$project"
+          cat > mago.toml <<'TOML'
+          [source]
+          paths = ["src"]
+          extensions = ["sharp"]
+          TOML
+          cat > src/App/Counter.sharp <<'SHARP'
+          namespace App;
+
+          class Counter
+          {
+              private int count = 0;
+
+              public int add(int amount)
+              {
+                  this.count += amount;
+                  return this.count;
+              }
+          }
+          SHARP
+          "$mago" analyze
+          "$mago" compile
 
       - name: Cache wasm-pack
         if: matrix.job.wasm
@@ -442,7 +495,6 @@ jobs:
     env:
       VERSION: ${{ needs.crate_metadata.outputs.version }}
     steps:
-      # The ci job uploads its own artifacts, so only the build job's packages are release assets.
       - name: Download every asset
         uses: actions/download-artifact@v4
         with:
