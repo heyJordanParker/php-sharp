@@ -224,7 +224,7 @@ RUN set -eux; \
 	test "$(php -r 'echo PHP_VERSION;')" = "$PHP_VERSION"; \
 	php --ri sharp
 
-COPY sharp/docker/runtime/docker-php-ext-* sharp/docker/runtime/docker-php-entrypoint /usr/local/bin/
+COPY sharp/docker/runtime/docker-php-ext-* sharp/docker/runtime/fpm/docker-php-entrypoint /usr/local/bin/
 
 # sodium was built as a shared module (so that it can be replaced later if so desired), so let's enable it too (https://github.com/docker-library/php/issues/598)
 RUN docker-php-ext-enable sodium
