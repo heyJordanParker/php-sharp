@@ -3629,7 +3629,7 @@ These are compile errors, whether the parent is PHP# or plain PHP:
 
 - a missing `override`
 - `override` when the parent has no such method
-- overriding a PHP# method that is not `virtual` or `abstract`, in PHP# or in a plain PHP class: the checker refuses every replacement it sees, and a test double that tests generate while they run may replace the method, as MockK replaces a Kotlin member that is not `open`
+- overriding a PHP# method that is not `virtual` or `abstract`, in PHP# or in a plain PHP class: the checker refuses every replacement written in the project, and a subclass a library generates while the app runs, as a test double or a lazy-loading proxy, may replace the method, as MockK and Kotlin's `all-open` plugin replace a Kotlin member that is not `open`
 - overriding a plain PHP method marked `final`
 - an override that renames a parameter of the method it overrides. The error names both names.
 
