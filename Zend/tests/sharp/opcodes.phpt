@@ -1682,6 +1682,12 @@ Generics/Catalog: different opcodes and lines in 14 op arrays, same signatures i
   .sharp L0020 0011 RETURN V5
   .sharp L0020 0012 VERIFY_RETURN_TYPE
   .sharp L0020 0013 RETURN null
+  .sharp      ; (lines=11, args=2, vars=2, tmps=3)
+  .sharp L0022 0006 T4 = SHARP_VERIFY_TYPE_ARGS V3 string("bool")
+  .sharp L0022 0007 VERIFY_RETURN_TYPE T4
+  .sharp L0022 0008 RETURN T4
+  .sharp L0022 0009 VERIFY_RETURN_TYPE
+  .sharp L0022 0010 RETURN null
   .sharp      ; (lines=14, args=0, vars=0, tmps=7)
   .sharp L0026 0007 T4 = SHARP_TYPE_ARGS string("Paging.Order")
   .sharp L0026 0008 V5 = DO_FCALL T4
@@ -1763,6 +1769,13 @@ Generics/Catalog: different opcodes and lines in 14 op arrays, same signatures i
   .sharp 0011 RETURN V5
   .sharp      2: 0004 - 0008 (new)
   .sharp      5: 0010 - 0011 (tmp/var)
+  .sharp      ; (lines=11, args=2, vars=2, tmps=3)
+  .sharp 0006 T4 = SHARP_VERIFY_TYPE_ARGS V3 string("bool")
+  .sharp 0007 VERIFY_RETURN_TYPE T4
+  .sharp 0008 RETURN T4
+  .sharp 0009 VERIFY_RETURN_TYPE
+  .sharp 0010 RETURN null
+  .sharp      4: 0007 - 0008 (tmp/var)
   .sharp      ; (lines=14, args=0, vars=0, tmps=7)
   .sharp 0007 T4 = SHARP_TYPE_ARGS string("Paging.Order")
   .sharp 0008 V5 = DO_FCALL T4
@@ -1831,6 +1844,11 @@ Generics/Catalog: different opcodes and lines in 14 op arrays, same signatures i
   .php   L0020 0009 RETURN V3
   .php   L0020 0010 VERIFY_RETURN_TYPE
   .php   L0020 0011 RETURN null
+  .php        ; (lines=10, args=2, vars=2, tmps=2)
+  .php   L0022 0006 VERIFY_RETURN_TYPE V3
+  .php   L0022 0007 RETURN V3
+  .php   L0022 0008 VERIFY_RETURN_TYPE
+  .php   L0022 0009 RETURN null
   .php   L0026 0007 V4 = DO_FCALL
   .php   L0026 0008 T5 = FETCH_OBJ_R V4 string("id")
   .php   L0026 0009 VERIFY_RETURN_TYPE T5
@@ -1886,6 +1904,12 @@ Generics/Catalog: different opcodes and lines in 14 op arrays, same signatures i
   .php   0009 RETURN V3
   .php        0: 0002 - 0006 (new)
   .php        3: 0008 - 0009 (tmp/var)
+  .php        ; (lines=10, args=2, vars=2, tmps=2)
+  .php   0006 VERIFY_RETURN_TYPE V3
+  .php   0007 RETURN V3
+  .php   0008 VERIFY_RETURN_TYPE
+  .php   0009 RETURN null
+  .php        3: 0006 - 0007 (tmp/var)
   .php   0008 V5 = DO_FCALL
   .php   0009 VERIFY_RETURN_TYPE V5
   .php   0010 RETURN V5
@@ -1911,7 +1935,7 @@ Generics/PaginatedList: different opcodes and lines in 3 op arrays, same signatu
   .php       /** @return TItem */
 Generics/Query: same opcodes and lines in 2 op arrays, same signatures in 0 classes
 Generics/Repository: different opcodes and lines in 2 op arrays, same signatures in 1 classes
-  .sharp      ; (lines=14, args=1, vars=2, tmps=6)
+  .sharp      ; (lines=15, args=1, vars=2, tmps=7)
   .sharp L0008 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity")
   .sharp L0008 0002 V2 = FETCH_CLASS (exception) string("Paging\\PaginatedList")
   .sharp L0008 0003 T3 = SHARP_TYPE_ARGS CV1($) string("#0")
@@ -1919,13 +1943,14 @@ Generics/Repository: different opcodes and lines in 2 op arrays, same signatures
   .sharp L0008 0005 T5 = CAST (object) CV0($query)
   .sharp L0008 0006 INIT_METHOD_CALL 0 T5 string("rows")
   .sharp L0008 0007 V6 = DO_FCALL
-  .sharp L0008 0008 SEND_VAR_NO_REF_EX V6 1
-  .sharp L0008 0009 DO_FCALL
-  .sharp L0008 0010 VERIFY_RETURN_TYPE V4
-  .sharp L0008 0011 RETURN V4
-  .sharp L0008 0012 VERIFY_RETURN_TYPE
-  .sharp L0008 0013 RETURN null
-  .sharp      ; (lines=14, args=1, vars=2, tmps=6)
+  .sharp L0008 0008 T7 = SHARP_VERIFY_TYPE_ARGS V6 string("List<Any?>")
+  .sharp L0008 0009 SEND_VAL_EX T7 1
+  .sharp L0008 0010 DO_FCALL
+  .sharp L0008 0011 VERIFY_RETURN_TYPE V4
+  .sharp L0008 0012 RETURN V4
+  .sharp L0008 0013 VERIFY_RETURN_TYPE
+  .sharp L0008 0014 RETURN null
+  .sharp      ; (lines=15, args=1, vars=2, tmps=7)
   .sharp 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity")
   .sharp 0002 V2 = FETCH_CLASS (exception) string("Paging\\PaginatedList")
   .sharp 0003 T3 = SHARP_TYPE_ARGS CV1($) string("#0")
@@ -1933,14 +1958,15 @@ Generics/Repository: different opcodes and lines in 2 op arrays, same signatures
   .sharp 0005 T5 = CAST (object) CV0($query)
   .sharp 0006 INIT_METHOD_CALL 0 T5 string("rows")
   .sharp 0007 V6 = DO_FCALL
-  .sharp 0008 SEND_VAR_NO_REF_EX V6 1
-  .sharp 0009 DO_FCALL
-  .sharp 0010 VERIFY_RETURN_TYPE V4
-  .sharp 0011 RETURN V4
-  .sharp 0012 VERIFY_RETURN_TYPE
-  .sharp 0013 RETURN null
-  .sharp      4: 0005 - 0010 (new)
-  .sharp      4: 0010 - 0011 (tmp/var)
+  .sharp 0008 T7 = SHARP_VERIFY_TYPE_ARGS V6 string("List<Any?>")
+  .sharp 0009 SEND_VAL_EX T7 1
+  .sharp 0010 DO_FCALL
+  .sharp 0011 VERIFY_RETURN_TYPE V4
+  .sharp 0012 RETURN V4
+  .sharp 0013 VERIFY_RETURN_TYPE
+  .sharp 0014 RETURN null
+  .sharp      4: 0005 - 0011 (new)
+  .sharp      4: 0011 - 0012 (tmp/var)
   .php        ; (lines=11, args=1, vars=1, tmps=4)
   .php   L0008 0001 V1 = NEW 1 string("Paging\\PaginatedList")
   .php   L0008 0002 T2 = CAST (object) CV0($query)
@@ -1990,15 +2016,16 @@ Generics/Store: different opcodes and lines in 7 op arrays, same signatures in 1
   .sharp L0026 0002 T2 = FETCH_DIM_R CV0($items) int(0)
   .sharp L0026 0003 RETURN T2
   .sharp L0026 0004 RETURN null
-  .sharp      ; (lines=9, args=1, vars=2, tmps=2)
+  .sharp      ; (lines=10, args=1, vars=2, tmps=3)
   .sharp L0030 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity & Paging.Shareable")
   .sharp L0030 0002 T2 = CAST (object) CV0($item)
   .sharp L0030 0003 INIT_METHOD_CALL 0 T2 string("link")
   .sharp L0030 0004 V3 = DO_FCALL
-  .sharp L0030 0005 VERIFY_RETURN_TYPE V3
-  .sharp L0030 0006 RETURN V3
-  .sharp L0030 0007 VERIFY_RETURN_TYPE
-  .sharp L0030 0008 RETURN null
+  .sharp L0030 0005 T4 = SHARP_VERIFY_TYPE_ARGS V3 string("string")
+  .sharp L0030 0006 VERIFY_RETURN_TYPE T4
+  .sharp L0030 0007 RETURN T4
+  .sharp L0030 0008 VERIFY_RETURN_TYPE
+  .sharp L0030 0009 RETURN null
   .sharp      ; (lines=16, args=2, vars=4, tmps=3)
   .sharp 0002 CV2($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity")
   .sharp 0003 V4 = FE_RESET_R CV0($items) 0012
@@ -2020,13 +2047,16 @@ Generics/Store: different opcodes and lines in 7 op arrays, same signatures in 1
   .sharp 0002 T2 = FETCH_DIM_R CV0($items) int(0)
   .sharp 0003 RETURN T2
   .sharp 0004 RETURN null
-  .sharp      ; (lines=9, args=1, vars=2, tmps=2)
+  .sharp      ; (lines=10, args=1, vars=2, tmps=3)
   .sharp 0001 CV1($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity & Paging.Shareable")
   .sharp 0002 T2 = CAST (object) CV0($item)
   .sharp 0003 INIT_METHOD_CALL 0 T2 string("link")
   .sharp 0004 V3 = DO_FCALL
-  .sharp 0005 VERIFY_RETURN_TYPE V3
-  .sharp 0006 RETURN V3
+  .sharp 0005 T4 = SHARP_VERIFY_TYPE_ARGS V3 string("string")
+  .sharp 0006 VERIFY_RETURN_TYPE T4
+  .sharp 0007 RETURN T4
+  .sharp 0008 VERIFY_RETURN_TYPE
+  .sharp 0009 RETURN null
   .sharp     Property [ private Sharp\Map $saved = new \Sharp\Map() ]
   .sharp     Property [ private Sharp\Map $kinds = new \Sharp\Map([0 => 'order', 1 => 'Paging\\Order']) ]
   .php        ; (lines=15, args=2, vars=3, tmps=3)

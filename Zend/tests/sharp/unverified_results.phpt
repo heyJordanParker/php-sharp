@@ -8,7 +8,7 @@ require __DIR__ . '/unverified_results.inc';
 Function<Any()> giving null: f(): Return value must be of type Any, null returned
 Function<Any()> giving 1: 1
 Function<Object()> giving 5: f(): Return value must be of type Object, int returned
-Source.read() giving null: Crossed\Source::read(): Return value must be of type Any, null returned
+Source.read() giving null: Crossed.Source.read(): Return value must be of type Any, null returned
 map: array (   0 => 2.0,   1 => 4.0, )
 sumOf: 6.0
 groupBy giving text: groupBy(): Return value must be of type Map<float, List<int>>, Sharp.Map returned: ["key"] key expected float, got string 'key'

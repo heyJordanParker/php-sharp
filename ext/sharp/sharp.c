@@ -4598,13 +4598,23 @@ static bool sharp_type_table_holds(
 	return holds;
 }
 
+/* Whether `type` is `Any?`, which every value is of. */
+static bool sharp_type_is_any_value(const sharp_type *type)
+{
+	return type->kind == SHARP_TYPE_NULLABLE && type->members[0]->kind == SHARP_TYPE_NAMED
+		&& !type->members[0]->class_name && type->members[0]->built_in == SHARP_BUILT_IN_ANY;
+}
+
 /* Whether `value`, an array, or the Sharp\Map or Sharp\Set of a `Map` or a `Set`, is of the collection `type`, each
- * element checked by sharp_type_holds. */
+ * element checked by sharp_type_holds. A collection of `Any?`, as `List<Any?>`, holds each element without a walk. */
 static bool sharp_type_collection_holds(
 	const sharp_type *type, const zval *value, sharp_holds_mode mode, sharp_type_problems *problems)
 {
+	const sharp_type *keys = type->built_in == SHARP_BUILT_IN_MAP ? type->members[0] : NULL;
+	const sharp_type *elements = sharp_type_elements(type);
+	bool walked = !sharp_type_is_any_value(elements) || (keys && !sharp_type_is_any_value(keys));
 	if (Z_TYPE_P(value) == IS_OBJECT) {
-		return sharp_type_table_holds(type, Z_OBJ_P(value), mode, problems);
+		return !walked || sharp_type_table_holds(type, Z_OBJ_P(value), mode, problems);
 	}
 	if (type->built_in == SHARP_BUILT_IN_LIST && !zend_array_is_list(Z_ARRVAL_P(value))) {
 		if (problems) {
@@ -4612,9 +4622,10 @@ static bool sharp_type_collection_holds(
 		}
 		return false;
 	}
+	if (!walked) {
+		return true;
+	}
 
-	const sharp_type *keys = type->built_in == SHARP_BUILT_IN_MAP ? type->members[0] : NULL;
-	const sharp_type *elements = sharp_type_elements(type);
 	bool holds = true;
 	zend_ulong index;
 	zend_string *name;

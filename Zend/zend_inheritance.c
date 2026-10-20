@@ -875,8 +875,12 @@ static inheritance_status zend_do_perform_implementation_check(
 	/* Check return type compatibility, but only if the prototype already specifies
 	 * a return type. Adding a new return type is always valid. */
 	if (proto->common.fn_flags & ZEND_ACC_HAS_RETURN_TYPE) {
-		/* Removing a return type is not valid, unless the parent return type is tentative. */
+		/* Removing a return type is not valid, unless the parent return type is tentative, or PHP# checks the result
+		 * of each of its calls, as for an interface member. */
 		if (!(fe->common.fn_flags & ZEND_ACC_HAS_RETURN_TYPE)) {
+			if (ZEND_ARG_IS_CALLER_CHECKED(&proto->common.arg_info[-1])) {
+				return status;
+			}
 			if (!ZEND_ARG_TYPE_IS_TENTATIVE(&proto->common.arg_info[-1])) {
 				return INHERITANCE_ERROR;
 			}

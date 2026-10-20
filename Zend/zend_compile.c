@@ -8844,6 +8844,8 @@ static zend_op_array *zend_compile_func_decl_ex(
 	init_op_array(op_array, ZEND_USER_FUNCTION, INITIAL_OP_ARRAY_SIZE);
 	bool sharp_crossing_result = return_type_ast && return_type_ast->kind == ZEND_AST_SHARP_TYPE_ARGS
 		&& (return_type_ast->attr & ZEND_SHARP_RESULT_CROSSES);
+	bool sharp_caller_checked = return_type_ast && return_type_ast->kind == ZEND_AST_SHARP_TYPE_ARGS
+		&& (return_type_ast->attr & ZEND_SHARP_RESULT_CALLER_CHECKED);
 	return_type_ast = zend_sharp_declared_type(return_type_ast, &op_array->sharp_type);
 
 	if (CG(compiler_options) & ZEND_COMPILE_PRELOAD) {
@@ -8939,6 +8941,10 @@ static zend_op_array *zend_compile_func_decl_ex(
 
 	zend_compile_params(params_ast, return_type_ast,
 		is_method && zend_string_equals_literal(lcname, ZEND_TOSTRING_FUNC_NAME) ? IS_STRING : 0);
+	if (sharp_caller_checked) {
+		ZEND_ASSERT(op_array->fn_flags & ZEND_ACC_HAS_RETURN_TYPE);
+		ZEND_TYPE_FULL_MASK(op_array->arg_info[-1].type) |= _ZEND_IS_CALLER_CHECKED_BIT;
+	}
 	if (CG(active_op_array)->fn_flags & ZEND_ACC_GENERATOR) {
 		zend_mark_function_as_generator();
 		zend_emit_op(NULL, ZEND_GENERATOR_CREATE, NULL, NULL);

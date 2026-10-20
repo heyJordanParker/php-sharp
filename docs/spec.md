@@ -3629,7 +3629,7 @@ These are compile errors, whether the parent is PHP# or plain PHP:
 
 - a missing `override`
 - `override` when the parent has no such method
-- overriding a PHP# method that is not `virtual` or `abstract`, in PHP# or in a plain PHP class: the checker refuses every replacement written in the project, and a subclass a library generates while the app runs, as a test double or a lazy-loading proxy, may replace the method, as MockK and Kotlin's `all-open` plugin replace a Kotlin member that is not `open`
+- overriding a PHP# method that is not `virtual` or `abstract`, in PHP# or in a plain PHP class: the checker refuses every replacement written in the project, and a subclass a library generates while the app runs, as a test double or a lazy-loading proxy, may replace the method, as MockK, and the proxies Kotlin's `all-open` plugin allows, replace a Kotlin member that is not `open`
 - overriding a plain PHP method marked `final`
 - an override that renames a parameter of the method it overrides. The error names both names.
 
@@ -3958,7 +3958,45 @@ App\Priced::CURRENCY;                  // "USD"
 - An interface states no law: a law is proved against the code of a class or an enum, and any class may implement an interface later.
 - An interface's operator applies to every implementer, a plain PHP class included, as section 19 chooses every operator: from the types of both sides, the most specific one runs.
 - A plain PHP class that implements an interface with default bodies uses `<Interface>\Defaults`, or it is a compile error that names the trait.
-- A plain PHP class that extends or implements a PHP# type satisfies it as PHP links it: each method it declares or inherits, from the project or a package, fits the PHP declaration of the member it implements or overrides, by PHP's rules and without docblocks, or `mago compile` refuses the class's file. That declaration erases the PHP# types, so `Self` is `static`, a `List` is `array`, a `Map` or a `Set` parameter, and such a result a plain PHP caller gets as its array, is `\Sharp\Map|array` or `\Sharp\Set|array`, and `Any`, `Any?` and a type parameter without a bound declare no type. `mago compile` checks a plain PHP file only there, as `kotlinc` checks a Java class only where it meets a Kotlin declaration, and every other error in the file stays `mago analyze`'s, as in a plain PHP project.
+- A plain PHP class that extends or implements a PHP# type satisfies it as PHP links it: each method it declares or inherits, from the project or a package, fits the PHP declaration of the member it implements or overrides, by PHP's rules and without docblocks, or `mago compile` refuses the class's file. The next rule names the one exception: a method with no return type under an interface's member. That declaration erases the PHP# types, so `Self` is `static`, a `List` is `array`, a `Map` or a `Set` parameter, and such a result a plain PHP caller gets as its array, is `\Sharp\Map|array` or `\Sharp\Set|array`, and `Any`, `Any?` and a type parameter without a bound declare no type. `mago compile` checks a plain PHP file only there, as `kotlinc` checks a Java class only where it meets a Kotlin declaration, and every other error in the file stays `mago analyze`'s, as in a plain PHP project.
+- Each PHP# call of an interface's member checks the result, so a plain PHP method that declares no return type implements the member, whether the class declares it or inherits it from a package, as Eloquent's `Model` declares `getMorphClass()`. The member keeps the type it states, and a result of another type throws a `TypeError` that names the member and its type as PHP# writes them, as Kotlin checks a Java method's result where Kotlin code takes it as non-null. The check reads a collection but none of its elements, so a call costs the same however many the result holds, unless the type holds a `float`, an `Any` or an `Object`, which section 24 checks wherever a value enters from plain PHP. A method that declares a return type still fits the member's PHP declaration, and a plain PHP method that overrides a PHP# class's method still declares one, since a call of a class's method checks nothing.
+
+<!-- example interface-member-untyped-implementer -->
+```csharp
+// app/Taggable.sharp
+namespace App;
+
+public interface Taggable
+{
+    string morphClass();
+}
+```
+
+<!-- example interface-member-untyped-implementer -->
+```php
+// app/Photo.php
+namespace App;
+
+abstract class Record
+{
+    public function __construct(private $morph) {}
+
+    public function morphClass()                       // declares no return type, as Eloquent's Model does
+    {
+        return $this->morph;
+    }
+}
+
+class Photo extends Record implements Taggable {}      // compiles: each call of morphClass() checks its result
+```
+
+<!-- example interface-member-untyped-implementer: statements -->
+```csharp
+Taggable photo = new Photo("photo");
+photo.morphClass();                     // "photo"
+Taggable scan = new Photo(42);
+scan.morphClass();                      // throws: "App.Taggable.morphClass(): Return value must be of type string, int returned"
+```
 
 **A plain PHP trait** is listed in the header with the base class and interfaces, and it is also a type. It works everywhere an interface does:
 

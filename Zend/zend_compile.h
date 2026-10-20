@@ -1205,6 +1205,11 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  * return type, ZEND_SHARP_RESULT_CROSSES, and each of its returns and yields emits ZEND_SHARP_RETURN_ARRAY.
  *   attr of ZEND_AST_SHARP_TYPE_ARGS                          upstream: no such node
  *
+ * ZEND_SHARP_RESULT_CALLER_CHECKED: the result of a PHP# interface member, which each PHP# call of the member checks,
+ * so a plain PHP method that declares no return type implements it, spec section 22. The compiler turns it into
+ * ZEND_ARG_IS_CALLER_CHECKED on the method's return type.
+ *   attr of ZEND_AST_SHARP_TYPE_ARGS                          upstream: no such node
+ *
  * ZEND_ACC_SHARP_GENERIC: the class declares that hidden slot, so == and serialize read type arguments only
  * from objects of such a class. Inheritance never copies it.
  *   ce_flags of zend_class_entry                              upstream: the ZEND_ACC_* class flags
@@ -1212,6 +1217,7 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
 #define ZEND_SHARP_OPERATOR_SYNTAX	(1<<15)
 #define ZEND_SHARP_OPERATOR	(1<<30)
 #define ZEND_SHARP_RESULT_CROSSES	(1<<0)
+#define ZEND_SHARP_RESULT_CALLER_CHECKED	(1<<1)
 
 ZEND_STATIC_ASSERT(!(ZEND_SHARP_OPERATOR_SYNTAX & UINT8_MAX),
 	"ZEND_SHARP_OPERATOR_SYNTAX overlaps the opcode in the attr of ZEND_AST_BINARY_OP");
@@ -1300,6 +1306,9 @@ static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 #define _ZEND_IS_TENTATIVE_BIT (1 << (_ZEND_TYPE_EXTRA_FLAGS_SHIFT + 4))
 /* ZEND_PARAM_WIDENED: inheritance skips the parameter's variance check, and every call still checks its type. */
 #define _ZEND_IS_WIDENED_BIT (1 << (_ZEND_TYPE_EXTRA_FLAGS_SHIFT + 5))
+/* ZEND_SHARP_RESULT_CALLER_CHECKED: inheritance takes an implementation without a return type, and every PHP# call
+ * checks the result. */
+#define _ZEND_IS_CALLER_CHECKED_BIT (1u << (_ZEND_TYPE_EXTRA_FLAGS_SHIFT + 6))
 #define ZEND_ARG_SEND_MODE(arg_info) \
 	((ZEND_TYPE_FULL_MASK((arg_info)->type) >> _ZEND_SEND_MODE_SHIFT) & 3)
 #define ZEND_ARG_IS_VARIADIC(arg_info) \
@@ -1310,6 +1319,8 @@ static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 	((ZEND_TYPE_FULL_MASK((arg_info)->type) & _ZEND_IS_TENTATIVE_BIT) != 0)
 #define ZEND_ARG_IS_WIDENED(arg_info) \
 	((ZEND_TYPE_FULL_MASK((arg_info)->type) & _ZEND_IS_WIDENED_BIT) != 0)
+#define ZEND_ARG_IS_CALLER_CHECKED(arg_info) \
+	((ZEND_TYPE_FULL_MASK((arg_info)->type) & _ZEND_IS_CALLER_CHECKED_BIT) != 0)
 
 #define ZEND_DIM_IS					(1 << 0) /* isset fetch needed for null coalesce. Set in zend_compile.c for ZEND_AST_DIM nested within ZEND_AST_COALESCE. */
 #define ZEND_DIM_SHARP				(1 << 1) /* PHP# index read, see ZEND_SHARP_OPERATOR. Set in ext/sharp for every ZEND_AST_DIM. */
