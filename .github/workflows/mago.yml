@@ -4,7 +4,6 @@ on:
   push:
     branches: [master]
   pull_request:
-  workflow_call:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
@@ -24,7 +23,8 @@ jobs:
         exclude:
           - { os: macos-latest, rust: nightly }
 
-    runs-on: ${{ matrix.os }}
+    # The macOS leg runs on the self-hosted Mac runners, except for a fork's pull request: the repository is public.
+    runs-on: ${{ matrix.os == 'macos-latest' && !github.event.pull_request.head.repo.fork && 'macos-arm64-local' || matrix.os }}
 
     permissions:
       contents: read
@@ -47,7 +47,9 @@ jobs:
           shared-key: ${{ runner.os }}-rust-${{ matrix.rust }}
           cache-on-failure: true
 
+      # setup-php brew-installs PHP on macOS, so the self-hosted runners use their Homebrew PHP and Composer instead.
       - name: Install PHP
+        if: runner.environment == 'github-hosted'
         uses: shivammathur/setup-php@master
         with:
           php-version: "8.3"
@@ -131,7 +133,7 @@ jobs:
         run: ./target/release/mago analyze --reporting-format=github
 
   release-build:
-    runs-on: macos-latest
+    runs-on: ${{ !github.event.pull_request.head.repo.fork && 'macos-arm64-local' || 'macos-latest' }}
 
     permissions:
       contents: read
@@ -217,7 +219,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'macos-latest' && !github.event.pull_request.head.repo.fork && 'macos-arm64-local' || matrix.os }}
 
     permissions:
       contents: read
@@ -226,9 +228,15 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
 
+      # The self-hosted runners already have Homebrew's PHP and Composer, and a job never installs on them.
       - name: brew
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && runner.environment == 'github-hosted'
         run: brew install php composer
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
 
       - name: Download the release binary
         uses: actions/download-artifact@v4
