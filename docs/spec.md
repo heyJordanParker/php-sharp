@@ -3629,7 +3629,7 @@ These are compile errors, whether the parent is PHP# or plain PHP:
 
 - a missing `override`
 - `override` when the parent has no such method
-- overriding a PHP# method that is not `virtual` or `abstract`, in PHP# or in a plain PHP class: the engine runs that method as PHP's `final` one, as Kotlin emits a member that is not `open` as a final JVM method, so it refuses a plain PHP class that replaces it when it links the class
+- overriding a PHP# method that is not `virtual` or `abstract`, in PHP# or in a plain PHP class: the checker refuses every replacement it sees, and a test double that tests generate while they run may replace the method, as MockK replaces a Kotlin member that is not `open`
 - overriding a plain PHP method marked `final`
 - an override that renames a parameter of the method it overrides. The error names both names.
 
@@ -3958,7 +3958,7 @@ App\Priced::CURRENCY;                  // "USD"
 - An interface states no law: a law is proved against the code of a class or an enum, and any class may implement an interface later.
 - An interface's operator applies to every implementer, a plain PHP class included, as section 19 chooses every operator: from the types of both sides, the most specific one runs.
 - A plain PHP class that implements an interface with default bodies uses `<Interface>\Defaults`, or it is a compile error that names the trait.
-- A plain PHP class that extends or implements a PHP# type satisfies it as a PHP# class does: each member it declares or inherits fits the member it implements or overrides, or `mago compile` refuses the class's file. `mago compile` checks a plain PHP file only there, as `kotlinc` checks a Java class only where it meets a Kotlin declaration, and every other error in the file stays `mago analyze`'s, as in a plain PHP project.
+- A plain PHP class that extends or implements a PHP# type satisfies it as PHP links it: each method it declares or inherits, from the project or a package, fits the PHP declaration of the member it implements or overrides, by PHP's rules and without docblocks, or `mago compile` refuses the class's file. That declaration erases the PHP# types, so `Self` is `static`, a `List` is `array`, a `Map` or a `Set` parameter, and such a result a plain PHP caller gets as its array, is `\Sharp\Map|array` or `\Sharp\Set|array`, and `Any`, `Any?` and a type parameter without a bound declare no type. `mago compile` checks a plain PHP file only there, as `kotlinc` checks a Java class only where it meets a Kotlin declaration, and every other error in the file stays `mago analyze`'s, as in a plain PHP project.
 
 **A plain PHP trait** is listed in the header with the base class and interfaces, and it is also a type. It works everywhere an interface does:
 

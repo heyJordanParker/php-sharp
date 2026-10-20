@@ -8,7 +8,7 @@ use Throwable;
 
 class Expressions
 {
-    final public static function positive(int $value): int
+    public static function positive(int $value): int
     {
         if ($value < 0) {
             throw new InvalidArgumentException("negative");
@@ -16,12 +16,12 @@ class Expressions
         return $value;
     }
 
-    final public static function known(int $value): int
+    public static function known(int $value): int
     {
         return Expressions::lookup($value) ?? throw new InvalidArgumentException("unknown");
     }
 
-    final public static function recover(int $value, \Demo\Box $steps): int
+    public static function recover(int $value, \Demo\Box $steps): int
     {
         try {
             $steps->size += 1;
@@ -36,13 +36,13 @@ class Expressions
         }
     }
 
-    final public static function describe(string $label, Countable $items): string
+    public static function describe(string $label, Countable $items): string
     {
         $token = \str_pad("", ((object) $items)->count(), "x");
         return \sprintf("%s has %d items and a %d-byte token", $label, ((object) $items)->count(), \strlen($token));
     }
 
-    final public static function label(string $name, Countable $items): string
+    public static function label(string $name, Countable $items): string
     {
         $plain = '${name} {$name} $name';
         $size = ((object) $items)->count();
@@ -50,7 +50,7 @@ class Expressions
 total";
     }
 
-    final public static function greet(string $first, string $last): string
+    public static function greet(string $first, string $last): string
     {
         $line = $first . " " . $last;
         $line .= "!";

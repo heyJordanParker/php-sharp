@@ -6,7 +6,7 @@ class Order extends Model
 {
     #[\Override] protected $table = "orders";
 
-    final public function tableName(): string
+    public function tableName(): string
     {
         return $this->table;
     }

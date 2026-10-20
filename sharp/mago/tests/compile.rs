@@ -226,10 +226,10 @@ fn compile_refuses_a_package_file_with_an_error_and_names_its_package() {
 const KEYED: &str = "namespace App;\n\npublic interface Keyed\n{\n    int getKey();\n\n    string label() => `record:${this.getKey()}`;\n}\n";
 const RECORD: &str = "<?php\n\nnamespace App;\n\nclass Record\n{\n    public function getKey(): int|string|null\n    {\n        return 7;\n    }\n}\n";
 
-/// The engine refuses a plain PHP class that extends a PHP# struct, or replaces a PHP# method that is not `virtual`,
-/// static or not, which runs as a `final` one, as Kotlin emits a member that is not `open`. The compile refuses each
-/// such class, as it refuses every other class the engine refuses when it links it, and links one that replaces a
-/// `virtual` method.
+/// The engine refuses a plain PHP class that extends a PHP# struct when it links it, so the compile refuses that class
+/// first. A PHP# method that is not `virtual` is closed to every class the compile sees, static or not, so the
+/// compile refuses a plain PHP class that replaces it too, though the engine runs it as an ordinary method for the test
+/// doubles tests generate. The compile links a class that replaces a `virtual` method.
 #[test]
 fn compile_refuses_a_plain_php_class_that_extends_a_struct_or_replaces_a_closed_method() {
     let directory = project(ORDER, MONEY);
@@ -296,7 +296,7 @@ fn compile_refuses_a_plain_php_class_that_does_not_satisfy_the_php_sharp_interfa
     );
     assert!(printed(&output).contains("incompatible-return-type"), "{}", printed(&output));
     assert!(
-        printed(&output).contains("Parameter `item` of `App\\IntBox::put()` must take at least `mixed`"),
+        printed(&output).contains("Parameter `$item` of `App\\IntBox::put()` must take at least `mixed`"),
         "{}",
         printed(&output)
     );
@@ -309,6 +309,80 @@ fn compile_refuses_a_plain_php_class_that_does_not_satisfy_the_php_sharp_interfa
         "<?php\n\nnamespace App;\n\nclass Bare extends Record implements Keyed\n{\n    use Keyed\\Defaults;\n\n    public function getKey(): int\n    {\n        return 7;\n    }\n}\n",
     );
     write(root, "app/IntBox.php", &int_box("mixed"));
+    compile_succeeds(root);
+}
+
+/// The engine links a plain PHP class against the PHP# interface it implements whatever declares each method the class
+/// takes: the class, a trait of the project, or a class or trait of a package in `vendor/`, as Eloquent's `Model` gives
+/// `unsetRelation()` from its `HasRelationships` trait. So the compile refuses an untyped method under a typed member
+/// from each of them, naming the member's type as PHP declares it. An `Any?` result declares no PHP type, so an untyped
+/// method fits it from each of them.
+#[test]
+fn compile_checks_each_method_a_plain_php_class_links_against_a_php_sharp_interface_wherever_it_is_declared() {
+    let directory = project(ORDER, MONEY);
+    let root = directory.path();
+    let untyped = |namespace: &str, name: &str| {
+        format!(
+            "<?php\n\nnamespace {namespace};\n\ntrait {name}\n{{\n    public function forget($relation)\n    {{\n        return $this;\n    }}\n\n    public function getMorphClass()\n    {{\n        return 'row';\n    }}\n}}\n"
+        )
+    };
+    write(root, "app/ForgetsInApp.php", &untyped("App", "ForgetsInApp"));
+    write(
+        root,
+        "app/AppRow.php",
+        "<?php\n\nnamespace App;\n\nclass AppRow implements Relates\n{\n    use ForgetsInApp;\n}\n",
+    );
+    write(root, "vendor/acme/model/src/ForgetsRelations.php", &untyped("Acme", "ForgetsRelations"));
+    write(
+        root,
+        "vendor/acme/model/src/Model.php",
+        "<?php\n\nnamespace Acme;\n\nabstract class Model\n{\n    use ForgetsRelations;\n}\n",
+    );
+    write(
+        root,
+        "app/VendorRow.php",
+        "<?php\n\nnamespace App;\n\nclass VendorRow extends \\Acme\\Model implements Relates\n{\n}\n",
+    );
+    let relates = |forget: &str| {
+        format!(
+            "namespace App;\n\npublic interface Relates\n{{\n    {forget} forget(string relation);\n\n    Any? getMorphClass();\n}}\n"
+        )
+    };
+    write(root, "app/Relates.sharp", &relates("Self"));
+
+    let output = compile(root);
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    for class in ["AppRow", "VendorRow"] {
+        assert!(
+            printed(&output).contains(&format!(
+                "`App\\{class}::forget()` must declare a return type compatible with `static` declared by `App\\Relates::forget()`"
+            )),
+            "{}",
+            printed(&output)
+        );
+    }
+    assert!(!printed(&output).contains("getMorphClass"), "{}", printed(&output));
+    assert!(printed(&output).contains("2 plain PHP files were refused"), "{}", printed(&output));
+
+    write(root, "app/Relates.sharp", &relates("Any?"));
+    compile_succeeds(root);
+}
+
+/// The engine erases a PHP# class's type parameters and reads no docblock, so it links a plain PHP class that implements
+/// a generic PHP# interface without the type argument an `@implements` tag would give it. The compile links it too, and
+/// the analysis keeps its error on the missing type argument.
+#[test]
+fn compile_links_a_plain_php_class_that_gives_a_php_sharp_interface_no_type_argument() {
+    let directory = project(ORDER, MONEY);
+    let root = directory.path();
+    write(root, "app/Morphs.sharp", "namespace App;\n\npublic interface Morphs<T>\n{\n    T morph();\n}\n");
+    write(
+        root,
+        "app/Bare.php",
+        "<?php\n\nnamespace App;\n\nclass Bare implements Morphs\n{\n    public function morph()\n    {\n        return 'row';\n    }\n}\n",
+    );
+
     compile_succeeds(root);
 }
 
@@ -779,6 +853,97 @@ final class Typing implements Plugin, BeforeAnalysisHook
 
 (new Worker(new Extension('typing', 'Typing', '0.0.0', analyzerPlugins: [new Typing()])))->run();
 "#;
+
+/// An extension host that gives one plain PHP method its parameters, as a framework's host signs its query builder's
+/// methods, so the hosts may sign any method the analysis can't find.
+const SIGNING_HOST: &str = r#"<?php
+
+declare(strict_types=1);
+
+use Mago\Sdk\Analyzer\CallableSignatureProvider;
+use Mago\Sdk\Analyzer\CallableSignatureProviderContext;
+use Mago\Sdk\Analyzer\EffectiveCallableSignature;
+use Mago\Sdk\Analyzer\MethodReturnTypeProvider;
+use Mago\Sdk\Analyzer\MethodTarget;
+use Mago\Sdk\Analyzer\Plugin;
+use Mago\Sdk\Analyzer\PluginDefinition;
+use Mago\Sdk\Analyzer\PluginRegistry;
+use Mago\Sdk\Analyzer\ReturnTypeProviderContext;
+use Mago\Sdk\Analyzer\Type;
+use Mago\Sdk\Extension;
+use Mago\Sdk\Worker;
+
+require $argv[1];
+
+final class Signing implements Plugin, MethodReturnTypeProvider, CallableSignatureProvider
+{
+    public function getDefinition(): PluginDefinition
+    {
+        return new PluginDefinition('signing', 'Signing', 'Signs one builder method.');
+    }
+
+    public function register(PluginRegistry $registry): void
+    {
+        $registry->registerMethodReturnTypeProvider($this);
+    }
+
+    public function getTargets(): array
+    {
+        return [MethodTarget::exact('App\\Builder', 'where')];
+    }
+
+    public function getCallableSignature(CallableSignatureProviderContext $context): ?EffectiveCallableSignature
+    {
+        return null;
+    }
+
+    public function getReturnType(ReturnTypeProviderContext $context): ?Type
+    {
+        return null;
+    }
+}
+
+(new Worker(new Extension('signing', 'Signing', '0.0.0', analyzerPlugins: [new Signing()])))->run();
+"#;
+
+/// A method a `List`, a `Map`, a `Set` or an `Iterable` lacks is named on its type as PHP# writes it, never as the class
+/// the analyzer checks the collection's methods against, also when a host may sign methods the analysis can't find.
+#[test]
+fn a_missing_collection_method_names_the_collection_type_when_a_host_signs_methods() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
+    if !common::php_sdk_is_available(repository, "the collection method message test") {
+        return;
+    }
+    let directory = project(ORDER, MONEY);
+    let root = directory.path();
+    write(
+        root,
+        "app/Shelf.sharp",
+        "namespace App;\n\npublic class Shelf\n{\n    public static void touch(List<int> sizes, Map<string, int> counts, Set<string> tags, Iterable<int> stream)\n    {\n        sizes.values();\n        counts.items();\n        tags.items();\n        stream.items();\n    }\n}\n",
+    );
+    write(root, "tools/host.php", SIGNING_HOST);
+    write(
+        root,
+        "mago.toml",
+        &format!(
+            "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n\n[extension-hosts.signing]\nworkers = 1\ncommand = [\"php\", \"tools/host.php\", {:?}]\n",
+            repository.join("vendor/autoload.php").display().to_string()
+        ),
+    );
+
+    let output = compile(root);
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    for missing in [
+        "Method `values` does not exist on `List<int>`.",
+        "Method `items` does not exist on `Map<string, int>`.",
+        "Method `items` does not exist on `Set<string>`.",
+        "Method `items` does not exist on `Iterable<int>`.",
+    ] {
+        assert!(printed(&output).contains(missing), "{missing}: {}", printed(&output));
+    }
+    assert!(!printed(&output).contains("Methods"), "{}", printed(&output));
+}
 
 #[test]
 fn compile_deletes_the_compiled_file_of_a_renamed_or_removed_source() {

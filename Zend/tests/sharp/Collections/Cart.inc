@@ -7,7 +7,7 @@ class Cart
     public private(set) array $items = [];
     #[\Sharp\Crossing(['map', 'string', null])] private \Sharp\Map $counts;
 
-    final public function fill(array $extra): int
+    public function fill(array $extra): int
     {
         $this->items = [new \Demo\Item("tea", 3)];
         $this->items->add($extra[0]); // PHP# makes the array a Sharp\Collection
@@ -25,7 +25,7 @@ class Cart
         return $total + ((object) \SplFixedArray::fromArray($this->prices()))->getSize();
     }
 
-    final public function prices(): array
+    public function prices(): array
     {
         $prices = [];
         foreach ($this->items as $item) {
@@ -34,23 +34,23 @@ class Cart
         return $prices;
     }
 
-    final public function bump(string $name): int
+    public function bump(string $name): int
     {
         $this->counts[$name] = ($this->counts[$name] ?? 0) + 1;
         return $this->counts[$name] ?? 0;
     }
 
-    final public function has(int $cents): bool
+    public function has(int $cents): bool
     {
         return \array_find_key($this->prices(), (fn ($value) => fn ($element) => $element === $value)($cents)) !== null;
     }
 
-    final public function withPrices(array $before, array $after): array
+    public function withPrices(array $before, array $after): array
     {
         return [...$before, ...$this->prices(), 0, ...$after];
     }
 
-    final public function totals(): array
+    public function totals(): array
     {
         $total = 0;
         foreach ($this->items as $item) {
@@ -59,7 +59,7 @@ class Cart
         return [$total, \count($this->items)];
     }
 
-    final public function described(): string
+    public function described(): string
     {
         $totals = $this->totals();
         [$total, $count] = $this->totals();

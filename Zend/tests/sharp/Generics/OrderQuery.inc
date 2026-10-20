@@ -7,5 +7,5 @@ class OrderQuery implements Query
     {
     }
 
-    final public function rows(): array { return $this->orders; }
+    public function rows(): array { return $this->orders; }
 }

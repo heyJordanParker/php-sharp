@@ -7,5 +7,5 @@ class PaginatedList
     {
     }
     /** @return TItem */
-    final public function first(): DatabaseEntity { return $this->rows[0]; }
+    public function first(): DatabaseEntity { return $this->rows[0]; }
 }

@@ -427,7 +427,10 @@ where
 
                             if resolved_magic_call_method.is_empty() {
                                 let identifier = FunctionLikeIdentifier::Method(classname, method_name);
-                                if context.external_analysis_session.is_some()
+                                // A PHP# collection has the methods spec section 12 gives it, which no host extends.
+                                let collection = display_sharp_collection(context, obj_type);
+                                if collection.is_none()
+                                    && context.external_analysis_session.is_some()
                                     && context.plugin_registry.may_have_callable_signature_provider(&identifier)
                                 {
                                     result.unresolved_methods.push(UnresolvedMethod {
@@ -440,7 +443,7 @@ where
                                     result.encountered_mixed |= has_incomplete_hierarchy;
                                 } else if has_incomplete_hierarchy {
                                     result.encountered_mixed = true;
-                                } else if let Some(collection) = display_sharp_collection(context, obj_type) {
+                                } else if let Some(collection) = collection {
                                     report_non_existent_collection_method(
                                         context,
                                         object.span(),

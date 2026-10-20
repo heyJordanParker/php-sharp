@@ -31,7 +31,6 @@ use mago_codex::ttype::comparator::union_comparator;
 use mago_codex::ttype::comparator::union_comparator::can_expression_types_be_identical;
 use mago_codex::ttype::get_array_parameters;
 use mago_codex::ttype::get_mixed;
-use mago_codex::ttype::get_php_array_key_type;
 use mago_codex::ttype::get_sharp_type;
 use mago_codex::ttype::is_written_in_sharp;
 use mago_codex::ttype::template::variance::Variance;
@@ -54,7 +53,6 @@ use mago_syntax::cst::NullSafeFunctionCall;
 use mago_syntax::cst::NullSafePropertyAccess;
 use mago_syntax::cst::PropertyAccess;
 use mago_word::Word;
-use mago_word::ascii_lowercase_word;
 use mago_word::word;
 
 use super::inline::InlineForm;
@@ -129,6 +127,10 @@ impl<'analysis> Types<'analysis> {
 
     pub(crate) fn names(&self) -> &ResolvedNames<'analysis> {
         &self.names
+    }
+
+    pub(crate) fn codebase(&self) -> &'analysis CodebaseMetadata {
+        self.codebase
     }
 
     /// What the PHP of a pattern depends on, as the analysis answered it.
@@ -561,17 +563,10 @@ impl<'analysis> Types<'analysis> {
         self.function_type(&function, &parameters, result)
     }
 
-    /// Whether the method `method` of `class` overrides or implements a plain PHP method that declares a PHP return type,
-    /// such as `JsonSerializable::jsonSerialize(): mixed`, which PHP requires its override to declare too.
+    /// Whether the method `method` of `class` overrides a plain PHP method that declares a return type, as
+    /// [`CodebaseMetadata::overrides_typed_php_method`] tells.
     pub(crate) fn overrides_typed_result(&self, class: &[u8], method: &[u8]) -> bool {
-        let Some(overridden) = self.scanned(class).overridden_method_ids.get(&ascii_lowercase_word(method)) else {
-            return false;
-        };
-
-        overridden
-            .values()
-            .filter_map(|parent| self.codebase.get_method_by_id(parent))
-            .any(|parent| !parent.flags.is_sharp() && parent.return_type_declaration_metadata.is_some())
+        self.codebase.overrides_typed_php_method(self.scanned(class), method)
     }
 
     /// Each method of a PHP# interface `class` implements that `class` takes from a plain PHP parent declaring no return
@@ -1404,11 +1399,6 @@ impl<'analysis> Types<'analysis> {
     /// The key type and the element type of a collection.
     pub(crate) fn array_parameters(&self, array: &TArray) -> (TUnion, TUnion) {
         get_array_parameters(array, self.codebase)
-    }
-
-    /// Whether a PHP array holds each key of a `Map` keyed by `key_type`, as the codex's `get_php_array_key_type` says.
-    pub(crate) fn keys_hold_in_array(&self, key_type: &TUnion) -> bool {
-        get_php_array_key_type(key_type, self.codebase).is_some()
     }
 
     /// The type of the elements a value of `r#type` holds, the `T` of a `List<T>`, leaving out `null`. The caller asks

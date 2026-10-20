@@ -23,33 +23,33 @@ class Page extends Resource implements Linkable
         return parent::id() + 1;
     }
 
-    final public function link(): string
+    public function link(): string
     {
         return "/page";
     }
 
-    final public function limit(): int
+    public function limit(): int
     {
         return Page::LIMIT;
     }
 
-    final public function visit(): int
+    public function visit(): int
     {
         Page::$views++;
         return Page::$views;
     }
 
-    final public function live(): bool
+    public function live(): bool
     {
         return $this->status === Status::Live;
     }
 
-    final public function draft(): Status
+    public function draft(): Status
     {
         return Status::Draft;
     }
 
-    final public function registered(): string
+    public function registered(): string
     {
         return Catalog::register(Page::class);
     }

@@ -35,6 +35,7 @@ use mago_codex::ttype::expander::TypeExpansionOptions;
 use mago_codex::ttype::expander::expand_union;
 use mago_codex::ttype::get_mixed;
 use mago_codex::ttype::get_never;
+use mago_codex::ttype::get_php_declared_type;
 use mago_codex::ttype::get_specialized_template_type;
 use mago_codex::ttype::intersect_union_types;
 use mago_codex::ttype::resolution::TypeResolutionContext;
@@ -3390,6 +3391,7 @@ fn check_abstract_method_signatures<'ctx, A>(
                 context.codebase,
                 class_like_metadata.name,
                 &substituted_appearing_method,
+                declaring_class_name,
                 &substituted_overridden_method,
                 context.dialect,
             );
@@ -3469,6 +3471,7 @@ fn check_trait_method_conflicts<'ctx, 'arena, A>(
                                 context.codebase,
                                 class_like_metadata.name,
                                 second_method,
+                                first_method_id.get_class_name(),
                                 first_method,
                                 context.dialect,
                             );
@@ -3528,6 +3531,7 @@ fn check_trait_method_conflicts<'ctx, 'arena, A>(
                                     context.codebase,
                                     class_like_metadata.name,
                                     second_method,
+                                    first_method_id.get_class_name(),
                                     first_method,
                                     context.dialect,
                                 );
@@ -4030,6 +4034,7 @@ fn check_interface_method_signatures<'ctx, A>(
             context.codebase,
             class_like_metadata.name,
             &substituted_class_method,
+            interface_method_id.get_class_name(),
             &substituted_interface_method,
             context.dialect,
         );
@@ -4344,8 +4349,9 @@ fn report_signature_compatibility_issue<'ctx, A>(
     use method_signature::SignatureCompatibilityIssue;
 
     match incompatibility {
-        // A PHP# method is closed unless it is `virtual`, spec section 22, and only an override is written `final`. The
-        // engine runs a closed method as a `final` one, so a plain PHP subclass doesn't replace it either.
+        // A PHP# method is closed unless it is `virtual`, spec section 22, and only an override is written `final`. No
+        // class the checker sees replaces a closed method, a plain PHP one included, though the engine runs it as an
+        // ordinary method, so a test double generated while tests run replaces it.
         SignatureCompatibilityIssue::FinalMethodOverride if parent_class.flags.is_sharp() => {
             let reason = if parent_class.overridden_method_ids.contains_key(&method_name) {
                 "is `final`"
@@ -4526,6 +4532,28 @@ fn report_signature_compatibility_issue<'ctx, A>(
                 .with_help("Change the parameter type to be compatible with the parent method."),
             );
         }
+        SignatureCompatibilityIssue::ByReferenceMismatch { parameter_index } => {
+            let param_name = child_method.parameters.get(parameter_index).map_or_else(|| word("unknown"), |p| p.name.0);
+
+            context.collector.report_with_code(
+                IssueCode::IncompatibleParameterType,
+                Issue::error(format!(
+                    "Parameter `{param_name}` of `{child_display}` takes its argument by reference, and `{parent_display}` takes it by value."
+                ))
+                .with_annotation(
+                    Annotation::primary(primary_span).with_message(format!("`{param_name}` is taken by reference")),
+                )
+                .with_annotation(
+                    Annotation::secondary(parent_class_span)
+                        .with_message(format!("Parent method `{parent_display}` parameter defined here")),
+                )
+                .with_annotation(
+                    Annotation::secondary(child_class_span).with_message(format!("In class `{child_name}`")),
+                )
+                .with_note("PHP refuses a parameter taken by reference where the method it implements takes it by value, when it links the class.")
+                .with_help(format!("Take `{param_name}` by value, as `{parent_display}` does.")),
+            );
+        }
         SignatureCompatibilityIssue::TakesOnEffectsDropped { parameter_index, child_type } => {
             let Some(child_parameter) = child_method.parameters.get(parameter_index) else {
                 unreachable!("the signature check found this parameter on the override");
@@ -4596,8 +4624,12 @@ fn report_signature_compatibility_issue<'ctx, A>(
             ..
         } => {
             let parameter = child_method.parameters.get(parameter_index);
-            let param_name = parameter
-                .map_or_else(|| word("unknown"), |p| word(mago_bytes::trim_start_byte(p.name.0.as_bytes(), b'$')));
+            let param_name = parameter.map_or_else(|| word("unknown"), |p| p.name.0);
+            let param_name = if context.dialect.is_sharp() {
+                word(mago_bytes::trim_start_byte(param_name.as_bytes(), b'$'))
+            } else {
+                param_name
+            };
             let span = parameter
                 .map(|p| p.name_span)
                 .filter(|span| span.file_id == primary_span.file_id)
@@ -4699,15 +4731,29 @@ fn report_signature_compatibility_issue<'ctx, A>(
             );
         }
         SignatureCompatibilityIssue::MissingReturnTypeDeclaration { parent_type } => {
-            let parent_type = display_type(context, &parent_type);
+            // A plain PHP method links against the type PHP declares for a PHP# method.
+            let parent_type = if parent_class.flags.is_sharp() && !context.dialect.is_sharp() {
+                method_signature::display_erased(&parent_type, context)
+            } else {
+                format!("`{}`", display_type(context, &parent_type))
+            };
+            // A package's method is not the project's to change, so the class declares its own.
+            let help = if child_method.flags.is_user_defined() {
+                format!("Add a return type declaration compatible with {parent_type}.")
+            } else {
+                format!(
+                    "`{child_name}` takes `{}()` from a package, so declare it in `{child_name}` with a return type compatible with {parent_type}.",
+                    child_method.original_name
+                )
+            };
 
             context.collector.report_with_code(
                 IssueCode::IncompatibleReturnType,
                 Issue::error(format!(
-                    "`{child_display}` must declare a return type compatible with `{parent_type}` declared by `{parent_display}`"
+                    "`{child_display}` must declare a return type compatible with {parent_type} declared by `{parent_display}`"
                 ))
                 .with_annotation(Annotation::primary(primary_span).with_message(format!(
-                    "This method has no return type declaration, but the parent declares `{parent_type}`"
+                    "This method has no return type declaration, but the parent declares {parent_type}"
                 )))
                 .with_annotation(
                     Annotation::secondary(parent_class_span)
@@ -4717,7 +4763,7 @@ fn report_signature_compatibility_issue<'ctx, A>(
                     Annotation::secondary(child_class_span).with_message(format!("In class `{child_name}`")),
                 )
                 .with_note("PHP requires an overriding method to declare a return type when the overridden method declares one.")
-                .with_help(format!("Add a return type declaration compatible with `{parent_type}`.")),
+                .with_help(help),
             );
         }
         SignatureCompatibilityIssue::ParameterNameMismatch {
@@ -5377,8 +5423,8 @@ fn check_class_like_properties<'ctx, A>(
                                 .with_help(format!("Change the type of `{property}` to `{parent_type_id}` to match the parent property."))
                             );
                     } else if is_sharp {
-                        let erased_type = method_signature::erase(&declaring_type.type_union, context.codebase);
-                        let erased_parent_type = method_signature::erase(&parent_type.type_union, context.codebase);
+                        let erased_type = get_php_declared_type(&declaring_type.type_union, context.codebase);
+                        let erased_parent_type = get_php_declared_type(&parent_type.type_union, context.codebase);
 
                         if is_property_type_variance_invalid(
                             context.codebase,

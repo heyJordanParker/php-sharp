@@ -41,6 +41,7 @@ use mago_codex::ttype::union::TUnion;
 use mago_database::DatabaseReader;
 use mago_database::file::File;
 use mago_database::file::FileId;
+use mago_database::file::FileType;
 use mago_names::CHANGING_COLLECTION_METHODS;
 use mago_names::INLINED_COLLECTION_METHODS;
 use mago_names::STANDARD_EXCEPTIONS;
@@ -145,6 +146,9 @@ fn analyze_with_artifacts(
         .map(|(name, code)| {
             let mut file = File::ephemeral(Cow::Borrowed(name.as_bytes()), Cow::Borrowed(code.as_bytes()));
             file.is_standard_library = name.starts_with(STANDARD_LIBRARY);
+            if name.starts_with("vendor/") {
+                file.file_type = FileType::Vendored;
+            }
 
             (*name, database.add(file))
         })
@@ -2558,19 +2562,31 @@ fn an_override_of_a_plain_php_method_whose_return_type_fits_the_parents_docblock
     assert_eq!(issues(("src/Demo/Tally.sharp", sharp), &others), Vec::<String>::new());
 }
 
-/// A plain PHP subclass of a PHP# override meets the type the override writes, as a subclass of any PHP# method does,
-/// and inherits no `@return` from the plain PHP class above the override.
+/// A plain PHP subclass of a PHP# override meets the type the override's PHP declaration writes, `\Sharp\Map|array`
+/// for a `Map` plain PHP gets as its array, as a subclass of any PHP# method does, and inherits no `@return` from the
+/// plain PHP class above the override. So `array` links, as the engine links it, and `string` doesn't.
 #[test]
 fn a_plain_php_subclass_of_a_sharp_override_meets_the_type_the_override_writes() {
     let plain = "namespace Demo;\n\npublic class Tally\n{\n    public virtual Map<int, int> counts()\n    {\n        return [:];\n    }\n}\n";
-    let rush = "<?php\n\nnamespace Demo;\n\nclass Rush extends Tally\n{\n    #[\\Override]\n    public function counts(): array\n    {\n        return ['a' => 1];\n    }\n}\n";
+    let rush = |result: &str| -> &'static str {
+        let value = if result == "array" { "[1 => 1]" } else { "'one'" };
 
-    let below_plain = issues(("src/Demo/Rush.php", rush), &[("src/Demo/Tally.sharp", plain)]);
-    let below_override =
-        issues(("src/Demo/Rush.php", rush), &[("src/Demo/Tally.sharp", TALLY), ("src/Lib/Counter.php", COUNTER)]);
+        String::leak(format!(
+            "<?php\n\nnamespace Demo;\n\nclass Rush extends Tally\n{{\n    #[\\Override]\n    public function counts(): {result}\n    {{\n        return {value};\n    }}\n}}\n"
+        ))
+    };
 
-    assert_eq!(below_plain, ["8:21 incompatible-return-type"]);
-    assert_eq!(below_override, below_plain);
+    for result in ["array", "string"] {
+        let below_plain = issues(("src/Demo/Rush.php", rush(result)), &[("src/Demo/Tally.sharp", plain)]);
+        let below_override = issues(
+            ("src/Demo/Rush.php", rush(result)),
+            &[("src/Demo/Tally.sharp", TALLY), ("src/Lib/Counter.php", COUNTER)],
+        );
+
+        let expected: &[&str] = if result == "array" { &[] } else { &["8:21 incompatible-return-type"] };
+        assert_eq!(below_plain, expected, "counts(): {result}");
+        assert_eq!(below_override, below_plain, "counts(): {result}");
+    }
 }
 
 /// A PHP# override takes the parameter type it writes, so `tags` is a `Map` whose `get` takes its key. The signature
@@ -11481,9 +11497,9 @@ fn a_map_whose_keys_can_collide_passes_where_plain_php_takes_an_array() {
 /// Spec sections 11 and 12 check a value from plain PHP where it enters PHP#. So where PHP# takes a `Map`, as a
 /// parameter or a property, instance or static, plain PHP passes or writes the keys a PHP array holds there: a
 /// backed enum's backing values, and an `int` beside a `string`, as PHP holds the key `'5'` as `5`, which PHP# turns
-/// back into the `string`. An index write through the property keeps it such an array. A `Map<Size, int>` of an
-/// `int`-backed enum refuses a `string` key. That border check does not look inside a collection yet, so a key that is
-/// no case fails when PHP# reads it back as `Status`.
+/// back into the `string`. An index write through the property keeps it such an array. A `Map<Status, int>` whose
+/// cases' values write no integer refuses an `int` key, and so does the engine, as a `Map<Size, int>` of an
+/// `int`-backed enum refuses a `string` key.
 #[test]
 fn a_plain_php_caller_passes_and_writes_the_keys_a_php_array_holds_where_php_sharp_takes_a_map() {
     let sharp = "namespace Demo;\n\nimport Lib.Size;\nimport Lib.Status;\n\npublic class Tally\n{\n    public Map<string, int> named { get; set; } = [:];\n    public static Map<string, int> shared { get; set; } = [:];\n    public Map<Status, int> counts { get; set; } = [:];\n    public Map<Size, int> sizes { get; set; } = [:];\n\n    public int total(Map<Status, int> counts) => counts.count();\n\n    public int name(Map<string, int> named) => named.count();\n\n    public int size(Map<Size, int> sizes) => sizes.count();\n}\n";
@@ -11491,7 +11507,12 @@ fn a_plain_php_caller_passes_and_writes_the_keys_a_php_array_holds_where_php_sha
 
     assert_eq!(
         issues(("src/Demo/Caller.php", php), &[("src/Demo/Tally.sharp", sharp), ("src/Lib/Status.php", STATUS)]),
-        ["15:25 invalid-property-assignment-value", "16:140 possibly-invalid-argument"]
+        [
+            "13:26 invalid-property-assignment-value",
+            "15:25 invalid-property-assignment-value",
+            "16:63 possibly-invalid-argument",
+            "16:140 possibly-invalid-argument"
+        ]
     );
 }
 
@@ -13561,8 +13582,8 @@ fn an_erased_parameter_help_names_a_bound_only_where_one_fits() {
     assert_eq!(
         explained(("src/Demo/Boxes.php", php_boxes), &boxes),
         [
-            "8:32 incompatible-parameter-type Parameter `item` of `Demo\\StatusBox::put()` must take at least `mixed`, the type `Demo\\Box::put()` erases it to. Write `item` with a type that erases to `mixed`, or bound the type parameter, as in `Box<TItem : Status>`, so both sides erase to the bound.",
-            "16:36 incompatible-parameter-type Parameter `item` of `Demo\\PairBox::put()` must take at least `mixed`, the type `Demo\\Box::put()` erases it to. Write `item` with a type that erases to `mixed`.",
+            "8:32 incompatible-parameter-type Parameter `$item` of `Demo\\StatusBox::put()` must take at least `mixed`, the type `Demo\\Box::put()` erases it to. Write `$item` with a type that erases to `mixed`, or bound the type parameter, as in `Box<TItem : Status>`, so both sides erase to the bound.",
+            "16:36 incompatible-parameter-type Parameter `$item` of `Demo\\PairBox::put()` must take at least `mixed`, the type `Demo\\Box::put()` erases it to. Write `$item` with a type that erases to `mixed`.",
         ]
     );
     assert_eq!(
@@ -13604,10 +13625,9 @@ fn a_renamed_parameter_is_widened_too() {
     );
 }
 
-/// A PHP# member is closed unless it is `virtual` or `abstract`. The engine runs a closed method as a `final` one, as
-/// Kotlin emits a member that is not `open` final, so a plain PHP subclass that replaces it is refused as PHP refuses
-/// one that replaces a `final` method, while it still overrides a closed property with no report. A PHP# subclass
-/// keeps both reports.
+/// A PHP# member is closed unless it is `virtual` or `abstract`, so a plain PHP subclass that replaces a closed method
+/// is refused as PHP refuses one that replaces a `final` method, while it still overrides a closed property with no
+/// report. A PHP# subclass keeps both reports.
 #[test]
 fn a_plain_php_subclass_is_refused_replacing_a_closed_method_and_overrides_a_closed_property() {
     let shape = "namespace App;\n\npublic class Shape\n{\n    protected string title { get; set; } = \"shape\";\n\n    public string name() => this.title;\n}\n";
@@ -13628,6 +13648,156 @@ fn a_plain_php_subclass_is_refused_replacing_a_closed_method_and_overrides_a_clo
         codes(&issues(("src/App/Square.sharp", sharp), &[("src/App/Shape.sharp", shape)])),
         ["override-final-method", "override-final-property"]
     );
+}
+
+/// The engine links a plain PHP class against the PHP# methods it implements or overrides whatever declares the method
+/// it takes, the class or a package in `vendor/`, so an untyped method under a typed one is refused from each, named as
+/// PHP declares the type: `Self` as `static`, and an `Any?` override of a typed plain PHP method as the `mixed` PHP
+/// requires of it. A package's docblock is not PHP's declaration, and an `Any?` result that overrides nothing declares
+/// no PHP type, so an untyped method fits it.
+#[test]
+fn a_plain_php_class_is_refused_an_untyped_method_under_a_typed_php_sharp_one_wherever_it_is_declared() {
+    let relates = "namespace App;\n\npublic interface Relates\n{\n    Self forget(string relation);\n\n    Any? getMorphClass();\n}\n";
+    let app_row = "<?php\n\nnamespace App;\n\nclass AppRow implements Relates\n{\n    public function forget($relation)\n    {\n        return $this;\n    }\n\n    public function getMorphClass()\n    {\n        return 'row';\n    }\n}\n";
+    let model = "<?php\n\nnamespace Acme;\n\nabstract class Model\n{\n    /** @return $this */\n    public function forget($relation)\n    {\n        return $this;\n    }\n\n    public function getMorphClass()\n    {\n        return 'row';\n    }\n}\n";
+    let vendor_row = "<?php\n\nnamespace App;\n\nclass VendorRow extends \\Acme\\Model implements Relates\n{\n}\n";
+    let shaped =
+        "<?php\n\nnamespace Lib;\n\nabstract class Shaped\n{\n    abstract public function shape(): mixed;\n}\n";
+    let report = "namespace App;\n\nimport Lib.Shaped;\n\npublic class Report : Shaped\n{\n    public Report() { }\n\n    public override Any? shape() => null;\n}\n";
+    let legacy_report = "<?php\n\nnamespace App;\n\nclass LegacyReport extends Report\n{\n    public function shape()\n    {\n        return 1;\n    }\n}\n";
+    let refused = |analyzed: (&'static str, &'static str), others: &[(&'static str, &'static str)]| -> Vec<String> {
+        analyze(&PLUGIN_REGISTRY, settings(), analyzed, others)
+            .iter()
+            .map(|issue| format!("{} | {}", issue.message, issue.help.as_deref().unwrap_or_default()))
+            .collect()
+    };
+
+    assert_eq!(
+        refused(("src/App/AppRow.php", app_row), &[("src/App/Relates.sharp", relates)]),
+        [
+            "`App\\AppRow::forget()` must declare a return type compatible with `static` declared by `App\\Relates::forget()` | Add a return type declaration compatible with `static`."
+        ]
+    );
+    assert_eq!(
+        refused(
+            ("src/App/VendorRow.php", vendor_row),
+            &[("src/App/Relates.sharp", relates), ("vendor/acme/model/src/Model.php", model)]
+        ),
+        [
+            "`App\\VendorRow::forget()` must declare a return type compatible with `static` declared by `App\\Relates::forget()` | `App\\VendorRow` takes `forget()` from a package, so declare it in `App\\VendorRow` with a return type compatible with `static`."
+        ]
+    );
+    assert_eq!(
+        refused(
+            ("src/App/LegacyReport.php", legacy_report),
+            &[("src/App/Report.sharp", report), ("src/Lib/Shaped.php", shaped)]
+        ),
+        [
+            "`App\\LegacyReport::shape()` must declare a return type compatible with `mixed` declared by `App\\Report::shape()` | Add a return type declaration compatible with `mixed`."
+        ]
+    );
+}
+
+/// The engine links a plain PHP class against the PHP declaration the bridge writes for each PHP# method, by PHP's own
+/// rules, wherever the class's method is declared, so the analysis checks the same pair: what each side declares in
+/// PHP, without docblocks. A parameter taken by reference is refused, as is `array` where the bridge declares
+/// `\Sharp\Map|array`. `array` fits a `List<int>` or a plain PHP caller's `Map<string, int>` result, a `@param`
+/// docblock changes nothing, and an untyped method fits `Any` or a type parameter without a bound, which declare no
+/// type whatever type argument `@implements` gives it. Each verdict is the one the engine gives the class.
+#[test]
+fn a_plain_php_class_links_against_the_php_declaration_of_a_php_sharp_method() {
+    let interfaces = [
+        (
+            "src/App/Forgets.sharp",
+            "namespace App;\n\npublic interface Forgets\n{\n    Self forget(string relation);\n}\n",
+        ),
+        ("src/App/ListsItems.sharp", "namespace App;\n\npublic interface ListsItems\n{\n    List<int> items();\n}\n"),
+        (
+            "src/App/MapsItems.sharp",
+            "namespace App;\n\npublic interface MapsItems\n{\n    Map<string, int> items();\n}\n",
+        ),
+        ("src/App/MorphsGeneric.sharp", "namespace App;\n\npublic interface MorphsGeneric<T>\n{\n    T morph();\n}\n"),
+        ("src/App/MorphsAny.sharp", "namespace App;\n\npublic interface MorphsAny\n{\n    Any morph();\n}\n"),
+        (
+            "src/App/TakesMap.sharp",
+            "namespace App;\n\npublic interface TakesMap\n{\n    void take(Map<string, int> counts);\n}\n",
+        ),
+        (
+            "vendor/acme/model/src/Providers.php",
+            "<?php\n\nnamespace Acme;\n\nabstract class RefForget\n{\n    public function forget(&$relation): static\n    {\n        return $this;\n    }\n}\n\nabstract class StaticForget\n{\n    public function forget($relation): static\n    {\n        return $this;\n    }\n}\n\nabstract class ArrayItems\n{\n    public function items(): array\n    {\n        return [1];\n    }\n}\n\nabstract class UntypedMorph\n{\n    public function morph()\n    {\n        return 'row';\n    }\n}\n",
+        ),
+    ];
+    let row = |class: &str, body: &str| -> (&'static str, &'static str) {
+        (String::leak(format!("src/App/{class}.php")), String::leak(format!("<?php\n\nnamespace App;\n\n{body}\n")))
+    };
+    let rows = [
+        (
+            row(
+                "FProjectRef",
+                "class FProjectRef implements Forgets\n{\n    public function forget(&$relation): static\n    {\n        return $this;\n    }\n}",
+            ),
+            vec!["incompatible-parameter-type"],
+        ),
+        (
+            row("FRef", "class FRef extends \\Acme\\RefForget implements Forgets\n{\n}"),
+            vec!["incompatible-parameter-type"],
+        ),
+        (
+            row(
+                "FProjectDocblock",
+                "class FProjectDocblock implements Forgets\n{\n    /**\n     * @param int $relation\n     */\n    public function forget($relation): static\n    {\n        return $this;\n    }\n}",
+            ),
+            vec![],
+        ),
+        (row("FStatic", "class FStatic extends \\Acme\\StaticForget implements Forgets\n{\n}"), vec![]),
+        (
+            row(
+                "LArrayOwn",
+                "class LArrayOwn implements ListsItems\n{\n    public function items(): array\n    {\n        return [1];\n    }\n}",
+            ),
+            vec![],
+        ),
+        (row("LArrayVendor", "class LArrayVendor extends \\Acme\\ArrayItems implements ListsItems\n{\n}"), vec![]),
+        (
+            row(
+                "MapArrayOwn",
+                "class MapArrayOwn implements MapsItems\n{\n    public function items(): array\n    {\n        return ['a' => 1];\n    }\n}",
+            ),
+            vec![],
+        ),
+        (
+            row(
+                "TakeMapOwn",
+                "class TakeMapOwn implements TakesMap\n{\n    public function take(array $counts): void\n    {\n    }\n}",
+            ),
+            vec!["incompatible-parameter-type"],
+        ),
+        (
+            row(
+                "MGenericOwn",
+                "/**\n * @implements MorphsGeneric<string>\n */\nclass MGenericOwn implements MorphsGeneric\n{\n    public function morph()\n    {\n        return 'row';\n    }\n}",
+            ),
+            vec![],
+        ),
+        (
+            row(
+                "MGenericVendor",
+                "/**\n * @implements MorphsGeneric<string>\n */\nclass MGenericVendor extends \\Acme\\UntypedMorph implements MorphsGeneric\n{\n}",
+            ),
+            vec![],
+        ),
+        (row("MAnyVendor", "class MAnyVendor extends \\Acme\\UntypedMorph implements MorphsAny\n{\n}"), vec![]),
+    ];
+
+    for (analyzed, expected) in rows {
+        let refused: Vec<String> = analyze(&PLUGIN_REGISTRY, settings(), analyzed, &interfaces)
+            .into_iter()
+            .filter(|issue| issue.level == Level::Error)
+            .map(|issue| issue.code.unwrap_or_default())
+            .collect();
+
+        assert_eq!(refused, expected, "{}", analyzed.0);
+    }
 }
 
 /// A PHP# type states a property, not its hooks, so a plain PHP class that lacks the property a PHP# interface states
@@ -13658,7 +13828,7 @@ fn a_php_class_overriding_an_erased_sharp_method_is_refused_and_a_sharp_class_is
     assert_eq!(
         explained(("src/Demo/OrderBox.php", order_box), &[("src/Demo/Box.sharp", sharp_box)]),
         [
-            "8:31 incompatible-parameter-type Parameter `item` of `Demo\\OrderBox::put()` must take at least `mixed`, the type `Demo\\Box::put()` erases it to. Write `item` with a type that erases to `mixed`, or bound the type parameter, as in `Box<TItem : Order>`, so both sides erase to the bound.",
+            "8:31 incompatible-parameter-type Parameter `$item` of `Demo\\OrderBox::put()` must take at least `mixed`, the type `Demo\\Box::put()` erases it to. Write `$item` with a type that erases to `mixed`, or bound the type parameter, as in `Box<TItem : Order>`, so both sides erase to the bound.",
         ]
     );
     assert_eq!(
@@ -15441,8 +15611,8 @@ fn a_class_type_names_a_generic_class_without_its_type_arguments() {
 
 /// A plain PHP caller passes the backing values where a generic PHP# method takes a `Map<TKey, int>` with `TKey`
 /// bound by a backed enum, as it does where the method takes a `Map<Status, int>`: the method's key is read as PHP#
-/// writes it, and an `int` key passes for a `string` backing value, as PHP holds the key `"1"`. A plain PHP template
-/// bounded by the enum keeps upstream Mago's issues.
+/// writes it, so an `int` key, which no case's value writes, is refused. A plain PHP template bounded by the enum keeps
+/// upstream Mago's issues.
 #[test]
 fn a_plain_php_caller_passes_the_backing_values_where_a_generic_method_takes_a_map_keyed_by_its_type_parameter() {
     let keys = "namespace Demo;\n\nimport Lib.Status;\n\npublic class Keys\n{\n    public static int count<TKey : Status>(Map<TKey, int> counts) => 0;\n}\n";
@@ -15460,7 +15630,7 @@ fn a_plain_php_caller_passes_the_backing_values_where_a_generic_method_takes_a_m
     );
     assert_eq!(
         issues(("src/Demo/Caller.php", php), &[("src/Demo/Keys.sharp", keys), ("src/Lib/Status.php", STATUS)]),
-        Vec::<String>::new()
+        ["9:59 possibly-invalid-argument"]
     );
 }
 
@@ -18395,15 +18565,18 @@ fn a_php_caller_passes_null_as_the_left_operand_of_op_equality() {
     assert_eq!(issues(("src/App/Check.php", php), &[MONEY_OPERATORS]), Vec::<String>::new());
 }
 
-/// Plain PHP receives a PHP# `Map` or `Set` as the object it runs as, spec section 12: a `Sharp\Map<K, V>` or a
-/// `Sharp\Set<T>` from a return, a property, a static property, and a callback's argument, at any depth. So
-/// `is_array` on one is never true, and an index read and a loop resolve through the object's `ArrayAccess` and
-/// `IteratorAggregate`. A PHP# parameter or property takes the object back, or the PHP array PHP# turns into one, and a
-/// property read after such a write is the object again. A plain PHP parameter that names an object type the object
-/// has, as `Countable`, `Traversable`, `JsonSerializable`, `object` or `Sharp\Map`, takes a PHP# `Map` or `Set` passed
-/// to it, and one the object lacks refuses it.
+/// Plain PHP receives a PHP# `Map` or `Set` as the PHP array the engine gives it, spec section 12, from a return, a
+/// property, a static property and a callback's argument, at any depth: a `Map` as the array of its entries, each
+/// backed enum key its backing value, and a `Set` as the list of its elements. A `string` key is `int|string`, as PHP
+/// holds `"5"` as `5`, and a case's value that writes no integer stays a `string`. So `array_merge`, `ksort` and a
+/// backed enum's `tryFrom` take them, and a parameter that takes a `string` still refuses one. Where a key, at any
+/// depth, has no PHP array form, as an enum without backing values, plain PHP receives the whole value as the
+/// `Sharp\Map` object, as the engine gives it. A PHP# parameter or property takes the `Sharp\Map` or `Sharp\Set`
+/// object, or the PHP array PHP# turns into one, and a function plain PHP passes may give either. A plain PHP
+/// parameter that names an object type the object has, as `Countable`, `Traversable`, `JsonSerializable`, `object` or
+/// `Sharp\Map`, takes a PHP# `Map` or `Set` that PHP# passes to it, and one the object lacks refuses it.
 #[test]
-fn plain_php_receives_a_map_or_a_set_as_the_object_it_runs_as() {
+fn plain_php_receives_a_map_or_a_set_as_a_php_array() {
     let sink = (
         "src/Lib/Sink.php",
         "<?php\n\nnamespace Lib;\n\nfinal class Sink\n{\n    public static function countable(\\Countable $values): int { return count($values); }\n\n    public static function traversable(\\Traversable $values): int { return iterator_count($values); }\n\n    public static function json(\\JsonSerializable $values): int { return strlen((string) json_encode($values)); }\n\n    public static function object(object $values): int { return strlen(get_debug_type($values)); }\n\n    public static function map(\\Sharp\\Map $values): int { return count($values); }\n\n    public static function set(\\Sharp\\Set $values): int { return count($values); }\n\n    public static function date(\\DateTimeInterface $values): int { return 0; }\n}\n",
@@ -18420,27 +18593,28 @@ fn plain_php_receives_a_map_or_a_set_as_the_object_it_runs_as() {
 
     let tally = (
         "src/Demo/Tally.sharp",
-        "namespace Demo;\n\npublic class Tally\n{\n    public Set<string> seen = [];\n    public static Map<string, List<Set<int>>> nested = [:];\n    public Map<string, int> kept { get; set => field = value; } = [:];\n\n    public Map<string, int> counts() => [\"a\": 1];\n\n    public int total(Map<string, int> counts) => counts.count();\n\n    public void each(Function<void(Map<string, int>)> visit)\n    {\n        visit(this.counts());\n    }\n\n    public int build(Function<Set<int>()> make) => make().count();\n}\n",
+        "namespace Demo;\n\npublic class Tally\n{\n    public Set<string> seen = [];\n    public static Map<string, List<Set<int>>> nested = [:];\n    public Map<string, int> kept { get; set => field = value; } = [:];\n\n    public Map<string, int> counts() => [\"a\": 1];\n\n    public Map<Size, int?> limits() => [Size.Small: 1];\n\n    public Map<Shade, int> shades() => [Shade.Dark: 1];\n\n    public Map<string, Map<Shade, int>> nestedShades() => [\"n\": [Shade.Dark: 1]];\n\n    public int total(Map<string, int> counts) => counts.count();\n\n    public void each(Function<void(Map<string, int>)> visit)\n    {\n        visit(this.counts());\n    }\n\n    public int build(Function<Set<int>()> make) => make().count();\n}\n",
     );
-    let php = "<?php\n\nnamespace Demo;\n\nfinal class Caller\n{\n    public function counts(Tally $tally): int\n    {\n        return $tally->counts();\n    }\n\n    public function seen(Tally $tally): int\n    {\n        return $tally->seen;\n    }\n\n    public function nested(): int\n    {\n        return Tally::$nested;\n    }\n\n    public function isArray(Tally $tally): int\n    {\n        $counts = $tally->counts();\n        if (is_array($counts)) {\n            return 1;\n        }\n        if (is_array($tally->seen)) {\n            return 2;\n        }\n        return 0;\n    }\n\n    public function read(Tally $tally): string\n    {\n        return $tally->counts()['a'];\n    }\n\n    public function loop(Tally $tally): int\n    {\n        foreach ($tally->counts() as $key => $count) {\n            return $key;\n        }\n        foreach ($tally->seen as $position => $tag) {\n            return $tag;\n        }\n        return 0;\n    }\n\n    public function back(Tally $tally): int\n    {\n        $tally->seen = ['x'];\n        $tally->seen = $tally->seen;\n        $tally->kept = ['k' => 1];\n        Tally::$nested = ['n' => []];\n        if (is_array($tally->kept)) {\n            return 3;\n        }\n        $tally->each(function (\\Sharp\\Map $counts): void {});\n        $tally->each(function (array $counts): void {});\n        $tally->build(fn (): \\Sharp\\Set => new \\Sharp\\Set([1]));\n        $tally->build(fn (): array => [1]);\n        return $tally->total($tally->counts()) + $tally->total(['b' => 2]);\n    }\n}\n";
+    let size =
+        ("src/Demo/Size.php", "<?php\n\nnamespace Demo;\n\nenum Size: string\n{\n    case Small = 'small';\n}\n");
+    let shade = ("src/Demo/Shade.sharp", "namespace Demo;\n\npublic enum Shade\n{\n    case Dark;\n}\n");
+    let php = "<?php\n\nnamespace Demo;\n\nfinal class Caller\n{\n    public function counts(Tally $tally): int\n    {\n        return $tally->counts();\n    }\n\n    public function seen(Tally $tally): int\n    {\n        return $tally->seen;\n    }\n\n    public function nested(): int\n    {\n        return Tally::$nested;\n    }\n\n    public function limits(Tally $tally): int\n    {\n        return $tally->limits();\n    }\n\n    public function shades(Tally $tally): int\n    {\n        return $tally->shades();\n    }\n\n    public function nestedShades(Tally $tally): int\n    {\n        return $tally->nestedShades();\n    }\n\n    public function arrays(Tally $tally): int\n    {\n        $merged = array_merge(['a' => 0], $tally->counts());\n        $limits = $tally->limits();\n        ksort($limits);\n        foreach ($tally->limits() as $size => $limit) {\n            Size::tryFrom($size);\n        }\n        return count($merged) + count($limits) + strlen($tally->seen) + count(array_merge([], $tally->nestedShades()));\n    }\n\n    public function read(Tally $tally): string\n    {\n        return $tally->counts()['a'];\n    }\n\n    public function loop(Tally $tally): int\n    {\n        foreach ($tally->counts() as $key => $count) {\n            return strlen($key);\n        }\n        foreach ($tally->seen as $position => $tag) {\n            return $tag;\n        }\n        return 0;\n    }\n\n    public function back(Tally $tally): int\n    {\n        $tally->seen = ['x'];\n        $tally->seen = $tally->seen;\n        $tally->kept = ['k' => 1];\n        Tally::$nested = ['n' => []];\n        $tally->each(function (\\Sharp\\Map $counts): void {});\n        $tally->each(function (array $counts): void {});\n        $tally->build(fn (): \\Sharp\\Set => new \\Sharp\\Set([1]));\n        $tally->build(fn (): array => [1]);\n        return $tally->total($tally->counts()) + $tally->total(['b' => 2]) + $tally->total(new \\Sharp\\Map(['c', 3]));\n    }\n}\n";
 
     assert_eq!(
-        messages(("src/Demo/Caller.php", php), &[tally]),
+        messages(("src/Demo/Caller.php", php), &[tally, size, shade]),
         [
-            "Invalid return type for function `Demo\\Caller::counts`: expected `int`, but found `Sharp\\Map<string, int>`.",
-            "Invalid return type for function `Demo\\Caller::seen`: expected `int`, but found `Sharp\\Set<string>`.",
-            "Invalid return type for function `Demo\\Caller::nested`: expected `int`, but found `Sharp\\Map<string, list<Sharp\\Set<int>>>`.",
-            "Impossible type assertion: `$counts` of type `Sharp\\Map<string, int>` can never be `array<array-key, mixed>`.",
-            "This condition (type `false`) will always evaluate to false.",
-            "Impossible type assertion: `$tally->seen` of type `Sharp\\Set<string>` can never be `array<array-key, mixed>`.",
-            "This condition (type `false`) will always evaluate to false.",
+            "Invalid return type for function `Demo\\Caller::counts`: expected `int`, but found `array<int|string, int>`.",
+            "Invalid return type for function `Demo\\Caller::seen`: expected `int`, but found `list<string>`.",
+            "Invalid return type for function `Demo\\Caller::nested`: expected `int`, but found `array<int|string, list<list<int>>>`.",
+            "Invalid return type for function `Demo\\Caller::limits`: expected `int`, but found `array<string, int|null>`.",
+            "Invalid return type for function `Demo\\Caller::shades`: expected `int`, but found `Sharp\\Map<enum(Demo\\Shade), int>`.",
+            "Invalid return type for function `Demo\\Caller::nestedShades`: expected `int`, but found `Sharp\\Map<string, Sharp\\Map<enum(Demo\\Shade), int>>`.",
+            "Invalid argument type for argument #1 of `strlen`: expected `string`, but found `list<string>`.",
+            "Invalid argument type for argument #2 of `array_merge`: expected `array<('K.array_merge() extends array-key), ('V.array_merge() extends mixed)>`, but found `Sharp\\Map<string, Sharp\\Map<enum(Demo\\Shade), int>>`.",
             "Invalid return type for function `Demo\\Caller::read`: expected `string`, but found `int`.",
+            "Possible argument type mismatch for argument #1 of `strlen`: expected `string`, but possibly received `int|string`.",
             "Invalid return type for function `Demo\\Caller::loop`: expected `int`, but found `string`.",
-            "Invalid return type for function `Demo\\Caller::loop`: expected `int`, but found `string`.",
-            "Impossible type assertion: `$tally->kept` of type `Sharp\\Map<string, int>` can never be `array<array-key, mixed>`.",
-            "This condition (type `false`) will always evaluate to false.",
-            "Invalid argument type for argument #1 of `Demo\\Tally::each`: expected `(closure(Sharp\\Map<string, int>): void)`, but found `(closure(array<array-key, mixed>): void)`.",
-            "Invalid argument type for argument #1 of `Demo\\Tally::build`: expected `(closure(): Sharp\\Set<int>)`, but found `(closure(): list{int(1)})`.",
+            "Invalid argument type for argument #1 of `Demo\\Tally::each`: expected `(closure(array<int|string, int>): void)`, but found `(closure(Sharp\\Map<mixed, mixed>): void)`.",
         ]
     );
 }
@@ -18463,7 +18637,7 @@ fn plain_php_knows_the_engine_s_container() {
 
 /// A PHP caller checks its arguments against the PHP method a PHP# method runs as, whose `List<int>` and
 /// `Map<string, int>` parameters keep their element types, so a wrongly typed list or map is still reported. The `Map`
-/// takes a `Sharp\Map` or the PHP array PHP# turns into one.
+/// takes a `Sharp\Map` or the PHP array PHP# turns into one, whose all-digit keys PHP holds as `int`s.
 #[test]
 fn a_php_caller_keeps_the_element_types_of_a_sharp_methods_collection_parameters() {
     let tally = (
