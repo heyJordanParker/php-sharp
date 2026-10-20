@@ -1,0 +1,18 @@
+namespace CallerChecked;
+
+public interface Taggable
+{
+    Relation morphToMany(string related, string name);
+
+    never fail(string reason);
+
+    List<int> ids();
+
+    Set<string> labels();
+
+    Map<string, int> counts();
+
+    Iterable<int> stream();
+
+    [List<int>, string] pair();
+}

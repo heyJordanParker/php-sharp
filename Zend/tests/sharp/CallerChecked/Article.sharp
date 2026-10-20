@@ -1,0 +1,8 @@
+namespace CallerChecked;
+
+public class Article : Contact
+{
+    public Article() { }
+
+    public string viaThis() => this.morphToMany("Tag", "this").name;
+}

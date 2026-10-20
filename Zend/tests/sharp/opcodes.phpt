@@ -1635,39 +1635,42 @@ Generics/Catalog: different opcodes and lines in 14 op arrays, same signatures i
   .sharp L0008 0012 RETURN T7
   .sharp L0008 0013 VERIFY_RETURN_TYPE
   .sharp L0008 0014 RETURN null
-  .sharp      ; (lines=20, args=0, vars=0, tmps=11)
+  .sharp      ; (lines=21, args=0, vars=0, tmps=12)
   .sharp L0010 0010 T6 = SHARP_TYPE_ARGS string("Paging.Order")
   .sharp L0010 0011 V7 = DO_FCALL T6
-  .sharp L0010 0012 T8 = CAST (object) V7
-  .sharp L0010 0013 INIT_METHOD_CALL 0 T8 string("first")
-  .sharp L0010 0014 V9 = DO_FCALL
-  .sharp L0010 0015 T10 = FETCH_OBJ_R V9 string("id")
-  .sharp L0010 0016 VERIFY_RETURN_TYPE T10
-  .sharp L0010 0017 RETURN T10
-  .sharp L0010 0018 VERIFY_RETURN_TYPE
-  .sharp L0010 0019 RETURN null
-  .sharp      ; (lines=15, args=0, vars=0, tmps=5)
+  .sharp L0010 0012 T8 = SHARP_VERIFY_TYPE_ARGS V7 string("Paging.PaginatedList<Paging.Order>")
+  .sharp L0010 0013 T9 = CAST (object) T8
+  .sharp L0010 0014 INIT_METHOD_CALL 0 T9 string("first")
+  .sharp L0010 0015 V10 = DO_FCALL
+  .sharp L0010 0016 T11 = FETCH_OBJ_R V10 string("id")
+  .sharp L0010 0017 VERIFY_RETURN_TYPE T11
+  .sharp L0010 0018 RETURN T11
+  .sharp L0010 0019 VERIFY_RETURN_TYPE
+  .sharp L0010 0020 RETURN null
+  .sharp      ; (lines=16, args=0, vars=0, tmps=6)
   .sharp L0012 0005 T1 = SHARP_TYPE_ARGS string("Paging.Order")
   .sharp L0012 0006 V2 = DO_FCALL T1
-  .sharp L0012 0007 T3 = JMP_NULL V2 0009
-  .sharp L0012 0008 T3 = FETCH_OBJ_IS V2 string("id")
-  .sharp L0012 0009 T4 = COALESCE T3 0011
-  .sharp L0012 0010 T4 = QM_ASSIGN int(0)
-  .sharp L0012 0011 VERIFY_RETURN_TYPE T4
-  .sharp L0012 0012 RETURN T4
-  .sharp L0012 0013 VERIFY_RETURN_TYPE
-  .sharp L0012 0014 RETURN null
-  .sharp      ; (lines=15, args=0, vars=0, tmps=5)
+  .sharp L0012 0007 T3 = SHARP_VERIFY_TYPE_ARGS V2 string("Paging.Order?")
+  .sharp L0012 0008 T4 = JMP_NULL T3 0010
+  .sharp L0012 0009 T4 = FETCH_OBJ_IS T3 string("id")
+  .sharp L0012 0010 T5 = COALESCE T4 0012
+  .sharp L0012 0011 T5 = QM_ASSIGN int(0)
+  .sharp L0012 0012 VERIFY_RETURN_TYPE T5
+  .sharp L0012 0013 RETURN T5
+  .sharp L0012 0014 VERIFY_RETURN_TYPE
+  .sharp L0012 0015 RETURN null
+  .sharp      ; (lines=16, args=0, vars=0, tmps=6)
   .sharp L0014 0005 T1 = SHARP_TYPE_ARGS string("Paging.Order")
   .sharp L0014 0006 V2 = DO_FCALL T1
-  .sharp L0014 0007 T3 = JMP_NULL V2 0009
-  .sharp L0014 0008 T3 = FETCH_OBJ_IS V2 string("id")
-  .sharp L0014 0009 T4 = COALESCE T3 0011
-  .sharp L0014 0010 T4 = QM_ASSIGN int(0)
-  .sharp L0014 0011 VERIFY_RETURN_TYPE T4
-  .sharp L0014 0012 RETURN T4
-  .sharp L0014 0013 VERIFY_RETURN_TYPE
-  .sharp L0014 0014 RETURN null
+  .sharp L0014 0007 T3 = SHARP_VERIFY_TYPE_ARGS V2 string("Paging.Order?")
+  .sharp L0014 0008 T4 = JMP_NULL T3 0010
+  .sharp L0014 0009 T4 = FETCH_OBJ_IS T3 string("id")
+  .sharp L0014 0010 T5 = COALESCE T4 0012
+  .sharp L0014 0011 T5 = QM_ASSIGN int(0)
+  .sharp L0014 0012 VERIFY_RETURN_TYPE T5
+  .sharp L0014 0013 RETURN T5
+  .sharp L0014 0014 VERIFY_RETURN_TYPE
+  .sharp L0014 0015 RETURN null
   .sharp      ; (lines=14, args=0, vars=0, tmps=6)
   .sharp L0020 0001 V0 = FETCH_CLASS (exception) string("Paging\\Feed")
   .sharp L0020 0002 T1 = SHARP_TYPE_ARGS string("Paging.Order")
@@ -1688,14 +1691,15 @@ Generics/Catalog: different opcodes and lines in 14 op arrays, same signatures i
   .sharp L0022 0008 RETURN T4
   .sharp L0022 0009 VERIFY_RETURN_TYPE
   .sharp L0022 0010 RETURN null
-  .sharp      ; (lines=14, args=0, vars=0, tmps=7)
+  .sharp      ; (lines=15, args=0, vars=0, tmps=8)
   .sharp L0026 0007 T4 = SHARP_TYPE_ARGS string("Paging.Order")
   .sharp L0026 0008 V5 = DO_FCALL T4
-  .sharp L0026 0009 T6 = FETCH_OBJ_R V5 string("id")
-  .sharp L0026 0010 VERIFY_RETURN_TYPE T6
-  .sharp L0026 0011 RETURN T6
-  .sharp L0026 0012 VERIFY_RETURN_TYPE
-  .sharp L0026 0013 RETURN null
+  .sharp L0026 0009 T6 = SHARP_VERIFY_TYPE_ARGS V5 string("Paging.Order")
+  .sharp L0026 0010 T7 = FETCH_OBJ_R T6 string("id")
+  .sharp L0026 0011 VERIFY_RETURN_TYPE T7
+  .sharp L0026 0012 RETURN T7
+  .sharp L0026 0013 VERIFY_RETURN_TYPE
+  .sharp L0026 0014 RETURN null
   .sharp      ; (lines=14, args=0, vars=0, tmps=7)
   .sharp L0028 0008 T5 = SHARP_TYPE_ARGS string("Paging.Order")
   .sharp L0028 0009 V6 = DO_FCALL T5
@@ -1720,44 +1724,45 @@ Generics/Catalog: different opcodes and lines in 14 op arrays, same signatures i
   .sharp 0014 RETURN null
   .sharp      2: 0003 - 0007 (new)
   .sharp      7: 0011 - 0012 (tmp/var)
-  .sharp      ; (lines=20, args=0, vars=0, tmps=11)
+  .sharp      ; (lines=21, args=0, vars=0, tmps=12)
   .sharp 0010 T6 = SHARP_TYPE_ARGS string("Paging.Order")
   .sharp 0011 V7 = DO_FCALL T6
-  .sharp 0012 T8 = CAST (object) V7
-  .sharp 0013 INIT_METHOD_CALL 0 T8 string("first")
-  .sharp 0014 V9 = DO_FCALL
-  .sharp 0015 T10 = FETCH_OBJ_R V9 string("id")
-  .sharp 0016 VERIFY_RETURN_TYPE T10
-  .sharp 0017 RETURN T10
-  .sharp 0018 VERIFY_RETURN_TYPE
-  .sharp 0019 RETURN null
-  .sharp      10: 0016 - 0017 (tmp/var)
-  .sharp      ; (lines=15, args=0, vars=0, tmps=5)
+  .sharp 0012 T8 = SHARP_VERIFY_TYPE_ARGS V7 string("Paging.PaginatedList<Paging.Order>")
+  .sharp 0013 T9 = CAST (object) T8
+  .sharp 0014 INIT_METHOD_CALL 0 T9 string("first")
+  .sharp 0015 V10 = DO_FCALL
+  .sharp 0016 T11 = FETCH_OBJ_R V10 string("id")
+  .sharp 0017 VERIFY_RETURN_TYPE T11
+  .sharp 0018 RETURN T11
+  .sharp 0019 VERIFY_RETURN_TYPE
+  .sharp 0020 RETURN null
+  .sharp      11: 0017 - 0018 (tmp/var)
+  .sharp      ; (lines=16, args=0, vars=0, tmps=6)
   .sharp 0005 T1 = SHARP_TYPE_ARGS string("Paging.Order")
   .sharp 0006 V2 = DO_FCALL T1
-  .sharp 0007 T3 = JMP_NULL V2 0009
-  .sharp 0008 T3 = FETCH_OBJ_IS V2 string("id")
-  .sharp 0009 T4 = COALESCE T3 0011
-  .sharp 0010 T4 = QM_ASSIGN int(0)
-  .sharp 0011 VERIFY_RETURN_TYPE T4
-  .sharp 0012 RETURN T4
-  .sharp 0013 VERIFY_RETURN_TYPE
-  .sharp 0014 RETURN null
-  .sharp      2: 0007 - 0008 (tmp/var)
-  .sharp      4: 0011 - 0012 (tmp/var)
-  .sharp      ; (lines=15, args=0, vars=0, tmps=5)
+  .sharp 0007 T3 = SHARP_VERIFY_TYPE_ARGS V2 string("Paging.Order?")
+  .sharp 0008 T4 = JMP_NULL T3 0010
+  .sharp 0009 T4 = FETCH_OBJ_IS T3 string("id")
+  .sharp 0010 T5 = COALESCE T4 0012
+  .sharp 0011 T5 = QM_ASSIGN int(0)
+  .sharp 0012 VERIFY_RETURN_TYPE T5
+  .sharp 0013 RETURN T5
+  .sharp 0014 VERIFY_RETURN_TYPE
+  .sharp 0015 RETURN null
+  .sharp      5: 0012 - 0013 (tmp/var)
+  .sharp      ; (lines=16, args=0, vars=0, tmps=6)
   .sharp 0005 T1 = SHARP_TYPE_ARGS string("Paging.Order")
   .sharp 0006 V2 = DO_FCALL T1
-  .sharp 0007 T3 = JMP_NULL V2 0009
-  .sharp 0008 T3 = FETCH_OBJ_IS V2 string("id")
-  .sharp 0009 T4 = COALESCE T3 0011
-  .sharp 0010 T4 = QM_ASSIGN int(0)
-  .sharp 0011 VERIFY_RETURN_TYPE T4
-  .sharp 0012 RETURN T4
-  .sharp 0013 VERIFY_RETURN_TYPE
-  .sharp 0014 RETURN null
-  .sharp      2: 0007 - 0008 (tmp/var)
-  .sharp      4: 0011 - 0012 (tmp/var)
+  .sharp 0007 T3 = SHARP_VERIFY_TYPE_ARGS V2 string("Paging.Order?")
+  .sharp 0008 T4 = JMP_NULL T3 0010
+  .sharp 0009 T4 = FETCH_OBJ_IS T3 string("id")
+  .sharp 0010 T5 = COALESCE T4 0012
+  .sharp 0011 T5 = QM_ASSIGN int(0)
+  .sharp 0012 VERIFY_RETURN_TYPE T5
+  .sharp 0013 RETURN T5
+  .sharp 0014 VERIFY_RETURN_TYPE
+  .sharp 0015 RETURN null
+  .sharp      5: 0012 - 0013 (tmp/var)
   .sharp      ; (lines=14, args=0, vars=0, tmps=6)
   .sharp 0001 V0 = FETCH_CLASS (exception) string("Paging\\Feed")
   .sharp 0002 T1 = SHARP_TYPE_ARGS string("Paging.Order")
@@ -1776,13 +1781,16 @@ Generics/Catalog: different opcodes and lines in 14 op arrays, same signatures i
   .sharp 0009 VERIFY_RETURN_TYPE
   .sharp 0010 RETURN null
   .sharp      4: 0007 - 0008 (tmp/var)
-  .sharp      ; (lines=14, args=0, vars=0, tmps=7)
+  .sharp      ; (lines=15, args=0, vars=0, tmps=8)
   .sharp 0007 T4 = SHARP_TYPE_ARGS string("Paging.Order")
   .sharp 0008 V5 = DO_FCALL T4
-  .sharp 0009 T6 = FETCH_OBJ_R V5 string("id")
-  .sharp 0010 VERIFY_RETURN_TYPE T6
-  .sharp 0011 RETURN T6
-  .sharp      6: 0010 - 0011 (tmp/var)
+  .sharp 0009 T6 = SHARP_VERIFY_TYPE_ARGS V5 string("Paging.Order")
+  .sharp 0010 T7 = FETCH_OBJ_R T6 string("id")
+  .sharp 0011 VERIFY_RETURN_TYPE T7
+  .sharp 0012 RETURN T7
+  .sharp 0013 VERIFY_RETURN_TYPE
+  .sharp 0014 RETURN null
+  .sharp      7: 0011 - 0012 (tmp/var)
   .sharp      ; (lines=14, args=0, vars=0, tmps=7)
   .sharp 0008 T5 = SHARP_TYPE_ARGS string("Paging.Order")
   .sharp 0009 V6 = DO_FCALL T5
@@ -1903,7 +1911,6 @@ Generics/Catalog: different opcodes and lines in 14 op arrays, same signatures i
   .php   0008 VERIFY_RETURN_TYPE V3
   .php   0009 RETURN V3
   .php        0: 0002 - 0006 (new)
-  .php        3: 0008 - 0009 (tmp/var)
   .php        ; (lines=10, args=2, vars=2, tmps=2)
   .php   0006 VERIFY_RETURN_TYPE V3
   .php   0007 RETURN V3
@@ -1943,7 +1950,7 @@ Generics/Repository: different opcodes and lines in 2 op arrays, same signatures
   .sharp L0008 0005 T5 = CAST (object) CV0($query)
   .sharp L0008 0006 INIT_METHOD_CALL 0 T5 string("rows")
   .sharp L0008 0007 V6 = DO_FCALL
-  .sharp L0008 0008 T7 = SHARP_VERIFY_TYPE_ARGS V6 string("List<Any?>")
+  .sharp L0008 0008 T7 = SHARP_VERIFY_TYPE_ARGS V6 string("List<Any?>, List<#0>")
   .sharp L0008 0009 SEND_VAL_EX T7 1
   .sharp L0008 0010 DO_FCALL
   .sharp L0008 0011 VERIFY_RETURN_TYPE V4
@@ -1958,7 +1965,7 @@ Generics/Repository: different opcodes and lines in 2 op arrays, same signatures
   .sharp 0005 T5 = CAST (object) CV0($query)
   .sharp 0006 INIT_METHOD_CALL 0 T5 string("rows")
   .sharp 0007 V6 = DO_FCALL
-  .sharp 0008 T7 = SHARP_VERIFY_TYPE_ARGS V6 string("List<Any?>")
+  .sharp 0008 T7 = SHARP_VERIFY_TYPE_ARGS V6 string("List<Any?>, List<#0>")
   .sharp 0009 SEND_VAL_EX T7 1
   .sharp 0010 DO_FCALL
   .sharp 0011 VERIFY_RETURN_TYPE V4

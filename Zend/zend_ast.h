@@ -179,8 +179,9 @@ enum _zend_ast_kind {
 
 	// Pseudo node for initializing enums
 	ZEND_AST_CONST_ENUM_INIT,
-	/* PHP#: the value child 0 holds, checked against the type text child 1 spells. Child 2 names what takes the
-	 * value, as `local counter`. */
+	/* PHP#: the value child 0 holds, checked against the first type the type list text child 1 spells. A second type
+	 * in the list is the one the error names, where the check reads less of the value than it says. Child 2 names
+	 * what takes the value, as `local counter`. */
 	ZEND_AST_VERIFY_TYPE_ARGS,
 	/* PHP#: the metadata of a PHP# class-like, in its member list. Child 0 is the type arguments its header gives
 	 * each generic parent and interface, child 1 the bounds of its type parameters, which declares a class's

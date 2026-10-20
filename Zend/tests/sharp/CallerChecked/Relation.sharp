@@ -1,0 +1,11 @@
+namespace CallerChecked;
+
+public class Relation
+{
+    public string name { get; }
+
+    public Relation(string name)
+    {
+        this.name = name;
+    }
+}
