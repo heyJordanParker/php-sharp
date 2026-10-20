@@ -226,6 +226,7 @@ jobs:
   # Each runtime image, with the extensions a typical Laravel app installs on top, installed the way such an app's
   # Dockerfile does. The engine changes PHP's internal structures, so an extension can stop building or loading.
   PHP_EXTENSIONS:
+    name: PHP_EXTENSIONS (${{ matrix.file }}, ${{ matrix.php }})
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true'
     runs-on: ubuntu-24.04
