@@ -2283,6 +2283,22 @@ public void renewAll(List<int> customerIds, string plan)
 }
 ```
 
+**The rest of the chain reads a `?.` receiver as not null,** because it runs only when the receiver is not null, as C#'s null checks read it. An argument or an index after `step?.` uses `step` with no second `?.`. After the chain, `step` may be null again.
+
+<!-- example null-safe-rest-of-chain: statements
+public class Router { public string route(string label) => label; }
+public class Step { public string title { get; set; } = ""; public Router router { get; } = new Router(); public List<string> labels { get; set; } = []; public string label() => this.title; public int last() => 0; public string route(string label) => label; }
+public class Steps { public Step? find(int id) => id == 1 ? new Step() : null; }
+private Steps steps = new Steps();
+-->
+```csharp
+Step? step = this.steps.find(1);                    // null when no step has this id
+string? routed = step?.route(step.label());         // compiles: step is not null in the arguments
+string? passed = step?.router.route(step.label());  // compiles: nor further along the chain
+string? named = step?.labels[step.last()];          // compiles: nor in an index
+string label = step.label();                        // compile error: after the chain, step may be null
+```
+
 **A write through `?.` happens only when every `?.` receiver on its left is not null,** as in C# 14, Kotlin and Swift. When one is null, nothing is written, and neither the right side nor a `set` body runs. Each receiver runs once, and the write goes to the object it tested, so `this.orders.find(id)?.note = "gift"` calls `find` once.
 
 **An index into a collection that may be null is an error,** read or written, as a member read on a value that may be null is. Test the collection first, as in `if (tags != null)`.
