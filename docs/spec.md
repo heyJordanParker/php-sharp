@@ -5074,7 +5074,7 @@ public class Money
 
 **A law's body is ordinary PHP#.** It holds `if` and `else`, `match` statements whose arms are blocks, locals, `return;`, and calls of laws as statements, and nothing else. It has no effects.
 
-- **Each `if` and each `match` arm is a case** that knows its condition or its pattern. A `match` in a body matches a list parameter of the law, with the arms `[]`, `[first, ...rest]` and `default`.
+- **Each `if` and each `match` arm is a case** that knows its condition, or its pattern and its `when` guard. A `match` in a body takes every arm a `match` takes, of a parameter of the law, a value a pattern of the body names, or a property of one.
 - **`return;` closes the case it ends.** The checker proves the claim there with what the case knows. So does the end of the body.
 - **A call of a law is a fact the case knows from then on:** the claim of that law for the call's arguments. Its arguments are any pure expressions.
 - **A law is reached through its class's name,** as a static method is, as `Money.addKeepsCurrency(m, x)`. A module's law is reached as `Module.name(…)` (section 32).
