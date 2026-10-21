@@ -16,5 +16,7 @@ public class SendOptin : BaseJob
         this.rows.add(prices);
     }
 
+    public string firstName() => this.names.getOrNull(0) ?? "none";
+
     public static SendOptin made(Map<string, int> prices) => new Self { payload: prices };
 }

@@ -1,0 +1,9 @@
+namespace Demo;
+
+// A PHP# base whose collection properties a PHP# subclass fills from plain PHP.
+public abstract class Stockroom
+{
+    public Map<string, int> stock { get; set; } = [:];
+
+    public List<string> names { get; set; } = [];
+}

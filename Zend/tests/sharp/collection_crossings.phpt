@@ -272,6 +272,8 @@ for ($round = 0; $round < 100; $round++) {
     echo 'a Map in a with of a subclass: ', received(Crossings::jobCopied(new Demo\SendOptin(), new Map(['tea', 3]))->payload), "\n";
     echo 'a Map in a new Self initializer: ', received(Demo\SendOptin::made(new Map(['tea', 3]))->payload), "\n";
     echo 'a Map in a new T initializer: ', received(Crossings::initializedAsContext(new Map(['tea', 3]))->payload), "\n";
+    echo "PHP# reads an inherited plain PHP array with gaps as its List: ", $job->firstName(), "\n";
+    echo "plain PHP's arrays written to a PHP# base's collection properties: ", (new Demo\Cellar())->restocked(), "\n";
 
     // A parameter's type, an attribute's argument and a constant.
     echo 'a Map parameter: ', (new ReflectionMethod(Holdings::class, 'accepted'))->getParameters()[0]->getType(), ' ', $holdings->accepted(['a' => 'b']), "\n";
@@ -462,6 +464,8 @@ a Map in an initializer of a subclass: array, is_array true, {"tea":3}
 a Map in a with of a subclass: array, is_array true, {"tea":3}
 a Map in a new Self initializer: array, is_array true, {"tea":3}
 a Map in a new T initializer: array, is_array true, {"tea":3}
+PHP# reads an inherited plain PHP array with gaps as its List: ada
+plain PHP's arrays written to a PHP# base's collection properties: 2 true 2 jam
 a Map parameter: array 1
 a Map attribute argument: array, is_array true, {"variant":"success"}
 a Map attribute argument, built: array, is_array true, {"variant":"success"}

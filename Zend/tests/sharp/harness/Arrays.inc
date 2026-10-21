@@ -43,6 +43,12 @@ function price_list(): array
     return ['tea' => 3, '5' => 1];
 }
 
+/** @return array<int, string> */
+function shelf_names(): array
+{
+    return [4 => 'jam', 8 => 'tea'];
+}
+
 /** @return Generator<int, array<string, int>> */
 function price_rows(): Generator
 {
@@ -247,6 +253,9 @@ abstract class BaseJob
 
     /** @var list<array<string, mixed>> */
     public array $rows = [['seed' => 0]];
+
+    /** @var array<int, string> */
+    public array $names = [3 => 'ada', 7 => 'bo'];
 }
 
 // A plain PHP class that takes a write to a name it declares no property for through __set, as Eloquent's Model does,
