@@ -43,6 +43,12 @@ function price_list(): array
     return ['tea' => 3, '5' => 1];
 }
 
+/** @return array<int, string> */
+function shelf_names(): array
+{
+    return [4 => 'jam', 8 => 'tea'];
+}
+
 /** @return Generator<int, array<string, int>> */
 function price_rows(): Generator
 {
@@ -207,6 +213,60 @@ class Hiding
     public function hide(string $name): void
     {
         $this->hidden[] = $name;
+    }
+}
+
+// A plain PHP object PHP# fills, as a request context, a DTO or a job is: each property declares a type a parameter
+// could, and one declares none.
+class RequestContext
+{
+    public array $payload = [];
+
+    public ?array $extra = null;
+
+    public $untyped;
+
+    public mixed $anything = null;
+
+    public iterable $items = [];
+
+    public array|Countable $either = [];
+
+    public ?Countable $counted = null;
+
+    public static array $registry = [];
+
+    public array $payloads = [];
+
+    /** @var list<mixed> */
+    public array $rows = ['seed'];
+}
+
+// A plain PHP parent whose properties a PHP# subclass writes, as a Laravel job's base class is.
+abstract class BaseJob
+{
+    public array $payload = [];
+
+    public array $payloads = [];
+
+    public static array $registry = [];
+
+    /** @var list<array<string, mixed>> */
+    public array $rows = [['seed' => 0]];
+
+    /** @var array<int, string> */
+    public array $names = [3 => 'ada', 7 => 'bo'];
+}
+
+// A plain PHP class that takes a write to a name it declares no property for through __set, as Eloquent's Model does,
+// and records what each write gave it.
+final class Attributes
+{
+    public array $seen = [];
+
+    public function __set(string $name, mixed $value): void
+    {
+        $this->seen[$name] = is_array($value) ? $value : get_debug_type($value);
     }
 }
 

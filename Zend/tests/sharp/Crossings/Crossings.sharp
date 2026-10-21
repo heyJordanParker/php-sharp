@@ -1,6 +1,8 @@
 namespace Demo;
 
 import ArrayCounter;
+import Attributes;
+import RequestContext;
 
 class Crossings
 {
@@ -165,6 +167,55 @@ class Crossings
     public static Iterable<Map<string, int>> keyed(Iterable<int> numbers) => numbers.map(number => ["n": number]);
 
     public static string cartonPayloadClass(Carton carton) => global.get_class(carton.payload);
+
+    // Each write into a plain PHP object gives it what a parameter of the property's type takes.
+    public static void filled(RequestContext context, Map<string, int> prices, Set<string> tags)
+    {
+        context.payload = prices;
+        context.extra = tags;
+        context.untyped = prices;
+        context.anything = tags;
+        context.items = prices;
+        context.either = prices;
+        context.counted = prices;
+        RequestContext.registry = tags;
+        context.payloads["first"] = prices;
+        context.rows[0] = tags;
+        context.rows.add(prices);
+    }
+
+    public static void filledOnce(RequestContext context, Map<string, int> prices) { context.extra ??= prices; }
+
+    public static void filledNested(RequestContext context, Map<string, int> prices, Set<string> tags)
+    {
+        context.payload = ["shelf": prices];
+        context.items = [prices, tags];
+    }
+
+    public static void filledFromPlain(RequestContext context, RequestContext other) { context.payload = other.payload; }
+
+    public static RequestContext initialized(Map<string, int> prices) => new RequestContext { payload: prices };
+
+    public static RequestContext copied(RequestContext context, Map<string, int> prices) => context with { payload: prices };
+
+    public static SendOptin jobInitialized(Map<string, int> prices) => new SendOptin { payload: prices };
+
+    public static SendOptin jobCopied(SendOptin job, Map<string, int> prices) => job with { payload: prices };
+
+    public static T initializedAs<T : RequestContext>(Map<string, int> prices) => new T { payload: prices };
+
+    public static RequestContext initializedAsContext(Map<string, int> prices) => Crossings.initializedAs<RequestContext>(prices);
+
+    public static void filledPlus(RequestContext context, Map<string, int> prices) { context.payload += prices; }
+
+    public static void attributed(Attributes attributes, Map<string, int> prices) { attributes.meta = prices; }
+
+    // A write into PHP#'s own property keeps the Map.
+    public static string ownWritten(Holdings holdings, Map<string, string> payload)
+    {
+        holdings.payload = payload;
+        return global.get_class(holdings.payload);
+    }
 
     public static string ownEntries(Map<string, int> counts)
     {

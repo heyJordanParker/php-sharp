@@ -1,0 +1,22 @@
+namespace Demo;
+
+import BaseJob;
+
+// A PHP# job whose plain PHP parent declares the properties it fills.
+public class SendOptin : BaseJob
+{
+    public required SendOptin() { }
+
+    public void fill(Map<string, int> prices)
+    {
+        this.payload = prices;
+        this.payloads["first"] = prices;
+        SendOptin.registry = prices;
+        this.rows[0]["shelf"] = prices;
+        this.rows.add(prices);
+    }
+
+    public string firstName() => this.names.getOrNull(0) ?? "none";
+
+    public static SendOptin made(Map<string, int> prices) => new Self { payload: prices };
+}

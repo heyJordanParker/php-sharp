@@ -23939,6 +23939,412 @@ fn a_map_or_set_goes_into_a_plain_php_array_parameter_as_its_php_array() {
 }
 
 /// ```php
+/// $context->payload = \Sharp\Internal\arrayOf($stock);
+/// \Lib\Context::$registry = \Sharp\Internal\arrayOf($stock);
+/// $context->payloads['first'] = \Sharp\Internal\arrayOf($stock);
+/// $context->counted = $stock;
+/// $this->own = $stock;
+/// ```
+///
+/// A `Map` written into a property plain PHP declares, or an element of one, goes in as the PHP array a parameter of
+/// the property's type takes, spec section 12: as its PHP array where the type takes an array, and as itself where it
+/// takes only objects, as `\Countable` does. A property PHP# declares keeps the `Map`.
+#[test]
+fn a_map_written_into_plain_php_storage_goes_in_as_a_parameter_of_the_property_s_type_takes_it() {
+    let context = (
+        "src/Lib/Context.php",
+        "<?php namespace Lib; class Context { public array $payload = []; public static array $registry = []; public array $payloads = []; public ?\\Countable $counted = null; }",
+    );
+    let code = "namespace App.Tenant;\n\nimport Lib.Context;\n\nclass Report\n{\n    public Map<string, int> own { get; set; } = [:];\n\n    public void run(Context context)\n    {\n        Map<string, int> stock = this.stock();\n        context.payload = stock;\n        Context.registry = stock;\n        context.payloads[\"first\"] = stock;\n        context.counted = stock;\n        this.own = stock;\n    }\n\n    private Map<string, int> stock() => [:];\n}\n";
+
+    assert_eq!(
+        statements_at(code, &[context], 1..6),
+        [
+            indoc! {r#"
+                ASSIGN
+                  PROP
+                    VAR
+                      ZVAL "context"
+                    ZVAL "payload"
+                  CALL
+                    ZVAL "Sharp\\Internal\\arrayOf"
+                    ARG_LIST
+                      VAR
+                        ZVAL "stock"
+            "#},
+            indoc! {r#"
+                ASSIGN
+                  STATIC_PROP
+                    ZVAL "Lib\\Context"
+                    ZVAL "registry"
+                  CALL
+                    ZVAL "Sharp\\Internal\\arrayOf"
+                    ARG_LIST
+                      VAR
+                        ZVAL "stock"
+            "#},
+            indoc! {r#"
+                ASSIGN
+                  DIM
+                    PROP
+                      VAR
+                        ZVAL "context"
+                      ZVAL "payloads"
+                    ZVAL "first"
+                  CALL
+                    ZVAL "Sharp\\Internal\\arrayOf"
+                    ARG_LIST
+                      VAR
+                        ZVAL "stock"
+            "#},
+            indoc! {r#"
+                ASSIGN
+                  PROP
+                    VAR
+                      ZVAL "context"
+                    ZVAL "counted"
+                  VAR
+                    ZVAL "stock"
+            "#},
+            indoc! {r#"
+                ASSIGN
+                  PROP
+                    VAR
+                      ZVAL "this"
+                    ZVAL "own"
+                  VAR
+                    ZVAL "stock"
+            "#},
+        ]
+    );
+}
+
+/// ```php
+/// $this->payload = \Sharp\Internal\arrayOf($stock);
+/// \App\Tenant\Job::$registry = \Sharp\Internal\arrayOf($stock);
+/// $this->rows[0]['shelf'] = \Sharp\Internal\arrayOf($stock);
+/// [$context->kept = \is_array($renumbered#1 = $context->kept) ? \array_values($renumbered#1) : $renumbered#1,
+///     $context->kept[0]['shelf'] = \Sharp\Internal\arrayOf($stock)][1];
+/// $this->payload += \Sharp\Internal\arrayOf($stock);
+/// $attributes->meta = \Sharp\Internal\arrayOf($stock);
+/// ```
+///
+/// A property a plain PHP parent declares takes a `Map` as a property its class declares does, and so does an
+/// element of an element of a list it declares, which is PHP's own write, after the list is renumbered where the
+/// checker reads plain PHP's `array<int, …>` as a `List`. A compound assignment takes it the same way, and so does a
+/// name the class declares no property for, which its `__set` takes as its `mixed` value parameter does.
+#[test]
+fn a_map_written_into_a_plain_php_parent_s_or_set_s_storage_goes_in_as_its_type_takes_it() {
+    let library = (
+        "src/Lib/BaseJob.php",
+        "<?php namespace Lib; abstract class BaseJob { public array $payload = []; public static array $registry = []; /** @var list<array<string, mixed>> */ public array $rows = []; }
+        final class Context { /** @var array<int, array<string, mixed>> */ public array $kept = []; }
+        final class Attributes { public function __set(string $name, mixed $value): void {} }",
+    );
+    let code = "namespace App.Tenant;\n\nimport Lib.Attributes;\nimport Lib.BaseJob;\nimport Lib.Context;\n\nclass Job : BaseJob\n{\n    public void run(Context context, Attributes attributes)\n    {\n        Map<string, int> stock = this.stock();\n        this.payload = stock;\n        Job.registry = stock;\n        this.rows[0][\"shelf\"] = stock;\n        context.kept[0][\"shelf\"] = stock;\n        this.payload += stock;\n        attributes.meta = stock;\n    }\n\n    private Map<string, int> stock() => [:];\n}\n";
+
+    assert_eq!(
+        statements_at(code, &[library], 1..7),
+        [
+            indoc! {r#"
+                ASSIGN
+                  PROP
+                    VAR
+                      ZVAL "this"
+                    ZVAL "payload"
+                  CALL
+                    ZVAL "Sharp\\Internal\\arrayOf"
+                    ARG_LIST
+                      VAR
+                        ZVAL "stock"
+            "#},
+            indoc! {r#"
+                ASSIGN
+                  STATIC_PROP
+                    ZVAL "App\\Tenant\\Job"
+                    ZVAL "registry"
+                  CALL
+                    ZVAL "Sharp\\Internal\\arrayOf"
+                    ARG_LIST
+                      VAR
+                        ZVAL "stock"
+            "#},
+            indoc! {r#"
+                ASSIGN
+                  DIM
+                    DIM
+                      PROP
+                        VAR
+                          ZVAL "this"
+                        ZVAL "rows"
+                      ZVAL 0
+                    ZVAL "shelf"
+                  CALL
+                    ZVAL "Sharp\\Internal\\arrayOf"
+                    ARG_LIST
+                      VAR
+                        ZVAL "stock"
+            "#},
+            indoc! {r#"
+                DIM
+                  ARRAY [3]
+                    ARRAY_ELEM
+                      ASSIGN
+                        PROP
+                          VAR
+                            ZVAL "context"
+                          ZVAL "kept"
+                        CONDITIONAL
+                          CALL
+                            ZVAL "is_array"
+                            ARG_LIST
+                              ASSIGN
+                                VAR
+                                  ZVAL "renumbered#1"
+                                PROP
+                                  VAR
+                                    ZVAL "context"
+                                  ZVAL "kept"
+                          CALL
+                            ZVAL "array_values"
+                            ARG_LIST
+                              VAR
+                                ZVAL "renumbered#1"
+                          VAR
+                            ZVAL "renumbered#1"
+                      null
+                    ARRAY_ELEM
+                      ASSIGN
+                        DIM
+                          DIM
+                            PROP
+                              VAR
+                                ZVAL "context"
+                              ZVAL "kept"
+                            ZVAL 0
+                          ZVAL "shelf"
+                        CALL
+                          ZVAL "Sharp\\Internal\\arrayOf"
+                          ARG_LIST
+                            VAR
+                              ZVAL "stock"
+                      null
+                  ZVAL 1
+            "#},
+            indoc! {r#"
+                ASSIGN_OP [1]
+                  PROP
+                    VAR
+                      ZVAL "this"
+                    ZVAL "payload"
+                  CALL
+                    ZVAL "Sharp\\Internal\\arrayOf"
+                    ARG_LIST
+                      VAR
+                        ZVAL "stock"
+            "#},
+            indoc! {r#"
+                ASSIGN
+                  PROP
+                    VAR
+                      ZVAL "attributes"
+                    ZVAL "meta"
+                  CALL
+                    ZVAL "Sharp\\Internal\\arrayOf"
+                    ARG_LIST
+                      VAR
+                        ZVAL "stock"
+            "#},
+        ]
+    );
+}
+
+/// ```php
+/// $context->rows->add(\Sharp\Internal\arrayOf($stock));
+/// $context->rows->add(\Sharp\Internal\arrayOf($stock));
+/// $context->rows->insert(index: 0, value: \Sharp\Internal\arrayOf($stock));
+/// ```
+///
+/// A `Map` a collection method stores in a collection plain PHP declares goes in as an element of it takes it, spec
+/// section 12, whether the argument is positional or named.
+#[test]
+fn a_map_a_method_stores_in_a_plain_php_collection_goes_in_as_its_element_takes_it() {
+    let context = (
+        "src/Lib/Context.php",
+        "<?php namespace Lib; class Context { /** @var list<mixed> */ public array $rows = []; }",
+    );
+    let code = "namespace App.Tenant;\n\nimport Lib.Context;\n\nclass Report\n{\n    public void run(Context context)\n    {\n        Map<string, int> stock = this.stock();\n        context.rows.add(stock);\n        context.rows.add(value: stock);\n        context.rows.insert(index: 0, value: stock);\n    }\n\n    private Map<string, int> stock() => [:];\n}\n";
+    let added = indoc! {r#"
+        METHOD_CALL
+          PROP
+            VAR
+              ZVAL "context"
+            ZVAL "rows"
+          ZVAL "add"
+          ARG_LIST
+            CALL
+              ZVAL "Sharp\\Internal\\arrayOf"
+              ARG_LIST
+                VAR
+                  ZVAL "stock"
+    "#};
+
+    assert_eq!(
+        statements_at(code, &[context], 1..4),
+        [
+            added,
+            added,
+            indoc! {r#"
+                METHOD_CALL
+                  PROP
+                    VAR
+                      ZVAL "context"
+                    ZVAL "rows"
+                  ZVAL "insert"
+                  ARG_LIST
+                    NAMED_ARG
+                      ZVAL "index"
+                      ZVAL 0
+                    NAMED_ARG
+                      ZVAL "value"
+                      CALL
+                        ZVAL "Sharp\\Internal\\arrayOf"
+                        ARG_LIST
+                          VAR
+                            ZVAL "stock"
+            "#},
+        ]
+    );
+}
+
+/// ```php
+/// $this->stock = \is_array($crossing = \Lib\Prices::all())
+///     ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [(string) $key, $value], \array_keys($crossing), $crossing)))
+///     : $crossing;
+/// $this->names = \is_array($renumbered = \Lib\Calc::names()) ? \array_values($renumbered) : $renumbered;
+/// ```
+///
+/// Plain PHP's array a PHP# subclass writes into a property its PHP# base declares crosses as the property's declared
+/// type says, as it does into a property the class declares itself: into a `Map` as the `Map` of its entries, and into
+/// a `List` renumbered.
+#[test]
+fn plain_php_s_array_written_into_a_php_sharp_base_s_property_crosses_as_its_type_declares() {
+    let base = (
+        "src/App/Tenant/Shelf.sharp",
+        "namespace App.Tenant;\n\npublic abstract class Shelf\n{\n    public Map<string, int> stock { get; set; } = [:];\n\n    public List<string> names { get; set; } = [];\n}\n",
+    );
+    let prices = (
+        "src/Lib/Prices.php",
+        "<?php namespace Lib; final class Prices { /** @return array<string, int> */ public static function all(): array { return []; } }",
+    );
+    let code = "namespace App.Tenant;\n\nimport Lib.Calc;\nimport Lib.Prices;\n\nclass Pantry : Shelf\n{\n    public void run()\n    {\n        this.stock = Prices.all();\n        this.names = Calc.names();\n    }\n}\n";
+
+    assert_eq!(
+        statements_at(code, &[base, prices], 0..2),
+        [
+            indoc! {r#"
+                ASSIGN
+                  PROP
+                    VAR
+                      ZVAL "this"
+                    ZVAL "stock"
+                  CONDITIONAL
+                    CALL
+                      ZVAL "is_array"
+                      ARG_LIST
+                        ASSIGN
+                          VAR
+                            ZVAL "crossing#1"
+                          VERIFY_TYPE_ARGS
+                            STATIC_CALL
+                              ZVAL "Lib\\Prices"
+                              ZVAL "all"
+                              ARG_LIST
+                            ZVAL "Map<string, int>"
+                            ZVAL "Lib\\Prices::all()"
+                    NEW
+                      ZVAL "Sharp\\Map"
+                      ARG_LIST
+                        CALL
+                          ZVAL "array_merge"
+                          ARG_LIST
+                            ARRAY [3]
+                            UNPACK
+                              CALL
+                                ZVAL "array_map"
+                                ARG_LIST
+                                  ARROW_FUNC "" @10-10
+                                    PARAM_LIST
+                                      PARAM
+                                        null
+                                        ZVAL "key#2"
+                                        null
+                                        null
+                                        null
+                                        null
+                                      PARAM
+                                        null
+                                        ZVAL "value#3"
+                                        null
+                                        null
+                                        null
+                                        null
+                                    null
+                                    ARRAY [3]
+                                      ARRAY_ELEM
+                                        CAST [6]
+                                          VAR
+                                            ZVAL "key#2"
+                                        null
+                                      ARRAY_ELEM
+                                        VAR
+                                          ZVAL "value#3"
+                                        null
+                                    null
+                                    null
+                                  CALL
+                                    ZVAL "array_keys"
+                                    ARG_LIST
+                                      VAR
+                                        ZVAL "crossing#1"
+                                  VAR
+                                    ZVAL "crossing#1"
+                    VAR
+                      ZVAL "crossing#1"
+            "#},
+            indoc! {r#"
+                ASSIGN
+                  PROP
+                    VAR
+                      ZVAL "this"
+                    ZVAL "names"
+                  VERIFY_TYPE_ARGS
+                    CONDITIONAL
+                      CALL
+                        ZVAL "is_array"
+                        ARG_LIST
+                          ASSIGN
+                            VAR
+                              ZVAL "renumbered#1"
+                            STATIC_CALL
+                              ZVAL "Lib\\Calc"
+                              ZVAL "names"
+                              ARG_LIST
+                      CALL
+                        ZVAL "array_values"
+                        ARG_LIST
+                          VAR
+                            ZVAL "renumbered#1"
+                      VAR
+                        ZVAL "renumbered#1"
+                    ZVAL "List<string>"
+                    ZVAL "Lib\\Calc::names()"
+            "#},
+        ]
+    );
+}
+
+/// ```php
 /// [$sorted = \Sharp\Internal\arrayOf($sorted), \Lib\Calc::sort($sorted), $sorted = \is_array($sorted) ? \Sharp\Map::from($sorted) : $sorted][1];
 /// [$filled = \Sharp\Internal\arrayOf($filled), \Lib\Calc::fill($filled), $filled = \is_array($filled) ? \Sharp\Map::from($filled) : $filled][1];
 /// \Lib\Calc::bump($count);

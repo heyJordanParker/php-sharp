@@ -222,6 +222,59 @@ for ($round = 0; $round < 100; $round++) {
     echo 'PHP# reads what plain PHP wrote: ', $written->payloadClass(), ' ', $written->firstRowClass(), ' ', Holdings::countsClass(), ' ', json_encode($written->payload), "\n";
     Holdings::$counts = ['c' => 1];
 
+    // A write into plain PHP's storage takes what a parameter of the property's type takes, and PHP#'s own property
+    // keeps the Map.
+    $context = new RequestContext();
+    $bound = &$context->payload;
+    Crossings::filled($context, new Map(['tea', 3, 'pie', 7]), new Set(['a', 'b']));
+    $typed = fn (string $property) => property_type(RequestContext::class, $property);
+    echo 'a Map written to an array property: ', received($context->payload, $typed('payload')), "\n";
+    echo 'a Map written through a reference to it: ', received($bound), "\n";
+    echo 'a Set written to a ?array property: ', received($context->extra, $typed('extra')), "\n";
+    echo 'a Map written to an untyped property: ', received($context->untyped), "\n";
+    echo 'a Set written to a mixed property: ', received($context->anything, $typed('anything')), "\n";
+    echo 'a Map written to an iterable property: ', received($context->items, $typed('items')), "\n";
+    echo 'a Map written to an array|Countable property: ', received($context->either, $typed('either')), "\n";
+    echo 'a Map written to a ?Countable property: ', received($context->counted, $typed('counted')), "\n";
+    echo 'a Set written to a static array property: ', received(RequestContext::$registry, $typed('registry')), "\n";
+    echo 'a Map written to an element of an array property: ', received($context->payloads['first']), "\n";
+    echo 'a Set written to an element of a list property: ', received($context->rows[0]), "\n";
+    echo 'a Map added to a list property: ', received($context->rows[1]), "\n";
+    $context = new RequestContext();
+    Crossings::filledOnce($context, new Map(['tea', 3]));
+    echo 'a Map written by ??=: ', received($context->extra), "\n";
+    Crossings::filledNested($context, new Map(['tea', 3]), new Set(['a']));
+    echo 'a Map in a Map: ', received($context->payload), ' / a Map and a Set in a List: ', received($context->items), "\n";
+    $other = new RequestContext();
+    $other->payload = ['tea' => 1];
+    Crossings::filledFromPlain($context, $other);
+    echo "plain PHP's array written back: ", received($context->payload), "\n";
+    echo 'a Map in an object initializer: ', received(Crossings::initialized(new Map(['tea', 3]))->payload), "\n";
+    echo 'a Map in a with: ', received(Crossings::copied(new RequestContext(), new Map(['tea', 3]))->payload), "\n";
+    echo "a Map written to PHP#'s own property: ", Crossings::ownWritten(new Holdings(), new Map(['id', 'p3'])), "\n";
+    $context = new RequestContext();
+    $context->payload = ['seed' => 1];
+    Crossings::filledPlus($context, new Map(['tea', 3]));
+    echo 'a Map written by +=: ', received($context->payload), "\n";
+    $attributes = new Attributes();
+    Crossings::attributed($attributes, new Map(['tea', 3]));
+    echo 'a Map written through __set: ', received($attributes->seen['meta']), "\n";
+
+    // A property a plain PHP parent declares, and an initializer of a class a type names.
+    $job = new Demo\SendOptin();
+    $job->fill(new Map(['tea', 3, 'pie', 7]));
+    echo 'a Map written to an inherited array property: ', received($job->payload), "\n";
+    echo 'a Map written to an element of an inherited array property: ', received($job->payloads['first']), "\n";
+    echo 'a Map written to an inherited static array property: ', received(BaseJob::$registry), "\n";
+    echo 'a Map written to an element of an element of an inherited list property: ', received($job->rows[0]['shelf']), "\n";
+    echo 'a Map added to an inherited list property: ', received($job->rows[1]), "\n";
+    echo 'a Map in an initializer of a subclass: ', received(Crossings::jobInitialized(new Map(['tea', 3]))->payload), "\n";
+    echo 'a Map in a with of a subclass: ', received(Crossings::jobCopied(new Demo\SendOptin(), new Map(['tea', 3]))->payload), "\n";
+    echo 'a Map in a new Self initializer: ', received(Demo\SendOptin::made(new Map(['tea', 3]))->payload), "\n";
+    echo 'a Map in a new T initializer: ', received(Crossings::initializedAsContext(new Map(['tea', 3]))->payload), "\n";
+    echo "PHP# reads an inherited plain PHP array with gaps as its List: ", $job->firstName(), "\n";
+    echo "plain PHP's arrays written to a PHP# base's collection properties: ", (new Demo\Cellar())->restocked(), "\n";
+
     // A parameter's type, an attribute's argument and a constant.
     echo 'a Map parameter: ', (new ReflectionMethod(Holdings::class, 'accepted'))->getParameters()[0]->getType(), ' ', $holdings->accepted(['a' => 'b']), "\n";
     $label = (new ReflectionClass(Holdings::class))->getAttributes(Label::class)[0];
@@ -382,6 +435,37 @@ ReflectionProperty::getValue() of a static: array, is_array true, {"c":1}
 a plain PHP subclass reads $this->payload: array, is_array true, {"id":"p1"}
 PHP# reads its Map property: Sharp\Map Sharp\Map Sharp\Map
 PHP# reads what plain PHP wrote: Sharp\Map Sharp\Map Sharp\Map {"id":"p2"}
+a Map written to an array property: array, is_array true, {"tea":3,"pie":7}, typed array
+a Map written through a reference to it: array, is_array true, {"tea":3,"pie":7}
+a Set written to a ?array property: array, is_array true, ["a","b"], typed ?array
+a Map written to an untyped property: array, is_array true, {"tea":3,"pie":7}
+a Set written to a mixed property: array, is_array true, ["a","b"], typed mixed
+a Map written to an iterable property: array, is_array true, {"tea":3,"pie":7}, typed iterable
+a Map written to an array|Countable property: array, is_array true, {"tea":3,"pie":7}, typed Countable|array
+a Map written to a ?Countable property: Sharp\Map, is_array false, refused by array_merge, typed ?Countable
+a Set written to a static array property: array, is_array true, ["a","b"], typed array
+a Map written to an element of an array property: array, is_array true, {"tea":3,"pie":7}
+a Set written to an element of a list property: array, is_array true, ["a","b"]
+a Map added to a list property: array, is_array true, {"tea":3,"pie":7}
+a Map written by ??=: array, is_array true, {"tea":3}
+a Map in a Map: array, is_array true, {"shelf":{"tea":3}} / a Map and a Set in a List: array, is_array true, [{"tea":3},["a"]]
+plain PHP's array written back: array, is_array true, {"tea":1}
+a Map in an object initializer: array, is_array true, {"tea":3}
+a Map in a with: array, is_array true, {"tea":3}
+a Map written to PHP#'s own property: Sharp\Map
+a Map written by +=: array, is_array true, {"seed":1,"tea":3}
+a Map written through __set: array, is_array true, {"tea":3}
+a Map written to an inherited array property: array, is_array true, {"tea":3,"pie":7}
+a Map written to an element of an inherited array property: array, is_array true, {"tea":3,"pie":7}
+a Map written to an inherited static array property: array, is_array true, {"tea":3,"pie":7}
+a Map written to an element of an element of an inherited list property: array, is_array true, {"tea":3,"pie":7}
+a Map added to an inherited list property: array, is_array true, {"tea":3,"pie":7}
+a Map in an initializer of a subclass: array, is_array true, {"tea":3}
+a Map in a with of a subclass: array, is_array true, {"tea":3}
+a Map in a new Self initializer: array, is_array true, {"tea":3}
+a Map in a new T initializer: array, is_array true, {"tea":3}
+PHP# reads an inherited plain PHP array with gaps as its List: ada
+plain PHP's arrays written to a PHP# base's collection properties: 2 true 2 jam
 a Map parameter: array 1
 a Map attribute argument: array, is_array true, {"variant":"success"}
 a Map attribute argument, built: array, is_array true, {"variant":"success"}

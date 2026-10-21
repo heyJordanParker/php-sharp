@@ -588,12 +588,10 @@ impl<'analysis> Types<'analysis> {
         Some(&self.codebase.get_method(class, method)?.return_type_metadata.as_ref()?.type_union)
     }
 
-    /// The declared type of the property `property` of the class `class` declares or inherits, with a type parameter as
-    /// itself.
-    pub(crate) fn declared_property_type(&self, class: &[u8], property: &[u8]) -> Option<&'analysis TUnion> {
-        let metadata = self.codebase.get_declaring_property(class, &[b"$", property].concat())?;
-
-        Some(&metadata.type_metadata.as_ref()?.type_union)
+    /// The declared type of the property `variable`, `$`-prefixed, that the class `class` declares or inherits, with a
+    /// type parameter as itself.
+    pub(crate) fn declared_property_type(&self, class: &[u8], variable: &[u8]) -> Option<&'analysis TUnion> {
+        Some(&self.codebase.get_declaring_property(class, variable)?.type_metadata.as_ref()?.type_union)
     }
 
     /// The type text of the result of the method `class::method`, as [`FunctionType::result`] writes it.
@@ -1132,12 +1130,12 @@ impl<'analysis> Types<'analysis> {
 
     /// The declaration `member` of the fully qualified class name `class` resolves to when code reads it: an enum case,
     /// a constant, a property, then a method, which the read takes as a first-class callable. Only when the class
-    /// declares none of them is it a property its `__get` serves. A read of an object is [`Self::read_member`]'s, and a
-    /// call is [`Self::call_target`]'s.
+    /// declares none of them is it a property its `__get` serves, or its `__set` takes a write to. A read of an object
+    /// is [`Self::read_member`]'s, and a call is [`Self::call_target`]'s.
     #[must_use]
     pub fn member_declaration(&self, class: &[u8], member: &[u8]) -> Declaration {
         self.declared_member(class, member).unwrap_or_else(|| {
-            if !self.codebase.method_exists(class, b"__get") {
+            if !self.codebase.method_exists(class, b"__get") && !self.codebase.method_exists(class, b"__set") {
                 unreachable!(
                     "the checker refuses `{}.{}`, which names no member",
                     String::from_utf8_lossy(class),
@@ -1676,18 +1674,67 @@ impl<'analysis> Types<'analysis> {
     }
 
     /// The declared type of the property `target` writes, `object.property`, `object?.property` or `Class.property`,
-    /// as the class, or the first class its object can be, declares it. None for any other target.
+    /// as the class, or the first class its object can be, declares or inherits it, as
+    /// [`Self::declared_property_type`] gives it. None for any other target.
     pub(crate) fn property_type(&self, target: &Expression) -> Option<&'analysis TUnion> {
-        let (class, property) = self.accessed_property(target)?;
+        let (class, variable) = self.accessed_property(target)?;
 
-        self.codebase.get_property(class, &property)?.type_metadata.as_ref().map(|declared| &declared.type_union)
+        self.declared_property_type(class, &variable)
     }
 
     /// Whether `target` reads a property plain PHP declares, which can hold a PHP array where PHP# reads a `Map` or a
     /// `Set`.
     pub(crate) fn plain_property(&self, target: &Expression) -> bool {
-        self.accessed_property(target)
-            .and_then(|(class, property)| self.codebase.get_declaring_property_class(class, &property))
+        self.accessed_property(target).is_some_and(|(class, property)| self.plain_declares(class, &property))
+    }
+
+    /// The type plain PHP declares for the place `target` writes, a property it declares, as [`Self::plain_property`]
+    /// says, or an element of one at any depth, as [`Self::plain_element_type`] gives it. `mixed` stands for a place
+    /// that declares no type. None for any other place, which PHP# declares or a local holds.
+    pub(crate) fn plain_place_type(&self, target: &Expression) -> Option<TUnion> {
+        if let Expression::ArrayAccess(access) = target.unparenthesized() {
+            return self.plain_element_type(access.array);
+        }
+        let (class, variable) = self.accessed_property(target)?;
+
+        self.plain_property_type(class, &variable)
+    }
+
+    /// The type plain PHP declares for an element of the place `holder`, as [`Self::plain_place_type`] gives the
+    /// place: the value type of each array its type holds, and `mixed` where it holds none.
+    pub(crate) fn plain_element_type(&self, holder: &Expression) -> Option<TUnion> {
+        let holder = self.plain_place_type(holder)?;
+        let mut element = None;
+        for atomic in holder.types.iter() {
+            if let TAtomic::Array(array) = atomic {
+                let (_, value) = get_array_parameters(array, self.codebase);
+                element = Some(add_optional_union_type(value, element.as_ref(), self.codebase));
+            }
+        }
+
+        Some(element.unwrap_or_else(get_mixed))
+    }
+
+    /// The type plain PHP declares for the property `variable`, `$`-prefixed, that the fully qualified class name
+    /// `class` declares or inherits, as [`Self::plain_place_type`] gives it. A write to a name the class has no
+    /// property for runs its `__set`, so the place is the value parameter of a `__set` plain PHP declares, as Eloquent's
+    /// `Model` does. None for a property PHP# declares.
+    pub(crate) fn plain_property_type(&self, class: &[u8], variable: &[u8]) -> Option<TUnion> {
+        let declared = match self.codebase.get_declaring_property(class, variable) {
+            Some(_) if !self.plain_declares(class, variable) => return None,
+            Some(property) => property.type_metadata.as_ref().map(|declared| &declared.type_union),
+            None => {
+                plain_parameters(class, self.codebase.get_declaring_method(class, b"__set"))?.get(1)?.declared_type()
+            }
+        };
+
+        Some(declared.cloned().unwrap_or_else(get_mixed))
+    }
+
+    /// Whether plain PHP declares the property `variable`, `$`-prefixed, that `class` declares or inherits.
+    fn plain_declares(&self, class: &[u8], variable: &[u8]) -> bool {
+        self.codebase
+            .get_declaring_property_class(class, variable)
             .and_then(|declaring| self.codebase.get_class_like(declaring.as_bytes()))
             .is_some_and(|declaring| !declaring.flags.is_sharp())
     }
@@ -1979,6 +2026,15 @@ pub(crate) struct FunctionType {
     pub(crate) result: Option<String>,
 }
 
+/// Whether a place plain PHP declares of the type `declared`, a parameter, a property or an element of one, takes a
+/// PHP array, which a `Map` or a `Set` crosses into, spec section 12: the type names `array`, `iterable`, `mixed` or a
+/// template. A type that takes only objects, such as `\Countable` or an interface, takes the object.
+pub(crate) fn takes_array(declared: &TUnion) -> bool {
+    declared.types.iter().any(|atomic| {
+        matches!(atomic, TAtomic::Array(_) | TAtomic::Iterable(_) | TAtomic::Mixed(_) | TAtomic::GenericParameter(_))
+    })
+}
+
 /// A parameter of plain PHP code a call runs, which a `Map` or a `Set` crosses into: a declared function's, method's or
 /// constructor's, or one of the signature of a plain PHP closure a local holds.
 #[derive(Clone, Copy, Debug)]
@@ -2006,18 +2062,9 @@ impl<'analysis> PlainParameter<'analysis> {
         }
     }
 
-    /// Whether the parameter takes a PHP array, which a `Map` or a `Set` crosses into, spec section 12: it declares no
-    /// type, or one that names `array`, `iterable`, `mixed` or a template. A type that takes only objects, such as
-    /// `\Countable` or an interface, takes the object.
+    /// Whether the parameter takes a PHP array, as [`takes_array`] says of the type it declares, or it declares none.
     pub(crate) fn takes_array(self) -> bool {
-        self.declared_type().is_none_or(|declared| {
-            declared.types.iter().any(|atomic| {
-                matches!(
-                    atomic,
-                    TAtomic::Array(_) | TAtomic::Iterable(_) | TAtomic::Mixed(_) | TAtomic::GenericParameter(_)
-                )
-            })
-        })
+        self.declared_type().is_none_or(takes_array)
     }
 
     pub(crate) fn is_variadic(self) -> bool {
