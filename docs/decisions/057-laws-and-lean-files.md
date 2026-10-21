@@ -1,12 +1,16 @@
-# 57. Laws and their proofs in PHP#
+# 57. Laws and structure in PHP#
 
 ## Decision
 
-Laws only, as in Bend (Jordan, 10-21). A class, an enum or a module states its laws in PHP#, with `law`. A law is a claim over every value of its parameters, and `when` after the parameters states its condition. `law name(parameters) => claim;` is proven by the checker alone. A law the checker cannot prove alone carries a body after its claim, and the body is its proof, in ordinary PHP#: `if` and `else`, `match` statements with block arms, locals, `return;`, and calls of laws as statements. A call of a law is a fact the case knows from then on, and a law calls itself only on a smaller value.
+Both kinds of facts the checker verifies are written in PHP#, in `.sharp` files (Jordan, 10-21). No `.lean` file of the project is ever read.
 
-Lean stays underneath. The checker translates the pure code a law reaches and the theorem of each law into the generated `.sharp/` folder on each compile, turns a body into the theorem's proof, and Lean's kernel checks it. No `.lean` file of the project proves a law, and nobody writes or reads Lean. A case the checker cannot close is the error `law-unproven`, with the case's conditions and the claim still to show printed in PHP#. A namespace's structure rules stay in `Module.lean`.
+**Laws only, as in Bend.** A class, an enum or a module states its laws in PHP#, with `law`. A law is a claim over every value of its parameters, and `when` after the parameters states its condition. `law name(parameters) => claim;` is proven by the checker alone. A law the checker cannot prove alone carries a body after its claim, and the body is its proof, in ordinary PHP#: `if` and `else`, `match` statements with block arms, locals, `return;`, and calls of laws as statements. A call of a law is a fact the case knows from then on, and a law calls itself only on a smaller value. No loop carries an invariant.
 
-## Options
+Lean stays underneath. The checker translates the pure code a law reaches and the theorem of each law into the generated `.sharp/` folder on each compile, turns a body into the theorem's proof, and Lean's kernel checks it. Nobody writes or reads Lean. A case the checker cannot close is the error `law-unproven`, with the case's conditions and the claim still to show printed in PHP#.
+
+**Structure is a module's `imports` list, as Java's `module-info` lists what a module `requires`.** A namespace's `Module.sharp` lists the namespaces its code imports from, `module { imports App.Tenant.Community, App.Shared.Schema; }`, and an import of any other namespace is a compile error at the import. The checker checks the list as it checks types, with no Lean.
+
+## Options for laws
 
 ### Chosen: laws only, the body is the proof in PHP#, Lean underneath
 
@@ -127,15 +131,58 @@ theorem refundNeverExceedsPaid (paid refunded amount : Int)
 
 A PHP# developer can't read what a class claims without reading Lean.
 
+## Options for structure
+
+### Chosen: the importing namespace lists what it imports
+
+```csharp
+// app/Tenant/Store/Module.sharp
+namespace App.Tenant.Store;
+
+module
+{
+    imports App.Tenant.Community, App.Shared.Schema, Illuminate.Support;
+}
+```
+
+A namespace states its own dependencies in the module file it already has, in PHP#. An import outside the list is a compile error at the import line, and two lists that name each other are a compile error on each list, so namespaces import one way.
+
+### Rejected: a provider-side `visible to` list, as Rust's `pub(in path)` and Go's `internal`
+
+```csharp
+// app/Shared/Ledger/Module.sharp
+module
+{
+    visible to App.Shared, App.Tenant.Billing;
+}
+```
+
+The namespace that is used names who may use it. Rust's `pub(in path)` and Go's `internal` folders work this way. A namespace then can't see its own dependencies in one place, and a rule such as "Store imports only Community and Schema" needs a line in every namespace Store must not reach.
+
+### Rejected: structure rules as Lean `@[rule]` definitions in `Module.lean`
+
+```lean
+-- app/Tenant/Store/Module.lean
+import Code.App.Tenant.Store.Module
+open Sharp
+
+@[rule] def importsOnly : Rule := .importsOnly [App.Tenant.Community, App.Shared.Schema]
+```
+
+This was the previous design: Lean ran each rule over the code's namespaces, imports and references. A PHP# developer had to write Lean to state where code may depend, and every compile that judged a rule started Lean.
+
 ## Precedent
 
-- **Chosen:** Bend 2, where a law and its proof are in the same file: a law is proven by a definition of the same name, written in Bend itself. Bend's `--verdict` mode and Aeneas, which translates Rust to Lean, check code through a prover the developer never writes.
+- **Chosen, laws:** Bend 2, where a law and its proof are in the same file: a law is proven by a definition of the same name, written in Bend itself. Bend's `--verdict` mode and Aeneas, which translates Rust to Lean, check code through a prover the developer never writes.
 - **Chosen, the error that shows what is left:** Lean's and Agda's goal display, printed here in PHP#.
+- **Chosen, structure:** Java's `module-info.java`, whose `requires` lists the modules a module reads.
 - **Rejected, proof files:** the previous version of this decision.
 - **Rejected, contracts and loop invariants:** Dafny, Eiffel.
+- **Rejected, a provider-side list:** Rust's `pub(in path)`, Go's `internal`.
 
 ## Spec
 
 - [Section 27, PHP# files](../spec.md#27-php-files)
 - [Section 28, Verification](../spec.md#28-verification)
 - [Section 28.1, Lean files](../spec.md#281-lean-files)
+- [Section 32, Modules](../spec.md#32-modules)

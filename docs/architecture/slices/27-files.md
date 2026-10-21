@@ -122,7 +122,7 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 | 3563 | An out-of-date file is refused, naming the file that changed | Works, word for word: "app/Shop/Order.sharp is out of date (app/Shop/Money.sharp changed). Run vendor/bin/mago compile." | None new | `refusal_out_of_date_input.phpt` |
 | 3564 | A file compiled for another engine is refused | Works, word for word, after one ABI byte of `Fresh.sharpc` changed: "app/Shop/Fresh.sharp was compiled for a different PHP# engine. Install the mago-sharp release that matches this engine." | None new | `refusal_different_engine.phpt` |
 | 3567 | A deploy runs `vendor/bin/mago compile` before the code runs | Holds through the refusals above: a deploy that skips it stops at its first PHP# file | None new; Jordan question 3 | |
-| 3568 | A type error or a broken structure rule stops the file, and so does a law without a proof, a gap, or a proof of a deleted law | Works: section 28's examples pass; `structure_rules.phpt` and `laws.phpt` | None new (section 28, #113) | |
+| 3568 | A type error stops the file, and so does a law without a proof, a gap, or a proof of a deleted law | Works: section 28's examples pass; `laws.phpt` | None new (section 28, #113) | |
 | 3569 | A whole-project rule can lag in development, and is exact at deploy | Works by design: `sharp.compile_command` compiles on demand from a stale file, and `mago compile` checks every rule | None new | |
 
 ## Positions real code hits
@@ -161,7 +161,7 @@ The bridge writes each node's `.sharp` line into the compiled file (`sharp_trans
 | mago-sharp #45; php-sharp #35 | Errors in a `.sharp` file can't be suppressed | Line 3555; no change |
 | mago-sharp #173, #95 | File-level code refused; capitalized namespaces | Beside the new rule in `sharp.rs` |
 | php-sharp #8, #137 | The Composer plugin and its class map, an interface's `Defaults` trait in it | Decision 7 |
-| mago-sharp #150, php-sharp #113 | Laws, proofs and structure rules | Lines 3557 and 3568; no change |
+| mago-sharp #150, php-sharp #113 | Laws and proofs | Lines 3557 and 3568; no change |
 | php-sharp #145, open | Section 23: namespaces, imports and default names | `Position` as a default name. Of this Slice's files, #145 changes only `sharp.rs`, in three places outside `check_declarations` and the default's refusal, and `error.rs`, where it adds `UsesOnImportInSharp` and decision 6 adds one `Display` arm |
 | php-sharp #121 | Modules, `readModule` | Decision 8's crash is in its code |
 

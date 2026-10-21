@@ -5034,7 +5034,7 @@ app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mag
 - **`mago compile` writes a `.php` file beside each of the project's `.sharp` files that declares a type,** as `StoreService.php` beside `StoreService.sharp`. So PHP code that finds classes by listing `*.php` files and naming each class by its path, as route-attribute and event discovery do, finds PHP# classes too, the way Java's classpath scanners find Kotlin classes. The file loads its `.sharp` file through the engine, and on plain PHP it throws the "needs the PHP# engine" error. It ends with the type's declaration in an `if (false)` that never runs, naming the type and its kind, so PHP code that reads `*.php` source, as Composer's class map generator and Symfony's attribute routing do, finds the type too, the way tools read a TypeScript `.d.ts` file. A type named after a word PHP reserves, as `Case` or `Match`, gets the file without the declaration, which PHP would refuse, so a tool that reads source never finds it, and Composer's PSR-4 rule still loads it. The engine declares the type once, from the `.sharp` file, and the checker reads the `.sharp` file and never the `.php` file. Once its `.sharp` file is deleted, it declares nothing until the next compile deletes it. Nobody edits it: a `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, and the next compile rewrites or deletes the file with its source. In a git repository, `mago compile` lists in `.git/info/exclude` the files no `.gitignore` already ignores. It finds that file by reading `.git` itself, in a clone and in a worktree, so it needs no `git` program. When git refuses to read the repository, as one another user owns, the compile still succeeds, lists every file there, and warns with git's reason. When it can't write the file, as with a read-only `.git/info` folder, it warns which files git shows as untracked and which folder to make writable.
 - **A `.sharp` file in an `autoload-dev` folder, and a package's in `vendor/`, gets no `.php` file.** A test class keeps one file, because PHPUnit loads a test class only from the file it lists, so `phpunit.xml` lists the PHP# tests as `<directory suffix="Test.sharp">tests</directory>`.
 - **Editors hide the `.php` files:** VS Code through `"files.exclude": {"**/*.php": {"when": "$(basename).sharp"}}`, and PhpStorm through file nesting of `.php` under `.sharp`.
-- **A type error, or a broken structure rule (section 28), stops the file from running.** So does a law the checker cannot prove, a compile error that names the law and what is still to show.
+- **A type error stops the file from running, an import its module's `imports` line leaves out included.** So does a law the checker cannot prove, a compile error that names the law and what is still to show.
 - **A plain PHP class that doesn't satisfy a PHP# type it extends or implements stops `mago compile`** (section 22), and `mago compile` still writes every accepted `.sharp` file.
 - **`mago compile` hides exactly what `mago analyze` hides:** the same `ignore` entries and baseline hide a host rule's error from both, as `tsc` and `tsc --noEmit` report the same errors.
 - **An extension host loads the project's own classes, on a fresh or read-only tree and after any change.** Before a command starts its hosts, `mago compile`, `mago analyze` (`--watch` too) and `mago lint` compile the project for the hosts into a folder of mago's cache, outside the project, which only the hosts' engine reads, so the project's `.sharp` folder holds only what `mago compile` accepted. That compile lowers every file that lowers, whatever the checker says of it, as Roslyn hands an analyzer a compilation with errors and `tsc` emits despite type errors: a host that loads a file with a type error gets the error the code raises when it runs, and a host that loads a file that doesn't lower gets the checker's errors. A watch restarts the hosts' workers when a file they load changes, as a dev server restarts a worker when a module it loaded changes.
@@ -5044,7 +5044,7 @@ app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mag
 
 The checker verifies two kinds of facts before code runs:
 
-- **Structure:** what code may depend on and do. Visibility and effects belong to the language. Code-shape and style rules stay plugins in the checker.
+- **Structure,** meaning what a namespace may import, is a module's `imports` line (section 32), which the checker checks as it checks types.
 - **Values:** facts the code guarantees, written as laws, as in Bend, Lean and Agda.
 
 **A class states its laws in PHP#,** with `law`. A law is a claim over every value of its parameters, `law name(parameters) => claim;`, and the checker proves it alone. A law the checker cannot prove alone carries a body after its claim, in place of the `;`, and the body is its proof, in ordinary PHP#. Laws and their proofs live in the `.sharp` file, as in Bend, where a law is proven by a definition of the same name in the same file. The checker turns each law into a Lean theorem in `.sharp/`, and Lean's kernel checks every proof. Nobody writes or reads Lean.
@@ -5186,7 +5186,7 @@ error[law-unproven]: law timesKeepsCurrency is not proven
   help: the law for a smaller n is the call Money.timesKeepsCurrency(m, n - 1)
 ```
 
-**A module states laws that span its classes** in `Module.sharp` (section 32), with bodies as a class's laws have. The namespace's structure rules go in `Module.lean` in the same folder (section 28.1). Both files are optional.
+**A module states laws that span its classes** in `Module.sharp` (section 32), with bodies as a class's laws have.
 
 <!-- example module-law -->
 ```csharp
@@ -5203,7 +5203,7 @@ module
 }
 ```
 
-**Rules and laws gate running.** A broken structure rule stops the code that breaks it from running, as a type error does. A law the checker cannot prove is a compile error that names it (section 27).
+A law the checker cannot prove is a compile error that names it (section 27).
 
 **Laws hold only over pure code** (section 29). The checker translates pure PHP# code to Lean, and Lean's kernel checks the proofs. Bend's `--verdict` mode and Aeneas, which translates Rust to Lean, work the same way. A law reaches the code it calls, and that code's own calls, and code no law reaches is never translated or refused:
 
@@ -5272,46 +5272,25 @@ public enum Status : string
 }
 ```
 
-**Structure rules are checks that Lean runs.** The checker loads the code's structure, meaning its namespaces, imports and references, as data, and Lean runs each rule over it like a function. A broken rule reports every offending line. Laws, which cover every possible value, stay theorems proved by Lean's kernel. A structure rule only scans the facts that exist, where a kernel proof gives the same answer far more slowly. Structure rules replace architecture linters such as a Mago module-boundary rule, the way CodeQL queries and Mathlib's `#lint` checks do.
-
 ### 28.1 Lean files
 
-A law and its proof sit in the `.sharp` file that states it. A namespace's structure rules sit in `Module.lean` in its folder, beside its `Module.sharp`.
+A law and its proof sit in the `.sharp` file that states it.
 
 ```text
 app/
-├── Module.lean                  <- structure rules about the whole application
 ├── Shared/
-│   ├── Module.lean              <- App.Shared's structure rules, such as "Shared never reaches Tenant"
 │   └── Money.sharp              <- states and proves the laws addKeepsCurrency and timesKeepsCurrency
 └── Tenant/Store/
-    ├── Module.sharp             <- the module (section 32), and the law receiptMatchesRefunds
-    ├── Module.lean              <- App.Tenant.Store's structure rules
+    ├── Module.sharp             <- the module (section 32), its imports line, and the law receiptMatchesRefunds
     ├── Receipts.sharp
     ├── Refunds.sharp
     └── StoreService.sharp
 ```
 
-`app/Tenant/Store/Module.lean` holds the namespace's structure rule: "`App.Tenant.Store` imports only `App.Tenant.Community` and `App.Shared.Schema`." It imports `Code.App.Tenant.Store.Module`, the module the checker generates for the namespace.
-
-**A structure rule is a Lean definition with the `@[rule]` attribute,** the way Lean marks a simp lemma with `@[simp]`. **It names a namespace by its full name, and a name that is no namespace in the project is a compile error,** as any unknown name in Lean is. That holds in the rules PHP# ships, such as `.neverImports`, and in a rule of your own, such as one built with `.imports` and `under`:
-
-```lean
--- app/Tenant/Store/Module.lean
-import Code.App.Tenant.Store.Module
-open Sharp
-
-@[rule] def importsOnly : Rule := .importsOnly [App.Tenant.Community, App.Shared.Schema]   -- compiles
-@[rule] def neverLedger : Rule := .neverImports App.Shared.Ledgr                            -- compile error: unknown identifier `App.Shared.Ledgr`
-@[rule] def ownLedger : Rule := .imports fun _ i => under i.name App.Shared.Ledgr           -- compile error: unknown identifier `App.Shared.Ledgr`
-```
-
 - **The checker generates the Lean translation of pure code and the theorem of each law into `.sharp/`,** never into the source tree, on each compile. No Lean file of the project proves a law.
 - **A law's generated statement is named by its class's full name and the law's name,** as in `App.Shared.Money.addKeepsCurrency`. A module law's is named by its namespace, `Module` and the law's name, as in `App.Tenant.Store.Module.receiptMatchesRefunds`.
 - **A law the checker cannot prove is a compile error that names it,** with what is still to show.
-- **A rule lives with the namespace it constrains.** "Shared never reaches Tenant" goes in `app/Shared/Module.lean`. A rule about the whole application goes in `app/Module.lean`.
 - **Names match exactly.** Translated code keeps its PHP# names in Lean, with no prefix.
-- **A failed rule is reported on the code that breaks it,** such as the offending `import` line, not only as a failed theorem.
 - **The checker names the law in each error about it,** as in `law addKeepsCurrency is not proven`.
 
 ## 29. Effects
@@ -5846,7 +5825,7 @@ module
 - **A binding names the services it needs as parameters, and its value is one expression over them,** as Dagger's `@Provides` methods do. The container passes each parameter the service bound to its type, so `RedisStore` above gets the app's `Environment`, which the standard library's module binds for every namespace. An expression is for a value no binding gives, such as `RedisStore`'s URL.
 - **A module stays declarative:** one expression per binding, and no statements, loops or methods.
 - **A `foreign` object is created in a module binding** (section 29). The binding's lifetime decides how often one is created, and the container passes it to classes through their constructors.
-- **A module also states the laws that span its classes** (section 28).
+- **A module also states the laws that span its classes** (section 28), **and lists the namespaces its code imports from** (below).
 
 **The host defines each lifetime, as ASP.NET Core's host does.** A `singleton` lives as long as the host runs the app. A `scoped` binding lives for one scope, which the host starts and ends, such as one HTTP request, one queued job or one console command run. A `transient` binding is created each time a class needs one.
 
@@ -5993,6 +5972,62 @@ module
 {
     singleton Mailer = SmtpMailer;
     transient Checkout = Checkout;   // compile error: Checkout needs a PaymentGateway, and no module binds one
+}
+```
+
+**A module lists the namespaces its code imports from** on one `imports` line, as Java's `module-info.java` lists the modules it `requires`. An import of any other namespace is a compile error at the import, which names the namespace and its list.
+
+<!-- example module-imports -->
+```csharp
+// app/Tenant/Store/Module.sharp
+namespace App.Tenant.Store;
+
+module
+{
+    imports App.Tenant.Community, App.Shared.Schema, Illuminate.Support;
+}
+```
+
+<!-- example module-imports -->
+```csharp
+// app/Tenant/Store/StoreService.sharp
+namespace App.Tenant.Store;
+
+import App.Tenant.Community.Member;     // compiles
+import Illuminate.Support.Facades.DB;   // compiles: Illuminate.Support lists every namespace below it
+import App.Shared.Ledger.Entry;         // compile error: App.Tenant.Store imports only App.Tenant.Community, App.Shared.Schema and Illuminate.Support
+
+public class StoreService { … }
+```
+
+- **The line is optional.** A namespace with no `imports` line imports from any namespace.
+- **A list covers its namespace and every namespace below it.** A namespace below may list its own imports, and an import must then pass every list above it.
+- **Listing a namespace lists every namespace below it.**
+- **A namespace always imports from itself, and from every namespace below the namespace that lists,** so under `App.Tenant.Store`'s list, `App.Tenant.Store.Checkout` imports from `App.Tenant.Store.Receipts`.
+- **`Sharp`, the standard library, is always imported and never listed.** A plain PHP library is listed by its namespace, as `Illuminate.Support` is.
+- **A name written in full in code counts as an import,** so `App.Shared.Ledger.Entry.record()` is refused as `import App.Shared.Ledger.Entry;` is.
+- **Two lists that name each other, directly or through other lists, are a compile error on each `imports` line of the cycle,** so the namespaces import one way. A namespace with no list takes part in no cycle.
+- **A listed name that names no namespace is a compile error,** as an import of an unknown name is.
+
+<!-- example module-imports-errors -->
+```csharp
+// app/Tenant/Store/Module.sharp
+namespace App.Tenant.Store;
+
+module
+{
+    imports App.Tenant.Community, App.Shared.Schema;   // compile error: App.Tenant.Store and App.Shared.Schema import from each other
+}
+```
+
+<!-- example module-imports-errors -->
+```csharp
+// app/Shared/Schema/Module.sharp
+namespace App.Shared.Schema;
+
+module
+{
+    imports App.Tenant.Store, App.Shared.Ledgr;        // compile error: App.Shared.Ledgr names no namespace, and App.Shared.Schema and App.Tenant.Store import from each other
 }
 ```
 

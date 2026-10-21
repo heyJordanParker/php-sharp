@@ -18,7 +18,7 @@ foreach ([
     'a root past the nodes' => fn () => overwrite($compiled, 92, pack('V', $nodes)),
     'a child past the nodes' => fn () => overwrite($compiled, $first_child, pack('V', $nodes)),
     'a text past the texts' => fn () => overwrite($compiled, $first_node + 48, pack('V', 0x7fffffff)),
-    "a library version past the texts" => fn () => overwrite($compiled, 120, pack('V', 0x7fffffff)),
+    "a library version past the texts" => fn () => overwrite($compiled, 116, pack('V', 0x7fffffff)),
 ] as $damage => $write) {
     file_put_contents($compiled, $bytes);
     $write();

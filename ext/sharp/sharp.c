@@ -687,7 +687,7 @@ static sharp_state sharp_check(sharp_compiled *compiled, const char *source, siz
 			+ sizeof(sharp_input) * (uint64_t) header->input_count
 			+ sizeof(sharp_node) * (uint64_t) header->node_count
 			+ sizeof(uint32_t) * (uint64_t) header->children_count
-			+ (uint64_t) header->texts_size + header->facts_size != ZSTR_LEN(compiled->bytes)) {
+			+ header->texts_size != ZSTR_LEN(compiled->bytes)) {
 		return SHARP_NOT_COMPILED;
 	}
 

@@ -2,7 +2,7 @@
 
 ## Decision
 
-A `.sharp` file runs only after the checker accepts it, and a type error stops it from running, as in C# and Java. The checker's types reach the running program, inferred ones too. A generic method can test a type parameter its call inferred, `typeof(TItem)` works on every type parameter, and a loop over a `Map` keyed by a backed enum gives its keys back as the enum with no type written. This reverses the earlier model, where each file compiled alone from its own text. `vendor/bin/mago compile` compiles each accepted `.sharp` file into a `.sharpc` file in one `.sharp/` folder at the project root, and the engine runs only current compiled files. A type error, a broken structure rule, or a law left unproven (decision 57) stops a file from running. Pragmas, `ignore` and the baseline hide warnings, never an error.
+A `.sharp` file runs only after the checker accepts it, and a type error stops it from running, as in C# and Java. The checker's types reach the running program, inferred ones too. A generic method can test a type parameter its call inferred, `typeof(TItem)` works on every type parameter, and a loop over a `Map` keyed by a backed enum gives its keys back as the enum with no type written. This reverses the earlier model, where each file compiled alone from its own text. `vendor/bin/mago compile` compiles each accepted `.sharp` file into a `.sharpc` file in one `.sharp/` folder at the project root, and the engine runs only current compiled files. A type error, such as an import its module's `imports` line leaves out, or a law left unproven (decision 57) stops a file from running. Pragmas, `ignore` and the baseline hide warnings, never an error.
 
 ## Options
 
@@ -29,7 +29,7 @@ project/
     └── app/Orders/Order.sharpc     <- what the engine runs; a missing, stale or mismatched one is refused, naming the fix
 ```
 
-The checker compiles, and the engine runs its output, as C#'s compiler and runtime split the work. `mago compile` mirrors the source paths into one folder, vendor packages included, so nothing is written into `vendor/`. A deploy runs `mago compile`, which also writes the `.php` file decision 81 puts beside each of the project's sources that declares a type. In development, `sharp.compile_command` compiles a stale file on demand. A broken structure rule stops a file as a type error does. A rule that reads the whole project can lag in development until the next full compile, and is exact at deploy.
+The checker compiles, and the engine runs its output, as C#'s compiler and runtime split the work. `mago compile` mirrors the source paths into one folder, vendor packages included, so nothing is written into `vendor/`. A deploy runs `mago compile`, which also writes the `.php` file decision 81 puts beside each of the project's sources that declares a type. In development, `sharp.compile_command` compiles a stale file on demand. A check that reads the whole project, such as a cycle between two modules' `imports` lines, can lag in development until the next full compile, and is exact at deploy.
 
 ### Rejected: each file compiles alone (Hack's model)
 
