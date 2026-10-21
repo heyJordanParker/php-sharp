@@ -126,18 +126,46 @@ CompileError: Coupon.sharp has 1 error:
 line 5: `Coupon` declares `operator ==` without `public int hash()`: declare it in `Coupon` or a parent, so equal values hash alike.
 CompileError: Refusals.sharp has 16 errors:
 line 5: `==` cannot compare `Cart` with `Cart`: `Cart` declares no `operator ==`.
+  `==` on a class instance exists only where its class declares `operator ==`.
+  help: Use `===` to test whether both sides are the same object.
 line 9: `if` takes a `bool`, but this is `int`.
+  PHP# conditions are `bool`, so PHP's truthiness never applies.
+  help: Compare the value, as in `count > 0` or `name != ""`.
 line 17: `|` takes `int`, but both sides are `bool`: write `||` for two `bool` values.
+  PHP# gives `|`, `&`, `^`, `~`, `<<`, `>>` and their compound forms to `int` only.
+  help: `||`, `&&` and `!=` join two `bool` values.
 line 23: This `match` misses `Status.Closed`.
+  Only a `match` on an enum may leave out `default`, when its arms cover every case.
+  help: Add an arm for each value it misses, or add `default => …` as the last arm.
 line 32: A `match` needs a `default` arm.
+  Only a `match` on an enum may leave out `default`, when its arms cover every case.
+  help: Add `default => …` as the last arm.
 line 40: `order.total` is `Any?` here: a property is not narrowed, because it could change between the test and the use.
+  PHP# narrows a local or a parameter after `is`, never a property.
+  help: Copy the value into a local first: test it with a name, as in `if (order.total is int t)`, and use `t`.
 line 50: `circle` exists only where `shape is Circle circle` is true.
+  help: A pattern variable holds a value only where its pattern matches. Test the value again here, or declare a local for `circle` before the test.
 line 55: Write `entity is not HasDesign`: `!` applies to `entity` before `is` tests it.
+  `is` binds with the comparisons, so `!entity is HasDesign` reads as `(!entity) is HasDesign`, and a negative test is written `is not`.
 line 63: Write `not (Paid or Refunded)`, or `(not Paid) or Refunded`.
+  In a pattern, `not` beside `or` needs parentheses. C# reads `not Paid or Refunded` as `(not Paid) or Refunded`, where `or Refunded` adds nothing.
 line 71: A type pattern is never nullable: null never matches a type.
+  help: Test for null with `x == null`, or join both with `or`, as in `x is int or null`.
 line 77: This pattern never matches the value it tests.
+  PHP# makes a pattern that can never match an error, as C# does (CS8121).
+  help: Remove the pattern, or test a value that can match it.
 line 81: `while` takes a `bool`, but this is `int`.
+  PHP# conditions are `bool`, so PHP's truthiness never applies.
+  help: Compare the value, as in `count > 0` or `name != ""`.
 line 87: `<` orders numbers, strings, and classes and enums that declare `operator <=>`, and `bool` is none of them.
+  A `bool` and a collection have no order, and an enum's cases have one only where it declares `operator <=>`.
+  help: Order a number or a string taken from the value instead.
 line 89: `<` orders numbers, strings, and classes and enums that declare `operator <=>`, and `Status` is none of them.
+  A `bool` and a collection have no order, and an enum's cases have one only where it declares `operator <=>`.
+  help: Declare `public static int operator <=>(Status a, Status b)` in `Status`: an enum orders its cases once it declares `operator <=>`.
 line 91: `<=>` orders numbers, strings, and classes and enums that declare `operator <=>`, and `Status` is none of them.
+  A `bool` and a collection have no order, and an enum's cases have one only where it declares `operator <=>`.
+  help: Declare `public static int operator <=>(Status a, Status b)` in `Status`: an enum orders its cases once it declares `operator <=>`.
 line 93: `<` orders numbers, strings, and classes and enums that declare `operator <=>`, and `List<int>` is none of them.
+  A `bool` and a collection have no order, and an enum's cases have one only where it declares `operator <=>`.
+  help: Order a number or a string taken from the value instead.

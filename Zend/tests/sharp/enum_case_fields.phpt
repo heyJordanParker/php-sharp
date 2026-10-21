@@ -23,3 +23,4 @@ remove_project($root);
 --EXPECT--
 CompileError: Demo/Amount.sharp has 1 error:
 line 6: The field `cents` of the case `Amount.Some` shares its name with the property `Amount.cents`, which every case has.
+  help: Rename one of them.

@@ -763,13 +763,14 @@ static zval *sharp_member(const zval *object, const char *key, uint8_t type)
 	return member && Z_TYPE_P(member) == type ? member : NULL;
 }
 
-/* Refuses a file with every error the compile command's checker reported for it, in the order they appear in the file.
- * The report covers every file the command compiled, lists errors by checking pass rather than by line, and counts
- * lines from 0. Returns false when the report holds no error for the file. */
+/* Refuses a file with every error the compile command's checker reported for it, in the order they appear in the file,
+ * each with its notes and its help, as mago compile prints them. The report covers every file the command compiled,
+ * lists errors by checking pass rather than by line, and counts lines from 0. Returns false when the report holds no
+ * error for the file. */
 static ZEND_COLD bool sharp_refuse_checked(const sharp_compiled *compiled, const char *name)
 {
 	zval *issues = sharp_member(&SHARP_G(compile_command_report), "issues", IS_ARRAY), *issue;
-	struct { zend_long offset, line; zend_string *message; } *errors;
+	struct { zend_long offset, line; zval *issue; } *errors;
 	uint32_t count = 0;
 
 	if (!issues) {
@@ -805,7 +806,7 @@ static ZEND_COLD bool sharp_refuse_checked(const sharp_compiled *compiled, const
 		}
 		errors[at].offset = Z_LVAL_P(offset);
 		errors[at].line = Z_LVAL_P(start_line) + 1;
-		errors[at].message = Z_STR_P(text);
+		errors[at].issue = issue;
 	} ZEND_HASH_FOREACH_END();
 
 	if (count > 0) {
@@ -813,8 +814,23 @@ static ZEND_COLD bool sharp_refuse_checked(const sharp_compiled *compiled, const
 
 		smart_str_append_printf(&refusal, "%s has %u error%s:", name, count, count == 1 ? "" : "s");
 		for (uint32_t i = 0; i < count; i++) {
+			zval *notes = sharp_member(errors[i].issue, "notes", IS_ARRAY), *note;
+			zval *help = sharp_member(errors[i].issue, "help", IS_STRING);
+
 			smart_str_append_printf(&refusal, "\nline " ZEND_LONG_FMT ": ", errors[i].line);
-			smart_str_append(&refusal, errors[i].message);
+			smart_str_append(&refusal, Z_STR_P(sharp_member(errors[i].issue, "message", IS_STRING)));
+			if (notes) {
+				ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(notes), note) {
+					if (Z_TYPE_P(note) == IS_STRING) {
+						smart_str_appends(&refusal, "\n  ");
+						smart_str_append(&refusal, Z_STR_P(note));
+					}
+				} ZEND_HASH_FOREACH_END();
+			}
+			if (help) {
+				smart_str_appends(&refusal, "\n  help: ");
+				smart_str_append(&refusal, Z_STR_P(help));
+			}
 		}
 		smart_str_0(&refusal);
 		zend_throw_exception(zend_ce_compile_error, ZSTR_VAL(refusal.s), 0);
