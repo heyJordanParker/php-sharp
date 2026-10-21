@@ -45,11 +45,14 @@ fn write(root: &Path, name: &str, contents: &str) {
     std::fs::write(path, contents).unwrap();
 }
 
+/// `mago compile` in `root`, which prints its issues in the medium format wherever it runs: mago would pick another
+/// one under GitHub Actions or GitLab CI.
 fn command(root: &Path, colors: &str) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_mago"));
     command
         .args(["--no-version-check", "--colors", colors, "compile"])
         .env("MAGO_LOG", "info")
+        .env("MAGO_REPORTING_FORMAT", "medium")
         .env("XDG_CACHE_HOME", Path::new(env!("CARGO_TARGET_TMPDIR")).join("cache"))
         .current_dir(root);
     command
@@ -1780,8 +1783,14 @@ fn compile_quotes_each_input_path_of_the_listener_table() {
 /// Spec section 28.1's `app/Shared/Money.sharp`, whose law holds over its pure `add`.
 const LAWFUL_MONEY: &str = "namespace App.Shared;\n\npublic class Money\n{\n    public Money(public int amount { get; }, public string currency { get; }) { }\n    public Money add(Money other) => new Money(this.amount + other.amount, this.currency);\n\n    law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;\n}\n";
 
-/// The proof `mago compile` creates for [`LAWFUL_MONEY`].
-const MONEY_PROOF: &str = "import Code.App.Shared.Money\nopen Sharp\n\ntheorem addKeepsCurrency : App.Shared.Money.addKeepsCurrency := by\n  simp [App.Shared.Money.addKeepsCurrency, App.Shared.Money.add]\n";
+/// The `.lean` files of the project outside `.sharp/`. A law is proven from its `.sharp` file alone, so the compile
+/// writes none.
+fn source_lean_files(root: &Path) -> Vec<PathBuf> {
+    files_under(root)
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|extension| extension == "lean") && !path.starts_with(".sharp"))
+        .collect()
+}
 
 /// A project whose `composer.json` maps `App\` to `app/`, holding `files`.
 fn lawful_project(files: &[(&str, &str)]) -> tempfile::TempDir {
@@ -1835,14 +1844,14 @@ fn library_builds(cache: &Path) -> Vec<PathBuf> {
 }
 
 #[test]
-fn compile_proves_a_law_with_the_proof_it_creates_and_writes_the_compiled_file() {
+fn compile_proves_a_law_from_its_sharp_file_alone_and_writes_the_compiled_file() {
     let directory = lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY)]);
     let root = directory.path();
 
     let output = compile(root);
 
     assert!(output.status.success(), "{}", printed(&output));
-    assert_eq!(read(root, "app/Shared/Money.lean"), MONEY_PROOF);
+    assert_eq!(source_lean_files(root), Vec::<PathBuf>::new());
     assert!(compiled(root, "app/Shared/Money.sharp").exists());
     assert!(root.join(".sharp").join(PACKAGE_FOLDER).is_dir(), "the compile keeps the Lake package's folder");
     assert!(root.join(".sharp/.lean/Code/App/Shared/Money.lean").exists(), "the Lake package stays in .sharp/.lean/");
@@ -1865,7 +1874,7 @@ fn compiles_that_start_together_on_an_empty_cache_each_prove_their_law_and_leave
 
     for (project, output) in projects.iter().zip(&outputs) {
         assert!(output.status.success(), "{}", printed(output));
-        assert_eq!(read(project.path(), "app/Shared/Money.lean"), MONEY_PROOF);
+        assert_eq!(source_lean_files(project.path()), Vec::<PathBuf>::new());
     }
     assert_eq!(library_builds(cache.path()).len(), 1, "one library build is left");
 }
@@ -1890,7 +1899,7 @@ fn compile_rebuilds_a_library_build_that_lost_its_lakefile_or_its_runner_and_pro
         let output = compile_in_cache(&project);
 
         assert!(output.status.success(), "{lost}: {}", printed(&output));
-        assert_eq!(read(project.path(), "app/Shared/Money.lean"), MONEY_PROOF);
+        assert_eq!(source_lean_files(project.path()), Vec::<PathBuf>::new());
         assert!(lost_path.exists(), "the library build has {lost} again");
         assert_eq!(library_builds(cache.path()).len(), 1, "one library build is left");
     }
@@ -1906,7 +1915,7 @@ fn compile_deletes_the_staging_folder_a_dead_build_left_and_proves_its_law() {
     let output = command(project.path(), "never").env("XDG_CACHE_HOME", cache.path()).output().unwrap();
 
     assert!(output.status.success(), "{}", printed(&output));
-    assert_eq!(read(project.path(), "app/Shared/Money.lean"), MONEY_PROOF);
+    assert_eq!(source_lean_files(project.path()), Vec::<PathBuf>::new());
     assert!(!stale.exists(), "the staging folder a dead build left is deleted");
     assert_eq!(library_builds(cache.path()).len(), 1, "one library build is left");
 }
@@ -1930,14 +1939,14 @@ fn compiles_that_start_together_on_a_library_build_that_lost_its_lakefile_each_p
 
     for (project, output) in projects.iter().zip(&outputs) {
         assert!(output.status.success(), "{}", printed(output));
-        assert_eq!(read(project.path(), "app/Shared/Money.lean"), MONEY_PROOF);
+        assert_eq!(source_lean_files(project.path()), Vec::<PathBuf>::new());
     }
     assert!(library.join("lakefile.toml").is_file(), "the library build has its lakefile again");
     assert_eq!(library_builds(cache.path()), [library], "one library build is left, with no staging folder");
 }
 
 #[test]
-fn a_second_compile_leaves_the_proof_byte_identical_and_starts_no_lean_process() {
+fn a_second_compile_leaves_the_compiled_file_byte_identical_and_starts_no_lean_process() {
     let directory = lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY)]);
     let root = directory.path();
     compile_succeeds(root);
@@ -1946,7 +1955,6 @@ fn a_second_compile_leaves_the_proof_byte_identical_and_starts_no_lean_process()
     let output = compile_without_lean(root);
 
     assert!(output.status.success(), "the compile needed lake: {}", printed(&output));
-    assert_eq!(read(root, "app/Shared/Money.lean"), MONEY_PROOF);
     assert_eq!(std::fs::read(compiled(root, "app/Shared/Money.sharp")).unwrap(), before);
 }
 
@@ -1980,7 +1988,7 @@ fn compile_proves_a_law_in_a_project_that_installs_the_standard_library() {
     let output = compile_lines(root);
 
     assert!(output.status.success(), "{}", printed(&output));
-    assert_eq!(read(root, "app/Shared/Money.lean"), MONEY_PROOF);
+    assert!(compiled(root, "app/Shared/Money.sharp").exists());
 }
 
 #[test]
@@ -1995,16 +2003,18 @@ fn compile_refuses_a_law_a_changed_method_breaks_on_the_law_line_and_writes_no_c
         &LAWFUL_MONEY
             .replace("this.amount + other.amount, this.currency", "this.amount + other.amount, other.currency"),
     );
-    let output = compile_lines(root);
+    let output = compile(root);
 
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     assert!(
-        printed(&output).contains("app/Shared/Money.sharp:8:5:error - unproven-law: Law addKeepsCurrency is not proven: Lean rejected its proof in app/Shared/Money.lean line 4: unsolved goals"),
+        printed(&output).contains(
+            "app/Shared/Money.sharp:8:5: error[law-unproven]: law addKeepsCurrency is not proven\n = still to show: new Money(a.amount + b.amount, b.currency).currency == a.currency\n"
+        ),
         "{}",
         printed(&output)
     );
     assert!(!compiled(root, "app/Shared/Money.sharp").exists());
-    assert_eq!(read(root, "app/Shared/Money.lean"), MONEY_PROOF, "an existing proof is never rewritten");
+    assert_eq!(source_lean_files(root), Vec::<PathBuf>::new());
 }
 
 /// Spec section 10: a struct states a law as a class does. Mago proves it, and refuses it once a changed method breaks
@@ -2015,7 +2025,6 @@ fn a_struct_states_a_law() {
     let directory = lawful_project(&[("app/Shared/Money.sharp", &money)]);
     let root = directory.path();
     compile_succeeds(root);
-    assert_eq!(read(root, "app/Shared/Money.lean"), MONEY_PROOF);
 
     write(
         root,
@@ -2025,7 +2034,8 @@ fn a_struct_states_a_law() {
     let output = compile_lines(root);
 
     assert!(
-        printed(&output).contains("app/Shared/Money.sharp:8:5:error - unproven-law: Law addKeepsCurrency is not proven: Lean rejected its proof in app/Shared/Money.lean line 4: unsolved goals"),
+        printed(&output)
+            .contains("app/Shared/Money.sharp:8:5:error - law-unproven: law addKeepsCurrency is not proven"),
         "{}",
         printed(&output)
     );
@@ -2044,8 +2054,7 @@ fn compile_proves_two_stale_law_files_and_refuses_each_one_whose_method_breaks_i
     let directory = money_and_wallet();
     let root = directory.path();
     compile_succeeds(root);
-    assert_eq!(read(root, "app/Shared/Money.lean"), MONEY_PROOF);
-    assert_eq!(read(root, "app/Shared/Wallet.lean"), MONEY_PROOF.replace("Money", "Wallet"));
+    assert!(compiled(root, "app/Shared/Wallet.sharp").exists());
 
     for class in ["Money", "Wallet"] {
         write(
@@ -2061,7 +2070,9 @@ fn compile_proves_two_stale_law_files_and_refuses_each_one_whose_method_breaks_i
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     for class in ["Money", "Wallet"] {
         assert!(
-            printed(&output).contains(&format!("app/Shared/{class}.sharp:8:5:error - unproven-law: Law addKeepsCurrency is not proven: Lean rejected its proof in app/Shared/{class}.lean line 4: unsolved goals")),
+            printed(&output).contains(&format!(
+                "app/Shared/{class}.sharp:8:5:error - law-unproven: law addKeepsCurrency is not proven"
+            )),
             "{class}: {}",
             printed(&output)
         );
@@ -2105,7 +2116,7 @@ fn compile_runs_the_runners_of_two_stale_law_files_at_the_same_time() {
 
     assert!(output.status.success(), "{}", printed(&output));
     assert!(!lake.path().join("alone").exists(), "the second runner started only after the first one ended");
-    assert_eq!(read(root, "app/Shared/Wallet.lean"), MONEY_PROOF.replace("Money", "Wallet"));
+    assert!(compiled(root, "app/Shared/Wallet.sharp").exists());
 }
 
 /// A `lake` on the `PATH` builds the Lean code, so CI's and a user's own elan keep working, and Mago installs no Lean.
@@ -2120,9 +2131,11 @@ fn compile_runs_the_lake_on_the_path_and_installs_no_lean() {
     std::fs::set_permissions(lake.path().join("lake"), std::fs::Permissions::from_mode(0o755)).unwrap();
     let cache = tempfile::tempdir().unwrap();
 
+    // The debug log holds what the failed build printed.
     let output = command(directory.path(), "never")
         .env("PATH", lake.path())
         .env("XDG_CACHE_HOME", cache.path())
+        .env("MAGO_LOG", "debug")
         .output()
         .unwrap();
 
@@ -2181,14 +2194,10 @@ fn compiles_that_start_together_install_the_missing_lean_of_the_lake_on_the_path
 }
 
 #[test]
-fn compile_refuses_a_gap_every_time_and_never_leaves_a_current_compiled_file() {
-    let directory = lawful_project(&[
-        ("app/Shared/Money.sharp", LAWFUL_MONEY),
-        (
-            "app/Shared/Money.lean",
-            &MONEY_PROOF.replace("simp [App.Shared.Money.addKeepsCurrency, App.Shared.Money.add]", "sorry"),
-        ),
-    ]);
+fn compile_refuses_an_unproven_law_every_time_and_never_leaves_a_current_compiled_file() {
+    let broken =
+        LAWFUL_MONEY.replace("this.amount + other.amount, this.currency", "this.amount + other.amount, other.currency");
+    let directory = lawful_project(&[("app/Shared/Money.sharp", &broken)]);
     let root = directory.path();
 
     for run in ["first", "second"] {
@@ -2196,7 +2205,8 @@ fn compile_refuses_a_gap_every_time_and_never_leaves_a_current_compiled_file() {
 
         assert_eq!(output.status.code(), Some(1), "{run}: {}", printed(&output));
         assert!(
-            printed(&output).contains("app/Shared/Money.sharp:8:5:error - unproven-law: Law addKeepsCurrency is not proven: app/Shared/Money.lean line 4 is a gap (sorry). Write the proof there, or change the law."),
+            printed(&output)
+                .contains("app/Shared/Money.sharp:8:5:error - law-unproven: law addKeepsCurrency is not proven"),
             "{run}: {}",
             printed(&output)
         );
@@ -2204,128 +2214,29 @@ fn compile_refuses_a_gap_every_time_and_never_leaves_a_current_compiled_file() {
     }
 }
 
+/// A file whose law needs proving needs the law checker; with no `lake` and no Lean Mago can install, each such file is
+/// refused with `law-checker-unavailable`, a fixed sentence that names no tool and no folder of one, and every other
+/// file compiles. The debug log holds what failed.
 #[test]
-fn compile_refuses_a_proof_that_uses_native_decide() {
-    let directory = lawful_project(&[
-        (
-            "app/Shared/Limits.sharp",
-            "namespace App.Shared;\n\npublic class Limits\n{\n    public static int double(int a) => a + a;\n\n    law doubleOfTwo() => Limits.double(2) == 4;\n}\n",
-        ),
-        (
-            "app/Shared/Limits.lean",
-            "import Code.App.Shared.Limits\nopen Sharp\n\ntheorem doubleOfTwo : App.Shared.Limits.doubleOfTwo := by\n  unfold App.Shared.Limits.doubleOfTwo\n  native_decide\n",
-        ),
-    ]);
+fn compile_reports_an_unavailable_law_checker_on_each_file_that_needs_it_and_whose_compiled_file_is_not_current() {
+    let unavailable = if cfg!(target_env = "musl") {
+        "error - law-checker-unavailable: Laws need the law checker, and this musl build of the checker can't install it, because the law checker has no musl build. On glibc Linux, the checker's glibc build installs it itself."
+    } else {
+        "error - law-checker-unavailable: The law checker could not be installed. Run vendor/bin/mago compile again to retry, with MAGO_LOG=debug to see why."
+    };
+    let directory = lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY), ("app/Order.sharp", ORDER)]);
     let root = directory.path();
 
-    let output = compile_lines(root);
+    let output = compile_without_lean(root);
 
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
-    assert!(
-        printed(&output).contains("app/Shared/Limits.sharp:7:5:error - unproven-law: Law doubleOfTwo is not proven: its proof in app/Shared/Limits.lean uses native_decide, which trusts compiled code instead of Lean's kernel. Use decide."),
-        "{}",
-        printed(&output)
-    );
-    assert!(!compiled(root, "app/Shared/Limits.sharp").exists());
-}
-
-/// Spec section 28.1: a proof whose law was deleted is a compile error, whether the law, its whole class or its whole
-/// module was deleted. It sits on the class or module name, or at the start of a file that states neither any more.
-#[test]
-fn compile_reports_the_proof_of_a_deleted_law() {
-    const MONEY_DELETED: &str = "app/Shared/Money.lean line 4 proves App.Shared.Money.addKeepsCurrency, which Money.sharp no longer states. Delete the proof, or restore the law.";
-    const MODULE_DELETED: &str = "app/Tenant/Store/Module.lean line 4 proves App.Tenant.Store.Module.receiptMatchesRefunds, which Module.sharp no longer states. Delete the proof, or restore the law.";
-    let lawless_money =
-        LAWFUL_MONEY.replace("\n    law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;\n", "");
-    let refundable = "refunded < paid ? refunded : paid";
-
-    for (directory, source, reduced, position, deleted) in [
-        (
-            lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY)]),
-            "app/Shared/Money.sharp",
-            lawless_money.as_str(),
-            "3:14",
-            MONEY_DELETED,
-        ),
-        (
-            lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY)]),
-            "app/Shared/Money.sharp",
-            "namespace App.Shared;\n",
-            "1:1",
-            MONEY_DELETED,
-        ),
-        (
-            store(refundable, refundable),
-            "app/Tenant/Store/Module.sharp",
-            "namespace App.Tenant.Store;\n\nmodule\n{\n}\n",
-            "3:1",
-            MODULE_DELETED,
-        ),
-        (
-            store(refundable, refundable),
-            "app/Tenant/Store/Module.sharp",
-            "namespace App.Tenant.Store;\n",
-            "1:1",
-            MODULE_DELETED,
-        ),
-    ] {
-        let root = directory.path();
-        compile_succeeds(root);
-
-        write(root, source, reduced);
-        let output = compile_lines(root);
-
-        assert_eq!(output.status.code(), Some(1), "{reduced}: {}", printed(&output));
-        assert!(
-            printed(&output).contains(&format!("{source}:{position}:error - non-existent-law: {deleted}")),
-            "{reduced}: {}",
-            printed(&output)
-        );
-        assert!(!compiled(root, source).exists(), "{reduced}");
-    }
-}
-
-/// A file whose law needs proving, or that a structure rule judges, needs Lean; with no `lake` and no Lean Mago can
-/// install, each such file is refused with `missing-lean`, which names what failed, and every other file compiles.
-#[test]
-fn compile_reports_missing_lean_on_each_file_that_needs_lean_and_whose_compiled_file_is_not_current() {
-    let missing = if cfg!(target_env = "musl") {
-        "error - missing-lean: Laws and structure rules need Lean 4.34.1, and no lake is on the PATH. This musl build of the checker can't install Lean, because Lean has no musl build. On glibc Linux, the checker's glibc build installs Lean itself.".to_owned()
-    } else {
-        format!(
-            "error - missing-lean: Laws and structure rules need Lean 4.34.1, and no lake is on the PATH. The checker could not install Lean into {}: File exists (os error 17). Run vendor/bin/mago compile again to retry.",
-            unwritable_cache().join("mago/elan").display()
-        )
-    };
-    let shared = rules("App.Shared", "@[rule] def neverReachesTenant : Rule := .neverImports App.Tenant");
-    for (files, refused) in [
-        (
-            vec![("app/Shared/Money.sharp", LAWFUL_MONEY), ("app/Order.sharp", ORDER)],
-            vec!["app/Shared/Money.sharp:3:14"],
-        ),
-        (
-            vec![
-                ("app/Shared/Module.lean", shared.as_str()),
-                ("app/Shared/Ledger.sharp", "namespace App.Shared;\n\npublic class Ledger { }\n"),
-                ("app/Order.sharp", ORDER),
-            ],
-            vec!["app/Shared/Ledger.sharp:1:11"],
-        ),
-    ] {
-        let directory = lawful_project(&files);
-        let root = directory.path();
-
-        let output = compile_without_lean(root);
-
-        assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
-        let expected: Vec<String> = refused.iter().map(|place| format!("{place}:{missing}")).collect();
-        assert_eq!(issue_lines(&output), expected, "{}", printed(&output));
-        assert!(compiled(root, "app/Order.sharp").exists());
-    }
+    assert_eq!(issue_lines(&output), [format!("app/Shared/Money.sharp:8:5:{unavailable}")], "{}", printed(&output));
+    assert!(!printed(&output).contains("elan"), "{}", printed(&output));
+    assert!(compiled(root, "app/Order.sharp").exists());
 }
 
 #[test]
-fn compile_needs_no_lean_for_a_project_with_no_law_and_no_proof_file() {
+fn compile_needs_no_lean_for_a_project_with_no_law() {
     let directory = project(ORDER, MONEY);
     let root = directory.path();
 
@@ -2349,13 +2260,12 @@ fn an_edit_to_a_file_no_law_reaches_starts_no_lean_process() {
 }
 
 #[test]
-fn compile_deletes_the_lean_package_once_no_law_and_no_proof_file_remain() {
+fn compile_deletes_the_lean_package_once_no_law_remains() {
     let directory = lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY)]);
     let root = directory.path();
     compile_succeeds(root);
 
     std::fs::remove_file(root.join("app/Shared/Money.sharp")).unwrap();
-    std::fs::remove_file(root.join("app/Shared/Money.lean")).unwrap();
     write(root, "app/Order.sharp", ORDER);
     let output = compile_without_lean(root);
 
@@ -2364,8 +2274,23 @@ fn compile_deletes_the_lean_package_once_no_law_and_no_proof_file_remain() {
     assert_eq!(files_under(&root.join(".sharp")), [Path::new("app/Order.sharpc"), Path::new("listeners.php")]);
 }
 
+/// A `Money.lean` a 0.4.2 compile left beside `Money.sharp` is an ordinary unused file: the compile builds none of it,
+/// and the law it once proved is proven from `Money.sharp` alone.
 #[test]
-fn compile_appends_a_proof_for_a_new_law_and_keeps_every_existing_proof() {
+fn compile_reads_no_lean_file_beside_a_class_and_proves_its_law() {
+    let leftover = "import Code.App.Shared.Money\nopen Sharp\n\ntheorem addKeepsCurrency : App.Shared.Money.addKeepsCurrency := by\n  simp [App.Shared.Money.addKeepsCurrency, App.Shared.Money.add]\n";
+    let directory = lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY), ("app/Shared/Money.lean", leftover)]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Shared/Money.sharp").exists());
+    assert_eq!(read(root, "app/Shared/Money.lean"), leftover);
+}
+
+#[test]
+fn compile_proves_a_law_an_edit_adds_from_the_sharp_file_alone() {
     let directory = lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY)]);
     let root = directory.path();
     compile_succeeds(root);
@@ -2381,12 +2306,8 @@ fn compile_appends_a_proof_for_a_new_law_and_keeps_every_existing_proof() {
     let output = compile(root);
 
     assert!(output.status.success(), "{}", printed(&output));
-    assert_eq!(
-        read(root, "app/Shared/Money.lean"),
-        format!(
-            "{MONEY_PROOF}\ntheorem addKeepsOtherCurrency : App.Shared.Money.addKeepsOtherCurrency := by\n  simp [App.Shared.Money.addKeepsOtherCurrency, App.Shared.Money.add]\n"
-        )
-    );
+    assert!(compiled(root, "app/Shared/Money.sharp").exists());
+    assert_eq!(source_lean_files(root), Vec::<PathBuf>::new());
 }
 
 #[test]
@@ -2463,9 +2384,7 @@ fn compile_proves_spec_section_28_1_s_state_machine_law_over_an_enum_match() {
     let output = compile(root);
 
     assert!(output.status.success(), "{}", printed(&output));
-    assert!(
-        read(root, "app/Shop/Status.lean").contains("theorem refundedIsFinal : App.Shop.Status.refundedIsFinal := by")
-    );
+    assert_eq!(source_lean_files(root), Vec::<PathBuf>::new());
     assert!(compiled(root, "app/Shop/Status.sharp").exists());
 }
 
@@ -2485,9 +2404,7 @@ fn compile_proves_spec_section_28_s_state_machine_law_over_an_interface() {
     let output = compile(root);
 
     assert!(output.status.success(), "{}", printed(&output));
-    assert!(
-        read(root, "app/Shop/Status.lean").contains("theorem refundedIsFinal : App.Shop.Status.refundedIsFinal := by")
-    );
+    assert_eq!(source_lean_files(root), Vec::<PathBuf>::new());
     assert!(compiled(root, "app/Shop/Status.sharp").exists());
 }
 
@@ -2508,9 +2425,8 @@ fn compile_proves_spec_section_28_s_state_machine_law_with_a_class_as_its_event(
     let output = compile(root);
 
     assert!(output.status.success(), "{}", printed(&output));
-    assert!(
-        read(root, "app/Shop/Card.lean").contains("theorem cardRefundIsFinal : App.Shop.Card.cardRefundIsFinal := by")
-    );
+    assert!(compiled(root, "app/Shop/Card.sharp").exists());
+    assert_eq!(source_lean_files(root), Vec::<PathBuf>::new());
 }
 
 /// A law never calls an interface's method, which a law cannot reason about, even when every implementation is
@@ -2536,7 +2452,7 @@ fn a_law_that_calls_an_interface_method_is_refused() {
         let root = directory.path();
         let expected: Vec<String> = calls
             .iter()
-            .map(|at| format!("{file}:{at}:error - unmodeled-construct: Law {law}. A law cannot reason about an interface method, because the implementation that runs is chosen at run time."))
+            .map(|at| format!("{file}:{at}:error - unmodeled-construct: Law {law}. Call the method on a value of a class that implements the interface, since a law cannot know which implementation runs."))
             .collect();
 
         let output = compile_without_lean(root);
@@ -2568,19 +2484,37 @@ fn store(refundable: &str, remaining: &str) -> tempfile::TempDir {
     ])
 }
 
-/// Spec section 28.1: `app/Tenant/Store/Module.lean` proves the module law, created with the proof `simp` found.
+/// Spec section 28: the checker proves the module law from `Module.sharp` alone, and writes no `Module.lean`.
 #[test]
-fn compile_proves_spec_section_28_s_module_law_with_the_proof_it_creates_in_module_lean() {
+fn compile_proves_spec_section_28_s_module_law_from_module_sharp_alone() {
     let directory = store("refunded < paid ? refunded : paid", "refunded < paid ? refunded : paid");
     let root = directory.path();
 
     let output = compile(root);
 
     assert!(output.status.success(), "{}", printed(&output));
-    assert_eq!(
-        read(root, "app/Tenant/Store/Module.lean"),
-        "import Code.App.Tenant.Store.Module\nopen Sharp\n\ntheorem receiptMatchesRefunds : App.Tenant.Store.Module.receiptMatchesRefunds := by\n  simp [App.Tenant.Store.Module.receiptMatchesRefunds, App.Tenant.Store.Receipts.refundable, App.Tenant.Store.Refunds.remaining]\n"
-    );
+    assert_eq!(source_lean_files(root), Vec::<PathBuf>::new());
+    assert!(compiled(root, "app/Tenant/Store/Module.sharp").exists());
+}
+
+/// Spec section 28: a module law's body proves it as a class law's does, calling the laws of the module and of its
+/// classes through their names.
+#[test]
+fn compile_proves_a_module_law_by_its_body() {
+    let module = "namespace App.Tenant.Store;\n\nmodule\n{\n    law receiptMatchesRefunds(int paid, int refunded) => Receipts.refundable(paid, refunded) == Refunds.remaining(paid, refunded);\n    law receiptNeverAbovePaid(int paid, int refunded) when paid >= 0 && refunded >= 0 => Refunds.remaining(paid, refunded) <= paid\n    {\n        Module.receiptMatchesRefunds(paid, refunded);\n        Receipts.neverAbovePaid(paid, refunded);\n    }\n}\n";
+    let receipts = "namespace App.Tenant.Store;\n\npublic static class Receipts\n{\n    public static int refundable(int paid, int refunded) => refunded < paid ? paid - refunded : 0;\n\n    law neverAbovePaid(int paid, int refunded) when paid >= 0 && refunded >= 0 => Receipts.refundable(paid, refunded) <= paid;\n}\n";
+    let refunds = "namespace App.Tenant.Store;\n\npublic static class Refunds\n{\n    public static int remaining(int paid, int refunded) => refunded < paid ? paid - refunded : 0;\n}\n";
+    let directory = lawful_project(&[
+        ("app/Tenant/Store/Module.sharp", module),
+        ("app/Tenant/Store/Receipts.sharp", receipts),
+        ("app/Tenant/Store/Refunds.sharp", refunds),
+    ]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert_eq!(source_lean_files(root), Vec::<PathBuf>::new());
     assert!(compiled(root, "app/Tenant/Store/Module.sharp").exists());
 }
 
@@ -2595,7 +2529,9 @@ fn compile_refuses_module_sharp_when_its_law_does_not_hold() {
 
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     assert!(
-        printed(&output).contains("app/Tenant/Store/Module.sharp:5:5:error - unproven-law: Law receiptMatchesRefunds is not proven: app/Tenant/Store/Module.lean line 6 is a gap (sorry). Write the proof there, or change the law."),
+        printed(&output).contains(
+            "app/Tenant/Store/Module.sharp:5:5:error - law-unproven: law receiptMatchesRefunds is not proven"
+        ),
         "{}",
         printed(&output)
     );
@@ -2696,43 +2632,62 @@ fn compile_refuses_a_class_beside_a_folder_of_its_name_with_or_without_a_law() {
     }
 }
 
-/// `app/Shared/Ledger.sharp`, whose line 3 imports a class of `App.Tenant`.
-const LEDGER: &str = "namespace App.Shared;\n\nimport App.Tenant.Store.Receipts;\n\npublic class Ledger\n{\n    public static int refundable(int paid) => Receipts.refundable(paid, 0);\n}\n";
-
 /// `app/Tenant/Store/Receipts.sharp`, which imports nothing.
 const RECEIPTS: &str = "namespace App.Tenant.Store;\n\npublic class Receipts\n{\n    public static int refundable(int paid, int refunded) => paid - refunded;\n}\n";
 
-/// `app/Tenant/Store/StoreService.sharp`, whose line 3 imports `App.Shared.Ledger`.
-const STORE_SERVICE: &str = "namespace App.Tenant.Store;\n\nimport App.Shared.Ledger;\n\npublic class StoreService\n{\n    public int refundable(int paid) => Ledger.refundable(paid);\n}\n";
+/// Spec section 32's `imports` line: `App.Tenant.Store` imports only from the namespaces its `Module.sharp` lists, so
+/// `mago compile` refuses `StoreService.sharp` at its import outside the list and writes every other file. Lists that
+/// name each other refuse each module of the cycle at its `imports` line, and so does a listed name that names no
+/// namespace. Each row is the `Module.sharp` files beside the classes the store reaches.
+#[test]
+fn compile_refuses_an_import_outside_the_list_of_its_namespace_at_the_import() {
+    let store_module = |listed: &str| format!("namespace App.Tenant.Store;\n\nmodule\n{{\n    imports {listed};\n}}\n");
+    let listed = store_module("App.Tenant.Community, App.Shared.Schema, Illuminate.Support");
+    let misspelled = store_module("App.Tenant.Community, App.Shared.Schema, Illuminate.Suport");
+    let cyclic = store_module("App.Tenant.Community, App.Shared");
+    let schema_module = "namespace App.Shared.Schema;\n\nmodule\n{\n    imports App.Tenant.Store;\n}\n";
+    let service = "namespace App.Tenant.Store;\n\nimport App.Tenant.Community.Member;\nimport Illuminate.Support.Facades.DB;\nimport App.Shared.Ledger.Entry;\n\npublic class StoreService\n{\n    public StoreService(private Member member, private DB db, private Entry entry) { }\n}\n";
+    let refused = "app/Tenant/Store/StoreService.sharp:5:8:error - unlisted-import: `App.Tenant.Store` imports only `App.Tenant.Community`, `App.Shared.Schema` and `Illuminate.Support`.";
+    for (modules, expected) in [
+        (vec![("app/Tenant/Store/Module.sharp", listed.as_str())], vec![refused.to_owned()]),
+        (
+            vec![("app/Tenant/Store/Module.sharp", misspelled.as_str())],
+            vec![
+                "app/Tenant/Store/Module.sharp:5:54:error - non-existent-use-import: Imported namespace `Illuminate.Suport` does not exist.".to_owned(),
+                "app/Tenant/Store/StoreService.sharp:4:8:error - unlisted-import: `App.Tenant.Store` imports only `App.Tenant.Community`, `App.Shared.Schema` and `Illuminate.Suport`.".to_owned(),
+                "app/Tenant/Store/StoreService.sharp:5:8:error - unlisted-import: `App.Tenant.Store` imports only `App.Tenant.Community`, `App.Shared.Schema` and `Illuminate.Suport`.".to_owned(),
+            ],
+        ),
+        (
+            vec![("app/Tenant/Store/Module.sharp", cyclic.as_str()), ("app/Shared/Schema/Module.sharp", schema_module)],
+            vec![
+                "app/Shared/Schema/Module.sharp:5:13:error - import-cycle: `App.Shared.Schema` and `App.Tenant.Store` import from each other: `App.Shared.Schema` lists `App.Tenant.Store`, and `App.Tenant.Store` lists `App.Shared`.".to_owned(),
+                "app/Tenant/Store/Module.sharp:5:35:error - import-cycle: `App.Tenant.Store` and `App.Shared.Schema` import from each other: `App.Tenant.Store` lists `App.Shared`, and `App.Shared.Schema` lists `App.Tenant.Store`.".to_owned(),
+                "app/Tenant/Store/StoreService.sharp:4:8:error - unlisted-import: `App.Tenant.Store` imports only `App.Tenant.Community` and `App.Shared`.".to_owned(),
+            ],
+        ),
+    ] {
+        let mut files = vec![
+            ("app/Tenant/Community/Member.sharp", "namespace App.Tenant.Community;\n\npublic class Member\n{\n}\n"),
+            ("app/Shared/Schema/Table.sharp", "namespace App.Shared.Schema;\n\npublic class Table\n{\n}\n"),
+            ("app/Shared/Ledger/Entry.sharp", "namespace App.Shared.Ledger;\n\npublic class Entry\n{\n}\n"),
+            (
+                "vendor/laravel/framework/src/Illuminate/Support/Facades/DB.php",
+                "<?php\n\nnamespace Illuminate\\Support\\Facades;\n\nclass DB\n{\n}\n",
+            ),
+            ("app/Tenant/Store/Receipts.sharp", RECEIPTS),
+            ("app/Tenant/Store/StoreService.sharp", service),
+        ];
+        files.extend(modules.iter().copied());
+        let directory = lawful_project(&files);
+        let root = directory.path();
 
-/// The `Module.lean` of the folder of `namespace`, holding `rules` after the lines every Lean file beside PHP# code
-/// starts with.
-fn rules(namespace: &str, rules: &str) -> String {
-    format!("import Code.{namespace}.Module\nopen Sharp\n\n{rules}\n")
-}
+        let output = compile_lines(root);
 
-/// Section 28.1's imports-only rule, which names two namespaces.
-const IMPORTS_ONLY: &str = "@[rule] def importsOnly : Rule := .importsOnly [App.Tenant.Community, App.Shared.Schema]";
-
-/// The design note's `p3` without `app/Module.lean`: `Ledger.sharp`, `Receipts.sharp` and `StoreService.sharp`, with
-/// "Shared never reaches Tenant" in `app/Shared/Module.lean` and section 28.1's imports-only rule in
-/// `app/Tenant/Store/Module.lean`, beside a class in each namespace that rule names, and then `files`, which may
-/// replace them.
-fn structured(files: &[(&str, &str)]) -> tempfile::TempDir {
-    let shared = rules("App.Shared", "@[rule] def neverReachesTenant : Rule := .neverImports App.Tenant");
-    let store = rules("App.Tenant.Store", IMPORTS_ONLY);
-    let mut all = vec![
-        ("app/Shared/Ledger.sharp", LEDGER),
-        ("app/Shared/Module.lean", shared.as_str()),
-        ("app/Shared/Schema/Entity.sharp", "namespace App.Shared.Schema;\n\npublic class Entity { }\n"),
-        ("app/Tenant/Community/Forum.sharp", "namespace App.Tenant.Community;\n\npublic class Forum { }\n"),
-        ("app/Tenant/Store/Module.lean", store.as_str()),
-        ("app/Tenant/Store/Receipts.sharp", RECEIPTS),
-        ("app/Tenant/Store/StoreService.sharp", STORE_SERVICE),
-    ];
-    all.extend_from_slice(files);
-
-    lawful_project(&all)
+        assert_eq!(output.status.code(), Some(1), "{modules:?}: {}", printed(&output));
+        assert_eq!(issue_lines(&output), expected, "{modules:?}: {}", printed(&output));
+        assert!(compiled(root, "app/Tenant/Store/Receipts.sharp").exists(), "{modules:?}");
+    }
 }
 
 /// Each issue line `mago compile` printed, in its order.
@@ -2744,915 +2699,16 @@ fn issue_lines(output: &Output) -> Vec<String> {
         .collect()
 }
 
-/// Spec section 28.1: "A failed rule is reported on the code that breaks it, such as the offending `import` line", and
-/// section 27: "A broken structure rule stops the file from running". Each row is a fact a rule judges: an import, an
-/// import on a cycle of the namespace import graph, a name reference and a declaration.
-#[test]
-fn compile_refuses_each_file_that_breaks_a_structure_rule_on_the_code_that_breaks_it() {
-    let cycles = rules("App", "@[rule] def noImportCycles : Rule := .noImportCycles");
-    let references = rules(
-        "App.Shared",
-        "@[rule] def neverCallsTenant : Rule := .each fun _ fact => match fact with\n  | .reference r => under r.name App.Tenant\n  | _ => false",
-    );
-    let declarations = rules(
-        "App.Tenant.Store",
-        "@[rule] def noServices : Rule := .each fun _ fact => match fact with\n  | .declaration d => d.name.endsWith \"Service\"\n  | _ => false",
-    );
-    let fine = rules("App.Shared", "");
-    let open = rules("App.Tenant.Store", "");
-    for (files, refused, accepted) in [
-        (
-            vec![],
-            vec![
-                "app/Shared/Ledger.sharp:3:8:error - broken-rule: This import of App.Tenant.Store.Receipts breaks the structure rule neverReachesTenant in app/Shared/Module.lean.",
-                "app/Tenant/Store/StoreService.sharp:3:8:error - broken-rule: This import of App.Shared.Ledger breaks the structure rule importsOnly in app/Tenant/Store/Module.lean.",
-            ],
-            "app/Tenant/Store/Receipts.sharp",
-        ),
-        (
-            vec![
-                ("app/Module.lean", cycles.as_str()),
-                ("app/Shared/Module.lean", fine.as_str()),
-                ("app/Tenant/Store/Module.lean", open.as_str()),
-            ],
-            vec![
-                "app/Shared/Ledger.sharp:3:8:error - broken-rule: This import of App.Tenant.Store.Receipts breaks the structure rule noImportCycles in app/Module.lean.",
-                "app/Tenant/Store/StoreService.sharp:3:8:error - broken-rule: This import of App.Shared.Ledger breaks the structure rule noImportCycles in app/Module.lean.",
-            ],
-            "app/Tenant/Store/Receipts.sharp",
-        ),
-        (
-            vec![("app/Shared/Module.lean", references.as_str()), ("app/Tenant/Store/Module.lean", open.as_str())],
-            vec![
-                "app/Shared/Ledger.sharp:7:47:error - broken-rule: This reference to App.Tenant.Store.Receipts breaks the structure rule neverCallsTenant in app/Shared/Module.lean.",
-            ],
-            "app/Tenant/Store/StoreService.sharp",
-        ),
-        (
-            vec![("app/Shared/Module.lean", fine.as_str()), ("app/Tenant/Store/Module.lean", declarations.as_str())],
-            vec![
-                "app/Tenant/Store/StoreService.sharp:5:14:error - broken-rule: This declaration of App.Tenant.Store.StoreService breaks the structure rule noServices in app/Tenant/Store/Module.lean.",
-            ],
-            "app/Shared/Ledger.sharp",
-        ),
-    ] {
-        let directory = structured(&files);
-        let root = directory.path();
-
-        let output = compile_lines(root);
-
-        assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
-        assert_eq!(issue_lines(&output), refused, "{}", printed(&output));
-        for line in &refused {
-            let name = line.split(':').next().unwrap();
-            assert!(!compiled(root, name).exists(), "{name}");
-        }
-        assert!(compiled(root, accepted).exists(), "{accepted}");
-    }
-}
-
-/// The standard library's package with its `Sharp.Json.Json`, which an import names only where the project installs it.
-const JSON_LIBRARY: [(&str, &str); 2] = [
-    (
-        "vendor/heyjordanparker/php-sharp-composer/composer.json",
-        "{\"name\": \"heyjordanparker/php-sharp-composer\", \"autoload\": {\"psr-4\": {\"Sharp\\\\\": \"library/Sharp/\"}}}\n",
-    ),
-    (
-        "vendor/heyjordanparker/php-sharp-composer/library/Sharp/Json/Json.sharp",
-        "namespace Sharp.Json;\n\npublic static class Json\n{\n    public static int one() => 1;\n}\n",
-    ),
-];
-
-/// What a rule allows compiles. `Rule.importsOnly` allows the rule's own namespace and the standard library, and a
-/// namespace holds only the names under it: `App.TenantDirectory` is not inside `App.Tenant`. Each row is an import
-/// section 28.1's rules allow, and the project compiles.
-#[test]
-fn a_structure_rule_accepts_every_import_it_allows() {
-    let fine = rules("App.Shared", "");
-    let service =
-        |import: &str| format!("namespace App.Tenant.Store;\n\nimport {import};\n\npublic class StoreService {{ }}\n");
-    let own = service("App.Tenant.Store.Receipts");
-    let library = service("Sharp.Json.Json");
-    for files in [
-        vec![("app/Shared/Module.lean", fine.as_str()), ("app/Tenant/Store/StoreService.sharp", own.as_str())],
-        [
-            vec![("app/Shared/Module.lean", fine.as_str()), ("app/Tenant/Store/StoreService.sharp", library.as_str())],
-            JSON_LIBRARY.to_vec(),
-        ]
-        .concat(),
-        vec![
-            (
-                "app/Shared/Ledger.sharp",
-                "namespace App.Shared;\n\nimport App.TenantDirectory.Listing;\n\npublic class Ledger { }\n",
-            ),
-            ("app/TenantDirectory/Listing.sharp", "namespace App.TenantDirectory;\n\npublic class Listing { }\n"),
-            ("app/Tenant/Store/StoreService.sharp", "namespace App.Tenant.Store;\n\npublic class StoreService { }\n"),
-        ],
-    ] {
-        let directory = structured(&files);
-        let root = directory.path();
-
-        let output = compile_lines(root);
-
-        assert!(output.status.success(), "{files:?}: {}", printed(&output));
-        assert!(compiled(root, "app/Tenant/Store/StoreService.sharp").exists(), "{files:?}");
-    }
-}
-
-/// `app/Shared/Ledger.sharp` breaks "Shared never reaches Tenant" on its import line.
-const LEDGER_BREAKS: &str = "app/Shared/Ledger.sharp:3:8:error - broken-rule: This import of App.Tenant.Store.Receipts breaks the structure rule neverReachesTenant in app/Shared/Module.lean.";
-
-/// The issue on each `.sharp` file of `App.Tenant.Store` when Lean rejects `app/Tenant/Store/Module.lean` at `place`
-/// with `message`.
-fn store_rejected(file: &str, place: &str, message: &str) -> String {
-    format!(
-        "app/Tenant/Store/{file}.sharp:1:11:error - broken-rule: This file is in App.Tenant.Store, whose structure rules app/Tenant/Store/Module.lean holds, and Lean rejected app/Tenant/Store/Module.lean {place}: {message}."
-    )
-}
-
-/// Spec section 28.1: a structure rule names a namespace by its full name, which Lean resolves as any name, so a
-/// misspelled namespace is Lean's unknown identifier at its line and column of the `Module.lean`, in the standard
-/// library's rules and in a rule the project writes alike, and refuses every file the rules judge. Each row is the
-/// rules of `app/Tenant/Store/Module.lean`, whose fourth line is the first rule: real namespaces of the project, of
-/// plain PHP in the project and in `vendor/`, and of the standard library judge imports, and each misspelled one is
-/// reported at its own place. A name is a namespace only through a class-like of the codebase: a `Namespace` built from
-/// a string, or declared in a `Module.lean`, is refused with Lean's whole reason.
-#[test]
-fn a_structure_rule_names_a_namespace_by_its_full_name_and_a_misspelled_one_is_an_unknown_identifier() {
-    let ledgr = "Unknown identifier `App.Shared.Ledgr`";
-    let json = "namespace App.Tenant.Store;\n\nimport Sharp.Json.Json;\n\npublic class StoreService { }\n";
-    let plain_php = "namespace App.Tenant.Store;\n\nimport App.Legacy.Rate;\nimport Illuminate.Support.Facades.DB;\nimport App.Legacy.fun.Clock;\n\npublic class StoreService { }\n";
-    let plain_php_breaks = |line: u32, imported: &str, rule: &str| {
-        format!(
-            "app/Tenant/Store/StoreService.sharp:{line}:8:error - broken-rule: This import of {imported} breaks the structure rule {rule} in app/Tenant/Store/Module.lean."
-        )
-    };
-    let anonymous = "Invalid `⟨...⟩` notation: Constructor for `Sharp.Namespace` is marked as private";
-    let instance = "invalid {...} notation, constructor for `Namespace` is marked as private";
-    let declared =
-        "`namespace_decl` belongs in the module mago compile generates: a rule names only a namespace of the codebase";
-    let quoted = "Application type mismatch: The argument \"App.Shared.Ledgr\" has type String but is expected to have type Namespace in the application Rule.neverImports \"App.Shared.Ledgr\"";
-    for (rules_of_store, service, refused) in [
-        (
-            IMPORTS_ONLY.to_owned(),
-            STORE_SERVICE,
-            vec![
-                LEDGER_BREAKS.to_owned(),
-                "app/Tenant/Store/StoreService.sharp:3:8:error - broken-rule: This import of App.Shared.Ledger breaks the structure rule importsOnly in app/Tenant/Store/Module.lean.".to_owned(),
-            ],
-        ),
-        (
-            format!(
-                "{IMPORTS_ONLY}\n@[rule] def neverLedger : Rule := .neverImports App.Shared.Ledgr\n@[rule] def ownLedger : Rule := .imports fun _ i => under i.name App.Shared.Ledgr"
-            ),
-            STORE_SERVICE,
-            vec![
-                LEDGER_BREAKS.to_owned(),
-                store_rejected("Receipts", "line 5, column 49", ledgr),
-                store_rejected("Receipts", "line 6, column 66", ledgr),
-                store_rejected("StoreService", "line 5, column 49", ledgr),
-                store_rejected("StoreService", "line 6, column 66", ledgr),
-            ],
-        ),
-        (
-            "@[rule] def importsOnly : Rule := .importsOnly [App.Tenant.Communty, App.Shared.Schema]".to_owned(),
-            STORE_SERVICE,
-            vec![
-                LEDGER_BREAKS.to_owned(),
-                store_rejected("Receipts", "line 4, column 49", "Unknown identifier `App.Tenant.Communty`"),
-                store_rejected("StoreService", "line 4, column 49", "Unknown identifier `App.Tenant.Communty`"),
-            ],
-        ),
-        (
-            "@[rule] def neverJson : Rule := .neverImports Sharp.Json".to_owned(),
-            json,
-            vec![
-                LEDGER_BREAKS.to_owned(),
-                "app/Tenant/Store/StoreService.sharp:3:8:error - broken-rule: This import of Sharp.Json.Json breaks the structure rule neverJson in app/Tenant/Store/Module.lean.".to_owned(),
-            ],
-        ),
-        (
-            "@[rule] def legacy : Rule := .neverImports App.Legacy\n@[rule] def facades : Rule := .neverImports Illuminate.Support.Facades\n@[rule] def keyword : Rule := .neverImports App.Legacy.«fun»".to_owned(),
-            plain_php,
-            vec![
-                LEDGER_BREAKS.to_owned(),
-                plain_php_breaks(5, "App.Legacy.fun.Clock", "keyword"),
-                plain_php_breaks(4, "Illuminate.Support.Facades.DB", "facades"),
-                plain_php_breaks(3, "App.Legacy.Rate", "legacy"),
-                plain_php_breaks(5, "App.Legacy.fun.Clock", "legacy"),
-            ],
-        ),
-        (
-            "@[rule] def anonymous : Rule := .neverImports ⟨\"App.Shared.Ledgr\"⟩\n@[rule] def structureInstance : Rule := .neverImports { name := \"App.Shared.Ledgr\" }\nnamespace_decl App.Shared.Ledgr".to_owned(),
-            STORE_SERVICE,
-            vec![
-                LEDGER_BREAKS.to_owned(),
-                store_rejected("Receipts", "line 4, column 47", anonymous),
-                store_rejected("Receipts", "line 5, column 55", instance),
-                store_rejected("Receipts", "line 6, column 1", declared),
-                store_rejected("StoreService", "line 4, column 47", anonymous),
-                store_rejected("StoreService", "line 5, column 55", instance),
-                store_rejected("StoreService", "line 6, column 1", declared),
-            ],
-        ),
-        (
-            "@[rule] def quoted : Rule := .neverImports \"App.Shared.Ledgr\"".to_owned(),
-            STORE_SERVICE,
-            vec![
-                LEDGER_BREAKS.to_owned(),
-                store_rejected("Receipts", "line 4, column 44", quoted),
-                store_rejected("StoreService", "line 4, column 44", quoted),
-            ],
-        ),
-    ] {
-        let store = rules("App.Tenant.Store", &rules_of_store);
-        let directory = structured(&[
-            ("app/Tenant/Store/Module.lean", store.as_str()),
-            ("app/Tenant/Store/StoreService.sharp", service),
-            ("app/Legacy/Rate.php", "<?php\n\nnamespace App\\Legacy;\n\nfinal class Rate {}\n"),
-            ("app/Legacy/fun/Clock.php", "<?php\n\nnamespace App\\Legacy\\fun;\n\nfinal class Clock {}\n"),
-            ("vendor/illuminate/support/Facades/DB.php", "<?php\n\nnamespace Illuminate\\Support\\Facades;\n\nclass DB {}\n"),
-            // A namespace Lean already names, as `List`, is declared by none, so the rest of `Code` still builds.
-            ("vendor/acme/list/Item.php", "<?php\n\nnamespace List;\n\nclass Item {}\n"),
-            JSON_LIBRARY[0],
-            JSON_LIBRARY[1],
-        ]);
-        let root = directory.path();
-
-        let output = compile_lines(root);
-
-        assert_eq!(output.status.code(), Some(1), "{rules_of_store}: {}", printed(&output));
-        assert_eq!(issue_lines(&output), refused, "{rules_of_store}: {}", printed(&output));
-    }
-}
-
-/// A structure rule runs only on what Lean's kernel checks, and names a namespace only through the constants `Code`
-/// declares: any other way to make a `Namespace` would let a misspelled name compile and never fire. So the runner
-/// does not run a rule that reaches `sorry`, an axiom beyond Lean's standard ones, an unsafe constant, a constant whose
-/// compiled code is not its definition, `Sharp.Rule.breaks` or the constructor of `Namespace`, nor one Lean cannot
-/// evaluate. It refuses each file of the rule's namespace, naming the rule, its place and what it reached, and the
-/// compile still checks every other file. Each row is the `app/Tenant/Store/Module.lean` of `structured`.
-#[test]
-fn a_structure_rule_that_reaches_more_than_lean_checks_does_not_run() {
-    let ledgr = "\"App.Shared.Ledgr\"";
-    let elaborator = "open Lean Elab Term in\nelab \"ns!\" s:str : term => do\n  let some (mk, _) := (← getEnv).constants.toList.find? fun (n, _) => (privateToUserName? n) == some `Sharp.Namespace.mk\n    | throwError \"no constructor\"\n  return mkApp (mkConst mk) (mkStrLit s.getString)\n";
-    let reserved = |name: &str| {
-        format!(
-            "it reaches {name}, which makes a namespace from a string. Name the namespace by its full name, as App.Shared.Schema"
-        )
-    };
-    for (module_lean, rule, place, reason) in [
-        (
-            rules(
-                "App.Tenant.Store",
-                &format!(
-                    "@[rule] def viaBreaks : Rule := .imports fun _ i => Rule.breaks (.imports fun ns j => under j.name ns) {ledgr} {{}} (.import {{ i with namespace_ := {ledgr} }})"
-                ),
-            ),
-            "viaBreaks",
-            "line 4, column 13",
-            reserved("Sharp.Rule.breaks"),
-        ),
-        (
-            format!(
-                "import Lean\n{}",
-                rules(
-                    "App.Tenant.Store",
-                    &format!("{elaborator}@[rule] def withElab : Rule := .neverImports (ns! {ledgr})")
-                )
-            ),
-            "withElab",
-            "line 10, column 13",
-            reserved("Sharp.Namespace.mk"),
-        ),
-        (
-            rules(
-                "App.Tenant.Store",
-                &format!("@[rule] unsafe def withUnsafeCast : Rule := .neverImports (unsafeCast {ledgr})"),
-            ),
-            "withUnsafeCast",
-            "line 4, column 20",
-            "it reaches unsafeCast, which is unsafe, so Lean's kernel does not check it".to_owned(),
-        ),
-        (
-            rules(
-                "App.Tenant.Store",
-                &format!(
-                    "axiom same : String = Namespace\n@[rule] def withAxiomCast : Rule := .neverImports (cast same {ledgr})"
-                ),
-            ),
-            "withAxiomCast",
-            "line 5, column 13",
-            "it uses the axiom same, which Lean's kernel does not check".to_owned(),
-        ),
-        (
-            rules("App.Tenant.Store", "@[rule] def withSorry : Rule := .neverImports sorry"),
-            "withSorry",
-            "line 4, column 13",
-            "it uses sorry. Write the rule out".to_owned(),
-        ),
-        (
-            rules(
-                "App.Tenant.Store",
-                "def legacy : Namespace := App.Shared.Schema\n@[implemented_by legacy] def schema : Namespace := App.Shared.Schema\n@[rule] def implemented : Rule := .neverImports schema",
-            ),
-            "implemented",
-            "line 6, column 13",
-            "it reaches schema, whose compiled code is not the definition Lean checked".to_owned(),
-        ),
-        (
-            rules(
-                "App.Tenant.Store",
-                "@[extern \"sharp_schema\"] def schema (u : Unit) : Namespace := App.Shared.Schema\n@[rule] def externed : Rule := .neverImports (schema ())",
-            ),
-            "externed",
-            "line 5, column 13",
-            "it reaches schema, whose compiled code is not the definition Lean checked".to_owned(),
-        ),
-        (
-            rules(
-                "App.Tenant.Store",
-                "@[rule] noncomputable def uncomputed : Rule := .neverImports (Classical.choice ⟨App.Shared.Schema⟩)",
-            ),
-            "uncomputed",
-            "line 4, column 27",
-            "Lean cannot evaluate it: (interpreter) unknown declaration 'uncomputed'".to_owned(),
-        ),
-    ] {
-        let directory = structured(&[("app/Tenant/Store/Module.lean", module_lean.as_str())]);
-        let refused = |file: &str| {
-            format!(
-                "app/Tenant/Store/{file}.sharp:1:11:error - broken-rule: This file is in App.Tenant.Store, whose structure rules app/Tenant/Store/Module.lean holds, and its rule {rule} at {place} does not run: {reason}."
-            )
-        };
-
-        let output = compile_lines(directory.path());
-
-        assert_eq!(
-            issue_lines(&output),
-            [LEDGER_BREAKS.to_owned(), refused("Receipts"), refused("StoreService")],
-            "{rule}: {}",
-            printed(&output)
-        );
-    }
-}
-
-/// The runner trusts every module under a root Lean or Mago owns: `Init`, `Lean`, `Std`, `Lake`, `Code` and `Sharp`.
-/// So a Lean file of the project never builds as one, and a PSR-4 folder under one of them gets no link. Its Lean files
-/// cannot be built, which refuses each file that needs one, naming the root, and every other rule still runs. Each row
-/// is a project with `App\` in `app/`: the reviewer's helper in a `Code\Evil\` root that reaches `Rule.breaks`, a
-/// `code\` root whose module differs from a generated one only in case, so on a disk that ignores case both would build
-/// to one file, a `Std\Evil\` file that a `Module.lean` imports, and a `Module.lean`, a Lean file nothing imports and a
-/// law in a `Code\Evil\` root inside `app/`.
-#[test]
-fn a_lean_file_under_a_root_lean_or_mago_owns_is_refused_and_every_other_rule_runs() {
-    let outside = "{\"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\", \"Code\\\\Evil\\\\\": \"code-evil/\", \"Std\\\\Evil\\\\\": \"std-evil/\"}}}\n";
-    let inside = "{\"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\", \"Code\\\\Evil\\\\\": \"app/Evil/\"}}}\n";
-    let owned = |owner: &str, root: &str, file: &str| {
-        format!(
-            "`{owner}` is a name Lean or the checker keeps, so Lean files under the `{root}` root, such as {file}, can't be built. Move them under one of your own namespaces"
-        )
-    };
-    let code = owned("Code", "Code\\Evil\\", "code-evil/Names.lean");
-    let std = owned("Std", "Std\\Evil\\", "std-evil/Names.lean");
-    let lower = "{\"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\", \"code\\\\\": \"code/\"}}}\n";
-    let lower_code = "`code` names the same folder as `Code` on a disk that ignores case, and `Code` is a name Lean or the checker keeps, so Lean files under the `code\\` root, such as code/App/Tenant/Store/Module.lean, can't be built. Move them under one of your own namespaces";
-    let lower_names = "import Code\nopen Sharp\n\ndef legacy : Namespace := App.Shared\n";
-    let via_lower = "import Code.App.Tenant.Store.Module\nimport code.App.Tenant.Store.Module\nopen Sharp\n\n@[rule] def lower : Rule := .neverImports legacy\n";
-    let names = "import Sharp.Lean.Facts\nopen Sharp\n\ndef Code.Evil.Names.neverImports (forbidden : String) : Rule :=\n  .imports fun _ i => Rule.breaks (.imports fun ns j => under j.name ns) forbidden {} (.import { i with namespace_ := forbidden })\n";
-    let via_code = "import Code.App.Tenant.Store.Module\nimport Code.Evil.Names\nopen Sharp\n\n@[rule] def viaCodeModule : Rule := Code.Evil.Names.neverImports \"App.Shared.Ledgr\"\n@[rule] def viaCodeModuleLegacy : Rule := Code.Evil.Names.neverImports \"App.Shared\"\n";
-    let via_std = format!("import Code.App.Tenant.Store.Module\nimport Std.Evil.Names\nopen Sharp\n\n{IMPORTS_ONLY}\n");
-    let answer = "def Std.Evil.Names.answer : Nat := 42\n";
-    let evil_rules =
-        "import Code.Code.Evil.Module\nopen Sharp\n\n@[rule] def importsNothing : Rule := .importsOnly []\n";
-    let money = LAWFUL_MONEY.replace("namespace App.Shared;", "namespace Code.Evil;");
-    let store_imports = "app/Tenant/Store/StoreService.sharp:3:8:error - broken-rule: This import of App.Shared.Ledger breaks the structure rule importsOnly in app/Tenant/Store/Module.lean.";
-    for (files, refused) in [
-        (
-            vec![
-                ("composer.json", outside),
-                ("code-evil/Names.lean", names),
-                ("app/Tenant/Store/Module.lean", via_code),
-            ],
-            vec![
-                LEDGER_BREAKS.to_owned(),
-                store_rejected("Receipts", "line 2, column 1", &code),
-                store_rejected("StoreService", "line 2, column 1", &code),
-            ],
-        ),
-        (
-            vec![
-                ("composer.json", lower),
-                ("code/App/Tenant/Store/Module.lean", lower_names),
-                ("app/Tenant/Store/Module.lean", via_lower),
-            ],
-            vec![
-                LEDGER_BREAKS.to_owned(),
-                store_rejected("Receipts", "line 2, column 1", lower_code),
-                store_rejected("StoreService", "line 2, column 1", lower_code),
-            ],
-        ),
-        (
-            vec![
-                ("composer.json", outside),
-                ("std-evil/Names.lean", answer),
-                ("app/Tenant/Store/Module.lean", via_std.as_str()),
-            ],
-            vec![
-                LEDGER_BREAKS.to_owned(),
-                store_rejected("Receipts", "line 2, column 1", &std),
-                store_rejected("StoreService", "line 2, column 1", &std),
-            ],
-        ),
-        (
-            vec![
-                ("composer.json", inside),
-                ("app/Evil/Thing.sharp", "namespace Code.Evil;\n\npublic class Thing { }\n"),
-                ("app/Evil/Module.lean", evil_rules),
-                ("app/Evil/Helper.lean", "def Code.Evil.Helper.answer : Nat := 42\n"),
-            ],
-            vec![
-                format!(
-                    "app/Evil/Thing.sharp:1:11:error - broken-rule: {}.",
-                    owned("Code", "Code\\Evil\\", "app/Evil/Helper.lean")
-                ),
-                format!(
-                    "app/Evil/Thing.sharp:1:11:error - broken-rule: {}.",
-                    owned("Code", "Code\\Evil\\", "app/Evil/Module.lean")
-                ),
-                LEDGER_BREAKS.to_owned(),
-                store_imports.to_owned(),
-            ],
-        ),
-        (
-            vec![("composer.json", inside), ("app/Evil/Money.sharp", money.as_str())],
-            vec![
-                format!(
-                    "app/Evil/Money.sharp:8:5:error - unproven-law: Law addKeepsCurrency is not proven: {}.",
-                    owned("Code", "Code\\Evil\\", "app/Evil/Money.lean")
-                ),
-                LEDGER_BREAKS.to_owned(),
-                store_imports.to_owned(),
-            ],
-        ),
-    ] {
-        let directory = structured(&files);
-
-        let output = compile_lines(directory.path());
-
-        assert_eq!(output.status.code(), Some(1), "{files:?}: {}", printed(&output));
-        assert_eq!(issue_lines(&output), refused, "{files:?}: {}", printed(&output));
-    }
-}
-
-/// The namespaces a rule may name are those of the project's `.sharp` files when `mago compile` runs, so a rule that
-/// names a namespace an edit deletes is Lean's unknown identifier on the next compile, though no `.sharpc` file the rule
-/// judges lists the deleted file as an input. Each row is an edit to a project that compiled.
-#[test]
-fn a_rule_that_names_a_namespace_an_edit_deletes_is_an_unknown_identifier_on_the_next_compile() {
-    let fine = rules("App.Shared", "");
-    let plain = "namespace App.Tenant.Store;\n\npublic class StoreService { }\n";
-    let renamed = "namespace App.Shared.Schemas;\n\npublic class Entity { }\n";
-    let schema = "Unknown identifier `App.Shared.Schema`";
-    for (edits, cold) in [
-        (vec![("app/Shared/Schema/Entity.sharp", None)], false),
-        (vec![("app/Shared/Schema/Entity.sharp", None), ("app/Shared/Schemas/Entity.sharp", Some(renamed))], false),
-        (vec![("app/Shared/Schema/Entity.sharp", None)], true),
-    ] {
-        let directory =
-            structured(&[("app/Shared/Module.lean", fine.as_str()), ("app/Tenant/Store/StoreService.sharp", plain)]);
-        let root = directory.path();
-        compile_succeeds(root);
-        for (name, contents) in &edits {
-            match contents {
-                Some(contents) => write(root, name, contents),
-                None => std::fs::remove_file(root.join(name)).unwrap(),
-            }
-        }
-        if cold {
-            std::fs::remove_dir_all(root.join(".sharp")).unwrap();
-        }
-
-        let output = compile_lines(root);
-
-        assert_eq!(
-            issue_lines(&output),
-            [
-                store_rejected("Receipts", "line 4, column 71", schema),
-                store_rejected("StoreService", "line 4, column 71", schema),
-            ],
-            "{edits:?}, cold {cold}: {}",
-            printed(&output)
-        );
-    }
-}
-
-/// Spec section 28.1: "A rule lives with the namespace it constrains. A rule about the whole application goes in
-/// `app/Module.lean`." A rule judges only the files under the namespace of its `Module.lean`, which composer.json's
-/// PSR-4 map names, as it names a proof file's module: `src/Cart/Module.lean` is `Shop.Cart.Module`.
-#[test]
-fn a_structure_rule_judges_only_the_files_under_the_namespace_of_its_module_lean() {
-    let shared_only = rules("App.Shared", "@[rule] def importsNothing : Rule := .importsOnly []");
-    let whole = rules("App", "@[rule] def neverImportsShared : Rule := .neverImports App.Shared");
-    let open = rules("App.Tenant.Store", "");
-    let fine = rules("App.Shared", "");
-    let cart = rules("Shop.Cart", "@[rule] def importsNothing : Rule := .importsOnly []");
-    for (files, refused, accepted) in [
-        (
-            vec![("app/Shared/Module.lean", shared_only.as_str()), ("app/Tenant/Store/Module.lean", open.as_str())],
-            "app/Shared/Ledger.sharp:3:8:error - broken-rule: This import of App.Tenant.Store.Receipts breaks the structure rule importsNothing in app/Shared/Module.lean.",
-            "app/Tenant/Store/StoreService.sharp",
-        ),
-        (
-            vec![
-                ("app/Module.lean", whole.as_str()),
-                ("app/Shared/Module.lean", fine.as_str()),
-                ("app/Tenant/Store/Module.lean", open.as_str()),
-            ],
-            "app/Tenant/Store/StoreService.sharp:3:8:error - broken-rule: This import of App.Shared.Ledger breaks the structure rule neverImportsShared in app/Module.lean.",
-            "app/Shared/Ledger.sharp",
-        ),
-        (
-            vec![
-                ("composer.json", "{\"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\", \"Shop\\\\\": \"src/\"}}}\n"),
-                ("app/Shared/Module.lean", fine.as_str()),
-                ("app/Tenant/Store/Module.lean", open.as_str()),
-                ("src/Cart/Module.lean", cart.as_str()),
-                (
-                    "src/Cart/Basket.sharp",
-                    "namespace Shop.Cart;\n\nimport App.Shared.Ledger;\n\npublic class Basket { }\n",
-                ),
-            ],
-            "src/Cart/Basket.sharp:3:8:error - broken-rule: This import of App.Shared.Ledger breaks the structure rule importsNothing in src/Cart/Module.lean.",
-            "app/Tenant/Store/StoreService.sharp",
-        ),
-    ] {
-        let directory = structured(&files);
-        let root = directory.path();
-        write(
-            root,
-            "mago.toml",
-            "php-version = \"8.4\"\n\n[source]\npaths = [\"app\", \"src\"]\nincludes = [\"vendor\"]\n",
-        );
-
-        let output = compile_lines(root);
-
-        assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
-        assert_eq!(issue_lines(&output), [refused], "{}", printed(&output));
-        assert!(compiled(root, accepted).exists(), "{accepted}");
-    }
-}
-
-/// A `Module.lean` needs a Lean module name, which the PSR-4 map of composer.json gives it as it gives a proof file one.
-/// One in no PSR-4 folder with a namespace refuses each file under its folder, since none of its rules can run.
-#[test]
-fn a_module_lean_outside_every_psr_4_folder_refuses_each_file_under_its_folder() {
-    let shop = rules("Shop", "@[rule] def neverReachesTenant : Rule := .neverImports App.Tenant");
-    let cart = "namespace Shop;\n\nimport App.Tenant.Store.Receipts;\n\npublic class Cart\n{\n    public static int refundable(int paid) => Receipts.refundable(paid, 0);\n}\n";
-    for composer in [
-        "{\"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\"}}}\n",
-        "{\"autoload\": {\"psr-4\": {\"App\\\\\": \"app/\", \"\": \"lib/\"}}}\n",
-    ] {
-        let directory = lawful_project(&[
-            ("composer.json", composer),
-            ("app/Tenant/Store/Receipts.sharp", RECEIPTS),
-            ("lib/Shop/Module.lean", shop.as_str()),
-            ("lib/Shop/Cart.sharp", cart),
-        ]);
-        let root = directory.path();
-        write(
-            root,
-            "mago.toml",
-            "php-version = \"8.4\"\n\n[source]\npaths = [\"app\", \"lib\"]\nincludes = [\"vendor\"]\n",
-        );
-
-        let output = compile_lines(root);
-
-        assert_eq!(
-            issue_lines(&output),
-            [
-                "lib/Shop/Cart.sharp:1:11:error - broken-rule: lib/Shop/Module.lean is in no PSR-4 folder of composer.json, so its structure rules have no Lean module name and cannot run.",
-            ],
-            "{composer}: {}",
-            printed(&output)
-        );
-        assert!(compiled(root, "app/Tenant/Store/Receipts.sharp").exists(), "{composer}");
-    }
-}
-
-/// The design note's ruling: a `Module.lean` that Lean rejects refuses every `.sharp` file of its namespace, with one
-/// issue for each of Lean's errors that names the `Module.lean`, the error's line and column, and Lean's whole message,
-/// its lines joined by spaces. A `Module.lean` that
-/// imports a rejected one names it and its errors instead, and a `Module.sharp` beside a rejected `Module.lean` gets
-/// Lean's error as the proof file of its laws.
-#[test]
-fn a_module_lean_that_lean_rejects_refuses_every_file_of_its_namespace() {
-    let mistyped = rules("App.Shared", "@[rule] def broken : Nat := 1");
-    let rejected = rules("App.Tenant", "def allowed : List String := 1");
-    let importing = "import Code.App.Shared.Module\nimport App.Tenant.Module\nopen Sharp\n\n@[rule] def neverReachesTenant : Rule := .neverImports App.Tenant\n";
-    let open = rules("App.Tenant.Store", "");
-    for (files, refused) in [
-        (
-            vec![("app/Module.lean", "this is not Lean at all\n")],
-            vec![
-                "app/Shared/Ledger.sharp:1:11:error - broken-rule: This file is in App, whose structure rules app/Module.lean holds, and Lean rejected app/Module.lean line 1, column 1: unexpected identifier; expected command.",
-                "app/Shared/Ledger.sharp:3:8:error - broken-rule: This import of App.Tenant.Store.Receipts breaks the structure rule neverReachesTenant in app/Shared/Module.lean.",
-                "app/Shared/Schema/Entity.sharp:1:11:error - broken-rule: This file is in App, whose structure rules app/Module.lean holds, and Lean rejected app/Module.lean line 1, column 1: unexpected identifier; expected command.",
-                "app/Tenant/Community/Forum.sharp:1:11:error - broken-rule: This file is in App, whose structure rules app/Module.lean holds, and Lean rejected app/Module.lean line 1, column 1: unexpected identifier; expected command.",
-                "app/Tenant/Store/Receipts.sharp:1:11:error - broken-rule: This file is in App, whose structure rules app/Module.lean holds, and Lean rejected app/Module.lean line 1, column 1: unexpected identifier; expected command.",
-                "app/Tenant/Store/StoreService.sharp:1:11:error - broken-rule: This file is in App, whose structure rules app/Module.lean holds, and Lean rejected app/Module.lean line 1, column 1: unexpected identifier; expected command.",
-                "app/Tenant/Store/StoreService.sharp:3:8:error - broken-rule: This import of App.Shared.Ledger breaks the structure rule importsOnly in app/Tenant/Store/Module.lean.",
-            ],
-        ),
-        (
-            vec![("app/Shared/Module.lean", mistyped.as_str()), ("app/Tenant/Store/Module.lean", open.as_str())],
-            vec![
-                "app/Shared/Ledger.sharp:1:11:error - broken-rule: This file is in App.Shared, whose structure rules app/Shared/Module.lean holds, and Lean rejected app/Shared/Module.lean line 4, column 3: `@[rule]` needs a definition of type `Sharp.Rule`.",
-                "app/Shared/Schema/Entity.sharp:1:11:error - broken-rule: This file is in App.Shared, whose structure rules app/Shared/Module.lean holds, and Lean rejected app/Shared/Module.lean line 4, column 3: `@[rule]` needs a definition of type `Sharp.Rule`.",
-            ],
-        ),
-        (
-            vec![
-                ("app/Tenant/Module.lean", rejected.as_str()),
-                ("app/Shared/Module.lean", importing),
-                ("app/Tenant/Store/Module.lean", open.as_str()),
-            ],
-            vec![
-                "app/Shared/Ledger.sharp:1:11:error - broken-rule: This file is in App.Shared, whose structure rules app/Shared/Module.lean holds, and app/Shared/Module.lean imports app/Tenant/Module.lean, which Lean rejected at line 4, column 30: failed to synthesize instance of type class OfNat (List String) 1 numerals are polymorphic in Lean, but the numeral `1` cannot be used in a context where the expected type is List String due to the absence of the instance above Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.",
-                "app/Shared/Schema/Entity.sharp:1:11:error - broken-rule: This file is in App.Shared, whose structure rules app/Shared/Module.lean holds, and app/Shared/Module.lean imports app/Tenant/Module.lean, which Lean rejected at line 4, column 30: failed to synthesize instance of type class OfNat (List String) 1 numerals are polymorphic in Lean, but the numeral `1` cannot be used in a context where the expected type is List String due to the absence of the instance above Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.",
-                "app/Tenant/Community/Forum.sharp:1:11:error - broken-rule: This file is in App.Tenant, whose structure rules app/Tenant/Module.lean holds, and Lean rejected app/Tenant/Module.lean line 4, column 30: failed to synthesize instance of type class OfNat (List String) 1 numerals are polymorphic in Lean, but the numeral `1` cannot be used in a context where the expected type is List String due to the absence of the instance above Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.",
-                "app/Tenant/Store/Receipts.sharp:1:11:error - broken-rule: This file is in App.Tenant, whose structure rules app/Tenant/Module.lean holds, and Lean rejected app/Tenant/Module.lean line 4, column 30: failed to synthesize instance of type class OfNat (List String) 1 numerals are polymorphic in Lean, but the numeral `1` cannot be used in a context where the expected type is List String due to the absence of the instance above Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.",
-                "app/Tenant/Store/StoreService.sharp:1:11:error - broken-rule: This file is in App.Tenant, whose structure rules app/Tenant/Module.lean holds, and Lean rejected app/Tenant/Module.lean line 4, column 30: failed to synthesize instance of type class OfNat (List String) 1 numerals are polymorphic in Lean, but the numeral `1` cannot be used in a context where the expected type is List String due to the absence of the instance above Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.",
-            ],
-        ),
-    ] {
-        let directory = structured(&files);
-        let root = directory.path();
-
-        let output = compile_lines(root);
-
-        assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
-        assert_eq!(issue_lines(&output), refused, "{}", printed(&output));
-    }
-
-    let directory = store("refunded < paid ? refunded : paid", "refunded < paid ? refunded : paid");
-    let root = directory.path();
-    compile_succeeds(root);
-    let proof = read(root, "app/Tenant/Store/Module.lean");
-    write(root, "app/Tenant/Store/Module.lean", &format!("{proof}\n@[rule] def broken : Nat := 1\n"));
-
-    let output = compile_lines(root);
-
-    assert_eq!(
-        issue_lines(&output),
-        [
-            "app/Tenant/Store/Module.sharp:3:1:error - unproven-law: Lean rejected app/Tenant/Store/Module.lean line 7: `@[rule]` needs a definition of type `Sharp.Rule`",
-            "app/Tenant/Store/Receipts.sharp:1:11:error - broken-rule: This file is in App.Tenant.Store, whose structure rules app/Tenant/Store/Module.lean holds, and Lean rejected app/Tenant/Store/Module.lean line 7, column 3: `@[rule]` needs a definition of type `Sharp.Rule`.",
-            "app/Tenant/Store/Refunds.sharp:1:11:error - broken-rule: This file is in App.Tenant.Store, whose structure rules app/Tenant/Store/Module.lean holds, and Lean rejected app/Tenant/Store/Module.lean line 7, column 3: `@[rule]` needs a definition of type `Sharp.Rule`.",
-        ],
-        "{}",
-        printed(&output)
-    );
-}
-
-/// The design note's decision 3: a rule constrains the namespace of the `Module.lean` that holds it, so a `@[rule]` in
-/// any other Lean file is a Lean error at the attribute. In a proof file it refuses the file of the proved laws. In a
-/// Lean file that nothing imports it refuses each file of its folder's namespace, and in one a `Module.lean` imports
-/// each file that `Module.lean`'s rules judge, naming the file and its error.
-#[test]
-fn a_structure_rule_outside_a_module_lean_is_refused_at_its_attribute() {
-    let rule = "@[rule] def neverReachesTenant : Rule := .neverImports App.Tenant";
-    let proof = format!("{MONEY_PROOF}\n{rule}\n");
-    let stray = format!("import Code.App.Shared.Rules\nopen Sharp\n\n{rule}\n");
-    let attribute = "`@[rule]` belongs in a Module.lean: a structure rule constrains the namespace of the Module.lean that holds it";
-    for (files, refused) in [
-        (
-            vec![("app/Shared/Money.sharp", LAWFUL_MONEY), ("app/Shared/Money.lean", proof.as_str())],
-            format!(
-                "app/Shared/Money.sharp:3:14:error - unproven-law: Lean rejected app/Shared/Money.lean line 7: {attribute}"
-            ),
-        ),
-        (
-            vec![("app/Shared/Rules.lean", stray.as_str())],
-            format!(
-                "app/Shared/Ledger.sharp:1:11:error - broken-rule: This file is in App.Shared, and Lean rejected app/Shared/Rules.lean line 4, column 3: {attribute}."
-            ),
-        ),
-        (
-            vec![
-                ("app/Shared/Rules.lean", stray.as_str()),
-                ("app/Shared/Module.lean", "import Code.App.Shared.Module\nimport App.Shared.Rules\nopen Sharp\n"),
-            ],
-            format!(
-                "app/Shared/Ledger.sharp:1:11:error - broken-rule: This file is in App.Shared, whose structure rules app/Shared/Module.lean holds, and app/Shared/Module.lean imports app/Shared/Rules.lean, which Lean rejected at line 4, column 3: {attribute}."
-            ),
-        ),
-    ] {
-        let mut all = vec![("app/Shared/Ledger.sharp", LEDGER), ("app/Tenant/Store/Receipts.sharp", RECEIPTS)];
-        all.extend_from_slice(&files);
-        let directory = lawful_project(&all);
-
-        let output = compile_lines(directory.path());
-
-        assert_eq!(issue_lines(&output), [refused], "{files:?}: {}", printed(&output));
-    }
-}
-
-/// Spec section 27: "At deploy, `mago compile` checks every rule exactly." Each `.sharpc` lists the `Module.lean` of
-/// its folder and of each folder above it and every workspace Lean file they import, so any edit that changes a rule
-/// makes the files it judges stale, and the compile checks every rule again over the facts of every file. A Lean file
-/// that no Lean file imports is listed by no `.sharpc`, and the compile checks again when one joins or changes, so a
-/// `@[rule]` written there is refused at once. Each row is an edit to a project that compiled, and the next compile
-/// refuses exactly the files a compile from nothing refuses.
-#[test]
-fn compile_checks_every_rule_exactly_after_any_edit() {
-    let fine = rules("App.Shared", "");
-    let open = rules("App.Tenant.Store", "");
-    let reaching = |namespace: &str| {
-        rules("App.Shared", &format!("@[rule] def neverReachesTenant : Rule := .neverImports {namespace}"))
-    };
-    let (community, tenant) = (reaching("App.Tenant.Community"), reaching("App.Tenant"));
-    let importing = |module: &str| {
-        format!(
-            "import Code.App.Shared.Module\nimport {module}\nopen Sharp\n\n@[rule] def neverReachesForbidden : Rule := .neverImports forbidden\n"
-        )
-    };
-    let (names, lib) = (importing("App.Lib.Names"), importing("App.Lib.Module"));
-    let forbidden = |namespace: &str| format!("def forbidden : Namespace := {namespace}");
-    let (lib_community, lib_tenant) =
-        (rules("App.Lib", &forbidden("App.Tenant.Community")), rules("App.Lib", &forbidden("App.Tenant")));
-    let names_file = |namespace: &str| format!("import Code.App.Lib.Names\nopen Sharp\n\n{}\n", forbidden(namespace));
-    let (names_community, names_tenant) = (names_file("App.Tenant.Community"), names_file("App.Tenant"));
-    let whole = rules("App", "@[rule] def neverImportsShared : Rule := .neverImports App.Shared");
-    let cycles = rules("App", "@[rule] def noImportCycles : Rule := .noImportCycles");
-    let store = rules("App.Tenant", "@[rule] def neverReachesStore : Rule := .neverImports App.Tenant.Store");
-    let moved = LEDGER.replace("namespace App.Shared;", "namespace App.Tenant;");
-    let plain = "namespace App.Tenant.Store;\n\npublic class StoreService { }\n";
-    let class = |namespace: &str, name: &str, import: &str| {
-        format!("namespace {namespace};\n\n{import}public class {name} {{ }}\n")
-    };
-    let (x, y, z) = (
-        class("App.A", "X", "import App.B.Y;\n\n"),
-        class("App.B", "Y", "import App.C.Z;\n\n"),
-        class("App.C", "Z", ""),
-    );
-    let closing = class("App.C", "Z", "import App.A.X;\n\n");
-    let forbidding = "app/Shared/Ledger.sharp:3:8:error - broken-rule: This import of App.Tenant.Store.Receipts breaks the structure rule neverReachesForbidden in app/Shared/Module.lean.";
-    let unreached = |declaration: &str| format!("import Code.App.Shared.Rules\nopen Sharp\n\n{declaration}\n");
-    let (helper, straying) = (
-        unreached("def helper : Nat := 1"),
-        unreached("@[rule] def neverReachesTenant : Rule := .neverImports App.Tenant"),
-    );
-    let refused_at_attribute = |file: &str| {
-        format!(
-            "{file}:1:11:error - broken-rule: This file is in App.Shared, and Lean rejected app/Shared/Rules.lean line 4, column 3: `@[rule]` belongs in a Module.lean: a structure rule constrains the namespace of the Module.lean that holds it."
-        )
-    };
-    let attributes =
-        [refused_at_attribute("app/Shared/Ledger.sharp"), refused_at_attribute("app/Shared/Schema/Entity.sharp")];
-    let attributes: Vec<&str> = attributes.iter().map(String::as_str).collect();
-    for (files, edits, refused) in [
-        (
-            vec![("app/Shared/Module.lean", fine.as_str())],
-            vec![("app/Module.lean", Some(whole.as_str()))],
-            vec![
-                "app/Tenant/Store/StoreService.sharp:3:8:error - broken-rule: This import of App.Shared.Ledger breaks the structure rule neverImportsShared in app/Module.lean.",
-            ],
-        ),
-        (
-            vec![("app/Shared/Module.lean", community.as_str())],
-            vec![("app/Shared/Module.lean", Some(tenant.as_str()))],
-            vec![
-                "app/Shared/Ledger.sharp:3:8:error - broken-rule: This import of App.Tenant.Store.Receipts breaks the structure rule neverReachesTenant in app/Shared/Module.lean.",
-            ],
-        ),
-        (
-            vec![("app/Shared/Module.lean", names.as_str()), ("app/Lib/Names.lean", names_community.as_str())],
-            vec![("app/Lib/Names.lean", Some(names_tenant.as_str()))],
-            vec![forbidding],
-        ),
-        (
-            vec![("app/Shared/Module.lean", lib.as_str()), ("app/Lib/Module.lean", lib_community.as_str())],
-            vec![("app/Lib/Module.lean", Some(lib_tenant.as_str()))],
-            vec![forbidding],
-        ),
-        (
-            vec![("app/Shared/Module.lean", lib.as_str()), ("app/Lib/Module.lean", lib_community.as_str())],
-            vec![("app/Lib/Module.lean", None)],
-            vec![
-                "app/Shared/Ledger.sharp:1:11:error - broken-rule: This file is in App.Shared, whose structure rules app/Shared/Module.lean holds, and Lean rejected app/Shared/Module.lean line 2, column 1: bad import App.Lib.Module: app/Lib/Module.lean does not exist.",
-                "app/Shared/Schema/Entity.sharp:1:11:error - broken-rule: This file is in App.Shared, whose structure rules app/Shared/Module.lean holds, and Lean rejected app/Shared/Module.lean line 2, column 1: bad import App.Lib.Module: app/Lib/Module.lean does not exist.",
-            ],
-        ),
-        (
-            vec![
-                ("app/Shared/Module.lean", fine.as_str()),
-                ("app/Tenant/Store/StoreService.sharp", plain),
-                ("app/Module.lean", cycles.as_str()),
-                ("app/A/X.sharp", x.as_str()),
-                ("app/B/Y.sharp", y.as_str()),
-                ("app/C/Z.sharp", z.as_str()),
-            ],
-            vec![("app/C/Z.sharp", Some(closing.as_str()))],
-            vec![
-                "app/A/X.sharp:3:8:error - broken-rule: This import of App.B.Y breaks the structure rule noImportCycles in app/Module.lean.",
-                "app/B/Y.sharp:3:8:error - broken-rule: This import of App.C.Z breaks the structure rule noImportCycles in app/Module.lean.",
-                "app/C/Z.sharp:3:8:error - broken-rule: This import of App.A.X breaks the structure rule noImportCycles in app/Module.lean.",
-            ],
-        ),
-        (
-            vec![
-                ("app/Shared/Module.lean", fine.as_str()),
-                ("app/Tenant/Store/StoreService.sharp", plain),
-                ("app/Tenant/Module.lean", store.as_str()),
-            ],
-            vec![("app/Shared/Ledger.sharp", None), ("app/Tenant/Ledger.sharp", Some(moved.as_str()))],
-            vec![
-                "app/Tenant/Ledger.sharp:3:8:error - broken-rule: This import of App.Tenant.Store.Receipts breaks the structure rule neverReachesStore in app/Tenant/Module.lean.",
-            ],
-        ),
-        (
-            vec![("app/Shared/Module.lean", fine.as_str())],
-            vec![("app/Shared/Rules.lean", Some(straying.as_str()))],
-            attributes.clone(),
-        ),
-        (
-            vec![("app/Shared/Module.lean", fine.as_str()), ("app/Shared/Rules.lean", helper.as_str())],
-            vec![("app/Shared/Rules.lean", Some(straying.as_str()))],
-            attributes,
-        ),
-    ] {
-        let mut all = vec![("app/Tenant/Store/Module.lean", open.as_str())];
-        all.extend_from_slice(&files);
-        let directory = structured(&all);
-        let root = directory.path();
-        compile_succeeds(root);
-        for (name, contents) in &edits {
-            match contents {
-                Some(contents) => write(root, name, contents),
-                None => std::fs::remove_file(root.join(name)).unwrap(),
-            }
-        }
-
-        let output = compile_lines(root);
-
-        assert_eq!(issue_lines(&output), refused, "{edits:?}: {}", printed(&output));
-        for line in &refused {
-            let name = line.split(':').next().unwrap();
-            assert!(!compiled(root, name).exists(), "{edits:?}: {name}");
-        }
-    }
-}
-
-/// A compile that finds every `.sharpc` current starts no Lean process, as for laws, so a project with structure rules
-/// compiles again with no `lake` on the `PATH`.
-#[test]
-fn a_second_compile_of_a_project_with_structure_rules_starts_no_lean_process() {
-    let fine = rules("App.Shared", "");
-    let open = rules("App.Tenant.Store", "");
-    let directory =
-        structured(&[("app/Shared/Module.lean", fine.as_str()), ("app/Tenant/Store/Module.lean", open.as_str())]);
-    let root = directory.path();
-    compile_succeeds(root);
-
-    let output = compile_without_lean(root);
-
-    assert!(output.status.success(), "the compile needed lake: {}", printed(&output));
-    assert!(compiled(root, "app/Shared/Ledger.sharp").exists());
-}
-
-/// The runner reads a request of thousands of facts whole, more than one read of its pipe holds, so a rule judges the
-/// last fact of a file too.
-#[test]
-fn compile_checks_a_structure_rule_over_thousands_of_imports() {
-    let imports: String = (0..4072).map(|index| format!("import Vendor.Package.Class{index};\n")).collect();
-    let classes: String = (0..4072).map(|index| format!("class Class{index} {{}}\n")).collect();
-    let package = format!("<?php\n\nnamespace Vendor\\Package;\n\n{classes}");
-    let ledger =
-        LEDGER.replace("import App.Tenant.Store.Receipts;\n", &format!("{imports}import App.Tenant.Store.Receipts;\n"));
-    let directory =
-        structured(&[("app/Shared/Ledger.sharp", ledger.as_str()), ("vendor/vendor/package/Classes.php", &package)]);
-    let root = directory.path();
-
-    let output = compile_lines(root);
-
-    assert!(
-        issue_lines(&output).contains(&"app/Shared/Ledger.sharp:4075:8:error - broken-rule: This import of App.Tenant.Store.Receipts breaks the structure rule neverReachesTenant in app/Shared/Module.lean.".to_owned()),
-        "{}",
-        printed(&output)
-    );
-}
-
-/// `mago compile` with each issue on one line, as `compile_lines` runs it, under a processor-time limit of `seconds`,
-/// which each Lean process it starts inherits, so a row reaches the limit long before 120 seconds and the deadline long
-/// before 480 seconds, and the processor seconds it and every process it waited for used. The limit is soft, or also
-/// hard when `hard` is set, as `ulimit -t` sets it. Mago's own limit on each Lean process is `library.rs`'s
+/// `mago compile` with each issue on one line, as `compile_lines` runs it, with `path` as its `PATH`, under a
+/// processor-time limit of `seconds`, which each Lean process it starts inherits, so a row reaches the limit long before
+/// 120 seconds and the deadline long before 480 seconds, and the processor seconds it and every process it waited for
+/// used. The limit is soft, as `ulimit -S -t` sets it. Mago's own limit on each Lean process is `library.rs`'s
 /// `each_process_a_lake_starts_runs_under_the_processor_time_limit`'s to prove: Mago takes the lower of 120 seconds and
 /// this limit, so no compile can tell the two apart.
 #[cfg(unix)]
 // `wait4` reaps the compile, which clippy can't see.
 #[allow(clippy::zombie_processes)]
-fn compile_lines_within(root: &Path, seconds: u64, hard: bool) -> (Output, f64) {
+fn compile_lines_within(root: &Path, seconds: u64, path: &std::ffi::OsStr) -> (Output, f64) {
     use std::io::Read;
     use std::os::unix::process::CommandExt;
     use std::os::unix::process::ExitStatusExt;
@@ -3660,7 +2716,7 @@ fn compile_lines_within(root: &Path, seconds: u64, hard: bool) -> (Output, f64) 
     use std::process::Stdio;
 
     let mut command = command(root, "never");
-    command.env("MAGO_REPORTING_FORMAT", "emacs").stdout(Stdio::piped()).stderr(Stdio::piped());
+    command.env("MAGO_REPORTING_FORMAT", "emacs").env("PATH", path).stdout(Stdio::piped()).stderr(Stdio::piped());
     // SAFETY: `getrlimit` and `setrlimit` are async-signal-safe, and the closure allocates nothing.
     unsafe {
         command.pre_exec(move || {
@@ -3669,9 +2725,6 @@ fn compile_lines_within(root: &Path, seconds: u64, hard: bool) -> (Output, f64) 
                 return Err(std::io::Error::last_os_error());
             }
             limit.rlim_cur = seconds;
-            if hard {
-                limit.rlim_max = seconds;
-            }
             if libc::setrlimit(libc::RLIMIT_CPU, &raw const limit) != 0 {
                 return Err(std::io::Error::last_os_error());
             }
@@ -3703,174 +2756,64 @@ fn compile_lines_within(root: &Path, seconds: u64, hard: bool) -> (Output, f64) 
     )
 }
 
-/// A loop over a trillion numbers, which no rule or proof ends in time.
-const ENDLESS: &str = "Id.run do\n  let mut n := 0\n  for i in [0:1000000000000] do\n    n := n + i\n  return n == 0";
+/// Puts a `lake` first on the `PATH` that runs the real one, except in a project's `.sharp/.lean` package: there a build
+/// fails at once, and `lake env lean`, which elaborates a module that did not build, leaves `stalled` in `folder` and
+/// runs the shell commands `work`, which stand in for Lean work that never ends. Its own path, `bin/lake` in `folder`,
+/// names each process it runs `work` in.
+#[cfg(unix)]
+fn stalling_lake(folder: &Path, work: &str) -> std::ffi::OsString {
+    use std::os::unix::fs::PermissionsExt;
 
-/// A loop of `steps` steps. Ten million take about 1.1 processor seconds on an Apple M-series core and about 3 on Linux
-/// aarch64, so one such rule ends well within the 10 seconds the test below sets, and thirty of them pass a runner's
-/// own limit of 20 seconds.
-fn looping(steps: u64) -> String {
-    ENDLESS.replace("1000000000000", &steps.to_string())
+    let path = std::env::var_os("PATH").unwrap();
+    let real =
+        std::env::split_paths(&path).map(|directory| directory.join("lake")).find(|lake| lake.is_file()).unwrap();
+    let script = format!(
+        "#!/bin/sh\ncase \"$PWD\" in\n  */.sharp/.lean)\n    case \"$1 $2\" in\n      \"build \"*) exit 1 ;;\n      \"env lean\")\n        touch '{stalled}'\n        {work}\n        ;;\n    esac\n    ;;\nesac\nexec '{real}' \"$@\"\n",
+        stalled = folder.join("stalled").display(),
+        real = real.display(),
+    );
+    let lake = folder.join("bin/lake");
+    write(folder, "bin/lake", &script);
+    std::fs::set_permissions(&lake, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    std::env::join_paths(std::iter::once(folder.join("bin")).chain(std::env::split_paths(&path))).unwrap()
 }
 
 /// Lean work that runs past the processor-time limit, or waits until the deadline, stops there once instead of holding
-/// the compile, and is reported where it sits while every other rule runs. Each row runs after a compile that built the
-/// runtime library.
-///
-/// Work that never ends runs under a limit of 30 seconds, and costs the compile less than two limits, which leaves room
-/// for the dozen Lean processes the rest of the compile starts on a slow machine: a rule that never ends is refused at
-/// its name, and the other rule of its `Module.lean` still judges `StoreService.sharp`; a `#eval` that never ends
-/// refuses each file its `Module.lean` judges; and a proof whose tactic never ends, which Lean's own heartbeat limit
-/// does not stop, refuses its law's file. Those rows run one at a time, since a Lean that gets under a quarter
-/// of a core reaches its deadline of four limits before its limit. Work that waits runs under a limit of 10 seconds, so
-/// its deadline is 40 seconds: a rule that sleeps is refused as waited, and the rule after it still judges
-/// `StoreService.sharp`; and a `#eval` that sleeps refuses each file its `Module.lean` judges. Those rows use almost no
-/// processor time, so each runs on its own thread meanwhile.
-///
-/// Then slow rules run under a limit of 10 seconds, one row at a time, since a loaded machine raises the processor time
-/// of each rule. Each is a `looping` of ten million steps, so thirty of them pass the runner's own limit of twice the
-/// limit: a slow rule runs; thirty slow rules that one `attribute [rule]` line marks all run; thirty slow rules a macro
-/// of a helper file declares all run; and thirty shorter rules under a hard limit of 10 seconds, which keeps the
-/// runner's own limit at 9 seconds, all run.
+/// the compile, and refuses the law whose code it was checking with what stopped it. Each row runs after a compile that
+/// built the runtime library. Work that never ends runs under a limit of 30 seconds, and costs the compile less than two
+/// limits, which leaves room for the rest of the compile on a slow machine. Work that waits runs under a limit of 10
+/// seconds, so its deadline is 40 seconds. It uses almost no processor time, so it runs on its own thread meanwhile.
 #[cfg(unix)]
 #[test]
-fn lean_work_that_never_ends_stops_once_at_its_limit_or_deadline_and_every_other_rule_runs() {
+fn lean_work_that_never_ends_stops_once_at_its_limit_or_deadline() {
     compile_succeeds(lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY)]).path());
-    let stopped = "it ran past 30 processor seconds, the limit the checker sets on each Lean process";
-    let waited = "it waited 40 seconds without finishing";
-    let store_breaks = "app/Tenant/Store/StoreService.sharp:3:8:error - broken-rule: This import of App.Shared.Ledger breaks the structure rule importsOnly in app/Tenant/Store/Module.lean.";
-    let refused = |file: &str, rule: &str, why: &str| {
-        format!(
-            "app/Tenant/Store/{file}.sharp:1:11:error - broken-rule: This file is in App.Tenant.Store, whose structure rules app/Tenant/Store/Module.lean holds, and its rule {rule} at line 5, column 13 does not run: {why}. Make the rule end sooner."
-        )
+    let refused = |why: &str| {
+        vec![format!(
+            "app/Shared/Money.sharp:8:5:error - law-unproven: Law addKeepsCurrency is not proven: {why}. Make the code it reaches end sooner."
+        )]
     };
-    let rejected = |file: &str, why: &str| {
-        format!(
-            "app/Tenant/Store/{file}.sharp:1:11:error - broken-rule: This file is in App.Tenant.Store, whose structure rules app/Tenant/Store/Module.lean holds, and Lean rejected app/Tenant/Store/Module.lean: {why}. Make its proofs and rules end sooner."
-        )
-    };
-    let endless_rule = rules(
-        "App.Tenant.Store",
-        &format!("{IMPORTS_ONLY}\n@[rule] def endless : Rule := .imports fun _ _ => {ENDLESS}"),
-    );
-    let endless_eval = rules("App.Tenant.Store", &format!("{IMPORTS_ONLY}\n#eval {ENDLESS}"));
-    // The loop holds its memory still: a proof that piles up goals, as `repeat` does, fills a fast machine's memory
-    // before it reaches the limit.
-    let endless_proof = MONEY_PROOF.replace(
-        "  simp [App.Shared.Money.addKeepsCurrency, App.Shared.Money.add]",
-        "  run_tac do\n    let mut n := 0\n    for i in [0:1000000000000] do\n      n := n + i",
-    );
-    let money_rejected = format!(
-        "app/Shared/Money.sharp:3:14:error - unproven-law: Lean rejected app/Shared/Money.lean: {stopped}. Make its proofs and rules end sooner"
-    );
-    let sleeping_rule = rules(
-        "App.Tenant.Store",
-        &format!(
-            "{IMPORTS_ONLY}\n@[rule] def sleeps : Rule := .imports fun _ _ => dbgSleep 4000000000 fun _ => false\n@[rule] def after : Rule := .neverImports App.Shared"
-        ),
-    );
-    let sleeping_eval = rules("App.Tenant.Store", &format!("{IMPORTS_ONLY}\n#eval IO.sleep 4000000000"));
-    let slow_rule = rules(
-        "App.Tenant.Store",
-        &format!("{IMPORTS_ONLY}\n@[rule] def slow : Rule := .imports fun _ _ => {}", looping(10_000_000)),
-    );
-    // Each loop has its own length, so Lean shares no loop between rules.
-    let slow_definitions: String = (1..=30)
-        .map(|rule| format!("\ndef slow{rule} : Rule := .imports fun _ _ => {}", looping(10_000_000 + rule)))
-        .collect();
-    let marked: Vec<String> = (1..=30).map(|rule| format!("slow{rule}")).collect();
-    let marked_rules =
-        rules("App.Tenant.Store", &format!("{IMPORTS_ONLY}{slow_definitions}\nattribute [rule] {}", marked.join(" ")));
-    let slow_macro = format!(
-        "import Code.App.Tenant.Store.Slow\nopen Sharp\n\nmacro \"slow_rule \" name:ident length:num : command =>\n  `(@[rule] def $name : Rule := .imports fun _ _ => {})\n",
-        looping(10_000_000).replace("10000000", "$length").replace('\n', "\n    ")
-    );
-    let macro_rules: String = (1..=30).map(|rule| format!("\nslow_rule slow{rule} {}", 10_000_000 + rule)).collect();
-    let macro_rules = format!(
-        "import Code.App.Tenant.Store.Module\nimport App.Tenant.Store.Slow\nopen Sharp\n\n{IMPORTS_ONLY}{macro_rules}\n"
-    );
-    // Two thirds of a slow rule, so thirty of them still pass the 9 seconds a hard limit of 10 leaves each runner.
-    let shorter_rules: String = (1..=30)
-        .map(|rule| format!("\n@[rule] def shorter{rule} : Rule := .imports fun _ _ => {}", looping(6_700_000 + rule)))
-        .collect();
-    let shorter_rules = rules("App.Tenant.Store", &format!("{IMPORTS_ONLY}{shorter_rules}"));
-    let endless = [
-        (
-            vec![("app/Tenant/Store/Module.lean", endless_rule.as_str())],
-            vec![
-                LEDGER_BREAKS.to_owned(),
-                refused("Receipts", "endless", stopped),
-                store_breaks.to_owned(),
-                refused("StoreService", "endless", stopped),
-            ],
-        ),
-        (
-            vec![("app/Tenant/Store/Module.lean", endless_eval.as_str())],
-            vec![LEDGER_BREAKS.to_owned(), rejected("Receipts", stopped), rejected("StoreService", stopped)],
-        ),
-        (
-            vec![("app/Shared/Money.sharp", LAWFUL_MONEY), ("app/Shared/Money.lean", endless_proof.as_str())],
-            vec![LEDGER_BREAKS.to_owned(), money_rejected, store_breaks.to_owned()],
-        ),
-    ];
-    let waiting = [
-        (
-            vec![("app/Tenant/Store/Module.lean", sleeping_rule.as_str())],
-            vec![
-                LEDGER_BREAKS.to_owned(),
-                refused("Receipts", "sleeps", waited),
-                refused("StoreService", "sleeps", waited),
-                store_breaks.to_owned(),
-                "app/Tenant/Store/StoreService.sharp:3:8:error - broken-rule: This import of App.Shared.Ledger breaks the structure rule after in app/Tenant/Store/Module.lean.".to_owned(),
-            ],
-        ),
-        (
-            vec![("app/Tenant/Store/Module.lean", sleeping_eval.as_str())],
-            vec![LEDGER_BREAKS.to_owned(), rejected("Receipts", waited), rejected("StoreService", waited)],
-        ),
-    ];
-    let slow = [
-        (vec![("app/Tenant/Store/Module.lean", slow_rule.as_str())], false),
-        (vec![("app/Tenant/Store/Module.lean", marked_rules.as_str())], false),
-        (
-            vec![
-                ("app/Tenant/Store/Slow.lean", slow_macro.as_str()),
-                ("app/Tenant/Store/Module.lean", macro_rules.as_str()),
-            ],
-            false,
-        ),
-        (vec![("app/Tenant/Store/Module.lean", shorter_rules.as_str())], true),
-    ];
-    let stops = |limit: u64, files: &[(&str, &str)], expected: &[String]| {
-        let directory = structured(files);
+    let stops = |limit: u64, work: &str, expected: &[String]| {
+        let lake = tempfile::tempdir().unwrap();
+        let directory = lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY)]);
 
-        let (output, seconds) = compile_lines_within(directory.path(), limit, false);
+        let (output, seconds) = compile_lines_within(directory.path(), limit, &stalling_lake(lake.path(), work));
 
-        assert_eq!(issue_lines(&output), expected, "{files:?}: {}", printed(&output));
-        assert!(seconds < 2.0 * limit as f64, "{files:?} used {seconds} processor seconds: {}", printed(&output));
+        assert!(lake.path().join("stalled").exists(), "{work}: {}", printed(&output));
+        assert_eq!(issue_lines(&output), expected, "{work}, after {seconds} processor seconds: {}", printed(&output));
+        assert!(seconds < 2.0 * limit as f64, "{work} used {seconds} processor seconds: {}", printed(&output));
+        assert!(!compiled(directory.path(), "app/Shared/Money.sharp").exists(), "{work}");
     };
+
     std::thread::scope(|scope| {
-        let waits: Vec<_> =
-            waiting.iter().map(|(files, expected)| scope.spawn(|| stops(10, files, expected))).collect();
-        for (files, expected) in &endless {
-            stops(30, files, expected);
-        }
-        for wait in waits {
-            wait.join().unwrap();
-        }
-    });
-    for (files, hard) in slow {
-        let directory = structured(&files);
-
-        let (output, _) = compile_lines_within(directory.path(), 10, hard);
-
-        assert_eq!(
-            issue_lines(&output),
-            [LEDGER_BREAKS.to_owned(), store_breaks.to_owned()],
-            "{files:?}: {}",
-            printed(&output)
+        let waits = scope.spawn(|| stops(10, "sleep 4000", &refused("it waited 40 seconds without finishing")));
+        stops(
+            30,
+            "exec awk 'BEGIN { while (1) { } }'",
+            &refused("it ran past 30 processor seconds, the limit the checker sets on each check"),
         );
-    }
+        waits.join().unwrap();
+    });
 }
 
 /// Each signal that ends a compile from a terminal or `kill` ends the Lean it waits on too, though Mago runs Lake in a
@@ -3886,17 +2829,14 @@ fn a_signal_that_ends_a_compile_ends_the_lean_it_waits_on() {
     use std::time::Duration;
     use std::time::Instant;
 
-    let sleeping_eval = rules("App.Tenant.Store", &format!("{IMPORTS_ONLY}\n#eval IO.sleep 4000000000"));
     for signal in [libc::SIGINT, libc::SIGQUIT, libc::SIGHUP, libc::SIGTERM] {
-        let directory = structured(&[("app/Tenant/Store/Module.lean", sleeping_eval.as_str())]);
-        let sleeping = format!(
-            "{}/.sharp/.lean/Proofs/App/Tenant/Store/Module.lean",
-            directory.path().file_name().unwrap().to_string_lossy()
-        );
-        let leans =
-            || String::from_utf8(Command::new("pgrep").args(["-f", &sleeping]).output().unwrap().stdout).unwrap();
+        let lake = tempfile::tempdir().unwrap();
+        let path = stalling_lake(lake.path(), "while :; do sleep 1; done");
+        let script = lake.path().join("bin/lake").display().to_string();
+        let leans = || String::from_utf8(Command::new("pgrep").args(["-f", &script]).output().unwrap().stdout).unwrap();
+        let directory = lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY)]);
         let mut compiling = command(directory.path(), "never");
-        compiling.stdout(Stdio::null()).stderr(Stdio::null()).process_group(0);
+        compiling.env("PATH", &path).stdout(Stdio::null()).stderr(Stdio::null()).process_group(0);
         // SAFETY: `setrlimit` is async-signal-safe, and the closure allocates nothing.
         unsafe {
             compiling.pre_exec(|| {
@@ -3910,8 +2850,8 @@ fn a_signal_that_ends_a_compile_ends_the_lean_it_waits_on() {
         };
         let mut compile = compiling.spawn().unwrap();
         let started = Instant::now();
-        while leans().is_empty() {
-            assert!(started.elapsed() < Duration::from_secs(300), "{signal}: the sleeping Lean never started");
+        while !lake.path().join("stalled").exists() {
+            assert!(started.elapsed() < Duration::from_secs(300), "{signal}: the stalled Lean never started");
             std::thread::sleep(Duration::from_millis(100));
         }
 
@@ -3925,7 +2865,7 @@ fn a_signal_that_ends_a_compile_ends_the_lean_it_waits_on() {
         }
         let left = leans();
         if !left.is_empty() {
-            Command::new("pkill").args(["-f", &sleeping]).status().unwrap();
+            Command::new("pkill").args(["-f", &script]).status().unwrap();
         }
         assert_eq!(left, "", "{signal}: Lean outlived the compile");
     }
@@ -3933,20 +2873,17 @@ fn a_signal_that_ends_a_compile_ends_the_lean_it_waits_on() {
 
 #[test]
 fn compile_proves_a_law_over_locals_an_if_a_nullable_and_strings() {
-    let directory = lawful_project(&[(
-        "app/Shared/Label.sharp",
+    assert_proven(
+        "Label",
         "namespace App.Shared;\n\npublic class Label\n{\n    public static string tag(string? name, bool loud)\n    {\n        let text = name ?? \"item\";\n        if (loud) {\n            text = text + \"!\";\n        }\n        return text;\n    }\n\n    law quietKeepsName(string name) => Label.tag(name, false) == name;\n}\n",
-    )]);
-    let root = directory.path();
-
-    let output = compile(root);
-
-    assert!(output.status.success(), "{}", printed(&output));
-    assert!(compiled(root, "app/Shared/Label.sharp").exists());
+        "law loudKeepsName(string name) => Label.tag(name, true) == name;",
+    );
 }
 
+/// A package's law is proven from its `.sharp` file as a law of the project is, and the compile writes nothing under
+/// `vendor/`.
 #[test]
-fn compile_refuses_a_package_law_with_no_proof_and_writes_nothing_under_vendor() {
+fn compile_proves_a_package_law_and_writes_nothing_under_vendor() {
     let directory = lawful_project(&[
         (
             "vendor/acme/money/composer.json",
@@ -3959,12 +2896,8 @@ fn compile_refuses_a_package_law_with_no_proof_and_writes_nothing_under_vendor()
 
     let output = compile_lines(root);
 
-    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
-    assert!(
-        printed(&output).contains("vendor/acme/money/src/Money.sharp:8:5:error - unproven-law: Law addKeepsCurrency has no proof in vendor/acme/money/src/Money.lean. Its package ships no proof for it, so report it to the package's maintainers."),
-        "{}",
-        printed(&output)
-    );
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "vendor/acme/money/src/Money.sharp").exists());
     assert_eq!(files_under(&root.join("vendor")), vendor, "nothing is written under vendor/");
 }
 
@@ -3988,19 +2921,19 @@ fn compile_refuses_an_unproven_law_whatever_pragma_ignore_entry_or_baseline_entr
     write(
         baselined.path(),
         "baseline.toml",
-        "variant = \"strict\"\n\n[[entries.\"app/Shared/Money.sharp\".issues]]\ncode = \"unproven-law\"\nstart_line = 8\nend_line = 8\n",
+        "variant = \"strict\"\n\n[[entries.\"app/Shared/Money.sharp\".issues]]\ncode = \"law-unproven\"\nstart_line = 8\nend_line = 8\n",
     );
 
     for (suppression, directory) in [
-        ("a pragma", workspace("// @mago-expect analysis:unproven-law", "")),
-        ("an ignore entry", workspace("", "ignore = [\"unproven-law\"]")),
+        ("a pragma", workspace("// @mago-expect analysis:law-unproven", "")),
+        ("an ignore entry", workspace("", "ignore = [\"law-unproven\"]")),
         ("a baseline entry", baselined),
     ] {
         let output = compile_lines(directory.path());
 
         assert_eq!(output.status.code(), Some(1), "{suppression}: {}", printed(&output));
         assert!(
-            printed(&output).contains("error - unproven-law: Law addKeepsCurrency"),
+            printed(&output).contains("error - law-unproven: law addKeepsCurrency"),
             "{suppression}: {}",
             printed(&output)
         );
@@ -4052,11 +2985,22 @@ fn a_law_testing_the_identity_of_objects_is_refused() {
     );
 }
 
+/// `==` on two Lists runs the elements' class operator `==` on each pair, as the bridge lowers it, so a law over it is
+/// refused: Lean's own `==` on Lists would compare every value the objects hold and prove this law, which is false
+/// when two amounts match and the currencies differ.
+#[test]
+fn a_law_comparing_lists_of_objects_a_class_operator_compares_is_refused() {
+    assert_unmodeled(
+        "namespace App.Shared;\n\npublic class Shape\n{\n    public Shape(public int amount { get; }, public string currency { get; }) { }\n    public static bool operator ==(Shape a, Shape b) => a.amount == b.amount;\n    public int hash() => this.amount;\n\n    law sameListSameCurrency(Shape a, Shape b) => !([a] == [b]) || a.currency == b.currency;\n}\n",
+        "Law sameListSameCurrency reaches the class operator `==` in Shape.sameListSameCurrency. Compare the values the objects hold, such as their properties.",
+    );
+}
+
 #[test]
 fn a_law_reaching_a_try_catch_is_refused() {
     assert_unmodeled(
         "namespace App.Shared;\n\nimport DivisionByZeroError;\n\npublic class Shape\n{\n    public static int share(int a)\n    {\n        try {\n            return 10 / a;\n        } catch (DivisionByZeroError e) {\n            return 0;\n        }\n    }\n\n    law shared(int a) => Shape.share(a) >= 0;\n}\n",
-        "Law shared reaches a try/catch in Shape.share. An exception is a bug, and a law reasons about values.",
+        "Law shared reaches a try/catch in Shape.share. Return a value that tells the failure apart, such as `null` or an enum case, in place of the exception.",
     );
 }
 
@@ -4072,7 +3016,7 @@ fn a_law_reaching_a_type_test_is_refused() {
 fn a_law_reaching_a_member_lean_reserves_is_refused() {
     assert_unmodeled(
         "namespace App.Shared;\n\npublic class Shape\n{\n    public int rec() => 1;\n\n    law one(Shape s) => s.rec() == 1;\n}\n",
-        "Law one reaches the method Shape.rec in Shape.rec. A `.lean` proof file gives every class a member of that name, so a law cannot reach a member that has it.",
+        "Law one reaches the method Shape.rec in Shape.rec. The checker gives every class a member of that name, so a law cannot reach a member that has it.",
     );
 }
 
@@ -4080,7 +3024,7 @@ fn a_law_reaching_a_member_lean_reserves_is_refused() {
 fn a_law_reaching_a_map_is_refused() {
     assert_unmodeled(
         "namespace App.Shared;\n\npublic class Shape\n{\n    law sized(Map<string, int> items) => true;\n}\n",
-        "Law sized reaches a collection in Shape.sized. A law cannot reason about this use of a collection.",
+        "Law sized reaches a collection in Shape.sized. Hold the values in a List, and read it with `count()`, `map`, `filter`, a list pattern or a spread.",
     );
 }
 
@@ -4088,16 +3032,468 @@ fn a_law_reaching_a_map_is_refused() {
 /// `List.length`, so Mago proves a law over them with the proof it creates.
 #[test]
 fn compile_proves_a_law_over_map_filter_and_count() {
-    let directory = lawful_project(&[(
-        "app/Shared/Basket.sharp",
+    assert_proven(
+        "Basket",
         "namespace App.Shared;\n\npublic class Basket\n{\n    public static List<bool> flags(List<int> items) => items.map(x => x > 0);\n\n    public static List<int> positives(List<int> items) => items.filter(x => x > 0);\n\n    law flagsKeepCount(List<int> items) => Basket.flags(items).count() == items.count();\n\n    law positivesDropTheRest(int unused) => Basket.positives([1, -2, 3]) == [1, 3];\n}\n",
+        "law positivesKeepAll(List<int> items) => Basket.positives(items).count() == items.count();",
+    );
+}
+
+/// Compiles `source` as `app/Shared/<class>.sharp` and checks that the compile proves every law it states with the proof
+/// it creates, and that the class with `twin` added, a false law over the same code, is refused as `law-unproven`.
+fn assert_proven(class: &str, source: &str, twin: &str) {
+    let name = format!("app/Shared/{class}.sharp");
+    let Some(end) = source.rfind('}') else {
+        panic!("{class} has no closing brace");
+    };
+    let with_twin = format!("{}    {twin}\n{}", &source[..end], &source[end..]);
+    let Some(law) = twin.strip_prefix("law ").and_then(|twin| twin.split('(').next()) else {
+        panic!("{twin} is no law");
+    };
+
+    for (source, proven) in [(source, true), (with_twin.as_str(), false)] {
+        let directory = lawful_project(&[(&name, source)]);
+        let root = directory.path();
+
+        let output = compile(root);
+
+        assert_eq!(output.status.success(), proven, "{source}: {}", printed(&output));
+        assert_eq!(compiled(root, &name).exists(), proven);
+        if !proven {
+            assert!(
+                printed(&output).contains(&format!("error[law-unproven]: law {law} is not proven")),
+                "{}",
+                printed(&output)
+            );
+        }
+    }
+}
+
+/// Spec section 28.1's `total`: a method that calls itself on a list's rest from a list pattern gets smaller on each call.
+#[test]
+fn compile_proves_a_law_over_recursion_on_a_list_rest() {
+    assert_proven(
+        "Money",
+        "namespace App.Shared;\n\npublic class Money\n{\n    public Money(public int amount { get; }, public string currency { get; }) { }\n\n    public static int total(List<Money> items) => match (items) {\n        [] => 0,\n        [Money first, ...List<Money> rest] => first.amount + Money.total(rest),\n        default => 0,\n    };\n\n    law totalOfTwo(int unused) => Money.total([new Money(1, \"EUR\"), new Money(2, \"EUR\")]) == 3;\n}\n",
+        "law totalOfTwoIsFour(int unused) => Money.total([new Money(1, \"EUR\"), new Money(2, \"EUR\")]) == 4;",
+    );
+}
+
+/// Spec section 28.1's `times`: `n - 1` where `n <= 0` failed is one step towards the bound 0.
+#[test]
+fn compile_proves_a_law_over_recursion_on_an_int_one_step_towards_a_bound_a_guard_tested() {
+    assert_proven(
+        "Money",
+        "namespace App.Shared;\n\npublic class Money\n{\n    public Money(public int amount { get; }, public string currency { get; }) { }\n    public Money add(Money other) => new Money(this.amount + other.amount, this.currency);\n    public Money times(int n) => n <= 0 ? new Money(0, this.currency) : this.add(this.times(n - 1));\n\n    law zeroTimesIsZero(Money m) => m.times(0).amount == 0;\n}\n",
+        "law oneTimeIsZero(Money m) => m.times(1).amount == 0;",
+    );
+}
+
+/// An `if` that returns, a `match` arm's comparison, and a `?:` each show the bound a step moves towards, a literal or a
+/// parameter the call passes on unchanged.
+#[test]
+fn compile_proves_a_law_over_recursion_towards_a_bound_an_if_a_match_or_a_parameter_sets() {
+    assert_proven(
+        "Steps",
+        "namespace App.Shared;\n\npublic class Steps\n{\n    public static int walk(int n)\n    {\n        if (n <= 0) {\n            return 0;\n        }\n        return 1 + Steps.walk(n - 1);\n    }\n\n    public static int fall(int n) => match (n) {\n        <= 0 => 0,\n        default => Steps.fall(n - 1),\n    };\n\n    public static int climb(int i, int top) => i >= top ? 0 : 1 + Steps.climb(i + 1, top);\n\n    law twoSteps(int unused) => Steps.walk(2) == 2;\n    law fallsToZero(int unused) => Steps.fall(2) == 0;\n    law climbsTwo(int unused) => Steps.climb(0, 2) == 2;\n}\n",
+        "law climbsThree(int unused) => Steps.climb(0, 2) == 3;",
+    );
+}
+
+/// Two methods of one class that call each other on `n - 1` under the same bound are one Lean `mutual` block.
+#[test]
+fn compile_proves_a_law_over_mutual_recursion() {
+    assert_proven(
+        "Parity",
+        "namespace App.Shared;\n\npublic class Parity\n{\n    public static bool isEven(int n) => n <= 0 ? true : Parity.isOdd(n - 1);\n    public static bool isOdd(int n) => n <= 0 ? false : Parity.isEven(n - 1);\n\n    law fourIsEven(int unused) => Parity.isEven(4);\n}\n",
+        "law threeIsEven(int unused) => Parity.isEven(3);",
+    );
+}
+
+/// A list pattern names an element or only its type, and has a rest anywhere: before the last element, or bare.
+#[test]
+fn compile_proves_a_law_over_list_patterns_with_a_binding_arm_and_a_type_only_arm() {
+    assert_proven(
+        "Basket",
+        "namespace App.Shared;\n\npublic class Basket\n{\n    public Basket(public int amount { get; }) { }\n\n    public static int size(List<Basket> items) => match (items) {\n        [] => 0,\n        [Basket, ...List<Basket> rest] => 1 + Basket.size(rest),\n        default => 0,\n    };\n\n    public static int firstAmount(List<Basket> items) => match (items) {\n        [Basket first, ...] => first.amount,\n        default => 0,\n    };\n\n    public static int lastAmount(List<Basket> items) => match (items) {\n        [..., Basket last] => last.amount,\n        default => 0,\n    };\n\n    public static int backwards(List<Basket> items) => match (items) {\n        [...List<Basket> before, Basket last] => last.amount + Basket.backwards(before),\n        default => 0,\n    };\n\n    law sizeOfTwo(int unused) => Basket.size([new Basket(1), new Basket(2)]) == 2;\n    law firstOfTwo(int unused) => Basket.firstAmount([new Basket(1), new Basket(2)]) == 1;\n    law lastOfTwo(int unused) => Basket.lastAmount([new Basket(1), new Basket(2)]) == 2;\n    law backwardsOfTwo(int unused) => Basket.backwards([new Basket(1), new Basket(2)]) == 3;\n}\n",
+        "law lastOfTwoIsFirst(int unused) => Basket.lastAmount([new Basket(1), new Basket(2)]) == 1;",
+    );
+}
+
+#[test]
+fn compile_proves_a_law_over_a_match_statement_with_block_arms_and_a_when_guard() {
+    assert_proven(
+        "Sign",
+        "namespace App.Shared;\n\npublic class Sign\n{\n    public static int of(int n)\n    {\n        match (n) {\n            int m when m > 0 => { return 1; },\n            0 => { return 0; },\n            default => { return -1; },\n        }\n    }\n\n    law positive(int unused) => Sign.of(5) == 1;\n    law zero(int unused) => Sign.of(0) == 0;\n}\n",
+        "law negativeIsZero(int unused) => Sign.of(-5) == 0;",
+    );
+}
+
+/// `is` tests the type a value of a nullable type holds when it is not null, and names it in the `?:` it decides.
+#[test]
+fn compile_proves_a_law_over_an_is_test() {
+    assert_proven(
+        "Order",
+        "namespace App.Shared;\n\npublic class Order\n{\n    public Order(public int total { get; }) { }\n\n    public static bool known(Order? order) => order is Order;\n    public static int totalOf(Order? order) => order is Order o ? o.total : 0;\n\n    law nullIsUnknown(int unused) => !Order.known(null);\n    law nullTotalIsZero(int unused) => Order.totalOf(null) == 0;\n    law totalIsKept(Order order) => Order.totalOf(order) == order.total;\n}\n",
+        "law totalIsZero(Order order) => Order.totalOf(order) == 0;",
+    );
+}
+
+#[test]
+fn compile_proves_a_law_over_a_spread() {
+    assert_proven(
+        "Joiner",
+        "namespace App.Shared;\n\npublic class Joiner\n{\n    public static List<int> joined(List<int> a, List<int> b) => [...a, 0, ...b];\n\n    law joinedKeepsCount(List<int> a, List<int> b) => Joiner.joined(a, b).count() == a.count() + b.count() + 1;\n}\n",
+        "law joinedAddsNothing(List<int> a, List<int> b) => Joiner.joined(a, b).count() == a.count() + b.count();",
+    );
+}
+
+/// `count()` is a value, so a lambda, a `when` guard and a `?:` condition read it.
+#[test]
+fn compile_proves_a_law_over_a_count_in_a_lambda_a_guard_and_a_condition() {
+    assert_proven(
+        "Lists",
+        "namespace App.Shared;\n\npublic class Lists\n{\n    public static List<List<int>> nonEmpty(List<List<int>> lists) => lists.filter(list => list.count() > 0);\n\n    public static int size(List<int> xs) => match (xs) {\n        [int first, ...] when xs.count() > 2 => first,\n        default => xs.count() > 1 ? 1 : 0,\n    };\n\n    law dropsEmpty(int unused) => Lists.nonEmpty([[1], [2, 3]]).count() == 2;\n    law longFirst(int unused) => Lists.size([5, 6, 7]) == 5;\n    law shortIsOne(int unused) => Lists.size([5, 6]) == 1;\n}\n",
+        "law keepsEmpty(int unused) => Lists.nonEmpty([[1], []]).count() == 2;",
+    );
+}
+
+/// `[]` is the empty List wherever the code expects a List: an argument, a returned value, and a compared one.
+#[test]
+fn compile_proves_a_law_over_an_empty_list() {
+    assert_proven(
+        "More",
+        "namespace App.Shared;\n\npublic class More\n{\n    public static int sizeOf(List<int> xs) => match (xs) {\n        [] => 0,\n        default => xs.count() > 2 ? 2 : 1,\n    };\n\n    public static List<int> none(int unused) => [];\n\n    law sizeOfEmpty(int unused) => More.sizeOf([]) == 0;\n    law noneIsEmpty(int unused) => More.none(0).count() == 0;\n    law noneIsTheEmptyList(int unused) => More.none(0) == [];\n}\n",
+        "law sizeOfEmptyIsOne(int unused) => More.sizeOf([]) == 1;",
+    );
+}
+
+/// A loop that only counts is the list's length.
+#[test]
+fn compile_proves_a_law_over_a_counting_loop() {
+    assert_proven(
+        "Orders",
+        "namespace App.Shared;\n\npublic class Orders\n{\n    public static int size(List<int> orders)\n    {\n        let count = 0;\n        for (const order of orders) {\n            count++;\n        }\n        return count;\n    }\n\n    law sizeIsCount(List<int> orders) => Orders.size(orders) == orders.count();\n}\n",
+        "law sizeIsOneMore(List<int> orders) => Orders.size(orders) == orders.count() + 1;",
+    );
+}
+
+/// A loop that adds each element is `List.sum`, so Lean's `List.sum_append` proves that it joins.
+#[test]
+fn compile_proves_a_law_over_a_summing_loop() {
+    assert_proven(
+        "Sums",
+        "namespace App.Shared;\n\npublic class Sums\n{\n    public static int sumOf(List<int> xs)\n    {\n        let sum = 0;\n        for (const x of xs) {\n            sum += x;\n        }\n        return sum;\n    }\n\n    law sumJoins(List<int> a, List<int> b) => Sums.sumOf([...a, ...b]) == Sums.sumOf(a) + Sums.sumOf(b);\n}\n",
+        "law sumIsTheFirst(List<int> a, List<int> b) => Sums.sumOf([...a, ...b]) == Sums.sumOf(a);",
+    );
+}
+
+/// A loop that counts the elements an `if` tests is `List.countP`, so Lean's `List.countP_le_length` proves it counts no
+/// more than the list holds.
+#[test]
+fn compile_proves_a_law_over_a_counting_loop_under_an_if() {
+    assert_proven(
+        "Order",
+        "namespace App.Shared;\n\npublic class Order\n{\n    public Order(public bool open { get; }) { }\n\n    public static int openCount(List<Order> orders)\n    {\n        let count = 0;\n        for (const o of orders) {\n            if (o.open) {\n                count += 1;\n            }\n        }\n        return count;\n    }\n\n    law countAtMost(List<Order> orders) => Order.openCount(orders) <= orders.count();\n}\n",
+        "law countAll(List<Order> orders) => Order.openCount(orders) == orders.count();",
+    );
+}
+
+/// Spec section 28's `Money`: a law the checker proves alone, a law its body proves by recursion on a smaller int, one
+/// proven by recursion on a list's rest, and one under a `when` condition.
+const SPECIMEN_MONEY: &str = "namespace App.Shared;\n\nimport Sharp.Math.Math;\n\npublic class Money\n{\n    public Money(public int amount { get; }, public string currency { get; }) { }\n    public Money add(Money other) => new Money(this.amount + other.amount, this.currency);\n    public Money times(int n) => n <= 0 ? new Money(0, this.currency) : this.add(this.times(n - 1));\n\n    law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;\n    law timesKeepsCurrency(Money m, int n) => m.times(n).currency == m.currency\n    {\n        if (n <= 0) {\n            return;\n        }\n        Money.timesKeepsCurrency(m, n - 1);\n        Money.addKeepsCurrency(m, m.times(n - 1));\n    }\n\n    public static Money sum(Money total, List<Money> items) => match (items) {\n        [] => total,\n        [Money first, ...List<Money> rest] => Money.sum(total.add(first), rest),\n        default => total,\n    };\n\n    law sumKeepsCurrency(Money total, List<Money> items) => Money.sum(total, items).currency == total.currency\n    {\n        match (items) {\n            [] => { return; },\n            [Money first, ...List<Money> rest] => {\n                Money.sumKeepsCurrency(total.add(first), rest);\n                Money.addKeepsCurrency(total, first);\n            },\n            default => { return; },\n        }\n    }\n\n    public static int refundable(int paid, int refunded) => Math.max(paid - refunded, 0);\n\n    law neverAbovePaid(int paid, int refunded) when paid >= 0 && refunded >= 0\n        => Money.refundable(paid, refunded) <= paid;\n}\n";
+
+/// A project that installs the whole standard library, as every project does, holding `files`.
+fn library_project(files: &[(&str, &str)]) -> tempfile::TempDir {
+    let directory = lawful_project(files);
+    let package = Path::new(env!("CARGO_MANIFEST_DIR")).join("../composer");
+    write(
+        directory.path(),
+        "vendor/heyjordanparker/php-sharp-composer/composer.json",
+        "{\"name\": \"heyjordanparker/php-sharp-composer\", \"autoload\": {\"psr-4\": {\"Sharp\\\\\": \"library/Sharp/\"}}}\n",
+    );
+    for file in files_under(&package.join("library")) {
+        let source = std::fs::read_to_string(package.join("library").join(&file)).unwrap();
+        write(
+            directory.path(),
+            &format!("vendor/heyjordanparker/php-sharp-composer/library/{}", file.display()),
+            &source,
+        );
+    }
+
+    directory
+}
+
+/// The standard library's `Math.max` and `Math.min` on ints are pure and reach laws with no `extern`: the checker
+/// knows what they compute, with a spread argument as with one written out, and a claim they break is not proven.
+#[test]
+fn a_law_reasons_about_math_max_and_math_min_as_the_largest_and_the_smallest_int() {
+    let bounds = |law: &str| {
+        format!(
+            "namespace App.Shared;\n\nimport Sharp.Math.Math;\n\npublic class Bounds\n{{\n    public static int clamp(int x, int low, int high) => Math.min(Math.max(x, low), high);\n    public static int largest(int first, List<int> rest) => Math.max(first, ...rest);\n\n    {law}\n}}\n"
+        )
+    };
+    for (law, proven) in [
+        ("law clampAtMostHigh(int x, int low, int high) => Bounds.clamp(x, low, high) <= high;", true),
+        ("law clampAtLeastLow(int x, int low, int high) when low <= high => Bounds.clamp(x, low, high) >= low;", true),
+        ("law largestOfThree(int unused) => Bounds.largest(1, [5, 3]) == 5;", true),
+        ("law clampAtMostLow(int x, int low, int high) => Bounds.clamp(x, low, high) <= low;", false),
+    ] {
+        let directory = library_project(&[("app/Shared/Bounds.sharp", &bounds(law))]);
+        let root = directory.path();
+
+        let output = compile(root);
+
+        assert_eq!(output.status.success(), proven, "{law}: {}", printed(&output));
+        if !proven {
+            assert!(
+                printed(&output).contains("error[law-unproven]: law clampAtMostLow is not proven"),
+                "{}",
+                printed(&output)
+            );
+        }
+    }
+}
+
+/// Spec section 28: every law of a project with only `.sharp` files is proven, and no `.lean` file is in the project
+/// before the compile or after it.
+#[test]
+fn compile_proves_spec_section_28_s_money_from_its_sharp_file_alone() {
+    let directory = library_project(&[("app/Shared/Money.sharp", SPECIMEN_MONEY)]);
+    let root = directory.path();
+    assert_eq!(source_lean_files(root), Vec::<PathBuf>::new());
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Shared/Money.sharp").exists());
+    assert_eq!(source_lean_files(root), Vec::<PathBuf>::new());
+}
+
+/// Spec section 28: a `match` on an int parameter shows its bound as an `if` does: a comparison arm where it holds, and
+/// in each arm after it, where it failed. The analyzer and the proof read one walk of the body's paths, so the call of
+/// the law itself on `n - 1` after `<= 0` is smaller in both.
+#[test]
+fn compile_proves_a_law_whose_body_tests_its_bound_with_a_comparison_arm() {
+    let money = SPECIMEN_MONEY.replace(
+        "        if (n <= 0) {\n            return;\n        }\n        Money.timesKeepsCurrency(m, n - 1);\n        Money.addKeepsCurrency(m, m.times(n - 1));\n",
+        "        match (n) {\n            <= 0 => { return; },\n            default => {\n                Money.timesKeepsCurrency(m, n - 1);\n                Money.addKeepsCurrency(m, m.times(n - 1));\n            },\n        }\n",
+    );
+    assert_ne!(money, SPECIMEN_MONEY);
+    let directory = library_project(&[("app/Shared/Money.sharp", &money)]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Shared/Money.sharp").exists());
+}
+
+/// Spec section 28: a case the body leaves open is `law-unproven`, with the case's conditions and the goal still to
+/// show in PHP#, and the call of the law itself on a smaller value when the case makes none.
+#[test]
+fn a_case_a_law_s_body_leaves_open_names_its_conditions_and_its_goal_in_php_sharp() {
+    let without_add = SPECIMEN_MONEY.replace("        Money.addKeepsCurrency(m, m.times(n - 1));\n", "");
+    let without_calls = without_add.replace("        Money.timesKeepsCurrency(m, n - 1);\n", "");
+    let without_sum_calls = SPECIMEN_MONEY.replace(
+        "                Money.sumKeepsCurrency(total.add(first), rest);\n                Money.addKeepsCurrency(total, first);\n",
+        "",
+    );
+    for (source, expected) in [
+        (
+            without_sum_calls.as_str(),
+            "app/Shared/Money.sharp:27:5: error[law-unproven]: law sumKeepsCurrency is not proven\n = when items is [Money first, ...List<Money> rest], still to show: Money.sum(total.add(first), rest).currency == total.currency\n = Help: the law for a smaller items is the call Money.sumKeepsCurrency(total, rest)\n",
+        ),
+        (
+            without_add.as_str(),
+            "app/Shared/Money.sharp:12:5: error[law-unproven]: law timesKeepsCurrency is not proven\n = when n > 0, still to show: m.add(m.times(n - 1)).currency == m.currency\n",
+        ),
+        (
+            without_calls.as_str(),
+            "app/Shared/Money.sharp:12:5: error[law-unproven]: law timesKeepsCurrency is not proven\n = when n > 0, still to show: m.add(m.times(n - 1)).currency == m.currency\n = Help: the law for a smaller n is the call Money.timesKeepsCurrency(m, n - 1)\n",
+        ),
+    ] {
+        let directory = library_project(&[("app/Shared/Money.sharp", source)]);
+        let root = directory.path();
+
+        let output = compile(root);
+
+        assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+        assert!(printed(&output).contains(expected), "{}", printed(&output));
+        assert!(!compiled(root, "app/Shared/Money.sharp").exists());
+    }
+}
+
+/// Spec section 28: every goal prints in PHP#. A goal whose `match` the case leaves open, as `Money.sum`'s on a list
+/// it knows nothing of, prints as the claim the law writes.
+#[test]
+fn a_goal_with_a_match_the_case_leaves_open_prints_as_the_law_s_claim() {
+    let money = SPECIMEN_MONEY.replace(
+        "    public static int refundable",
+        "    law sumIsEuro(Money total, List<Money> items) => Money.sum(total, items).currency == \"EUR\";\n\n    public static int refundable",
+    );
+    let directory = library_project(&[("app/Shared/Money.sharp", &money)]);
+
+    let output = compile(directory.path());
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(
+            "error[law-unproven]: law sumIsEuro is not proven\n = still to show: Money.sum(total, items).currency == \"EUR\"\n"
+        ),
+        "{}",
+        printed(&output)
+    );
+}
+
+/// Spec section 28: a law with `when` is called only where its condition holds, so a call where it is not known names
+/// the condition still to show.
+#[test]
+fn a_call_of_a_when_law_where_its_condition_is_not_known_names_the_condition_to_show() {
+    let money = SPECIMEN_MONEY.replace(
+        "        => Money.refundable(paid, refunded) <= paid;\n",
+        "        => Money.refundable(paid, refunded) <= paid;\n    law refundOfAnything(int p, int r) => p < 0 || Money.refundable(p, r) <= p\n    {\n        Money.neverAbovePaid(p, r);\n    }\n",
+    );
+    let directory = library_project(&[("app/Shared/Money.sharp", &money)]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(
+            "error[law-unproven]: law refundOfAnything is not proven\n = still to show for the call Money.neverAbovePaid(p, r): p >= 0 && r >= 0\n"
+        ),
+        "{}",
+        printed(&output)
+    );
+}
+
+/// Spec section 28: a call of a `when` law where the conditions on the path show each part of its condition proves,
+/// with nothing left to show for the call.
+#[test]
+fn a_call_of_a_when_law_where_each_part_of_its_condition_is_known_proves() {
+    let money = SPECIMEN_MONEY.replace(
+        "        => Money.refundable(paid, refunded) <= paid;\n",
+        "        => Money.refundable(paid, refunded) <= paid;\n    law refundOfKnown(int p, int r) => p < 0 || r < 0 || Money.refundable(p, r) <= p\n    {\n        if (p < 0) {\n            return;\n        }\n        if (r < 0) {\n            return;\n        }\n        Money.neverAbovePaid(p, r);\n    }\n",
+    );
+    let directory = library_project(&[("app/Shared/Money.sharp", &money)]);
+    let root = directory.path();
+
+    let output = compile(root);
+
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(compiled(root, "app/Shared/Money.sharp").exists());
+}
+
+/// Spec section 28: a law's `when` condition and its body read a nullable parameter as its claim does, so a value the
+/// condition or an `if` tests for null is a value.
+#[test]
+fn compile_proves_a_law_whose_condition_or_body_reads_a_nullable_parameter() {
+    let directory = lawful_project(&[(
+        "app/Shared/Box.sharp",
+        "namespace App.Shared;\n\npublic class Box\n{\n    law somePositive(int? x) when x != null && x + 1 > 0 => true;\n    law anything(int x) => true;\n    law someAnything(int? x) => true\n    {\n        if (x != null) {\n            Box.anything(x);\n        }\n    }\n}\n",
     )]);
     let root = directory.path();
 
     let output = compile(root);
 
     assert!(output.status.success(), "{}", printed(&output));
-    assert!(compiled(root, "app/Shared/Basket.sharp").exists());
+    assert!(compiled(root, "app/Shared/Box.sharp").exists());
+}
+
+/// A law that calls a law of a file with errors is not proven until those errors are fixed, which the error says, as it
+/// says of any code of such a file a law reaches.
+#[test]
+fn a_call_of_a_law_whose_file_has_errors_names_the_errors_to_fix() {
+    let money = LAWFUL_MONEY.replace(
+        "    law addKeepsCurrency",
+        "    public int broken() => \"text\";\n    law same(int x) => x == x;\n\n    law addKeepsCurrency",
+    );
+    let directory = lawful_project(&[
+        ("app/Shared/Money.sharp", &money),
+        (
+            "app/Shared/Ledger.sharp",
+            "namespace App.Shared;\n\npublic class Ledger\n{\n    law usesMoney(int x) => true\n    {\n        Money.same(x);\n    }\n}\n",
+        ),
+    ]);
+    let root = directory.path();
+
+    let output = compile_lines(root);
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(
+            "app/Shared/Ledger.sharp:5:5:error - law-unproven: Law usesMoney is not proven: it reaches Money.same, whose file has errors. Fix them, then run vendor/bin/mago compile again."
+        ),
+        "{}",
+        printed(&output)
+    );
+}
+
+/// Spec section 28: laws that call each other in a cycle never end, so the call that closes the cycle is the error of
+/// a law that calls itself on no smaller value.
+#[test]
+fn laws_that_call_each_other_in_a_cycle_are_refused() {
+    let cycle = "namespace App.Shared;\n\npublic class Count\n{\n    law up(int x) => true\n    {\n        Count.down(x);\n    }\n    law down(int x) => true\n    {\n        Count.up(x);\n    }\n}\n";
+    let directory = lawful_project(&[("app/Shared/Count.sharp", cycle)]);
+    let root = directory.path();
+
+    let output = compile_lines(root);
+
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert_eq!(
+        issue_lines(&output),
+        [
+            "app/Shared/Count.sharp:7:9:error - law-recursion: a law calls itself only on a smaller value",
+            "app/Shared/Count.sharp:11:9:error - law-recursion: a law calls itself only on a smaller value",
+        ],
+        "{}",
+        printed(&output)
+    );
+}
+
+/// Spec section 28: a `match` in a law's body takes every arm a `match` takes, and each arm is a case that knows its
+/// pattern and its `when` guard: a constant, a type pattern that names the value, an enum's cases, a comparison and
+/// `default`. A case an arm leaves open names its pattern. Spec section 28's `sumKeepsCurrency` covers a list.
+#[test]
+fn a_law_body_s_match_splits_its_cases_on_every_arm_a_match_takes() {
+    let status = "namespace App.Shared;\n\npublic enum Status\n{\n    case Open;\n    case Paid;\n\n    public int weight() => match (this) {\n        Status.Open => 1,\n        Status.Paid => 2,\n    };\n}\n";
+    let signs = |arms: &str| {
+        format!(
+            "namespace App.Shared;\n\npublic class Signs\n{{\n    public static int sign(int n) => n > 5 ? 2 : (n < 0 ? 0 : 1);\n\n    law signBounded(int n) => Signs.sign(n) >= 0 && Signs.sign(n) <= 2\n    {{\n        match (n) {{\n{arms}        }}\n    }}\n    law weighs(Status s) => s.weight() > 0\n    {{\n        match (s) {{\n            Status.Open => {{ return; }},\n            default => {{ return; }},\n        }}\n    }}\n}}\n"
+        )
+    };
+    let proven = signs(
+        "            int m when m > 5 => { return; },\n            < 0 => { return; },\n            0 => { return; },\n            default => { return; },\n",
+    );
+    let directory = lawful_project(&[("app/Shared/Signs.sharp", &proven), ("app/Shared/Status.sharp", status)]);
+    let output = compile(directory.path());
+    assert!(output.status.success(), "{}", printed(&output));
+
+    let positive = signs("            int m when m > 5 => { return; },\n            default => { return; },\n")
+        .replace(
+            "law signBounded(int n) => Signs.sign(n) >= 0 && Signs.sign(n) <= 2",
+            "law signBounded(int n) => Signs.sign(n) == 2",
+        );
+    let directory = lawful_project(&[("app/Shared/Signs.sharp", &positive), ("app/Shared/Status.sharp", status)]);
+    let output = compile(directory.path());
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(" = when !(n is int m && m > 5), still to show: (n > 5 ? 2 : n < 0 ? 0 : 1) == 2\n"),
+        "{}",
+        printed(&output)
+    );
+}
+
+/// A law's proof splits its cases on a value it can name without running code, so a `match` of any other value is
+/// refused with what to match instead.
+#[test]
+fn a_law_body_s_match_on_a_value_that_runs_code_is_refused() {
+    assert_unmodeled(
+        "namespace App.Shared;\n\npublic class Shape\n{\n    law signs(int n) => true\n    {\n        match (n + 1) {\n            0 => { return; },\n            default => { return; },\n        }\n    }\n}\n",
+        "Law signs reaches a match on `n + 1` in Shape.signs. Match a parameter of the law, a value a pattern of its body names, or a property of one.",
+    );
 }
 
 /// A law reaches only `map`, `filter` and `count` of a `List`, so any other method of one is refused by its name.
@@ -4105,7 +3501,7 @@ fn compile_proves_a_law_over_map_filter_and_count() {
 fn a_law_reaching_another_list_method_is_refused_by_name() {
     assert_unmodeled(
         "namespace App.Shared;\n\npublic class Shape\n{\n    public static bool known(List<int> items) => items.contains(3);\n\n    law knows(List<int> items) => Shape.known(items);\n}\n",
-        "Law knows reaches the List method contains in Shape.known. A law cannot reason about this use of a collection.",
+        "Law knows reaches the List method contains in Shape.known. Hold the values in a List, and read it with `count()`, `map`, `filter`, a list pattern or a spread.",
     );
 }
 
@@ -4115,7 +3511,7 @@ fn a_law_reaching_another_list_method_is_refused_by_name() {
 fn a_law_reaching_a_lambda_that_can_throw_is_refused() {
     assert_unmodeled(
         "namespace App.Shared;\n\npublic class Shape\n{\n    public static List<int> doubled(List<int> items) => items.map(x => x * 2);\n\n    law same(List<int> items) => Shape.doubled(items).count() == items.count();\n}\n",
-        "Law same reaches a lambda whose body can throw in Shape.doubled. A law cannot reason about this lambda.",
+        "Law same reaches a lambda whose body can throw in Shape.doubled. Pass a lambda only to a List's `map` or `filter`, with a body that cannot throw, and call a PHP# method in place of any other function value.",
     );
 }
 
@@ -4123,15 +3519,148 @@ fn a_law_reaching_a_lambda_that_can_throw_is_refused() {
 fn a_law_reaching_a_loop_is_refused() {
     assert_unmodeled(
         "namespace App.Shared;\n\npublic class Shape\n{\n    public static int sum(int n)\n    {\n        let total = 0;\n        for (let i = 0; i < n; i++) {\n            total += i;\n        }\n        return total;\n    }\n\n    law summed(int n) => Shape.sum(n) >= 0;\n}\n",
-        "Law summed reaches a loop in Shape.sum. A law cannot reason about a loop.",
+        "Law summed reaches a loop in Shape.sum. Write the method as recursion that calls itself on a smaller value.",
     );
 }
 
 #[test]
-fn a_law_reaching_a_recursion_is_refused() {
+fn a_law_reaching_a_while_loop_is_refused() {
     assert_unmodeled(
-        "namespace App.Shared;\n\npublic class Shape\n{\n    public static int down(int n) => n <= 0 ? 0 : Shape.down(n - 1);\n\n    law reachesZero(int n) => Shape.down(n) == 0;\n}\n",
-        "Law reachesZero reaches a recursion in Shape.down. A law cannot reason about recursion.",
+        "namespace App.Shared;\n\npublic class Shape\n{\n    public static int steps(int n)\n    {\n        let left = n;\n        let steps = 0;\n        while (left > 0) {\n            left -= 1;\n            steps += 1;\n        }\n        return steps;\n    }\n\n    law counted(int n) => Shape.steps(n) >= 0;\n}\n",
+        "Law counted reaches a loop in Shape.steps. Write the method as recursion that calls itself on a smaller value.",
+    );
+}
+
+/// A `for … of` loop is a law's only when it only adds to int locals, so one that adds to a string is refused.
+#[test]
+fn a_law_reaching_a_loop_that_writes_a_string_local_is_refused() {
+    assert_unmodeled(
+        "namespace App.Shared;\n\npublic class Shape\n{\n    public static string joined(List<string> names)\n    {\n        let text = \"\";\n        for (const name of names) {\n            text += name;\n        }\n        return text;\n    }\n\n    law joinedText(List<string> names) => Shape.joined(names) == Shape.joined(names);\n}\n",
+        "Law joinedText reaches a loop that does more than count or sum in Shape.joined. Write the method as recursion that calls itself on a smaller value.",
+    );
+}
+
+/// `n + 1` under `n <= 0` moves away from the bound the condition tested, so the recursion never gets smaller.
+#[test]
+fn a_law_reaching_a_recursion_that_does_not_get_smaller_is_refused() {
+    assert_unmodeled(
+        "namespace App.Shared;\n\npublic class Shape\n{\n    public static int up(int n) => n <= 0 ? 0 : Shape.up(n + 1);\n\n    law reachesZero(int n) => Shape.up(n) == 0;\n}\n",
+        "Law reachesZero reaches a recursion that does not get smaller in Shape.up. Write the method as recursion that calls itself on a smaller value: a list's rest from a list pattern, or an int one step towards a bound a condition tested.",
+    );
+}
+
+/// Mutual recursion ends only when every call among the methods passes a smaller value, so a call on `n` itself is
+/// refused.
+#[test]
+fn a_law_reaching_a_mutual_recursion_that_does_not_get_smaller_is_refused() {
+    assert_unmodeled(
+        "namespace App.Shared;\n\npublic class Shape\n{\n    public static bool isEven(int n) => n <= 0 ? true : Shape.isOdd(n - 1);\n    public static bool isOdd(int n) => n <= 0 ? false : Shape.isEven(n);\n\n    law fourIsEven(int unused) => Shape.isEven(4);\n}\n",
+        "Law fourIsEven reaches a recursion that does not get smaller in Shape.isOdd. Write the method as recursion that calls itself on a smaller value: a list's rest from a list pattern, or an int one step towards a bound a condition tested.",
+    );
+}
+
+/// A class whose property holds the class is a Lean structure that holds itself, which Lean refuses.
+#[test]
+fn a_law_reaching_a_type_that_holds_itself_is_refused() {
+    assert_unmodeled(
+        "namespace App.Shared;\n\npublic class Shape\n{\n    public Shape(public int value { get; }, public Shape? next { get; }) { }\n\n    law keepsValue(Shape shape) => shape.value == shape.value;\n}\n",
+        "Law keepsValue reaches a type that holds itself in Shape. A law reasons only about a class whose properties never hold a value of the class itself.",
+    );
+}
+
+/// A value pattern tests a List by `==`, which a `when` guard writes, so the refusal says to write it there.
+#[test]
+fn a_law_reaching_a_value_pattern_on_a_list_is_refused() {
+    assert_unmodeled(
+        "namespace App.Shared;\n\npublic class Shape\n{\n    public const List<int> PAIR = [1, 2];\n\n    public static int pair(List<int> xs) => match (xs) {\n        Shape.PAIR => 1,\n        default => 0,\n    };\n\n    law pairHolds(List<int> xs) => Shape.pair(xs) == Shape.pair(xs);\n}\n",
+        "Law pairHolds reaches a match on this subject in Shape.pair. Compare the value with `==` in a `when` guard.",
+    );
+}
+
+/// Each refusal a law reaches names the construct and says, in one PHP# sentence, what to write in its place, or why
+/// the value is out of a law's reach.
+#[test]
+fn each_refusal_a_law_reaches_says_what_to_write_instead() {
+    let source = "namespace App.Shared;\n\nextern InvalidArgumentException;\n\npublic class Shape\n{\n    public Shape(public int value { get; }) { }\n    public static bool operator ==(Shape a, Shape b) => a.value == b.value;\n    public int hash() => this.value;\n\n    public static int union(int|string x) => 1;\n    public static int power(int a) => a ** 2;\n    public static int complement(int a) => ~a;\n    public static bool same(Shape a, Shape b) => a == b;\n    public static string template(int a) => `n ${a}`;\n    public static int guard(int a) => match (a) {\n        int m when m + 1 > 2 => 1,\n        default => 0,\n    };\n    public static int defaulted(int a = 1) => a;\n    public static int callsDefault(int a) => Shape.defaulted();\n    public static int named(int a) => Shape.defaulted(a: a);\n    public static int thrown(int a) => a > 0 ? a : throw new InvalidArgumentException(\"no\");\n    public static int compound(int a)\n    {\n        let x = a;\n        x **= 2;\n        return x;\n    }\n    public static int inner(int a)\n    {\n        let x = 0;\n        return (x = a) + 1;\n    }\n\n    law l1(int a) => Shape.union(a) == 1;\n    law l2(int a) => Shape.power(a) == Shape.power(a);\n    law l3(int a) => Shape.complement(a) == Shape.complement(a);\n    law l4(Shape a) => Shape.same(a, a);\n    law l5(int a) => Shape.template(a) == Shape.template(a);\n    law l6(int a) => Shape.guard(a) == Shape.guard(a);\n    law l7(int a) => Shape.callsDefault(a) == 1;\n    law l8(int a) => Shape.named(a) == a;\n    law l9(int a) => Shape.thrown(a) == Shape.thrown(a);\n    law l10(int a) => Shape.compound(a) == Shape.compound(a);\n    law l11(int a) => Shape.inner(a) == Shape.inner(a);\n}\n";
+    let directory = lawful_project(&[("app/Shared/Shape.sharp", source)]);
+    let root = directory.path();
+
+    let output = compile_without_lean(root);
+
+    let printed = printed(&output);
+    assert_eq!(output.status.code(), Some(1), "{printed}");
+    for message in [
+        "Law l1 reaches the type `int|string` in Shape.union. Give it a type a law reasons about: int, bool, string, a List, or a PHP# class, enum or interface, with or without `?`.",
+        "Law l2 reaches the operator `**` here in Shape.power. Write it with the operators a law reaches: `+ - * / %` on ints, `+` on strings, `< <= > >=` on ints and strings, `== !=`, `! && ||` and `??`.",
+        "Law l3 reaches the operator `~` in Shape.complement. Write it with the operators a law reaches: `+ - * / %` on ints, `+` on strings, `< <= > >=` on ints and strings, `== !=`, `! && ||` and `??`.",
+        "Law l4 reaches the class operator `==` in Shape.same. Compare the values the objects hold, such as their properties.",
+        "Law l5 reaches a string template in Shape.template. Join the strings with `+`.",
+        "Law l6 reaches a guard that can throw in Shape.guard. Write the guard without calls or arithmetic, which can throw, and compute such a value in the arm.",
+        "Law l7 reaches a default argument in Shape.callsDefault. Pass every argument, the ones with a default value included.",
+        "Law l8 reaches a named or spread argument in Shape.named. Pass each argument by its position.",
+        "Law l9 reaches a throw in Shape.thrown. Return a value that tells the failure apart, such as `null` or an enum case, in place of the exception.",
+        "Law l10 reaches the operator `**=` in Shape.compound. Update an int with `+=`, `-=`, `*=`, `/=` or `%=`, or a string with `+=`.",
+        "Law l11 reaches an assignment inside an expression in Shape.inner. Assign the value in a statement of its own, before the expression that reads it.",
+    ] {
+        assert!(printed.contains(&format!("error - unmodeled-construct: {message}")), "{message}\n{printed}");
+    }
+    assert!(!printed.contains("A law cannot reason about it."), "{printed}");
+}
+
+/// The refusals of code a law cannot read say what to write instead, and name a type parameter as one and PHP's root
+/// namespace as `global.`, never as a plain PHP class.
+#[test]
+fn each_refusal_of_code_a_law_cannot_read_says_what_to_write_instead() {
+    let clock = (
+        "vendor/lib/clock/Clock.php",
+        "<?php\n\nnamespace Lib;\n\nfinal class Clock\n{\n    public static function hour(): int\n    {\n        return 1;\n    }\n}\n",
+    );
+    let stub = ("app/Stubs/Clock.sharp", "namespace App.Stubs;\n\nimport Lib.Clock;\n\nextern Clock;\n");
+    let shape = (
+        "app/Shared/Shape.sharp",
+        "namespace App.Shared;\n\nimport Lib.Clock;\n\npublic class Shape\n{\n    public Shape(public int raw { get; }) { }\n    public int doubled => this.raw * 2;\n\n    public static int parsed(string s) => Int.tryParse(s) ?? 0;\n    public static int hour(int a) => Clock.hour();\n    public static int length(string s) => global.strlen(s);\n    public static int kept<T>(T item) => 1;\n\n    law l1(string s) => Shape.parsed(s) == Shape.parsed(s);\n    law l2(int a) => Shape.hour(a) == Shape.hour(a);\n    law l3(string s) => Shape.length(s) == Shape.length(s);\n    law l4(int a) => Shape.kept(a) == 1;\n    law l5(Shape s) => s.doubled == s.doubled;\n}\n",
+    );
+    let directory = library_project(&[shape, clock, stub]);
+    let root = directory.path();
+
+    let output = compile_without_lean(root);
+
+    let printed = printed(&output);
+    assert_eq!(output.status.code(), Some(1), "{printed}");
+    for message in [
+        "Law l1 reaches the standard library class Int in Shape.parsed. Write the code in a PHP# class of the project: of the standard library, a law reaches a List's `count()`, `map` and `filter`, and `Math.max` and `Math.min` on ints.",
+        "Law l2 reaches the plain PHP class Clock in Shape.hour. Write the code the law reaches in PHP#, or pass the value plain PHP computes to the law as a parameter.",
+        "Law l3 reaches the function `global.strlen` of PHP's root namespace in Shape.length. Write the code the law reaches in PHP#, or pass the value plain PHP computes to the law as a parameter.",
+        "Law l4 reaches the type parameter T in Shape.kept. Give it a type a law reasons about: int, bool, string, a List, or a PHP# class, enum or interface, with or without `?`.",
+        "Law l5 reaches the accessor of Shape.doubled in Shape.l5. Compute the value in a method, and give the property no accessor body.",
+    ] {
+        assert!(printed.contains(&format!("error - unmodeled-construct: {message}")), "{message}\n{printed}");
+    }
+    assert!(!printed.contains("the plain PHP class T"), "{printed}");
+}
+
+/// A loop that reads the local it adds to, here in an `if`, does more than count or sum.
+#[test]
+fn a_law_reaching_a_loop_that_reads_a_local_it_adds_to_is_refused() {
+    assert_unmodeled(
+        "namespace App.Shared;\n\npublic class Shape\n{\n    public static int capped(List<int> xs)\n    {\n        let sum = 0;\n        for (const x of xs) {\n            if (sum < 10) {\n                sum += x;\n            }\n        }\n        return sum;\n    }\n\n    law cappedHolds(List<int> xs) => Shape.capped(xs) == Shape.capped(xs);\n}\n",
+        "Law cappedHolds reaches a loop that reads a local it adds to in Shape.capped. Write the method as recursion that calls itself on a smaller value.",
+    );
+}
+
+#[test]
+fn a_law_reaching_a_pattern_that_names_a_value_outside_an_if_or_a_conditional_is_refused() {
+    assert_unmodeled(
+        "namespace App.Shared;\n\npublic class Shape\n{\n    public Shape(public int total { get; }) { }\n\n    public static bool big(Shape? shape) => shape is Shape found && found.total > 10;\n\n    law nullIsSmall(int unused) => !Shape.big(null);\n}\n",
+        "Law nullIsSmall reaches a pattern that names a value outside the condition of an if or a ?: in Shape.big. Write the test as the condition of an if or a ?:, and read the value it names in the branch it decides.",
+    );
+}
+
+#[test]
+fn a_law_reaching_a_list_pattern_on_a_value_that_is_no_list_is_refused() {
+    assert_unmodeled(
+        "namespace App.Shared;\n\npublic class Shape\n{\n    public static int first(Any? value) => match (value) {\n        [int first, ...] => first,\n        default => 0,\n    };\n\n    law firstOfNull(int unused) => Shape.first(null) == 0;\n}\n",
+        "Law firstOfNull reaches a list pattern on a value that is no List in Shape.first. It reads types while the code runs.",
     );
 }
 
@@ -4139,7 +3668,7 @@ fn a_law_reaching_a_recursion_is_refused() {
 fn a_law_reaching_a_lambda_is_refused() {
     assert_unmodeled(
         "namespace App.Shared;\n\npublic class Shape\n{\n    public static int next(int a)\n    {\n        const step = (int x) => x + 1;\n        return step(a);\n    }\n\n    law grows(int a) => Shape.next(a) != a;\n}\n",
-        "Law grows reaches a lambda in Shape.next. A law cannot reason about this lambda.",
+        "Law grows reaches a lambda in Shape.next. Pass a lambda only to a List's `map` or `filter`, with a body that cannot throw, and call a PHP# method in place of any other function value.",
     );
 }
 
@@ -4148,7 +3677,7 @@ fn a_law_reaching_an_inherited_class_is_refused() {
     assert_unmodeled_beside(
         "namespace App.Shared;\n\npublic class Shape : Base\n{\n    law any(Shape s) => true;\n}\n",
         &[("app/Shared/Base.sharp", "namespace App.Shared;\n\npublic class Base\n{\n}\n")],
-        "Law any reaches the class Shape, which extends Base in Shape. A law cannot reason about inheritance.",
+        "Law any reaches the class Shape, which extends Base in Shape. Declare the members the law reaches in the class itself, in place of inheriting them.",
     );
 }
 
@@ -4156,7 +3685,7 @@ fn a_law_reaching_an_inherited_class_is_refused() {
 fn a_law_reaching_a_named_constructor_is_refused() {
     assert_unmodeled(
         "namespace App.Shared;\n\npublic class Shape\n{\n    public Shape(public int sides { get; }) { }\n    public Shape.triangle() : this(3) { }\n\n    law threeSides(int unused) => new Shape.triangle().sides == 3;\n}\n",
-        "Law threeSides reaches the named constructor Shape.triangle in Shape.threeSides. A law cannot reason about a constructor's body.",
+        "Law threeSides reaches the named constructor Shape.triangle in Shape.threeSides. Write the constructor with promoted properties and no body, and compute the values in a static method that calls `new`.",
     );
 }
 
@@ -4168,6 +3697,6 @@ fn a_law_reaching_an_extension_member_lean_cannot_see_is_refused() {
             "app/Shared/ShapeMath.sharp",
             "namespace App.Shared;\n\npublic static class ShapeMath\n{\n    extension(Shape shape)\n    {\n        public int sum()\n        {\n            let total = 0;\n            for (let i = 0; i < shape.sides; i++) {\n                total += i;\n            }\n            return total;\n        }\n    }\n}\n",
         )],
-        "Law summed reaches a loop in ShapeMath.sum. A law cannot reason about a loop.",
+        "Law summed reaches a loop in ShapeMath.sum. Write the method as recursion that calls itself on a smaller value.",
     );
 }

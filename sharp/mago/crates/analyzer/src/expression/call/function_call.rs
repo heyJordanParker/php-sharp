@@ -50,6 +50,7 @@ use crate::plugin::hook::NamedCall;
 use crate::resolver::class_name::report_keyword_in_another_case;
 use crate::resolver::extension::is_imported_by_default;
 use crate::resolver::property::check_redundant_nullsafe;
+use crate::statement::class_like::law::uncallable_law;
 use crate::utils::expression::get_bare_name_variable_id;
 use crate::utils::names::display_atomic;
 use crate::utils::names::display_class_like_name;
@@ -1338,13 +1339,24 @@ where
 }
 
 /// Spec section 4 writes every member as `this.m()` or `Class.m()`, so a bare call is the global function's. When the
-/// enclosing class declares a method of that name, returns the message that names the member call to write, for the
-/// call that finds no function.
+/// enclosing class declares a method of that name, returns the message that names the member call to write. When it
+/// states a law of that name, spec section 28, a law's body writes the call through the class name, as a static
+/// method's, and any other code is refused the call, for the call that finds no function.
 fn bare_member_call<A>(context: &Context<'_, '_, A>, block_context: &BlockContext<'_>, name: &[u8]) -> Option<String>
 where
     A: Arena,
 {
     let class = block_context.scope.get_class_like()?;
+    if let Some(law) = class.laws.get(&ascii_lowercase_word(name)) {
+        return Some(if block_context.flags.inside_law_body() {
+            format!(
+                "Write `{}()`: a static method reaches the members of its class through the class name.",
+                display_code_member(context, class.original_name, law.original_name)
+            )
+        } else {
+            uncallable_law(context, class, law, law.span).message
+        });
+    }
     let method = context.codebase.get_method(class.name.as_bytes(), name)?;
 
     Some(if block_context.scope.is_static() {

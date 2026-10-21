@@ -1,15 +1,20 @@
-//! A checked PHP# file as the Lean declarations of the code laws reach, of its own laws, and as the facts structure
-//! rules judge.
+//! A checked PHP# file as the Lean declarations of the code laws reach and of its own laws.
 //!
 //! The translation reads the same `CheckedProgram` the bridge lowers to the `.sharpc` file: one checked tree, two back
 //! ends. It translates only what a law reaches, and records each construct Lean does not model where it stands, so a
 //! law that reaches it is refused with the construct named.
 
 mod body;
+mod loops;
 pub(crate) mod names;
+mod pattern;
+pub(crate) mod proof;
 
 use std::path::PathBuf;
 
+use mago_analyzer::smaller::Bound;
+use mago_analyzer::smaller::Smaller;
+use mago_analyzer::smaller::Step;
 use mago_database::file::FileId;
 use mago_names::binding::php_method_name;
 use mago_sharp_bridge::CheckedProgram;
@@ -39,14 +44,14 @@ use mago_syntax::cst::PropertyHookBody;
 use mago_syntax::cst::Sequence;
 use mago_syntax::cst::Statement;
 
-use crate::facts;
-use crate::facts::Facts;
 use crate::issues;
 use crate::reach::Reach;
 use crate::translate::body::Body;
 use crate::translate::body::indented;
+use crate::translate::proof::Proof;
+use crate::translate::proof::Prover;
 
-/// The Lean translation of one accepted `.sharp` file: its laws, the declarations laws reach in it, and its facts.
+/// The Lean translation of one accepted `.sharp` file: its laws and the declarations laws reach in it.
 #[derive(Debug)]
 pub struct Translation {
     pub(crate) file: FileId,
@@ -57,8 +62,9 @@ pub struct Translation {
     pub(crate) class: Option<(String, Span)>,
     pub(crate) laws: Vec<Law>,
     pub(crate) declarations: Vec<Declaration>,
-    /// What structure rules judge in the file.
-    pub(crate) facts: Facts,
+    /// Each member PHP# calls on a value, by its Lean name, and whether it is a property: `m.add(x)` and `m.total`. A goal
+    /// names any other member on its class, as `Money.refundable(a, b)`.
+    pub(crate) receivers: Vec<(String, bool)>,
 }
 
 /// A law the file states.
@@ -70,6 +76,8 @@ pub(crate) struct Law {
     pub(crate) statement: String,
     /// From `law` to the law's name, where its errors are reported.
     pub(crate) span: Span,
+    /// Its theorem, `<statement>.proof`.
+    pub(crate) proof: Proof,
 }
 
 /// One Lean declaration: a structure, an inductive, a definition or a law's statement.
@@ -81,8 +89,11 @@ pub(crate) struct Declaration {
     pub(crate) text: String,
     pub(crate) uses: Vec<Use>,
     pub(crate) unmodeled: Vec<Unmodeled>,
-    /// Whether a proposed proof names it to `simp`: a definition other than a constructor, which is `@[simp]` already.
+    /// Whether it is a definition that computes, a method or a law, rather than a type: a cycle of definitions is a
+    /// recursion, and a cycle of types a type that holds itself.
     pub(crate) unfolds: bool,
+    /// What a method makes smaller on each call it makes of itself or of a method that calls it back.
+    pub(crate) measure: Option<Measure>,
 }
 
 /// A declaration another one uses.
@@ -93,6 +104,52 @@ pub(crate) struct Use {
     pub(crate) file: Option<FileId>,
     /// As messages name it: `Money.add`.
     pub(crate) place: String,
+    /// The smaller value the use passes, when it is a call of a method of the same class.
+    pub(crate) smaller: Option<Smaller>,
+}
+
+/// The parameter a recursive method's calls each make smaller, by the same step, and the `termination_by` that tells
+/// Lean.
+#[derive(Debug, Clone)]
+pub(crate) struct Measure {
+    pub(crate) parameter: usize,
+    pub(crate) step: Step,
+    pub(crate) termination: String,
+}
+
+impl Measure {
+    /// The measure of a method whose parameters Lean names `parameters`, from the calls among `uses` that pass a
+    /// smaller value, when they all make the same parameter smaller by the same step.
+    fn of(uses: &[Use], parameters: &[String]) -> Option<Measure> {
+        let mut calls = uses.iter().filter_map(|used| used.smaller);
+        let first = calls.next()?;
+        if !calls.all(|call| call.parameter == first.parameter && call.step == first.step) {
+            return None;
+        }
+
+        Some(Self::new(first.parameter, first.step, parameters))
+    }
+
+    /// The measure of a method or a law whose parameters Lean names `parameters`, whose calls of itself each make the
+    /// parameter at `place` smaller by `step`.
+    pub(crate) fn new(place: usize, step: Step, parameters: &[String]) -> Measure {
+        let parameter = &parameters[place];
+        let bound = |bound: Bound| match bound {
+            Bound::Literal(value) => format!("({value} : int).toInt"),
+            Bound::Parameter(index) => format!("{}.toInt", parameters[index]),
+        };
+        let measure = match step {
+            Step::Rest => format!("{parameter}.length"),
+            Step::Down(below) => format!("({parameter}.toInt - {}).toNat", bound(below)),
+            Step::Up(above) => format!("({} - {parameter}.toInt).toNat", bound(above)),
+        };
+
+        Measure {
+            parameter: place,
+            step,
+            termination: format!("termination_by {measure}\ndecreasing_by all_goals smaller_value"),
+        }
+    }
 }
 
 /// A construct the translation does not model.
@@ -120,7 +177,7 @@ pub fn translate(checked: &CheckedProgram<'_>, reach: &Reach) -> Translation {
             class: None,
             laws: Vec::new(),
             declarations: Vec::new(),
-            facts: facts::collect(checked),
+            receivers: Vec::new(),
         },
     };
 
@@ -319,7 +376,15 @@ impl Translator<'_, '_> {
             parameters.join(" "),
             indented(&lines, 2).collect::<Vec<_>>().join("\n")
         );
-        self.translation.declarations.push(Declaration { key, span, text, uses, unmodeled, unfolds: false });
+        self.translation.declarations.push(Declaration {
+            key,
+            span,
+            text,
+            uses,
+            unmodeled,
+            unfolds: false,
+            measure: None,
+        });
     }
 
     fn r#enum(&mut self, r#enum: &Enum) {
@@ -374,6 +439,7 @@ impl Translator<'_, '_> {
             for (case, value) in values {
                 lines.push(format!("  | .{case} => {value}"));
             }
+            self.translation.receivers.push((names::member(&lean, b"value"), true));
             self.declare(body, names::member(&lean, b"value"), r#enum.name.span, lines.join("\n"), true);
         }
 
@@ -477,8 +543,16 @@ impl Translator<'_, '_> {
         if receiver.is_none() && !method.is_static() {
             parameters.push(format!("(this : {lean})"));
         }
+        if receiver.is_some() || !method.is_static() {
+            self.translation.receivers.push((names::member(lean, method.name.value), false));
+        }
+        body.takes(receiver.into_iter().chain(method.parameter_list.parameters.iter()));
         for parameter in receiver.into_iter().chain(method.parameter_list.parameters.iter()) {
             parameters.push(binder(&mut body, parameter));
+        }
+        // An extension's receiver comes before the arguments a call passes, so only a method's own calls recurse.
+        if receiver.is_none() {
+            body.recurse_on(method.parameter_list.parameters.iter());
         }
         let void = method.return_type_hint.as_ref().is_none_or(|hint| matches!(hint.hint, Hint::Void(_)));
         let returns =
@@ -492,7 +566,16 @@ impl Translator<'_, '_> {
                 body.finish()
             }
         };
-        self.define(names::member(lean, method.name.value), method.name.span, &parameters, &returns, translated);
+        let names: Vec<String> = method.parameter_list.parameters.iter().map(parameter_name).collect();
+        let measure = receiver.is_none().then(|| Measure::of(&translated.1, &names)).flatten();
+        self.define(
+            names::member(lean, method.name.value),
+            method.name.span,
+            &parameters,
+            &returns,
+            translated,
+            measure,
+        );
     }
 
     /// The reached members of an extension, spec section 26, each the static method it runs as.
@@ -533,10 +616,12 @@ impl Translator<'_, '_> {
             body.unmodeled(property.variable.span, format!("the property {place}"), issues::RESERVED_NAME);
         }
 
+        body.takes([receiver]);
         let parameter = binder(&mut body, receiver);
+        self.translation.receivers.push((names::member(lean, name), true));
         let returns = body.declared_type(property.hint.as_ref(), property.variable.span);
         let translated = body.expression_body(property.body.expression);
-        self.define(names::member(lean, name), property.variable.span, &[parameter], &returns, translated);
+        self.define(names::member(lean, name), property.variable.span, &[parameter], &returns, translated, None);
     }
 
     /// `def Class.m (parameters) : M returns := do …`, a definition a law unfolds, from its translated body.
@@ -547,33 +632,64 @@ impl Translator<'_, '_> {
         parameters: &[String],
         returns: &str,
         (lines, uses, unmodeled): (Vec<String>, Vec<Use>, Vec<Unmodeled>),
+        measure: Option<Measure>,
     ) {
         let text = format!(
             "def {key} {} : M {returns} := do\n{}",
             parameters.join(" "),
             indented(&lines, 2).collect::<Vec<_>>().join("\n")
         );
-        self.translation.declarations.push(Declaration { key, span, text, uses, unmodeled, unfolds: true });
+        self.translation.declarations.push(Declaration { key, span, text, uses, unmodeled, unfolds: true, measure });
     }
 
-    /// `@[law] def Class.law : Prop := ∀ (a : A), holds do …`: the law holds unless its body finishes with `false`.
+    /// `@[law] def Class.law (a : A) : Prop := [condition = pure true →] holds do …`: the law holds for every value of
+    /// its parameters that meets its `when` condition, unless its claim finishes with `false`. Its theorem, which its
+    /// body proves, comes from [`Prover`].
     fn law(&mut self, full: &[u8], lean: &str, short: &str, law: &LawNode) {
         let name = String::from_utf8_lossy(law.name.value).into_owned();
         let key = names::member(lean, law.name.value);
-        let mut body = Body::new(self.checked, self.reach, full, format!("{short}.{name}"));
+        let place = format!("{short}.{name}");
+        let mut body = Body::for_law(self.checked, self.reach, full, place.clone(), law);
         let binders: Vec<String> =
             law.parameter_list.parameters.iter().map(|parameter| binder(&mut body, parameter)).collect();
+        let parameters: Vec<String> =
+            law.parameter_list.parameters.iter().map(|parameter| parameter_name(parameter)).collect();
 
-        let (lines, uses, unmodeled) = body.expression_body(law.body.expression);
-        let statement =
-            if binders.is_empty() { "holds do".to_owned() } else { format!("∀ {}, holds do", binders.join(" ")) };
-        let text = format!(
-            "@[law] def {key} : Prop :=\n  {statement}\n{}",
-            indented(&lines, 4).collect::<Vec<_>>().join("\n")
-        );
+        let mut text = format!("@[law] def {key} {} : Prop :=\n", binders.join(" "));
+        let (mut uses, mut unmodeled) = (Vec::new(), Vec::new());
+        if let Some(condition) = &law.condition {
+            let (lines, terms, condition_uses, condition_unmodeled) =
+                Body::for_law(self.checked, self.reach, full, place.clone(), law).terms(&[], &[condition.expression]);
+            text.push_str("  ((do\n");
+            text.extend(indented(&lines, 6).map(|line| format!("{line}\n")));
+            text.push_str("      return (");
+            text.push_str(&terms[0]);
+            text.push_str(")) : M Bool) = pure true →\n");
+            uses.extend(condition_uses);
+            unmodeled.extend(condition_unmodeled);
+        }
+        let (lines, claim_uses, claim_unmodeled) = body.expression_body(law.claim);
+        text.push_str("  holds do\n");
+        text.push_str(&indented(&lines, 4).collect::<Vec<_>>().join("\n"));
+        uses.extend(claim_uses);
+        unmodeled.extend(claim_unmodeled);
+
+        // The theorem lives beside the statement, so the generated module holds what its proof uses too.
+        let mut proof =
+            Prover::new(self.checked, self.reach, full, place, law, key.clone()).prove(&binders, &parameters);
+        uses.append(&mut proof.uses);
+        unmodeled.append(&mut proof.unmodeled);
         let span = Span::between(law.law.span(), law.name.span);
-        self.translation.laws.push(Law { name, statement: key.clone(), span });
-        self.translation.declarations.push(Declaration { key, span, text, uses, unmodeled, unfolds: true });
+        self.translation.laws.push(Law { name, statement: key.clone(), span, proof });
+        self.translation.declarations.push(Declaration {
+            key,
+            span,
+            text,
+            uses,
+            unmodeled,
+            unfolds: true,
+            measure: None,
+        });
     }
 
     fn states_laws(&self, members: &Sequence<'_, ClassLikeMember<'_>>) -> bool {
@@ -582,7 +698,7 @@ impl Translator<'_, '_> {
 
     fn declare(&mut self, body: Body<'_, '_>, key: String, span: Span, text: String, unfolds: bool) {
         let (_, uses, unmodeled) = body.finish();
-        self.translation.declarations.push(Declaration { key, span, text, uses, unmodeled, unfolds });
+        self.translation.declarations.push(Declaration { key, span, text, uses, unmodeled, unfolds, measure: None });
     }
 }
 
@@ -614,13 +730,14 @@ fn is_stored(property: &Property) -> bool {
     }
 }
 
-/// `parameter` as the binder `(name : Type)`, which `body` reads as a local.
+/// `parameter` as the binder `(name : Type)`, with its Lean type as `body` translates it.
 fn binder(body: &mut Body<'_, '_>, parameter: &FunctionLikeParameter) -> String {
     let r#type = body.declared_type(parameter.hint.as_ref(), parameter.span());
-    if matches!(parameter.hint, Some(Hint::Nullable(_))) {
-        body.nullable_parameter(parameter.variable.span.start.offset);
-    }
-    let name = parameter.variable.name.strip_prefix(b"$").unwrap_or(parameter.variable.name);
 
-    format!("({} : {type})", names::identifier(name))
+    format!("({} : {type})", parameter_name(parameter))
+}
+
+/// `parameter`'s name as Lean writes it.
+fn parameter_name(parameter: &FunctionLikeParameter) -> String {
+    names::identifier(parameter.variable.name.strip_prefix(b"$").unwrap_or(parameter.variable.name))
 }

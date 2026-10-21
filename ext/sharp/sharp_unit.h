@@ -12,7 +12,7 @@
 #endif
 
 #define SHARP_UNIT_MAGIC "\x53\x48\x41\x52\x50\x43\x00\x00"
-#define SHARP_UNIT_ABI "\xc1\x5c\x23\x4e\xae\x37\x65\xfb\x4b\xe1\x94\x93\x45\x6f\x85\x9f"
+#define SHARP_UNIT_ABI "\xfc\xd5\xb6\x2d\x48\xd3\x34\xa5\xc8\xc0\xe6\xc2\x94\xa0\x27\x8b"
 
 #define SHARP_KINDS(X) \
   X(ZVAL) \
@@ -330,7 +330,6 @@ typedef struct {
   // A `SHARP_AST_STMT_LIST`.
   uint32_t root;
   uint32_t texts_size;
-  uint32_t facts_size;
   // The native fingerprint of the standard library the file was compiled against, which the engine compares with
   // its own `SHARP_NATIVE`. All zero when the project holds no standard library.
   uint8_t native_fingerprint[16];

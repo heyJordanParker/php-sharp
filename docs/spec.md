@@ -5020,7 +5020,7 @@ Log.info("charged", ["class": typeof(Order)]);                   // compiles: re
 public int total() => "one";                                    // compile error: the pragma hides no error of the language
 ```
 
-**`vendor/bin/mago compile` compiles the project.** It checks every `.sharp` file, vendor packages included. It also creates a missing `.lean` file beside a class that has a law (section 28.1), and never rewrites an existing one.
+**`vendor/bin/mago compile` compiles the project.** It checks every `.sharp` file, vendor packages included, and proves every law they state (section 28).
 
 - **A `.sharp` file that isn't compiled, or is out of date, is refused,** and the refusal names the fix:
 
@@ -5034,7 +5034,7 @@ app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mag
 - **`mago compile` writes a `.php` file beside each of the project's `.sharp` files that declares a type,** as `StoreService.php` beside `StoreService.sharp`. So PHP code that finds classes by listing `*.php` files and naming each class by its path, as route-attribute and event discovery do, finds PHP# classes too, the way Java's classpath scanners find Kotlin classes. The file loads its `.sharp` file through the engine, and on plain PHP it throws the "needs the PHP# engine" error. It ends with the type's declaration in an `if (false)` that never runs, naming the type and its kind, so PHP code that reads `*.php` source, as Composer's class map generator and Symfony's attribute routing do, finds the type too, the way tools read a TypeScript `.d.ts` file. A type named after a word PHP reserves, as `Case` or `Match`, gets the file without the declaration, which PHP would refuse, so a tool that reads source never finds it, and Composer's PSR-4 rule still loads it. The engine declares the type once, from the `.sharp` file, and the checker reads the `.sharp` file and never the `.php` file. Once its `.sharp` file is deleted, it declares nothing until the next compile deletes it. Nobody edits it: a `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, and the next compile rewrites or deletes the file with its source. In a git repository, `mago compile` lists in `.git/info/exclude` the files no `.gitignore` already ignores. It finds that file by reading `.git` itself, in a clone and in a worktree, so it needs no `git` program. When git refuses to read the repository, as one another user owns, the compile still succeeds, lists every file there, and warns with git's reason. When it can't write the file, as with a read-only `.git/info` folder, it warns which files git shows as untracked and which folder to make writable.
 - **A `.sharp` file in an `autoload-dev` folder, and a package's in `vendor/`, gets no `.php` file.** A test class keeps one file, because PHPUnit loads a test class only from the file it lists, so `phpunit.xml` lists the PHP# tests as `<directory suffix="Test.sharp">tests</directory>`.
 - **Editors hide the `.php` files:** VS Code through `"files.exclude": {"**/*.php": {"when": "$(basename).sharp"}}`, and PhpStorm through file nesting of `.php` under `.sharp`.
-- **A type error, or a broken structure rule (section 28), stops the file from running.** So does a law without a proof, a gap, or a proof whose law was deleted, each a compile error that names it.
+- **A type error stops the file from running, an import its module's `imports` line leaves out included.** So does a law the checker cannot prove, a compile error that names the law and what is still to show.
 - **A plain PHP class that doesn't satisfy a PHP# type it extends or implements stops `mago compile`** (section 22), and `mago compile` still writes every accepted `.sharp` file.
 - **`mago compile` hides exactly what `mago analyze` hides:** the same `ignore` entries and baseline hide a host rule's error from both, as `tsc` and `tsc --noEmit` report the same errors.
 - **An extension host loads the project's own classes, on a fresh or read-only tree and after any change.** Before a command starts its hosts, `mago compile`, `mago analyze` (`--watch` too) and `mago lint` compile the project for the hosts into a folder of mago's cache, outside the project, which only the hosts' engine reads, so the project's `.sharp` folder holds only what `mago compile` accepted. That compile lowers every file that lowers, whatever the checker says of it, as Roslyn hands an analyzer a compilation with errors and `tsc` emits despite type errors: a host that loads a file with a type error gets the error the code raises when it runs, and a host that loads a file that doesn't lower gets the checker's errors. A watch restarts the hosts' workers when a file they load changes, as a dev server restarts a worker when a module it loaded changes.
@@ -5044,10 +5044,10 @@ app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mag
 
 The checker verifies two kinds of facts before code runs:
 
-- **Structure:** what code may depend on and do. Visibility and effects belong to the language. Code-shape and style rules stay plugins in the checker.
-- **Values:** facts the code guarantees, written as laws with proofs, as in Bend, Lean and Agda.
+- **Structure,** meaning what a namespace may import, is a module's `imports` line (section 32), which the checker checks as it checks types.
+- **Values:** facts the code guarantees, written as laws, as in Bend, Lean and Agda.
 
-**A class states its laws in PHP#,** with `law`. A law's parameters range over every possible value. Its proofs go in a Lean file of the same name beside it, `Money.lean` beside `Money.sharp`, written in Lean 4 and checked by Lean. Bend 2 splits claims from proofs the same way, into `LAWS.bend` and `PROOF.bend`.
+**A class states its laws in PHP#,** with `law`. A law is a claim over every value of its parameters, `law name(parameters) => claim;`, and the checker proves it alone. A law the checker cannot prove alone carries a body after its claim, in place of the `;`, and the body is its proof, in ordinary PHP#. Laws and their proofs live in the `.sharp` file, as in Bend, where a law is proven by a definition of the same name in the same file. The checker turns each law into a Lean theorem in `.sharp/`, and Lean's kernel checks every proof. Nobody writes or reads Lean.
 
 <!-- example class-law -->
 ```csharp
@@ -5058,12 +5058,135 @@ public class Money
 {
     public Money(public int amount { get; }, public string currency { get; }) { }
     public Money add(Money other) => new Money(this.amount + other.amount, this.currency);
+    public Money times(int n) => n <= 0 ? new Money(0, this.currency) : this.add(this.times(n - 1));
 
-    law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;
+    law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;   // compiles: the checker proves it alone
+    law timesKeepsCurrency(Money m, int n) => m.times(n).currency == m.currency   // compiles: its body proves it
+    {
+        if (n <= 0) {
+            return;                                     // m.times(n) is new Money(0, m.currency)
+        }
+        Money.timesKeepsCurrency(m, n - 1);             // the law for the smaller n
+        Money.addKeepsCurrency(m, m.times(n - 1));      // adding keeps that currency
+    }
 }
 ```
 
-**A module states laws that span its classes** in `Module.sharp` (section 32). Their proofs, and the namespace's structure rules, go in `Module.lean` in the same folder. Both files are optional.
+**A law's body is ordinary PHP#.** It holds `if` and `else`, `match` statements whose arms are blocks, locals, `return;`, and calls of laws as statements, and nothing else. It has no effects.
+
+- **Each `if` and each `match` arm is a case** that knows its condition, or its pattern and its `when` guard. A `match` in a body takes every arm a `match` takes, of a parameter of the law, a value a pattern of the body names, or a property of one.
+- **`return;` closes the case it ends.** The checker proves the claim there with what the case knows. So does the end of the body.
+- **A call of a law is a fact the case knows from then on:** the claim of that law for the call's arguments. Its arguments are any pure expressions.
+- **A law is reached through its class's name,** as a static method is, as `Money.addKeepsCurrency(m, x)`. A module's law is reached as `Module.name(…)` (section 32).
+- **A law is called only as a statement of a law's body.** A law never runs, so a call of it anywhere else is a compile error.
+- **Every proven law is a fact later laws may call,** and the checker's own steps use the laws a body calls.
+
+<!-- example law-calls -->
+```csharp
+// app/Shared/Money.sharp
+namespace App.Shared;
+
+public class Money
+{
+    public Money(public int amount { get; }, public string currency { get; }) { }
+    public Money add(Money other) => new Money(this.amount + other.amount, this.currency);
+    public static bool same(Money a, Money b) => Money.addKeepsCurrency(a, b);   // compile error: `Money.addKeepsCurrency` is a law, and only a law's body calls a law, as a statement of its own
+
+    law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;
+    law addTwiceKeepsCurrency(Money a, Money b) => a.add(b).add(b).currency == a.currency
+    {
+        Money.addKeepsCurrency(a, b);
+        Money.addKeepsCurrency(a.add(b), b);
+    }
+}
+```
+
+**A law calls itself only on a smaller value:** a list's rest from a list pattern the body matched, or an int one step towards a bound the body tested, as a method's recursion does (below). Any other call of itself, and two laws that call each other in a cycle, is the compile error "a law calls itself only on a smaller value".
+
+<!-- example law-recursion -->
+```csharp
+// app/Shared/Money.sharp
+namespace App.Shared;
+
+public class Money
+{
+    public Money(public int amount { get; }, public string currency { get; }) { }
+    public Money add(Money other) => new Money(this.amount + other.amount, this.currency);
+
+    public static Money sum(Money total, List<Money> items) => match (items) {
+        [] => total,
+        [Money first, ...List<Money> rest] => Money.sum(total.add(first), rest),
+        default => total,
+    };
+
+    law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;
+    law sumKeepsCurrency(Money total, List<Money> items) => Money.sum(total, items).currency == total.currency
+    {
+        match (items) {
+            [] => { return; },
+            [Money first, ...List<Money> rest] => {
+                Money.sumKeepsCurrency(total.add(first), rest);   // the law for the list's rest
+                Money.addKeepsCurrency(total, first);
+            },
+            default => { return; },
+        }
+    }
+    law broken(int x) => x == x + 1 { Money.broken(x); }   // compile error: a law calls itself only on a smaller value
+}
+```
+
+**`when` after a law's parameters states its condition:** the claim holds for every value that meets it. A law with `when` is called only where its condition holds, and a call where the case does not know it is an error that names the condition still to show.
+
+<!-- example law-when -->
+```csharp
+// app/Shared/Refunds.sharp
+namespace App.Shared;
+
+import Sharp.Math.Math;
+
+public class Refunds
+{
+    public static int refundable(int paid, int refunded) => Math.max(paid - refunded, 0);
+
+    law neverAbovePaid(int paid, int refunded) when paid >= 0 && refunded >= 0
+        => Refunds.refundable(paid, refunded) <= paid;
+    law refundOfNothing(int paid) when paid >= 0 => Refunds.refundable(paid, 0) == paid;
+    law refundOfAnything(int p, int r) => p < 0 || Refunds.refundable(p, r) <= p
+    {
+        Refunds.neverAbovePaid(p, r);                     // compile error: still to show for the call Refunds.neverAbovePaid(p, r): p >= 0 && r >= 0
+    }
+}
+```
+
+**A case the checker cannot close is the error `law-unproven`** on the law. It names the case's conditions and the claim still to show, in PHP#, and a `help` line names a call of the law itself on a smaller value when the case makes none:
+
+<!-- example law-unproven -->
+```csharp
+// app/Shared/Money.sharp
+namespace App.Shared;
+
+public class Money
+{
+    public Money(public int amount { get; }, public string currency { get; }) { }
+    public Money add(Money other) => new Money(this.amount + other.amount, this.currency);
+    public Money times(int n) => n <= 0 ? new Money(0, this.currency) : this.add(this.times(n - 1));
+
+    law timesKeepsCurrency(Money m, int n) => m.times(n).currency == m.currency   // compile error: law timesKeepsCurrency is not proven
+    {
+        if (n <= 0) {
+            return;
+        }
+    }
+}
+```
+
+```text
+error[law-unproven]: law timesKeepsCurrency is not proven
+  when n > 0, still to show: m.add(m.times(n - 1)).currency == m.currency
+  help: the law for a smaller n is the call Money.timesKeepsCurrency(m, n - 1)
+```
+
+**A module states laws that span its classes** in `Module.sharp` (section 32), with bodies as a class's laws have.
 
 <!-- example module-law -->
 ```csharp
@@ -5073,12 +5196,62 @@ namespace App.Tenant.Store;
 module
 {
     law receiptMatchesRefunds(int paid, int refunded) => Receipts.refundable(paid, refunded) == Refunds.remaining(paid, refunded);
+    law receiptNeverNegative(int paid, int refunded) when refunded <= paid => Refunds.remaining(paid, refunded) >= 0
+    {
+        Module.receiptMatchesRefunds(paid, refunded);
+    }
 }
 ```
 
-**Rules and laws gate running.** A broken structure rule stops the code that breaks it from running, as a type error does. A law without a proof, a gap, or a proof whose law was deleted is a compile error that names it (section 27).
+A law the checker cannot prove is a compile error that names it (section 27).
 
-**Laws hold only over pure code** (section 29). The checker translates pure PHP# code to Lean, and Lean's kernel checks the proofs. Bend's `--verdict` mode and Aeneas, which translates Rust to Lean, work the same way.
+**Laws hold only over pure code** (section 29). The checker translates pure PHP# code to Lean, and Lean's kernel checks the proofs. Bend's `--verdict` mode and Aeneas, which translates Rust to Lean, work the same way. A law reaches the code it calls, and that code's own calls, and code no law reaches is never translated or refused:
+
+- **A method may call itself, or a method of its class that calls it back, only on a smaller value:** a list's rest from a list pattern, or `n - 1` or `n + 1` towards a bound an `if`, `?:`, `&&`, `||` or `match` comparison tested. The bound is an int literal, tested with `<`, `<=`, `>` or `>=`, or another int parameter the call passes on unchanged, tested with `<` or `>`.
+- **A `for (… of …)` loop over a List** reaches a law when its body only adds pure int values to int locals with `+=` or `++`, each under an `if` or not, and never reads a local it adds to.
+- **A list pattern takes one rest, anywhere in it,** and each element names a value or only a type. `[...a, x, ...b]` appends the lists.
+- **The standard library's `Math.max` and `Math.min` on ints reach laws,** since the checker knows they give the largest and the smallest of their arguments.
+- **Each refusal names what to write instead,** as these do:
+
+```text
+Law summed reaches a loop in Shape.sum. Write the method as recursion that calls itself on a smaller value.
+Law joinedText reaches a loop that does more than count or sum in Shape.joined. Write the method as recursion that calls itself on a smaller value.
+Law cappedHolds reaches a loop that reads a local it adds to in Shape.capped. Write the method as recursion that calls itself on a smaller value.
+Law reachesZero reaches a recursion that does not get smaller in Shape.up. Write the method as recursion that calls itself on a smaller value: a list's rest from a list pattern, or an int one step towards a bound a condition tested.
+Law nullIsSmall reaches a pattern that names a value outside the condition of an if or a ?: in Shape.big. Write the test as the condition of an if or a ?:, and read the value it names in the branch it decides.
+```
+
+<!-- example law-reach -->
+```csharp
+// app/Shared/Steps.sharp
+namespace App.Shared;
+
+public class Steps
+{
+    public static int walk(int n)
+    {
+        if (n <= 0) {
+            return 0;
+        }
+        return 1 + Steps.walk(n - 1);                   // n - 1 towards the bound 0 the if tested
+    }
+
+    public static int climb(int i, int top) => i >= top ? 0 : 1 + Steps.climb(i + 1, top);
+
+    public static int size(List<int> items)
+    {
+        let count = 0;
+        for (const item of items) {
+            count++;
+        }
+        return count;
+    }
+
+    law twoSteps(int unused) => Steps.walk(2) == 2;
+    law climbsTwo(int unused) => Steps.climb(0, 2) == 2;
+    law sizeIsCount(List<int> items) => Steps.size(items) == items.count();
+}
+```
 
 **A state machine gets its laws through a pure transition method on its status enum,** so a law covers every state and event:
 
@@ -5099,63 +5272,26 @@ public enum Status : string
 }
 ```
 
-**Structure rules are checks that Lean runs.** The checker loads the code's structure, meaning its namespaces, imports and references, as data, and Lean runs each rule over it like a function. A broken rule reports every offending line. Laws, which cover every possible value, stay theorems proved by Lean's kernel. A structure rule only scans the facts that exist, where a kernel proof gives the same answer far more slowly. Structure rules replace architecture linters such as a Mago module-boundary rule, the way CodeQL queries and Mathlib's `#lint` checks do.
-
 ### 28.1 Lean files
 
-A class's proofs sit in a Lean file of the same name beside it. A namespace's module laws, their proofs and its structure rules sit in `Module.sharp` and `Module.lean` in its folder.
+A law and its proof sit in the `.sharp` file that states it.
 
 ```text
 app/
-├── Module.lean                  <- structure rules about the whole application
 ├── Shared/
-│   ├── Module.lean              <- App.Shared's structure rules, such as "Shared never reaches Tenant"
-│   ├── Money.sharp              <- states the law addKeepsCurrency
-│   └── Money.lean               <- proves addKeepsCurrency
+│   └── Money.sharp              <- states and proves the laws addKeepsCurrency and timesKeepsCurrency
 └── Tenant/Store/
-    ├── Module.sharp             <- the module (section 32), and the law receiptMatchesRefunds
-    ├── Module.lean              <- proves receiptMatchesRefunds, and holds App.Tenant.Store's structure rules
+    ├── Module.sharp             <- the module (section 32), its imports line, and the law receiptMatchesRefunds
     ├── Receipts.sharp
     ├── Refunds.sharp
     └── StoreService.sharp
 ```
 
-The checker created `Money.lean` and appended the proof `simp` found:
-
-```lean
--- app/Shared/Money.lean
-import Code.App.Shared.Money
-open Sharp
-
-theorem addKeepsCurrency : App.Shared.Money.addKeepsCurrency := by
-  simp [App.Shared.Money.addKeepsCurrency, App.Shared.Money.add]
-```
-
-`app/Tenant/Store/Module.lean` proves the module law. It imports `Code.App.Tenant.Store.Module` because `Module.sharp` states a law. The same file also holds the namespace's structure rule: "`App.Tenant.Store` imports only `App.Tenant.Community` and `App.Shared.Schema`."
-
-**A structure rule is a Lean definition with the `@[rule]` attribute,** the way Lean marks a simp lemma with `@[simp]`. **It names a namespace by its full name, and a name that is no namespace in the project is a compile error,** as any unknown name in Lean is. That holds in the rules PHP# ships, such as `.neverImports`, and in a rule of your own, such as one built with `.imports` and `under`:
-
-```lean
--- app/Tenant/Store/Module.lean
-import Code.App.Tenant.Store.Module
-open Sharp
-
-theorem receiptMatchesRefunds : App.Tenant.Store.Module.receiptMatchesRefunds := by
-  simp [App.Tenant.Store.Module.receiptMatchesRefunds, App.Tenant.Store.Receipts.refundable, App.Tenant.Store.Refunds.remaining]
-
-@[rule] def importsOnly : Rule := .importsOnly [App.Tenant.Community, App.Shared.Schema]   -- compiles
-@[rule] def neverLedger : Rule := .neverImports App.Shared.Ledgr                            -- compile error: unknown identifier `App.Shared.Ledgr`
-@[rule] def ownLedger : Rule := .imports fun _ i => under i.name App.Shared.Ledgr           -- compile error: unknown identifier `App.Shared.Ledgr`
-```
-
-- **The checker generates the Lean translation of pure code and the Lean statement of each law into `.sharp/`,** never into the source tree.
-- **A law's generated Lean statement is named by its class's full name and the law's name,** as in `App.Shared.Money.addKeepsCurrency`. A module law's is named by its namespace, `Module` and the law's name, as in `App.Tenant.Store.Module.receiptMatchesRefunds`.
-- **When a class or module has a law and no Lean file, the checker creates the file.** For each new law, it appends a proof found by Lean's automatic steps (`simp`, `omega`, `decide`), or a marked gap when none is found. It never rewrites a proof that exists.
-- **A law without a proof, a gap, or a proof whose law was deleted is a compile error that names it.**
-- **A rule lives with the namespace it constrains.** "Shared never reaches Tenant" goes in `app/Shared/Module.lean`. A rule about the whole application goes in `app/Module.lean`.
+- **The checker generates the Lean translation of pure code and the theorem of each law into `.sharp/`,** never into the source tree, on each compile. No Lean file of the project proves a law.
+- **A law's generated statement is named by its class's full name and the law's name,** as in `App.Shared.Money.addKeepsCurrency`. A module law's is named by its namespace, `Module` and the law's name, as in `App.Tenant.Store.Module.receiptMatchesRefunds`.
+- **A law the checker cannot prove is a compile error that names it,** with what is still to show.
 - **Names match exactly.** Translated code keeps its PHP# names in Lean, with no prefix.
-- **A failed rule is reported on the code that breaks it,** such as the offending `import` line, not only as a failed theorem.
-- **The checker names the law in each error about it,** as in `Law addKeepsCurrency is not proven.`
+- **The checker names the law in each error about it,** as in `law addKeepsCurrency is not proven`.
 
 ## 29. Effects
 
@@ -5384,7 +5520,7 @@ public class Stamp
 - **A class's effects** are the `foreign` classes it holds, directly or through its fields, or that its methods take, the effects of the plain PHP its methods call, and the events its methods emit. A method that calls a `foreign` object it takes has that effect, as when it calls one it holds, and a caller that uses one a method returns has the effect at that call. The checker works them out from field, constructor and parameter types and from method bodies. Nothing is written down.
 - **A `foreign` object** is created in a module binding (section 32), as often as its binding's lifetime decides, and passed on through constructors, method parameters and return values. Creating one anywhere else in PHP# code, or storing one in a static, is a compile error. Plain PHP creates one as it creates any object.
 
-**Pure code** reaches no `foreign` object, emits no event, and calls no plain PHP unless an `extern` declares it pure. Pure limits only what code reaches outside the program, so a pure method may change its own object and its arguments. `readonly` after the parameters is what promises a method changes nothing, as in `T peek() readonly;`, and it holds every implementation to that (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code that changes nothing it was given, so a law that reaches a change is a compile error naming the method, and Lean cannot see inside `foreign` classes or plain PHP.
+**Pure code** reaches no `foreign` object, emits no event, and calls no plain PHP unless an `extern` declares it pure. Pure limits only what code reaches outside the program, so a pure method may change its own object and its arguments. `readonly` after the parameters is what promises a method changes nothing, as in `T peek() readonly;`, and it holds every implementation to that (section 13). A `get` body has whatever effects its body has, and a read of the property carries them (section 6.1). Laws (section 28) reason only about pure code that changes nothing it was given, so a law that reaches a change is a compile error naming the method, and a law cannot see inside `foreign` classes or plain PHP.
 
 **Code without a body is pure unless it says `uses`.** This covers interface methods, abstract methods and function types, except the function type of a method's parameter, which takes on what each call passes (below). A declaration that overrides another is held to it: a sub-interface may narrow its parent's `uses`, and a `uses` that widens it is a compile error at the declaration. Every implementation is held to what the declaration allows:
 
@@ -5689,7 +5825,7 @@ module
 - **A binding names the services it needs as parameters, and its value is one expression over them,** as Dagger's `@Provides` methods do. The container passes each parameter the service bound to its type, so `RedisStore` above gets the app's `Environment`, which the standard library's module binds for every namespace. An expression is for a value no binding gives, such as `RedisStore`'s URL.
 - **A module stays declarative:** one expression per binding, and no statements, loops or methods.
 - **A `foreign` object is created in a module binding** (section 29). The binding's lifetime decides how often one is created, and the container passes it to classes through their constructors.
-- **A module also states the laws that span its classes** (section 28).
+- **A module also states the laws that span its classes** (section 28), **and lists the namespaces its code imports from** (below).
 
 **The host defines each lifetime, as ASP.NET Core's host does.** A `singleton` lives as long as the host runs the app. A `scoped` binding lives for one scope, which the host starts and ends, such as one HTTP request, one queued job or one console command run. A `transient` binding is created each time a class needs one.
 
@@ -5836,6 +5972,62 @@ module
 {
     singleton Mailer = SmtpMailer;
     transient Checkout = Checkout;   // compile error: Checkout needs a PaymentGateway, and no module binds one
+}
+```
+
+**A module lists the namespaces its code imports from** on one `imports` line, as Java's `module-info.java` lists the modules it `requires`. An import of any other namespace is a compile error at the import, which names the namespace and its list.
+
+<!-- example module-imports -->
+```csharp
+// app/Tenant/Store/Module.sharp
+namespace App.Tenant.Store;
+
+module
+{
+    imports App.Tenant.Community, App.Shared.Schema, Illuminate.Support;
+}
+```
+
+<!-- example module-imports -->
+```csharp
+// app/Tenant/Store/StoreService.sharp
+namespace App.Tenant.Store;
+
+import App.Tenant.Community.Member;     // compiles
+import Illuminate.Support.Facades.DB;   // compiles: Illuminate.Support lists every namespace below it
+import App.Shared.Ledger.Entry;         // compile error: App.Tenant.Store imports only App.Tenant.Community, App.Shared.Schema and Illuminate.Support
+
+public class StoreService { … }
+```
+
+- **The line is optional.** A namespace with no `imports` line imports from any namespace.
+- **A list covers its namespace and every namespace below it.** A namespace below may list its own imports, and an import must then pass every list above it. So an entry a list above leaves out allows nothing, and is a compile error on that entry: "`{name}` is outside `{parent}`'s list, so this entry allows nothing."
+- **Listing a namespace lists every namespace below it.**
+- **A namespace always imports from itself, and from every namespace below the namespace that lists,** so under `App.Tenant.Store`'s list, `App.Tenant.Store.Checkout` imports from `App.Tenant.Store.Receipts`.
+- **`Sharp`, the standard library, is always imported and never listed.** A plain PHP library is listed by its namespace, as `Illuminate.Support` is.
+- **A name written in full in code counts as an import,** so `App.Shared.Ledger.Entry.record()` is refused as `import App.Shared.Ledger.Entry;` is.
+- **Two lists that name each other, directly or through other lists, are a compile error on each `imports` line of the cycle,** so the namespaces import one way. A list names another list when a name it lists is that list's namespace, or a namespace above or below it. A namespace with no list takes part in no cycle.
+- **A listed name that names no namespace is a compile error,** as an import of an unknown name is.
+
+<!-- example module-imports-errors -->
+```csharp
+// app/Tenant/Store/Module.sharp
+namespace App.Tenant.Store;
+
+module
+{
+    imports App.Tenant.Community, App.Shared.Schema;   // compile error: App.Tenant.Store and App.Shared.Schema import from each other
+}
+```
+
+<!-- example module-imports-errors -->
+```csharp
+// app/Shared/Schema/Module.sharp
+namespace App.Shared.Schema;
+
+module
+{
+    imports App.Tenant.Store, App.Shared.Ledgr;        // compile error: App.Shared.Ledgr names no namespace, and App.Shared.Schema and App.Tenant.Store import from each other
 }
 ```
 

@@ -873,8 +873,9 @@ fn a_foreign_class_lowers_to_the_nodes_of_the_plain_class() {
     );
 }
 
-/// A law, spec section 28, is checked and never runs, so the engine gets the same tree without it. A module of laws
-/// alone binds no service, so its `Module.sharp` lowers to its namespace alone.
+/// A law, spec section 28, is checked and never runs, so the engine gets the same tree without it, whether the
+/// checker proves it alone or its `when` condition and body prove it. A module of laws alone binds no service, so its
+/// `Module.sharp` lowers to its namespace alone.
 #[test]
 fn a_class_an_enum_or_a_module_with_a_law_lowers_to_the_nodes_it_lowers_to_without_it() {
     for (path, with, without) in [
@@ -882,6 +883,11 @@ fn a_class_an_enum_or_a_module_with_a_law_lowers_to_the_nodes_it_lowers_to_witho
             "src/Money.sharp",
             "namespace App.Shared;\n\npublic class Money\n{\n    public Money(public int amount { get; }) { }\n\n    law amountIsItself(Money a) => a.amount == a.amount;\n}\n",
             "namespace App.Shared;\n\npublic class Money\n{\n    public Money(public int amount { get; }) { }\n\n\n}\n",
+        ),
+        (
+            "src/Money.sharp",
+            "namespace App.Shared;\n\npublic class Money\n{\n    public Money(public int amount { get; }) { }\n    public int times(int n) => n <= 0 ? 0 : this.amount + this.times(n - 1);\n\n    law timesStays(Money m, int n) when n >= 0 => m.times(n) == m.times(n)\n    {\n        if (n <= 0) {\n            return;\n        }\n        Money.timesStays(m, n - 1);\n    }\n}\n",
+            "namespace App.Shared;\n\npublic class Money\n{\n    public Money(public int amount { get; }) { }\n    public int times(int n) => n <= 0 ? 0 : this.amount + this.times(n - 1);\n\n\n\n\n\n\n\n\n}\n",
         ),
         (
             "src/Status.sharp",
@@ -18792,7 +18798,7 @@ fn a_file_lowers_to_the_same_bytes_from_any_workspace_root_and_names_no_path() {
             "no text names the file"
         );
 
-        encode(&unit, &file.contents, [0; 16], &[], &[], &Library::default())
+        encode(&unit, &file.contents, [0; 16], &[], &Library::default())
     });
 
     assert_eq!(encoded[0], encoded[1]);
@@ -27791,6 +27797,103 @@ fn every_operand_shape_the_checker_accepts_calls_the_class_that_declares_the_ope
                         VAR
                           ZVAL "order"
                     ZVAL 0
+        "#}
+    );
+}
+
+/// Spec section 19: two lists whose elements may each be a list or a string compare element by element, each pair by
+/// the running values, since only the running value tells a list from a string.
+/// ```php
+/// return (fn (${'lhs#1'}, ${'rhs#2'}) => \count(${'lhs#1'}) === \count(${'rhs#2'})
+///     && \array_all(${'lhs#1'}, fn (${'element#3'}, ${'key#4'}) => \array_key_exists(${'key#4'}, ${'rhs#2'})
+///         && \Sharp\Internal\equals(${'element#3'}, ${'rhs#2'}[${'key#4'}])))($a, $b);
+/// ```
+#[test]
+fn equality_of_lists_whose_elements_may_be_a_list_or_a_string_compares_each_pair_when_the_code_runs() {
+    assert_eq!(
+        body_in("bool run(List<List<int>|string> a, List<List<int>|string> b)", "        return a == b;\n", &[]),
+        indoc! {r#"
+            STMT_LIST
+              RETURN
+                CALL
+                  ARROW_FUNC "" @9-9
+                    PARAM_LIST
+                      PARAM
+                        null
+                        ZVAL "lhs#1"
+                        null
+                        null
+                        null
+                        null
+                      PARAM
+                        null
+                        ZVAL "rhs#2"
+                        null
+                        null
+                        null
+                        null
+                    null
+                    AND
+                      BINARY_OP [16]
+                        CALL
+                          ZVAL "count"
+                          ARG_LIST
+                            VAR
+                              ZVAL "lhs#1"
+                        CALL
+                          ZVAL "count"
+                          ARG_LIST
+                            VAR
+                              ZVAL "rhs#2"
+                      CALL
+                        ZVAL "array_all"
+                        ARG_LIST
+                          VAR
+                            ZVAL "lhs#1"
+                          ARROW_FUNC "" @9-9
+                            PARAM_LIST
+                              PARAM
+                                null
+                                ZVAL "element#3"
+                                null
+                                null
+                                null
+                                null
+                              PARAM
+                                null
+                                ZVAL "key#4"
+                                null
+                                null
+                                null
+                                null
+                            null
+                            AND
+                              CALL
+                                ZVAL "array_key_exists"
+                                ARG_LIST
+                                  VAR
+                                    ZVAL "key#4"
+                                  VAR
+                                    ZVAL "rhs#2"
+                              CALL
+                                ZVAL "Sharp\\Internal\\equals"
+                                ARG_LIST
+                                  VAR
+                                    ZVAL "element#3"
+                                  DIM
+                                    VAR
+                                      ZVAL "rhs#2"
+                                    VAR
+                                      ZVAL "key#4"
+                            null
+                            null
+                    null
+                    null
+                  ARG_LIST
+                    VAR
+                      ZVAL "a"
+                    VAR
+                      ZVAL "b"
         "#}
     );
 }

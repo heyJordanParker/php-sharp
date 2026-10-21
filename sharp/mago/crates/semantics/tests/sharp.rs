@@ -284,6 +284,47 @@ fn a_module_that_overrides_another_states_no_laws() {
     }
 }
 
+/// Spec section 32: a folder's `Module.sharp` lists its namespace's imports on one `imports` line, which never lists
+/// `Sharp`, the standard library every namespace imports from. An environment or test module only overrides
+/// services, so it lists none.
+#[test]
+fn a_module_lists_its_imports_once_in_its_folders_module_sharp() {
+    for (path, header, members, expected) in [
+        ("app/Shop/Module.sharp", "", "    imports App.Mail, Illuminate.Support;", vec![]),
+        (
+            "app/Shop/Module.sharp",
+            "",
+            "    imports App.Mail;\n    imports Illuminate.Support;",
+            vec!["6:5 The module already lists its imports: list every namespace on one `imports` line."],
+        ),
+        (
+            "app/Shop/Module.sharp",
+            "",
+            "    imports App.Mail, Sharp.Text, Sharp;",
+            vec![
+                "5:23 Every namespace imports from `Sharp`, the standard library: remove `Sharp.Text` from the list.",
+                "5:35 Every namespace imports from `Sharp`, the standard library: remove `Sharp` from the list.",
+            ],
+        ),
+        (
+            "app/Shop/Module.Production.sharp",
+            " : App.Shop",
+            "    imports App.Mail;",
+            vec!["5:5 A module that overrides another lists no imports: list them in its folder's Module.sharp."],
+        ),
+        (
+            "app/Shop/CheckoutTest.sharp",
+            " : App.Shop",
+            "    imports App.Mail;",
+            vec!["5:5 A module that overrides another lists no imports: list them in its folder's Module.sharp."],
+        ),
+    ] {
+        let code = leak(format!("namespace App.Shop;\n\nmodule{header}\n{{\n{members}\n}}\n"));
+
+        assert_eq!(issues_in(path, code), expected, "{path}: {members}");
+    }
+}
+
 /// Spec section 32: `Module.sharp` holds its namespace, its imports and one module, and nothing else.
 #[test]
 fn module_sharp_holds_only_its_folders_module() {
@@ -425,6 +466,18 @@ fn a_bare_member_in_a_law_is_written_through_the_class_name() {
     assert_eq!(
         issues(code),
         ["7:30 Write `Money.cents`: a static method reaches the members of its class through the class name."]
+    );
+}
+
+/// Spec section 28: a law's `when` condition, claim and body are checked as a static method's body, where a call of a
+/// law of its class is written bare.
+#[test]
+fn a_law_s_condition_claim_and_body_are_checked_as_a_static_method_s_body() {
+    let code = "namespace App.Shared;\n\npublic class Money\n{\n    private int cents = 0;\n\n    law positive(int a) when a > 0 => a >= 0;\n    law stays(int a) when a > 0 => a >= 0\n    {\n        if (a <= 1) {\n            return;\n        }\n        positive(a);\n    }\n    law reads(int a) when cents > a => true;\n}\n";
+
+    assert_eq!(
+        issues(code),
+        ["15:27 Write `Money.cents`: a static method reaches the members of its class through the class name."]
     );
 }
 

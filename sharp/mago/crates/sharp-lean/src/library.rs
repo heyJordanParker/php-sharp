@@ -33,9 +33,6 @@ use sha2::Sha256;
 /// The library's Lean version, which `.sharp/.lean/lean-toolchain` pins too.
 pub(crate) const TOOLCHAIN: &str = include_str!("../lean/lean-toolchain");
 
-/// The Lean namespace that holds every module of the library.
-pub(crate) const NAMESPACE: &str = "Sharp";
-
 /// The library's Lake package, as `crates/sharp-lean/lean/` holds it.
 const PACKAGE: [(&str, &str); 8] = [
     ("lakefile.toml", include_str!("../lean/lakefile.toml")),
@@ -43,8 +40,8 @@ const PACKAGE: [(&str, &str); 8] = [
     ("Sharp/Lean/Int.lean", include_str!("../lean/Sharp/Lean/Int.lean")),
     ("Sharp/Lean/Interface.lean", include_str!("../lean/Sharp/Lean/Interface.lean")),
     ("Sharp/Lean/Law.lean", include_str!("../lean/Sharp/Lean/Law.lean")),
+    ("Sharp/Lean/Proof.lean", include_str!("../lean/Sharp/Lean/Proof.lean")),
     ("Sharp/Lean/String.lean", include_str!("../lean/Sharp/Lean/String.lean")),
-    ("Sharp/Lean/Facts.lean", include_str!("../lean/Sharp/Lean/Facts.lean")),
     ("Sharp/Lean/Runner.lean", include_str!("../lean/Sharp/Lean/Runner.lean")),
 ];
 
@@ -117,11 +114,6 @@ impl Lake {
     /// A command that runs this `lake`. On Unix it may use `processor_seconds()`, as may each Lean process it starts,
     /// which inherits the limit.
     pub(crate) fn command(&self) -> Command {
-        self.command_within(processor_seconds())
-    }
-
-    /// A command that runs this `lake`, which on Unix may use `seconds`, kept under the hard limit Mago inherits.
-    pub(crate) fn command_within(&self, seconds: u64) -> Command {
         let mut command = Command::new(&self.program);
         if let Some(home) = &self.home {
             command.env("ELAN_HOME", home);
@@ -130,11 +122,10 @@ impl Lake {
         {
             use std::os::unix::process::CommandExt;
 
+            let seconds = processor_seconds();
             // SAFETY: `getrlimit` and `setrlimit` are async-signal-safe, and the closure allocates nothing.
             unsafe { command.pre_exec(move || limit_processor_time(seconds)) };
         }
-        #[cfg(not(unix))]
-        let _ = seconds;
 
         command
     }
@@ -332,7 +323,7 @@ extern "C" fn forward(signal: libc::c_int) {
 
 /// What `child` wrote and how it exited, and whether Mago ended its group at `deadline()`.
 fn wait_before_deadline(child: &mut Child) -> io::Result<(Output, bool)> {
-    let missing = || io::Error::other("a Lean process has no output stream");
+    let missing = || io::Error::other("a law checker process has no output stream");
     let (stdout, stderr) = (child.stdout.take().ok_or_else(missing)?, child.stderr.take().ok_or_else(missing)?);
     let (wrote, written) = mpsc::channel();
     let stdout = read_all(stdout, wrote.clone());
@@ -352,7 +343,7 @@ fn wait_before_deadline(child: &mut Child) -> io::Result<(Output, bool)> {
     };
     let status = child.wait()?;
     let joined = |reader: thread::JoinHandle<io::Result<Vec<u8>>>| {
-        reader.join().map_err(|_| io::Error::other("a reader of a Lean process panicked"))?
+        reader.join().map_err(|_| io::Error::other("a reader of a law checker process panicked"))?
     };
 
     Ok((Output { status, stdout: joined(stdout)?, stderr: joined(stderr)? }, waited))
@@ -402,6 +393,16 @@ fn is_built(library: &Path) -> bool {
             .all(|(path, source)| fs::read(library.join(path)).is_ok_and(|bytes| bytes == source.as_bytes()))
 }
 
+/// The error of a build of the law checker that failed for `failure`, which only the debug log holds, so the error
+/// names no folder and no tool.
+fn unbuilt(failure: impl std::fmt::Display) -> io::Error {
+    tracing::debug!("The law checker's build failed: {failure}");
+
+    io::Error::other(
+        "the law checker could not be built in Mago's cache folder. Run vendor/bin/mago compile again to retry, with MAGO_LOG=debug to see why",
+    )
+}
+
 /// Writes the library's package to `lean/<build id>.staging` in Mago's cache folder, builds it with `lake` and renames
 /// it to `lean/<build id>`, once per build ID. Builds take turns under an exclusive lock on `lean/build.lock`, across
 /// threads and processes alike. A build that lost its runner or a package file, as a cache cleaner leaves it, is
@@ -429,21 +430,11 @@ pub(crate) fn build(lake: &Lake) -> io::Result<PathBuf> {
 
     let output = lake.command().arg("build").current_dir(&staging).output()?;
     if !output.status.success() {
-        return Err(io::Error::other(format!(
-            "Lake could not build the Lean runtime library in {}:\n{}{}",
-            staging.display(),
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        )));
+        let printed = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        return Err(unbuilt(format!("lake build in {} printed:\n{printed}", staging.display())));
     }
 
-    fs::rename(&staging, &library).map_err(|error| {
-        io::Error::other(format!(
-            "The checker could not move the Lean runtime library from {} to {}: {error}",
-            staging.display(),
-            library.display()
-        ))
-    })?;
+    fs::rename(&staging, &library).map_err(unbuilt)?;
 
     for entry in fs::read_dir(&builds)? {
         let old = entry?.path();
@@ -465,9 +456,9 @@ pub(crate) fn install() -> io::Result<Option<Lake>> {
         format!("https://github.com/leanprover/elan/releases/download/v{ELAN_VERSION}/elan-{}.tar.gz", archive.target);
     let cache = cache_root()?;
 
-    install_from(&url, archive, &cache).map(Some).map_err(|error| {
-        io::Error::other(format!("The checker could not install Lean into {}: {error}", cache.join("elan").display()))
-    })
+    install_from(&url, archive, &cache)
+        .map(Some)
+        .map_err(|error| io::Error::other(format!("{}: {error}", cache.join("elan").display())))
 }
 
 /// Installs elan from the archive at `url` into `elan/` in `cache`, then the library's Lean version with it, each once.
@@ -484,9 +475,10 @@ fn install_from(url: &str, archive: &Archive, cache: &Path) -> io::Result<Lake> 
         return Ok(lake);
     }
 
-    let lean = format!("Lean {} ({})", TOOLCHAIN.trim().trim_start_matches("leanprover/lean4:v"), archive.lean_size);
-    let downloads = if has_elan { lean } else { format!("elan {ELAN_VERSION} ({}) and {lean}", archive.size) };
-    tracing::info!("Downloading {downloads} into {}, once, because no lake is on the PATH.", home.display());
+    let size =
+        if has_elan { archive.lean_size.to_owned() } else { format!("{} and {}", archive.size, archive.lean_size) };
+    tracing::info!("Downloading the law checker ({size}) into Mago's cache folder, once.");
+    tracing::debug!("The law checker installs into {}.", home.display());
     if !has_elan {
         install_elan(url, archive, &home)?;
     }
@@ -495,8 +487,7 @@ fn install_from(url: &str, archive: &Archive, cache: &Path) -> io::Result<Lake> 
     let output = elan(&home).args(["toolchain", "install", TOOLCHAIN.trim()]).output()?;
     if !output.status.success() {
         return Err(io::Error::other(format!(
-            "elan could not install {}: {}",
-            TOOLCHAIN.trim(),
+            "its download failed: {}",
             String::from_utf8_lossy(&output.stderr).trim()
         )));
     }
@@ -553,7 +544,7 @@ fn install_elan(url: &str, archive: &Archive, home: &Path) -> io::Result<()> {
         .entries()?
         .filter_map(Result::ok)
         .find(|entry| entry.path().is_ok_and(|path| path == Path::new("elan-init")))
-        .ok_or_else(|| io::Error::other(format!("{url} holds no elan-init")))?;
+        .ok_or_else(|| io::Error::other(format!("{url} holds no installer")))?;
     entry.unpack_in(unpacked.path())?;
 
     let staging = home.with_extension("staging");
@@ -566,7 +557,10 @@ fn install_elan(url: &str, archive: &Archive, home: &Path) -> io::Result<()> {
             .env("ELAN_HOME", &staging),
     )?;
     if !output.status.success() {
-        return Err(io::Error::other(format!("elan-init failed: {}", String::from_utf8_lossy(&output.stderr).trim())));
+        return Err(io::Error::other(format!(
+            "the installer failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
     }
 
     fs::rename(&staging, home)
@@ -656,10 +650,8 @@ mod tests {
         let lake = Lake { program: PathBuf::from("/bin/sh"), home: None };
 
         let output = lake.command().args(["-c", "ulimit -t; ulimit -c"]).output()?;
-        let within = lake.command_within(360).args(["-c", "ulimit -t"]).output()?;
 
         assert_eq!(String::from_utf8_lossy(&output.stdout), "120\n0\n");
-        assert_eq!(String::from_utf8_lossy(&within.stdout), "360\n");
 
         Ok(())
     }
@@ -817,7 +809,7 @@ fi
                 "an elan-init that fails after it installed",
                 digest,
                 true,
-                "elan-init failed: elan-init broke".to_owned(),
+                "the installer failed: elan-init broke".to_owned(),
             ),
         ] {
             let cache = tempfile::tempdir()?;

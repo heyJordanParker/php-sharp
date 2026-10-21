@@ -35,8 +35,19 @@ remove_project($root);
 --EXPECT--
 CompileError: Refusals.sharp has 6 errors:
 line 5: Invalid argument type for argument #1 of `string.contains`: expected `string`, but found `int`.
+  The provided type `int` is not compatible with the expected type `string`.
+  help: Change the argument value to match `string`, or update the parameter's type declaration.
 line 7: Invalid argument type for argument #2 of `string.replace`: expected `string`, but found `int`.
+  The provided type `int` is not compatible with the expected type `string`.
+  help: Change the argument value to match `string`, or update the parameter's type declaration.
 line 9: Method `shuffled` does not exist on `string`.
+  help: A `string` has the methods `contains`, `endsWith`, `lowercase`, `parseCsv`, `replace`, `split`, `startsWith`, `trim`, `uppercase`.
 line 11: Invalid return type for method `Refusals.values`: expected `List<int>`, but found `List<[string, int]>`.
+  The type `List<[string, int]>` returned here is not compatible with the declared return type `List<int>`.
+  help: Change the return value to match `List<int>`, or update the method's return type declaration.
 line 13: Invalid return type for method `Refusals.keys`: expected `List<string>`, but found `List<[string, int]>`.
+  The type `List<[string, int]>` returned here is not compatible with the declared return type `List<string>`.
+  help: Change the return value to match `List<string>`, or update the method's return type declaration.
 line 15: Invalid argument type for argument #1 of `List<List<int>>.flatMap`: expected `Function<Iterable<Any?>(List<int>)>`, but found `Function<int(List<int>)>`.
+  The provided type `Function<int(List<int>)>` is not compatible with the expected type `Function<Iterable<Any?>(List<int>)>`.
+  help: Change the argument value to match `Function<Iterable<Any?>(List<int>)>`, or update the parameter's type declaration.

@@ -5,6 +5,9 @@
 //! condition is a nested `do` block, so its effects run only there.
 
 use foldhash::HashSet;
+use mago_analyzer::smaller::Path;
+use mago_analyzer::smaller::Smaller;
+use mago_analyzer::smaller::Step;
 use mago_codex::ttype::TType;
 use mago_codex::ttype::atomic::TAtomic;
 use mago_codex::ttype::atomic::array::TArray;
@@ -14,6 +17,7 @@ use mago_codex::ttype::union::TUnion;
 use mago_names::binding::Binding;
 use mago_sharp_bridge::CheckedProgram;
 use mago_sharp_bridge::DeclarationKind;
+use mago_sharp_bridge::Equality;
 use mago_span::HasSpan;
 use mago_span::Span;
 use mago_syntax::cst::Access;
@@ -29,9 +33,13 @@ use mago_syntax::cst::Call;
 use mago_syntax::cst::ClassLikeMemberSelector;
 use mago_syntax::cst::ConstantAccess;
 use mago_syntax::cst::Expression;
+use mago_syntax::cst::FunctionLikeParameter;
 use mago_syntax::cst::Hint;
 use mago_syntax::cst::IfBody;
 use mago_syntax::cst::Instantiation;
+use mago_syntax::cst::Is;
+use mago_syntax::cst::Law as LawNode;
+use mago_syntax::cst::ListPatternElement;
 use mago_syntax::cst::Literal;
 use mago_syntax::cst::LocalTarget;
 use mago_syntax::cst::MethodCall;
@@ -42,6 +50,7 @@ use mago_syntax::cst::PatternMatch;
 use mago_syntax::cst::PatternMatchArm;
 use mago_syntax::cst::PatternMatchArmBody;
 use mago_syntax::cst::PropertyAccess;
+use mago_syntax::cst::Sequence;
 use mago_syntax::cst::Statement;
 use mago_syntax::cst::UnaryPrefix;
 use mago_syntax::cst::UnaryPrefixOperator;
@@ -52,10 +61,13 @@ use crate::reach::Reach;
 use crate::translate::Unmodeled;
 use crate::translate::Use;
 use crate::translate::names;
+use crate::translate::pattern::Choice;
+use crate::translate::pattern::Test;
+use crate::translate::pattern::choice;
 
 /// What a value of a PHP# type is in Lean, as far as an operator cares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Kind {
+pub(super) enum Kind {
     Int,
     Bool,
     String,
@@ -67,11 +79,11 @@ enum Kind {
 }
 
 /// One branch of a choice: its statements, the last of which gives the branch's value.
-type Branch = Vec<String>;
+pub(super) type Branch = Vec<String>;
 
 /// The translation of one body: its `do` statements, the declarations it uses, and each construct it cannot model.
 pub(crate) struct Body<'body, 'program> {
-    checked: &'body CheckedProgram<'program>,
+    pub(super) checked: &'body CheckedProgram<'program>,
     reach: &'body Reach,
     /// The fully qualified PHP name of the class the body belongs to.
     class: &'body [u8],
@@ -79,10 +91,16 @@ pub(crate) struct Body<'body, 'program> {
     place: String,
     pub(crate) uses: Vec<Use>,
     pub(crate) unmodeled: Vec<Unmodeled>,
-    lines: Vec<String>,
+    pub(super) lines: Vec<String>,
     temporaries: u32,
     /// Each local whose type takes `null`, by where its declaration's name starts.
-    nullable_locals: HashSet<u32>,
+    pub(super) nullable_locals: HashSet<u32>,
+    /// The parameters of a method whose calls of its own class may recurse, and what the conditions and patterns on the
+    /// path to the code being translated show about them.
+    path: Path<'body, 'program>,
+    /// The locals the loop being translated adds to, by where their declarations' names start, which its conditions
+    /// and the values it adds must not read.
+    pub(super) accumulators: Vec<u32>,
 }
 
 impl<'body, 'program> Body<'body, 'program> {
@@ -102,7 +120,51 @@ impl<'body, 'program> Body<'body, 'program> {
             lines: Vec::new(),
             temporaries: 0,
             nullable_locals: HashSet::default(),
+            path: Path::new(checked.names(), []),
+            accumulators: Vec::new(),
         }
+    }
+
+    /// The translation of code of `law`, a law of `class`: its `when` condition, its claim or its body, which read its
+    /// parameters, and whose calls of the law itself pass smaller values of them.
+    pub(crate) fn for_law(
+        checked: &'body CheckedProgram<'program>,
+        reach: &'body Reach,
+        class: &'body [u8],
+        place: String,
+        law: &LawNode,
+    ) -> Self {
+        let mut body = Self::new(checked, reach, class, place);
+        body.takes(law.parameter_list.parameters.iter());
+        body.recurse_on(law.parameter_list.parameters.iter());
+
+        body
+    }
+
+    /// Reads each of `parameters` whose type takes `null` as Lean's `Option`, and as its value where the analysis
+    /// typed it as a value.
+    pub(crate) fn takes<'parameter>(
+        &mut self,
+        parameters: impl IntoIterator<Item = &'parameter FunctionLikeParameter<'parameter>>,
+    ) {
+        for parameter in parameters {
+            if matches!(parameter.hint, Some(Hint::Nullable(_))) {
+                self.nullable_locals.insert(parameter.variable.span.start.offset);
+            }
+        }
+    }
+
+    /// Lets the body's calls of methods of its own class pass smaller values of `parameters`, in order.
+    pub(crate) fn recurse_on<'parameter>(
+        &mut self,
+        parameters: impl IntoIterator<Item = &'parameter FunctionLikeParameter<'parameter>>,
+    ) {
+        self.path = Path::new(self.checked.names(), parameters);
+    }
+
+    /// Lets the body's calls pass the smaller values `path`, a path of a law's body, shows.
+    pub(crate) fn on_path(&mut self, path: Path<'body, 'program>) {
+        self.path = path;
     }
 
     /// The Lean type of `hint`.
@@ -116,6 +178,11 @@ impl<'body, 'program> Body<'body, 'program> {
             Hint::Nullable(nullable) => format!("(Option {})", self.r#type(nullable.hint)),
             Hint::Parenthesized(parenthesized) => self.r#type(parenthesized.hint),
             Hint::Self_(_) => self.class_type(hint.span(), self.class),
+            Hint::Identifier(identifier) if self.checked.names().is_type_parameter(identifier) => self.unmodeled(
+                hint.span(),
+                format!("the type parameter {}", String::from_utf8_lossy(identifier.value())),
+                issues::TYPE,
+            ),
             Hint::Identifier(identifier) => {
                 let class = self.checked.names().get(identifier);
 
@@ -138,9 +205,7 @@ impl<'body, 'program> Body<'body, 'program> {
             Hint::Function(_) => self.unmodeled(hint.span(), "a function type".to_owned(), issues::LAMBDA),
             Hint::Mixed(_) => self.unmodeled(hint.span(), "Any".to_owned(), issues::TYPE_TEST),
             Hint::Iterable(_) => self.unmodeled(hint.span(), "Iterable".to_owned(), issues::LAZY),
-            _ => {
-                self.unmodeled(hint.span(), format!("the type `{}`", self.source(hint.span())), issues::NOT_TRANSLATED)
-            }
+            _ => self.unmodeled(hint.span(), format!("the type `{}`", self.source(hint.span())), issues::TYPE),
         }
     }
 
@@ -149,13 +214,8 @@ impl<'body, 'program> Body<'body, 'program> {
     pub(crate) fn declared_type(&mut self, hint: Option<&Hint>, span: Span) -> String {
         match hint {
             Some(hint) => self.r#type(hint),
-            None => self.unmodeled(span, "a declaration without a type".to_owned(), issues::NOT_TRANSLATED),
+            None => self.unmodeled(span, "a declaration without a type".to_owned(), issues::MISSING_TYPE),
         }
-    }
-
-    /// Marks the parameter whose name starts at `offset` as one whose type takes `null`.
-    pub(crate) fn nullable_parameter(&mut self, offset: u32) {
-        self.nullable_locals.insert(offset);
     }
 
     /// The `do` statements of an expression body, which returns the expression's value.
@@ -166,11 +226,23 @@ impl<'body, 'program> Body<'body, 'program> {
         (self.lines, self.uses, self.unmodeled)
     }
 
+    /// The `do` statements that compute `values` after the local declarations `locals`, and the term of each value.
+    pub(crate) fn terms(
+        mut self,
+        locals: &[&Statement],
+        values: &[&Expression],
+    ) -> (Vec<String>, Vec<String>, Vec<Use>, Vec<Unmodeled>) {
+        for local in locals {
+            self.statement(local);
+        }
+        let terms = values.iter().map(|value| self.value(value)).collect();
+
+        (self.lines, terms, self.uses, self.unmodeled)
+    }
+
     /// The `do` statements of a block body. A body that may end without `return` ends in `pure ()`.
     pub(crate) fn block_body(mut self, block: &Block, void: bool) -> (Vec<String>, Vec<Use>, Vec<Unmodeled>) {
-        for statement in &block.statements {
-            self.statement(statement);
-        }
+        self.statements(&block.statements);
         if void || self.lines.is_empty() {
             self.lines.push("pure ()".to_owned());
         }
@@ -180,7 +252,8 @@ impl<'body, 'program> Body<'body, 'program> {
 
     /// The term of a constant's value, which Lean defines without `M`, so it must not throw.
     pub(crate) fn pure_value(&mut self, expression: &Expression) -> String {
-        self.pure(expression, "a constant whose value can throw").unwrap_or_else(|| "default".to_owned())
+        self.pure(expression, "a constant whose value can throw", issues::CONSTANT_VALUE)
+            .unwrap_or_else(|| "default".to_owned())
     }
 
     /// The body's statements so far, the declarations it uses, and each construct it cannot model.
@@ -188,20 +261,32 @@ impl<'body, 'program> Body<'body, 'program> {
         (self.lines, self.uses, self.unmodeled)
     }
 
+    /// `statements` in order. The statements after an `if` whose block returns run where its condition does not hold.
+    fn statements(&mut self, statements: &Sequence<'_, Statement<'_>>) {
+        let outer = self.path.clone();
+        for statement in statements {
+            self.statement(statement);
+            if let Statement::If(r#if) = statement
+                && let IfBody::Statement(body) = &r#if.body
+                && body.else_clause.is_none()
+                && returns(body.statement)
+            {
+                self.path = self.path.branch(r#if.condition, false);
+            }
+        }
+        self.path = outer;
+    }
+
     fn statement(&mut self, statement: &Statement) {
         match statement {
-            Statement::Block(block) => {
-                for statement in &block.statements {
-                    self.statement(statement);
-                }
-            }
+            Statement::Block(block) => self.statements(&block.statements),
             Statement::Return(r#return) => {
                 let value = r#return.value.map_or_else(|| "()".to_owned(), |value| self.value(value));
                 self.lines.push(format!("return {value}"));
             }
             Statement::LocalDeclaration(local) => {
                 let LocalTarget::Name(name) = &local.target else {
-                    self.unmodeled(statement.span(), "an unpacked tuple".to_owned(), issues::NOT_TRANSLATED);
+                    self.unmodeled(statement.span(), "an unpacked tuple".to_owned(), issues::TUPLE);
 
                     return;
                 };
@@ -220,21 +305,33 @@ impl<'body, 'program> Body<'body, 'program> {
             },
             Statement::If(r#if) => {
                 let IfBody::Statement(body) = &r#if.body else {
-                    self.unmodeled(r#if.span(), "a colon-delimited if".to_owned(), issues::NOT_TRANSLATED);
-                    return;
+                    unreachable!("PHP# parses no colon-delimited if, as {:?}", r#if.span());
                 };
+                let holds = self.path.branch(r#if.condition, true);
+                // `if (x is Money m)` names `m` where the test holds, so it is a `match` on `x`.
+                if let Expression::Is(is) = r#if.condition.unparenthesized() {
+                    let Some(test) = self.is_test(is) else {
+                        return;
+                    };
+                    let then = self.under(holds, |this| this.nested_statement(body.statement));
+                    let otherwise = body.else_clause.as_ref().map(|clause| self.nested_statement(clause.statement));
+                    let choice = choice(vec![(test, then)], otherwise.unwrap_or_default());
+                    self.lines.extend(statements(&choice));
+                    return;
+                }
                 let condition = self.value(r#if.condition);
-                let then = self.nested_statement(body.statement);
+                let then = self.under(holds, |this| this.nested_statement(body.statement));
                 self.lines.push(format!("if {condition} then"));
                 self.lines.extend(indented(&then, 2));
                 if let Some(clause) = &body.else_clause {
-                    let otherwise = self.nested_statement(clause.statement);
+                    let fails = self.path.branch(r#if.condition, false);
+                    let otherwise = self.under(fails, |this| this.nested_statement(clause.statement));
                     self.lines.push("else".to_owned());
                     self.lines.extend(indented(&otherwise, 2));
                 }
             }
+            Statement::ForOf(for_of) => self.counting_loop(for_of),
             Statement::For(_)
-            | Statement::ForOf(_)
             | Statement::Foreach(_)
             | Statement::While(_)
             | Statement::DoWhile(_)
@@ -243,16 +340,20 @@ impl<'body, 'program> Body<'body, 'program> {
                 self.unmodeled(statement.span(), "a loop".to_owned(), issues::LOOP);
             }
             Statement::Try(_) => {
-                self.unmodeled(statement.span(), "a try/catch".to_owned(), issues::TRY_CATCH);
+                self.unmodeled(statement.span(), "a try/catch".to_owned(), issues::EXCEPTION);
             }
-            Statement::PatternMatch(_) => {
-                self.unmodeled(statement.span(), "a match statement".to_owned(), issues::NOT_TRANSLATED);
+            Statement::PatternMatch(r#match) => {
+                let Some((arms, otherwise)) = self.arms(r#match, Self::arm_statements) else {
+                    return;
+                };
+                let choice = choice(arms, otherwise);
+                self.lines.extend(statements(&choice));
             }
             _ => {
                 self.unmodeled(
                     statement.span(),
                     format!("the statement `{}`", self.source(statement.span())),
-                    issues::NOT_TRANSLATED,
+                    issues::STATEMENT,
                 );
             }
         }
@@ -267,7 +368,7 @@ impl<'body, 'program> Body<'body, 'program> {
             return;
         };
         if !matches!(self.checked.names().binding(&target.name), Some(Binding::Local(_))) {
-            self.unmodeled(assignment.lhs.span(), "an assignment".to_owned(), issues::NOT_TRANSLATED);
+            self.unmodeled(assignment.lhs.span(), "an assignment".to_owned(), issues::LOCAL_ASSIGNMENT);
             return;
         }
 
@@ -285,7 +386,7 @@ impl<'body, 'program> Body<'body, 'program> {
             (_, Kind::Float) => self.unmodeled(assignment.span(), "a float".to_owned(), issues::FLOAT),
             (operator, _) => {
                 let what = format!("the operator `{}`", self.source(operator.span()));
-                self.unmodeled(assignment.span(), what, issues::NOT_TRANSLATED)
+                self.unmodeled(assignment.span(), what, issues::UPDATE)
             }
         };
         self.lines.push(format!("{local} := {assigned}"));
@@ -303,13 +404,28 @@ impl<'body, 'program> Body<'body, 'program> {
             Expression::UnaryPrefix(unary) => self.prefix(unary),
             Expression::Conditional(conditional) => match conditional.then {
                 Some(then) => {
-                    let condition = self.value(conditional.condition);
-                    let then = self.branch(then);
-                    let otherwise = self.branch(conditional.r#else);
+                    let holds = self.path.branch(conditional.condition, true);
+                    if let Expression::Is(is) = conditional.condition.unparenthesized() {
+                        let Some(test) = self.is_test(is) else {
+                            return "default".to_owned();
+                        };
+                        let then = self.under(holds, |body| body.branch(then));
+                        let otherwise = self.branch(conditional.r#else);
 
-                    self.choose(vec![(condition, then)], otherwise)
+                        return self.choose(&choice(vec![(test, then)], otherwise));
+                    }
+                    let condition = self.value(conditional.condition);
+                    let then = self.under(holds, |body| body.branch(then));
+                    let fails = self.path.branch(conditional.condition, false);
+                    let otherwise = self.under(fails, |body| body.branch(conditional.r#else));
+
+                    self.choose(&Choice::If(
+                        condition,
+                        Box::new(Choice::Branch(then)),
+                        Box::new(Choice::Branch(otherwise)),
+                    ))
                 }
-                None => self.unmodeled(expression.span(), "the operator `?:`".to_owned(), issues::NOT_TRANSLATED),
+                None => unreachable!("PHP# parses no `?:` with two operands, as {:?}", expression.span()),
             },
             Expression::PatternMatch(r#match) => self.pattern_match(r#match),
             Expression::Call(Call::Method(call)) => self.method_call(expression, call),
@@ -321,16 +437,35 @@ impl<'body, 'program> Body<'body, 'program> {
             Expression::Instantiation(instantiation) => self.instantiation(instantiation),
             Expression::Access(Access::Property(access)) => self.property(expression, access),
             Expression::Access(Access::NullSafeProperty(access)) => self.null_safe_property(expression, access),
-            Expression::Array(array) if self.is_list(expression) => {
-                let mut elements = Vec::new();
+            // A spread is Lean's `++`: `[x, ...rest]` is `[x] ++ rest`. `[]` types as no array in particular, and Lean
+            // reads it as the empty List the code around it expects.
+            Expression::Array(array) if array.elements.is_empty() || self.is_list(expression) => {
+                let mut parts: Vec<String> = Vec::new();
+                let mut elements: Vec<String> = Vec::new();
                 for element in &array.elements {
-                    let ArrayElement::Value(element) = element else {
-                        return self.unmodeled(element.span(), "a spread in a list".to_owned(), issues::COLLECTION);
-                    };
-                    elements.push(self.value(element.value));
+                    match element {
+                        ArrayElement::Value(element) => elements.push(self.value(element.value)),
+                        ArrayElement::Variadic(spread) => {
+                            if !elements.is_empty() {
+                                parts.push(format!("[{}]", elements.join(", ")));
+                                elements.clear();
+                            }
+                            parts.push(self.value(spread.value));
+                        }
+                        element => unreachable!(
+                            "the checker accepts a List literal of values and spreads of Lists, not {:?}",
+                            element.span()
+                        ),
+                    }
+                }
+                if !elements.is_empty() || parts.is_empty() {
+                    parts.push(format!("[{}]", elements.join(", ")));
                 }
 
-                format!("[{}]", elements.join(", "))
+                match parts.as_slice() {
+                    [only] => only.clone(),
+                    _ => format!("({})", parts.join(" ++ ")),
+                }
             }
             Expression::Array(_)
             | Expression::LegacyArray(_)
@@ -342,22 +477,36 @@ impl<'body, 'program> Body<'body, 'program> {
             Expression::Closure(_) | Expression::ArrowFunction(_) | Expression::PartialApplication(_) => {
                 self.unmodeled(expression.span(), "a lambda".to_owned(), issues::LAMBDA)
             }
-            Expression::Is(_) | Expression::As(_) | Expression::TypeOf(_) => {
+            Expression::Is(is) => {
+                if names_values(is.pattern) {
+                    return self.unmodeled(
+                        expression.span(),
+                        "a pattern that names a value outside the condition of an if or a ?:".to_owned(),
+                        issues::NAMED_PATTERN,
+                    );
+                }
+                let Some(test) = self.is_test(is) else {
+                    return "default".to_owned();
+                };
+
+                self.choose(&choice(vec![(test, vec!["pure true".to_owned()])], vec!["pure false".to_owned()]))
+            }
+            Expression::As(_) | Expression::TypeOf(_) => {
                 self.unmodeled(expression.span(), "a type test".to_owned(), issues::TYPE_TEST)
             }
             Expression::Yield(_) => self.unmodeled(expression.span(), "a lazy sequence".to_owned(), issues::LAZY),
-            Expression::Throw(_) => self.unmodeled(expression.span(), "a throw".to_owned(), issues::NOT_TRANSLATED),
+            Expression::Throw(_) => self.unmodeled(expression.span(), "a throw".to_owned(), issues::EXCEPTION),
             Expression::CompositeString(_) => {
-                self.unmodeled(expression.span(), "a string template".to_owned(), issues::NOT_TRANSLATED)
+                self.unmodeled(expression.span(), "a string template".to_owned(), issues::TEMPLATE)
             }
             Expression::Assignment(_) => self.unmodeled(
                 expression.span(),
                 "an assignment inside an expression".to_owned(),
-                issues::NOT_TRANSLATED,
+                issues::NESTED_ASSIGNMENT,
             ),
             _ => {
                 let what = format!("the expression `{}`", self.source(expression.span()));
-                self.unmodeled(expression.span(), what, issues::NOT_TRANSLATED)
+                self.unmodeled(expression.span(), what, issues::EXPRESSION)
             }
         }
     }
@@ -380,6 +529,13 @@ impl<'body, 'program> Body<'body, 'program> {
     fn name(&mut self, expression: &Expression, name: &ConstantAccess) -> String {
         match self.checked.names().binding(&name.name) {
             Some(Binding::Local(local)) => {
+                if self.accumulators.contains(&local.declaration.start.offset) {
+                    return self.unmodeled(
+                        expression.span(),
+                        "a loop that reads a local it adds to".to_owned(),
+                        issues::LOOP,
+                    );
+                }
                 let lean = names::identifier(name.name.value());
                 if self.nullable_locals.contains(&local.declaration.start.offset)
                     && !self.checked.types().expression_type(expression).is_nullable()
@@ -393,7 +549,7 @@ impl<'body, 'program> Body<'body, 'program> {
             Some(Binding::Member) => self.field("this".to_owned(), self.class, name.name.value(), expression),
             _ => {
                 let what = format!("the constant `{}`", self.source(name.name.span()));
-                self.unmodeled(expression.span(), what, issues::NOT_TRANSLATED)
+                self.unmodeled(expression.span(), what, issues::CONSTANT)
             }
         }
     }
@@ -424,30 +580,45 @@ impl<'body, 'program> Body<'body, 'program> {
             BinaryOperator::Multiplication(_) if ints => self.bind(format!("int.mul {lhs} {rhs}")),
             BinaryOperator::Division(_) if ints => self.bind(format!("int.div {lhs} {rhs}")),
             BinaryOperator::Modulo(_) if ints => self.bind(format!("int.mod {lhs} {rhs}")),
-            BinaryOperator::Identical(_) | BinaryOperator::NotIdentical(_)
-                if kinds.0 == Kind::Object || kinds.1 == Kind::Object =>
-            {
+            // `===` works on objects only, and asks whether both are the same one.
+            BinaryOperator::Identical(_) | BinaryOperator::NotIdentical(_) => {
                 self.unmodeled(binary.span(), format!("the identity test `{operator}`"), issues::IDENTITY)
             }
-            BinaryOperator::Equal(_) | BinaryOperator::NotEqual(_)
-                if kinds.0 == Kind::Object || kinds.1 == Kind::Object =>
-            {
-                self.unmodeled(binary.span(), format!("the class operator `{operator}`"), issues::NOT_TRANSLATED)
+            // Lean's `==` on the values a law sees is PHP's `===` on values that hold no object, the one comparison of
+            // the bridge's that runs no code a law cannot see.
+            BinaryOperator::Equal(_) | BinaryOperator::NotEqual(_) => {
+                let (what, reason) =
+                    match types.equality(types.expression_type(binary.lhs), types.expression_type(binary.rhs)) {
+                        Equality::Identical if binary.operator.is_negated_equality() => {
+                            return format!("({lhs} != {rhs})");
+                        }
+                        Equality::Identical => return format!("({lhs} == {rhs})"),
+                        Equality::Declared(..) | Equality::Elements => {
+                            (format!("the class operator `{operator}`"), issues::CLASS_OPERATOR)
+                        }
+                        Equality::Numbers => ("a float".to_owned(), issues::FLOAT),
+                        Equality::Tables => ("a collection".to_owned(), issues::COLLECTION),
+                        Equality::Running => {
+                            (format!("`{operator}` on values only the running code tells apart"), issues::TYPE_TEST)
+                        }
+                    };
+
+                self.unmodeled(binary.span(), what, reason)
             }
-            BinaryOperator::Equal(_) | BinaryOperator::Identical(_) => format!("({lhs} == {rhs})"),
-            BinaryOperator::NotEqual(_) | BinaryOperator::NotIdentical(_) => format!("({lhs} != {rhs})"),
             BinaryOperator::LessThan(_) if ordered => format!("(decide ({lhs} < {rhs}))"),
             BinaryOperator::LessThanOrEqual(_) if ordered => format!("(decide ({lhs} <= {rhs}))"),
-            BinaryOperator::GreaterThan(_) if ordered => format!("(decide ({rhs} < {lhs}))"),
-            BinaryOperator::GreaterThanOrEqual(_) if ordered => format!("(decide ({rhs} <= {lhs}))"),
-            _ => self.unmodeled(binary.span(), format!("the operator `{operator}` here"), issues::NOT_TRANSLATED),
+            // `>` and `>=` stay Lean's `>` and `≥`, so a goal prints them as the code writes them.
+            BinaryOperator::GreaterThan(_) if ordered => format!("(decide ({lhs} > {rhs}))"),
+            BinaryOperator::GreaterThanOrEqual(_) if ordered => format!("(decide ({lhs} >= {rhs}))"),
+            _ => self.unmodeled(binary.span(), format!("the operator `{operator}` here"), issues::OPERATOR),
         }
     }
 
     /// `&&` and `||`, which run their right side only when the left one does not decide.
     fn short_circuit(&mut self, binary: &Binary, and: bool) -> String {
         let lhs = self.value(binary.lhs);
-        let rhs = self.branch(binary.rhs);
+        let path = self.path.branch(binary.lhs, and);
+        let rhs = self.under(path, |body| body.branch(binary.rhs));
         let operator = if and { "&&" } else { "||" };
         if let [only] = rhs.as_slice()
             && let Some(rhs) = only.strip_prefix("pure ")
@@ -455,11 +626,9 @@ impl<'body, 'program> Body<'body, 'program> {
             return format!("({lhs} {operator} {rhs})");
         }
 
-        if and {
-            self.choose(vec![(lhs, rhs)], vec!["pure false".to_owned()])
-        } else {
-            self.choose(vec![(lhs, vec!["pure true".to_owned()])], rhs)
-        }
+        let (then, otherwise) =
+            if and { (rhs, vec!["pure false".to_owned()]) } else { (vec!["pure true".to_owned()], rhs) };
+        self.choose(&Choice::If(lhs, Box::new(Choice::Branch(then)), Box::new(Choice::Branch(otherwise))))
     }
 
     /// `a ?? b`, which runs `b` only when `a` is null.
@@ -469,7 +638,11 @@ impl<'body, 'program> Body<'body, 'program> {
         let rhs = self.branch(binary.rhs);
         let present = if keeps_null { lhs.clone() } else { format!("({lhs}.getD default)") };
 
-        self.choose(vec![(format!("{lhs}.isSome"), vec![format!("pure {present}")])], rhs)
+        self.choose(&Choice::If(
+            format!("{lhs}.isSome"),
+            Box::new(Choice::Branch(vec![format!("pure {present}")])),
+            Box::new(Choice::Branch(rhs)),
+        ))
     }
 
     fn prefix(&mut self, unary: &UnaryPrefix) -> String {
@@ -486,7 +659,7 @@ impl<'body, 'program> Body<'body, 'program> {
                         self.bind(format!("int.neg {operand}"))
                     }
                     Kind::Float => self.unmodeled(unary.span(), "a float".to_owned(), issues::FLOAT),
-                    _ => self.unmodeled(unary.span(), "the operator `-` here".to_owned(), issues::NOT_TRANSLATED),
+                    _ => self.unmodeled(unary.span(), "the operator `-` here".to_owned(), issues::OPERATOR),
                 }
             }
             UnaryPrefixOperator::Not(_) => {
@@ -496,59 +669,166 @@ impl<'body, 'program> Body<'body, 'program> {
             UnaryPrefixOperator::Plus(_) => self.value(unary.operand),
             operator => {
                 let what = format!("the operator `{}`", self.source(operator.span()));
-                self.unmodeled(unary.span(), what, issues::NOT_TRANSLATED)
+                self.unmodeled(unary.span(), what, issues::OPERATOR)
             }
         }
     }
 
-    /// A `match` tests its subject against each arm's pattern and guard in order, and throws when no arm matches.
+    /// A `match` in an expression gives the value of the first arm whose pattern and guard hold, and throws when none
+    /// does.
     fn pattern_match(&mut self, r#match: &PatternMatch) -> String {
-        let kind = self.kind(self.checked.types().expression_type(r#match.expression));
-        match kind {
-            Kind::Float => return self.unmodeled(r#match.span(), "a float".to_owned(), issues::FLOAT),
-            Kind::Object | Kind::Other => {
-                return self.unmodeled(r#match.span(), "a match on this subject".to_owned(), issues::NOT_TRANSLATED);
-            }
-            Kind::Int | Kind::Bool | Kind::String | Kind::Enum | Kind::Null => {}
+        let Some((arms, otherwise)) = self.arms(r#match, Self::arm_value) else {
+            return "default".to_owned();
+        };
+
+        self.choose(&choice(arms, otherwise))
+    }
+
+    /// The test and the branch of each arm of `r#match`, in order, each branch as `translate` gives it, and the branch
+    /// that runs when no arm matches: the `default` arm's, else a throw. `None` after recording why an arm has no test.
+    fn arms(
+        &mut self,
+        r#match: &PatternMatch,
+        mut translate: impl FnMut(&mut Self, &PatternMatchArmBody) -> Branch,
+    ) -> Option<(Vec<(Test, Branch)>, Branch)> {
+        let r#type = self.checked.types().expression_type(r#match.expression);
+        if self.kind(r#type) == Kind::Float {
+            self.unmodeled(r#match.span(), "a float".to_owned(), issues::FLOAT);
+            return None;
         }
 
         let subject = self.value(r#match.expression);
+        let (paths, _) = self.path.arms(r#match.expression, r#match.arms.as_slice());
         let mut arms = Vec::new();
         let mut otherwise = vec!["throw Throwable.UnhandledMatchError".to_owned()];
-        for arm in r#match.arms.iter() {
-            let body = match arm {
-                PatternMatchArm::Pattern(arm) => &arm.body,
-                PatternMatchArm::Default(arm) => &arm.body,
-            };
-            let PatternMatchArmBody::Expression(body) = body else {
-                return self.unmodeled(arm.span(), "a match arm with a block".to_owned(), issues::NOT_TRANSLATED);
-            };
+        for (arm, path) in r#match.arms.iter().zip(paths) {
             let PatternMatchArm::Pattern(arm) = arm else {
-                otherwise = self.branch(body);
+                otherwise = self.under(path, |body| translate(body, arm.body()));
                 continue;
             };
 
-            let Some(mut condition) = self.pattern(&subject, kind, arm.pattern) else {
-                return "default".to_owned();
-            };
+            let mut test = self.test(&subject, r#type, arm.pattern)?;
             if let Some(guard) = &arm.guard {
-                let Some(guard) = self.pure(guard.condition, "a guard that can throw") else {
-                    return "default".to_owned();
-                };
-                condition = format!("({condition} && {guard})");
+                test.conditions.push(self.pure(guard.condition, "a guard that can throw", issues::GUARD)?);
             }
-            arms.push((condition, self.branch(body)));
+            arms.push((test, self.under(path, |body| translate(body, &arm.body))));
         }
 
-        self.choose(arms, otherwise)
+        Some((arms, otherwise))
+    }
+
+    /// The branch of an arm of a `match` in an expression, which ends in the arm's value.
+    fn arm_value(&mut self, body: &PatternMatchArmBody) -> Branch {
+        match body {
+            PatternMatchArmBody::Expression(expression) => self.branch(expression),
+            PatternMatchArmBody::Block(block) => {
+                unreachable!("the checker accepts a block arm only in a match statement, not {:?}", block.span())
+            }
+        }
+    }
+
+    /// The statements of an arm of a `match` statement.
+    fn arm_statements(&mut self, body: &PatternMatchArmBody) -> Branch {
+        let outer = std::mem::take(&mut self.lines);
+        match body {
+            PatternMatchArmBody::Expression(expression) => {
+                self.value(expression);
+            }
+            PatternMatchArmBody::Block(block) => self.statements(&block.statements),
+        }
+
+        std::mem::replace(&mut self.lines, outer)
+    }
+
+    /// The test of `x is P`, of the value of `x`.
+    fn is_test(&mut self, is: &Is) -> Option<Test> {
+        let r#type = self.checked.types().expression_type(is.value);
+        let subject = self.value(is.value);
+
+        self.test(&subject, r#type, is.pattern)
+    }
+
+    /// Whether `hint` names the type of every value of `atomic`.
+    pub(super) fn names_type(&self, hint: &Hint, atomic: &TAtomic) -> bool {
+        let class = match hint {
+            Hint::Integer(_) => return matches!(atomic, TAtomic::Scalar(TScalar::Integer(_))),
+            Hint::String(_) => return matches!(atomic, TAtomic::Scalar(TScalar::String(_))),
+            Hint::Bool(_) => return matches!(atomic, TAtomic::Scalar(TScalar::Bool(_))),
+            Hint::Parenthesized(parenthesized) => return self.names_type(parenthesized.hint, atomic),
+            Hint::Generic(generic) => {
+                let name = self.checked.names().resolve(&generic.name).unwrap_or(generic.name.value);
+                if names::short_name(name) == "List"
+                    && let TAtomic::Array(TArray::List(list)) = atomic
+                    && let [element] = generic.type_arguments.arguments.as_slice()
+                    && !list.element_type.is_nullable()
+                    && let [element_type] = list.element_type.types.as_ref()
+                {
+                    return self.names_type(element, element_type);
+                }
+                return false;
+            }
+            Hint::Self_(_) => self.class,
+            Hint::Identifier(identifier) => self.checked.names().get(identifier),
+            _ => return false,
+        };
+
+        match atomic {
+            TAtomic::Object(TObject::Named(named)) => named.name.as_bytes().eq_ignore_ascii_case(class),
+            TAtomic::Object(TObject::Enum(r#enum)) => r#enum.name.as_bytes().eq_ignore_ascii_case(class),
+            _ => false,
+        }
+    }
+
+    /// The Lean constructor of the case of an enum `hint` names, when `atomic` is that enum.
+    pub(super) fn case(&self, hint: &Hint, atomic: &TAtomic) -> Option<String> {
+        let Hint::Identifier(identifier) = hint else {
+            return None;
+        };
+        let class = self.checked.names().get(identifier);
+        let separator = class.iter().rposition(|&byte| byte == b'\\')?;
+        let (r#enum, case) = (&class[..separator], &class[separator + 1..]);
+        let named = match atomic {
+            TAtomic::Object(TObject::Named(named)) => named.name.as_bytes(),
+            TAtomic::Object(TObject::Enum(r#enum)) => r#enum.name.as_bytes(),
+            _ => return None,
+        };
+        if !named.eq_ignore_ascii_case(r#enum) || self.checked.types().enum_case_class(r#enum, case).is_none() {
+            return None;
+        }
+
+        Some(names::member(&names::full_name(&self.reached_name(r#enum)), case))
+    }
+
+    /// `translate` on `path`, a path into a branch of the code being translated.
+    fn under<T>(&mut self, path: Path<'body, 'program>, translate: impl FnOnce(&mut Self) -> T) -> T {
+        let outer = std::mem::replace(&mut self.path, path);
+        let translated = translate(self);
+        self.path = outer;
+
+        translated
     }
 
     /// The condition that `subject`, a value of `kind`, matches `pattern`, or `None` after recording why it has none.
-    fn pattern(&mut self, subject: &str, kind: Kind, pattern: &Pattern) -> Option<String> {
+    pub(super) fn pattern(&mut self, subject: &str, kind: Kind, pattern: &Pattern) -> Option<String> {
         match pattern {
-            Pattern::Value(value) => Some(format!("({subject} == {})", self.pure(value, "a pattern that can throw")?)),
+            // A value an object is compared with is `null`: a pattern takes constants, and an object's identity is
+            // nothing a law reasons about.
+            Pattern::Value(value)
+                if matches!(kind, Kind::Object | Kind::Other)
+                    && !matches!(value.unparenthesized(), Expression::Literal(Literal::Null(_))) =>
+            {
+                self.unmodeled(pattern.span(), "a match on this subject".to_owned(), issues::MATCH_SUBJECT);
+                None
+            }
+            Pattern::Value(value) => {
+                Some(format!("({subject} == {})", self.pure(value, "a pattern that can throw", issues::PATTERN_VALUE)?))
+            }
+            Pattern::Comparison(_) if matches!(kind, Kind::Object | Kind::Other) => {
+                self.unmodeled(pattern.span(), "a match on this subject".to_owned(), issues::MATCH_SUBJECT);
+                None
+            }
             Pattern::Comparison(comparison) => {
-                let value = self.pure(comparison.value, "a pattern that can throw")?;
+                let value = self.pure(comparison.value, "a pattern that can throw", issues::PATTERN_VALUE)?;
                 let condition = match comparison.operator {
                     BinaryOperator::Equal(_) | BinaryOperator::Identical(_) => format!("({subject} == {value})"),
                     BinaryOperator::NotEqual(_) | BinaryOperator::NotIdentical(_) => {
@@ -558,13 +838,13 @@ impl<'body, 'program> Body<'body, 'program> {
                     BinaryOperator::LessThanOrEqual(_) if kind == Kind::Int => {
                         format!("(decide ({subject} <= {value}))")
                     }
-                    BinaryOperator::GreaterThan(_) if kind == Kind::Int => format!("(decide ({value} < {subject}))"),
+                    BinaryOperator::GreaterThan(_) if kind == Kind::Int => format!("(decide ({subject} > {value}))"),
                     BinaryOperator::GreaterThanOrEqual(_) if kind == Kind::Int => {
-                        format!("(decide ({value} <= {subject}))")
+                        format!("(decide ({subject} >= {value}))")
                     }
                     _ => {
                         let what = format!("the pattern `{}`", self.source(comparison.span()));
-                        self.unmodeled(comparison.span(), what, issues::NOT_TRANSLATED);
+                        self.unmodeled(comparison.span(), what, issues::COMPARISON_PATTERN);
                         return None;
                     }
                 };
@@ -586,14 +866,14 @@ impl<'body, 'program> Body<'body, 'program> {
         }
     }
 
-    /// The term of `expression`, which must not throw, or `None` after recording `what` when it can.
-    fn pure(&mut self, expression: &Expression, what: &str) -> Option<String> {
+    /// The term of `expression`, which must not throw, or `None` after recording `what` and `reason` when it can.
+    pub(super) fn pure(&mut self, expression: &Expression, what: &str, reason: &'static str) -> Option<String> {
         let (lines, value) = self.nested(|body| body.value(expression));
         if lines.is_empty() {
             return Some(value);
         }
 
-        self.unmodeled(expression.span(), what.to_owned(), issues::NOT_TRANSLATED);
+        self.unmodeled(expression.span(), what.to_owned(), reason);
         None
     }
 
@@ -608,7 +888,26 @@ impl<'body, 'program> Body<'body, 'program> {
                     issues::TYPE_TEST,
                 );
             }
+            // Spec section 23: `global.f(…)` calls the function `f` of PHP's root namespace.
+            if class.name.value() == b"global" {
+                let function = self.method_name(&call.method).map(String::from_utf8_lossy).unwrap_or_default();
+                return self.unmodeled(
+                    expression.span(),
+                    format!("the function `global.{function}` of PHP's root namespace"),
+                    issues::PLAIN_PHP,
+                );
+            }
             let class = names.get(&class.name);
+            if class.eq_ignore_ascii_case(b"Sharp\\Math\\Math")
+                && let ClassLikeMemberSelector::Identifier(method) = &call.method
+                && let Some(lean) = match method.value {
+                    b"max" => Some("max"),
+                    b"min" => Some("min"),
+                    _ => None,
+                }
+            {
+                return self.extremum(lean, &call.argument_list);
+            }
             if !self.is_translated_class(call.object.span(), class) {
                 return "default".to_owned();
             }
@@ -619,7 +918,8 @@ impl<'body, 'program> Body<'body, 'program> {
             {
                 let class_name = self.reached_name(class);
                 let lean = names::full_name(&class_name);
-                let Some(arguments) = self.arguments(&call.argument_list, call.argument_list.arguments.len()) else {
+                let Some(arguments) = self.arguments(&call.argument_list, call.argument_list.arguments.len(), None)
+                else {
                     return "default".to_owned();
                 };
                 self.uses(class, &lean, names::short_name(&class_name));
@@ -708,15 +1008,16 @@ impl<'body, 'program> Body<'body, 'program> {
     }
 
     /// Whether `expression`'s value is a `List`, null aside.
-    fn is_list(&self, expression: &Expression) -> bool {
+    pub(super) fn is_list(&self, expression: &Expression) -> bool {
         let r#type = self.checked.types().expression_type(expression);
         let mut types = r#type.types.iter().filter(|atomic| !atomic.is_null()).peekable();
 
         types.peek().is_some() && types.all(TAtomic::is_list)
     }
 
-    /// A `List` method a law reasons about, as the Lean function it is: `count()` is `List.length`, and `map` and
-    /// `filter` of a lambda are `List.map` and `List.filter`. Every other method of a collection is refused by name.
+    /// A `List` method a law reasons about, as the Lean function it is: `count()` is `int.count`, the list's length,
+    /// and `map` and `filter` of a lambda are `List.map` and `List.filter`. Every other method of a collection is
+    /// refused by name.
     fn list_call(&mut self, expression: &Expression, call: &MethodCall) -> String {
         let Some(method) = self.method_name(&call.method) else {
             return "default".to_owned();
@@ -726,7 +1027,7 @@ impl<'body, 'program> Body<'body, 'program> {
             (b"count", 0) => {
                 let list = self.value(call.object);
 
-                format!("(Int64.ofNat (List.length {list}))")
+                format!("(int.count {list})")
             }
             (b"map" | b"filter", 1) => {
                 let list = self.value(call.object);
@@ -742,6 +1043,29 @@ impl<'body, 'program> Body<'body, 'program> {
                 self.unmodeled(expression.span(), what, issues::COLLECTION)
             }
         }
+    }
+
+    /// The standard library's `Math.max(…)` or `Math.min(…)`, as Lean's `max` or `min` on `int`, named by `lean`. The
+    /// checker knows what they compute, so a law reasons about them as it does about `<`, and they need no `extern`.
+    /// Each argument after the first joins with `lean`, and a spread one joins each element of its List.
+    fn extremum(&mut self, lean: &str, list: &ArgumentList) -> String {
+        let mut joined: Option<String> = None;
+        for argument in &list.arguments {
+            let Argument::Positional(argument) = argument else {
+                return self.unmodeled(argument.span(), "a named or spread argument".to_owned(), issues::ARGUMENT);
+            };
+            let value = self.value(argument.value);
+            joined = Some(match (joined, argument.ellipsis.is_some()) {
+                (None, false) => value,
+                (Some(joined), false) => format!("({lean} {joined} {value})"),
+                (Some(joined), true) => format!("(List.foldl {lean} {joined} {value})"),
+                (None, true) => {
+                    return self.unmodeled(argument.span(), "a named or spread argument".to_owned(), issues::ARGUMENT);
+                }
+            });
+        }
+
+        joined.unwrap_or_else(|| unreachable!("the checker refuses `Math.{lean}()`, as at {:?}", list.span()))
     }
 
     /// A lambda `map` or `filter` takes, as a Lean `fun`. Its body is one expression that cannot throw, so the function
@@ -812,7 +1136,11 @@ impl<'body, 'program> Body<'body, 'program> {
             if returns_null { called } else { format!("(some {called})") }
         });
 
-        self.choose(vec![(format!("{receiver}.isSome"), present)], vec!["pure none".to_owned()])
+        self.choose(&Choice::If(
+            format!("{receiver}.isSome"),
+            Box::new(Choice::Branch(present)),
+            Box::new(Choice::Branch(vec!["pure none".to_owned()])),
+        ))
     }
 
     /// The name a member selector spells, or `None` after recording a name computed while the code runs.
@@ -821,7 +1149,7 @@ impl<'body, 'program> Body<'body, 'program> {
             return Some(method.value);
         }
 
-        self.unmodeled(selector.span(), "a dynamic member name".to_owned(), issues::NOT_TRANSLATED);
+        self.unmodeled(selector.span(), "a dynamic member name".to_owned(), issues::MEMBER_NAME);
         None
     }
 
@@ -847,7 +1175,7 @@ impl<'body, 'program> Body<'body, 'program> {
             return self.unmodeled(
                 expression.span(),
                 format!("the method {}.{}", names::short_name(class), String::from_utf8_lossy(method)),
-                issues::NOT_TRANSLATED,
+                issues::BODYLESS,
             );
         };
 
@@ -855,14 +1183,34 @@ impl<'body, 'program> Body<'body, 'program> {
         let key = names::member(&names::full_name(&class_name), facts.name.as_bytes());
         let mut parts = vec![key.clone()];
         parts.extend(receiver);
-        let Some(arguments) = arguments.map_or_else(|| Some(Vec::new()), |list| self.arguments(list, facts.parameters))
+        let smaller = arguments
+            .filter(|_| ascii_lowercase_word(class) == ascii_lowercase_word(self.class))
+            .and_then(|list| self.smaller(list));
+        let stepped = smaller.as_ref().and_then(|(smaller, term)| Some((smaller.argument, term.clone()?)));
+        let Some(arguments) =
+            arguments.map_or_else(|| Some(Vec::new()), |list| self.arguments(list, facts.parameters, stepped))
         else {
             return "default".to_owned();
         };
         parts.extend(arguments);
-        self.uses(class, &key, format!("{}.{}", names::short_name(&class_name), facts.name));
+        let place = format!("{}.{}", names::short_name(&class_name), facts.name);
+        self.use_of(class, &key, place, smaller.map(|(smaller, _)| smaller));
 
         self.bind(parts.join(" "))
+    }
+
+    /// The smaller value a call of a method of the body's own class passes, by spec section 28's smaller value rule,
+    /// and the pure term of an int one, which cannot leave the `int` range where a condition showed it is above or below
+    /// its bound.
+    pub(crate) fn smaller(&self, list: &ArgumentList) -> Option<(Smaller, Option<String>)> {
+        let arguments: Vec<&Expression> = list.arguments.iter().map(Argument::value).collect();
+        let (smaller, operand) = self.path.smaller(&arguments)?;
+        let term = operand.map(|operand| {
+            let name = names::identifier(self.source(operand.span()).as_bytes());
+            if matches!(smaller.step, Step::Down(_)) { format!("({name} - 1)") } else { format!("({name} + 1)") }
+        });
+
+        Some((smaller, term))
     }
 
     /// `new Class(…)`, which runs the class's constructor. A named constructor runs a body, which Mago does not
@@ -893,7 +1241,7 @@ impl<'body, 'program> Body<'body, 'program> {
         let parameters = self.reach.method(class, b"__construct").map_or(0, |method| method.parameters);
         let mut parts = vec![key.clone()];
         if let Some(arguments) = &instantiation.argument_list {
-            let Some(arguments) = self.arguments(arguments, parameters) else {
+            let Some(arguments) = self.arguments(arguments, parameters, None) else {
                 return "default".to_owned();
             };
             parts.extend(arguments);
@@ -904,22 +1252,31 @@ impl<'body, 'program> Body<'body, 'program> {
     }
 
     /// The terms of a call's arguments, or `None` when one cannot be translated. Each argument is passed by position,
-    /// and the call passes every parameter.
-    fn arguments(&mut self, list: &ArgumentList, parameters: usize) -> Option<Vec<String>> {
+    /// and the call passes every parameter. `stepped` is an argument's position and the term that stands for it.
+    fn arguments(
+        &mut self,
+        list: &ArgumentList,
+        parameters: usize,
+        stepped: Option<(usize, String)>,
+    ) -> Option<Vec<String>> {
         let mut arguments = Vec::new();
-        for argument in list.arguments.iter() {
+        for (position, argument) in list.arguments.iter().enumerate() {
+            if let Some((_, term)) = stepped.as_ref().filter(|(at, _)| *at == position) {
+                arguments.push(term.clone());
+                continue;
+            }
             match argument {
                 Argument::Positional(argument) if argument.ellipsis.is_none() => {
                     arguments.push(self.value(argument.value));
                 }
                 argument => {
-                    self.unmodeled(argument.span(), "a named or spread argument".to_owned(), issues::NOT_TRANSLATED);
+                    self.unmodeled(argument.span(), "a named or spread argument".to_owned(), issues::ARGUMENT);
                     return None;
                 }
             }
         }
         if arguments.len() < parameters {
-            self.unmodeled(list.span(), "a default argument".to_owned(), issues::NOT_TRANSLATED);
+            self.unmodeled(list.span(), "a default argument".to_owned(), issues::DEFAULT_ARGUMENT);
             return None;
         }
 
@@ -929,7 +1286,7 @@ impl<'body, 'program> Body<'body, 'program> {
     /// `object.y`, `Class.CASE` and `Class.CONSTANT`.
     fn property(&mut self, expression: &Expression, access: &PropertyAccess) -> String {
         let ClassLikeMemberSelector::Identifier(member) = &access.property else {
-            return self.unmodeled(access.property.span(), "a dynamic member name".to_owned(), issues::NOT_TRANSLATED);
+            return self.unmodeled(access.property.span(), "a dynamic member name".to_owned(), issues::MEMBER_NAME);
         };
         let names = self.checked.names();
         if let Some(class) = names.static_property_class(access) {
@@ -996,7 +1353,7 @@ impl<'body, 'program> Body<'body, 'program> {
                 String::from_utf8_lossy(property)
             );
 
-            return self.unmodeled(expression.span(), format!("the field {place} of a case"), issues::NOT_TRANSLATED);
+            return self.unmodeled(expression.span(), format!("the field {place} of a case"), issues::CASE_FIELD);
         }
         let class_name = self.reached_name(class);
         let short = names::short_name(&class_name);
@@ -1010,7 +1367,7 @@ impl<'body, 'program> Body<'body, 'program> {
             return format!("({key} {object})");
         }
         if !matches!(declaration.kind, DeclarationKind::Property { .. }) {
-            return self.unmodeled(expression.span(), format!("the member {place}"), issues::NOT_TRANSLATED);
+            return self.unmodeled(expression.span(), format!("the member {place}"), issues::MEMBER);
         }
         if ascii_lowercase_word(declaration.class.as_bytes()) != ascii_lowercase_word(class) {
             return self.unmodeled(expression.span(), format!("the inherited property {place}"), issues::INHERITANCE);
@@ -1033,7 +1390,7 @@ impl<'body, 'program> Body<'body, 'program> {
     /// `object?.y`, null when `object` is.
     fn null_safe_property(&mut self, expression: &Expression, access: &NullSafePropertyAccess) -> String {
         let ClassLikeMemberSelector::Identifier(member) = &access.property else {
-            return self.unmodeled(access.property.span(), "a dynamic member name".to_owned(), issues::NOT_TRANSLATED);
+            return self.unmodeled(access.property.span(), "a dynamic member name".to_owned(), issues::MEMBER_NAME);
         };
         if let Some(extension) = self.checked.types().extension(expression) {
             if !self.is_translated_class(expression.span(), extension.class.as_bytes()) {
@@ -1081,7 +1438,7 @@ impl<'body, 'program> Body<'body, 'program> {
                     self.unmodeled(
                         object.span(),
                         format!("a value of the type `{}`", r#type.get_id()),
-                        issues::NOT_TRANSLATED,
+                        issues::RECEIVER,
                     );
                     return None;
                 }
@@ -1149,8 +1506,13 @@ impl<'body, 'program> Body<'body, 'program> {
 
     /// Records that the body uses the declaration `key` of `class`, which messages name `place`.
     fn uses(&mut self, class: &[u8], key: &str, place: String) {
+        self.use_of(class, key, place, None);
+    }
+
+    /// [`Body::uses`], for a call that passes the `smaller` value.
+    fn use_of(&mut self, class: &[u8], key: &str, place: String, smaller: Option<Smaller>) {
         let file = self.reach.class(class).map(|reached| reached.file);
-        self.uses.push(Use { key: key.to_owned(), file, place });
+        self.uses.push(Use { key: key.to_owned(), file, place, smaller });
     }
 
     /// The source text at `span`, as messages quote it.
@@ -1169,7 +1531,7 @@ impl<'body, 'program> Body<'body, 'program> {
         "default".to_owned()
     }
 
-    fn kind(&self, r#type: &TUnion) -> Kind {
+    pub(super) fn kind(&self, r#type: &TUnion) -> Kind {
         let mut kinds = r#type.types.iter().filter(|atomic| !atomic.is_null()).map(|atomic| match atomic {
             TAtomic::Scalar(TScalar::Integer(_)) => Kind::Int,
             TAtomic::Scalar(TScalar::Bool(_)) => Kind::Bool,
@@ -1196,7 +1558,7 @@ impl<'body, 'program> Body<'body, 'program> {
     }
 
     /// Binds `effect` to a new temporary, and returns the temporary.
-    fn bind(&mut self, effect: String) -> String {
+    pub(super) fn bind(&mut self, effect: String) -> String {
         self.temporaries += 1;
         let temporary = format!("«${}»", self.temporaries);
         self.lines.push(format!("let {temporary} ← {effect}"));
@@ -1205,7 +1567,7 @@ impl<'body, 'program> Body<'body, 'program> {
     }
 
     /// The statements `translate` adds, apart from the body's own, and the term it returns.
-    fn nested(&mut self, translate: impl FnOnce(&mut Self) -> String) -> (Vec<String>, String) {
+    pub(super) fn nested(&mut self, translate: impl FnOnce(&mut Self) -> String) -> (Vec<String>, String) {
         let outer = std::mem::take(&mut self.lines);
         let term = translate(self);
         let lines = std::mem::replace(&mut self.lines, outer);
@@ -1238,44 +1600,105 @@ impl<'body, 'program> Body<'body, 'program> {
         lines
     }
 
-    /// The value of the first branch whose condition holds, else `otherwise`'s. Branches that only return a pure term
-    /// are an `if` term, and any other is bound from a nested `do` block, which runs only its own branch's effects.
-    fn choose(&mut self, arms: Vec<(String, Branch)>, otherwise: Branch) -> String {
-        let pure = |branch: &Branch| match branch.as_slice() {
-            [only] => only.strip_prefix("pure ").map(str::to_owned),
-            _ => None,
-        };
-        if let Some(mut term) = pure(&otherwise)
-            && arms.iter().all(|(_, branch)| pure(branch).is_some())
-        {
-            for (condition, branch) in arms.iter().rev() {
-                term = format!("(if {condition} then {} else {term})", pure(branch).unwrap_or_default());
-            }
-
+    /// The value of the branch `choice` runs. A choice whose branches only return a pure term is a term, and any other
+    /// is bound from a nested `do` block, which runs only its own branch's effects.
+    fn choose(&mut self, choice: &Choice) -> String {
+        if let Some(term) = term(choice) {
             return term;
         }
 
-        self.temporaries += 1;
-        let temporary = format!("«${}»", self.temporaries);
-        let mut lines = Vec::new();
-        for (index, (condition, branch)) in arms.iter().enumerate() {
-            if index == 0 {
-                lines.push(format!("let {temporary} ← if {condition} then do"));
-            } else {
-                lines.push(format!("  else if {condition} then do"));
-            }
-            lines.extend(indented(branch, 4));
-        }
-        if arms.is_empty() {
-            lines.push(format!("let {temporary} ← do"));
-            lines.extend(indented(&otherwise, 4));
-        } else {
-            lines.push("  else do".to_owned());
-            lines.extend(indented(&otherwise, 4));
-        }
-        self.lines.extend(lines);
+        let temporary = self.fresh();
+        self.lines.push(format!("let {temporary} ← do"));
+        self.lines.extend(indented(&statements(choice), 4));
 
         temporary
+    }
+
+    /// A name no PHP# name is: `«$n»`.
+    pub(super) fn fresh(&mut self) -> String {
+        self.temporaries += 1;
+
+        format!("«${}»", self.temporaries)
+    }
+}
+
+/// `choice` as a pure term, when each of its branches only returns one.
+fn term(choice: &Choice) -> Option<String> {
+    Some(match choice {
+        Choice::Branch(branch) => match branch.as_slice() {
+            [only] => only.strip_prefix("pure ")?.to_owned(),
+            _ => return None,
+        },
+        Choice::If(condition, then, otherwise) => {
+            format!("(if {condition} then {} else {})", term(then)?, term(otherwise)?)
+        }
+        Choice::Match(matched, alternatives) => {
+            let mut arms = Vec::new();
+            for (pattern, branch) in alternatives {
+                arms.push(format!("| {pattern} => {}", term(branch)?));
+            }
+            format!("(match {matched} with {})", arms.join(" "))
+        }
+        Choice::Let(name, value, branch) => format!("(let {name} := {value}; {})", term(branch)?),
+    })
+}
+
+/// `choice` as the statements of a `do` block.
+fn statements(choice: &Choice) -> Vec<String> {
+    match choice {
+        Choice::Branch(branch) if branch.is_empty() => vec!["pure ()".to_owned()],
+        Choice::Branch(branch) => branch.clone(),
+        Choice::If(condition, then, otherwise) => {
+            let mut lines = vec![format!("if {condition} then")];
+            lines.extend(indented(&statements(then), 2));
+            lines.push("else".to_owned());
+            lines.extend(indented(&statements(otherwise), 2));
+            lines
+        }
+        Choice::Match(matched, alternatives) => {
+            let mut lines = vec![format!("match {matched} with")];
+            for (pattern, branch) in alternatives {
+                lines.push(format!("| {pattern} =>"));
+                lines.extend(indented(&statements(branch), 2));
+            }
+            lines
+        }
+        Choice::Let(name, value, branch) => {
+            let mut lines = vec![format!("let {name} := {value}")];
+            lines.extend(statements(branch));
+            lines
+        }
+    }
+}
+
+/// Whether `statement` always returns: a `return`, or a block that ends in one.
+fn returns(statement: &Statement) -> bool {
+    match statement {
+        Statement::Return(_) => true,
+        Statement::Block(block) => block.statements.last().is_some_and(returns),
+        _ => false,
+    }
+}
+
+/// Whether `pattern` names a value it matches, which exists only where the pattern holds.
+fn names_values(pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::Type(pattern) => {
+            pattern.variable.is_some()
+                || pattern.fields.is_some_and(|fields| fields.fields.iter().any(|field| names_values(field)))
+                || pattern.properties.is_some_and(|properties| {
+                    properties.properties.iter().any(|property| names_values(property.pattern))
+                })
+        }
+        Pattern::Not(not) => names_values(not.pattern),
+        Pattern::Binary(binary) => names_values(binary.left) || names_values(binary.right),
+        Pattern::Parenthesized(parenthesized) => names_values(parenthesized.pattern),
+        Pattern::Properties(properties) => properties.properties.iter().any(|property| names_values(property.pattern)),
+        Pattern::List(list) => list.elements.iter().any(|element| match element {
+            ListPatternElement::Pattern(pattern) => names_values(pattern),
+            ListPatternElement::Rest(rest) => rest.variable.is_some(),
+        }),
+        Pattern::Value(_) | Pattern::Comparison(_) => false,
     }
 }
 

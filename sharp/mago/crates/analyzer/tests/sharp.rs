@@ -22027,6 +22027,44 @@ fn a_law_reaching_a_method_with_an_effect_in_another_file_is_refused() {
     }
 }
 
+/// Spec section 28: the effect rule reads all of a law: its `when` condition and every statement of its body, a local
+/// no law call reads after it included, as well as its claim.
+#[test]
+fn an_effect_in_a_law_s_condition_or_body_is_refused() {
+    let timer = (
+        "src/Lib/Timer.php",
+        "<?php\n\nnamespace Lib;\n\nfinal class Timer\n{\n    public static function now(): int\n    {\n        return time();\n    }\n}\n",
+    );
+    let stub = ("app/Stubs/Timer.sharp", "namespace App.Stubs;\n\nimport Lib.Timer;\n\nextern Timer.now uses Clock;\n");
+
+    for (law, at) in [
+        (
+            (
+                "app/Shop/Clock.sharp",
+                "namespace App.Shop;\n\nimport Lib.Timer;\n\npublic class Clock\n{\n    law ticks(int x) => true\n    {\n        let now = Timer.now();\n    }\n}\n",
+            ),
+            "9:19",
+        ),
+        (
+            (
+                "app/Shop/Clock.sharp",
+                "namespace App.Shop;\n\nimport Lib.Timer;\n\npublic class Clock\n{\n    law ticks(int x) when Timer.now() > 0 => true;\n}\n",
+            ),
+            "7:27",
+        ),
+    ] {
+        assert_eq!(
+            effect_issues(&[law, stub, timer]),
+            [format!(
+                "{}:{at} impure-law: Law `ticks` calls `Timer.now`, which has the effect `Clock`. Laws hold only over pure code.",
+                law.0
+            )],
+            "{}",
+            law.1
+        );
+    }
+}
+
 /// A law that calls plain PHP with no `extern` names the declaration it lacks, as the getter rule does.
 #[test]
 fn a_law_calling_plain_php_with_no_extern_names_the_missing_declaration() {
@@ -22307,16 +22345,272 @@ fn this_in_a_law_is_refused_as_in_a_static_method() {
     assert_eq!(issues(static_method, &[]), ["7:42 undefined-variable"]);
 }
 
-/// Spec section 28: a law is checked and never runs, so a call of it names no method.
+/// Spec section 28: a law is checked and never runs, so a call of it outside a law's body names no method, whether it
+/// names the law's class or, in the class itself, the law alone.
 #[test]
-fn a_call_of_a_law_is_a_non_existent_method_that_names_the_law() {
+fn a_call_of_a_law_outside_a_law_body_is_a_non_existent_method_that_names_the_law() {
     let ledger = (
         "app/Shared/Ledger.sharp",
         "namespace App.Shared;\n\npublic class Ledger\n{\n    public static bool check(Money a, Money b) => Money.addKeepsCurrency(a, b);\n}\n",
     );
+    let money = (
+        "app/Shared/Money.sharp",
+        "namespace App.Shared;\n\npublic class Money\n{\n    public Money(public int amount { get; }) { }\n\n    public static bool check(Money a) => sameAmount(a);\n\n    law sameAmount(Money a) => a.amount == a.amount;\n}\n",
+    );
 
     assert_eq!(codes(&issues(ledger, &[LAWFUL_MONEY])), ["non-existent-method", "mixed-return-statement"]);
-    assert_eq!(messages(ledger, &[LAWFUL_MONEY])[0], "`Money.addKeepsCurrency` is a law, and a law is never called.");
+    assert_eq!(
+        messages(ledger, &[LAWFUL_MONEY])[0],
+        "`Money.addKeepsCurrency` is a law, and only a law's body calls a law, as a statement of its own."
+    );
+    assert_eq!(codes(&issues(money, &[]))[0], "non-existent-function");
+    assert_eq!(
+        messages(money, &[])[0],
+        "`Money.sameAmount` is a law, and only a law's body calls a law, as a statement of its own."
+    );
+}
+
+/// Spec section 28's `Money`, whose laws the checker proves alone, by a body that calls a law, by recursion on a
+/// smaller int and on a list's rest, and under a `when` condition.
+const PROVEN_MONEY: (&str, &str) = (
+    "app/Shared/Money.sharp",
+    "namespace App.Shared;\n\npublic class Money\n{\n    public Money(public int amount { get; }, public string currency { get; }) { }\n    public Money add(Money other) => new Money(this.amount + other.amount, this.currency);\n    public static int refundable(int paid, int refunded) => refunded > paid ? 0 : paid - refunded;\n\n    law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;\n    law addTwiceKeepsCurrency(Money m, Money a, Money b) => m.add(a).add(b).currency == m.currency\n    {\n        Money.addKeepsCurrency(m, a);\n        Money.addKeepsCurrency(m.add(a), b);\n    }\n    law neverAbovePaid(int paid, int refunded) when paid >= 0 && refunded >= 0\n        => Money.refundable(paid, refunded) <= paid;\n    law countsDown(int n) when n >= 0 => Money.refundable(n, 0) <= n\n    {\n        if (n <= 0) { return; }\n        Money.countsDown(n - 1);\n        Money.neverAbovePaid(n, 0);\n    }\n    law countNeverNegative(List<int> items) => items.count() >= 0\n    {\n        match (items) {\n            [int, ...List<int> rest] => { Money.countNeverNegative(rest); },\n            default => { return; },\n        }\n    }\n}\n",
+);
+
+/// Spec section 28: a law's body is ordinary PHP#, where a call of a law is a statement, and a law calls itself on a
+/// smaller value.
+#[test]
+fn a_law_proven_by_its_body_reports_no_issue() {
+    assert_eq!(issues(PROVEN_MONEY, &[]), Vec::<String>::new());
+    assert_eq!(effect_issues(&[PROVEN_MONEY]), Vec::<String>::new());
+}
+
+/// The body of a law in `Count`, as `law f(int x, List<int> items) => true` states it.
+fn law_body(body: &str) -> (&'static str, &'static str) {
+    let code = format!(
+        "namespace App.Shared;\n\npublic class Count\n{{\n    law f(int x, List<int> items) => true\n    {{\n{body}\n    }}\n}}\n"
+    );
+
+    ("app/Shared/Count.sharp", Box::leak(code.into_boxed_str()))
+}
+
+/// Spec section 28: a law calls itself only on a smaller value, a list's rest from a pattern the body matched or an int
+/// one step towards a bound the body tested, so its proof ends. Any other call of itself is an error on the call. A
+/// literal bound takes `<=` and `>=` as one step past it, and a parameter bound only `<` and `>`, as a method's recursion
+/// does, and every call makes the same value smaller.
+#[test]
+fn a_law_that_calls_itself_on_a_value_no_smaller_is_refused() {
+    let broken = (
+        "app/Shared/Count.sharp",
+        "namespace App.Shared;\n\npublic class Count\n{\n    law broken(int x) => x == x + 1 { Count.broken(x); }\n}\n",
+    );
+
+    assert_eq!(issues(broken, &[]), ["5:39 law-recursion"]);
+    assert_eq!(
+        worded(broken, &[]),
+        [
+            "5:39 law-recursion a law calls itself only on a smaller value | This call passes no smaller value. | Call Count.broken on a list's rest from a pattern the body matched, or on an int one step towards a bound the body tested, as `if (n <= 0) { return; }` tests 0 before `Count.broken(n - 1);`."
+        ]
+    );
+    for body in [
+        "        Count.f(x - 1, items);",
+        "        if (x <= 0) { return; }\n        Count.f(x + 1, items);",
+        "        if (x >= 10) { return; }\n        Count.f(x - 1, items);",
+        "        if (x <= 0) { return; }\n        Count.f(x - 2, items);",
+        "        if (x == 0) { return; }\n        Count.f(x - 1, items);",
+        "        if (items.count() == 0) { return; }\n        Count.f(x - 1, items);",
+        "        match (items) {\n            [int, ...List<int> rest] => { Count.f(x, items); },\n            default => { return; },\n        }",
+        "        match (items) {\n            [...List<int> rest] => { Count.f(x, rest); },\n            default => { return; },\n        }",
+    ] {
+        assert_eq!(codes(&issues(law_body(body), &[])), ["law-recursion"], "{body}");
+    }
+    // A condition shows a bound under `!`, `&&` where it holds, `||` where it fails, with the parameter on either side,
+    // in parentheses, and against a negative literal.
+    for body in [
+        "        if (x <= 0) { return; }\n        Count.f(x - 1, items);",
+        "        if (x < 0) { return; }\n        Count.f(x - 1, items);",
+        "        if (x >= 10) { return; }\n        Count.f(x + 1, items);",
+        "        if (x >= 10) { return; }\n        Count.f(1 + x, items);",
+        "        if (x > 0) { Count.f(x - 1, items); }",
+        "        if (x <= 0) { return; } else { Count.f(x - 1, items); }",
+        "        if (!(x > 0)) { return; }\n        Count.f(x - 1, items);",
+        "        if (x > 0 && items.count() > 0) { Count.f(x - 1, items); }",
+        "        if (x <= 0 || items.count() == 0) { return; }\n        Count.f(x - 1, items);",
+        "        if (0 >= x) { return; }\n        Count.f(x - 1, items);",
+        "        if ((x <= -1)) { return; }\n        Count.f((x - 1), items);",
+        "        if ((x) <= 0) { return; }\n        Count.f((x) - 1, items);",
+        "        match (items) {\n            [int first, ...List<int> rest] => { Count.f(first, rest); },\n            default => { return; },\n        }",
+        "        match (x) {\n            <= 0 => { return; },\n            default => { Count.f(x - 1, items); },\n        }",
+        "        match (x) {\n            > 0 => { Count.f(x - 1, items); },\n            default => { return; },\n        }",
+        "        match (x) {\n            0 => { return; },\n            < 0 => { return; },\n            default => { Count.f(x - 1, items); },\n        }",
+        // A guarded arm shows nothing where it fails, since its guard may be what failed.
+        "        match (x) {\n            <= 0 when items.count() == 0 => { return; },\n            <= 0 => { return; },\n            default => { Count.f(x - 1, items); },\n        }",
+        "        match (items) {\n            ([int, ...List<int> rest]) => { Count.f(x, rest); },\n            default => { return; },\n        }",
+        "        if (items is [int, ...List<int> rest]) { Count.f(x, rest); }",
+    ] {
+        assert_eq!(issues(law_body(body), &[]), Vec::<String>::new(), "{body}");
+    }
+
+    // A type pattern binds the list itself, which is no smaller. A name that reads no local reads no parameter, so a
+    // comparison with it shows no bound, and passing it passes no smaller value.
+    assert_eq!(
+        issues(
+            law_body(
+                "        match (items) {\n            List<int> all when all.count() > 2 => { Count.f(x, all); },\n            default => { return; },\n        }"
+            ),
+            &[]
+        ),
+        ["8:53 law-recursion"]
+    );
+    assert_eq!(
+        issues(law_body("        if (x < unknown) { return; }\n        Count.f(unknown, items);"), &[]),
+        [
+            "8:9 law-recursion",
+            "7:17 non-existent-constant",
+            "7:17 mixed-operand",
+            "8:17 non-existent-constant",
+            "8:17 mixed-argument"
+        ]
+    );
+
+    // A call passes its smaller value in the parameter's own place, though an argument before it passes one too.
+    let shifted = (
+        "app/Shared/Count.sharp",
+        "namespace App.Shared;\n\npublic class Count\n{\n    law shifts(int a, int b) => true\n    {\n        if (b <= 0) { return; }\n        Count.shifts(b - 1, b - 1);\n    }\n}\n",
+    );
+    assert_eq!(issues(shifted, &[]), Vec::<String>::new());
+
+    let mixed = law_body(
+        "        if (x <= 0) { return; }\n        Count.f(x - 1, items);\n        match (items) {\n            [int, ...List<int> rest] => { Count.f(x, rest); },\n            default => { return; },\n        }",
+    );
+    assert_eq!(
+        worded(mixed, &[]),
+        [
+            "10:43 law-recursion a law calls itself only on a smaller value | This call makes a value smaller other than the one the law's first call of itself does. | Call Count.f on a list's rest from a pattern the body matched, or on an int one step towards a bound the body tested, as `if (n <= 0) { return; }` tests 0 before `Count.f(n - 1);`."
+        ]
+    );
+
+    let bounded = (
+        "app/Shared/Count.sharp",
+        "namespace App.Shared;\n\npublic class Count\n{\n    law climbs(int i, int top) => true\n    {\n        if (i >= top) { return; }\n        Count.climbs(i + 1, top);\n    }\n    law slips(int i, int top) => true\n    {\n        if (i >= top) { return; }\n        Count.slips(i + 1, top - 1);\n    }\n}\n",
+    );
+    assert_eq!(issues(bounded, &[]), ["13:9 law-recursion"]);
+}
+
+/// Spec section 28: a law's body reaches a law through its class's name, as a static method reaches the members of its
+/// class.
+#[test]
+fn a_bare_call_of_a_law_in_a_law_body_names_the_call_to_write() {
+    let bare = law_body("        if (x <= 0) { return; }\n        f(x - 1, items);");
+
+    assert_eq!(issues(bare, &[]), ["8:9 non-existent-function"]);
+    assert_eq!(
+        messages(bare, &[]),
+        ["Write `Count.f()`: a static method reaches the members of its class through the class name."]
+    );
+}
+
+/// Spec section 28: a call statement of a law's body calls a law. A call of a static method is no proof step, so it is
+/// refused as a statement a body cannot hold.
+#[test]
+fn a_call_of_a_method_in_a_law_body_is_refused() {
+    let count = (
+        "app/Shared/Count.sharp",
+        "namespace App.Shared;\n\npublic class Count\n{\n    public static int twice(int x) => x + x;\n\n    law f(int x) => true\n    {\n        Count.twice(x);\n    }\n}\n",
+    );
+
+    assert_eq!(issues(count, &[]), ["9:9 invalid-law"]);
+}
+
+/// A class states one law of a name: semantics refuses a second, and the analysis reads only the first.
+#[test]
+fn a_second_law_of_one_name_is_analyzed_once() {
+    let count = (
+        "app/Shared/Count.sharp",
+        "namespace App.Shared;\n\npublic class Count\n{\n    law same(int a) => a == a;\n    law same(int a) => a + 1;\n}\n",
+    );
+
+    assert_eq!(issues(count, &[]), Vec::<String>::new());
+}
+
+/// Spec section 28: a call of a law passes each argument by its position, which is the parameter it states the law
+/// for, so a named or a spread argument is refused.
+#[test]
+fn a_law_call_passes_each_argument_by_its_position() {
+    let count = (
+        "app/Shared/Count.sharp",
+        "namespace App.Shared;\n\npublic class Count\n{\n    law g(int x) => true;\n    law named(int x) => true\n    {\n        Count.g(x: x);\n    }\n    law spread(int x) => true\n    {\n        Count.g(...[x]);\n    }\n}\n",
+    );
+
+    assert_eq!(issues(count, &[]), ["8:17 invalid-law", "12:17 invalid-law"]);
+    assert_eq!(
+        messages(count, &[]),
+        [
+            "A law call passes each argument by its position, which is the parameter of the law it stands for.",
+            "A law call passes each argument by its position, which is the parameter of the law it stands for.",
+        ]
+    );
+}
+
+/// Spec section 28: a law's body holds `if`, `match` statements with block arms, locals, `return;` and calls of laws as
+/// statements, and nothing else.
+#[test]
+fn a_law_body_holds_only_conditions_matches_locals_returns_and_law_calls() {
+    for (body, at) in [
+        ("        for (const item of items) { Count.f(item, items); }", "7:9"),
+        ("        return true;", "7:9"),
+        ("        int y = 0;\n        y = 1;", "8:9"),
+        ("        if (x > 0): return; endif;", "7:9"),
+        (
+            "        match (items) {\n            [] => Count.f(x, items),\n            default => { return; },\n        }",
+            "8:13",
+        ),
+    ] {
+        assert_eq!(issues(law_body(body), &[]), [format!("{at} invalid-law")], "{body}");
+    }
+    assert_eq!(issues(law_body("        if (f(x, items)) { return; }"), &[]), ["7:13 non-existent-function"]);
+    assert_eq!(
+        messages(law_body("        return true;"), &[]),
+        [
+            "A law's body holds only `if`, `match`, locals, `return;` and calls of laws, each call a statement of its own."
+        ]
+    );
+    assert_eq!(
+        issues(law_body("        const y = x - 1;\n        if (x <= 0) { return; }"), &[]),
+        Vec::<String>::new()
+    );
+}
+
+/// A call of a law passes the law's parameters as any call does, so an argument of another type is an error.
+#[test]
+fn a_law_call_passes_the_law_s_parameter_types() {
+    let body = law_body("        Money.addKeepsCurrency(x, x);");
+
+    assert_eq!(codes(&issues(body, &[LAWFUL_MONEY])), ["invalid-argument", "invalid-argument"]);
+}
+
+/// Spec section 28: a law's `when` condition is a `bool`, as its claim is.
+#[test]
+fn a_law_s_when_condition_is_a_bool() {
+    let count = (
+        "app/Shared/Count.sharp",
+        "namespace App.Shared;\n\npublic class Count\n{\n    law positive(int a) when a + 1 => a + 1 > a;\n}\n",
+    );
+
+    assert_eq!(issues(count, &[]), ["5:30 invalid-law"]);
+    assert_eq!(messages(count, &[]), ["A law's `when` condition is a `bool`, and `a + 1` is an `int`."]);
+}
+
+/// Spec section 28: a law's `when` condition holds for its claim and its body, so a condition that tests a parameter
+/// for null lets the claim and the body read it as a value.
+#[test]
+fn a_law_s_claim_and_body_read_what_its_when_condition_shows() {
+    let order = (
+        "app/Shared/Order.sharp",
+        "namespace App.Shared;\n\npublic class Order\n{\n    public Order(public int total { get; }) { }\n\n    law sameTotal(Order o) => o.total == o.total;\n    law known(Order? o) when o != null => o.total == o.total\n    {\n        Order.sameTotal(o);\n    }\n}\n",
+    );
+
+    assert_eq!(issues(order, &[]), Vec::<String>::new());
 }
 
 /// A PHP caller of a law gets the same refusal, with the law named as PHP writes a static method.
@@ -22330,7 +22624,7 @@ fn a_php_call_of_a_law_is_a_non_existent_method_that_names_the_law_as_php_writes
     assert_eq!(codes(&issues(ledger, &[LAWFUL_MONEY]))[0], "non-existent-method");
     assert_eq!(
         messages(ledger, &[LAWFUL_MONEY])[0],
-        "`App\\Shared\\Money::addKeepsCurrency` is a law, and a law is never called."
+        "`App\\Shared\\Money::addKeepsCurrency` is a law, and only a law's body calls a law, as a statement of its own."
     );
 }
 
@@ -23747,6 +24041,324 @@ fn an_environment_or_test_module_is_checked_with_the_base_bindings_it_changes() 
             assert_eq!(refusals(*analyzed, &others), expected, "{}", analyzed.0);
         }
     }
+}
+
+/// The module of spec section 32's `imports` example: `App.Tenant.Store` imports only from `App.Tenant.Community`,
+/// `App.Shared.Schema` and `Illuminate.Support`.
+const STORE_MODULE: (&str, &str) = (
+    "app/Tenant/Store/Module.sharp",
+    "namespace App.Tenant.Store;\n\nmodule\n{\n    imports App.Tenant.Community, App.Shared.Schema, Illuminate.Support;\n}\n",
+);
+
+/// The classes the `imports` tests import, one in each namespace they reach.
+const LISTED_CLASSES: [(&str, &str); 7] = [
+    ("app/Tenant/Community/Member.sharp", "namespace App.Tenant.Community;\n\npublic class Member\n{\n}\n"),
+    ("app/Shared/Schema/Table.sharp", "namespace App.Shared.Schema;\n\npublic class Table\n{\n}\n"),
+    (
+        "app/Shared/Ledger/Entry.sharp",
+        "namespace App.Shared.Ledger;\n\npublic class Entry\n{\n    public static int record() => 1;\n}\n",
+    ),
+    ("app/Shared/Money.sharp", "namespace App.Shared;\n\npublic class Money\n{\n}\n"),
+    ("app/Tenant/Store/Receipts/Receipt.sharp", "namespace App.Tenant.Store.Receipts;\n\npublic class Receipt\n{\n}\n"),
+    ("app/Tenant/Store/Checkout/Cart.sharp", "namespace App.Tenant.Store.Checkout;\n\npublic class Cart\n{\n}\n"),
+    (
+        "vendor/laravel/framework/src/Illuminate/Support/Facades/DB.php",
+        "<?php\n\nnamespace Illuminate\\Support\\Facades;\n\nclass DB\n{\n}\n",
+    ),
+];
+
+/// A class of `namespace`, in the file `path`, that imports each of `imports` and takes each class as a property of its
+/// constructor, so every import is read.
+fn importing(path: &'static str, namespace: &str, imports: &[&str]) -> (&'static str, &'static str) {
+    let lines: Vec<String> = imports.iter().map(|import| format!("import {import};\n")).collect();
+    let lines = lines.concat();
+    let parameters: Vec<String> = imports
+        .iter()
+        .enumerate()
+        .map(|(index, import)| format!("public {} p{index} {{ get; }}", import.rsplit('.').next().unwrap_or(import)))
+        .collect();
+    let class = path.rsplit('/').next().unwrap_or(path).trim_end_matches(".sharp");
+
+    (
+        path,
+        leak(format!(
+            "namespace {namespace};\n\n{lines}\npublic class {class}\n{{\n    public {class}({}) {{ }}\n}}\n",
+            parameters.join(", ")
+        )),
+    )
+}
+
+/// Spec section 32's example: an `imports` line limits what its namespace's code imports, and an import outside it
+/// is refused at the import, naming the namespace and its list. Listing a namespace lists every namespace below it, so
+/// `Illuminate.Support.Facades.DB`, a plain PHP library's class, is under the listed `Illuminate.Support`.
+#[test]
+fn an_import_outside_the_list_of_its_namespace_is_refused_at_the_import() {
+    let service = importing(
+        "app/Tenant/Store/StoreService.sharp",
+        "App.Tenant.Store",
+        &["App.Tenant.Community.Member", "Illuminate.Support.Facades.DB", "App.Shared.Ledger.Entry"],
+    );
+    let others: Vec<_> = LISTED_CLASSES.iter().copied().chain([STORE_MODULE]).collect();
+
+    assert_eq!(
+        worded(service, &others),
+        [
+            "5:8 unlisted-import `App.Tenant.Store` imports only `App.Tenant.Community`, `App.Shared.Schema` and `Illuminate.Support`. | Imports `App.Shared.Ledger.Entry`. | The list is the `imports` line of app/Tenant/Store/Module.sharp."
+        ]
+    );
+}
+
+/// Spec section 32: a namespace with no `imports` line imports from any namespace, and so does one whose module lists
+/// nothing, as `App.Shared` and `App.Tenant`'s `Module.sharp`, which binds a service, show here, beside the list of
+/// `App.Tenant.Store`.
+#[test]
+fn a_namespace_with_no_list_imports_from_any_namespace() {
+    let tenant_module = (
+        "app/Tenant/Module.sharp",
+        "namespace App.Tenant;\n\nimport App.Tenant.Community.Member;\n\nmodule\n{\n    transient Member = Member;\n}\n",
+    );
+    let others: Vec<_> = LISTED_CLASSES.iter().copied().chain([STORE_MODULE, tenant_module]).collect();
+
+    for importer in [
+        importing(
+            "app/Shared/Report.sharp",
+            "App.Shared",
+            &["App.Tenant.Store.Receipts.Receipt", "App.Shared.Ledger.Entry"],
+        ),
+        importing(
+            "app/Tenant/Desk.sharp",
+            "App.Tenant",
+            &["App.Shared.Ledger.Entry", "App.Tenant.Store.Receipts.Receipt"],
+        ),
+    ] {
+        assert_eq!(refusals(importer, &others), Vec::<String>::new(), "{}", importer.0);
+    }
+}
+
+/// Spec section 32: a list covers its namespace and every namespace below it, and a namespace below may list its own
+/// imports, so an import passes every list above it. The list nearest the importing code that refuses it is named.
+/// Every namespace reaches its own namespace and every namespace below the namespace that lists, as
+/// `App.Tenant.Store.Checkout` reaches `App.Tenant.Store.Receipts`, and `Sharp` needs no listing.
+#[test]
+fn an_import_passes_the_list_of_its_namespace_and_of_each_namespace_above_it() {
+    let checkout_module = (
+        "app/Tenant/Store/Checkout/Module.sharp",
+        "namespace App.Tenant.Store.Checkout;\n\nmodule\n{\n    imports App.Tenant.Store, App.Shared.Schema, App.Shared.Ledger;\n}\n",
+    );
+    let others: Vec<_> = LISTED_CLASSES.iter().copied().chain([STORE_MODULE, checkout_module, DISPATCHER]).collect();
+    let store =
+        "`App.Tenant.Store` imports only `App.Tenant.Community`, `App.Shared.Schema` and `Illuminate.Support`. | ";
+    let checkout =
+        "`App.Tenant.Store.Checkout` imports only `App.Tenant.Store`, `App.Shared.Schema` and `App.Shared.Ledger`. | ";
+
+    for (importer, expected) in [
+        (
+            importing(
+                "app/Tenant/Store/Receipts/Printer.sharp",
+                "App.Tenant.Store.Receipts",
+                &[
+                    "App.Tenant.Store.Checkout.Cart",
+                    "App.Tenant.Community.Member",
+                    "Sharp.Dispatcher",
+                    "App.Shared.Money",
+                ],
+            ),
+            vec![format!("6:8 unlisted-import {store}")],
+        ),
+        (
+            importing(
+                "app/Tenant/Store/Checkout/Till.sharp",
+                "App.Tenant.Store.Checkout",
+                &[
+                    "App.Tenant.Store.Receipts.Receipt",
+                    "App.Shared.Schema.Table",
+                    "App.Shared.Ledger.Entry",
+                    "App.Tenant.Community.Member",
+                    "Illuminate.Support.Facades.DB",
+                ],
+            ),
+            vec![
+                format!("5:8 unlisted-import {store}"),
+                format!("6:8 unlisted-import {checkout}"),
+                format!("7:8 unlisted-import {checkout}"),
+            ],
+        ),
+    ] {
+        assert_eq!(refusals(importer, &others), expected, "{}", importer.0);
+    }
+}
+
+/// Spec section 32: a name written in full in code counts as an import, so a full name outside the list is refused as
+/// its import would be, and a full name the list allows keeps the refusal that names the import to write.
+#[test]
+fn a_full_name_in_code_counts_as_an_import() {
+    let service = (
+        "app/Tenant/Store/StoreService.sharp",
+        "namespace App.Tenant.Store;\n\npublic class StoreService\n{\n    public int recorded() => App.Shared.Ledger.Entry.record();\n    public void hold(App.Shared.Ledger.Entry entry, App.Tenant.Community.Member member) { }\n    public int totalled() => App.Shared.Ledger.total();\n}\n",
+    );
+    let total = (
+        "app/Shared/Ledger/functions.php",
+        "<?php\n\nnamespace App\\Shared\\Ledger;\n\nfunction total(): int\n{\n    return 1;\n}\n",
+    );
+    let others: Vec<_> = LISTED_CLASSES.iter().copied().chain([STORE_MODULE, total]).collect();
+    let refused =
+        "`App.Tenant.Store` imports only `App.Tenant.Community`, `App.Shared.Schema` and `Illuminate.Support`. | ";
+
+    assert_eq!(
+        refusals(service, &others),
+        [
+            format!("5:30 unlisted-import {refused}"),
+            format!("6:22 unlisted-import {refused}"),
+            "6:53 non-existent-class-like Full names appear only in `import` lines: add `import App.Tenant.Community.Member;` and write `Member`. | In code, `.` is always member access, so a class is written by the short name its import brings in.".to_owned(),
+            format!("7:30 unlisted-import {refused}"),
+        ]
+    );
+}
+
+/// Spec section 32: the help for a short name the file doesn't import names the import to add only when the list of
+/// the file's namespace allows it. For a class outside the list, it names the list and the file that holds it.
+#[test]
+fn a_missing_import_is_suggested_only_when_the_list_allows_it() {
+    let service = (
+        "app/Tenant/Store/StoreService.sharp",
+        "namespace App.Tenant.Store;\n\npublic class StoreService\n{\n    public void hold(Entry entry, Member member) { }\n}\n",
+    );
+    let others: Vec<_> = LISTED_CLASSES.iter().copied().chain([STORE_MODULE]).collect();
+
+    assert_eq!(
+        refusals(service, &others),
+        [
+            "5:22 non-existent-class-like `Entry` is not imported. | `App.Shared.Ledger.Entry` is outside `App.Tenant.Store`'s list, the `imports` line of app/Tenant/Store/Module.sharp.",
+            "5:35 non-existent-class-like `Member` is not imported. | Add `import App.Tenant.Community.Member;` to the file.",
+        ]
+    );
+}
+
+/// Spec section 32: a help that names several classes the file doesn't import names, once each, those outside the list
+/// of the file's namespace, as the constructor a class needs under a base class's constructor names its parameters'.
+#[test]
+fn a_help_names_each_class_outside_the_list_once() {
+    let membership = (
+        "app/Tenant/Community/Membership.sharp",
+        "namespace App.Tenant.Community;\n\nimport App.Shared.Ledger.Account;\nimport App.Shared.Ledger.Entry;\n\npublic class Membership\n{\n    public Membership(Entry first, Entry second, Account account) { }\n}\n",
+    );
+    let account = ("app/Shared/Ledger/Account.sharp", "namespace App.Shared.Ledger;\n\npublic class Account\n{\n}\n");
+    let shopper = (
+        "app/Tenant/Store/Shopper.sharp",
+        "namespace App.Tenant.Store;\n\nimport App.Tenant.Community.Membership;\n\npublic class Shopper : Membership\n{\n    protected string label = global.strtoupper(\"x\");\n}\n",
+    );
+    let others: Vec<_> = LISTED_CLASSES.iter().copied().chain([STORE_MODULE, membership, account]).collect();
+
+    assert_eq!(
+        refusals(shopper, &others),
+        [
+            "5:14 missing-super-call `Shopper` must declare a constructor that calls `Membership`'s with `: super(…)`. | Write `public Shopper(Entry first, Entry second, Account account) : super(first, second, account) { }`. `App.Shared.Ledger.Entry` and `App.Shared.Ledger.Account` are outside `App.Tenant.Store`'s list, the `imports` line of app/Tenant/Store/Module.sharp."
+        ]
+    );
+}
+
+/// Spec section 32: the list of a namespace below one with a list allows only what the list above it allows, so an
+/// entry the list above it leaves out allows nothing.
+#[test]
+fn a_nested_list_entry_outside_its_parent_s_list_is_refused() {
+    let tenant = ("app/Tenant/Module.sharp", "namespace App.Tenant;\n\nmodule\n{\n    imports App.Shared;\n}\n");
+    let store = (
+        "app/Tenant/Store/Module.sharp",
+        "namespace App.Tenant.Store;\n\nmodule\n{\n    imports App.Shared.Schema, App.Billing;\n}\n",
+    );
+    let invoices = ("app/Billing/Invoice.sharp", "namespace App.Billing;\n\npublic class Invoice\n{\n}\n");
+    let schema = ("app/Shared/Schema/Table.sharp", "namespace App.Shared.Schema;\n\npublic class Table\n{\n}\n");
+    let files: Vec<_> = LISTED_CLASSES.iter().copied().chain([invoices, schema, tenant]).collect();
+
+    assert_eq!(
+        refusals(store, &files),
+        [
+            "5:32 unlisted-import `App.Billing` is outside `App.Tenant`'s list, so this entry allows nothing. | Add `App.Billing` to `App.Tenant`'s list, or remove this entry."
+        ]
+    );
+}
+
+/// Spec section 32: lists that name each other, directly or through a chain of lists, are refused at each `imports`
+/// line of the cycle, at the name that leads on. A list names the namespace it lists and every namespace below it. A
+/// namespace with no list ends every chain, so it is never part of a cycle.
+#[test]
+fn lists_that_name_each_other_are_refused_at_each_imports_line() {
+    let module = |namespace: &str, listed: &str| {
+        let path = leak(format!("app/{}/Module.sharp", namespace.trim_start_matches("App.").replace('.', "/")));
+
+        (path, leak(format!("namespace {namespace};\n\nmodule\n{{\n    imports {listed};\n}}\n")))
+    };
+    let store = module("App.Tenant.Store", "App.Tenant.Community, App.Shared");
+    let schema = module("App.Shared.Schema", "App.Tenant.Store");
+    let community = module("App.Tenant.Community", "App.Billing");
+    let billing = module("App.Billing", "App.Tenant.Store");
+    let invoices = ("app/Billing/Invoice.sharp", "namespace App.Billing;\n\npublic class Invoice\n{\n}\n");
+    let others: Vec<_> = LISTED_CLASSES.iter().copied().chain([invoices]).collect();
+    let with = |modules: &[(&'static str, &'static str)]| -> Vec<(&'static str, &'static str)> {
+        others.iter().copied().chain(modules.iter().copied()).collect()
+    };
+    let help = " | Remove one of these names, so the namespaces import one way.";
+
+    assert_eq!(
+        refusals(store, &with(&[schema])),
+        [format!(
+            "5:35 import-cycle `App.Tenant.Store` and `App.Shared.Schema` import from each other: `App.Tenant.Store` lists `App.Shared`, and `App.Shared.Schema` lists `App.Tenant.Store`.{help}"
+        )]
+    );
+    assert_eq!(
+        refusals(schema, &with(&[store])),
+        [format!(
+            "5:13 import-cycle `App.Shared.Schema` and `App.Tenant.Store` import from each other: `App.Shared.Schema` lists `App.Tenant.Store`, and `App.Tenant.Store` lists `App.Shared`.{help}"
+        )]
+    );
+    assert_eq!(
+        refusals(community, &with(&[store, billing])),
+        [format!(
+            "5:13 import-cycle `App.Tenant.Community`, `App.Billing` and `App.Tenant.Store` import from each other: `App.Tenant.Community` lists `App.Billing`, `App.Billing` lists `App.Tenant.Store`, and `App.Tenant.Store` lists `App.Tenant.Community`.{help}"
+        )]
+    );
+    // Neither `App.Tenant.Community` nor `App.Shared` has a list, so the chain from `App.Billing` ends at them.
+    assert_eq!(refusals(billing, &with(&[store])), Vec::<String>::new());
+
+    // A listed name below the other list's namespace leads to it too.
+    let columns = (
+        "app/Shared/Schema/Columns/Column.sharp",
+        "namespace App.Shared.Schema.Columns;\n\npublic class Column\n{\n}\n",
+    );
+    let store_to_columns = module("App.Tenant.Store", "App.Tenant.Community, App.Shared.Schema.Columns");
+    assert_eq!(
+        refusals(store_to_columns, &with(&[schema, columns])),
+        [format!(
+            "5:35 import-cycle `App.Tenant.Store` and `App.Shared.Schema` import from each other: `App.Tenant.Store` lists `App.Shared.Schema.Columns`, and `App.Shared.Schema` lists `App.Tenant.Store`.{help}"
+        )]
+    );
+
+    // Two chains from `App.Tenant.Store` meet at `App.Tenant.Community` before it leads back, and one cycle is refused.
+    let branching = module("App.Tenant.Store", "App.Billing, App.Shared.Schema");
+    let schema_to_community = module("App.Shared.Schema", "App.Tenant.Community");
+    let billing_to_community = module("App.Billing", "App.Tenant.Community");
+    let community_to_store = module("App.Tenant.Community", "App.Tenant.Store");
+    assert_eq!(
+        codes(&issues(branching, &with(&[schema_to_community, billing_to_community, community_to_store]))),
+        ["import-cycle"]
+    );
+}
+
+/// Spec section 32: a listed name that names no namespace of the project or its libraries is the ordinary error of an
+/// import that names nothing.
+#[test]
+fn a_listed_name_that_names_no_namespace_is_an_unknown_name() {
+    let module = (
+        "app/Tenant/Store/Module.sharp",
+        "namespace App.Tenant.Store;\n\nmodule\n{\n    imports App.Tenant.Community, App.Shared.Ledgr;\n}\n",
+    );
+
+    assert_eq!(
+        refusals(module, &LISTED_CLASSES),
+        [
+            "5:35 non-existent-use-import Imported namespace `App.Shared.Ledgr` does not exist. | Ensure that the namespace `App.Shared.Ledgr` is defined in the codebase."
+        ]
+    );
 }
 
 /// The classes the spec section 13 tests read and write through readonly values.

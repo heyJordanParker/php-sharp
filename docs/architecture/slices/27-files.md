@@ -114,15 +114,15 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 
 | Line | Rule | State on master | Mechanism | Reuses |
 |---|---|---|---|---|
-| 3555 | A `.sharp` file runs only after the checker accepts it; a type error stops it | Works: `Suppressed.sharp`'s type error leaves no `.sharpc`; loading it gives "app/Rules/Suppressed.sharp isn't compiled. Run vendor/bin/mago compile.", and with `sharp.compile_command` set "app/Rules/Suppressed.sharp has 1 error:\nline 8: Invalid return type for method `Suppressed.total`: expected `int`, but found `string`." | None new | `sharp_refuse_checked` |
+| 3555 | A `.sharp` file runs only after the checker accepts it; a type error stops it | Works: `Suppressed.sharp`'s type error leaves no `.sharpc`; loading it gives "app/Rules/Suppressed.sharp isn't compiled. Run vendor/bin/mago compile.", and with `sharp.compile_command` set "app/Rules/Suppressed.sharp has 1 error:\nline 8: Invalid return type for method `Suppressed.total`: expected `int`, but found `string`.\n  The type `string` returned here is not compatible with the declared return type `int`.\n  help: Change the return value to match `int`, or update the method's return type declaration." | None new | `sharp_refuse_checked` |
 | 3555 | A pragma, `ignore` or the baseline hide a warning, never an error | Works: a `// @mago-expect analysis:invalid-return-statement` pragma leaves the error and the refusal. `mago/tests/sharp.rs` covers all three under `analyze` and `compile` (`compile_refuses_a_sharp_file_whose_error_a_pragma_an_ignore_entry_or_a_baseline_entry_targets`) | None new | `Issue::can_be_suppressed_in` |
 | 3557 | `mago compile` checks every `.sharp` file, vendor packages included | Works: an error in `vendor/heyjordanparker/php-sharp-composer/library/Sharp/Builtins.sharp` was reported and refused with "… comes from the Composer package heyjordanparker/php-sharp-composer. Update the package, or report the error to its maintainers." | None new | `CompileCommand::execute` |
-| 3557 | It creates a missing `.lean` file beside a class that has a law, and never rewrites an existing one | Works: `class-law`'s `Money` got `app/Shared/Money.lean` with its theorem, and a line appended to it survived the next compile | None new (section 28.1) | `mago_sharp_lean::Lean::prove` |
+| 3557 | It proves every law the `.sharp` files state | Since decision 057's laws-only ruling, a law's proof is its body in the `.sharp` file, and no `.lean` file of the project proves a law | None new (section 28) | `mago_sharp_lean::Lean::check` |
 | 3559, 3562 | An uncompiled file is refused, naming the fix | Works, word for word: "app/Shop/Fresh.sharp isn't compiled. Run vendor/bin/mago compile." | None new | `sharp_refuse`, `refusal_not_compiled.phpt` |
 | 3563 | An out-of-date file is refused, naming the file that changed | Works, word for word: "app/Shop/Order.sharp is out of date (app/Shop/Money.sharp changed). Run vendor/bin/mago compile." | None new | `refusal_out_of_date_input.phpt` |
 | 3564 | A file compiled for another engine is refused | Works, word for word, after one ABI byte of `Fresh.sharpc` changed: "app/Shop/Fresh.sharp was compiled for a different PHP# engine. Install the mago-sharp release that matches this engine." | None new | `refusal_different_engine.phpt` |
 | 3567 | A deploy runs `vendor/bin/mago compile` before the code runs | Holds through the refusals above: a deploy that skips it stops at its first PHP# file | None new; Jordan question 3 | |
-| 3568 | A type error or a broken structure rule stops the file, and so does a law without a proof, a gap, or a proof of a deleted law | Works: section 28's examples pass; `structure_rules.phpt` and `laws.phpt` | None new (section 28, #113) | |
+| 3568 | A type error stops the file, and so does a law without a proof, a gap, or a proof of a deleted law | Works: section 28's examples pass; `laws.phpt` | None new (section 28, #113) | |
 | 3569 | A whole-project rule can lag in development, and is exact at deploy | Works by design: `sharp.compile_command` compiles on demand from a stale file, and `mago compile` checks every rule | None new | |
 
 ## Positions real code hits
@@ -161,7 +161,7 @@ The bridge writes each node's `.sharp` line into the compiled file (`sharp_trans
 | mago-sharp #45; php-sharp #35 | Errors in a `.sharp` file can't be suppressed | Line 3555; no change |
 | mago-sharp #173, #95 | File-level code refused; capitalized namespaces | Beside the new rule in `sharp.rs` |
 | php-sharp #8, #137 | The Composer plugin and its class map, an interface's `Defaults` trait in it | Decision 7 |
-| mago-sharp #150, php-sharp #113 | Laws, proofs and structure rules | Lines 3557 and 3568; no change |
+| mago-sharp #150, php-sharp #113 | Laws and proofs | Lines 3557 and 3568; no change |
 | php-sharp #145, open | Section 23: namespaces, imports and default names | `Position` as a default name. Of this Slice's files, #145 changes only `sharp.rs`, in three places outside `check_declarations` and the default's refusal, and `error.rs`, where it adds `UsesOnImportInSharp` and decision 6 adds one `Display` arm |
 | php-sharp #121 | Modules, `readModule` | Decision 8's crash is in its code |
 

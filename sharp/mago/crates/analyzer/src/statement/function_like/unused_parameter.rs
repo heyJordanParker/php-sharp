@@ -75,6 +75,7 @@ pub fn check_unused_params<'ctx, 'ast, 'arena, A>(
                 }
             }
         }
+        FunctionLikeBody::Law(_) => unreachable!("a law's parameters are never checked for use"),
     }
 }
 

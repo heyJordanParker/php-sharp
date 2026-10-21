@@ -24,6 +24,7 @@ use mago_syntax::cst::Implements;
 use mago_syntax::cst::Inheritance;
 use mago_syntax::cst::Interface;
 use mago_syntax::cst::Law;
+use mago_syntax::cst::LawProof;
 use mago_syntax::cst::Method;
 use mago_syntax::cst::MethodBody;
 use mago_syntax::cst::Module;
@@ -786,7 +787,13 @@ impl Fingerprintable for Law<'_> {
         self.parameter_list.fingerprint_with_hasher(hasher, resolved_names, options);
 
         if !options.signature_only {
-            self.body.expression.fingerprint_with_hasher(hasher, resolved_names, options);
+            if let Some(condition) = &self.condition {
+                condition.expression.fingerprint_with_hasher(hasher, resolved_names, options);
+            }
+            self.claim.fingerprint_with_hasher(hasher, resolved_names, options);
+            if let LawProof::Body(body) = &self.proof {
+                body.fingerprint_with_hasher(hasher, resolved_names, options);
+            }
         }
     }
 }
@@ -810,6 +817,12 @@ impl Fingerprintable for Module<'_> {
 
         for member in &self.members {
             match member {
+                ModuleMember::Imports(imports) => {
+                    "imports".hash(hasher);
+                    for namespace in &imports.namespaces {
+                        namespace.fingerprint_with_hasher(hasher, resolved_names, options);
+                    }
+                }
                 ModuleMember::Law(law) => law.fingerprint_with_hasher(hasher, resolved_names, options),
                 ModuleMember::Binding(binding) => binding.fingerprint_with_hasher(hasher, resolved_names, options),
             }

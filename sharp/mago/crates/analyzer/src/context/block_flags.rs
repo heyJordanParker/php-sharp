@@ -29,6 +29,9 @@ impl BlockContextFlags {
     /// Set while analyzing a constant expression: a constant's value, a default or an attribute's arguments. PHP#
     /// reads `Class.name` there as the class constant or enum case only, as PHP evaluates it.
     pub const INSIDE_CONSTANT_EXPRESSION: u32 = 1 << 20;
+    /// Set while analyzing a PHP# law's body, spec section 28, where a call statement may call a law and `return;` ends
+    /// the case it closes.
+    pub const INSIDE_LAW_BODY: u32 = 1 << 21;
 
     #[inline]
     pub const fn new() -> Self {
@@ -160,6 +163,11 @@ impl BlockContextFlags {
     #[inline(always)]
     pub const fn inside_constant_expression(&self) -> bool {
         self.contains(Self::INSIDE_CONSTANT_EXPRESSION)
+    }
+
+    #[inline(always)]
+    pub const fn inside_law_body(&self) -> bool {
+        self.contains(Self::INSIDE_LAW_BODY)
     }
 
     #[inline(always)]
