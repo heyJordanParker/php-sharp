@@ -210,6 +210,32 @@ class Hiding
     }
 }
 
+// A plain PHP object PHP# fills, as a request context, a DTO or a job is: each property declares a type a parameter
+// could, and one declares none.
+class RequestContext
+{
+    public array $payload = [];
+
+    public ?array $extra = null;
+
+    public $untyped;
+
+    public mixed $anything = null;
+
+    public iterable $items = [];
+
+    public array|Countable $either = [];
+
+    public ?Countable $counted = null;
+
+    public static array $registry = [];
+
+    public array $payloads = [];
+
+    /** @var list<mixed> */
+    public array $rows = ['seed'];
+}
+
 // A plain PHP parent whose methods declare no return type, as Eloquent's Model::getKey() declares none.
 class Record
 {
