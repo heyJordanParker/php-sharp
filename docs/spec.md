@@ -5689,7 +5689,7 @@ module
 - **A binding names the services it needs as parameters, and its value is one expression over them,** as Dagger's `@Provides` methods do. The container passes each parameter the service bound to its type, so `RedisStore` above gets the app's `Environment`, which the standard library's module binds for every namespace. An expression is for a value no binding gives, such as `RedisStore`'s URL.
 - **A module stays declarative:** one expression per binding, and no statements, loops or methods.
 - **A `foreign` object is created in a module binding** (section 29). The binding's lifetime decides how often one is created, and the container passes it to classes through their constructors.
-- **A module also states the laws that span its classes** (section 28).
+- **A module also states the laws that span its classes** (section 28), **and lists the namespaces its code imports from** (below).
 
 **The host defines each lifetime, as ASP.NET Core's host does.** A `singleton` lives as long as the host runs the app. A `scoped` binding lives for one scope, which the host starts and ends, such as one HTTP request, one queued job or one console command run. A `transient` binding is created each time a class needs one.
 
@@ -5836,6 +5836,62 @@ module
 {
     singleton Mailer = SmtpMailer;
     transient Checkout = Checkout;   // compile error: Checkout needs a PaymentGateway, and no module binds one
+}
+```
+
+**A module lists the namespaces its code imports from** on one `imports` line, as Java's `module-info.java` lists the modules it `requires`. An import of any other namespace is a compile error at the import, which names the namespace and its list.
+
+<!-- example module-imports -->
+```csharp
+// app/Tenant/Store/Module.sharp
+namespace App.Tenant.Store;
+
+module
+{
+    imports App.Tenant.Community, App.Shared.Schema, Illuminate.Support;
+}
+```
+
+<!-- example module-imports -->
+```csharp
+// app/Tenant/Store/StoreService.sharp
+namespace App.Tenant.Store;
+
+import App.Tenant.Community.Member;     // compiles
+import Illuminate.Support.Facades.DB;   // compiles: Illuminate.Support lists every namespace below it
+import App.Shared.Ledger.Entry;         // compile error: App.Tenant.Store imports only App.Tenant.Community, App.Shared.Schema and Illuminate.Support
+
+public class StoreService { … }
+```
+
+- **The line is optional.** A namespace with no `imports` line imports from any namespace.
+- **A list covers its namespace and every namespace below it.** A namespace below may list its own imports, and an import must then pass every list above it.
+- **Listing a namespace lists every namespace below it.**
+- **A namespace always imports from itself, and from every namespace below the namespace that lists,** so under `App.Tenant.Store`'s list, `App.Tenant.Store.Checkout` imports from `App.Tenant.Store.Receipts`.
+- **`Sharp`, the standard library, is always imported and never listed.** A plain PHP library is listed by its namespace, as `Illuminate.Support` is.
+- **A name written in full in code counts as an import,** so `App.Shared.Ledger.Entry.record()` is refused as `import App.Shared.Ledger.Entry;` is.
+- **Two lists that name each other, directly or through other lists, are a compile error on each `imports` line of the cycle,** so the namespaces import one way. A namespace with no list takes part in no cycle.
+- **A listed name that names no namespace is a compile error,** as an import of an unknown name is.
+
+<!-- example module-imports-errors -->
+```csharp
+// app/Tenant/Store/Module.sharp
+namespace App.Tenant.Store;
+
+module
+{
+    imports App.Tenant.Community, App.Shared.Schema;   // compile error: App.Tenant.Store and App.Shared.Schema import from each other
+}
+```
+
+<!-- example module-imports-errors -->
+```csharp
+// app/Shared/Schema/Module.sharp
+namespace App.Shared.Schema;
+
+module
+{
+    imports App.Tenant.Store, App.Shared.Ledgr;        // compile error: App.Shared.Ledgr names no namespace, and App.Shared.Schema and App.Tenant.Store import from each other
 }
 ```
 

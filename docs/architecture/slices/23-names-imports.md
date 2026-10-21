@@ -204,9 +204,8 @@ sharp/mago/
     │       return_type_fetcher.rs                     the collection classes in Sharp\Internal (G5), is_sharp_internal (G8)
     ├── orchestrator/src/service/
     │   └── incremental_analysis.rs                    the warm path re-analyzes a namespace's files (G7)
-    ├── syntax/tests/sharp.rs, semantics/tests/sharp.rs, names/tests/binder.rs, analyzer/tests/sharp.rs,
-    │   sharp-bridge/tests/lower.rs, orchestrator/…/compile.rs   one test per rule, forms as rows
-    └── ../tests/compile.rs                            a structure rule's imports name classes the project declares
+    └── syntax/tests/sharp.rs, semantics/tests/sharp.rs, names/tests/binder.rs, analyzer/tests/sharp.rs,
+        sharp-bridge/tests/lower.rs, orchestrator/…/compile.rs   one test per rule, forms as rows
 Zend/tests/sharp/
 ├── NamesImports.sharp                                 new: renamed imports, shadowed defaults, keyword-named classes,
 │                                                      a library's function and constant
