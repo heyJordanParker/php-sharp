@@ -5142,16 +5142,18 @@ public class Money
 // app/Shared/Refunds.sharp
 namespace App.Shared;
 
+import Sharp.Math.Math;
+
 public class Refunds
 {
-    public static int refundable(int paid, int refunded) => paid < refunded ? 0 : paid - refunded;
+    public static int refundable(int paid, int refunded) => Math.max(paid - refunded, 0);
 
     law neverAbovePaid(int paid, int refunded) when paid >= 0 && refunded >= 0
         => Refunds.refundable(paid, refunded) <= paid;
     law refundOfNothing(int paid) when paid >= 0 => Refunds.refundable(paid, 0) == paid;
     law refundOfAnything(int p, int r) => p < 0 || Refunds.refundable(p, r) <= p
     {
-        Refunds.neverAbovePaid(p, r);                     // compile error: still to show for the call Refunds.neverAbovePaid(p, r): 0 <= p && 0 <= r
+        Refunds.neverAbovePaid(p, r);                     // compile error: still to show for the call Refunds.neverAbovePaid(p, r): p >= 0 && r >= 0
     }
 }
 ```
@@ -5208,6 +5210,7 @@ module
 - **A method may call itself, or a method of its class that calls it back, only on a smaller value:** a list's rest from a list pattern, or `n - 1` or `n + 1` towards a bound an `if`, `?:`, `&&`, `||` or `match` comparison tested. The bound is an int literal, tested with `<`, `<=`, `>` or `>=`, or another int parameter the call passes on unchanged, tested with `<` or `>`.
 - **A `foreach` over a List** is a law's when its body only adds pure int values to int locals with `+=` or `++`, each under an `if` or not, and never reads a local it adds to.
 - **A list pattern takes one rest, anywhere in it,** and each element names a value or only a type. `[...a, x, ...b]` appends the lists.
+- **The standard library's `Math.max` and `Math.min` on ints reach laws,** since the checker knows they give the largest and the smallest of their arguments.
 - **Each refusal names what to write instead,** as these do:
 
 ```text
