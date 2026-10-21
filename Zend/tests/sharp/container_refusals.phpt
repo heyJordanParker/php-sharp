@@ -69,7 +69,10 @@ foreach (['App\Mail\Mailer', 'App\Missing', 'App\Mail\SmtpMailer', 'Egg', 'Loose
 var_dump($container->has('App\Missing'), $container->has('App\Mail\SmtpMailer'), $container->has('Egg'));
 Sharp\Internal\endTest();
 
-// A module edited since its compile is refused each time the container reads it, never skipped.
+// A module edited since its compile is refused each time the container reads it, never skipped. Panel's own compiled
+// file lists the module as an input, as its imports pass the module's list, so Panel is loaded before the edit, as an
+// app that already holds it, and only the module's read meets the edit.
+class_exists('App\Shop\Admin\Panel');
 file_put_contents("$root/app/Shop/Admin/Module.sharp", CONTAINER_APP['app/Shop/Admin/Module.sharp'] . "\n");
 foreach ([1, 2] as $attempt) {
     try {
