@@ -1,5 +1,5 @@
 --TEST--
-A class whose law Lean proves runs, and once its proof file holds a gap, the checker refuses it and the engine does not run it
+A class whose law the checker proves runs, and once an edit breaks the law, the checker refuses it and the engine does not run it
 --FILE--
 <?php
 require __DIR__ . '/project.inc';
@@ -37,14 +37,10 @@ $settings = ['sharp.compile_command' => escapeshellarg(getenv('TEST_MAGO_EXECUTA
 refusal("$root/app/Shared/Payment.sharp", $settings);
 refusal("$root/app/Shared/Money.sharp", $settings);
 
-file_put_contents("$root/app/Shared/Money.lean", <<<'LEAN'
-import Code.App.Shared.Money
-open Sharp
-
-theorem addKeepsCurrency : App.Shared.Money.addKeepsCurrency := by
-  sorry
-
-LEAN);
+file_put_contents(
+    "$root/app/Shared/Money.sharp",
+    str_replace('this.amount + other.amount, this.currency', 'this.amount + other.amount, other.currency', file_get_contents("$root/app/Shared/Money.sharp")),
+);
 refusal("$root/app/Shared/Money.sharp", $settings);
 remove_project($root);
 ?>
@@ -52,4 +48,4 @@ remove_project($root);
 ran
 ran
 CompileError: app/Shared/Money.sharp has 1 error:
-line 8: Law addKeepsCurrency is not proven: app/Shared/Money.lean line 4 is a gap (sorry). Write the proof there, or change the law.
+line 8: law addKeepsCurrency is not proven

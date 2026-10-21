@@ -1,14 +1,14 @@
-# 57. Laws and Lean files
+# 57. Laws and their proofs in PHP#
 
 ## Decision
 
-A class states its laws in PHP#, as in `law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;`. The parameters range over every possible value. Its proofs go in a Lean file of the same name beside it, `Money.lean` beside `Money.sharp`. A module states laws that span its classes in `Module.sharp`. Their proofs, and the namespace's structure rules, go in `Module.lean` in the same folder. Both files are optional. The old layout, one rules file beside the folder, goes.
+Laws only, as in Bend (Jordan, 10-21). A class, an enum or a module states its laws in PHP#, with `law`. A law is a claim over every value of its parameters, and `when` after the parameters states its condition. `law name(parameters) => claim;` is proven by the checker alone. A law the checker cannot prove alone carries a body after its claim, and the body is its proof, in ordinary PHP#: `if` and `else`, `match` statements with block arms, locals, `return;`, and calls of laws as statements. A call of a law is a fact the case knows from then on, and a law calls itself only on a smaller value.
 
-The checker generates the Lean translation of pure code and the Lean statement of each law into `.sharp/`, never into the source tree. A law's generated statement is named by its class's full name and the law's name, as in `App.Shared.Money.addKeepsCurrency`. A module law's is named by its namespace, `Module` and the law's name, as in `App.Shop.Module.ordersStayInTenant`. When a class or module has a law and no Lean file, `mago compile` creates the file beside it, so it writes `.sharp/` and that one missing `.lean` file. For each new law, it appends a proof found by Lean's automatic steps (`simp`, `omega`, `decide`), or a marked gap when none is found. It never rewrites a proof that exists. A law without a proof, a gap, or a proof whose law was deleted is a compile error that names it. Laws hold only over pure code.
+Lean stays underneath. The checker translates the pure code a law reaches and the theorem of each law into the generated `.sharp/` folder on each compile, turns a body into the theorem's proof, and Lean's kernel checks it. No `.lean` file of the project proves a law, and nobody writes or reads Lean. A case the checker cannot close is the error `law-unproven`, with the case's conditions and the claim still to show printed in PHP#. A namespace's structure rules stay in `Module.lean`.
 
 ## Options
 
-### Chosen: laws in PHP#, proofs in a Lean file beside the class
+### Chosen: laws only, the body is the proof in PHP#, Lean underneath
 
 ```csharp
 // app/Shared/Money.sharp
@@ -18,10 +18,29 @@ public class Money
 {
     public Money(public int amount { get; }, public string currency { get; }) { }
     public Money add(Money other) => new Money(this.amount + other.amount, this.currency);
+    public Money times(int n) => n <= 0 ? new Money(0, this.currency) : this.add(this.times(n - 1));
 
-    law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;   // compiles once Money.lean proves it
+    law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;   // the checker proves it alone
+    law timesKeepsCurrency(Money m, int n) => m.times(n).currency == m.currency
+    {
+        if (n <= 0) {
+            return;                                     // m.times(n) is new Money(0, m.currency)
+        }
+        Money.timesKeepsCurrency(m, n - 1);             // the law for the smaller n
+        Money.addKeepsCurrency(m, m.times(n - 1));      // adding keeps that currency
+    }
 }
 ```
+
+A PHP# developer, usually an AI agent, writes a claim and its proof in the language it already writes, in the file that holds the code. Each `if` and `match` arm is a case split, each law call a fact, a call of the law itself Lean's recursion on the theorem, and each `return;` closes its case with Lean's automatic steps. When a case stays open, the error says what is left in PHP#:
+
+```text
+error[law-unproven]: law timesKeepsCurrency is not proven
+  when n > 0, still to show: m.add(m.times(n - 1)).currency == m.currency
+  help: the law for a smaller n is the call Money.timesKeepsCurrency(m, n - 1)
+```
+
+### Rejected: proofs in a Lean file beside the class
 
 ```lean
 -- app/Shared/Money.lean
@@ -32,7 +51,56 @@ theorem addKeepsCurrency : App.Shared.Money.addKeepsCurrency := by
   simp [App.Shared.Money.addKeepsCurrency, App.Shared.Money.add]
 ```
 
-The checker created `Money.lean` and appended the proof `simp` found. A PHP# developer reads what a class claims in the class itself, in PHP#. The proof sits one file away, and the checker writes the first draft of it.
+This was the previous decision: the checker created `Money.lean`, appended the proof Lean's automatic steps found or a marked gap, and refused a law with no proof, a gap, or a proof whose law was deleted. An agent had to know Lean to finish any proof the automatic steps missed, and every law split across two files in two languages.
+
+### Rejected: Lean `by` steps inside the `.sharp` file
+
+```csharp
+law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency
+    by simp [Money.add];
+```
+
+Lean's tactic language inside PHP#. The developer still writes Lean, and the steps name Lean's lemmas and the translation's names, which change when the translation does.
+
+### Rejected: test-like proof blocks
+
+```csharp
+law timesKeepsCurrency(Money m, int n) => m.times(n).currency == m.currency
+    proof {
+        assert(m.times(0).currency == m.currency);
+        assert(m.times(n).currency == m.times(n - 1).add(m).currency);
+    }
+```
+
+A block of assertions reads like a test, and a test checks the values it names. A law covers every value, so its proof needs cases and recursion, which a list of assertions cannot state. The chosen body states them with PHP#'s own `if`, `match` and calls.
+
+### Rejected: `ensures` and `requires` contracts on methods
+
+```csharp
+public Money add(Money other)
+    requires other.currency == this.currency
+    ensures result.currency == this.currency
+    => new Money(this.amount + other.amount, this.currency);
+```
+
+Dafny and Eiffel attach claims to each method. Every method body then needs its own proof, a caller must show each `requires` at every call, and a fact that spans methods, such as one about `times` and `add` together, has no home. A law states a fact on its own, over the code it names, and `when` covers what `requires` would.
+
+### Rejected: loop invariants
+
+```csharp
+public static int openCount(List<Order> orders)
+{
+    let count = 0;
+    for (const o of orders) invariant count <= orders.count() {
+        if (o.open) {
+            count += 1;
+        }
+    }
+    return count;
+}
+```
+
+Dafny proves a loop through an invariant the developer writes on it. The checker proves a loop that only counts or sums alone, and a loop it cannot prove is written as recursion that gets smaller, which a law's body proves with a call of the law itself.
 
 ### Rejected: one rules file beside each namespace folder
 
@@ -44,7 +112,7 @@ app/Tenant/
     └── StoreService.sharp
 ```
 
-This was the old layout, `app/Tenant/Store.lean`. Every law of a namespace collects in one growing file, far from the class it describes.
+The layout before the previous decision. Every law of a namespace collected in one growing Lean file, far from the class it describes.
 
 ### Rejected: laws stated in Lean
 
@@ -53,26 +121,18 @@ This was the old layout, `app/Tenant/Store.lean`. Every law of a namespace colle
 theorem refundNeverExceedsPaid (paid refunded amount : Int)
     (h1 : refunded ≤ paid) (h2 : amount ≤ App.Tenant.Store.Refunds.remaining paid refunded) :
     refunded + amount ≤ paid := by
-  unfold App.Tenant.Store.Refunds.remaining at h2
+  unfold App.Tenant.Store.Refunds.remaining
   omega
 ```
 
-This was the old "laws never sit in a `.sharp` file". A PHP# developer can't read what a class claims without reading Lean.
-
-### Rejected: laws and proofs both in `.sharp`
-
-```csharp
-law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency
-    proof { … };                                    // a proof language inside PHP#
-```
-
-Dafny works this way. PHP# would need its own proof language, where Lean already has one, with its tactics and its library.
+A PHP# developer can't read what a class claims without reading Lean.
 
 ## Precedent
 
-- **Chosen:** Bend 2, which splits claims (`LAWS.bend`) from proofs (`PROOF.bend`). For a state machine, a pure transition method on the status enum lets laws cover every state and event.
-- **Rejected, one file per namespace:** Mathlib's `Mathlib/Order.lean` beside `Mathlib/Order/`.
-- **Rejected, laws and proofs together:** Dafny.
+- **Chosen:** Bend 2, where a law and its proof are in the same file: a law is proven by a definition of the same name, written in Bend itself. Bend's `--verdict` mode and Aeneas, which translates Rust to Lean, check code through a prover the developer never writes.
+- **Chosen, the error that shows what is left:** Lean's and Agda's goal display, printed here in PHP#.
+- **Rejected, proof files:** the previous version of this decision.
+- **Rejected, contracts and loop invariants:** Dafny, Eiffel.
 
 ## Spec
 

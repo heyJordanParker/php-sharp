@@ -2,6 +2,8 @@
 
 Spec section 28 and 28.1, with the parts of section 27 that section 28 reaches. This note is the design only. team-lead approves it before anyone builds.
 
+**Superseded for laws by [decision 057](../../decisions/057-laws-and-lean-files.md):** a law's proof is its body, in ordinary PHP# in the `.sharp` file, and no `.lean` file of the project proves a law. Every `Money.lean`, gap, missing-proof and deleted-law path this note describes is gone. Its structure-rule design still holds.
+
 ## The answer first
 
 Class laws work on master. Everything else section 28 promises does not:
@@ -308,7 +310,7 @@ The lens: `Server::get_lens(file)` returns one `CodeLensItem` above each method 
 
 # Lean on a user's machine
 
-**Master today:** `crates/sharp-lean/src/package.rs` `Package::toolchain` writes `.sharp/.lean/lean-toolchain` and runs `lake --version`. With no `lake` on the `PATH`, every file that needs Lean is refused with `missing-lean`: "Laws and structure rules need Lean 4.34.1, and lake was not found. Install elan from https://lean-lang.org/install, then run vendor/bin/mago compile again." Only CI installs elan (`.github/actions/setup-lean/action.yml`). Neither `heyjordanparker/mago-sharp`'s Composer package nor `sharp/docker/runtime/Dockerfile` ships Lean (`trace grep -i "elan|\blean\b" sharp .github` in php-sharp finds nothing).
+**Master today:** `crates/sharp-lean/src/package.rs` `Package::toolchain` writes `.sharp/.lean/lean-toolchain` and runs `lake --version`. With no `lake` on the `PATH`, Mago installs Lean itself (below), and when it cannot, every file that needs Lean is refused with `missing-lean`, which names what failed: "Laws and structure rules need Lean 4.34.1, and no lake is on the PATH. The checker could not install Lean into <Mago's cache>/elan: <reason>. Run vendor/bin/mago compile again to retry." Only CI installs elan (`.github/actions/setup-lean/action.yml`). Neither `heyjordanparker/mago-sharp`'s Composer package nor `sharp/docker/runtime/Dockerfile` ships Lean (`trace grep -i "elan|\blean\b" sharp .github` in php-sharp finds nothing).
 
 **The precedent:** `composer/bin/mago` calls `ensure_binary` in `composer/src/internal.php`, which downloads the pinned release archive for the machine's target triple on first run, into a per-version folder, under a file lock. `crates/sharp-lean/src/library.rs` already builds the Lean runtime library once per Mago build in Mago's cache folder, under a lock. The `mago` binary already links `ureq`, `tar` and `flate2` for `mago self-update` (`src/updater/github.rs`, `src/updater/archive.rs`). `mago-sharp-lean` gains them as workspace dependencies. The engine never links `mago-sharp-lean`, since that crate depends on `mago-sharp-bridge` and not the reverse.
 
