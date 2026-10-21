@@ -5208,7 +5208,7 @@ A law the checker cannot prove is a compile error that names it (section 27).
 **Laws hold only over pure code** (section 29). The checker translates pure PHP# code to Lean, and Lean's kernel checks the proofs. Bend's `--verdict` mode and Aeneas, which translates Rust to Lean, work the same way. A law reaches the code it calls, and that code's own calls, and code no law reaches is never translated or refused:
 
 - **A method may call itself, or a method of its class that calls it back, only on a smaller value:** a list's rest from a list pattern, or `n - 1` or `n + 1` towards a bound an `if`, `?:`, `&&`, `||` or `match` comparison tested. The bound is an int literal, tested with `<`, `<=`, `>` or `>=`, or another int parameter the call passes on unchanged, tested with `<` or `>`.
-- **A `foreach` over a List** is a law's when its body only adds pure int values to int locals with `+=` or `++`, each under an `if` or not, and never reads a local it adds to.
+- **A `for (… of …)` loop over a List** reaches a law when its body only adds pure int values to int locals with `+=` or `++`, each under an `if` or not, and never reads a local it adds to.
 - **A list pattern takes one rest, anywhere in it,** and each element names a value or only a type. `[...a, x, ...b]` appends the lists.
 - **The standard library's `Math.max` and `Math.min` on ints reach laws,** since the checker knows they give the largest and the smallest of their arguments.
 - **Each refusal names what to write instead,** as these do:
