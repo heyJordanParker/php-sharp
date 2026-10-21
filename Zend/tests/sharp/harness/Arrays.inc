@@ -236,6 +236,31 @@ class RequestContext
     public array $rows = ['seed'];
 }
 
+// A plain PHP parent whose properties a PHP# subclass writes, as a Laravel job's base class is.
+abstract class BaseJob
+{
+    public array $payload = [];
+
+    public array $payloads = [];
+
+    public static array $registry = [];
+
+    /** @var list<array<string, mixed>> */
+    public array $rows = [['seed' => 0]];
+}
+
+// A plain PHP class that takes a write to a name it declares no property for through __set, as Eloquent's Model does,
+// and records what each write gave it.
+final class Attributes
+{
+    public array $seen = [];
+
+    public function __set(string $name, mixed $value): void
+    {
+        $this->seen[$name] = is_array($value) ? $value : get_debug_type($value);
+    }
+}
+
 // A plain PHP parent whose methods declare no return type, as Eloquent's Model::getKey() declares none.
 class Record
 {

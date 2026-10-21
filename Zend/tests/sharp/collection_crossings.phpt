@@ -252,6 +252,26 @@ for ($round = 0; $round < 100; $round++) {
     echo 'a Map in an object initializer: ', received(Crossings::initialized(new Map(['tea', 3]))->payload), "\n";
     echo 'a Map in a with: ', received(Crossings::copied(new RequestContext(), new Map(['tea', 3]))->payload), "\n";
     echo "a Map written to PHP#'s own property: ", Crossings::ownWritten(new Holdings(), new Map(['id', 'p3'])), "\n";
+    $context = new RequestContext();
+    $context->payload = ['seed' => 1];
+    Crossings::filledPlus($context, new Map(['tea', 3]));
+    echo 'a Map written by +=: ', received($context->payload), "\n";
+    $attributes = new Attributes();
+    Crossings::attributed($attributes, new Map(['tea', 3]));
+    echo 'a Map written through __set: ', received($attributes->seen['meta']), "\n";
+
+    // A property a plain PHP parent declares, and an initializer of a class a type names.
+    $job = new Demo\SendOptin();
+    $job->fill(new Map(['tea', 3, 'pie', 7]));
+    echo 'a Map written to an inherited array property: ', received($job->payload), "\n";
+    echo 'a Map written to an element of an inherited array property: ', received($job->payloads['first']), "\n";
+    echo 'a Map written to an inherited static array property: ', received(BaseJob::$registry), "\n";
+    echo 'a Map written to an element of an element of an inherited list property: ', received($job->rows[0]['shelf']), "\n";
+    echo 'a Map added to an inherited list property: ', received($job->rows[1]), "\n";
+    echo 'a Map in an initializer of a subclass: ', received(Crossings::jobInitialized(new Map(['tea', 3]))->payload), "\n";
+    echo 'a Map in a with of a subclass: ', received(Crossings::jobCopied(new Demo\SendOptin(), new Map(['tea', 3]))->payload), "\n";
+    echo 'a Map in a new Self initializer: ', received(Demo\SendOptin::made(new Map(['tea', 3]))->payload), "\n";
+    echo 'a Map in a new T initializer: ', received(Crossings::initializedAsContext(new Map(['tea', 3]))->payload), "\n";
 
     // A parameter's type, an attribute's argument and a constant.
     echo 'a Map parameter: ', (new ReflectionMethod(Holdings::class, 'accepted'))->getParameters()[0]->getType(), ' ', $holdings->accepted(['a' => 'b']), "\n";
@@ -431,6 +451,17 @@ plain PHP's array written back: array, is_array true, {"tea":1}
 a Map in an object initializer: array, is_array true, {"tea":3}
 a Map in a with: array, is_array true, {"tea":3}
 a Map written to PHP#'s own property: Sharp\Map
+a Map written by +=: array, is_array true, {"seed":1,"tea":3}
+a Map written through __set: array, is_array true, {"tea":3}
+a Map written to an inherited array property: array, is_array true, {"tea":3,"pie":7}
+a Map written to an element of an inherited array property: array, is_array true, {"tea":3,"pie":7}
+a Map written to an inherited static array property: array, is_array true, {"tea":3,"pie":7}
+a Map written to an element of an element of an inherited list property: array, is_array true, {"tea":3,"pie":7}
+a Map added to an inherited list property: array, is_array true, {"tea":3,"pie":7}
+a Map in an initializer of a subclass: array, is_array true, {"tea":3}
+a Map in a with of a subclass: array, is_array true, {"tea":3}
+a Map in a new Self initializer: array, is_array true, {"tea":3}
+a Map in a new T initializer: array, is_array true, {"tea":3}
 a Map parameter: array 1
 a Map attribute argument: array, is_array true, {"variant":"success"}
 a Map attribute argument, built: array, is_array true, {"variant":"success"}

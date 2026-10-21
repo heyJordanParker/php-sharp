@@ -1,6 +1,7 @@
 namespace Demo;
 
 import ArrayCounter;
+import Attributes;
 import RequestContext;
 
 class Crossings
@@ -196,6 +197,18 @@ class Crossings
     public static RequestContext initialized(Map<string, int> prices) => new RequestContext { payload: prices };
 
     public static RequestContext copied(RequestContext context, Map<string, int> prices) => context with { payload: prices };
+
+    public static SendOptin jobInitialized(Map<string, int> prices) => new SendOptin { payload: prices };
+
+    public static SendOptin jobCopied(SendOptin job, Map<string, int> prices) => job with { payload: prices };
+
+    public static T initializedAs<T : RequestContext>(Map<string, int> prices) => new T { payload: prices };
+
+    public static RequestContext initializedAsContext(Map<string, int> prices) => Crossings.initializedAs<RequestContext>(prices);
+
+    public static void filledPlus(RequestContext context, Map<string, int> prices) { context.payload += prices; }
+
+    public static void attributed(Attributes attributes, Map<string, int> prices) { attributes.meta = prices; }
 
     // A write into PHP#'s own property keeps the Map.
     public static string ownWritten(Holdings holdings, Map<string, string> payload)
