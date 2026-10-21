@@ -6001,12 +6001,12 @@ public class StoreService { … }
 ```
 
 - **The line is optional.** A namespace with no `imports` line imports from any namespace.
-- **A list covers its namespace and every namespace below it.** A namespace below may list its own imports, and an import must then pass every list above it.
+- **A list covers its namespace and every namespace below it.** A namespace below may list its own imports, and an import must then pass every list above it. So an entry a list above leaves out allows nothing, and is a compile error on that entry: "`{name}` is outside `{parent}`'s list, so this entry allows nothing."
 - **Listing a namespace lists every namespace below it.**
 - **A namespace always imports from itself, and from every namespace below the namespace that lists,** so under `App.Tenant.Store`'s list, `App.Tenant.Store.Checkout` imports from `App.Tenant.Store.Receipts`.
 - **`Sharp`, the standard library, is always imported and never listed.** A plain PHP library is listed by its namespace, as `Illuminate.Support` is.
 - **A name written in full in code counts as an import,** so `App.Shared.Ledger.Entry.record()` is refused as `import App.Shared.Ledger.Entry;` is.
-- **Two lists that name each other, directly or through other lists, are a compile error on each `imports` line of the cycle,** so the namespaces import one way. A namespace with no list takes part in no cycle.
+- **Two lists that name each other, directly or through other lists, are a compile error on each `imports` line of the cycle,** so the namespaces import one way. A list names another list when a name it lists is that list's namespace, or a namespace above or below it. A namespace with no list takes part in no cycle.
 - **A listed name that names no namespace is a compile error,** as an import of an unknown name is.
 
 <!-- example module-imports-errors -->
