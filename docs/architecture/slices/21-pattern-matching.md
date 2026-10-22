@@ -248,7 +248,7 @@ Refused. The spec run printed `docs/spec.md:2085 expects no error, and the check
 
 Refused. `ListPattern.sharp` printed "A list pattern is not supported yet in PHP#." at each of the three arms.
 
-- **Mechanism (decision 5):** `parse_primary_pattern`'s `[` arm parses `ListPattern` instead of `skip_balanced`. The binder declares each element's variables and the rest's name. `php_shape` lowers the count test, each element's test on `s[i]` read from the end for elements after the rest (`s[\count(s) - 1]`), and the rest's `\array_slice`. A `match` on a `List` still needs `default`, since the spec skips it only on an enum or a sealed interface.
+- **Mechanism (decision 5):** `parse_primary_pattern`'s `[` arm parses `ListPattern` instead of `skip_balanced`. The binder declares each element's variables and the rest's name. `php_shape` lowers the count test, each element's test on `s[i]` read from the end for elements after the rest (`s[\count(s) - 1]`), and the rest's `\array_slice`. A `match` on a `List` needs no `default` when its arms handle every list, as in Rust: `missing_cases` in expression/mod.rs splits the lists by length and each item by its enum cases, sealed implementers and `null`, and names each part no arm without `when` holds, as "This `match` misses lists whose first item is a `Square`."
 - **Engine:** none on a `List` subject. On another subject, #102's `ZEND_SHARP_IS_TYPE` for `List<T>`.
 
 ## P15: a pattern takes types and constants only
@@ -517,7 +517,7 @@ Each test proves one rule and fails on a real bug in it, with its forms as rows.
 - `a_null_safe_call_calls_only_a_function_that_is_there` (new): `f?.(x)` types `int?` for a `Function<int(int)>?`, and `redundant-nullsafe-operator` for a `Function<int(int)>`.
 - `a_pattern_takes_constants_of_the_codebase_only` (new): a static property through its class is refused with P15's message; a class constant and an enum case through their class compile.
 - `a_type_with_properties_tests_both_and_binds` (new): `big` is `Paid` inside the `if` of `payment is Paid { amount: > 1000 } big`, its property test reads `Paid`'s `amount`, and an unknown property of `Paid` is `non-existent-property`.
-- `list_patterns_test_the_count_and_each_element` (new): element and rest variables typed from the subject, a list pattern on a `Map` never matching, and a `match` on a `List` without `default` refused.
+- `list_patterns_test_the_count_and_each_element` (new): element and rest variables typed from the subject, and a list pattern on a `Map` never matching. The tests after it cover a `match` on a `List` without `default`: arms that handle every list compile, and each list they miss is named, by its length and by the item no arm handles.
 - `function_types_are_tested_like_any_type` (new): `Function<int(int)>` on a lambda, a method value and a `Closure` from plain PHP (`unknown-function-type`), in `is`, `as`, an arm and a bare statement.
 - `a_function_type_test_of_a_plain_php_function_value_is_unknown` (new): a `Closure` parameter and a plain PHP method named as a value are `unknown-function-type`, with no "always true" beside it.
 - orchestrator: `a_body_edit_that_changes_a_callees_effects_changes_the_callers_key` (new): a lambda's file lists the file of the body it calls, and an edit there that changes its effects changes the lambda's key.
