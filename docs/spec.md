@@ -3343,6 +3343,7 @@ match (result) {
 
 - **On an enum,** arms that handle every case need no `default`. A missed case is a compile error that names it.
 - **On a sealed interface,** the same holds for its implementers (section 20.1).
+- **On a List,** arms that handle every length need no `default`. A list pattern handles its number of items, and with a rest every longer list too, when each element's pattern takes any element of the List. A missed length is a compile error that names it.
 - **On any other value,** `match` must have a `default` arm.
 - **An arm with `when`** does not count toward covering a case.
 
@@ -3358,6 +3359,27 @@ string label = match (status) {
 string size = match (n) {
     < 10 => "small",                   // compile error: a match on an int needs a default arm
 };
+```
+
+<!-- example match-list-coverage -->
+```csharp
+// app/Shared/Money.sharp
+namespace App.Shared;
+
+public class Money
+{
+    public Money(public int amount { get; }, public string currency { get; }) { }
+
+    public static int total(List<Money> items) => match (items) {
+        [] => 0,
+        [Money first, ...List<Money> rest] => first.amount + Money.total(rest),
+    };                                 // compiles: every length is handled
+
+    public static string label(List<Money> items) => match (items) {
+        [] => "empty",
+        [Money only] => "one",         // compile error: This `match` misses lists of 2 or more items.
+    };
+}
 ```
 
 **Patterns:**
@@ -5116,7 +5138,6 @@ public class Money
     public static Money sum(Money total, List<Money> items) => match (items) {
         [] => total,
         [Money first, ...List<Money> rest] => Money.sum(total.add(first), rest),
-        default => total,
     };
 
     law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;
@@ -5128,7 +5149,6 @@ public class Money
                 Money.sumKeepsCurrency(total.add(first), rest);   // the law for the list's rest
                 Money.addKeepsCurrency(total, first);
             },
-            default => { return; },
         }
     }
     law broken(int x) => x == x + 1 { Money.broken(x); }   // compile error: a law calls itself only on a smaller value
