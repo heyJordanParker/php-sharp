@@ -2,6 +2,8 @@
 
 A fix found by moving part of a real Laravel app to PHP#. Plain PHP code and the framework read the moved classes, and a PHP# `Map` or `Set` reaches each reader as a `Sharp\Map` or `Sharp\Set` object. team-lead's rule, which Jordan can correct: a PHP# collection reaches plain PHP as a PHP array at every crossing, the mirror of the approved rule that an int-keyed plain PHP array arrives in PHP# as a `List`. A second crossing breaks too: a PHP# interface method that returns `Any?` lowers to `: mixed`, which no untyped plain PHP method fits.
 
+**Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
+
 Every state below was observed on master `754ab7ce08`, with the engine image `php-sharp:754ab7ce08` and a Linux release `mago` built from a clean checkout of `754ab7ce08` (checked out 14:37, built 14:48).
 
 ## The answer first

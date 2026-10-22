@@ -2,6 +2,8 @@
 
 A PHP# app runs under php-fpm, the CLI, FrankenPHP and Laravel Octane. A long-running host keeps one booted app in memory and serves request after request, or job after job, from it. This slice makes each lifetime mean the same thing under every host: a `scoped` service lives for one unit of work and never reaches the next one, a `singleton` and a static live as long as the app runs.
 
+**Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
+
 Jordan's rulings this slice builds on:
 
 - **A static lives as long as the app runs.** Its initial value runs once per app. Under Octane every request sees what the last one left, as in C#, TypeScript and Rust. Under php-fpm nothing changes, because there the app lives for one request.

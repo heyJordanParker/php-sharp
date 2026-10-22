@@ -1,5 +1,7 @@
 # 38. Superglobals and the environment
 
+Superseded in part by [decision 83](083-php-through-the-standard-library.md): `global.` does not exist in PHP# code, so the rejected `global.getenv(…)` below is the error an unknown name gets, and `Environment` is the only way to read the environment.
+
 ## Decision
 
 PHP# has no superglobals. `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS`, with or without `$`, fail as a typo does. Request data arrives as an object, such as a framework's `Request`. The standard library adds `Environment`, a `foreign` class with a standard effect of the same name, which has `variable(name)`, `arguments` and `currentDirectory`. `getenv()` and PHP's other environment built-ins carry the `Environment` effect.

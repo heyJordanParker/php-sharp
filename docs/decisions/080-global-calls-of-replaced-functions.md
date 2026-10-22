@@ -1,5 +1,7 @@
 # 80. `global.` calls of functions the standard library replaces
 
+Superseded by [decision 83](083-php-through-the-standard-library.md): `global.` does not exist in PHP# code, so every `global.` call below is the error an unknown name gets, and a bare call of a PHP function names no function, with no message that names a member to write.
+
 ## Decision
 
 Outside the standard library, a call through `global` of a plain PHP function the standard library replaces is a compile error with its bare call's message. The message names the member that does the function's work, as `global.trim(name)` names `name.trim()`, `global.printf(…)` names `console.write(…)` on the `Console` your constructor takes, and `global.exit(1)` names `process.exit(…)` on the `Process`. `global.die(…)` names `console.writeError(text)`, then `process.exit(1)`.

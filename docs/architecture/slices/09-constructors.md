@@ -2,6 +2,8 @@
 
 Spec section 9 and 9.1, with the parts of sections 6, 14.2 and 25 that section 9 reaches. This note is the design only. team-lead approves it before anyone builds.
 
+**Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
+
 ## The answer first
 
 Members declared on constructor parameters work on master. The rest of section 9 does not:

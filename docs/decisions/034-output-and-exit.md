@@ -1,5 +1,7 @@
 # 34. Output and exit
 
+Superseded in part by [decision 83](083-php-through-the-standard-library.md): `global.` does not exist in PHP# code, and a bare `printf(…)`, `fwrite(…)`, `exit(1)` or `die(…)` names no function, as a misspelled name does, with no message that names a member to write. Output and exit go through `Console` and `Process` alone.
+
 Superseded in part by [decision 76](076-plain-php-functions.md): a bare call such as `fwrite(…)`, `exit(1)` or `printf(…)` below is a compile error. A bare `STDERR` or `PHP_EOL` is a compile error too, and the constant is written `global.STDERR`. A statement after a call that never returns never runs, which [decision 77](077-unreachable-statements.md) makes a compile error.
 
 Superseded in part by [decision 80](080-global-calls-of-replaced-functions.md): outside the standard library, the call through `global`, as `global.exit(1)` or `global.printf(…)`, is a compile error too. The standard library's effect classes (spec section 29) carry output and exit, so each error names the member to write: `console.write(…)` for `printf`, `console.write(…)` or `console.writeError(…)` for `fwrite`, and `process.exit(…)` for `exit`. The error for `global.die` names `console.writeError(text)`, then `process.exit(1)`.

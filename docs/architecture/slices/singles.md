@@ -2,6 +2,8 @@
 
 The last v1 feature PR. It builds every change team-lead approved that has no section PR of its own (`tmp/slice-singles/approved.md`), and the three spec examples that still fail in sections 9, 18 and 19. Every state below was observed on master `bda1b92df2`, with a release `mago` and the debug engine built from that commit.
 
+**Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
+
 ## The answer first
 
 Of the approved changes, two already hold on master, parts of a third hold, and the rest need building. Three spec examples fail in this PR's sections.

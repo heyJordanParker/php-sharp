@@ -2,6 +2,8 @@
 
 Spec section 24, and section 5's rule for a member with no access modifier. This note is the design only. team-lead approves it before anyone builds.
 
+**Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
+
 ## The answer first
 
 Most of section 24 already holds on master: integer overflow, `**`, `/`, the int-to-float compile errors, the plain PHP int-to-float conversion at entry, the casts and their refusals, `null` defaults, unions, and the `Any` checks. Six examples fail, and probing every rule line found nine more gaps:
