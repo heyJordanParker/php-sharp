@@ -5185,6 +5185,12 @@ public class Money
         [Money first, ...List<Money> rest] => Money.sum(total.add(first), rest),
     };
 
+    public static int total(List<Money> items) => match (items) {
+        [] => 0,
+        [Money first, ...List<Money> rest] => first.amount + Money.total(rest),
+        default => 0,
+    };
+
     law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;
     law sumKeepsCurrency(Money total, List<Money> items) => Money.sum(total, items).currency == total.currency
     {
@@ -5196,6 +5202,24 @@ public class Money
             },
         }
     }
+    law totalJoins(List<Money> a, List<Money> b) => Money.total([...a, ...b]) == Money.total(a) + Money.total(b)
+    {
+        match (a) {
+            [] => { return; },
+            [Money, ...List<Money> rest] => { Money.totalJoins(rest, b); },   // the law for a's rest
+            default => { return; },
+        }
+    }
+}
+```
+
+<!-- example law-smaller-value -->
+```csharp
+// app/Shared/Money.sharp
+namespace App.Shared;
+
+public class Money
+{
     law broken(int x) => x == x + 1 { Money.broken(x); }   // compile error: a law calls itself only on a smaller value
 }
 ```
@@ -5222,6 +5246,8 @@ public class Refunds
     }
 }
 ```
+
+**A law's claim and its `when` condition compute ints exactly,** since a law never runs. `Money.total(a) + Money.total(b)` in a claim never overflows, so a sum law holds for a list's rest wherever the code it calls runs. The code a law calls throws `ArithmeticError` where it overflows at runtime (section 24), and a law holds wherever its code throws.
 
 **A case the checker cannot close is the error `law-unproven`** on the law. It names the case's conditions and the claim still to show, in PHP#, and a `help` line names a call of the law itself on a smaller value when the case makes none:
 
