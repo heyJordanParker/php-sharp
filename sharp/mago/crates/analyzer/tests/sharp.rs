@@ -13801,6 +13801,17 @@ fn an_intersection_joins_at_most_one_class() {
     );
 }
 
+/// Spec section 24: `int & string` joins nothing a value can be, which the semantics checker refuses, so the type adds
+/// no second error, in the body that reads the parameter or in a call to it, in PHP# or in PHP.
+#[test]
+fn an_intersection_of_types_that_never_join_adds_no_second_error() {
+    let sharp = "namespace Demo;\n\npublic class Desk\n{\n    public int count(int & string amount) => amount;\n\n    public int run() => this.count(5);\n}\n";
+    let php = "<?php\n\nnamespace Demo;\n\nfunction count_of(int&string $amount): int\n{\n    return $amount;\n}\n\ncount_of(5);\n";
+
+    assert_eq!(issues(("src/Demo/Desk.sharp", sharp), &[]), Vec::<String>::new());
+    assert_eq!(issues(("src/Demo/Count.php", php), &[]), Vec::<String>::new());
+}
+
 /// `value is TItem`, `value as TItem` and a `match` arm of the type `TItem`, in an expression or in a statement, add no
 /// issue, and the other arms' types are checked as types anywhere: `Box<int>` is outside its bound.
 #[test]
