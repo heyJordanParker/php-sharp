@@ -17,8 +17,9 @@ jobs:
   # CI_PASSED is this workflow's one required check, so the workflow always runs, and LINUX,
   # LINUX_ZTS, HOSTS, PHP_EXTENSIONS and MACOS skip a change to documentation alone. docs/spec.md, README.md and
   # sharp/spec-self-test.md count as code, because LINUX compiles and runs their examples. A tag runs none of them: it
-  # publishes only a commit whose CI_PASSED already passed on master, as release.yml does with Mago CI, so its MACOS
-  # never waits for the Mac runners behind the release's Apple builds.
+  # publishes only a commit whose suites all ran and passed on master, as release.yml does with Mago CI, so its MACOS
+  # never waits for the Mac runners behind the release's Apple builds. CI_PASSED alone isn't enough, because it also
+  # passes a change to documentation alone, whose suites skipped.
   CHANGES:
     runs-on: ubuntu-24.04
     permissions:
@@ -27,23 +28,24 @@ jobs:
     outputs:
       code: ${{ steps.diff.outputs.code }}
     steps:
-      - name: The tagged commit's CI_PASSED check passed on master
+      - name: The tagged commit's suites ran and passed on master
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/sharp.yml/runs?head_sha=$GITHUB_SHA&branch=master&event=push" --jq '.workflow_runs[0].id // empty')
           if [[ -z $run ]]; then
-            echo "::error::PHP# CI never ran on master for commit $GITHUB_SHA, so its CI_PASSED check is missing. Tag a commit that master's PHP# CI passed."
+            echo "::error::PHP# CI never ran on master for commit $GITHUB_SHA. Tag a commit whose suites master's PHP# CI ran and passed."
             exit 1
           fi
           jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=100")
-          if [[ $(jq -r '.jobs[] | select(.name == "CI_PASSED") | .conclusion' <<< "$jobs") != success ]]; then
-            failed=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | "\(.name): \(.conclusion // .status)"] | join(", ")' <<< "$jobs")
-            echo "::error::Commit $GITHUB_SHA has not passed PHP# CI's CI_PASSED check on master ($failed): $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
+          suites='.jobs[] | select(.name == "LINUX" or .name == "LINUX_ZTS" or .name == "HOSTS" or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS")))'
+          failed=$(jq -r "[$suites | select(.conclusion != \"success\") | \"\(.name): \(.conclusion // .status)\"] | join(\", \")" <<< "$jobs")
+          if [[ $(jq "[$suites | select(.conclusion == \"success\")] | length" <<< "$jobs") != 6 ]]; then
+            echo "::error::Commit $GITHUB_SHA has not run and passed every PHP# suite on master (${failed:-a suite is missing}): $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
             exit 1
           fi
-          echo "Commit $GITHUB_SHA passed PHP# CI's CI_PASSED check on master: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
+          echo "Commit $GITHUB_SHA ran and passed every PHP# suite on master: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
       - name: git checkout
         if: github.ref_type != 'tag'
         uses: actions/checkout@v6
