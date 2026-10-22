@@ -18,8 +18,8 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 
 ## Parallelism
 
-- At most 7 builders run at once, one per worktree slot.
-- At most 4 helpers and reviewers run at once, on top of the builders.
+- At most 2 builders run at once, each in its own worktree slot. A builder still running is never stopped to meet the cap: no new builder starts until the count is under it.
+- At most 4 helpers and reviewers run at once, on top of the builders. Each does one short task.
 
 ## Worktree slots
 
