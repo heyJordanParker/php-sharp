@@ -39,9 +39,9 @@ class Library
 
     public static function extension(string $path): string { return \pathinfo($path, \PATHINFO_EXTENSION); }
 
-    public static function day(int $timestamp): string { return \Sharp\Time\Date::format($timestamp, "Y-m-d"); }
+    public static function day(int $seconds): string { return ((object) new \Sharp\Time\Instant($seconds))->inZone(\Sharp\Time\TimeZone::{"utc#get"}())->date->toString(); }
 
-    public static function zones(): int { return \count(\array_values(\timezone_identifiers_list())); }
+    public static function zones(): int { return \count(\Sharp\Time\TimeZone::names()); }
 
     public static function query(\Sharp\Map|array $values): string { $values = \is_array($values) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [(string) $key, $value], \array_keys($values), $values))) : $values; return \Sharp\Net\Url::buildQuery($values); } // a form whose parameter is a Map is called, as the method makes plain PHP's array a Map
 

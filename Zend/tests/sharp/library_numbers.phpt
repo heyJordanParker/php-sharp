@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls every member of int and float: abs, clamp, round, floor, ceil, isFinite, toHex and format, abs throws ArithmeticError for the smallest int, and clamp throws ValueError for a minimum above its maximum
+A PHP# class calls every member of int and float: abs, clamp, round, floor, ceil, isFinite, toHex, floorDiv, mod and format, floorDiv rounds down and mod takes the divisor's sign, abs throws ArithmeticError for the smallest int, and clamp throws ValueError for a minimum above its maximum
 --FILE--
 <?php
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
@@ -14,6 +14,13 @@ var_dump(NumberCalls::absoluteFloat(-1.5), NumberCalls::clampedFloat(2.5, 0.0, 1
 var_dump(NumberCalls::rounded(2.5, 0), NumberCalls::rounded(-2.5, 0), NumberCalls::rounded(2.567, 2), NumberCalls::rounded(1234.0, -2));
 var_dump(NumberCalls::floored(-1.5), NumberCalls::ceiled(1.2));
 var_dump(NumberCalls::formattedFloat(1234.5678, 2), NumberCalls::formattedIn(1234.5678, 1, ',', '.'));
+foreach ([[7, 2], [-7, 2], [7, -2], [-7, -2], [-8, 2], [PHP_INT_MIN, -1]] as [$value, $divisor]) {
+    try {
+        echo implode(' ', NumberCalls::divided($value, $divisor)), "\n";
+    } catch (ArithmeticError $error) {
+        echo get_class($error), "\n";
+    }
+}
 var_dump(NumberCalls::hex(255), NumberCalls::hex(0), NumberCalls::hex(-255), NumberCalls::hex(PHP_INT_MIN),NumberCalls::finite(1.5), NumberCalls::finite(INF), NumberCalls::finite(NAN));
 
 try {
@@ -49,6 +56,12 @@ float(-2)
 float(2)
 string(8) "1,234.57"
 string(7) "1.234,6"
+3 1
+-4 1
+-4 -1
+3 -1
+-4 0
+ArithmeticError
 string(2) "ff"
 string(1) "0"
 string(3) "-ff"

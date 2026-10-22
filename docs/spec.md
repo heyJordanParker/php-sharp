@@ -4209,7 +4209,7 @@ public class Layout
 **The standard library lives under one root, `Sharp`,** with one standard library namespace per domain, as .NET has `System.*` and Rust has `std::*`:
 
 - `Sharp.Text` holds the members of `string`, `Regex` and `Html`.
-- `Sharp.Time` holds `Clock`, `Date`, `Duration` and `TimeZone`.
+- `Sharp.Time` holds `Clock`, `Instant`, `Duration`, `Date`, `DateTime` and `TimeZone`.
 - `Sharp.IO` holds `Files`, `Path` and `Console`.
 - `Sharp.System` holds `Process`, `ProcessResult` and `Environment`.
 - `Sharp.Net` holds `Http`, `HttpRequest`, `HttpResponse`, `HttpMethod`, `Url`, `Ip`, `Mail`, `MailMessage` and `MailAddress`.
@@ -4549,11 +4549,39 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 - `(int)` truncates a `float` toward zero. A `float` too large for an `int`, or NaN, throws `ArithmeticError`.
 - A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take a `string`, as C#'s `int.Parse(string)` and Kotlin's `String.toInt()` do, and throw on a string that holds anything but a number, such as `"abc"` or `"12abc"`. Spaces around the number count too, as in Rust and Kotlin: `Int.parse(" 12 ")` throws, and its error says to call `trim()` first. An `Any?` is checked with `as string` first.
 - `Int.tryParse(s)` and `Float.tryParse(s)` take a `string` too, and give null where `parse` throws.
-- An `int` and a `float` have Kotlin's and Rust's number methods, from the standard library's extensions: `abs()`, `clamp(min, max)` and `format()`, which groups the digits in thousands. An `int` has `toHex()`, and a `float` has `round(decimals)`, `floor()`, `ceil()` and `isFinite()`, as in `price.round(2)` and `total.format()`. `abs()` of the smallest `int` throws `ArithmeticError`, and a `clamp` whose minimum is above its maximum throws `ValueError`.
+- An `int` and a `float` have Kotlin's and Rust's number methods, from the standard library's extensions: `abs()`, `clamp(min, max)` and `format()`, which groups the digits in thousands. An `int` has `toHex()`, and `floorDiv(divisor)` and `mod(divisor)`, which round down where `/` and `%` round toward zero, so `(-7).floorDiv(2)` is -4 and `(-7).mod(2)` is 1. A `float` has `round(decimals)`, `floor()`, `ceil()` and `isFinite()`, as in `price.round(2)` and `total.format()`. `abs()` of the smallest `int` throws `ArithmeticError`, and a `clamp` whose minimum is above its maximum throws `ValueError`.
 - A class or an interface narrows only with `as`, which gives null, or with `as … ?? throw` (section 21).
 - PHP# has no user-defined conversion operators, such as C#'s `implicit operator`. A type converts only through a property or method it declares, such as `username.value`.
 - `(bool)`, `(array)` and `(object)` do not exist. Conditions are `bool` (section 21), so a comparison such as `request.input("flag") == "1"` replaces `(bool)`. `(array)` and `(object)` are compile errors that name their replacements, shown below.
 - PHP's cast aliases `(integer)`, `(double)`, `(boolean)` and `(binary)` do not exist.
+
+**Time is values,** as in Kotlin's `kotlinx.datetime`, Java's `java.time` and JavaScript's Temporal, never an `int` of seconds or a format of PHP's letters. `Sharp.Time` holds them:
+
+- An `Instant` is a point on the time line, which `Clock.now()` gives (section 29).
+- A `Duration` is a length of time in nanoseconds.
+- A `Date` is a day of the calendar, with no time and no time zone.
+- A `TimeZone` is a zone of the IANA time zone database, such as `Europe/Sofia`.
+- A `DateTime` is an `Instant` as the clocks of a `TimeZone` show it.
+
+Each one's `toString()` writes ISO-8601, and its `parse` reads it back and throws `ValueError` on any other text, while `tryParse` gives null instead. A `DateTime` writes its zone after the offset, as RFC 9557 does. A day or a zone that does not exist throws `ValueError`:
+
+<!-- example time-values: statements
+import Sharp.Time.Date;
+import Sharp.Time.Duration;
+import Sharp.Time.Instant;
+import Sharp.Time.TimeZone;
+-->
+```csharp
+const paid = Instant.parse("2026-10-22T18:30:00Z");
+paid.plus(Duration.ofHours(2)).toString();                // "2026-10-22T20:30:00Z"
+paid.inZone(new TimeZone("Europe/Sofia")).toString();     // "2026-10-22T21:30:00+03:00[Europe/Sofia]"
+paid.inZone(TimeZone.utc).date.plusMonths(4).toString();  // "2027-02-22"
+Date.parse("2026-01-31").plusMonths(1).toString();        // "2026-02-28"
+Date.parse("2026-10-01").daysUntil(Date.parse("2026-10-22")); // 21
+Duration.parse("PT1H30M").minutes;                        // 90
+Instant.tryParse("yesterday");                            // null
+new Date(2026, 2, 29);                                    // throws ValueError
+```
 
 **Replacing `(array)` and `(object)`:**
 
@@ -5465,7 +5493,7 @@ extern now uses Clock;               // compile error: no function now exists
 - `Files`, in `Sharp.IO`, replaces every file function outside standard output and standard error.
 - `Console`, in `Sharp.IO`, replaces printing to standard output and standard error.
 - `Process`, in `Sharp.System`, replaces `exit` and `shell_exec()`.
-- `Clock`, in `Sharp.Time`, replaces `time()`.
+- `Clock`, in `Sharp.Time`, replaces `time()`, and its `now()` gives an `Instant`.
 - `Random`, in `Sharp`, replaces `random_int`.
 - `Cache`, in `Sharp.Data`, replaces the APCu functions.
 - `Mail`, in `Sharp.Net`, replaces `mail()`.
@@ -5609,11 +5637,10 @@ public class TenantCache
 namespace App.Shop;
 
 import Sharp.Time.Clock;
-import Sharp.Time.Date;
 
 public class Stamp
 {
-    public string stampedWith(Clock clock) => Date.format(clock.now(), "Y-m-d");   // compiles: the method has the effect Clock
+    public string stampedWith(Clock clock) => clock.now().toString();   // compiles: the method has the effect Clock
 }
 ```
 

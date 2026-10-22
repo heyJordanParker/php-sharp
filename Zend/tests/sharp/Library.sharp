@@ -12,7 +12,7 @@ import Sharp.Security.Hash;
 import Sharp.Security.Password;
 import Sharp.Text.Html;
 import Sharp.Text.Regex;
-import Sharp.Time.Date;
+import Sharp.Time.Instant;
 import Sharp.Time.TimeZone;
 
 class Library
@@ -39,7 +39,7 @@ class Library
 
     public static string extension(string path) => Path.extension(path);
 
-    public static string day(int timestamp) => Date.format(timestamp, "Y-m-d");
+    public static string day(int seconds) => new Instant(seconds).inZone(TimeZone.utc).date.toString();
 
     public static int zones() => TimeZone.names().count();
 

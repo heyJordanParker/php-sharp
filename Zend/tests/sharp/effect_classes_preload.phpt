@@ -17,7 +17,7 @@ if (PHP_OS_FAMILY == 'Windows') die('skip Preloading is not supported on Windows
 var_dump(class_exists(Sharp\Data\Database::class, false));
 require __DIR__ . '/effect_classes.inc';
 
-var_dump(abs((new Sharp\Time\Clock())->now() - time()) <= 1);
+var_dump(abs((new Sharp\Time\Clock())->now()->epochSeconds - time()) <= 1);
 var_dump((new Sharp\Random(7))->nextInt(0, 100) === (new Sharp\Random(7))->nextInt(0, 100));
 (new Sharp\IO\Console())->writeLine('written');
 $result = (new Sharp\System\Process())->run(getenv('TEST_PHP_EXECUTABLE'), ['-n', '-r', 'echo "ran";']);

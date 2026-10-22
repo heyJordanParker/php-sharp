@@ -140,7 +140,7 @@ $fixtures = [
         '../../../sharp/composer/library/Sharp/Security/Password.sharp',
         '../../../sharp/composer/library/Sharp/Text/Html.sharp',
         '../../../sharp/composer/library/Sharp/Text/Regex.sharp',
-        '../../../sharp/composer/library/Sharp/Time/Date.sharp',
+        '../../../sharp/composer/library/Sharp/Time/Instant.sharp',
         '../../../sharp/composer/library/Sharp/Time/TimeZone.sharp',
     ],
     'Inbox' => null,

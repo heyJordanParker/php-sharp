@@ -1,6 +1,6 @@
 # The standard library: PHP's built-ins in PHP#
 
-PHP# code reaches PHP only through the standard library (decision 83). Real code sets what the library covers: a production app's plain PHP makes 6195 calls to 239 distinct built-in functions. Each one below maps to a language form, a standard library member, or a leave-out with its reason. A leave-out stays reachable from a plain PHP class of the project, as `Words.distance` reaches `levenshtein` in the engine tests. Time maps to `Instant`, `Date`, `DateTime` and `TimeZone` (slice 3), and `parse_url` to the `Url` value (slice 4).
+PHP# code reaches PHP only through the standard library (decision 83). Real code sets what the library covers: a production app's plain PHP makes 6195 calls to 239 distinct built-in functions. Each one below maps to a language form, a standard library member, or a leave-out with its reason. A leave-out stays reachable from a plain PHP class of the project, as `Words.distance` reaches `levenshtein` in the engine tests. `parse_url` maps to the `Url` value (slice 4).
 
 ## Types, values and names
 
@@ -59,7 +59,7 @@ PHP# code reaches PHP only through the standard library (decision 83). Real code
 | `abs` | `n.abs()` |
 | `round`, `floor`, `ceil` | `x.round(decimals)`, `x.floor()`, `x.ceil()` |
 | `max`, `min` | `Math.max(a, b)`, `Math.min(a, b)`, `list.max()`, `list.min()` |
-| `intdiv` | `a / b` on two `int`s (section 24) |
+| `intdiv` | `a / b` on two `int`s (section 24), and `a.floorDiv(b)` and `a.mod(b)` to round down |
 | `sqrt` | `Math.sqrt(x)` |
 | `dechex` | `n.toHex()` |
 | `bin2hex` | `Hex.encode(bytes)` |
@@ -116,8 +116,9 @@ PHP# code reaches PHP only through the standard library (decision 83). Real code
 
 | PHP | PHP# |
 | --- | --- |
-| `time`, `microtime` | `Clock.now()`, `Clock.timestamp()` |
-| `date`, `strtotime` | `Date.format(timestamp, pattern)`, `Date.parse(text)` |
+| `time`, `microtime` | `Clock.now()`, an `Instant`, and `Clock.timestamp()` for measuring |
+| `date` | `toString()` of an `Instant`, a `Date` or a `DateTime`, and a template of a `DateTime`'s `date`, `hour` and `minute` for other text |
+| `strtotime` | `Instant.parse(text)`, `Date.parse(text)`, and `plus`, `plusDays` and `plusMonths` for a relative time such as `-6 days` |
 | `timezone_identifiers_list` | `TimeZone.names()` |
 | `json_encode`, `json_decode` | `Json.encode(value)`, `Json.decode(text)` |
 | `base64_encode`, `base64_decode` | `Base64.encode`, `Base64.decode` |

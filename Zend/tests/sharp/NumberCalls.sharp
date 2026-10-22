@@ -10,6 +10,8 @@ class NumberCalls
 
     public static string hex(int value) => value.toHex();
 
+    public static List<int> divided(int value, int divisor) => [value.floorDiv(divisor), value.mod(divisor)];
+
     public static bool finite(float value) => value.isFinite();
 
     public static float absoluteFloat(float value) => value.abs();

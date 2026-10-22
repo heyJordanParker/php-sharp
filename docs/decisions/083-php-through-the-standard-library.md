@@ -23,7 +23,7 @@ Jordan's rulings of 10-22. This replaces [decision 80](080-global-calls-of-repla
 
 Every other built-in class a project's code named before has a standard library type for its job, or is reached from a plain PHP class of the project:
 
-- `DateTimeImmutable` and `DateTimeZone`: the types of `Sharp.Time` (`Clock`, `Date`, `Duration`, `TimeZone`).
+- `DateTimeImmutable` and `DateTimeZone`: the types of `Sharp.Time` (`Clock`, `Instant`, `Duration`, `Date`, `DateTime`, `TimeZone`).
 - `PDO` and `PDOStatement`: `Database`, in `Sharp.Data`.
 - `SplFileObject`: `Files` and `Console`, in `Sharp.IO`.
 - `SplFixedArray`: `List`.

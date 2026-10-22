@@ -5,7 +5,7 @@
 // a test that preloads it finds the classes already declared, so it skips the requires.
 if (!class_exists(Sharp\Time\Clock::class, false)) {
     foreach ([
-        'Time/Duration', 'Net/Url', 'Net/HttpMethod', 'Net/HttpRequest', 'Net/HttpResponse',
+        'Int', 'Time/Duration', 'Time/Instant', 'Net/Url', 'Net/HttpMethod', 'Net/HttpRequest', 'Net/HttpResponse',
         'Net/MailAddress', 'Net/MailMessage', 'System/ProcessResult', 'System/Environment', 'Time/Clock', 'Random',
         'IO/Console', 'System/Process', 'IO/Files', 'Text/StringMembers', 'Net/Http', 'Data/Cache', 'Net/Mail',
         'Data/Database',

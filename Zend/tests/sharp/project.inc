@@ -4,8 +4,9 @@
 // by their paths under the library's Sharp folder. A project that holds the library's module holds these.
 const LIBRARY_MODULE = [
     'Module', 'Dispatcher', 'ImmediateDispatcher', 'System/Environment', 'Time/Clock', 'Random', 'IO/Console',
-    'System/Process', 'System/ProcessResult', 'IO/Files', 'Net/Http', 'Net/Mail', 'Time/Duration', 'Net/HttpMethod',
-    'Net/HttpRequest', 'Net/HttpResponse', 'Net/MailAddress', 'Net/MailMessage', 'Net/Url', 'Text/StringMembers',
+    'System/Process', 'System/ProcessResult', 'IO/Files', 'Net/Http', 'Net/Mail', 'Time/Duration', 'Time/Instant',
+    'Time/DateTime', 'Time/Date', 'Time/TimeZone', 'Int', 'Math', 'Net/HttpMethod', 'Net/HttpRequest',
+    'Net/HttpResponse', 'Net/MailAddress', 'Net/MailMessage', 'Net/Url', 'Text/StringMembers',
 ];
 
 function compile_project(string $name, array $files): string

@@ -1,8 +1,15 @@
 namespace Demo;
 
+import Sharp.Time.Instant;
 import Sharp.Time.TimeZone;
 
 class TimeZoneCalls
 {
     public static List<string> names() => TimeZone.names();
+
+    public static string utc() => TimeZone.utc.name;
+
+    public static string? named(string name) => TimeZone.tryOf(name)?.toString();
+
+    public static int offsetMinutes(string name, string instant) => new TimeZone(name).offsetAt(Instant.parse(instant)).minutes;
 }
