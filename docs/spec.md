@@ -4215,7 +4215,7 @@ public class Layout
 - `Sharp.Net` holds `Http`, `HttpRequest`, `HttpResponse`, `HttpMethod`, `Url`, `Ip`, `Mail`, `MailMessage` and `MailAddress`.
 - `Sharp.Data` holds `Database` and `Cache`.
 - `Sharp.Encoding` holds `Json`, `Base64`, `Hex` and `Compression`.
-- `Sharp.Security` holds `Hash` and `Password`.
+- `Sharp.Security` holds `Hash`, `Hmac` and `Password`.
 
 A type never repeats the last part of its namespace, so a call reads `Json.encode(body)` after `import Sharp.Encoding.Json;`.
 

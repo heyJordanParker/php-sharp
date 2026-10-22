@@ -1,6 +1,6 @@
 # The standard library: PHP's built-ins in PHP#
 
-PHP# code reaches PHP only through the standard library (decision 83). Real code sets what the library covers: a production app's plain PHP makes 6195 calls to 239 distinct built-in functions. Each one below maps to a language form, a standard library member, or a leave-out with its reason. A leave-out stays reachable from a plain PHP class of the project, as `Words.distance` reaches `levenshtein` in the engine tests. `parse_url` maps to the `Url` value (slice 4).
+PHP# code reaches PHP only through the standard library (decision 83). Real code sets what the library covers: a production app's plain PHP makes 6195 calls to 239 distinct built-in functions. Each one below maps to a language form, a standard library member, or a leave-out with its reason. A leave-out stays reachable from a plain PHP class of the project, as `Words.distance` reaches `levenshtein` in the engine tests.
 
 ## Types, values and names
 
@@ -122,9 +122,10 @@ PHP# code reaches PHP only through the standard library (decision 83). Real code
 | `timezone_identifiers_list` | `TimeZone.names()` |
 | `json_encode`, `json_decode` | `Json.encode(value)`, `Json.decode(text)` |
 | `base64_encode`, `base64_decode` | `Base64.encode`, `Base64.decode` |
-| `hash`, `md5`, `sha1`, `crc32`, `hash_hmac`, `hash_equals` | `Hash.of`, `Hash.md5`, `Hash.sha1`, `Hash.crc32`, `Hash.hmac`, `Hash.equals` |
+| `hash`, `md5`, `sha1`, `crc32`, `hash_equals` | `Hash.of`, `Hash.md5`, `Hash.sha1`, `Hash.crc32`, `Hash.equals` |
+| `hash_hmac` | `Hmac.of(algorithm, data, key)`, and `Hmac.verify(algorithm, data, key, signature)` to check a signature |
 | `password_hash` | `Password.hash`, `Password.verify` |
 | `rawurlencode`, `urlencode`, `http_build_query`, `parse_str` | `Url.encode`, `Url.encodeForm`, `Url.buildQuery`, `Url.parseQuery` |
-| `parse_url` | the `Url` value (slice 4) |
+| `parse_url` | `Url.parse(text)`, a value with `scheme`, `host`, `port`, `path`, `query`, `fragment`, `user` and `password` |
 | `filter_var` | `Url.isValid`, `Ip.isValid`, `MailAddress.isValid`, `Int.tryParse`, `Bool.tryParse` |
 | `inet_pton` | `Ip.toBinary(address)` |

@@ -1,12 +1,15 @@
 namespace Demo;
 
 import Sharp.Security.Hash;
+import Sharp.Security.Hmac;
 
 class HashCalls
 {
     public static string of(string algorithm, string data) => Hash.of(algorithm, data);
 
-    public static string hmac(string algorithm, string data, string key) => Hash.hmac(algorithm, data, key);
+    public static string hmac(string algorithm, string data, string key) => Hmac.of(algorithm, data, key);
+
+    public static bool verified(string algorithm, string data, string key, string signature) => Hmac.verify(algorithm, data, key, signature);
 
     public static string md5(string data) => Hash.md5(data);
 
