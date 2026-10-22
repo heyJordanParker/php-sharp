@@ -7,7 +7,7 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 - **Jordan, the Architect,** owns the language: `docs/spec.md` and the proposals in `docs/decisions/`. He approves or corrects proposals. He doesn't review code or plan work.
 - **Cass, the CTO agent,** owns everything else: the plan, the order of work, the architecture, and this file. Cass starts every agent, approves every PR's architecture after its review, and checks that what lands works.
 - **A builder** is an agent that does one task: one PR, from a new branch to its merge.
-- **A reviewer** is an agent that reviews one PR and posts its verdict on that PR.
+- **A reviewer** is an agent that reviews one PR once. It changes nothing, and Cass posts its verdict on the PR.
 - **A helper** is an agent that reads, searches or researches for Cass, and changes nothing.
 
 ## One agent, one task
@@ -18,7 +18,7 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 
 ## Parallelism
 
-- At most 2 builders run at once, each in its own worktree slot. A builder still running is never stopped to meet the cap: no new builder starts until the count is under it.
+- At most 2 builders run at once, each in its own worktree slot. Cass never stops a running builder to meet the cap. Cass starts a new builder only while fewer than 2 run.
 - At most 4 helpers and reviewers run at once, on top of the builders. Each does one short task.
 
 ## Worktree slots
@@ -31,8 +31,8 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 ## A PR's path to master
 
 1. The builder opens the PR, and CI must pass.
-2. A fresh reviewer reviews the details and the architecture, and posts its verdict on the PR. The builder makes the changes the reviewer asks for, until the reviewer approves.
-3. Cass checks the architecture across the whole system and the plan, and posts an approval on the PR. If Cass asks for changes, the builder makes them and the reviewer reviews again.
+2. One fresh reviewer reviews the details and the architecture once, and Cass posts its verdict on the PR. The builder makes every change it asks for, and Cass checks each fix by reading it. No second review round runs.
+3. Cass checks the architecture across the whole system and the plan, and posts an approval on the PR. If Cass asks for changes, the builder makes them and Cass checks them by reading.
 4. The builder merges with `gh pr merge --merge --match-head-commit <full head SHA>`.
 
 A PR that finishes spec sections says so in its body, on its own line, exactly as `Completes: §6.1, §9`. The `COMPLETES` check fails while `sharp/baseline/spec` still lists an example of a named section.
