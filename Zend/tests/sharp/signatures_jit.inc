@@ -1,5 +1,5 @@
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Math/Math.sharp';
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Math.sharp';
 require __DIR__ . '/Signatures.sharp';
 
 for ($round = 0; $round < 100; $round++) {

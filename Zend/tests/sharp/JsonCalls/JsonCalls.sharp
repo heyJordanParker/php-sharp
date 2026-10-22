@@ -1,6 +1,6 @@
 namespace Demo;
 
-import Sharp.Json.Json;
+import Sharp.Encoding.Json;
 
 class JsonCalls
 {

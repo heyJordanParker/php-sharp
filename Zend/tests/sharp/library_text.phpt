@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls every method of Sharp.Text.Text, Text.fromByte throws ValueError for a value that is not a byte, parseCsv reads one CSV line, where a quoted field keeps its comma and a blank line is one empty field, case changes and split work on characters, replace replaces every match and throws ValueError for empty text to replace, split keeps the empty text after a trailing delimiter, gives at most a positive limit's parts, the last holding the rest, and every part for a limit of 0, and throws ValueError for an empty delimiter or a negative limit, and join puts the separator between a List<string>'s parts
+A PHP# class calls every member of string in Sharp.Text and int.toByteString, toByteString throws ValueError for a value that is not a byte, parseCsv reads one CSV line, where a quoted field keeps its comma and a blank line is one empty field, case changes and split work on characters, replace replaces every match and throws ValueError for empty text to replace, split keeps the empty text after a trailing delimiter, gives at most a positive limit's parts, the last holding the rest, and every part for a limit of 0, and throws ValueError for an empty delimiter or a negative limit, and join puts the separator between a List<string>'s parts
 --FILE--
 <?php
 require __DIR__ . '/library_text.inc';
@@ -48,9 +48,9 @@ string(11) "hello-world"
 string(1) "A"
 bool(true)
 bool(true)
-ValueError: Text.fromByte: the value is not a byte from 0 to 255
-ValueError: Text.fromByte: the value is not a byte from 0 to 255
-ValueError: Text.fromByte: the value is not a byte from 0 to 255
+ValueError: `toByteString` needs a byte from 0 to 255, and the value is outside it.
+ValueError: `toByteString` needs a byte from 0 to 255, and the value is outside it.
+ValueError: `toByteString` needs a byte from 0 to 255, and the value is outside it.
 ["A1","tea, hot","3"]
 ["a","","b"]
 [""]

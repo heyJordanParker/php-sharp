@@ -1,8 +1,8 @@
 --TEST--
-A PHP# class calls every method of Sharp.Data.Hash, and an unknown algorithm throws ValueError
+A PHP# class calls every method of Sharp.Security.Hash, and an unknown algorithm throws ValueError
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Data/Hash.sharp';
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Security/Hash.sharp';
 require __DIR__ . '/HashCalls.sharp';
 
 use Demo\HashCalls;

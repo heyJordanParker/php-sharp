@@ -1,9 +1,9 @@
 <?php
 // php library_autoload.inc <engine|changed|missing> <psr4|classmap> <version|absent> <class> [composer]: requires
 // sharp/composer/autoload.php beside the library's composer.json, its Module.sharp and the classes it binds, compiled, and a native.php that is the engine's own, one with another SHARP_NATIVE and the same
-// native bodies, or one that also declares Text.missing, with Sharp\ and a project's App\Clock found by PSR-4 or by an
+// native bodies, or one that also declares StringMembers.missing, with Sharp\ and a project's App\Clock found by PSR-4 or by an
 // authoritative class map, and Composer reporting the package at that version or not installed, then uses
-// Sharp\Text\Text, App\Clock, App\Tick\Now, a case of the enum App/Tick.sharp declares, or the trait App\Timed\Defaults
+// Sharp\Text\StringMembers, App\Clock, App\Tick\Now, a case of the enum App/Tick.sharp declares, or the trait App\Timed\Defaults
 // of the interface App/Timed.sharp declares, or App\Ticking\Defaults of an interface without a default body, through a
 // plain PHP class, or App\Stamp, whose type line starts with an attribute. The class map lists the classes the package's
 // Composer plugin finds in each file, which it prints. With composer, Composer itself requires autoload.php, as it does to load a plugin.
@@ -96,6 +96,8 @@ namespace {
     @mkdir("$package/library/Sharp/Time", 0777, true);
     @mkdir("$package/library/Sharp/Net", 0777, true);
     @mkdir("$package/library/Sharp/Text", 0777, true);
+    @mkdir("$package/library/Sharp/IO", 0777, true);
+    @mkdir("$package/library/Sharp/System", 0777, true);
     copy("$root/sharp/composer/autoload.php", "$package/autoload.php");
     file_put_contents("$package/composer.json", '{"name": "heyjordanparker/php-sharp-composer"}');
     foreach (LIBRARY_MODULE as $library) {
@@ -104,7 +106,7 @@ namespace {
     if ($native === 'engine') {
         copy("$root/sharp/composer/native.php", "$package/native.php");
     } else {
-        $bodies = $native === 'missing' ? ['Sharp.Text.Text.missing', 'Sharp.Text.Text.slug'] : ['Sharp.Text.Text.slug'];
+        $bodies = $native === 'missing' ? ['Sharp.Text.StringMembers.missing', 'Sharp.Text.StringMembers.slugOf'] : ['Sharp.Text.StringMembers.slugOf'];
         file_put_contents("$package/native.php", '<?php return ' . var_export(['fingerprint' => '0123456789abcdef0123456789abcdef', 'bodies' => $bodies], true) . ';');
     }
     file_put_contents("$package/src/App/Clock.sharp", "namespace App;\n\npublic class Clock\n{\n    public string now() => \"noon\";\n}\n");
@@ -120,7 +122,7 @@ namespace {
     $uncompiled = ($argv[5] ?? null) === 'uncompiled';
     if ($uncompiled) {
         file_put_contents("$package/src/App/Greeting.sharp", "namespace App;\n\npublic class Greeting\n{\n    public Greeting(private string text) { }\n\n    public string now() => this.text;\n}\n");
-        file_put_contents("$package/src/App/Module.sharp", "namespace App;\n\nmodule\n{\n    singleton Greeting(Environment environment) = new Greeting(environment.variable(\"SHARP_GREETING\") ?? \"no greeting\");\n}\n");
+        file_put_contents("$package/src/App/Module.sharp", "namespace App;\n\nimport Sharp.System.Environment;\n\nmodule\n{\n    singleton Greeting(Environment environment) = new Greeting(environment.variable(\"SHARP_GREETING\") ?? \"no greeting\");\n}\n");
     } else {
         run_mago($package);
     }
@@ -130,7 +132,7 @@ namespace {
         require "$root/sharp/composer/src/Plugin.php";
         $declaredClasses = new ReflectionMethod(PhpSharp\Composer\Plugin::class, 'declaredClasses');
         $classMap = [];
-        foreach (["$package/src/App/Clock.sharp", "$package/src/App/Tick.sharp", "$package/src/App/Timed.sharp", "$package/src/App/Ticking.sharp", "$package/src/App/Stamp.sharp", "$package/stubs/App/Failed.sharp", "$library/Text/Text.sharp", "$library/Module.sharp"] as $file) {
+        foreach (["$package/src/App/Clock.sharp", "$package/src/App/Tick.sharp", "$package/src/App/Timed.sharp", "$package/src/App/Ticking.sharp", "$package/src/App/Stamp.sharp", "$package/stubs/App/Failed.sharp", "$library/Text/StringMembers.sharp", "$library/Module.sharp"] as $file) {
             $classMap += array_fill_keys($declaredClasses->invoke(null, new SplFileInfo($file)), $file);
         }
         // A module's file and an extern declaration file declare no type, spec section 27, so the class map lists
@@ -145,13 +147,13 @@ namespace {
 
     try {
         require "$package/autoload.php";
-        echo 'booted, with ', class_exists('Sharp\Text\Text', false) ? 'a' : 'no', " library class declared\n";
+        echo 'booted, with ', class_exists('Sharp\Text\StringMembers', false) ? 'a' : 'no', " library class declared\n";
         echo 'class map handed to Composer: ', json_encode(array_keys($loader->classMap)), "\n";
         if ($uncompiled) {
             run_mago($package);
         }
         echo match ($class) {
-            'Sharp\Text\Text' => \Sharp\Text\Text::slug('A B'),
+            'Sharp\Text\StringMembers' => \Sharp\Text\StringMembers::slug('A B'),
             'App\Tick\Now' => (new $class('noon'))->at . (class_exists('App\Tick', false) ? ', with its enum' : ''),
             // A plain PHP class gets a PHP# interface's default bodies by using its trait, spec section 22.
             'App\Timed\Defaults' => (new class implements \App\Timed { use \App\Timed\Defaults; })->now(),

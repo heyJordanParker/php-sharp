@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls every method of Sharp.Math.Math, which call the PHP functions of their own names, Math.max and Math.min take one int or more, spread or not, and Math.pow throws DivisionByZeroError for a base of 0 and a negative exponent
+A PHP# class calls every method of Sharp.Math, which call the PHP functions of their own names, Math.max and Math.min take one int or more, spread or not, and Math.pow throws DivisionByZeroError for a base of 0 and a negative exponent
 --FILE--
 <?php
 require __DIR__ . '/library_math.inc';

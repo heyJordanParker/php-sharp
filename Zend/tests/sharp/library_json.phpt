@@ -1,8 +1,8 @@
 --TEST--
-A PHP# class calls Sharp.Json.Json: decode gives objects as maps and throws JsonException on invalid JSON, and encode writes a Map as an object and a List as an array, a struct key through its toString(), floats with their fraction, and slashes and Unicode as they are
+A PHP# class calls Sharp.Encoding.Json: decode gives objects as maps and throws JsonException on invalid JSON, and encode writes a Map as an object and a List as an array, a struct key through its toString(), floats with their fraction, and slashes and Unicode as they are
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Json/Json.sharp';
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Json.sharp';
 require __DIR__ . '/harness/fixture.inc';
 fixture('JsonCalls');
 

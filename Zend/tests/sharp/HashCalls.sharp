@@ -1,6 +1,6 @@
 namespace Demo;
 
-import Sharp.Data.Hash;
+import Sharp.Security.Hash;
 
 class HashCalls
 {

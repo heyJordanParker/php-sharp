@@ -124,24 +124,22 @@ $fixtures = [
     'Store' => 'harness/Model.inc',
     'RushOrders' => 'harness/Model.inc',
     'TypedOrders' => 'harness/TypedModel.inc',
-    'Permalink' => '../../../sharp/composer/library/Sharp/Text/Text.sharp',
+    'Permalink' => '../../../sharp/composer/library/Sharp/Text/StringMembers.sharp',
     'Library' => [
-        '../../../sharp/composer/library/Sharp/Data/Base64.sharp',
-        '../../../sharp/composer/library/Sharp/Data/Binary.sharp',
-        '../../../sharp/composer/library/Sharp/Data/Compression.sharp',
-        '../../../sharp/composer/library/Sharp/Data/Hash.sharp',
-        '../../../sharp/composer/library/Sharp/Data/Hex.sharp',
-        '../../../sharp/composer/library/Sharp/Data/Password.sharp',
-        '../../../sharp/composer/library/Sharp/Data/PhpSerializer.sharp',
+        '../../../sharp/composer/library/Sharp/Encoding/Base64.sharp',
+        '../../../sharp/composer/library/Sharp/Encoding/Compression.sharp',
+        '../../../sharp/composer/library/Sharp/Encoding/Hex.sharp',
+        '../../../sharp/composer/library/Sharp/Encoding/Json.sharp',
+        '../../../sharp/composer/library/Sharp/Int.sharp',
         '../../../sharp/composer/library/Sharp/IO/Path.sharp',
-        '../../../sharp/composer/library/Sharp/Json/Json.sharp',
-        '../../../sharp/composer/library/Sharp/Math/Math.sharp',
-        '../../../sharp/composer/library/Sharp/Net/Email.sharp',
+        '../../../sharp/composer/library/Sharp/Math.sharp',
         '../../../sharp/composer/library/Sharp/Net/Ip.sharp',
+        '../../../sharp/composer/library/Sharp/Net/MailAddress.sharp',
         '../../../sharp/composer/library/Sharp/Net/Url.sharp',
+        '../../../sharp/composer/library/Sharp/Security/Hash.sharp',
+        '../../../sharp/composer/library/Sharp/Security/Password.sharp',
         '../../../sharp/composer/library/Sharp/Text/Html.sharp',
         '../../../sharp/composer/library/Sharp/Text/Regex.sharp',
-        '../../../sharp/composer/library/Sharp/Text/Text.sharp',
         '../../../sharp/composer/library/Sharp/Time/Date.sharp',
         '../../../sharp/composer/library/Sharp/Time/TimeZone.sharp',
     ],
@@ -732,20 +730,20 @@ RushOrders/RushOrder: same opcodes and lines in 1 op arrays, same signatures in 
 TypedOrders/Order: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 TypedOrders/RushOrder: same opcodes and lines in 1 op arrays, same signatures in 1 classes
 Permalink: same opcodes and lines in 2 op arrays, same signatures in 1 classes
-Library: different opcodes and lines in 20 op arrays, same signatures in 1 classes
+Library: different opcodes and lines in 18 op arrays, same signatures in 1 classes
   check  Demo\Library::query string("Map<string, Any?>")
-  .sharp L0054 0000 CV0($key#1) = RECV 1
-  .sharp L0054 0001 CV1($value#2) = RECV 2
-  .sharp L0054 0002 T2 = CAST (string) CV0($key#1)
-  .sharp L0054 0004 T3 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
+  .sharp L0046 0000 CV0($key#1) = RECV 1
+  .sharp L0046 0001 CV1($value#2) = RECV 2
+  .sharp L0046 0002 T2 = CAST (string) CV0($key#1)
+  .sharp L0046 0004 T3 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
   .sharp 0000 CV0($key#1) = RECV 1
   .sharp 0001 CV1($value#2) = RECV 2
   .sharp 0002 T2 = CAST (string) CV0($key#1)
   .sharp 0004 T3 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
-  .php   L0054 0000 CV0($key) = RECV 1
-  .php   L0054 0001 CV1($value) = RECV 2
-  .php   L0054 0002 T2 = CAST (string) CV0($key)
-  .php   L0054 0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
+  .php   L0046 0000 CV0($key) = RECV 1
+  .php   L0046 0001 CV1($value) = RECV 2
+  .php   L0046 0002 T2 = CAST (string) CV0($key)
+  .php   L0046 0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
   .php   0000 CV0($key) = RECV 1
   .php   0001 CV1($value) = RECV 2
   .php   0002 T2 = CAST (string) CV0($key)

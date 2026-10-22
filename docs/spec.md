@@ -682,7 +682,6 @@ public T first<T>(List<T> items) { … }
 **A method can take any number of arguments** with PHP's `...`. The parameter is written `int ...values`, and `values` arrives as a `List<int>`. A call spreads an existing list with `...list`.
 
 <!-- example variadic-parameters: statements in Money
-import Sharp.Math.Math;
 List<int> prices = [900, 2900];
 -->
 ```csharp
@@ -788,12 +787,11 @@ Tickets.take();     // 2
 
 There are no top-level functions. Shared code lives in static methods on a class.
 
-**A PHP function is reached through the type it works on,** as a method the standard library declares with an extension (section 26), as in `name.trim()`. Otherwise it goes through a static class in its standard library namespace (section 23), as in `Math.max(a, b)` and `Json.encode(body)`.
+**A PHP function is reached through the type it works on,** as a method the standard library declares with an extension (section 26), as in `name.trim()`. Otherwise it goes through a static class of the standard library (section 23), as in `Math.max(a, b)` and `Json.encode(body)`.
 
 <!-- example standard-library-calls -->
 ```csharp
-import Sharp.Json.Json;
-import Sharp.Math.Math;
+import Sharp.Encoding.Json;
 
 public class Receipt
 {
@@ -812,6 +810,9 @@ public class Receipt
 
 <!-- example output-and-exit: statements -->
 ```csharp
+import Sharp.IO.Console;
+import Sharp.System.Process;
+
 public class Prune
 {
     public Prune(private Console console, private Process process) { }
@@ -1152,7 +1153,7 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 - **`Object` bounds a type parameter to any object,** `<TValue : Object>`, as C#'s `where T : class` and TypeScript's `T extends object` do. It is a bound alone.
 - **A bound may name another type parameter,** `<TPart : TItem>`, as C#'s `where TPart : TItem` and Java's and TypeScript's `<U extends T>` do. A `TPart` then goes wherever a `TItem` goes. It is a bound alone, as in Java, and a bound that leads back to its own type parameter, such as `<TItem : TItem>`, is a compile error, as in C#.
 - **A type parameter with no bound may hold `null`,** so it is bounded by `Any?`.
-- **A generic class can't implement PHP's `Serializable`,** because its `serialize` drops the type arguments. The error says to leave `Serializable` out: an object serialized as it is keeps its type arguments.
+- **A generic class can't be PHP's `Serializable`** through a plain PHP library's interface or parent class, because its `serialize` drops the type arguments. The error says to leave `Serializable` out: an object serialized as it is keeps its type arguments.
 - **A class value with type arguments can't be a `Map` key,** because `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` share the plain class name.
 
 <!-- example type-parameter-bounds: members -->
@@ -4186,18 +4187,29 @@ public class Layout
 
 **An import never carries `uses`,** because a library's effect lives in its one `extern` declaration (section 29).
 
-**The standard library lives under one root, `Sharp`,** with the standard library namespaces `Sharp.Text`, `Sharp.Math`, `Sharp.Json`, `Sharp.IO`, `Sharp.Time`, `Sharp.Net` and `Sharp.Data`, as .NET has `System.*` and Rust has `std::*`.
+**The standard library lives under one root, `Sharp`,** with one standard library namespace per domain, as .NET has `System.*` and Rust has `std::*`:
 
-**`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin. `Error` is the one default name that nothing shadows (section 31):
+- `Sharp.Text` holds the members of `string`, `Regex` and `Html`.
+- `Sharp.Time` holds `Clock`, `Date`, `Duration` and `TimeZone`.
+- `Sharp.IO` holds `Files`, `Path` and `Console`.
+- `Sharp.System` holds `Process`, `ProcessResult` and `Environment`.
+- `Sharp.Net` holds `Http`, `HttpRequest`, `HttpResponse`, `HttpMethod`, `Url`, `Ip`, `Mail`, `MailMessage` and `MailAddress`.
+- `Sharp.Data` holds `Database` and `Cache`.
+- `Sharp.Encoding` holds `Json`, `Base64`, `Hex` and `Compression`.
+- `Sharp.Security` holds `Hash` and `Password`.
+
+A type never repeats the last part of its namespace, so a call reads `Json.encode(body)` after `import Sharp.Encoding.Json;`.
+
+**`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Math` is `Sharp.Math`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin. `Error` is the one default name that nothing shadows (section 31):
 
 <!-- example own-namespace-shadows -->
 ```csharp
-// app/Shop/Environment.sharp
+// app/Shop/Math.sharp
 namespace App.Shop;
 
-public class Environment
+public static class Math
 {
-    public static string stage() => "production";
+    public static int square(int value) => value * value;
 }
 ```
 
@@ -4208,21 +4220,38 @@ namespace App.Shop;
 
 public class Release
 {
-    public string stage() => Environment.stage();                   // compiles: Environment is App.Shop.Environment, with no import
-    public string? region(Environment environment) => environment.variable("AWS_REGION");   // compile error: App.Shop.Environment declares no variable
+    public int area(int side) => Math.square(side);                  // compiles: Math is App.Shop.Math, with no import
+    public int larger(int a, int b) => Math.max(a, b);               // compile error: App.Shop.Math declares no max
 }
 ```
 
-**PHP's standard exception classes need no import either,** as Java's `java.lang` exceptions and Kotlin's need none. A bare `ValueError`, `OutOfRangeException` or any other exception class in PHP's root namespace names PHP's own. A class of the same name that the file declares or imports, or one in the file's own namespace, shadows it by the same rule:
+**PHP's standard exception classes need no import either,** as Java's `java.lang` exceptions and Kotlin's need none. A bare `ValueError`, `OutOfRangeException` or any other exception class in PHP's root namespace names PHP's own. So do `Throwable`, which every exception is, `Attribute`, which makes a class an attribute, and `Countable` and `JsonSerializable`, which a plain PHP library asks a class to implement. A class of the same name that the file declares or imports, or one in the file's own namespace, shadows it by the same rule:
 
 <!-- example standard-exceptions -->
 ```csharp
 // app/Shop/Gauge.sharp
 namespace App.Shop;
 
-public class Gauge
+public class Gauge : Countable                                                                              // compiles: Countable is PHP's, with no import
 {
+    public int count() => 0;
+
     public int first(List<int> values) => values.count() > 0 ? values[0] : throw new ValueError("empty");   // compiles: ValueError is PHP's, with no import
+}
+```
+
+**PHP's other classes are names only the standard library uses,** as Rust and Swift reach the platform only through their standard libraries. A class, interface or enum PHP or one of its extensions builds in, such as `PDO`, `DateTimeImmutable` or `Random.Randomizer`, is the name a misspelling is in a `.sharp` file outside the standard library: its import is an import of no class, and its bare name names no type. The standard library has a type for each job: `Database` for a database, the types of `Sharp.Time` for a date, `Random` for random numbers, and `Files` for a file. A plain PHP library that reaches one is called as any library:
+
+<!-- example built-in-classes -->
+```csharp
+// app/Shop/Stamp.sharp
+namespace App.Shop;
+
+import DateTimeImmutable;                                     // compile error: no class DateTimeImmutable exists
+
+public class Stamp
+{
+    public int drivers() => PDO.getAvailableDrivers().count();  // compile error: no type PDO exists
 }
 ```
 
@@ -4230,14 +4259,13 @@ public class Gauge
 
 <!-- example standard-library-import: statements
 Map<string, Any> payload = ["id": 1];
-int a = 1;
-int b = 2;
+string text = "PHP#";
 -->
 ```csharp
-import Sharp.Json.Json;
+import Sharp.Encoding.Json;
 
 Json.encode(payload);     // compiles
-Math.max(a, b);           // compile error: Math is not imported
+Base64.encode(text);      // compile error: Base64 is not imported
 ```
 
 **`import X.Y as Z;` renames an import in this file only.** It compiles to PHP's `use X\Y as Z;`. Here the rename keeps the standard `Key`, which `import Cache.Key;` would shadow:
@@ -4510,7 +4538,7 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 **Replacing `(array)` and `(object)`:**
 
 <!-- example array-object-replacements: statements
-import Sharp.Json.Json;
+import Sharp.Encoding.Json;
 Object row = Rows.withId(1);
 string email = "ada@example.com";
 -->
@@ -4526,7 +4554,7 @@ const point = (object)["x": 1];                   // parse error
 - **`Json.encode` encodes by the value's PHP# type,** so a `Map` is a JSON object and a `List` is a JSON array wherever it is, below an `Any` too, even when empty, and even when a `Map`'s keys run from 0 to n. A `Map` is an object the engine tells apart from a `List` (section 12).
 
 <!-- example json-encoding: statements
-import Sharp.Json.Json;
+import Sharp.Encoding.Json;
 -->
 ```csharp
 Map<string, int> none = [:];
@@ -4542,7 +4570,7 @@ Json.encode(listed);                              // {"counts":[]}: an empty Lis
 **`Any` holds a value of any type except null. `Any?` also allows null.** A value of type `Any` must be checked with `is`, `as` or `match` before it can be used:
 
 <!-- example any-checks: statements
-import Sharp.Json.Json;
+import Sharp.Encoding.Json;
 string body = "{}";
 -->
 ```csharp
@@ -4850,6 +4878,8 @@ public abstract class DatabaseEntity { public required DatabaseEntity(Row row) {
 // app/Order.sharp
 namespace App;
 
+import Sharp.Time.Clock;
+
 public class Order : DatabaseEntity
 {
     public Order(Row row, Clock? clock = null) : super(row) { … }   // compiles: new Self(row) can call it
@@ -4860,6 +4890,8 @@ public class Order : DatabaseEntity
 ```csharp
 // app/Invoice.sharp
 namespace App;
+
+import Sharp.Time.Clock;
 
 public class Invoice : DatabaseEntity
 {
@@ -5198,8 +5230,6 @@ public class Money
 // app/Shared/Refunds.sharp
 namespace App.Shared;
 
-import Sharp.Math.Math;
-
 public class Refunds
 {
     public static int refundable(int paid, int refunded) => Math.max(paid - refunded, 0);
@@ -5408,34 +5438,20 @@ extern now uses Clock;               // compile error: no function now exists
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way.
 - **PHP's own built-in functions and exception classes come declared.** PHP#'s Composer package declares the effect of each built-in function the standard library calls, so `Files` has the effect `Files`. Each built-in exception class is declared pure, so pure code may `throw new ValueError("empty")`.
 
-**The standard library's ten effect classes replace PHP's built-ins for their effects:**
+**The standard library's ten effect classes replace PHP's built-ins for their effects.** Each lives in the namespace of its domain (section 23), and a `uses` names it by its class name with no import, whatever the file imports:
 
-- `Database` replaces PDO.
-- `Http` replaces curl.
-- `Files` replaces every file function outside standard output and standard error.
-- `Console` replaces printing to standard output and standard error.
-- `Process` replaces `exit` and `shell_exec()`.
-- `Clock` replaces `time()`.
-- `Random` replaces `random_int`.
-- `Cache` replaces the APCu functions.
-- `Mail` replaces `mail()`.
-- `Environment` replaces `getenv()` and PHP's other environment functions.
+- `Database`, in `Sharp.Data`, replaces PDO.
+- `Http`, in `Sharp.Net`, replaces curl.
+- `Files`, in `Sharp.IO`, replaces every file function outside standard output and standard error.
+- `Console`, in `Sharp.IO`, replaces printing to standard output and standard error.
+- `Process`, in `Sharp.System`, replaces `exit` and `shell_exec()`.
+- `Clock`, in `Sharp.Time`, replaces `time()`.
+- `Random`, in `Sharp`, replaces `random_int`.
+- `Cache`, in `Sharp.Data`, replaces the APCu functions.
+- `Mail`, in `Sharp.Net`, replaces `mail()`.
+- `Environment`, in `Sharp.System`, replaces `getenv()` and PHP's other environment functions.
 
-A bare call of a replaced function names no function (section 8). **A PHP built-in class, such as `PDO` or `DateTimeImmutable`, is a plain PHP class:** code imports and names it to hold, pass, return and read what a library gives, and creating one has the effects its `extern` lists, as creating a `DateTimeImmutable` reads the clock:
-
-<!-- example built-in-classes -->
-```csharp
-// app/Shop/Stamp.sharp
-namespace App.Shop;
-
-import DateTimeImmutable;
-
-public class Stamp
-{
-    public string year(DateTimeImmutable moment) => moment.format("Y");      // compiles: code holds and reads one a library gives
-    public DateTimeImmutable now() => new DateTimeImmutable();               // compiles: has the effect Clock
-}
-```
+A bare call of a replaced function names no function (section 8), and a PHP built-in class names no class (section 23), so only the standard library reaches them. Inside it, creating a built-in class has the effects its `extern` lists, as creating a `DateTimeImmutable` reads the clock.
 
 <!-- example pure-interface -->
 ```csharp
@@ -5453,6 +5469,8 @@ public interface Formatter
 // app/Visitor.sharp
 namespace App;
 
+import Sharp.IO.Files;
+
 public class Visitor
 {
     public Visitor(private Files files) { }
@@ -5466,6 +5484,8 @@ public class Visitor
 ```csharp
 // app/FileFormatter.sharp
 namespace App;
+
+import Sharp.IO.Files;
 
 public class FileFormatter : Formatter
 {
@@ -5508,6 +5528,8 @@ The standard library's ten effect classes, listed above, are `foreign` classes. 
 ```csharp
 // app/Deploy.sharp
 namespace App;
+
+import Sharp.System.Environment;
 
 public class Deploy
 {
@@ -5566,6 +5588,7 @@ public class TenantCache
 // app/Shop/Stamp.sharp
 namespace App.Shop;
 
+import Sharp.Time.Clock;
 import Sharp.Time.Date;
 
 public class Stamp
@@ -5867,6 +5890,7 @@ import App.Pricing.PriceRule;
 import App.Pricing.TaxRule;
 import App.Pricing.DiscountRule;
 import App.Cache.RedisStore;
+import Sharp.System.Environment;
 
 module
 {

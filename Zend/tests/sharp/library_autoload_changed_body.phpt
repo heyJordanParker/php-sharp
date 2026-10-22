@@ -4,7 +4,7 @@ A standard library whose every native body exists in the engine but whose SHARP_
 <?php
 foreach (['0.1.0', 'v0.1.0', 'absent'] as $version) {
     echo "== package $version\n";
-    echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n ' . escapeshellarg(__DIR__ . '/library_autoload.inc') . " changed psr4 $version " . escapeshellarg('Sharp\Text\Text') . ' 2>&1');
+    echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n ' . escapeshellarg(__DIR__ . '/library_autoload.inc') . " changed psr4 $version " . escapeshellarg('Sharp\Text\StringMembers') . ' 2>&1');
 }
 ?>
 --EXPECT--

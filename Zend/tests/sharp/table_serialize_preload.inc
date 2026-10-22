@@ -1,7 +1,6 @@
 <?php
 
 require __DIR__ . '/harness/Probe.inc';
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Data/PhpSerializer.sharp';
 require __DIR__ . '/Queued/Speed.sharp';
 require __DIR__ . '/Queued/Parcel.sharp';
 require __DIR__ . '/Queued/Shipment.sharp';

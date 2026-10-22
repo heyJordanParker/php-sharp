@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class that imports Sharp.Text.Text turns titles into slugs through the native body of Text.slug
+A PHP# class turns titles into slugs with the string member slug, which runs the native body of StringMembers.slugOf
 --FILE--
 <?php
 require __DIR__ . '/text_slug.inc';

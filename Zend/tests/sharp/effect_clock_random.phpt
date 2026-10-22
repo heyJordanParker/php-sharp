@@ -6,7 +6,7 @@ require __DIR__ . '/effect_classes.inc';
 
 use Sharp\Time\Duration;
 
-$clock = new Sharp\Clock();
+$clock = new Sharp\Time\Clock();
 var_dump(abs($clock->now() - time()) <= 1);
 $start = $clock->timestamp();
 $clock->sleep(Duration::ofMilliseconds(2));

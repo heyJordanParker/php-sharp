@@ -1,6 +1,6 @@
 <?php
 
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Math/Math.sharp';
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Math.sharp';
 require __DIR__ . '/harness/Row.inc';
 require __DIR__ . '/harness/Words.inc';
 require __DIR__ . '/harness/fixture.inc';

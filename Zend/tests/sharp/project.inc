@@ -3,9 +3,9 @@
 // The standard library's module, each class it binds, and the classes and types their members take, return and call,
 // by their paths under the library's Sharp folder. A project that holds the library's module holds these.
 const LIBRARY_MODULE = [
-    'Module', 'Dispatcher', 'ImmediateDispatcher', 'Environment', 'Clock', 'Random', 'Console', 'Process',
-    'ProcessResult', 'Files', 'Http', 'Mail', 'Time/Duration', 'Net/HttpMethod', 'Net/HttpRequest', 'Net/HttpResponse',
-    'Net/MailAddress', 'Net/MailMessage', 'Net/Url', 'Net/Email', 'Text/Text',
+    'Module', 'Dispatcher', 'ImmediateDispatcher', 'System/Environment', 'Time/Clock', 'Random', 'IO/Console',
+    'System/Process', 'System/ProcessResult', 'IO/Files', 'Net/Http', 'Net/Mail', 'Time/Duration', 'Net/HttpMethod',
+    'Net/HttpRequest', 'Net/HttpResponse', 'Net/MailAddress', 'Net/MailMessage', 'Net/Url', 'Text/StringMembers',
 ];
 
 function compile_project(string $name, array $files): string

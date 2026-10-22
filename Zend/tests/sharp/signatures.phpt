@@ -2,7 +2,7 @@
 PHP# union-typed parameters, fields and properties, promoted and variadic parameters take plain PHP calls, spreads and named arguments, and refuse a wrong value
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Math/Math.sharp';
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Math.sharp';
 require __DIR__ . '/Signatures.sharp';
 
 $empty = new Demo\Signatures("none");

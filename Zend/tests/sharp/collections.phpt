@@ -14,6 +14,7 @@ final class Summary
 }
 
 require __DIR__ . '/harness/fixture.inc';
+require __DIR__ . '/harness/Slots.inc';
 fixture('Collections');
 
 $cart = new \Demo\Cart();

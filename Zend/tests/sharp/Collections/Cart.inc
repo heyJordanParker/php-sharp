@@ -1,6 +1,6 @@
 <?php declare(strict_types=1); namespace Demo;
 
-use SplFixedArray;
+use Lib\Slots;
 
 class Cart
 {
@@ -22,7 +22,7 @@ class Cart
                 $total += $size * 10;
             }
         }
-        return $total + ((object) \SplFixedArray::fromArray($this->prices()))->getSize();
+        return $total + ((object) \Lib\Slots::fromArray($this->prices()))->getSize();
     }
 
     public function prices(): array

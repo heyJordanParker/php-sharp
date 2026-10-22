@@ -1,5 +1,5 @@
 --TEST--
-Preloading keeps Math.max and Math.min of Sharp.Math.Math: one int or more, spread or not
+Preloading keeps Math.max and Math.min of Sharp.Math: one int or more, spread or not
 --INI--
 opcache.enable=1
 opcache.enable_cli=1
@@ -15,7 +15,7 @@ if (PHP_OS_FAMILY == 'Windows') die('skip Preloading is not supported on Windows
 <?php
 
 // Preloading declared the classes before this request, which never ran the files that declare them.
-var_dump(class_exists(Demo\MathCalls::class, false), class_exists(Sharp\Math\Math::class, false));
+var_dump(class_exists(Demo\MathCalls::class, false), class_exists(Sharp\Math::class, false));
 
 use Demo\MathCalls;
 

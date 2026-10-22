@@ -1,7 +1,5 @@
 namespace Demo;
 
-import Sharp.Math.Math;
-
 class MathCalls
 {
     public static float ceil(float x) => Math.ceil(x);

@@ -2,6 +2,7 @@ namespace Demo;
 
 import Lib;
 import Lib.Probe;
+import Sharp.IO.Files;
 
 public class Import
 {

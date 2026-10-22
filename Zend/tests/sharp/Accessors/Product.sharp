@@ -1,7 +1,6 @@
 namespace Store;
 
 import InvalidArgumentException;
-import Sharp.Math.Math;
 
 class Product
 {

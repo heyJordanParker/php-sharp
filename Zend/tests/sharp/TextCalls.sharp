@@ -1,12 +1,10 @@
 namespace Demo;
 
-import Sharp.Text.Text;
-
 class TextCalls
 {
-    public static string slug(string title) => Text.slug(title);
+    public static string slug(string title) => title.slug();
 
-    public static string fromByte(int byte) => Text.fromByte(byte);
+    public static string fromByte(int byte) => byte.toByteString();
 
     public static List<string> fields(string line) => line.parseCsv();
 

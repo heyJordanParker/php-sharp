@@ -5,7 +5,6 @@ A Map or a Set serializes and reads back as itself, alone or inside a List, a st
 require __DIR__ . '/harness/fixture.inc';
 require __DIR__ . '/harness/Probe.inc';
 fixture('Queued');
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Data/PhpSerializer.sharp';
 require __DIR__ . '/table_serialize.inc';
 
 run_rows();
@@ -38,8 +37,6 @@ a wrong key in a struct field: TypeError: Cannot assign Sharp.Map to property Qu
 a wrong element in a Set field: TypeError: Cannot assign Sharp.Set to property Queued\Crate::$speeds of type Set<Queued.Speed>: [0] expected Queued.Speed, got int 5
 a wrong value inside a List<Map<string, int>> field: TypeError: Cannot assign array to property Queued\Crate::$batches of type List<Map<string, int>>: [0]["tea"] expected int, got string 'x'
 a generic class field: TypeError: Cannot assign Sharp.Map to property Queued\Box::$held of type Map<string, int>: ["tea"] expected int, got string 'x'
-Sharp.Data.PhpSerializer, which allows no class by default: ['tea' => 2, 'jam' => 5] Sharp\Map
-PhpSerializer allowing a class by its PHP# name: Queued\Crate([3 => 'c'], [Queued\Speed.Express], [['tea' => 1]]) Sharp\Map Sharp\Set array
 allowed_classes => false, which still checks each key's class: [Set['vip', 'new'], Map[__PHP_Incomplete_Class('Queued\\Parcel', 250, Queued\Speed.Express): 'small']]
 __unserialize on a Map that holds entries: Error: A Sharp\Map that holds entries is written through its index, which copies a shared one first
 a second constructor call on a Set that holds entries: Error: A Sharp\Set that holds entries is written through its index, which copies a shared one first

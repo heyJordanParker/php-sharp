@@ -1,7 +1,6 @@
 <?php declare(strict_types=1); namespace Store;
 
 use InvalidArgumentException;
-use Sharp\Math\Math;
 
 class Product
 {
@@ -19,7 +18,7 @@ class Product
             $this->price = $value;
         }
     }
-    public private(set) int $stock = 0 { set { $this->stock = Math::max(0, $value); } }
+    public private(set) int $stock = 0 { set { $this->stock = \Sharp\Math::max(0, $value); } }
     public array $tags = []
     {
         get => $this->tags;

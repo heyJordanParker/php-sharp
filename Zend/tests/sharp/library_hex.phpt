@@ -1,8 +1,8 @@
 --TEST--
-A PHP# class calls every method of Sharp.Data.Hex, and Hex.decode throws ValueError on text that is not hexadecimal, with no warning
+A PHP# class calls every method of Sharp.Encoding.Hex, and Hex.decode throws ValueError on text that is not hexadecimal, with no warning
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Data/Hex.sharp';
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Hex.sharp';
 require __DIR__ . '/HexCalls.sharp';
 
 use Demo\HexCalls;

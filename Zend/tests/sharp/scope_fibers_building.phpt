@@ -4,17 +4,23 @@ Each fiber builds its own services: a fiber suspended in the middle of a build l
 <?php
 require __DIR__ . '/Container.inc';
 
-// Each class's constructor suspends the fiber that builds it, as a constructor that waits on I/O does.
-$waits = fn (string $class) => "namespace App.Shop.Waits;\n\nimport Fiber;\n\npublic class $class\n{\n"
-    . "    public $class()\n    {\n        if (Fiber.getCurrent() != null) {\n            Fiber.suspend();\n        }\n    }\n}\n";
-container_project('scope-fibers-building', [
+// Each class's constructor suspends the fiber that builds it, as a constructor that waits on I/O does, through the
+// project's plain PHP class that reaches PHP's fibers.
+$waits = fn (string $class) => "namespace App.Shop.Waits;\n\npublic class $class\n{\n"
+    . "    public $class()\n    {\n        Pause.here();\n    }\n}\n";
+$root = container_project('scope-fibers-building', [
+    'mago.toml' => "[source]\npaths = [\".\"]\nextensions = [\"sharp\", \"php\"]\n",
     'app/Shop/Waits/Module.sharp' => "namespace App.Shop.Waits;\n\nmodule\n{\n"
         . "    scoped Visit = Visit;\n    transient Brief = Brief;\n    singleton Once = Once;\n    scoped Stuck = Stuck;\n}\n",
+    'app/Shop/Waits/Pause.php' => "<?php\n\nnamespace App\\Shop\\Waits;\n\nfinal class Pause\n{\n"
+        . "    public static function here(): void\n    {\n        if (\\Fiber::getCurrent() !== null) {\n"
+        . "            \\Fiber::suspend();\n        }\n    }\n}\n",
     'app/Shop/Waits/Visit.sharp' => $waits('Visit'),
     'app/Shop/Waits/Brief.sharp' => $waits('Brief'),
     'app/Shop/Waits/Once.sharp' => $waits('Once'),
     'app/Shop/Waits/Stuck.sharp' => $waits('Stuck'),
 ]);
+require "$root/app/Shop/Waits/Pause.php";
 $container = new Sharp\Container();
 $finish = function (Fiber $fiber): array {
     while (!$fiber->isTerminated()) {

@@ -4,7 +4,7 @@ PHP# Files reads and writes whole files and folders, returns null for a missing 
 <?php
 require __DIR__ . '/effect_classes.inc';
 
-$files = new Sharp\Files();
+$files = new Sharp\IO\Files();
 $folder = sys_get_temp_dir() . '/sharp-effect-files-' . getmypid();
 $files->createDirectory("$folder/nested/deeper");
 $files->createDirectory("$folder/nested/deeper");
