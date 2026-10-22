@@ -66,7 +66,9 @@ jobs:
         run: composer install
 
       - name: Install just
-        uses: extractions/setup-just@v4
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
 
       - name: Install elan and Lean
         uses: ./.github/actions/setup-lean
