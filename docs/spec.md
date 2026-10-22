@@ -5158,6 +5158,8 @@ public class Refunds
 }
 ```
 
+**A law's claim and its `when` condition compute ints exactly,** since a law never runs. `Money.total(a) + Money.total(b)` in a claim never overflows, so a sum law holds for a list's rest wherever the code it calls runs. The code a law calls throws `ArithmeticError` where it overflows at runtime (section 24), and a law holds wherever its code throws.
+
 **A case the checker cannot close is the error `law-unproven`** on the law. It names the case's conditions and the claim still to show, in PHP#, and a `help` line names a call of the law itself on a smaller value when the case makes none:
 
 <!-- example law-unproven -->
