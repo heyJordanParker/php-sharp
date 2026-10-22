@@ -800,11 +800,11 @@ public class Receipt
     public string label(string name) => name.trim();                        // compiles
     public int larger(int a, int b) => Math.max(a, b);                      // compiles
     public string body(Map<string, Any> payload) => Json.encode(payload);   // compiles
-    public string raw(string name) => trim(name);                           // compile error: write name.trim()
+    public string raw(string name) => trim(name);                           // compile error: no function trim exists
 }
 ```
 
-- **PHP is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation. Calling a built-in function by its bare name from `.sharp` code is a compile error, which names the standard library's member for it when there is one. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
+- **PHP is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation. A bare call names a local or nothing, so calling a built-in function by its bare name from `.sharp` code is the compile error a misspelled name gets. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
 - **A built-in the standard library has no member for is called from a plain PHP class of the project,** which `.sharp` code calls as it calls any plain PHP class (section 23).
 - **PHP's constants are reached the same way,** as `Int.MAX` gives the largest `int`. A bare `CURLOPT_TIMEOUT` is a compile error, because a bare uppercase name is always the code's own constant.
 
@@ -828,9 +828,9 @@ public class Prune
 
 echo "Pruned";                                               // parse error
 print "Pruned";                                              // parse error
-printf("Pruned");                                            // compile error: write console.write(text)
-public void stop() { exit(1); }                              // compile error: write process.exit(1)
-public void fail() { die("Prune failed"); }                  // compile error: write the message with console.writeError, then process.exit(1)
+printf("Pruned");                                            // compile error: no function printf exists
+public void stop() { exit(1); }                              // compile error: no function exit exists
+public void fail() { die("Prune failed"); }                  // compile error: no function die exists
 ```
 
 - Exiting skips every `finally` block, as Java's `System.exit` and C#'s `Environment.Exit` do.
@@ -2902,7 +2902,7 @@ A plain PHP file keeps PHP's own interpolation. It converts an object of a class
 "a,b".split("");                          // throws: "`split` needs a delimiter, and it is empty."
 "a:b".split(":", -1);                     // throws: "`split` takes a limit of 0 or more, and it is negative."
 "hello".contains(1);                      // compile error: contains takes a string
-str_contains("hello", "ell");             // compile error: write "hello".contains(…)
+str_contains("hello", "ell");             // compile error: no function str_contains exists
 ```
 
 PHP's backtick shell execution is removed, and so is `shell_exec()`. A program runs through `Process.run(program, arguments)` (section 29), which takes its arguments as a list, so no shell reads them.
@@ -4087,7 +4087,7 @@ import Vendor.Pdf;
 public class Printer
 {
     public string print(string html) => Pdf.render(html);     // compiles: the function is called through its namespace
-    public string draft(string html) => render(html);         // compile error: call it through its namespace, as in Pdf.render(html)
+    public string draft(string html) => render(html);         // compile error: no function render exists
 }
 ```
 
@@ -4124,12 +4124,12 @@ import Illuminate.Foundation;
 public class CartsController
 {
     public void missing() => Foundation.abort(404, "Cart not found.");   // compiles: abort belongs to Illuminate.Foundation, the namespace of the class beside it
-    public void bare() => abort(404);                                    // compile error: call it through its namespace, as in Foundation.abort(…)
+    public void bare() => abort(404);                                    // compile error: no function abort exists
 }
 ```
 
-- **A folder whose classes have several namespaces gives its functions each of them,** and the error for a bare call names the first in alphabetical order.
-- **A function with no class of the library beside it belongs to no namespace PHP# code imports,** so a call of it is a compile error that says to call it from a plain PHP class.
+- **A folder whose classes have several namespaces gives its functions each of them,** and a message that names one of the functions writes it through the first in alphabetical order.
+- **A function with no class of the library beside it belongs to no namespace PHP# code imports,** so PHP# code never names it, as it never names PHP's own built-ins.
 - **An import of that namespace is an import like any other,** so a module's `imports` list holds it to the list (section 32).
 - **`global` is an ordinary name.** `global.levenshtein(a, b)` is a compile error that says `global` names no class, and no namespace the file imports, as `gadget.levenshtein(a, b)` is.
 
@@ -4152,7 +4152,7 @@ import App.Support.Words;
 public class Search
 {
     public int closeness(string query, string title) => Words.distance(query, title);   // compiles: the project's plain PHP class calls levenshtein
-    public int bare(string query, string title) => levenshtein(query, title);           // compile error: levenshtein belongs to no namespace PHP# code imports
+    public int bare(string query, string title) => levenshtein(query, title);           // compile error: no function levenshtein exists
 }
 ```
 <!-- run built-in-through-a-class
@@ -4180,7 +4180,7 @@ public class Layout
 {
     public int largest() => Int.MAX;                              // compiles: the standard library gives the int bounds
     public int dpi() => Pdf.DEFAULT_DPI;                          // compiles: the library's constant is read through its namespace
-    public int bare() => DEFAULT_DPI;                             // compile error: read it through its namespace, as in Pdf.DEFAULT_DPI
+    public int bare() => DEFAULT_DPI;                             // compile error: no constant DEFAULT_DPI exists
 }
 ```
 
@@ -5398,7 +5398,7 @@ import Vendor.Pdf;
 
 extern Pdf.render uses Files;        // compiles: Pdf.render(html) has the effect Files
 extern Foundation.now uses Clock;    // compiles: Foundation.now() has the effect Clock
-extern now uses Clock;               // compile error: name the function through its namespace, as in Foundation.now
+extern now uses Clock;               // compile error: no function now exists
 ```
 
 - **Each class, method or function has at most one `extern` declaration in the whole project.** A second one is a compile error, as declaring a class twice is.
@@ -5421,9 +5421,9 @@ extern now uses Clock;               // compile error: name the function through
 - `Mail` replaces `mail()`.
 - `Environment` replaces `getenv()` and PHP's other environment functions.
 
-Calling a replaced function directly is a compile error that names the method (section 8). **A PHP built-in class the standard library replaces, such as `PDO` or `DateTimeImmutable`, may be imported and named** to hold, pass, return and read what a library gives. Creating one, with `new` or a static factory such as `DateTimeImmutable.createFromFormat(…)`, is a compile error that names the standard library member to use instead, such as `clock.now()` on the `Clock` a constructor takes, or `database.query(…)` on the `Database`:
+A bare call of a replaced function names no function (section 8). **A PHP built-in class, such as `PDO` or `DateTimeImmutable`, is a plain PHP class:** code imports and names it to hold, pass, return and read what a library gives, and creating one has the effects its `extern` lists, as creating a `DateTimeImmutable` reads the clock:
 
-<!-- example wrapped-class -->
+<!-- example built-in-classes -->
 ```csharp
 // app/Shop/Stamp.sharp
 namespace App.Shop;
@@ -5433,7 +5433,7 @@ import DateTimeImmutable;
 public class Stamp
 {
     public string year(DateTimeImmutable moment) => moment.format("Y");      // compiles: code holds and reads one a library gives
-    public DateTimeImmutable now() => new DateTimeImmutable();               // compile error: read the time with clock.now() on the Clock your constructor takes
+    public DateTimeImmutable now() => new DateTimeImmutable();               // compiles: has the effect Clock
 }
 ```
 
