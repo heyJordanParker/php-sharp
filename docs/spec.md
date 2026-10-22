@@ -5103,7 +5103,7 @@ public class Money
 
 **A law calls itself only on a smaller value:** a list's rest from a list pattern the body matched, or an int one step towards a bound the body tested, as a method's recursion does (below). Any other call of itself, and two laws that call each other in a cycle, is the compile error "a law calls itself only on a smaller value".
 
-<!-- example law-recursion: alone 27,41 -->
+<!-- example law-recursion -->
 ```csharp
 // app/Shared/Money.sharp
 namespace App.Shared;
@@ -5145,6 +5145,16 @@ public class Money
             default => { return; },
         }
     }
+}
+```
+
+<!-- example law-smaller-value -->
+```csharp
+// app/Shared/Money.sharp
+namespace App.Shared;
+
+public class Money
+{
     law broken(int x) => x == x + 1 { Money.broken(x); }   // compile error: a law calls itself only on a smaller value
 }
 ```
