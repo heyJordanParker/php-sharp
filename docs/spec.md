@@ -5103,7 +5103,7 @@ public class Money
 
 **A law calls itself only on a smaller value:** a list's rest from a list pattern the body matched, or an int one step towards a bound the body tested, as a method's recursion does (below). Any other call of itself, and two laws that call each other in a cycle, is the compile error "a law calls itself only on a smaller value".
 
-<!-- example law-recursion -->
+<!-- example law-recursion: alone 27,41 -->
 ```csharp
 // app/Shared/Money.sharp
 namespace App.Shared;
@@ -5119,6 +5119,12 @@ public class Money
         default => total,
     };
 
+    public static int total(List<Money> items) => match (items) {
+        [] => 0,
+        [Money first, ...List<Money> rest] => first.amount + Money.total(rest),
+        default => 0,
+    };
+
     law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;
     law sumKeepsCurrency(Money total, List<Money> items) => Money.sum(total, items).currency == total.currency
     {
@@ -5128,6 +5134,14 @@ public class Money
                 Money.sumKeepsCurrency(total.add(first), rest);   // the law for the list's rest
                 Money.addKeepsCurrency(total, first);
             },
+            default => { return; },
+        }
+    }
+    law totalJoins(List<Money> a, List<Money> b) => Money.total([...a, ...b]) == Money.total(a) + Money.total(b)
+    {
+        match (a) {
+            [] => { return; },
+            [Money, ...List<Money> rest] => { Money.totalJoins(rest, b); },   // the law for a's rest
             default => { return; },
         }
     }
