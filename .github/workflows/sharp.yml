@@ -280,9 +280,9 @@ jobs:
       BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie-slim
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
       EXTENSIONS: bcmath exif gd imagick intl pcntl pdo_pgsql pgsql redis zip
-      # The same extensions, with imagick and redis built from their release tags on GitHub, because pecl.php.net
-      # outages failed this job.
-      INSTALL: bcmath exif gd Imagick/imagick@3.8.1 intl pcntl pdo_pgsql pgsql phpredis/phpredis@6.3.0 zip
+      # The same extensions, with imagick and redis built from the release tags the image adds from GitHub, because
+      # pecl.php.net outages failed this job.
+      INSTALL: bcmath exif gd /usr/src/imagick intl pcntl pdo_pgsql pgsql /usr/src/phpredis zip
     steps:
       - name: git checkout
         uses: actions/checkout@v6
@@ -333,6 +333,9 @@ jobs:
           docker build --build-arg INSTALL --tag php-sharp-extensions - <<'DOCKERFILE'
           FROM php-sharp
           COPY --from=ghcr.io/mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /usr/local/bin/
+          # A git source brings phpredis's liblzf submodule, which GitHub's tag archive leaves out.
+          ADD https://github.com/Imagick/imagick.git#3.8.1 /usr/src/imagick
+          ADD https://github.com/phpredis/phpredis.git#6.3.0 /usr/src/phpredis
           ARG INSTALL
           RUN install-php-extensions $INSTALL
           RUN apt-get update && apt-get install -y --no-install-recommends rustup && apt-get dist-clean
