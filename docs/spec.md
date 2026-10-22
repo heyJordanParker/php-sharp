@@ -3343,6 +3343,8 @@ match (result) {
 
 - **On an enum,** arms that handle every case need no `default`. A missed case is a compile error that names it.
 - **On a sealed interface,** the same holds for its implementers (section 20.1).
+- **On a List,** arms that handle every list need no `default`. A list pattern without a rest handles lists of its number of items, and one with a rest every longer list too. Each element is covered by the same rules as a `match` on one value of the element type, as in Rust, so `[Circle c, ...]` and `[Square s, ...]` together handle every list of a sealed `Shape` with a first item. A typed rest must take any `List` of the element type, as `...List<Shape> rest` does. A missed list is a compile error that names it in plain words.
+- **On a nullable enum, sealed interface or List,** such as a `Status?` or a `List<Money>?`, the arms handle `null` too.
 - **On any other value,** `match` must have a `default` arm.
 - **An arm with `when`** does not count toward covering a case.
 
@@ -3358,6 +3360,71 @@ string label = match (status) {
 string size = match (n) {
     < 10 => "small",                   // compile error: a match on an int needs a default arm
 };
+```
+
+<!-- example match-list-coverage -->
+```csharp
+// app/Shared/Money.sharp
+namespace App.Shared;
+
+public class Money
+{
+    public Money(public int amount { get; }, public string currency { get; }) { }
+
+    public static int total(List<Money> items) => match (items) {
+        [] => 0,
+        [Money first, ...List<Money> rest] => first.amount + Money.total(rest),
+    };                                 // compiles: every length is handled
+
+    public static string label(List<Money> items) => match (items) {
+        [] => "empty",
+        [Money only] => "one",         // compile error: This `match` misses lists of 2 or more items.
+    };
+}
+```
+
+<!-- example match-list-sealed -->
+```csharp
+// app/Drawing/Shape.sharp
+namespace App.Drawing;
+
+public sealed interface Shape { }
+```
+
+<!-- example match-list-sealed -->
+```csharp
+// app/Drawing/Circle.sharp
+namespace App.Drawing;
+
+public class Circle : Shape { }
+```
+
+<!-- example match-list-sealed -->
+```csharp
+// app/Drawing/Square.sharp
+namespace App.Drawing;
+
+public class Square : Shape { }
+```
+
+<!-- example match-list-sealed -->
+```csharp
+// app/Drawing/Drawing.sharp
+namespace App.Drawing;
+
+public class Drawing
+{
+    public static int corners(List<Shape> shapes) => match (shapes) {
+        [] => 0,
+        [Circle c, ...List<Shape> rest] => Drawing.corners(rest),
+        [Square s, ...List<Shape> rest] => 4 + Drawing.corners(rest),
+    };                                 // compiles: every first item is handled
+
+    public static int circles(List<Shape> shapes) => match (shapes) {
+        [] => 0,
+        [Circle c, ...List<Shape> rest] => 1 + Drawing.circles(rest), // compile error: This `match` misses lists whose first item is a `Square`.
+    };
+}
 ```
 
 **Patterns:**
@@ -5116,7 +5183,6 @@ public class Money
     public static Money sum(Money total, List<Money> items) => match (items) {
         [] => total,
         [Money first, ...List<Money> rest] => Money.sum(total.add(first), rest),
-        default => total,
     };
 
     public static int total(List<Money> items) => match (items) {
@@ -5134,7 +5200,6 @@ public class Money
                 Money.sumKeepsCurrency(total.add(first), rest);   // the law for the list's rest
                 Money.addKeepsCurrency(total, first);
             },
-            default => { return; },
         }
     }
     law totalJoins(List<Money> a, List<Money> b) => Money.total([...a, ...b]) == Money.total(a) + Money.total(b)
