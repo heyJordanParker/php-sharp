@@ -1,6 +1,5 @@
 namespace Observed;
 
-import Lib.Probe;
 import Lib.Witness;
 import Lib.Words;
 
@@ -9,7 +8,7 @@ public class Account
     public int balance { get; set; willSet => Witness.say(`will ${value} from ${field}\n`); didSet => Witness.say(`did ${field}\n`); } = 1;
     public string name { get; set { Witness.say(`set [${value}]\n`); field = value.trim(); } didSet => Witness.say(`named ${field}\n`); } = "  start  ";
     public string note { get; set { Witness.say("set note\n"); field = value; } } = Words.repeated(" ", 2);
-    public static int opened { get; set; didSet => Witness.say(`opened ${field}\n`); } = Probe.length("ab");
+    public static int opened { get; set; didSet => Witness.say(`opened ${field}\n`); } = Words.distance("ab", "");
 
     public Account(string name)
     {

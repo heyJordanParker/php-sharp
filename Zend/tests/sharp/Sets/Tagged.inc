@@ -33,9 +33,9 @@ class Tagged
 
         return [
             ((object) ((object) $tags)->filter(fn ($tag) => $tag !== "vip"))->toList(),
-            ((object) $tags)->map(fn ($tag) => Probe::length($tag)),
+            ((object) $tags)->map(fn ($tag) => \mb_strlen($tag, "UTF-8")),
             ((object) $tags)->any(fn ($tag) => $tag === "5"),
-            ((object) $tags)->first(fn ($tag) => Probe::length($tag) > 2),
+            ((object) $tags)->first(fn ($tag) => \mb_strlen($tag, "UTF-8") > 2),
             ((object) $tags)->sortedBy(fn ($tag) => $tag),
             Probe::join(",", \Sharp\Internal\arrayOf($tags)),
         ];

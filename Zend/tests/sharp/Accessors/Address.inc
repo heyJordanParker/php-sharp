@@ -5,7 +5,7 @@ use Lib\Words;
 class Address
 {
     protected string $region { get => \mb_strtoupper($this->region, 'UTF-8'); }
-    public string $city { set { $this->city = Words::capitalized(\trim($value)); } }
+    public string $city { set { $this->city = Words::capitalized(\mb_trim($value)); } }
 
     public function __construct(string $city, string $region)
     {

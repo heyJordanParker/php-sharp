@@ -5,11 +5,6 @@ namespace Lib;
 /** A project's plain PHP class that tells a test what PHP sees of the values PHP# code hands it. */
 final class Probe
 {
-    public static function length(string $text): int
-    {
-        return strlen($text);
-    }
-
     public static function className(object $value): string
     {
         return get_class($value);

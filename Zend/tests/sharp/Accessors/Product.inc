@@ -5,7 +5,7 @@ use InvalidArgumentException;
 class Product
 {
     public string $sku = "";
-    public string $name = "" { get => $this->name; set { $this->name = \trim($value); } }
+    public string $name = "" { get => $this->name; set { $this->name = \mb_trim($value); } }
     public int $price = 0
     {
 

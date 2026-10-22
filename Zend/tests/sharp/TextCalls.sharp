@@ -25,4 +25,40 @@ class TextCalls
     public static List<string> splitAtMost(string text, string delimiter, int limit) => text.split(delimiter, limit);
 
     public static string join(List<string> parts, string separator) => parts.join(separator);
+
+    public static int length(string text) => text.length();
+
+    public static string substring(string text, int start) => text.substring(start);
+
+    public static string between(string text, int start, int end) => text.substring(start, end);
+
+    public static int? indexOf(string text, string other, int from) => text.indexOf(other, from);
+
+    public static int? lastIndexOf(string text, string other) => text.lastIndexOf(other);
+
+    public static string trimmed(string text) => text.trim();
+
+    public static string trimmedStart(string text) => text.trimStart();
+
+    public static string trimmedEnd(string text) => text.trimEnd();
+
+    public static string withoutPrefix(string text, string prefix) => text.removePrefix(prefix);
+
+    public static string withoutSuffix(string text, string suffix) => text.removeSuffix(suffix);
+
+    public static string padStart(string text, int length, string padding) => text.padStart(length, padding);
+
+    public static string padEnd(string text, int length) => text.padEnd(length);
+
+    public static string capitalized(string text) => text.capitalized();
+
+    public static string decapitalized(string text) => text.decapitalized();
+
+    public static string repeat(string text, int times) => text.repeat(times);
+
+    public static List<string> lines(string text) => text.lines();
+
+    public static List<string> characters(string text) => text.characters();
+
+    public static List<int> codePoints(string text) => text.codePoints();
 }

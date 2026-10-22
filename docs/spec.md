@@ -1711,10 +1711,16 @@ lines.contains(line);
 lines.groupBy(l => l.product.id);
 lines.associateBy(l => l.id);
 lines.sortedBy(l => l.amount);
+lines.all(l => l.amount > 0);
+lines.fold(0, (total, l) => total + l.amount);
+lines.reversed();
+lines.distinct();
+lines.slice(1, 3);
+lines.chunked(2);
 ```
 
 - Methods that read return a new collection.
-- `first` throws `OutOfRangeException` when nothing matches, as a bare index read does.
+- `first` throws `OutOfRangeException` when nothing matches, as a bare index read does, and so does a `slice` range outside the list. A `chunked` size below 1 throws `ValueError`.
 - A `sortedBy` key of type `T` or `T?` compiles exactly when `<` compiles on two non-null `T` values. The nullable part is allowed, and it sorts first.
 - A method takes on the effects of each function it is given (section 29), so `lines.map(l => l.name)` is pure.
 - Methods that change a collection change it in place:
@@ -2884,10 +2890,23 @@ A plain PHP file keeps PHP's own interpolation. It converts an object of a class
 
 **Plain strings:** `"…"` and `'…'` never interpolate, so braces and `$` inside them are literal.
 
-**Text methods:** a `string` has Kotlin's text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so a case change reaches every letter. `replace` replaces every match, as Kotlin's does. `split` keeps the empty text after a trailing delimiter, and takes Kotlin's `limit`: 0, its default, gives every part, and a positive limit gives at most that many, the last holding the rest. Empty text to replace, an empty delimiter and a negative limit each throw `ValueError`:
+**Text methods:** a `string` has Kotlin's text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so `length` counts characters and a case change reaches every letter. `substring`, `indexOf` and `lastIndexOf` count in characters, a search that finds nothing gives `null`, and a range or a start outside the text throws `OutOfRangeException`. `trim`, `trimStart` and `trimEnd` remove whitespace, and `removePrefix` and `removeSuffix` remove their text once when the text starts or ends with it. `replace` replaces every match, as Kotlin's does. `split` keeps the empty text after a trailing delimiter, and takes Kotlin's `limit`: 0, its default, gives every part, and a positive limit gives at most that many, the last holding the rest. `lines` splits at `"\r\n"`, `"\n"` and `"\r"`. Empty text to replace, an empty delimiter, a negative limit, empty padding and a negative count each throw `ValueError`:
 
 <!-- example text-methods: statements -->
 ```csharp
+"école".length();                         // 5
+"école".substring(1, 3);                  // "co"
+"banana".indexOf("a", 2);                 // 3
+"banana".indexOf("x");                    // null
+"banana".lastIndexOf("a");                // 5
+"/path/".removeSuffix("/");               // "/path"
+"7".padStart(3, "0");                     // "007"
+"école".capitalized();                    // "École"
+"ab".repeat(3);                           // "ababab"
+"a\nb".lines();                           // ["a", "b"]
+"éa".characters();                        // ["é", "a"]
+"éa".codePoints();                        // [233, 97]
+"abc".substring(4);                       // throws OutOfRangeException
 "hello".contains("ell");                  // true
 "hello".contains("xyz");                  // false
 "ÉCOLE".lowercase();                      // "école"
@@ -4528,8 +4547,9 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 
 - `(int)` and `(float)` convert between `int` and `float`. `(string)` converts a number to a `string`.
 - `(int)` truncates a `float` toward zero. A `float` too large for an `int`, or NaN, throws `ArithmeticError`.
-- A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take a `string`, as C#'s `int.Parse(string)` and Kotlin's `String.toInt()` do, and throw on a string that holds anything but a number, such as `"abc"` or `"12abc"`. Spaces around the number count too, as in Rust and Kotlin: `Int.parse(" 12 ")` throws, and its error says to call `Text.trim()` first. An `Any?` is checked with `as string` first.
+- A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take a `string`, as C#'s `int.Parse(string)` and Kotlin's `String.toInt()` do, and throw on a string that holds anything but a number, such as `"abc"` or `"12abc"`. Spaces around the number count too, as in Rust and Kotlin: `Int.parse(" 12 ")` throws, and its error says to call `trim()` first. An `Any?` is checked with `as string` first.
 - `Int.tryParse(s)` and `Float.tryParse(s)` take a `string` too, and give null where `parse` throws.
+- An `int` and a `float` have Kotlin's and Rust's number methods, from the standard library's extensions: `abs()`, `clamp(min, max)` and `format()`, which groups the digits in thousands. An `int` has `toHex()`, and a `float` has `round(decimals)`, `floor()`, `ceil()` and `isFinite()`, as in `price.round(2)` and `total.format()`. `abs()` of the smallest `int` throws `ArithmeticError`, and a `clamp` whose minimum is above its maximum throws `ValueError`.
 - A class or an interface narrows only with `as`, which gives null, or with `as … ?? throw` (section 21).
 - PHP# has no user-defined conversion operators, such as C#'s `implicit operator`. A type converts only through a property or method it declares, such as `username.value`.
 - `(bool)`, `(array)` and `(object)` do not exist. Conditions are `bool` (section 21), so a comparison such as `request.input("flag") == "1"` replaces `(bool)`. `(array)` and `(object)` are compile errors that name their replacements, shown below.

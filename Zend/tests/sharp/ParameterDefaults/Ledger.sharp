@@ -1,6 +1,5 @@
 namespace ParameterDefaults;
 
-import Lib.Probe;
 import Lib.Words;
 import LogicException;
 
@@ -14,7 +13,7 @@ public class Ledger
 
     public int sized(int size = new Stamp(8).value) => size;
 
-    public int counted(string text = Words.repeated("ab", 2)) => Probe.length(text);
+    public int counted(string text = Words.repeated("ab", 2)) => text.length();
 
     public int issued(int count = Stamp.seeds) => count;
 
