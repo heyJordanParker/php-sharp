@@ -1,5 +1,5 @@
 --TEST--
-PHP# calls a global function a library or the app declares, and a namespace function of the same name never replaces it. It reads a library's constant and PHP's own through their namespaces
+PHP# calls a function a library declares in PHP's root namespace through the namespace of the library's classes, and a namespace function of the same name never replaces it. It reads a library's constant through its namespace, and PHP's own through the standard library
 --FILE--
 <?php
 
@@ -12,7 +12,7 @@ namespace Demo {
 
 namespace {
     require __DIR__ . '/../../../sharp/composer/library/Sharp/Int.sharp';
-    require __DIR__ . '/harness/Functions.inc';
+    require __DIR__ . '/harness/Shipping/Functions.inc';
     require __DIR__ . '/Interop.sharp';
 
     echo Demo\Interop::shipping(1250), "\n";

@@ -15,6 +15,7 @@ if (ini_get('opcache.jit') === false) die('skip JIT is not available');
 <?php
 echo 'jit ', opcache_get_status()['jit']['on'] ? 'on' : 'off', "\n";
 require __DIR__ . '/harness/Arrays.inc';
+require __DIR__ . '/harness/Probe.inc';
 require __DIR__ . '/harness/fixture.inc';
 fixture('Crossings');
 require __DIR__ . '/collection_readers.inc';

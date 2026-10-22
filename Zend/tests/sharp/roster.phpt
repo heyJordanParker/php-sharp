@@ -2,6 +2,7 @@
 A PHP# Map keyed by a backed enum reads and deletes by case, and filters, maps and sorts with lambdas
 --FILE--
 <?php
+require __DIR__ . '/harness/Probe.inc';
 require __DIR__ . '/harness/Standing.inc';
 require __DIR__ . '/Roster.sharp';
 

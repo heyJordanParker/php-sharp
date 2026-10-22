@@ -1,6 +1,7 @@
 <?php
 
 require __DIR__ . '/harness/Ledger.inc';
+require __DIR__ . '/harness/Probe.inc';
 require __DIR__ . '/Cashier.sharp';
 
 // Each receipt runs twice, so the JIT variants compile the methods and closures before the second run.

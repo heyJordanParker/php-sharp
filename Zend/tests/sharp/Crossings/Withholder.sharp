@@ -1,6 +1,7 @@
 namespace Demo;
 
 import Hiding;
+import Lib.Probe;
 
 public class Withholder : Hiding
 {
@@ -10,5 +11,5 @@ public class Withholder : Hiding
         set;
     } = ["token"];
 
-    public string hiddenText() => global.implode(",", this.hidden);
+    public string hiddenText() => Probe.join(",", this.hidden);
 }

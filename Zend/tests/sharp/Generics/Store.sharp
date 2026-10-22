@@ -1,5 +1,7 @@
 namespace Paging;
 
+import Lib.Probe;
+
 public class Store
 {
 
@@ -29,9 +31,9 @@ public class Store
 
     public string share<TItem : DatabaseEntity & Shareable>(TItem item) => item.link();
 
-    public void save(Class<DatabaseEntity> type, DatabaseEntity entity) => this.saved[global.sprintf("%s#%d", type, entity.id)] = entity;
+    public void save(Class<DatabaseEntity> type, DatabaseEntity entity) => this.saved[Probe.named(type) + "#" + (string) entity.id] = entity;
 
-    public DatabaseEntity? load(Class<DatabaseEntity> type, int id) => this.saved[global.sprintf("%s#%d", type, id)] ?? null;
+    public DatabaseEntity? load(Class<DatabaseEntity> type, int id) => this.saved[Probe.named(type) + "#" + (string) id] ?? null;
 
     public Class<DatabaseEntity> kind(string name) => this.kinds[name] ?? typeof(Order);
 }

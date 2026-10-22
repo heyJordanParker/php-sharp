@@ -1,10 +1,10 @@
 --TEST--
-The engine refuses a .sharp file once the plain PHP file that declares a constant it reads through its namespace changes, as a clean compile refuses it: the library's constant deleted or given another type, and a constant of PHP's root namespace given another type
+The engine refuses a .sharp file once the plain PHP file that declares a constant it reads through its namespace changes, as a clean compile refuses it: the library's constant deleted or given another type, and a constant the library declares in PHP's root namespace beside its classes given another type
 --FILE--
 <?php
 require __DIR__ . '/project.inc';
 
-const PDF = "<?php\n\nnamespace Vendor\\Pdf;\n\nconst DEFAULT_DPI = 300;\n";
+const PDF = "<?php\n\nnamespace Vendor\\Pdf;\n\nconst DEFAULT_DPI = 300;\n\nfinal class Document\n{\n}\n";
 const VERSION = "<?php\n\nconst APP_VERSION = 3;\n";
 
 // A clean compile of the project as it stands, which refuses Report.sharp after each edit below.
@@ -31,7 +31,7 @@ class Report
 {
     public static int dpi() => Pdf.DEFAULT_DPI;
 
-    public static int version() => global.APP_VERSION;
+    public static int version() => Pdf.APP_VERSION;
 }
 
 SHARP,
@@ -43,7 +43,7 @@ foreach ([
     ['Pdf.php', PDF, str_replace('300', '"300"', PDF)],
     ['version.php', VERSION, str_replace('3', '"3"', VERSION)],
 ] as [$file, $before, $after]) {
-    file_put_contents("$root/$file", $after === '' ? "<?php\n\nnamespace Vendor\\Pdf;\n" : $after);
+    file_put_contents("$root/$file", $after === '' ? str_replace("const DEFAULT_DPI = 300;\n\n", '', PDF) : $after);
     refusal("$root/Report.sharp");
     clean_compile($root);
     file_put_contents("$root/$file", $before);

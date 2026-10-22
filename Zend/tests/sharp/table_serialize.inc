@@ -109,7 +109,8 @@ function rows(): array
         'a read-back in a fresh process' => function () {
             $payload = serialize([new Sharp\Map(['tea', 2, 'jam', 5]), Payloads::bySpeed(), Payloads::shipment(), Payloads::ledger(),
                 new Sharp\Set(['vip', 'new']), Payloads::byParcel(), Payloads::byCourier()]);
-            $worker = 'require ' . var_export(__DIR__ . '/harness/fixture.inc', true) . '; require ' . var_export(__FILE__, true) . ';'
+            $worker = 'require ' . var_export(__DIR__ . '/harness/fixture.inc', true) . '; require '
+                . var_export(__DIR__ . '/harness/Probe.inc', true) . '; require ' . var_export(__FILE__, true) . ';'
                 . ' fixture("Queued"); echo read_payload(base64_decode($argv[1]));';
             return shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n -r ' . escapeshellarg($worker) . ' '
                 . escapeshellarg(base64_encode($payload)) . ' 2>&1');

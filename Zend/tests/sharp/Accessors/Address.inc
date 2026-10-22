@@ -1,9 +1,11 @@
 <?php declare(strict_types=1); namespace Store;
 
+use Lib\Words;
+
 class Address
 {
     protected string $region { get => \mb_strtoupper($this->region, 'UTF-8'); }
-    public string $city { set { $this->city = \ucfirst(\trim($value)); } }
+    public string $city { set { $this->city = Words::capitalized(\trim($value)); } }
 
     public function __construct(string $city, string $region)
     {
@@ -13,6 +15,6 @@ class Address
 
     public function label(): string
     {
-        return \sprintf("%s, %s", $this->city, $this->region);
+        return "{$this->city}, {$this->region}";
     }
 }

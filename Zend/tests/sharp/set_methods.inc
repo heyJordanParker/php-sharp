@@ -2,6 +2,7 @@
 
 namespace {
     require __DIR__ . '/attempt.inc';
+    require __DIR__ . '/harness/Probe.inc';
     require __DIR__ . '/harness/Standing.inc';
     require __DIR__ . '/harness/fixture.inc';
     fixture('Sets');

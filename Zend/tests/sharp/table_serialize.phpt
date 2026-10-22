@@ -3,6 +3,7 @@ A Map or a Set serializes and reads back as itself, alone or inside a List, a st
 --FILE--
 <?php
 require __DIR__ . '/harness/fixture.inc';
+require __DIR__ . '/harness/Probe.inc';
 fixture('Queued');
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Data/PhpSerializer.sharp';
 require __DIR__ . '/table_serialize.inc';

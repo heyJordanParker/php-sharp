@@ -1,6 +1,7 @@
 <?php
 require __DIR__ . '/type_arguments.inc';
 require __DIR__ . '/harness/PlainPicker.inc';
+require __DIR__ . '/harness/Probe.inc';
 require __DIR__ . '/harness/Wrapper.inc';
 require_once __DIR__ . '/harness/fixture.inc';
 fixture('TypeArgumentsCalls');

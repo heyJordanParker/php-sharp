@@ -1,6 +1,7 @@
 namespace Demo;
 
 import Lib.Ledger;
+import Lib.Probe;
 
 class Cashier
 {
@@ -15,19 +16,19 @@ class Cashier
     {
         let count = 0;
         const paid = prices.filter(price => price > 0).map(price => this.discount(price)).sortedBy(price => -price);
-        const total = global.array_reduce(paid, (int sum, int price) => {
+        const total = Ledger.fold(paid, (int sum, int price) => {
             count += 1;
             return sum + price;
         }, 0);
         const recorded = ledger.record(paid, price => other.discount(price));
         return [
-            global.implode(",", paid.map(this.format)),
+            Probe.join(",", paid.map(this.format)),
             (string) total,
             (string) count,
-            global.implode(",", recorded),
+            Probe.join(",", recorded),
             (string) ledger.scale(total),
         ];
     }
 
-    private string format(int cents) => global.sprintf("%d.%02d", cents / 100, cents % 100);
+    private string format(int cents) => (string) (cents / 100) + "." + (cents % 100 < 10 ? "0" : "") + (string) (cents % 100);
 }

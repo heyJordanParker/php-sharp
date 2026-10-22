@@ -1,5 +1,6 @@
 <?php
 
+require __DIR__ . '/harness/Callbacks.inc';
 require __DIR__ . '/PreloadedLambdas/Labeled.sharp';
 require __DIR__ . '/PreloadedLambdas/Shapes.sharp';
 require __DIR__ . '/PreloadedLambdas/StoredStep.sharp';

@@ -17,6 +17,11 @@ final class Callbacks
         return $step($value);
     }
 
+    public static function call(callable $step, int $value): void
+    {
+        $step($value);
+    }
+
     public static function runHandler(int $value): int
     {
         return (self::$handler)($value);
@@ -32,4 +37,10 @@ final class Callbacks
             $parameters,
         ));
     }
+}
+
+/** A plain PHP function of the library, which PHP# code reads as a value through its namespace. */
+function magnitude(int $value): int
+{
+    return abs($value);
 }

@@ -1,5 +1,6 @@
 namespace Demo;
 
+import Lib.Probe;
 import Lib.Size;
 import Lib.Standing;
 
@@ -32,11 +33,11 @@ class Tagged
     {
         return [
             tags.filter(tag => tag != "vip").toList(),
-            tags.map(tag => global.strlen(tag)),
+            tags.map(tag => Probe.length(tag)),
             tags.any(tag => tag == "5"),
-            tags.first(tag => global.strlen(tag) > 2),
+            tags.first(tag => Probe.length(tag) > 2),
             tags.sortedBy(tag => tag),
-            global.implode(",", tags),
+            Probe.join(",", tags),
         ];
     }
 

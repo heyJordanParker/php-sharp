@@ -1,20 +1,12 @@
 --TEST--
-PHP# calls PHP's built-in functions, and a namespace function of the same name never replaces one
+PHP# reaches PHP's built-in levenshtein through a project's plain PHP class that wraps it
 --FILE--
 <?php
 
-namespace Demo {
-    function count(\Countable $items): int
-    {
-        return -1;
-    }
-}
+require __DIR__ . '/harness/Words.inc';
+require __DIR__ . '/Expressions.sharp';
 
-namespace {
-    require __DIR__ . '/Expressions.sharp';
-
-    echo Demo\Expressions::describe("cart", new ArrayObject([1, 2, 3])), "\n";
-}
+echo Demo\Expressions::describe("cart", new ArrayObject([1, 2, 3]), "carts"), "\n";
 ?>
 --EXPECT--
-cart has 3 items and a 3-byte token
+cart has 3 items, 1 edit from carts

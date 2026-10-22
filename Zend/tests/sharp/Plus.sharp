@@ -1,5 +1,7 @@
 namespace Demo;
 
+import Lib.Probe;
+
 class Plus
 {
     private string log = "log:";
@@ -34,7 +36,7 @@ class Plus
 
     public static int length(string first, string last)
     {
-        return global.strlen(first + last);
+        return Probe.length(first + last);
     }
 
     public static string repeat(string text, int times)

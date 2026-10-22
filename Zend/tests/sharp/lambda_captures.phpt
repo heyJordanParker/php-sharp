@@ -1,5 +1,5 @@
 --TEST--
-PHP# lambdas capture the variables themselves, give each loop pass its own let, and pass to plain PHP functions
+PHP# lambdas capture the variables themselves, give each loop pass its own let, and pass to plain PHP methods
 --FILE--
 <?php
 require __DIR__ . '/lambda_captures.inc';

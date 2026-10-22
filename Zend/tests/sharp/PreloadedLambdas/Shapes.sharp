@@ -1,5 +1,7 @@
 namespace PreloadedLambdas;
 
+import Lib.Callbacks;
+
 public class Shapes : Labeled
 {
     private int base = 5;
@@ -32,6 +34,6 @@ public class Shapes : Labeled
 
     public Any passedToPlainPhp()
     {
-        return global.call_user_func((int n) => n * 2, 4);
+        return Callbacks.apply((int n) => n * 2, 4);
     }
 }

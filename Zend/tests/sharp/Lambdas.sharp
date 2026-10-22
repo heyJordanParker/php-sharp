@@ -1,5 +1,7 @@
 namespace Demo;
 
+import Lib.Callbacks;
+import Lib.Probe;
 import OutOfRangeException;
 
 class Lambdas
@@ -15,7 +17,7 @@ class Lambdas
             count += step + this.base;
         };
         const bump = () => count += 1;
-        global.call_user_func(add, twice(half(4)));
+        Callbacks.call(add, twice(half(4)));
         bump();
         return count;
     }
@@ -37,7 +39,7 @@ class Lambdas
             marks.add(() => seen);
             times -= 1;
         }
-        return global.implode(",", marks.map(read => read()));
+        return Probe.join(",", marks.map(read => read()));
     }
 
     public static List<string> pipeline(List<int> numbers, Map<string, int> prices)
@@ -46,13 +48,13 @@ class Lambdas
         const labels = odd.map(n => (string) (n * 10));
         const groups = numbers.groupBy(n => n % 2 == 0 ? "even" : "odd");
         return [
-            global.implode(",", labels),
-            global.implode(",", numbers.sortedBy(n => -n)),
-            global.implode(",", groups["odd"] ?? []),
-            global.implode(",", labels.associateBy(label => label).keys()),
-            global.implode(",", prices.filter(price => price < 100).keys()),
-            global.implode(",", prices.filter(price => price < 100)),
-            global.implode(",", prices.map(price => price * 2)),
+            Probe.join(",", labels),
+            Probe.join(",", numbers.sortedBy(n => -n)),
+            Probe.join(",", groups["odd"] ?? []),
+            Probe.join(",", labels.associateBy(label => label).keys()),
+            Probe.join(",", prices.filter(price => price < 100).keys()),
+            Probe.join(",", prices.filter(price => price < 100)),
+            Probe.join(",", prices.map(price => price * 2)),
         ];
     }
 

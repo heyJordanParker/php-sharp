@@ -4,6 +4,7 @@ PHP# runs generic classes, interfaces and methods erased, with type arguments wr
 <?php
 
 require __DIR__ . '/harness/fixture.inc';
+require __DIR__ . '/harness/Probe.inc';
 fixture('Generics');
 
 use Paging\Catalog;

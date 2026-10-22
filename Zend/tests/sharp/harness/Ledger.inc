@@ -25,4 +25,13 @@ final class Ledger extends Book
     {
         return array_map($entry, $amounts);
     }
+
+    /**
+     * @param list<int> $amounts
+     * @param \Closure(int, int): int $step
+     */
+    public static function fold(array $amounts, \Closure $step, int $start): int
+    {
+        return array_reduce($amounts, $step, $start);
+    }
 }

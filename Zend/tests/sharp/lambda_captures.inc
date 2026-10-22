@@ -1,5 +1,7 @@
 <?php
 
+require __DIR__ . '/harness/Callbacks.inc';
+require __DIR__ . '/harness/Probe.inc';
 require __DIR__ . '/Lambdas.sharp';
 
 // Each call runs twice, so the JIT variants compile the methods and closures before the second run.

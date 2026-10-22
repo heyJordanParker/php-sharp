@@ -1,5 +1,7 @@
 <?php declare(strict_types=1); namespace Paging;
 
+use Lib\Probe;
+
 class Store
 {
     /** @var \Sharp\Map<string, DatabaseEntity> */
@@ -29,9 +31,9 @@ class Store
      *  @param TItem $item */
     public function share(DatabaseEntity&Shareable $item): string { return ((object) $item)->link(); }
     /** @param class-string<DatabaseEntity> $type */
-    public function save(string $type, DatabaseEntity $entity): void { $this->saved[\sprintf("%s#%d", $type, $entity->id)] = $entity; }
+    public function save(string $type, DatabaseEntity $entity): void { $this->saved[Probe::named($type) . "#" . (string) $entity->id] = $entity; }
     /** @param class-string<DatabaseEntity> $type */
-    public function load(string $type, int $id): ?DatabaseEntity { return $this->saved[\sprintf("%s#%d", $type, $id)] ?? null; }
+    public function load(string $type, int $id): ?DatabaseEntity { return $this->saved[Probe::named($type) . "#" . (string) $id] ?? null; }
     /** @return class-string<DatabaseEntity> */
     public function kind(string $name): string { return $this->kinds[$name] ?? Order::class; }
 }

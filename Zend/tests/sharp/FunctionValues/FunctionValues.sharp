@@ -1,6 +1,8 @@
 namespace Demo;
 
+import Lib;
 import Lib.Callbacks;
+import Lib.Words;
 
 public class FunctionValues
 {
@@ -67,7 +69,7 @@ public class FunctionValues
             [2, 4].filter(seen.contains),
             tidy(),
             exclaim("!"),
-            ["a", "b"].map(global.ucfirst),
+            ["a", "b"].map(Words.capitalized),
             firstTwo(2).toList(),
         ];
     }
@@ -132,7 +134,7 @@ public class FunctionValues
         return [
             this.doubler(4),
             Callbacks.apply(this.plus, 3),
-            Callbacks.applyClosure(global.abs, -4),
+            Callbacks.applyClosure(Lib.magnitude, -4),
             Callbacks.runHandler(3),
             Callbacks.describe("hey".exclaim),
             Callbacks.describe(allowed.contains),

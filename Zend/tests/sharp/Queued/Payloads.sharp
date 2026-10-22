@@ -1,5 +1,6 @@
 namespace Queued;
 
+import Lib.Probe;
 import Sharp.Data.PhpSerializer;
 
 // The values a queued job or a cached entry holds, and the PHP# reads of each one unserialize gives back.
@@ -30,14 +31,20 @@ public class Payloads
     public static Any? throughSerializerAllowing(Any? value, List<string> allowedClasses)
         => PhpSerializer.unserialize(PhpSerializer.serialize(value), allowedClasses);
 
-    // The class PHP# holds `value` as, or each field's for an object other than a Map or a Set. Plain PHP reads a Map or
-    // a Set, and a field that holds one, as its PHP array, spec section 12, so a row reads the classes through PHP#.
+    // The class PHP# holds `value` as, or each field's for a Shipment, a Ledger or a Crate. Plain PHP reads a Map or a
+    // Set field as its PHP array, spec section 12, so a row reads each field through PHP#.
     public static string kinds(Any? value)
     {
-        if (global.is_object(value) && !global.is_iterable(value)) {
-            return global.implode(" ", global.get_object_vars(value).values().map(Payloads.kinds));
+        if (value is Shipment shipment) {
+            return `${Payloads.kinds(shipment.labels)} ${Payloads.kinds(shipment.parcels)}`;
         }
-        return global.get_debug_type(value);
+        if (value is Ledger ledger) {
+            return Payloads.kinds(ledger.totals);
+        }
+        if (value is Crate crate) {
+            return `${Payloads.kinds(crate.byNumber)} ${Payloads.kinds(crate.speeds)} ${Payloads.kinds(crate.batches)}`;
+        }
+        return Probe.typeName(value);
     }
 
     public static string serializedKinds(Any? value, List<string> allowedClasses)
