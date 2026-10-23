@@ -89,6 +89,23 @@ git archive HEAD | docker build -f sharp/docker/runtime/Dockerfile -t php-sharp 
 git archive HEAD | docker build -f sharp/docker/runtime/frankenphp.Dockerfile -t php-sharp:frankenphp -
 ```
 
+A server whose PHP comes from its distribution, such as Ubuntu's packages, can't load PHP#'s extensions there: PHP# reports module API `20261009`, and every distribution extension is built for PHP's own. There nginx stays on the host, and PHP runs in the php-fpm image, which listens on port 9000. The app is mounted at the same path in the container as on the host, because nginx passes that path in `SCRIPT_FILENAME`:
+
+```sh
+docker run -d --name app --restart always -p 127.0.0.1:9000:9000 -v /srv/www/app:/srv/www/app ghcr.io/heyjordanparker/php-sharp:<version>
+```
+
+```nginx
+location ~ \.php$ {
+    include fastcgi_params;
+    fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+    fastcgi_param DOCUMENT_ROOT $realpath_root;
+    fastcgi_pass 127.0.0.1:9000;
+}
+```
+
+The queue workers and the scheduler run from the same image with the same mount, each as its own container, as `docker run -d --restart always -v /srv/www/app:/srv/www/app -w /srv/www/app ghcr.io/heyjordanparker/php-sharp:<version> php artisan queue:work` does for Laravel's worker.
+
 ## Composer
 
 `sharp/composer/` is the Composer plugin `heyjordanparker/php-sharp-composer`. Composer's autoloader then tries `.sharp` after `.php` by the PSR-4 rules, the way it tries `.hh` on HHVM. Composer's class map scanner reads only `<?php` files, so on `composer dump-autoload --optimize` the plugin writes every `.sharp` file under a PSR-4 folder to `vendor/composer/autoload_sharp.php`, and the autoloader reads it. The package's autoloader includes every `.sharp` class itself, never Composer's, so on plain PHP the first one stops with "This project needs the PHP# engine" before its source can reach the output. `mago compile` also writes a `.php` file beside each of a project's `.sharp` files that declares a type, outside `autoload-dev` folders and `vendor/`, which loads the `.sharp` file the same way, so PHP code that lists `*.php` files finds PHP# classes (spec section 27, decision 81).
