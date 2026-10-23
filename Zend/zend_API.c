@@ -1533,22 +1533,6 @@ ZEND_API zend_result zend_update_class_constant(zend_class_constant *c, const ze
 	return SUCCESS;
 }
 
-/* Whether the class's constant defaults are evaluated in this request, as zend_update_class_constants reads it: an
- * immutable class, as opcache keeps one, holds the flag in its mutable data. */
-ZEND_API bool zend_class_constants_updated(const zend_class_entry *class_type) /* {{{ */
-{
-	if (class_type->ce_flags & ZEND_ACC_CONSTANTS_UPDATED) {
-		return true;
-	}
-	if (ZEND_MAP_PTR(class_type->mutable_data) == NULL) {
-		return false;
-	}
-	const zend_class_mutable_data *mutable_data = ZEND_MAP_PTR_GET_IMM(class_type->mutable_data);
-
-	return mutable_data && (mutable_data->ce_flags & ZEND_ACC_CONSTANTS_UPDATED);
-}
-/* }}} */
-
 ZEND_API zend_result zend_update_class_constants(zend_class_entry *class_type) /* {{{ */
 {
 	zend_class_mutable_data *mutable_data = NULL;
