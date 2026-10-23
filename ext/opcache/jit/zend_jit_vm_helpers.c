@@ -982,7 +982,9 @@ zend_jit_trace_stop ZEND_FASTCALL zend_jit_trace_execute(zend_execute_data  *ex,
 					}
 				}
 				break;
-			case ZEND_FETCH_OBJ_R: {
+			case ZEND_FETCH_OBJ_R:
+			/* FETCH_OBJ_FUNC_ARG of an argument taken by value runs FETCH_OBJ_R's handler, which inlines hooks too. */
+			case ZEND_FETCH_OBJ_FUNC_ARG: {
 				if (opline->op2_type == IS_CONST) {
 					/* Remove the SIMPLE_GET flag to avoid inlining hooks. */
 					void **cache_slot = CACHE_ADDR(opline->extended_value & ~(ZEND_FETCH_REF|ZEND_SHARP_OPERATOR));
@@ -996,7 +998,6 @@ zend_jit_trace_stop ZEND_FASTCALL zend_jit_trace_execute(zend_execute_data  *ex,
 			case ZEND_FETCH_OBJ_W:
 			case ZEND_FETCH_OBJ_RW:
 			case ZEND_FETCH_OBJ_IS:
-			case ZEND_FETCH_OBJ_FUNC_ARG:
 			case ZEND_FETCH_OBJ_UNSET:
 			case ZEND_ASSIGN_OBJ:
 			case ZEND_ASSIGN_OBJ_OP:
