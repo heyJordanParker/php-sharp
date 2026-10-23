@@ -98,8 +98,9 @@ This state is:
 - local to one worker, not shared with sibling processes;
 - retained across files and incremental-analysis generations while the process lives;
 - lost if Mago restarts the worker after a failure;
-- not guaranteed to receive requests in file order;
-- potentially observed by interleaved Fibers if callbacks cooperatively suspend.
+- not guaranteed to receive requests in file order.
+
+A worker runs one request at a time, in the order Mago sends them. A hook that waits on a codebase query keeps its turn, so no other hook in that process starts until it returns. A rule can fill a cache on its own object around a query, and every later file reads the full result. Mago gets parallelism by running several workers.
 
 Use generation-aware SDK data for analysis caches. Use a `WorkerReducer` when process-local application metrics must be combined at shutdown.
 
