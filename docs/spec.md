@@ -5188,7 +5188,6 @@ public class Money
     public static int total(List<Money> items) => match (items) {
         [] => 0,
         [Money first, ...List<Money> rest] => first.amount + Money.total(rest),
-        default => 0,
     };
 
     law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;
@@ -5207,7 +5206,6 @@ public class Money
         match (a) {
             [] => { return; },
             [Money, ...List<Money> rest] => { Money.totalJoins(rest, b); },   // the law for a's rest
-            default => { return; },
         }
     }
 }
