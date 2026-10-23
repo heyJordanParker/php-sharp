@@ -287,6 +287,55 @@ fn a_public_member_nothing_outside_its_namespace_uses_is_too_wide() {
     );
 }
 
+/// Spec section 5: a use from plain PHP outside the namespace is an outside use, as one from PHP# is: a read in a
+/// class, and a callable array a routes file passes, as `[Carts::class, 'show']`. A plain PHP use inside the namespace
+/// is none, and a member no code names still warns.
+#[test]
+fn a_plain_php_use_outside_the_namespace_keeps_a_public_member() {
+    let event = "namespace App.Payments;\n\npublic struct Event\n{\n    public Event(public string rawBody { get; }, public string kind { get; }, public string source { get; }) { }\n}\n";
+    let carts = "namespace App.Payments;\n\npublic class Carts\n{\n    public string show() => \"cart\";\n\n    public string hidden() => \"none\";\n}\n";
+    let reader = "<?php\n\nnamespace App\\Gateways;\n\nuse App\\Payments\\Event;\n\nfinal class Reader\n{\n    public function read(Event $event): string\n    {\n        return $event->rawBody;\n    }\n}\n";
+    let inner = "<?php\n\nnamespace App\\Payments\\Gateways;\n\nuse App\\Payments\\Event;\n\nfinal class Inner\n{\n    public function source(Event $event): string\n    {\n        return $event->source;\n    }\n}\n";
+    let routes = "<?php\n\nuse App\\Payments\\Carts;\n\nfunction route(string $path, array $action): void\n{\n}\n\nroute('/cart', [Carts::class, 'show']);\n";
+
+    assert_eq!(
+        too_wide(&[
+            ("src/App/Payments/Event.sharp", event),
+            ("src/App/Payments/Carts.sharp", carts),
+            ("src/App/Gateways/Reader.php", reader),
+            ("src/App/Payments/Gateways/Inner.php", inner),
+            ("src/routes.php", routes),
+        ]),
+        [
+            "src/App/Payments/Event.sharp 5:64 `Event.kind` is public, and nothing outside `App.Payments` uses it.",
+            "src/App/Payments/Event.sharp 5:93 `Event.source` is public, and nothing outside `App.Payments` uses it.",
+            "src/App/Payments/Carts.sharp 7:19 `Carts.hidden` is public, and nothing outside `App.Payments` uses it.",
+        ]
+    );
+}
+
+/// Spec section 5: a member with an attribute is reached by the code that reads the attribute, through reflection,
+/// which no checker sees, so it never warns, as a `[Listen]` method or a `[Field]` property. The same members
+/// without an attribute still warn.
+#[test]
+fn a_public_member_with_an_attribute_is_not_too_wide() {
+    let listen = "<?php\n\nnamespace Lib;\n\n#[\\Attribute(\\Attribute::TARGET_METHOD)]\nfinal class Listen\n{\n}\n";
+    let field = "<?php\n\nnamespace Lib;\n\n#[\\Attribute(\\Attribute::TARGET_PROPERTY)]\nfinal class Field\n{\n}\n";
+    let hooks = "namespace App.Payments;\n\nimport Lib.Field;\nimport Lib.Listen;\n\npublic class Hooks\n{\n    [Field]\n    public string title { get; } = \"hooks\";\n\n    public string label { get; } = \"hooks\";\n\n    [Listen]\n    public void paid() { }\n\n    public void refunded() { }\n}\n";
+
+    assert_eq!(
+        too_wide(&[
+            ("src/Lib/Listen.php", listen),
+            ("src/Lib/Field.php", field),
+            ("src/App/Payments/Hooks.sharp", hooks),
+        ]),
+        [
+            "src/App/Payments/Hooks.sharp 11:19 `Hooks.label` is public, and nothing outside `App.Payments` uses it.",
+            "src/App/Payments/Hooks.sharp 16:17 `Hooks.refunded` is public, and nothing outside `App.Payments` uses it.",
+        ]
+    );
+}
+
 /// Asserts that no issue on a `.sharp` file of `names` names a word only PHP has, in its message, help, notes or
 /// annotations.
 fn assert_speaks_sharp<'name, 'issue>(
@@ -18500,6 +18549,81 @@ fn a_message_names_a_static_property_as_sharp_writes_it() {
         [
             "9:29 invalid-property-assignment-value Invalid property assignment value | Order.count with declared type int, cannot be assigned type string",
             "11:27 impossible-type-comparison Impossible type assertion: `Order.count` of type `int` can never be `string`. | Argument `Order.count` has type `int` | The assertion expects `Order.count` to be `string`, but no value of type `int` can satisfy this. | Check that the correct variable is being passed, or update the assertion type."
+        ]
+    );
+}
+
+/// The PHP of a `match`, an `is` or an `as` holds a tested value that is not a local in a hidden variable, `$match#N`
+/// or `$as#N`, which no source writes. A message names it as the file writes the value.
+#[test]
+fn a_message_names_a_tested_value_as_sharp_writes_it() {
+    let sharp = "namespace Demo;\n\nclass Order\n{\n    private int count = 0;\n\n    public int kind() => match (this.total()) { string => 1, default => 0 };\n\n    public bool positive() => this.total() is int and > 0;\n\n    public string? text() => this.total() as string;\n\n    public int total() => this.count;\n}\n";
+
+    assert_eq!(
+        worded(("src/Demo/Order.sharp", sharp), &[])
+            .into_iter()
+            .filter(|line| line.contains("-type-comparison "))
+            .collect::<Vec<_>>(),
+        [
+            "7:49 impossible-type-comparison Impossible type assertion: `this.total()` of type `int` can never be `string`. | Argument `this.total()` has type `int` | The assertion expects `this.total()` to be `string`, but no value of type `int` can satisfy this. | Check that the correct variable is being passed, or update the assertion type.",
+            "9:47 redundant-type-comparison Redundant type assertion: `this.total()` is already `int`. | Argument `this.total()` already has type `int` | The assertion against `int` always holds because `this.total()` is `int`. | Consider removing this assertion or replacing it with `default` if used in a `match` arm.",
+            "11:46 impossible-type-comparison Impossible type assertion: `this.total()` of type `int` can never be `string`. | Argument `this.total()` has type `int` | The assertion expects `this.total()` to be `string`, but no value of type `int` can satisfy this. | Check that the correct variable is being passed, or update the assertion type.",
+        ]
+    );
+}
+
+/// The analysis of `||` reads an `is` again as its PHP after the `is` is analyzed, and a message from that reading names
+/// the tested value as the file writes it too.
+#[test]
+fn a_message_from_the_analysis_of_or_names_a_tested_value_as_sharp_writes_it() {
+    let sharp = "namespace Demo;\n\nclass Order\n{\n    private int count = 0;\n\n    public bool open() => this.total() is string || this.count > 0;\n\n    public int total() => this.count;\n}\n";
+
+    assert_eq!(
+        worded(("src/Demo/Order.sharp", sharp), &[]),
+        [
+            "7:43 impossible-type-comparison Impossible type assertion: `this.total()` of type `int` can never be `string`. | Argument `this.total()` has type `int` | The assertion expects `this.total()` to be `string`, but no value of type `int` can satisfy this. | Check that the correct variable is being passed, or update the assertion type.",
+            "7:27 impossible-type-comparison Impossible condition: variable `this.total()` (type `int`) can never be `string`. | This condition always evaluates to `false` | The type of variable `this.total()` (type `int`) is incompatible with the assertion that it is `string`. | This condition is impossible and the associated code block will never execute. Review the types and condition logic.",
+            "7:27 redundant-logical-operation Redundant `||` operation: left operand is always `false` and right operand is evaluated. | Left operand is always `false` | Right operand is evaluated | The `||` operator will always return the boolean value of the right-hand side in this case. | Consider simplifying this expression to just the right operand.",
+        ]
+    );
+}
+
+/// `?:`, `while` and `do` read an `is` in their condition again as its PHP, and `do` reads it before it analyzes it, so
+/// every reading names the hidden variable its first PHP assigned, and a message names the tested value as the file
+/// writes it.
+#[test]
+fn a_message_from_a_condition_names_a_tested_value_as_sharp_writes_it() {
+    let sharp = "namespace Demo;\n\nclass Order\n{\n    private int count = 0;\n\n    public int pick() => this.total() is string ? 1 : 2;\n\n    public int waits()\n    {\n        let passes = 0;\n        while (this.total() is string) {\n            passes += 1;\n        }\n        do {\n            passes += 1;\n        } while (this.total() is string);\n        return passes;\n    }\n\n    public int total() => this.count;\n}\n";
+
+    assert_eq!(
+        worded(("src/Demo/Order.sharp", sharp), &[]),
+        [
+            "7:42 impossible-type-comparison Impossible type assertion: `this.total()` of type `int` can never be `string`. | Argument `this.total()` has type `int` | The assertion expects `this.total()` to be `string`, but no value of type `int` can satisfy this. | Check that the correct variable is being passed, or update the assertion type.",
+            "7:26 impossible-condition Redundant ternary operator: condition is always `false`. | This condition (type `false`) is always `false` | This `then` branch will never be evaluated | This `else` branch is always evaluated, making it the result of the expression | The ternary operator `? :` evaluates the `then` branch only when the condition is `true`. | Consider replacing the entire expression with just this `else` branch.",
+            "12:32 impossible-type-comparison Impossible type assertion: `this.total()` of type `int` can never be `string`. | Argument `this.total()` has type `int` | The assertion expects `this.total()` to be `string`, but no value of type `int` can satisfy this. | Check that the correct variable is being passed, or update the assertion type.",
+            "12:16 impossible-condition This loop condition (type `false`) will always evaluate to `false`. | This condition is always `false`, the loop body will never execute | Check the logic of this loop condition. The loop body is unreachable.",
+            "17:34 impossible-type-comparison Impossible type assertion: `this.total()` of type `int` can never be `string`. | Argument `this.total()` has type `int` | The assertion expects `this.total()` to be `string`, but no value of type `int` can satisfy this. | Check that the correct variable is being passed, or update the assertion type.",
+            "17:18 impossible-type-comparison Impossible condition: variable `this.total()` (type `int`) can never be `string`. | This condition always evaluates to `false` | The type of variable `this.total()` (type `int`) is incompatible with the assertion that it is `string`. | This condition is impossible and the associated code block will never execute. Review the types and condition logic.",
+        ]
+    );
+}
+
+/// A property or an element a pattern tests is held in a hidden variable too, and a message names it as PHP# reads it:
+/// `line.quantity`, `lines[0].quantity`, and `lines[lines.count() - 1].quantity` for an element after a rest.
+#[test]
+fn a_message_names_a_value_a_pattern_reads_as_sharp_reads_it() {
+    let sharp = "namespace Demo;\n\nclass Line\n{\n    private int quantity = 0;\n\n    public bool counted(Line line) => line is { quantity: string };\n\n    public bool first(List<Line> lines) => lines is [{ quantity: string }, ...];\n\n    public bool last(List<Line> lines) => lines is [..., { quantity: string }];\n\n    public bool called() => this.lines() is [{ quantity: string }, ...];\n\n    public List<Line> lines() => [];\n}\n";
+
+    assert_eq!(
+        messages(("src/Demo/Line.sharp", sharp), &[])
+            .into_iter()
+            .filter(|message| message.starts_with("Impossible type assertion"))
+            .collect::<Vec<_>>(),
+        [
+            "Impossible type assertion: `line.quantity` of type `int` can never be `string`.",
+            "Impossible type assertion: `lines[0].quantity` of type `int` can never be `string`.",
+            "Impossible type assertion: `lines[lines.count() - 1].quantity` of type `int` can never be `string`.",
+            "Impossible type assertion: `this.lines()[0].quantity` of type `int` can never be `string`.",
         ]
     );
 }

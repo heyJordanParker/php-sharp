@@ -353,6 +353,7 @@ Checkout.maximum;
 - **Visibility is checked both ways.**
   - Too narrow is a compile error at the caller.
   - Too wide is a warning, for example a `public` member that nothing outside its namespace uses. It runs in a project, a package whose `composer.json` says `"type": "project"`, because a library's members are used by the projects that install it, which the checker never sees. A constructor never warns: `new` calls it, so it reaches as far as its class.
+  - A use from plain PHP counts as one from PHP#, a callable array such as `[Carts::class, 'show']` included. A member with an attribute never warns: the code that reads the attribute reaches it through reflection, as a framework reaches a `[Listen]` method.
 - **There is no named reach,** such as `internal(App\Tenant)`. A helper shared by sibling namespaces moves to their parent namespace.
 
 **An interface member is always public, so it takes no access modifier.** Writing one, `public` included, is a compile error, as in TypeScript, Swift and Go:
@@ -5342,7 +5343,6 @@ public class Money
     public static int total(List<Money> items) => match (items) {
         [] => 0,
         [Money first, ...List<Money> rest] => first.amount + Money.total(rest),
-        default => 0,
     };
 
     law addKeepsCurrency(Money a, Money b) => a.add(b).currency == a.currency;
@@ -5361,7 +5361,6 @@ public class Money
         match (a) {
             [] => { return; },
             [Money, ...List<Money> rest] => { Money.totalJoins(rest, b); },   // the law for a's rest
-            default => { return; },
         }
     }
 }
