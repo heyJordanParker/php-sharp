@@ -14,29 +14,29 @@ if (PHP_OS_FAMILY == 'Windows') die('skip Preloading is not supported on Windows
 --FILE--
 <?php
 // Preloading declared the classes before this request, which never ran the file that declares them.
-var_dump(class_exists(Sharp\Database::class, false));
+var_dump(class_exists(Sharp\Data\Database::class, false));
 require __DIR__ . '/effect_classes.inc';
 
-var_dump(abs((new Sharp\Clock())->now() - time()) <= 1);
+var_dump(abs((new Sharp\Time\Clock())->now()->epochSeconds - time()) <= 1);
 var_dump((new Sharp\Random(7))->nextInt(0, 100) === (new Sharp\Random(7))->nextInt(0, 100));
-(new Sharp\Console())->writeLine('written');
-$result = (new Sharp\Process())->run(getenv('TEST_PHP_EXECUTABLE'), ['-n', '-r', 'echo "ran";']);
+(new Sharp\IO\Console())->writeLine('written');
+$result = (new Sharp\System\Process())->run(getenv('TEST_PHP_EXECUTABLE'), ['-n', '-r', 'echo "ran";']);
 var_dump($result->output, $result->successful);
-$files = new Sharp\Files();
+$files = new Sharp\IO\Files();
 $temporary = $files->temporaryFile();
 $files->write($temporary, 'kept');
 var_dump($files->read($temporary));
 $files->delete($temporary);
-$database = new Sharp\Database('sqlite::memory:');
+$database = new Sharp\Data\Database('sqlite::memory:');
 var_dump($database->scalar('SELECT 6 * 7'));
 $path = sys_get_temp_dir() . '/sharp-effect-preload-' . getmypid() . '.sqlite';
-$cache = new Sharp\Cache($path);
+$cache = new Sharp\Data\Cache($path);
 $cache->set('k', 'v');
 var_dump($cache->get('k'));
 unset($cache);
 unlink($path);
 try {
-    (new Sharp\Http())->get('not a url');
+    (new Sharp\Net\Http())->get('not a url');
 } catch (ValueError $e) {
     echo $e->getMessage(), "\n";
 }

@@ -9,24 +9,24 @@ require __DIR__ . '/effect_classes.inc';
 
 use Sharp\Time\Duration;
 
-$console = new Sharp\Console();
+$console = new Sharp\IO\Console();
 $console->write('no newline, ');
 $console->writeLine('then a newline');
 var_dump($console->readLine(), $console->readLine(), $console->readLine());
 
-$process = new Sharp\Process();
+$process = new Sharp\System\Process();
 var_dump($process->id() === getmypid());
 $php = getenv('TEST_PHP_EXECUTABLE');
 $classes = 'require ' . var_export(__DIR__ . '/effect_classes.inc', true) . ';';
 
-$result = $process->run($php, ['-n', '-r', $classes . ' $c = new Sharp\Console(); $c->write("out"); $c->writeError("err"); exit(3);']);
+$result = $process->run($php, ['-n', '-r', $classes . ' $c = new Sharp\IO\Console(); $c->write("out"); $c->writeError("err"); exit(3);']);
 var_dump($result->exitCode, $result->output, $result->errorOutput, $result->successful);
 
 // The argument reaches the program as it is written, with no shell to read its quotes and semicolons.
 $echoed = $process->run($php, ['-n', '-r', 'echo $argv[1];', '--', '"quoted"; $(id)']);
 var_dump($echoed->output, $echoed->successful);
 
-$exited = $process->run($php, ['-n', '-r', $classes . ' try { (new Sharp\Process())->exit(4); } finally { echo "finally ran"; }']);
+$exited = $process->run($php, ['-n', '-r', $classes . ' try { (new Sharp\System\Process())->exit(4); } finally { echo "finally ran"; }']);
 var_dump($exited->exitCode, $exited->output);
 
 // A code past 254 is refused, as a negative one is, so the process keeps running.
@@ -37,7 +37,7 @@ foreach ([-1, 255] as $code) {
         echo $e::class, ': ', $e->getMessage(), "\n";
     }
 }
-$highest = $process->run($php, ['-n', '-r', $classes . ' (new Sharp\Process())->exit(254);']);
+$highest = $process->run($php, ['-n', '-r', $classes . ' (new Sharp\System\Process())->exit(254);']);
 var_dump($highest->exitCode);
 
 try {

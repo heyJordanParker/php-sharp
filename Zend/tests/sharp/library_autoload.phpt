@@ -3,8 +3,8 @@ A standard library whose native bodies match the engine's boots when autoload.ph
 --FILE--
 <?php
 foreach ([
-    ['psr4', 'Sharp\Text\Text'],
-    ['classmap', 'Sharp\Text\Text'],
+    ['psr4', 'Sharp\Text\StringMembers'],
+    ['classmap', 'Sharp\Text\StringMembers'],
     ['psr4', 'App\Clock'],
     ['classmap', 'App\Clock'],
     ['psr4', 'App\Tick\Now'],
@@ -20,12 +20,12 @@ foreach ([
 }
 ?>
 --EXPECT--
-== psr4, Sharp\Text\Text
+== psr4, Sharp\Text\StringMembers
 booted, with no library class declared
 class map handed to Composer: []
 a-b
-== classmap, Sharp\Text\Text
-class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\Text"]
+== classmap, Sharp\Text\StringMembers
+class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\StringMembers"]
 booted, with no library class declared
 class map handed to Composer: []
 a-b
@@ -34,7 +34,7 @@ booted, with no library class declared
 class map handed to Composer: []
 noon
 == classmap, App\Clock
-class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\Text"]
+class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\StringMembers"]
 booted, with no library class declared
 class map handed to Composer: []
 noon
@@ -43,7 +43,7 @@ booted, with no library class declared
 class map handed to Composer: []
 noon, with its enum
 == classmap, App\Tick\Now
-class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\Text"]
+class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\StringMembers"]
 booted, with no library class declared
 class map handed to Composer: []
 noon, with its enum
@@ -52,7 +52,7 @@ booted, with no library class declared
 class map handed to Composer: []
 default noon
 == classmap, App\Timed\Defaults
-class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\Text"]
+class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\StringMembers"]
 booted, with no library class declared
 class map handed to Composer: []
 default noon
@@ -62,13 +62,13 @@ class map handed to Composer: []
 Error: Trait "App\Ticking\Defaults" not found
 1 .sharp files included
 == classmap, App\Ticking\Defaults
-class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\Text"]
+class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\StringMembers"]
 booted, with no library class declared
 class map handed to Composer: []
 Error: Trait "App\Ticking\Defaults" not found
 1 .sharp files included
 == classmap, App\Stamp
-class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\Text"]
+class map the plugin writes: ["App\\Clock","App\\Tick","App\\Tick\\Later","App\\Tick\\Now","App\\Timed","App\\Timed\\Defaults","App\\Ticking","App\\Ticking\\Defaults","App\\Stamp","Sharp\\Text\\StringMembers"]
 booted, with no library class declared
 class map handed to Composer: []
 stamped

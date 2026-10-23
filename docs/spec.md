@@ -406,7 +406,7 @@ Initial values run before the parent's constructor, in the order the members are
 <!-- example initial-value-storage: members -->
 ```csharp
 public string code { get; set => field = value.trim(); } = "  a  ";            // compiles: code starts as "  a  ", since set doesn't run
-public string label { get; set => field = value.trim(); } = global.strval(1);  // compiles: a computed initial value fills the storage too
+public string label { get; set => field = value.trim(); } = " b ".uppercase();  // compiles: a computed initial value fills the storage too
 ```
 
 **A member has no implicit starting value, `null` included.** A `T?` member writes `= null` like any other starting value, and PHP# has no default filler such as C#'s `default(T)`.
@@ -683,7 +683,6 @@ public T first<T>(List<T> items) { … }
 **A method can take any number of arguments** with PHP's `...`. The parameter is written `int ...values`, and `values` arrives as a `List<int>`. A call spreads an existing list with `...list`.
 
 <!-- example variadic-parameters: statements in Money
-import Sharp.Math.Math;
 List<int> prices = [900, 2900];
 -->
 ```csharp
@@ -789,32 +788,32 @@ Tickets.take();     // 2
 
 There are no top-level functions. Shared code lives in static methods on a class.
 
-**A PHP function is reached through the type it works on,** as a method the standard library declares with an extension (section 26), as in `name.trim()`. Otherwise it goes through a static class in its standard library namespace (section 23), as in `Math.max(a, b)` and `Json.encode(body)`.
+**A PHP function is reached through the type it works on,** as a method the standard library declares with an extension (section 26), as in `name.trim()`. Otherwise it goes through a static class of the standard library (section 23), as in `Math.max(a, b)` and `Json.encode(body)`.
 
 <!-- example standard-library-calls -->
 ```csharp
-import Sharp.Json.Json;
-import Sharp.Math.Math;
+import Sharp.Encoding.Json;
 
 public class Receipt
 {
     public string label(string name) => name.trim();                        // compiles
     public int larger(int a, int b) => Math.max(a, b);                      // compiles
     public string body(Map<string, Any> payload) => Json.encode(payload);   // compiles
-    public string raw(string name) => trim(name);                           // compile error: write name.trim()
-    public string rawGlobal(string name) => global.trim(name);              // compile error: write name.trim()
+    public string raw(string name) => trim(name);                           // compile error: no function trim exists
 }
 ```
 
-- **Every PHP built-in function is a standard library method,** so calling one by its bare name from `.sharp` code is a compile error that names the method. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
-- **A built-in the standard library has no method for is called through PHP's root namespace,** as `global.levenshtein(a, b)` (section 23).
-- **A built-in the standard library has a method for is reached only through that method.** Outside the standard library, `global.trim(name)` is a compile error that names `name.trim()`, as the bare call is, and so is the value `global.trim`, as in `names.map(global.trim)`. The standard library's own methods call PHP through `global`, and a built-in PHP# syntax replaces keeps its `global.` call, as `global.strval(1)`.
-- **PHP's constants are read through its root namespace too,** as `global.CURLOPT_TIMEOUT` (section 23). A bare `CURLOPT_TIMEOUT` is a compile error, because a bare uppercase name is always the code's own constant. A value the standard library gives, as `Int.MAX`, is read from it.
+- **PHP is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation. A bare call names a local or nothing, so calling a built-in function by its bare name from `.sharp` code is the compile error a misspelled name gets. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
+- **A built-in the standard library has no member for is called from a plain PHP class of the project,** which `.sharp` code calls as it calls any plain PHP class (section 23).
+- **PHP's constants are reached the same way,** as `Int.MAX` gives the largest `int`. A bare `CURLOPT_TIMEOUT` is a compile error, because a bare uppercase name is always the code's own constant.
 
 **Output and exit go through the standard library.** `echo` and `print` are removed, and output goes through `Console` (section 29). `die` is removed, because `die("…")` prints its message and exits with status 0, which reports success. Exiting goes through `Process`.
 
 <!-- example output-and-exit: statements -->
 ```csharp
+import Sharp.IO.Console;
+import Sharp.System.Process;
+
 public class Prune
 {
     public Prune(private Console console, private Process process) { }
@@ -831,9 +830,9 @@ public class Prune
 
 echo "Pruned";                                               // parse error
 print "Pruned";                                              // parse error
-printf("Pruned");                                            // compile error: write console.write(text)
-public void stop() { exit(1); }                              // compile error: write process.exit(1)
-public void fail() { die("Prune failed"); }                  // compile error: write the message with console.writeError, then process.exit(1)
+printf("Pruned");                                            // compile error: no function printf exists
+public void stop() { exit(1); }                              // compile error: no function exit exists
+public void fail() { die("Prune failed"); }                  // compile error: no function die exists
 ```
 
 - Exiting skips every `finally` block, as Java's `System.exit` and C#'s `Environment.Exit` do.
@@ -1155,7 +1154,7 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 - **`Object` bounds a type parameter to any object,** `<TValue : Object>`, as C#'s `where T : class` and TypeScript's `T extends object` do. It is a bound alone.
 - **A bound may name another type parameter,** `<TPart : TItem>`, as C#'s `where TPart : TItem` and Java's and TypeScript's `<U extends T>` do. A `TPart` then goes wherever a `TItem` goes. It is a bound alone, as in Java, and a bound that leads back to its own type parameter, such as `<TItem : TItem>`, is a compile error, as in C#.
 - **A type parameter with no bound may hold `null`,** so it is bounded by `Any?`.
-- **A generic class can't implement PHP's `Serializable`,** because its `serialize` drops the type arguments. The error says to leave `Serializable` out: an object serialized as it is keeps its type arguments.
+- **A generic class can't be PHP's `Serializable`** through a plain PHP library's interface or parent class, because its `serialize` drops the type arguments. The error says to leave `Serializable` out: an object serialized as it is keeps its type arguments.
 - **A class value with type arguments can't be a `Map` key,** because `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` share the plain class name.
 
 <!-- example type-parameter-bounds: members -->
@@ -1713,10 +1712,16 @@ lines.contains(line);
 lines.groupBy(l => l.product.id);
 lines.associateBy(l => l.id);
 lines.sortedBy(l => l.amount);
+lines.all(l => l.amount > 0);
+lines.fold(0, (total, l) => total + l.amount);
+lines.reversed();
+lines.distinct();
+lines.slice(1, 3);
+lines.chunked(2);
 ```
 
 - Methods that read return a new collection.
-- `first` throws `OutOfRangeException` when nothing matches, as a bare index read does.
+- `first` throws `OutOfRangeException` when nothing matches, as a bare index read does, and so does a `slice` range outside the list. A `chunked` size below 1 throws `ValueError`.
 - A `sortedBy` key of type `T` or `T?` compiles exactly when `<` compiles on two non-null `T` values. The nullable part is allowed, and it sorts first.
 - A method takes on the effects of each function it is given (section 29), so `lines.map(l => l.name)` is pure.
 - Methods that change a collection change it in place:
@@ -2142,22 +2147,19 @@ List<string> names = ["Spring Sale"];
 names.map(Str.slug);
 ```
 
-A method of a `List`, `Map` or `Set`, an extension method (section 26) and a plain PHP function are values the same way, as in `allowed.contains`, `name.trim` and `global.ucfirst`. A collection is a value (section 12), so a collection's method value holds the collection as it was when the value was made, as C# copies a struct into a delegate made from its method:
+A method of a `List`, `Map` or `Set`, an extension method (section 26) and a plain PHP function are values the same way, as in `allowed.contains`, `name.trim` and `Pdf.render` (section 23). A collection is a value (section 12), so a collection's method value holds the collection as it was when the value was made, as C# copies a struct into a delegate made from its method:
 
 <!-- example method-value-kinds: statements
 List<int> allowed = [1, 3];
-List<string> names = ["tea", "jam"];
 -->
 ```csharp
 const has = allowed.contains;
 allowed.add(5);
 List<int> kept = [1, 2, 5].filter(allowed.contains);   // [1, 5]
-List<string> capitalized = names.map(global.ucfirst);  // ["Tea", "Jam"]
 ```
 <!-- run method-value-kinds
 has(5);        // false
 kept;          // [1, 5]
-capitalized;   // ["Tea", "Jam"]
 -->
 
 **A method that changes a collection is no function value**, since it would change only that copy, as Swift refuses the value of a `mutating` method. A lambda that calls it changes the collection itself:
@@ -2170,15 +2172,22 @@ const add = seen.add;                       // compile error: write a lambda tha
 const record = (int value) => seen.add(value);
 ```
 
-**A plain PHP function that changes a variable it is given, or reads the variables of the code that calls it, is no function value,** since PHP# passes every argument by value. A call that would pass it a PHP# variable to change is an error too, and names the method that does the work where there is one:
+**A plain PHP function that changes a variable it is given is no function value,** since PHP# passes every argument by value. A call that would pass it a PHP# variable to change is an error too:
+
+<!-- example by-reference-functions -->
+```php
+namespace Vendor\Lists;
+
+function reorder(array &$items): bool { return sort($items); }
+```
 
 <!-- example by-reference-functions: statements
+import Vendor.Lists;
 List<int> numbers = [3, 1, 2];
 -->
 ```csharp
-const sort = global.sort;                   // compile error: global.sort changes the variable it is given
-const args = global.func_get_args;          // compile error: global.func_get_args reads the caller's variables
-global.array_push(numbers, 4);              // compile error: write numbers.add(…)
+const reorder = Lists.reorder;              // compile error: Lists.reorder changes the variable it is given
+Lists.reorder(numbers);                     // compile error: Lists.reorder changes the variable it is given, so numbers can't go there
 List<int> sorted = numbers.sortedBy(n => n);
 ```
 <!-- run by-reference-functions
@@ -2882,10 +2891,23 @@ A plain PHP file keeps PHP's own interpolation. It converts an object of a class
 
 **Plain strings:** `"…"` and `'…'` never interpolate, so braces and `$` inside them are literal.
 
-**Text methods:** a `string` has Kotlin's text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so a case change reaches every letter. `replace` replaces every match, as Kotlin's does. `split` keeps the empty text after a trailing delimiter, and takes Kotlin's `limit`: 0, its default, gives every part, and a positive limit gives at most that many, the last holding the rest. Empty text to replace, an empty delimiter and a negative limit each throw `ValueError`:
+**Text methods:** a `string` has Kotlin's text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so `length` counts characters and a case change reaches every letter. `substring`, `indexOf` and `lastIndexOf` count in characters, a search that finds nothing gives `null`, and a range or a start outside the text throws `OutOfRangeException`. `trim`, `trimStart` and `trimEnd` remove whitespace, and `removePrefix` and `removeSuffix` remove their text once when the text starts or ends with it. `replace` replaces every match, as Kotlin's does. `split` keeps the empty text after a trailing delimiter, and takes Kotlin's `limit`: 0, its default, gives every part, and a positive limit gives at most that many, the last holding the rest. `lines` splits at `"\r\n"`, `"\n"` and `"\r"`. Empty text to replace, an empty delimiter, a negative limit, empty padding and a negative count each throw `ValueError`:
 
 <!-- example text-methods: statements -->
 ```csharp
+"école".length();                         // 5
+"école".substring(1, 3);                  // "co"
+"banana".indexOf("a", 2);                 // 3
+"banana".indexOf("x");                    // null
+"banana".lastIndexOf("a");                // 5
+"/path/".removeSuffix("/");               // "/path"
+"7".padStart(3, "0");                     // "007"
+"école".capitalized();                    // "École"
+"ab".repeat(3);                           // "ababab"
+"a\nb".lines();                           // ["a", "b"]
+"éa".characters();                        // ["é", "a"]
+"éa".codePoints();                        // [233, 97]
+"abc".substring(4);                       // throws OutOfRangeException
 "hello".contains("ell");                  // true
 "hello".contains("xyz");                  // false
 "ÉCOLE".lowercase();                      // "école"
@@ -2901,7 +2923,7 @@ A plain PHP file keeps PHP's own interpolation. It converts an object of a class
 "a,b".split("");                          // throws: "`split` needs a delimiter, and it is empty."
 "a:b".split(":", -1);                     // throws: "`split` takes a limit of 0 or more, and it is negative."
 "hello".contains(1);                      // compile error: contains takes a string
-global.str_contains("hello", "ell");      // compile error: write "hello".contains(…)
+str_contains("hello", "ell");             // compile error: no function str_contains exists
 ```
 
 PHP's backtick shell execution is removed, and so is `shell_exec()`. A program runs through `Process.run(program, arguments)` (section 29), which takes its arguments as a list, so no shell reads them.
@@ -4134,7 +4156,7 @@ import App.Shared.Schema.Entities.DatabaseEntity;
 
 **Full names appear only in `namespace` and `import` lines.** Code uses the short imported name, so `.` in code is always member access. The last part of an import is always a class, or the namespace of a plain PHP library's functions and constants. A full class name inside code is a compile error that names the import to add. A module header names a namespace, as the `namespace` line does, so `module : App.Shop` compiles (section 32).
 
-**A plain PHP library's function is called through its namespace, as a member,** as Go calls a package's functions, as Python does after `import pdf`, as Java calls Kotlin's top-level functions and as C# calls F# modules. After `import Vendor.Pdf;`, the call is `Pdf.render(html)`. A function in PHP's root namespace is called as `global.now()`, as C#'s `global::` names the root. Importing a single function, or calling a function by its bare name, is a compile error, so every call outside the current class reads `Name.member(…)`:
+**A plain PHP library's function is called through its namespace, as a member,** as Go calls a package's functions, as Python does after `import pdf`, as Java calls Kotlin's top-level functions and as C# calls F# modules. After `import Vendor.Pdf;`, the call is `Pdf.render(html)`. Importing a single function, or calling a function by its bare name, is a compile error, so every call outside the current class reads `Name.member(…)`:
 
 <!-- example library-functions -->
 ```php
@@ -4153,7 +4175,7 @@ import Vendor.Pdf;
 public class Printer
 {
     public string print(string html) => Pdf.render(html);     // compiles: the function is called through its namespace
-    public string draft(string html) => render(html);         // compile error: call it through its namespace, as in Pdf.render(html)
+    public string draft(string html) => render(html);         // compile error: no function render exists
 }
 ```
 
@@ -4167,23 +4189,66 @@ import Vendor.Pdf.render;                                     // compile error: 
 public class Draft { }
 ```
 
-**A PHP built-in's failure is the value it returns,** as `global.iconv("UTF-8", "ASCII", text)` returns `false` for text that has a letter ASCII lacks. A call of a built-in whose return type holds `false` or `null` silences the warning for that failure, so an error handler that skips silenced warnings, as Laravel's, Symfony's and PHPUnit's do, never turns it into an exception, and the code tests the value, as Go tests a returned error:
+**A function a library declares outside any namespace belongs to the namespace of the library's classes in the same folder,** as Laravel declares `abort()` beside the classes of `Illuminate\Foundation`, and as Kotlin's top-level functions belong to the package of their file. The namespace comes from the classes beside the file, never from the folder's name. After `import Illuminate.Foundation;`, the call is `Foundation.abort(404)`, the value is `Foundation.abort`, and `extern Foundation.now uses Clock;` declares the effect of `now()` (section 29). The call runs PHP's `\abort(404)`:
 
-<!-- example built-in-failures -->
-```csharp
-public class Codes
-{
-    public string? ascii(string text) => global.iconv("UTF-8", "ASCII", text) is string converted ? converted : null;   // compiles: "café" gives null, with no warning
-    public string? silenced(string text) => @(global.iconv("UTF-8", "ASCII", text)) is string converted ? converted : null;   // parse error
+<!-- example library-root-functions -->
+```php
+namespace Illuminate\Foundation {
+    class Application { }
+}
+
+namespace {
+    function abort(int $code, string $message = ''): never { throw new RuntimeException($message, $code); }
 }
 ```
-<!-- run built-in-failures
-Codes codes = new Codes();
-codes.ascii("abc");   // "abc"
-codes.ascii("café");  // null
+
+<!-- example library-root-functions -->
+```csharp
+// app/Http/CartsController.sharp
+namespace App.Http;
+
+import Illuminate.Foundation;
+
+public class CartsController
+{
+    public void missing() => Foundation.abort(404, "Cart not found.");   // compiles: abort belongs to Illuminate.Foundation, the namespace of the class beside it
+    public void bare() => abort(404);                                    // compile error: no function abort exists
+}
+```
+
+- **A folder whose classes have several namespaces gives its functions each of them,** and a message that names one of the functions writes it through the first in alphabetical order.
+- **A function with no class of the library beside it belongs to no namespace PHP# code imports,** so PHP# code never names it, as it never names PHP's own built-ins.
+- **An import of that namespace is an import like any other,** so a module's `imports` list holds it to the list (section 32).
+- **`global` is an ordinary name.** `global.levenshtein(a, b)` is a compile error that says `global` names no class, and no namespace the file imports, as `gadget.levenshtein(a, b)` is.
+
+**PHP itself is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation (section 8). A built-in the standard library has no member for is called from a plain PHP class of the project, which `.sharp` code imports and calls as any class:
+
+<!-- example built-in-through-a-class -->
+```php
+namespace App\Support;
+
+final class Words
+{
+    public static function distance(string $from, string $to): int { return levenshtein($from, $to); }
+}
+```
+
+<!-- example built-in-through-a-class -->
+```csharp
+import App.Support.Words;
+
+public class Search
+{
+    public int closeness(string query, string title) => Words.distance(query, title);   // compiles: the project's plain PHP class calls levenshtein
+    public int bare(string query, string title) => levenshtein(query, title);           // compile error: no function levenshtein exists
+}
+```
+<!-- run built-in-through-a-class
+Search search = new Search();
+search.closeness("cart", "carts");   // 1
 -->
 
-**A plain PHP constant is read through its namespace the same way.** `global.CURLOPT_TIMEOUT` reads the constant of PHP's curl extension, and `Pdf.DEFAULT_DPI` reads the library's after `import Vendor.Pdf;`. A bare uppercase name is always the code's own constant, so a bare PHP constant such as `CURLOPT_TIMEOUT` is a compile error that says to write `global.CURLOPT_TIMEOUT`. A value the standard library gives is read from it, as `Int.MAX` and `Int.MIN` give the `int` bounds:
+**A plain PHP constant is read through its namespace the same way.** `Pdf.DEFAULT_DPI` reads the library's after `import Vendor.Pdf;`, and a constant a library declares outside any namespace is read through the namespace of its classes, as a function is. A bare uppercase name is always the code's own constant, so a bare `DEFAULT_DPI` is a compile error. PHP's own constants are reached through the standard library, as `Int.MAX` and `Int.MIN` give the `int` bounds:
 
 <!-- example library-constants -->
 ```php
@@ -4201,27 +4266,37 @@ import Vendor.Pdf;
 
 public class Layout
 {
-    public int timeout() => global.CURLOPT_TIMEOUT;               // compiles: PHP's constant is read through global
     public int largest() => Int.MAX;                              // compiles: the standard library gives the int bounds
     public int dpi() => Pdf.DEFAULT_DPI;                          // compiles: the library's constant is read through its namespace
-    public int bare() => CURLOPT_TIMEOUT;                         // compile error: write global.CURLOPT_TIMEOUT
+    public int bare() => DEFAULT_DPI;                             // compile error: no constant DEFAULT_DPI exists
 }
 ```
 
 **An import never carries `uses`,** because a library's effect lives in its one `extern` declaration (section 29).
 
-**The standard library lives under one root, `Sharp`,** with the standard library namespaces `Sharp.Text`, `Sharp.Math`, `Sharp.Json`, `Sharp.IO`, `Sharp.Time`, `Sharp.Net` and `Sharp.Data`, as .NET has `System.*` and Rust has `std::*`.
+**The standard library lives under one root, `Sharp`,** with one standard library namespace per domain, as .NET has `System.*` and Rust has `std::*`:
 
-**`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin. `Error` is the one default name that nothing shadows (section 31):
+- `Sharp.Text` holds the members of `string`, `Regex` and `Html`.
+- `Sharp.Time` holds `Clock`, `Instant`, `Duration`, `Date`, `DateTime`, `TimeZone`, `Weekday` and `Month`.
+- `Sharp.IO` holds `Files`, `Path` and `Console`.
+- `Sharp.System` holds `Process`, `ProcessResult` and `Environment`.
+- `Sharp.Net` holds `Http`, `HttpRequest`, `HttpResponse`, `HttpMethod`, `Url`, `Ip`, `Mail`, `MailMessage` and `MailAddress`.
+- `Sharp.Data` holds `Database` and `Cache`.
+- `Sharp.Encoding` holds `Json`, `Serialized`, `PhpLiteral`, `Base64`, `Hex` and `Compression`.
+- `Sharp.Security` holds `Hash`, `Hmac` and `Password`.
+
+A type never repeats the last part of its namespace, so a call reads `Json.encode(body)` after `import Sharp.Encoding.Json;`.
+
+**`Sharp` itself is imported by default,** together with the standard library's extensions on `string`, `int`, `float`, `List`, `Map` and `Set`, as Kotlin imports `kotlin.*`, `kotlin.text` and `kotlin.collections`. A bare `Int` is `Sharp.Int`, a bare `Math` is `Sharp.Math`, a bare `Key` is the standard attribute, and `name.trim()` needs no import. A class the file declares or imports, or a class in the file's own namespace, shadows the default one, as in Kotlin. `Error` is the one default name that nothing shadows (section 31):
 
 <!-- example own-namespace-shadows -->
 ```csharp
-// app/Shop/Environment.sharp
+// app/Shop/Math.sharp
 namespace App.Shop;
 
-public class Environment
+public static class Math
 {
-    public static string stage() => "production";
+    public static int square(int value) => value * value;
 }
 ```
 
@@ -4232,21 +4307,38 @@ namespace App.Shop;
 
 public class Release
 {
-    public string stage() => Environment.stage();                   // compiles: Environment is App.Shop.Environment, with no import
-    public string? region(Environment environment) => environment.variable("AWS_REGION");   // compile error: App.Shop.Environment declares no variable
+    public int area(int side) => Math.square(side);                  // compiles: Math is App.Shop.Math, with no import
+    public int larger(int a, int b) => Math.max(a, b);               // compile error: App.Shop.Math declares no max
 }
 ```
 
-**PHP's standard exception classes need no import either,** as Java's `java.lang` exceptions and Kotlin's need none. A bare `ValueError`, `OutOfRangeException` or any other exception class in PHP's root namespace names PHP's own. A class of the same name that the file declares or imports, or one in the file's own namespace, shadows it by the same rule:
+**PHP's standard exception classes need no import either,** as Java's `java.lang` exceptions and Kotlin's need none. A bare `ValueError`, `OutOfRangeException` or any other exception class in PHP's root namespace names PHP's own. So do `Throwable`, which every exception is, `Attribute`, which makes a class an attribute, and `Countable` and `JsonSerializable`, which a plain PHP library asks a class to implement. A class of the same name that the file declares or imports, or one in the file's own namespace, shadows it by the same rule:
 
 <!-- example standard-exceptions -->
 ```csharp
 // app/Shop/Gauge.sharp
 namespace App.Shop;
 
-public class Gauge
+public class Gauge : Countable                                                                              // compiles: Countable is PHP's, with no import
 {
+    public int count() => 0;
+
     public int first(List<int> values) => values.count() > 0 ? values[0] : throw new ValueError("empty");   // compiles: ValueError is PHP's, with no import
+}
+```
+
+**PHP's other classes are names only the standard library uses,** as Rust and Swift reach the platform only through their standard libraries. A class, interface or enum PHP or one of its extensions builds in, such as `PDO`, `DateTimeImmutable` or `Random.Randomizer`, is the name a misspelling is in a `.sharp` file outside the standard library: its import is an import of no class, and its bare name names no type. The standard library has a type for each job: `Database` for a database, the types of `Sharp.Time` for a date, `Random` for random numbers, and `Files` for a file. A plain PHP library that reaches one is called as any library:
+
+<!-- example built-in-classes -->
+```csharp
+// app/Shop/Stamp.sharp
+namespace App.Shop;
+
+import DateTimeImmutable;                                     // compile error: no class DateTimeImmutable exists
+
+public class Stamp
+{
+    public int drivers() => PDO.getAvailableDrivers().count();  // compile error: no type PDO exists
 }
 ```
 
@@ -4254,14 +4346,13 @@ public class Gauge
 
 <!-- example standard-library-import: statements
 Map<string, Any> payload = ["id": 1];
-int a = 1;
-int b = 2;
+string text = "PHP#";
 -->
 ```csharp
-import Sharp.Json.Json;
+import Sharp.Encoding.Json;
 
 Json.encode(payload);     // compiles
-Math.max(a, b);           // compile error: Math is not imported
+Base64.encode(text);      // compile error: Base64 is not imported
 ```
 
 **`import X.Y as Z;` renames an import in this file only.** It compiles to PHP's `use X\Y as Z;`. Here the rename keeps the standard `Key`, which `import Cache.Key;` would shadow:
@@ -4524,17 +4615,64 @@ const flag = request.input("flag") == "1";           // replaces (bool)
 
 - `(int)` and `(float)` convert between `int` and `float`. `(string)` converts a number to a `string`.
 - `(int)` truncates a `float` toward zero. A `float` too large for an `int`, or NaN, throws `ArithmeticError`.
-- A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take a `string`, as C#'s `int.Parse(string)` and Kotlin's `String.toInt()` do, and throw on a string that holds anything but a number, such as `"abc"` or `"12abc"`. Spaces around the number count too, as in Rust and Kotlin: `Int.parse(" 12 ")` throws, and its error says to call `Text.trim()` first. An `Any?` is checked with `as string` first.
+- A string becomes a number only by parsing. `Int.parse(s)` and `Float.parse(s)` take a `string`, as C#'s `int.Parse(string)` and Kotlin's `String.toInt()` do, and throw on a string that holds anything but a number, such as `"abc"` or `"12abc"`. Spaces around the number count too, as in Rust and Kotlin: `Int.parse(" 12 ")` throws, and its error says to call `trim()` first. An `Any?` is checked with `as string` first.
 - `Int.tryParse(s)` and `Float.tryParse(s)` take a `string` too, and give null where `parse` throws.
+- An `int` and a `float` have Kotlin's and Rust's number methods, from the standard library's extensions: `abs()`, `clamp(min, max)` and `format()`, which groups the digits in thousands. An `int` has `toHex()`, and `floorDiv(divisor)` and `mod(divisor)`, which round down where `/` and `%` round toward zero, so `(-7).floorDiv(2)` is -4 and `(-7).mod(2)` is 1. A `float` has `round(decimals)`, `floor()`, `ceil()` and `isFinite()`, as in `price.round(2)` and `total.format()`. `abs()` of the smallest `int` throws `ArithmeticError`, and a `clamp` whose minimum is above its maximum throws `ValueError`.
 - A class or an interface narrows only with `as`, which gives null, or with `as … ?? throw` (section 21).
 - PHP# has no user-defined conversion operators, such as C#'s `implicit operator`. A type converts only through a property or method it declares, such as `username.value`.
 - `(bool)`, `(array)` and `(object)` do not exist. Conditions are `bool` (section 21), so a comparison such as `request.input("flag") == "1"` replaces `(bool)`. `(array)` and `(object)` are compile errors that name their replacements, shown below.
 - PHP's cast aliases `(integer)`, `(double)`, `(boolean)` and `(binary)` do not exist.
 
+**Time is values,** as in Kotlin's `kotlinx.datetime`, Java's `java.time` and JavaScript's Temporal, never an `int` of seconds or a format of PHP's letters. `Sharp.Time` holds them:
+
+- An `Instant` is a point on the time line, which `Clock.now()` gives (section 29).
+- A `Duration` is a length of time in nanoseconds.
+- A `Date` is a day of the calendar, with no time and no time zone.
+- A `TimeZone` is a zone of the IANA time zone database, such as `Europe/Sofia`.
+- A `DateTime` is an `Instant` as the clocks of a `TimeZone` show it.
+
+Each one's `toString()` writes ISO-8601, and its `parse` reads it back and throws `ValueError` on any other text, while `tryParse` gives null instead. A `DateTime` writes its zone after the offset, as RFC 9557 does. A day or a zone that does not exist throws `ValueError`:
+
+<!-- example time-values: statements
+import Sharp.Time.Date;
+import Sharp.Time.Duration;
+import Sharp.Time.Instant;
+import Sharp.Time.TimeZone;
+-->
+```csharp
+const paid = Instant.parse("2026-10-22T18:30:00Z");
+paid.plus(Duration.ofHours(2)).toString();                // "2026-10-22T20:30:00Z"
+paid.inZone(new TimeZone("Europe/Sofia")).toString();     // "2026-10-22T21:30:00+03:00[Europe/Sofia]"
+paid.inZone(TimeZone.utc).date.plusMonths(4).toString();  // "2027-02-22"
+Date.parse("2026-01-31").plusMonths(1).toString();        // "2026-02-28"
+Date.parse("2026-10-01").daysUntil(Date.parse("2026-10-22")); // 21
+Duration.parse("PT1H30M").minutes;                        // 90
+Instant.tryParse("yesterday");                            // null
+new Date(2026, 2, 29);                                    // throws ValueError
+```
+
+A format is named by the text it writes, never by PHP's format letters. A `DateTime`'s `toOffsetString()` writes ISO-8601 with the offset and no zone, its `toSqlString()` a SQL `DATETIME`, and an `Instant`'s `toHttpDate()` the HTTP date of RFC 9110. `DateTime.parseLocal(text, zone)` reads a date and a time of day on a zone's clocks, with a space or a `T` between them. A `Date` and a `DateTime` give their `weekday` and `monthOfYear` as the enums `Weekday` and `Month`, whose `toString()` is the English name. Any other text is a template of the fields:
+
+<!-- example time-texts: statements
+import Sharp.Time.DateTime;
+import Sharp.Time.Instant;
+import Sharp.Time.TimeZone;
+import Sharp.Time.Weekday;
+-->
+```csharp
+const sofia = Instant.parse("2026-10-22T18:30:00Z").inZone(new TimeZone("Europe/Sofia"));
+sofia.toOffsetString();                                   // "2026-10-22T21:30:00+03:00"
+sofia.toSqlString();                                      // "2026-10-22 21:30:00"
+sofia.instant.toHttpDate();                               // "Thu, 22 Oct 2026 18:30:00 GMT"
+sofia.weekday == Weekday.Thursday;                        // true
+sofia.monthOfYear.toString();                             // "October"
+DateTime.parseLocal("2026-10-22 21:30:00", TimeZone.utc).toString(); // "2026-10-22T21:30:00+00:00[UTC]"
+```
+
 **Replacing `(array)` and `(object)`:**
 
 <!-- example array-object-replacements: statements
-import Sharp.Json.Json;
+import Sharp.Encoding.Json;
 Object row = Rows.withId(1);
 string email = "ada@example.com";
 -->
@@ -4550,7 +4688,7 @@ const point = (object)["x": 1];                   // parse error
 - **`Json.encode` encodes by the value's PHP# type,** so a `Map` is a JSON object and a `List` is a JSON array wherever it is, below an `Any` too, even when empty, and even when a `Map`'s keys run from 0 to n. A `Map` is an object the engine tells apart from a `List` (section 12).
 
 <!-- example json-encoding: statements
-import Sharp.Json.Json;
+import Sharp.Encoding.Json;
 -->
 ```csharp
 Map<string, int> none = [:];
@@ -4566,11 +4704,11 @@ Json.encode(listed);                              // {"counts":[]}: an empty Lis
 **`Any` holds a value of any type except null. `Any?` also allows null.** A value of type `Any` must be checked with `is`, `as` or `match` before it can be used:
 
 <!-- example any-checks: statements
-import Sharp.Json.Json;
+import Sharp.Encoding.Json;
 string body = "{}";
 -->
 ```csharp
-Any? payload = Json.decode(body);
+Any? payload = Json.parse(body);
 payload.order;                              // compile error: check what payload is first
 if (payload is WebhookPayload) {
     payload.order.total;                    // narrowed to WebhookPayload
@@ -4598,16 +4736,28 @@ bool d = raw == other;             // compile error: other is an unchecked Any? 
 string a = `plan: ${raw}`;         // compile error: check raw with is, as or match first
 ```
 
-PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or untyped arrive as `Any?`. Decoding straight into a type, such as `Json.decode<WebhookPayload>(body)`, is the normal path. That decoding API is specified with the standard library.
+PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or untyped arrive as `Any?`. Decoding straight into a type, such as `Json.decode<WebhookPayload>(body)`, is the normal path: it reads a struct or a PHP# class through its `parse` (section 10), so a bad field throws the one error that lists every bad field, and a type `parse` can't read is a compile error. `Json.parse(body)` gives any JSON value as `Any?`.
 
 **`Object` holds any object, and nothing else.** It compiles to PHP's `object`, and `Object?` adds null. Like `Any`, it has no members until `is` narrows it. An `Object` passes where `Any` is expected, and a plain PHP value typed `object` arrives as `Object`.
 
-<!-- example object-type: statements -->
+<!-- example object-type -->
+```php
+namespace Vendor\Registry;
+
+final class Handles
+{
+    public static function of(object $value): int { return spl_object_id($value); }
+}
+```
+
+<!-- example object-type: statements
+import Vendor.Registry.Handles;
+-->
 ```csharp
 public class Ids
 {
-    public static int identity(Object value) => global.spl_object_id(value);   // compiles
-    public static int identityOf(Any value) => global.spl_object_id(value);    // compile error: Any may hold an int, and spl_object_id takes an object
+    public static int identity(Object value) => Handles.of(value);   // compiles
+    public static int identityOf(Any value) => Handles.of(value);    // compile error: Any may hold an int, and Handles.of takes an object
 
     public static void sync(Object source)
     {
@@ -4862,6 +5012,8 @@ public abstract class DatabaseEntity { public required DatabaseEntity(Row row) {
 // app/Order.sharp
 namespace App;
 
+import Sharp.Time.Clock;
+
 public class Order : DatabaseEntity
 {
     public Order(Row row, Clock? clock = null) : super(row) { … }   // compiles: new Self(row) can call it
@@ -4872,6 +5024,8 @@ public class Order : DatabaseEntity
 ```csharp
 // app/Invoice.sharp
 namespace App;
+
+import Sharp.Time.Clock;
 
 public class Invoice : DatabaseEntity
 {
@@ -5230,8 +5384,6 @@ public class Money
 // app/Shared/Refunds.sharp
 namespace App.Shared;
 
-import Sharp.Math.Math;
-
 public class Refunds
 {
     public static int refundable(int paid, int refunded) => Math.max(paid - refunded, 0);
@@ -5412,7 +5564,7 @@ extern StripeClient uses Http;
 ```
 
 - **A declaration file is an ordinary `.sharp` file.** Its `namespace` line matches its path, as section 5 requires.
-- **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, `extern Carbon.now uses Clock;`, `extern Pdf.render uses Files;` for a function after `import Vendor.Pdf;`, or `extern global.now uses Clock;` for a function in PHP's root namespace (section 23).
+- **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, `extern Carbon.now uses Clock;`, `extern Pdf.render uses Files;` for a function after `import Vendor.Pdf;`, or `extern Foundation.now uses Clock;` for a function a library declares outside any namespace, after `import Illuminate.Foundation;` (section 23).
 - **An `extern` that names no effect declares the class, method or function pure,** as in `extern BigDecimal;`.
 
 <!-- example extern-functions -->
@@ -5427,11 +5579,12 @@ function render(string $html): string { return $html; }
 // app/Stubs/Functions.sharp
 namespace App.Stubs;
 
+import Illuminate.Foundation;
 import Vendor.Pdf;
 
 extern Pdf.render uses Files;        // compiles: Pdf.render(html) has the effect Files
-extern global.now uses Clock;        // compiles: global.now() has the effect Clock
-extern now uses Clock;               // compile error: name the function through its namespace, as in global.now
+extern Foundation.now uses Clock;    // compiles: Foundation.now() has the effect Clock
+extern now uses Clock;               // compile error: no function now exists
 ```
 
 - **Each class, method or function has at most one `extern` declaration in the whole project.** A second one is a compile error, as declaring a class twice is.
@@ -5439,36 +5592,22 @@ extern now uses Clock;               // compile error: name the function through
 - **An object a declared plain PHP call returns carries that call's effect,** so `StripeClient.charges()` returns an object with `Http`, and calling it fits `uses Http`. An `extern` on the returned class itself wins over the inherited effect.
 - **A call to plain PHP with no declaration has an unknown effect.** Code with a body may make it, and is then never pure and never takes part in laws (section 28). No `uses` accepts it, and the error names the missing declaration.
 - **A project declares the effects of every library it uses,** conventionally in `app/Stubs`. PHP# ships declarations for no framework, so every library is declared the same way.
-- **PHP's own built-in functions and exception classes come declared.** PHP#'s Composer package ships an `extern global.…` declaration for each function, so `global.levenshtein(a, b)` is pure, and the `global.fopen(path, "r")` that the standard library's `Files` calls has `Files`. Each built-in exception class is declared pure, so pure code may `throw new ValueError("empty")`.
+- **PHP's own built-in functions and exception classes come declared.** PHP#'s Composer package declares the effect of each built-in function the standard library calls, so `Files` has the effect `Files`. Each built-in exception class is declared pure, so pure code may `throw new ValueError("empty")`.
 
-**The standard library's ten effect classes replace PHP's built-ins for their effects:**
+**The standard library's ten effect classes replace PHP's built-ins for their effects.** Each lives in the namespace of its domain (section 23), and a `uses` names it by its class name with no import, whatever the file imports:
 
-- `Database` replaces PDO.
-- `Http` replaces curl.
-- `Files` replaces every file function outside standard output and standard error.
-- `Console` replaces printing to standard output and standard error.
-- `Process` replaces `exit` and `shell_exec()`.
-- `Clock` replaces `time()`.
-- `Random` replaces `random_int`.
-- `Cache` replaces the APCu functions.
-- `Mail` replaces `mail()`.
-- `Environment` replaces `getenv()` and PHP's other environment functions.
+- `Database`, in `Sharp.Data`, replaces PDO.
+- `Http`, in `Sharp.Net`, replaces curl.
+- `Files`, in `Sharp.IO`, replaces every file function outside standard output and standard error.
+- `Console`, in `Sharp.IO`, replaces printing to standard output and standard error.
+- `Process`, in `Sharp.System`, replaces `exit` and `shell_exec()`.
+- `Clock`, in `Sharp.Time`, replaces `time()`, and its `now()` gives an `Instant`.
+- `Random`, in `Sharp`, replaces `random_int`.
+- `Cache`, in `Sharp.Data`, replaces the APCu functions.
+- `Mail`, in `Sharp.Net`, replaces `mail()`.
+- `Environment`, in `Sharp.System`, replaces `getenv()` and PHP's other environment functions.
 
-Calling a replaced function directly is a compile error that names the method (section 8). **A PHP built-in class the standard library replaces, such as `PDO` or `DateTimeImmutable`, may be imported and named** to hold, pass, return and read what a library gives. Creating one, with `new` or a static factory such as `DateTimeImmutable.createFromFormat(…)`, is a compile error that names the standard library member to use instead, such as `clock.now()` on the `Clock` a constructor takes, or `database.query(…)` on the `Database`:
-
-<!-- example wrapped-class -->
-```csharp
-// app/Shop/Stamp.sharp
-namespace App.Shop;
-
-import DateTimeImmutable;
-
-public class Stamp
-{
-    public string year(DateTimeImmutable moment) => moment.format("Y");      // compiles: code holds and reads one a library gives
-    public DateTimeImmutable now() => new DateTimeImmutable();               // compile error: read the time with clock.now() on the Clock your constructor takes
-}
-```
+A bare call of a replaced function names no function (section 8), and a PHP built-in class names no class (section 23), so only the standard library reaches them. Inside it, creating a built-in class has the effects its `extern` lists, as creating a `DateTimeImmutable` reads the clock.
 
 <!-- example pure-interface -->
 ```csharp
@@ -5486,6 +5625,8 @@ public interface Formatter
 // app/Visitor.sharp
 namespace App;
 
+import Sharp.IO.Files;
+
 public class Visitor
 {
     public Visitor(private Files files) { }
@@ -5499,6 +5640,8 @@ public class Visitor
 ```csharp
 // app/FileFormatter.sharp
 namespace App;
+
+import Sharp.IO.Files;
 
 public class FileFormatter : Formatter
 {
@@ -5541,6 +5684,8 @@ The standard library's ten effect classes, listed above, are `foreign` classes. 
 ```csharp
 // app/Deploy.sharp
 namespace App;
+
+import Sharp.System.Environment;
 
 public class Deploy
 {
@@ -5599,11 +5744,11 @@ public class TenantCache
 // app/Shop/Stamp.sharp
 namespace App.Shop;
 
-import Sharp.Time.Date;
+import Sharp.Time.Clock;
 
 public class Stamp
 {
-    public string stampedWith(Clock clock) => Date.format(clock.now(), "Y-m-d");   // compiles: the method has the effect Clock
+    public string stampedWith(Clock clock) => clock.now().toString();   // compiles: the method has the effect Clock
 }
 ```
 
@@ -5780,7 +5925,7 @@ pricing.setRate((cents) => this.rates.convert(cents));            // compile err
 
 The standard library's collection methods (section 12) take on the effects of their functions this way, so list code with pure functions stays pure, and laws (section 28) can reason about it.
 
-**Plain PHP can run any function it is given,** as `global.usort(list, f)` and `global.call_user_func(f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => this.clock.now()` to `global.call_user_func` has the effect `Clock`.
+**Plain PHP can run any function it is given,** as Laravel's `Collection.map(f)` and `Foundation.app().call(f)` do. So a call of a plain PHP function or method has the effects its `extern` lists, plus the effects of each lambda, method value and function value passed to it. A getter that passes `() => this.clock.now()` to a plain PHP method has the effect `Clock`.
 
 **Code with a body writes no `uses`.** Its effects enter through the constructor, through the plain PHP it calls, through the events it emits and through each function it is given, and its body and declaration show all four. The checker works out each method's effects, and its errors name them, as in "`Gauge.level` calls `Clock.now`, which has the effect `Clock`". A `uses` that names a function parameter, with or without a body, is a parse error that says to delete it.
 
@@ -5900,6 +6045,7 @@ import App.Pricing.PriceRule;
 import App.Pricing.TaxRule;
 import App.Pricing.DiscountRule;
 import App.Cache.RedisStore;
+import Sharp.System.Environment;
 
 module
 {

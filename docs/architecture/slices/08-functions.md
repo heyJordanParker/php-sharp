@@ -2,6 +2,8 @@
 
 Spec section 8, lines 478 to 528 of `docs/spec.md` on master `605ac2e800`, with the parts of sections 7, 23 and 29 it names. team-lead approved this design in Queue 1, with the answers under "Answers" below.
 
+**Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
+
 ## The answer first
 
 Most of section 8 already holds on master: top-level and nested functions are refused, `name.trim()` and `Json.encode` run, a bare `trim(name)` names `name.trim()`, `global.levenshtein` and `global.PHP_EOL` run, a bare `PHP_EOL` names `global.PHP_EOL`, `echo`, `print` and `die` are refused, `global.exit(3)` skips a `finally`, and printing and exiting carry `Console` and `Process`. Two examples fail:

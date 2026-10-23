@@ -3,6 +3,8 @@ PHP# a parameter's default is any expression, a property of a new object too, wh
 --FILE--
 <?php
 require __DIR__ . '/harness/fixture.inc';
+require __DIR__ . '/harness/Probe.inc';
+require __DIR__ . '/harness/Words.inc';
 fixture('ParameterDefaults');
 
 $ledger = new ParameterDefaults\Ledger();

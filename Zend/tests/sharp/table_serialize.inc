@@ -109,7 +109,8 @@ function rows(): array
         'a read-back in a fresh process' => function () {
             $payload = serialize([new Sharp\Map(['tea', 2, 'jam', 5]), Payloads::bySpeed(), Payloads::shipment(), Payloads::ledger(),
                 new Sharp\Set(['vip', 'new']), Payloads::byParcel(), Payloads::byCourier()]);
-            $worker = 'require ' . var_export(__DIR__ . '/harness/fixture.inc', true) . '; require ' . var_export(__FILE__, true) . ';'
+            $worker = 'require ' . var_export(__DIR__ . '/harness/fixture.inc', true) . '; require '
+                . var_export(__DIR__ . '/harness/Probe.inc', true) . '; require ' . var_export(__FILE__, true) . ';'
                 . ' fixture("Queued"); echo read_payload(base64_decode($argv[1]));';
             return shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n -r ' . escapeshellarg($worker) . ' '
                 . escapeshellarg(base64_encode($payload)) . ' 2>&1');
@@ -122,11 +123,11 @@ function rows(): array
         'a wrong element in a Set field' => fn () => shown(tampered(Payloads::crate(), 'E:20:"Queued\Speed:Express";', 'i:5;')),
         'a wrong value inside a List<Map<string, int>> field' => fn () => shown(tampered(Payloads::crate(), 's:3:"tea";i:1;i:1;}}}', 's:3:"tea";i:1;s:1:"x";}}}')),
         'a generic class field' => fn () => shown(tampered(Payloads::box(), 'i:1;i:1;}', 'i:1;s:1:"x";}')),
-        'Sharp.Data.PhpSerializer, which allows no class by default' => function () {
+        'Sharp.Encoding.Serialized, which allows no class by default' => function () {
             $counts = new Sharp\Map(['tea', 2, 'jam', 5]);
-            return shown(Payloads::throughSerializer($counts)) . ' ' . Payloads::serializedKinds($counts, []);
+            return shown(Payloads::throughSerialized($counts)) . ' ' . Payloads::serializedKinds($counts, []);
         },
-        'PhpSerializer allowing a class by its PHP# name' => fn () => shown(Payloads::throughSerializerAllowing(Payloads::crate(), ['Queued.Crate']))
+        'Serialized allowing a class by its PHP# name' => fn () => shown(Payloads::throughSerializedAllowing(Payloads::crate(), ['Queued.Crate']))
             . ' ' . Payloads::serializedKinds(Payloads::crate(), ['Queued.Crate']),
         'allowed_classes => false, which still checks each key\'s class' => fn () => shown(unserialize(serialize([new Sharp\Set(['vip', 'new']), Payloads::byParcel()]), ['allowed_classes' => false])),
         '__unserialize on a Map that holds entries' => function () {

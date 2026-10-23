@@ -1,5 +1,7 @@
 # 43. The effects of PHP's built-in functions
 
+Superseded in part by [decision 83](083-php-through-the-standard-library.md): `global.` does not exist in PHP# code, and a bare `file_put_contents(…)` names no function, as a misspelled name does. Only the standard library calls PHP's built-ins, so their declared effects reach PHP# code through the standard library's members.
+
 Superseded in part by [decision 76](076-plain-php-functions.md): a bare call such as `file_put_contents("seen.txt", token)` below is a compile error.
 
 Superseded in part by [decision 80](080-global-calls-of-replaced-functions.md): outside the standard library, `global.file_put_contents(…)` is a compile error too. Both name `files.write(…)` or `files.append(…)` on the `Files` your constructor takes, which has the effect `Files`.

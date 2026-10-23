@@ -1,12 +1,14 @@
 namespace Demo;
 
+import Lib;
+
 // A PHP# subclass that writes plain PHP's arrays into the collection properties its PHP# base declares.
 public class Cellar : Stockroom
 {
     public string restocked()
     {
-        this.stock = global.price_list();
-        this.names = global.shelf_names();
+        this.stock = Lib.price_list();
+        this.names = Lib.shelf_names();
 
         return `${this.stock.count()} ${this.stock.has("5")} ${this.names.count()} ${this.names.getOrNull(0) ?? "none"}`;
     }

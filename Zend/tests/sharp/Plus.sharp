@@ -34,7 +34,7 @@ class Plus
 
     public static int length(string first, string last)
     {
-        return global.strlen(first + last);
+        return (first + last).length();
     }
 
     public static string repeat(string text, int times)

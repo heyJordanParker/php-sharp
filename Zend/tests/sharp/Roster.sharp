@@ -1,5 +1,6 @@
 namespace Demo;
 
+import Lib.Probe;
 import Lib.Standing;
 
 class Roster
@@ -12,9 +13,9 @@ class Roster
         const kept = members.filter(n => n >= (members.get(Standing.Active) ?? 0));
         members.remove(Standing.Closed);
         return [
-            global.implode(",", ranked),
-            global.implode(",", tens),
-            global.implode(",", kept.map(n => n)),
+            Probe.join(",", ranked),
+            Probe.join(",", tens),
+            Probe.join(",", kept.map(n => n)),
             (string) (busy.get(Standing.Active) ?? 0),
             (string) (busy.get(Standing.Closed) ?? 0),
             (string) (members.get(Standing.Active) ?? 0),

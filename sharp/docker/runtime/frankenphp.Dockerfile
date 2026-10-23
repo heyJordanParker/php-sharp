@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# docker-library/php 8.5/trixie/zts at 79320e28b93fdc720d6f07d150709310cf54e757, built from this repository's source
+# docker-library/php 8.5/trixie/zts at f6048b5f6e3c2202ee082665a4ccc0d90de291a3, built from this repository's source
 # instead of the php.net tarball, then FrankenPHP v1.13.0's Dockerfile stages on top of it, as FrankenPHP builds on
 # php:8.5-zts-trixie.
 #
@@ -84,7 +84,7 @@ ENV PHP_CFLAGS="-fstack-protector-strong -fpic -fpie -O2 -D_LARGEFILE_SOURCE -D_
 ENV PHP_CPPFLAGS="$PHP_CFLAGS"
 ENV PHP_LDFLAGS="-Wl,-O1 -pie"
 
-ENV PHP_VERSION 8.5.11
+ENV PHP_VERSION 8.5.12
 
 COPY --from=source /usr/src/php.tar.xz /usr/src/
 

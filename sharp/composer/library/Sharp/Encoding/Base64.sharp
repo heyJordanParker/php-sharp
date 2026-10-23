@@ -1,0 +1,9 @@
+namespace Sharp.Encoding;
+
+public static class Base64
+{
+    public static string encode(string data) => global.base64_encode(data);
+
+    public static string decode(string text)
+        => global.base64_decode(text, true) is string data ? data : throw new ValueError("Base64.decode: the text is not valid base64");
+}

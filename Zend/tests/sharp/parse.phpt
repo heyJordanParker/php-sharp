@@ -45,9 +45,9 @@ int(-12)
 int(7)
 int(-9223372036854775808)
 int(9223372036854775807)
-ValueError: Int.parse: " -12 " is not an int: remove its spaces with Text.trim() first
+ValueError: Int.parse: " -12 " is not an int: remove its spaces with trim() first
 NULL
-ValueError: Int.parse: "+007	" is not an int: remove its spaces with Text.trim() first
+ValueError: Int.parse: "+007	" is not an int: remove its spaces with trim() first
 NULL
 ValueError: Int.parse: "12abc" is not an int
 NULL
@@ -97,7 +97,7 @@ float(1000)
 float(0.025)
 float(-0)
 float(12.5)
-ValueError: Float.parse: " -0.25 " is not a float: remove its spaces with Text.trim() first
+ValueError: Float.parse: " -0.25 " is not a float: remove its spaces with trim() first
 NULL
 ValueError: Float.parse: "1,5" is not a float
 NULL

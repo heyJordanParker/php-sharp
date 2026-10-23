@@ -1,5 +1,7 @@
 namespace Demo;
 
+import Sharp.Data.Database;
+
 // Reads rows through the Database its constructor takes, as PHP# code does.
 public class Ledger
 {

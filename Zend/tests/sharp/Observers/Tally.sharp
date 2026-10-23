@@ -5,7 +5,7 @@ import RuntimeException;
 
 public class Tally
 {
-    public int count { get; set; didSet => Witness.say(global.sprintf("count %d\n", field)); } = 0;
+    public int count { get; set; didSet => Witness.say(`count ${field}\n`); } = 0;
     private static Tally? kept = null;
 
     public Tally() { }

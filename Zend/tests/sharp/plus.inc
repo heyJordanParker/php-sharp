@@ -1,5 +1,6 @@
 <?php
 
+require __DIR__ . '/harness/Probe.inc';
 require __DIR__ . '/Plus.sharp';
 
 for ($round = 0; $round < 100; $round++) {

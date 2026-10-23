@@ -30,7 +30,7 @@ for ($run = 0; $run < 2; $run++) {
     echo WalletReport::direct(new Wallet(5)), ' ', WalletReport::direct(new Wallet(0)), "\n";
     echo WalletReport::ranks(new AuditedWallet(5), new AuditedWallet(5)), "\n";
 }
-var_dump(class_exists('Sharp\Text\Text', false));
+var_dump(class_exists('Sharp\Text\StringMembers', false));
 ?>
 --EXPECT--
 Lib\Wallet: ada! 7 8 full

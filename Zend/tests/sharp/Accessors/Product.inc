@@ -1,12 +1,11 @@
 <?php declare(strict_types=1); namespace Store;
 
 use InvalidArgumentException;
-use Sharp\Math\Math;
 
 class Product
 {
     public string $sku = "";
-    public string $name = "" { get => $this->name; set { $this->name = \trim($value); } }
+    public string $name = "" { get => $this->name; set { $this->name = \mb_trim($value); } }
     public int $price = 0
     {
 
@@ -19,7 +18,7 @@ class Product
             $this->price = $value;
         }
     }
-    public private(set) int $stock = 0 { set { $this->stock = Math::max(0, $value); } }
+    public private(set) int $stock = 0 { set { $this->stock = \Sharp\Math::max(0, $value); } }
     public array $tags = []
     {
         get => $this->tags;

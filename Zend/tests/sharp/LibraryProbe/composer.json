@@ -1,0 +1,8 @@
+{
+    "name": "heyjordanparker/php-sharp-composer",
+    "autoload": {
+        "psr-4": {
+            "Sharp\\Probe\\": ""
+        }
+    }
+}

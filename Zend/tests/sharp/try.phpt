@@ -20,5 +20,5 @@ var_dump($steps->size);
 --EXPECT--
 int(5)
 int(101)
-RuntimeException: recovered on line 31, from InvalidArgumentException
+RuntimeException: recovered on line 32, from InvalidArgumentException
 int(111)

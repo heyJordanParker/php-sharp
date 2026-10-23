@@ -1,5 +1,6 @@
 namespace NamedVariadics;
 
+import Lib;
 import Lib.Generic;
 import Lib.Markup;
 import Lib.Sized;
@@ -15,5 +16,5 @@ public class Page
 
     public static string sized() => new Sized(name: "box", width: 3, height: 4).describe();
 
-    public static string called() => global.markup_attributes("a", href: "/home");
+    public static string called() => Lib.markup_attributes("a", href: "/home");
 }

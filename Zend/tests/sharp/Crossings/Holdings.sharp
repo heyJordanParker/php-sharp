@@ -1,6 +1,8 @@
 namespace Demo;
 
 import Label;
+import Lib;
+import Lib.Probe;
 
 [Label("paid", config: ["variant": "success"])]
 public class Holdings
@@ -57,7 +59,7 @@ public class Holdings
         Map<string, int> limits = Holdings.LIMITS;
         Set<string> codes = Holdings.CODES;
 
-        return `${global.get_class(limits)} ${global.get_class(codes)}`;
+        return `${Probe.className(limits)} ${Probe.className(codes)}`;
     }
 
     public static string pairText()
@@ -68,11 +70,11 @@ public class Holdings
     }
 
     // A plain PHP parameter that takes only an object takes the Map or the Set itself.
-    public string payloadClass() => global.get_class(this.payload);
+    public string payloadClass() => Probe.className(this.payload);
 
-    public string firstRowClass() => global.get_class(this.rows[0]);
+    public string firstRowClass() => Probe.className(this.rows[0]);
 
-    public static string countsClass() => global.get_class(Holdings.counts);
+    public static string countsClass() => Probe.className(Holdings.counts);
 
     public int accepted(Map<string, string> given) => given.count();
 
@@ -88,7 +90,7 @@ public class Holdings
     public static Any? collidedFirstKey()
     {
         Map<int|string, string> codes = [5: "a", "5": "b"];
-        return global.array_key_first(codes);
+        return Probe.firstKey(codes);
     }
 
     public static Any collidedAny()
@@ -106,8 +108,8 @@ public class Holdings
         Holdings.mixedCodes = [5: "a", "5": "b"];
     }
 
-    // The PHP array get_object_vars gives, a Map<int|string, Any?> in PHP#, passes back to plain PHP.
-    public static Any? firstPropertyName(Holdings holdings) => global.array_key_first(global.get_object_vars(holdings));
+    // The PHP array `Probe.fields` gives, a Map<string, Any?> in PHP#, passes back to plain PHP.
+    public static Any? firstPropertyName(Holdings holdings) => Probe.firstKey(Probe.fields(holdings));
 
     public Map<Weather, int> weatherCounts() => [Weather.Rainy: 2];
 
@@ -123,15 +125,15 @@ public class Holdings
 
     public virtual Map<string, int> tally() => ["t": 1];
 
-    public string tallyClass() => global.get_class(this.tally());
+    public string tallyClass() => Probe.className(this.tally());
 
     // Each PHP array a plain PHP generator yields, held as an Iterable<Map<string, int>>.
     public static string plainRows()
     {
-        Iterable<Map<string, int>> rows = global.price_rows();
+        Iterable<Map<string, int>> rows = Lib.price_rows();
         let seen = "";
         for (const row of rows) {
-            seen = `${seen}${global.get_class(row)}:${row.count()} `;
+            seen = `${seen}${Probe.className(row)}:${row.count()} `;
         }
         return seen;
     }

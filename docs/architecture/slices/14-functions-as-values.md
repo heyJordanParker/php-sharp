@@ -2,6 +2,8 @@
 
 Spec section 14: function types, lambdas, methods as values and the null operators. This note holds every rule line of the section, its state on master `c4adf74516`, its mechanism and the code it reuses. Hosts (#136) and effect classes (#151) land in their own pull requests, and this Slice builds on them without building them again: a method takes on the effects of each function it is given, a function parameter whose type states no effects never escapes, and an effect object is an ordinary type.
 
+**Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
+
 ## The answer first
 
 All eight examples of section 14 pass on master, and most rule lines hold, engine included. Behind the examples, seven gaps remain:

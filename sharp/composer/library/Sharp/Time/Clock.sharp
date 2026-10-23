@@ -1,0 +1,40 @@
+namespace Sharp.Time;
+
+import DateTimeImmutable;
+
+// The clock, as .NET's TimeProvider and Kotlin's Clock.
+public foreign class Clock
+{
+    public Instant now()
+    {
+        const now = new DateTimeImmutable("now");
+
+        return new Instant(now.getTimestamp(), Int.parse(now.format("u")) * 1_000);
+    }
+
+    // Monotonic nanoseconds, only for measuring.
+    public int timestamp()
+        => global.hrtime(true) is int nanoseconds ? nanoseconds : throw new RuntimeException("Clock.timestamp: the monotonic clock cannot be read");
+
+    // The time since a `timestamp()`.
+    public Duration elapsedSince(int start)
+    {
+        const elapsed = this.timestamp() - start;
+        if (elapsed < 0) {
+            throw new ValueError("Clock.elapsedSince: the start is later than now");
+        }
+
+        return new Duration(elapsed);
+    }
+
+    public void sleep(Duration duration)
+    {
+        if (duration.nanoseconds < 0) {
+            throw new ValueError("Clock.sleep: the duration is negative");
+        }
+        const microseconds = duration.nanoseconds / 1_000;
+        if (microseconds > 0) {
+            global.usleep(microseconds);
+        }
+    }
+}

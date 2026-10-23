@@ -131,6 +131,20 @@ PHP_INI_END()
 
 static zend_op_array *(*sharp_next_compile_file)(zend_file_handle *file_handle, int type);
 
+/* Whether the request ran past memory_limit, after which it throws the fatal error at once, as zend_call_function does.
+ * An allocation past memory_limit succeeds, and the VM raises the error at its next safe point (GHSA-w8hw-w9fx-j79w), but
+ * one past the hard limit above it, twice memory_limit by default, ends the process. So a loop that allocates for each
+ * element of a value, and runs no PHP code between them, checks before each one and stops through its exception path. */
+static bool sharp_out_of_memory(void)
+{
+	if (EXPECTED(!ZEND_HAS_OOM())) {
+		return false;
+	}
+	zend_handle_delayed_oom();
+
+	return true;
+}
+
 typedef struct {
 	const sharp_node *nodes;
 	const uint32_t *children;
@@ -1623,6 +1637,9 @@ ZEND_METHOD(Sharp_Collection, entries)
 	zend_ulong index;
 	zval *element;
 	ZEND_HASH_FOREACH_NUM_KEY_VAL(Z_ARRVAL_P(held), index, element) {
+		if (sharp_out_of_memory()) {
+			RETURN_THROWS();
+		}
 		zval key;
 		ZVAL_LONG(&key, (zend_long) index);
 		sharp_table_put(table, &key, element);
@@ -1775,6 +1792,9 @@ static HashTable *sharp_table_to_list(zend_object *object)
 	HashTable *list = zend_new_array(table->size);
 
 	SHARP_TABLE_FOREACH(table, bucket) {
+		if (sharp_out_of_memory()) {
+			break;
+		}
 		zval listed;
 		if (object->ce == sharp_ce_map) {
 			array_init_size(&listed, 2);
@@ -2643,7 +2663,7 @@ static bool sharp_sequence_append(zval *sequence, zval *list)
 	}
 
 	sharp_sequence_iterator_next(iterator, true);
-	while (!EG(exception) && !Z_ISUNDEF(iterator->value)) {
+	while (!EG(exception) && !Z_ISUNDEF(iterator->value) && !sharp_out_of_memory()) {
 		Z_TRY_ADDREF(iterator->value);
 		zend_hash_next_index_insert_new(Z_ARRVAL_P(list), &iterator->value);
 		sharp_sequence_iterator_next(iterator, false);
@@ -3118,6 +3138,11 @@ static sharp_type_node *sharp_type_read_atom(sharp_type_reader *reader)
 {
 	const char *start = reader->at;
 	sharp_type_node *type;
+
+	/* Every node of a text starts here, so a long one read from input stops once it runs out of memory. */
+	if (sharp_out_of_memory()) {
+		return NULL;
+	}
 
 	bool of_class = sharp_type_skip(reader, "$");
 	if (of_class || sharp_type_skip(reader, "#")) {
@@ -4605,7 +4630,7 @@ static bool sharp_type_table_holds(
 		if (entries) {
 			zval_ptr_dtor(&entry);
 		}
-		if (UNEXPECTED(EG(exception)) || (!holds && !problems)) {
+		if (UNEXPECTED(EG(exception)) || (!holds && !problems) || sharp_out_of_memory()) {
 			break;
 		}
 	} SHARP_TABLE_FOREACH_END();
@@ -4657,7 +4682,7 @@ static bool sharp_type_collection_holds(
 		if (!sharp_type_entry_holds(keys, key_holds, &key, elements, element, mode, problems)) {
 			holds = false;
 		}
-		if (UNEXPECTED(EG(exception)) || (!holds && !problems)) {
+		if (UNEXPECTED(EG(exception)) || (!holds && !problems) || sharp_out_of_memory()) {
 			break;
 		}
 	} ZEND_HASH_FOREACH_END();
@@ -4686,7 +4711,7 @@ static bool sharp_type_tuple_holds(
 		if (!sharp_type_entry_holds(NULL, true, &at, type->members[position++], element, mode, problems)) {
 			holds = false;
 		}
-		if (UNEXPECTED(EG(exception)) || (!holds && !problems)) {
+		if (UNEXPECTED(EG(exception)) || (!holds && !problems) || sharp_out_of_memory()) {
 			break;
 		}
 	} ZEND_HASH_FOREACH_END();
@@ -4855,6 +4880,9 @@ static void sharp_type_convert(const sharp_type *type, zval *value)
 	zval *element;
 	SEPARATE_ARRAY(value);
 	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(value), element) {
+		if (sharp_out_of_memory()) {
+			return;
+		}
 		sharp_type_convert(sharp_type_element_at(converting, position++), element);
 	} ZEND_HASH_FOREACH_END();
 }
@@ -4961,6 +4989,9 @@ static void sharp_type_renumber(const sharp_type *type, zval *value)
 	uint32_t position = 0;
 	zval *element;
 	ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(value), element) {
+		if (sharp_out_of_memory()) {
+			return;
+		}
 		const sharp_type *at = sharp_type_renumbered_element(type, position++);
 		if (at) {
 			sharp_type_renumber(at, element);
@@ -4980,7 +5011,7 @@ bool sharp_type_accepts(const sharp_type *type, zval *value, sharp_type_problems
 	}
 	sharp_type_convert(type, value);
 
-	return true;
+	return !EG(exception);
 }
 
 /* The type arguments of the generic method `frame` runs, which it keeps in its hidden local, or NULL. */
@@ -6092,9 +6123,9 @@ zend_result sharp_type_arguments_unserialize(
 	return SUCCESS;
 }
 
-/* The native body of `Sharp.Environment.commandLine`: the command-line arguments as PHP's `$argv` holds them, starting
+/* The native body of `Sharp.System.Environment.commandLine`: the command-line arguments as PHP's `$argv` holds them, starting
  * with the script's name. Only the SAPI holds them, so this body is C behind the prototype sharp/bin/native writes. */
-void sharp_native_Environment_commandLine(zval *result)
+void sharp_native_System_Environment_commandLine(zval *result)
 {
 	ZVAL_COPY(result, &SHARP_G(arguments));
 }
@@ -7223,7 +7254,7 @@ static void sharp_add_listener(zval *listeners, zval *row, zend_ulong scoped)
 
 /* Fills listeners with one function per listener of the event: the table's, in its order, then the scoped listeners,
  * in the order they started. A listener started or stopped later doesn't change the list, though a stopped one's
- * function runs nothing. Throws and returns false when the table is damaged. */
+ * function runs nothing. Throws and returns false when the table is damaged or the request runs out of memory. */
 static bool sharp_listeners_for(zval *event, zval *listeners)
 {
 	HashTable *rows = sharp_listeners_of(Z_OBJ_P(event));
@@ -7239,6 +7270,11 @@ static bool sharp_listeners_for(zval *event, zval *listeners)
 		sharp_add_listener(listeners, row, 0);
 	} ZEND_HASH_FOREACH_END();
 	ZEND_HASH_FOREACH_NUM_KEY_PTR(&SHARP_G(scoped_listeners), number, listening) {
+		if (sharp_out_of_memory()) {
+			zval_ptr_dtor(listeners);
+			ZVAL_NULL(listeners);
+			return false;
+		}
 		if (sharp_hears(Z_OBJ_P(event), listening->type)) {
 			sharp_add_listener(listeners, NULL, number);
 		}
@@ -7701,7 +7737,7 @@ static bool sharp_crossed(zval *result, zval *value, const zval *plan)
 	if (zend_string_equals_literal(Z_STR_P(kind), "list")) {
 		array_init_size(result, zend_hash_num_elements(entries));
 		ZEND_HASH_FOREACH_KEY_VAL(entries, index, name, element) {
-			if (!sharp_crossed(&crossed, element, inner)) {
+			if (sharp_out_of_memory() || !sharp_crossed(&crossed, element, inner)) {
 				zval_ptr_dtor(result);
 				return false;
 			}
@@ -7719,7 +7755,7 @@ static bool sharp_crossed(zval *result, zval *value, const zval *plan)
 		sharp_table_object_create(is_set ? sharp_ce_set : sharp_ce_map, zend_hash_num_elements(entries));
 	ZVAL_OBJ(result, &table->std);
 	ZEND_HASH_FOREACH_KEY_VAL(entries, index, name, element) {
-		if (!sharp_crossed(&crossed, element, inner)) {
+		if (sharp_out_of_memory() || !sharp_crossed(&crossed, element, inner)) {
 			zval_ptr_dtor(result);
 			return false;
 		}
@@ -7914,7 +7950,7 @@ static bool sharp_table_array(zval *result, zend_object *object, zval **unheld)
 			break;
 		}
 		sharp_array_of(&converted, is_set ? key : &bucket->value);
-		if (UNEXPECTED(EG(exception))) {
+		if (UNEXPECTED(EG(exception)) || sharp_out_of_memory()) {
 			zval_ptr_dtor(&converted);
 			break;
 		}
@@ -7973,7 +8009,7 @@ void sharp_array_of(zval *result, zval *value)
 		}
 		zval crossed;
 		sharp_array_of(&crossed, held);
-		if (UNEXPECTED(EG(exception))) {
+		if (UNEXPECTED(EG(exception)) || sharp_out_of_memory()) {
 			zval_ptr_dtor(&crossed);
 			break;
 		}
@@ -8524,6 +8560,10 @@ ZEND_METHOD(Sharp_Table, jsonSerialize)
 	sharp_table *table = sharp_table_of(object);
 	HashTable *encoded = zend_new_array(table->size);
 	SHARP_TABLE_FOREACH(table, bucket) {
+		if (sharp_out_of_memory()) {
+			zend_array_release(encoded);
+			RETURN_THROWS();
+		}
 		if (object->ce == sharp_ce_set) {
 			Z_TRY_ADDREF(bucket->key);
 			zend_hash_next_index_insert_new(encoded, &bucket->key);
@@ -8644,6 +8684,9 @@ static bool sharp_map_fill(zend_object *map, HashTable *keys_and_values)
 
 	zval *key = NULL, *element;
 	ZEND_HASH_FOREACH_VAL(keys_and_values, element) {
+		if (sharp_out_of_memory()) {
+			return false;
+		}
 		if (!key) {
 			key = element;
 		} else if (!sharp_table_put(table, key, element)) {
@@ -8734,7 +8777,7 @@ static bool sharp_set_fill(zend_object *set, HashTable *values)
 	zval null, *element;
 	ZVAL_NULL(&null);
 	ZEND_HASH_FOREACH_VAL(values, element) {
-		if (!sharp_table_put(table, element, &null)) {
+		if (sharp_out_of_memory() || !sharp_table_put(table, element, &null)) {
 			return false;
 		}
 	} ZEND_HASH_FOREACH_END();

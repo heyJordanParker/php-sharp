@@ -1,5 +1,7 @@
 <?php declare(strict_types=1); namespace Demo;
 
+use Lib\Callbacks;
+use Lib\Probe;
 use OutOfRangeException;
 
 class Lambdas
@@ -15,7 +17,7 @@ class Lambdas
             $count += $step + $this->base;
         };
         $bump = function () use (&$count) { return $count += 1; };
-        \call_user_func($add, $twice($half(4)));
+        Callbacks::call($add, $twice($half(4)));
         $bump();
         return $count;
     }
@@ -37,7 +39,7 @@ class Lambdas
             ((object) $marks)->add(function () use (&$seen) { return $seen; });
             $times -= 1;
         }
-        return \implode(",", ((object) $marks)->map(fn ($read) => $read()));
+        return Probe::join(",", ((object) $marks)->map(fn ($read) => $read()));
     }
 
     public static function pipeline(array $numbers, \Sharp\Map|array $prices): array { $prices = \is_array($prices) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [(string) $key, $value], \array_keys($prices), $prices))) : $prices; // PHP# makes the array a Map, its keys strings
@@ -46,13 +48,13 @@ class Lambdas
         $labels = ((object) $odd)->map(fn ($n) => (string) ($n * 10));
         $groups = ((object) $numbers)->groupBy(fn ($n) => $n % 2 === 0 ? "even" : "odd");
         return [
-            \implode(",", $labels),
-            \implode(",", ((object) $numbers)->sortedBy(fn ($n) => -$n)),
-            \implode(",", $groups["odd"] ?? []),
-            \implode(",", ((object) ((object) $labels)->associateBy(fn ($label) => $label))->keys()),
-            \implode(",", ((object) ((object) $prices)->filter(fn ($price) => $price < 100))->keys()),
-            \implode(",", \Sharp\Internal\arrayOf(((object) $prices)->filter(fn ($price) => $price < 100))), // PHP# passes plain PHP the Map's array
-            \implode(",", ((object) $prices)->map(fn ($price) => $price * 2)),
+            Probe::join(",", $labels),
+            Probe::join(",", ((object) $numbers)->sortedBy(fn ($n) => -$n)),
+            Probe::join(",", $groups["odd"] ?? []),
+            Probe::join(",", ((object) ((object) $labels)->associateBy(fn ($label) => $label))->keys()),
+            Probe::join(",", ((object) ((object) $prices)->filter(fn ($price) => $price < 100))->keys()),
+            Probe::join(",", \Sharp\Internal\arrayOf(((object) $prices)->filter(fn ($price) => $price < 100))), // PHP# passes plain PHP the Map's array
+            Probe::join(",", ((object) $prices)->map(fn ($price) => $price * 2)),
         ];
     }
 

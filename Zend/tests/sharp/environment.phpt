@@ -7,15 +7,15 @@ production --force
 --FILE--
 <?php
 
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Environment.sharp';
+require __DIR__ . '/../../../sharp/composer/library/Sharp/System/Environment.sharp';
 require __DIR__ . '/Deploy.sharp';
 
-$deploy = new Demo\Deploy(new Sharp\Environment());
+$deploy = new Demo\Deploy(new Sharp\System\Environment());
 var_dump($deploy->variable('SHARP_REGION'), $deploy->variable('SHARP_UNSET_REGION'));
 var_dump($deploy->arguments() === $argv);
 echo implode(' ', array_slice($deploy->arguments(), 1)), ' ', $deploy->target(), "\n";
 
-$environment = new Sharp\Environment();
+$environment = new Sharp\System\Environment();
 $start = $deploy->folder();
 var_dump($start === getcwd());
 $environment->changeDirectory(__DIR__ . '/harness');
@@ -45,9 +45,9 @@ try {
     echo $e->getMessage(), "\n";
 }
 
-$code = 'require ' . var_export(__DIR__ . '/../../../sharp/composer/library/Sharp/Environment.sharp', true) . ';'
+$code = 'require ' . var_export(__DIR__ . '/../../../sharp/composer/library/Sharp/System/Environment.sharp', true) . ';'
     . ' require ' . var_export(__DIR__ . '/Deploy.sharp', true) . ';'
-    . ' try { (new Demo\Deploy(new Sharp\Environment()))->target(); } catch (OutOfRangeException $e) { echo get_class($e), "\n"; }';
+    . ' try { (new Demo\Deploy(new Sharp\System\Environment()))->target(); } catch (OutOfRangeException $e) { echo get_class($e), "\n"; }';
 echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' ' . getenv('TEST_PHP_EXTRA_ARGS') . ' -r ' . escapeshellarg($code) . ' 2>&1');
 
 try {
@@ -86,6 +86,6 @@ bool(true)
 Environment.setVariable: the name "SHARP=BROKEN" holds "=" or is empty
 Environment.require: the environment variable "SHARP_UNSET_REGION" is not set
 OutOfRangeException
-Cannot modify readonly property Sharp\Environment::$arguments
-Cannot indirectly modify readonly property Sharp\Environment::$arguments
-Cannot unset readonly property Sharp\Environment::$arguments
+Cannot modify readonly property Sharp\System\Environment::$arguments
+Cannot indirectly modify readonly property Sharp\System\Environment::$arguments
+Cannot unset readonly property Sharp\System\Environment::$arguments

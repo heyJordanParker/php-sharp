@@ -21,6 +21,7 @@ SKIPPED	Zend/tests/int_overflow_32bit.phpt
 SKIPPED	Zend/tests/int_underflow_32bit.phpt
 SKIPPED	Zend/tests/magic_methods/bug68412.phpt
 SKIPPED	Zend/tests/multibyte/multibyte_encoding_006.phpt
+SKIPPED	Zend/tests/oom_request_parsing.phpt
 SKIPPED	Zend/tests/temporary_cleaning/temporary_cleaning_014.phpt
 SKIPPED	Zend/tests/type_coercion/float_to_int/dval_to_lval_32.phpt
 SKIPPED	Zend/tests/type_coercion/float_to_int/explicit_casts_should_not_warn_32bit.phpt
@@ -32,6 +33,7 @@ SKIPPED	ext/opcache/tests/api/opcache_preloading_002.phpt
 SKIPPED	ext/opcache/tests/blacklist-win32.phpt
 SKIPPED	ext/opcache/tests/bug78189.phpt
 SKIPPED	ext/opcache/tests/file_cache_error.phpt
+SKIPPED	ext/opcache/tests/file_cache_frameless_handler.phpt
 SKIPPED	ext/opcache/tests/gh10405.phpt
 SKIPPED	ext/opcache/tests/gh18417.phpt
 SKIPPED	ext/opcache/tests/gh8466.phpt

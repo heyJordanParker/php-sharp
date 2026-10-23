@@ -1,0 +1,37 @@
+namespace Demo;
+
+import Sharp.Time.Date;
+import Sharp.Time.DateTime;
+import Sharp.Time.Instant;
+import Sharp.Time.TimeZone;
+import Sharp.Time.Weekday;
+
+class DateTextCalls
+{
+    public static string names(string day)
+    {
+        const date = Date.parse(day);
+
+        return `${date.weekday.toString()} ${date.monthOfYear.toString()} ${date.lengthOfMonth}`;
+    }
+
+    public static bool weekend(string day) => Date.parse(day).weekday == Weekday.Saturday || Date.parse(day).weekday == Weekday.Sunday;
+
+    public static string monthBounds(string day)
+    {
+        const date = Date.parse(day);
+
+        return `${new Date(date.year, date.month, 1).toString()} ${new Date(date.year, date.month, date.lengthOfMonth).toString()} ${new Date(date.year, 1, 1).toString()}`;
+    }
+
+    public static string texts(string instant, string zone)
+    {
+        const time = Instant.parse(instant).inZone(new TimeZone(zone));
+
+        return `${time.toOffsetString()} | ${time.toSqlString()} | ${time.weekday.toString()} | ${Instant.parse(instant).toHttpDate()}`;
+    }
+
+    public static string local(string text, string zone) => DateTime.tryParseLocal(text, new TimeZone(zone))?.toString() ?? "null";
+
+    public static string strictLocal(string text, string zone) => DateTime.parseLocal(text, new TimeZone(zone)).toString();
+}

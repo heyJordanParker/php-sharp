@@ -2,6 +2,8 @@
 
 Spec section 23, and section 2's rule that keywords are lowercase. team-lead approved G1 to G8, the four engine test files and `ParseError::UsesOnImportInSharp`, with the answers below, which replace the proposals of this note wherever they differ.
 
+**Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
+
 ## Answers in force
 
 1. **Q1:** no. An alias exists only in a framework's runtime config, so `import Log;` names a class the checker sees, as in `import Illuminate.Support.Facades.Log;`. Its error says there is no class `Log` to import, with no special case for `log()`.

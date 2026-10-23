@@ -1,10 +1,10 @@
 --TEST--
-A PHP# class calls every method of Sharp.Data.Compression, and Compression.uncompress throws ValueError on data that is not zlib-compressed, with no warning
+A PHP# class calls every method of Sharp.Encoding.Compression, and Compression.uncompress throws ValueError on data that is not zlib-compressed, with no warning
 --EXTENSIONS--
 zlib
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Data/Compression.sharp';
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Compression.sharp';
 require __DIR__ . '/CompressionCalls.sharp';
 
 use Demo\CompressionCalls;

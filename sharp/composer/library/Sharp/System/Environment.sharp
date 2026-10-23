@@ -1,0 +1,41 @@
+namespace Sharp.System;
+
+public foreign class Environment
+{
+    public List<string> arguments { get; }
+
+    public Environment()
+    {
+        this.arguments = Environment.commandLine();
+    }
+
+    public string? variable(string name) => global.getenv(name) is string value ? value : null;
+
+    public Map<string, string> variables() => global.getenv();
+
+    // Sets the variable for this process and the programs it starts.
+    public void setVariable(string name, string value)
+    {
+        if (name == "" || global.str_contains(name, "=")) {
+            throw new ValueError(`Environment.setVariable: the name "${name}" holds "=" or is empty`);
+        }
+        if (!global.putenv(`${name}=${value}`)) {
+            throw new RuntimeException(`Environment.setVariable: the variable "${name}" cannot be set`);
+        }
+    }
+
+    public string currentDirectory()
+        => global.getcwd() is string directory ? directory : throw new RuntimeException("Environment.currentDirectory: the current directory cannot be read");
+
+    public void changeDirectory(string path)
+    {
+        if (!global.chdir(path)) {
+            throw new RuntimeException(`Environment.changeDirectory: the directory "${path}" cannot be entered`);
+        }
+    }
+
+    public string require(string name)
+        => global.getenv(name) is string value ? value : throw new ValueError(`Environment.require: the environment variable "${name}" is not set`);
+
+    private static extern List<string> commandLine();
+}

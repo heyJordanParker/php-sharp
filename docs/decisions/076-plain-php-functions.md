@@ -1,5 +1,7 @@
 # 76. Calling plain PHP functions
 
+Superseded in part by [decision 83](083-php-through-the-standard-library.md): `global.` does not exist in PHP# code, and a function a library declares in PHP's root namespace is called through the namespace of the library's classes beside it, as `Foundation.abort(404)`. A bare call or a bare PHP constant is the error a misspelled name gets, and the checker keeps no table of replacements. PHP's own functions and constants are reached only through the standard library, which alone keeps `global.`.
+
 Superseded in part by [decision 80](080-global-calls-of-replaced-functions.md): outside the standard library, a call through `global` of a function the standard library replaces is a compile error with its bare call's message, as `global.trim(name)` names `name.trim()`. Only the standard library calls such a function, so it is no longer "the same way, with no exemption".
 
 ## Decision

@@ -16,7 +16,7 @@ public static class Int
             throw new ArithmeticError(`Int.parse: "${text}" is out of range for an int`);
         }
         if (Int.digits(global.trim(text)) is string) {
-            throw new ValueError(`Int.parse: "${text}" is not an int: remove its spaces with Text.trim() first`);
+            throw new ValueError(`Int.parse: "${text}" is not an int: remove its spaces with trim() first`);
         }
         throw new ValueError(`Int.parse: "${text}" is not an int`);
     }
@@ -32,5 +32,48 @@ public static class Int
         let found = 0;
         const digits = global.preg_replace("/\\A([+-]?)0*([0-9]+)\\z/", "$1$2", text, 1, found);
         return found == 1 ? digits : null;
+    }
+
+    extension(int value)
+    {
+        public int abs()
+            => value == Int.MIN
+                ? throw new ArithmeticError("`abs` of the smallest int is larger than the largest int.")
+                : global.abs(value);
+
+        public int clamp(int min, int max)
+            => min > max
+                ? throw new ValueError("`clamp` needs a minimum no larger than its maximum, and the minimum is larger.")
+                : value < min ? min : value > max ? max : value;
+
+        // The quotient rounded down, as Kotlin's floorDiv and Java's Math.floorDiv: -7.floorDiv(2) is -4.
+        public int floorDiv(int divisor)
+        {
+            const quotient = value / divisor;
+
+            return value % divisor != 0 && (value < 0) != (divisor < 0) ? quotient - 1 : quotient;
+        }
+
+        // The remainder with the divisor's sign, as Kotlin's mod and Java's Math.floorMod: -7.mod(2) is 1.
+        public int mod(int divisor)
+        {
+            const remainder = value % divisor;
+
+            return remainder != 0 && (remainder < 0) != (divisor < 0) ? remainder + divisor : remainder;
+        }
+
+        public string format(string thousandsSeparator = ",")
+        {
+            const digits = global.strrev(global.ltrim(global.strval(value), "-"));
+            const grouped = global.strrev(global.implode(global.strrev(thousandsSeparator), global.str_split(digits, 3)));
+            return value < 0 ? "-" + grouped : grouped;
+        }
+
+        public string toHex()
+            => value == Int.MIN ? "-8000000000000000" : value < 0 ? "-" + global.dechex(-value) : global.dechex(value);
+
+        // The string of the one byte `value`, from 0 to 255, as Kotlin's `Int.toByte()` gives it.
+        public string toByteString()
+            => value >= 0 && value <= 255 ? global.chr(value) : throw new ValueError("`toByteString` needs a byte from 0 to 255, and the value is outside it.");
     }
 }
