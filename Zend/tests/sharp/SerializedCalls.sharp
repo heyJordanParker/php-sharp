@@ -1,0 +1,15 @@
+namespace Demo;
+
+import Sharp.Encoding.PhpLiteral;
+import Sharp.Encoding.Serialized;
+
+class SerializedCalls
+{
+    public static string encode(Any? value) => Serialized.encode(value);
+
+    public static Any? decode(string text) => Serialized.decode(text);
+
+    public static Any? decodeAllowing(string text, List<string> allowedClasses) => Serialized.decode(text, allowedClasses);
+
+    public static string literal(Any? value) => PhpLiteral.of(value);
+}

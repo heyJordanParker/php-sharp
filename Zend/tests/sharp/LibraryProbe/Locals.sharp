@@ -1,0 +1,7 @@
+namespace Sharp.Probe;
+
+// A generic method of a file the standard library's package holds, which alone may call PHP's get_defined_vars.
+public static class Locals
+{
+    public static Map<int|string, Any?> of<T>(T item) => global.get_defined_vars();
+}

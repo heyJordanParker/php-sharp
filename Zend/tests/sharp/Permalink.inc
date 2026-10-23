@@ -2,5 +2,5 @@
 
 class Permalink
 {
-    public static function of(string $title): string { return \Sharp\Text\StringMembers::slug($title); }
+    public static function of(string $title): string { return \Sharp\Internal\Text\StringMembers\slugOf($title); }
 }

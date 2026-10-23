@@ -14,7 +14,6 @@ PHP# code reaches PHP only through the standard library (decision 83). Real code
 | `define`, `defined`, `constant` | a class's `const` (section 2) |
 | `compact` | a `Map` literal, `["name": name]` (section 12) |
 | `func_get_args` | a rest parameter, `int ...rest` (section 7) |
-| `var_export`, `serialize`, `unserialize` | `Json.encode(value)`, `Json.decode(text)` |
 | `gettype`, `get_debug_type` | leave-out: the checker knows every value's type, and its messages name it |
 | `function_exists`, `class_exists`, `interface_exists`, `enum_exists`, `method_exists`, `property_exists`, `get_parent_class`, `class_implements`, `class_uses`, `get_declared_classes`, `get_object_vars`, `is_resource`, `spl_object_id` | leave-out: the checker decides what exists when it compiles, and `==` on objects compares them (section 19) |
 | `token_get_all` | leave-out: it reads PHP source, which PHP# code never holds |
@@ -117,10 +116,20 @@ PHP# code reaches PHP only through the standard library (decision 83). Real code
 | PHP | PHP# |
 | --- | --- |
 | `time`, `microtime` | `Clock.now()`, an `Instant`, and `Clock.timestamp()` for measuring |
-| `date` | `toString()` of an `Instant`, a `Date` or a `DateTime`, and a template of a `DateTime`'s `date`, `hour` and `minute` for other text |
-| `strtotime` | `Instant.parse(text)`, `Date.parse(text)`, and `plus`, `plusDays` and `plusMonths` for a relative time such as `-6 days` |
+| `date('Y-m-d')` | `date.toString()` |
+| `date('c')`, `gmdate('c')` | `dateTime.toOffsetString()`, and `instant.inZone(TimeZone.utc).toOffsetString()` for UTC |
+| `gmdate('Y-m-d\TH:i:s\Z')` | `instant.toString()` |
+| `date('Y-m-d H:i:s')` | `dateTime.toSqlString()`, a SQL `DATETIME` |
+| `gmdate('D, d M Y H:i:s \G\M\T')` | `instant.toHttpDate()`, the HTTP date of RFC 9110 |
+| `date('l')`, `date('F')`, `date('N')`, `date('n')` | `date.weekday` and `date.monthOfYear`, the enums `Weekday` and `Month`, whose `toString()` is the English name |
+| `date('t')`, `date('Y-m-01')`, `date('Y-m-t')`, `date('Y-01-01')` | `date.lengthOfMonth`, and `new Date(date.year, date.month, 1)`, `new Date(date.year, date.month, date.lengthOfMonth)` and `new Date(date.year, 1, 1)` |
+| `date('YmdHis')`, `format('Y-m-d\TH:i:s.uP')` | a template of a `DateTime`'s `date`, `hour`, `minute`, `second` and `nanosecond` |
+| `strtotime` | `Instant.parse(text)`, `Date.parse(text)`, `DateTime.parseLocal(text, zone)` for a SQL `DATETIME` or a datetime-local value, and `plus`, `plusDays` and `plusMonths` for a relative time such as `-6 days` |
 | `timezone_identifiers_list` | `TimeZone.names()` |
-| `json_encode`, `json_decode` | `Json.encode(value)`, `Json.decode(text)` |
+| `json_encode`, `json_decode` | `Json.encode(value)`, `Json.parse(text)` for any JSON value, and `Json.decode<T>(text)` for a struct or a PHP# class `T` |
+| `serialize`, `unserialize` | `Serialized.encode(value)`, `Serialized.decode(text, allowedClasses)`: PHP's serialized text, which a plain PHP library's cache or queue holds, keeping each object's class |
+| `var_export` | `PhpLiteral.of(value)`: the PHP code that writes the value, as a plain PHP library's generated config file holds it |
+| `pack`, `unpack` | leave-out: no PHP# consumer calls them (the real app, the spec and the inventory hold none), and `Hex`, `Base64` and `Ip.toBinary` write the bytes that real code writes |
 | `base64_encode`, `base64_decode` | `Base64.encode`, `Base64.decode` |
 | `hash`, `md5`, `sha1`, `crc32`, `hash_equals` | `Hash.of`, `Hash.md5`, `Hash.sha1`, `Hash.crc32`, `Hash.equals` |
 | `hash_hmac` | `Hmac.of(algorithm, data, key)`, and `Hmac.verify(algorithm, data, key, signature)` to check a signature |

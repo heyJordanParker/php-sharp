@@ -4,7 +4,11 @@ import Sharp.Encoding.Json;
 
 class JsonCalls
 {
-    public static Any? decode(string json) => Json.decode(json);
+    public static Any? parse(string json) => Json.parse(json);
+
+    public static JsonPoint point(string json) => Json.decode<JsonPoint>(json);
+
+    public static JsonOrder order(string json) => Json.decode<JsonOrder>(json);
 
     public static string encode(Any? value) => Json.encode(value);
 

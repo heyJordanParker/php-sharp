@@ -41,7 +41,8 @@ class Expressions
     {
         const count = items.count();
         const edits = Words.distance(word, label);
-        return `${label} has ${count} items, ${edits} edit from ${word}`;
+        const letters = label.length();
+        return `${label} has ${count} items, ${letters} letters and ${edits} edit from ${word}`;
     }
 
     public static string label(string name, Countable items)

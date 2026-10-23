@@ -4276,12 +4276,12 @@ public class Layout
 **The standard library lives under one root, `Sharp`,** with one standard library namespace per domain, as .NET has `System.*` and Rust has `std::*`:
 
 - `Sharp.Text` holds the members of `string`, `Regex` and `Html`.
-- `Sharp.Time` holds `Clock`, `Instant`, `Duration`, `Date`, `DateTime` and `TimeZone`.
+- `Sharp.Time` holds `Clock`, `Instant`, `Duration`, `Date`, `DateTime`, `TimeZone`, `Weekday` and `Month`.
 - `Sharp.IO` holds `Files`, `Path` and `Console`.
 - `Sharp.System` holds `Process`, `ProcessResult` and `Environment`.
 - `Sharp.Net` holds `Http`, `HttpRequest`, `HttpResponse`, `HttpMethod`, `Url`, `Ip`, `Mail`, `MailMessage` and `MailAddress`.
 - `Sharp.Data` holds `Database` and `Cache`.
-- `Sharp.Encoding` holds `Json`, `Base64`, `Hex` and `Compression`.
+- `Sharp.Encoding` holds `Json`, `Serialized`, `PhpLiteral`, `Base64`, `Hex` and `Compression`.
 - `Sharp.Security` holds `Hash`, `Hmac` and `Password`.
 
 A type never repeats the last part of its namespace, so a call reads `Json.encode(body)` after `import Sharp.Encoding.Json;`.
@@ -4650,6 +4650,24 @@ Instant.tryParse("yesterday");                            // null
 new Date(2026, 2, 29);                                    // throws ValueError
 ```
 
+A format is named by the text it writes, never by PHP's format letters. A `DateTime`'s `toOffsetString()` writes ISO-8601 with the offset and no zone, its `toSqlString()` a SQL `DATETIME`, and an `Instant`'s `toHttpDate()` the HTTP date of RFC 9110. `DateTime.parseLocal(text, zone)` reads a date and a time of day on a zone's clocks, with a space or a `T` between them. A `Date` and a `DateTime` give their `weekday` and `monthOfYear` as the enums `Weekday` and `Month`, whose `toString()` is the English name. Any other text is a template of the fields:
+
+<!-- example time-texts: statements
+import Sharp.Time.DateTime;
+import Sharp.Time.Instant;
+import Sharp.Time.TimeZone;
+import Sharp.Time.Weekday;
+-->
+```csharp
+const sofia = Instant.parse("2026-10-22T18:30:00Z").inZone(new TimeZone("Europe/Sofia"));
+sofia.toOffsetString();                                   // "2026-10-22T21:30:00+03:00"
+sofia.toSqlString();                                      // "2026-10-22 21:30:00"
+sofia.instant.toHttpDate();                               // "Thu, 22 Oct 2026 18:30:00 GMT"
+sofia.weekday == Weekday.Thursday;                        // true
+sofia.monthOfYear.toString();                             // "October"
+DateTime.parseLocal("2026-10-22 21:30:00", TimeZone.utc).toString(); // "2026-10-22T21:30:00+00:00[UTC]"
+```
+
 **Replacing `(array)` and `(object)`:**
 
 <!-- example array-object-replacements: statements
@@ -4689,7 +4707,7 @@ import Sharp.Encoding.Json;
 string body = "{}";
 -->
 ```csharp
-Any? payload = Json.decode(body);
+Any? payload = Json.parse(body);
 payload.order;                              // compile error: check what payload is first
 if (payload is WebhookPayload) {
     payload.order.total;                    // narrowed to WebhookPayload
@@ -4717,7 +4735,7 @@ bool d = raw == other;             // compile error: other is an unchecked Any? 
 string a = `plan: ${raw}`;         // compile error: check raw with is, as or match first
 ```
 
-PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or untyped arrive as `Any?`. Decoding straight into a type, such as `Json.decode<WebhookPayload>(body)`, is the normal path. That decoding API is specified with the standard library.
+PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or untyped arrive as `Any?`. Decoding straight into a type, such as `Json.decode<WebhookPayload>(body)`, is the normal path: it reads a struct or a PHP# class through its `parse` (section 10), so a bad field throws the one error that lists every bad field, and a type `parse` can't read is a compile error. `Json.parse(body)` gives any JSON value as `Any?`.
 
 **`Object` holds any object, and nothing else.** It compiles to PHP's `object`, and `Object?` adds null. Like `Any`, it has no members until `is` narrows it. An `Object` passes where `Any` is expected, and a plain PHP value typed `object` arrives as `Object`.
 

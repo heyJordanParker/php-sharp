@@ -123,6 +123,12 @@ function rows(): array
         'a wrong element in a Set field' => fn () => shown(tampered(Payloads::crate(), 'E:20:"Queued\Speed:Express";', 'i:5;')),
         'a wrong value inside a List<Map<string, int>> field' => fn () => shown(tampered(Payloads::crate(), 's:3:"tea";i:1;i:1;}}}', 's:3:"tea";i:1;s:1:"x";}}}')),
         'a generic class field' => fn () => shown(tampered(Payloads::box(), 'i:1;i:1;}', 'i:1;s:1:"x";}')),
+        'Sharp.Encoding.Serialized, which allows no class by default' => function () {
+            $counts = new Sharp\Map(['tea', 2, 'jam', 5]);
+            return shown(Payloads::throughSerialized($counts)) . ' ' . Payloads::serializedKinds($counts, []);
+        },
+        'Serialized allowing a class by its PHP# name' => fn () => shown(Payloads::throughSerializedAllowing(Payloads::crate(), ['Queued.Crate']))
+            . ' ' . Payloads::serializedKinds(Payloads::crate(), ['Queued.Crate']),
         'allowed_classes => false, which still checks each key\'s class' => fn () => shown(unserialize(serialize([new Sharp\Set(['vip', 'new']), Payloads::byParcel()]), ['allowed_classes' => false])),
         '__unserialize on a Map that holds entries' => function () {
             $map = new Sharp\Map(['tea', 2, 'jam', 5]);

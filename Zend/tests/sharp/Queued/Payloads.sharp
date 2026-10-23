@@ -1,6 +1,7 @@
 namespace Queued;
 
 import Lib.Probe;
+import Sharp.Encoding.Serialized;
 
 // The values a queued job or a cached entry holds, and the PHP# reads of each one unserialize gives back.
 public class Payloads
@@ -25,6 +26,11 @@ public class Payloads
 
     public static Box<int> box() => new Box<int>(["tea": 1]);
 
+    public static Any? throughSerialized(Any? value) => Serialized.decode(Serialized.encode(value));
+
+    public static Any? throughSerializedAllowing(Any? value, List<string> allowedClasses)
+        => Serialized.decode(Serialized.encode(value), allowedClasses);
+
     // The class PHP# holds `value` as, or each field's for a Shipment, a Ledger or a Crate. Plain PHP reads a Map or a
     // Set field as its PHP array, spec section 12, so a row reads each field through PHP#.
     public static string kinds(Any? value)
@@ -40,6 +46,9 @@ public class Payloads
         }
         return Probe.typeName(value);
     }
+
+    public static string serializedKinds(Any? value, List<string> allowedClasses)
+        => Payloads.kinds(Serialized.decode(Serialized.encode(value), allowedClasses));
 
     public static bool holdsCounts(Any value) => value is Map<string, int>;
 

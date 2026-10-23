@@ -41,7 +41,8 @@ class Expressions
     {
         $count = ((object) $items)->count();
         $edits = Words::distance($word, $label);
-        return "{$label} has {$count} items, {$edits} edit from {$word}";
+        $letters = \mb_strlen($label, "UTF-8");
+        return "{$label} has {$count} items, {$letters} letters and {$edits} edit from {$word}";
     }
 
     public static function label(string $name, Countable $items): string
