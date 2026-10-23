@@ -1,0 +1,20 @@
+namespace Demo;
+
+class ListCalls
+{
+    public static List<int> reversed(List<int> values) => values.reversed();
+
+    public static List<string> distinct(List<string> values) => values.distinct();
+
+    public static List<int> slice(List<int> values, int start) => values.slice(start);
+
+    public static List<int> between(List<int> values, int start, int end) => values.slice(start, end);
+
+    public static List<List<int>> chunked(List<int> values, int size) => values.chunked(size);
+
+    public static bool allPositive(List<int> values) => values.all(value => value > 0);
+
+    public static int total(List<int> values) => values.fold(0, (sum, value) => sum + value);
+
+    public static string joined(List<string> values) => values.fold("", (text, value) => text + value);
+}

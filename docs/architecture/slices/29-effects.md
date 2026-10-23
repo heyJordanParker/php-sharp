@@ -2,6 +2,8 @@
 
 Spec section 29, lines 3688 to 3997 of `docs/spec.md` on master `849232f4e1`, with the parts of sections 6.1, 8, 13, 15, 23, 28 and 32 that section 29 reaches. This note is the design only. team-lead approves it before anyone builds.
 
+**Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
+
 ## The answer first
 
 The effect checker works on master. `crates/analyzer/src/effects/` records each body's effects, solves them over the whole call graph, and holds getters, laws, function values and implementations to them. Most rule lines hold when probed. What fails:

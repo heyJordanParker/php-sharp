@@ -1,7 +1,5 @@
 namespace Demo;
 
-import Sharp.Math.Math;
-
 class Signatures
 {
     private int|string receipt = "unpaid";

@@ -1,5 +1,6 @@
 <?php declare(strict_types=1); namespace Demo;
 
+use Lib\Probe;
 use Lib\Size;
 use Lib\Standing;
 
@@ -32,11 +33,11 @@ class Tagged
 
         return [
             ((object) ((object) $tags)->filter(fn ($tag) => $tag !== "vip"))->toList(),
-            ((object) $tags)->map(fn ($tag) => \strlen($tag)),
+            ((object) $tags)->map(fn ($tag) => \mb_strlen($tag, "UTF-8")),
             ((object) $tags)->any(fn ($tag) => $tag === "5"),
-            ((object) $tags)->first(fn ($tag) => \strlen($tag) > 2),
+            ((object) $tags)->first(fn ($tag) => \mb_strlen($tag, "UTF-8") > 2),
             ((object) $tags)->sortedBy(fn ($tag) => $tag),
-            \implode(",", \Sharp\Internal\arrayOf($tags)),
+            Probe::join(",", \Sharp\Internal\arrayOf($tags)),
         ];
     }
 

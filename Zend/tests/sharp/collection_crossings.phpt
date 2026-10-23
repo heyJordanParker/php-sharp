@@ -3,6 +3,7 @@ A Map or a Set reaches plain PHP as a PHP array at every crossing, and as the ob
 --FILE--
 <?php
 require __DIR__ . '/harness/Arrays.inc';
+require __DIR__ . '/harness/Probe.inc';
 require __DIR__ . '/harness/fixture.inc';
 fixture('Crossings');
 

@@ -39,6 +39,6 @@ float(-0.25)
 ValueError: Int.parse: "12abc" is not an int in Checkout.sharp on line 47
 ValueError: Int.parse: "" is not an int in Checkout.sharp on line 47
 ValueError: Int.parse: "1,5" is not an int in Checkout.sharp on line 47
-ValueError: Int.parse: " 7 " is not an int: remove its spaces with Text.trim() first in Checkout.sharp on line 47
+ValueError: Int.parse: " 7 " is not an int: remove its spaces with trim() first in Checkout.sharp on line 47
 ArithmeticError: Int.parse: "99999999999999999999" is out of range for an int in Checkout.sharp on line 47
 ValueError: Float.parse: "NaN" is not a float in Checkout.sharp on line 42

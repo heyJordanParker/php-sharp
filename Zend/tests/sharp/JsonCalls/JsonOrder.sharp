@@ -1,0 +1,6 @@
+namespace Demo;
+
+public struct JsonOrder
+{
+    public JsonOrder(public int id { get; }, public List<string> tags { get; }, public JsonPoint at { get; }) { }
+}

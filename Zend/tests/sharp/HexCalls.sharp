@@ -1,6 +1,6 @@
 namespace Demo;
 
-import Sharp.Data.Hex;
+import Sharp.Encoding.Hex;
 
 class HexCalls
 {

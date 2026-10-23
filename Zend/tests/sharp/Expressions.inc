@@ -2,6 +2,7 @@
 
 use Countable;
 use InvalidArgumentException;
+use Lib\Words;
 use LogicException;
 use RuntimeException;
 use Throwable;
@@ -36,10 +37,12 @@ class Expressions
         }
     }
 
-    public static function describe(string $label, Countable $items): string
+    public static function describe(string $label, Countable $items, string $word): string
     {
-        $token = \str_pad("", ((object) $items)->count(), "x");
-        return \sprintf("%s has %d items and a %d-byte token", $label, ((object) $items)->count(), \strlen($token));
+        $count = ((object) $items)->count();
+        $edits = Words::distance($word, $label);
+        $letters = \mb_strlen($label, "UTF-8");
+        return "{$label} has {$count} items, {$letters} letters and {$edits} edit from {$word}";
     }
 
     public static function label(string $name, Countable $items): string

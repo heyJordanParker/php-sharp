@@ -1,8 +1,8 @@
 --TEST--
-A PHP# class calls every method of Sharp.Data.Base64, and Base64.decode throws ValueError on text that is not base64
+A PHP# class calls every method of Sharp.Encoding.Base64, and Base64.decode throws ValueError on text that is not base64
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Data/Base64.sharp';
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Base64.sharp';
 require __DIR__ . '/Base64Calls.sharp';
 
 use Demo\Base64Calls;

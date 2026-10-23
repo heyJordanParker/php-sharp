@@ -1,7 +1,5 @@
 <?php declare(strict_types=1); namespace Demo;
 
-use Sharp\Math\Math;
-
 class Signatures
 {
     private int|string $receipt = "unpaid";
@@ -66,7 +64,7 @@ class Signatures
 
     public static function spread(int $first, int ...$values): int
     {
-        return Signatures::sum($first, ...$values) + Math::max($first, ...$values);
+        return Signatures::sum($first, ...$values) + \Sharp\Math::max($first, ...$values);
     }
 
     public static function made(int ...$values): int|string

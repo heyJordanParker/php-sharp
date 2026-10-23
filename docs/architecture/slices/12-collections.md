@@ -2,6 +2,8 @@
 
 Spec section 12 (collections) and section 17's collection rules, with the section 5 rule one section 12 example needs and the section 30 rules the entries of a `Map` need. team-lead approved this design with the answers each question records.
 
+**Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
+
 ## The answer first
 
 Most of section 12 works on master `c2aca5e564`. Values and copy-on-write, the crossings from plain PHP, `as` on a collection, literals and their kinds, spreads, a bare `List` read, the `Map` read rules, `Map` keys of every scalar, enum, struct and class kind, the plain PHP view of a `Map`, a literal landing in a `Set`, every collection method and the `==` rules of `contains`, `remove` and `indexOf` compile, refuse and run as the spec annotates. 16 of section 12's 21 examples pass, and 3 of section 17's 4.

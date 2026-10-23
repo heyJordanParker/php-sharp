@@ -6,8 +6,8 @@ require __DIR__ . '/effect_classes.inc';
 
 use Sharp\Time\Duration;
 
-$clock = new Sharp\Clock();
-var_dump(abs($clock->now() - time()) <= 1);
+$clock = new Sharp\Time\Clock();
+var_dump(abs($clock->now()->epochSeconds - time()) <= 1, $clock->now()->nanosecond % 1_000 === 0);
 $start = $clock->timestamp();
 $clock->sleep(Duration::ofMilliseconds(2));
 $elapsed = $clock->elapsedSince($start);
@@ -44,6 +44,7 @@ foreach ([fn () => $secure->nextInt(3, 1), fn () => $secure->nextBytes(0)] as $r
 }
 ?>
 --EXPECT--
+bool(true)
 bool(true)
 bool(true)
 bool(true)

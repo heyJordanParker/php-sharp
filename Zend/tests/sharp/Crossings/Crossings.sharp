@@ -2,6 +2,8 @@ namespace Demo;
 
 import ArrayCounter;
 import Attributes;
+import Lib;
+import Lib.Probe;
 import RequestContext;
 
 class Crossings
@@ -9,49 +11,49 @@ class Crossings
     public static List<string> outward(Map<string, int> prices, Set<string> tags)
     {
         return [
-            global.array_keys_of(prices),
-            global.array_keys_of(tags),
-            global.documented_keys_of(prices),
-            global.type_of_mixed(prices),
-            global.type_of_untyped(prices),
-            global.type_of_iterable(tags),
+            Lib.array_keys_of(prices),
+            Lib.array_keys_of(tags),
+            Lib.documented_keys_of(prices),
+            Lib.type_of_mixed(prices),
+            Lib.type_of_untyped(prices),
+            Lib.type_of_iterable(tags),
         ];
     }
 
     public static Map<string, int> written(Map<string, int> prices)
     {
-        global.write_array(prices);
-        global.write_mixed(prices);
+        Lib.write_array(prices);
+        Lib.write_mixed(prices);
         return prices;
     }
 
     public static Map<string, int> local()
     {
-        Map<string, int> prices = global.price_list();
+        Map<string, int> prices = Lib.price_list();
         prices["jam"] = 5;
         return prices;
     }
 
-    public static Map<string, int> returned() => global.price_list();
+    public static Map<string, int> returned() => Lib.price_list();
 
     public static List<string> plainMapCalls() => [
-        `${global.price_list().get("tea") ?? -1}`,
-        `${global.price_list().get("5") ?? -1}`,
-        `${global.price_list().has("5")}`,
-        global.implode(",", global.price_list().keys()),
-        `${global.price_list().count()}`,
+        `${Lib.price_list().get("tea") ?? -1}`,
+        `${Lib.price_list().get("5") ?? -1}`,
+        `${Lib.price_list().has("5")}`,
+        Probe.join(",",Lib.price_list().keys()),
+        `${Lib.price_list().count()}`,
     ];
 
     public static List<string> plainLoops()
     {
         List<string> seen = [];
-        for (const [sku, count] of global.price_list()) {
+        for (const [sku, count] of Lib.price_list()) {
             seen.add(`${sku is string}:${sku}=${count}`);
         }
-        for (const entry of global.price_list()) {
+        for (const entry of Lib.price_list()) {
             seen.add(`${entry[0] is string}:${entry[0]}=${entry[1]}`);
         }
-        for (const [string, int] typed of global.price_list()) {
+        for (const [string, int] typed of Lib.price_list()) {
             seen.add(`${typed[0] is string}:${typed[0]}`);
         }
         return seen;
@@ -59,11 +61,11 @@ class Crossings
 
     public static string untypedLocal()
     {
-        let kept = global.price_list();
+        let kept = Lib.price_list();
         const removed = kept.remove("5");
         const left = kept.count();
-        kept = global.price_list();
-        return `${removed} ${left} ${kept.has("5")} ${global.get_debug_type(kept)}`;
+        kept = Lib.price_list();
+        return `${removed} ${left} ${kept.has("5")} ${Probe.typeName(kept)}`;
     }
 
     public static Map<string, int> received(Map<string, int> counts) => counts;
@@ -71,17 +73,17 @@ class Crossings
     public static List<string> objects(Map<string, int> prices, Set<string> tags)
     {
         return [
-            global.count_of_countable(prices),
-            global.count_of_traversable(tags),
-            global.json_of(prices),
-            global.type_of_object(tags),
-            global.count_of_map(prices),
+            Lib.count_of_countable(prices),
+            Lib.count_of_traversable(tags),
+            Lib.json_of(prices),
+            Lib.type_of_object(tags),
+            Lib.count_of_map(prices),
         ];
     }
 
     public static string counted(Map<string, int> prices)
     {
-        const counter = global.array_counter();
+        const counter = Lib.array_counter();
         return counter(prices);
     }
 
@@ -95,7 +97,7 @@ class Crossings
 
     // A PHP# lambda behind a function type takes the Map itself, not a PHP array it would build a Map from again.
     public static string appliedOwn(Map<string, int> prices) =>
-        Crossings.applied(values => `${global.spl_object_id(values) == global.spl_object_id(prices)}`, prices);
+        Crossings.applied(values => `${Probe.id(values) == Probe.id(prices)}`, prices);
 
     public static List<string> named(Map<string|Level, int> counts) => [`${counts.count()}`, `${counts["5"] ?? -1}`, `${counts.has("5")}`];
 
@@ -110,28 +112,28 @@ class Crossings
 
     public static string lazilyReturned(Any? last)
     {
-        Iterable<string> names = global.names_and(last);
+        Iterable<string> names = Lib.names_and(last);
         return Crossings.joined(names);
     }
 
     public static string heldGenerator(Any? last)
     {
-        Iterable<string> names = global.names_generator(last);
+        Iterable<string> names = Lib.names_generator(last);
         return Crossings.joined(names);
     }
 
     public static string heldRows(Any? last)
     {
-        Iterable<string> names = global.name_rows(last);
+        Iterable<string> names = Lib.name_rows(last);
         return Crossings.joined(names);
     }
 
-    public static Iterable<string> returnedLazy(Any? last) => global.lazy_names(last);
+    public static Iterable<string> returnedLazy(Any? last) => Lib.lazy_names(last);
 
-    public static string passedGenerator(Any? last) => Crossings.joined(global.names_generator(last));
+    public static string passedGenerator(Any? last) => Crossings.joined(Lib.names_generator(last));
 
     // Until it is held as an `Iterable<T>`, a plain PHP class keeps its own methods.
-    public static int lazyCount(Any? last) => global.lazy_names(last).count();
+    public static int lazyCount(Any? last) => Lib.lazy_names(last).count();
 
     public static Map<Level, int?> limits() => [Level.Low: 5, Level.High: null];
 
@@ -145,7 +147,7 @@ class Crossings
 
     public static Function<Map<string, int>()> sizer() => () => ["s": 1];
 
-    public static string sent(Envelope envelope) => global.send_headers(envelope.headers);
+    public static string sent(Envelope envelope) => Lib.send_headers(envelope.headers);
 
     public static string pair([string name, int count] given) => `${given.name} ${given.count}`;
 
@@ -158,15 +160,15 @@ class Crossings
         return joined;
     }
 
-    public static string unioned(Set<string>|int given) => given is Set<string> ? `${global.get_class(given)} ${global.implode(",", given.toList())}` : `int ${given}`;
+    public static string unioned(Set<string>|int given) => given is Set<string> ? `${Probe.className(given)} ${Probe.join(",",given.toList())}` : `int ${given}`;
 
-    public static string mapOrInt(Map<string, int>|int given) => given is Map<string, int> ? `${global.get_class(given)} ${given["a"] ?? -1}` : `int ${given}`;
+    public static string mapOrInt(Map<string, int>|int given) => given is Map<string, int> ? `${Probe.className(given)} ${given["a"] ?? -1}` : `int ${given}`;
 
     public static Iterable<int> doubled(Iterable<int> numbers) => numbers.map(number => number * 2);
 
     public static Iterable<Map<string, int>> keyed(Iterable<int> numbers) => numbers.map(number => ["n": number]);
 
-    public static string cartonPayloadClass(Carton carton) => global.get_class(carton.payload);
+    public static string cartonPayloadClass(Carton carton) => Probe.className(carton.payload);
 
     // Each write into a plain PHP object gives it what a parameter of the property's type takes.
     public static void filled(RequestContext context, Map<string, int> prices, Set<string> tags)
@@ -214,7 +216,7 @@ class Crossings
     public static string ownWritten(Holdings holdings, Map<string, string> payload)
     {
         holdings.payload = payload;
-        return global.get_class(holdings.payload);
+        return Probe.className(holdings.payload);
     }
 
     public static string ownEntries(Map<string, int> counts)

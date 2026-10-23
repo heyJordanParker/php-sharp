@@ -4,7 +4,7 @@ PHP# Files reads and writes whole files and folders, returns null for a missing 
 <?php
 require __DIR__ . '/effect_classes.inc';
 
-$files = new Sharp\Files();
+$files = new Sharp\IO\Files();
 $folder = sys_get_temp_dir() . '/sharp-effect-files-' . getmypid();
 $files->createDirectory("$folder/nested/deeper");
 $files->createDirectory("$folder/nested/deeper");
@@ -15,7 +15,7 @@ var_dump($files->read($file), $files->readLines($file), $files->size($file), $fi
 $files->write($file, "one\r\ntwo\n");
 $files->append($file, "three\n");
 var_dump(json_encode($files->read($file)), $files->readLines($file), $files->size($file), $files->exists($file));
-var_dump(abs($files->lastModified($file) - time()) <= 5);
+var_dump(abs($files->lastModified($file)->epochSeconds - time()) <= 5);
 // Lines read one at a time, each line ending dropped, and null for a missing file.
 $lazy = $files->readLinesLazily($file);
 foreach ($lazy as $line) {

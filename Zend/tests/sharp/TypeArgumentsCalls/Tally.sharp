@@ -1,6 +1,7 @@
 namespace Calls;
 
 import App.DatabaseEntity;
+import Lib.Probe;
 
 // Each type argument's statics run their initial values that run as code once, on that type argument's first use, and
 // have their own accessors' storage and `static lazy` value.
@@ -8,9 +9,9 @@ public class Tally<T : DatabaseEntity>
 {
     public static int count { get; set; } = 0;
 
-    public static string made { get; } = Runs.ran(global.sprintf("made %s", typeof(T)));
+    public static string made { get; } = Runs.ran(`made ${Probe.named(typeof(T))}`);
 
-    public static string label => global.sprintf("label %s %d", typeof(T), Tally<T>.count);
+    public static string label => `label ${Probe.named(typeof(T))} ${Tally<T>.count}`;
 
     public static int doubled { get => field * 2; set => field = value; } = 1;
 
@@ -19,7 +20,7 @@ public class Tally<T : DatabaseEntity>
 
     public static int watched { get; set; didSet => Tally<T>.count += 1; } = 0;
 
-    public static lazy string once => Runs.ran(global.sprintf("once %s", typeof(T)));
+    public static lazy string once => Runs.ran(`once ${Probe.named(typeof(T))}`);
 
     public static int bump()
     {

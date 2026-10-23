@@ -1,8 +1,8 @@
 --TEST--
-A PHP# class calls every method of Sharp.Data.Password, and Password.hash throws ValueError on a password with a NUL byte
+A PHP# class calls every method of Sharp.Security.Password, and Password.hash throws ValueError on a password with a NUL byte
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Data/Password.sharp';
+require __DIR__ . '/../../../sharp/composer/library/Sharp/Security/Password.sharp';
 require __DIR__ . '/PasswordCalls.sharp';
 
 use Demo\PasswordCalls;

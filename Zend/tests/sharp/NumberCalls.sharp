@@ -1,0 +1,30 @@
+namespace Demo;
+
+class NumberCalls
+{
+    public static int absolute(int value) => value.abs();
+
+    public static int clamped(int value, int min, int max) => value.clamp(min, max);
+
+    public static string formatted(int value, string separator) => value.format(separator);
+
+    public static string hex(int value) => value.toHex();
+
+    public static List<int> divided(int value, int divisor) => [value.floorDiv(divisor), value.mod(divisor)];
+
+    public static bool finite(float value) => value.isFinite();
+
+    public static float absoluteFloat(float value) => value.abs();
+
+    public static float clampedFloat(float value, float min, float max) => value.clamp(min, max);
+
+    public static float rounded(float value, int decimals) => value.round(decimals);
+
+    public static float floored(float value) => value.floor();
+
+    public static float ceiled(float value) => value.ceil();
+
+    public static string formattedFloat(float value, int decimals) => value.format(decimals);
+
+    public static string formattedIn(float value, int decimals, string point, string separator) => value.format(decimals, point, separator);
+}

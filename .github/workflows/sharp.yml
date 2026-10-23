@@ -134,7 +134,7 @@ jobs:
         run: |
           sharp/docker/run sharp/bin/builtins --self-test
           sharp/docker/run sharp/bin/builtins
-          git diff --exit-code sharp/composer/library/Sharp/Builtins.sharp
+          git diff --exit-code sharp/composer/library/Sharp/Internal/Builtins.sharp
       - name: Verify ext/sharp/sharp_unit.h, with its sharp_kind, SHARP_T_ tokens and SHARP_UNIT_ABI, is the header sharp/mago generates from Zend/zend_ast.h and Zend/zend_language_parser.h
         run: |
           sharp/docker/run php sharp/mago/scripts/regen-sharp-kinds.php Zend/zend_ast.h Zend/zend_language_parser.h | diff -u sharp/mago/crates/sharp-bridge/src/kind.rs -

@@ -1,5 +1,6 @@
 <?php declare(strict_types=1); namespace Demo;
 
+use Lib\Probe;
 use Lib\Standing;
 
 class Roster
@@ -12,9 +13,9 @@ class Roster
         $kept = ((object) $members)->filter(function ($n) use (&$members) { return $n >= (((object) $members)->get(Standing::Active) ?? 0); });
         ((object) $members)->remove(Standing::Closed);
         return [
-            \implode(",", $ranked),
-            \implode(",", $tens),
-            \implode(",", ((object) $kept)->map(fn ($n) => $n)),
+            Probe::join(",", $ranked),
+            Probe::join(",", $tens),
+            Probe::join(",", ((object) $kept)->map(fn ($n) => $n)),
             (string) (((object) $busy)->get(Standing::Active) ?? 0),
             (string) (((object) $busy)->get(Standing::Closed) ?? 0),
             (string) (((object) $members)->get(Standing::Active) ?? 0),

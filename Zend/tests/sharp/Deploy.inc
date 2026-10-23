@@ -1,8 +1,10 @@
 <?php declare(strict_types=1); namespace Demo;
 
+
+
 class Deploy
 {
-    public function __construct(private \Sharp\Environment $environment)
+    public function __construct(private \Sharp\System\Environment $environment)
     {
     }
 

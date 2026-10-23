@@ -2,6 +2,8 @@
 
 Spec section 15, finished across the checker, the bridge and the engine in one php-sharp pull request, `feat/events-engine`. team-lead approved decisions 1 to 7 as written and ruled on the questions, under "Rulings". "What the branch holds" says what is built.
 
+**Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
+
 ## The answer first
 
 **The checker and the bridge already do section 15. The engine does none of it.** mago-sharp #162 and #170, now in `sharp/mago/`, parse, check and lower `event`, `extern event`, `emit` and `on`, and write `.sharp/listeners.php`. php-sharp #121 checks that each listener's class can be built from its namespace's modules. But `emit` lowers to `\Sharp\Internal\emit($e)`, which the engine does not define, so the first `emit` that runs throws:

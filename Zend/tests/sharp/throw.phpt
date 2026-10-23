@@ -15,7 +15,7 @@ foreach ([fn() => Demo\Expressions::positive(-1), fn() => Demo\Expressions::know
 var_dump(Demo\Expressions::positive(2), Demo\Expressions::known(3));
 ?>
 --EXPECT--
-InvalidArgumentException: negative in Expressions.sharp on line 14
-InvalidArgumentException: unknown in Expressions.sharp on line 21
+InvalidArgumentException: negative in Expressions.sharp on line 15
+InvalidArgumentException: unknown in Expressions.sharp on line 22
 int(2)
 int(3)

@@ -1,5 +1,7 @@
 # 35. Object
 
+Superseded in part by [decision 83](083-php-through-the-standard-library.md): `global.` does not exist in PHP# code, so the code below reaches `spl_object_id` through a project's plain PHP class, as spec section 24 writes `Handles.of(value)`.
+
 ## Decision
 
 `Object` holds any object, and nothing else. It compiles to PHP's `object`, and `Object?` adds null. It has no members until `is` narrows it, it passes where `Any` is expected, and a plain PHP value typed `object` arrives as `Object`.

@@ -27,7 +27,7 @@ php_cli_server_start(<<<'PHP'
     PHP);
 $base = 'http://' . PHP_CLI_SERVER_ADDRESS;
 
-$http = new Sharp\Http();
+$http = new Sharp\Net\Http();
 $got = $http->get("$base/");
 var_dump($got->status, $got->body, $got->headers['x-seen'], $got->successful);
 

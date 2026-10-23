@@ -1,6 +1,6 @@
 namespace Demo;
 
-import Sharp.Data.Base64;
+import Sharp.Encoding.Base64;
 
 class Base64Calls
 {

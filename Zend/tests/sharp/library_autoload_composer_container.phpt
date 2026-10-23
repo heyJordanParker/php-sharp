@@ -18,7 +18,7 @@ $files = [
     'vendor/heyjordanparker/php-sharp-composer/native.php' => file_get_contents("$package/native.php"),
     'vendor/composer/installed.json' => '{"packages": [{"name": "heyjordanparker/php-sharp-composer", "version": "9.9.9"}]}',
     'app/Greeting.sharp' => "namespace App;\n\npublic class Greeting\n{\n    public Greeting(private string text) { }\n\n    public string now() => this.text;\n}\n",
-    'app/Module.sharp' => "namespace App;\n\nmodule\n{\n    singleton Greeting(Environment environment) = new Greeting(environment.variable(\"SHARP_GREETING\") ?? \"no greeting\");\n}\n",
+    'app/Module.sharp' => "namespace App;\n\nimport Sharp.System.Environment;\n\nmodule\n{\n    singleton Greeting(Environment environment) = new Greeting(environment.variable(\"SHARP_GREETING\") ?? \"no greeting\");\n}\n",
     'app/Clock.sharp' => "namespace App;\n\npublic class Clock\n{\n    public string now() => \"noon\";\n}\n",
     'app/Tick.sharp' => "namespace App;\n\npublic enum Tick\n{\n    case Later;\n    case Now(string at);\n}\n",
     // Composer's own loader, in short, which registers first and finds a class's PHP file by the PSR-4 rule. With
@@ -146,7 +146,7 @@ $root = compile_project('library-autoload-composer-container', $files);
 $preloading = ' -d opcache.enable=1 -d opcache.enable_cli=1 -d ' . escapeshellarg("opcache.preload=$root/preload.php");
 foreach ([
     "the engine's own native bodies" => file_get_contents("$package/native.php"),
-    'other native bodies' => '<?php return ' . var_export(['fingerprint' => '0123456789abcdef0123456789abcdef', 'bodies' => ['Sharp.Text.Text.slug']], true) . ';',
+    'other native bodies' => '<?php return ' . var_export(['fingerprint' => '0123456789abcdef0123456789abcdef', 'bodies' => ['Sharp.Text.StringMembers.slugOf']], true) . ';',
 ] as $case => $native) {
     file_put_contents("$root/vendor/heyjordanparker/php-sharp-composer/native.php", $native);
     run_mago($root);

@@ -1,5 +1,7 @@
 namespace Demo;
 
+import Sharp.System.Environment;
+
 class Deploy
 {
     public Deploy(private Environment environment)

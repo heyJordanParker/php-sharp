@@ -1,5 +1,7 @@
 # 77. Statements that never run
 
+Superseded in part by [decision 83](083-php-through-the-standard-library.md): `global.` does not exist in PHP# code, so the call that ends a block by ending the process is `process.exit(…)` on `Process`, a call that never returns, in place of `global.exit(…)` below.
+
 Superseded in part by [decision 80](080-global-calls-of-replaced-functions.md): outside the standard library, `global.exit(…)` below is a compile error that names `process.exit(…)`, so the form that ends a block there is a call that never returns.
 
 ## Decision

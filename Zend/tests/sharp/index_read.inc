@@ -1,9 +1,11 @@
 <?php
 
+use Lib\Slots;
 use Lib\Standing;
 
 require __DIR__ . '/attempt.inc';
 require __DIR__ . '/harness/Helper.inc';
+require __DIR__ . '/harness/Slots.inc';
 require __DIR__ . '/harness/Standing.inc';
 require __DIR__ . '/IndexRead.sharp';
 
@@ -21,8 +23,8 @@ for ($round = 0; $round < 100; $round++) {
     attempt(fn () => Demo\IndexRead::literal(2));
     attempt(fn () => Demo\IndexRead::passed([1, 7], 0));
     attempt(fn () => Demo\IndexRead::passed([1, 7], 2));
-    attempt(fn () => Demo\IndexRead::size(['a' => new SplFixedArray(4)], 'a'));
-    attempt(fn () => Demo\IndexRead::size(['a' => new SplFixedArray(4)], 'b'));
+    attempt(fn () => Demo\IndexRead::size(['a' => new Slots(4)], 'a'));
+    attempt(fn () => Demo\IndexRead::size(['a' => new Slots(4)], 'b'));
     attempt(fn () => Demo\IndexRead::count(['a' => [1, 2]], 'a'));
     attempt(fn () => Demo\IndexRead::count(['a' => [1, 2]], 'b'));
     attempt(fn () => Demo\IndexRead::standing([3], 0));

@@ -1,5 +1,5 @@
 --TEST--
-Preloading keeps the string members of Sharp.Text.Text: contains, lowercase, uppercase, startsWith, endsWith, replace, which throws ValueError for empty text to replace, and split, which takes a limit and throws ValueError for an empty delimiter
+Preloading keeps the string members of Sharp.Text: contains, lowercase, uppercase, startsWith, endsWith, replace, which throws ValueError for empty text to replace, and split, which takes a limit and throws ValueError for an empty delimiter
 --INI--
 opcache.enable=1
 opcache.enable_cli=1
@@ -15,7 +15,7 @@ if (PHP_OS_FAMILY == 'Windows') die('skip Preloading is not supported on Windows
 <?php
 
 // Preloading declared the classes before this request, which never ran the files that declare them.
-var_dump(class_exists(Demo\TextCalls::class, false), class_exists(Sharp\Text\Text::class, false));
+var_dump(class_exists(Demo\TextCalls::class, false), class_exists(Sharp\Text\StringMembers::class, false));
 
 use Demo\TextCalls;
 

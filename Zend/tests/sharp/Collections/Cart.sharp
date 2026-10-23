@@ -1,6 +1,6 @@
 namespace Demo;
 
-import SplFixedArray;
+import Lib.Slots;
 
 class Cart
 {
@@ -22,7 +22,7 @@ class Cart
                 total += size * 10;
             }
         }
-        return total + SplFixedArray.fromArray(this.prices()).getSize();
+        return total + Slots.fromArray(this.prices()).getSize();
     }
 
     public List<int> prices()

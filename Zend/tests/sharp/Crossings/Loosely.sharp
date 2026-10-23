@@ -1,5 +1,7 @@
 namespace Demo;
 
+import Lib.Probe;
+
 public class Loosely
 {
     public Any? loose { get; set; } = ["k": 1];
@@ -8,16 +10,16 @@ public class Loosely
 
     public Map<string, Any> anyValues { get; set; } = ["m": ["k": 1]];
 
-    public string looseType() => global.get_debug_type(this.loose);
+    public string looseType() => Probe.typeName(this.loose);
 
     public string shelvedType()
     {
         for (const shelf of this.shelved) {
-            return global.get_class(shelf);
+            return Probe.className(shelf);
         }
 
         return "none";
     }
 
-    public string anyValuesType() => global.get_debug_type(this.anyValues["m"] ?? null);
+    public string anyValuesType() => Probe.typeName(this.anyValues["m"] ?? null);
 }

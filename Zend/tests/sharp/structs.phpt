@@ -68,14 +68,14 @@ array(4) {
   [3]=>
   bool(true)
 }
-Sharp\InvalidFields: first: expected int, got string 'x'; second: expected string, got int 4 in Pair.sharp on line 3
+Sharp\InvalidFields: first: expected int, got string 'x'; second: expected string, got int 4 in Pair.sharp on line 5
 NULL
 int(1)
 string(23) "int string | string int"
 bool(true)
 Sharp\InvalidFields: inner.first: expected int, got string 'x' in Wrapped.sharp on line 3
-Error: Cannot modify readonly property Demo\Stamp::$name in structs.inc on line 64
-Error: Cannot modify protected(set) property Demo\Stamp::$shown from global scope in structs.inc on line 65
-Error: Cannot modify protected(set) readonly property Demo\Stamp::$name from global scope in structs.inc on line 66
+Error: Cannot modify readonly property Demo\Stamp::$name in structs.inc on line 65
+Error: Cannot modify protected(set) property Demo\Stamp::$shown from global scope in structs.inc on line 66
+Error: Cannot modify protected(set) readonly property Demo\Stamp::$name from global scope in structs.inc on line 67
 
 Fatal error: Class Sticker cannot extend final class Demo\Stamp in %sstructs.inc(%d) : eval()'d code on line %d

@@ -1,9 +1,11 @@
 namespace Store;
 
+import Lib.Words;
+
 class Address
 {
     protected string region { get => field.uppercase(); }
-    public string city { get; set => field = global.ucfirst(value.trim()); }
+    public string city { get; set => field = Words.capitalized(value.trim()); }
 
     public Address(string city, string region)
     {
@@ -13,6 +15,6 @@ class Address
 
     public string label()
     {
-        return global.sprintf("%s, %s", this.city, this.region);
+        return `${this.city}, ${this.region}`;
     }
 }

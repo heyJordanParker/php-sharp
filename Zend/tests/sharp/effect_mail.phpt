@@ -11,7 +11,7 @@ require __DIR__ . '/effect_classes.inc';
 use Sharp\Net\MailAddress;
 use Sharp\Net\MailMessage;
 
-$mail = new Sharp\Mail();
+$mail = new Sharp\Net\Mail();
 $from = new MailAddress('shop@example.com', 'The "Tea" Shop');
 $mail->send(new MailMessage($from, [new MailAddress('ann@example.com')], 'Your receipt', "Thanks for the tea.\n"));
 $sent = file_get_contents(__DIR__ . '/effect_mail.eml');

@@ -1,8 +1,10 @@
 namespace Holders;
 
+import Lib.Probe;
+
 public class Ids
 {
-    public static int identity(Object value) => global.spl_object_id(value);
+    public static int identity(Object value) => Probe.id(value);
 
     public static Object either(Object? first, Object fallback) => first ?? fallback;
 

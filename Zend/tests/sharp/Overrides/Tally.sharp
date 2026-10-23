@@ -7,7 +7,7 @@ public class Tally
     private static int hits = 0;
     public static int doubled => Tally.hits * 2;
     public static int total { get => field; set { field = value; Tally.hits = Tally.hits + 1; } } = 0;
-    public static string label { get; private set; didSet => Witness.say(global.sprintf("label %s\n", field)); } = "start";
+    public static string label { get; private set; didSet => Witness.say(`label ${field}\n`); } = "start";
     public static int squared { get { return 2 * 2; } }
 
     public static void rename(string text)

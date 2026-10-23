@@ -15,4 +15,17 @@ class UrlCalls
     public static bool isValid(string url) => Url.isValid(url);
 
     public static Map<int|string, Any?> parseQuery(string query) => Url.parseQuery(query);
+
+    public static List<string> parts(string text)
+    {
+        const url = Url.parse(text);
+
+        return [url.scheme, url.host, `${url.port ?? 0}`, url.path, url.query ?? "-", url.fragment ?? "-", url.user ?? "-", url.password ?? "-"];
+    }
+
+    public static string? written(string text) => Url.tryParse(text)?.toString();
+
+    public static Map<int|string, Any?> queryValues(string text) => Url.parse(text).queryValues();
+
+    public static string built() => new Url("https", "example.com", path: "/search", query: Url.buildQuery(["q": "a b"])).toString();
 }

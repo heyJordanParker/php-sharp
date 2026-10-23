@@ -1,5 +1,5 @@
 --TEST--
-PHP# lambdas that the preload request already made, one capturing nothing, one a local, one this, one in a static method, one passed to a plain PHP function, one in a field and one in an interface's default body that two classes implement, run again in each request
+PHP# lambdas that the preload request already made, one capturing nothing, one a local, one this, one in a static method, one passed to a plain PHP method, one in a field and one in an interface's default body that two classes implement, run again in each request
 --INI--
 opcache.enable=1
 opcache.enable_cli=1

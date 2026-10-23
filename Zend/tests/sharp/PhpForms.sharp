@@ -1,5 +1,9 @@
 namespace Demo;
 
+import Sharp.IO.Console;
+import Sharp.System.Environment;
+import Sharp.System.Process;
+
 public class PhpForms
 {
     public PhpForms(private Environment environment, private Console console, private Process process) { }

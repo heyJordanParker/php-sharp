@@ -1,12 +1,76 @@
 namespace Demo;
 
 import Sharp.Time.Date;
+import Sharp.Time.DateTime;
+import Sharp.Time.Duration;
+import Sharp.Time.Instant;
+import Sharp.Time.TimeZone;
 
 class DateCalls
 {
-    public static string format(int timestamp, string pattern) => Date.format(timestamp, pattern);
+    public static string day(int year, int month, int day) => new Date(year, month, day).toString();
 
-    public static string formatIn(int timestamp, string pattern, string timeZone) => Date.format(timestamp, pattern, timeZone);
+    public static string dayAfter(string text, int days) => Date.parse(text).plusDays(days).toString();
 
-    public static int? parse(string text) => Date.parse(text);
+    public static string monthAfter(string text, int months) => Date.parse(text).plusMonths(months).toString();
+
+    public static int daysBetween(string start, string end) => Date.parse(start).daysUntil(Date.parse(end));
+
+    public static int epochDay(string text) => Date.parse(text).epochDay;
+
+    public static string ofEpochDay(int days) => Date.ofEpochDay(days).toString();
+
+    public static bool before(string first, string second) => Date.parse(first).isBefore(Date.parse(second));
+
+    public static string? tryDay(string text) => Date.tryParse(text)?.toString();
+
+    public static string startOfDay(string text, string zone) => Date.parse(text).atStartOfDay(new TimeZone(zone)).toString();
+
+    public static string instant(int seconds, int nanosecond) => new Instant(seconds, nanosecond).toString();
+
+    public static string ofMilliseconds(int milliseconds) => Instant.ofEpochMilliseconds(milliseconds).toString();
+
+    public static int milliseconds(string text) => Instant.parse(text).epochMilliseconds;
+
+    public static string? tryInstant(string text) => Instant.tryParse(text)?.toString();
+
+    public static string later(string text, string duration) => Instant.parse(text).plus(Duration.parse(duration)).toString();
+
+    public static string earlier(string text, string duration) => Instant.parse(text).minus(Duration.parse(duration)).toString();
+
+    public static string between(string start, string end) => Instant.parse(start).until(Instant.parse(end)).toString();
+
+    public static bool after(string first, string second) => Instant.parse(first).isAfter(Instant.parse(second));
+
+    public static string inZone(string text, string zone) => Instant.parse(text).inZone(new TimeZone(zone)).toString();
+
+    public static List<int> parts(string text, string zone)
+    {
+        const shown = Instant.parse(text).inZone(new TimeZone(zone));
+
+        return [shown.date.year, shown.date.month, shown.date.day, shown.hour, shown.minute, shown.second, shown.offset.minutes];
+    }
+
+    public static string zoned(string text) => DateTime.parse(text).instant.toString();
+
+    public static string? tryZoned(string text) => DateTime.tryParse(text)?.toString();
+
+    public static string zonedLater(string text, string duration) => DateTime.parse(text).plus(Duration.parse(duration)).toString();
+
+    public static string duration(string text) => Duration.parse(text).toString();
+
+    public static string? tryDuration(string text) => Duration.tryParse(text)?.toString();
+
+    public static List<int> units(string text)
+    {
+        const length = Duration.parse(text);
+
+        return [length.days, length.hours, length.minutes, length.seconds, length.milliseconds, length.nanoseconds];
+    }
+
+    public static string sum(string first, string second) => Duration.parse(first).plus(Duration.parse(second)).minus(Duration.zero).toString();
+
+    public static string scaled(string text, int factor) => Duration.parse(text).times(factor).toString();
+
+    public static string built() => Duration.ofDays(1).plus(Duration.ofHours(2)).plus(Duration.ofMinutes(3)).plus(Duration.ofSeconds(4)).plus(Duration.ofMilliseconds(5)).toString();
 }

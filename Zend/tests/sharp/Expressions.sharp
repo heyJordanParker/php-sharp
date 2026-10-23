@@ -2,6 +2,7 @@ namespace Demo;
 
 import Countable;
 import InvalidArgumentException;
+import Lib.Words;
 import LogicException;
 import RuntimeException;
 import Throwable;
@@ -36,10 +37,12 @@ class Expressions
         }
     }
 
-    public static string describe(string label, Countable items)
+    public static string describe(string label, Countable items, string word)
     {
-        const token = global.str_pad("", items.count(), "x");
-        return global.sprintf("%s has %d items and a %d-byte token", label, items.count(), global.strlen(token));
+        const count = items.count();
+        const edits = Words.distance(word, label);
+        const letters = label.length();
+        return `${label} has ${count} items, ${letters} letters and ${edits} edit from ${word}`;
     }
 
     public static string label(string name, Countable items)

@@ -1,5 +1,9 @@
 namespace Demo;
 
+import Lib;
+import Lib.Probe;
+import Sharp.IO.Files;
+
 public class Import
 {
     public Import(private List<Row> pending, private Row latest)
@@ -58,11 +62,11 @@ public class Import
 
     public Iterable<Row> printed()
     {
-        global.names_and("printed");
+        Lib.names_and("printed");
         yield this.latest;
     }
 
-    public Iterable<int> lengths() => this.all().map(row => global.iterator_count(global.names_and(row.number)));
+    public Iterable<int> lengths() => this.all().map(row => Probe.counted(Lib.names_and(row.number)));
 
     public static List<string> spelled(string word) => word.letters().toList();
 }

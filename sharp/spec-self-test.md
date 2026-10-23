@@ -100,6 +100,8 @@ Run lines reach a `foreign` object the way PHP# code does: a constructor on a ru
 // app/Gauge.sharp
 namespace App;
 
+import Sharp.System.Environment;
+
 public class Gauge
 {
     public Gauge(private Environment environment) { }

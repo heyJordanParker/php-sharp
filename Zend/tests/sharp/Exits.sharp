@@ -1,5 +1,8 @@
 namespace Demo;
 
+import Sharp.IO.Console;
+import Sharp.System.Process;
+
 class Exits
 {
     public Exits(private Process process, private Console console) { }

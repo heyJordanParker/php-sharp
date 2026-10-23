@@ -1,5 +1,7 @@
 # 63. The effects of printing and `exit`
 
+Superseded in part by [decision 83](083-php-through-the-standard-library.md): `global.` does not exist in PHP# code, and a bare `printf(…)`, `fwrite(…)` or `exit(1)` names no function, as a misspelled name does, with no message that names a member to write. Inside the standard library, `global.fwrite` keeps both `Console` and `Files`.
+
 Superseded in part by [decision 76](076-plain-php-functions.md): a bare call such as `printf(…)`, `fwrite(…)` or `exit(1)` below is a compile error. A bare `STDERR` or `PHP_EOL` is a compile error too, and the constant is written `global.STDERR`.
 
 Superseded in part by [decision 80](080-global-calls-of-replaced-functions.md): outside the standard library, the call through `global` is a compile error too. Each names the member of `Console` or `Process` to write: `console.write(…)` for `printf`, `console.write(…)` or `console.writeError(…)` for `fwrite`, and `process.exit(…)` for `exit`. Inside the standard library, `global.fwrite` has both `Console` and `Files`, because the handle it takes can be a terminal or a file.
