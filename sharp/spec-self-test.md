@@ -180,6 +180,16 @@ const total = $count;   // compile error: write the name without $
 line 1 expects a compile error, and the checker reports: …Unexpected …
 -->
 
+A lexer error, code `syntax`, says the line could not be read too:
+
+<!-- example unlexable-line: statements -->
+```csharp
+const mode = 0789;   // compile error: an octal literal has no 8
+```
+<!-- expect unlexable-line
+line 1 expects a compile error, and the checker reports: …Unexpected …`8`…
+-->
+
 A message the parser writes to name a PHP# rule satisfies a `compile error` line:
 
 <!-- example parser-rule: members -->
