@@ -1,6 +1,6 @@
 #
 # docker-library/php 8.5/trixie/zts at f6048b5f6e3c2202ee082665a4ccc0d90de291a3, built from this repository's source
-# instead of the php.net tarball, then FrankenPHP v1.13.0's Dockerfile stages on top of it, as FrankenPHP builds on
+# instead of the php.net tarball, then FrankenPHP v1.13.1's Dockerfile stages on top of it, as FrankenPHP builds on
 # php:8.5-zts-trixie.
 #
 
@@ -241,12 +241,13 @@ ENTRYPOINT ["docker-php-entrypoint"]
 
 FROM scratch AS frankenphp-source
 
-ADD https://github.com/php/frankenphp.git#v1.13.0 /
+# v1.13.1 takes golang.org/x/net v0.61.0, which fixes CVE-2026-78669 in v1.13.0's v0.59.0.
+ADD https://github.com/php/frankenphp.git#v1.13.1 /
 
 FROM ${GOLANG_IMAGE} AS golang-base
 
 #
-# FrankenPHP v1.13.0's Dockerfile, with e-dant/watcher and install-php-extensions at fixed releases.
+# FrankenPHP v1.13.1's Dockerfile, with e-dant/watcher and install-php-extensions at fixed releases.
 #
 
 FROM php-base AS common
@@ -293,7 +294,7 @@ EXPOSE 2019
 
 FROM common AS builder
 
-ARG FRANKENPHP_VERSION='1.13.0'
+ARG FRANKENPHP_VERSION='1.13.1'
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 COPY --from=golang-base /usr/local/go /usr/local/go
@@ -319,7 +320,7 @@ RUN apt-get update && \
 	&& \
 	apt-get clean
 
-# Install e-dant/watcher (necessary for file watching), at the release FrankenPHP v1.13.0's go.mod pins
+# Install e-dant/watcher (necessary for file watching), at the release FrankenPHP v1.13.1's go.mod pins
 WORKDIR /usr/local/src/watcher
 RUN set -eux; \
 	curl -fsSL https://github.com/e-dant/watcher/archive/refs/tags/0.14.5.tar.gz | tar xz --strip-components 1; \
