@@ -12,7 +12,7 @@
 #endif
 
 #define SHARP_UNIT_MAGIC "\x53\x48\x41\x52\x50\x43\x00\x00"
-#define SHARP_UNIT_ABI "\xfc\xd5\xb6\x2d\x48\xd3\x34\xa5\xc8\xc0\xe6\xc2\x94\xa0\x27\x8b"
+#define SHARP_UNIT_ABI "\x19\x8f\x04\x5a\xdf\x20\x0e\x03\x49\xf4\x18\xf7\xf9\x13\x9a\x6e"
 
 #define SHARP_KINDS(X) \
   X(ZVAL) \
@@ -336,6 +336,9 @@ typedef struct {
   // The version Composer installed that standard library at, which the engine's refusal names. Empty when Composer
   // reports none.
   sharp_str library_version;
+  // The hash of every byte after the header: the inputs, the tree and the texts. The engine refuses a file whose
+  // sections changed after it was written, as a damaged or partly written one.
+  uint8_t sections_hash[16];
 } sharp_unit_header;
 
 // A file whose edit makes the compiled file's source due for a check.
@@ -355,7 +358,7 @@ typedef struct {
   uint32_t line;
   // Closing line, for declarations.
   uint32_t end_line;
-  // Index into `children[]`.
+  // Index into `children[]`. Each child is a node written before this one, so the tree holds no cycle.
   uint32_t first_child;
   // List kinds are variadic.
   uint32_t child_count;

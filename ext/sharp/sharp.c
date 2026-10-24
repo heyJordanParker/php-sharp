@@ -52,7 +52,7 @@ extern PHP_JSON_API zend_class_entry *php_json_exception_ce;
 SHARP_KINDS(SHARP_KIND_IS_ZEND_KIND)
 ZEND_STATIC_ASSERT(SHARP_T_FILE == T_FILE, "SHARP_T_FILE differs from T_FILE");
 
-ZEND_STATIC_ASSERT(sizeof(sharp_unit_header) == 128, "a .sharpc header is 128 bytes");
+ZEND_STATIC_ASSERT(sizeof(sharp_unit_header) == 144, "a .sharpc header is 144 bytes");
 ZEND_STATIC_ASSERT(sizeof(sharp_input) == 40, "a .sharpc input is 40 bytes");
 ZEND_STATIC_ASSERT(sizeof(sharp_node) == 56, "a .sharpc node is 56 bytes");
 
@@ -258,6 +258,8 @@ static zend_ast *sharp_translate_fixed(const sharp_unit *unit, const sharp_node 
 	return ast;
 }
 
+/* sharp_check proved the tree is one: each child comes before its parent. A tree deeper than the stack stops as
+ * zend_compile stops on a deep expression. */
 static zend_ast *sharp_translate(const sharp_unit *unit, uint32_t index)
 {
 	const sharp_node *node;
@@ -267,6 +269,13 @@ static zend_ast *sharp_translate(const sharp_unit *unit, uint32_t index)
 	if (index == UINT32_MAX) {
 		return NULL;
 	}
+#ifdef ZEND_CHECK_STACK_LIMIT
+	if (UNEXPECTED(zend_call_stack_overflowed(EG(stack_limit)))) {
+		zend_error_noreturn(E_COMPILE_ERROR, "Maximum call stack size of %zu bytes (zend.max_allowed_stack_size"
+			" - zend.reserved_stack_size) reached during compilation. Try splitting expression",
+			(size_t) ((uintptr_t) EG(stack_base) - (uintptr_t) EG(stack_limit)));
+	}
+#endif
 
 	node = &unit->nodes[index];
 	kind = (zend_ast_kind) node->kind;
@@ -660,7 +669,65 @@ static zend_string *sharp_native_refusal(const char *version, size_t length)
 		(int) length, version, (int) length, version);
 }
 
-static bool sharp_offsets_fit(const sharp_unit_header *header, const sharp_unit *unit)
+static void sharp_hash_bytes(const char *bytes, size_t length, uint8_t hash[16])
+{
+	PHP_XXH3_128_CTX context = {0};
+
+	PHP_XXH3_128_Init(&context, NULL);
+	PHP_XXH3_128_Update(&context, (const unsigned char *) bytes, length);
+	PHP_XXH3_128_Final(hash, &context);
+}
+
+/* Whether the file's inputs, tree and texts, every byte after its header, are the ones mago wrote. */
+static bool sharp_sections_intact(const zend_string *bytes)
+{
+	const sharp_unit_header *header = (const sharp_unit_header *) ZSTR_VAL(bytes);
+	uint8_t hash[16];
+
+	sharp_hash_bytes(ZSTR_VAL(bytes) + sizeof(sharp_unit_header), ZSTR_LEN(bytes) - sizeof(sharp_unit_header), hash);
+
+	return memcmp(hash, header->sections_hash, sizeof(hash)) == 0;
+}
+
+static bool sharp_kind_declared(sharp_kind kind)
+{
+	switch (kind) {
+#define SHARP_KIND_CASE(name) case SHARP_AST_##name:
+		SHARP_KINDS(SHARP_KIND_CASE)
+#undef SHARP_KIND_CASE
+			return true;
+		default:
+			return false;
+	}
+}
+
+/* Whether sharp_translate builds the node: a value with a tag sharp_value names, a declaration with its 5 children, a
+ * list, or another kind php-src declares with as many children as the kind takes. ZEND_AST_CONSTANT, ZEND_AST_OP_ARRAY
+ * and ZEND_AST_ZNODE are no nodes the parser makes. */
+static bool sharp_node_fits(const sharp_node *node)
+{
+	zend_ast_kind kind = (zend_ast_kind) node->kind;
+
+	if (!sharp_kind_declared(node->kind)) {
+		return false;
+	}
+	if (kind == ZEND_AST_ZVAL) {
+		return node->value <= SHARP_STRING;
+	}
+	if ((kind >> ZEND_AST_IS_LIST_SHIFT) & 1) {
+		return true;
+	}
+	if (kind >= ZEND_AST_FUNC_DECL && kind <= ZEND_AST_PROPERTY_HOOK) {
+		return node->child_count == 5;
+	}
+
+	return !((kind >> ZEND_AST_SPECIAL_SHIFT) & 1) && node->child_count == kind >> ZEND_AST_NUM_CHILDREN_SHIFT;
+}
+
+/* Whether sharp_translate turns the tree into a zend_ast: the root and every child name a node or none, each text and
+ * child range lies inside its section, each node fits its kind, and each child comes before its parent, as the bridge
+ * writes them, so no node holds itself. */
+static bool sharp_tree_fits(const sharp_unit_header *header, const sharp_unit *unit)
 {
 	if (header->root >= header->node_count) {
 		return false;
@@ -669,13 +736,16 @@ static bool sharp_offsets_fit(const sharp_unit_header *header, const sharp_unit 
 		const sharp_node *node = &unit->nodes[i];
 
 		if (!sharp_text_fits(header, node->text)
-				|| (uint64_t) node->first_child + node->child_count > header->children_count) {
+				|| (uint64_t) node->first_child + node->child_count > header->children_count
+				|| !sharp_node_fits(node)) {
 			return false;
 		}
-	}
-	for (uint32_t i = 0; i < header->children_count; i++) {
-		if (unit->children[i] != UINT32_MAX && unit->children[i] >= header->node_count) {
-			return false;
+		for (uint32_t c = 0; c < node->child_count; c++) {
+			uint32_t child = unit->children[node->first_child + c];
+
+			if (child != UINT32_MAX && child >= i) {
+				return false;
+			}
 		}
 	}
 
@@ -719,11 +789,8 @@ static sharp_state sharp_check(sharp_compiled *compiled, const char *source, siz
 	}
 	if (source) {
 		uint8_t hash[16];
-		PHP_XXH3_128_CTX context = {0};
 
-		PHP_XXH3_128_Init(&context, NULL);
-		PHP_XXH3_128_Update(&context, (const unsigned char *) source, source_length);
-		PHP_XXH3_128_Final(hash, &context);
+		sharp_hash_bytes(source, source_length, hash);
 		if (header->source_size != source_length || memcmp(header->source_hash, hash, sizeof(hash)) != 0) {
 			compiled->changed = ZSTR_VAL(compiled->source) + compiled->root_length + 1;
 			compiled->changed_length = ZSTR_LEN(compiled->source) - compiled->root_length - 1;
@@ -740,7 +807,8 @@ static sharp_state sharp_check(sharp_compiled *compiled, const char *source, siz
 			return SHARP_OUT_OF_DATE;
 		}
 	}
-	if (source && !sharp_offsets_fit(header, &compiled->unit)) {
+	/* The revision opcache asks for reads no node, so only a compile pays for these. */
+	if (source && (!sharp_sections_intact(compiled->bytes) || !sharp_tree_fits(header, &compiled->unit))) {
 		return SHARP_NOT_COMPILED;
 	}
 
