@@ -84,8 +84,19 @@ bool sharp_cross_slot_read(zval *array, zend_object *object, zval *slot);
 void sharp_cross_array_cast(zval *result, zend_object *object);
 
 bool sharp_property_takes_reference(zval *slot, const zend_property_info *info);
-zval *sharp_property_from_reference(zval *slot, const zend_property_info *info, zval *rv);
+/* PHP# code reads `slot`, the reference of a property of `object`, or of no object for a static one. Checks what the
+ * reference holds against the property's type, and gives back `slot` once it holds the value itself, or `rv`, its copy,
+ * while plain PHP still holds the reference or after the TypeError. */
+zval *sharp_property_from_reference(zval *slot, zend_object *object, const zend_property_info *info, zval *rv);
 bool sharp_property_for_write(zval *result, zend_object *object, zval *slot, const zend_property_info *info);
+/* Spec section 12: plain PHP fetches `slot`, of a property of `object` with ZEND_ACC_SHARP_TYPED, or of no object for a
+ * static one, to write into what it holds, as `$o->items[] = $v`, `$o->items[0][1] = $v`, `unset($o->items[0])` and
+ * `sort($o->items)` do, after the fetch's `flags` were handled. An array, or the null or uninitialized slot an element
+ * write fills with one, becomes a reference the property types, as a reference plain PHP takes does, so
+ * sharp_property_from_reference checks it before PHP# code next reads it. A Sharp\Map or Sharp\Set is copied when
+ * shared, and a table PHP# code made takes the property's type as its own, which each write plain PHP makes into it
+ * then takes at the write. */
+void sharp_property_for_plain_write(zval *slot, zend_object *object, const zend_property_info *info, uint32_t flags);
 
 #define SHARP_IS_TABLE(value) \
 	(Z_TYPE_P(value) == IS_OBJECT && (Z_OBJCE_P(value) == sharp_ce_map || Z_OBJCE_P(value) == sharp_ce_set))
@@ -337,7 +348,7 @@ static zend_always_inline const sharp_type *sharp_type_arguments(zend_object *ob
  * name to a class that declares none, or another number. Throws an Error when they do not fit. */
 bool sharp_class_takes(const zend_class_entry *ce, const sharp_type *arguments);
 
-/* Stores `arguments` in the slot of `object`, whose class declares one. */
+/* Stores `arguments` in the slot of `object`, whose class declares one, or in a Sharp\Map or Sharp\Set. */
 void sharp_type_arguments_store(zend_object *object, const sharp_type *arguments);
 
 /* The class `name`, as PHP writes it, names in serialized data, or NULL when the data may not hold it. */

@@ -55,6 +55,41 @@ public class Carton
         this.tags["a"] = ["x"];
     }
 
+    public List<int> counts { get; set; } = [1, 2];
+
+    public List<List<int>> grid { get; set; } = [[1]];
+
+    public Set<int> numbers { get; set; } = [1];
+
+    // What PHP# reads from each Map and Set plain PHP writes into: each key and value, or element, with its type.
+    public string entriesText() =>
+        `${Probe.join(",", this.payload.keys())}=${Probe.join(",", this.payload.values())} ${this.levels.count()} ${this.levels[Level.High] ?? -1} ${Probe.join(",", this.numbers.toList())}`;
+
+    public int secondDoubled() => this.counts[1] * 2;
+
+    public int gridFirst() => this.grid[0][0];
+
+    public string countsText() => Probe.join(",", this.counts);
+
+    public void addCount(int count)
+    {
+        this.counts.add(count);
+    }
+
+    public static List<int> totals { get; set; } = [1, 2];
+
+    public static int secondTotal() => Carton.totals[1] * 2;
+
+    // The constructor sets it, so an object plain PHP creates without the constructor holds it uninitialized.
+    public List<int> later { get; set; }
+
+    public Carton()
+    {
+        this.later = [];
+    }
+
+    public string laterText() => Probe.join(",", this.later);
+
     public Set<string>|int picked { get; set => field = value; } = 0;
 
     public string pickedText()

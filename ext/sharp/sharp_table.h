@@ -71,11 +71,20 @@ bool sharp_table_put(sharp_table *table, zval *key, zval *value);
 /* Removes key's entry, when the table holds one. False after an exception, with the table unchanged. */
 bool sharp_table_remove(sharp_table *table, zval *key);
 
-/* A Sharp\Map or a Sharp\Set: its table, then the object. A Set holds each element as a key with a null value. */
+/* A Sharp\Map or a Sharp\Set: its table, its type arguments, then the object. A Set holds each element as a key with a
+ * null value. The type arguments, as `string, int` for a Map<string, int>, are the ones sharp_type_arguments_store gave
+ * it at the first typed boundary that took it, or NULL until one did. Each write plain PHP makes into it takes them. A
+ * copy keeps them. */
 typedef struct {
 	sharp_table table;
+	const struct _sharp_type *arguments;
 	zend_object std;
 } sharp_table_object;
+
+static inline sharp_table_object *sharp_table_object_of(zend_object *object)
+{
+	return (sharp_table_object *) ((char *) object - XtOffsetOf(sharp_table_object, std));
+}
 
 extern zend_class_entry *sharp_ce_map;
 extern zend_class_entry *sharp_ce_set;
@@ -83,7 +92,7 @@ extern zend_class_entry *sharp_ce_struct;
 
 static inline sharp_table *sharp_table_of(zend_object *object)
 {
-	return &((sharp_table_object *) ((char *) object - XtOffsetOf(sharp_table_object, std)))->table;
+	return &sharp_table_object_of(object)->table;
 }
 
 /* PHP#'s == on two values, spec section 19. False with equal unset after an exception an op_Equality threw. */

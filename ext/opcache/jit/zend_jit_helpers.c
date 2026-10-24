@@ -2266,7 +2266,8 @@ static zend_never_inline bool zend_handle_fetch_obj_flags(
 {
 	switch (flags) {
 		case ZEND_FETCH_DIM_WRITE:
-			if (UNEXPECTED(Z_ISREF_P(ptr)) && prop_info && UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_CROSSING)
+			if (UNEXPECTED(Z_ISREF_P(ptr)) && prop_info
+					&& UNEXPECTED(prop_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
 					&& UNEXPECTED(!sharp_property_for_write(result, obj, ptr, prop_info))) {
 				if (result) ZVAL_ERROR(result);
 				return 0;
@@ -2341,9 +2342,8 @@ static void ZEND_FASTCALL zend_jit_fetch_obj_w_slow(zend_object *zobj)
 	ZVAL_INDIRECT(result, retval);
 
 	/* Support for typed properties */
+	uint32_t flags = opline->extended_value & ZEND_FETCH_OBJ_FLAGS;
 	do {
-		uint32_t flags = opline->extended_value & ZEND_FETCH_OBJ_FLAGS;
-
 		if (flags) {
 			zend_property_info *prop_info = CACHED_PTR_EX(cache_slot + 2);
 
@@ -2355,13 +2355,17 @@ static void ZEND_FASTCALL zend_jit_fetch_obj_w_slow(zend_object *zobj)
 			}
 		}
 	} while (0);
+	zend_property_info *sharp_info = CACHED_PTR_EX(cache_slot + 2);
+	if (sharp_info && UNEXPECTED(sharp_info->flags & ZEND_ACC_SHARP_TYPED)) {
+		sharp_property_for_plain_write(retval, zobj, sharp_info, flags);
+	}
 
 	if (UNEXPECTED(Z_TYPE_P(retval) == IS_UNDEF)) {
 		ZVAL_NULL(retval);
 	}
 }
 
-static void ZEND_FASTCALL zend_jit_check_array_promotion(zval *val, zend_property_info *prop)
+static void ZEND_FASTCALL zend_jit_check_array_promotion(zval *val, zend_property_info *prop, zend_object *zobj)
 {
 	zend_execute_data *execute_data = EG(current_execute_data);
 	const zend_op *opline = execute_data->opline;
@@ -2380,6 +2384,9 @@ static void ZEND_FASTCALL zend_jit_check_array_promotion(zval *val, zend_propert
 		zend_string_release(type_str);
 		ZVAL_ERROR(result);
 	} else {
+		if (UNEXPECTED(prop->flags & ZEND_ACC_SHARP_TYPED)) {
+			sharp_property_for_plain_write(val, zobj, prop, ZEND_FETCH_DIM_WRITE);
+		}
 		ZVAL_INDIRECT(result, val);
 	}
 }
@@ -3597,6 +3604,16 @@ static void ZEND_FASTCALL zend_jit_sharp_static_read(zval *result, const zend_pr
 {
 	if (info && UNEXPECTED(info->flags & ZEND_ACC_SHARP_CROSSING)) {
 		sharp_cross_read(result);
+	}
+}
+
+/* PHP#: plain PHP code fetches the static property `info`, which has ZEND_ACC_SHARP_TYPED, to write into what it
+ * holds, after the fetch's `flags` were handled, see sharp_property_for_plain_write. */
+static void ZEND_FASTCALL zend_jit_sharp_static_write(zval *slot, const zend_property_info *info, uint32_t flags)
+{
+	if (!EG(exception)
+			&& (!(info->flags & ZEND_ACC_PPP_SET_MASK) || zend_asymmetric_property_has_set_access(info))) {
+		sharp_property_for_plain_write(slot, NULL, info, flags);
 	}
 }
 

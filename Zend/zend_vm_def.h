@@ -1942,10 +1942,26 @@ ZEND_VM_INLINE_HELPER(zend_fetch_static_prop_helper, ANY, ANY, int type)
 		}
 		prop = &EG(uninitialized_zval);
 	}
+	if ((type == BP_VAR_W || type == BP_VAR_RW) && prop != &EG(uninitialized_zval)
+	 && UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_TYPED) && !EG(exception)) {
+		sharp_property_for_plain_write(prop, NULL, prop_info,
+			type == BP_VAR_W ? opline->extended_value & ZEND_FETCH_OBJ_FLAGS : 0);
+	}
 
 	if (type == BP_VAR_R || type == BP_VAR_IS) {
 ZEND_VM_C_LABEL(copy_deref):
-		ZVAL_COPY_DEREF(EX_VAR(opline->result.var), prop);
+		if (UNEXPECTED(Z_ISREF_P(prop)) && UNEXPECTED(prop_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
+		 && sharp_function_is_sharp(EX(func))) {
+			/* PHP# code reads what plain PHP wrote through the reference, which its type may not hold. */
+			zval held;
+			zval *read = sharp_property_from_reference(prop, NULL, prop_info, &held);
+			ZVAL_COPY_DEREF(EX_VAR(opline->result.var), read);
+			if (read == &held) {
+				zval_ptr_dtor(&held);
+			}
+		} else {
+			ZVAL_COPY_DEREF(EX_VAR(opline->result.var), prop);
+		}
 		if (type == BP_VAR_R && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)
 		 && SHARP_IS_COLLECTION(EX_VAR(opline->result.var))) {
 			sharp_collection_of_static_property(EX_VAR(opline->result.var), prop, prop_info);
@@ -2182,7 +2198,8 @@ ZEND_VM_C_LABEL(fetch_obj_r_simple):
 					retval = OBJ_PROP(zobj, prop_offset);
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
-					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (!ZEND_VM_SPEC || (OP1_TYPE & (IS_TMP_VAR|IS_VAR)) != 0) {
 							ZEND_VM_C_GOTO(fetch_obj_r_copy);
 						} else {
@@ -2401,7 +2418,8 @@ ZEND_VM_C_LABEL(fetch_obj_is_simple):
 					retval = OBJ_PROP(zobj, prop_offset);
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
-					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags & ZEND_ACC_SHARP_CROSSING))) {
+					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (!ZEND_VM_SPEC || (OP1_TYPE & (IS_TMP_VAR|IS_VAR)) != 0) {
 							ZEND_VM_C_GOTO(fetch_obj_is_copy);
 						} else {

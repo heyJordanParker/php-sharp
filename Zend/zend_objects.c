@@ -220,9 +220,9 @@ ZEND_API void ZEND_FASTCALL zend_objects_clone_members(zend_object *new_object, 
 			i_zval_ptr_dtor(dst);
 			zend_property_info *crossing = UNEXPECTED(Z_ISREF_P(src)) && ZEND_REF_HAS_TYPE_SOURCES(Z_REF_P(src))
 				? zend_get_property_info_for_slot_self(old_object, src) : NULL;
-			if (UNEXPECTED(crossing && (crossing->flags & ZEND_ACC_SHARP_CROSSING))) {
+			if (UNEXPECTED(crossing && (crossing->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 				zval value;
-				zval *held = sharp_property_from_reference(src, crossing, &value);
+				zval *held = sharp_property_from_reference(src, old_object, crossing, &value);
 				ZVAL_COPY_VALUE(dst, held);
 				if (held != &value) {
 					Z_TRY_ADDREF_P(dst);

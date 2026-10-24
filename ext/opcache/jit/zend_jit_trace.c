@@ -6166,8 +6166,9 @@ static zend_vm_opcode_handler_t zend_jit_trace(zend_jit_trace_rec *trace_buffer,
 						    || (opline->op2.num & ZEND_FETCH_CLASS_MASK) == ZEND_FETCH_CLASS_PARENT))))) {
 							break;
 						}
-						if (opline->opcode == ZEND_FETCH_STATIC_PROP_R
-						 && zend_jit_sharp_receiver_may_be_collection(op_array, opline, NULL, 0, NULL)) {
+						if ((opline->opcode == ZEND_FETCH_STATIC_PROP_R
+						  && zend_jit_sharp_receiver_may_be_collection(op_array, opline, NULL, 0, NULL))
+						 || zend_jit_sharp_static_may_be_referenced(op_array, opline)) {
 							break;
 						}
 						if (!zend_jit_fetch_static_prop(&ctx, opline, op_array)) {

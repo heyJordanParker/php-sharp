@@ -13,4 +13,6 @@ public class Held<T>
     public T get() => this.value;
 
     public static Held<Map<string, int>> ofMap() => new Held<Map<string, int>>(["h": 1]);
+
+    public static Held<List<int>> ofList() => new Held<List<int>>([1]);
 }

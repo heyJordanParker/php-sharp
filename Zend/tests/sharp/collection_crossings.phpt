@@ -7,6 +7,7 @@ require __DIR__ . '/harness/Probe.inc';
 require __DIR__ . '/harness/fixture.inc';
 fixture('Crossings');
 
+use Demo\Carton;
 use Demo\Crossings;
 use Demo\Envelope;
 use Demo\Holdings;
@@ -223,6 +224,27 @@ for ($round = 0; $round < 100; $round++) {
     echo 'PHP# reads what plain PHP wrote: ', $written->payloadClass(), ' ', $written->firstRowClass(), ' ', Holdings::countsClass(), ' ', json_encode($written->payload), "\n";
     Holdings::$counts = ['c' => 1];
 
+    // Plain PHP's write into a Map or a Set property crosses each entry as the property's type takes it, and a wrong
+    // one throws at the write, leaving the property as it was.
+    $box = new Carton();
+    foreach ([
+        'a string value into a Map<string, int>' => fn () => $box->payload['k'] = 'x',
+        'a key no case backs into a Map<Demo.Level, int>' => fn () => $box->levels['zzz'] = 1,
+        'a string element into a Set<int>' => fn () => $box->numbers[] = 'x',
+        'a string value into a static Map<string, int>' => fn () => Holdings::$counts['k'] = 'x',
+    ] as $write => $run) {
+        try {
+            $run();
+            echo $write, ": no TypeError\n";
+        } catch (TypeError $e) {
+            echo $write, ': ', $e->getMessage(), "\n";
+        }
+    }
+    $box->payload[5] = 5;
+    $box->levels['high'] = 2;
+    $box->numbers[] = 2;
+    echo 'writes that fit a Map and a Set, as PHP# reads them: ', $box->entriesText(), "\n";
+
     // A write into plain PHP's storage takes what a parameter of the property's type takes, and PHP#'s own property
     // keeps the Map.
     $context = new RequestContext();
@@ -436,6 +458,11 @@ ReflectionProperty::getValue() of a static: array, is_array true, {"c":1}
 a plain PHP subclass reads $this->payload: array, is_array true, {"id":"p1"}
 PHP# reads its Map property: Sharp\Map Sharp\Map Sharp\Map
 PHP# reads what plain PHP wrote: Sharp\Map Sharp\Map Sharp\Map {"id":"p2"}
+a string value into a Map<string, int>: Cannot assign string to Map<string, int>: ["k"] expected int, got string 'x'
+a key no case backs into a Map<Demo.Level, int>: Cannot assign int to Map<Demo.Level, int>: ["zzz"] key expected Demo.Level, got string 'zzz'
+a string element into a Set<int>: Cannot assign string to Set<int>: [1] expected int, got string 'x'
+a string value into a static Map<string, int>: Cannot assign string to Map<string, int>: ["k"] expected int, got string 'x'
+writes that fit a Map and a Set, as PHP# reads them: b,a,5=2,1,5 2 2 1,2
 a Map written to an array property: array, is_array true, {"tea":3,"pie":7}, typed array
 a Map written through a reference to it: array, is_array true, {"tea":3,"pie":7}
 a Set written to a ?array property: array, is_array true, ["a","b"], typed ?array

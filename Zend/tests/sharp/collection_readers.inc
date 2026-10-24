@@ -2,6 +2,7 @@
 
 use Demo\Carton;
 use Demo\Crossings;
+use Demo\Held;
 use Demo\Loosely;
 use Demo\Quiet;
 use Demo\Subscriber;
@@ -250,6 +251,75 @@ function reader_var_export(): string
         . ' / ' . var_export(new Carton(), true));
 }
 
+// Each write puts a string where a List<int> holds ints, and the first PHP# read throws, naming the element.
+function reader_list_writes_checked_on_read(): string
+{
+    $writes = [
+        'append' => fn (Carton $box) => $box->counts[] = 'z',
+        'index write' => fn (Carton $box) => $box->counts[1] = 'z',
+        'nested write' => fn (Carton $box) => $box->grid[0][] = 'z',
+        'reference write' => function (Carton $box) {
+            $r = &$box->counts;
+            $r[] = 'z';
+        },
+        'array_push()' => fn (Carton $box) => array_push($box->counts, 'z'),
+        'foreach by reference' => function (Carton $box) {
+            foreach ($box->counts as &$count) {
+                $count = 'z';
+            }
+        },
+    ];
+    $seen = [];
+    foreach ($writes as $write => $run) {
+        $box = new Carton();
+        $run($box);
+        $seen[] = "$write " . reader_attempt(fn () => $box->secondDoubled() . ' ' . $box->gridFirst());
+    }
+
+    return implode(' / ', $seen);
+}
+
+// A write that fits reads back as written, and a reference plain PHP holds stays the property's, both ways.
+function reader_list_writes_that_fit(): string
+{
+    $box = new Carton();
+    $box->counts[] = 3;
+    $box->counts[0] = 5;
+    sort($box->counts);
+    $box->grid[0][] = 2;
+    $seen = [$box->countsText() . ' ' . $box->gridFirst()];
+    $r = &$box->counts;
+    $r[] = 7;
+    $seen[] = $box->countsText();
+    $box->addCount(8);
+    $r[] = 9;
+    $seen[] = $box->countsText() . ' ' . json_encode($r);
+    $r[] = 'z';
+    $seen[] = reader_attempt(fn () => $box->countsText());
+
+    return implode(' / ', $seen);
+}
+
+// A static property, a property the constructor never set, and one whose type names its class's type parameter, which
+// PHP# reads with the object's type arguments, take the same check.
+function reader_list_writes_into_other_slots(): string
+{
+    $seen = [];
+    Carton::$totals[] = 'z';
+    $seen[] = 'static ' . reader_attempt(fn () => (string) Carton::secondTotal());
+    Carton::$totals = [1, 2];
+    Carton::$totals[1] = 3;
+    $seen[] = 'static that fits ' . Carton::secondTotal();
+    $box = (new ReflectionClass(Carton::class))->newInstanceWithoutConstructor();
+    $box->later[] = 'z';
+    $seen[] = 'uninitialized ' . reader_attempt(fn () => $box->laterText());
+    $held = Held::ofList();
+    $held->value[] = 'z';
+    $seen[] = 'type parameter ' . reader_attempt(fn () => json_encode($held->get()));
+
+    return implode(' / ', $seen);
+}
+
 function readers(): string
 {
     $rows = [
@@ -275,6 +345,9 @@ function readers(): string
         'iterator_to_array() of a lazy Iterable<Map<string, int>> result' => reader_iterable_of_maps(...),
         'a lazy Iterable result is a Traversable, and its declared type' => reader_iterable_type(...),
         'var_export() of a Map property, a Map and a PHP# object' => reader_var_export(...),
+        "plain PHP's writes into a List<int> property, checked when PHP# reads it" => reader_list_writes_checked_on_read(...),
+        "plain PHP's writes that fit a List<int> property, and a reference it keeps" => reader_list_writes_that_fit(...),
+        "plain PHP's writes into a static, an uninitialized and a type parameter's List<int>" => reader_list_writes_into_other_slots(...),
     ];
     $output = '';
     foreach ($rows as $row => $read) {
