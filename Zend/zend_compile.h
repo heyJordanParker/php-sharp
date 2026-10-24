@@ -1194,7 +1194,9 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  *
  * ZEND_ACC_SHARP_TYPED: the property has a PHP# type, its sharp_type, which every write from plain PHP checks. A write
  * tests this flag before it looks for the object, and the JIT's helpers test it with readonly and asymmetric visibility
- * in one test, so a plain PHP property pays at most one bit test for the check.
+ * in one test, so a plain PHP property pays at most one bit test for the check. A write into what the property holds,
+ * as `$o->items[] = $v`, fetches it through sharp_property_for_plain_write, and PHP# code reads a slot plain PHP turned
+ * into a reference through sharp_property_from_reference, which checks it, as for ZEND_ACC_SHARP_CROSSING.
  *   flags of zend_property_info                               upstream: the ZEND_ACC_* property flags
  *
  * ZEND_ACC_SHARP_CROSSING: the property's #[\Sharp\Crossing] says plain PHP reads its value with each Map and Set in
