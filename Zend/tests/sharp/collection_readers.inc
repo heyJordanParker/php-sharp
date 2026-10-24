@@ -377,7 +377,7 @@ function reader_tables_typed_from_creation(): string
 
 // A Map whose type names a class or a type parameter carries that type too: one an initial value or a static makes,
 // with the type arguments of the object or the static, one a parameter or a result crosses into, and one a method value
-// makes in a generic method.
+// or an empty literal makes in a generic method, with the method's type arguments.
 function reader_tables_typed_by_names(): string
 {
     $box = new Carton();
@@ -389,7 +389,9 @@ function reader_tables_typed_by_names(): string
         'a Map<string, Demo.Carton> result' => fn () => $box->handResult(['a' => new Carton()], 'k', 5),
         'a Map<string, Demo.Carton> local' => fn () => $box->handLocal(['a' => new Carton()], 'k', 5),
         'entries() as a method value in a generic method' => fn () => $box->handEntriesValue('k', 'x'),
+        'a Map<string, TItem> [:] local in a generic method' => fn () => $box->handPlaced('k', 'x'),
         'writes that fit' => function () use ($box, $held) {
+            $box->handPlaced('k', 4);
             $held->handIndex('k', 2);
             $held->handPool('k', 3);
             $box->handGiven(['high' => new Carton()], 'low', new Carton());
@@ -426,6 +428,27 @@ function reader_table_value_writes_checked_on_read(): string
             return '';
         });
         $seen[] = "$write " . reader_attempt(fn () => $box->$read());
+    }
+
+    return implode(' / ', $seen);
+}
+
+// After plain PHP's write into a Map's entry, each way PHP# code reads the Map's entries throws, naming the entry.
+function reader_table_entry_reads_checked(): string
+{
+    // Carton's Json and Serialized reads run the standard library's classes, which no fixture loads.
+    foreach (['Json' => 'Encoding/Json', 'Serialized' => 'Encoding/Serialized'] as $class => $file) {
+        if (!class_exists("Sharp\\Encoding\\$class", false)) {
+            require __DIR__ . "/../../../sharp/composer/library/Sharp/$file.sharp";
+        }
+    }
+    $reads = ['shelvesText', 'shelvesValues', 'shelvesList', 'shelvesFiltered', 'shelvesGrouped', 'shelvesLooped',
+        'shelvesJson', 'shelvesSerialized'];
+    $seen = [];
+    foreach ($reads as $read) {
+        $box = new Carton();
+        $box->shelves['k'][] = 5;
+        $seen[] = "$read " . reader_attempt(fn () => (string) $box->$read());
     }
 
     return implode(' / ', $seen);
@@ -487,6 +510,25 @@ function reader_plain_readers_after_wrong_write(): string
     ]);
 }
 
+// Plain PHP's clone gives the clone's typed slot a reference of its own, which the clone's property types in every
+// build, so PHP's own check refuses a wrong write through it, and a clone of the clone still reads checked.
+function reader_plain_clone_reference_typed(): string
+{
+    $box = new Carton();
+    $box->counts[] = 'z';
+    $clone = clone $box;
+    $seen = [reader_attempt(function () use ($clone) {
+        $held = &$clone->counts;
+        $held = 'text';
+
+        return 'no TypeError';
+    })];
+    $again = clone $clone;
+    $seen[] = reader_attempt(fn () => $again->countsText());
+
+    return implode(' / ', $seen);
+}
+
 // An element write into a property that holds false makes it an array in place, which PHP# reads checked.
 function reader_false_made_an_array(): string
 {
@@ -532,9 +574,11 @@ function readers(): string
         'a Map or a Set PHP# code makes, typed from when it is made' => reader_tables_typed_from_creation(...),
         'a Map whose type names a class or a type parameter, typed from when it is made' => reader_tables_typed_by_names(...),
         "plain PHP's writes into a Map's values, checked when PHP# reads it" => reader_table_value_writes_checked_on_read(...),
+        "each PHP# read of a Map's entries after plain PHP's write into one" => reader_table_entry_reads_checked(...),
         "plain PHP's writes that fit a Map's values" => reader_table_value_writes_that_fit(...),
         "PHP#'s += and ++ after plain PHP's write" => reader_sharp_changes_checked(...),
         "plain PHP's readers and clone after a wrong write" => reader_plain_readers_after_wrong_write(...),
+        "plain PHP's clone of a typed slot's reference, written through and cloned again" => reader_plain_clone_reference_typed(...),
         'an element write into a property that holds false' => reader_false_made_an_array(...),
     ];
     $output = '';

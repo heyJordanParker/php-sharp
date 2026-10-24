@@ -76,7 +76,7 @@ bool sharp_table_remove(sharp_table *table, zval *key);
  * ones sharp_type_arguments_store gave it: when PHP# code made it, or for one plain PHP made, at the first typed
  * boundary that took it, and NULL until then. Each write plain PHP makes into it takes them. A write plain PHP makes into an entry, as `$map["k"][] = $element`, leaves the
  * entry a reference, and unchecked_entries says one may be left, which PHP# code checks before it reads the table, see
- * sharp_table_check_entries. A copy keeps both. */
+ * sharp_table_entries. A copy keeps both. */
 typedef struct {
 	sharp_table table;
 	const struct _sharp_type *arguments;

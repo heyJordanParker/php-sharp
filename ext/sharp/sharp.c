@@ -1380,11 +1380,14 @@ static zval *sharp_collection_element(HashTable *array, zval *index)
 	return element;
 }
 
-/* Spec section 12: PHP# code reads a Map's entries only after each one plain PHP wrote into, as
- * `$map["k"][] = $element` does, is checked against the Map's type. Throws the TypeError and gives false for one that
- * isn't of it. Each entry it takes is no reference any more, unless plain PHP still holds that reference. Plain PHP
- * code reads the entries as they are, so it never throws. */
-static bool sharp_table_check_entries(zend_object *object);
+/* The table of the Map or the Set `object` whose entries the running code reads. Spec section 12: PHP# code reads a
+ * Map's entries only after each one plain PHP wrote into, as `$map["k"][] = $element` does, is checked against the
+ * Map's type, so this throws the TypeError and gives NULL for one that isn't of it. Each entry it takes is no reference
+ * any more, unless plain PHP still holds that reference. Plain PHP code reads the entries as they are, so it never
+ * throws. Every read of a table's entries, by an index, a loop, a method of the table or of Sharp\Collection, a
+ * crossing, json_encode() or serialize(), takes the table here. sharp_table_of gives it to a write, and to the engine's
+ * own bookkeeping, which reads no entry for the running code. */
+static sharp_table *sharp_table_entries(zend_object *object);
 
 /* Plain PHP code may unset a property between the fetch and the call, and a function an argument
  * runs may remove the element an element collection was read from. A Map's entries are checked first. */
@@ -1395,7 +1398,7 @@ static zval *sharp_collection_checked(zval *held)
 		zend_throw_error(NULL, "Cannot call %s() on a collection that was unset", get_active_function_name());
 		return NULL;
 	}
-	if (Z_TYPE_P(held) == IS_OBJECT && !sharp_table_check_entries(Z_OBJ_P(held))) {
+	if (Z_TYPE_P(held) == IS_OBJECT && !sharp_table_entries(Z_OBJ_P(held))) {
 		return NULL;
 	}
 
@@ -8152,9 +8155,13 @@ static ZEND_COLD void sharp_table_refuse_collision(zend_object *object)
  * fewer entries than the Map. */
 static bool sharp_table_array(zval *result, zend_object *object, zval **unheld)
 {
-	sharp_table *table = sharp_table_of(object);
+	sharp_table *table = sharp_table_entries(object);
 	bool is_set = object->ce == sharp_ce_set;
 	*unheld = NULL;
+	if (!table) {
+		ZVAL_UNDEF(result);
+		return false;
+	}
 	array_init_size(result, table->size);
 	SHARP_TABLE_FOREACH(table, bucket) {
 		zval *key = &bucket->key, converted;
@@ -8496,16 +8503,16 @@ static const sharp_type *sharp_table_written_type(zend_object *object)
 	return sharp_runs_sharp_code() ? NULL : sharp_table_type(object);
 }
 
-static bool sharp_table_check_entries(zend_object *object)
+static sharp_table *sharp_table_entries(zend_object *object)
 {
 	sharp_table_object *table = sharp_table_object_of(object);
 	if (EXPECTED(!table->unchecked_entries) || !sharp_runs_sharp_code()) {
-		return true;
+		return &table->table;
 	}
 	const sharp_type *type = sharp_table_type(object);
 	const sharp_type *elements = type ? sharp_type_elements(type) : NULL;
 	if (!elements) {
-		return true;
+		return &table->table;
 	}
 	zval plan;
 	sharp_type_plan(&plan, type);
@@ -8563,11 +8570,12 @@ static bool sharp_table_check_entries(zend_object *object)
 		}
 	} SHARP_TABLE_FOREACH_END();
 	zval_ptr_dtor(&plan);
-	if (checked) {
-		table->unchecked_entries = unchecked;
+	if (!checked) {
+		return NULL;
 	}
+	table->unchecked_entries = unchecked;
 
-	return checked;
+	return &table->table;
 }
 
 /* Throws the TypeError of plain PHP's write into the table of `type`, as C# throws a wrong element's write into an
@@ -8699,10 +8707,10 @@ static zval *sharp_table_read_dimension(zend_object *object, zval *offset, int t
 		return NULL;
 	}
 
-	if (!sharp_table_check_entries(object)) {
+	sharp_table *table = sharp_table_entries(object);
+	if (!table) {
 		return NULL;
 	}
-	sharp_table *table = sharp_table_of(object);
 	if (type == BP_VAR_W || type == BP_VAR_RW) {
 		zval null, key;
 		if (!sharp_table_entry(object, offset, NULL, &key, NULL)) {
@@ -8772,10 +8780,8 @@ static void sharp_table_write_dimension(zend_object *object, zval *offset, zval 
 
 static int sharp_table_has_dimension(zend_object *object, zval *offset, int check_empty)
 {
-	if (!sharp_table_check_entries(object)) {
-		return 0;
-	}
-	sharp_table_bucket *bucket = sharp_table_find(sharp_table_of(object), offset);
+	sharp_table *table = sharp_table_entries(object);
+	sharp_table_bucket *bucket = table ? sharp_table_find(table, offset) : NULL;
 
 	if (!bucket) {
 		return 0;
@@ -8877,7 +8883,7 @@ static zend_object_iterator *sharp_table_get_iterator(zend_class_entry *ce, zval
 		zend_throw_error(NULL, "A %s can't be looped over by reference", ce == sharp_ce_set ? "Set" : "Map");
 		return NULL;
 	}
-	if (!sharp_table_check_entries(Z_OBJ_P(object))) {
+	if (!sharp_table_entries(Z_OBJ_P(object))) {
 		return NULL;
 	}
 
@@ -9052,7 +9058,10 @@ ZEND_METHOD(Sharp_Table, jsonSerialize)
 	ZEND_PARSE_PARAMETERS_NONE();
 
 	zend_object *object = Z_OBJ_P(ZEND_THIS);
-	sharp_table *table = sharp_table_of(object);
+	sharp_table *table = sharp_table_entries(object);
+	if (!table) {
+		RETURN_THROWS();
+	}
 	HashTable *encoded = zend_new_array(table->size);
 	SHARP_TABLE_FOREACH(table, bucket) {
 		if (sharp_out_of_memory()) {
@@ -9102,7 +9111,10 @@ static void sharp_table_list(INTERNAL_FUNCTION_PARAMETERS, bool keys)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
 
-	sharp_table *table = sharp_table_of(Z_OBJ_P(ZEND_THIS));
+	sharp_table *table = sharp_table_entries(Z_OBJ_P(ZEND_THIS));
+	if (!table) {
+		RETURN_THROWS();
+	}
 	HashTable *list = zend_new_array(table->size);
 	SHARP_TABLE_FOREACH(table, bucket) {
 		zval *held = keys ? &bucket->key : &bucket->value;
@@ -9129,6 +9141,9 @@ ZEND_METHOD(Sharp_Table, toList)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
 
+	if (!sharp_table_entries(Z_OBJ_P(ZEND_THIS))) {
+		RETURN_THROWS();
+	}
 	RETURN_ARR(sharp_table_to_list(Z_OBJ_P(ZEND_THIS)));
 }
 
@@ -9137,7 +9152,10 @@ ZEND_METHOD(Sharp_Map, __serialize)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
 
-	sharp_table *table = sharp_table_of(Z_OBJ_P(ZEND_THIS));
+	sharp_table *table = sharp_table_entries(Z_OBJ_P(ZEND_THIS));
+	if (!table) {
+		RETURN_THROWS();
+	}
 	HashTable *keys_and_values = zend_new_array(table->size * 2);
 	SHARP_TABLE_FOREACH(table, bucket) {
 		zval value;

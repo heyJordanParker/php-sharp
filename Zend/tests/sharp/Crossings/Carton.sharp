@@ -1,6 +1,8 @@
 namespace Demo;
 
 import Lib.Probe;
+import Sharp.Encoding.Json;
+import Sharp.Encoding.Serialized;
 
 public class Carton
 {
@@ -89,6 +91,29 @@ public class Carton
 
     public string shelvesText() => Probe.join(",", this.shelves["k"] ?? []);
 
+    // Each other way PHP# code reads a Map's entries.
+    public int shelvesValues() => this.shelves.values().count();
+
+    public int shelvesList() => this.shelves.toList().count();
+
+    public int shelvesFiltered() => this.shelves.filter(shelf => shelf.count() > 0).count();
+
+    public int shelvesGrouped() => this.shelves.groupBy(shelf => shelf.count()).count();
+
+    public int shelvesLooped()
+    {
+        int found = 0;
+        for (const [key, shelf] of this.shelves) {
+            found += shelf.count();
+        }
+
+        return found;
+    }
+
+    public string shelvesJson() => Json.encode(this.shelves);
+
+    public string shelvesSerialized() => Serialized.encode(this.shelves);
+
     public Map<string, Map<string, int>> nested { get; set; } = ["k": ["n": 1]];
 
     public string nestedText() => Probe.join(",", (this.nested["k"] ?? [:]).values());
@@ -160,6 +185,18 @@ public class Carton
     {
         const made = items.entries;
         Probe.put(made(), key, value);
+    }
+
+    // An empty literal at a place that names the method's own type parameter takes the call's type argument.
+    public void handPlaced(string key, Any? value)
+    {
+        this.placedOf<int>(key, value);
+    }
+
+    private void placedOf<TItem>(string key, Any? value)
+    {
+        Map<string, TItem> made = [:];
+        Probe.put(made, key, value);
     }
 
     public List<int>|bool marks { get; set; } = false;
