@@ -10,8 +10,8 @@ name: Base images
 # scanner from the copies of moby/buildkit and docker/buildkit-syft-scanner, for the same reason (#86).
 #
 # The runtime images, and IMAGE's BuildKit, take these images at a pinned digest. PIN is the one thing that
-# moves the runtime images' base digests: it opens a pull request that points them at the day's copies, so a
-# new base image arrives as a reviewable change.
+# moves the runtime images' base digests: it pushes a branch that points them at the day's copies, and an issue
+# names that branch, so a new base image arrives as a reviewable change.
 on:
   schedule:
     - cron: '17 4 * * *'
@@ -73,38 +73,68 @@ jobs:
   # of today's copy. Each source serves the same index digest, so the public default and CI's ghcr.io copy are one
   # image. GITHUB_TOKEN can't push a change to .github/workflows, so sharp.yml's pins of the BuildKit copies, whose
   # release tags don't move, change by hand with their version.
+  #
+  # PIN opens no pull request: one GITHUB_TOKEN opens starts no workflow, and letting GitHub Actions open one would
+  # let every workflow's token approve pull requests. So it pushes one branch per set of digests, named from them,
+  # and keeps one open issue that names the newest branch, from which an Agent opens the pull request and its CI
+  # runs. A pushed branch never moves, so a pull request already open from it keeps the head its CI ran on.
   PIN:
     needs: MIRROR
     if: ${{ !cancelled() && github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-      pull-requests: write
+      issues: write
     steps:
       - name: git checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Point the runtime Dockerfiles' pins at today's copies
+        id: pin
         run: |
+          name=
           for image in debian:trixie-slim golang:1.27-trixie; do
-            digest="$(skopeo inspect --raw "docker://ghcr.io/heyjordanparker/$image" | sha256sum | cut -d ' ' -f 1)"
-            sed -i -E "s#/${image//./\\.}@sha256:[0-9a-f]{64}#/$image@sha256:$digest#g" sharp/docker/runtime/*Dockerfile
-            echo "$image: sha256:$digest"
+            pin="/${image//./\\.}@sha256:[0-9a-f]{64}"
+            old="$(grep -ohE "$pin" sharp/docker/runtime/*Dockerfile | head -n 1)"
+            new="sha256:$(skopeo inspect --raw "docker://ghcr.io/heyjordanparker/$image" | sha256sum | cut -d ' ' -f 1)"
+            sed -i -E "s#$pin#/$image@$new#g" sharp/docker/runtime/*Dockerfile
+            name+="-${image//:/-}-${new:7:12}"
+            echo "| \`$image\` | \`${old#*@}\` | \`$new\` |" >> "$RUNNER_TEMP/digests.md"
           done
+          echo "branch=base-images/${name#-}" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/digests.md"
           git diff
-      - name: Open or update the pull request that moves the digests
+      - name: Push the branch that moves the digests, and name it in the issue
         env:
+          BRANCH: ${{ steps.pin.outputs.branch }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TITLE: The runtime images' base images have new digests
         run: |
           if git diff --quiet; then
             echo "Every pinned digest is today's copy."
             exit 0
           fi
-          branch=base-images/digests
-          git switch --create "$branch"
+          git switch --create "$BRANCH"
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit --all --message 'chore: the runtime images take the base images base-images.yml copied today'
-          git push --force origin "$branch"
-          if [[ $(gh pr list --head "$branch" --state open --json number --jq length) == 0 ]]; then
-            gh pr create --head "$branch" --title 'chore: the runtime images take the base images base-images.yml copied today' \
-              --body "base-images.yml copied new base images, and this moves every pinned digest to them: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. A pull request GitHub Actions opens starts no workflow, so close and reopen it to run CI."
+          if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; then
+            echo "$BRANCH already holds these digests."
+          else
+            git push origin "$BRANCH"
+          fi
+          cat > "$RUNNER_TEMP/issue.md" <<MARKDOWN
+          base-images.yml copied new base images in $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID, and branch \`$BRANCH\` pins the runtime Dockerfiles to them:
+
+          | Image | \`$GITHUB_REF_NAME\` pins | \`$BRANCH\` pins |
+          | --- | --- | --- |
+          $(cat "$RUNNER_TEMP/digests.md")
+
+          The change: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/$GITHUB_REF_NAME...$BRANCH
+
+          Open a pull request from \`$BRANCH\` into \`$GITHUB_REF_NAME\`, so CI builds and scans the runtime images on the new bases.
+          MARKDOWN
+          issue="$(gh issue list --state open --search "in:title \"$TITLE\"" --json number,title --jq "map(select(.title == env.TITLE)) | .[0].number // empty")"
+          if [[ -z $issue ]]; then
+            gh issue create --title "$TITLE" --body-file "$RUNNER_TEMP/issue.md"
+          else
+            gh issue edit "$issue" --body-file "$RUNNER_TEMP/issue.md"
           fi

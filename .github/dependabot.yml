@@ -11,7 +11,12 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    # Minor and patch releases arrive together in one pull request. Each major release arrives in a pull request of
+    # its own, because it can change what the action does.
     groups:
       github-actions:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch

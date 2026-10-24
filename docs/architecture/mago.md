@@ -13,7 +13,7 @@
 - `sharp/bin/test` builds `mago` from `sharp/mago/` into `sharp/build/<os>-<arch>/mago/`, and every test and spec run uses that binary. cargo rebuilds only what changed.
 - `ext/sharp/sharp_unit.h` is the C header that `sharp/mago/crates/sharp-bridge/build.rs` generates. The engine and the `mago` built from the same tree always agree on it, so the header names no Mago commit.
 - `.github/workflows/mago.yml` runs Mago's gates in `sharp/mago/`, and `.github/workflows/mutants.yml` runs `cargo mutants` on `master`.
-- A `v*` tag runs `.github/workflows/release.yml`. It publishes `mago` for every platform as assets of php-sharp's release, at the version PHP# has. `install.sh`, `mago self-update` and the Composer package `heyjordanparker/mago-sharp` download from those releases. The Composer wrapper extracts an archive only when its SHA-256 is the one the package version's `composer/sha256sums.txt` pins, so the version pins the exact binary.
+- A `v*` tag runs `.github/workflows/release.yml`. It publishes `mago` for every platform as assets of php-sharp's release, at the version PHP# has. `install.sh`, `mago self-update` and the Composer package `heyjordanparker/mago-sharp` download from those releases. `install.sh` and `mago self-update` verify an archive's build attestation with `gh`, or else its SHA-256 against the release's `mago-<version>-sha256sums.txt`. The Composer wrapper extracts an archive only when its SHA-256 is the one the package version's `composer/sha256sums.txt` pins, so the version pins the exact binary.
 
 `sharp/mago/.gitattributes` marks Mago's sources `export-ignore`, so `git archive` of php-sharp leaves them out, and the runtime image never builds Mago.
 

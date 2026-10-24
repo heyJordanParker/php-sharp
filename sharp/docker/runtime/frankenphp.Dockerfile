@@ -1,11 +1,15 @@
+# No `# syntax=` line: it makes BuildKit pull the docker/dockerfile frontend from Docker Hub with no login (#86), so
+# the image builds with BuildKit's own Dockerfile frontend. The WORKFLOWS job of .github/workflows/sharp.yml fails on
+# one under sharp/docker.
 #
 # docker-library/php 8.5/trixie/zts at f6048b5f6e3c2202ee082665a4ccc0d90de291a3, built from this repository's source
 # instead of the php.net tarball, then FrankenPHP v1.13.1's Dockerfile stages on top of it, as FrankenPHP builds on
 # php:8.5-zts-trixie.
 #
 
-# The images are pinned by their digests, and .github/workflows/base-images.yml moves the digests in a pull request.
-# CI sets REGISTRY to ghcr.io/heyjordanparker, where base-images.yml copies the images under the same digests.
+# The images are pinned by their digests, and .github/workflows/base-images.yml moves the digests on a branch that an
+# issue names, for review. CI sets REGISTRY to ghcr.io/heyjordanparker, where base-images.yml copies the images under
+# the same digests.
 ARG REGISTRY=public.ecr.aws/docker/library
 ARG BASE_IMAGE=${REGISTRY}/debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
 ARG GOLANG_IMAGE=${REGISTRY}/golang:1.27-trixie@sha256:fbb7ae40b62ff8afe31662df570d39b4f5052ac32b90dae8e60d7657a20a74f4
@@ -241,13 +245,15 @@ ENTRYPOINT ["docker-php-entrypoint"]
 
 FROM scratch AS frankenphp-source
 
-# v1.13.1 takes golang.org/x/net v0.61.0, which fixes CVE-2026-78669 in v1.13.0's v0.59.0.
-ADD https://github.com/php/frankenphp.git#v1.13.1 /
+# v1.13.1 takes golang.org/x/net v0.61.0, which fixes CVE-2026-78669 in v1.13.0's v0.59.0. The source is fetched by
+# the commit its v1.13.1 tag names, so a moved tag builds nothing else.
+ADD https://github.com/php/frankenphp.git#99d4e119ca2e5a90a69d8dbee5d5c9a8016416c5 /
 
 FROM ${GOLANG_IMAGE} AS golang-base
 
 #
-# FrankenPHP v1.13.1's Dockerfile, with e-dant/watcher and install-php-extensions at fixed releases.
+# FrankenPHP v1.13.1's Dockerfile, with e-dant/watcher and install-php-extensions at fixed releases, each checked
+# against its SHA-256.
 #
 
 FROM php-base AS common
@@ -278,6 +284,7 @@ RUN ln /etc/caddy/Caddyfile /etc/frankenphp/Caddyfile && \
 	curl -sSLf \
 		-o /usr/local/bin/install-php-extensions \
 		https://github.com/mlocati/docker-php-extension-installer/releases/download/2.12.0/install-php-extensions && \
+	echo '3f49c71fa66c79b8b2b96bc0ce92885dafd7946f3b5a46f545b390d6f1617e2c  /usr/local/bin/install-php-extensions' | sha256sum -c && \
 	chmod +x /usr/local/bin/install-php-extensions
 
 CMD ["--config", "/etc/frankenphp/Caddyfile", "--adapter", "caddyfile"]
@@ -323,7 +330,10 @@ RUN apt-get update && \
 # Install e-dant/watcher (necessary for file watching), at the release FrankenPHP v1.13.1's go.mod pins
 WORKDIR /usr/local/src/watcher
 RUN set -eux; \
-	curl -fsSL https://github.com/e-dant/watcher/archive/refs/tags/0.14.5.tar.gz | tar xz --strip-components 1; \
+	curl -fsSL -o /tmp/watcher.tar.gz https://github.com/e-dant/watcher/archive/refs/tags/0.14.5.tar.gz; \
+	echo '190bbe5e19923083db2beb3aa68f4e99a563c8f685d8037b0536780b0116c4d3  /tmp/watcher.tar.gz' | sha256sum -c; \
+	tar xzf /tmp/watcher.tar.gz --strip-components 1; \
+	rm /tmp/watcher.tar.gz; \
 	# -Wno-error=use-after-free: GCC 12 on Bookworm i386 emits a spurious warning in libstdc++ basic_string.h
 	cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-Wno-error=use-after-free"; \
 	cmake --build build; \

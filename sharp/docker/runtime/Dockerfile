@@ -3,8 +3,9 @@
 # built from this repository's source instead of the php.net tarball.
 #
 
-# The base is pinned by its digest, and .github/workflows/base-images.yml moves the digest in a pull request. CI sets
-# REGISTRY to ghcr.io/heyjordanparker, where base-images.yml copies the image under the same digest.
+# The base is pinned by its digest, and .github/workflows/base-images.yml moves the digest on a branch that an issue
+# names, for review. CI sets REGISTRY to ghcr.io/heyjordanparker, where base-images.yml copies the image under the same
+# digest.
 ARG REGISTRY=public.ecr.aws/docker/library
 ARG BASE_IMAGE=${REGISTRY}/debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
 FROM ${BASE_IMAGE} AS source
