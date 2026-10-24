@@ -3515,7 +3515,7 @@ const paid = result as PaymentResult.Paid ?? throw new NotPaid(result);
 ```
 
 - **`is`** tests a value against any pattern, and creates the pattern's variables when it matches.
-- **Narrowing:** after `is` without a name, a local variable or parameter counts as the tested type for the rest of the block. Assigning to it inside the block ends the narrowing. Properties are not narrowed, because they could change between the test and the use. To use a property's tested value, bind it to a name, as in `is int t`.
+- **Narrowing:** after `is` without a name, a local variable or parameter counts as the tested type for the rest of the block. Assigning to it inside the block ends the narrowing. A local or parameter that a lambda assigns is never narrowed, because the lambda may run between the test and the use, as Kotlin decides a smart cast. A lambda keeps the narrowing of a local it reads only when no assignment can run after the lambda is created, as TypeScript decides. Properties are not narrowed, because they could change between the test and the use. To use the tested value of such a local or of a property, bind it to a name, as in `is int t`.
 
 <!-- example narrowing: statements
 Any? entity = new Page();

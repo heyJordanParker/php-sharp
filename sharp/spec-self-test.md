@@ -160,24 +160,14 @@ line 1 expects no error, and the checker reports: …Mailerr…
 line 3 expects a compile error, and the checker accepts it
 -->
 
-A parse error that says the parser could not read the line never satisfies a `compile error` line, whether it names the tokens it expected:
+A parse error that says the parser could not read the line never satisfies a `compile error` line:
 
 <!-- example unreadable-line: statements -->
 ```csharp
 let int a = 1;   // compile error: let takes no written type
 ```
 <!-- expect unreadable-line
-line 1 expects a compile error, and the checker reports: Expected `=`, found `a`
--->
-
-or only the text the line writes:
-
-<!-- example unexpected-text: statements -->
-```csharp
-const total = $count;   // compile error: write the name without $
-```
-<!-- expect unexpected-text
-line 1 expects a compile error, and the checker reports: Unexpected `$count`
+line 1 expects a compile error, and the checker reports: Parse error encountered during parsing…
 -->
 
 A message the parser writes to name a PHP# rule satisfies a `compile error` line:

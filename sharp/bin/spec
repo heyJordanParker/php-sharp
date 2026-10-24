@@ -32,9 +32,6 @@ const RUN_MARKER = '<!-- run ';
 const REFUSAL = 'not supported yet';
 // The checker's refusal of a construct no rule names, which says nothing about the rule a line states.
 const GENERIC_REFUSAL = '~^This .+ is not part of PHP#\.$~';
-// A parse error that says the parser could not read the line, as "Unexpected `->`" or "Expected `;`, found `return`",
-// unlike one the parser writes to name a PHP# rule, such as "A PHP# parameter needs a type, as in `int extra`.".
-const UNREADABLE = '~^(?:Unexpected\b|Expected .+, found `|Unclosed (?:single|double)-quoted string$|Maximum recursion depth exceeded$)~';
 const RUNTIME = ['value', 'throws', 'message'];
 // The errors mago reports at a construct's first line for the whole construct, by code, or by message when the code is
 // the generic `semantics`. Only these move to the `compile error` line inside the construct. A new one joins in a PR of its own.
@@ -874,10 +871,11 @@ function compile_errors(string $stdout): array
                 break;
             }
         }
+        $message = $issue['message'] . ($issue['code'] === 'parse' && $primary !== null ? ' ' . $primary['message'] : '');
         $errors[] = [
             'name' => $primary['span']['file_id']['name'] ?? '',
             'line' => $primary['span']['start']['line'] ?? 0,
-            'message' => $issue['message'],
+            'message' => $message,
             'code' => $issue['code'],
         ];
     }
@@ -1061,7 +1059,7 @@ function check_compile(array $example, array $reads, array $files, array $varian
         }
         $where = where($block, $i);
         $parse = $error['code'] === 'parse';
-        $unreadable = $parse && preg_match(UNREADABLE, $error['message']) === 1;
+        $unreadable = $parse && str_starts_with($error['message'], 'Parse error encountered');
         // A refusal says the feature is missing or names no rule, and a missing class says the setup is: none is the rule
         // the line states. A missing class the marked line names itself is the line's own error, as `on OrderPayed` names
         // no event. mago quotes the missing name last.
