@@ -36,6 +36,18 @@ final class Probe
         return get_object_vars($value);
     }
 
+    /**
+     * Gives back the PHP array it was given.
+     *
+     * @template T
+     * @param array<string, T> $values
+     * @return array<string, T>
+     */
+    public static function same(array $values): array
+    {
+        return $values;
+    }
+
     public static function firstKey(array $values): int|string|null
     {
         return array_key_first($values);
@@ -44,5 +56,17 @@ final class Probe
     public static function counted(iterable $values): int
     {
         return iterator_count($values);
+    }
+
+    /** Writes `$value` under `$key` into the Map PHP# code hands it as the object. */
+    public static function put(object $map, string $key, mixed $value): void
+    {
+        $map[$key] = $value;
+    }
+
+    /** Adds `$value` to the Set PHP# code hands it as the object. */
+    public static function add(object $set, mixed $value): void
+    {
+        $set[] = $value;
     }
 }

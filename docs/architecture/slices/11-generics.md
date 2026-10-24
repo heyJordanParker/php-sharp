@@ -60,13 +60,7 @@ Every PHP# property checks through PHP's typed property path, one path for every
 - A write from a `.sharp` file is never checked, since the checker proved it. A hook writing its own property's storage counts as the code that set the property, so a write through a `set` body is checked on the value it stores.
 - The set-hook check that `VERIFY_TYPE_ARGS [1]` marked is gone.
 
-A reference to a property whose type names a type parameter is refused, since the reference would hold no type to check a later write against: "Cannot take a reference to `Checks\Rack::$own`: its type depends on the object's type arguments". `sharp_property_refuses_reference` runs wherever the engine makes a property a reference, inside `sharp_property_takes_reference` everywhere but `$rack->own = &$box` and `unserialize`:
-- `&$rack->own`, in the VM's and both JITs' fetch.
-- `$rack->own = &$box`.
-- `foreach ($rack as &$value)`, over a plain object and over one with hooks.
-- `foreach (new ArrayIterator($rack) as &$value)`.
-- `array_walk($rack, …)`.
-- `unserialize` of an `R:` back-reference to the property, or of a property that already holds a reference.
+Plain PHP takes a reference to a property whose type names a type parameter as it takes any other, and a write through it takes any value, since the reference has no object to spell the type for. PHP# code checks the slot with the object's type arguments in every fetch of it, through `sharp_property_from_reference`, and throws "Reference held by property Checks\Rack::$own of type App.Box<App.Order>? holds Checks.Customer". `sharp_property_checks_on_read` names that property to the JIT, which leaves such a fetch to the helper that checks it.
 
 A closed type's reference keeps PHP's typed reference check through `sharp_type`.
 

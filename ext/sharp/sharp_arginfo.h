@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: d6e4268d291614dfd8269414ae9a88f8787bb0e5 */
+ * Stub hash: 25245efe406ba151a3b320858f0f42bc2a4f0d29 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -98,6 +98,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_get, 0, 1
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Sharp_Collection_entries, 0, 0, Sharp\\Map, 0)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, typeArguments, IS_STRING, 1, "null")
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Collection_has, 0, 1, _IS_BOOL, 0)
@@ -149,6 +150,7 @@ ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Sharp_Collection_groupBy, 0, 1, Sharp\\Map, 0)
 	ZEND_ARG_OBJ_INFO(0, key, Closure, 0)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, typeArguments, IS_STRING, 1, "null")
 ZEND_END_ARG_INFO()
 
 #define arginfo_class_Sharp_Collection_associateBy arginfo_class_Sharp_Collection_groupBy

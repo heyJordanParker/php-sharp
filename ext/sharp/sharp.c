@@ -19,6 +19,7 @@
 #include "ext/standard/basic_functions.h"
 #include "ext/standard/info.h"
 #include "zend_attributes.h"
+#include "zend_bitset.h"
 #include "zend_closures.h"
 #include "zend_enum.h"
 #include "zend_exceptions.h"
@@ -52,7 +53,7 @@ extern PHP_JSON_API zend_class_entry *php_json_exception_ce;
 SHARP_KINDS(SHARP_KIND_IS_ZEND_KIND)
 ZEND_STATIC_ASSERT(SHARP_T_FILE == T_FILE, "SHARP_T_FILE differs from T_FILE");
 
-ZEND_STATIC_ASSERT(sizeof(sharp_unit_header) == 128, "a .sharpc header is 128 bytes");
+ZEND_STATIC_ASSERT(sizeof(sharp_unit_header) == 144, "a .sharpc header is 144 bytes");
 ZEND_STATIC_ASSERT(sizeof(sharp_input) == 40, "a .sharpc input is 40 bytes");
 ZEND_STATIC_ASSERT(sizeof(sharp_node) == 56, "a .sharpc node is 56 bytes");
 
@@ -258,6 +259,8 @@ static zend_ast *sharp_translate_fixed(const sharp_unit *unit, const sharp_node 
 	return ast;
 }
 
+/* sharp_check proved the tree is one: each child comes before its parent, and each node has one parent. A tree deeper
+ * than the stack stops as zend_compile stops on a deep expression. */
 static zend_ast *sharp_translate(const sharp_unit *unit, uint32_t index)
 {
 	const sharp_node *node;
@@ -267,6 +270,13 @@ static zend_ast *sharp_translate(const sharp_unit *unit, uint32_t index)
 	if (index == UINT32_MAX) {
 		return NULL;
 	}
+#ifdef ZEND_CHECK_STACK_LIMIT
+	if (UNEXPECTED(zend_call_stack_overflowed(EG(stack_limit)))) {
+		zend_error_noreturn(E_COMPILE_ERROR, "Maximum call stack size of %zu bytes (zend.max_allowed_stack_size"
+			" - zend.reserved_stack_size) reached during compilation. Try splitting expression",
+			(size_t) ((uintptr_t) EG(stack_base) - (uintptr_t) EG(stack_limit)));
+	}
+#endif
 
 	node = &unit->nodes[index];
 	kind = (zend_ast_kind) node->kind;
@@ -660,7 +670,66 @@ static zend_string *sharp_native_refusal(const char *version, size_t length)
 		(int) length, version, (int) length, version);
 }
 
-static bool sharp_offsets_fit(const sharp_unit_header *header, const sharp_unit *unit)
+static void sharp_hash_bytes(const char *bytes, size_t length, uint8_t hash[16])
+{
+	PHP_XXH3_128_CTX context = {0};
+
+	PHP_XXH3_128_Init(&context, NULL);
+	PHP_XXH3_128_Update(&context, (const unsigned char *) bytes, length);
+	PHP_XXH3_128_Final(hash, &context);
+}
+
+/* Whether the file's inputs, tree and texts, every byte after its header, are the ones mago wrote. */
+static bool sharp_sections_intact(const zend_string *bytes)
+{
+	const sharp_unit_header *header = (const sharp_unit_header *) ZSTR_VAL(bytes);
+	uint8_t hash[16];
+
+	sharp_hash_bytes(ZSTR_VAL(bytes) + sizeof(sharp_unit_header), ZSTR_LEN(bytes) - sizeof(sharp_unit_header), hash);
+
+	return memcmp(hash, header->sections_hash, sizeof(hash)) == 0;
+}
+
+static bool sharp_kind_declared(sharp_kind kind)
+{
+	switch (kind) {
+#define SHARP_KIND_CASE(name) case SHARP_AST_##name:
+		SHARP_KINDS(SHARP_KIND_CASE)
+#undef SHARP_KIND_CASE
+			return true;
+		default:
+			return false;
+	}
+}
+
+/* Whether sharp_translate builds the node: a value with a tag sharp_value names, a declaration with its 5 children, a
+ * list, or another kind php-src declares with as many children as the kind takes. ZEND_AST_CONSTANT, ZEND_AST_OP_ARRAY
+ * and ZEND_AST_ZNODE are no nodes the parser makes. */
+static bool sharp_node_fits(const sharp_node *node)
+{
+	zend_ast_kind kind = (zend_ast_kind) node->kind;
+
+	if (!sharp_kind_declared(node->kind)) {
+		return false;
+	}
+	if (kind == ZEND_AST_ZVAL) {
+		return node->value <= SHARP_STRING;
+	}
+	if ((kind >> ZEND_AST_IS_LIST_SHIFT) & 1) {
+		return true;
+	}
+	if (kind >= ZEND_AST_FUNC_DECL && kind <= ZEND_AST_PROPERTY_HOOK) {
+		return node->child_count == 5;
+	}
+
+	return !((kind >> ZEND_AST_SPECIAL_SHIFT) & 1) && node->child_count == kind >> ZEND_AST_NUM_CHILDREN_SHIFT;
+}
+
+/* Whether sharp_translate turns the tree into a zend_ast: the root and every child name a node or none, each text and
+ * child range lies inside its section, each node fits its kind, and each child comes before its parent, as the bridge
+ * writes them, so no node holds itself. Each node the root reaches has one parent, so the nodes it reaches are a tree,
+ * which sharp_translate builds once per node, where a node two parents share would be built once per path to it. */
+static bool sharp_tree_fits(const sharp_unit_header *header, const sharp_unit *unit)
 {
 	if (header->root >= header->node_count) {
 		return false;
@@ -669,17 +738,41 @@ static bool sharp_offsets_fit(const sharp_unit_header *header, const sharp_unit 
 		const sharp_node *node = &unit->nodes[i];
 
 		if (!sharp_text_fits(header, node->text)
-				|| (uint64_t) node->first_child + node->child_count > header->children_count) {
+				|| (uint64_t) node->first_child + node->child_count > header->children_count
+				|| !sharp_node_fits(node)) {
 			return false;
 		}
-	}
-	for (uint32_t i = 0; i < header->children_count; i++) {
-		if (unit->children[i] != UINT32_MAX && unit->children[i] >= header->node_count) {
-			return false;
+		for (uint32_t c = 0; c < node->child_count; c++) {
+			uint32_t child = unit->children[node->first_child + c];
+
+			if (child != UINT32_MAX && child >= i) {
+				return false;
+			}
 		}
 	}
 
-	return true;
+	/* A parent comes after each of its children, so a walk down from the root meets every parent of a node before
+	 * the node, and a node it has reached already has a second parent. */
+	zend_bitset reached = ecalloc(zend_bitset_len(header->root + 1), ZEND_BITSET_ELM_SIZE);
+	bool tree = true;
+	zend_bitset_incl(reached, header->root);
+	for (uint32_t i = header->root + 1; tree && i-- > 0;) {
+		if (!zend_bitset_in(reached, i)) {
+			continue;
+		}
+		const sharp_node *node = &unit->nodes[i];
+		for (uint32_t c = 0; tree && c < node->child_count; c++) {
+			uint32_t child = unit->children[node->first_child + c];
+			if (child == UINT32_MAX) {
+				continue;
+			}
+			tree = !zend_bitset_in(reached, child);
+			zend_bitset_incl(reached, child);
+		}
+	}
+	efree(reached);
+
+	return tree;
 }
 
 static sharp_state sharp_check(sharp_compiled *compiled, const char *source, size_t source_length)
@@ -719,11 +812,8 @@ static sharp_state sharp_check(sharp_compiled *compiled, const char *source, siz
 	}
 	if (source) {
 		uint8_t hash[16];
-		PHP_XXH3_128_CTX context = {0};
 
-		PHP_XXH3_128_Init(&context, NULL);
-		PHP_XXH3_128_Update(&context, (const unsigned char *) source, source_length);
-		PHP_XXH3_128_Final(hash, &context);
+		sharp_hash_bytes(source, source_length, hash);
 		if (header->source_size != source_length || memcmp(header->source_hash, hash, sizeof(hash)) != 0) {
 			compiled->changed = ZSTR_VAL(compiled->source) + compiled->root_length + 1;
 			compiled->changed_length = ZSTR_LEN(compiled->source) - compiled->root_length - 1;
@@ -740,7 +830,8 @@ static sharp_state sharp_check(sharp_compiled *compiled, const char *source, siz
 			return SHARP_OUT_OF_DATE;
 		}
 	}
-	if (source && !sharp_offsets_fit(header, &compiled->unit)) {
+	/* The revision opcache asks for reads no node, so only a compile pays for these. */
+	if (source && (!sharp_sections_intact(compiled->bytes) || !sharp_tree_fits(header, &compiled->unit))) {
 		return SHARP_NOT_COMPILED;
 	}
 
@@ -1289,13 +1380,25 @@ static zval *sharp_collection_element(HashTable *array, zval *index)
 	return element;
 }
 
+/* The table of the Map or the Set `object` whose entries the running code reads. Spec section 12: PHP# code reads a
+ * Map's entries only after each one plain PHP wrote into, as `$map["k"][] = $element` does, is checked against the
+ * Map's type, so this throws the TypeError and gives NULL for one that isn't of it. Each entry it takes is no reference
+ * any more, unless plain PHP still holds that reference. Plain PHP code reads the entries as they are, so it never
+ * throws. Every read of a table's entries, by an index, a loop, a method of the table or of Sharp\Collection, a
+ * crossing, json_encode() or serialize(), takes the table here. sharp_table_of gives it to a write, and to the engine's
+ * own bookkeeping, which reads no entry for the running code. */
+static sharp_table *sharp_table_entries(zend_object *object);
+
 /* Plain PHP code may unset a property between the fetch and the call, and a function an argument
- * runs may remove the element an element collection was read from. */
+ * runs may remove the element an element collection was read from. A Map's entries are checked first. */
 static zval *sharp_collection_checked(zval *held)
 {
 	ZVAL_DEREF(held);
 	if (UNEXPECTED(!SHARP_IS_COLLECTION(held))) {
 		zend_throw_error(NULL, "Cannot call %s() on a collection that was unset", get_active_function_name());
+		return NULL;
+	}
+	if (Z_TYPE_P(held) == IS_OBJECT && !sharp_table_entries(Z_OBJ_P(held))) {
 		return NULL;
 	}
 
@@ -1619,10 +1722,18 @@ ZEND_METHOD(Sharp_Collection, get)
 	RETURN_COPY_DEREF(&bucket->value);
 }
 
-/* A List's entries: the Map of each index to its element. A Map's: the Map. */
+static bool sharp_table_made_with(zend_execute_data *execute_data, zend_object *table, zend_string *text, uint32_t argument);
+
+/* A List's entries: the Map of each index to its element, of the type arguments `int, T` PHP# code passes. A Map's: the
+ * Map. */
 ZEND_METHOD(Sharp_Collection, entries)
 {
-	ZEND_PARSE_PARAMETERS_NONE();
+	zend_string *type_arguments = NULL;
+
+	ZEND_PARSE_PARAMETERS_START(0, 1)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_STR_OR_NULL(type_arguments)
+	ZEND_PARSE_PARAMETERS_END();
 
 	zval *held = sharp_collection_array(sharp_collection_from(Z_OBJ_P(ZEND_THIS)));
 	if (!held) {
@@ -1633,6 +1744,9 @@ ZEND_METHOD(Sharp_Collection, entries)
 	}
 
 	object_init_ex(return_value, sharp_ce_map);
+	if (!sharp_table_made_with(execute_data, Z_OBJ_P(return_value), type_arguments, 1)) {
+		RETURN_THROWS();
+	}
 	sharp_table *table = sharp_table_of(Z_OBJ_P(return_value));
 	zend_ulong index;
 	zval *element;
@@ -1768,6 +1882,7 @@ static void sharp_collection_list(INTERNAL_FUNCTION_PARAMETERS, bool values)
 	array_init_size(return_value, table->size);
 	SHARP_TABLE_FOREACH(table, bucket) {
 		zval *listed = values ? &bucket->value : &bucket->key;
+		ZVAL_DEREF(listed);
 		Z_TRY_ADDREF_P(listed);
 		zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), listed);
 	} SHARP_TABLE_FOREACH_END();
@@ -1798,10 +1913,11 @@ static HashTable *sharp_table_to_list(zend_object *object)
 		zval listed;
 		if (object->ce == sharp_ce_map) {
 			array_init_size(&listed, 2);
+			zval value;
 			Z_TRY_ADDREF(bucket->key);
-			Z_TRY_ADDREF(bucket->value);
+			ZVAL_COPY_DEREF(&value, &bucket->value);
 			zend_hash_next_index_insert_new(Z_ARRVAL(listed), &bucket->key);
-			zend_hash_next_index_insert_new(Z_ARRVAL(listed), &bucket->value);
+			zend_hash_next_index_insert_new(Z_ARRVAL(listed), &value);
 		} else {
 			ZVAL_COPY(&listed, &bucket->key);
 		}
@@ -1882,6 +1998,7 @@ static zend_array *sharp_collection_read(zval *this_ptr)
 	zend_array *elements = zend_new_array(table->size);
 	SHARP_TABLE_FOREACH(table, bucket) {
 		zval *element = set ? &bucket->key : &bucket->value;
+		ZVAL_DEREF(element);
 		Z_TRY_ADDREF_P(element);
 		zend_hash_next_index_insert_new(elements, element);
 	} SHARP_TABLE_FOREACH_END();
@@ -1911,14 +2028,18 @@ static void sharp_collection_filter_table(zend_object *object, zend_fcall_info *
 
 	GC_ADDREF(object);
 	object_init_ex(&kept, object->ce);
+	/* The entries a filter keeps are of the type the Map or the Set has. */
+	sharp_table_object_of(Z_OBJ(kept))->arguments = sharp_table_object_of(object)->arguments;
 	sharp_table *kept_table = sharp_table_of(Z_OBJ(kept));
 	SHARP_TABLE_FOREACH(sharp_table_of(object), bucket) {
-		if (!sharp_collection_call(fci, fcc, set ? &bucket->key : &bucket->value, &keep)) {
+		zval *value = &bucket->value;
+		ZVAL_DEREF(value);
+		if (!sharp_collection_call(fci, fcc, set ? &bucket->key : value, &keep)) {
 			break;
 		}
 		bool is_kept = zend_is_true(&keep);
 		zval_ptr_dtor(&keep);
-		if (is_kept && !sharp_table_put(kept_table, &bucket->key, &bucket->value)) {
+		if (is_kept && !sharp_table_put(kept_table, &bucket->key, value)) {
 			break;
 		}
 	} SHARP_TABLE_FOREACH_END();
@@ -2108,14 +2229,17 @@ ZEND_METHOD(Sharp_Collection, any)
 
 /* Puts each element in a Map under the key the function gives it: in a list of the elements under that
  * key, or alone, where the last element with a key replaces the ones before it. Any key a Map takes
- * goes in as it is, found by PHP#'s == (spec section 12). */
+ * goes in as it is, found by PHP#'s == (spec section 12). The Map has the type arguments PHP# code passes. */
 static void sharp_collection_key_by(INTERNAL_FUNCTION_PARAMETERS, bool group)
 {
 	zend_fcall_info fci;
 	zend_fcall_info_cache fcc;
+	zend_string *type_arguments = NULL;
 
-	ZEND_PARSE_PARAMETERS_START(1, 1)
+	ZEND_PARSE_PARAMETERS_START(1, 2)
 		Z_PARAM_FUNC(fci, fcc)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_STR_OR_NULL(type_arguments)
 	ZEND_PARSE_PARAMETERS_END();
 
 	zend_array *elements = sharp_collection_read(ZEND_THIS);
@@ -2126,6 +2250,11 @@ static void sharp_collection_key_by(INTERNAL_FUNCTION_PARAMETERS, bool group)
 	zval map, key;
 	zval *element;
 	object_init_ex(&map, sharp_ce_map);
+	if (!sharp_table_made_with(execute_data, Z_OBJ(map), type_arguments, 2)) {
+		zval_ptr_dtor(&map);
+		zend_array_release(elements);
+		RETURN_THROWS();
+	}
 	sharp_table *table = sharp_table_of(Z_OBJ(map));
 	ZEND_HASH_FOREACH_VAL(elements, element) {
 		if (!sharp_collection_call(&fci, &fcc, element, &key)) {
@@ -2288,7 +2417,7 @@ typedef struct {
 	zend_object std;
 } sharp_sequence;
 
-static bool sharp_crossed(zval *result, zval *value, const zval *plan);
+static bool sharp_crossed(zval *result, zval *value, const zval *plan, const sharp_type *type);
 static void sharp_type_plan(zval *plan, const sharp_type *type);
 
 /* One reading of a stage: it.data holds the Sequence, and source reads the stage before it, or is NULL for an array. */
@@ -2430,7 +2559,7 @@ static void sharp_sequence_iterator_fetch(sharp_sequence_iterator *iterator, boo
 					/* Spec section 12: a PHP array a plain PHP source gives enters as the Map or the Set it is. */
 					if (Z_TYPE(sequence->crossing) == IS_ARRAY && Z_TYPE(element) == IS_ARRAY) {
 						zval crossed;
-						bool is_crossed = sharp_crossed(&crossed, &element, &sequence->crossing);
+						bool is_crossed = sharp_crossed(&crossed, &element, &sequence->crossing, sequence->checked);
 						if (!is_crossed && !EG(exception)) {
 							sharp_sequence_refuse(sequence, &element, iterator->index);
 						}
@@ -3570,7 +3699,10 @@ static uint32_t sharp_class_arity(const zend_class_entry *ce)
 
 bool sharp_class_takes(const zend_class_entry *ce, const sharp_type *arguments)
 {
-	uint32_t count = sharp_class_is_sharp(ce) ? sharp_class_arity(ce) : 0;
+	/* A Map literal takes its key and value types, and a Set literal its element type, as `Map<K, V>` and `Set<T>`. */
+	uint32_t count = ce == sharp_ce_map ? 2
+		: ce == sharp_ce_set ? 1
+		: sharp_class_is_sharp(ce) ? sharp_class_arity(ce) : 0;
 
 	if (EXPECTED(arguments->count == count)) {
 		return true;
@@ -3588,6 +3720,11 @@ bool sharp_class_takes(const zend_class_entry *ce, const sharp_type *arguments)
 
 void sharp_type_arguments_store(zend_object *object, const sharp_type *arguments)
 {
+	if (object->ce == sharp_ce_map || object->ce == sharp_ce_set) {
+		ZEND_ASSERT(arguments->kind == SHARP_TYPE_LIST);
+		sharp_table_object_of(object)->arguments = arguments;
+		return;
+	}
 	const zend_property_info *slot = sharp_type_arguments_slot(object->ce);
 
 	ZEND_ASSERT(slot != NULL && arguments->kind == SHARP_TYPE_LIST);
@@ -4565,7 +4702,8 @@ static bool sharp_type_holds_key(const sharp_type *type, zend_ulong index, zend_
 /* Whether the entry `element` under `key` of a collection holds, where `key_holds` says whether the key is of `keys`,
  * the key type of a `Map`, and `elements` is the type of its elements. With `problems`, the entry's path goes on the
  * walk's path while it is checked: `["name"]` for a string key, `[5]` for an int, and the key's own text for any other
- * key a Sharp\Map holds, as `[object Lib\Standing::Active]`. Without `problems`, a bad key stops the check. */
+ * key a Sharp\Map holds, as `[object Lib\Standing::Active]`. Without `problems`, a bad key stops the check. With no
+ * `element`, only the key is checked. */
 static bool sharp_type_entry_holds(const sharp_type *keys, bool key_holds, const zval *key, const sharp_type *elements,
 	const zval *element, sharp_holds_mode mode, sharp_type_problems *problems)
 {
@@ -4589,7 +4727,7 @@ static bool sharp_type_entry_holds(const sharp_type *keys, bool key_holds, const
 	if (!key_holds && problems) {
 		sharp_type_problem(problems, "key ", keys, key);
 	}
-	if ((holds || problems) && !sharp_type_holds(elements, element, mode, problems)) {
+	if (element && (holds || problems) && !sharp_type_holds(elements, element, mode, problems)) {
 		holds = false;
 	}
 
@@ -4598,6 +4736,22 @@ static bool sharp_type_entry_holds(const sharp_type *keys, bool key_holds, const
 	}
 
 	return holds;
+}
+
+/* Gives the Sharp\Map or Sharp\Set `table` the type arguments of `type`, its `Map` or `Set`, `string, int` for
+ * `Map<string, int>`, unless it has its own already. */
+static void sharp_table_type_store(zend_object *table, const sharp_type *type)
+{
+	if (sharp_table_object_of(table)->arguments) {
+		return;
+	}
+	const char *open = memchr(ZSTR_VAL(type->text), '<', ZSTR_LEN(type->text));
+	const sharp_type *arguments = open
+		? sharp_type_list(open + 1, ZSTR_VAL(type->text) + ZSTR_LEN(type->text) - open - 2) : NULL;
+
+	if (arguments) {
+		sharp_type_arguments_store(table, arguments);
+	}
 }
 
 /* Whether the Sharp\Map or Sharp\Set `table` is of the collection `type`: each key of a Map is checked against its key
@@ -4655,7 +4809,13 @@ static bool sharp_type_collection_holds(
 	const sharp_type *elements = sharp_type_elements(type);
 	bool walked = !sharp_type_is_any_value(elements) || (keys && !sharp_type_is_any_value(keys));
 	if (Z_TYPE_P(value) == IS_OBJECT) {
-		return !walked || sharp_type_table_holds(type, Z_OBJ_P(value), mode, problems);
+		bool holds = !walked || sharp_type_table_holds(type, Z_OBJ_P(value), mode, problems);
+		/* The first typed boundary that takes the table, a property, a parameter or a return, gives it its type, which
+		 * each later write plain PHP makes into it takes, as an object has one type. A test, as `is`, only looks. */
+		if (holds && mode != SHARP_HOLDS_TEST && type->built_in != SHARP_BUILT_IN_ITERABLE && !EG(exception)) {
+			sharp_table_type_store(Z_OBJ_P(value), type);
+		}
+		return holds;
 	}
 	if (type->built_in == SHARP_BUILT_IN_LIST && !zend_array_is_list(Z_ARRVAL_P(value))) {
 		if (problems) {
@@ -5029,9 +5189,65 @@ static const sharp_type *sharp_frame_method_type_arguments(const zend_execute_da
 	return NULL;
 }
 
+/* The type text list `text` that the internal function `execute_data` runs takes as its argument `argument`, spelled
+ * for the user code that calls it, as ZEND_SHARP_VERIFY_TYPE_ARGS spells its own, so it can name `$0` or `#0`. It holds
+ * `count` types, or any number for 0. NULL after the ValueError for a text that is no such list or names a type
+ * parameter the calling code has no type argument for. */
+static const sharp_type *sharp_caller_type_list(
+	zend_execute_data *execute_data, zend_string *text, uint32_t argument, uint32_t count)
+{
+	const zend_execute_data *caller = EX(prev_execute_data);
+	bool is_user_code = caller && caller->func && ZEND_USER_CODE(caller->func->type);
+	zend_object *object = is_user_code && Z_TYPE(caller->This) == IS_OBJECT ? Z_OBJ(caller->This) : NULL;
+	const sharp_type *method = is_user_code ? sharp_frame_method_type_arguments(caller) : NULL;
+
+	sharp_type_reader reader = sharp_type_reader_of(ZSTR_VAL(text), ZSTR_LEN(text), zend_arena_create(1024));
+	const sharp_type_node *read = sharp_type_read_list(&reader);
+	bool is_list = read && (!count || read->count == count) && reader.at == reader.end;
+	uint32_t names = reader.names;
+	zend_arena_destroy(reader.arena);
+	if (!is_list) {
+		zend_argument_value_error(argument, count == 1 ? "must be one PHP# type" : "must be a PHP# type list");
+		return NULL;
+	}
+	if (((names & SHARP_TYPE_NAMES_THIS) && !object) || ((names & SHARP_TYPE_NAMES_METHOD) && !method)) {
+		zend_argument_value_error(argument, "must name only type parameters the calling code has type arguments for");
+		return NULL;
+	}
+
+	zval spelled;
+	ZVAL_STR(&spelled, text);
+	void *cache[4] = {NULL};
+	const sharp_type *list = sharp_type_list_of_frame(
+		&spelled, object, method, false, is_user_code ? caller->func->common.scope : NULL, cache);
+	if (!list && !EG(exception)) {
+		zend_argument_value_error(argument, "must name only type parameters the calling code has type arguments for");
+	}
+
+	return list;
+}
+
+/* Gives the Map or Set `table`, which a native made for the PHP# code that calls it, the type arguments `text` the
+ * bridge passes as the native's argument `argument`, `K, V` or `T`, so each write plain PHP makes into it is checked,
+ * as in a literal's. A native plain PHP calls passes none, and its table takes them at the first typed boundary. False
+ * after the Error. */
+static bool sharp_table_made_with(zend_execute_data *execute_data, zend_object *table, zend_string *text, uint32_t argument)
+{
+	if (!text) {
+		return true;
+	}
+	const sharp_type *arguments = sharp_caller_type_list(execute_data, text, argument, 0);
+	if (!arguments || !sharp_class_takes(table->ce, arguments)) {
+		return false;
+	}
+	sharp_type_arguments_store(table, arguments);
+
+	return true;
+}
+
 /* Spec section 10: a struct's generated parse checks each parameter with the walk, as `\Sharp\Internal\accepts($type,
- * $value, $path, $problems)`. The type text is spelled for the user code that calls it, as ZEND_SHARP_VERIFY_TYPE_ARGS
- * spells its own, so a generic struct's parse can pass `List<$0>` or `List<#0>`. */
+ * $value, $path, $problems)`. The type text is spelled for the user code that calls it, as sharp_caller_type_list
+ * spells it, so a generic struct's parse can pass `List<$0>` or `List<#0>`. */
 ZEND_FUNCTION(Sharp_Internal_accepts)
 {
 	zend_string *type;
@@ -5045,34 +5261,8 @@ ZEND_FUNCTION(Sharp_Internal_accepts)
 		Z_PARAM_ARRAY_EX(problems, 0, 1)
 	ZEND_PARSE_PARAMETERS_END();
 
-	const zend_execute_data *caller = EX(prev_execute_data);
-	bool is_user_code = caller && caller->func && ZEND_USER_CODE(caller->func->type);
-	zend_object *object = is_user_code && Z_TYPE(caller->This) == IS_OBJECT ? Z_OBJ(caller->This) : NULL;
-	const sharp_type *method = is_user_code ? sharp_frame_method_type_arguments(caller) : NULL;
-
-	sharp_type_reader reader = sharp_type_reader_of(ZSTR_VAL(type), ZSTR_LEN(type), zend_arena_create(1024));
-	const sharp_type_node *read = sharp_type_read_list(&reader);
-	bool is_one_type = read && read->count == 1 && reader.at == reader.end;
-	uint32_t names = reader.names;
-	zend_arena_destroy(reader.arena);
-	if (!is_one_type) {
-		zend_argument_value_error(1, "must be one PHP# type");
-		RETURN_THROWS();
-	}
-	if (((names & SHARP_TYPE_NAMES_THIS) && !object) || ((names & SHARP_TYPE_NAMES_METHOD) && !method)) {
-		zend_argument_value_error(1, "must name only type parameters the calling code has type arguments for");
-		RETURN_THROWS();
-	}
-
-	zval text;
-	ZVAL_STR(&text, type);
-	void *cache[4] = {NULL};
-	const sharp_type *list = sharp_type_list_of_frame(
-		&text, object, method, false, is_user_code ? caller->func->common.scope : NULL, cache);
+	const sharp_type *list = sharp_caller_type_list(execute_data, type, 1, 1);
 	if (!list) {
-		if (!EG(exception)) {
-			zend_argument_value_error(1, "must name only type parameters the calling code has type arguments for");
-		}
 		RETURN_THROWS();
 	}
 
@@ -5611,18 +5801,6 @@ bool sharp_property_accepts(const zend_property_info *info, zval *value, zend_ob
 	}
 
 	return false;
-}
-
-bool sharp_property_refuses_reference(const zend_property_info *info)
-{
-	if (!sharp_property_is_open(info)) {
-		return false;
-	}
-
-	zend_throw_error(NULL, "Cannot take a reference to `%s::$%s`: its type depends on the object's type arguments",
-		ZSTR_VAL(info->ce->name), zend_get_unmangled_property_name(info->name));
-
-	return true;
 }
 
 bool sharp_object_properties_accept(zend_object *object)
@@ -7640,6 +7818,8 @@ static sharp_table_object *sharp_table_object_create(zend_class_entry *ce, uint3
 
 	zend_object_std_init(&created->std, ce);
 	sharp_table_init(&created->table, size);
+	created->arguments = NULL;
+	created->unchecked_entries = false;
 
 	return created;
 }
@@ -7661,6 +7841,8 @@ static zend_object *sharp_table_clone(zend_object *object)
 
 	zend_object_std_init(&copy->std, object->ce);
 	sharp_table_copy(&copy->table, sharp_table_of(object));
+	copy->arguments = sharp_table_object_of(object)->arguments;
+	copy->unchecked_entries = sharp_table_object_of(object)->unchecked_entries;
 
 	return &copy->std;
 }
@@ -7715,10 +7897,37 @@ static bool sharp_crossed_key(zval *key, const zval *plan_key, zend_ulong index,
 	return true;
 }
 
+/* The `List`, `Map` or `Set`, as `built_in` names it, a value of `type` is when it is one: `type` itself, the member of
+ * `T?`, or the one member of a union that is such a collection. NULL for any other type, and for no type. */
+static const sharp_type *sharp_type_collection_member(const sharp_type *type, sharp_built_in built_in)
+{
+	if (!type) {
+		return NULL;
+	}
+	switch (type->kind) {
+		case SHARP_TYPE_NAMED:
+			return !type->class_name && type->built_in == built_in ? type : NULL;
+		case SHARP_TYPE_NULLABLE:
+			return sharp_type_collection_member(type->members[0], built_in);
+		case SHARP_TYPE_UNION:
+			for (uint32_t i = 0; i < type->count; i++) {
+				const sharp_type *member = sharp_type_collection_member(type->members[i], built_in);
+				if (member) {
+					return member;
+				}
+			}
+			return NULL;
+		default:
+			return NULL;
+	}
+}
+
 /* The value a PHP array crosses into, as `plan` describes the PHP# type it enters: ['map', key, values],
  * ['set', elements] or ['list', elements], each inner plan null when that part holds no Map or Set. A value that is
- * not a PHP array is the object already, as the bridge's own crossing leaves it. */
-static bool sharp_crossed(zval *result, zval *value, const zval *plan)
+ * not a PHP array is the object already, as the bridge's own crossing leaves it. `type` is that PHP# type, or NULL
+ * when the caller has none, and each Map and Set the crossing makes takes its type from it when it is made, so each
+ * write plain PHP makes into one is checked, as in a table a typed boundary took. */
+static bool sharp_crossed(zval *result, zval *value, const zval *plan, const sharp_type *type)
 {
 	if (Z_TYPE_P(value) != IS_ARRAY || Z_TYPE_P(plan) != IS_ARRAY) {
 		ZVAL_COPY(result, value);
@@ -7735,9 +7944,11 @@ static bool sharp_crossed(zval *result, zval *value, const zval *plan)
 	zval *element, crossed, key;
 
 	if (zend_string_equals_literal(Z_STR_P(kind), "list")) {
+		const sharp_type *list = sharp_type_collection_member(type, SHARP_BUILT_IN_LIST);
+		const sharp_type *elements = list ? sharp_type_elements(list) : NULL;
 		array_init_size(result, zend_hash_num_elements(entries));
 		ZEND_HASH_FOREACH_KEY_VAL(entries, index, name, element) {
-			if (sharp_out_of_memory() || !sharp_crossed(&crossed, element, inner)) {
+			if (sharp_out_of_memory() || !sharp_crossed(&crossed, element, inner, elements)) {
 				zval_ptr_dtor(result);
 				return false;
 			}
@@ -7751,11 +7962,17 @@ static bool sharp_crossed(zval *result, zval *value, const zval *plan)
 	}
 
 	bool is_set = zend_string_equals_literal(Z_STR_P(kind), "set");
+	const sharp_type *collection =
+		sharp_type_collection_member(type, is_set ? SHARP_BUILT_IN_SET : SHARP_BUILT_IN_MAP);
+	const sharp_type *elements = collection ? sharp_type_elements(collection) : NULL;
 	sharp_table_object *table =
 		sharp_table_object_create(is_set ? sharp_ce_set : sharp_ce_map, zend_hash_num_elements(entries));
 	ZVAL_OBJ(result, &table->std);
+	if (collection) {
+		sharp_table_type_store(&table->std, collection);
+	}
 	ZEND_HASH_FOREACH_KEY_VAL(entries, index, name, element) {
-		if (sharp_out_of_memory() || !sharp_crossed(&crossed, element, inner)) {
+		if (sharp_out_of_memory() || !sharp_crossed(&crossed, element, inner, elements)) {
 			zval_ptr_dtor(result);
 			return false;
 		}
@@ -7859,7 +8076,10 @@ bool sharp_cross_property(const zend_property_info *info, zval *value)
 		return false;
 	}
 
-	bool is_crossed = sharp_crossed(&crossed, value, &plan);
+	/* A type that names the class's type parameters needs the object, which no caller has here, so the Maps and Sets
+	 * the crossing makes for it take their type at the next typed boundary instead. */
+	const sharp_type *type = info->sharp_type && !sharp_property_is_open(info) ? sharp_property_type(info, NULL) : NULL;
+	bool is_crossed = sharp_crossed(&crossed, value, &plan, type);
 	zval_ptr_dtor(&plan);
 	if (!is_crossed) {
 		return false;
@@ -7935,9 +8155,13 @@ static ZEND_COLD void sharp_table_refuse_collision(zend_object *object)
  * fewer entries than the Map. */
 static bool sharp_table_array(zval *result, zend_object *object, zval **unheld)
 {
-	sharp_table *table = sharp_table_of(object);
+	sharp_table *table = sharp_table_entries(object);
 	bool is_set = object->ce == sharp_ce_set;
 	*unheld = NULL;
+	if (!table) {
+		ZVAL_UNDEF(result);
+		return false;
+	}
 	array_init_size(result, table->size);
 	SHARP_TABLE_FOREACH(table, bucket) {
 		zval *key = &bucket->key, converted;
@@ -8102,9 +8326,6 @@ static bool sharp_property_rebuilds(const zend_property_info *info)
 
 bool sharp_property_takes_reference(zval *slot, const zend_property_info *info)
 {
-	if (sharp_property_refuses_reference(info)) {
-		return false;
-	}
 	if ((info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_STATIC)) != ZEND_ACC_SHARP_CROSSING || sharp_runs_sharp_code()) {
 		return true;
 	}
@@ -8115,9 +8336,9 @@ bool sharp_property_takes_reference(zval *slot, const zend_property_info *info)
 	return !EG(exception);
 }
 
-static bool sharp_reference_holds(const zend_property_info *info, zval *value)
+static bool sharp_reference_holds(const zend_property_info *info, zend_object *object, zval *value)
 {
-	const sharp_type *type = info->sharp_type ? sharp_property_type(info, NULL) : NULL;
+	const sharp_type *type = info->sharp_type ? sharp_property_type(info, object) : NULL;
 	if (info->sharp_type && !type) {
 		return false;
 	}
@@ -8136,7 +8357,7 @@ static bool sharp_reference_holds(const zend_property_info *info, zval *value)
 		}
 		return false;
 	}
-	if (sharp_cross_property(info, value)) {
+	if (!(info->flags & ZEND_ACC_SHARP_CROSSING) || sharp_cross_property(info, value)) {
 		return true;
 	}
 	if (!EG(exception)) {
@@ -8147,11 +8368,11 @@ static bool sharp_reference_holds(const zend_property_info *info, zval *value)
 	return false;
 }
 
-zval *sharp_property_from_reference(zval *slot, const zend_property_info *info, zval *rv)
+zval *sharp_property_from_reference(zval *slot, zend_object *object, const zend_property_info *info, zval *rv)
 {
 	zend_reference *reference = Z_REF_P(slot);
 	ZVAL_COPY(rv, &reference->val);
-	if (!sharp_reference_holds(info, rv) || GC_REFCOUNT(reference) > 1) {
+	if (!sharp_reference_holds(info, object, rv) || GC_REFCOUNT(reference) > 1) {
 		return rv;
 	}
 
@@ -8164,16 +8385,18 @@ zval *sharp_property_from_reference(zval *slot, const zend_property_info *info, 
 
 bool sharp_property_for_write(zval *result, zend_object *object, zval *slot, const zend_property_info *info)
 {
-	if (!object || !sharp_runs_sharp_code()) {
-		return true;
-	}
 	zval value;
-	if (sharp_property_from_reference(slot, info, &value) == slot) {
+	if (sharp_property_from_reference(slot, object, info, &value) == slot) {
 		return true;
 	}
 	if (EG(exception)) {
 		zval_ptr_dtor(&value);
 		return false;
+	}
+	/* An array plain PHP still holds a reference to is written in place, as plain PHP's writes through it are. */
+	if (!(info->flags & ZEND_ACC_SHARP_CROSSING) || !object || !result) {
+		zval_ptr_dtor(&value);
+		return true;
 	}
 
 	const char *unmangled = zend_get_unmangled_property_name(info->name);
@@ -8183,6 +8406,33 @@ bool sharp_property_for_write(zval *result, zend_object *object, zval *slot, con
 	zend_string_release(name);
 
 	return true;
+}
+
+void sharp_property_for_plain_write(zval *slot, const zend_property_info *info, uint32_t flags)
+{
+	if (Z_ISREF_P(slot) || Z_ISERROR_P(slot) || sharp_runs_sharp_code()) {
+		return;
+	}
+	/* A Map or a Set checks each write itself, with the type it got when it was made or at its first typed boundary. */
+	if (SHARP_IS_TABLE(slot)) {
+		SHARP_SEPARATE(slot);
+		return;
+	}
+	/* The slot becomes a reference whatever it holds, before the write promotes it in place, as an element write
+	 * makes an array of null, false, and a slot the constructor never set. An object holds no element PHP writes
+	 * into in place, since a write into it goes through the object's own handlers, so it stays as it is. */
+	if (Z_TYPE_P(slot) == IS_UNDEF) {
+		if (flags != ZEND_FETCH_DIM_WRITE) {
+			return;
+		}
+		ZVAL_NULL(slot);
+	}
+	if (Z_TYPE_P(slot) != IS_OBJECT) {
+		ZVAL_NEW_REF(slot, slot);
+		if (ZEND_TYPE_IS_SET(info->type)) {
+			ZEND_REF_ADD_TYPE_SOURCE(Z_REF_P(slot), (zend_property_info *) info);
+		}
+	}
 }
 
 static HashTable *sharp_table_get_gc(zend_object *object, zval **table, int *n)
@@ -8226,6 +8476,223 @@ static zend_result sharp_table_count_elements(zend_object *object, zend_long *co
 	return SUCCESS;
 }
 
+/* The type of the Map or Set `object`: `Map<string, int>` for the table made with, or given at its first typed
+ * boundary, the type arguments `string, int`, or NULL for a table that has none. */
+static const sharp_type *sharp_table_type(zend_object *object)
+{
+	const sharp_type *arguments = sharp_table_object_of(object)->arguments;
+	if (!arguments) {
+		return NULL;
+	}
+	smart_str text = {0};
+	smart_str_appends(&text, object->ce == sharp_ce_map ? "Map<" : "Set<");
+	smart_str_append(&text, arguments->text);
+	smart_str_appendc(&text, '>');
+	smart_str_0(&text);
+	const sharp_type *type = sharp_type_list(ZSTR_VAL(text.s), ZSTR_LEN(text.s));
+	smart_str_free(&text);
+	ZEND_ASSERT(type != NULL);
+
+	return type->members[0];
+}
+
+/* The type plain PHP's write into the Map or Set `object` takes, see sharp_table_type. NULL for a write PHP# code
+ * makes, which the checker proved, and for a table that has no type. */
+static const sharp_type *sharp_table_written_type(zend_object *object)
+{
+	return sharp_runs_sharp_code() ? NULL : sharp_table_type(object);
+}
+
+static sharp_table *sharp_table_entries(zend_object *object)
+{
+	sharp_table_object *table = sharp_table_object_of(object);
+	if (EXPECTED(!table->unchecked_entries) || !sharp_runs_sharp_code()) {
+		return &table->table;
+	}
+	const sharp_type *type = sharp_table_type(object);
+	const sharp_type *elements = type ? sharp_type_elements(type) : NULL;
+	if (!elements) {
+		return &table->table;
+	}
+	zval plan;
+	sharp_type_plan(&plan, type);
+	const zval *plan_of_values = Z_TYPE(plan) == IS_ARRAY
+		? zend_hash_index_find(Z_ARRVAL(plan), zend_hash_num_elements(Z_ARRVAL(plan)) - 1) : NULL;
+	bool checked = true, unchecked = false;
+	SHARP_TABLE_FOREACH(&table->table, bucket) {
+		if (!Z_ISREF(bucket->value)) {
+			continue;
+		}
+		zval value;
+		ZVAL_COPY(&value, Z_REFVAL(bucket->value));
+		sharp_type_renumber(elements, &value);
+		if (!sharp_type_accepts(elements, &value, NULL)) {
+			if (!EG(exception)) {
+				smart_str given = {0}, key = {0};
+				sharp_value_type_text(&given, &value);
+				sharp_value_text(&key, &bucket->key);
+				smart_str_0(&key);
+				zend_string *problem = sharp_first_problem(elements, &value);
+				zend_type_error("%s holds %s under the key %s%s", ZSTR_VAL(type->text), ZSTR_VAL(given.s),
+					ZSTR_VAL(key.s), ZSTR_VAL(problem));
+				zend_string_release(problem);
+				smart_str_free(&given);
+				smart_str_free(&key);
+			}
+			zval_ptr_dtor(&value);
+			checked = false;
+			break;
+		}
+		/* A PHP array plain PHP wrote where a Map or a Set belongs crosses into it, as a write of the whole entry does. */
+		bool crosses = plan_of_values && Z_TYPE_P(plan_of_values) == IS_ARRAY && Z_TYPE(value) == IS_ARRAY;
+		if (crosses) {
+			zval crossed;
+			if (!sharp_crossed(&crossed, &value, plan_of_values, elements)) {
+				zval_ptr_dtor(&value);
+				checked = false;
+				break;
+			}
+			zval_ptr_dtor(&value);
+			ZVAL_COPY_VALUE(&value, &crossed);
+		}
+		if (Z_REFCOUNT(bucket->value) == 1) {
+			zval_ptr_dtor(&bucket->value);
+			ZVAL_COPY_VALUE(&bucket->value, &value);
+		} else if (crosses) {
+			/* Plain PHP still holds the reference, which then holds the Map or the Set too, as PHP# reads it. */
+			zval_ptr_dtor(Z_REFVAL(bucket->value));
+			ZVAL_COPY_VALUE(Z_REFVAL(bucket->value), &value);
+			unchecked = true;
+		} else {
+			/* Plain PHP still holds the reference, so its next write may change the entry again. */
+			zval_ptr_dtor(&value);
+			unchecked = true;
+		}
+	} SHARP_TABLE_FOREACH_END();
+	zval_ptr_dtor(&plan);
+	if (!checked) {
+		return NULL;
+	}
+	table->unchecked_entries = unchecked;
+
+	return &table->table;
+}
+
+/* Throws the TypeError of plain PHP's write into the table of `type`, as C# throws a wrong element's write into an
+ * array at the write: at the entry's path, `["k"] expected int, got string 'x'`, or naming the key when the key is
+ * wrong, `Cannot use string 'zzz' as a key of Map<Demo.Level, int>: expected Demo.Level`. `value` is NULL for a write
+ * into an entry, as `$map[$key][] = $element`. */
+static ZEND_COLD void sharp_table_refuse(const sharp_type *type, const sharp_type *keys, bool key_holds,
+	const zval *key, const zval *value)
+{
+	if (keys && !key_holds) {
+		smart_str given = {0};
+		sharp_value_text(&given, key);
+		smart_str_0(&given);
+		zend_type_error("Cannot use %s as a key of %s: expected %s", ZSTR_VAL(given.s), ZSTR_VAL(type->text),
+			ZSTR_VAL(keys->text));
+		smart_str_free(&given);
+		return;
+	}
+
+	zval problems;
+	array_init(&problems);
+	sharp_type_problems found = {&problems, {0}};
+	sharp_type_entry_holds(keys, key_holds, key, sharp_type_elements(type), key_holds ? value : NULL,
+		SHARP_HOLDS_ENTRY_INT_AS_FLOAT, &found);
+	smart_str_free(&found.path);
+
+	smart_str written = {0};
+	if (value) {
+		smart_str_appends(&written, "Cannot assign ");
+		sharp_value_type_text(&written, value);
+	} else {
+		smart_str_appends(&written, "Cannot write an entry");
+	}
+	smart_str_0(&written);
+	zend_string *path;
+	zval *problem;
+	ZEND_HASH_FOREACH_STR_KEY_VAL(Z_ARRVAL(problems), path, problem) {
+		zend_type_error("%s to %s: %s %s", ZSTR_VAL(written.s), ZSTR_VAL(type->text), ZSTR_VAL(path),
+			Z_STRVAL_P(problem));
+		break;
+	} ZEND_HASH_FOREACH_END();
+	if (!EG(exception)) {
+		zend_type_error("%s to %s", ZSTR_VAL(written.s), ZSTR_VAL(type->text));
+	}
+	smart_str_free(&written);
+	zval_ptr_dtor(&problems);
+}
+
+/* What plain PHP's write of `value` under `offset` into the Map `object` stores, spec section 12: the key and the value
+ * a PHP array's entry crosses into, as the Map's own type takes them, so the write throws where a wrong entry lands.
+ * A Set's element is `value` under no `offset`, and a write into an entry, as `$map[$key][] = $element`, has no
+ * `value`. False after the TypeError, with neither `key` nor `element` set. */
+static bool sharp_table_entry(zend_object *object, zval *offset, zval *value, zval *key, zval *element)
+{
+	const sharp_type *type = sharp_table_written_type(object);
+	if (offset) {
+		ZVAL_COPY(key, offset);
+	}
+	if (value) {
+		ZVAL_COPY_DEREF(element, value);
+	}
+	if (!type) {
+		return true;
+	}
+
+	const sharp_type *keys = type->built_in == SHARP_BUILT_IN_MAP ? type->members[0] : NULL;
+	const sharp_type *elements = sharp_type_elements(type);
+	zval plan, at;
+	sharp_type_plan(&plan, type);
+	ZVAL_LONG(&at, sharp_table_of(object)->size);
+	bool key_holds = true;
+	if (keys && (Z_TYPE_P(offset) == IS_LONG || Z_TYPE_P(offset) == IS_STRING)) {
+		/* Plain PHP writes the key it would write into a PHP array, so "5" is the int 5 a Map<string, …> holds as
+		 * "5", and a backed enum's backing value is its case. */
+		zend_ulong index = Z_TYPE_P(offset) == IS_LONG ? (zend_ulong) Z_LVAL_P(offset) : 0;
+		zend_string *name = Z_TYPE_P(offset) == IS_STRING
+			&& !ZEND_HANDLE_NUMERIC_STR(Z_STRVAL_P(offset), Z_STRLEN_P(offset), index) ? Z_STR_P(offset) : NULL;
+		key_holds = sharp_type_holds_key(keys, index, name);
+		if (key_holds) {
+			zval_ptr_dtor(key);
+			key_holds = sharp_crossed_key(key, zend_hash_index_find(Z_ARRVAL(plan), 1), index, name);
+			if (!key_holds) {
+				ZVAL_COPY(key, offset);
+			}
+		}
+	} else if (keys) {
+		key_holds = sharp_type_holds(keys, offset, SHARP_HOLDS_ENTRY, NULL);
+	}
+
+	bool taken = key_holds && !EG(exception);
+	if (taken && value) {
+		sharp_type_renumber(elements, element);
+		taken = sharp_type_accepts(elements, element, NULL);
+		zval crossed;
+		if (taken && sharp_crossed(&crossed, element,
+				zend_hash_index_find(Z_ARRVAL(plan), zend_hash_num_elements(Z_ARRVAL(plan)) - 1), elements)) {
+			zval_ptr_dtor(element);
+			ZVAL_COPY_VALUE(element, &crossed);
+		}
+	}
+	if (!taken && !EG(exception)) {
+		sharp_table_refuse(type, keys, key_holds, keys ? offset : &at, value);
+	}
+	zval_ptr_dtor(&plan);
+	if (!taken || EG(exception)) {
+		if (offset) {
+			zval_ptr_dtor(key);
+		}
+		if (value) {
+			zval_ptr_dtor(element);
+		}
+		return false;
+	}
+
+	return true;
+}
+
 /* A Map read gives the value, or null when the key is missing (spec section 12's TValue?). A Set has no index. A
  * write through the read, as $map[$key][] = $element, gets the entry's own slot, inserting null for a missing key as a
  * PHP array does: the slot comes back as a new reference, which the VM unwraps in place, as ArrayObject's does. */
@@ -8240,16 +8707,32 @@ static zval *sharp_table_read_dimension(zend_object *object, zval *offset, int t
 		return NULL;
 	}
 
-	sharp_table *table = sharp_table_of(object);
+	sharp_table *table = sharp_table_entries(object);
+	if (!table) {
+		return NULL;
+	}
 	if (type == BP_VAR_W || type == BP_VAR_RW) {
-		zval null;
-		ZVAL_NULL(&null);
-		sharp_table_bucket *bucket = sharp_table_find(table, offset);
-		if (!bucket && (EG(exception) || !sharp_table_put(table, offset, &null))) {
+		zval null, key;
+		if (!sharp_table_entry(object, offset, NULL, &key, NULL)) {
 			return NULL;
 		}
-		bucket = bucket ? bucket : sharp_table_find(table, offset);
+		ZVAL_NULL(&null);
+		sharp_table_bucket *bucket = sharp_table_find(table, &key);
+		if (!bucket && !EG(exception) && sharp_table_put(table, &key, &null)) {
+			bucket = sharp_table_find(table, &key);
+		}
+		zval_ptr_dtor(&key);
+		if (!bucket) {
+			return NULL;
+		}
 		ZVAL_MAKE_REF(&bucket->value);
+		/* Plain PHP's write into a typed Map's entry, which no check sees, goes through a reference the entry keeps
+		 * once the write ends, since rv holds it too, so PHP# code checks the entry before it reads it. */
+		if (sharp_table_written_type(object)) {
+			sharp_table_object_of(object)->unchecked_entries = true;
+			ZVAL_COPY(rv, &bucket->value);
+			return rv;
+		}
 		return &bucket->value;
 	}
 
@@ -8268,31 +8751,43 @@ static zval *sharp_table_read_dimension(zend_object *object, zval *offset, int t
 
 static void sharp_table_write_dimension(zend_object *object, zval *offset, zval *value)
 {
+	zval key, element;
 	if (object->ce == sharp_ce_set) {
 		if (offset) {
 			zend_throw_error(NULL, "A Set adds an element with $set[] = $element");
 			return;
 		}
+		if (!sharp_table_entry(object, NULL, value, NULL, &element)) {
+			return;
+		}
 		zval null;
 		ZVAL_NULL(&null);
-		sharp_table_put(sharp_table_of(object), value, &null);
+		sharp_table_put(sharp_table_of(object), &element, &null);
+		zval_ptr_dtor(&element);
 		return;
 	}
 	if (!offset) {
 		zend_throw_error(NULL, "A Map write needs a key");
 		return;
 	}
-	sharp_table_put(sharp_table_of(object), offset, value);
+	if (!sharp_table_entry(object, offset, value, &key, &element)) {
+		return;
+	}
+	sharp_table_put(sharp_table_of(object), &key, &element);
+	zval_ptr_dtor(&key);
+	zval_ptr_dtor(&element);
 }
 
 static int sharp_table_has_dimension(zend_object *object, zval *offset, int check_empty)
 {
-	sharp_table_bucket *bucket = sharp_table_find(sharp_table_of(object), offset);
+	sharp_table *table = sharp_table_entries(object);
+	sharp_table_bucket *bucket = table ? sharp_table_find(table, offset) : NULL;
 
 	if (!bucket) {
 		return 0;
 	}
 	zval *held = object->ce == sharp_ce_set ? &bucket->key : &bucket->value;
+	ZVAL_DEREF(held);
 
 	return check_empty ? i_zend_is_true(held) : Z_TYPE_P(held) != IS_NULL;
 }
@@ -8336,8 +8831,10 @@ static zend_result sharp_table_iterator_valid(zend_object_iterator *it)
 static zval *sharp_table_iterator_current(zend_object_iterator *it)
 {
 	sharp_table_bucket *bucket = sharp_table_iterator_bucket(it);
+	zval *held = Z_OBJCE(it->data) == sharp_ce_set ? &bucket->key : &bucket->value;
+	ZVAL_DEREF(held);
 
-	return Z_OBJCE(it->data) == sharp_ce_set ? &bucket->key : &bucket->value;
+	return held;
 }
 
 static void sharp_table_iterator_key(zend_object_iterator *it, zval *key)
@@ -8384,6 +8881,9 @@ static zend_object_iterator *sharp_table_get_iterator(zend_class_entry *ce, zval
 {
 	if (by_ref) {
 		zend_throw_error(NULL, "A %s can't be looped over by reference", ce == sharp_ce_set ? "Set" : "Map");
+		return NULL;
+	}
+	if (!sharp_table_entries(Z_OBJ_P(object))) {
 		return NULL;
 	}
 
@@ -8441,6 +8941,7 @@ ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Sharp_Map_from, 0, 1, Sharp\\Map, 0)
 	ZEND_ARG_TYPE_INFO(0, entries, IS_ARRAY, 0)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, typeArguments, IS_STRING, 1, "null")
 ZEND_END_ARG_INFO()
 
 
@@ -8557,7 +9058,10 @@ ZEND_METHOD(Sharp_Table, jsonSerialize)
 	ZEND_PARSE_PARAMETERS_NONE();
 
 	zend_object *object = Z_OBJ_P(ZEND_THIS);
-	sharp_table *table = sharp_table_of(object);
+	sharp_table *table = sharp_table_entries(object);
+	if (!table) {
+		RETURN_THROWS();
+	}
 	HashTable *encoded = zend_new_array(table->size);
 	SHARP_TABLE_FOREACH(table, bucket) {
 		if (sharp_out_of_memory()) {
@@ -8574,8 +9078,9 @@ ZEND_METHOD(Sharp_Table, jsonSerialize)
 			zend_array_release(encoded);
 			RETURN_THROWS();
 		}
-		Z_TRY_ADDREF(bucket->value);
-		zend_hash_update(encoded, key, &bucket->value);
+		zval value;
+		ZVAL_COPY_DEREF(&value, &bucket->value);
+		zend_hash_update(encoded, key, &value);
 		zend_string_release(key);
 	} SHARP_TABLE_FOREACH_END();
 
@@ -8606,10 +9111,14 @@ static void sharp_table_list(INTERNAL_FUNCTION_PARAMETERS, bool keys)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
 
-	sharp_table *table = sharp_table_of(Z_OBJ_P(ZEND_THIS));
+	sharp_table *table = sharp_table_entries(Z_OBJ_P(ZEND_THIS));
+	if (!table) {
+		RETURN_THROWS();
+	}
 	HashTable *list = zend_new_array(table->size);
 	SHARP_TABLE_FOREACH(table, bucket) {
 		zval *held = keys ? &bucket->key : &bucket->value;
+		ZVAL_DEREF(held);
 		Z_TRY_ADDREF_P(held);
 		zend_hash_next_index_insert_new(list, held);
 	} SHARP_TABLE_FOREACH_END();
@@ -8632,6 +9141,9 @@ ZEND_METHOD(Sharp_Table, toList)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
 
+	if (!sharp_table_entries(Z_OBJ_P(ZEND_THIS))) {
+		RETURN_THROWS();
+	}
 	RETURN_ARR(sharp_table_to_list(Z_OBJ_P(ZEND_THIS)));
 }
 
@@ -8640,13 +9152,17 @@ ZEND_METHOD(Sharp_Map, __serialize)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
 
-	sharp_table *table = sharp_table_of(Z_OBJ_P(ZEND_THIS));
+	sharp_table *table = sharp_table_entries(Z_OBJ_P(ZEND_THIS));
+	if (!table) {
+		RETURN_THROWS();
+	}
 	HashTable *keys_and_values = zend_new_array(table->size * 2);
 	SHARP_TABLE_FOREACH(table, bucket) {
+		zval value;
 		Z_TRY_ADDREF(bucket->key);
 		zend_hash_next_index_insert_new(keys_and_values, &bucket->key);
-		Z_TRY_ADDREF(bucket->value);
-		zend_hash_next_index_insert_new(keys_and_values, &bucket->value);
+		ZVAL_COPY_DEREF(&value, &bucket->value);
+		zend_hash_next_index_insert_new(keys_and_values, &value);
 	} SHARP_TABLE_FOREACH_END();
 
 	RETURN_ARR(keys_and_values);
@@ -8737,17 +9253,23 @@ ZEND_METHOD(Sharp_Map, __unserialize)
 	}
 }
 
-/* A PHP array's entries, under the keys PHP holds them by. */
+/* A PHP array's entries, under the keys PHP holds them by, of the type arguments PHP# code passes. */
 ZEND_METHOD(Sharp_Map, from)
 {
 	HashTable *entries;
+	zend_string *type_arguments = NULL;
 
-	ZEND_PARSE_PARAMETERS_START(1, 1)
+	ZEND_PARSE_PARAMETERS_START(1, 2)
 		Z_PARAM_ARRAY_HT(entries)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_STR_OR_NULL(type_arguments)
 	ZEND_PARSE_PARAMETERS_END();
 
 	sharp_table_object *map = sharp_table_object_create(sharp_ce_map, zend_hash_num_elements(entries));
 	RETVAL_OBJ(&map->std);
+	if (!sharp_table_made_with(execute_data, &map->std, type_arguments, 2)) {
+		RETURN_THROWS();
+	}
 	zend_ulong index;
 	zend_string *name;
 	zval *element;
