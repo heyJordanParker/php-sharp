@@ -160,14 +160,34 @@ line 1 expects no error, and the checker reports: …Mailerr…
 line 3 expects a compile error, and the checker accepts it
 -->
 
-A parse error that says the parser could not read the line never satisfies a `compile error` line:
+A parse error that says the parser could not read the line never satisfies a `compile error` line, whether mago titles it "Parse error encountered during parsing" or its message quotes the line, and whether it names the tokens it expected:
 
 <!-- example unreadable-line: statements -->
 ```csharp
 let int a = 1;   // compile error: let takes no written type
 ```
 <!-- expect unreadable-line
-line 1 expects a compile error, and the checker reports: Parse error encountered during parsing…
+line 1 expects a compile error, and the checker reports: …Expected …, found `…`
+-->
+
+or only the text the line writes:
+
+<!-- example unexpected-text: statements -->
+```csharp
+const total = $count;   // compile error: write the name without $
+```
+<!-- expect unexpected-text
+line 1 expects a compile error, and the checker reports: …Unexpected …
+-->
+
+A lexer error, code `syntax`, says the line could not be read too:
+
+<!-- example unlexable-line: statements -->
+```csharp
+const mode = 0789;   // compile error: an octal literal has no 8
+```
+<!-- expect unlexable-line
+line 1 expects a compile error, and the checker reports: …Unexpected …`8`…
 -->
 
 A message the parser writes to name a PHP# rule satisfies a `compile error` line:
