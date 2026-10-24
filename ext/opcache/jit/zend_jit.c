@@ -752,18 +752,17 @@ static bool zend_jit_sharp_receiver_may_be_collection(const zend_op_array *op_ar
 	return 0;
 }
 
-/* Whether PHP# code's read of a static property may find a reference plain PHP made of it, which only the VM's handler
- * checks, through sharp_property_from_reference. */
+/* Whether PHP# code's fetch of a static property may find a reference plain PHP made of it that only the VM's handler
+ * checks: one of a property the JIT doesn't know, or of a #[\Sharp\Crossing] property, whose read gives the Map or the
+ * Set the checked array crosses into. zend_jit_fetch_static_prop checks a reference of any other property itself. */
 static bool zend_jit_sharp_static_may_be_referenced(const zend_op_array *op_array, const zend_op *opline)
 {
-	if ((opline->opcode != ZEND_FETCH_STATIC_PROP_R && opline->opcode != ZEND_FETCH_STATIC_PROP_IS
-			&& opline->opcode != ZEND_FETCH_STATIC_PROP_FUNC_ARG)
-			|| !sharp_function_is_sharp((const zend_function *) op_array)) {
+	if (!sharp_function_is_sharp((const zend_function *) op_array)) {
 		return 0;
 	}
 	zend_property_info *prop_info = zend_get_known_static_property_info(op_array, opline);
 
-	return !prop_info || (prop_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED));
+	return !prop_info || (prop_info->flags & ZEND_ACC_SHARP_CROSSING);
 }
 
 /* Whether the receiver a ZEND_CAST of a PHP# method call reads may be a Sharp\Map or a Sharp\Set, from the class the

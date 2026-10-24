@@ -14354,18 +14354,6 @@ static ir_ref jit_sharp_slot_is_plain(zend_jit_ctx *jit, ir_ref type_info, bool 
 	return type_info;
 }
 
-/* PHP#: plain PHP's write into the collection of a property with ZEND_ACC_SHARP_TYPED fetches it through the run-time
- * cache's path, whose helpers run sharp_property_for_plain_write, so this gives no property for it. */
-static zend_property_info *zend_jit_known_written_property(
-	const zend_op_array *op_array, const zend_op *opline, zend_property_info *prop_info)
-{
-	if (prop_info && opline->opcode == ZEND_FETCH_OBJ_W && UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_TYPED)
-			&& !sharp_function_is_sharp((const zend_function *) op_array)) {
-		return NULL;
-	}
-	return prop_info;
-}
-
 static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
                               const zend_op        *opline,
                               const zend_op_array  *op_array,
@@ -14401,8 +14389,7 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 
 	member = RT_CONSTANT(opline, opline->op2);
 	ZEND_ASSERT(Z_TYPE_P(member) == IS_STRING && Z_STRVAL_P(member)[0] != '\0');
-	prop_info = zend_jit_known_written_property(op_array, opline,
-		zend_get_known_property_info(op_array, ce, Z_STR_P(member), on_this, op_array->filename));
+	prop_info = zend_get_known_property_info(op_array, ce, Z_STR_P(member), on_this, op_array->filename);
 
 	if (JIT_G(trigger) == ZEND_JIT_ON_HOT_TRACE && prop_type == IS_UNDEF) {
 		prop_info = NULL;
@@ -14480,8 +14467,7 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 
 	ZEND_ASSERT(obj_ref);
 	if (!prop_info && trace_ce && (trace_ce->ce_flags & ZEND_ACC_IMMUTABLE)) {
-		prop_info = zend_jit_known_written_property(op_array, opline,
-			zend_get_known_property_info(op_array, trace_ce, Z_STR_P(member), on_this, op_array->filename));
+		prop_info = zend_get_known_property_info(op_array, trace_ce, Z_STR_P(member), on_this, op_array->filename);
 		if (prop_info) {
 			ce = trace_ce;
 			ce_is_instanceof = 0;
@@ -14629,7 +14615,8 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 				ir_END_list(end_inputs);
 				ir_IF_FALSE(if_has_prop_info);
 			} else if (flags == ZEND_FETCH_REF) {
-				/* PHP# refuses a reference to a property whose type names its class's type parameters. */
+				/* PHP#: plain PHP's reference to a #[\Sharp\Crossing] property refers to its array form, see
+				 * sharp_property_takes_reference. */
 				jit_SET_EX_OPLINE(jit, opline);
 				ir_CALL_3(IR_VOID, ir_CONST_FC_FUNC(zend_jit_create_typed_ref),
 					prop_ref,
@@ -14645,8 +14632,10 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 	} else {
 		prop_ref = ir_ADD_OFFSET(obj_ref, prop_info->offset);
 		prop_addr = ZEND_ADDR_REF_ZVAL(prop_ref);
-		/* PHP# code reads a property plain PHP wrote through a reference through the VM's handler, which checks it. */
-		bool crossing = (prop_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)) != 0;
+		/* PHP# code reads a property plain PHP wrote through a reference through the VM's handler, which checks it, and
+		 * plain PHP code reads it as it is, as stock PHP does. */
+		bool crossing = (prop_info->flags & ZEND_ACC_SHARP_CROSSING)
+			|| (sharp_function_is_sharp((const zend_function *) op_array) && sharp_property_checks_on_read(prop_info));
 		bool crossing_write = crossing && opline->opcode == ZEND_FETCH_OBJ_W;
 		if (JIT_G(trigger) == ZEND_JIT_ON_HOT_TRACE) {
 			if (opline->opcode == ZEND_FETCH_OBJ_W || !(res_info & MAY_BE_GUARD) || !JIT_G(current_frame)) {
@@ -14724,7 +14713,22 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 			uint32_t flags = opline->extended_value & ZEND_FETCH_OBJ_FLAGS;
 
 			if (flags == ZEND_FETCH_DIM_WRITE) {
-				if ((ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_ARRAY) == 0 && !crossing_write) {
+				if (UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_TYPED)
+				 && !sharp_function_is_sharp((const zend_function *) op_array)) {
+					/* PHP#: plain PHP's write into what the slot holds makes it a reference the property types, see
+					 * sharp_property_for_plain_write, which has nothing more to do with a reference, so only a slot that
+					 * isn't one leaves the fast path. */
+					if (!prop_type_ref) {
+						prop_type_ref = jit_Z_TYPE_INFO(jit, prop_addr);
+					}
+					ir_ref if_reference = ir_IF(ir_EQ(prop_type_ref, ir_CONST_U32(IS_REFERENCE_EX)));
+					ir_IF_FALSE_cold(if_reference);
+					jit_SET_EX_OPLINE(jit, opline);
+					ir_CALL_3(IR_VOID, ir_CONST_FC_FUNC(zend_jit_check_array_promotion),
+						prop_ref, ir_CONST_ADDR(prop_info), obj_ref);
+					ir_END_list(end_inputs);
+					ir_IF_TRUE(if_reference);
+				} else if ((ZEND_TYPE_FULL_MASK(prop_info->type) & MAY_BE_ARRAY) == 0 && !crossing_write) {
 					if (!prop_type_ref) {
 						prop_type_ref = jit_Z_TYPE_INFO(jit, prop_addr);
 					}
@@ -15433,6 +15437,12 @@ static int zend_jit_assign_obj_op(zend_jit_ctx         *jit,
 		}
 	}
 
+	/* PHP#: PHP# code checks a slot plain PHP turned into a reference before it changes it, which the run-time cache's
+	 * path does in its helper, see sharp_property_for_change. */
+	if (prop_info && sharp_function_is_sharp((const zend_function *) op_array) && sharp_property_checks_on_read(prop_info)) {
+		prop_info = NULL;
+	}
+
 	use_prop_guard = (prop_type != IS_UNKNOWN
 		&& prop_type != IS_UNDEF
 		&& prop_type != IS_REFERENCE
@@ -15853,6 +15863,12 @@ static int zend_jit_incdec_obj(zend_jit_ctx         *jit,
 				}
 			}
 		}
+	}
+
+	/* PHP#: PHP# code checks a slot plain PHP turned into a reference before it changes it, which the run-time cache's
+	 * path does in its helper, see sharp_property_for_change. */
+	if (prop_info && sharp_function_is_sharp((const zend_function *) op_array) && sharp_property_checks_on_read(prop_info)) {
+		prop_info = NULL;
 	}
 
 	use_prop_guard = (prop_type != IS_UNKNOWN
@@ -16355,6 +16371,22 @@ static int zend_jit_fetch_static_prop(zend_jit_ctx *jit, const zend_op *opline, 
 		if (!known_prop_info) {
 			ir_MERGE_WITH_EMPTY_FALSE(if_sharp_typed);
 		}
+	}
+	/* PHP#: PHP# code checks a static plain PHP turned into a reference before it reads it or writes into it, as the
+	 * VM's handler does. zend_jit_sharp_static_may_be_referenced leaves every other PHP# fetch that may find one to the
+	 * handler. */
+	if (known_prop_info && sharp_function_is_sharp((const zend_function *) op_array)
+	 && sharp_property_checks_on_read(known_prop_info)) {
+		// JIT: if (Z_ISREF_P(result) && !sharp_property_for_write(NULL, NULL, result, property_info))
+		ir_ref if_reference = ir_IF(ir_EQ(jit_Z_TYPE_ref(jit, ref), ir_CONST_U8(IS_REFERENCE)));
+		ir_IF_TRUE_cold(if_reference);
+		jit_SET_EX_OPLINE(jit, opline);
+		ir_ref if_held = ir_IF(ir_CALL_4(IR_BOOL, ir_CONST_FUNC(sharp_property_for_write),
+			IR_NULL, IR_NULL, ref, ir_CONST_ADDR(known_prop_info)));
+		ir_IF_FALSE_cold(if_held);
+		ir_IJMP(jit_STUB_ADDR(jit, jit_stub_exception_handler_undef));
+		ir_IF_TRUE(if_held);
+		ir_MERGE_WITH_EMPTY_FALSE(if_reference);
 	}
 
 	fast_path = ir_END();

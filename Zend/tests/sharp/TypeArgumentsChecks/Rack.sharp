@@ -11,6 +11,10 @@ public class Rack<TItem>
 
     public static Rack<Order> orders() => new Rack<Order>();
 
+    public Box<TItem>? kept() => this.own;
+
+    public int held() => this.items.count();
+
     public static Box<Order> box() => new Box<Order>();
 
     public static Box<Customer> customerBox() => new Box<Customer>();

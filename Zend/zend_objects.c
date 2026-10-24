@@ -218,15 +218,24 @@ ZEND_API void ZEND_FASTCALL zend_objects_clone_members(zend_object *new_object, 
 
 		do {
 			i_zval_ptr_dtor(dst);
+			/* PHP#: a clone PHP# code makes checks what plain PHP wrote through a reference of a typed slot, and takes
+			 * the value itself. Plain PHP's clone shares a reference something else holds, as stock PHP's does, and
+			 * copies one only the slot holds into a reference of its own, where stock PHP takes the value, so PHP# code
+			 * still checks what plain PHP wrote when it reads the clone. */
 			zend_property_info *crossing = UNEXPECTED(Z_ISREF_P(src)) && ZEND_REF_HAS_TYPE_SOURCES(Z_REF_P(src))
 				? zend_get_property_info_for_slot_self(old_object, src) : NULL;
-			if (UNEXPECTED(crossing && (crossing->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
+			bool sharp_slot = UNEXPECTED(crossing && (crossing->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)));
+			if (sharp_slot && sharp_runs_sharp_code()) {
 				zval value;
 				zval *held = sharp_property_from_reference(src, old_object, crossing, &value);
 				ZVAL_COPY_VALUE(dst, held);
 				if (held != &value) {
 					Z_TRY_ADDREF_P(dst);
 				}
+				Z_PROP_FLAG_P(dst) = Z_PROP_FLAG_P(src);
+			} else if (sharp_slot && Z_REFCOUNT_P(src) == 1) {
+				ZVAL_NEW_REF(dst, Z_REFVAL_P(src));
+				Z_TRY_ADDREF_P(Z_REFVAL_P(dst));
 				Z_PROP_FLAG_P(dst) = Z_PROP_FLAG_P(src);
 			} else {
 				ZVAL_COPY_VALUE_PROP(dst, src);

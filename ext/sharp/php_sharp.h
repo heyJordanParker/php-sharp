@@ -88,15 +88,38 @@ bool sharp_property_takes_reference(zval *slot, const zend_property_info *info);
  * reference holds against the property's type, and gives back `slot` once it holds the value itself, or `rv`, its copy,
  * while plain PHP still holds the reference or after the TypeError. */
 zval *sharp_property_from_reference(zval *slot, zend_object *object, const zend_property_info *info, zval *rv);
+/* PHP# code fetches `slot`, the reference of a property of `object`, or of no object for a static one, to write, in any
+ * fetch mode, as `this.counts[1] += 1` reads it first. Checks it as sharp_property_from_reference does, and gives false
+ * after the TypeError. While plain PHP still holds the reference, the write goes into what it holds, except that the
+ * Map or Set of a #[\Sharp\Crossing] property's index write, which passes `result`, goes through a Sharp\Collection. */
 bool sharp_property_for_write(zval *result, zend_object *object, zval *slot, const zend_property_info *info);
-/* Spec section 12: plain PHP fetches `slot`, of a property of `object` with ZEND_ACC_SHARP_TYPED, or of no object for a
- * static one, to write into what it holds, as `$o->items[] = $v`, `$o->items[0][1] = $v`, `unset($o->items[0])` and
- * `sort($o->items)` do, after the fetch's `flags` were handled. An array, or the null or uninitialized slot an element
- * write fills with one, becomes a reference the property types, as a reference plain PHP takes does, so
- * sharp_property_from_reference checks it before PHP# code next reads it. A Sharp\Map or Sharp\Set is copied when
- * shared, and a table PHP# code made takes the property's type as its own, which each write plain PHP makes into it
- * then takes at the write. */
-void sharp_property_for_plain_write(zval *slot, zend_object *object, const zend_property_info *info, uint32_t flags);
+/* The running code is about to change `slot`, of the property `info` of `object`, with `++`, `--` or a compound
+ * assignment, which reads it first. When PHP# code does and plain PHP turned the slot into a reference, checks it
+ * through sharp_property_for_write. False after the TypeError. Plain PHP code changes it as it is. */
+static zend_always_inline bool sharp_property_for_change(zend_object *object, zval *slot, const zend_property_info *info)
+{
+	return !Z_ISREF_P(slot) || !info || !(info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
+		|| !sharp_function_is_sharp(EG(current_execute_data)->func) || sharp_property_for_write(NULL, object, slot, info);
+}
+/* Spec section 12: plain PHP fetches `slot`, of the property `info` with ZEND_ACC_SHARP_TYPED, an instance or a static
+ * one, to write into what it holds, as `$o->items[] = $v`, `$o->items[0][1] = $v`, `unset($o->items[0])` and
+ * `sort($o->items)` do, after the fetch's `flags` were handled. The slot becomes a reference the property types, as a
+ * reference plain PHP takes does, whatever it holds but an object, so sharp_property_from_reference checks it before
+ * PHP# code next reads it. Plain PHP itself never runs that check. A Sharp\Map or Sharp\Set is copied when shared, and
+ * checks each write plain PHP makes into it with its own type. */
+void sharp_property_for_plain_write(zval *slot, const zend_property_info *info, uint32_t flags);
+
+/* Whether a write plain PHP makes into what the property `info` holds can leave a value its PHP# type doesn't hold,
+ * which PHP# code checks when it next reads the property: a #[\Sharp\Crossing] property, one whose PHP# type names its
+ * class's type parameters, which a write through a reference can't check without the object, and one with a PHP# type
+ * that PHP stores as an array or as no declared type. Each write into any other is checked, as an int property's
+ * reference takes only an int. */
+static zend_always_inline bool sharp_property_checks_on_read(const zend_property_info *info)
+{
+	return (info->flags & ZEND_ACC_SHARP_CROSSING) || ((info->flags & ZEND_ACC_SHARP_TYPED)
+		&& (!ZEND_TYPE_IS_SET(info->type) || (ZEND_TYPE_FULL_MASK(info->type) & MAY_BE_ARRAY)
+			|| memchr(ZSTR_VAL(info->sharp_type), '$', ZSTR_LEN(info->sharp_type))));
+}
 
 #define SHARP_IS_TABLE(value) \
 	(Z_TYPE_P(value) == IS_OBJECT && (Z_OBJCE_P(value) == sharp_ce_map || Z_OBJCE_P(value) == sharp_ce_set))
@@ -284,15 +307,12 @@ bool sharp_type_verify(zend_execute_data *execute_data, zval *value, const zval 
  * as sharp_type_accepts decides, with the type spelled for `object`, whose property it is, and an int it accepts for a
  * float becomes a float. A PHP array it takes crosses into the Map or Set object, as the property's #[\Sharp\Crossing]
  * plans it, and a crossing that throws refuses the value. A type that names a `$i` takes any value when `object` is
- * NULL, as a write through a reference or PHP's own API has no object. A write from a .sharp file is never checked,
- * since PHP# checked it where it compiled, and the write a property hook makes to its own property is its caller's.
- * Throws PHP's TypeError, for a write to the property or to a reference it holds when `reference` holds, when it does
- * not take the value. */
+ * NULL, as a write through a reference or PHP's own API has no object, and PHP# code checks that value with the
+ * object's type arguments when it next fetches the property, see sharp_property_from_reference. A write from a .sharp
+ * file is never checked, since PHP# checked it where it compiled, and the write a property hook makes to its own
+ * property is its caller's. Throws PHP's TypeError, for a write to the property or to a reference it holds when
+ * `reference` holds, when it does not take the value. */
 bool sharp_property_accepts(const zend_property_info *info, zval *value, zend_object *object, bool reference);
-
-/* Whether the property `info` refuses a reference to it, which throws an Error: a property whose PHP# type names a type
- * parameter of its class, since a write through a reference has no object to spell the type for. */
-bool sharp_property_refuses_reference(const zend_property_info *info);
 
 /* Whether each property of `object` with a PHP# type takes its value, spelled for the object's type arguments, as
  * sharp_property_accepts decides. unserialize reads the type arguments after the properties, and fills each Map and Set
@@ -343,9 +363,10 @@ static zend_always_inline const sharp_type *sharp_type_arguments(zend_object *ob
 	return UNEXPECTED(object->ce->ce_flags & ZEND_ACC_SHARP_GENERIC) ? sharp_type_arguments_of_slot(object) : NULL;
 }
 
-/* Whether `new` can give an object of `ce` the type arguments `arguments`, one for each type parameter `ce` declares.
- * PHP# checked them against the class the name reached when it compiled, but an alias or an autoloader can bind the
- * name to a class that declares none, or another number. Throws an Error when they do not fit. */
+/* Whether `new` can give an object of `ce` the type arguments `arguments`, one for each type parameter `ce` declares,
+ * or two for a Sharp\Map and one for a Sharp\Set, which a PHP# literal creates with its type. PHP# checked them
+ * against the class the name reached when it compiled, but an alias or an autoloader can bind the name to a class that
+ * declares none, or another number. Throws an Error when they do not fit. */
 bool sharp_class_takes(const zend_class_entry *ce, const sharp_type *arguments);
 
 /* Stores `arguments` in the slot of `object`, whose class declares one, or in a Sharp\Map or Sharp\Set. */

@@ -1,6 +1,6 @@
 /* The hash table a Sharp\Map and a Sharp\Set hold, from php-ds v1.8.0's src/ds/ds_htable.c, whose MIT notice
  * sharp_table.h carries. The buckets, chains, rehash, growth and shrinking are php-ds's. The hash and the key match
- * are PHP#'s: sharp_hash and sharp_equal below. */
+ * are PHP#'s: sharp_hash and sharp_key_equal below. */
 
 #include "sharp_table.h"
 #include "php_sharp.h"
@@ -91,7 +91,14 @@ void sharp_table_copy(sharp_table *table, const sharp_table *source)
 			ZVAL_UNDEF(&to->value);
 		} else {
 			ZVAL_COPY(&to->key, &from->key);
-			ZVAL_COPY(&to->value, &from->value);
+			/* An entry plain PHP wrote into through a reference only the table holds stays unchecked in the copy, in a
+			 * reference of its own, so a write into one copy never reaches the other. */
+			if (Z_ISREF(from->value) && Z_REFCOUNT(from->value) == 1) {
+				ZVAL_NEW_REF(&to->value, Z_REFVAL(from->value));
+				Z_TRY_ADDREF_P(Z_REFVAL(to->value));
+			} else {
+				ZVAL_COPY(&to->value, &from->value);
+			}
 			SHARP_TABLE_HASH(to) = SHARP_TABLE_HASH(from);
 		}
 		SHARP_TABLE_NEXT(to) = SHARP_TABLE_NEXT(from);
@@ -117,6 +124,8 @@ void sharp_table_destroy(sharp_table *table)
 	table->capacity = 0;
 }
 
+static bool sharp_key_equal(zval *a, zval *b, bool *equal);
+
 /* The bucket in hash's chain that holds a key equal to key, through prev the one before it. */
 static bool sharp_table_search(sharp_table *table, zval *key, uint32_t hash, uint32_t *found, uint32_t *prev)
 {
@@ -124,7 +133,7 @@ static bool sharp_table_search(sharp_table *table, zval *key, uint32_t hash, uin
 	for (uint32_t index = SHARP_TABLE_HEAD(table, hash); index != SHARP_TABLE_INVALID;) {
 		sharp_table_bucket *bucket = &table->buckets[index];
 		bool equal = false;
-		if (SHARP_TABLE_HASH(bucket) == hash && !sharp_equal(&bucket->key, key, &equal)) {
+		if (SHARP_TABLE_HASH(bucket) == hash && !sharp_key_equal(&bucket->key, key, &equal)) {
 			return false;
 		}
 		if (equal) {
@@ -222,19 +231,45 @@ static uint32_t sharp_hash_combine(uint32_t hash, uint32_t next)
 	return hash * 31 + next;
 }
 
-/* A double whose value is a whole number an int holds hashes as that int, since 5 == 5.0 (spec section 19), and -0.0
- * as 0. NAN equals nothing, itself included, so its bits are as good a hash as any, and ZEND_DOUBLE_FITS_LONG, which
- * holds for NAN, must not cast it. */
+/* Whether the double `number` is a whole number an int holds exactly. ZEND_DOUBLE_FITS_LONG holds for NAN, so NAN is
+ * tested first, and the cast is never reached for it. */
+static bool sharp_double_is_long(double number)
+{
+	return !zend_isnan(number) && ZEND_DOUBLE_FITS_LONG(number) && (double) (zend_long) number == number;
+}
+
+/* A double that is a whole number an int holds exactly hashes as that int, since 5 is 5.0 as a key (spec section 12),
+ * and -0.0 as 0. Every NAN is one key, so each NAN payload hashes alike. */
 static uint32_t sharp_hash_double(double number)
 {
-	if (!zend_isnan(number) && ZEND_DOUBLE_FITS_LONG(number) && (double) (zend_long) number == number) {
+	if (sharp_double_is_long(number)) {
 		return sharp_hash_bits((uint64_t) (zend_long) number);
+	}
+	if (zend_isnan(number)) {
+		number = ZEND_NAN;
 	}
 
 	uint64_t bits;
 	memcpy(&bits, &number, sizeof bits);
 
 	return sharp_hash_bits(bits);
+}
+
+/* Whether the keys `a` and `b` are one key of a Map or one element of a Set (spec section 12): as == compares them,
+ * except that every NAN is one key, as C#'s Double.Equals finds it, where NAN == NAN is false. -0.0 and 0.0 are one
+ * key, as == already says. False after an exception an op_Equality threw. */
+static bool sharp_key_equal(zval *a, zval *b, bool *equal)
+{
+	zval *left = a, *right = b;
+	ZVAL_DEREF(left);
+	ZVAL_DEREF(right);
+	if (Z_TYPE_P(left) == IS_DOUBLE && Z_TYPE_P(right) == IS_DOUBLE
+			&& zend_isnan(Z_DVAL_P(left)) && zend_isnan(Z_DVAL_P(right))) {
+		*equal = true;
+		return true;
+	}
+
+	return sharp_equal(left, right, equal);
 }
 
 /* The class's own method of name, or NULL when it declares none. */
@@ -593,11 +628,19 @@ bool sharp_equal(zval *a, zval *b, bool *equal)
 	ZVAL_DEREF(a);
 	ZVAL_DEREF(b);
 
-	/* An int and a float compare as two floats (spec section 19), so NAN equals nothing and -0.0 equals 0.0. */
+	/* Numbers compare by value (spec section 19): two floats as IEEE 754 does, so NAN equals nothing and -0.0 equals
+	 * 0.0, and an int and a float exactly, as Python and Rust compare them, so 2^53 + 1 and 2^53 differ though the float
+	 * nearest 2^53 + 1 is 2^53, and == stays transitive. */
 	if ((Z_TYPE_P(a) == IS_LONG || Z_TYPE_P(a) == IS_DOUBLE) && (Z_TYPE_P(b) == IS_LONG || Z_TYPE_P(b) == IS_DOUBLE)) {
-		*equal = Z_TYPE_P(a) == IS_LONG && Z_TYPE_P(b) == IS_LONG
-			? Z_LVAL_P(a) == Z_LVAL_P(b)
-			: zval_get_double(a) == zval_get_double(b);
+		if (Z_TYPE_P(a) == IS_LONG && Z_TYPE_P(b) == IS_LONG) {
+			*equal = Z_LVAL_P(a) == Z_LVAL_P(b);
+		} else if (Z_TYPE_P(a) == IS_DOUBLE && Z_TYPE_P(b) == IS_DOUBLE) {
+			*equal = Z_DVAL_P(a) == Z_DVAL_P(b);
+		} else {
+			zend_long whole = Z_TYPE_P(a) == IS_LONG ? Z_LVAL_P(a) : Z_LVAL_P(b);
+			double number = Z_TYPE_P(a) == IS_DOUBLE ? Z_DVAL_P(a) : Z_DVAL_P(b);
+			*equal = sharp_double_is_long(number) && (zend_long) number == whole;
+		}
 		return true;
 	}
 	if (Z_TYPE_P(a) != Z_TYPE_P(b)) {

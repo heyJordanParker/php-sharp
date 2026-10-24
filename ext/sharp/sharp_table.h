@@ -17,8 +17,8 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  * PHP# keeps the buckets in insertion order, the collision chains through a separate lookup array, and the rehash that
- * doubles the capacity. A key is found by its hash, then by PHP#'s == (spec section 19) within its chain, where php-ds
- * compares with === and Hashable::equals(). */
+ * doubles the capacity. A key is found by its hash, then within its chain by PHP#'s == (spec section 19), under which
+ * every NAN is one key (spec section 12), where php-ds compares with === and Hashable::equals(). */
 
 #ifndef SHARP_TABLE_H
 #define SHARP_TABLE_H
@@ -71,13 +71,16 @@ bool sharp_table_put(sharp_table *table, zval *key, zval *value);
 /* Removes key's entry, when the table holds one. False after an exception, with the table unchanged. */
 bool sharp_table_remove(sharp_table *table, zval *key);
 
-/* A Sharp\Map or a Sharp\Set: its table, its type arguments, then the object. A Set holds each element as a key with a
- * null value. The type arguments, as `string, int` for a Map<string, int>, are the ones sharp_type_arguments_store gave
- * it at the first typed boundary that took it, or NULL until one did. Each write plain PHP makes into it takes them. A
- * copy keeps them. */
+/* A Sharp\Map or a Sharp\Set: its table, its type arguments, whether it has unchecked entries, then the object. A Set
+ * holds each element as a key with a null value. The type arguments, as `string, int` for a Map<string, int>, are the
+ * ones sharp_type_arguments_store gave it: when PHP# code made it, or for one plain PHP made, at the first typed
+ * boundary that took it, and NULL until then. Each write plain PHP makes into it takes them. A write plain PHP makes into an entry, as `$map["k"][] = $element`, leaves the
+ * entry a reference, and unchecked_entries says one may be left, which PHP# code checks before it reads the table, see
+ * sharp_table_check_entries. A copy keeps both. */
 typedef struct {
 	sharp_table table;
 	const struct _sharp_type *arguments;
+	bool unchecked_entries;
 	zend_object std;
 } sharp_table_object;
 

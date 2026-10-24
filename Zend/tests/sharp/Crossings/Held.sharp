@@ -1,9 +1,17 @@
 namespace Demo;
 
+import Lib.Probe;
+
 // A Map in a type parameter's place.
 public class Held<T>
 {
     public T value { get; set; }
+
+    // A Map whose type names T, which only the object's type arguments spell, so its initial value runs in the
+    // constructor, and a static's runs for each type argument.
+    public Map<string, T> index { get; set; } = [:];
+
+    public static Map<string, T> pool { get; set; } = [:];
 
     public Held(T value)
     {
@@ -15,4 +23,17 @@ public class Held<T>
     public static Held<Map<string, int>> ofMap() => new Held<Map<string, int>>(["h": 1]);
 
     public static Held<List<int>> ofList() => new Held<List<int>>([1]);
+
+    public static Held<int> ofInt() => new Held<int>(1);
+
+    // The Map an initial value made, handed to plain PHP as the object, which writes `value` under `key` into it.
+    public void handIndex(string key, Any? value)
+    {
+        Probe.put(this.index, key, value);
+    }
+
+    public void handPool(string key, Any? value)
+    {
+        Probe.put(Held<T>.pool, key, value);
+    }
 }

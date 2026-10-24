@@ -2266,12 +2266,6 @@ static zend_never_inline bool zend_handle_fetch_obj_flags(
 {
 	switch (flags) {
 		case ZEND_FETCH_DIM_WRITE:
-			if (UNEXPECTED(Z_ISREF_P(ptr)) && prop_info
-					&& UNEXPECTED(prop_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					&& UNEXPECTED(!sharp_property_for_write(result, obj, ptr, prop_info))) {
-				if (result) ZVAL_ERROR(result);
-				return 0;
-			}
 			if (promotes_to_array(ptr)) {
 				if (!prop_info) {
 					break;
@@ -2341,8 +2335,18 @@ static void ZEND_FASTCALL zend_jit_fetch_obj_w_slow(zend_object *zobj)
 
 	ZVAL_INDIRECT(result, retval);
 
-	/* Support for typed properties */
+	/* PHP#: PHP# code checks a slot plain PHP turned into a reference before it writes into it, as the VM does. */
 	uint32_t flags = opline->extended_value & ZEND_FETCH_OBJ_FLAGS;
+	zend_property_info *sharp_info = CACHED_PTR_EX(cache_slot + 2);
+	if (sharp_info && UNEXPECTED(Z_ISREF_P(retval))
+	 && UNEXPECTED(sharp_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
+	 && sharp_function_is_sharp(EX(func))
+	 && UNEXPECTED(!sharp_property_for_write(flags == ZEND_FETCH_DIM_WRITE ? result : NULL, zobj, retval, sharp_info))) {
+		ZVAL_ERROR(result);
+		return;
+	}
+
+	/* Support for typed properties */
 	do {
 		if (flags) {
 			zend_property_info *prop_info = CACHED_PTR_EX(cache_slot + 2);
@@ -2355,9 +2359,8 @@ static void ZEND_FASTCALL zend_jit_fetch_obj_w_slow(zend_object *zobj)
 			}
 		}
 	} while (0);
-	zend_property_info *sharp_info = CACHED_PTR_EX(cache_slot + 2);
 	if (sharp_info && UNEXPECTED(sharp_info->flags & ZEND_ACC_SHARP_TYPED)) {
-		sharp_property_for_plain_write(retval, zobj, sharp_info, flags);
+		sharp_property_for_plain_write(retval, sharp_info, flags);
 	}
 
 	if (UNEXPECTED(Z_TYPE_P(retval) == IS_UNDEF)) {
@@ -2370,6 +2373,20 @@ static void ZEND_FASTCALL zend_jit_check_array_promotion(zval *val, zend_propert
 	zend_execute_data *execute_data = EG(current_execute_data);
 	const zend_op *opline = execute_data->opline;
 	zval *result = EX_VAR(opline->result.var);
+
+	/* PHP#: PHP# code checks a slot plain PHP turned into a reference before it writes into it, as the VM does. */
+	if (UNEXPECTED(Z_ISREF_P(val)) && UNEXPECTED(prop->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
+	 && sharp_function_is_sharp(EX(func))) {
+		ZVAL_INDIRECT(result, val);
+		if (UNEXPECTED(!sharp_property_for_write(result, zobj, val, prop))) {
+			ZVAL_ERROR(result);
+			return;
+		}
+		/* The write goes through the Sharp\Collection of the Map or the Set plain PHP still holds. */
+		if (Z_TYPE_P(result) != IS_INDIRECT) {
+			return;
+		}
+	}
 
 	if ((Z_TYPE_P(val) <= IS_FALSE
 		|| (Z_ISREF_P(val) && Z_TYPE_P(Z_REFVAL_P(val)) <= IS_FALSE))
@@ -2385,7 +2402,7 @@ static void ZEND_FASTCALL zend_jit_check_array_promotion(zval *val, zend_propert
 		ZVAL_ERROR(result);
 	} else {
 		if (UNEXPECTED(prop->flags & ZEND_ACC_SHARP_TYPED)) {
-			sharp_property_for_plain_write(val, zobj, prop, ZEND_FETCH_DIM_WRITE);
+			sharp_property_for_plain_write(val, prop, ZEND_FETCH_DIM_WRITE);
 		}
 		ZVAL_INDIRECT(result, val);
 	}
@@ -3028,6 +3045,8 @@ static void ZEND_FASTCALL zend_jit_assign_obj_op_helper(zend_object *zobj, zend_
 //???			if (UNEXPECTED(RETURN_VALUE_USED(opline))) {
 //???				ZVAL_NULL(EX_VAR(opline->result.var));
 //???			}
+		} else if (UNEXPECTED(!sharp_property_for_change(zobj, zptr, CACHED_PTR_EX(cache_slot + 2)))) {
+			return;
 		} else {
 //???			zval *orig_zptr = zptr;
 			zend_reference *ref;
@@ -3317,6 +3336,10 @@ static void ZEND_FASTCALL zend_jit_pre_inc_obj_helper(zend_object *zobj, zend_st
 			if (UNEXPECTED(result)) {
 				ZVAL_NULL(result);
 			}
+		} else if (UNEXPECTED(!sharp_property_for_change(zobj, prop, CACHED_PTR_EX(cache_slot + 2)))) {
+			if (UNEXPECTED(result)) {
+				ZVAL_UNDEF(result);
+			}
 		} else {
 			zend_property_info *prop_info = (zend_property_info *) CACHED_PTR_EX(cache_slot + 2);
 			if (prop_info && !ZEND_TYPE_IS_SET(prop_info->type)) {
@@ -3394,6 +3417,10 @@ static void ZEND_FASTCALL zend_jit_pre_dec_obj_helper(zend_object *zobj, zend_st
 			if (UNEXPECTED(result)) {
 				ZVAL_NULL(result);
 			}
+		} else if (UNEXPECTED(!sharp_property_for_change(zobj, prop, CACHED_PTR_EX(cache_slot + 2)))) {
+			if (UNEXPECTED(result)) {
+				ZVAL_UNDEF(result);
+			}
 		} else {
 			zend_property_info *prop_info = (zend_property_info *) CACHED_PTR_EX(cache_slot + 2);
 			if (prop_info && !ZEND_TYPE_IS_SET(prop_info->type)) {
@@ -3469,6 +3496,8 @@ static void ZEND_FASTCALL zend_jit_post_inc_obj_helper(zend_object *zobj, zend_s
 	if (EXPECTED((prop = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 		if (UNEXPECTED(Z_ISERROR_P(prop))) {
 			ZVAL_NULL(result);
+		} else if (UNEXPECTED(!sharp_property_for_change(zobj, prop, CACHED_PTR_EX(cache_slot + 2)))) {
+			ZVAL_UNDEF(result);
 		} else {
 			zend_property_info *prop_info = (zend_property_info*)CACHED_PTR_EX(cache_slot + 2);
 			if (prop_info && !ZEND_TYPE_IS_SET(prop_info->type)) {
@@ -3537,6 +3566,8 @@ static void ZEND_FASTCALL zend_jit_post_dec_obj_helper(zend_object *zobj, zend_s
 	if (EXPECTED((prop = zobj->handlers->get_property_ptr_ptr(zobj, name, BP_VAR_RW, cache_slot)) != NULL)) {
 		if (UNEXPECTED(Z_ISERROR_P(prop))) {
 			ZVAL_NULL(result);
+		} else if (UNEXPECTED(!sharp_property_for_change(zobj, prop, CACHED_PTR_EX(cache_slot + 2)))) {
+			ZVAL_UNDEF(result);
 		} else {
 			zend_property_info *prop_info = (zend_property_info*)CACHED_PTR_EX(cache_slot + 2);
 			if (prop_info && !ZEND_TYPE_IS_SET(prop_info->type)) {
@@ -3613,7 +3644,7 @@ static void ZEND_FASTCALL zend_jit_sharp_static_write(zval *slot, const zend_pro
 {
 	if (!EG(exception)
 			&& (!(info->flags & ZEND_ACC_PPP_SET_MASK) || zend_asymmetric_property_has_set_access(info))) {
-		sharp_property_for_plain_write(slot, NULL, info, flags);
+		sharp_property_for_plain_write(slot, info, flags);
 	}
 }
 

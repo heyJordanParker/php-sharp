@@ -67,6 +67,110 @@ public class Carton
 
     public int secondDoubled() => this.counts[1] * 2;
 
+    public int bumpSecond()
+    {
+        this.counts[1] += 1;
+
+        return this.counts[1];
+    }
+
+    public int incrementSecond()
+    {
+        this.counts[1]++;
+
+        return this.counts[1];
+    }
+
+    public Map<string, int> tallies { get; set; } = ["top": 9223372036854775807, "low": 1];
+
+    public string talliesText() => `${Probe.join(",", this.tallies.keys())}=${Probe.join(",", this.tallies.values())}`;
+
+    public Map<string, List<string>> shelves { get; set; } = ["k": ["a"]];
+
+    public string shelvesText() => Probe.join(",", this.shelves["k"] ?? []);
+
+    public Map<string, Map<string, int>> nested { get; set; } = ["k": ["n": 1]];
+
+    public string nestedText() => Probe.join(",", (this.nested["k"] ?? [:]).values());
+
+    public string tagsText() => Probe.join(",", (this.tags["a"] ?? []).toList());
+
+    public static Map<string, int> stock { get; set; } = ["a": 1];
+
+    public static string stockText() => `${Probe.join(",", Carton.stock.keys())}=${Probe.join(",", Carton.stock.values())}`;
+
+    public static int bumpTotal()
+    {
+        Carton.totals[1] += 1;
+
+        return Carton.totals[1];
+    }
+
+    // Each Map PHP# code makes, handed to plain PHP as the object, which writes `value` under `key` into it.
+    public void handLiteral(string key, Any? value)
+    {
+        Probe.put(["a": 1], key, value);
+    }
+
+    public void handGrouped(string key, Any? value)
+    {
+        Probe.put(this.counts.groupBy(n => n % 2 == 0 ? "even" : "odd"), key, value);
+    }
+
+    public void handAssociated(string key, Any? value)
+    {
+        Probe.put(this.counts.associateBy(n => `${n}`), key, value);
+    }
+
+    public void handEntries(string key, Any? value)
+    {
+        Probe.put(this.counts.entries(), key, value);
+    }
+
+    public void handSet(Any? value)
+    {
+        Probe.add(this.counts.toSet(), value);
+    }
+
+    // A Map a parameter, a result and a method value make, each typed with the classes and type parameters it names.
+    public void handGiven(Map<Level, Carton> given, string key, Any? value)
+    {
+        Probe.put(given, key, value);
+    }
+
+    public Map<string, Carton> sameOf(Map<string, Carton> given) => Probe.same(given);
+
+    public void handResult(Map<string, Carton> given, string key, Any? value)
+    {
+        Probe.put(this.sameOf(given), key, value);
+    }
+
+    public void handLocal(Map<string, Carton> given, string key, Any? value)
+    {
+        Map<string, Carton> same = Probe.same(given);
+        Probe.put(same, key, value);
+    }
+
+    public void handEntriesValue(string key, Any? value)
+    {
+        this.entriesOf<string>(["a"], key, value);
+    }
+
+    private void entriesOf<TItem>(List<TItem> items, string key, Any? value)
+    {
+        const made = items.entries;
+        Probe.put(made(), key, value);
+    }
+
+    public List<int>|bool marks { get; set; } = false;
+
+    public string marksText()
+    {
+        const marks = this.marks;
+
+        return marks is List<int> ? Probe.join(",", marks) : "bool";
+    }
+
     public int gridFirst() => this.grid[0][0];
 
     public string countsText() => Probe.join(",", this.counts);
