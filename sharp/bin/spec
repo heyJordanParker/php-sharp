@@ -32,6 +32,12 @@ const RUN_MARKER = '<!-- run ';
 const REFUSAL = 'not supported yet';
 // The checker's refusal of a construct no rule names, which says nothing about the rule a line states.
 const GENERIC_REFUSAL = '~^This .+ is not part of PHP#\.$~';
+// The codes of the errors that say mago could not read the line: the parser's and the lexer's.
+const UNREADABLE_CODES = ['parse', 'syntax'];
+// The primary annotation message of a parse error the parser writes to name a PHP# rule, such as "A PHP# parameter
+// needs a type, as in `int extra`.", in every mago. Any other error of UNREADABLE_CODES says the line could not be read,
+// whatever its message, so a new kind of parse error never satisfies a `compile error` line.
+const RULE_MARKER = 'Written here.';
 const RUNTIME = ['value', 'throws', 'message'];
 // The errors mago reports at a construct's first line for the whole construct, by code, or by message when the code is
 // the generic `semantics`. Only these move to the `compile error` line inside the construct. A new one joins in a PR of its own.
@@ -854,7 +860,7 @@ function run_all(array $commands): array
     return $results;
 }
 
-/** @return list<array{name: string, line: int, message: string, code: string}> the errors of a mago compile's JSON report, with lines counted from 0 as mago counts them */
+/** @return list<array{name: string, line: int, message: string, code: string, rule: bool}> the errors of a mago compile's JSON report, with lines counted from 0 as mago counts them, each with whether it carries the RULE_MARKER */
 function compile_errors(string $stdout): array
 {
     $start = strpos($stdout, '{');
@@ -871,12 +877,18 @@ function compile_errors(string $stdout): array
                 break;
             }
         }
-        $message = $issue['message'] . ($issue['code'] === 'parse' && $primary !== null ? ' ' . $primary['message'] : '');
+        // A parse or lexer error titled "Parse error encountered during parsing" or "Syntax error encountered during
+        // lexing" quotes the code in its primary annotation, and a parse error that names a PHP# rule carries the
+        // RULE_MARKER there: either joins the message. One whose message quotes the code itself has no annotation message.
+        $annotated = $primary['message'] ?? null;
+        $quoted = in_array($issue['code'], UNREADABLE_CODES, true) ? $annotated : null;
+        $message = $issue['message'] . ($quoted !== null ? ' ' . $quoted : '');
         $errors[] = [
             'name' => $primary['span']['file_id']['name'] ?? '',
             'line' => $primary['span']['start']['line'] ?? 0,
             'message' => $message,
             'code' => $issue['code'],
+            'rule' => $annotated === RULE_MARKER,
         ];
     }
 
@@ -1058,8 +1070,8 @@ function check_compile(array $example, array $reads, array $files, array $varian
             }
         }
         $where = where($block, $i);
-        $parse = $error['code'] === 'parse';
-        $unreadable = $parse && str_starts_with($error['message'], 'Parse error encountered');
+        $parse = in_array($error['code'], UNREADABLE_CODES, true);
+        $unreadable = $parse && !$error['rule'];
         // A refusal says the feature is missing or names no rule, and a missing class says the setup is: none is the rule
         // the line states. A missing class the marked line names itself is the line's own error, as `on OrderPayed` names
         // no event. mago quotes the missing name last.
