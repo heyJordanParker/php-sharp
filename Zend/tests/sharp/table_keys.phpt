@@ -171,6 +171,10 @@ for ($round = 0; $round < 100; $round++) {
     echo ', in a List: ', $counted[[new Counted(1)]], ' ', Counted::$compared, "\n";
     $set = new Set([5, 5.0, '5', Tone::Warm, Tone::Warm]);
     echo 'a Set: ', count($set), ' ', var_export(isset($set[5.0]), true), ' ', var_export(isset($set['6']), true), "\n";
+    // NAN equals nothing, itself included (spec section 19), so each NAN is an element of its own and none is found.
+    $nan = new Set([NAN, NAN, 1.0]);
+    $nanMap = new Map([NAN, 'a']);
+    echo 'NAN in a Set: ', count($nan), ' ', var_export(isset($nan[NAN]), true), ', in a Map: ', var_export($nanMap[NAN], true), "\n";
     $prices = new Map([new Cents(5, 'first'), 'tea']);
     echo 'a read: ', $prices[new Cents(5, 'other')], ' ', var_export($prices[new Cents(6, 'none')], true), "\n";
     try {
@@ -207,5 +211,6 @@ a Set, regardless of order: Sharp\Set[1,2] => b, Sharp\Set[1] => c
 a removal inside a chain: acNULL cNULL 1
 a key under another hash is never compared: a 1, in a List: a 1
 a Set: 3 true false
+NAN in a Set: 3 false, in a Map: NULL
 a read: tea NULL
 a resource: A Map key or a Set element can't be of type resource

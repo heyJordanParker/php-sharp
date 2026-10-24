@@ -223,10 +223,11 @@ static uint32_t sharp_hash_combine(uint32_t hash, uint32_t next)
 }
 
 /* A double whose value is a whole number an int holds hashes as that int, since 5 == 5.0 (spec section 19), and -0.0
- * as 0. */
+ * as 0. NAN equals nothing, itself included, so its bits are as good a hash as any, and ZEND_DOUBLE_FITS_LONG, which
+ * holds for NAN, must not cast it. */
 static uint32_t sharp_hash_double(double number)
 {
-	if (ZEND_DOUBLE_FITS_LONG(number) && (double) (zend_long) number == number) {
+	if (!zend_isnan(number) && ZEND_DOUBLE_FITS_LONG(number) && (double) (zend_long) number == number) {
 		return sharp_hash_bits((uint64_t) (zend_long) number);
 	}
 
