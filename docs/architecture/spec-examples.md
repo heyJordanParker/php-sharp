@@ -2,7 +2,7 @@
 
 `docs/spec.md` is the definition of PHP# v1, and `README.md` shows its first example. Every rule comes with code annotated `// compiles`, `// compile error: …`, `// throws …` or the value a line gives. `sharp/bin/spec` compiles every one of those blocks with the `mago` built from `sharp/mago/`, runs the ones that claim a runtime result on the engine, and compares each annotated line with its annotation.
 
-The examples that fail today are listed in `sharp/baseline/spec/`, one empty file each. Their count is the v1 meter: v1 is done when the folder is gone. CI keeps the list honest: an example that passes leaves it, an example off it passes, and an example the base already checked never joins it.
+An example that fails is listed in `sharp/baseline/spec/`, one empty file each. Their count was the v1 meter, and every example passes today, so the folder is gone. CI keeps the list honest: an example that passes leaves it, an example off it passes, and an example the base already checked never joins it.
 
 ## Precedents
 
@@ -36,7 +36,7 @@ Every `csharp`, `ts` and `php` block in `docs/spec.md` and `README.md` has a mar
 - **Setup lines** are compiled with the block and never rendered. They are PHP# for a PHP# block and PHP for a PHP block.
 - **Two blocks with the same `<id>`** are one example with two files, such as a plain PHP caller and the PHP# class it calls. The blocks must be next to each other.
 - **A template** replaces the shape when none fits. It is the setup with a line holding only `…`, where the block goes. The block's namespace, import and type declaration lines still go to the head of the file, and every other line goes in the `…` slot.
-- **`<!-- example <id>: ignore <reason> -->`** skips a block that is not complete code by design. Only two blocks have it: `naming-values` in §16 and `native-body` in §29. Adding `ignore` to an example that had none counts as adding an entry to the list, also under a new id: an ignored block whose code a checked example ran at the base fails the comparison.
+- **`<!-- example <id>: ignore <reason> -->`** skips a block that is not complete code by design. Only one block has it: `naming-values` in §16. Adding `ignore` to an example that had none counts as adding an entry to the list, also under a new id: an ignored block whose code a checked example ran at the base fails the comparison.
 
 **Run lines** follow the closing fence of the example's last block in a second hidden comment, for a claim the block itself can't run:
 
@@ -207,7 +207,7 @@ A block's own variables, such as `lines` or `p`, are its setup lines, next to th
 
 ## The list
 
-`sharp/baseline/spec/` holds one empty file per example that fails, at `<section>/<id>`. towncrier keeps changelog entries the same way, one news fragment per file, so pull requests that list or fix different examples never edit the same file and never conflict.
+`sharp/baseline/spec/` holds one empty file per example that fails, at `<section>/<id>`. towncrier keeps changelog entries the same way, one news fragment per file, so pull requests that list or fix different examples never edit the same file and never conflict. No example fails today, so the folder does not exist. A list of three would read:
 
 ```text
 sharp/baseline/spec/
@@ -224,8 +224,6 @@ sharp/baseline/spec/
 **The list records which examples fail, not how,** as test262's expected-failure lists do in V8 and SpiderMonkey. A listed example may change its errors, so a checker that turns a parse error into a named "not supported yet" refusal passes, and so does a later change to `sharp/mago/` that does the same. The list doesn't notice a listed example getting worse. Mago's own tests and `Zend/tests/sharp/` cover the rules those examples use.
 
 `sharp/bin/spec` fails when the list differs from what the examples do, and prints the commands that make it match: `git rm -q sharp/baseline/spec/<section>/<id>` for an example that passes, and `mkdir -p` and `touch` for one that fails. An example that fails prints every line that differs from its annotation, with the checker's message or the value it gave.
-
-**An open pull request that edited the old one-file list** converts once, when it merges master. git reports a modify/delete conflict on the file `sharp/baseline/spec`. Resolve it with `git rm sharp/baseline/spec`, then run `sharp/bin/test --spec` and the commands it prints: they delete the files of the examples the pull request fixed and add the files of examples it lists.
 
 ## CI
 
@@ -309,7 +307,7 @@ Measured on an Apple M-series Mac with `mago` at mago-sharp commit `449377ad4`, 
 - **Four at once with `MAGO_THREADS=1`:** 0.18 seconds for all four.
 - **One run on the engine:** 0.13 seconds for the README's plain PHP caller.
 
-`sharp/bin/spec` runs four single-threaded compiles at a time. A full run over the 161 examples, 159 checked and 2 ignored, takes 26 seconds on that Mac.
+`sharp/bin/spec` runs four single-threaded compiles at a time. A full run over the 276 examples, 275 checked and 1 ignored, took 197 seconds on 10-24, on an Apple M-series Mac with a debug build of `mago` from `sharp/mago/` and a debug build of the engine.
 
 ## Files
 
@@ -320,7 +318,7 @@ sharp/
 ├── bin/
 │   ├── spec              # (guarded) new: PHP, like census. Checks every example, compares with a base (--base), reads Completes: (--completes), or tests its own rules (--self-test)
 │   └── test              # --spec runs sharp/bin/spec --self-test, then sharp/bin/spec, after the suite
-├── baseline/spec/        # new: one empty file per example that fails today, the v1 meter
+├── baseline/spec/        # one empty file per example that fails, absent while every example passes
 ├── spec-self-test.md     # one example for each rule sharp/bin/spec applies, with the problems it must report
 ├── docker/
 │   ├── Dockerfile        # installs elan, for the law examples
@@ -342,4 +340,4 @@ docs/how-we-work.md       # a PR that completes a section says Completes: §N
 
 ## The markers
 
-`docs/spec.md` has a marker above each of its 162 checked blocks, and `README.md` above each of its 2. Three examples have two blocks, so there are 161 examples in all: 159 checked and 2 ignored. Four examples have run lines: `copy-on-write`, `capture-by-reference`, `capture-and-change` and `environment`. The markers themselves are the record, so this note lists none of them by line.
+`docs/spec.md` has a marker above each of its 385 blocks, and `README.md` above each of its 2. An example of several files has a block for each, so there are 277 examples in all: 276 checked and 1 ignored, `naming-values`. 18 examples have run lines, such as `copy-on-write`, `capture-by-reference`, `capture-and-change` and `environment`. The markers themselves are the record, so this note lists none of them by line.
