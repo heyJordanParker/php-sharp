@@ -1,12 +1,14 @@
-# syntax=docker/dockerfile:1
 #
 # docker-library/php 8.5/trixie/zts at f6048b5f6e3c2202ee082665a4ccc0d90de291a3, built from this repository's source
 # instead of the php.net tarball, then FrankenPHP v1.13.0's Dockerfile stages on top of it, as FrankenPHP builds on
 # php:8.5-zts-trixie.
 #
 
-ARG BASE_IMAGE=public.ecr.aws/docker/library/debian:trixie-slim
-ARG GOLANG_IMAGE=public.ecr.aws/docker/library/golang:1.27-trixie
+# The images are pinned by their digests, and .github/workflows/base-images.yml moves the digests in a pull request.
+# CI sets REGISTRY to ghcr.io/heyjordanparker, where base-images.yml copies the images under the same digests.
+ARG REGISTRY=public.ecr.aws/docker/library
+ARG BASE_IMAGE=${REGISTRY}/debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
+ARG GOLANG_IMAGE=${REGISTRY}/golang:1.27-trixie@sha256:fbb7ae40b62ff8afe31662df570d39b4f5052ac32b90dae8e60d7657a20a74f4
 FROM ${BASE_IMAGE} AS source
 
 RUN set -eux; \

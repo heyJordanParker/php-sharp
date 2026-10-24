@@ -48,7 +48,7 @@ jobs:
           echo "Commit $GITHUB_SHA ran and passed every PHP# suite on master: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
       - name: git checkout
         if: github.ref_type != 'tag'
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Find changes outside documentation
         id: diff
         if: github.ref_type != 'tag'
@@ -80,7 +80,7 @@ jobs:
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
     steps:
       - name: git checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Pull the base images from ghcr.io
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -95,7 +95,7 @@ jobs:
             exit 1
           fi
       - name: Rust cache
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             sharp/build/cargo
@@ -104,7 +104,7 @@ jobs:
       # sharp/bin/test builds mago from sharp/mago into sharp/build/<os>-<arch>/mago. The cache keeps the
       # dependencies' build, and cargo rebuilds Mago's own crates.
       - name: Mago cache
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: sharp/build/*/mago
           key: SHARP_LINUX_MAGO-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.lock') }}
@@ -146,7 +146,7 @@ jobs:
       - name: Keep php-fpm and mago for HOSTS
         run: tar -cf "$RUNNER_TEMP/hosts-nts.tar" "sharp/build/linux-$(uname -m)/sapi/fpm/php-fpm" "sharp/build/linux-$(uname -m)/mago/release/mago"
       - name: Upload php-fpm and mago for HOSTS
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: hosts-nts
           path: ${{ runner.temp }}/hosts-nts.tar
@@ -167,7 +167,7 @@ jobs:
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
     steps:
       - name: git checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Pull the base images from ghcr.io
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -176,7 +176,7 @@ jobs:
           docker pull "$BASE_IMAGE"
           docker pull "$GOLANG_IMAGE"
       - name: Rust cache
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             sharp/build/cargo
@@ -184,7 +184,7 @@ jobs:
           key: SHARP_LINUX_RUST-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
       # sharp/bin/test --zts builds mago into the other build's folder, sharp/build/<os>-<arch>/mago, as LINUX does.
       - name: Mago cache
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: sharp/build/*/mago
           key: SHARP_LINUX_MAGO-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.lock') }}
@@ -198,7 +198,7 @@ jobs:
           install="sharp/build/linux-$(uname -m)-zts/install"
           tar -cf "$RUNNER_TEMP/hosts-zts.tar" "$install/lib" "$install/include" "$install/bin/php-config"
       - name: Upload the installed engine for HOSTS
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: hosts-zts
           path: ${{ runner.temp }}/hosts-zts.tar
@@ -218,7 +218,7 @@ jobs:
       GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
     steps:
       - name: git checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Pull the base images from ghcr.io
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -227,17 +227,17 @@ jobs:
           docker pull "$BASE_IMAGE"
           docker pull "$GOLANG_IMAGE"
       - name: Go module cache
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: sharp/build/go/pkg/mod
           key: SHARP_HOSTS_GO-${{ hashFiles('sharp/bin/hosts', 'sharp/docker/Dockerfile') }}
       - name: Download php-fpm and mago
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: hosts-nts
           path: ${{ runner.temp }}
       - name: Download the installed engine
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: hosts-zts
           path: ${{ runner.temp }}
@@ -275,35 +275,46 @@ jobs:
             docker-run: --publish 8443:443 --volume "$RUNNER_TEMP/public:/app/public:ro"
             request: curl --silent --show-error --fail --insecure https://localhost:8443/
             sapi: frankenphp
-    # The image builds FROM base-images.yml's copies, as IMAGE's does.
+    # The image builds FROM base-images.yml's copies at the digests the Dockerfiles pin, as IMAGE's does.
     env:
-      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie-slim
-      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
+      REGISTRY: ghcr.io/heyjordanparker
       EXTENSIONS: bcmath exif gd imagick intl pcntl pdo_pgsql pgsql redis zip
       # The same extensions, with imagick and redis built from the release tags the image adds from GitHub, because
       # pecl.php.net outages failed this job.
       INSTALL: bcmath exif gd /usr/src/imagick intl pcntl pdo_pgsql pgsql /usr/src/phpredis zip
     steps:
       - name: git checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Log in to ghcr.io
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
       - name: Rust cache
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             sharp/build/cargo
             sharp/build/rustup
           key: SHARP_LINUX_RUST-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
       - name: Mago cache
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: sharp/build/*/mago
           key: SHARP_LINUX_MAGO-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.lock') }}
       - name: Build the image
-        run: git archive HEAD | docker build --build-arg BASE_IMAGE --build-arg GOLANG_IMAGE --file "${{ matrix.file }}" --tag php-sharp -
+        run: git archive HEAD | docker build --build-arg REGISTRY --file "${{ matrix.file }}" --tag php-sharp -
+      # A critical or high CVE that a fixed package resolves fails the build, so it is fixed before IMAGE publishes,
+      # which takes only a commit whose PHP_EXTENSIONS passed on master. aquasecurity/trivy-action's v0.35.0 and
+      # later are immutable releases, made after its tags were rewritten to malware on 2026-03-19, and Trivy's
+      # v0.71.1 and later fix GHSA-mcj4-mphf-j9ff.
+      - name: Scan the image for fixable critical and high CVEs
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: php-sharp
+          version: v0.76.1
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
       - name: Install cgi-fcgi
         if: matrix.sapi == 'fpm-fcgi'
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libfcgi-bin
@@ -368,7 +379,7 @@ jobs:
       FORMULAE: autoconf bison curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
     steps:
       - name: git checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: brew
         if: runner.environment == 'github-hosted'
         run: brew install $FORMULAE
@@ -388,7 +399,7 @@ jobs:
           rustc --version
           cargo --version
       - name: Mago cache
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: sharp/build/*/mago
           key: SHARP_MACOS_MAGO-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.lock') }}
@@ -419,7 +430,7 @@ jobs:
     concurrency: composer-${{ github.ref }}
     steps:
       - name: git checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
       - name: Split sharp/composer
@@ -429,7 +440,7 @@ jobs:
           tar -xzf "$RUNNER_TEMP/splitsh-lite.tar.gz" -C "$RUNNER_TEMP"
           "$RUNNER_TEMP/splitsh-lite" --prefix=sharp/composer --target=refs/heads/composer
       - name: git checkout heyJordanParker/php-sharp-composer
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: heyJordanParker/php-sharp-composer
           ssh-key: ${{ secrets.PHP_SHARP_COMPOSER_DEPLOY_KEY }}
@@ -440,11 +451,15 @@ jobs:
         run: |
           git fetch "$GITHUB_WORKSPACE" refs/heads/composer
           git push origin "FETCH_HEAD:$GITHUB_REF"
+      # A tag's heyJordanParker/mago-sharp version pins the SHA-256 of every release asset, which exist only once
+      # release.yml has built them, so release.yml's COMPOSER job pushes that tag.
       - name: Split sharp/mago
+        if: github.ref_type == 'branch'
         run: |
           "$RUNNER_TEMP/splitsh-lite" --prefix=sharp/mago --target=refs/heads/mago
       - name: git checkout heyJordanParker/mago-sharp
-        uses: actions/checkout@v6
+        if: github.ref_type == 'branch'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: heyJordanParker/mago-sharp
           ssh-key: ${{ secrets.MAGO_SHARP_DEPLOY_KEY }}
@@ -455,47 +470,124 @@ jobs:
       # push is skipped until that branch is rewritten once. git subtree split would keep that history, but it
       # walks all of Mago's history in shell recursion and took more than 8 minutes without finishing.
       - name: Push the split
+        if: github.ref_type == 'branch'
         working-directory: sharp/build/mago-sharp
         run: |
           git fetch "$GITHUB_WORKSPACE" refs/heads/mago
-          if [[ $GITHUB_REF_TYPE == branch ]] && git rev-parse -q --verify "origin/$GITHUB_REF_NAME" > /dev/null \
+          if git rev-parse -q --verify "origin/$GITHUB_REF_NAME" > /dev/null \
             && ! git merge-base --is-ancestor "origin/$GITHUB_REF_NAME" FETCH_HEAD; then
             echo "::warning::The split of sharp/mago does not contain heyJordanParker/mago-sharp's $GITHUB_REF_NAME, so pushing it would rewrite that branch. The push is skipped."
             exit 0
           fi
           git push origin "FETCH_HEAD:$GITHUB_REF"
   # One image per host, under one name: php-fpm's as <version>, FrankenPHP's as <version>-frankenphp, as
-  # docker-library names 8.5-fpm and 8.5-zts.
+  # docker-library names 8.5-fpm and 8.5-zts. Each platform builds on a runner of its own architecture and pushes
+  # its image by digest, with BuildKit's provenance and SBOM attestations, and IMAGE_TAGS tags the two as one.
+  # BuildKit, its SBOM scanner and the bases are base-images.yml's copies in ghcr.io at pinned digests, pulled after
+  # the login, so no pull is an anonymous Docker Hub pull (#86).
   IMAGE:
+    name: IMAGE (${{ matrix.host.file }}, ${{ matrix.platform }})
     if: github.ref_type == 'tag'
     needs: CHANGES
-    strategy:
-      matrix:
-        include:
-          - file: sharp/docker/runtime/Dockerfile
-            flavor: latest=false
-            build-args: BASE_IMAGE=ghcr.io/heyjordanparker/debian:trixie-slim
-          - file: sharp/docker/runtime/frankenphp.Dockerfile
-            flavor: latest=false,suffix=-frankenphp
-            build-args: |
-              BASE_IMAGE=ghcr.io/heyjordanparker/debian:trixie-slim
-              GOLANG_IMAGE=ghcr.io/heyjordanparker/golang:1.27-trixie
-    uses: docker/github-builder/.github/workflows/build.yml@58cb9f5b71b1836d6f690c1e95effdeb9b98cb8a # v1.17.0
+    runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     permissions:
       contents: read
-      id-token: write
       packages: write
-    with:
-      output: image
-      push: true
-      file: ${{ matrix.file }}
-      build-args: ${{ matrix.build-args }}
-      platforms: linux/amd64,linux/arm64
-      meta-images: ghcr.io/heyjordanparker/php-sharp
-      meta-tags: type=semver,pattern={{version}}
-      meta-flavor: ${{ matrix.flavor }}
-    secrets:
-      registry-auths: |
-        - registry: ghcr.io
+    strategy:
+      matrix:
+        host:
+          - { file: sharp/docker/runtime/Dockerfile, name: fpm }
+          - { file: sharp/docker/runtime/frankenphp.Dockerfile, name: frankenphp }
+        platform: [linux/amd64, linux/arm64]
+    steps:
+      - name: Log in to ghcr.io
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Buildx with BuildKit from ghcr.io
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: image=ghcr.io/heyjordanparker/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
+      # The build's context is the tagged commit's tree, which BuildKit fetches from GitHub by the commit's SHA, so
+      # a tag moved after the push builds nothing else, as docker/github-builder's checksum pinned it.
+      - name: Build and push the image by digest
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ github.server_url }}/${{ github.repository }}.git#${{ github.sha }}
+          file: ${{ matrix.host.file }}
+          platforms: ${{ matrix.platform }}
+          build-args: REGISTRY=ghcr.io/heyjordanparker
+          provenance: mode=max
+          sbom: generator=ghcr.io/heyjordanparker/buildkit-syft-scanner:1.12.0@sha256:ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9
+          outputs: type=image,name=ghcr.io/heyjordanparker/php-sharp,push-by-digest=true,name-canonical=true,push=true
+      - name: Keep the digest for IMAGE_TAGS
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - name: Upload the digest for IMAGE_TAGS
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: digest-${{ matrix.host.name }}-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+  # Tags each host's two platform images as one image, and attests its provenance with the repository's identity,
+  # which `gh attestation verify oci://ghcr.io/heyjordanparker/php-sharp:<tag> --repo heyJordanParker/php-sharp`
+  # checks.
+  IMAGE_TAGS:
+    name: IMAGE_TAGS (${{ matrix.host.name }})
+    needs: IMAGE
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      matrix:
+        host:
+          - { name: fpm, suffix: '' }
+          - { name: frankenphp, suffix: -frankenphp }
+    steps:
+      - name: Download the platforms' digests
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: digest-${{ matrix.host.name }}-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+      - name: Log in to ghcr.io
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tag the platforms' images as one image
+        id: tag
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          SUFFIX: ${{ matrix.host.suffix }}
+        run: |
+          image=ghcr.io/heyjordanparker/php-sharp
+          tag="$image:${GITHUB_REF_NAME#v}$SUFFIX"
+          sources=()
+          for digest in *; do
+            sources+=("$image@sha256:$digest")
+          done
+          if [[ ${#sources[@]} != 2 ]]; then
+            echo "::error::IMAGE pushed ${#sources[@]} platform images for $tag, not linux/amd64's and linux/arm64's."
+            exit 1
+          fi
+          docker buildx imagetools create --tag "$tag" "${sources[@]}"
+          docker buildx imagetools inspect "$tag"
+          echo "digest=$(docker buildx imagetools inspect "$tag" --format '{{json .Manifest}}' | jq -r .digest)" >> "$GITHUB_OUTPUT"
+      - name: Attest the image's provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-name: ghcr.io/heyjordanparker/php-sharp
+          subject-digest: ${{ steps.tag.outputs.digest }}
+          push-to-registry: true

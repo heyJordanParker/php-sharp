@@ -1,0 +1,70 @@
+name: Fuzz
+# sharp/mago/crates/syntax/fuzz holds libFuzzer targets for the lexer, and for the parser in the PHP and PHP#
+# dialects. PHP and PHP# source is user input, so every day each target runs for 10 minutes, seeded from the
+# fixtures the Justfile's fuzz recipes use. A panic, an abort, a stack overflow, or an input that runs past
+# libFuzzer's per-input timeout fails the job, and the input that caused it is uploaded as an artifact.
+on:
+  schedule:
+    - cron: '43 3 * * *'
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - .github/workflows/fuzz.yml
+      - sharp/mago/crates/syntax/fuzz/**
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
+  cancel-in-progress: true
+jobs:
+  FUZZ:
+    name: FUZZ (${{ matrix.target }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: lexer
+            seeds: ../tests/fixtures ../../analyzer/tests/cases ../../formatter/tests/cases
+          - target: parser
+            seeds: ../tests/fixtures ../../analyzer/tests/cases ../../formatter/tests/cases
+          - target: sharp_parser
+            seeds: ../../semantics/tests/fixtures ../../../tests/fixtures/sharp
+    defaults:
+      run:
+        working-directory: sharp/mago/crates/syntax/fuzz
+    steps:
+      - name: git checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      # libFuzzer's instrumentation needs nightly.
+      - name: Install nightly Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: nightly
+      - name: Cache cargo-fuzz
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ~/.cargo/bin/cargo-fuzz
+          key: cargo-fuzz-0.13.2-${{ runner.os }}
+      - name: Install cargo-fuzz
+        run: |
+          if ! command -v cargo-fuzz > /dev/null; then
+            cargo install cargo-fuzz --version 0.13.2 --locked
+          fi
+      - name: Fuzz ${{ matrix.target }} for 10 minutes
+        env:
+          TARGET: ${{ matrix.target }}
+          SEEDS: ${{ matrix.seeds }}
+        run: |
+          # shellcheck disable=SC2086 # SEEDS is a list of directories.
+          cargo +nightly fuzz run "$TARGET" "corpus/$TARGET" $SEEDS -- -max_total_time=600
+      - name: Upload the input that crashed ${{ matrix.target }}
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fuzz-${{ matrix.target }}-crash
+          path: sharp/mago/crates/syntax/fuzz/artifacts/${{ matrix.target }}
+          if-no-files-found: ignore
