@@ -1494,7 +1494,7 @@ PHP's `["key" => value]` is not used, because `=>` is the lambda arrow.
 
 <!-- example empty-literals: statements alone -->
 ```csharp
-let messages = [];                             // compile error: an empty literal needs a type: write List<string> messages = []
+let messages = [];                             // compile error: an empty literal needs a type: write the type of its elements, as in List<string> messages = []
 List<string> messages = [];                    // compiles
 ```
 
@@ -3515,7 +3515,7 @@ const paid = result as PaymentResult.Paid ?? throw new NotPaid(result);
 ```
 
 - **`is`** tests a value against any pattern, and creates the pattern's variables when it matches.
-- **Narrowing:** after `is` without a name, a local variable or parameter counts as the tested type for the rest of the block. Assigning to it inside the block ends the narrowing. Properties are not narrowed, because they could change between the test and the use. To use a property's tested value, bind it to a name, as in `is int t`.
+- **Narrowing:** after `is` without a name, a local variable or parameter counts as the tested type for the rest of the block. Assigning to it inside the block ends the narrowing. A local or parameter that a lambda assigns is never narrowed, because the lambda may run between the test and the use, as Kotlin decides a smart cast. A lambda keeps the narrowing of a local it reads only when no assignment can run after the lambda is created, as TypeScript decides. Properties are not narrowed, because they could change between the test and the use. To use the tested value of such a local or of a property, bind it to a name, as in `is int t`.
 
 <!-- example narrowing: statements
 Any? entity = new Page();
@@ -3678,11 +3678,17 @@ if (items.count() > 0) { … }
 
 ## 22. Inheritance
 
-The class header lists the base class and interfaces after `:`. The checker knows which name is the class.
+The class header lists the base class and interfaces after `:`. The checker knows which name is the class. A class or an interface that inherits from itself, through its own header or a chain of headers, is a compile error that names the chain, as C#'s CS0146 and Java's cyclic inheritance error are.
 
 <!-- example class-header -->
 ```csharp
 public class Page : DatabaseEntity, Linkable, Shareable { … }
+```
+
+<!-- example inheritance-cycle -->
+```csharp
+public class Folder : Shortcut { }   // compile error: Folder inherits from itself: Folder → Shortcut → Folder
+public class Shortcut : Folder { }   // compile error: Shortcut inherits from itself: Shortcut → Folder → Shortcut
 ```
 
 **Methods of a PHP# class are closed unless the class opens them** with `virtual`, or by declaring them `abstract`. A subclass replaces a method only with a required `override`:
@@ -4449,7 +4455,7 @@ public User find(int|string id)
 
 **A union that holds null is written `(int|string)?`,** with the same `?` as any other type. `int|string|null` is a compile error that names `(int|string)?`, and `int|null` one that names `int?`.
 
-- `null`, `true` and `false` are values, not types. `null` alone as a type is a compile error that names `T?`, and `true` or `false` alone is one that names `bool`.
+- `null`, `true` and `false` are values, not types. `null` alone as a type is a compile error that says to write a type with `?` after it, as in `int?`. `true` or `false` alone, PHP's types, fails as a typo does.
 
 <!-- example nullable-unions: members -->
 ```csharp
@@ -5671,7 +5677,7 @@ The standard library's ten effect classes, listed above, are `foreign` classes. 
 
 **`Events` is the effect of `emit`** (section 15). It is the one standard effect that is not a `foreign` class: a method has it when its body emits, and no object carries it.
 
-**PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS` are compile errors. For the environment and the command-line arguments, the error names `Environment`. For request data, it names a parameter that takes it. PHP# has no global variables, so for `$GLOBALS` it names a constructor or method parameter that takes the value. The process environment arrives as `Environment`, a standard `foreign` class like `Clock` and `Random`:
+**PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS`, with or without `$`, fail as a typo does. Request data arrives as a parameter, such as a framework's `Request`. The process environment and the command-line arguments arrive as `Environment`, a standard `foreign` class like `Clock` and `Random`:
 
 - `string? variable(string name)` reads an environment variable, or gives null when it is not set.
 - `Map<string, string> variables()` reads every environment variable, by name, on every call.
