@@ -3685,6 +3685,12 @@ The class header lists the base class and interfaces after `:`. The checker know
 public class Page : DatabaseEntity, Linkable, Shareable { … }
 ```
 
+<!-- example inheritance-cycle -->
+```csharp
+public class Folder : Shortcut { }   // compile error: Folder inherits from itself: Folder → Shortcut → Folder
+public class Shortcut : Folder { }   // compile error: Shortcut inherits from itself: Shortcut → Folder → Shortcut
+```
+
 **Methods of a PHP# class are closed unless the class opens them** with `virtual`, or by declaring them `abstract`. A subclass replaces a method only with a required `override`:
 
 <!-- example virtual-methods -->
@@ -4449,7 +4455,7 @@ public User find(int|string id)
 
 **A union that holds null is written `(int|string)?`,** with the same `?` as any other type. `int|string|null` is a compile error that names `(int|string)?`, and `int|null` one that names `int?`.
 
-- `null`, `true` and `false` are values, not types. `null` alone as a type is a compile error that names `T?`, and `true` or `false` alone is one that names `bool`.
+- `null`, `true` and `false` are values, not types. `null` alone as a type is a compile error that says to write a type with `?` after it, as in `int?`. `true` or `false` alone, PHP's types, fails as a typo does.
 
 <!-- example nullable-unions: members -->
 ```csharp
