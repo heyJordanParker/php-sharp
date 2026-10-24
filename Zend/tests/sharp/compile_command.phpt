@@ -87,8 +87,7 @@ CompileError: Broken.sharp has 1 error:
 line 5: Invalid return type for method `Broken.run`: expected `int`, but found `string`.
   The type `string` returned here is not compatible with the declared return type `int`.
   help: Change the return value to match `int`, or update the method's return type declaration.
-CompileError: Torn.sharp has 2 errors:
-line 5: Parse error encountered during parsing
+CompileError: Torn.sharp has 1 error:
 line 5: Parse error encountered during parsing
 CompileError: Wrong.sharp has 2 errors:
 line 5: Parse error encountered during parsing
