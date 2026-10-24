@@ -13,7 +13,16 @@ public class Bounds
         try {
             return `${Int.MIN / -1}`;
         } catch (ArithmeticError failure) {
-            return "overflows";
+            return failure.getMessage();
+        }
+    }
+
+    public static string floorOverflow()
+    {
+        try {
+            return `${Int.MIN.floorDiv(-1)}`;
+        } catch (ArithmeticError failure) {
+            return failure.getMessage();
         }
     }
 }
