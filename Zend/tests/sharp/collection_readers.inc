@@ -2,6 +2,7 @@
 
 use Demo\Carton;
 use Demo\Crossings;
+use Demo\Held;
 use Demo\Loosely;
 use Demo\Quiet;
 use Demo\Subscriber;
@@ -250,6 +251,297 @@ function reader_var_export(): string
         . ' / ' . var_export(new Carton(), true));
 }
 
+// Each write puts a string where a List<int> holds ints, and the first PHP# read throws, naming the element.
+function reader_list_writes_checked_on_read(): string
+{
+    $writes = [
+        'append' => fn (Carton $box) => $box->counts[] = 'z',
+        'index write' => fn (Carton $box) => $box->counts[1] = 'z',
+        'nested write' => fn (Carton $box) => $box->grid[0][] = 'z',
+        'reference write' => function (Carton $box) {
+            $r = &$box->counts;
+            $r[] = 'z';
+        },
+        'array_push()' => fn (Carton $box) => array_push($box->counts, 'z'),
+        'foreach by reference' => function (Carton $box) {
+            foreach ($box->counts as &$count) {
+                $count = 'z';
+            }
+        },
+    ];
+    $seen = [];
+    foreach ($writes as $write => $run) {
+        $box = new Carton();
+        $run($box);
+        $seen[] = "$write " . reader_attempt(fn () => $box->secondDoubled() . ' ' . $box->gridFirst());
+    }
+
+    return implode(' / ', $seen);
+}
+
+// A write that fits reads back as written, and a reference plain PHP holds stays the property's, both ways.
+function reader_list_writes_that_fit(): string
+{
+    $box = new Carton();
+    $box->counts[] = 3;
+    $box->counts[0] = 5;
+    sort($box->counts);
+    $box->grid[0][] = 2;
+    $seen = [$box->countsText() . ' ' . $box->gridFirst()];
+    $r = &$box->counts;
+    $r[] = 7;
+    $seen[] = $box->countsText();
+    $box->addCount(8);
+    $r[] = 9;
+    $seen[] = $box->countsText() . ' ' . json_encode($r);
+    $r[] = 'z';
+    $seen[] = reader_attempt(fn () => $box->countsText());
+
+    return implode(' / ', $seen);
+}
+
+// A static property, a property the constructor never set, and one whose type names its class's type parameter, which
+// PHP# reads with the object's type arguments, take the same check.
+function reader_list_writes_into_other_slots(): string
+{
+    $seen = [];
+    Carton::$totals[] = 'z';
+    $seen[] = 'static ' . reader_attempt(fn () => (string) Carton::secondTotal());
+    Carton::$totals = [1, 2];
+    Carton::$totals[1] = 3;
+    $seen[] = 'static that fits ' . Carton::secondTotal();
+    $box = (new ReflectionClass(Carton::class))->newInstanceWithoutConstructor();
+    $box->later[] = 'z';
+    $seen[] = 'uninitialized ' . reader_attempt(fn () => $box->laterText());
+    $held = Held::ofList();
+    $held->value[] = 'z';
+    $seen[] = 'type parameter ' . reader_attempt(fn () => json_encode($held->get()));
+
+    return implode(' / ', $seen);
+}
+
+// Plain PHP's write into a Map or a Set property crosses each entry as the property's type takes it, and a wrong one
+// throws at the write, leaving the property as it was, as a write into a Map a Map's value holds does.
+function reader_table_writes_checked_at_write(): string
+{
+    $box = new Carton();
+    $writes = [
+        'a string value into a Map<string, int>' => fn () => $box->payload['k'] = 'x',
+        'a key no case backs into a Map<Demo.Level, int>' => fn () => $box->levels['zzz'] = 1,
+        'a string element into a Set<int>' => fn () => $box->numbers[] = 'x',
+        'a string value into a static Map<string, int>' => fn () => Carton::$stock['k'] = 'x',
+        'a string into a nested Map<string, int>' => fn () => $box->nested['k']['m'] = 'x',
+    ];
+    $seen = [];
+    foreach ($writes as $write => $run) {
+        $seen[] = "$write " . reader_attempt(function () use ($run) {
+            $run();
+            return 'no TypeError';
+        });
+    }
+    $box->payload[5] = 5;
+    $box->levels['high'] = 2;
+    $box->numbers[] = 2;
+    $seen[] = 'writes that fit ' . $box->entriesText() . ' ' . Carton::stockText();
+
+    return implode(' / ', $seen);
+}
+
+// A Map or a Set PHP# code makes, by a literal or a standard library method, carries its type from when it is made, so
+// plain PHP's write into it is checked at the write, though it never met a typed place.
+function reader_tables_typed_from_creation(): string
+{
+    $box = new Carton();
+    $writes = [
+        'a literal' => fn () => $box->handLiteral('k', 'x'),
+        'groupBy()' => fn () => $box->handGrouped('k', 5),
+        'associateBy()' => fn () => $box->handAssociated('k', 'x'),
+        'entries()' => fn () => $box->handEntries('k', 5),
+        'toSet()' => fn () => $box->handSet('x'),
+        'writes that fit' => function () use ($box) {
+            $box->handLiteral('k', 2);
+            $box->handGrouped('odd', [3]);
+            $box->handSet(4);
+            return 'no TypeError';
+        },
+    ];
+    $seen = [];
+    foreach ($writes as $write => $run) {
+        $seen[] = "$write " . reader_attempt(function () use ($run) {
+            return $run() ?? 'no TypeError';
+        });
+    }
+
+    return implode(' / ', $seen);
+}
+
+// A Map whose type names a class or a type parameter carries that type too: one an initial value or a static makes,
+// with the type arguments of the object or the static, one a parameter or a result crosses into, and one a method value
+// or an empty literal makes in a generic method, with the method's type arguments.
+function reader_tables_typed_by_names(): string
+{
+    $box = new Carton();
+    $held = Held::ofInt();
+    $writes = [
+        'an initial value of a Map<string, T>' => fn () => $held->handIndex('k', 'x'),
+        'a static of a Map<string, T>' => fn () => $held->handPool('k', 'x'),
+        'a Map<Demo.Level, Demo.Carton> parameter' => fn () => $box->handGiven(['high' => new Carton()], 'high', 5),
+        'a Map<string, Demo.Carton> result' => fn () => $box->handResult(['a' => new Carton()], 'k', 5),
+        'a Map<string, Demo.Carton> local' => fn () => $box->handLocal(['a' => new Carton()], 'k', 5),
+        'entries() as a method value in a generic method' => fn () => $box->handEntriesValue('k', 'x'),
+        'a Map<string, TItem> [:] local in a generic method' => fn () => $box->handPlaced('k', 'x'),
+        'writes that fit' => function () use ($box, $held) {
+            $box->handPlaced('k', 4);
+            $held->handIndex('k', 2);
+            $held->handPool('k', 3);
+            $box->handGiven(['high' => new Carton()], 'low', new Carton());
+            $box->handResult(['a' => new Carton()], 'k', new Carton());
+            $box->handLocal(['a' => new Carton()], 'k', new Carton());
+        },
+    ];
+    $seen = [];
+    foreach ($writes as $write => $run) {
+        $seen[] = "$write " . reader_attempt(function () use ($run) {
+            return $run() ?? 'no TypeError';
+        });
+    }
+
+    return implode(' / ', $seen);
+}
+
+// A write plain PHP makes into a Map's value goes through a reference the entry keeps, and the first PHP# read of the
+// Map throws, naming the entry.
+function reader_table_value_writes_checked_on_read(): string
+{
+    $writes = [
+        'an append to a missing int entry' => [fn (Carton $box) => $box->payload['new'][] = 'x', 'payloadText'],
+        'a decrement of a missing entry' => [fn (Carton $box) => @$box->payload['missing']--, 'payloadText'],
+        'an increment past PHP_INT_MAX' => [fn (Carton $box) => $box->tallies['top']++, 'talliesText'],
+        'an int into a Set<string> value' => [fn (Carton $box) => $box->tags['a'][] = 5, 'tagsText'],
+        'an int into a List<string> value' => [fn (Carton $box) => $box->shelves['k'][] = 5, 'shelvesText'],
+    ];
+    $seen = [];
+    foreach ($writes as $write => [$run, $read]) {
+        $box = new Carton();
+        reader_attempt(function () use ($run, $box) {
+            $run($box);
+            return '';
+        });
+        $seen[] = "$write " . reader_attempt(fn () => $box->$read());
+    }
+
+    return implode(' / ', $seen);
+}
+
+// After plain PHP's write into a Map's entry, each way PHP# code reads the Map's entries throws, naming the entry.
+function reader_table_entry_reads_checked(): string
+{
+    // Carton's Json and Serialized reads run the standard library's classes, which no fixture loads.
+    foreach (['Json' => 'Encoding/Json', 'Serialized' => 'Encoding/Serialized'] as $class => $file) {
+        if (!class_exists("Sharp\\Encoding\\$class", false)) {
+            require __DIR__ . "/../../../sharp/composer/library/Sharp/$file.sharp";
+        }
+    }
+    $reads = ['shelvesText', 'shelvesValues', 'shelvesList', 'shelvesFiltered', 'shelvesGrouped', 'shelvesLooped',
+        'shelvesJson', 'shelvesSerialized'];
+    $seen = [];
+    foreach ($reads as $read) {
+        $box = new Carton();
+        $box->shelves['k'][] = 5;
+        $seen[] = "$read " . reader_attempt(fn () => (string) $box->$read());
+    }
+
+    return implode(' / ', $seen);
+}
+
+// A write into a Map's value that fits reads back as written.
+function reader_table_value_writes_that_fit(): string
+{
+    $box = new Carton();
+    $box->shelves['k'][] = 'b';
+    $box->tags['a'][] = 'x';
+    $box->nested['k']['m'] = 2;
+    $box->tallies['low']++;
+    $box->payload['a'] += 10;
+
+    return implode(' / ', [$box->shelvesText(), $box->tagsText(), $box->nestedText(), $box->talliesText(),
+        $box->payloadText()]);
+}
+
+// PHP#'s `+=` and `++` read the element first, so each checks what plain PHP wrote, in an instance and a static.
+function reader_sharp_changes_checked(): string
+{
+    $seen = [];
+    foreach (['+= 1' => 'bumpSecond', '++' => 'incrementSecond'] as $change => $method) {
+        $box = new Carton();
+        $box->counts[1] = 1.5;
+        $seen[] = "$change " . reader_attempt(fn () => (string) $box->$method());
+        $box = new Carton();
+        $box->counts[1] = 4;
+        $seen[] = "$change that fits " . $box->$method();
+    }
+    Carton::$totals = [1, 2];
+    Carton::$totals[1] = 1.5;
+    $seen[] = 'static += 1 ' . reader_attempt(fn () => (string) Carton::bumpTotal());
+    Carton::$totals = [1, 2];
+    $seen[] = 'static += 1 that fits ' . Carton::bumpTotal();
+    Carton::$totals = [1, 2];
+
+    return implode(' / ', $seen);
+}
+
+// After a write PHP# reads as wrong, plain PHP's own readers never throw, and its clone shares the property as stock
+// PHP's does, which PHP# then reads checked.
+function reader_plain_readers_after_wrong_write(): string
+{
+    $box = new Carton();
+    $box->counts[] = 'z';
+    ob_start();
+    var_dump($box);
+    $dumped = ob_get_clean();
+    $clone = clone $box;
+
+    return implode(' / ', [
+        'var_dump ' . (str_contains($dumped, 'string(1) "z"') ? 'holds "z"' : 'no "z"'),
+        'serialize ' . (str_contains(serialize($box), 's:1:"z"') ? 'holds "z"' : 'no "z"'),
+        '(array) ' . json_encode(((array) $box)['counts']),
+        'get_object_vars ' . json_encode(get_object_vars($box)['counts']),
+        'clone ' . json_encode($clone->counts) . ' ' . reader_attempt(fn () => $clone->countsText()),
+    ]);
+}
+
+// Plain PHP's clone gives the clone's typed slot a reference of its own, which the clone's property types in every
+// build, so PHP's own check refuses a wrong write through it, and a clone of the clone still reads checked.
+function reader_plain_clone_reference_typed(): string
+{
+    $box = new Carton();
+    $box->counts[] = 'z';
+    $clone = clone $box;
+    $seen = [reader_attempt(function () use ($clone) {
+        $held = &$clone->counts;
+        $held = 'text';
+
+        return 'no TypeError';
+    })];
+    $again = clone $clone;
+    $seen[] = reader_attempt(fn () => $again->countsText());
+
+    return implode(' / ', $seen);
+}
+
+// An element write into a property that holds false makes it an array in place, which PHP# reads checked.
+function reader_false_made_an_array(): string
+{
+    $box = new Carton();
+    @$box->marks[] = 'z';
+    $seen = [reader_attempt(fn () => $box->marksText())];
+    $box = new Carton();
+    @$box->marks[] = 3;
+    $seen[] = $box->marksText();
+
+    return implode(' / ', $seen);
+}
+
 function readers(): string
 {
     $rows = [
@@ -275,6 +567,19 @@ function readers(): string
         'iterator_to_array() of a lazy Iterable<Map<string, int>> result' => reader_iterable_of_maps(...),
         'a lazy Iterable result is a Traversable, and its declared type' => reader_iterable_type(...),
         'var_export() of a Map property, a Map and a PHP# object' => reader_var_export(...),
+        "plain PHP's writes into a List<int> property, checked when PHP# reads it" => reader_list_writes_checked_on_read(...),
+        "plain PHP's writes that fit a List<int> property, and a reference it keeps" => reader_list_writes_that_fit(...),
+        "plain PHP's writes into a static, an uninitialized and a type parameter's List<int>" => reader_list_writes_into_other_slots(...),
+        "plain PHP's writes into a Map or a Set property, checked at the write" => reader_table_writes_checked_at_write(...),
+        'a Map or a Set PHP# code makes, typed from when it is made' => reader_tables_typed_from_creation(...),
+        'a Map whose type names a class or a type parameter, typed from when it is made' => reader_tables_typed_by_names(...),
+        "plain PHP's writes into a Map's values, checked when PHP# reads it" => reader_table_value_writes_checked_on_read(...),
+        "each PHP# read of a Map's entries after plain PHP's write into one" => reader_table_entry_reads_checked(...),
+        "plain PHP's writes that fit a Map's values" => reader_table_value_writes_that_fit(...),
+        "PHP#'s += and ++ after plain PHP's write" => reader_sharp_changes_checked(...),
+        "plain PHP's readers and clone after a wrong write" => reader_plain_readers_after_wrong_write(...),
+        "plain PHP's clone of a typed slot's reference, written through and cloned again" => reader_plain_clone_reference_typed(...),
+        'an element write into a property that holds false' => reader_false_made_an_array(...),
     ];
     $output = '';
     foreach ($rows as $row => $read) {
