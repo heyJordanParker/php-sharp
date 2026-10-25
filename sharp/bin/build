@@ -25,9 +25,12 @@ if $zts; then
   build_dir+=-zts
 fi
 
+# --enable-werror, as php-src's own CI builds, so a warning fails the build here and in CI before it fails an upstream
+# merge or a packager's build.
 flags=(
   --prefix="$build_dir/install"
   --enable-option-checking=fatal
+  --enable-werror
   --enable-debug
   --enable-fpm
   --disable-cgi

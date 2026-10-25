@@ -953,7 +953,9 @@ ZEND_FUNCTION(get_mangled_object_vars)
 		 GC_IS_RECURSIVE(properties)));
 	RETVAL_ARR(properties);
 	/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array, as (array) does. */
-	sharp_cross_array_cast(return_value, obj);
+	if (UNEXPECTED(obj->ce->sharp_flags & SHARP_CLASS_HAS_CROSSING_PROPS)) {
+		sharp_cross_array_cast(return_value, obj);
+	}
 }
 /* }}} */
 

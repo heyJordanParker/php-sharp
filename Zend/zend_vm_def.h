@@ -1928,7 +1928,8 @@ ZEND_VM_INLINE_HELPER(zend_fetch_static_prop_helper, ANY, ANY, int type)
 {
 	USE_OPLINE
 	zval *prop;
-	zend_property_info *prop_info;
+	/* A fetch that finds no property leaves it unset, and the PHP# reads below test it. */
+	zend_property_info *prop_info = NULL;
 
 	SAVE_OPLINE();
 
@@ -6866,7 +6867,8 @@ ZEND_VM_COLD_CONST_HANDLER(51, ZEND_CAST, CONST|TMP|VAR|CV, ANY, TYPE)
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, OP1_TYPE);
 				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
-				if (OP1_TYPE != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
+				if (OP1_TYPE != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT
+				 && UNEXPECTED(Z_OBJCE_P(expr)->sharp_flags & SHARP_CLASS_HAS_CROSSING_PROPS)) {
 					sharp_cross_array_cast(result, Z_OBJ_P(expr));
 				}
 			} else {

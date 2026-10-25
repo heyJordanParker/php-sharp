@@ -748,7 +748,7 @@ PHP_METHOD(ArrayObject, getArrayCopy)
 
 	RETVAL_ARR(zend_array_dup(spl_array_get_hash_table(intern)));
 	zend_object *backing = spl_array_backing_object(intern);
-	if (backing) {
+	if (backing && UNEXPECTED(backing->ce->sharp_flags & SHARP_CLASS_HAS_CROSSING_PROPS)) {
 		sharp_cross_array_cast(return_value, backing);
 	}
 } /* }}} */

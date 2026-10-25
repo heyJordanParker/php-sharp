@@ -361,6 +361,14 @@ typedef struct _zend_oparray_context {
 /* objects' type arguments, see ext/sharp                 |     |     |     */
 #define ZEND_ACC_SHARP_GENERIC           (1U << 31) /* X  |     |     |     */
 /*                                                        |     |     |     */
+/* PHP# Class Flags, in sharp_flags of zend_class_entry,  |     |     |     */
+/* since ce_flags has no free bit (unused: 1-7)           |     |     |     */
+/* ====================                                   |     |     |     */
+/*                                                        |     |     |     */
+/* PHP#: a property of the class, its own or inherited,   |     |     |     */
+/* has ZEND_ACC_SHARP_CROSSING                            |     |     |     */
+#define SHARP_CLASS_HAS_CROSSING_PROPS   (1 <<  0) /*  X  |     |     |     */
+/*                                                        |     |     |     */
 /* Function Flags (unused: 30)                            |     |     |     */
 /* ==============                                         |     |     |     */
 /*                                                        |     |     |     */
@@ -1215,6 +1223,12 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  * ZEND_ACC_SHARP_GENERIC: the class declares that hidden slot, so == and serialize read type arguments only
  * from objects of such a class. Inheritance never copies it.
  *   ce_flags of zend_class_entry                              upstream: the ZEND_ACC_* class flags
+ *
+ * SHARP_CLASS_HAS_CROSSING_PROPS: some property of the class, its own, a trait's or an inherited one, has
+ * ZEND_ACC_SHARP_CROSSING. zend_build_properties_info_table sets it when the class is linked, and opcache keeps it
+ * with the class entry. Plain PHP's (array), get_mangled_object_vars() and ArrayObject::getArrayCopy() test it
+ * before sharp_cross_array_cast, so an object of any other class pays one bit test.
+ *   sharp_flags of zend_class_entry                           upstream: padding before name
  */
 #define ZEND_SHARP_OPERATOR_SYNTAX	(1<<15)
 #define ZEND_SHARP_OPERATOR	(1<<30)
@@ -1262,6 +1276,14 @@ ZEND_STATIC_ASSERT(!(ZEND_ACC_SHARP_GENERIC & (ZEND_ACC_INTERFACE|ZEND_ACC_TRAIT
 		|ZEND_ACC_HAS_AST_PROPERTIES|ZEND_ACC_HAS_AST_STATICS|ZEND_ACC_FILE_CACHED|ZEND_ACC_ENUM
 		|ZEND_ACC_NOT_SERIALIZABLE|ZEND_ACC_USE_GUARDS)),
 	"ZEND_ACC_SHARP_GENERIC overlaps a ZEND_ACC_* flag in the ce_flags of zend_class_entry");
+ZEND_STATIC_ASSERT(offsetof(zend_class_entry, name) == sizeof(zend_string *),
+	"sharp_flags moved name, so an extension built against upstream's headers reads every field of zend_class_entry wrong");
+#if SIZEOF_SIZE_T == 8
+/* 544 bytes on 64-bit, measured on master d2e2b0f3cd before sharp_flags took its padding, so a new field of
+ * zend_class_entry changes its layout only on purpose. */
+ZEND_STATIC_ASSERT(sizeof(zend_class_entry) == 544,
+	"a field changed the size of zend_class_entry; move it into padding, or change this size on purpose");
+#endif
 
 static zend_always_inline uint32_t zend_ast_sharp_operator(const zend_ast *ast)
 {

@@ -58,6 +58,8 @@ The engine runs only `.sharpc` files that `mago compile` wrote. So before any te
 
 Every PHP# feature must pass `sharp/bin/test --opcache --repeat --passes --census --spec --differential --phpunit`. `sharp/bin/test` disables the JIT outside `--passes`.
 
+`sharp/bin/build` configures with `--enable-werror`, as php-src's own CI does, and so do the runtime images in `sharp/docker/runtime/`, so a compiler warning fails the build that brings it in.
+
 `sharp/bin/build` reruns `buildconf` and `configure` by itself when `configure.ac`, a `*.m4` file, a `Makefile.frag`, `build/Makefile.global`, `sharp/docker/Dockerfile`, `sharp/bin/build` or `Zend/zend_modules.h` changes. `configure` reads `ZEND_MODULE_API_NO` from `Zend/zend_modules.h` into the extension directory.
 
 Run one build per tree at a time. Parallel Agents each work in their own git worktree.

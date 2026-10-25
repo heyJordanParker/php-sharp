@@ -80,7 +80,8 @@ void sharp_cross_read(zval *value);
 bool sharp_cross_slot_read(zval *array, zend_object *object, zval *slot);
 
 /* Makes each property of `object` that `result`, the (array) cast of `object`, holds under its mangled name, what plain
- * PHP code reads from it, by sharp_cross_slot_read(). */
+ * PHP code reads from it, by sharp_cross_slot_read(). Each caller calls it only for an object whose class has
+ * SHARP_CLASS_HAS_CROSSING_PROPS, so the cast of any other object pays one bit test. */
 void sharp_cross_array_cast(zval *result, zend_object *object);
 
 bool sharp_property_takes_reference(zval *slot, const zend_property_info *info);
