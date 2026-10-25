@@ -1,5 +1,5 @@
 --TEST--
-A PHP# class calls every member of string in Sharp.Text and int.toByteString, toByteString throws ValueError for a value that is not a byte, parseCsv reads one CSV line, where a quoted field keeps its comma and a blank line is one empty field, case changes and split work on characters, replace replaces every match and throws ValueError for empty text to replace, split keeps the empty text after a trailing delimiter, gives at most a positive limit's parts, the last holding the rest, and every part for a limit of 0, and throws ValueError for an empty delimiter or a negative limit, and join puts the separator between a List<string>'s parts, length, substring, indexOf, lastIndexOf, padding, trimming whitespace at either end, removing a prefix or a suffix, capitalizing, repeat, lines and characters work on characters, a range or a start outside the text throws OutOfRangeException, and empty padding or a negative count throws ValueError
+A PHP# class calls every member of string in Sharp.Text and int.toByteString, toByteString throws ValueError for a value that is not a byte, parseCsv reads one CSV line, where a quoted field keeps its comma and a blank line is one empty field, case changes and split work on characters, replace replaces every match and throws ValueError for empty text to replace, split keeps the empty text after a trailing delimiter, gives at most a positive limit's parts, the last holding the rest, and every part for a limit of 0, and throws ValueError for an empty delimiter or a negative limit, and join puts the separator between a List<string>'s parts, length, substring, indexOf, lastIndexOf, padding, trimming whitespace at either end, removing a prefix or a suffix, capitalizing, repeat, lines and characters work on characters, compareTo gives -1, 0 or 1 in byte order, as < orders strings, a range or a start outside the text throws OutOfRangeException, and empty padding or a negative count throws ValueError
 --FILE--
 <?php
 require __DIR__ . '/library_text.inc';
@@ -60,6 +60,7 @@ var_dump(Demo\TextCalls::capitalized('école'), Demo\TextCalls::decapitalized('�
 echo json_encode(Demo\TextCalls::lines("a\r\nb\nc\rd\n"), JSON_UNESCAPED_UNICODE), ' ', json_encode(Demo\TextCalls::lines('')), "\n";
 echo json_encode(Demo\TextCalls::characters('éa'), JSON_UNESCAPED_UNICODE), ' ', json_encode(Demo\TextCalls::characters('')), "\n";
 echo json_encode(Demo\TextCalls::codePoints('éa€')), ' ', json_encode(Demo\TextCalls::codePoints('')), "\n";
+var_dump(Demo\TextCalls::compareTo('10', '9'), Demo\TextCalls::compareTo('a', 'a'), Demo\TextCalls::compareTo('apple', 'Zebra'), Demo\TextCalls::compareTo('ab', 'abc'), Demo\TextCalls::compareTo('1e3', '1000'));
 ?>
 --EXPECT--
 string(11) "hello-world"
@@ -134,3 +135,8 @@ string(0) ""
 ["a","b","c","d",""] [""]
 ["é","a"] []
 [233,97,8364] []
+int(-1)
+int(0)
+int(1)
+int(-1)
+int(1)

@@ -160,15 +160,15 @@ line 77: This pattern never matches the value it tests.
 line 81: `while` takes a `bool`, but this is `int`.
   PHP# conditions are `bool`, so PHP's truthiness never applies.
   help: Compare the value, as in `count > 0` or `name != ""`.
-line 87: `<` orders numbers, strings, and classes and enums that declare `operator <=>`, and `bool` is none of them.
+line 87: `<` orders numbers, strings, and classes, structs and enums that declare `operator <=>`, and `bool` is none of them.
   A `bool` and a collection have no order, and an enum's cases have one only where it declares `operator <=>`.
   help: Order a number or a string taken from the value instead.
-line 89: `<` orders numbers, strings, and classes and enums that declare `operator <=>`, and `Status` is none of them.
+line 89: `<` orders numbers, strings, and classes, structs and enums that declare `operator <=>`, and `Status` is none of them.
   A `bool` and a collection have no order, and an enum's cases have one only where it declares `operator <=>`.
   help: Declare `public static int operator <=>(Status a, Status b)` in `Status`: an enum orders its cases once it declares `operator <=>`.
-line 91: `<=>` orders numbers, strings, and classes and enums that declare `operator <=>`, and `Status` is none of them.
+line 91: `<=>` orders numbers, strings, and classes, structs and enums that declare `operator <=>`, and `Status` is none of them.
   A `bool` and a collection have no order, and an enum's cases have one only where it declares `operator <=>`.
   help: Declare `public static int operator <=>(Status a, Status b)` in `Status`: an enum orders its cases once it declares `operator <=>`.
-line 93: `<` orders numbers, strings, and classes and enums that declare `operator <=>`, and `List<int>` is none of them.
+line 93: `<` orders numbers, strings, and classes, structs and enums that declare `operator <=>`, and `List<int>` is none of them.
   A `bool` and a collection have no order, and an enum's cases have one only where it declares `operator <=>`.
   help: Order a number or a string taken from the value instead.

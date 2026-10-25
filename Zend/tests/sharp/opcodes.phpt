@@ -211,8 +211,8 @@ echo 'a check: ', without_checks($checked, $checks) === $twin ? 'same' : 'differ
 echo 'a check and another opcode: ', without_checks($added, $checks) === $twin ? 'same' : 'different', "\n";
 ?>
 --EXPECT--
-Calc: same opcodes and lines in 4 op arrays, same signatures in 1 classes
-Nulls: same opcodes and lines in 16 op arrays, same signatures in 1 classes
+Calc: same opcodes and lines in 5 op arrays, same signatures in 1 classes
+Nulls: same opcodes and lines in 18 op arrays, same signatures in 1 classes
 ControlFlow: different opcodes and lines in 6 op arrays, same signatures in 1 classes
   .sharp      ; (lines=36, args=1, vars=6, tmps=18)
   .sharp L0061 0004 T8 = SHARP_VERIFY_TYPE_ARGS V7 string("List<int>")

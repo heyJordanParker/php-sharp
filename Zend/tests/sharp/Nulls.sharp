@@ -86,4 +86,10 @@ class Nulls
     }
 
     public Function<int(int) uses Clock>? held() => this.doubler;
+
+    public string greeting(string? name = null) => name ?? "nobody";
+
+    private string? nickname = null;
+
+    public string? currentNickname() => this.nickname;
 }
