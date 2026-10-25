@@ -1,0 +1,22 @@
+# Every third-party action is pinned to a full commit SHA with its version as a comment, and Dependabot moves the SHA
+# and the comment to each new release. The cooldown keeps a release out of a pull request for its first week:
+# trivy-action's tags pointed at malware for 12 hours on 2026-03-19 before they were restored.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/*
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    # Minor and patch releases arrive together in one pull request. Each major release arrives in a pull request of
+    # its own, because it can change what the action does.
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch

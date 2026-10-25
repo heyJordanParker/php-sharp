@@ -10,7 +10,7 @@ runs:
   using: composite
   steps:
     - name: Solaris
-      uses: vmactions/solaris-vm@v1
+      uses: vmactions/solaris-vm@1c166978f5a2c1f87f1c9d4d8dd85ae3d1eff6f7 # v1.4.2
       with:
         release: "11.4-gcc"
         usesh: true

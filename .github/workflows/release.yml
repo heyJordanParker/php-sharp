@@ -1,8 +1,10 @@
 name: Release
 
 # A tag such as v0.4.0 releases PHP# and Mago at one version: ext/sharp/php_sharp.h's PHP_SHARP_VERSION and
-# sharp/mago/Cargo.toml's version must both be 0.4.0. This workflow builds the mago binary per platform and
-# publishes php-sharp's GitHub release. sharp.yml's IMAGE job publishes the engine's image from the same tag.
+# sharp/mago/Cargo.toml's version must both be 0.4.0. This workflow builds the mago binary per platform,
+# publishes php-sharp's GitHub release with the SHA-256 of every asset, and publishes the tag's
+# heyjordanparker/mago-sharp version with those SHA-256s. sharp.yml's IMAGE job publishes the engine's image from
+# the same tag, and its COMPOSER job publishes heyjordanparker/php-sharp-composer.
 on:
   workflow_dispatch:
   push:
@@ -13,11 +15,7 @@ env:
   CICD_INTERMEDIATES_DIR: ${{ github.workspace }}/_cd-intermediates
 
 permissions:
-  contents: write
-  discussions: write
-  id-token: write
-  attestations: write
-  packages: write
+  contents: read
 
 defaults:
   run:
@@ -57,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: ci
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: extract crate information
         id: crate_metadata
         run: |
@@ -99,15 +97,15 @@ jobs:
     needs: crate_metadata
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install rust toolchain (v${{ needs.crate_metadata.outputs.msrv }})
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: ${{ needs.crate_metadata.outputs.msrv }}
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: sharp/mago
           key: msrv-${{ needs.crate_metadata.outputs.msrv }}
@@ -124,9 +122,13 @@ jobs:
     name: Create source code archives
     runs-on: ubuntu-latest
     needs: crate_metadata
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Create source archives
         id: source_package
@@ -148,24 +150,24 @@ jobs:
           echo "ZIP_PATH=${STAGING}/${ZIP_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Generate artifact attestation (source tar.gz)
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-path: ${{ steps.source_package.outputs.TAR_PATH }}
 
       - name: Generate artifact attestation (source zip)
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-path: ${{ steps.source_package.outputs.ZIP_PATH }}
 
       - name: "Artifact upload: source tar.gz"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ steps.source_package.outputs.TAR_NAME }}
           path: ${{ steps.source_package.outputs.TAR_PATH }}
           if-no-files-found: error
 
       - name: "Artifact upload: source zip"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ steps.source_package.outputs.ZIP_NAME }}
           path: ${{ steps.source_package.outputs.ZIP_PATH }}
@@ -175,6 +177,10 @@ jobs:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
     needs: crate_metadata
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -221,7 +227,7 @@ jobs:
 
     steps:
       - name: checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: set version env variable
         id: version
@@ -240,13 +246,13 @@ jobs:
           esac
 
       - name: install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: ${{ needs.crate_metadata.outputs.msrv }}
           targets: ${{ matrix.job.target }}
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: sharp/mago
           key: ${{ matrix.job.target }}
@@ -254,7 +260,7 @@ jobs:
 
       - name: Cache cargo-pgo
         if: matrix.job.pgo
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CARGO_HOME }}/bin/cargo-pgo
           key: cargo-pgo-${{ runner.os }}
@@ -270,7 +276,7 @@ jobs:
 
       - name: install cross
         if: startsWith(matrix.job.os, 'ubuntu') && !matrix.job.pgo
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
         with:
           tool: cross
 
@@ -310,14 +316,14 @@ jobs:
       # setup-php brew-installs PHP on macOS, so the self-hosted runners use their Homebrew PHP and Composer instead.
       - name: setup PHP for PGO profiling
         if: matrix.job.pgo && runner.environment == 'github-hosted'
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: "8.3"
           tools: composer
 
       - name: Cache composer dependencies for PGO corpus
         if: matrix.job.pgo
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: sharp/mago/corpus/vendor
           key: composer-corpus-${{ hashFiles('sharp/mago/corpus/composer.lock') }}
@@ -399,7 +405,7 @@ jobs:
 
       - name: Cache wasm-pack
         if: matrix.job.wasm
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cargo/bin/wasm-pack
           key: wasm-pack-0.13.1-${{ runner.os }}
@@ -460,18 +466,18 @@ jobs:
           echo "WASM_PKG_PATH=${WASM_STAGING}/${WASM_PKG_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Generate artifact attestation (binary)
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-path: ${{ steps.package.outputs.PKG_PATH }}
 
       - name: Generate artifact attestation (WASM)
         if: matrix.job.wasm
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-path: ${{ steps.wasm_package.outputs.WASM_PKG_PATH }}
 
       - name: "Artifact upload: tarball"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ steps.package.outputs.PKG_NAME }}
           path: ${{ steps.package.outputs.PKG_PATH }}
@@ -479,7 +485,7 @@ jobs:
 
       - name: "Artifact upload: WASM"
         if: matrix.job.wasm
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ steps.wasm_package.outputs.WASM_PKG_NAME }}
           path: ${{ steps.wasm_package.outputs.WASM_PKG_PATH }}
@@ -489,6 +495,8 @@ jobs:
     name: Publish the release
     runs-on: ubuntu-latest
     needs: [crate_metadata, min_version, source_archive, build]
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: .
@@ -496,7 +504,7 @@ jobs:
       VERSION: ${{ needs.crate_metadata.outputs.version }}
     steps:
       - name: Download every asset
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: mago-${{ needs.crate_metadata.outputs.version }}-*
           path: assets
@@ -521,6 +529,25 @@ jobs:
             echo "::error::The downloaded assets differ from the expected release assets."
             exit 1
           }
+
+      # install.sh checks a download against this file when gh is missing, and the composer job pins these
+      # SHA-256s in the tag's heyjordanparker/mago-sharp version.
+      - name: Write the SHA-256 of every asset
+        shell: bash
+        run: |
+          sums="mago-${VERSION}-sha256sums.txt"
+          (cd assets && sha256sum -- *) > "$sums"
+          cat "$sums"
+          mv "$sums" assets/
+          echo "$sums" >> expected-assets.txt
+          sort -o expected-assets.txt expected-assets.txt
+
+      - name: "Artifact upload: SHA-256s"
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sha256sums
+          path: assets/mago-${{ env.VERSION }}-sha256sums.txt
+          if-no-files-found: error
 
       - name: Upload every asset to the draft release, check it, then publish it
         shell: bash
@@ -549,3 +576,72 @@ jobs:
             exit 1
           }
           gh release edit "$TAG" --draft=false
+
+  # The tag's heyjordanparker/mago-sharp version is sharp/mago's split, as sharp.yml's COMPOSER job pushes a branch,
+  # plus a commit that adds the release's SHA-256s as composer/sha256sums.txt. The Composer wrapper refuses an
+  # archive whose SHA-256 differs, so the package version pins the exact binary, as esbuild's and Biome's npm
+  # packages do. The tag is pushed once the release is public, so every asset it names can be downloaded, and the
+  # push never forces, so a published version never changes.
+  composer:
+    name: Publish heyjordanparker/mago-sharp
+    runs-on: ubuntu-latest
+    needs: [crate_metadata, release]
+    if: github.ref_type == 'tag'
+    defaults:
+      run:
+        working-directory: .
+    env:
+      VERSION: ${{ needs.crate_metadata.outputs.version }}
+    steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install splitsh-lite
+        uses: ./.github/actions/splitsh-lite
+
+      - name: Split sharp/mago
+        run: splitsh-lite --prefix=sharp/mago --target=refs/heads/mago
+
+      - name: Download the SHA-256s
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sha256sums
+          path: ${{ runner.temp }}
+
+      # The tag pins these SHA-256s for good, so the assets a user downloads from the published release must match
+      # them before the tag exists, and so must the sums file install.sh checks a download against.
+      - name: The published assets match the SHA-256s the tag pins
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          published="$RUNNER_TEMP/published"
+          gh release download "$GITHUB_REF_NAME" --dir "$published"
+          if ! cmp "$RUNNER_TEMP/mago-$VERSION-sha256sums.txt" "$published/mago-$VERSION-sha256sums.txt"; then
+            echo "::error::Release $GITHUB_REF_NAME publishes a mago-$VERSION-sha256sums.txt that differs from the one this run wrote, so no heyjordanparker/mago-sharp tag is pushed."
+            exit 1
+          fi
+          if ! (cd "$published" && sha256sum --check --strict "$RUNNER_TEMP/mago-$VERSION-sha256sums.txt"); then
+            echo "::error::An asset of release $GITHUB_REF_NAME has a SHA-256 other than the one this run wrote, so no heyjordanparker/mago-sharp tag is pushed."
+            exit 1
+          fi
+
+      - name: git checkout heyJordanParker/mago-sharp
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: heyJordanParker/mago-sharp
+          ssh-key: ${{ secrets.MAGO_SHARP_DEPLOY_KEY }}
+          path: sharp/build/mago-sharp
+
+      - name: Push the tag, with the SHA-256 of every release asset
+        working-directory: sharp/build/mago-sharp
+        run: |
+          git fetch "$GITHUB_WORKSPACE" refs/heads/mago
+          git switch --detach FETCH_HEAD
+          cp "$RUNNER_TEMP/mago-$VERSION-sha256sums.txt" composer/sha256sums.txt
+          git add composer/sha256sums.txt
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit --message "The SHA-256 of every mago $VERSION release asset"
+          git push origin "HEAD:refs/tags/$GITHUB_REF_NAME"

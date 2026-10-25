@@ -5,6 +5,7 @@ on:
       - Test
     types:
       - completed
+permissions: {}
 jobs:
   on-failure:
     runs-on: ubuntu-latest
