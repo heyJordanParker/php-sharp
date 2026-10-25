@@ -22,7 +22,7 @@ class DateCalls
 
     public static string ofEpochDay(int days) => Date.ofEpochDay(days).toString();
 
-    public static bool before(string first, string second) => Date.parse(first).isBefore(Date.parse(second));
+    public static bool before(string first, string second) => Date.parse(first) < Date.parse(second);
 
     public static string? tryDay(string text) => Date.tryParse(text)?.toString();
 
@@ -42,7 +42,7 @@ class DateCalls
 
     public static string between(string start, string end) => Instant.parse(start).until(Instant.parse(end)).toString();
 
-    public static bool after(string first, string second) => Instant.parse(first).isAfter(Instant.parse(second));
+    public static bool after(string first, string second) => Instant.parse(first) > Instant.parse(second);
 
     public static string inZone(string text, string zone) => Instant.parse(text).inZone(new TimeZone(zone)).toString();
 
@@ -75,8 +75,6 @@ class DateCalls
     public static string scaled(string text, int factor) => Duration.parse(text).times(factor).toString();
 
     public static string built() => Duration.ofDays(1).plus(Duration.ofHours(2)).plus(Duration.ofMinutes(3)).plus(Duration.ofSeconds(4)).plus(Duration.ofMilliseconds(5)).toString();
-
-    public static bool dayEarlier(string first, string second) => Date.parse(first) < Date.parse(second);
 
     public static int dayOrder(string first, string second) => Date.parse(first) <=> Date.parse(second);
 

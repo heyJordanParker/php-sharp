@@ -44,11 +44,11 @@ echo implode(' ', DateCalls::units('P1DT2H3M4.005S')), ' ', implode(' ', DateCal
 var_dump(DateCalls::sum('PT1H', '-PT90M'), DateCalls::scaled('PT20M', 3), DateCalls::built());
 
 echo "Order\n";
-var_dump(DateCalls::dayEarlier('2026-10-01', '2026-10-22'), DateCalls::dayEarlier('2026-10-22', '2026-10-22'));
+var_dump(DateCalls::before('2026-10-01', '2026-10-22'), DateCalls::before('2026-10-22', '2026-10-22'));
 var_dump(DateCalls::dayOrder('2026-10-22', '2026-10-01'), DateCalls::dayOrder('2025-12-31', '2026-01-01'), DateCalls::dayOrder('2026-02-01', '2026-01-31'), DateCalls::dayOrder('2026-10-22', '2026-10-22'));
 var_dump(DateCalls::instantOrder('2026-10-22T18:30:00.000000001Z', '2026-10-22T18:30:00Z'), DateCalls::instantOrder('1969-12-31T23:59:59.999Z', '1970-01-01T00:00:00Z'), DateCalls::instantOrder('2026-10-22T18:30:00Z', '2026-10-22T21:30:00+03:00'));
 var_dump(DateCalls::zonedSame('2026-10-22T21:30:00+03:00[Europe/Sofia]', '2026-10-22T18:30:00+00:00[UTC]'), DateCalls::zonedOrder('2026-10-22T21:30:00+03:00[Europe/Sofia]', '2026-10-22T18:30:00+00:00[UTC]'), DateCalls::zonedOrder('2026-10-22T18:30:00+00:00[UTC]', '2026-10-22T21:30:00+03:00[Europe/Sofia]'));
-var_dump(DateCalls::zonedSame('2026-10-22T21:30:00+03:00[Europe/Sofia]', '2026-10-22T21:30:00+03:00[Europe/Sofia]'), DateCalls::zonedOrder('2026-10-22T21:30:00+03:00[Europe/Sofia]', '2026-10-22T21:30:00+03:00[Europe/Sofia]'), DateCalls::zonedOrder('2026-10-22T21:00:00+00:00[UTC]', '2026-10-22T21:30:00+03:00[Europe/Sofia]'));
+var_dump(DateCalls::zonedSame('2026-10-22T21:30:00+03:00[Europe/Sofia]', '2026-10-22T21:30:00+03:00[Europe/Sofia]'), DateCalls::zonedOrder('2026-10-22T21:30:00+03:00[Europe/Sofia]', '2026-10-22T21:30:00+03:00[Europe/Sofia]'), DateCalls::zonedOrder('2026-10-22T21:00:00+00:00[UTC]', '2026-10-22T21:30:00+03:00[Europe/Sofia]'), DateCalls::zonedOrder('2026-10-22T18:00:00+00:00[UTC]', '2026-10-22T21:30:00+03:00[Europe/Sofia]'));
 var_dump(DateCalls::zoneSame('Europe/Sofia', 'Europe/Sofia'), DateCalls::zoneSame('Europe/Sofia', 'UTC'));
 foreach ([59, 60] as $minutes) {
     echo implode(' ', array_map(fn (bool $order): string => var_export($order, true), DateCalls::hourAgainstMinutes($minutes))), "\n";
@@ -174,6 +174,7 @@ int(1)
 bool(true)
 int(0)
 int(1)
+int(-1)
 bool(true)
 bool(false)
 true true false false
@@ -196,8 +197,8 @@ ValueError: `Date` takes a day of the calendar, and 2026-0-1 is not one.
 ValueError: `Date.parse` reads an ISO-8601 day, such as "2026-10-22", and "2026-1-1" is not.
 ValueError: `Instant.parse` reads ISO-8601 with an offset, such as "2026-10-22T18:30:00Z", and "yesterday" is not.
 ValueError: `Instant` takes a nanosecond from 0 to 999999999, and it is outside that range.
-ValueError: `TimeZone` takes a name from the time zone database, such as "Europe/Sofia", and "Nowhere/City" is not one.
+ValueError: `TimeZone` takes a name from the time zone database, such as "Europe/Sofia", and "Nowhere/City" is not one. `TimeZone.tryOf` gives null for it instead.
 ValueError: `DateTime.parse` reads ISO-8601 with an offset and a zone, such as "2026-10-22T21:30:00+03:00[Europe/Sofia]", and "2026-10-22T21:30:00+02:00[Europe/Sofia]" is not.
 ValueError: `Duration.parse` reads ISO-8601, such as "PT1H30M", and "one hour" is not.
-ValueError: `toDateTime` needs a zone from the time zone database, such as "Europe/Sofia", and "+03:00" is only an offset. `toInstant()` keeps the instant without a zone.
-ValueError: `toDateTime` needs a zone from the time zone database, such as "Europe/Sofia", and "EEST" is only an offset. `toInstant()` keeps the instant without a zone.
+ValueError: `toDateTime` needs a zone such as "Europe/Sofia", and "+03:00" is an offset or an abbreviation, not a zone of the time zone database. `toInstant()` keeps the instant without a zone.
+ValueError: `toDateTime` needs a zone such as "Europe/Sofia", and "EEST" is an offset or an abbreviation, not a zone of the time zone database. `toInstant()` keeps the instant without a zone.
