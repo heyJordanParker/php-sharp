@@ -31,6 +31,7 @@
 #include <stdlib.h>
 
 #include "basic_functions.h"
+#include "ext/sharp/php_sharp.h"
 
 PHPAPI zend_class_entry *rounding_mode_ce;
 
@@ -1458,7 +1459,9 @@ PHP_FUNCTION(intdiv)
 	} else if (divisor == -1 && dividend == ZEND_LONG_MIN) {
 		/* Prevent overflow error/crash ... really should not happen:
 		   We don't return a float here as that violates function contract */
-		zend_throw_exception_ex(zend_ce_arithmetic_error, 0, "Division of PHP_INT_MIN by -1 is not an integer");
+		/* PHP#'s `/` on two ints runs intdiv, and PHP# code names the smallest int Int.MIN (spec section 24). */
+		zend_throw_exception_ex(zend_ce_arithmetic_error, 0, "%s", sharp_runs_sharp_code()
+			? "Division of Int.MIN by -1 overflows an int" : "Division of PHP_INT_MIN by -1 is not an integer");
 		RETURN_THROWS();
 	}
 

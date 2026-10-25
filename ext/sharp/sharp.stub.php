@@ -22,7 +22,7 @@ final class Collection
 
     public function get(mixed $key): mixed {}
 
-    public function entries(): Map {}
+    public function entries(?string $typeArguments = null): Map {}
 
     public function has(mixed $key): bool {}
 
@@ -54,9 +54,9 @@ final class Collection
 
     public function any(\Closure $predicate): bool {}
 
-    public function groupBy(\Closure $key): Map {}
+    public function groupBy(\Closure $key, ?string $typeArguments = null): Map {}
 
-    public function associateBy(\Closure $key): Map {}
+    public function associateBy(\Closure $key, ?string $typeArguments = null): Map {}
 
     public function sortedBy(\Closure $selector, ?\Closure $comparison = null): array {}
 }

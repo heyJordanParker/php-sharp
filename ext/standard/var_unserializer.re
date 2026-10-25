@@ -798,8 +798,7 @@ second_try:
 		}
 
 		if (UNEXPECTED(info)) {
-			if (!zend_verify_prop_assignable_by_ref(info, data, /* strict */ 1)
-					|| UNEXPECTED(Z_ISREF_P(data) && sharp_property_refuses_reference(info))) {
+			if (!zend_verify_prop_assignable_by_ref(info, data, /* strict */ 1)) {
 				zval_ptr_dtor(data);
 				ZVAL_UNDEF(data);
 				goto failure;
@@ -1056,9 +1055,6 @@ static int php_var_unserialize_internal(UNSERIALIZE_PARAMETER)
 		zend_property_info *info = NULL;
 		if ((*var_hash)->ref_props) {
 			info = zend_hash_index_find_ptr((*var_hash)->ref_props, (uintptr_t) rval_ref);
-		}
-		if (info && UNEXPECTED(sharp_property_refuses_reference(info))) {
-			return 0;
 		}
 		ZVAL_NEW_REF(rval_ref, rval_ref);
 		if (info) {

@@ -87,26 +87,17 @@ CompileError: Broken.sharp has 1 error:
 line 5: Invalid return type for method `Broken.run`: expected `int`, but found `string`.
   The type `string` returned here is not compatible with the declared return type `int`.
   help: Change the return value to match `int`, or update the method's return type declaration.
-CompileError: Torn.sharp has 2 errors:
-line 5: Parse error encountered during parsing
-  This error indicates that the parser encountered a parse issue.
-  help: Check the syntax of your code.
-line 5: Parse error encountered during parsing
-  This error indicates that the parser encountered a parse issue.
-  help: Check the syntax of your code.
+CompileError: Torn.sharp has 1 error:
+line 5: Unexpected `=>`
 CompileError: Wrong.sharp has 2 errors:
-line 5: Parse error encountered during parsing
-  This error indicates that the parser encountered a parse issue.
-  help: Check the syntax of your code.
+line 5: Unexpected `echo`
 line 5: `Wrong.run` is declared twice: a class has one method per name, with no overloading by argument types.
   help: Give each a name that says what it takes, as in `grantUserAccess` and `grantTenantAccess`.
 CompileError: app/Orders/Order.sharp has 3 errors:
 line 12: Invalid return type for method `Order.total`: expected `int`, but found `string`.
   The type `string` returned here is not compatible with the declared return type `int`.
   help: Change the return value to match `int`, or update the method's return type declaration.
-line 19: Parse error encountered during parsing
-  This error indicates that the parser encountered a parse issue.
-  help: Check the syntax of your code.
+line 19: Unexpected `echo`
 line 31: Invalid return type for method `Order.label`: expected `string`, but found `int`.
   The type `int` returned here is not compatible with the declared return type `string`.
   help: Change the return value to match `string`, or update the method's return type declaration.

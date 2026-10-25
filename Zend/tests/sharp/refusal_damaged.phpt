@@ -1,37 +1,21 @@
 --TEST--
-The engine refuses a compiled file whose length or offsets disagree with its header, as not compiled
+The engine refuses a compiled file whose length, offsets or sections disagree with its header, or whose tree it can't translate, as not compiled
 --FILE--
 <?php
-require __DIR__ . '/project.inc';
-
-$root = compile_project('damaged', ['Shop.sharp' => SHOP, 'Counter.sharp' => COUNTER]);
-$compiled = "$root/.sharp/Shop.sharpc";
-$bytes = file_get_contents($compiled);
-['inputs' => $inputs, 'nodes' => $nodes] = unpack('Vinputs/Vnodes', $bytes, 80);
-$first_node = 128 + 40 * $inputs;
-$first_child = $first_node + 56 * $nodes;
-
-foreach ([
-    'one byte too long' => fn () => file_put_contents($compiled, $bytes . "\0"),
-    'one byte too short' => fn () => file_put_contents($compiled, substr($bytes, 0, -1)),
-    'shorter than a header' => fn () => file_put_contents($compiled, substr($bytes, 0, 100)),
-    'a root past the nodes' => fn () => overwrite($compiled, 92, pack('V', $nodes)),
-    'a child past the nodes' => fn () => overwrite($compiled, $first_child, pack('V', $nodes)),
-    'a text past the texts' => fn () => overwrite($compiled, $first_node + 48, pack('V', 0x7fffffff)),
-    "a library version past the texts" => fn () => overwrite($compiled, 116, pack('V', 0x7fffffff)),
-] as $damage => $write) {
-    file_put_contents($compiled, $bytes);
-    $write();
-    echo $damage, ': ';
-    refusal("$root/Shop.sharp");
-}
-remove_project($root);
+require __DIR__ . '/refusal_damaged.inc';
 ?>
 --EXPECT--
 one byte too long: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
 one byte too short: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
 shorter than a header: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
 a root past the nodes: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
+a library version past the texts: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
+sections changed after mago wrote them: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
 a child past the nodes: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
 a text past the texts: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
-a library version past the texts: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
+a kind php-src does not declare: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
+a return with two children: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
+a statement list that holds itself: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
+a statement two places hold: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
+a value tag past SHARP_STRING: CompileError: Shop.sharp isn't compiled. Run vendor/bin/mago compile.
+the file as mago wrote it: ran

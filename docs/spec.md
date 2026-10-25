@@ -1426,6 +1426,8 @@ copy.add(line);           // changes only copy
 
 At each crossing, the runtime checks every element once and throws a `TypeError` that names the element. An `int` where PHP# expects a `float` does not throw: it becomes a `float` (section 24). A call from PHP# to PHP# checks nothing at runtime, because the checker proved it.
 
+**Plain PHP's write into a PHP# collection is checked too.** A `Map` or a `Set` PHP# code makes carries its type from when it is made, as `new` of a generic class does: a literal takes the type of where it lands, `entries()`, `groupBy()`, `associateBy()` and `toSet()` the type of their result, `filter()` its receiver's, and a PHP array that crosses into a typed place the type of that place. One plain PHP makes, as `new \Sharp\Map()`, takes its type at the first typed place that holds it, a property, a parameter or a return. Each keeps its type, as a C# object keeps its one type. A property's initial value that makes one whose type names a type parameter, as `Map<string, T> index = [:]`, runs in the constructor, and a static's for each type argument, so it has the object's or the type argument's type. A literal in a generic method whose place names the method's own type parameter, as `Map<string, TItem> made = [:]` in `build<TItem>()`, has the type argument of the call. A parameter's default runs with neither, so a `Map` or a `Set` it makes whose type names a type parameter has no type, and plain PHP's writes into it are not checked. A key and a value plain PHP writes into a `Map`, as `$larder->stock["k"] = "x"`, and an element it adds to a `Set` cross as a PHP array's entry does, and a wrong one throws the `TypeError` at the write, as C# throws on a wrong element written into an array. A write into a `List` property, as `$order->counts[] = "z"`, a write into a `Map`'s value, as `$larder->shelves["k"][] = "x"`, an index write, a nested write, a write through a reference, `sort()`, `array_push()` and `foreach` by reference, writes plain PHP's value. The next PHP# read of the property or of the `Map`'s entries, by an index, a loop, a method such as `values()` or `filter()`, `json_encode` or `serialize`, throws the `TypeError` that names its type and the element, as Kotlin's read of a Java list does. So PHP# code never reads an element its type doesn't hold.
+
 **A plain PHP array keyed by `int` alone arrives as a `List`, renumbered,** as Kotlin reads a Java `List`. PHP keeps an array's keys when a function such as `array_filter` drops elements, so plain PHP's `array<int, Person>` holds a list whose keys may have gaps. PHP# reads it as a `List<Person>` wherever it arrives, a return, a property read, an argument from a plain PHP caller and a property plain PHP writes, and its first element is at `0`. A place declared `Map<int, Person>` keeps the keys plain PHP gave. A shape whose keys are all `int`, as `list{int, int}` or `array{0: int, 1: int}`, is a `List` too, of its elements in order, and so is each array keyed by `int` alone that a shape's field, a `Map`'s value or a `List`'s element holds. An array keyed by `string` or by `int|string` stays a `Map`, and a value plain PHP types as a list or a map, as `list<int>|array<string, int>`, keeps the keys it holds, so no `string` key is ever lost.
 
 <!-- example plain-list-arrival -->
@@ -1494,7 +1496,7 @@ PHP's `["key" => value]` is not used, because `=>` is the lambda arrow.
 
 <!-- example empty-literals: statements alone -->
 ```csharp
-let messages = [];                             // compile error: an empty literal needs a type: write List<string> messages = []
+let messages = [];                             // compile error: an empty literal needs a type: write the type of its elements, as in List<string> messages = []
 List<string> messages = [];                    // compiles
 ```
 
@@ -1617,7 +1619,7 @@ for (const [sku, count] of stock) {   // stock is Map<string, int>, so sku is a 
 }
 ```
 
-**Map keys:** anything with `==` and `hash()` (section 19) keys a `Map` and joins a `Set`, as in Swift, Rust, Java and Kotlin.
+**Map keys:** anything with `==` and `hash()` (section 19) keys a `Map` and joins a `Set`, as in Swift, Rust, Java and Kotlin. Two keys are one key when they are equal as C#'s `Dictionary` finds them with `Equals`, which is `==` but for two numbers: every NaN is one key, though `NaN == NaN` stays false, and an `int` and a `float` are one key only when the `float` is exactly that whole number, though `==` converts the `int` to a `float` first, as C#'s `==` on a `long` and a `double` does. So `-0.0` and `0.0` are one key, and `2 ** 53 + 1` and `2.0 ** 53` are two. In a `Map<float, V>` an `int` key becomes a `float` where it enters, so the two differ only for a key type that holds both.
 
 - A loop over the `Map` gives each key as the key type, as in `for (const [status, n] of counts)`, where `status` arrives as a `Status`. Writing the type, as in `const [Status status, int n]`, stays allowed. An inferred `Map`, such as a `groupBy` result, gives its keys back the same way.
 - Plain PHP receives a `Map` or a `Set` as a PHP array wherever it gets one: a result, a value a generator yields, an argument, a property it reads, a value PHP# writes into a property plain PHP declares or an element of one, a constant and an attribute's argument, and so does each `Map` and `Set` a `List` holds. That holds where the declared type is `Any`, `Any?`, a type parameter or an `Iterable` too. A `Map` is the array of its entries and a `Set` the list of its elements. A property it reads through `get_object_vars`, `get_mangled_object_vars`, `get_class_vars`, an `(array)` cast, `foreach`, `array_walk` or an `ArrayIterator` over the object, `ReflectionProperty::getValue` and `getRawValue`, after an `isInitialized()` or a `setValue()` too, and `ReflectionClass`'s static property reads is the array too, `empty()` tests that array, `var_export` prints it, and reflection gives each such property, parameter and result the type `array`. A reference plain PHP takes to an instance property whose type names each `Map` and `Set` it can hold, as `Map<string, Set<int>>` does and `Map<string, Any>` does not, is a reference to that array, as `ksort`, `$r = &$order->tags` and `foreach` by reference take one, and each array assigned through it must fit the property's type. PHP# code reading its own property still gets the `Map`, and a PHP array plain PHP writes there, directly or through a reference, becomes one again. A lazy `Iterable` reaches plain PHP as a `Traversable`, unread, and each element crosses as plain PHP reads it.
@@ -3515,7 +3517,7 @@ const paid = result as PaymentResult.Paid ?? throw new NotPaid(result);
 ```
 
 - **`is`** tests a value against any pattern, and creates the pattern's variables when it matches.
-- **Narrowing:** after `is` without a name, a local variable or parameter counts as the tested type for the rest of the block. Assigning to it inside the block ends the narrowing. Properties are not narrowed, because they could change between the test and the use. To use a property's tested value, bind it to a name, as in `is int t`.
+- **Narrowing:** after `is` without a name, a local variable or parameter counts as the tested type for the rest of the block. Assigning to it inside the block ends the narrowing. A local or parameter that a lambda assigns is never narrowed, because the lambda may run between the test and the use, as Kotlin decides a smart cast. A lambda keeps the narrowing of a local it reads only when no assignment can run after the lambda is created, as TypeScript decides. Properties are not narrowed, because they could change between the test and the use. To use the tested value of such a local or of a property, bind it to a name, as in `is int t`.
 
 <!-- example narrowing: statements
 Any? entity = new Page();
@@ -3678,11 +3680,17 @@ if (items.count() > 0) { … }
 
 ## 22. Inheritance
 
-The class header lists the base class and interfaces after `:`. The checker knows which name is the class.
+The class header lists the base class and interfaces after `:`. The checker knows which name is the class. A class or an interface that inherits from itself, through its own header or a chain of headers, is a compile error that names the chain, as C#'s CS0146 and Java's cyclic inheritance error are.
 
 <!-- example class-header -->
 ```csharp
 public class Page : DatabaseEntity, Linkable, Shareable { … }
+```
+
+<!-- example inheritance-cycle -->
+```csharp
+public class Folder : Shortcut { }   // compile error: Folder inherits from itself: Folder → Shortcut → Folder
+public class Shortcut : Folder { }   // compile error: Shortcut inherits from itself: Shortcut → Folder → Shortcut
 ```
 
 **Methods of a PHP# class are closed unless the class opens them** with `virtual`, or by declaring them `abstract`. A subclass replaces a method only with a required `override`:
@@ -4449,7 +4457,7 @@ public User find(int|string id)
 
 **A union that holds null is written `(int|string)?`,** with the same `?` as any other type. `int|string|null` is a compile error that names `(int|string)?`, and `int|null` one that names `int?`.
 
-- `null`, `true` and `false` are values, not types. `null` alone as a type is a compile error that names `T?`, and `true` or `false` alone is one that names `bool`.
+- `null`, `true` and `false` are values, not types. `null` alone as a type is a compile error that says to write a type with `?` after it, as in `int?`. `true` or `false` alone, PHP's types, fails as a typo does.
 
 <!-- example nullable-unions: members -->
 ```csharp
@@ -5671,7 +5679,7 @@ The standard library's ten effect classes, listed above, are `foreign` classes. 
 
 **`Events` is the effect of `emit`** (section 15). It is the one standard effect that is not a `foreign` class: a method has it when its body emits, and no object carries it.
 
-**PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS` are compile errors. For the environment and the command-line arguments, the error names `Environment`. For request data, it names a parameter that takes it. PHP# has no global variables, so for `$GLOBALS` it names a constructor or method parameter that takes the value. The process environment arrives as `Environment`, a standard `foreign` class like `Clock` and `Random`:
+**PHP# has no superglobals.** `$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `$_FILES`, `$_REQUEST`, `$_SESSION`, `$_ENV` and `$GLOBALS`, with or without `$`, fail as a typo does. Request data arrives as a parameter, such as a framework's `Request`. The process environment and the command-line arguments arrive as `Environment`, a standard `foreign` class like `Clock` and `Random`:
 
 - `string? variable(string name)` reads an environment variable, or gives null when it is not set.
 - `Map<string, string> variables()` reads every environment variable, by name, on every call.

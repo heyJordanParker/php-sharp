@@ -1,6 +1,8 @@
 namespace Demo;
 
 import Lib.Probe;
+import Sharp.Encoding.Json;
+import Sharp.Encoding.Serialized;
 
 public class Carton
 {
@@ -54,6 +56,180 @@ public class Carton
     {
         this.tags["a"] = ["x"];
     }
+
+    public List<int> counts { get; set; } = [1, 2];
+
+    public List<List<int>> grid { get; set; } = [[1]];
+
+    public Set<int> numbers { get; set; } = [1];
+
+    // What PHP# reads from each Map and Set plain PHP writes into: each key and value, or element, with its type.
+    public string entriesText() =>
+        `${Probe.join(",", this.payload.keys())}=${Probe.join(",", this.payload.values())} ${this.levels.count()} ${this.levels[Level.High] ?? -1} ${Probe.join(",", this.numbers.toList())}`;
+
+    public int secondDoubled() => this.counts[1] * 2;
+
+    public int bumpSecond()
+    {
+        this.counts[1] += 1;
+
+        return this.counts[1];
+    }
+
+    public int incrementSecond()
+    {
+        this.counts[1]++;
+
+        return this.counts[1];
+    }
+
+    public Map<string, int> tallies { get; set; } = ["top": 9223372036854775807, "low": 1];
+
+    public string talliesText() => `${Probe.join(",", this.tallies.keys())}=${Probe.join(",", this.tallies.values())}`;
+
+    public Map<string, List<string>> shelves { get; set; } = ["k": ["a"]];
+
+    public string shelvesText() => Probe.join(",", this.shelves["k"] ?? []);
+
+    // Each other way PHP# code reads a Map's entries.
+    public int shelvesValues() => this.shelves.values().count();
+
+    public int shelvesList() => this.shelves.toList().count();
+
+    public int shelvesFiltered() => this.shelves.filter(shelf => shelf.count() > 0).count();
+
+    public int shelvesGrouped() => this.shelves.groupBy(shelf => shelf.count()).count();
+
+    public int shelvesLooped()
+    {
+        int found = 0;
+        for (const [key, shelf] of this.shelves) {
+            found += shelf.count();
+        }
+
+        return found;
+    }
+
+    public string shelvesJson() => Json.encode(this.shelves);
+
+    public string shelvesSerialized() => Serialized.encode(this.shelves);
+
+    public Map<string, Map<string, int>> nested { get; set; } = ["k": ["n": 1]];
+
+    public string nestedText() => Probe.join(",", (this.nested["k"] ?? [:]).values());
+
+    public string tagsText() => Probe.join(",", (this.tags["a"] ?? []).toList());
+
+    public static Map<string, int> stock { get; set; } = ["a": 1];
+
+    public static string stockText() => `${Probe.join(",", Carton.stock.keys())}=${Probe.join(",", Carton.stock.values())}`;
+
+    public static int bumpTotal()
+    {
+        Carton.totals[1] += 1;
+
+        return Carton.totals[1];
+    }
+
+    // Each Map PHP# code makes, handed to plain PHP as the object, which writes `value` under `key` into it.
+    public void handLiteral(string key, Any? value)
+    {
+        Probe.put(["a": 1], key, value);
+    }
+
+    public void handGrouped(string key, Any? value)
+    {
+        Probe.put(this.counts.groupBy(n => n % 2 == 0 ? "even" : "odd"), key, value);
+    }
+
+    public void handAssociated(string key, Any? value)
+    {
+        Probe.put(this.counts.associateBy(n => `${n}`), key, value);
+    }
+
+    public void handEntries(string key, Any? value)
+    {
+        Probe.put(this.counts.entries(), key, value);
+    }
+
+    public void handSet(Any? value)
+    {
+        Probe.add(this.counts.toSet(), value);
+    }
+
+    // A Map a parameter, a result and a method value make, each typed with the classes and type parameters it names.
+    public void handGiven(Map<Level, Carton> given, string key, Any? value)
+    {
+        Probe.put(given, key, value);
+    }
+
+    public Map<string, Carton> sameOf(Map<string, Carton> given) => Probe.same(given);
+
+    public void handResult(Map<string, Carton> given, string key, Any? value)
+    {
+        Probe.put(this.sameOf(given), key, value);
+    }
+
+    public void handLocal(Map<string, Carton> given, string key, Any? value)
+    {
+        Map<string, Carton> same = Probe.same(given);
+        Probe.put(same, key, value);
+    }
+
+    public void handEntriesValue(string key, Any? value)
+    {
+        this.entriesOf<string>(["a"], key, value);
+    }
+
+    private void entriesOf<TItem>(List<TItem> items, string key, Any? value)
+    {
+        const made = items.entries;
+        Probe.put(made(), key, value);
+    }
+
+    // An empty literal at a place that names the method's own type parameter takes the call's type argument.
+    public void handPlaced(string key, Any? value)
+    {
+        this.placedOf<int>(key, value);
+    }
+
+    private void placedOf<TItem>(string key, Any? value)
+    {
+        Map<string, TItem> made = [:];
+        Probe.put(made, key, value);
+    }
+
+    public List<int>|bool marks { get; set; } = false;
+
+    public string marksText()
+    {
+        const marks = this.marks;
+
+        return marks is List<int> ? Probe.join(",", marks) : "bool";
+    }
+
+    public int gridFirst() => this.grid[0][0];
+
+    public string countsText() => Probe.join(",", this.counts);
+
+    public void addCount(int count)
+    {
+        this.counts.add(count);
+    }
+
+    public static List<int> totals { get; set; } = [1, 2];
+
+    public static int secondTotal() => Carton.totals[1] * 2;
+
+    // The constructor sets it, so an object plain PHP creates without the constructor holds it uninitialized.
+    public List<int> later { get; set; }
+
+    public Carton()
+    {
+        this.later = [];
+    }
+
+    public string laterText() => Probe.join(",", this.later);
 
     public Set<string>|int picked { get; set => field = value; } = 0;
 
