@@ -35,8 +35,8 @@ const GENERIC_REFUSAL = '~^This .+ is not part of PHP#\.$~';
 // The codes of the errors that say mago could not read the line: the parser's and the lexer's.
 const UNREADABLE_CODES = ['parse', 'syntax'];
 // The primary annotation message of a parse error the parser writes to name a PHP# rule, such as "A PHP# parameter
-// needs a type, as in `int extra`.", in every mago. Any other error of UNREADABLE_CODES says the line could not be read,
-// whatever its message, so a new kind of parse error never satisfies a `compile error` line.
+// needs a type, as in `int extra`.". Any other error of UNREADABLE_CODES says the line could not be read, whatever its
+// message, so a new kind of parse error never satisfies a `compile error` line.
 const RULE_MARKER = 'Written here.';
 const RUNTIME = ['value', 'throws', 'message'];
 // The errors mago reports at a construct's first line for the whole construct, by code, or by message when the code is
@@ -877,18 +877,12 @@ function compile_errors(string $stdout): array
                 break;
             }
         }
-        // A parse or lexer error titled "Parse error encountered during parsing" or "Syntax error encountered during
-        // lexing" quotes the code in its primary annotation, and a parse error that names a PHP# rule carries the
-        // RULE_MARKER there: either joins the message. One whose message quotes the code itself has no annotation message.
-        $annotated = $primary['message'] ?? null;
-        $quoted = in_array($issue['code'], UNREADABLE_CODES, true) ? $annotated : null;
-        $message = $issue['message'] . ($quoted !== null ? ' ' . $quoted : '');
         $errors[] = [
             'name' => $primary['span']['file_id']['name'] ?? '',
             'line' => $primary['span']['start']['line'] ?? 0,
-            'message' => $message,
+            'message' => $issue['message'],
             'code' => $issue['code'],
-            'rule' => $annotated === RULE_MARKER,
+            'rule' => ($primary['message'] ?? null) === RULE_MARKER,
         ];
     }
 
