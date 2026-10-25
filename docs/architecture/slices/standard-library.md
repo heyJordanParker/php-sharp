@@ -115,7 +115,10 @@ PHP# code reaches PHP only through the standard library (decision 83). Real code
 
 | PHP | PHP# |
 | --- | --- |
-| `time`, `microtime` | `Clock.now()`, an `Instant`, and `Clock.timestamp()` for measuring |
+| `time`, `microtime` | `Clock.now()`, an `Instant`, and `Clock.timestamp()` for measuring, with `new Clock.fixed(instant)` bound in a test module for a time that never moves |
+| `date_diff`, `<` on two PHP dates | `a < b` on two `Date`s, `Instant`s, `Duration`s or `DateTime`s, and `a.until(b)` for the `Duration` between two `Instant`s |
+| `date_timestamp_get`, `date_timezone_get` | `value.toInstant()` and `value.toDateTime()` on a plain PHP date, such as a Carbon, after `import Sharp.Time.DateTimeInterfaceMembers;`, and `instant.toPhpDateTime()` or `dateTime.toPhpDateTime()` back, for a plain PHP library that takes a `DateTimeInterface` |
+| `date_create_immutable` | `Instant.parse(text)` for text, and `Clock.now()` for now |
 | `date('Y-m-d')` | `date.toString()` |
 | `date('c')`, `gmdate('c')` | `dateTime.toOffsetString()`, and `instant.inZone(TimeZone.utc).toOffsetString()` for UTC |
 | `gmdate('Y-m-d\TH:i:s\Z')` | `instant.toString()` |
