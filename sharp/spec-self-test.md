@@ -198,6 +198,16 @@ public int twice(n) => n * 2;   // compile error: write the parameter's type
 ```
 <!-- expect parser-rule -->
 
+A message the parser writes to name a PHP# rule is reported as the parser wrote it:
+
+<!-- example parser-rule-reported: members -->
+```csharp
+public int twice(n) => n * 2;
+```
+<!-- expect parser-rule-reported
+line 1 expects no error, and the checker reports: A PHP# parameter needs a type, as in `int extra`.
+-->
+
 A `parse error` line needs a parse error:
 
 <!-- example parse-error-needed: statements -->
