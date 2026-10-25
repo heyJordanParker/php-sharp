@@ -550,9 +550,10 @@ foreach (['Attribute', 'Countable', 'JsonSerializable', 'Throwable'] as $class) 
     $externs[] = "extern $class;";
 }
 // A date or a time zone is a value once created, and the members that create one from the clock list `Clock` below,
-// so holding and reading one is pure. Without the line, each would carry the effects of every declared call that
-// returns one, as `date_create_immutable`'s `Clock`.
-foreach (['DateTimeImmutable', 'DateTimeZone'] as $class) {
+// so holding and reading one is pure, as is reading any plain PHP date, such as a Carbon, through the interface every
+// one implements. Without the line, each would carry the effects of every declared call that returns one, as
+// `date_create_immutable`'s `Clock`.
+foreach (['DateTimeImmutable', 'DateTimeInterface', 'DateTimeZone'] as $class) {
     $imports[] = "import $class;";
     $externs[] = "extern $class;";
 }

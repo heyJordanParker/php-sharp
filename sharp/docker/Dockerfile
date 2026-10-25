@@ -32,7 +32,7 @@ RUN apt-get update \
       libzip-dev \
  && rm -rf /var/lib/apt/lists/*
 
-# sharp/bin/hosts builds FrankenPHP with the Go its v1.13.0 release names, as sharp/docker/runtime/frankenphp.Dockerfile
+# sharp/bin/hosts builds FrankenPHP with the Go its v1.13.1 release names, as sharp/docker/runtime/frankenphp.Dockerfile
 # does, and serves the fixture through php-fpm with libfcgi-bin's cgi-fcgi.
 COPY --from=golang /usr/local/go /usr/local/go
 ENV PATH=/usr/local/go/bin:$PATH \

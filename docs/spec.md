@@ -4285,7 +4285,7 @@ public class Layout
 **The standard library lives under one root, `Sharp`,** with one standard library namespace per domain, as .NET has `System.*` and Rust has `std::*`:
 
 - `Sharp.Text` holds the members of `string`, `Regex` and `Html`.
-- `Sharp.Time` holds `Clock`, `Instant`, `Duration`, `Date`, `DateTime`, `TimeZone`, `Weekday` and `Month`.
+- `Sharp.Time` holds `Clock`, `Instant`, `Duration`, `Date`, `DateTime`, `TimeZone`, `Weekday` and `Month`, and the members of a plain PHP date in `DateTimeInterfaceMembers`.
 - `Sharp.IO` holds `Files`, `Path` and `Console`.
 - `Sharp.System` holds `Process`, `ProcessResult` and `Environment`.
 - `Sharp.Net` holds `Http`, `HttpRequest`, `HttpResponse`, `HttpMethod`, `Url`, `Ip`, `Mail`, `MailMessage` and `MailAddress`.
@@ -4658,6 +4658,8 @@ Duration.parse("PT1H30M").minutes;                        // 90
 Instant.tryParse("yesterday");                            // null
 new Date(2026, 2, 29);                                    // throws ValueError
 ```
+
+Two `Date`s, `Instant`s, `Duration`s or `DateTime`s order with `<`, `<=`, `>` and `>=`. A `DateTime` orders by its instant and then by its zone's name, so its `<=>` is 0 exactly when `==` is true. A zone's name is spelled exactly as the time zone database spells it, so `+03:00`, `EEST` and `europe/sofia` name no zone. A test module binds `new Clock.fixed(instant)` in place of the real `Clock`, and its `now()` is always that instant. After `import Sharp.Time.DateTimeInterfaceMembers;`, a plain PHP date, such as a Carbon, becomes an `Instant` with `toInstant()` or a `DateTime` with `toDateTime()`. `toPhpDateTime()` turns an `Instant` or a `DateTime` back into a plain PHP date. None of these four reads the clock.
 
 A format is named by the text it writes, never by PHP's format letters. A `DateTime`'s `toOffsetString()` writes ISO-8601 with the offset and no zone, its `toSqlString()` a SQL `DATETIME`, and an `Instant`'s `toHttpDate()` the HTTP date of RFC 9110. `DateTime.parseLocal(text, zone)` reads a date and a time of day on a zone's clocks, with a space or a `T` between them. A `Date` and a `DateTime` give their `weekday` and `monthOfYear` as the enums `Weekday` and `Month`, whose `toString()` is the English name. Any other text is a template of the fields:
 

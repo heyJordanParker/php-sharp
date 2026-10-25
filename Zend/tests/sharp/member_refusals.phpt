@@ -41,7 +41,7 @@ line 7: Invalid argument type for argument #2 of `string.replace`: expected `str
   The provided type `int` is not compatible with the expected type `string`.
   help: Change the argument value to match `string`, or update the parameter's type declaration.
 line 9: Method `shuffled` does not exist on `string`.
-  help: A `string` has the methods `capitalized`, `characters`, `codePoints`, `contains`, `decapitalized`, `endsWith`, `indexOf`, `lastIndexOf`, `length`, `lines`, `lowercase`, `padEnd`, `padStart`, `parseCsv`, `removePrefix`, `removeSuffix`, `repeat`, `replace`, `slug`, `split`, `startsWith`, `substring`, `trimEnd`, `trimStart`, `trim`, `uppercase`.
+  help: A `string` has the methods `capitalized`, `characters`, `codePoints`, `compareTo`, `contains`, `decapitalized`, `endsWith`, `indexOf`, `lastIndexOf`, `length`, `lines`, `lowercase`, `padEnd`, `padStart`, `parseCsv`, `removePrefix`, `removeSuffix`, `repeat`, `replace`, `slug`, `split`, `startsWith`, `substring`, `trimEnd`, `trimStart`, `trim`, `uppercase`.
 line 11: Invalid return type for method `Refusals.values`: expected `List<int>`, but found `List<[string, int]>`.
   The type `List<[string, int]>` returned here is not compatible with the declared return type `List<int>`.
   help: Change the return value to match `List<int>`, or update the method's return type declaration.

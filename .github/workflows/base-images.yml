@@ -1,12 +1,17 @@
 name: Base images
-# CI builds sharp/docker's Dockerfiles with BASE_IMAGE and GOLANG_IMAGE set to Debian's and Go's images in
-# this repository's registry, ghcr.io/heyjordanparker/debian and ghcr.io/heyjordanparker/golang, so it
-# pulls them with its GITHUB_TOKEN. A local build keeps each Dockerfile's default, the public registry's
+# CI builds sharp/docker's Dockerfiles from Debian's and Go's images in this repository's registry,
+# ghcr.io/heyjordanparker/debian and ghcr.io/heyjordanparker/golang: the development image through BASE_IMAGE
+# and GOLANG_IMAGE, and the runtime images through REGISTRY. So it pulls them with its GITHUB_TOKEN. A local build keeps each Dockerfile's default, the public registry's
 # image, and needs no login. GitHub's shared runners exhaust the anonymous quota of public registries:
 # Docker Hub answered 429 on 2026-10-09, and ECR Public answered "429 Too Many Requests: Data limit
 # exceeded" on #135, #143 and #136. This workflow is the one place that reads public registries. It
 # copies each image every day, so the copies take Debian's and Go's security updates, and a failed copy
-# leaves the previous day's images for every build.
+# leaves the previous day's images for every build. sharp.yml's IMAGE job sets up BuildKit and its SBOM
+# scanner from the copies of moby/buildkit and docker/buildkit-syft-scanner, for the same reason (#86).
+#
+# The runtime images, and IMAGE's BuildKit, take these images at a pinned digest. PIN is the one thing that
+# moves the runtime images' base digests: it pushes a branch that points them at the day's copies, and an issue
+# names that branch, so a new base image arrives as a reviewable change.
 on:
   schedule:
     - cron: '17 4 * * *'
@@ -34,24 +39,102 @@ jobs:
       packages: write
     strategy:
       matrix:
-        image: ['debian:trixie', 'debian:trixie-slim', 'golang:1.27-trixie']
+        # Docker Hub's names. Each copy is ghcr.io/heyjordanparker/ and the name after its first slash.
+        image:
+          - library/debian:trixie
+          - library/debian:trixie-slim
+          - library/golang:1.27-trixie
+          - moby/buildkit:v0.34.1
+          - docker/buildkit-syft-scanner:1.12.0
     steps:
-      # Each source serves Docker's official image under the same index digest, so the first that answers
-      # gives the same copy. ECR Public answered "Data limit exceeded" to this job on 2026-10-16, five times
-      # in a row. --all keeps every platform, since the release image is built for linux/amd64 and linux/arm64.
-      - name: Copy ${{ matrix.image }} to ghcr.io/heyjordanparker/${{ matrix.image }}
+      # Each source serves Docker Hub's image under the same index digest, so the first that answers gives
+      # the same copy. ECR Public answered "Data limit exceeded" to this job on 2026-10-16, five times in a
+      # row, and it serves only Docker's official images. --all keeps every platform, since the release
+      # image is built for linux/amd64 and linux/arm64.
+      - name: Copy ${{ matrix.image }} to ghcr.io/heyjordanparker
         env:
+          IMAGE: ${{ matrix.image }}
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          for source in mirror.gcr.io/library public.ecr.aws/docker/library docker.io/library; do
+          copy="ghcr.io/heyjordanparker/${IMAGE#*/}"
+          for source in mirror.gcr.io public.ecr.aws/docker docker.io; do
             if skopeo copy --all --retry-times 2 \
               --dest-creds "${{ github.actor }}:$TOKEN" \
-              "docker://$source/${{ matrix.image }}" \
-              "docker://ghcr.io/heyjordanparker/${{ matrix.image }}"; then
+              "docker://$source/$IMAGE" \
+              "docker://$copy"; then
               echo "Copied from $source"
-              skopeo inspect --raw "docker://ghcr.io/heyjordanparker/${{ matrix.image }}" | sha256sum
+              skopeo inspect --raw "docker://$copy" | sha256sum
               exit 0
             fi
           done
-          echo "::error::No source gave ${{ matrix.image }}, so ghcr.io keeps the previous copy."
+          echo "::error::No source gave $IMAGE, so $copy keeps the previous copy."
           exit 1
+  # The runtime Dockerfiles pin their bases as ${REGISTRY}/name:tag@sha256:digest, and each pin moves to the digest
+  # of today's copy. Each source serves the same index digest, so the public default and CI's ghcr.io copy are one
+  # image. GITHUB_TOKEN can't push a change to .github/workflows, so sharp.yml's pins of the BuildKit copies, whose
+  # release tags don't move, change by hand with their version.
+  #
+  # PIN opens no pull request: one GITHUB_TOKEN opens starts no workflow, and letting GitHub Actions open one would
+  # let every workflow's token approve pull requests. So it pushes one branch per set of digests, named from them,
+  # and keeps one open issue that names the newest branch, from which an Agent opens the pull request and its CI
+  # runs. A pushed branch never moves, so a pull request already open from it keeps the head its CI ran on.
+  PIN:
+    needs: MIRROR
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Point the runtime Dockerfiles' pins at today's copies
+        id: pin
+        run: |
+          name=
+          for image in debian:trixie-slim golang:1.27-trixie; do
+            pin="/${image//./\\.}@sha256:[0-9a-f]{64}"
+            old="$(grep -ohE "$pin" sharp/docker/runtime/*Dockerfile | head -n 1)"
+            new="sha256:$(skopeo inspect --raw "docker://ghcr.io/heyjordanparker/$image" | sha256sum | cut -d ' ' -f 1)"
+            sed -i -E "s#$pin#/$image@$new#g" sharp/docker/runtime/*Dockerfile
+            name+="-${image//:/-}-${new:7:12}"
+            echo "| \`$image\` | \`${old#*@}\` | \`$new\` |" >> "$RUNNER_TEMP/digests.md"
+          done
+          echo "branch=base-images/${name#-}" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/digests.md"
+          git diff
+      - name: Push the branch that moves the digests, and name it in the issue
+        env:
+          BRANCH: ${{ steps.pin.outputs.branch }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TITLE: The runtime images' base images have new digests
+        run: |
+          if git diff --quiet; then
+            echo "Every pinned digest is today's copy."
+            exit 0
+          fi
+          git switch --create "$BRANCH"
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit --all --message 'chore: the runtime images take the base images base-images.yml copied today'
+          if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; then
+            echo "$BRANCH already holds these digests."
+          else
+            git push origin "$BRANCH"
+          fi
+          cat > "$RUNNER_TEMP/issue.md" <<MARKDOWN
+          base-images.yml copied new base images in $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID, and branch \`$BRANCH\` pins the runtime Dockerfiles to them:
+
+          | Image | \`$GITHUB_REF_NAME\` pins | \`$BRANCH\` pins |
+          | --- | --- | --- |
+          $(cat "$RUNNER_TEMP/digests.md")
+
+          The change: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/$GITHUB_REF_NAME...$BRANCH
+
+          Open a pull request from \`$BRANCH\` into \`$GITHUB_REF_NAME\`, so CI builds and scans the runtime images on the new bases.
+          MARKDOWN
+          issue="$(gh issue list --state open --search "in:title \"$TITLE\"" --json number,title --jq "map(select(.title == env.TITLE)) | .[0].number // empty")"
+          if [[ -z $issue ]]; then
+            gh issue create --title "$TITLE" --body-file "$RUNNER_TEMP/issue.md"
+          else
+            gh issue edit "$issue" --body-file "$RUNNER_TEMP/issue.md"
+          fi

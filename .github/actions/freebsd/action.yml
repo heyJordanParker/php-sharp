@@ -10,7 +10,7 @@ runs:
   using: composite
   steps:
     - name: FreeBSD
-      uses: vmactions/freebsd-vm@v1
+      uses: vmactions/freebsd-vm@c46abacb49f09938ca4e1702d15d836285d694cc # v1.5.9
       with:
         release: '13.5'
         usesh: true

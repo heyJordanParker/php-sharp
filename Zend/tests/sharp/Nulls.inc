@@ -86,4 +86,10 @@ class Nulls
     }
 
     public function held(): ?\Closure { return $this->doubler; }
+
+    public function greeting(?string $name = null): string { return $name ?? "nobody"; }
+
+    private ?string $nickname = null;
+
+    public function currentNickname(): ?string { return $this->nickname; }
 }
