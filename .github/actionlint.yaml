@@ -1,0 +1,19 @@
+# sharp.yml's WORKFLOWS job runs actionlint over every workflow with this configuration.
+self-hosted-runner:
+  # test-suite.yml's LINUX_PPC64 job runs on php-src's self-hosted Gentoo runner on POWER.
+  labels:
+    - gentoo
+    - ppc64
+paths:
+  # The composite actions under .github/actions come from php-src, whose actions name no `description`, and each
+  # merge from php-src would undo one added here.
+  .github/workflows/*.yml:
+    ignore:
+      - 'description is required in metadata of ".+" action at'
+  # php-src's own workflows, kept as php-src writes them so they merge. shellcheck checks every workflow of ours.
+  .github/workflows/test-suite.yml:
+    ignore:
+      - 'shellcheck reported issue in this script'
+  .github/workflows/real-time-benchmark.yml:
+    ignore:
+      - 'shellcheck reported issue in this script'

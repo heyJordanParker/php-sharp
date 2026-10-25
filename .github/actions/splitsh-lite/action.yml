@@ -1,0 +1,18 @@
+name: Install splitsh-lite
+description: >-
+  Installs splitsh-lite v1.0.1 for Linux x86_64 on PATH, from its release archive checked against the SHA-256 pinned
+  here. sharp.yml's COMPOSER job and release.yml's composer job split sharp/composer and sharp/mago with it, to push
+  the heyjordanparker/php-sharp-composer and heyjordanparker/mago-sharp packages.
+
+runs:
+  using: composite
+  steps:
+    - name: Install splitsh-lite
+      shell: bash
+      run: |
+        archive="$RUNNER_TEMP/splitsh-lite.tar.gz"
+        curl -fsSL https://github.com/splitsh/lite/releases/download/v1.0.1/lite_linux_amd64.tar.gz -o "$archive"
+        echo "2539301ce5e21d0ca44b689d0dd2c1b20d9f9e996c1fe6c462afb8af4e7141cc  $archive" | sha256sum -c
+        mkdir "$RUNNER_TEMP/splitsh-lite"
+        tar -xzf "$archive" -C "$RUNNER_TEMP/splitsh-lite"
+        echo "$RUNNER_TEMP/splitsh-lite" >> "$GITHUB_PATH"
