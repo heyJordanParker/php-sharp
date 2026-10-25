@@ -18,4 +18,6 @@ class Calc
         $total += \Demo\Calc::make(2);
         return $total;
     }
+
+    public function share(int $total, int $parts): int { return \intdiv($total, $parts); }
 }

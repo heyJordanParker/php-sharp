@@ -1,5 +1,5 @@
 --TEST--
-PHP# Clock reads the time and sleeps for a Duration, and Random gives seeded or secure values in the ranges it names
+PHP# Clock reads the time and sleeps for a Duration, Clock.fixed always reads one instant, returns from sleep at once and measures no time, and Random gives seeded or secure values in the ranges it names
 --FILE--
 <?php
 require __DIR__ . '/effect_classes.inc';
@@ -19,6 +19,19 @@ foreach ([fn () => $clock->sleep(new Duration(-1)), fn () => $clock->elapsedSinc
     } catch (ValueError $e) {
         echo $e::class, ': ', $e->getMessage(), "\n";
     }
+}
+
+// A fixed clock always reads its instant, returns from sleep at once, and measures no time.
+$fixed = Sharp\Time\Clock::fixed(new Sharp\Time\Instant(1792693800, 250));
+$start = $fixed->timestamp();
+$before = hrtime(true);
+$fixed->sleep(Duration::ofSeconds(5));
+var_dump(hrtime(true) - $before < 1_000_000_000, $fixed->now()->epochSeconds, $fixed->now()->nanosecond);
+var_dump($fixed->timestamp() === $start, $fixed->elapsedSince($start)->nanoseconds);
+try {
+    $fixed->sleep(new Duration(-1));
+} catch (ValueError $e) {
+    echo $e::class, ': ', $e->getMessage(), "\n";
 }
 
 $first = new Sharp\Random(42);
@@ -52,6 +65,12 @@ int(3000000000)
 int(2)
 ValueError: Clock.sleep: the duration is negative
 ValueError: Clock.elapsedSince: the start is later than now
+bool(true)
+int(1792693800)
+int(250)
+bool(true)
+int(0)
+ValueError: Clock.sleep: the duration is negative
 bool(true)
 bool(true)
 int(5)

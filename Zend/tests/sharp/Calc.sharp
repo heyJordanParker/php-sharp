@@ -18,4 +18,6 @@ class Calc
         total += Calc.make(2);
         return total;
     }
+
+    public int share(int total, int parts) => total / parts;
 }

@@ -1,7 +1,9 @@
 namespace Demo;
 
+import Lib.Moments;
 import Sharp.Time.Date;
 import Sharp.Time.DateTime;
+import Sharp.Time.DateTimeInterfaceMembers;
 import Sharp.Time.Duration;
 import Sharp.Time.Instant;
 import Sharp.Time.TimeZone;
@@ -73,4 +75,47 @@ class DateCalls
     public static string scaled(string text, int factor) => Duration.parse(text).times(factor).toString();
 
     public static string built() => Duration.ofDays(1).plus(Duration.ofHours(2)).plus(Duration.ofMinutes(3)).plus(Duration.ofSeconds(4)).plus(Duration.ofMilliseconds(5)).toString();
+
+    public static bool dayEarlier(string first, string second) => Date.parse(first) < Date.parse(second);
+
+    public static int dayOrder(string first, string second) => Date.parse(first) <=> Date.parse(second);
+
+    public static int instantOrder(string first, string second) => Instant.parse(first) <=> Instant.parse(second);
+
+    public static bool zonedSame(string first, string second) => DateTime.parse(first) == DateTime.parse(second);
+
+    public static int zonedOrder(string first, string second) => DateTime.parse(first) <=> DateTime.parse(second);
+
+    public static bool zoneSame(string first, string second) => new TimeZone(first) == new TimeZone(second);
+
+    // `>`, `>=`, `<` and `<=`, each from `<=>`.
+    public static List<bool> hourAgainstMinutes(int minutes)
+    {
+        const hour = Duration.ofHours(1);
+        const shorter = Duration.ofMinutes(minutes);
+
+        return [hour > shorter, hour >= shorter, hour < shorter, hour <= shorter];
+    }
+
+    public static string phpZoned(string local, string zone) => Moments.at(local, zone).toDateTime().toString();
+
+    public static string phpInstant(string local, string zone) => Moments.at(local, zone).toInstant().toString();
+
+    public static string mutablePhpZoned(string local, string zone) => Moments.mutableAt(local, zone).toDateTime().toString();
+
+    // A Function type without `uses` takes only code with no effect, so these compile only while no crossing reads the
+    // clock.
+    public static string zonedCrossedBack(string text)
+    {
+        Function<string(DateTime)> crossing = (DateTime value) => value.toPhpDateTime().toDateTime().toString();
+
+        return crossing(DateTime.parse(text));
+    }
+
+    public static string instantCrossedBack(string text)
+    {
+        Function<string(Instant)> crossing = (Instant value) => value.toPhpDateTime().toInstant().toString();
+
+        return crossing(Instant.parse(text));
+    }
 }

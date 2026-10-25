@@ -61,4 +61,6 @@ class TextCalls
     public static List<string> characters(string text) => text.characters();
 
     public static List<int> codePoints(string text) => text.codePoints();
+
+    public static int compareTo(string text, string other) => text.compareTo(other);
 }
