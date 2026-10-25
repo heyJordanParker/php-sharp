@@ -1,0 +1,3 @@
+[source]
+paths = ["sharp/bench/*.sharp", "sharp/composer/library"]
+extensions = ["sharp"]

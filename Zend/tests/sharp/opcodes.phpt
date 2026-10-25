@@ -362,32 +362,10 @@ Members: same opcodes and lines in 10 op arrays, same signatures in 1 classes
 Site/Page: same opcodes and lines in 9 op arrays, same signatures in 1 classes
 Site/Shape: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Site/Square: same opcodes and lines in 3 op arrays, same signatures in 1 classes
-Collections/Cart: different opcodes and lines in 10 op arrays, same signatures in 1 classes
+Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in 1 classes
   check  Demo\Cart::fill string("List<Demo.Item>")
   check  Demo\Cart::withPrices string("List<int>, List<int>")
-  .sharp L0045 0006 BIND_LEXICAL T3 CV1($element#2)
-  .sharp L0045 0000 CV0($value#1) = RECV 1
-  .sharp L0045 0001 BIND_STATIC CV1($element#2)
-  .sharp L0045 0003 BIND_LEXICAL T2 CV0($value#1)
-  .sharp 0006 BIND_LEXICAL T3 CV1($element#2)
-  .sharp 0000 CV0($value#1) = RECV 1
-  .sharp 0001 BIND_STATIC CV1($element#2)
-  .sharp 0003 BIND_LEXICAL T2 CV0($value#1)
-  .sharp 0000 CV0($element#2) = RECV 1
-  .sharp 0001 BIND_STATIC CV1($value#1)
-  .sharp 0002 T2 = IS_IDENTICAL CV0($element#2) CV1($value#1)
   .sharp     Property [ private Sharp\Map $counts = Closure({closure:<file>:8})() ]
-  .php   L0045 0006 BIND_LEXICAL T3 CV1($element)
-  .php   L0045 0000 CV0($value) = RECV 1
-  .php   L0045 0001 BIND_STATIC CV1($element)
-  .php   L0045 0003 BIND_LEXICAL T2 CV0($value)
-  .php   0006 BIND_LEXICAL T3 CV1($element)
-  .php   0000 CV0($value) = RECV 1
-  .php   0001 BIND_STATIC CV1($element)
-  .php   0003 BIND_LEXICAL T2 CV0($value)
-  .php   0000 CV0($element) = RECV 1
-  .php   0001 BIND_STATIC CV1($value)
-  .php   0002 T2 = IS_IDENTICAL CV0($element) CV1($value)
   .php       Property [ private Sharp\Map $counts ]
 Collections/Item: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures in 1 classes

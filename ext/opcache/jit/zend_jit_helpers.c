@@ -2421,6 +2421,27 @@ static void ZEND_FASTCALL zend_jit_create_typed_ref(zval *val, zend_property_inf
 	ZVAL_INDIRECT(result, val);
 }
 
+/* PHP#: a by-reference fetch of a slot a PHP# type covers, as a `ref` receiver's, runs what the VM's runs: PHP# code
+ * checks a reference plain PHP made, then the slot becomes a reference, which is PHP#'s own when PHP# code made it and
+ * plain PHP's when plain PHP code takes it, see sharp_property_for_plain_write. False after the Error, with `result` the
+ * error. */
+static bool ZEND_FASTCALL zend_jit_sharp_fetch_ref(zval *val, zend_property_info *prop, zend_object *zobj, zval *result)
+{
+	zend_execute_data *execute_data = EG(current_execute_data);
+
+	if (Z_ISREF_P(val) && sharp_function_is_sharp(EX(func)) && !sharp_property_for_write(NULL, zobj, val, prop)) {
+		ZVAL_ERROR(result);
+		return false;
+	}
+	zend_jit_create_typed_ref(val, prop, result);
+	if (Z_ISERROR_P(result)) {
+		return false;
+	}
+	sharp_property_for_plain_write(val, prop, ZEND_FETCH_REF);
+
+	return true;
+}
+
 static void ZEND_FASTCALL zend_jit_extract_helper(zend_refcounted *garbage)
 {
 	zend_execute_data *execute_data = EG(current_execute_data);

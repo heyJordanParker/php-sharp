@@ -26,16 +26,16 @@ class Product
         {
             $this->tags = [];
             foreach ($value as $tag) {
-                $this->tags->add(\mb_strtolower($tag, 'UTF-8')); // PHP# makes the array a Sharp\Collection
+                \Sharp\Internal\add($this->tags, \mb_strtolower($tag, 'UTF-8'));
             }
         }
     }
     public private(set) array $ratings = [];
-    public int $rating = 0 { get => $this->rating; set { $this->ratings->add($value); } }
+    public int $rating = 0 { get => $this->rating; set { \Sharp\Internal\add($this->ratings, $value); } }
 
     public function tag(string $tag): void
     {
-        $this->tags->add($tag); // PHP# makes the array a Sharp\Collection
+        [${'receiver#1'} = $this->tags, ${'kept#2'} = ${'receiver#1'}, \Sharp\Internal\add(${'receiver#1'}, $tag), ${'receiver#1'} === ${'kept#2'} || ($this->tags = ${'receiver#1'})][2];
     }
 
     public function restock(int $count): void

@@ -116,6 +116,7 @@ ZEND_API HashTable *zend_std_build_object_properties_array(zend_object *zobj) /*
 
 	ZEND_ASSERT(!(zend_object_is_lazy_proxy(zobj) && zend_lazy_object_initialized(zobj)));
 	ZEND_ASSERT(!zobj->properties);
+	sharp_object_exposed(zobj);
 	ht = zend_new_array(ce->default_properties_count);
 	if (ce->default_properties_count) {
 		zend_hash_real_init_mixed(ht);
@@ -145,6 +146,7 @@ ZEND_API HashTable *zend_std_build_object_properties_array(zend_object *zobj) /*
 
 ZEND_API HashTable *zend_std_get_properties(zend_object *zobj) /* {{{ */
 {
+	sharp_object_exposed(zobj);
 	return zend_std_get_properties_ex(zobj);
 }
 /* }}} */

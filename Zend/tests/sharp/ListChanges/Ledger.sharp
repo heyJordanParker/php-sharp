@@ -1,0 +1,57 @@
+namespace ListChanges;
+
+// Each change through a `ref` member of a List reaches the place the List lives, and a List<int> property stays checked.
+public class Ledger
+{
+    public List<string> lines { get; set; } = [];
+    public List<int> counts { get; set; } = [];
+    public List<Function<void()>> callbacks { get; set; } = [];
+    public static List<string> archive { get; set; } = [];
+
+    public string dropLine() => this.lines.removeLast();
+
+    public static string dropArchived() => Ledger.archive.removeFirst();
+
+    public void count(int count)
+    {
+        this.counts.add(count);
+    }
+
+    public int total() => this.counts.sumOf(count => count);
+
+    public void forget()
+    {
+        this.callbacks.clear();
+    }
+
+    public int remembered() => this.callbacks.count();
+
+    // The removed element goes first, before the List it left.
+    public static List<string> removedAt(List<string> items, int index)
+    {
+        const removed = items.removeAt(index);
+        items.insert(0, removed);
+        return items;
+    }
+
+    public static List<string> left(List<string> items, int index)
+    {
+        items.removeAt(index);
+        return items;
+    }
+
+    public static string removedFirst(List<string> items) => items.removeFirst();
+
+    public static List<bool> emptiness(List<string> items) => [items.isEmpty(), items.isNotEmpty()];
+
+    // A null before `?.` skips the change and the rest of the chain.
+    public static int? lastCount(List<List<int>>? rows) => rows?.removeLast().count();
+
+    // A member's value runs the member's static method, whose `Map` takes the element type it is called with.
+    public static List<Any> indexed(List<string> items)
+    {
+        const entries = items.entries;
+        Any indexed = entries();
+        return [indexed is Map<int, string>, indexed is Map<int, int>, entries()[1]];
+    }
+}

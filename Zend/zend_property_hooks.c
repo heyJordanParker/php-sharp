@@ -384,6 +384,11 @@ ZEND_API zend_object_iterator *zend_hooked_object_get_iterator(zend_class_entry 
 		}
 	}
 
+	/* PHP#: a loop by reference can take each slot's reference, see sharp_object_exposed. */
+	if (by_ref) {
+		sharp_object_exposed(zobj);
+	}
+
 	zend_hooked_object_iterator *iterator = emalloc(sizeof(zend_hooked_object_iterator));
 	zend_iterator_init(&iterator->it);
 

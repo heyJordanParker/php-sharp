@@ -106,8 +106,15 @@ static zend_always_inline bool sharp_property_for_change(zend_object *object, zv
  * `sort($o->items)` do, after the fetch's `flags` were handled. The slot becomes a reference the property types, as a
  * reference plain PHP takes does, whatever it holds but an object, so sharp_property_from_reference checks it before
  * PHP# code next reads it. Plain PHP itself never runs that check. A Sharp\Map or Sharp\Set is copied when shared, and
- * checks each write plain PHP makes into it with its own type. */
+ * checks each write plain PHP makes into it with its own type. PHP# code fetches the slot here too: a reference it makes
+ * to pass the property by reference, as to a `ref` receiver, is its own, IS_REF_SHARP_MADE, which plain PHP code taking
+ * the reference here clears. */
 void sharp_property_for_plain_write(zval *slot, const zend_property_info *info, uint32_t flags);
+
+/* Plain PHP code that reads an object's properties table can take the reference a slot holds, as `foreach` by reference
+ * over the object, an `(array)` cast and array_walk do, so each reference PHP# code made there stops being PHP#'s own and
+ * is checked as plain PHP's, see sharp_property_from_reference. PHP# code reading the table changes nothing. */
+void sharp_object_exposed(zend_object *object);
 
 /* Whether a write plain PHP makes into what the property `info` holds can leave a value its PHP# type doesn't hold,
  * which PHP# code checks when it next reads the property: a #[\Sharp\Crossing] property, one whose PHP# type names its

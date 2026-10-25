@@ -874,6 +874,10 @@ static zend_always_inline uint32_t zval_gc_info(uint32_t gc_type_info) {
 
 #define OBJ_FLAGS(obj)              GC_FLAGS(obj)
 
+/* reference flags (zval.value->gc.u.flags) */
+#define IS_REF_SHARP_MADE			(1<<9)        /* PHP#: PHP# code passed a typed property by reference, and */
+                                                  /* plain PHP has not taken it, see sharp_property_from_reference */
+
 /* object extra flags (zend_object.flags) */
 
 #define IS_OBJ_LAZY_UNINITIALIZED   (1U<<31) /* Virtual proxy or uninitialized Ghost */

@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Prints the callgrind instruction count of each loop of sharp/bench/Loops.sharp, in no JIT, the function JIT and the
+# tracing JIT: the count of a run of 1M turns less the count of a run of none, so startup and the code a row runs
+# before its loop count for nothing. It runs in the php-sharp-linux image with the tree mounted, on the Linux build
+# sharp/bin/build --linux made, with valgrind installed in the throwaway container.
+
+usage() {
+  echo "usage: sharp/bin/bench [rows...]" >&2
+  exit 2
+}
+
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+rows=(listAdd listAddOnProperty listIndexRead listIndexWrite mapGetAndPut setAdd filterWithLambda plainMethodCall)
+for arg in "$@"; do
+  [[ "$arg" == -* ]] && usage
+done
+if [[ $# -gt 0 ]]; then
+  rows=("$@")
+fi
+
+if [[ ! -f /.dockerenv ]]; then
+  # valgrind is installed as root, and the rows run as the caller, so every file they write is the caller's.
+  exec docker run --rm --init \
+    --ulimit stack=8388608:-1 \
+    --env BENCH_UID="$(id -u)" \
+    --env BENCH_GID="$(id -g)" \
+    --volume "$root:/src" \
+    --workdir /src \
+    php-sharp-linux bash -c '
+      apt-get -qq update >/dev/null && apt-get -qq install -y valgrind >/dev/null
+      exec setpriv --reuid="$BENCH_UID" --regid="$BENCH_GID" --clear-groups \
+        env HOME=/tmp CARGO_HOME=/src/sharp/build/cargo RUSTUP_HOME=/src/sharp/build/rustup \
+        XDG_CACHE_HOME=/src/sharp/build/cache sharp/bin/bench "$@"' bench "${rows[@]}"
+fi
+
+build_dir="$root/sharp/build/linux-$(uname -m)"
+php="$build_dir/sapi/cli/php"
+if [[ ! -x "$php" ]]; then
+  echo "$php is missing. Run sharp/bin/build --linux first." >&2
+  exit 1
+fi
+
+cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
+PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --release --jobs "${CARGO_BUILD_JOBS:-2}" \
+  --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$build_dir/mago" --bin mago
+"$build_dir/mago/release/mago" --no-version-check --colors never --workspace "$root" \
+  --config "$root/sharp/bench/mago.toml" compile >/dev/null
+
+modes=("no JIT" "function JIT" "tracing JIT")
+flags_of() {
+  case "$1" in
+    "no JIT") echo "-d opcache.enable_cli=1 -d opcache.jit=disable" ;;
+    "function JIT") echo "-d opcache.enable_cli=1 -d opcache.jit=function -d opcache.jit_buffer_size=32M" ;;
+    "tracing JIT") echo "-d opcache.enable_cli=1 -d opcache.jit=tracing -d opcache.jit_buffer_size=32M" ;;
+  esac
+}
+
+# The instructions callgrind counts for one run, which must print what the row returns.
+instructions() {
+  local mode="$1" row="$2" n="$3" out
+  # shellcheck disable=SC2046
+  out="$(valgrind --tool=callgrind --smc-check=all --callgrind-out-file=/dev/null \
+    "$php" -n $(flags_of "$mode") "$root/sharp/bench/run.php" "$row" "$n" 2>&1)"
+  sed -n 's/^==[0-9]*== Collected : \([0-9]*\)$/\1/p' <<< "$out" | grep . || {
+    echo "callgrind counted nothing for $row in $mode:" >&2
+    echo "$out" >&2
+    exit 1
+  }
+}
+
+printf '%-20s %-14s %15s\n' row mode instructions
+for row in "${rows[@]}"; do
+  for mode in "${modes[@]}"; do
+    loop=$(($(instructions "$mode" "$row" 1000000) - $(instructions "$mode" "$row" 0)))
+    printf '%-20s %-14s %15d\n' "$row" "$mode" "$loop"
+  done
+done

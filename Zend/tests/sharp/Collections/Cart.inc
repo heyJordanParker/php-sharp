@@ -10,7 +10,7 @@ class Cart
     public function fill(array $extra): int
     {
         $this->items = [new \Demo\Item("tea", 3)];
-        $this->items->add($extra[0]); // PHP# makes the array a Sharp\Collection
+        \Sharp\Internal\add($this->items, $extra[0]);
         $this->counts["items"] = \count($this->items);
         $this->counts["extra"] = \count($extra);
         $total = $this->items[0]->cents;
@@ -29,7 +29,7 @@ class Cart
     {
         $prices = [];
         foreach ($this->items as $item) {
-            ((object) $prices)->add($item->cents); // PHP# makes the array a Sharp\Collection
+            \Sharp\Internal\add($prices, $item->cents);
         }
         return $prices;
     }
@@ -42,7 +42,7 @@ class Cart
 
     public function has(int $cents): bool
     {
-        return \array_find_key($this->prices(), (fn ($value) => fn ($element) => $element === $value)($cents)) !== null;
+        return \Sharp\Internal\contains($this->prices(), $cents);
     }
 
     public function withPrices(array $before, array $after): array
