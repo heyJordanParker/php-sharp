@@ -52,6 +52,6 @@ public class Ledger
     {
         const entries = items.entries;
         Any indexed = entries();
-        return [indexed is Map<int, string>, indexed is Map<int, int>, entries()[1]];
+        return [indexed is Map<int, string>, indexed is Map<int, int>, entries()[1] ?? "none"];
     }
 }
