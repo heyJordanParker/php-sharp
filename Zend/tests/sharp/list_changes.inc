@@ -29,6 +29,22 @@ for ($round = 0; $round < 3; $round++) {
 
     echo json_encode(Ledger::indexed(['a', 'b'])), "\n";
 
+    // Repeated changes to a List<int> property leave it a reference, which the next change takes as it is, and a bad
+    // element plain PHP wrote through a reference of its own throws at the next change.
+    $counted = new Ledger();
+    for ($count = 1; $count <= 3; $count++) {
+        $counted->count($count);
+    }
+    echo json_encode($counted->counts), "\n";
+    $alias = &$counted->counts;
+    $alias[] = 'z';
+    try {
+        $counted->count(4);
+    } catch (TypeError $error) {
+        echo get_class($error), ': ', $error->getMessage(), "\n";
+    }
+    unset($alias);
+
     foreach ([
         fn () => Ledger::removedFirst([]),
         fn () => Ledger::left([], 0),

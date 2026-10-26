@@ -14650,7 +14650,14 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 					return 0;
 				}
 				prop_type_ref = jit_Z_TYPE_INFO(jit, prop_addr);
-				ir_GUARD(jit_sharp_slot_is_plain(jit, prop_type_ref, crossing, crossing_write), ir_CONST_ADDR(exit_addr));
+				ir_ref is_plain = jit_sharp_slot_is_plain(jit, prop_type_ref, crossing, crossing_write);
+				/* PHP#: a `ref` receiver's by-reference fetch of a slot a PHP# type covers takes the reference the last
+				 * one left, which zend_jit_sharp_fetch_ref checks, so a loop of `this.items.add(i)` stays on the trace. */
+				if (crossing_write && (opline->extended_value & ZEND_FETCH_OBJ_FLAGS) == ZEND_FETCH_REF
+				 && (prop_info->flags & ZEND_ACC_SHARP_TYPED)) {
+					is_plain = ir_OR_B(is_plain, ir_EQ(prop_type_ref, ir_CONST_U32(IS_REFERENCE_EX)));
+				}
+				ir_GUARD(is_plain, ir_CONST_ADDR(exit_addr));
 				crossing = false;
 			}
 		} else {
