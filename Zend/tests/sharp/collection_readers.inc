@@ -564,7 +564,7 @@ function reader_array_casts(): string
     $plain = new ReaderPlainBox();
     $seen = [];
     foreach (['(array)' => fn ($object) => (array) $object, 'get_mangled_object_vars()' => get_mangled_object_vars(...),
-        'getArrayCopy()' => fn ($object) => (new ArrayIterator($object))->getArrayCopy()] as $reader => $read) {
+        'getArrayCopy()' => fn ($object) => (@new ArrayIterator($object))->getArrayCopy()] as $reader => $read) {
         $seen[] = "$reader of a plain object " . json_encode($read($plain));
         foreach (['declares' => new Carton(), 'inherits' => new ReaderCartonChild()] as $owner => $box) {
             $array = $read($box);
