@@ -2,23 +2,23 @@
 
 ## Decision
 
-`==` and `!=` on a value of a type parameter compile only when its bound guarantees `==`: the built-in bound `Equatable`, or a class or interface that declares `operator ==` or inherits one. The same rule covers every other place that compares a value of a type parameter with `==`: `contains`, `indexOf` and `remove` on a `List`, a `Map` key, a `Set` element and a value pattern.
+`==` and `!=` on a value of a type parameter compile only when its bound guarantees `==`: the built-in bound `Equatable`, or a class or interface that declares or inherits `operator ==`. The same rule covers every other place that compares a value of a type parameter with `==`: `contains`, `indexOf` and `remove` on a `List`, a `Map` key, a `Set` element and a value pattern.
 
-Every type that has `==` (decision 12) satisfies `Equatable` with no declaration: numbers, strings, `bool`, enums, collections whose elements have `==`, structs whose fields have `==`, and classes that declare `operator ==`. A function, `Object`, `Any` and a class without `operator ==` do not. Each `operator ==` comes with `hash()`, so `Equatable` also keys a `Map` and fills a `Set`.
+Every type that has `==` (decision 12) satisfies `Equatable` with no declaration: numbers, strings, `bool`, enums whose cases' fields all have `==`, collections whose elements have `==`, structs whose fields have `==`, and classes that declare or inherit `operator ==`. A function, `Object`, `Any` and a class without `operator ==` do not. Each `operator ==` comes with `hash()`, so `Equatable` also keys a `Map` and fills a `Set`. A class value has `==` but keys no `Map`, so it does not satisfy `Equatable` either.
 
 `Equatable` is a bound and never a value's type. It joins other bounds with `&`, as in `<TItem : Shareable & Equatable>`, and it adds no type the running code checks.
-
-```csharp
-public static bool same<T : Equatable>(T a, T b) => a == b;             // compiles
-public static bool same<T>(T a, T b) => a == b;                         // compile error: T has no ==; bound it with Equatable, as in <T : Equatable>
-public static bool sameEntity<T : DatabaseEntity>(T a, T b) => a == b;  // compiles: DatabaseEntity declares operator ==
-Generic.same(point, samePoint);       // compiles; runs: true, structs compare by value
-Generic.same(cartA, cartB);           // compile error: Cart is outside T's bound Equatable, since Cart declares no ==
-```
 
 ## Options
 
 ### Chosen: a built-in `Equatable` every type with `==` satisfies
+
+```csharp
+public static bool same<T : Equatable>(T a, T b) => a == b;             // compiles
+public static bool sameUnbounded<T>(T a, T b) => a == b;                // compile error: T has no ==; bound it with Equatable, as in <T : Equatable>
+public static bool sameEntity<T : DatabaseEntity>(T a, T b) => a == b;  // compiles: DatabaseEntity declares operator ==
+Generic.same(point, samePoint);       // compiles; runs: true, structs compare by value
+Generic.same(cartA, cartB);           // compile error: Cart is outside T's bound Equatable, since Cart declares no ==
+```
 
 The bound asks the same question `==` asks, so a type that compares with `==` passes as a type argument, and one that doesn't is refused at the call. No type writes anything new.
 

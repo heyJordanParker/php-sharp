@@ -1167,7 +1167,7 @@ public void joined<TItem, TPart : TItem & Shareable>() { }                      
 public void looped<TItem : TItem>() { }                                                         // compile error: the bound of TItem leads back to TItem
 ```
 
-**`Equatable` bounds a type parameter to the types that have `==`** (section 19), as Go's `comparable` and F#'s `equality` do. Every such type satisfies it with no declaration: a number, a string, `bool`, an enum, a collection whose elements have `==`, a struct whose fields have `==`, and a class that declares or inherits `operator ==`. A function, `Object`, `Any` and a class without `operator ==` don't. A type parameter has `==` only through its bound, so `==`, `!=`, `contains`, `indexOf` and `remove` on a `List`, a `Map` key, a `Set` element and a value pattern each need `Equatable` or a class or interface bound that declares `operator ==`. `Equatable` is a bound and never a value's type, so `List<Equatable>` is a compile error. It joins other bounds with `&`, as in `<TItem : Shareable & Equatable>`, and adds no type the running code checks.
+**`Equatable` bounds a type parameter to the types that have `==`** (section 19), as Go's `comparable` and F#'s `equality` do. Every such type satisfies it with no declaration: a number, a string, `bool`, an enum whose cases' fields all have `==`, a collection whose elements have `==`, a struct whose fields have `==`, and a class that declares or inherits `operator ==`. A function, `Object`, `Any` and a class without `operator ==` don't, and nor does a class value, which has `==` but keys no `Map`, as a value of `Equatable` does. A type parameter has `==` only through its bound, so `==`, `!=`, `contains`, `indexOf` and `remove` on a `List`, a `Map` key, a `Set` element and a value pattern each need `Equatable` or a class or interface bound that declares or inherits `operator ==`. `Equatable` is a bound and never a value's type, so `List<Equatable>` is a compile error. It joins other bounds with `&`, as in `<TItem : Shareable & Equatable>`, and adds no type the running code checks.
 
 <!-- example equatable-bound: statements in Generic
 public struct Point { public Point(public int x { get; }) { } }
@@ -2956,7 +2956,7 @@ PHP's backtick shell execution is removed, and so is `shell_exec()`. A program r
 - **Any type may declare `operator ==` with `hash()`,** a struct as well as a class, and the declared one replaces the one a struct gets with no code.
 - **A class** compares with `==` only if it or a parent declares `operator ==`. Otherwise `==` on it is a compile error.
 - **A function has no `==`,** so `==` between two function values is a compile error.
-- **A type parameter has `==` only through its bound:** `Equatable`, or a class or interface that declares `operator ==` (section 11).
+- **A type parameter has `==` only through its bound:** `Equatable`, or a class or interface that declares or inherits `operator ==` (section 11).
 - **`Any?`** compared with `==` against a struct, enum, string, number or collection compares by value, and is false when the types differ.
 - **`===`** is true only for the same object. It works on classes only, and cannot be overridden.
 - **`Set`** hashes a struct, enum, string, number or collection by its value, and an object by its class's `hash()`. A struct that declares `hash()` is hashed by it.
