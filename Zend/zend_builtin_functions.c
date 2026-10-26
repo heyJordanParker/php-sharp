@@ -861,6 +861,7 @@ ZEND_FUNCTION(get_object_vars)
 		RETVAL_ARR(zend_proptable_to_symtable(properties, always_duplicate));
 	} else {
 		array_init_size(return_value, zend_hash_num_elements(properties));
+		bool crosses = sharp_class_has_crossing_props(zobj->ce);
 
 		ZEND_HASH_FOREACH_KEY_VAL(properties, num_key, key, value) {
 			bool is_dynamic = 1;
@@ -882,7 +883,7 @@ ZEND_FUNCTION(get_object_vars)
 			}
 
 			/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
-			if (!is_dynamic && Z_TYPE_P(value) != IS_PTR && sharp_cross_slot_read(&tmp, zobj, value)) {
+			if (crosses && !is_dynamic && Z_TYPE_P(value) != IS_PTR && sharp_cross_slot_read(&tmp, zobj, value)) {
 				value = &tmp;
 			}
 

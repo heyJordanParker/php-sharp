@@ -377,7 +377,7 @@ function reader_tables_typed_from_creation(): string
 
 // A Map whose type names a class or a type parameter carries that type too: one an initial value or a static makes,
 // with the type arguments of the object or the static, one a parameter or a result crosses into, and one a method value
-// or an empty literal makes in a generic method, with the method's type arguments.
+// or a literal makes in a generic method, or in a lambda written there, with the method's type arguments.
 function reader_tables_typed_by_names(): string
 {
     $box = new Carton();
@@ -390,8 +390,12 @@ function reader_tables_typed_by_names(): string
         'a Map<string, Demo.Carton> local' => fn () => $box->handLocal(['a' => new Carton()], 'k', 5),
         'entries() as a method value in a generic method' => fn () => $box->handEntriesValue('k', 'x'),
         'a Map<string, TItem> [:] local in a generic method' => fn () => $box->handPlaced('k', 'x'),
+        'a Map<string, T> [:] a lambda in a generic method returns' => fn () => $box->handKeyed('j', 'x'),
+        'a Map<string, T> [:] a lambda in a lambda in a generic method returns' => fn () => $box->handNested('j', 'x'),
         'writes that fit' => function () use ($box, $held) {
             $box->handPlaced('k', 4);
+            $box->handKeyed('j', 4);
+            $box->handNested('j', 4);
             $held->handIndex('k', 2);
             $held->handPool('k', 3);
             $box->handGiven(['high' => new Carton()], 'low', new Carton());
@@ -542,6 +546,68 @@ function reader_false_made_an_array(): string
     return implode(' / ', $seen);
 }
 
+final class ReaderPlainBox
+{
+    public int $shown = 1;
+    protected array $kept = ['a' => 2];
+    private string $own = 'x';
+}
+
+// A plain PHP subclass declares no property of its own, so it holds exactly the properties Carton declares.
+final class ReaderCartonChild extends Carton
+{
+}
+
+// PHP# declares no traits, and an interface holds no fields, so a Map or a Set property reaches a class through a trait
+// only from plain PHP that writes #[\Sharp\Crossing] as the bridge does.
+trait ReaderCrossingTrait
+{
+    #[\Sharp\Crossing(['map', 'string', null])] public \Sharp\Map $payload;
+    #[\Sharp\Crossing(['set', null])] public \Sharp\Set $codes;
+}
+
+final class ReaderTraitBox
+{
+    use ReaderCrossingTrait;
+
+    public function __construct()
+    {
+        $this->payload = ['b' => 2, 'a' => 1];
+        $this->codes = ['b', 'a'];
+    }
+}
+
+// (array), get_mangled_object_vars(), ArrayIterator::getArrayCopy(), get_object_vars() and foreach give plain PHP each
+// Map and Set property as its PHP array, whether the class declares it, inherits it, is an anonymous class that
+// inherits it, or uses a trait that declares it, and an object of a class with no such property as plain PHP does.
+function reader_array_casts(): string
+{
+    $plain = new ReaderPlainBox();
+    $seen = [];
+    $loop = function (object $object): array {
+        $array = [];
+        foreach ($object as $name => $value) {
+            $array[$name] = $value;
+        }
+
+        return $array;
+    };
+    foreach (['(array)' => fn ($object) => (array) $object, 'get_mangled_object_vars()' => get_mangled_object_vars(...),
+        'getArrayCopy()' => fn ($object) => (@new ArrayIterator($object))->getArrayCopy(),
+        'get_object_vars()' => get_object_vars(...), 'foreach' => $loop] as $reader => $read) {
+        $seen[] = "$reader of a plain object " . json_encode($read($plain));
+        foreach (['declares' => new Carton(), 'inherits' => new ReaderCartonChild(),
+            'is anonymous and inherits' => new class extends Carton {}, 'uses a trait with' => new ReaderTraitBox()]
+            as $owner => $box) {
+            $array = $read($box);
+            $seen[] = "$reader of an object whose class $owner a Map and a Set " . get_debug_type($array['payload']) . ' '
+                . json_encode($array['payload']) . ' ' . get_debug_type($array['codes']) . ' ' . json_encode($array['codes']);
+        }
+    }
+
+    return implode(' / ', $seen);
+}
+
 function readers(): string
 {
     $rows = [
@@ -580,6 +646,7 @@ function readers(): string
         "plain PHP's readers and clone after a wrong write" => reader_plain_readers_after_wrong_write(...),
         "plain PHP's clone of a typed slot's reference, written through and cloned again" => reader_plain_clone_reference_typed(...),
         'an element write into a property that holds false' => reader_false_made_an_array(...),
+        "plain PHP's array casts, get_object_vars() and foreach of an object, with a Map and a Set property declared, inherited or from a trait, and without" => reader_array_casts(...),
     ];
     $output = '';
     foreach ($rows as $row => $read) {

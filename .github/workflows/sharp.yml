@@ -41,7 +41,8 @@ jobs:
           jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=100")
           suites='.jobs[] | select(.name == "LINUX" or .name == "LINUX_ZTS" or .name == "HOSTS" or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS")))'
           failed=$(jq -r "[$suites | select(.conclusion != \"success\") | \"\(.name): \(.conclusion // .status)\"] | join(\", \")" <<< "$jobs")
-          if [[ $(jq "[$suites | select(.conclusion == \"success\")] | length" <<< "$jobs") != 6 ]]; then
+          # LINUX, LINUX_ZTS, HOSTS, MACOS, and PHP_EXTENSIONS for each of its two images on each of its two runners.
+          if [[ $(jq "[$suites | select(.conclusion == \"success\")] | length" <<< "$jobs") != 8 ]]; then
             echo "::error::Commit $GITHUB_SHA has not run and passed every PHP# suite on master (${failed:-a suite is missing}): $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
             exit 1
           fi
@@ -100,14 +101,15 @@ jobs:
           path: |
             sharp/build/cargo
             sharp/build/rustup
-          key: SHARP_LINUX_RUST-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
+          # rustup's toolchains are binaries for the runner's architecture, so each architecture keeps its own.
+          key: SHARP_LINUX_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
       # sharp/bin/test builds mago from sharp/mago into sharp/build/<os>-<arch>/mago. The cache keeps the
       # dependencies' build, and cargo rebuilds Mago's own crates.
       - name: Mago cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: sharp/build/*/mago
-          key: SHARP_LINUX_MAGO-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.lock') }}
+          key: SHARP_LINUX_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.lock') }}
       - name: Build
         run: sharp/bin/build --linux
       - name: Test PHP#
@@ -184,13 +186,13 @@ jobs:
           path: |
             sharp/build/cargo
             sharp/build/rustup
-          key: SHARP_LINUX_RUST-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
+          key: SHARP_LINUX_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
       # sharp/bin/test --zts builds mago into the other build's folder, sharp/build/<os>-<arch>/mago, as LINUX does.
       - name: Mago cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: sharp/build/*/mago
-          key: SHARP_LINUX_MAGO-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.lock') }}
+          key: SHARP_LINUX_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.lock') }}
       - name: Build
         run: sharp/bin/build --linux --zts
       - name: Test PHP#
@@ -252,11 +254,14 @@ jobs:
         run: sharp/bin/hosts --linux
   # Each runtime image, with the extensions a typical Laravel app installs on top, installed the way such an app's
   # Dockerfile does. The engine changes PHP's internal structures, so an extension can stop building or loading.
+  # The images are the only -O2 builds, where GCC finds -Wmaybe-uninitialized and libcurl's type checks, and they build
+  # with --enable-werror. So each builds on amd64 and on arm64, as IMAGE builds them for a tag, and a warning one
+  # architecture alone finds fails the pull request instead of the release.
   PHP_EXTENSIONS:
-    name: PHP_EXTENSIONS (${{ matrix.file }}, ${{ matrix.php }})
+    name: PHP_EXTENSIONS (${{ matrix.host.file }}, ${{ matrix.host.php }}, ${{ matrix.runner }})
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
       contents: read
@@ -265,7 +270,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
+        host:
           # php-fpm answers FastCGI on port 9000 for the app in /var/www/html.
           - file: sharp/docker/runtime/Dockerfile
             php: php
@@ -278,6 +283,7 @@ jobs:
             docker-run: --publish 8443:443 --volume "$RUNNER_TEMP/public:/app/public:ro"
             request: curl --silent --show-error --fail --insecure https://localhost:8443/
             sapi: frankenphp
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
     # The image builds FROM base-images.yml's copies at the digests the Dockerfiles pin, as IMAGE's does.
     env:
       REGISTRY: ghcr.io/heyjordanparker
@@ -298,14 +304,14 @@ jobs:
           path: |
             sharp/build/cargo
             sharp/build/rustup
-          key: SHARP_LINUX_RUST-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
+          key: SHARP_LINUX_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
       - name: Mago cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: sharp/build/*/mago
-          key: SHARP_LINUX_MAGO-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.lock') }}
+          key: SHARP_LINUX_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.lock') }}
       - name: Build the image
-        run: git archive HEAD | docker build --build-arg REGISTRY --file "${{ matrix.file }}" --tag php-sharp -
+        run: git archive HEAD | docker build --build-arg REGISTRY --file "${{ matrix.host.file }}" --tag php-sharp -
       # A critical or high CVE that a fixed package resolves fails the build, so it is fixed before a tag, which takes
       # only a commit whose PHP_EXTENSIONS passed on master, and IMAGE scans what it pushes again.
       # aquasecurity/trivy-action's v0.35.0 and later are immutable releases, made after its tags were rewritten to
@@ -319,17 +325,17 @@ jobs:
           ignore-unfixed: true
           exit-code: '1'
       - name: Install cgi-fcgi
-        if: matrix.sapi == 'fpm-fcgi'
+        if: matrix.host.sapi == 'fpm-fcgi'
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libfcgi-bin
       # The image starts on its own default command, as an app's container does, and serves the app's page. A wrong
       # entrypoint stops the container here, before IMAGE publishes it.
-      - name: Start the image on its default command and request a page from ${{ matrix.sapi }}
+      - name: Start the image on its default command and request a page from ${{ matrix.host.sapi }}
         run: |
           mkdir "$RUNNER_TEMP/public"
           echo '<?php echo "Served by ", PHP_SAPI, PHP_EOL;' > "$RUNNER_TEMP/public/index.php"
-          docker run --detach --name server ${{ matrix.docker-run }} php-sharp
+          docker run --detach --name server ${{ matrix.host.docker-run }} php-sharp
           for ((second = 1; ; second++)); do
-            if response="$(${{ matrix.request }} 2>&1)" && grep -qx 'Served by ${{ matrix.sapi }}' <<< "$response"; then
+            if response="$(${{ matrix.host.request }} 2>&1)" && grep -qx 'Served by ${{ matrix.host.sapi }}' <<< "$response"; then
               echo "$response"
               break
             fi
@@ -354,10 +360,10 @@ jobs:
           RUN install-php-extensions $INSTALL
           RUN apt-get update && apt-get install -y --no-install-recommends rustup && apt-get dist-clean
           DOCKERFILE
-      - name: Check that php -m lists each extension, and call into each one from ${{ matrix.php }}
+      - name: Check that php -m lists each extension, and call into each one from ${{ matrix.host.php }}
         run: |
           # shellcheck disable=SC2086 # EXTENSIONS is a list of extensions.
-          docker run --rm --volume "$PWD:/src" --workdir /src php-sharp-extensions ${{ matrix.php }} sharp/bin/php-extensions $EXTENSIONS
+          docker run --rm --volume "$PWD:/src" --workdir /src php-sharp-extensions ${{ matrix.host.php }} sharp/bin/php-extensions $EXTENSIONS
       # The container mounts the tree and its caches as sharp/docker/run does.
       - name: Test PHP# with the extensions loaded
         run: |
