@@ -3633,9 +3633,9 @@ static zend_always_inline void zend_fetch_property_address(zval *result, zval *c
 					flags &= ZEND_FETCH_OBJ_FLAGS;
 					/* PHP#: PHP# code checks a slot plain PHP turned into a reference before it writes into it, and
 					 * a reference assignment replaces the slot, so it writes into nothing the slot holds. */
-					if (UNEXPECTED(Z_ISREF_P(ptr))
-					 && UNEXPECTED(prop_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					 && opline->opcode != ZEND_ASSIGN_OBJ_REF && sharp_function_is_sharp(EX(func))
+					bool sharp = UNEXPECTED(prop_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
+						&& opline->opcode != ZEND_ASSIGN_OBJ_REF && sharp_function_is_sharp(EX(func));
+					if (sharp && UNEXPECTED(Z_ISREF_P(ptr))
 					 && UNEXPECTED(!sharp_property_for_write(
 						flags == ZEND_FETCH_DIM_WRITE ? result : NULL, zobj, ptr, prop_info))) {
 						ZVAL_ERROR(result);
@@ -3643,7 +3643,7 @@ static zend_always_inline void zend_fetch_property_address(zval *result, zval *c
 					}
 					if ((!flags || zend_handle_fetch_obj_flags(result, ptr, zobj, prop_info, flags))
 					 && UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_TYPED) && opline->opcode != ZEND_ASSIGN_OBJ_REF) {
-						sharp_property_for_plain_write(ptr, prop_info, flags);
+						sharp_property_fetched_for_write(ptr, prop_info, flags, sharp);
 					}
 				}
 				return;
@@ -3698,9 +3698,9 @@ static zend_always_inline void zend_fetch_property_address(zval *result, zval *c
 	ZVAL_INDIRECT(result, ptr);
 	flags &= ZEND_FETCH_OBJ_FLAGS;
 	zend_property_info *sharp_info = CACHED_PTR_EX(cache_slot + 2);
-	if (sharp_info && UNEXPECTED(Z_ISREF_P(ptr))
-	 && UNEXPECTED(sharp_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-	 && opline->opcode != ZEND_ASSIGN_OBJ_REF && sharp_function_is_sharp(EX(func))
+	bool sharp = sharp_info && UNEXPECTED(sharp_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
+		&& opline->opcode != ZEND_ASSIGN_OBJ_REF && sharp_function_is_sharp(EX(func));
+	if (sharp && UNEXPECTED(Z_ISREF_P(ptr))
 	 && UNEXPECTED(!sharp_property_for_write(flags == ZEND_FETCH_DIM_WRITE ? result : NULL, zobj, ptr, sharp_info))) {
 		ZVAL_ERROR(result);
 		goto end;
@@ -3714,7 +3714,7 @@ static zend_always_inline void zend_fetch_property_address(zval *result, zval *c
 		}
 	}
 	if (sharp_info && UNEXPECTED(sharp_info->flags & ZEND_ACC_SHARP_TYPED) && opline->opcode != ZEND_ASSIGN_OBJ_REF) {
-		sharp_property_for_plain_write(ptr, sharp_info, flags);
+		sharp_property_fetched_for_write(ptr, sharp_info, flags, sharp);
 	}
 
 end:
@@ -3946,7 +3946,7 @@ ZEND_API zval* ZEND_FASTCALL zend_fetch_static_property(zend_execute_data *ex, i
 		 && UNEXPECTED(property_info->flags & ZEND_ACC_SHARP_TYPED)
 		 && (fetch_type == BP_VAR_W || fetch_type == BP_VAR_RW) && !EG(exception)
 		 && (!(property_info->flags & ZEND_ACC_PPP_SET_MASK) || zend_asymmetric_property_has_set_access(property_info))) {
-			sharp_property_for_plain_write(result, property_info, flags);
+			sharp_property_fetched_for_write(result, property_info, flags, sharp_function_is_sharp(EX(func)));
 		}
 	} else {
 		result = &EG(uninitialized_zval);

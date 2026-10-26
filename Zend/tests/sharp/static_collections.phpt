@@ -92,7 +92,7 @@ array(1) {
   string(5) "diary"
 }
 int(6)
-Error: Cannot modify private(set) property Demo\Archive::$shown from scope Demo\Patron in Archive.sharp on line 49
+Error: Cannot indirectly modify private(set) property Demo\Archive::$shown from scope Demo\Patron in Archive.sharp on line 49
 array(1) {
   [0]=>
   string(5) "poems"

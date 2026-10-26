@@ -32,12 +32,12 @@ show($frames);
 1,2
 Lib\Inspector::look: no object
 Demo\Inspection::{closure:Demo\Inspection::look():10}: no object
-Sharp\Collection->filter: no object
+Sharp\Internal\filter: no object
 Demo\Inspection::look: no object
 3,4
 Fiber::suspend: no object
 Lib\Inspector::pause: no object
 Demo\Inspection::{closure:Demo\Inspection::pause():16}: no object
-Sharp\Collection->filter: no object
+Sharp\Internal\filter: no object
 Demo\Inspection::pause: no object
 {closure:%sinspection.php:%d}: no object

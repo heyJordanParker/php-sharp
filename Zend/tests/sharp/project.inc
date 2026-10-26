@@ -6,7 +6,7 @@ const LIBRARY_MODULE = [
     'Module', 'Dispatcher', 'ImmediateDispatcher', 'System/Environment', 'Time/Clock', 'Random', 'IO/Console',
     'System/Process', 'System/ProcessResult', 'IO/Files', 'Net/Http', 'Net/Mail', 'Time/Duration', 'Time/Instant',
     'Time/DateTime', 'Time/Date', 'Time/TimeZone', 'Time/DateTimeInterfaceMembers', 'Time/Weekday', 'Time/Month', 'Int', 'Math', 'Net/HttpMethod', 'Net/HttpRequest',
-    'Net/HttpResponse', 'Net/MailAddress', 'Net/MailMessage', 'Net/Url', 'Text/StringMembers',
+    'Net/HttpResponse', 'Net/MailAddress', 'Net/MailMessage', 'Net/Url', 'Text/StringMembers', 'ListMembers',
 ];
 
 function compile_project(string $name, array $files): string

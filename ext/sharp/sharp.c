@@ -41,7 +41,6 @@ extern PHP_JSON_API zend_class_entry *php_json_exception_ce;
 #include "sharp_build_id.h"
 #include "sharp_native.h"
 
-#define SHARP_FILE_EXTENSION ".sharp"
 #define SHARP_COMPILED_FOLDER ".sharp"
 /* How the path of an input that stands for the .sharp files of its folder ends: the bridge's unit::SOURCE_LISTING. */
 #define SHARP_SOURCE_LISTING "/*.sharp"
@@ -1103,14 +1102,6 @@ static int sharp_parse(void)
 	return SUCCESS;
 }
 
-bool sharp_is_sharp_file(const zend_string *filename)
-{
-	size_t length = sizeof(SHARP_FILE_EXTENSION) - 1;
-
-	return ZSTR_LEN(filename) > length
-		&& memcmp(ZSTR_VAL(filename) + ZSTR_LEN(filename) - length, SHARP_FILE_EXTENSION, length) == 0;
-}
-
 HashTable *sharp_equality_operators(void)
 {
 	if (!SHARP_G(equality_operators)) {
@@ -1617,39 +1608,52 @@ static int sharp_struct_implemented(zend_class_entry *interface, zend_class_entr
 	return FAILURE;
 }
 
-/* Replaces the list at array with a renumbered copy: value goes in at index, or, with no value, the
- * element at index leaves. A List's keys are its positions. The old list is released last, so a
- * destructor an element runs sees the changed list. */
-static void sharp_collection_renumber(sharp_collection *collection, zend_long index, zval *value)
+/* Appends the value `element` holds to the List `list` being built, never a reference: a List holds values, spec
+ * section 12, and a `ref` change through an element that threw leaves the element a reference, which the new List
+ * would share otherwise. */
+static zend_always_inline void sharp_list_add_value(HashTable *list, zval *element)
 {
-	zval *array = sharp_collection_place(collection);
-	if (!array) {
-		return;
-	}
+	zval value;
+	ZVAL_COPY_DEREF(&value, element);
+	zend_hash_next_index_insert_new(list, &value);
+}
+
+/* Replaces the list at array with a renumbered copy: value goes in at index, or, with no value, the
+ * element at index leaves. A List's keys are its positions. It gives the old list in `old`, which the
+ * caller releases last, so a destructor an element runs sees the changed list. */
+static void sharp_list_renumber(zval *array, zend_long index, zval *value, zval *old)
+{
 	HashTable *elements = Z_ARRVAL_P(array);
-	zval changed, old;
+	zval changed;
 	zval *element;
 	zend_long position = 0;
 
 	array_init_size(&changed, zend_hash_num_elements(elements) + (value ? 1 : 0));
 	ZEND_HASH_FOREACH_VAL(elements, element) {
 		if (position == index && value) {
-			Z_TRY_ADDREF_P(value);
-			zend_hash_next_index_insert_new(Z_ARRVAL(changed), value);
+			sharp_list_add_value(Z_ARRVAL(changed), value);
 		}
 		if (position != index || value) {
-			Z_TRY_ADDREF_P(element);
-			zend_hash_next_index_insert_new(Z_ARRVAL(changed), element);
+			sharp_list_add_value(Z_ARRVAL(changed), element);
 		}
 		position++;
 	} ZEND_HASH_FOREACH_END();
 	if (position == index && value) {
-		Z_TRY_ADDREF_P(value);
-		zend_hash_next_index_insert_new(Z_ARRVAL(changed), value);
+		sharp_list_add_value(Z_ARRVAL(changed), value);
 	}
 
-	ZVAL_COPY_VALUE(&old, array);
+	ZVAL_COPY_VALUE(old, array);
 	ZVAL_COPY_VALUE(array, &changed);
+}
+
+static void sharp_collection_renumber(sharp_collection *collection, zend_long index, zval *value)
+{
+	zval *array = sharp_collection_place(collection);
+	if (!array) {
+		return;
+	}
+	zval old;
+	sharp_list_renumber(array, index, value, &old);
 	sharp_collection_write_back(collection);
 	zval_ptr_dtor(&old);
 }
@@ -1725,6 +1729,9 @@ ZEND_METHOD(Sharp_Collection, get)
 
 static bool sharp_table_made_with(zend_execute_data *execute_data, zend_object *table, zend_string *text, uint32_t argument);
 
+static void sharp_list_entries(zend_execute_data *execute_data, HashTable *list, zend_string *type_arguments,
+	uint32_t type_argument, zval *return_value);
+
 /* A List's entries: the Map of each index to its element, of the type arguments `int, T` PHP# code passes. A Map's: the
  * Map. */
 ZEND_METHOD(Sharp_Collection, entries)
@@ -1743,15 +1750,22 @@ ZEND_METHOD(Sharp_Collection, entries)
 	if (Z_TYPE_P(held) != IS_ARRAY) {
 		RETURN_COPY(held);
 	}
+	sharp_list_entries(execute_data, Z_ARRVAL_P(held), type_arguments, 1, return_value);
+}
 
+/* A List's entries: the Map of each index to its element, of the type arguments `type_arguments`, the
+ * argument `type_argument`, spells. */
+static void sharp_list_entries(zend_execute_data *execute_data, HashTable *list, zend_string *type_arguments,
+	uint32_t type_argument, zval *return_value)
+{
 	object_init_ex(return_value, sharp_ce_map);
-	if (!sharp_table_made_with(execute_data, Z_OBJ_P(return_value), type_arguments, 1)) {
+	if (!sharp_table_made_with(execute_data, Z_OBJ_P(return_value), type_arguments, type_argument)) {
 		RETURN_THROWS();
 	}
 	sharp_table *table = sharp_table_of(Z_OBJ_P(return_value));
 	zend_ulong index;
 	zval *element;
-	ZEND_HASH_FOREACH_NUM_KEY_VAL(Z_ARRVAL_P(held), index, element) {
+	ZEND_HASH_FOREACH_NUM_KEY_VAL(list, index, element) {
 		if (sharp_out_of_memory()) {
 			RETURN_THROWS();
 		}
@@ -2054,6 +2068,36 @@ static void sharp_collection_filter_table(zend_object *object, zend_fcall_info *
 }
 
 /* Spec section 12: a List's filter renumbers what it keeps, and a Map's or a Set's gives one of its kind. */
+static void sharp_filter(zval *held, zend_fcall_info *fci, zend_fcall_info_cache *fcc, zval *return_value)
+{
+	if (Z_TYPE_P(held) == IS_OBJECT) {
+		sharp_collection_filter_table(Z_OBJ_P(held), fci, fcc, return_value);
+		return;
+	}
+
+	zend_array *elements = Z_ARRVAL_P(held);
+	GC_TRY_ADDREF(elements);
+	zval kept, keep;
+	zval *element;
+	array_init(&kept);
+	ZEND_HASH_FOREACH_VAL(elements, element) {
+		if (!sharp_collection_call(fci, fcc, element, &keep)) {
+			break;
+		}
+		if (zend_is_true(&keep)) {
+			sharp_list_add_value(Z_ARRVAL(kept), element);
+		}
+		zval_ptr_dtor(&keep);
+	} ZEND_HASH_FOREACH_END();
+	zend_array_release(elements);
+
+	if (EG(exception)) {
+		zval_ptr_dtor(&kept);
+		RETURN_THROWS();
+	}
+	RETURN_COPY_VALUE(&kept);
+}
+
 ZEND_METHOD(Sharp_Collection, filter)
 {
 	zend_fcall_info fci;
@@ -2067,33 +2111,28 @@ ZEND_METHOD(Sharp_Collection, filter)
 	if (!held) {
 		RETURN_THROWS();
 	}
-	if (Z_TYPE_P(held) == IS_OBJECT) {
-		sharp_collection_filter_table(Z_OBJ_P(held), &fci, &fcc, return_value);
-		return;
-	}
+	sharp_filter(held, &fci, &fcc, return_value);
+}
 
-	zend_array *elements = Z_ARRVAL_P(held);
-	GC_TRY_ADDREF(elements);
-	zval kept, keep;
+/* What the function gives for each of `elements`, which it releases. */
+static void sharp_map(zend_array *elements, zend_fcall_info *fci, zend_fcall_info_cache *fcc, zval *return_value)
+{
+	zval mapped, value;
 	zval *element;
-	array_init(&kept);
+	array_init_size(&mapped, zend_hash_num_elements(elements));
 	ZEND_HASH_FOREACH_VAL(elements, element) {
-		if (!sharp_collection_call(&fci, &fcc, element, &keep)) {
+		if (!sharp_collection_call(fci, fcc, element, &value)) {
 			break;
 		}
-		if (zend_is_true(&keep)) {
-			Z_TRY_ADDREF_P(element);
-			zend_hash_next_index_insert_new(Z_ARRVAL(kept), element);
-		}
-		zval_ptr_dtor(&keep);
+		zend_hash_next_index_insert_new(Z_ARRVAL(mapped), &value);
 	} ZEND_HASH_FOREACH_END();
 	zend_array_release(elements);
 
 	if (EG(exception)) {
-		zval_ptr_dtor(&kept);
+		zval_ptr_dtor(&mapped);
 		RETURN_THROWS();
 	}
-	RETURN_COPY_VALUE(&kept);
+	RETURN_COPY_VALUE(&mapped);
 }
 
 ZEND_METHOD(Sharp_Collection, map)
@@ -2109,45 +2148,18 @@ ZEND_METHOD(Sharp_Collection, map)
 	if (!elements) {
 		RETURN_THROWS();
 	}
-
-	zval mapped, value;
-	zval *element;
-	array_init_size(&mapped, zend_hash_num_elements(elements));
-	ZEND_HASH_FOREACH_VAL(elements, element) {
-		if (!sharp_collection_call(&fci, &fcc, element, &value)) {
-			break;
-		}
-		zend_hash_next_index_insert_new(Z_ARRVAL(mapped), &value);
-	} ZEND_HASH_FOREACH_END();
-	zend_array_release(elements);
-
-	if (EG(exception)) {
-		zval_ptr_dtor(&mapped);
-		RETURN_THROWS();
-	}
-	RETURN_COPY_VALUE(&mapped);
+	sharp_map(elements, &fci, &fcc, return_value);
 }
 
-/* Adds as PHP#'s + does, which throws where an int sum overflows. */
-ZEND_METHOD(Sharp_Collection, sumOf)
+/* Adds what the function gives for each of `elements`, which it releases, as PHP#'s + does, which throws where an int
+ * sum overflows. */
+static void sharp_sum_of(zend_array *elements, zend_fcall_info *fci, zend_fcall_info_cache *fcc, zval *return_value)
 {
-	zend_fcall_info fci;
-	zend_fcall_info_cache fcc;
-
-	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_FUNC(fci, fcc)
-	ZEND_PARSE_PARAMETERS_END();
-
-	zend_array *elements = sharp_collection_read(ZEND_THIS);
-	if (!elements) {
-		RETURN_THROWS();
-	}
-
 	zval sum, value;
 	zval *element;
 	ZVAL_LONG(&sum, 0);
 	ZEND_HASH_FOREACH_VAL(elements, element) {
-		if (!sharp_collection_call(&fci, &fcc, element, &value)) {
+		if (!sharp_collection_call(fci, fcc, element, &value)) {
 			break;
 		}
 		checked_add_function(&sum, &sum, &value);
@@ -2165,26 +2177,29 @@ ZEND_METHOD(Sharp_Collection, sumOf)
 	RETURN_COPY_VALUE(&sum);
 }
 
-/* Finds the first element the function returns true for, and returns NULL when none is found or the
- * function threw. */
-static zval *sharp_collection_find(INTERNAL_FUNCTION_PARAMETERS, zend_array **elements)
+ZEND_METHOD(Sharp_Collection, sumOf)
 {
 	zend_fcall_info fci;
 	zend_fcall_info_cache fcc;
 
 	ZEND_PARSE_PARAMETERS_START(1, 1)
 		Z_PARAM_FUNC(fci, fcc)
-	ZEND_PARSE_PARAMETERS_END_EX(return NULL);
+	ZEND_PARSE_PARAMETERS_END();
 
-	*elements = sharp_collection_read(ZEND_THIS);
-	if (!*elements) {
-		return NULL;
+	zend_array *elements = sharp_collection_read(ZEND_THIS);
+	if (!elements) {
+		RETURN_THROWS();
 	}
+	sharp_sum_of(elements, &fci, &fcc, return_value);
+}
 
+/* The first of `elements` the function returns true for, or NULL when none is or the function threw. */
+static zval *sharp_find(zend_array *elements, zend_fcall_info *fci, zend_fcall_info_cache *fcc)
+{
 	zval found;
 	zval *element;
-	ZEND_HASH_FOREACH_VAL(*elements, element) {
-		if (!sharp_collection_call(&fci, &fcc, element, &found)) {
+	ZEND_HASH_FOREACH_VAL(elements, element) {
+		if (!sharp_collection_call(fci, fcc, element, &found)) {
 			return NULL;
 		}
 		bool is_found = zend_is_true(&found);
@@ -2197,81 +2212,92 @@ static zval *sharp_collection_find(INTERNAL_FUNCTION_PARAMETERS, zend_array **el
 	return NULL;
 }
 
-/* Kotlin's first: the first element the function returns true for, and an exception when there is
- * none, as a bare index read throws for a missing index. */
-ZEND_METHOD(Sharp_Collection, first)
+/* Kotlin's first: the first of `elements`, which it releases, the function returns true for, and an exception when
+ * there is none, as a bare index read throws for a missing index. */
+static void sharp_first(zend_array *elements, zend_fcall_info *fci, zend_fcall_info_cache *fcc, zval *return_value)
 {
-	zend_array *elements = NULL;
-	zval *element = sharp_collection_find(INTERNAL_FUNCTION_PARAM_PASSTHRU, &elements);
+	zval *element = sharp_find(elements, fci, fcc);
 
 	if (element) {
 		ZVAL_COPY_DEREF(return_value, element);
 	} else if (!EG(exception)) {
 		zend_throw_exception(spl_ce_OutOfRangeException, "No element matches the predicate", 0);
 	}
-	if (elements) {
-		zend_array_release(elements);
-	}
+	zend_array_release(elements);
 }
 
-ZEND_METHOD(Sharp_Collection, any)
+/* Whether the function returns true for any of `elements`, which it releases. */
+static void sharp_any(zend_array *elements, zend_fcall_info *fci, zend_fcall_info_cache *fcc, zval *return_value)
 {
-	zend_array *elements = NULL;
-	zval *element = sharp_collection_find(INTERNAL_FUNCTION_PARAM_PASSTHRU, &elements);
+	bool found = sharp_find(elements, fci, fcc) != NULL;
 
-	if (elements) {
-		zend_array_release(elements);
-	}
+	zend_array_release(elements);
 	if (EG(exception)) {
 		RETURN_THROWS();
 	}
-	RETURN_BOOL(element != NULL);
+	RETURN_BOOL(found);
 }
 
-/* Puts each element in a Map under the key the function gives it: in a list of the elements under that
- * key, or alone, where the last element with a key replaces the ones before it. Any key a Map takes
- * goes in as it is, found by PHP#'s == (spec section 12). The Map has the type arguments PHP# code passes. */
-static void sharp_collection_key_by(INTERNAL_FUNCTION_PARAMETERS, bool group)
+ZEND_METHOD(Sharp_Collection, first)
 {
 	zend_fcall_info fci;
 	zend_fcall_info_cache fcc;
-	zend_string *type_arguments = NULL;
 
-	ZEND_PARSE_PARAMETERS_START(1, 2)
+	ZEND_PARSE_PARAMETERS_START(1, 1)
 		Z_PARAM_FUNC(fci, fcc)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_STR_OR_NULL(type_arguments)
 	ZEND_PARSE_PARAMETERS_END();
 
 	zend_array *elements = sharp_collection_read(ZEND_THIS);
 	if (!elements) {
 		RETURN_THROWS();
 	}
+	sharp_first(elements, &fci, &fcc, return_value);
+}
 
+ZEND_METHOD(Sharp_Collection, any)
+{
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_array *elements = sharp_collection_read(ZEND_THIS);
+	if (!elements) {
+		RETURN_THROWS();
+	}
+	sharp_any(elements, &fci, &fcc, return_value);
+}
+
+/* Puts each element in a Map under the key the function gives it: in a list of the elements under that
+ * key, or alone, where the last element with a key replaces the ones before it. Any key a Map takes
+ * goes in as it is, found by PHP#'s == (spec section 12). The Map has the type arguments PHP# code passes. */
+static void sharp_key_by(zend_execute_data *execute_data, zend_array *elements, zend_fcall_info *fci,
+	zend_fcall_info_cache *fcc, zend_string *type_arguments, uint32_t type_argument, bool group, zval *return_value)
+{
 	zval map, key;
 	zval *element;
 	object_init_ex(&map, sharp_ce_map);
-	if (!sharp_table_made_with(execute_data, Z_OBJ(map), type_arguments, 2)) {
+	if (!sharp_table_made_with(execute_data, Z_OBJ(map), type_arguments, type_argument)) {
 		zval_ptr_dtor(&map);
 		zend_array_release(elements);
 		RETURN_THROWS();
 	}
 	sharp_table *table = sharp_table_of(Z_OBJ(map));
 	ZEND_HASH_FOREACH_VAL(elements, element) {
-		if (!sharp_collection_call(&fci, &fcc, element, &key)) {
+		if (!sharp_collection_call(fci, fcc, element, &key)) {
 			break;
 		}
 		sharp_table_bucket *bucket = group ? sharp_table_find(table, &key) : NULL;
 		bool put = !EG(exception);
 		if (bucket) {
 			SEPARATE_ARRAY(&bucket->value);
-			Z_TRY_ADDREF_P(element);
-			zend_hash_next_index_insert_new(Z_ARRVAL(bucket->value), element);
+			sharp_list_add_value(Z_ARRVAL(bucket->value), element);
 		} else if (put && group) {
 			zval list;
 			array_init(&list);
-			Z_TRY_ADDREF_P(element);
-			zend_hash_next_index_insert_new(Z_ARRVAL(list), element);
+			sharp_list_add_value(Z_ARRVAL(list), element);
 			put = sharp_table_put(table, &key, &list);
 			zval_ptr_dtor(&list);
 		} else if (put) {
@@ -2289,6 +2315,25 @@ static void sharp_collection_key_by(INTERNAL_FUNCTION_PARAMETERS, bool group)
 		RETURN_THROWS();
 	}
 	RETURN_COPY_VALUE(&map);
+}
+
+static void sharp_collection_key_by(INTERNAL_FUNCTION_PARAMETERS, bool group)
+{
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+	zend_string *type_arguments = NULL;
+
+	ZEND_PARSE_PARAMETERS_START(1, 2)
+		Z_PARAM_FUNC(fci, fcc)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_STR_OR_NULL(type_arguments)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_array *elements = sharp_collection_read(ZEND_THIS);
+	if (!elements) {
+		RETURN_THROWS();
+	}
+	sharp_key_by(execute_data, elements, &fci, &fcc, type_arguments, 2, group, return_value);
 }
 
 ZEND_METHOD(Sharp_Collection, groupBy)
@@ -2336,34 +2381,21 @@ static int sharp_collection_compare_keys(Bucket *a, Bucket *b)
 	return Z_EXTRA(a->val) < Z_EXTRA(b->val) ? -1 : Z_EXTRA(a->val) > Z_EXTRA(b->val);
 }
 
-ZEND_METHOD(Sharp_Collection, sortedBy)
+/* `elements`, which it releases, in ascending order of the key the function gives each, by `comparison`, the operator
+ * <=> the checker chose for the key type, when the key type declares one. */
+static void sharp_sorted_by(zend_array *elements, zend_fcall_info *fci, zend_fcall_info_cache *fcc,
+	zend_object *comparison, zval *return_value)
 {
-	zend_fcall_info fci;
-	zend_fcall_info_cache fcc;
-	zend_object *comparison = NULL;
-
-	ZEND_PARSE_PARAMETERS_START(1, 2)
-		Z_PARAM_FUNC(fci, fcc)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_OBJ_OF_CLASS_OR_NULL(comparison, zend_ce_closure)
-	ZEND_PARSE_PARAMETERS_END();
-
-	zend_array *elements = sharp_collection_read(ZEND_THIS);
-	if (!elements) {
-		RETURN_THROWS();
-	}
-
 	zval pairs, pair, key;
 	zval *element;
 	array_init_size(&pairs, zend_hash_num_elements(elements));
 	ZEND_HASH_FOREACH_VAL(elements, element) {
-		if (!sharp_collection_call(&fci, &fcc, element, &key)) {
+		if (!sharp_collection_call(fci, fcc, element, &key)) {
 			break;
 		}
 		array_init_size(&pair, 2);
 		zend_hash_next_index_insert_new(Z_ARRVAL(pair), &key);
-		Z_TRY_ADDREF_P(element);
-		zend_hash_next_index_insert_new(Z_ARRVAL(pair), element);
+		sharp_list_add_value(Z_ARRVAL(pair), element);
 		zend_hash_next_index_insert_new(Z_ARRVAL(pairs), &pair);
 	} ZEND_HASH_FOREACH_END();
 	zend_array_release(elements);
@@ -2388,6 +2420,25 @@ ZEND_METHOD(Sharp_Collection, sortedBy)
 		zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), element);
 	} ZEND_HASH_FOREACH_END();
 	zval_ptr_dtor(&pairs);
+}
+
+ZEND_METHOD(Sharp_Collection, sortedBy)
+{
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+	zend_object *comparison = NULL;
+
+	ZEND_PARSE_PARAMETERS_START(1, 2)
+		Z_PARAM_FUNC(fci, fcc)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_OBJ_OF_CLASS_OR_NULL(comparison, zend_ce_closure)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_array *elements = sharp_collection_read(ZEND_THIS);
+	if (!elements) {
+		RETURN_THROWS();
+	}
+	sharp_sorted_by(elements, &fci, &fcc, comparison, return_value);
 }
 
 static zend_class_entry *sharp_ce_sequence;
@@ -2818,25 +2869,13 @@ ZEND_METHOD(Sharp_Sequence, toList)
 
 /* Spec section 12: a List's flatMap, the elements of each Iterable the function gives, in order, each read as a
  * Sequence reads its source. */
-ZEND_METHOD(Sharp_Collection, flatMap)
+static void sharp_flat_map(zend_array *elements, zend_fcall_info *fci, zend_fcall_info_cache *fcc, zval *return_value)
 {
-	zend_fcall_info fci;
-	zend_fcall_info_cache fcc;
-
-	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_FUNC(fci, fcc)
-	ZEND_PARSE_PARAMETERS_END();
-
-	zend_array *elements = sharp_collection_read(ZEND_THIS);
-	if (!elements) {
-		RETURN_THROWS();
-	}
-
 	zval flat, part, sequence;
 	zval *element;
 	array_init(&flat);
 	ZEND_HASH_FOREACH_VAL(elements, element) {
-		if (!sharp_collection_call(&fci, &fcc, element, &part)) {
+		if (!sharp_collection_call(fci, fcc, element, &part)) {
 			break;
 		}
 		if (Z_TYPE(part) != IS_ARRAY
@@ -2861,6 +2900,540 @@ ZEND_METHOD(Sharp_Collection, flatMap)
 		RETURN_THROWS();
 	}
 	RETURN_COPY_VALUE(&flat);
+}
+
+ZEND_METHOD(Sharp_Collection, flatMap)
+{
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_array *elements = sharp_collection_read(ZEND_THIS);
+	if (!elements) {
+		RETURN_THROWS();
+	}
+	sharp_flat_map(elements, &fci, &fcc, return_value);
+}
+
+/* Spec section 12: the standard library's members of a List run these, each with the List first. A member that changes
+ * the List takes it by reference, from the place a `ref` receiver passes, and changes it there. It finds the change
+ * first and separates a shared List only then, as SEPARATE_ARRAY does for a write, so a `remove` that finds nothing and
+ * an index outside the List leave it shared (design section 5). One that renumbers builds the changed List anew in
+ * sharp_list_renumber, so it separates nothing. One that reads it takes it by value. */
+
+static ZEND_COLD void sharp_throw_empty_list(void)
+{
+	zend_throw_exception(spl_ce_OutOfRangeException, "The list is empty.", 0);
+}
+
+static ZEND_COLD void sharp_throw_missing_index(zend_long index)
+{
+	zend_throw_exception_ex(spl_ce_OutOfRangeException, 0, "Undefined array key " ZEND_LONG_FMT, index);
+}
+
+/* Whether `list`, the first argument of each function here, is a list, and a ValueError that names the function when it
+ * is not. Plain PHP can pass any array, and in one whose keys are not its positions, an element found by key would be
+ * removed or renumbered by position. A packed array without holes is a list at once. */
+static bool sharp_list_argument(const HashTable *list)
+{
+	if (EXPECTED(zend_array_is_list(list))) {
+		return true;
+	}
+	zend_argument_value_error(1, "must be a list");
+
+	return false;
+}
+
+/* `add`: the value goes after the last element. */
+ZEND_FUNCTION(Sharp_Internal_add)
+{
+	zval *list, *value;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ARRAY_EX2(list, 0, 1, 0)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	SEPARATE_ARRAY(list);
+	Z_TRY_ADDREF_P(value);
+	if (!zend_hash_next_index_insert(Z_ARRVAL_P(list), value)) {
+		zval_ptr_dtor(value);
+		zend_cannot_add_element();
+		RETURN_THROWS();
+	}
+}
+
+/* Kotlin's add(index, element): the value goes in at index, from 0 to the count, and the elements from index on move up
+ * one. Outside that range it throws as `set` does past the end. */
+ZEND_FUNCTION(Sharp_Internal_insert)
+{
+	zval *list, *value;
+	zend_long index;
+
+	ZEND_PARSE_PARAMETERS_START(3, 3)
+		Z_PARAM_ARRAY_EX2(list, 0, 1, 0)
+		Z_PARAM_LONG(index)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	if (index < 0 || index > (zend_long) zend_hash_num_elements(Z_ARRVAL_P(list))) {
+		sharp_throw_missing_index(index);
+		RETURN_THROWS();
+	}
+	zval old;
+	sharp_list_renumber(list, index, value, &old);
+	zval_ptr_dtor(&old);
+}
+
+/* Kotlin's set(index, element), which `list[i] = v` runs: the value replaces the element at index, and past either end
+ * it throws, where PHP's write would append or leave a gap (spec section 12). It gives the element it replaced, as
+ * Kotlin's does. */
+ZEND_FUNCTION(Sharp_Internal_set)
+{
+	zval *list, *value;
+	zend_long index;
+
+	ZEND_PARSE_PARAMETERS_START(3, 3)
+		Z_PARAM_ARRAY_EX2(list, 0, 1, 0)
+		Z_PARAM_LONG(index)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	if ((zend_ulong) index >= zend_hash_num_elements(Z_ARRVAL_P(list))) {
+		sharp_throw_missing_index(index);
+		RETURN_THROWS();
+	}
+	SEPARATE_ARRAY(list);
+	zval *element = zend_hash_index_find(Z_ARRVAL_P(list), index);
+	/* The old element leaves the list before it is given, so a destructor it runs sees the changed list. */
+	zval old;
+	ZVAL_COPY_VALUE(&old, element);
+	ZVAL_COPY(element, value);
+	RETVAL_COPY_DEREF(&old);
+	zval_ptr_dtor(&old);
+}
+
+static bool sharp_equal_values(zval *value, zval *other, bool *equal);
+
+/* The index of the first element of `list` equal to `value` by PHP#'s ==, as sharp_equal_values compares them, or -1
+ * when none is, or -2 after an exception an operator == threw. */
+static zend_long sharp_list_index_of(HashTable *list, zval *value)
+{
+	zend_ulong index;
+	zval *element;
+	ZEND_HASH_FOREACH_NUM_KEY_VAL(list, index, element) {
+		bool equal;
+		if (!sharp_equal_values(element, value, &equal)) {
+			return -2;
+		}
+		if (equal) {
+			return (zend_long) index;
+		}
+	} ZEND_HASH_FOREACH_END();
+
+	return -1;
+}
+
+/* A List's remove(value): removes the first element equal to the value by PHP#'s ==, renumbers the elements after it,
+ * and gives whether it removed one (decision 047). A List without one is not changed. */
+ZEND_FUNCTION(Sharp_Internal_remove)
+{
+	zval *list, *value;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ARRAY_EX2(list, 0, 1, 0)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	zend_long index = sharp_list_index_of(Z_ARRVAL_P(list), value);
+	if (index == -2) {
+		RETURN_THROWS();
+	}
+	if (index == -1) {
+		RETURN_FALSE;
+	}
+	zval old;
+	sharp_list_renumber(list, index, NULL, &old);
+	zval_ptr_dtor(&old);
+	RETURN_TRUE;
+}
+
+/* Kotlin's removeAt: removes the element at index, renumbers the ones after it and gives the removed one. An empty List
+ * throws as `last` does, and an index outside a List that holds elements as `set` does. */
+ZEND_FUNCTION(Sharp_Internal_removeAt)
+{
+	zval *list;
+	zend_long index;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ARRAY_EX2(list, 0, 1, 0)
+		Z_PARAM_LONG(index)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	uint32_t count = zend_hash_num_elements(Z_ARRVAL_P(list));
+	if (count == 0) {
+		sharp_throw_empty_list();
+		RETURN_THROWS();
+	}
+	if ((zend_ulong) index >= count) {
+		sharp_throw_missing_index(index);
+		RETURN_THROWS();
+	}
+	ZVAL_COPY_DEREF(return_value, zend_hash_index_find(Z_ARRVAL_P(list), index));
+	zval old;
+	sharp_list_renumber(list, index, NULL, &old);
+	zval_ptr_dtor(&old);
+}
+
+/* Kotlin's removeLast: removes the last element and gives it, as array_pop does, and an empty List throws as `last`
+ * does. */
+ZEND_FUNCTION(Sharp_Internal_removeLast)
+{
+	zval *list;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ARRAY_EX2(list, 0, 1, 0)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	uint32_t count = zend_hash_num_elements(Z_ARRVAL_P(list));
+	if (count == 0) {
+		sharp_throw_empty_list();
+		RETURN_THROWS();
+	}
+	SEPARATE_ARRAY(list);
+	HashTable *elements = Z_ARRVAL_P(list);
+	zend_long last = (zend_long) count - 1;
+	ZVAL_COPY_DEREF(return_value, zend_hash_index_find(elements, last));
+	zend_hash_index_del(elements, last);
+	elements->nNextFreeElement = last;
+	zend_hash_internal_pointer_reset(elements);
+}
+
+/* `clear`: the List becomes empty. The old elements are released last, so a destructor one runs sees the empty List. */
+ZEND_FUNCTION(Sharp_Internal_clear)
+{
+	zval *list;
+
+	/* The reference is followed, and a shared List is left to its other holders unseparated. */
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ARRAY_EX2(list, 0, 1, 0)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	zval old;
+	ZVAL_COPY_VALUE(&old, list);
+	ZVAL_EMPTY_ARRAY(list);
+	zval_ptr_dtor(&old);
+}
+
+/* `getOrNull(i)`: the element at index, or null past either end. */
+ZEND_FUNCTION(Sharp_Internal_get)
+{
+	HashTable *list;
+	zend_long index;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ARRAY_HT(list)
+		Z_PARAM_LONG(index)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(list)) {
+		RETURN_THROWS();
+	}
+	zval *element = zend_hash_index_find(list, index);
+	if (element) {
+		RETURN_COPY_DEREF(element);
+	}
+}
+
+/* Whether an element equals the value by PHP#'s ==. */
+ZEND_FUNCTION(Sharp_Internal_contains)
+{
+	HashTable *list;
+	zval *value;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ARRAY_HT(list)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(list)) {
+		RETURN_THROWS();
+	}
+	zend_long index = sharp_list_index_of(list, value);
+	if (index == -2) {
+		RETURN_THROWS();
+	}
+	RETURN_BOOL(index >= 0);
+}
+
+/* The index of the first element equal to the value by PHP#'s ==, or null when none is. */
+ZEND_FUNCTION(Sharp_Internal_indexOf)
+{
+	HashTable *list;
+	zval *value;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ARRAY_HT(list)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(list)) {
+		RETURN_THROWS();
+	}
+	zend_long index = sharp_list_index_of(list, value);
+	if (index == -2) {
+		RETURN_THROWS();
+	}
+	if (index >= 0) {
+		RETURN_LONG(index);
+	}
+}
+
+/* The List itself, or OutOfRangeException when it is empty: `last`, `max` and `min` read their element after it. */
+ZEND_FUNCTION(Sharp_Internal_nonEmpty)
+{
+	zval *list;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ARRAY(list)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	if (zend_hash_num_elements(Z_ARRVAL_P(list)) == 0) {
+		sharp_throw_empty_list();
+		RETURN_THROWS();
+	}
+	RETURN_COPY(list);
+}
+
+/* `entries()`: the Map of each index to its element, of the type arguments the bridge passes for the call's result. */
+ZEND_FUNCTION(Sharp_Internal_entries)
+{
+	HashTable *list;
+	zend_string *type_arguments = NULL;
+
+	ZEND_PARSE_PARAMETERS_START(1, 2)
+		Z_PARAM_ARRAY_HT(list)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_STR_OR_NULL(type_arguments)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(list)) {
+		RETURN_THROWS();
+	}
+	sharp_list_entries(execute_data, list, type_arguments, 2, return_value);
+}
+
+static bool sharp_set_fill(zend_object *set, HashTable *values);
+
+/* `toSet()`: the Set of the elements, each once, in the order they first appear, of the type arguments the bridge passes
+ * for the call's result. */
+ZEND_FUNCTION(Sharp_Internal_toSet)
+{
+	HashTable *list;
+	zend_string *type_arguments = NULL;
+
+	ZEND_PARSE_PARAMETERS_START(1, 2)
+		Z_PARAM_ARRAY_HT(list)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_STR_OR_NULL(type_arguments)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(list)) {
+		RETURN_THROWS();
+	}
+	object_init_ex(return_value, sharp_ce_set);
+	if (!sharp_table_made_with(execute_data, Z_OBJ_P(return_value), type_arguments, 2)
+			|| !sharp_set_fill(Z_OBJ_P(return_value), list)) {
+		RETURN_THROWS();
+	}
+}
+
+/* The elements a member that takes a function reads, held while the function runs, since the function may change the
+ * List: a change then separates the List from what this reads. */
+static zend_array *sharp_list_elements(zval *list)
+{
+	GC_TRY_ADDREF(Z_ARRVAL_P(list));
+
+	return Z_ARRVAL_P(list);
+}
+
+ZEND_FUNCTION(Sharp_Internal_filter)
+{
+	zval *list;
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ARRAY(list)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	sharp_filter(list, &fci, &fcc, return_value);
+}
+
+ZEND_FUNCTION(Sharp_Internal_map)
+{
+	zval *list;
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ARRAY(list)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	sharp_map(sharp_list_elements(list), &fci, &fcc, return_value);
+}
+
+ZEND_FUNCTION(Sharp_Internal_flatMap)
+{
+	zval *list;
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ARRAY(list)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	sharp_flat_map(sharp_list_elements(list), &fci, &fcc, return_value);
+}
+
+ZEND_FUNCTION(Sharp_Internal_sumOf)
+{
+	zval *list;
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ARRAY(list)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	sharp_sum_of(sharp_list_elements(list), &fci, &fcc, return_value);
+}
+
+ZEND_FUNCTION(Sharp_Internal_first)
+{
+	zval *list;
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ARRAY(list)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	sharp_first(sharp_list_elements(list), &fci, &fcc, return_value);
+}
+
+ZEND_FUNCTION(Sharp_Internal_any)
+{
+	zval *list;
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_ARRAY(list)
+		Z_PARAM_FUNC(fci, fcc)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	sharp_any(sharp_list_elements(list), &fci, &fcc, return_value);
+}
+
+static void sharp_internal_key_by(INTERNAL_FUNCTION_PARAMETERS, bool group)
+{
+	zval *list;
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+	zend_string *type_arguments = NULL;
+
+	ZEND_PARSE_PARAMETERS_START(2, 3)
+		Z_PARAM_ARRAY(list)
+		Z_PARAM_FUNC(fci, fcc)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_STR_OR_NULL(type_arguments)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	sharp_key_by(execute_data, sharp_list_elements(list), &fci, &fcc, type_arguments, 3, group, return_value);
+}
+
+ZEND_FUNCTION(Sharp_Internal_groupBy)
+{
+	sharp_internal_key_by(INTERNAL_FUNCTION_PARAM_PASSTHRU, true);
+}
+
+ZEND_FUNCTION(Sharp_Internal_associateBy)
+{
+	sharp_internal_key_by(INTERNAL_FUNCTION_PARAM_PASSTHRU, false);
+}
+
+ZEND_FUNCTION(Sharp_Internal_sortedBy)
+{
+	zval *list;
+	zend_fcall_info fci;
+	zend_fcall_info_cache fcc;
+	zend_object *comparison = NULL;
+
+	ZEND_PARSE_PARAMETERS_START(2, 3)
+		Z_PARAM_ARRAY(list)
+		Z_PARAM_FUNC(fci, fcc)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_OBJ_OF_CLASS_OR_NULL(comparison, zend_ce_closure)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	sharp_sorted_by(sharp_list_elements(list), &fci, &fcc, comparison, return_value);
 }
 
 ZEND_METHOD(Sharp_Sequence, getIterator)
@@ -5423,7 +5996,23 @@ ZEND_FUNCTION(Sharp_Internal_statics)
  * arguments, though its text is the bare class name. Spec section 24 compares an unchecked `Any?` with `==` here too,
  * and section 31 a value of a type parameter, as `Result<T, TError>`'s `==` compares its `T` field, so any other two
  * values compare by value, as sharp_equal compares a Map's keys: an int and a float as numbers, a List, a Map or a Set
- * by its elements, and a struct or a class with `operator ==` through it. */
+ * by its elements, and a struct or a class with `operator ==` through it. A List's search compares its elements so. */
+static bool sharp_equal_values(zval *value, zval *other, bool *equal)
+{
+	ZVAL_DEREF(value);
+	ZVAL_DEREF(other);
+	if (Z_TYPE_P(value) != IS_STRING || Z_TYPE_P(other) != IS_STRING) {
+		return sharp_equal(value, other, equal);
+	}
+	const sharp_type *type = sharp_class_value_type(Z_STR_P(value));
+	const sharp_type *other_type = sharp_class_value_type(Z_STR_P(other));
+	*equal = type || other_type
+		? sharp_type_equals(type, other_type)
+		: zend_string_equals(Z_STR_P(value), Z_STR_P(other));
+
+	return true;
+}
+
 ZEND_FUNCTION(Sharp_Internal_equals)
 {
 	zval *value, *other;
@@ -5433,20 +6022,11 @@ ZEND_FUNCTION(Sharp_Internal_equals)
 		Z_PARAM_ZVAL(other)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (Z_TYPE_P(value) != IS_STRING || Z_TYPE_P(other) != IS_STRING) {
-		bool equal;
-		if (!sharp_equal(value, other, &equal)) {
-			RETURN_THROWS();
-		}
-		RETURN_BOOL(equal);
+	bool equal;
+	if (!sharp_equal_values(value, other, &equal)) {
+		RETURN_THROWS();
 	}
-	const sharp_type *type = sharp_class_value_type(Z_STR_P(value));
-	const sharp_type *other_type = sharp_class_value_type(Z_STR_P(other));
-	if (type || other_type) {
-		RETURN_BOOL(sharp_type_equals(type, other_type));
-	}
-
-	RETURN_BOOL(zend_string_equals(Z_STR_P(value), Z_STR_P(other)));
+	RETURN_BOOL(equal);
 }
 
 /* Spec section 12: PHP# passes plain PHP `\Sharp\Internal\arrayOf($value)`, the PHP array sharp_array_of gives. Through
@@ -8369,11 +8949,21 @@ static bool sharp_reference_holds(const zend_property_info *info, zend_object *o
 	return false;
 }
 
+/* Whether the reference `slot` holds is one PHP# code made to pass the property by reference, as to a `ref` receiver,
+ * that nothing else holds: what it holds is what PHP# code wrote, so it needs no check. Plain PHP code that takes the
+ * reference clears the mark, see sharp_property_for_plain_write and sharp_object_exposed. */
+static bool sharp_reference_is_own(zval *slot)
+{
+	zend_reference *reference = Z_REF_P(slot);
+
+	return (GC_FLAGS(reference) & IS_REF_SHARP_MADE) && GC_REFCOUNT(reference) == 1;
+}
+
 zval *sharp_property_from_reference(zval *slot, zend_object *object, const zend_property_info *info, zval *rv)
 {
 	zend_reference *reference = Z_REF_P(slot);
 	ZVAL_COPY(rv, &reference->val);
-	if (!sharp_reference_holds(info, object, rv) || GC_REFCOUNT(reference) > 1) {
+	if (!sharp_reference_is_own(slot) && (!sharp_reference_holds(info, object, rv) || GC_REFCOUNT(reference) > 1)) {
 		return rv;
 	}
 
@@ -8386,6 +8976,11 @@ zval *sharp_property_from_reference(zval *slot, zend_object *object, const zend_
 
 bool sharp_property_for_write(zval *result, zend_object *object, zval *slot, const zend_property_info *info)
 {
+	/* The unset fetch before a `ref` change's ZEND_SEPARATE takes the reference the change made, see
+	 * zend_sharp_separate_place. */
+	if (sharp_reference_is_own(slot)) {
+		return true;
+	}
 	zval value;
 	if (sharp_property_from_reference(slot, object, info, &value) == slot) {
 		return true;
@@ -8409,9 +9004,27 @@ bool sharp_property_for_write(zval *result, zend_object *object, zval *slot, con
 	return true;
 }
 
+void sharp_object_exposed(zend_object *object)
+{
+	if (!(object->ce->sharp_flags & SHARP_CLASS_HAS_TYPED_PROPS) || sharp_runs_sharp_code()) {
+		return;
+	}
+	zval *slot = object->properties_table;
+	zval *end = slot + object->ce->default_properties_count;
+	for (; slot < end; slot++) {
+		if (Z_ISREF_P(slot)) {
+			GC_DEL_FLAGS(Z_REF_P(slot), IS_REF_SHARP_MADE);
+		}
+	}
+}
+
 void sharp_property_for_plain_write(zval *slot, const zend_property_info *info, uint32_t flags)
 {
-	if (Z_ISREF_P(slot) || Z_ISERROR_P(slot) || sharp_runs_sharp_code()) {
+	if (Z_ISREF_P(slot)) {
+		GC_DEL_FLAGS(Z_REF_P(slot), IS_REF_SHARP_MADE);
+		return;
+	}
+	if (Z_ISERROR_P(slot)) {
 		return;
 	}
 	/* A Map or a Set checks each write itself, with the type it got when it was made or at its first typed boundary. */
