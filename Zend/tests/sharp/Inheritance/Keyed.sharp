@@ -1,6 +1,6 @@
 namespace Demo;
 
-public interface Keyed<TKey>
+public interface Keyed<TKey : Equatable>
 {
     TKey key();
 
