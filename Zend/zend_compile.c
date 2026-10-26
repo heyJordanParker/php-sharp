@@ -823,9 +823,11 @@ static void zend_do_free(znode *op1) /* {{{ */
 		zend_emit_op(NULL, ZEND_FREE, op1, NULL);
 	} else if (op1->op_type == IS_VAR) {
 		zend_op *opline = &CG(active_op_array)->opcodes[CG(active_op_array)->last-1];
+		/* PHP#: the ZEND_SEPARATE of a local follows the call that sent it, see zend_compile_call_common. */
 		while (opline->opcode == ZEND_END_SILENCE ||
 				opline->opcode == ZEND_EXT_FCALL_END ||
-				opline->opcode == ZEND_OP_DATA) {
+				opline->opcode == ZEND_OP_DATA ||
+				(opline->opcode == ZEND_SEPARATE && opline->op1_type == IS_CV)) {
 			opline--;
 		}
 		if (opline->result_type == IS_VAR
@@ -4058,6 +4060,27 @@ static bool zend_compile_call_common(znode *result, zend_ast *args_ast, zend_fun
 	}
 	opline->lineno = lineno;
 	zend_do_extended_fcall_end();
+
+	/* PHP#: a local a PHP# call sends by reference to a Sharp\Internal function, the receiver of a `ref` member, is a
+	 * reference once the call returns, which every later read of it would go through. ZEND_SEPARATE unwraps it where
+	 * nothing else holds it, ruling 1's refcount 1 for a property applied to a local, as upstream unwraps a call's
+	 * result in zend_separate_if_call_and_write. */
+	if (fbc && fbc->type == ZEND_INTERNAL_FUNCTION
+	 && zend_string_starts_with_literal_ci(fbc->common.function_name, "Sharp\\Internal\\")
+	 && sharp_is_sharp_file(CG(active_op_array)->filename)) {
+		for (uint32_t i = 0; i < args->children; i++) {
+			zend_ast *arg = args->child[i];
+			znode local;
+
+			if (arg->kind == ZEND_AST_UNPACK || arg->kind == ZEND_AST_NAMED_ARG) {
+				break;
+			}
+			if (arg->kind == ZEND_AST_VAR && !is_this_fetch(arg) && ARG_SHOULD_BE_SENT_BY_REF(fbc, i + 1)
+			 && zend_try_compile_cv(&local, arg, BP_VAR_R) == SUCCESS) {
+				zend_emit_op(NULL, ZEND_SEPARATE, &local, NULL);
+			}
+		}
+	}
 	return false;
 }
 /* }}} */

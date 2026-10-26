@@ -1040,8 +1040,9 @@ static void zend_calc_live_ranges(
 
 		/* SEPARATE always redeclares its op1. For the purposes of live-ranges,
 		 * its declaration is irrelevant. Don't terminate the current live-range
-		 * to avoid breaking special handling of COPY_TMP. */
-		if (opline->opcode == ZEND_SEPARATE) {
+		 * to avoid breaking special handling of COPY_TMP. PHP#: a SEPARATE of a
+		 * CV, see zend_compile_call_common, declares no temporary. */
+		if (opline->opcode == ZEND_SEPARATE && opline->op1_type == IS_VAR) {
 			ZEND_ASSERT(opline->op1.var == opline->result.var);
 			continue;
 		}

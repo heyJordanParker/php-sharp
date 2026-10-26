@@ -47,6 +47,17 @@ public class Ledger
     // A null before `?.` skips the change and the rest of the chain.
     public static int? lastCount(List<List<int>>? rows) => rows?.removeLast().count();
 
+    // A lambda captures `items` itself, so `keep` can hand plain PHP a reference to it, and the change `add` makes
+    // and the one `write` makes through that reference both reach the List this method returns.
+    public static List<int> shared(Function<void(Function<int()>)> keep, Function<void()> write)
+    {
+        List<int> items = [1];
+        keep(() => items.count());
+        items.add(2);
+        write();
+        return items;
+    }
+
     // A member's value runs the member's static method, whose `Map` takes the element type it is called with.
     public static List<Any> indexed(List<string> items)
     {

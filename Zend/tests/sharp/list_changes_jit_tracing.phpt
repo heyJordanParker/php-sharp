@@ -35,6 +35,7 @@ int(1)
 [true,false,"b"]
 [1,2,3]
 TypeError: Reference held by property ListChanges\Ledger::$counts of type List<int> holds array: [3] expected int, got string 'z'
+[1,2,3]
 OutOfRangeException: The list is empty.
 OutOfRangeException: The list is empty.
 OutOfRangeException: Undefined array key 3

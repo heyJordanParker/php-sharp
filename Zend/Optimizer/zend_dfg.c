@@ -160,6 +160,8 @@ add_op1_def:
 		case ZEND_SEND_UNPACK:
 		case ZEND_FE_RESET_RW:
 		case ZEND_MAKE_REF:
+		/* PHP#: a SEPARATE of a CV unwraps the local, see zend_compile_call_common. */
+		case ZEND_SEPARATE:
 		case ZEND_PRE_INC_OBJ:
 		case ZEND_PRE_DEC_OBJ:
 		case ZEND_POST_INC_OBJ:

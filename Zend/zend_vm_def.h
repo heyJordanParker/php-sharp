@@ -8724,7 +8724,8 @@ ZEND_VM_HANDLER(142, ZEND_DECLARE_LAMBDA_FUNCTION, CONST, NUM)
 	ZEND_VM_NEXT_OPCODE();
 }
 
-ZEND_VM_HANDLER(156, ZEND_SEPARATE, VAR, UNUSED)
+/* PHP#: a CV is a local a PHP# call sent by reference to a Sharp\Internal function, see zend_compile_call_common. */
+ZEND_VM_HANDLER(156, ZEND_SEPARATE, VAR|CV, UNUSED)
 {
 	USE_OPLINE
 	zval *var_ptr;

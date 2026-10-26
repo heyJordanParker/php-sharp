@@ -45,6 +45,18 @@ for ($round = 0; $round < 3; $round++) {
     }
     unset($alias);
 
+    // Plain PHP takes a reference to a local a PHP# lambda captured, and writes through it after a change.
+    $captured = null;
+    echo json_encode(Ledger::shared(
+        function (Closure $counted) use (&$captured): void {
+            $captured = (new ReflectionFunction($counted))->getStaticVariables();
+        },
+        function () use (&$captured): void {
+            $captured['items'][] = 3;
+        },
+    )), "\n";
+    unset($captured);
+
     foreach ([
         fn () => Ledger::removedFirst([]),
         fn () => Ledger::left([], 0),
