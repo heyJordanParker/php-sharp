@@ -1928,7 +1928,9 @@ ZEND_VM_INLINE_HELPER(zend_fetch_static_prop_helper, ANY, ANY, int type)
 {
 	USE_OPLINE
 	zval *prop;
-	zend_property_info *prop_info;
+	/* A fetch that finds no property leaves it unset. Each PHP# read of it below runs only when prop is the property
+	 * found, so it never reads this NULL. */
+	zend_property_info *prop_info = NULL;
 
 	SAVE_OPLINE();
 
@@ -7435,7 +7437,8 @@ ZEND_VM_HELPER(zend_fe_fetch_object_helper, ANY, ANY)
 					if (EXPECTED(value_type != IS_UNDEF)
 					 && EXPECTED(zend_check_property_access(Z_OBJ_P(array), p->key, 0) == SUCCESS)) {
 						/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
-						if (UNEXPECTED(sharp_cross_slot_read(&crossed, Z_OBJ_P(array), value))) {
+						if (sharp_class_has_crossing_props(Z_OBJCE_P(array))
+						 && UNEXPECTED(sharp_cross_slot_read(&crossed, Z_OBJ_P(array), value))) {
 							value = &crossed;
 							value_type = Z_TYPE_INFO(crossed);
 						}

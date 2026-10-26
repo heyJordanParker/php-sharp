@@ -2080,6 +2080,7 @@ ZEND_API void zend_initialize_class_data(zend_class_entry *ce, bool nullify_hand
 
 	ce->refcount = 1;
 	ce->ce_flags = ZEND_ACC_CONSTANTS_UPDATED;
+	ce->sharp_flags = 0;
 
 	if (CG(compiler_options) & ZEND_COMPILE_GUARDS) {
 		ce->ce_flags |= ZEND_ACC_USE_GUARDS;

@@ -916,7 +916,9 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET zend_fetch_static_prop_helper_
 {
 	USE_OPLINE
 	zval *prop;
-	zend_property_info *prop_info;
+	/* A fetch that finds no property leaves it unset. Each PHP# read of it below runs only when prop is the property
+	 * found, so it never reads this NULL. */
+	zend_property_info *prop_info = NULL;
 
 	SAVE_OPLINE();
 
@@ -3122,7 +3124,8 @@ static zend_never_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV 
 					if (EXPECTED(value_type != IS_UNDEF)
 					 && EXPECTED(zend_check_property_access(Z_OBJ_P(array), p->key, 0) == SUCCESS)) {
 						/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
-						if (UNEXPECTED(sharp_cross_slot_read(&crossed, Z_OBJ_P(array), value))) {
+						if (sharp_class_has_crossing_props(Z_OBJCE_P(array))
+						 && UNEXPECTED(sharp_cross_slot_read(&crossed, Z_OBJ_P(array), value))) {
 							value = &crossed;
 							value_type = Z_TYPE_INFO(crossed);
 						}
@@ -60636,7 +60639,8 @@ static zend_never_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV  zend
 					if (EXPECTED(value_type != IS_UNDEF)
 					 && EXPECTED(zend_check_property_access(Z_OBJ_P(array), p->key, 0) == SUCCESS)) {
 						/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
-						if (UNEXPECTED(sharp_cross_slot_read(&crossed, Z_OBJ_P(array), value))) {
+						if (sharp_class_has_crossing_props(Z_OBJCE_P(array))
+						 && UNEXPECTED(sharp_cross_slot_read(&crossed, Z_OBJ_P(array), value))) {
 							value = &crossed;
 							value_type = Z_TYPE_INFO(crossed);
 						}
@@ -115760,7 +115764,9 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET zend_fetch_static_prop_helper_
 {
 	USE_OPLINE
 	zval *prop;
-	zend_property_info *prop_info;
+	/* A fetch that finds no property leaves it unset. Each PHP# read of it below runs only when prop is the property
+	 * found, so it never reads this NULL. */
+	zend_property_info *prop_info = NULL;
 
 	SAVE_OPLINE();
 

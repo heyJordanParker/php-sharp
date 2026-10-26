@@ -199,6 +199,30 @@ public class Carton
         Probe.put(made, key, value);
     }
 
+    // An empty literal in a lambda in a generic method takes the method's type arguments, as a C# closure sees them.
+    public void handKeyed(string key, Any? value)
+    {
+        Probe.put(Carton.keyed<int>(), key, value);
+    }
+
+    private static Map<string, T> keyed<T>()
+    {
+        Function<Map<string, T>()> make = () => [:];
+        return make();
+    }
+
+    // So does one in a lambda another lambda there returns.
+    public void handNested(string key, Any? value)
+    {
+        Probe.put(Carton.nestedKeyed<int>(), key, value);
+    }
+
+    private static Map<string, T> nestedKeyed<T>()
+    {
+        Function<Function<Map<string, T>()>()> make = () => () => [:];
+        return make()();
+    }
+
     public List<int>|bool marks { get; set; } = false;
 
     public string marksText()

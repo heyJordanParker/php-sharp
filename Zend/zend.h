@@ -146,6 +146,9 @@ struct _zend_inheritance_cache_entry {
 
 struct _zend_class_entry {
 	char type;
+	/* PHP#: PHP#'s own class flags, the SHARP_CLASS_* of Zend/zend_compile.h. ce_flags has no free bit, so they sit in
+	 * the padding before name, and every upstream field keeps its offset. */
+	uint8_t sharp_flags;
 	zend_string *name;
 	/* class_entry or string depending on ZEND_ACC_LINKED */
 	union {
