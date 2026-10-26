@@ -1362,7 +1362,8 @@ static bool sharp_collection_key(zval *key, zend_string **string_key, zend_long 
 static zval *sharp_collection_element(HashTable *array, zval *index)
 {
 	zend_string *string_key;
-	zend_long long_key;
+	/* sharp_collection_key sets it only for an int key, the one key the lookup below reads it for. */
+	zend_long long_key = 0;
 
 	if (!sharp_collection_key(index, &string_key, &long_key)) {
 		return NULL;
