@@ -4,6 +4,7 @@ A PHP# class calls Sharp.Encoding.Serialized, which allows no classes by default
 <?php
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/Serialized.sharp';
 require __DIR__ . '/../../../sharp/composer/library/Sharp/Encoding/PhpLiteral.sharp';
+require __DIR__ . '/../../../sharp/composer/library/Sharp/ListMembers.sharp';
 require __DIR__ . '/SerializedCalls.sharp';
 
 use Demo\SerializedCalls;

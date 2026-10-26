@@ -1,0 +1,137 @@
+namespace ListChanges;
+
+// Each change through a `ref` member of a List reaches the place the List lives, and a List<int> property stays checked.
+public class Ledger
+{
+    public List<string> lines { get; set; } = [];
+    public List<int> counts { get; set; } = [];
+    public List<Function<void()>> callbacks { get; set; } = [];
+    public static List<string> archive { get; set; } = [];
+    public List<List<Function<void()>>> hooks { get; set; } = [[]];
+    public List<List<int>> rows { get; set; } = [[]];
+
+    public string dropLine() => this.lines.removeLast();
+
+    public static string dropArchived() => Ledger.archive.removeFirst();
+
+    public void count(int count)
+    {
+        this.counts.add(count);
+    }
+
+    public int total() => this.counts.sumOf(count => count);
+
+    public void forget()
+    {
+        this.callbacks.clear();
+    }
+
+    public int remembered() => this.callbacks.count();
+
+    // A change through an element of a property, which plain PHP can reach through the property while it runs.
+    public void forgetHooks()
+    {
+        this.hooks[0].clear();
+    }
+
+    public int hooked() => this.hooks[0].count();
+
+    public void addToRow(int value)
+    {
+        this.rows[0].add(value);
+    }
+
+    public int rowTotal() => this.rows[0].sumOf(value => value);
+
+    // A change through an element leaves no reference behind, so a filtered copy of the List and a copy plain PHP
+    // makes of it change apart from it.
+    public static List<List<int>> filteredAfterAdd()
+    {
+        List<List<int>> grid = [[1]];
+        grid[0].add(2);
+        const kept = grid.filter(row => true);
+        kept[0].add(3);
+        return grid;
+    }
+
+    public static List<List<int>> added()
+    {
+        List<List<int>> grid = [[1]];
+        grid[0].add(2);
+        return grid;
+    }
+
+    // The removed element goes first, before the List it left.
+    public static List<string> removedAt(List<string> items, int index)
+    {
+        const removed = items.removeAt(index);
+        items.insert(0, removed);
+        return items;
+    }
+
+    public static List<string> left(List<string> items, int index)
+    {
+        items.removeAt(index);
+        return items;
+    }
+
+    public static string removedFirst(List<string> items) => items.removeFirst();
+
+    // `set` gives the element it replaced, as Kotlin's does, and the index write it runs gives the value it stores.
+    public static List<int> replaced(List<int> items)
+    {
+        const old = items.set(0, 9);
+        const stored = items[1] = 7;
+        return [old, stored, items[0], items[1]];
+    }
+
+    public static List<bool> emptiness(List<string> items) => [items.isEmpty(), items.isNotEmpty()];
+
+    // A null before `?.` skips the change and the rest of the chain.
+    public static int? lastCount(List<List<int>>? rows) => rows?.removeLast().count();
+
+    // A lambda captures `items` itself, so `keep` can hand plain PHP a reference to it, and the change `add` makes
+    // and the one `write` makes through that reference both reach the List this method returns.
+    public static List<int> shared(Function<void(Function<int()>)> keep, Function<void()> write)
+    {
+        List<int> items = [1];
+        keep(() => items.count());
+        items.add(2);
+        write();
+        return items;
+    }
+
+    // A change through an element that throws leaves the element as it was, and a filtered copy or an assigned one of
+    // the List changes apart from it.
+    public static List<List<int>> filteredAfterThrow()
+    {
+        List<List<int>> grid = [[1]];
+        try {
+            grid[0].removeAt(5);
+        } catch (OutOfRangeException refused) {
+        }
+        const kept = grid.filter(row => true);
+        kept[0].add(3);
+        return grid;
+    }
+
+    public static List<List<int>> copiedAfterThrow()
+    {
+        List<List<int>> grid = [[1]];
+        try {
+            grid[0].removeAt(5);
+        } catch (OutOfRangeException refused) {
+        }
+        List<List<int>> copy = grid;
+        copy[0].add(3);
+        return grid;
+    }
+
+    // A member's value runs the member's static method, whose `Map` takes the element type it is called with.
+    public static List<Any> indexed(List<string> items)
+    {
+        const entries = items.entries;
+        Any indexed = entries();
+        return [indexed is Map<int, string>, indexed is Map<int, int>, entries()[1] ?? "none"];
+    }
+}

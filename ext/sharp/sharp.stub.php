@@ -164,3 +164,47 @@ function emit(object $event): void {}
 function listenersFor(object $event): array {}
 
 function listen(string $event, \Closure $listener): \Sharp\Listening {}
+
+function add(array &$list, mixed $value): void {}
+
+function insert(array &$list, int $index, mixed $value): void {}
+
+function set(array &$list, int $index, mixed $value): mixed {}
+
+function remove(array &$list, mixed $value): bool {}
+
+function removeAt(array &$list, int $index): mixed {}
+
+function removeLast(array &$list): mixed {}
+
+function clear(array &$list): void {}
+
+function get(array $list, int $index): mixed {}
+
+function contains(array $list, mixed $value): bool {}
+
+function indexOf(array $list, mixed $value): ?int {}
+
+function nonEmpty(array $list): array {}
+
+function entries(array $list, ?string $type = null): \Sharp\Map {}
+
+function toSet(array $list, ?string $type = null): \Sharp\Set {}
+
+function filter(array $list, \Closure $predicate): array {}
+
+function map(array $list, \Closure $transform): array {}
+
+function flatMap(array $list, \Closure $transform): array {}
+
+function sumOf(array $list, \Closure $selector): int|float {}
+
+function first(array $list, \Closure $predicate): mixed {}
+
+function any(array $list, \Closure $predicate): bool {}
+
+function groupBy(array $list, \Closure $key, ?string $type = null): \Sharp\Map {}
+
+function associateBy(array $list, \Closure $key, ?string $type = null): \Sharp\Map {}
+
+function sortedBy(array $list, \Closure $selector, ?\Closure $comparison = null): array {}

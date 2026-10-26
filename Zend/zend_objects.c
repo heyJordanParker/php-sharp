@@ -241,6 +241,10 @@ ZEND_API void ZEND_FASTCALL zend_objects_clone_members(zend_object *new_object, 
 				Z_PROP_FLAG_P(dst) = Z_PROP_FLAG_P(src);
 				sharp_reference = true;
 			} else {
+				/* A reference plain PHP's clone shares is plain PHP's, see sharp_property_from_reference. */
+				if (sharp_slot) {
+					GC_DEL_FLAGS(Z_REF_P(src), IS_REF_SHARP_MADE);
+				}
 				ZVAL_COPY_VALUE_PROP(dst, src);
 				zval_add_ref(dst);
 			}
