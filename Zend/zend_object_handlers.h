@@ -279,11 +279,17 @@ ZEND_API HashTable *rebuild_object_properties_internal(zend_object *zobj);
 ZEND_API ZEND_COLD zend_never_inline void zend_bad_method_call(const zend_function *fbc, const zend_string *method_name, const zend_class_entry *scope);
 ZEND_API ZEND_COLD zend_never_inline void zend_abstract_method_call(const zend_function *fbc);
 
+/* PHP#: see ext/sharp/php_sharp.h. */
+void sharp_object_exposed(zend_object *object);
+
 static zend_always_inline HashTable *zend_std_get_properties_ex(zend_object *object)
 {
 	if (UNEXPECTED(zend_lazy_object_must_init(object))) {
 		return zend_lazy_object_get_properties(object);
 	}
+	/* PHP#: every path to the properties table comes here, a lazy proxy's with its instance and ArrayIterator's too,
+	 * and code that reads the table can take the reference a slot holds. */
+	sharp_object_exposed(object);
 	if (!object->properties) {
 		return rebuild_object_properties_internal(object);
 	}

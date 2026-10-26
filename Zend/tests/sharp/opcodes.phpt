@@ -365,6 +365,51 @@ Site/Square: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in 1 classes
   check  Demo\Cart::fill string("List<Demo.Item>")
   check  Demo\Cart::withPrices string("List<int>, List<int>")
+  .sharp      ; (lines=59, args=1, vars=5, tmps=35)
+  .sharp L0013 0014 V12 = FETCH_OBJ_UNSET THIS string("items")
+  .sharp L0013 0015 V12 = SEPARATE V12
+  .sharp L0014 0016 T15 = FETCH_OBJ_R THIS string("items")
+  .sharp L0014 0017 T16 = COUNT T15
+  .sharp L0014 0018 V13 = FETCH_OBJ_W (dim write) THIS string("counts")
+  .sharp L0014 0019 ASSIGN_DIM V13 string("items")
+  .sharp L0014 0020 OP_DATA T16
+  .sharp L0015 0021 T19 = COUNT CV0($extra)
+  .sharp L0015 0022 V17 = FETCH_OBJ_W (dim write) THIS string("counts")
+  .sharp L0015 0023 ASSIGN_DIM V17 string("extra")
+  .sharp L0015 0024 OP_DATA T19
+  .sharp L0016 0025 T20 = FETCH_OBJ_R THIS string("items")
+  .sharp L0016 0026 T21 = FETCH_DIM_R T20 int(0)
+  .sharp L0016 0027 T22 = FETCH_OBJ_R T21 string("cents")
+  .sharp L0016 0028 ASSIGN CV1($total) T22
+  .sharp L0017 0029 T24 = FETCH_OBJ_R THIS string("items")
+  .sharp L0017 0030 V25 = FE_RESET_R T24 0035
+  .sharp L0017 0031 FE_FETCH_R V25 CV2($item) 0035
+  .sharp L0018 0032 T26 = FETCH_OBJ_R CV2($item) string("cents")
+  .sharp L0018 0033 ASSIGN_OP (ADD) CV1($total) T26
+  .sharp L0017 0034 JMP 0031
+  .sharp L0017 0035 FE_FREE V25
+  .sharp L0020 0036 T28 = FETCH_OBJ_R THIS string("counts")
+  .sharp L0020 0037 V29 = FE_RESET_R T28 0045
+  .sharp L0020 0038 T30 = FE_FETCH_R V29 CV3($size) 0045
+  .sharp L0020 0039 ASSIGN CV4($name) T30
+  .sharp L0021 0040 T32 = IS_IDENTICAL CV4($name) string("items")
+  .sharp L0021 0041 JMPZ T32 0044
+  .sharp L0022 0042 T33 = MUL CV3($size) int(10)
+  .sharp L0022 0043 ASSIGN_OP (ADD) CV1($total) T33
+  .sharp L0020 0044 JMP 0038
+  .sharp L0020 0045 FE_FREE V29
+  .sharp L0025 0046 INIT_STATIC_METHOD_CALL 1 string("Lib\\Slots") string("fromArray")
+  .sharp L0025 0047 INIT_METHOD_CALL 0 THIS string("prices")
+  .sharp L0025 0049 SEND_VAR_NO_REF_EX V35 1
+  .sharp L0025 0050 V36 = DO_FCALL
+  .sharp L0025 0051 T37 = CAST (object) V36
+  .sharp L0025 0052 INIT_METHOD_CALL 0 T37 string("getSize")
+  .sharp L0025 0053 V38 = DO_FCALL
+  .sharp L0025 0054 T39 = ADD CV1($total) V38
+  .sharp L0025 0055 VERIFY_RETURN_TYPE T39
+  .sharp L0025 0056 RETURN T39
+  .sharp L0026 0057 VERIFY_RETURN_TYPE
+  .sharp L0026 0058 RETURN null
   .sharp      ; (lines=16, args=0, vars=2, tmps=5)
   .sharp L0031 0002 V4 = FE_RESET_R T3 0011
   .sharp L0031 0003 FE_FETCH_R V4 CV1($item) 0011
@@ -375,6 +420,56 @@ Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in
   .sharp L0034 0013 RETURN CV0($prices)
   .sharp L0035 0014 VERIFY_RETURN_TYPE
   .sharp L0035 0015 RETURN null
+  .sharp      ; (lines=59, args=1, vars=5, tmps=35)
+  .sharp 0014 V12 = FETCH_OBJ_UNSET THIS string("items")
+  .sharp 0015 V12 = SEPARATE V12
+  .sharp 0016 T15 = FETCH_OBJ_R THIS string("items")
+  .sharp 0017 T16 = COUNT T15
+  .sharp 0018 V13 = FETCH_OBJ_W (dim write) THIS string("counts")
+  .sharp 0019 ASSIGN_DIM V13 string("items")
+  .sharp 0020 OP_DATA T16
+  .sharp 0021 T19 = COUNT CV0($extra)
+  .sharp 0022 V17 = FETCH_OBJ_W (dim write) THIS string("counts")
+  .sharp 0023 ASSIGN_DIM V17 string("extra")
+  .sharp 0024 OP_DATA T19
+  .sharp 0025 T20 = FETCH_OBJ_R THIS string("items")
+  .sharp 0026 T21 = FETCH_DIM_R T20 int(0)
+  .sharp 0027 T22 = FETCH_OBJ_R T21 string("cents")
+  .sharp 0028 ASSIGN CV1($total) T22
+  .sharp 0029 T24 = FETCH_OBJ_R THIS string("items")
+  .sharp 0030 V25 = FE_RESET_R T24 0035
+  .sharp 0031 FE_FETCH_R V25 CV2($item) 0035
+  .sharp 0032 T26 = FETCH_OBJ_R CV2($item) string("cents")
+  .sharp 0033 ASSIGN_OP (ADD) CV1($total) T26
+  .sharp 0034 JMP 0031
+  .sharp 0035 FE_FREE V25
+  .sharp 0036 T28 = FETCH_OBJ_R THIS string("counts")
+  .sharp 0037 V29 = FE_RESET_R T28 0045
+  .sharp 0038 T30 = FE_FETCH_R V29 CV3($size) 0045
+  .sharp 0039 ASSIGN CV4($name) T30
+  .sharp 0040 T32 = IS_IDENTICAL CV4($name) string("items")
+  .sharp 0041 JMPZ T32 0044
+  .sharp 0042 T33 = MUL CV3($size) int(10)
+  .sharp 0043 ASSIGN_OP (ADD) CV1($total) T33
+  .sharp 0044 JMP 0038
+  .sharp 0045 FE_FREE V29
+  .sharp 0046 INIT_STATIC_METHOD_CALL 1 string("Lib\\Slots") string("fromArray")
+  .sharp 0047 INIT_METHOD_CALL 0 THIS string("prices")
+  .sharp 0049 SEND_VAR_NO_REF_EX V35 1
+  .sharp 0050 V36 = DO_FCALL
+  .sharp 0051 T37 = CAST (object) V36
+  .sharp 0052 INIT_METHOD_CALL 0 T37 string("getSize")
+  .sharp 0053 V38 = DO_FCALL
+  .sharp 0054 T39 = ADD CV1($total) V38
+  .sharp 0055 VERIFY_RETURN_TYPE T39
+  .sharp 0056 RETURN T39
+  .sharp 0057 VERIFY_RETURN_TYPE
+  .sharp 0058 RETURN null
+  .sharp      16: 0018 - 0019 (tmp/var)
+  .sharp      19: 0022 - 0023 (tmp/var)
+  .sharp      25: 0031 - 0035 (loop)
+  .sharp      29: 0038 - 0045 (loop)
+  .sharp      39: 0055 - 0056 (tmp/var)
   .sharp      ; (lines=16, args=0, vars=2, tmps=5)
   .sharp 0002 V4 = FE_RESET_R T3 0011
   .sharp 0003 FE_FETCH_R V4 CV1($item) 0011
@@ -385,6 +480,49 @@ Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in
   .sharp 0013 RETURN CV0($prices)
   .sharp      4: 0003 - 0011 (loop)
   .sharp     Property [ private Sharp\Map $counts = Closure({closure:<file>:8})() ]
+  .php        ; (lines=57, args=1, vars=5, tmps=34)
+  .php   L0014 0014 T14 = FETCH_OBJ_R THIS string("items")
+  .php   L0014 0015 T15 = COUNT T14
+  .php   L0014 0016 V12 = FETCH_OBJ_W (dim write) THIS string("counts")
+  .php   L0014 0017 ASSIGN_DIM V12 string("items")
+  .php   L0014 0018 OP_DATA T15
+  .php   L0015 0019 T18 = COUNT CV0($extra)
+  .php   L0015 0020 V16 = FETCH_OBJ_W (dim write) THIS string("counts")
+  .php   L0015 0021 ASSIGN_DIM V16 string("extra")
+  .php   L0015 0022 OP_DATA T18
+  .php   L0016 0023 T19 = FETCH_OBJ_R THIS string("items")
+  .php   L0016 0024 T20 = FETCH_DIM_R T19 int(0)
+  .php   L0016 0025 T21 = FETCH_OBJ_R T20 string("cents")
+  .php   L0016 0026 ASSIGN CV1($total) T21
+  .php   L0017 0027 T23 = FETCH_OBJ_R THIS string("items")
+  .php   L0017 0028 V24 = FE_RESET_R T23 0033
+  .php   L0017 0029 FE_FETCH_R V24 CV2($item) 0033
+  .php   L0018 0030 T25 = FETCH_OBJ_R CV2($item) string("cents")
+  .php   L0018 0031 ASSIGN_OP (ADD) CV1($total) T25
+  .php   L0017 0032 JMP 0029
+  .php   L0017 0033 FE_FREE V24
+  .php   L0020 0034 T27 = FETCH_OBJ_R THIS string("counts")
+  .php   L0020 0035 V28 = FE_RESET_R T27 0043
+  .php   L0020 0036 T29 = FE_FETCH_R V28 CV3($size) 0043
+  .php   L0020 0037 ASSIGN CV4($name) T29
+  .php   L0021 0038 T31 = IS_IDENTICAL CV4($name) string("items")
+  .php   L0021 0039 JMPZ T31 0042
+  .php   L0022 0040 T32 = MUL CV3($size) int(10)
+  .php   L0022 0041 ASSIGN_OP (ADD) CV1($total) T32
+  .php   L0020 0042 JMP 0036
+  .php   L0020 0043 FE_FREE V28
+  .php   L0025 0044 INIT_STATIC_METHOD_CALL 1 string("Lib\\Slots") string("fromArray")
+  .php   L0025 0045 INIT_METHOD_CALL 0 THIS string("prices")
+  .php   L0025 0046 V34 = DO_FCALL
+  .php   L0025 0047 SEND_VAR_NO_REF_EX V34 1
+  .php   L0025 0049 T36 = CAST (object) V35
+  .php   L0025 0050 INIT_METHOD_CALL 0 T36 string("getSize")
+  .php   L0025 0051 V37 = DO_FCALL
+  .php   L0025 0052 T38 = ADD CV1($total) V37
+  .php   L0025 0053 VERIFY_RETURN_TYPE T38
+  .php   L0025 0054 RETURN T38
+  .php   L0026 0055 VERIFY_RETURN_TYPE
+  .php   L0026 0056 RETURN null
   .php        ; (lines=15, args=0, vars=2, tmps=5)
   .php   L0031 0002 V4 = FE_RESET_R T3 0010
   .php   L0031 0003 FE_FETCH_R V4 CV1($item) 0010
@@ -394,6 +532,54 @@ Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in
   .php   L0034 0012 RETURN CV0($prices)
   .php   L0035 0013 VERIFY_RETURN_TYPE
   .php   L0035 0014 RETURN null
+  .php        ; (lines=57, args=1, vars=5, tmps=34)
+  .php   0014 T14 = FETCH_OBJ_R THIS string("items")
+  .php   0015 T15 = COUNT T14
+  .php   0016 V12 = FETCH_OBJ_W (dim write) THIS string("counts")
+  .php   0017 ASSIGN_DIM V12 string("items")
+  .php   0018 OP_DATA T15
+  .php   0019 T18 = COUNT CV0($extra)
+  .php   0020 V16 = FETCH_OBJ_W (dim write) THIS string("counts")
+  .php   0021 ASSIGN_DIM V16 string("extra")
+  .php   0022 OP_DATA T18
+  .php   0023 T19 = FETCH_OBJ_R THIS string("items")
+  .php   0024 T20 = FETCH_DIM_R T19 int(0)
+  .php   0025 T21 = FETCH_OBJ_R T20 string("cents")
+  .php   0026 ASSIGN CV1($total) T21
+  .php   0027 T23 = FETCH_OBJ_R THIS string("items")
+  .php   0028 V24 = FE_RESET_R T23 0033
+  .php   0029 FE_FETCH_R V24 CV2($item) 0033
+  .php   0030 T25 = FETCH_OBJ_R CV2($item) string("cents")
+  .php   0031 ASSIGN_OP (ADD) CV1($total) T25
+  .php   0032 JMP 0029
+  .php   0033 FE_FREE V24
+  .php   0034 T27 = FETCH_OBJ_R THIS string("counts")
+  .php   0035 V28 = FE_RESET_R T27 0043
+  .php   0036 T29 = FE_FETCH_R V28 CV3($size) 0043
+  .php   0037 ASSIGN CV4($name) T29
+  .php   0038 T31 = IS_IDENTICAL CV4($name) string("items")
+  .php   0039 JMPZ T31 0042
+  .php   0040 T32 = MUL CV3($size) int(10)
+  .php   0041 ASSIGN_OP (ADD) CV1($total) T32
+  .php   0042 JMP 0036
+  .php   0043 FE_FREE V28
+  .php   0044 INIT_STATIC_METHOD_CALL 1 string("Lib\\Slots") string("fromArray")
+  .php   0045 INIT_METHOD_CALL 0 THIS string("prices")
+  .php   0046 V34 = DO_FCALL
+  .php   0047 SEND_VAR_NO_REF_EX V34 1
+  .php   0049 T36 = CAST (object) V35
+  .php   0050 INIT_METHOD_CALL 0 T36 string("getSize")
+  .php   0051 V37 = DO_FCALL
+  .php   0052 T38 = ADD CV1($total) V37
+  .php   0053 VERIFY_RETURN_TYPE T38
+  .php   0054 RETURN T38
+  .php   0055 VERIFY_RETURN_TYPE
+  .php   0056 RETURN null
+  .php        15: 0016 - 0017 (tmp/var)
+  .php        18: 0020 - 0021 (tmp/var)
+  .php        24: 0029 - 0033 (loop)
+  .php        28: 0036 - 0043 (loop)
+  .php        38: 0053 - 0054 (tmp/var)
   .php        ; (lines=15, args=0, vars=2, tmps=5)
   .php   0002 V4 = FE_RESET_R T3 0010
   .php   0003 FE_FETCH_R V4 CV1($item) 0010
@@ -6475,6 +6661,19 @@ Accessors/Product: different opcodes and lines in 11 op arrays, same signatures 
   .sharp      5: 0004 - 0018 (tmp/var)
   .sharp      7: 0010 - 0011 (tmp/var)
   .sharp      9: 0015 - 0016 (tmp/var)
+  .sharp      ; (lines=19, args=1, vars=2, tmps=6)
+  .sharp 0003 V3 = FE_RESET_R CV0($value) 0017
+  .sharp 0004 FE_FETCH_R V3 CV1($tag) 0017
+  .sharp 0014 V7 = FETCH_OBJ_UNSET THIS string("tags")
+  .sharp 0015 V7 = SEPARATE V7
+  .sharp 0016 JMP 0004
+  .sharp 0017 FE_FREE V3
+  .sharp 0018 RETURN null
+  .sharp      3: 0004 - 0017 (loop)
+  .sharp      ; (lines=9, args=1, vars=1, tmps=3)
+  .sharp 0006 V3 = FETCH_OBJ_UNSET THIS string("ratings")
+  .sharp 0007 V3 = SEPARATE V3
+  .sharp 0008 RETURN null
   .php        ; (lines=20, args=1, vars=3, tmps=8)
   .php   L0038 0010 T5 = ADD_ARRAY_ELEMENT V7 NEXT
   .php   L0038 0011 T8 = IS_IDENTICAL CV1($receiver#1) CV2($kept#2)
@@ -6499,6 +6698,13 @@ Accessors/Product: different opcodes and lines in 11 op arrays, same signatures 
   .php   0019 RETURN null
   .php        5: 0004 - 0017 (tmp/var)
   .php        9: 0014 - 0015 (tmp/var)
+  .php        ; (lines=17, args=1, vars=2, tmps=5)
+  .php   0003 V3 = FE_RESET_R CV0($value) 0015
+  .php   0004 FE_FETCH_R V3 CV1($tag) 0015
+  .php   0014 JMP 0004
+  .php   0015 FE_FREE V3
+  .php   0016 RETURN null
+  .php        3: 0004 - 0015 (loop)
 Parcel: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Exits: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Positions: same opcodes and lines in 5 op arrays, same signatures in 1 classes

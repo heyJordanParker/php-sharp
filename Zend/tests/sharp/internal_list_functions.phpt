@@ -1,5 +1,5 @@
 --TEST--
-The engine functions the standard library's List members run change the List they are given by reference where it lives, copy a shared one first, and throw OutOfRangeException with the messages a List's index and last throw
+The engine functions the standard library's List members run change the List they are given by reference where it lives, copy a shared one first, set gives the element it replaced, and they throw OutOfRangeException with the messages a List's index and last throw
 --FILE--
 <?php
 use function Sharp\Internal\{add, insert, set, remove, removeAt, removeLast, clear, get, contains, indexOf, nonEmpty};
@@ -42,7 +42,7 @@ foreach ([
 }
 ?>
 --EXPECT--
-int(9)
+int(1)
 bool(true)
 bool(false)
 [0,9,2,4] [1,2,3]

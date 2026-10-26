@@ -4,20 +4,27 @@ set -euo pipefail
 # Prints the callgrind instruction count of each loop of sharp/bench/Loops.sharp, in no JIT, the function JIT and the
 # tracing JIT: the count of a run of 1M turns less the count of a run of none, so startup and the code a row runs
 # before its loop count for nothing. It runs in the php-sharp-linux image with the tree mounted, on the Linux build
-# sharp/bin/build --linux made, with valgrind installed in the throwaway container.
+# sharp/bin/build --linux made, or with --release on the release build sharp/bin/build --linux --release made, which
+# the speed gate measures, with valgrind installed in the throwaway container.
 
 usage() {
-  echo "usage: sharp/bin/bench [rows...]" >&2
+  echo "usage: sharp/bin/bench [--release] [rows...]" >&2
   exit 2
 }
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 rows=(listAdd listAddOnProperty listIndexRead listIndexWrite mapGetAndPut setAdd filterWithLambda plainMethodCall)
+release=false
+chosen=()
 for arg in "$@"; do
-  [[ "$arg" == -* ]] && usage
+  case "$arg" in
+    --release) release=true ;;
+    -*) usage ;;
+    *) chosen+=("$arg") ;;
+  esac
 done
-if [[ $# -gt 0 ]]; then
-  rows=("$@")
+if [[ ${#chosen[@]} -gt 0 ]]; then
+  rows=("${chosen[@]}")
 fi
 
 if [[ ! -f /.dockerenv ]]; then
@@ -32,20 +39,27 @@ if [[ ! -f /.dockerenv ]]; then
       apt-get -qq update >/dev/null && apt-get -qq install -y valgrind >/dev/null
       exec setpriv --reuid="$BENCH_UID" --regid="$BENCH_GID" --clear-groups \
         env HOME=/tmp CARGO_HOME=/src/sharp/build/cargo RUSTUP_HOME=/src/sharp/build/rustup \
-        XDG_CACHE_HOME=/src/sharp/build/cache sharp/bin/bench "$@"' bench "${rows[@]}"
+        XDG_CACHE_HOME=/src/sharp/build/cache sharp/bin/bench "$@"' bench "$@"
 fi
 
 build_dir="$root/sharp/build/linux-$(uname -m)"
+# mago doesn't depend on the engine's build, so both builds' rows compile with the one in the debug build's folder.
+mago_dir="$build_dir/mago"
+built="sharp/bin/build --linux"
+if $release; then
+  build_dir+=-release
+  built+=" --release"
+fi
 php="$build_dir/sapi/cli/php"
 if [[ ! -x "$php" ]]; then
-  echo "$php is missing. Run sharp/bin/build --linux first." >&2
+  echo "$php is missing. Run $built first." >&2
   exit 1
 fi
 
 cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
 PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --release --jobs "${CARGO_BUILD_JOBS:-2}" \
-  --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$build_dir/mago" --bin mago
-"$build_dir/mago/release/mago" --no-version-check --colors never --workspace "$root" \
+  --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$mago_dir" --bin mago
+"$mago_dir/release/mago" --no-version-check --colors never --workspace "$root" \
   --config "$root/sharp/bench/mago.toml" compile >/dev/null
 
 modes=("no JIT" "function JIT" "tracing JIT")

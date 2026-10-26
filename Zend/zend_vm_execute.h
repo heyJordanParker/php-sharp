@@ -938,8 +938,8 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET zend_fetch_static_prop_helper_
 	}
 	if ((type == BP_VAR_W || type == BP_VAR_RW) && prop != &EG(uninitialized_zval)
 	 && UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_TYPED) && !EG(exception)) {
-		sharp_property_for_plain_write(prop, prop_info,
-			type == BP_VAR_W ? opline->extended_value & ZEND_FETCH_OBJ_FLAGS : 0);
+		sharp_property_fetched_for_write(prop, prop_info,
+			type == BP_VAR_W ? opline->extended_value & ZEND_FETCH_OBJ_FLAGS : 0, sharp_function_is_sharp(EX(func)));
 	}
 
 	if (type == BP_VAR_R || type == BP_VAR_IS) {
@@ -6057,7 +6057,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_DECLARE_LAMBD
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: a CV is a local a PHP# call sent by reference to a Sharp\Internal function, see zend_compile_call_common. */
+/* PHP#: a CV is a local a PHP# call sent by reference to a Sharp\Internal function, and an INDIRECT VAR the property,
+ * static property or element it sent, see zend_sharp_separate_place. The unset fetch of a property already checked a
+ * reference plain PHP took, so the reference left at refcount 1 holds what PHP# wrote, and a typed one loses its
+ * property's type source as it goes. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_YIELD_FROM_SPEC_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -7057,12 +7060,12 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -7247,8 +7250,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -9859,12 +9861,12 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -10048,8 +10050,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -12639,12 +12640,12 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -12829,8 +12830,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -17316,12 +17316,12 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_R_S
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -17505,8 +17505,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -18871,12 +18870,12 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_R_S
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -19059,8 +19058,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -20332,12 +20330,12 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_R_S
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -20521,8 +20519,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -32367,8 +32364,15 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SEPARATE_SPEC
 	zval *var_ptr;
 
 	var_ptr = EX_VAR(opline->op1.var);
+	if (IS_VAR == IS_VAR && Z_TYPE_P(var_ptr) == IS_INDIRECT) {
+		var_ptr = Z_INDIRECT_P(var_ptr);
+	}
 	if (UNEXPECTED(Z_ISREF_P(var_ptr))) {
 		if (UNEXPECTED(Z_REFCOUNT_P(var_ptr) == 1)) {
+			zend_reference *ref = Z_REF_P(var_ptr);
+			if (IS_VAR == IS_VAR && ZEND_REF_HAS_TYPE_SOURCES(ref)) {
+				ZEND_REF_DEL_TYPE_SOURCE(ref, ZEND_REF_FIRST_SOURCE(ref));
+			}
 			ZVAL_UNREF(var_ptr);
 		}
 	}
@@ -35623,12 +35627,12 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -35858,8 +35862,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -38007,12 +38010,12 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_R_S
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -38234,8 +38237,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -40953,12 +40955,12 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_R_S
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -41183,8 +41185,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -45597,12 +45598,12 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -45832,8 +45833,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -49804,12 +49804,12 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_R_S
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -50031,8 +50031,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -54218,8 +54217,15 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_SEPARATE_SPEC
 	zval *var_ptr;
 
 	var_ptr = EX_VAR(opline->op1.var);
+	if (IS_CV == IS_VAR && Z_TYPE_P(var_ptr) == IS_INDIRECT) {
+		var_ptr = Z_INDIRECT_P(var_ptr);
+	}
 	if (UNEXPECTED(Z_ISREF_P(var_ptr))) {
 		if (UNEXPECTED(Z_REFCOUNT_P(var_ptr) == 1)) {
+			zend_reference *ref = Z_REF_P(var_ptr);
+			if (IS_CV == IS_VAR && ZEND_REF_HAS_TYPE_SOURCES(ref)) {
+				ZEND_REF_DEL_TYPE_SOURCE(ref, ZEND_REF_FIRST_SOURCE(ref));
+			}
 			ZVAL_UNREF(var_ptr);
 		}
 	}
@@ -55612,12 +55618,12 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_FETCH_OBJ_R_S
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -55842,8 +55848,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -63490,7 +63495,10 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_DECLARE_LAMBDA_FUN
 	ZEND_VM_NEXT_OPCODE();
 }
 
-/* PHP#: a CV is a local a PHP# call sent by reference to a Sharp\Internal function, see zend_compile_call_common. */
+/* PHP#: a CV is a local a PHP# call sent by reference to a Sharp\Internal function, and an INDIRECT VAR the property,
+ * static property or element it sent, see zend_sharp_separate_place. The unset fetch of a property already checked a
+ * reference plain PHP took, so the reference left at refcount 1 holds what PHP# wrote, and a typed one loses its
+ * property's type source as it goes. */
 static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_YIELD_FROM_SPEC_CONST_TAILCALL_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -64490,12 +64498,12 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -64680,8 +64688,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -67292,12 +67299,12 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -67481,8 +67488,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -69970,12 +69976,12 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -70160,8 +70166,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CONST & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -74647,12 +74652,12 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_R_SPEC_T
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -74836,8 +74841,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -76202,12 +76206,12 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_R_SPEC_T
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -76390,8 +76394,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -77563,12 +77566,12 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_R_SPEC_T
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -77752,8 +77755,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || ((IS_TMP_VAR|IS_VAR) & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -89598,8 +89600,15 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SEPARATE_SPEC_VAR_
 	zval *var_ptr;
 
 	var_ptr = EX_VAR(opline->op1.var);
+	if (IS_VAR == IS_VAR && Z_TYPE_P(var_ptr) == IS_INDIRECT) {
+		var_ptr = Z_INDIRECT_P(var_ptr);
+	}
 	if (UNEXPECTED(Z_ISREF_P(var_ptr))) {
 		if (UNEXPECTED(Z_REFCOUNT_P(var_ptr) == 1)) {
+			zend_reference *ref = Z_REF_P(var_ptr);
+			if (IS_VAR == IS_VAR && ZEND_REF_HAS_TYPE_SOURCES(ref)) {
+				ZEND_REF_DEL_TYPE_SOURCE(ref, ZEND_REF_FIRST_SOURCE(ref));
+			}
 			ZVAL_UNREF(var_ptr);
 		}
 	}
@@ -92854,12 +92863,12 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -93089,8 +93098,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -95238,12 +95246,12 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_R_SPEC_U
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -95465,8 +95473,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -98184,12 +98191,12 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_R_SPEC_U
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -98414,8 +98421,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_UNUSED & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -102828,12 +102834,12 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -103063,8 +103069,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -107035,12 +107040,12 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_R_SPEC_C
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -107262,8 +107267,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -111347,8 +111351,15 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_SEPARATE_SPEC_CV_U
 	zval *var_ptr;
 
 	var_ptr = EX_VAR(opline->op1.var);
+	if (IS_CV == IS_VAR && Z_TYPE_P(var_ptr) == IS_INDIRECT) {
+		var_ptr = Z_INDIRECT_P(var_ptr);
+	}
 	if (UNEXPECTED(Z_ISREF_P(var_ptr))) {
 		if (UNEXPECTED(Z_REFCOUNT_P(var_ptr) == 1)) {
+			zend_reference *ref = Z_REF_P(var_ptr);
+			if (IS_CV == IS_VAR && ZEND_REF_HAS_TYPE_SOURCES(ref)) {
+				ZEND_REF_DEL_TYPE_SOURCE(ref, ZEND_REF_FIRST_SOURCE(ref));
+			}
 			ZVAL_UNREF(var_ptr);
 		}
 	}
@@ -112741,12 +112752,12 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_FETCH_OBJ_R_SPEC_C
 				if (EXPECTED(IS_VALID_PROPERTY_OFFSET(prop_offset))) {
 fetch_obj_r_simple:
 					retval = OBJ_PROP(zobj, prop_offset);
-					/* PHP#: only PHP# code reads a reference plain PHP made of a typed slot through the check. */
+					/* PHP#: a reference in a typed slot is read through read_property, where PHP# code checks what
+					 * plain PHP wrote, and plain PHP code's read takes the reference from PHP#. */
 					if (EXPECTED(Z_TYPE_INFO_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_r_copy;
 						} else {
@@ -112971,8 +112982,7 @@ fetch_obj_is_simple:
 					if (EXPECTED(Z_TYPE_P(retval) != IS_UNDEF)
 					 && (EXPECTED(!Z_ISREF_P(retval)) || !CACHED_PTR_EX(cache_slot + 2)
 					  || !(((zend_property_info *) CACHED_PTR_EX(cache_slot + 2))->flags
-						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-					  || !sharp_function_is_sharp(EX(func)))) {
+						& (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)))) {
 						if (0 || (IS_CV & (IS_TMP_VAR|IS_VAR)) != 0) {
 							goto fetch_obj_is_copy;
 						} else {
@@ -115772,8 +115782,8 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET zend_fetch_static_prop_helper_
 	}
 	if ((type == BP_VAR_W || type == BP_VAR_RW) && prop != &EG(uninitialized_zval)
 	 && UNEXPECTED(prop_info->flags & ZEND_ACC_SHARP_TYPED) && !EG(exception)) {
-		sharp_property_for_plain_write(prop, prop_info,
-			type == BP_VAR_W ? opline->extended_value & ZEND_FETCH_OBJ_FLAGS : 0);
+		sharp_property_fetched_for_write(prop, prop_info,
+			type == BP_VAR_W ? opline->extended_value & ZEND_FETCH_OBJ_FLAGS : 0, sharp_function_is_sharp(EX(func)));
 	}
 
 	if (type == BP_VAR_R || type == BP_VAR_IS) {

@@ -7,6 +7,8 @@ public class Ledger
     public List<int> counts { get; set; } = [];
     public List<Function<void()>> callbacks { get; set; } = [];
     public static List<string> archive { get; set; } = [];
+    public List<List<Function<void()>>> hooks { get; set; } = [[]];
+    public List<List<int>> rows { get; set; } = [[]];
 
     public string dropLine() => this.lines.removeLast();
 
@@ -26,6 +28,39 @@ public class Ledger
 
     public int remembered() => this.callbacks.count();
 
+    // A change through an element of a property, which plain PHP can reach through the property while it runs.
+    public void forgetHooks()
+    {
+        this.hooks[0].clear();
+    }
+
+    public int hooked() => this.hooks[0].count();
+
+    public void addToRow(int value)
+    {
+        this.rows[0].add(value);
+    }
+
+    public int rowTotal() => this.rows[0].sumOf(value => value);
+
+    // A change through an element leaves no reference behind, so a filtered copy of the List and a copy plain PHP
+    // makes of it change apart from it.
+    public static List<List<int>> filteredAfterAdd()
+    {
+        List<List<int>> grid = [[1]];
+        grid[0].add(2);
+        const kept = grid.filter(row => true);
+        kept[0].add(3);
+        return grid;
+    }
+
+    public static List<List<int>> added()
+    {
+        List<List<int>> grid = [[1]];
+        grid[0].add(2);
+        return grid;
+    }
+
     // The removed element goes first, before the List it left.
     public static List<string> removedAt(List<string> items, int index)
     {
@@ -42,6 +77,14 @@ public class Ledger
 
     public static string removedFirst(List<string> items) => items.removeFirst();
 
+    // `set` gives the element it replaced, as Kotlin's does, and the index write it runs gives the value it stores.
+    public static List<int> replaced(List<int> items)
+    {
+        const old = items.set(0, 9);
+        const stored = items[1] = 7;
+        return [old, stored, items[0], items[1]];
+    }
+
     public static List<bool> emptiness(List<string> items) => [items.isEmpty(), items.isNotEmpty()];
 
     // A null before `?.` skips the change and the rest of the chain.
@@ -56,6 +99,32 @@ public class Ledger
         items.add(2);
         write();
         return items;
+    }
+
+    // A change through an element that throws leaves the element as it was, and a filtered copy or an assigned one of
+    // the List changes apart from it.
+    public static List<List<int>> filteredAfterThrow()
+    {
+        List<List<int>> grid = [[1]];
+        try {
+            grid[0].removeAt(5);
+        } catch (OutOfRangeException refused) {
+        }
+        const kept = grid.filter(row => true);
+        kept[0].add(3);
+        return grid;
+    }
+
+    public static List<List<int>> copiedAfterThrow()
+    {
+        List<List<int>> grid = [[1]];
+        try {
+            grid[0].removeAt(5);
+        } catch (OutOfRangeException refused) {
+        }
+        List<List<int>> copy = grid;
+        copy[0].add(3);
+        return grid;
     }
 
     // A member's value runs the member's static method, whose `Map` takes the element type it is called with.

@@ -41,7 +41,6 @@ extern PHP_JSON_API zend_class_entry *php_json_exception_ce;
 #include "sharp_build_id.h"
 #include "sharp_native.h"
 
-#define SHARP_FILE_EXTENSION ".sharp"
 #define SHARP_COMPILED_FOLDER ".sharp"
 /* How the path of an input that stands for the .sharp files of its folder ends: the bridge's unit::SOURCE_LISTING. */
 #define SHARP_SOURCE_LISTING "/*.sharp"
@@ -1103,14 +1102,6 @@ static int sharp_parse(void)
 	return SUCCESS;
 }
 
-bool sharp_is_sharp_file(const zend_string *filename)
-{
-	size_t length = sizeof(SHARP_FILE_EXTENSION) - 1;
-
-	return ZSTR_LEN(filename) > length
-		&& memcmp(ZSTR_VAL(filename) + ZSTR_LEN(filename) - length, SHARP_FILE_EXTENSION, length) == 0;
-}
-
 HashTable *sharp_equality_operators(void)
 {
 	if (!SHARP_G(equality_operators)) {
@@ -1616,6 +1607,16 @@ static int sharp_struct_implemented(zend_class_entry *interface, zend_class_entr
 	return FAILURE;
 }
 
+/* Appends the value `element` holds to the List `list` being built, never a reference: a List holds values, spec
+ * section 12, and a `ref` change through an element that threw leaves the element a reference, which the new List
+ * would share otherwise. */
+static zend_always_inline void sharp_list_add_value(HashTable *list, zval *element)
+{
+	zval value;
+	ZVAL_COPY_DEREF(&value, element);
+	zend_hash_next_index_insert_new(list, &value);
+}
+
 /* Replaces the list at array with a renumbered copy: value goes in at index, or, with no value, the
  * element at index leaves. A List's keys are its positions. It gives the old list in `old`, which the
  * caller releases last, so a destructor an element runs sees the changed list. */
@@ -1629,18 +1630,15 @@ static void sharp_list_renumber(zval *array, zend_long index, zval *value, zval 
 	array_init_size(&changed, zend_hash_num_elements(elements) + (value ? 1 : 0));
 	ZEND_HASH_FOREACH_VAL(elements, element) {
 		if (position == index && value) {
-			Z_TRY_ADDREF_P(value);
-			zend_hash_next_index_insert_new(Z_ARRVAL(changed), value);
+			sharp_list_add_value(Z_ARRVAL(changed), value);
 		}
 		if (position != index || value) {
-			Z_TRY_ADDREF_P(element);
-			zend_hash_next_index_insert_new(Z_ARRVAL(changed), element);
+			sharp_list_add_value(Z_ARRVAL(changed), element);
 		}
 		position++;
 	} ZEND_HASH_FOREACH_END();
 	if (position == index && value) {
-		Z_TRY_ADDREF_P(value);
-		zend_hash_next_index_insert_new(Z_ARRVAL(changed), value);
+		sharp_list_add_value(Z_ARRVAL(changed), value);
 	}
 
 	ZVAL_COPY_VALUE(old, array);
@@ -2086,8 +2084,7 @@ static void sharp_filter(zval *held, zend_fcall_info *fci, zend_fcall_info_cache
 			break;
 		}
 		if (zend_is_true(&keep)) {
-			Z_TRY_ADDREF_P(element);
-			zend_hash_next_index_insert_new(Z_ARRVAL(kept), element);
+			sharp_list_add_value(Z_ARRVAL(kept), element);
 		}
 		zval_ptr_dtor(&keep);
 	} ZEND_HASH_FOREACH_END();
@@ -2295,13 +2292,11 @@ static void sharp_key_by(zend_execute_data *execute_data, zend_array *elements, 
 		bool put = !EG(exception);
 		if (bucket) {
 			SEPARATE_ARRAY(&bucket->value);
-			Z_TRY_ADDREF_P(element);
-			zend_hash_next_index_insert_new(Z_ARRVAL(bucket->value), element);
+			sharp_list_add_value(Z_ARRVAL(bucket->value), element);
 		} else if (put && group) {
 			zval list;
 			array_init(&list);
-			Z_TRY_ADDREF_P(element);
-			zend_hash_next_index_insert_new(Z_ARRVAL(list), element);
+			sharp_list_add_value(Z_ARRVAL(list), element);
 			put = sharp_table_put(table, &key, &list);
 			zval_ptr_dtor(&list);
 		} else if (put) {
@@ -2399,8 +2394,7 @@ static void sharp_sorted_by(zend_array *elements, zend_fcall_info *fci, zend_fca
 		}
 		array_init_size(&pair, 2);
 		zend_hash_next_index_insert_new(Z_ARRVAL(pair), &key);
-		Z_TRY_ADDREF_P(element);
-		zend_hash_next_index_insert_new(Z_ARRVAL(pair), element);
+		sharp_list_add_value(Z_ARRVAL(pair), element);
 		zend_hash_next_index_insert_new(Z_ARRVAL(pairs), &pair);
 	} ZEND_HASH_FOREACH_END();
 	zend_array_release(elements);
@@ -2924,8 +2918,10 @@ ZEND_METHOD(Sharp_Collection, flatMap)
 }
 
 /* Spec section 12: the standard library's members of a List run these, each with the List first. A member that changes
- * the List takes it by reference, from the place a `ref` receiver passes, and changes it there: PHP's parameter parsing
- * separates a shared array first, as SEPARATE_ARRAY does for a write. One that reads it takes it by value. */
+ * the List takes it by reference, from the place a `ref` receiver passes, and changes it there. It finds the change
+ * first and separates a shared List only then, as SEPARATE_ARRAY does for a write, so a `remove` that finds nothing and
+ * an index outside the List leave it shared (design section 5). One that renumbers builds the changed List anew in
+ * sharp_list_renumber, so it separates nothing. One that reads it takes it by value. */
 
 static ZEND_COLD void sharp_throw_empty_list(void)
 {
@@ -2937,16 +2933,33 @@ static ZEND_COLD void sharp_throw_missing_index(zend_long index)
 	zend_throw_exception_ex(spl_ce_OutOfRangeException, 0, "Undefined array key " ZEND_LONG_FMT, index);
 }
 
+/* Whether `list`, the first argument of each function here, is a list, and a ValueError that names the function when it
+ * is not. Plain PHP can pass any array, and in one whose keys are not its positions, an element found by key would be
+ * removed or renumbered by position. A packed array without holes is a list at once. */
+static bool sharp_list_argument(const HashTable *list)
+{
+	if (EXPECTED(zend_array_is_list(list))) {
+		return true;
+	}
+	zend_argument_value_error(1, "must be a list");
+
+	return false;
+}
+
 /* `add`: the value goes after the last element. */
 ZEND_FUNCTION(Sharp_Internal_add)
 {
 	zval *list, *value;
 
 	ZEND_PARSE_PARAMETERS_START(2, 2)
-		Z_PARAM_ARRAY_EX(list, 0, 1)
+		Z_PARAM_ARRAY_EX2(list, 0, 1, 0)
 		Z_PARAM_ZVAL(value)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	SEPARATE_ARRAY(list);
 	Z_TRY_ADDREF_P(value);
 	if (!zend_hash_next_index_insert(Z_ARRVAL_P(list), value)) {
 		zval_ptr_dtor(value);
@@ -2963,11 +2976,14 @@ ZEND_FUNCTION(Sharp_Internal_insert)
 	zend_long index;
 
 	ZEND_PARSE_PARAMETERS_START(3, 3)
-		Z_PARAM_ARRAY_EX(list, 0, 1)
+		Z_PARAM_ARRAY_EX2(list, 0, 1, 0)
 		Z_PARAM_LONG(index)
 		Z_PARAM_ZVAL(value)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
 	if (index < 0 || index > (zend_long) zend_hash_num_elements(Z_ARRVAL_P(list))) {
 		sharp_throw_missing_index(index);
 		RETURN_THROWS();
@@ -2977,30 +2993,35 @@ ZEND_FUNCTION(Sharp_Internal_insert)
 	zval_ptr_dtor(&old);
 }
 
-/* `list[i] = v`: the value replaces the element at index, and past either end it throws, where PHP's write would append
- * or leave a gap (spec section 12). It gives the value, as a PHP assignment gives the value it stores. */
+/* Kotlin's set(index, element), which `list[i] = v` runs: the value replaces the element at index, and past either end
+ * it throws, where PHP's write would append or leave a gap (spec section 12). It gives the element it replaced, as
+ * Kotlin's does. */
 ZEND_FUNCTION(Sharp_Internal_set)
 {
 	zval *list, *value;
 	zend_long index;
 
 	ZEND_PARSE_PARAMETERS_START(3, 3)
-		Z_PARAM_ARRAY_EX(list, 0, 1)
+		Z_PARAM_ARRAY_EX2(list, 0, 1, 0)
 		Z_PARAM_LONG(index)
 		Z_PARAM_ZVAL(value)
 	ZEND_PARSE_PARAMETERS_END();
 
-	zval *element = zend_hash_index_find(Z_ARRVAL_P(list), index);
-	if (!element) {
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	if ((zend_ulong) index >= zend_hash_num_elements(Z_ARRVAL_P(list))) {
 		sharp_throw_missing_index(index);
 		RETURN_THROWS();
 	}
-	/* The old element is released last, so a destructor it runs sees the changed list. */
+	SEPARATE_ARRAY(list);
+	zval *element = zend_hash_index_find(Z_ARRVAL_P(list), index);
+	/* The old element leaves the list before it is given, so a destructor it runs sees the changed list. */
 	zval old;
 	ZVAL_COPY_VALUE(&old, element);
 	ZVAL_COPY(element, value);
+	RETVAL_COPY_DEREF(&old);
 	zval_ptr_dtor(&old);
-	RETURN_COPY(value);
 }
 
 static bool sharp_equal_values(zval *value, zval *other, bool *equal);
@@ -3031,10 +3052,13 @@ ZEND_FUNCTION(Sharp_Internal_remove)
 	zval *list, *value;
 
 	ZEND_PARSE_PARAMETERS_START(2, 2)
-		Z_PARAM_ARRAY_EX(list, 0, 1)
+		Z_PARAM_ARRAY_EX2(list, 0, 1, 0)
 		Z_PARAM_ZVAL(value)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
 	zend_long index = sharp_list_index_of(Z_ARRVAL_P(list), value);
 	if (index == -2) {
 		RETURN_THROWS();
@@ -3056,20 +3080,23 @@ ZEND_FUNCTION(Sharp_Internal_removeAt)
 	zend_long index;
 
 	ZEND_PARSE_PARAMETERS_START(2, 2)
-		Z_PARAM_ARRAY_EX(list, 0, 1)
+		Z_PARAM_ARRAY_EX2(list, 0, 1, 0)
 		Z_PARAM_LONG(index)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (zend_hash_num_elements(Z_ARRVAL_P(list)) == 0) {
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	uint32_t count = zend_hash_num_elements(Z_ARRVAL_P(list));
+	if (count == 0) {
 		sharp_throw_empty_list();
 		RETURN_THROWS();
 	}
-	zval *element = zend_hash_index_find(Z_ARRVAL_P(list), index);
-	if (!element) {
+	if ((zend_ulong) index >= count) {
 		sharp_throw_missing_index(index);
 		RETURN_THROWS();
 	}
-	ZVAL_COPY_DEREF(return_value, element);
+	ZVAL_COPY_DEREF(return_value, zend_hash_index_find(Z_ARRVAL_P(list), index));
 	zval old;
 	sharp_list_renumber(list, index, NULL, &old);
 	zval_ptr_dtor(&old);
@@ -3082,15 +3109,19 @@ ZEND_FUNCTION(Sharp_Internal_removeLast)
 	zval *list;
 
 	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_ARRAY_EX(list, 0, 1)
+		Z_PARAM_ARRAY_EX2(list, 0, 1, 0)
 	ZEND_PARSE_PARAMETERS_END();
 
-	HashTable *elements = Z_ARRVAL_P(list);
-	uint32_t count = zend_hash_num_elements(elements);
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
+	uint32_t count = zend_hash_num_elements(Z_ARRVAL_P(list));
 	if (count == 0) {
 		sharp_throw_empty_list();
 		RETURN_THROWS();
 	}
+	SEPARATE_ARRAY(list);
+	HashTable *elements = Z_ARRVAL_P(list);
 	zend_long last = (zend_long) count - 1;
 	ZVAL_COPY_DEREF(return_value, zend_hash_index_find(elements, last));
 	zend_hash_index_del(elements, last);
@@ -3108,6 +3139,9 @@ ZEND_FUNCTION(Sharp_Internal_clear)
 		Z_PARAM_ARRAY_EX2(list, 0, 1, 0)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
 	zval old;
 	ZVAL_COPY_VALUE(&old, list);
 	ZVAL_EMPTY_ARRAY(list);
@@ -3125,6 +3159,9 @@ ZEND_FUNCTION(Sharp_Internal_get)
 		Z_PARAM_LONG(index)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(list)) {
+		RETURN_THROWS();
+	}
 	zval *element = zend_hash_index_find(list, index);
 	if (element) {
 		RETURN_COPY_DEREF(element);
@@ -3142,6 +3179,9 @@ ZEND_FUNCTION(Sharp_Internal_contains)
 		Z_PARAM_ZVAL(value)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(list)) {
+		RETURN_THROWS();
+	}
 	zend_long index = sharp_list_index_of(list, value);
 	if (index == -2) {
 		RETURN_THROWS();
@@ -3160,6 +3200,9 @@ ZEND_FUNCTION(Sharp_Internal_indexOf)
 		Z_PARAM_ZVAL(value)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(list)) {
+		RETURN_THROWS();
+	}
 	zend_long index = sharp_list_index_of(list, value);
 	if (index == -2) {
 		RETURN_THROWS();
@@ -3178,6 +3221,9 @@ ZEND_FUNCTION(Sharp_Internal_nonEmpty)
 		Z_PARAM_ARRAY(list)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
 	if (zend_hash_num_elements(Z_ARRVAL_P(list)) == 0) {
 		sharp_throw_empty_list();
 		RETURN_THROWS();
@@ -3197,6 +3243,9 @@ ZEND_FUNCTION(Sharp_Internal_entries)
 		Z_PARAM_STR_OR_NULL(type_arguments)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(list)) {
+		RETURN_THROWS();
+	}
 	sharp_list_entries(execute_data, list, type_arguments, 2, return_value);
 }
 
@@ -3215,6 +3264,9 @@ ZEND_FUNCTION(Sharp_Internal_toSet)
 		Z_PARAM_STR_OR_NULL(type_arguments)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(list)) {
+		RETURN_THROWS();
+	}
 	object_init_ex(return_value, sharp_ce_set);
 	if (!sharp_table_made_with(execute_data, Z_OBJ_P(return_value), type_arguments, 2)
 			|| !sharp_set_fill(Z_OBJ_P(return_value), list)) {
@@ -3242,6 +3294,9 @@ ZEND_FUNCTION(Sharp_Internal_filter)
 		Z_PARAM_FUNC(fci, fcc)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
 	sharp_filter(list, &fci, &fcc, return_value);
 }
 
@@ -3256,6 +3311,9 @@ ZEND_FUNCTION(Sharp_Internal_map)
 		Z_PARAM_FUNC(fci, fcc)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
 	sharp_map(sharp_list_elements(list), &fci, &fcc, return_value);
 }
 
@@ -3270,6 +3328,9 @@ ZEND_FUNCTION(Sharp_Internal_flatMap)
 		Z_PARAM_FUNC(fci, fcc)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
 	sharp_flat_map(sharp_list_elements(list), &fci, &fcc, return_value);
 }
 
@@ -3284,6 +3345,9 @@ ZEND_FUNCTION(Sharp_Internal_sumOf)
 		Z_PARAM_FUNC(fci, fcc)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
 	sharp_sum_of(sharp_list_elements(list), &fci, &fcc, return_value);
 }
 
@@ -3298,6 +3362,9 @@ ZEND_FUNCTION(Sharp_Internal_first)
 		Z_PARAM_FUNC(fci, fcc)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
 	sharp_first(sharp_list_elements(list), &fci, &fcc, return_value);
 }
 
@@ -3312,6 +3379,9 @@ ZEND_FUNCTION(Sharp_Internal_any)
 		Z_PARAM_FUNC(fci, fcc)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
 	sharp_any(sharp_list_elements(list), &fci, &fcc, return_value);
 }
 
@@ -3329,6 +3399,9 @@ static void sharp_internal_key_by(INTERNAL_FUNCTION_PARAMETERS, bool group)
 		Z_PARAM_STR_OR_NULL(type_arguments)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
 	sharp_key_by(execute_data, sharp_list_elements(list), &fci, &fcc, type_arguments, 3, group, return_value);
 }
 
@@ -3356,6 +3429,9 @@ ZEND_FUNCTION(Sharp_Internal_sortedBy)
 		Z_PARAM_OBJ_OF_CLASS_OR_NULL(comparison, zend_ce_closure)
 	ZEND_PARSE_PARAMETERS_END();
 
+	if (!sharp_list_argument(Z_ARRVAL_P(list))) {
+		RETURN_THROWS();
+	}
 	sharp_sorted_by(sharp_list_elements(list), &fci, &fcc, comparison, return_value);
 }
 
@@ -8899,7 +8975,8 @@ zval *sharp_property_from_reference(zval *slot, zend_object *object, const zend_
 
 bool sharp_property_for_write(zval *result, zend_object *object, zval *slot, const zend_property_info *info)
 {
-	/* PHP# code writes through its own reference again, as each `ref` call in a loop passes it. */
+	/* The unset fetch before a `ref` change's ZEND_SEPARATE takes the reference the change made, see
+	 * zend_sharp_separate_place. */
 	if (sharp_reference_is_own(slot)) {
 		return true;
 	}
@@ -8943,15 +9020,10 @@ void sharp_object_exposed(zend_object *object)
 void sharp_property_for_plain_write(zval *slot, const zend_property_info *info, uint32_t flags)
 {
 	if (Z_ISREF_P(slot)) {
-		/* The reference a PHP# by-reference fetch just made is PHP#'s own until plain PHP code takes it. */
-		if (!sharp_runs_sharp_code()) {
-			GC_DEL_FLAGS(Z_REF_P(slot), IS_REF_SHARP_MADE);
-		} else if (flags == ZEND_FETCH_REF && GC_REFCOUNT(Z_REF_P(slot)) == 1) {
-			GC_ADD_FLAGS(Z_REF_P(slot), IS_REF_SHARP_MADE);
-		}
+		GC_DEL_FLAGS(Z_REF_P(slot), IS_REF_SHARP_MADE);
 		return;
 	}
-	if (Z_ISERROR_P(slot) || sharp_runs_sharp_code()) {
+	if (Z_ISERROR_P(slot)) {
 		return;
 	}
 	/* A Map or a Set checks each write itself, with the type it got when it was made or at its first typed boundary. */

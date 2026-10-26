@@ -4162,6 +4162,7 @@ static zend_always_inline zend_result _zend_update_type_info(
 			 * unknown result, since the result type it would infer is currently unimplemented due to some assumptions
 			 * in JIT. See: https://github.com/php/php-src/pull/13304#issuecomment-1926668141 */
 			if (ssa_op->op1_def >= 0) {
+				/* t1 must keep MAY_BE_REF: without it, has_concrete_type holds, and the tracing JIT records a concrete type. */
 				UPDATE_SSA_TYPE(t1, ssa_op->op1_def);
 				COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->op1_def);
 			}

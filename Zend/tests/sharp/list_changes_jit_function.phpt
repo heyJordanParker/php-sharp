@@ -25,10 +25,13 @@ old ["new"]
 ["b","a","c"]
 ["b","c"]
 only
+[1,7,9,7]
 [true,false] [false,true]
 NULL
 int(1)
 [true,false,"b"]
+[[1]] [[1]]
+[[1,2]] [[1,2]]
 [1,2,3]
 TypeError: Reference held by property ListChanges\Ledger::$counts of type List<int> holds array: [3] expected int, got string 'z'
 [1,2,3]

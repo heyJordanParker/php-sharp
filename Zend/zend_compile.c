@@ -823,11 +823,15 @@ static void zend_do_free(znode *op1) /* {{{ */
 		zend_emit_op(NULL, ZEND_FREE, op1, NULL);
 	} else if (op1->op_type == IS_VAR) {
 		zend_op *opline = &CG(active_op_array)->opcodes[CG(active_op_array)->last-1];
-		/* PHP#: the ZEND_SEPARATE of a local follows the call that sent it, see zend_compile_call_common. */
+		/* PHP#: the ZEND_SEPARATE of each place, and the unset fetch of each but a local, follow the call that sent
+		 * them, see zend_sharp_separate_place. */
 		while (opline->opcode == ZEND_END_SILENCE ||
 				opline->opcode == ZEND_EXT_FCALL_END ||
 				opline->opcode == ZEND_OP_DATA ||
-				(opline->opcode == ZEND_SEPARATE && opline->op1_type == IS_CV)) {
+				opline->opcode == ZEND_SEPARATE ||
+				opline->opcode == ZEND_FETCH_OBJ_UNSET ||
+				opline->opcode == ZEND_FETCH_STATIC_PROP_UNSET ||
+				opline->opcode == ZEND_FETCH_DIM_UNSET) {
 			opline--;
 		}
 		if (opline->result_type == IS_VAR
@@ -3755,6 +3759,122 @@ static uint32_t zend_get_arg_num(zend_function *fn, zend_string *arg_name) {
 	return (uint32_t) -1;
 }
 
+/* PHP#: whether a call of `fbc` here is the change a `ref` member makes, a call of a Sharp\Internal function from a
+ * PHP# file, as a `ref` member's inline form makes it, with the place it changes sent by reference. */
+static bool zend_sharp_changes_place(const zend_function *fbc)
+{
+	return fbc && fbc->type == ZEND_INTERNAL_FUNCTION
+		&& zend_string_starts_with_literal_ci(fbc->common.function_name, "Sharp\\Internal\\")
+		&& sharp_is_sharp_file(CG(active_op_array)->filename);
+}
+
+/* PHP#: the property whose element a `ref` member changes is fetched by reference too, from the oplines from `first` on
+ * that sent the element, so it is a reference IS_REF_SHARP_MADE marks while the change runs, as it is when the property
+ * itself is the place. Plain PHP code that reaches the property meanwhile clears the mark, and the property's
+ * ZEND_SEPARATE after the call checks it, see zend_sharp_separate_place. */
+static void zend_sharp_fetch_root_by_ref(uint32_t first)
+{
+	zend_op_array *op_array = CG(active_op_array);
+
+	for (zend_op *opline = &op_array->opcodes[first]; opline < &op_array->opcodes[op_array->last]; opline++) {
+		if ((opline->opcode == ZEND_FETCH_OBJ_W || opline->opcode == ZEND_FETCH_STATIC_PROP_W)
+		 && (opline->extended_value & ZEND_FETCH_OBJ_FLAGS) == ZEND_FETCH_DIM_WRITE) {
+			opline->extended_value = (opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS) | ZEND_FETCH_REF;
+			return;
+		}
+	}
+}
+
+static bool zend_sharp_place_reads_again(const zend_ast *ast);
+
+/* PHP#: whether the call `ast` is an engine function's that gives a place by reference, as Sharp\Internal\statics gives
+ * a generic class's statics, whose arguments each read again, as a name, a class name or type arguments do. */
+static bool zend_sharp_call_gives_place(const zend_ast *ast)
+{
+	if (ast->child[0]->kind != ZEND_AST_ZVAL || Z_TYPE_P(zend_ast_get_zval(ast->child[0])) != IS_STRING) {
+		return false;
+	}
+	zend_string *name = zend_string_tolower(zend_ast_get_str(ast->child[0]));
+	zend_function *function = zend_hash_find_ptr(CG(function_table), name);
+	zend_string_release(name);
+	if (!function || function->type != ZEND_INTERNAL_FUNCTION
+	 || !(function->common.fn_flags & ZEND_ACC_RETURN_REFERENCE)) {
+		return false;
+	}
+
+	const zend_ast_list *args = zend_ast_get_list(ast->child[1]);
+	for (uint32_t i = 0; i < args->children; i++) {
+		const zend_ast *arg = args->child[i];
+		if (arg->kind != ZEND_AST_ZVAL && arg->kind != ZEND_AST_CONST && arg->kind != ZEND_AST_CLASS_NAME
+		 && arg->kind != ZEND_AST_SHARP_TYPE_OF && !(arg->kind == ZEND_AST_VAR && zend_sharp_place_reads_again(arg))) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+/* PHP#: whether reading the place `ast` again runs no code: a local or `$this`, a property of one by name, a static
+ * property by its class's name, an engine function's place, and an element of one of those at a literal or a local.
+ * The bridge holds whatever else a place reads in a hidden local first. */
+static bool zend_sharp_place_reads_again(const zend_ast *ast)
+{
+	switch (ast->kind) {
+		case ZEND_AST_CALL:
+			return zend_sharp_call_gives_place(ast);
+		case ZEND_AST_VAR:
+			return ast->child[0]->kind == ZEND_AST_ZVAL;
+		case ZEND_AST_PROP:
+			return ast->child[1]->kind == ZEND_AST_ZVAL && zend_sharp_place_reads_again(ast->child[0]);
+		case ZEND_AST_STATIC_PROP:
+			return ast->child[0]->kind == ZEND_AST_ZVAL && ast->child[1]->kind == ZEND_AST_ZVAL;
+		case ZEND_AST_DIM:
+			return ast->child[1]
+				&& (ast->child[1]->kind == ZEND_AST_ZVAL || ast->child[1]->kind == ZEND_AST_CONST
+					|| (ast->child[1]->kind == ZEND_AST_VAR && ast->child[1]->child[0]->kind == ZEND_AST_ZVAL))
+				&& zend_sharp_place_reads_again(ast->child[0]);
+		default:
+			return false;
+	}
+}
+
+/* PHP#: the place `ast` a `ref` member's change sent by reference is a reference once the call returns, which every
+ * later read of it would go through. ZEND_SEPARATE unwraps it where nothing else holds it, as upstream unwraps a call's
+ * result in zend_separate_if_call_and_write: a local itself, and a property, a static property or an element through
+ * an unset fetch, which adds no element plain PHP removed meanwhile. The property an element lives in is separated
+ * after the element, see zend_sharp_fetch_root_by_ref. A place that reads again by running code is a compile error. */
+static void zend_sharp_separate_place(zend_ast *ast)
+{
+	znode place;
+
+	if (ast->kind == ZEND_AST_VAR) {
+		if (!is_this_fetch(ast) && zend_try_compile_cv(&place, ast, BP_VAR_R) == SUCCESS) {
+			zend_emit_op(NULL, ZEND_SEPARATE, &place, NULL);
+		}
+		return;
+	}
+	if (ast->kind != ZEND_AST_PROP && ast->kind != ZEND_AST_STATIC_PROP && ast->kind != ZEND_AST_DIM) {
+		return;
+	}
+	if (!zend_sharp_place_reads_again(ast)) {
+		zend_error_noreturn(E_COMPILE_ERROR,
+			"PHP#: a place a `ref` member changes must read again without running code, which the bridge holds in a local");
+	}
+
+	zend_compile_var(&place, ast, BP_VAR_UNSET, 0);
+	zend_op *opline = zend_emit_op(NULL, ZEND_SEPARATE, &place, NULL);
+	opline->result_type = IS_VAR;
+	opline->result.var = opline->op1.var;
+
+	zend_ast *root = ast;
+	while (root->kind == ZEND_AST_DIM) {
+		root = root->child[0];
+	}
+	if (root != ast && (root->kind == ZEND_AST_PROP || root->kind == ZEND_AST_STATIC_PROP)) {
+		zend_sharp_separate_place(root);
+	}
+}
+
 static uint32_t zend_compile_args(
 		zend_ast *ast, zend_function *fbc, bool *may_have_extra_named_args) /* {{{ */
 {
@@ -3870,7 +3990,11 @@ static uint32_t zend_compile_args(
 		} else if (zend_is_variable(arg) && !zend_ast_is_short_circuited(arg)) {
 			if (fbc && arg_num != (uint32_t) -1) {
 				if (ARG_SHOULD_BE_SENT_BY_REF(fbc, arg_num)) {
+					uint32_t first = get_next_op_number();
 					zend_compile_var(&arg_node, arg, BP_VAR_W, 1);
+					if (arg->kind == ZEND_AST_DIM && zend_sharp_changes_place(fbc)) {
+						zend_sharp_fetch_root_by_ref(first);
+					}
 					opcode = ZEND_SEND_REF;
 				} else {
 					zend_compile_var(&arg_node, arg, BP_VAR_R, 0);
@@ -4061,23 +4185,16 @@ static bool zend_compile_call_common(znode *result, zend_ast *args_ast, zend_fun
 	opline->lineno = lineno;
 	zend_do_extended_fcall_end();
 
-	/* PHP#: a local a PHP# call sends by reference to a Sharp\Internal function, the receiver of a `ref` member, is a
-	 * reference once the call returns, which every later read of it would go through. ZEND_SEPARATE unwraps it where
-	 * nothing else holds it, ruling 1's refcount 1 for a property applied to a local, as upstream unwraps a call's
-	 * result in zend_separate_if_call_and_write. */
-	if (fbc && fbc->type == ZEND_INTERNAL_FUNCTION
-	 && zend_string_starts_with_literal_ci(fbc->common.function_name, "Sharp\\Internal\\")
-	 && sharp_is_sharp_file(CG(active_op_array)->filename)) {
+	/* PHP#: no reference a `ref` member's change sends outlives a call that returns, see zend_sharp_separate_place. */
+	if (zend_sharp_changes_place(fbc)) {
 		for (uint32_t i = 0; i < args->children; i++) {
 			zend_ast *arg = args->child[i];
-			znode local;
 
 			if (arg->kind == ZEND_AST_UNPACK || arg->kind == ZEND_AST_NAMED_ARG) {
 				break;
 			}
-			if (arg->kind == ZEND_AST_VAR && !is_this_fetch(arg) && ARG_SHOULD_BE_SENT_BY_REF(fbc, i + 1)
-			 && zend_try_compile_cv(&local, arg, BP_VAR_R) == SUCCESS) {
-				zend_emit_op(NULL, ZEND_SEPARATE, &local, NULL);
+			if (ARG_SHOULD_BE_SENT_BY_REF(fbc, i + 1)) {
+				zend_sharp_separate_place(arg);
 			}
 		}
 	}

@@ -8,8 +8,17 @@ extern zend_module_entry sharp_module_entry;
 
 #define PHP_SHARP_VERSION "0.5.0"
 
-/* Whether `filename` names a PHP# source file, which ends in `.sharp`. */
-bool sharp_is_sharp_file(const zend_string *filename);
+#define SHARP_FILE_EXTENSION ".sharp"
+
+/* Whether `filename` names a PHP# source file, which ends in `.sharp`. Each fetch of a property a PHP# type covers asks
+ * it of the running code, so it is inline. */
+static zend_always_inline bool sharp_is_sharp_file(const zend_string *filename)
+{
+	size_t length = sizeof(SHARP_FILE_EXTENSION) - 1;
+
+	return ZSTR_LEN(filename) > length
+		&& memcmp(ZSTR_VAL(filename) + ZSTR_LEN(filename) - length, SHARP_FILE_EXTENSION, length) == 0;
+}
 
 /* The operators == each class the request compared objects of compares them by, keyed by the class's address, which
  * sharp_table.c fills and the request frees when it ends. */
@@ -106,14 +115,28 @@ static zend_always_inline bool sharp_property_for_change(zend_object *object, zv
  * `sort($o->items)` do, after the fetch's `flags` were handled. The slot becomes a reference the property types, as a
  * reference plain PHP takes does, whatever it holds but an object, so sharp_property_from_reference checks it before
  * PHP# code next reads it. Plain PHP itself never runs that check. A Sharp\Map or Sharp\Set is copied when shared, and
- * checks each write plain PHP makes into it with its own type. PHP# code fetches the slot here too: a reference it makes
- * to pass the property by reference, as to a `ref` receiver, is its own, IS_REF_SHARP_MADE, which plain PHP code taking
- * the reference here clears. */
+ * checks each write plain PHP makes into it with its own type. Plain PHP code taking a reference PHP# code made clears
+ * its IS_REF_SHARP_MADE, see sharp_property_fetched_for_write. */
 void sharp_property_for_plain_write(zval *slot, const zend_property_info *info, uint32_t flags);
+/* Code fetches `slot`, of the property `info` with ZEND_ACC_SHARP_TYPED, to write, after the fetch's `flags` were
+ * handled, and `sharp` says whether the code is PHP#, which the fetch already knows. Plain PHP code's fetch runs
+ * sharp_property_for_plain_write. A reference PHP# code makes to pass the property by reference, as to a `ref`
+ * receiver, is its own while nothing else holds it, IS_REF_SHARP_MADE, until plain PHP code reaches it. */
+static zend_always_inline void sharp_property_fetched_for_write(
+	zval *slot, const zend_property_info *info, uint32_t flags, bool sharp)
+{
+	if (!sharp) {
+		sharp_property_for_plain_write(slot, info, flags);
+	} else if (flags == ZEND_FETCH_REF && Z_ISREF_P(slot) && GC_REFCOUNT(Z_REF_P(slot)) == 1) {
+		GC_ADD_FLAGS(Z_REF_P(slot), IS_REF_SHARP_MADE);
+	}
+}
 
 /* Plain PHP code that reads an object's properties table can take the reference a slot holds, as `foreach` by reference
- * over the object, an `(array)` cast and array_walk do, so each reference PHP# code made there stops being PHP#'s own and
- * is checked as plain PHP's, see sharp_property_from_reference. PHP# code reading the table changes nothing. */
+ * over the object, an `(array)` cast, array_walk and ArrayIterator do, directly or through a lazy proxy, so each
+ * reference PHP# code made there stops being PHP#'s own and is checked as plain PHP's, see
+ * sharp_property_from_reference. zend_std_get_properties_ex runs it on every path to the table. PHP# code reading the
+ * table changes nothing. */
 void sharp_object_exposed(zend_object *object);
 
 /* Whether a write plain PHP makes into what the property `info` holds can leave a value its PHP# type doesn't hold,

@@ -23,14 +23,21 @@ for ($round = 0; $round < 3; $round++) {
     echo json_encode(Ledger::removedAt(['a', 'b', 'c'], 1)), "\n";
     echo json_encode(Ledger::left(['a', 'b', 'c'], 0)), "\n";
     echo Ledger::removedFirst(['only']), "\n";
+    echo json_encode(Ledger::replaced([1, 2])), "\n";
     echo json_encode(Ledger::emptiness([])), ' ', json_encode(Ledger::emptiness(['a'])), "\n";
 
     var_dump(Ledger::lastCount(null), Ledger::lastCount([[1, 2], [3]]));
 
     echo json_encode(Ledger::indexed(['a', 'b'])), "\n";
 
-    // Repeated changes to a List<int> property leave it a reference, which the next change takes as it is, and a bad
-    // element plain PHP wrote through a reference of its own throws at the next change.
+    echo json_encode(Ledger::filteredAfterThrow()), ' ', json_encode(Ledger::copiedAfterThrow()), "\n";
+    $grid = Ledger::added();
+    $copy = $grid;
+    $copy[0][] = 3;
+    echo json_encode(Ledger::filteredAfterAdd()), ' ', json_encode($grid), "\n";
+
+    // Repeated changes to a List<int> property leave no reference behind, and a bad element plain PHP wrote through a
+    // reference of its own throws at the next change.
     $counted = new Ledger();
     for ($count = 1; $count <= 3; $count++) {
         $counted->count($count);

@@ -146,7 +146,6 @@ ZEND_API HashTable *zend_std_build_object_properties_array(zend_object *zobj) /*
 
 ZEND_API HashTable *zend_std_get_properties(zend_object *zobj) /* {{{ */
 {
-	sharp_object_exposed(zobj);
 	return zend_std_get_properties_ex(zobj);
 }
 /* }}} */
@@ -1055,10 +1054,16 @@ exit:
 		ZVAL_COPY_VALUE(rv, &array);
 		retval = rv;
 	} else if (UNEXPECTED(Z_ISREF_P(retval)) && retval != rv && prop_info
-			&& (prop_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED)) && (type == BP_VAR_R || type == BP_VAR_IS)
-			&& sharp_runs_sharp_code()) {
-		/* PHP# code reads what plain PHP wrote through the reference, which its type may not hold. */
-		retval = sharp_property_from_reference(retval, zobj, prop_info, rv);
+			&& (prop_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
+			&& (type == BP_VAR_R || type == BP_VAR_IS)) {
+		if (sharp_runs_sharp_code()) {
+			/* PHP# code reads what plain PHP wrote through the reference, which its type may not hold. */
+			retval = sharp_property_from_reference(retval, zobj, prop_info, rv);
+		} else {
+			/* Plain PHP code holds what the reference holds, and a write into its copy reaches each reference a PHP#
+			 * change made inside it, so the reference stops being PHP#'s own, see zend_sharp_fetch_root_by_ref. */
+			GC_DEL_FLAGS(Z_REF_P(retval), IS_REF_SHARP_MADE);
+		}
 	}
 	return retval;
 }

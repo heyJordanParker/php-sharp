@@ -5,13 +5,15 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 linux=false
 clean=false
 zts=false
+release=false
 container_command=(sharp/bin/build)
 for arg in "$@"; do
   case "$arg" in
     --linux) linux=true ;;
     --clean) clean=true; container_command+=("$arg") ;;
     --zts) zts=true; container_command+=("$arg") ;;
-    *) echo "usage: sharp/bin/build [--clean] [--linux] [--zts]" >&2; exit 2 ;;
+    --release) release=true; container_command+=("$arg") ;;
+    *) echo "usage: sharp/bin/build [--clean] [--linux] [--zts] [--release]" >&2; exit 2 ;;
   esac
 done
 
@@ -20,15 +22,19 @@ if $linux; then
 fi
 
 build_dir="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
-# The thread-safe build, which FrankenPHP and other threaded hosts run, sits beside the other one.
+# The thread-safe build, which FrankenPHP and other threaded hosts run, sits beside the other one, and so does the
+# release build sharp/bin/bench --release measures, at -O2 without debug, as Users run the engine.
 if $zts; then
   build_dir+=-zts
+fi
+if $release; then
+  build_dir+=-release
+  export CFLAGS=-O2
 fi
 
 flags=(
   --prefix="$build_dir/install"
   --enable-option-checking=fatal
-  --enable-debug
   --enable-fpm
   --disable-cgi
   --without-pear
@@ -60,6 +66,9 @@ fi
 # refuses an engine with Zend signals, as docker-library's zts images build without them.
 if $zts; then
   flags+=(--enable-zts --enable-embed --disable-zend-signals)
+fi
+if ! $release; then
+  flags+=(--enable-debug)
 fi
 
 if $clean; then
