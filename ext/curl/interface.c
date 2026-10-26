@@ -86,7 +86,9 @@ static zend_result php_curl_option_url(php_curl *ch, const zend_string *url) /* 
 {
 	/* Disable file:// if open_basedir are used */
 	if (PG(open_basedir) && *PG(open_basedir)) {
-		curl_easy_setopt(ch->cp, CURLOPT_PROTOCOLS, CURLPROTO_ALL & ~CURLPROTO_FILE);
+		/* PHP#: libcurl reads a long for CURLOPT_PROTOCOLS, through varargs, so an int is undefined on 64-bit, and the
+		 * libcurl of Debian trixie refuses it at -O2. php-src's master and PHP-8.5 still pass the int. */
+		curl_easy_setopt(ch->cp, CURLOPT_PROTOCOLS, (long) (CURLPROTO_ALL & ~CURLPROTO_FILE));
 	}
 
 #ifdef PHP_WIN32

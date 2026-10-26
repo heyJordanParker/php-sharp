@@ -150,6 +150,8 @@ RUN set -eux; \
 		\
 # make sure invalid --configure-flags are fatal errors instead of just warnings
 		--enable-option-checking=fatal \
+# a compiler warning fails the release build, as php-src's own CI builds
+		--enable-werror \
 		\
 # https://github.com/docker-library/php/issues/439
 		--with-mhash \
