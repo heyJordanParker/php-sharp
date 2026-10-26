@@ -1155,7 +1155,7 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 - **A bound may name another type parameter,** `<TPart : TItem>`, as C#'s `where TPart : TItem` and Java's and TypeScript's `<U extends T>` do. A `TPart` then goes wherever a `TItem` goes. It is a bound alone, as in Java, and a bound that leads back to its own type parameter, such as `<TItem : TItem>`, is a compile error, as in C#.
 - **A type parameter with no bound may hold `null`,** so it is bounded by `Any?`.
 - **A generic class can't be PHP's `Serializable`** through a plain PHP library's interface or parent class, because its `serialize` drops the type arguments. The error says to leave `Serializable` out: an object serialized as it is keeps its type arguments.
-- **A class value with type arguments can't be a `Map` key,** because `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` share the plain class name.
+- **A class value can't be a `Map` key,** since it is none of the types that key one (section 12), and so it is outside `Equatable` too. A class value with type arguments couldn't be one in any case, because `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` share the plain class name.
 
 <!-- example type-parameter-bounds: members -->
 ```csharp
