@@ -9006,7 +9006,7 @@ bool sharp_property_for_write(zval *result, zend_object *object, zval *slot, con
 
 void sharp_object_exposed(zend_object *object)
 {
-	if (sharp_runs_sharp_code()) {
+	if (!(object->ce->sharp_flags & SHARP_CLASS_HAS_TYPED_PROPS) || sharp_runs_sharp_code()) {
 		return;
 	}
 	zval *slot = object->properties_table;

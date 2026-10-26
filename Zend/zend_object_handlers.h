@@ -288,8 +288,11 @@ static zend_always_inline HashTable *zend_std_get_properties_ex(zend_object *obj
 		return zend_lazy_object_get_properties(object);
 	}
 	/* PHP#: every path to the properties table comes here, a lazy proxy's with its instance and ArrayIterator's too,
-	 * and code that reads the table can take the reference a slot holds. */
-	sharp_object_exposed(object);
+	 * and code that reads the table can take the reference a slot holds. An object of a class with no PHP# flag, as
+	 * each plain PHP class, pays this one test, see SHARP_CLASS_HAS_TYPED_PROPS. */
+	if (UNEXPECTED(object->ce->sharp_flags)) {
+		sharp_object_exposed(object);
+	}
 	if (!object->properties) {
 		return rebuild_object_properties_internal(object);
 	}

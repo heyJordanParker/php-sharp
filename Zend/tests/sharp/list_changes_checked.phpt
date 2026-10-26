@@ -1,5 +1,5 @@
 --TEST--
-A List<int> property a `ref` member changed stays checked: PHP# reads what plain PHP wrote into it, or into an element a change went through, after the change, and what plain PHP wrote while the change ran through a reference it took by iterating the object, a lazy proxy of it or an ArrayIterator over it, or through a copy of the property whose element the change held, and throws TypeError at the bad element
+A List<int> property a `ref` member changed stays checked: PHP# reads what plain PHP wrote into it, or into an element a change went through, after the change, and what plain PHP wrote while the change ran through a reference it took by iterating the object, a lazy proxy of it or an ArrayIterator over it or over a plain PHP subclass's object, or through a copy of the property whose element the change held, and throws TypeError at the bad element
 --FILE--
 <?php
 require __DIR__ . '/harness/fixture.inc';
@@ -96,6 +96,21 @@ final class Proxied
     }
 }
 
+// A plain PHP class that extends Ledger and declares no property of its own has Ledger's slots, which the
+// ArrayIterator reaches the same way.
+final class Kept extends Ledger {}
+
+$ledger = new Kept();
+$writer = new Iterated($ledger);
+$ledger->callbacks = [static function () use ($writer): void {}];
+unset($writer);
+try {
+    $ledger->forget();
+    echo $ledger->remembered(), "\n";
+} catch (TypeError $error) {
+    echo get_class($error), ': ', $error->getMessage(), "\n";
+}
+
 foreach ([Iterated::class, Proxied::class] as $writes) {
     $ledger = new Ledger();
     $class = new ReflectionClass(Ledger::class);
@@ -127,6 +142,7 @@ try {
 6
 TypeError: Reference held by property ListChanges\Ledger::$counts of type List<int> holds array: [3] expected int, got string 'z'
 TypeError: Reference held by property ListChanges\Ledger::$rows of type List<List<int>> holds array: [0][1] expected int, got string 'z'
+TypeError: Reference held by property ListChanges\Ledger::$callbacks of type List<Function<void()>> holds array: [0] expected Function<void()>, got string 'bad'
 TypeError: Reference held by property ListChanges\Ledger::$callbacks of type List<Function<void()>> holds array: [0] expected Function<void()>, got string 'bad'
 TypeError: Reference held by property ListChanges\Ledger::$callbacks of type List<Function<void()>> holds array: [0] expected Function<void()>, got string 'bad'
 TypeError: Reference held by property ListChanges\Ledger::$callbacks of type List<Function<void()>> holds array: [0] expected Function<void()>, got string 'bad'

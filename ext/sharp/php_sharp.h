@@ -150,8 +150,9 @@ static zend_always_inline void sharp_property_fetched_for_write(
 /* Plain PHP code that reads an object's properties table can take the reference a slot holds, as `foreach` by reference
  * over the object, an `(array)` cast, array_walk and ArrayIterator do, directly or through a lazy proxy, so each
  * reference PHP# code made there stops being PHP#'s own and is checked as plain PHP's, see
- * sharp_property_from_reference. zend_std_get_properties_ex runs it on every path to the table. PHP# code reading the
- * table changes nothing. */
+ * sharp_property_from_reference. zend_std_get_properties_ex runs it on every path to the table for a class with a PHP#
+ * flag, and only a class with SHARP_CLASS_HAS_TYPED_PROPS has such references. PHP# code reading the table changes
+ * nothing. */
 void sharp_object_exposed(zend_object *object);
 
 /* Whether a write plain PHP makes into what the property `info` holds can leave a value its PHP# type doesn't hold,
