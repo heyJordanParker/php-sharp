@@ -916,7 +916,8 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET zend_fetch_static_prop_helper_
 {
 	USE_OPLINE
 	zval *prop;
-	/* A fetch that finds no property leaves it unset, and the PHP# reads below test it. */
+	/* A fetch that finds no property leaves it unset. Each PHP# read of it below runs only when prop is the property
+	 * found, so it never reads this NULL. */
 	zend_property_info *prop_info = NULL;
 
 	SAVE_OPLINE();
@@ -3123,7 +3124,8 @@ static zend_never_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV 
 					if (EXPECTED(value_type != IS_UNDEF)
 					 && EXPECTED(zend_check_property_access(Z_OBJ_P(array), p->key, 0) == SUCCESS)) {
 						/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
-						if (UNEXPECTED(sharp_cross_slot_read(&crossed, Z_OBJ_P(array), value))) {
+						if (sharp_class_has_crossing_props(Z_OBJCE_P(array))
+						 && UNEXPECTED(sharp_cross_slot_read(&crossed, Z_OBJ_P(array), value))) {
 							value = &crossed;
 							value_type = Z_TYPE_INFO(crossed);
 						}
@@ -5473,8 +5475,7 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, IS_CONST);
 				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
-				if (IS_CONST != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT
-				 && UNEXPECTED(Z_OBJCE_P(expr)->sharp_flags & SHARP_CLASS_HAS_CROSSING_PROPS)) {
+				if (IS_CONST != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
 					sharp_cross_array_cast(result, Z_OBJ_P(expr));
 				}
 			} else {
@@ -21396,8 +21397,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_CAST_SPEC_TMP
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, IS_TMP_VAR);
 				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
-				if (IS_TMP_VAR != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT
-				 && UNEXPECTED(Z_OBJCE_P(expr)->sharp_flags & SHARP_CLASS_HAS_CROSSING_PROPS)) {
+				if (IS_TMP_VAR != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
 					sharp_cross_array_cast(result, Z_OBJ_P(expr));
 				}
 			} else {
@@ -24200,8 +24200,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_CAST_SPEC_VAR
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, IS_VAR);
 				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
-				if (IS_VAR != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT
-				 && UNEXPECTED(Z_OBJCE_P(expr)->sharp_flags & SHARP_CLASS_HAS_CROSSING_PROPS)) {
+				if (IS_VAR != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
 					sharp_cross_array_cast(result, Z_OBJ_P(expr));
 				}
 			} else {
@@ -43515,8 +43514,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_FUNC_CCONV ZEND_CAST_SPEC_CV_
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, IS_CV);
 				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
-				if (IS_CV != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT
-				 && UNEXPECTED(Z_OBJCE_P(expr)->sharp_flags & SHARP_CLASS_HAS_CROSSING_PROPS)) {
+				if (IS_CV != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
 					sharp_cross_array_cast(result, Z_OBJ_P(expr));
 				}
 			} else {
@@ -60620,7 +60618,8 @@ static zend_never_inline ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV  zend
 					if (EXPECTED(value_type != IS_UNDEF)
 					 && EXPECTED(zend_check_property_access(Z_OBJ_P(array), p->key, 0) == SUCCESS)) {
 						/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
-						if (UNEXPECTED(sharp_cross_slot_read(&crossed, Z_OBJ_P(array), value))) {
+						if (sharp_class_has_crossing_props(Z_OBJCE_P(array))
+						 && UNEXPECTED(sharp_cross_slot_read(&crossed, Z_OBJ_P(array), value))) {
 							value = &crossed;
 							value_type = Z_TYPE_INFO(crossed);
 						}
@@ -62894,8 +62893,7 @@ static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_CAST_
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, IS_CONST);
 				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
-				if (IS_CONST != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT
-				 && UNEXPECTED(Z_OBJCE_P(expr)->sharp_flags & SHARP_CLASS_HAS_CROSSING_PROPS)) {
+				if (IS_CONST != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
 					sharp_cross_array_cast(result, Z_OBJ_P(expr));
 				}
 			} else {
@@ -78615,8 +78613,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_CAST_SPEC_TMP_TAIL
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, IS_TMP_VAR);
 				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
-				if (IS_TMP_VAR != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT
-				 && UNEXPECTED(Z_OBJCE_P(expr)->sharp_flags & SHARP_CLASS_HAS_CROSSING_PROPS)) {
+				if (IS_TMP_VAR != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
 					sharp_cross_array_cast(result, Z_OBJ_P(expr));
 				}
 			} else {
@@ -81419,8 +81416,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_CAST_SPEC_VAR_TAIL
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, IS_VAR);
 				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
-				if (IS_VAR != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT
-				 && UNEXPECTED(Z_OBJCE_P(expr)->sharp_flags & SHARP_CLASS_HAS_CROSSING_PROPS)) {
+				if (IS_VAR != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
 					sharp_cross_array_cast(result, Z_OBJ_P(expr));
 				}
 			} else {
@@ -100734,8 +100730,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_OPCODE_HANDLER_CCONV ZEND_CAST_SPEC_CV_TAILC
 			if (opline->extended_value == IS_ARRAY) {
 				zend_cast_zval_to_array(result, expr, IS_CV);
 				/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
-				if (IS_CV != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT
-				 && UNEXPECTED(Z_OBJCE_P(expr)->sharp_flags & SHARP_CLASS_HAS_CROSSING_PROPS)) {
+				if (IS_CV != IS_CONST && Z_TYPE_P(expr) == IS_OBJECT) {
 					sharp_cross_array_cast(result, Z_OBJ_P(expr));
 				}
 			} else {
@@ -115727,7 +115722,8 @@ static zend_always_inline ZEND_OPCODE_HANDLER_RET zend_fetch_static_prop_helper_
 {
 	USE_OPLINE
 	zval *prop;
-	/* A fetch that finds no property leaves it unset, and the PHP# reads below test it. */
+	/* A fetch that finds no property leaves it unset. Each PHP# read of it below runs only when prop is the property
+	 * found, so it never reads this NULL. */
 	zend_property_info *prop_info = NULL;
 
 	SAVE_OPLINE();

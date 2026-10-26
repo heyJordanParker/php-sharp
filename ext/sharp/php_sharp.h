@@ -74,15 +74,29 @@ void sharp_array_of(zval *result, zval *value);
 /* Makes `value`, which a property whose type holds a Map or a Set gives plain PHP code, what sharp_array_of gives. */
 void sharp_cross_read(zval *value);
 
+/* Whether some property of `ce` has ZEND_ACC_SHARP_CROSSING, SHARP_CLASS_HAS_CROSSING_PROPS. Each reader of an object's
+ * declared slots tests it first, so an object of any other class pays one bit test. */
+static zend_always_inline bool sharp_class_has_crossing_props(const zend_class_entry *ce)
+{
+	return UNEXPECTED(ce->sharp_flags & SHARP_CLASS_HAS_CROSSING_PROPS);
+}
+
 /* Puts in `array` what plain PHP code reads from `slot`, a declared property slot of `object`, and gives true, when its
  * property has ZEND_ACC_SHARP_CROSSING and code outside a .sharp file runs now. Gives false and leaves `array` alone
- * otherwise. get_object_vars() and foreach read slots through it. */
+ * otherwise. get_object_vars() and foreach read slots through it, once sharp_class_has_crossing_props() holds. */
 bool sharp_cross_slot_read(zval *array, zend_object *object, zval *slot);
 
 /* Makes each property of `object` that `result`, the (array) cast of `object`, holds under its mangled name, what plain
- * PHP code reads from it, by sharp_cross_slot_read(). Each caller calls it only for an object whose class has
- * SHARP_CLASS_HAS_CROSSING_PROPS, so the cast of any other object pays one bit test. */
-void sharp_cross_array_cast(zval *result, zend_object *object);
+ * PHP code reads from it, by sharp_cross_slot_read(). sharp_cross_array_cast() calls it. */
+void sharp_cross_declared_slots(zval *result, zend_object *object);
+
+/* sharp_cross_declared_slots(), for an object whose class sharp_class_has_crossing_props() holds for. */
+static zend_always_inline void sharp_cross_array_cast(zval *result, zend_object *object)
+{
+	if (sharp_class_has_crossing_props(object->ce)) {
+		sharp_cross_declared_slots(result, object);
+	}
+}
 
 bool sharp_property_takes_reference(zval *slot, const zend_property_info *info);
 /* PHP# code reads `slot`, the reference of a property of `object`, or of no object for a static one. Checks what the

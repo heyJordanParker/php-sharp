@@ -211,6 +211,18 @@ public class Carton
         return make();
     }
 
+    // So does one in a lambda another lambda there returns.
+    public void handNested(string key, Any? value)
+    {
+        Probe.put(Carton.nestedKeyed<int>(), key, value);
+    }
+
+    private static Map<string, T> nestedKeyed<T>()
+    {
+        Function<Function<Map<string, T>()>()> make = () => () => [:];
+        return make()();
+    }
+
     public List<int>|bool marks { get; set; } = false;
 
     public string marksText()

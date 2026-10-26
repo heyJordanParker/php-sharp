@@ -129,7 +129,7 @@ static bool spl_array_crossed_slot(spl_array_object *intern, zval *slot, zval *r
 {
 	zend_object *object = spl_array_backing_object(intern);
 
-	return object && slot >= object->properties_table
+	return object && sharp_class_has_crossing_props(object->ce) && slot >= object->properties_table
 		&& slot < object->properties_table + object->ce->default_properties_count
 		&& sharp_cross_slot_read(rv, object, slot);
 }
@@ -748,7 +748,7 @@ PHP_METHOD(ArrayObject, getArrayCopy)
 
 	RETVAL_ARR(zend_array_dup(spl_array_get_hash_table(intern)));
 	zend_object *backing = spl_array_backing_object(intern);
-	if (backing && UNEXPECTED(backing->ce->sharp_flags & SHARP_CLASS_HAS_CROSSING_PROPS)) {
+	if (backing) {
 		sharp_cross_array_cast(return_value, backing);
 	}
 } /* }}} */

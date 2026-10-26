@@ -5,13 +5,18 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 linux=false
 clean=false
 zts=false
+# --enable-werror, as php-src's own CI builds, so a warning fails the build here and in CI before it fails an upstream
+# merge or a packager's build. --no-werror builds past a warning a compiler newer than CI's finds in upstream code, as
+# php-src's own --disable-werror does. CI never passes it.
+werror=--enable-werror
 container_command=(sharp/bin/build)
 for arg in "$@"; do
   case "$arg" in
     --linux) linux=true ;;
     --clean) clean=true; container_command+=("$arg") ;;
     --zts) zts=true; container_command+=("$arg") ;;
-    *) echo "usage: sharp/bin/build [--clean] [--linux] [--zts]" >&2; exit 2 ;;
+    --no-werror) werror=--disable-werror; container_command+=("$arg") ;;
+    *) echo "usage: sharp/bin/build [--clean] [--linux] [--zts] [--no-werror]" >&2; exit 2 ;;
   esac
 done
 
@@ -25,12 +30,10 @@ if $zts; then
   build_dir+=-zts
 fi
 
-# --enable-werror, as php-src's own CI builds, so a warning fails the build here and in CI before it fails an upstream
-# merge or a packager's build.
 flags=(
   --prefix="$build_dir/install"
   --enable-option-checking=fatal
-  --enable-werror
+  "$werror"
   --enable-debug
   --enable-fpm
   --disable-cgi
@@ -70,7 +73,8 @@ if $clean; then
 fi
 
 status="$build_dir/config.status"
-if [[ ! -f "$status" || "$0" -nt "$status" || "$root/sharp/docker/Dockerfile" -nt "$status" || "$root/Zend/zend_modules.h" -nt "$status" || -n "$(find "$root" \( -path "$root/.git" -o -path "$root/sharp" \) -prune -o \( -name configure.ac -o -name '*.m4' -o -name Makefile.frag -o -name Makefile.global \) -newer "$status" -print -quit)" ]]; then
+# A build configured with the other werror setting configures again, so the setting this run asks for holds.
+if [[ ! -f "$status" || " $("$status" --config) " != *" $werror "* || "$0" -nt "$status" || "$root/sharp/docker/Dockerfile" -nt "$status" || "$root/Zend/zend_modules.h" -nt "$status" || -n "$(find "$root" \( -path "$root/.git" -o -path "$root/sharp" \) -prune -o \( -name configure.ac -o -name '*.m4' -o -name Makefile.frag -o -name Makefile.global \) -newer "$status" -print -quit)" ]]; then
   (cd "$root" && ./buildconf --force)
   mkdir -p "$build_dir"
   (cd "$build_dir" && "$root/configure" "${flags[@]}")

@@ -1226,8 +1226,9 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  *
  * SHARP_CLASS_HAS_CROSSING_PROPS: some property of the class, its own, a trait's or an inherited one, has
  * ZEND_ACC_SHARP_CROSSING. zend_build_properties_info_table sets it when the class is linked, and opcache keeps it
- * with the class entry. Plain PHP's (array), get_mangled_object_vars() and ArrayObject::getArrayCopy() test it
- * before sharp_cross_array_cast, so an object of any other class pays one bit test.
+ * with the class entry. Each plain PHP reader of an object's declared slots, (array), get_mangled_object_vars(),
+ * get_object_vars(), foreach and ArrayObject, tests it through sharp_class_has_crossing_props(), so an object of any
+ * other class pays one bit test.
  *   sharp_flags of zend_class_entry                           upstream: padding before name
  */
 #define ZEND_SHARP_OPERATOR_SYNTAX	(1<<15)
