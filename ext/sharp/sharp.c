@@ -1362,7 +1362,8 @@ static bool sharp_collection_key(zval *key, zend_string **string_key, zend_long 
 static zval *sharp_collection_element(HashTable *array, zval *index)
 {
 	zend_string *string_key;
-	zend_long long_key;
+	/* sharp_collection_key sets it only for an int key, the one key the lookup below reads it for. */
+	zend_long long_key = 0;
 
 	if (!sharp_collection_key(index, &string_key, &long_key)) {
 		return NULL;
@@ -8287,7 +8288,7 @@ bool sharp_cross_slot_read(zval *array, zend_object *object, zval *slot)
 	return true;
 }
 
-void sharp_cross_array_cast(zval *result, zend_object *object)
+void sharp_cross_declared_slots(zval *result, zend_object *object)
 {
 	if (UNEXPECTED(zend_object_is_lazy_proxy(object) && zend_lazy_object_initialized(object))) {
 		object = zend_lazy_object_get_instance(object);

@@ -1718,6 +1718,7 @@ void zend_build_properties_info_table(zend_class_entry *ce)
 			table, parent_table,
 			sizeof(zend_property_info *) * ce->parent->default_properties_count
 		);
+		ce->sharp_flags |= ce->parent->sharp_flags & SHARP_CLASS_HAS_CROSSING_PROPS;
 
 		/* Child did not add any new properties, we are done */
 		if (ce->default_properties_count == ce->parent->default_properties_count) {
@@ -1747,6 +1748,9 @@ void zend_build_properties_info_table(zend_class_entry *ce)
 			}
 			uint32_t prop_table_offset = OBJ_PROP_TO_NUM(root_prop->offset);
 			table[prop_table_offset] = prop;
+			if (prop->flags & ZEND_ACC_SHARP_CROSSING) {
+				ce->sharp_flags |= SHARP_CLASS_HAS_CROSSING_PROPS;
+			}
 		}
 	} ZEND_HASH_FOREACH_END();
 }
