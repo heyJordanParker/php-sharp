@@ -2338,9 +2338,9 @@ static void ZEND_FASTCALL zend_jit_fetch_obj_w_slow(zend_object *zobj)
 	/* PHP#: PHP# code checks a slot plain PHP turned into a reference before it writes into it, as the VM does. */
 	uint32_t flags = opline->extended_value & ZEND_FETCH_OBJ_FLAGS;
 	zend_property_info *sharp_info = CACHED_PTR_EX(cache_slot + 2);
-	if (sharp_info && UNEXPECTED(Z_ISREF_P(retval))
-	 && UNEXPECTED(sharp_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-	 && sharp_function_is_sharp(EX(func))
+	bool sharp = sharp_info && UNEXPECTED(sharp_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
+		&& sharp_function_is_sharp(EX(func));
+	if (sharp && UNEXPECTED(Z_ISREF_P(retval))
 	 && UNEXPECTED(!sharp_property_for_write(flags == ZEND_FETCH_DIM_WRITE ? result : NULL, zobj, retval, sharp_info))) {
 		ZVAL_ERROR(result);
 		return;
@@ -2360,7 +2360,7 @@ static void ZEND_FASTCALL zend_jit_fetch_obj_w_slow(zend_object *zobj)
 		}
 	} while (0);
 	if (sharp_info && UNEXPECTED(sharp_info->flags & ZEND_ACC_SHARP_TYPED)) {
-		sharp_property_for_plain_write(retval, sharp_info, flags);
+		sharp_property_fetched_for_write(retval, sharp_info, flags, sharp);
 	}
 
 	if (UNEXPECTED(Z_TYPE_P(retval) == IS_UNDEF)) {
@@ -2375,8 +2375,9 @@ static void ZEND_FASTCALL zend_jit_check_array_promotion(zval *val, zend_propert
 	zval *result = EX_VAR(opline->result.var);
 
 	/* PHP#: PHP# code checks a slot plain PHP turned into a reference before it writes into it, as the VM does. */
-	if (UNEXPECTED(Z_ISREF_P(val)) && UNEXPECTED(prop->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-	 && sharp_function_is_sharp(EX(func))) {
+	bool sharp = UNEXPECTED(prop->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
+		&& sharp_function_is_sharp(EX(func));
+	if (UNEXPECTED(Z_ISREF_P(val)) && sharp) {
 		ZVAL_INDIRECT(result, val);
 		if (UNEXPECTED(!sharp_property_for_write(result, zobj, val, prop))) {
 			ZVAL_ERROR(result);
@@ -2402,7 +2403,7 @@ static void ZEND_FASTCALL zend_jit_check_array_promotion(zval *val, zend_propert
 		ZVAL_ERROR(result);
 	} else {
 		if (UNEXPECTED(prop->flags & ZEND_ACC_SHARP_TYPED)) {
-			sharp_property_for_plain_write(val, prop, ZEND_FETCH_DIM_WRITE);
+			sharp_property_fetched_for_write(val, prop, ZEND_FETCH_DIM_WRITE, sharp);
 		}
 		ZVAL_INDIRECT(result, val);
 	}
@@ -2419,6 +2420,28 @@ static void ZEND_FASTCALL zend_jit_create_typed_ref(zval *val, zend_property_inf
 		ZEND_REF_ADD_TYPE_SOURCE(Z_REF_P(val), prop);
 	}
 	ZVAL_INDIRECT(result, val);
+}
+
+/* PHP#: a by-reference fetch of a slot a PHP# type covers, as a `ref` receiver's, runs what the VM's runs: PHP# code
+ * checks a reference plain PHP made, then the slot becomes a reference, which is PHP#'s own when PHP# code made it and
+ * plain PHP's when plain PHP code takes it, see sharp_property_fetched_for_write. False after the Error, with `result`
+ * the error. */
+static bool ZEND_FASTCALL zend_jit_sharp_fetch_ref(zval *val, zend_property_info *prop, zend_object *zobj, zval *result)
+{
+	zend_execute_data *execute_data = EG(current_execute_data);
+	bool sharp = sharp_function_is_sharp(EX(func));
+
+	if (Z_ISREF_P(val) && sharp && !sharp_property_for_write(NULL, zobj, val, prop)) {
+		ZVAL_ERROR(result);
+		return false;
+	}
+	zend_jit_create_typed_ref(val, prop, result);
+	if (Z_ISERROR_P(result)) {
+		return false;
+	}
+	sharp_property_fetched_for_write(val, prop, ZEND_FETCH_REF, sharp);
+
+	return true;
 }
 
 static void ZEND_FASTCALL zend_jit_extract_helper(zend_refcounted *garbage)
@@ -3639,12 +3662,13 @@ static void ZEND_FASTCALL zend_jit_sharp_static_read(zval *result, const zend_pr
 }
 
 /* PHP#: plain PHP code fetches the static property `info`, which has ZEND_ACC_SHARP_TYPED, to write into what it
- * holds, after the fetch's `flags` were handled, see sharp_property_for_plain_write. */
+ * holds, or PHP# code fetches it by reference, after the fetch's `flags` were handled, see
+ * sharp_property_fetched_for_write. */
 static void ZEND_FASTCALL zend_jit_sharp_static_write(zval *slot, const zend_property_info *info, uint32_t flags)
 {
 	if (!EG(exception)
 			&& (!(info->flags & ZEND_ACC_PPP_SET_MASK) || zend_asymmetric_property_has_set_access(info))) {
-		sharp_property_for_plain_write(slot, info, flags);
+		sharp_property_fetched_for_write(slot, info, flags, sharp_function_is_sharp(EG(current_execute_data)->func));
 	}
 }
 

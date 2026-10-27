@@ -1,0 +1,18 @@
+namespace ListChanges;
+
+// A `ref` member's change to a property with a `set` body runs the `set`, as an assignment does.
+public class Journal
+{
+    public int writes { get; set; } = 0;
+    public List<string> audited
+    {
+        get => field;
+        set
+        {
+            this.writes = this.writes + 1;
+            field = value;
+        }
+    } = [];
+
+    public string dropAudited() => this.audited.removeLast();
+}

@@ -362,12 +362,16 @@ typedef struct _zend_oparray_context {
 #define ZEND_ACC_SHARP_GENERIC           (1U << 31) /* X  |     |     |     */
 /*                                                        |     |     |     */
 /* PHP# Class Flags, in sharp_flags of zend_class_entry,  |     |     |     */
-/* since ce_flags has no free bit (unused: 1-7)           |     |     |     */
+/* since ce_flags has no free bit (unused: 2-7)           |     |     |     */
 /* ====================                                   |     |     |     */
 /*                                                        |     |     |     */
 /* PHP#: a property of the class, its own or inherited,   |     |     |     */
 /* has ZEND_ACC_SHARP_CROSSING                            |     |     |     */
 #define SHARP_CLASS_HAS_CROSSING_PROPS   (1 <<  0) /*  X  |     |     |     */
+/*                                                        |     |     |     */
+/* PHP#: a property of the class, its own or inherited,   |     |     |     */
+/* has ZEND_ACC_SHARP_TYPED                               |     |     |     */
+#define SHARP_CLASS_HAS_TYPED_PROPS      (1 <<  1) /*  X  |     |     |     */
 /*                                                        |     |     |     */
 /* Function Flags (unused: 30)                            |     |     |     */
 /* ==============                                         |     |     |     */
@@ -1196,6 +1200,13 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  * which init_op leaves IS_UNUSED.
  *   op1 of ZEND_DO_FCALL, ZEND_DO_UCALL, ZEND_DO_FCALL_BY_NAME   upstream: UNUSED
  *
+ * ZEND_SEPARATE: a PHP# call that sends a place by reference to a Sharp\Internal function unwraps it after the call,
+ * where nothing else holds the reference, see zend_sharp_separate_place. For a local the opline's op1 is that CV, with
+ * no result, and its SSA defines the CV. For a property, a static property or an element op1 is the INDIRECT VAR an
+ * unset fetch gives, whose slot it unwraps, and its result is that VAR, which nothing reads. Upstream separates only a
+ * call's VAR, which is also its result.
+ *   op1 of ZEND_SEPARATE                                      upstream: VAR
+ *
  * ZEND_ACC_SHARP_HIDDEN: the hidden slot an object of a generic PHP# class keeps its type arguments in, and the hidden
  * static a generic PHP# class keeps each type argument's own statics in.
  *   flags of zend_property_info                              upstream: the ZEND_ACC_* property flags
@@ -1229,6 +1240,13 @@ ZEND_API zend_string *zend_type_to_string(zend_type type);
  * with the class entry. Each plain PHP reader of an object's declared slots, (array), get_mangled_object_vars(),
  * get_object_vars(), foreach and ArrayObject, tests it through sharp_class_has_crossing_props(), so an object of any
  * other class pays one bit test.
+ *   sharp_flags of zend_class_entry                           upstream: padding before name
+ *
+ * SHARP_CLASS_HAS_TYPED_PROPS: some property of the class, its own, a trait's or an inherited one, has
+ * ZEND_ACC_SHARP_TYPED, so a slot of its objects can hold a reference a `ref` change marks IS_REF_SHARP_MADE.
+ * zend_build_properties_info_table sets it beside SHARP_CLASS_HAS_CROSSING_PROPS. zend_std_get_properties_ex runs
+ * sharp_object_exposed only for an object whose class has a PHP# flag, so an object of a plain PHP class pays one
+ * test.
  *   sharp_flags of zend_class_entry                           upstream: padding before name
  */
 #define ZEND_SHARP_OPERATOR_SYNTAX	(1<<15)

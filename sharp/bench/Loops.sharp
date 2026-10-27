@@ -1,0 +1,97 @@
+namespace Bench;
+
+// Each row of sharp/bin/bench: a loop of `n` turns, run once with n = 1M and once with n = 0, so its count is the
+// loop's alone. A row builds what it reads before its loop, so the build is in both runs.
+public class Loops
+{
+    private List<int> held = [];
+
+    public int one() => 1;
+
+    public static int listAdd(int n)
+    {
+        List<int> items = [];
+        for (let i = 0; i < n; i++) {
+            items.add(i);
+        }
+        return items.count();
+    }
+
+    public static int listAddOnProperty(int n)
+    {
+        Loops loops = new Loops();
+        return loops.fill(n);
+    }
+
+    private int fill(int n)
+    {
+        for (let i = 0; i < n; i++) {
+            this.held.add(i);
+        }
+        return this.held.count();
+    }
+
+    // The list is built with add in the same method, so its local is whatever add leaves it.
+    public static int listIndexRead(int n)
+    {
+        List<int> items = [];
+        for (let i = 0; i < 1000; i++) {
+            items.add(i);
+        }
+        let total = 0;
+        for (let i = 0; i < n; i++) {
+            total += items[i % 1000];
+        }
+        return total;
+    }
+
+    public static int listIndexWrite(int n)
+    {
+        List<int> items = [];
+        for (let i = 0; i < 1000; i++) {
+            items.add(i);
+        }
+        for (let i = 0; i < n; i++) {
+            items[i % 1000] = i;
+        }
+        return items.count();
+    }
+
+    public static int mapGetAndPut(int n)
+    {
+        Map<int, int> counts = [:];
+        for (let i = 0; i < n; i++) {
+            counts[i % 100] = (counts.get(i % 100) ?? 0) + 1;
+        }
+        return counts.count();
+    }
+
+    public static int setAdd(int n)
+    {
+        Set<int> seen = [];
+        for (let i = 0; i < n; i++) {
+            seen.add(i % 100);
+        }
+        return seen.count();
+    }
+
+    public static int filterWithLambda(int n)
+    {
+        List<int> items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let kept = 0;
+        for (let i = 0; i < n; i++) {
+            kept += items.filter(item => item > 5).count();
+        }
+        return kept;
+    }
+
+    public static int plainMethodCall(int n)
+    {
+        Loops loops = new Loops();
+        let total = 0;
+        for (let i = 0; i < n; i++) {
+            total += loops.one();
+        }
+        return total;
+    }
+}

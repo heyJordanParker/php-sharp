@@ -7,6 +7,9 @@ require __DIR__ . '/project.inc';
 $files = [
     'mago.toml' => "[source]\npaths = [\".\"]\nextensions = [\"sharp\", \"inc\"]\n",
     'Billing.inc' => file_get_contents(__DIR__ . '/harness/Billing.inc'),
+    // The fixtures sort Lists, whose members the standard library declares.
+    'vendor/heyjordanparker/php-sharp-composer/composer.json' => '{"name": "heyjordanparker/php-sharp-composer"}',
+    'vendor/heyjordanparker/php-sharp-composer/library/Sharp/ListMembers.sharp' => file_get_contents(__DIR__ . '/../../../sharp/composer/library/Sharp/ListMembers.sharp'),
 ];
 foreach (glob(__DIR__ . '/Operators/*.sharp') as $file) {
     $files['Operators/' . basename($file)] = file_get_contents($file);

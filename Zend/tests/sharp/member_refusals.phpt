@@ -9,6 +9,8 @@ const LIBRARY = 'vendor/heyjordanparker/php-sharp-composer';
 $root = compile_project('member-refusals', [
     LIBRARY . '/composer.json' => '{"name": "heyjordanparker/php-sharp-composer"}',
     LIBRARY . '/library/Sharp/Text/StringMembers.sharp' => file_get_contents(__DIR__ . '/../../../sharp/composer/library/Sharp/Text/StringMembers.sharp'),
+    // A string's members call a List's, which the library declares.
+    LIBRARY . '/library/Sharp/ListMembers.sharp' => file_get_contents(__DIR__ . '/../../../sharp/composer/library/Sharp/ListMembers.sharp'),
 ]);
 file_put_contents("$root/Refusals.sharp", <<<'SHARP'
 namespace Demo;

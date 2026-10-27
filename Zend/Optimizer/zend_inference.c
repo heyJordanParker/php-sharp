@@ -4156,6 +4156,20 @@ static zend_always_inline zend_result _zend_update_type_info(
 		case ZEND_FETCH_GLOBALS:
 			UPDATE_SSA_TYPE(MAY_BE_ARRAY|MAY_BE_ARRAY_KEY_ANY|MAY_BE_ARRAY_OF_ANY|MAY_BE_ARRAY_OF_REF|MAY_BE_RC1|MAY_BE_RCN, ssa_op->result_def);
 			break;
+		case ZEND_SEPARATE:
+			/* PHP#: a SEPARATE of a CV, see zend_compile_call_common, unwraps the local only where nothing else holds the
+			 * reference, so the local keeps every type it had, a reference too. A SEPARATE of a VAR keeps upstream's
+			 * unknown result, since the result type it would infer is currently unimplemented due to some assumptions
+			 * in JIT. See: https://github.com/php/php-src/pull/13304#issuecomment-1926668141 */
+			if (ssa_op->op1_def >= 0) {
+				/* t1 must keep MAY_BE_REF: without it, has_concrete_type holds, and the tracing JIT records a concrete type. */
+				UPDATE_SSA_TYPE(t1, ssa_op->op1_def);
+				COPY_SSA_OBJ_TYPE(ssa_op->op1_use, ssa_op->op1_def);
+			}
+			if (ssa_op->result_def >= 0) {
+				goto unknown_opcode;
+			}
+			break;
 		default:
 #ifdef ZEND_DEBUG_TYPE_INFERENCE
 			if (ssa_op->result_def >= 0) {
@@ -4166,9 +4180,6 @@ static zend_always_inline zend_result _zend_update_type_info(
 					case ZEND_FETCH_IS:
 					case ZEND_FETCH_UNSET:
 					case ZEND_YIELD_FROM:
-					/* Currently unimplemented due to some assumptions in JIT. See:
-					 * https://github.com/php/php-src/pull/13304#issuecomment-1926668141 */
-					case ZEND_SEPARATE:
 						break;
 					default:
 						fprintf(stderr, "Missing result type inference for opcode %s, line %d\n", zend_get_opcode_name(opline->opcode), opline->lineno);
