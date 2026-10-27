@@ -12,7 +12,7 @@
 # the same digests.
 ARG REGISTRY=public.ecr.aws/docker/library
 ARG BASE_IMAGE=${REGISTRY}/debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
-ARG GOLANG_IMAGE=${REGISTRY}/golang:1.27-trixie@sha256:fbb7ae40b62ff8afe31662df570d39b4f5052ac32b90dae8e60d7657a20a74f4
+ARG GOLANG_IMAGE=${REGISTRY}/golang:1.27-trixie@sha256:c124b9ad3452f46061b5054607d26ea51730dae5372c5e469920063ba2bc6dcc
 FROM ${BASE_IMAGE} AS source
 
 RUN set -eux; \
