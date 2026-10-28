@@ -11,8 +11,8 @@
 # issue names, for review. CI sets REGISTRY to ghcr.io/heyjordanparker, where base-images.yml copies the images under
 # the same digests.
 ARG REGISTRY=public.ecr.aws/docker/library
-ARG BASE_IMAGE=${REGISTRY}/debian:trixie-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
-ARG GOLANG_IMAGE=${REGISTRY}/golang:1.27-trixie@sha256:fbb7ae40b62ff8afe31662df570d39b4f5052ac32b90dae8e60d7657a20a74f4
+ARG BASE_IMAGE=${REGISTRY}/debian:trixie-slim@sha256:89c1ea91e897f0fe0a3731595330bc45b8bdef4047464a07116f891a94054b31
+ARG GOLANG_IMAGE=${REGISTRY}/golang:1.27-trixie@sha256:7b072c590a326b9d2a43b165ae247f6e8eafff32e1ad154ab97139e89f053be9
 FROM ${BASE_IMAGE} AS source
 
 RUN set -eux; \
