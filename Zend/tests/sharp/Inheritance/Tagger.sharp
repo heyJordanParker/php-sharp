@@ -1,6 +1,6 @@
 namespace Demo;
 
-public class Tagger<TTag> : Keyed<List<TTag>>
+public class Tagger<TTag : Equatable> : Keyed<List<TTag>>
 {
     public Tagger(public TTag tag { get; }) { }
 
