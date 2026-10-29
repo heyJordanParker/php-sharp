@@ -1,0 +1,9 @@
+namespace TableChanges;
+
+// An object with methods of a collection's names, which a value that may be either runs as its own.
+public class Box
+{
+    public int count() => 7;
+
+    public bool contains(int value) => value == 7;
+}

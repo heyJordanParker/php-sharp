@@ -4,7 +4,7 @@ A PHP# class calls every member of Sharp.Time's Date, Instant, DateTime and Dura
 date.timezone=America/New_York
 --FILE--
 <?php
-foreach (['Int', 'Math', 'Time/Duration', 'Time/Instant', 'Time/Date', 'Time/DateTime', 'Time/TimeZone', 'Time/DateTimeInterfaceMembers', 'ListMembers'] as $file) {
+foreach (['Int', 'Math', 'Time/Duration', 'Time/Instant', 'Time/Date', 'Time/DateTime', 'Time/TimeZone', 'Time/DateTimeInterfaceMembers', 'ListMembers', 'SetMembers'] as $file) {
     require __DIR__ . "/../../../sharp/composer/library/Sharp/$file.sharp";
 }
 require __DIR__ . '/harness/Moments.inc';

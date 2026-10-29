@@ -243,7 +243,7 @@ array(3) {
   [2]=>
   bool(true)
 }
-object(Sharp\Set)#18 (4) {
+object(Sharp\Set)#%d (4) {
   [0]=>
   string(1) "b"
   [1]=>
@@ -253,35 +253,35 @@ object(Sharp\Set)#18 (4) {
   [3]=>
   int(7)
 }
-object(Sharp\Set)#18 (2) {
+object(Sharp\Set)#%d (2) {
   [0]=>
   int(3)
   [1]=>
   int(1)
 }
-object(Sharp\Set)#18 (2) {
+object(Sharp\Set)#%d (2) {
   [0]=>
   enum(Lib\Standing::Closed)
   [1]=>
   enum(Lib\Standing::Active)
 }
-object(Sharp\Set)#18 (2) {
+object(Sharp\Set)#%d (2) {
   [0]=>
   enum(Lib\Size::Large)
   [1]=>
   enum(Lib\Code::Five)
 }
-object(Sharp\Set)#18 (1) {
+object(Sharp\Set)#%d (1) {
   [0]=>
   string(1) "x"
 }
-object(Sharp\Set)#18 (2) {
+object(Sharp\Set)#%d (2) {
   [0]=>
   string(1) "x"
   [1]=>
   NULL
 }
-object(Sharp\Set)#18 (1) {
+object(Sharp\Set)#%d (1) {
   [0]=>
   object(stdClass)#13 (0) {
   }

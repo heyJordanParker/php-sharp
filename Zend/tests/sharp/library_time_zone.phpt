@@ -2,7 +2,7 @@
 A PHP# class calls every member of Sharp.Time.TimeZone: names lists the time zone database, utc and tryOf name a zone, an older name of the database included, tryOf gives null for a name the database lacks, an offset, an abbreviation and a name in another case, the constructor's ValueError for one names tryOf, and offsetAt follows a zone's clock changes
 --FILE--
 <?php
-foreach (['Int', 'Math', 'Time/Duration', 'Time/Instant', 'Time/Date', 'Time/TimeZone', 'ListMembers'] as $file) {
+foreach (['Int', 'Math', 'Time/Duration', 'Time/Instant', 'Time/Date', 'Time/TimeZone', 'ListMembers', 'SetMembers'] as $file) {
     require __DIR__ . "/../../../sharp/composer/library/Sharp/$file.sharp";
 }
 require __DIR__ . '/TimeZoneCalls.sharp';
