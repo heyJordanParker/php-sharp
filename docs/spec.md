@@ -1155,7 +1155,7 @@ A collection's elements are still checked where it enters from plain PHP (sectio
 - **A bound may name another type parameter,** `<TPart : TItem>`, as C#'s `where TPart : TItem` and Java's and TypeScript's `<U extends T>` do. A `TPart` then goes wherever a `TItem` goes. It is a bound alone, as in Java, and a bound that leads back to its own type parameter, such as `<TItem : TItem>`, is a compile error, as in C#.
 - **A type parameter with no bound may hold `null`,** so it is bounded by `Any?`.
 - **A generic class can't be PHP's `Serializable`** through a plain PHP library's interface or parent class, because its `serialize` drops the type arguments. The error says to leave `Serializable` out: an object serialized as it is keeps its type arguments.
-- **A class value with type arguments can't be a `Map` key,** because `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` share the plain class name.
+- **A class value can't be a `Map` key,** since it is none of the types that key one (section 12), and so it is outside `Equatable` too. A class value with type arguments couldn't be one in any case, because `Class<PaginatedList<Order>>` and `Class<PaginatedList<Invoice>>` share the plain class name.
 
 <!-- example type-parameter-bounds: members -->
 ```csharp
@@ -1165,6 +1165,23 @@ public TValue keep<TValue : Object>(TValue value) => value;
 public TItem either<TItem : DatabaseEntity, TPart : TItem>(TItem whole, TPart part) => part;   // compiles: a TPart goes where a TItem goes
 public void joined<TItem, TPart : TItem & Shareable>() { }                                      // compile error: a type parameter is a bound alone
 public void looped<TItem : TItem>() { }                                                         // compile error: the bound of TItem leads back to TItem
+```
+
+**`Equatable` bounds a type parameter to the types that have `==`** (section 19), as Go's `comparable` and F#'s `equality` do. Every such type satisfies it with no declaration: a number, a string, `bool`, an enum whose cases' fields all have `==`, a collection whose elements have `==`, a struct whose fields have `==`, and a class that declares or inherits `operator ==`. A function, `Object`, `Any` and a class without `operator ==` don't, and nor does a class value, which has `==` but keys no `Map`, as a value of `Equatable` does. A type parameter has `==` only through its bound, so `==`, `!=`, `contains`, `indexOf` and `remove` on a `List`, a `Map` key, a `Set` element and a value pattern each need `Equatable` or a class or interface bound that declares or inherits `operator ==`. `Equatable` is a bound and never a value's type, so `List<Equatable>` is a compile error. It joins other bounds with `&`, as in `<TItem : Shareable & Equatable>`, and adds no type the running code checks.
+
+<!-- example equatable-bound: statements in Generic
+public struct Point { public Point(public int x { get; }) { } }
+Point point = new Point(1);
+Point samePoint = new Point(1);
+Cart cartA = new Cart();
+Cart cartB = new Cart();
+-->
+```csharp
+public static bool same<T : Equatable>(T a, T b) => a == b;              // compiles
+public static bool sameUnbounded<T>(T a, T b) => a == b;                 // compile error: T has no ==; bound it with Equatable, as in <T : Equatable>
+public static bool sameEntity<T : DatabaseEntity>(T a, T b) => a == b;   // compiles: DatabaseEntity declares operator ==
+Generic.same(point, samePoint);       // compiles; runs: true, structs compare by value
+Generic.same(cartA, cartB);           // compile error: Cart is outside T's bound Equatable, since Cart declares no ==
 ```
 
 **A class that implements or extends a generic type takes its type argument's type,** as in C#, Java, Kotlin, TypeScript and Rust: `OrderHandler : Handler<Order>` writes `handle(Order item)`. A call from plain PHP still checks `item` against `Order` under the caller's `strict_types`, as every typed parameter is checked, and reflection reports `Order` as its type:
@@ -2939,6 +2956,7 @@ PHP's backtick shell execution is removed, and so is `shell_exec()`. A program r
 - **Any type may declare `operator ==` with `hash()`,** a struct as well as a class, and the declared one replaces the one a struct gets with no code.
 - **A class** compares with `==` only if it or a parent declares `operator ==`. Otherwise `==` on it is a compile error.
 - **A function has no `==`,** so `==` between two function values is a compile error.
+- **A type parameter has `==` only through its bound:** `Equatable`, or a class or interface that declares or inherits `operator ==` (section 11).
 - **`Any?`** compared with `==` against a struct, enum, string, number or collection compares by value, and is false when the types differ.
 - **`===`** is true only for the same object. It works on classes only, and cannot be overridden.
 - **`Set`** hashes a struct, enum, string, number or collection by its value, and an object by its class's `hash()`. A struct that declares `hash()` is hashed by it.
@@ -5132,7 +5150,7 @@ import App.DatabaseEntity;
 
 public static class ListExtensions
 {
-    extension<TItem>(List<TItem> items)
+    extension<TItem : Equatable>(List<TItem> items)
     {
         public bool holds(TItem wanted) => items.contains(wanted);
         public List<TOut> mapped<TOut>(Function<TOut(TItem)> map) => items.map(map);

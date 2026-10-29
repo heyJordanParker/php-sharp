@@ -1,0 +1,6 @@
+namespace Equatables;
+
+public class Order : DatabaseEntity
+{
+    public Order(int id) : super(id) { }
+}
