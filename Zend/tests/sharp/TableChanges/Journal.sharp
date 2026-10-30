@@ -1,0 +1,38 @@
+namespace TableChanges;
+
+// A change to a Map or a Set a property with a `set` body holds runs the `set` once it changed the table, as an
+// assignment does.
+public class Journal
+{
+    public int writes { get; set; } = 0;
+    public Map<string, int> stock
+    {
+        get => field;
+        set
+        {
+            this.writes = this.writes + 1;
+            field = value;
+        }
+    } = [:];
+    public Set<string> tags
+    {
+        get => field;
+        set
+        {
+            this.writes = this.writes + 1;
+            field = value;
+        }
+    } = [];
+
+    public void put(string name, int count)
+    {
+        this.stock[name] = count;
+    }
+
+    public void putMissing(string name, int count)
+    {
+        this.stock[name] ??= count;
+    }
+
+    public bool tag(string name) => this.tags.add(name);
+}

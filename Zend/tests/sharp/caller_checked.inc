@@ -56,3 +56,17 @@ foreach ($calls as $name => $call) {
     }
     echo $name, ': ', $result, "\n";
 }
+$members = [
+    'Set' => Calls::setMembers(new Contact()),
+    'Map' => Calls::mapMembers($given(Contact::class, ['a' => 1, 'b' => 2, '10' => 3])),
+];
+foreach ($members as $kind => $calls) {
+    foreach ($calls as $name => $call) {
+        try {
+            $result = json_encode($call());
+        } catch (\Error $error) {
+            $result = get_class($error) . ': ' . $error->getMessage();
+        }
+        echo $kind, ' ', $name, ': ', $result, "\n";
+    }
+}

@@ -4,7 +4,7 @@ A PHP# class reads a Date's and a DateTime's Weekday and Month and writes the te
 date.timezone=America/New_York
 --FILE--
 <?php
-foreach (['Int', 'Math', 'Time/Duration', 'Time/Instant', 'Time/Date', 'Time/DateTime', 'Time/TimeZone', 'Time/Weekday', 'Time/Month', 'ListMembers'] as $file) {
+foreach (['Int', 'Math', 'Time/Duration', 'Time/Instant', 'Time/Date', 'Time/DateTime', 'Time/TimeZone', 'Time/Weekday', 'Time/Month', 'ListMembers', 'MapMembers', 'SetMembers'] as $file) {
     require __DIR__ . "/../../../sharp/composer/library/Sharp/$file.sharp";
 }
 require __DIR__ . '/DateTextCalls.sharp';
