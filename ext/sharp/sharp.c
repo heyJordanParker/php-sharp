@@ -3226,6 +3226,30 @@ ZEND_FUNCTION(Sharp_Internal_get)
 	}
 }
 
+/* A Map's and a Set's `count()`: how many keys it holds, which the table keeps, or how many entries the PHP array holds
+ * that plain PHP gives for one, as a plain PHP member of a PHP# interface returns it. */
+ZEND_FUNCTION(Sharp_Internal_size)
+{
+	zval *collection;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(collection)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (Z_TYPE_P(collection) == IS_ARRAY) {
+		RETURN_LONG(zend_hash_num_elements(Z_ARRVAL_P(collection)));
+	}
+	if (UNEXPECTED(!SHARP_IS_TABLE(collection))) {
+		zend_argument_type_error(1, "must be of type Sharp\\Map|Sharp\\Set|array, %s given", zend_zval_value_name(collection));
+		RETURN_THROWS();
+	}
+	sharp_table *entries = sharp_table_entries(Z_OBJ_P(collection));
+	if (!entries) {
+		RETURN_THROWS();
+	}
+	RETURN_LONG(entries->size);
+}
+
 /* A Map's `has(key)` and a Set's `contains(element)`: whether it holds a key equal to the value, a key whose value is
  * null included. */
 ZEND_FUNCTION(Sharp_Internal_containsKey)
@@ -3514,29 +3538,22 @@ ZEND_FUNCTION(Sharp_Internal_filterEntries)
 	sharp_collection_filter_table(map, &fci, &fcc, return_value);
 }
 
-/* A Set's `filter`: the Set of the elements the function keeps, of the type arguments the bridge passes for the call's
- * result, as `toSet()` makes its Set. */
+/* A Set's `filter`: the Set of the elements the function keeps, of the Set's type. */
 ZEND_FUNCTION(Sharp_Internal_filterElements)
 {
 	zend_object *set;
 	zend_fcall_info fci;
 	zend_fcall_info_cache fcc;
-	zend_string *type_arguments = NULL;
 
-	ZEND_PARSE_PARAMETERS_START(2, 3)
+	ZEND_PARSE_PARAMETERS_START(2, 2)
 		Z_PARAM_OBJ_OF_CLASS(set, sharp_ce_set)
 		Z_PARAM_FUNC(fci, fcc)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_STR_OR_NULL(type_arguments)
 	ZEND_PARSE_PARAMETERS_END();
 
 	if (!sharp_table_entries(set)) {
 		RETURN_THROWS();
 	}
 	sharp_collection_filter_table(set, &fci, &fcc, return_value);
-	if (!EG(exception) && !sharp_table_made_with(execute_data, Z_OBJ_P(return_value), type_arguments, 3)) {
-		RETURN_THROWS();
-	}
 }
 
 ZEND_FUNCTION(Sharp_Internal_map)
@@ -9234,16 +9251,32 @@ bool sharp_property_for_write(zval *result, zend_object *object, zval *slot, con
 		return false;
 	}
 	/* An array plain PHP still holds a reference to is written in place, as plain PHP's writes through it are. */
-	if (!(info->flags & ZEND_ACC_SHARP_CROSSING) || !object || !result) {
+	if (!(info->flags & ZEND_ACC_SHARP_CROSSING) || (result && !object)) {
 		zval_ptr_dtor(&value);
 		return true;
 	}
 
-	const char *unmangled = zend_get_unmangled_property_name(info->name);
-	zend_string *name = zend_string_init(unmangled, strlen(unmangled), false);
-	ZVAL_COPY_VALUE(result, &value);
-	sharp_collection_of_property(result, object, name, NULL);
-	zend_string_release(name);
+	/* A #[\Sharp\Crossing] property's index write, which passes `result`, goes through a Sharp\Collection, which writes
+	 * the Map or the Set back through the property. */
+	if (result) {
+		const char *unmangled = zend_get_unmangled_property_name(info->name);
+		zend_string *name = zend_string_init(unmangled, strlen(unmangled), false);
+		ZVAL_COPY_VALUE(result, &value);
+		sharp_collection_of_property(result, object, name, NULL);
+		zend_string_release(name);
+
+		return true;
+	}
+	/* A `ref` member's fetch finds the array the reference holds for plain PHP, and the reference holds the Map or the
+	 * Set it crosses back into while the member changes it in place. The unset fetch after the call finds that table,
+	 * and the reference takes the array it crosses into, with the typed-reference assignment, so plain PHP sees the
+	 * change, see zend_sharp_separate_place. */
+	zend_reference *reference = Z_REF_P(slot);
+	if (SHARP_IS_TABLE(&reference->val)) {
+		return zend_try_assign_typed_ref(reference, &value) == SUCCESS;
+	}
+	zval_ptr_dtor(&reference->val);
+	ZVAL_COPY_VALUE(&reference->val, &value);
 
 	return true;
 }

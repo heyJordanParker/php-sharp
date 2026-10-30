@@ -181,6 +181,8 @@ function clear(array|\Sharp\Map|\Sharp\Set &$collection): void {}
 
 function get(array|\Sharp\Map $collection, mixed $key): mixed {}
 
+function size(array|\Sharp\Map|\Sharp\Set $collection): int {}
+
 function containsKey(\Sharp\Map|\Sharp\Set $table, mixed $key): bool {}
 
 function removeKey(\Sharp\Map|\Sharp\Set &$table, mixed $key): bool {}
@@ -207,7 +209,7 @@ function filter(array $list, \Closure $predicate): array {}
 
 function filterEntries(\Sharp\Map $map, \Closure $predicate): \Sharp\Map {}
 
-function filterElements(\Sharp\Set $set, \Closure $predicate, ?string $type = null): \Sharp\Set {}
+function filterElements(\Sharp\Set $set, \Closure $predicate): \Sharp\Set {}
 
 function map(array|\Sharp\Map|\Sharp\Set $collection, \Closure $transform): array {}
 

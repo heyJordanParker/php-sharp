@@ -1,10 +1,14 @@
 <?php
 require __DIR__ . '/harness/fixture.inc';
 fixture('TableChanges');
+require __DIR__ . '/LibraryProbe/Stage.sharp';
+require __DIR__ . '/LibraryProbe/Tables.sharp';
 
 use TableChanges\Box;
+use TableChanges\Drawer;
 use TableChanges\Journal;
 use TableChanges\Ledger;
+use TableChanges\Shelf;
 
 // Each round runs every change, so the JIT runs compiled code before the last round, whose output is printed.
 for ($round = 0; $round < 3; $round++) {
@@ -31,6 +35,34 @@ for ($round = 0; $round < 3; $round++) {
         Ledger::found(false, ['tea'], ['milk'], 'milk'),
         Ledger::found(false, ['tea'], ['milk'], 'tea'),
     ]), "\n";
+    echo json_encode(Sharp\Probe\Tables::crossed()), "\n";
+
+    $shelf = new Shelf();
+    $shelf->keep(false, [], [1, -1, 2]);
+    echo json_encode($shelf->kept), "\n";
+    try {
+        $shelf->kept[] = 'x';
+    } catch (TypeError $error) {
+        echo $error->getMessage(), "\n";
+    }
+    foreach ([[true, [1, 2, 3], []], [false, [], ['a' => 1, 'b' => 2]]] as [$listed, $items, $counts]) {
+        $shelf->group($listed, $items, $counts);
+        echo json_encode($shelf->grouped), ' ', json_encode($shelf->associated), "\n";
+        foreach (['grouped', 'associated'] as $property) {
+            try {
+                $shelf->$property[7] = 'x';
+            } catch (TypeError $error) {
+                echo $error->getMessage(), "\n";
+            }
+        }
+    }
+
+    $drawer = new Drawer();
+    $numbers = &$drawer->numbers;
+    $prices = &$drawer->prices;
+    var_dump($drawer->addNumber(5), $drawer->removePrice('tea'));
+    echo json_encode($drawer->numbers), ' ', json_encode($numbers), ' ', json_encode($drawer->prices), ' ', json_encode($prices), "\n";
+    unset($numbers, $prices);
     $output = ob_get_clean();
 }
 

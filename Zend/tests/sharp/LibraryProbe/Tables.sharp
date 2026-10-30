@@ -1,0 +1,18 @@
+namespace Sharp.Probe;
+
+// A standard library file's calls of PHP's built-ins, which alone may call them: each takes a Map as the PHP array it
+// crosses into, a backed enum's key as its value, as plain PHP's own code does.
+public static class Tables
+{
+    public static List<Any?> crossed()
+    {
+        Map<Stage, int> counts = [Stage.Open: 1];
+        Map<string, int> named = ["open": 1];
+        Map<string, List<int>> rows = ["a": [1, 2], "b": [3]];
+        return [
+            global.http_build_query(counts),
+            global.iterator_to_array(named),
+            global.count(rows, global.COUNT_RECURSIVE),
+        ];
+    }
+}

@@ -13,7 +13,8 @@ usage() {
 }
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-rows=(listAdd listAddOnProperty listIndexRead listIndexWrite mapGetAndPut setAdd filterWithLambda plainMethodCall)
+rows=(listAdd listAddOnProperty listIndexRead listIndexWrite mapGetAndPut setAdd setInsert mapHas mapRemove
+  tableChangeWhileShared filterWithLambda plainMethodCall)
 release=false
 chosen=()
 for arg in "$@"; do

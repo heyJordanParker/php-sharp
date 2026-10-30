@@ -3750,7 +3750,7 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .sharp L0015 0024 ASSIGN_OBJ THIS string("labels")
   .sharp L0015 0025 OP_DATA T15
   .sharp L0017 0026 RETURN null
-  .sharp      ; (lines=69, args=1, vars=7, tmps=25)
+  .sharp      ; (lines=71, args=1, vars=7, tmps=25)
   .sharp L0019 0002 JMPZ T7 0010
   .sharp L0019 0003 V8 = FETCH_CLASS (exception) string("Sharp\\Set")
   .sharp L0019 0004 T9 = SHARP_TYPE_ARGS string("string")
@@ -3807,18 +3807,20 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .sharp L0029 0055 SEND_VAL string("new") 2
   .sharp L0029 0056 V29 = DO_ICALL
   .sharp L0029 0057 T27 = ADD_ARRAY_ELEMENT V29 NEXT
-  .sharp L0029 0058 T30 = COUNT CV0($tags)
-  .sharp L0029 0059 T27 = ADD_ARRAY_ELEMENT T30 NEXT
-  .sharp L0029 0060 INIT_FCALL 1 96 string("sharp\\internal\\keys")
-  .sharp L0029 0061 SEND_VAR CV0($tags) 1
-  .sharp L0029 0062 V31 = DO_ICALL
-  .sharp L0029 0063 T27 = ADD_ARRAY_ELEMENT V31 NEXT
-  .sharp L0029 0064 T27 = ADD_ARRAY_ELEMENT CV5($joined) NEXT
-  .sharp L0029 0065 VERIFY_RETURN_TYPE T27
-  .sharp L0029 0066 RETURN T27
-  .sharp L0030 0067 VERIFY_RETURN_TYPE
-  .sharp L0030 0068 RETURN null
-  .sharp      ; (lines=59, args=1, vars=1, tmps=21)
+  .sharp L0029 0058 INIT_FCALL 1 96 string("sharp\\internal\\size")
+  .sharp L0029 0059 SEND_VAR CV0($tags) 1
+  .sharp L0029 0060 V30 = DO_ICALL
+  .sharp L0029 0061 T27 = ADD_ARRAY_ELEMENT V30 NEXT
+  .sharp L0029 0062 INIT_FCALL 1 96 string("sharp\\internal\\keys")
+  .sharp L0029 0063 SEND_VAR CV0($tags) 1
+  .sharp L0029 0064 V31 = DO_ICALL
+  .sharp L0029 0065 T27 = ADD_ARRAY_ELEMENT V31 NEXT
+  .sharp L0029 0066 T27 = ADD_ARRAY_ELEMENT CV5($joined) NEXT
+  .sharp L0029 0067 VERIFY_RETURN_TYPE T27
+  .sharp L0029 0068 RETURN T27
+  .sharp L0030 0069 VERIFY_RETURN_TYPE
+  .sharp L0030 0070 RETURN null
+  .sharp      ; (lines=58, args=1, vars=1, tmps=21)
   .sharp L0032 0002 JMPZ T1 0010
   .sharp L0032 0003 V2 = FETCH_CLASS (exception) string("Sharp\\Set")
   .sharp L0032 0004 T3 = SHARP_TYPE_ARGS string("string")
@@ -3830,52 +3832,51 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .sharp L0032 0010 T6 = QM_ASSIGN CV0($tags)
   .sharp L0032 0011 ASSIGN CV0($tags) T6
   .sharp L0035 0012 INIT_FCALL 1 96 string("sharp\\internal\\keys")
-  .sharp L0035 0013 INIT_FCALL 3 128 string("sharp\\internal\\filterelements")
+  .sharp L0035 0013 INIT_FCALL 2 112 string("sharp\\internal\\filterelements")
   .sharp L0035 0014 SEND_VAR CV0($tags) 1
   .sharp L0035 0015 T8 = DECLARE_LAMBDA_FUNCTION 0
   .sharp L0035 0016 SEND_VAL T8 2
-  .sharp L0035 0017 SEND_VAL string("string") 3
-  .sharp L0035 0018 V9 = DO_ICALL
-  .sharp L0035 0019 SEND_VAR V9 1
-  .sharp L0035 0020 V10 = DO_ICALL
-  .sharp L0035 0021 T11 = INIT_ARRAY 6 (packed) V10 NEXT
-  .sharp L0036 0022 INIT_FCALL 2 112 string("sharp\\internal\\map")
-  .sharp L0036 0023 SEND_VAR CV0($tags) 1
-  .sharp L0036 0024 T12 = DECLARE_LAMBDA_FUNCTION 1
-  .sharp L0036 0025 SEND_VAL T12 2
-  .sharp L0036 0026 V13 = DO_ICALL
-  .sharp L0036 0027 T11 = ADD_ARRAY_ELEMENT V13 NEXT
-  .sharp L0037 0028 INIT_FCALL 2 112 string("sharp\\internal\\any")
-  .sharp L0037 0029 SEND_VAR CV0($tags) 1
-  .sharp L0037 0030 T14 = DECLARE_LAMBDA_FUNCTION 2
-  .sharp L0037 0031 SEND_VAL T14 2
-  .sharp L0037 0032 V15 = DO_ICALL
-  .sharp L0037 0033 T11 = ADD_ARRAY_ELEMENT V15 NEXT
-  .sharp L0038 0034 INIT_FCALL 2 112 string("sharp\\internal\\first")
-  .sharp L0038 0035 SEND_VAR CV0($tags) 1
-  .sharp L0038 0036 T16 = DECLARE_LAMBDA_FUNCTION 3
-  .sharp L0038 0037 SEND_VAL T16 2
-  .sharp L0038 0038 V17 = DO_ICALL
-  .sharp L0038 0039 T11 = ADD_ARRAY_ELEMENT V17 NEXT
-  .sharp L0039 0040 INIT_FCALL 3 128 string("sharp\\internal\\sortedby")
-  .sharp L0039 0041 SEND_VAR CV0($tags) 1
-  .sharp L0039 0042 T18 = DECLARE_LAMBDA_FUNCTION 4
-  .sharp L0039 0043 SEND_VAL T18 2
-  .sharp L0039 0044 SEND_VAL null 3
-  .sharp L0039 0045 V19 = DO_ICALL
-  .sharp L0039 0046 T11 = ADD_ARRAY_ELEMENT V19 NEXT
-  .sharp L0040 0047 INIT_STATIC_METHOD_CALL 2 string("Lib\\Probe") string("join")
-  .sharp L0040 0048 SEND_VAL_EX string(",") 1
-  .sharp L0040 0049 INIT_FCALL 1 96 string("sharp\\internal\\arrayof")
-  .sharp L0040 0050 SEND_VAR CV0($tags) 1
-  .sharp L0040 0051 V20 = DO_ICALL
-  .sharp L0040 0052 SEND_VAR_NO_REF_EX V20 2
-  .sharp L0040 0053 V21 = DO_FCALL
-  .sharp L0040 0054 T11 = ADD_ARRAY_ELEMENT V21 NEXT
-  .sharp L0040 0055 VERIFY_RETURN_TYPE T11
-  .sharp L0040 0056 RETURN T11
-  .sharp L0042 0057 VERIFY_RETURN_TYPE
-  .sharp L0042 0058 RETURN null
+  .sharp L0035 0017 V9 = DO_ICALL
+  .sharp L0035 0018 SEND_VAR V9 1
+  .sharp L0035 0019 V10 = DO_ICALL
+  .sharp L0035 0020 T11 = INIT_ARRAY 6 (packed) V10 NEXT
+  .sharp L0036 0021 INIT_FCALL 2 112 string("sharp\\internal\\map")
+  .sharp L0036 0022 SEND_VAR CV0($tags) 1
+  .sharp L0036 0023 T12 = DECLARE_LAMBDA_FUNCTION 1
+  .sharp L0036 0024 SEND_VAL T12 2
+  .sharp L0036 0025 V13 = DO_ICALL
+  .sharp L0036 0026 T11 = ADD_ARRAY_ELEMENT V13 NEXT
+  .sharp L0037 0027 INIT_FCALL 2 112 string("sharp\\internal\\any")
+  .sharp L0037 0028 SEND_VAR CV0($tags) 1
+  .sharp L0037 0029 T14 = DECLARE_LAMBDA_FUNCTION 2
+  .sharp L0037 0030 SEND_VAL T14 2
+  .sharp L0037 0031 V15 = DO_ICALL
+  .sharp L0037 0032 T11 = ADD_ARRAY_ELEMENT V15 NEXT
+  .sharp L0038 0033 INIT_FCALL 2 112 string("sharp\\internal\\first")
+  .sharp L0038 0034 SEND_VAR CV0($tags) 1
+  .sharp L0038 0035 T16 = DECLARE_LAMBDA_FUNCTION 3
+  .sharp L0038 0036 SEND_VAL T16 2
+  .sharp L0038 0037 V17 = DO_ICALL
+  .sharp L0038 0038 T11 = ADD_ARRAY_ELEMENT V17 NEXT
+  .sharp L0039 0039 INIT_FCALL 3 128 string("sharp\\internal\\sortedby")
+  .sharp L0039 0040 SEND_VAR CV0($tags) 1
+  .sharp L0039 0041 T18 = DECLARE_LAMBDA_FUNCTION 4
+  .sharp L0039 0042 SEND_VAL T18 2
+  .sharp L0039 0043 SEND_VAL null 3
+  .sharp L0039 0044 V19 = DO_ICALL
+  .sharp L0039 0045 T11 = ADD_ARRAY_ELEMENT V19 NEXT
+  .sharp L0040 0046 INIT_STATIC_METHOD_CALL 2 string("Lib\\Probe") string("join")
+  .sharp L0040 0047 SEND_VAL_EX string(",") 1
+  .sharp L0040 0048 INIT_FCALL 1 96 string("sharp\\internal\\arrayof")
+  .sharp L0040 0049 SEND_VAR CV0($tags) 1
+  .sharp L0040 0050 V20 = DO_ICALL
+  .sharp L0040 0051 SEND_VAR_NO_REF_EX V20 2
+  .sharp L0040 0052 V21 = DO_FCALL
+  .sharp L0040 0053 T11 = ADD_ARRAY_ELEMENT V21 NEXT
+  .sharp L0040 0054 VERIFY_RETURN_TYPE T11
+  .sharp L0040 0055 RETURN T11
+  .sharp L0042 0056 VERIFY_RETURN_TYPE
+  .sharp L0042 0057 RETURN null
   .sharp      ; (lines=21, args=1, vars=1, tmps=9)
   .sharp L0044 0002 JMPZ T1 0010
   .sharp L0044 0003 V2 = FETCH_CLASS (exception) string("Sharp\\Set")
@@ -4159,7 +4160,7 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .sharp L0071 0130 RETURN T52
   .sharp L0072 0131 VERIFY_RETURN_TYPE
   .sharp L0072 0132 RETURN null
-  .sharp      ; (lines=91, args=1, vars=6, tmps=38)
+  .sharp      ; (lines=93, args=1, vars=6, tmps=38)
   .sharp L0074 0002 JMPZ T6 0010
   .sharp L0074 0003 V7 = FETCH_CLASS (exception) string("Sharp\\Set")
   .sharp L0074 0004 T8 = SHARP_TYPE_ARGS string("string")
@@ -4241,14 +4242,16 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .sharp L0082 0080 T41 = TYPE_CHECK (null) CV0($maybe)
   .sharp L0082 0081 JMPZ T41 0084
   .sharp L0082 0082 T42 = QM_ASSIGN null
-  .sharp L0082 0083 JMP 0086
-  .sharp L0082 0084 T43 = COUNT CV0($maybe)
-  .sharp L0082 0085 T42 = QM_ASSIGN T43
-  .sharp L0082 0086 T31 = ADD_ARRAY_ELEMENT T42 NEXT
-  .sharp L0082 0087 VERIFY_RETURN_TYPE T31
-  .sharp L0082 0088 RETURN T31
-  .sharp L0083 0089 VERIFY_RETURN_TYPE
-  .sharp L0083 0090 RETURN null
+  .sharp L0082 0083 JMP 0088
+  .sharp L0082 0084 INIT_FCALL 1 96 string("sharp\\internal\\size")
+  .sharp L0082 0085 SEND_VAR CV0($maybe) 1
+  .sharp L0082 0086 V43 = DO_ICALL
+  .sharp L0082 0087 T42 = QM_ASSIGN V43
+  .sharp L0082 0088 T31 = ADD_ARRAY_ELEMENT T42 NEXT
+  .sharp L0082 0089 VERIFY_RETURN_TYPE T31
+  .sharp L0082 0090 RETURN T31
+  .sharp L0083 0091 VERIFY_RETURN_TYPE
+  .sharp L0083 0092 RETURN null
   .sharp      ; (lines=38, args=1, vars=4, tmps=19)
   .sharp L0100 0008 INIT_FCALL 2 112 string("sharp\\internal\\toset")
   .sharp L0100 0009 SEND_VAR CV0($names) 1
@@ -4297,7 +4300,7 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .sharp L0096 0016 V9 = DO_ICALL
   .sharp L0096 0017 RETURN V9
   .sharp L0096 0018 RETURN null
-  .sharp      ; (lines=15, args=1, vars=1, tmps=8)
+  .sharp      ; (lines=17, args=1, vars=1, tmps=8)
   .sharp L0097 0002 JMPZ T1 0010
   .sharp L0097 0003 V2 = FETCH_CLASS (exception) string("Sharp\\Set")
   .sharp L0097 0004 T3 = SHARP_TYPE_ARGS string("string")
@@ -4308,8 +4311,11 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .sharp L0097 0009 JMP 0011
   .sharp L0097 0010 T6 = QM_ASSIGN CV0($tags)
   .sharp L0097 0011 ASSIGN CV0($tags) T6
-  .sharp L0098 0012 T8 = COUNT CV0($tags)
-  .sharp L0098 0013 RETURN T8
+  .sharp L0098 0012 INIT_FCALL 1 96 string("sharp\\internal\\size")
+  .sharp L0098 0013 SEND_VAR CV0($tags) 1
+  .sharp L0098 0014 V8 = DO_ICALL
+  .sharp L0098 0015 RETURN V8
+  .sharp L0099 0016 RETURN null
   .sharp      ; (lines=36, args=0, vars=4, tmps=14)
   .sharp L0103 0002 T4 = DECLARE_LAMBDA_FUNCTION 0
   .sharp L0103 0003 SEND_VAL T4 1
@@ -4436,7 +4442,7 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .sharp 0026 RETURN null
   .sharp      6: 0007 - 0009 (new)
   .sharp      13: 0019 - 0021 (new)
-  .sharp      ; (lines=69, args=1, vars=7, tmps=25)
+  .sharp      ; (lines=71, args=1, vars=7, tmps=25)
   .sharp 0002 JMPZ T7 0010
   .sharp 0003 V8 = FETCH_CLASS (exception) string("Sharp\\Set")
   .sharp 0004 T9 = SHARP_TYPE_ARGS string("string")
@@ -4493,25 +4499,27 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .sharp 0055 SEND_VAL string("new") 2
   .sharp 0056 V29 = DO_ICALL
   .sharp 0057 T27 = ADD_ARRAY_ELEMENT V29 NEXT
-  .sharp 0058 T30 = COUNT CV0($tags)
-  .sharp 0059 T27 = ADD_ARRAY_ELEMENT T30 NEXT
-  .sharp 0060 INIT_FCALL 1 96 string("sharp\\internal\\keys")
-  .sharp 0061 SEND_VAR CV0($tags) 1
-  .sharp 0062 V31 = DO_ICALL
-  .sharp 0063 T27 = ADD_ARRAY_ELEMENT V31 NEXT
-  .sharp 0064 T27 = ADD_ARRAY_ELEMENT CV5($joined) NEXT
-  .sharp 0065 VERIFY_RETURN_TYPE T27
-  .sharp 0066 RETURN T27
-  .sharp 0067 VERIFY_RETURN_TYPE
-  .sharp 0068 RETURN null
+  .sharp 0058 INIT_FCALL 1 96 string("sharp\\internal\\size")
+  .sharp 0059 SEND_VAR CV0($tags) 1
+  .sharp 0060 V30 = DO_ICALL
+  .sharp 0061 T27 = ADD_ARRAY_ELEMENT V30 NEXT
+  .sharp 0062 INIT_FCALL 1 96 string("sharp\\internal\\keys")
+  .sharp 0063 SEND_VAR CV0($tags) 1
+  .sharp 0064 V31 = DO_ICALL
+  .sharp 0065 T27 = ADD_ARRAY_ELEMENT V31 NEXT
+  .sharp 0066 T27 = ADD_ARRAY_ELEMENT CV5($joined) NEXT
+  .sharp 0067 VERIFY_RETURN_TYPE T27
+  .sharp 0068 RETURN T27
+  .sharp 0069 VERIFY_RETURN_TYPE
+  .sharp 0070 RETURN null
   .sharp      10: 0006 - 0008 (new)
   .sharp      14: 0016 - 0017 (tmp/var)
   .sharp      16: 0022 - 0023 (tmp/var)
   .sharp      18: 0028 - 0029 (tmp/var)
   .sharp      20: 0034 - 0035 (tmp/var)
   .sharp      23: 0038 - 0043 (loop)
-  .sharp      27: 0045 - 0066 (tmp/var)
-  .sharp      ; (lines=59, args=1, vars=1, tmps=21)
+  .sharp      27: 0045 - 0068 (tmp/var)
+  .sharp      ; (lines=58, args=1, vars=1, tmps=21)
   .sharp 0002 JMPZ T1 0010
   .sharp 0003 V2 = FETCH_CLASS (exception) string("Sharp\\Set")
   .sharp 0004 T3 = SHARP_TYPE_ARGS string("string")
@@ -4523,54 +4531,53 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .sharp 0010 T6 = QM_ASSIGN CV0($tags)
   .sharp 0011 ASSIGN CV0($tags) T6
   .sharp 0012 INIT_FCALL 1 96 string("sharp\\internal\\keys")
-  .sharp 0013 INIT_FCALL 3 128 string("sharp\\internal\\filterelements")
+  .sharp 0013 INIT_FCALL 2 112 string("sharp\\internal\\filterelements")
   .sharp 0014 SEND_VAR CV0($tags) 1
   .sharp 0015 T8 = DECLARE_LAMBDA_FUNCTION 0
   .sharp 0016 SEND_VAL T8 2
-  .sharp 0017 SEND_VAL string("string") 3
-  .sharp 0018 V9 = DO_ICALL
-  .sharp 0019 SEND_VAR V9 1
-  .sharp 0020 V10 = DO_ICALL
-  .sharp 0021 T11 = INIT_ARRAY 6 (packed) V10 NEXT
-  .sharp 0022 INIT_FCALL 2 112 string("sharp\\internal\\map")
-  .sharp 0023 SEND_VAR CV0($tags) 1
-  .sharp 0024 T12 = DECLARE_LAMBDA_FUNCTION 1
-  .sharp 0025 SEND_VAL T12 2
-  .sharp 0026 V13 = DO_ICALL
-  .sharp 0027 T11 = ADD_ARRAY_ELEMENT V13 NEXT
-  .sharp 0028 INIT_FCALL 2 112 string("sharp\\internal\\any")
-  .sharp 0029 SEND_VAR CV0($tags) 1
-  .sharp 0030 T14 = DECLARE_LAMBDA_FUNCTION 2
-  .sharp 0031 SEND_VAL T14 2
-  .sharp 0032 V15 = DO_ICALL
-  .sharp 0033 T11 = ADD_ARRAY_ELEMENT V15 NEXT
-  .sharp 0034 INIT_FCALL 2 112 string("sharp\\internal\\first")
-  .sharp 0035 SEND_VAR CV0($tags) 1
-  .sharp 0036 T16 = DECLARE_LAMBDA_FUNCTION 3
-  .sharp 0037 SEND_VAL T16 2
-  .sharp 0038 V17 = DO_ICALL
-  .sharp 0039 T11 = ADD_ARRAY_ELEMENT V17 NEXT
-  .sharp 0040 INIT_FCALL 3 128 string("sharp\\internal\\sortedby")
-  .sharp 0041 SEND_VAR CV0($tags) 1
-  .sharp 0042 T18 = DECLARE_LAMBDA_FUNCTION 4
-  .sharp 0043 SEND_VAL T18 2
-  .sharp 0044 SEND_VAL null 3
-  .sharp 0045 V19 = DO_ICALL
-  .sharp 0046 T11 = ADD_ARRAY_ELEMENT V19 NEXT
-  .sharp 0047 INIT_STATIC_METHOD_CALL 2 string("Lib\\Probe") string("join")
-  .sharp 0048 SEND_VAL_EX string(",") 1
-  .sharp 0049 INIT_FCALL 1 96 string("sharp\\internal\\arrayof")
-  .sharp 0050 SEND_VAR CV0($tags) 1
-  .sharp 0051 V20 = DO_ICALL
-  .sharp 0052 SEND_VAR_NO_REF_EX V20 2
-  .sharp 0053 V21 = DO_FCALL
-  .sharp 0054 T11 = ADD_ARRAY_ELEMENT V21 NEXT
-  .sharp 0055 VERIFY_RETURN_TYPE T11
-  .sharp 0056 RETURN T11
-  .sharp 0057 VERIFY_RETURN_TYPE
-  .sharp 0058 RETURN null
+  .sharp 0017 V9 = DO_ICALL
+  .sharp 0018 SEND_VAR V9 1
+  .sharp 0019 V10 = DO_ICALL
+  .sharp 0020 T11 = INIT_ARRAY 6 (packed) V10 NEXT
+  .sharp 0021 INIT_FCALL 2 112 string("sharp\\internal\\map")
+  .sharp 0022 SEND_VAR CV0($tags) 1
+  .sharp 0023 T12 = DECLARE_LAMBDA_FUNCTION 1
+  .sharp 0024 SEND_VAL T12 2
+  .sharp 0025 V13 = DO_ICALL
+  .sharp 0026 T11 = ADD_ARRAY_ELEMENT V13 NEXT
+  .sharp 0027 INIT_FCALL 2 112 string("sharp\\internal\\any")
+  .sharp 0028 SEND_VAR CV0($tags) 1
+  .sharp 0029 T14 = DECLARE_LAMBDA_FUNCTION 2
+  .sharp 0030 SEND_VAL T14 2
+  .sharp 0031 V15 = DO_ICALL
+  .sharp 0032 T11 = ADD_ARRAY_ELEMENT V15 NEXT
+  .sharp 0033 INIT_FCALL 2 112 string("sharp\\internal\\first")
+  .sharp 0034 SEND_VAR CV0($tags) 1
+  .sharp 0035 T16 = DECLARE_LAMBDA_FUNCTION 3
+  .sharp 0036 SEND_VAL T16 2
+  .sharp 0037 V17 = DO_ICALL
+  .sharp 0038 T11 = ADD_ARRAY_ELEMENT V17 NEXT
+  .sharp 0039 INIT_FCALL 3 128 string("sharp\\internal\\sortedby")
+  .sharp 0040 SEND_VAR CV0($tags) 1
+  .sharp 0041 T18 = DECLARE_LAMBDA_FUNCTION 4
+  .sharp 0042 SEND_VAL T18 2
+  .sharp 0043 SEND_VAL null 3
+  .sharp 0044 V19 = DO_ICALL
+  .sharp 0045 T11 = ADD_ARRAY_ELEMENT V19 NEXT
+  .sharp 0046 INIT_STATIC_METHOD_CALL 2 string("Lib\\Probe") string("join")
+  .sharp 0047 SEND_VAL_EX string(",") 1
+  .sharp 0048 INIT_FCALL 1 96 string("sharp\\internal\\arrayof")
+  .sharp 0049 SEND_VAR CV0($tags) 1
+  .sharp 0050 V20 = DO_ICALL
+  .sharp 0051 SEND_VAR_NO_REF_EX V20 2
+  .sharp 0052 V21 = DO_FCALL
+  .sharp 0053 T11 = ADD_ARRAY_ELEMENT V21 NEXT
+  .sharp 0054 VERIFY_RETURN_TYPE T11
+  .sharp 0055 RETURN T11
+  .sharp 0056 VERIFY_RETURN_TYPE
+  .sharp 0057 RETURN null
   .sharp      4: 0006 - 0008 (new)
-  .sharp      11: 0022 - 0056 (tmp/var)
+  .sharp      11: 0021 - 0055 (tmp/var)
   .sharp      ; (lines=21, args=1, vars=1, tmps=9)
   .sharp 0002 JMPZ T1 0010
   .sharp 0003 V2 = FETCH_CLASS (exception) string("Sharp\\Set")
@@ -4882,7 +4889,7 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .sharp      52: 0088 - 0130 (tmp/var)
   .sharp      57: 0107 - 0109 (tmp/var)
   .sharp      62: 0121 - 0123 (tmp/var)
-  .sharp      ; (lines=91, args=1, vars=6, tmps=38)
+  .sharp      ; (lines=93, args=1, vars=6, tmps=38)
   .sharp 0002 JMPZ T6 0010
   .sharp 0003 V7 = FETCH_CLASS (exception) string("Sharp\\Set")
   .sharp 0004 T8 = SHARP_TYPE_ARGS string("string")
@@ -4963,18 +4970,20 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .sharp 0080 T41 = TYPE_CHECK (null) CV0($maybe)
   .sharp 0081 JMPZ T41 0084
   .sharp 0082 T42 = QM_ASSIGN null
-  .sharp 0083 JMP 0086
-  .sharp 0084 T43 = COUNT CV0($maybe)
-  .sharp 0085 T42 = QM_ASSIGN T43
-  .sharp 0086 T31 = ADD_ARRAY_ELEMENT T42 NEXT
-  .sharp 0087 VERIFY_RETURN_TYPE T31
-  .sharp 0088 RETURN T31
-  .sharp 0089 VERIFY_RETURN_TYPE
-  .sharp 0090 RETURN null
+  .sharp 0083 JMP 0088
+  .sharp 0084 INIT_FCALL 1 96 string("sharp\\internal\\size")
+  .sharp 0085 SEND_VAR CV0($maybe) 1
+  .sharp 0086 V43 = DO_ICALL
+  .sharp 0087 T42 = QM_ASSIGN V43
+  .sharp 0088 T31 = ADD_ARRAY_ELEMENT T42 NEXT
+  .sharp 0089 VERIFY_RETURN_TYPE T31
+  .sharp 0090 RETURN T31
+  .sharp 0091 VERIFY_RETURN_TYPE
+  .sharp 0092 RETURN null
   .sharp      9: 0006 - 0008 (new)
   .sharp      15: 0019 - 0020 (tmp/var)
   .sharp      22: 0034 - 0036 (tmp/var)
-  .sharp      31: 0049 - 0088 (tmp/var)
+  .sharp      31: 0049 - 0090 (tmp/var)
   .sharp      37: 0067 - 0068 (tmp/var)
   .sharp      ; (lines=38, args=1, vars=4, tmps=19)
   .sharp 0008 INIT_FCALL 2 112 string("sharp\\internal\\toset")
@@ -5027,7 +5036,7 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .sharp 0016 V9 = DO_ICALL
   .sharp 0017 RETURN V9
   .sharp      5: 0007 - 0009 (new)
-  .sharp      ; (lines=15, args=1, vars=1, tmps=8)
+  .sharp      ; (lines=17, args=1, vars=1, tmps=8)
   .sharp 0002 JMPZ T1 0010
   .sharp 0003 V2 = FETCH_CLASS (exception) string("Sharp\\Set")
   .sharp 0004 T3 = SHARP_TYPE_ARGS string("string")
@@ -5038,8 +5047,9 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .sharp 0009 JMP 0011
   .sharp 0010 T6 = QM_ASSIGN CV0($tags)
   .sharp 0011 ASSIGN CV0($tags) T6
-  .sharp 0012 T8 = COUNT CV0($tags)
-  .sharp 0013 RETURN T8
+  .sharp 0012 INIT_FCALL 1 96 string("sharp\\internal\\size")
+  .sharp 0013 SEND_VAR CV0($tags) 1
+  .sharp 0014 V8 = DO_ICALL
   .sharp      4: 0006 - 0008 (new)
   .sharp      ; (lines=36, args=0, vars=4, tmps=14)
   .sharp 0002 T4 = DECLARE_LAMBDA_FUNCTION 0
@@ -5631,6 +5641,7 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .php   L0098 0011 INIT_METHOD_CALL 0 T6 string("count")
   .php   L0098 0012 V7 = DO_FCALL
   .php   L0098 0013 RETURN V7
+  .php   L0099 0014 RETURN null
   .php        ; (lines=24, args=0, vars=3, tmps=9)
   .php   L0103 0002 T3 = DECLARE_LAMBDA_FUNCTION 0
   .php   L0103 0003 SEND_VAL T3 1
@@ -6171,7 +6182,6 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .php   0012 INIT_METHOD_CALL 1 T7 string("contains")
   .php   0013 SEND_VAR_EX CV1($prefix) 1
   .php   0014 V8 = DO_FCALL
-  .php   0015 RETURN V8
   .php        3: 0005 - 0007 (new)
   .php        ; (lines=15, args=1, vars=1, tmps=7)
   .php   0002 JMPZ T1 0008
@@ -6186,6 +6196,7 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .php   0011 INIT_METHOD_CALL 0 T6 string("count")
   .php   0012 V7 = DO_FCALL
   .php   0013 RETURN V7
+  .php   0014 RETURN null
   .php        2: 0004 - 0006 (new)
   .php        ; (lines=24, args=0, vars=3, tmps=9)
   .php   0002 T3 = DECLARE_LAMBDA_FUNCTION 0
@@ -6272,6 +6283,7 @@ Sets/Tagged: different opcodes and lines in 27 op arrays, same signatures in 1 c
   .php   0011 OP_DATA int(1)
   .php   0012 ASSIGN_OBJ THIS string("states")
   .php   0013 OP_DATA CV0($value)
+  .php   0014 RETURN null
   .php        2: 0004 - 0006 (new)
   .php       Property [ public Sharp\Set $tags ]
   .php       Property [ public Sharp\Set $states { get; set; } ]

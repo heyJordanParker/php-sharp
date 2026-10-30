@@ -75,6 +75,58 @@ public class Loops
         return seen.count();
     }
 
+    // Each turn adds an element the Set doesn't hold yet, so the table grows.
+    public static int setInsert(int n)
+    {
+        Set<int> seen = [];
+        for (let i = 0; i < n; i++) {
+            seen.add(i);
+        }
+        return seen.count();
+    }
+
+    public static int mapHas(int n)
+    {
+        Map<int, int> counts = [:];
+        for (let i = 0; i < 100; i++) {
+            counts[i] = i;
+        }
+        let found = 0;
+        for (let i = 0; i < n; i++) {
+            if (counts.has(i % 200)) {
+                found++;
+            }
+        }
+        return found;
+    }
+
+    // Each turn removes a key and puts it back, so the Map keeps its size.
+    public static int mapRemove(int n)
+    {
+        Map<int, int> counts = [:];
+        for (let i = 0; i < 100; i++) {
+            counts[i] = i;
+        }
+        for (let i = 0; i < n; i++) {
+            counts.remove(i % 100);
+            counts[i % 100] = i;
+        }
+        return counts.count();
+    }
+
+    // Each turn changes a Set another local shares, so the change copies the table first.
+    public static int tableChangeWhileShared(int n)
+    {
+        Set<int> seen = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let total = 0;
+        for (let i = 0; i < n; i++) {
+            let copy = seen;
+            copy.add(i);
+            total += copy.count();
+        }
+        return total;
+    }
+
     public static int filterWithLambda(int n)
     {
         List<int> items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
