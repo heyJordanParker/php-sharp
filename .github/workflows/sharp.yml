@@ -383,9 +383,11 @@ jobs:
     # head.repo.fork can't tell, because it is itself a fork of php/php-src. A job never installs on them, so they
     # check that Homebrew already has the build's formulae and build without ccache. Only the runner labelled
     # macos-arm64-suite takes it, so suites queue one at a time: the runners share one Mac, and three suites at once
-    # each ran past the 60-minute limit.
+    # each ran past the 60-minute limit. That Mac also builds the work the suite checks, so one suite alone takes 53
+    # minutes at moderate load and ran past 60 under a build. The limit leaves room for that, as php-src's own macOS
+    # jobs in test-suite.yml leave 180.
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'macos-arm64-suite' || 'macos-latest' }}
-    timeout-minutes: 60
+    timeout-minutes: 120
     env:
       FORMULAE: autoconf bison curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
     steps:
