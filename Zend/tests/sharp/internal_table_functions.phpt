@@ -2,7 +2,7 @@
 Each Sharp\Internal function a Map's or a Set's member runs reads or changes its table, a change separates a table another variable shares only when it changes, and a value of another kind is a TypeError that names what the function takes
 --FILE--
 <?php
-$map = new Sharp\Map(['a' => 1, 'b' => 2, 'c' => 3]);
+$map = new Sharp\Map(['a', 1, 'b', 2, 'c', 3]);
 $set = new Sharp\Set(['x', 'y']);
 var_dump(Sharp\Internal\containsKey($map, 'a'), Sharp\Internal\containsKey($set, 'z'));
 echo json_encode(Sharp\Internal\keys($map)), ' ', json_encode(Sharp\Internal\keys($set)), ' ',

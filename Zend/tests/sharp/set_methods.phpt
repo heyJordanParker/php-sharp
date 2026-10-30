@@ -283,6 +283,6 @@ object(Sharp\Set)#%d (2) {
 }
 object(Sharp\Set)#%d (1) {
   [0]=>
-  object(stdClass)#13 (0) {
+  object(stdClass)#%d (0) {
   }
 }
