@@ -1,0 +1,15 @@
+namespace Equatables;
+
+public abstract class DatabaseEntity
+{
+    public int id { get; }
+
+    public DatabaseEntity(int id)
+    {
+        this.id = id;
+    }
+
+    public static bool operator ==(DatabaseEntity a, DatabaseEntity b) => a.id == b.id;
+
+    public int hash() => this.id;
+}
