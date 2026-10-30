@@ -1220,13 +1220,13 @@ static void sharp_list_renumber(zval *array, zend_long index, zval *value, zval 
 
 static bool sharp_table_made_with(zend_execute_data *execute_data, zend_object *table, zend_string *text, uint32_t argument);
 
-/* A List's entries: the Map of each index to its element, of the type arguments `type_arguments`, the
- * argument `type_argument`, spells. */
+/* A List's entries: the Map of each index to its element, of the type arguments `type_arguments`, which `entries()`
+ * takes as its second argument, spells. */
 static void sharp_list_entries(zend_execute_data *execute_data, HashTable *list, zend_string *type_arguments,
-	uint32_t type_argument, zval *return_value)
+	zval *return_value)
 {
 	object_init_ex(return_value, sharp_ce_map);
-	if (!sharp_table_made_with(execute_data, Z_OBJ_P(return_value), type_arguments, type_argument)) {
+	if (!sharp_table_made_with(execute_data, Z_OBJ_P(return_value), type_arguments, 2)) {
 		RETURN_THROWS();
 	}
 	sharp_table *table = sharp_table_of(Z_OBJ_P(return_value));
@@ -2577,7 +2577,7 @@ ZEND_FUNCTION(Sharp_Internal_entries)
 	if (!sharp_list_argument(list)) {
 		RETURN_THROWS();
 	}
-	sharp_list_entries(execute_data, list, type_arguments, 2, return_value);
+	sharp_list_entries(execute_data, list, type_arguments, return_value);
 }
 
 static bool sharp_set_fill(zend_object *set, HashTable *values);
@@ -8363,7 +8363,7 @@ zval *sharp_property_from_reference(zval *slot, zend_object *object, const zend_
 	return slot;
 }
 
-bool sharp_property_for_write(zval *result, zend_object *object, zval *slot, const zend_property_info *info)
+bool sharp_property_for_write(zend_object *object, zval *slot, const zend_property_info *info)
 {
 	/* The unset fetch before a `ref` change's ZEND_SEPARATE takes the reference the change made, see
 	 * zend_sharp_separate_place. */
@@ -8379,7 +8379,7 @@ bool sharp_property_for_write(zval *result, zend_object *object, zval *slot, con
 		return false;
 	}
 	/* An array plain PHP still holds a reference to is written in place, as plain PHP's writes through it are. */
-	if (!(info->flags & ZEND_ACC_SHARP_CROSSING) || (result && !object)) {
+	if (!(info->flags & ZEND_ACC_SHARP_CROSSING)) {
 		zval_ptr_dtor(&value);
 		return true;
 	}

@@ -2016,7 +2016,7 @@ static void ZEND_FASTCALL zend_jit_fetch_obj_r_slow(zend_object *zobj)
 	const zend_op *opline = EX(opline);
 	zend_string *name = Z_STR_P(RT_CONSTANT(opline, opline->op2));
 	zval *result = EX_VAR(opline->result.var);
-	void **cache_slot = CACHE_ADDR(opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR));
+	void **cache_slot = CACHE_ADDR(opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS);
 
 	retval = zobj->handlers->read_property(zobj, name, BP_VAR_R, cache_slot, result);
 	if (retval != result) {
@@ -2034,7 +2034,7 @@ static void ZEND_FASTCALL zend_jit_fetch_obj_r_dynamic(zend_object *zobj, intptr
 		const zend_op *opline = EX(opline);
 		zend_string *name = Z_STR_P(RT_CONSTANT(opline, opline->op2));
 		zval *result = EX_VAR(opline->result.var);
-		void **cache_slot = CACHE_ADDR(opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR));
+		void **cache_slot = CACHE_ADDR(opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS);
 
 		if (!IS_UNKNOWN_DYNAMIC_PROPERTY_OFFSET(prop_offset)) {
 			intptr_t idx = ZEND_DECODE_DYN_PROP_OFFSET(prop_offset);
@@ -2128,7 +2128,7 @@ static zval* ZEND_FASTCALL zend_jit_fetch_obj_r_slow_ex(zend_object *zobj)
 	const zend_op *opline = EX(opline);
 	zend_string *name = Z_STR_P(RT_CONSTANT(opline, opline->op2));
 	zval *result = EX_VAR(opline->result.var);
-	void **cache_slot = CACHE_ADDR(opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR));
+	void **cache_slot = CACHE_ADDR(opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS);
 
 	retval = zobj->handlers->read_property(zobj, name, BP_VAR_R, cache_slot, result);
 	if (UNEXPECTED(Z_ISREF_P(retval))) {
@@ -2149,7 +2149,7 @@ static zval* ZEND_FASTCALL zend_jit_fetch_obj_r_dynamic_ex(zend_object *zobj, in
 		zend_execute_data *execute_data = EG(current_execute_data);
 		const zend_op *opline = EX(opline);
 		zend_string *name = Z_STR_P(RT_CONSTANT(opline, opline->op2));
-		void **cache_slot = CACHE_ADDR(opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR));
+		void **cache_slot = CACHE_ADDR(opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS);
 
 		if (!IS_UNKNOWN_DYNAMIC_PROPERTY_OFFSET(prop_offset)) {
 			intptr_t idx = ZEND_DECODE_DYN_PROP_OFFSET(prop_offset);
@@ -2340,8 +2340,7 @@ static void ZEND_FASTCALL zend_jit_fetch_obj_w_slow(zend_object *zobj)
 	zend_property_info *sharp_info = CACHED_PTR_EX(cache_slot + 2);
 	bool sharp = sharp_info && UNEXPECTED(sharp_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
 		&& sharp_function_is_sharp(EX(func));
-	if (sharp && UNEXPECTED(Z_ISREF_P(retval))
-	 && UNEXPECTED(!sharp_property_for_write(flags == ZEND_FETCH_DIM_WRITE ? result : NULL, zobj, retval, sharp_info))) {
+	if (sharp && UNEXPECTED(Z_ISREF_P(retval)) && UNEXPECTED(!sharp_property_for_write(zobj, retval, sharp_info))) {
 		ZVAL_ERROR(result);
 		return;
 	}
@@ -2377,12 +2376,9 @@ static void ZEND_FASTCALL zend_jit_check_array_promotion(zval *val, zend_propert
 	/* PHP#: PHP# code checks a slot plain PHP turned into a reference before it writes into it, as the VM does. */
 	bool sharp = UNEXPECTED(prop->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
 		&& sharp_function_is_sharp(EX(func));
-	if (UNEXPECTED(Z_ISREF_P(val)) && sharp) {
-		ZVAL_INDIRECT(result, val);
-		if (UNEXPECTED(!sharp_property_for_write(result, zobj, val, prop))) {
-			ZVAL_ERROR(result);
-			return;
-		}
+	if (UNEXPECTED(Z_ISREF_P(val)) && sharp && UNEXPECTED(!sharp_property_for_write(zobj, val, prop))) {
+		ZVAL_ERROR(result);
+		return;
 	}
 
 	if ((Z_TYPE_P(val) <= IS_FALSE
@@ -2427,7 +2423,7 @@ static bool ZEND_FASTCALL zend_jit_sharp_fetch_ref(zval *val, zend_property_info
 	zend_execute_data *execute_data = EG(current_execute_data);
 	bool sharp = sharp_function_is_sharp(EX(func));
 
-	if (Z_ISREF_P(val) && sharp && !sharp_property_for_write(NULL, zobj, val, prop)) {
+	if (Z_ISREF_P(val) && sharp && !sharp_property_for_write(zobj, val, prop)) {
 		ZVAL_ERROR(result);
 		return false;
 	}

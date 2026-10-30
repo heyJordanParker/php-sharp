@@ -72,4 +72,12 @@ public class Ledger
         let held = listed ? names : tags;
         return held.contains(name);
     }
+
+    // A member of a value that may be a List, an object or an Iterable runs the List's member on a List, the object's
+    // own method on the object, and the Iterable's member on anything else a loop reads.
+    public static int listed(int pick, List<int> items, Box box, Iterable<string> names) =>
+        (pick == 0 ? items : (pick == 1 ? box : names)).toList().count();
+
+    public static int streamed(bool listed, List<int> items, Iterable<string> names) =>
+        (listed ? items : names).toList().count();
 }

@@ -16415,12 +16415,12 @@ static int zend_jit_fetch_static_prop(zend_jit_ctx *jit, const zend_op *opline, 
 	 * handler. */
 	if (known_prop_info && sharp_function_is_sharp((const zend_function *) op_array)
 	 && sharp_property_checks_on_read(known_prop_info)) {
-		// JIT: if (Z_ISREF_P(result) && !sharp_property_for_write(NULL, NULL, result, property_info))
+		// JIT: if (Z_ISREF_P(result) && !sharp_property_for_write(NULL, result, property_info))
 		ir_ref if_reference = ir_IF(ir_EQ(jit_Z_TYPE_ref(jit, ref), ir_CONST_U8(IS_REFERENCE)));
 		ir_IF_TRUE_cold(if_reference);
 		jit_SET_EX_OPLINE(jit, opline);
-		ir_ref if_held = ir_IF(ir_CALL_4(IR_BOOL, ir_CONST_FUNC(sharp_property_for_write),
-			IR_NULL, IR_NULL, ref, ir_CONST_ADDR(known_prop_info)));
+		ir_ref if_held = ir_IF(ir_CALL_3(IR_BOOL, ir_CONST_FUNC(sharp_property_for_write),
+			IR_NULL, ref, ir_CONST_ADDR(known_prop_info)));
 		ir_IF_FALSE_cold(if_held);
 		ir_IJMP(jit_STUB_ADDR(jit, jit_stub_exception_handler_undef));
 		ir_IF_TRUE(if_held);
