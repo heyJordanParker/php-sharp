@@ -3,7 +3,7 @@
 # one under sharp/docker.
 #
 # docker-library/php 8.5/trixie/zts at f6048b5f6e3c2202ee082665a4ccc0d90de291a3, built from this repository's source
-# instead of the php.net tarball, then FrankenPHP v1.13.1's Dockerfile stages on top of it, as FrankenPHP builds on
+# instead of the php.net tarball, then FrankenPHP v1.13.4's Dockerfile stages on top of it, as FrankenPHP builds on
 # php:8.5-zts-trixie.
 #
 
@@ -247,14 +247,14 @@ ENTRYPOINT ["docker-php-entrypoint"]
 
 FROM scratch AS frankenphp-source
 
-# v1.13.1 takes golang.org/x/net v0.61.0, which fixes CVE-2026-78669 in v1.13.0's v0.59.0. The source is fetched by
-# the commit its v1.13.1 tag names, so a moved tag builds nothing else.
-ADD https://github.com/php/frankenphp.git#99d4e119ca2e5a90a69d8dbee5d5c9a8016416c5 /
+# v1.13.4 takes github.com/go-jose/go-jose/v4 v4.1.6, which fixes CVE-2026-116587 in v1.13.1's v4.1.5. The source is
+# fetched by the commit its v1.13.4 tag names, so a moved tag builds nothing else.
+ADD https://github.com/php/frankenphp.git#7f50be9d86261bf7cff9b051ab4fb572e95020ed /
 
 FROM ${GOLANG_IMAGE} AS golang-base
 
 #
-# FrankenPHP v1.13.1's Dockerfile, with e-dant/watcher and install-php-extensions at fixed releases, each checked
+# FrankenPHP v1.13.4's Dockerfile, with e-dant/watcher and install-php-extensions at fixed releases, each checked
 # against its SHA-256.
 #
 
@@ -267,6 +267,8 @@ RUN apt-get update && \
 		mailcap \
 		libcap2-bin \
 	&& \
+	# TODO: remove once the php base images ship the CVE-2026-111497 fix
+	apt-get -y --no-install-recommends install --only-upgrade libbrotli1 && \
 	apt-get clean && \
 	# Remove files with non-deterministic content (embedded timestamps and mtimes) to keep image digests reproducible
 	rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /var/log/alternatives.log /var/cache/ldconfig/aux-cache
@@ -303,7 +305,7 @@ EXPOSE 2019
 
 FROM common AS builder
 
-ARG FRANKENPHP_VERSION='1.13.1'
+ARG FRANKENPHP_VERSION='1.13.4'
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 COPY --from=golang-base /usr/local/go /usr/local/go
@@ -329,7 +331,23 @@ RUN apt-get update && \
 	&& \
 	apt-get clean
 
-# Install e-dant/watcher (necessary for file watching), at the release FrankenPHP v1.13.1's go.mod pins
+# TODO: temporary, remove with Bookworm (and in the runner): it ships libbrotli 1.0.9, cbrotli needs >= 1.1 and 1.2.1 fixes CVE-2026-111497
+WORKDIR /usr/local/src/brotli
+RUN set -eux; \
+	if pkg-config --atleast-version=1.1 libbrotlienc; then \
+		exit 0; \
+	fi; \
+	curl -fsSL -o brotli.tar.gz https://github.com/google/brotli/archive/refs/tags/v1.2.1.tar.gz; \
+	echo '98d35d11a78dc453aebb7d10c3748f3f73ff78c8267c0dc697b8631f67bf7e8f  brotli.tar.gz' | sha256sum -c -; \
+	tar xzf brotli.tar.gz --strip-components 1; \
+	cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF; \
+	cmake --build build; \
+	cmake --install build; \
+	# Multiarch dirs sort before libc.conf on arm64, arm and i386, so the distro libbrotli would win
+	echo /usr/local/lib > /etc/ld.so.conf.d/000-brotli.conf; \
+	ldconfig
+
+# Install e-dant/watcher (necessary for file watching), at the release FrankenPHP v1.13.4's go.mod pins
 WORKDIR /usr/local/src/watcher
 RUN set -eux; \
 	curl -fsSL -o /tmp/watcher.tar.gz https://github.com/e-dant/watcher/archive/refs/tags/0.14.5.tar.gz; \
@@ -366,12 +384,13 @@ FROM common AS runner
 
 ENV GODEBUG=cgocheck=0
 
-# copy watcher shared library
-COPY --from=builder /usr/local/lib/libwatcher* /usr/local/lib/
+# copy watcher and brotli (Bookworm only, temporary) shared libraries
+COPY --from=builder /usr/local/lib/libwatcher* /usr/local/lib/libbrotli* /usr/local/lib/
 # fix for the file watcher on arm
 RUN apt-get update && \
 	apt-get install -y --no-install-recommends libstdc++6 && \
 	apt-get clean && \
+	if [ -e /usr/local/lib/libbrotlicommon.so.1 ]; then echo /usr/local/lib > /etc/ld.so.conf.d/000-brotli.conf; fi && \
 	ldconfig && \
 	# Remove files with non-deterministic content (embedded timestamps and mtimes) to keep image digests reproducible
 	rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /var/log/alternatives.log /var/cache/ldconfig/aux-cache
