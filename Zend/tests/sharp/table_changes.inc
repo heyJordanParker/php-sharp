@@ -25,6 +25,12 @@ for ($round = 0; $round < 3; $round++) {
     $box = new Box();
     echo implode(' ', array_map(fn ($pick) => Ledger::counted($pick, [1], ['a' => 1, 'b' => 2], [1, 2, 3], $box), [0, 1, 2, 3])), "\n";
     var_dump(Ledger::holds(false, [3], $box, 3), Ledger::holds(true, [3], $box, 3), Ledger::holds(true, [3], $box, 7));
+    echo json_encode([
+        Ledger::found(true, ['tea'], ['milk'], 'tea'),
+        Ledger::found(true, ['tea'], ['milk'], 'milk'),
+        Ledger::found(false, ['tea'], ['milk'], 'milk'),
+        Ledger::found(false, ['tea'], ['milk'], 'tea'),
+    ]), "\n";
     $output = ob_get_clean();
 }
 

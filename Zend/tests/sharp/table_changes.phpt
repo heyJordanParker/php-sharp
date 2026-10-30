@@ -16,3 +16,4 @@ bool(false)
 bool(true)
 bool(false)
 bool(true)
+[true,false,true,false]

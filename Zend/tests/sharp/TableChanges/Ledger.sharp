@@ -65,4 +65,11 @@ public class Ledger
         let held = boxed ? box : tags;
         return held.contains(value);
     }
+
+    // A member every collection kind of a union has runs the member of the kind the value holds.
+    public static bool found(bool listed, List<string> names, Set<string> tags, string name)
+    {
+        let held = listed ? names : tags;
+        return held.contains(name);
+    }
 }
