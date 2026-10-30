@@ -4,27 +4,6 @@
 
 namespace Sharp;
 
-/**
- * @strict-properties
- * @not-serializable
- */
-final class Sequence implements \IteratorAggregate
-{
-    private function __construct() {}
-
-    public static function from(iterable $source): Sequence {}
-
-    public function filter(\Closure $predicate): Sequence {}
-
-    public function map(\Closure $transform): Sequence {}
-
-    public function take(int $count): Sequence {}
-
-    public function toList(): array {}
-
-    public function getIterator(): \Iterator {}
-}
-
 /** @strict-properties */
 final class Position
 {
@@ -66,6 +45,27 @@ final class Listening
 }
 
 namespace Sharp\Internal;
+
+/**
+ * @strict-properties
+ * @not-serializable
+ */
+final class Sequence implements \IteratorAggregate
+{
+    private function __construct() {}
+
+    public static function from(iterable $source): Sequence {}
+
+    public function filter(\Closure $predicate): Sequence {}
+
+    public function map(\Closure $transform): Sequence {}
+
+    public function take(int $count): Sequence {}
+
+    public function toList(): array {}
+
+    public function getIterator(): \Iterator {}
+}
 
 /**
  * @strict-properties
@@ -131,6 +131,8 @@ function containsKey(\Sharp\Map|\Sharp\Set $table, mixed $key): bool {}
 function removeKey(\Sharp\Map|\Sharp\Set &$table, mixed $key): bool {}
 
 function addKey(\Sharp\Set &$table, mixed $key): bool {}
+
+function put(\Sharp\Map &$map, mixed $key, mixed $value): void {}
 
 function keys(\Sharp\Map|\Sharp\Set $table): array {}
 

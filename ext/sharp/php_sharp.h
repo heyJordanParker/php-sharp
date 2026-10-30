@@ -104,8 +104,8 @@ zval *sharp_property_from_reference(zval *slot, zend_object *object, const zend_
 /* PHP# code fetches `slot`, the reference of a property of `object`, or of no object for a static one, to write, in any
  * fetch mode, as `this.counts[1] += 1` reads it first. Checks it as sharp_property_from_reference does, and gives false
  * after the TypeError. While plain PHP still holds the reference, the write goes into what it holds, except into a
- * #[\Sharp\Crossing] property's Map or Set: an index write, which passes `result`, changes the table the reference takes
- * first, and a `ref` member changes the table the reference holds until the unset fetch after the call crosses it back. */
+ * #[\Sharp\Crossing] property's Map or Set, which a `ref` member changes in the reference until the unset fetch after
+ * the call crosses it back. */
 bool sharp_property_for_write(zval *result, zend_object *object, zval *slot, const zend_property_info *info);
 /* The running code is about to change `slot`, of the property `info` of `object`, with `++`, `--` or a compound
  * assignment, which reads it first. When PHP# code does and plain PHP turned the slot into a reference, checks it

@@ -1934,13 +1934,13 @@ static void sharp_sequence_closure_stage(INTERNAL_FUNCTION_PARAMETERS, sharp_seq
 	Z_ADDREF(sequence->fci.function_name);
 }
 
-ZEND_METHOD(Sharp_Sequence, __construct)
+ZEND_METHOD(Sharp_Internal_Sequence, __construct)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
 }
 
 /* A Sequence is already one, so a local that holds a chain's result chains on without a second stage. */
-ZEND_METHOD(Sharp_Sequence, from)
+ZEND_METHOD(Sharp_Internal_Sequence, from)
 {
 	zval *source;
 
@@ -1955,17 +1955,17 @@ ZEND_METHOD(Sharp_Sequence, from)
 	sharp_sequence_new(return_value, SHARP_SEQUENCE_FROM, source);
 }
 
-ZEND_METHOD(Sharp_Sequence, filter)
+ZEND_METHOD(Sharp_Internal_Sequence, filter)
 {
 	sharp_sequence_closure_stage(INTERNAL_FUNCTION_PARAM_PASSTHRU, SHARP_SEQUENCE_FILTER);
 }
 
-ZEND_METHOD(Sharp_Sequence, map)
+ZEND_METHOD(Sharp_Internal_Sequence, map)
 {
 	sharp_sequence_closure_stage(INTERNAL_FUNCTION_PARAM_PASSTHRU, SHARP_SEQUENCE_MAP);
 }
 
-ZEND_METHOD(Sharp_Sequence, take)
+ZEND_METHOD(Sharp_Internal_Sequence, take)
 {
 	zend_long count;
 
@@ -2001,7 +2001,7 @@ static bool sharp_sequence_append(zval *sequence, zval *list)
 	return !EG(exception);
 }
 
-ZEND_METHOD(Sharp_Sequence, toList)
+ZEND_METHOD(Sharp_Internal_Sequence, toList)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
 
@@ -2435,6 +2435,23 @@ ZEND_FUNCTION(Sharp_Internal_addKey)
 	RETURN_TRUE;
 }
 
+/* A Map's `set`, which `map[key] = value` runs: inserts the key with the value, or replaces the value of an equal key. */
+ZEND_FUNCTION(Sharp_Internal_put)
+{
+	zval *map, *key, *value;
+
+	ZEND_PARSE_PARAMETERS_START(3, 3)
+		Z_PARAM_OBJECT_OF_CLASS_EX(map, sharp_ce_map, 0, 1)
+		Z_PARAM_ZVAL(key)
+		Z_PARAM_ZVAL(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	SHARP_SEPARATE(map);
+	if (!sharp_table_put(sharp_table_of(Z_OBJ_P(map)), key, value)) {
+		RETURN_THROWS();
+	}
+}
+
 /* A Map's `keys()` and a Set's `toList()`: the List of its keys, which are a Set's elements. */
 ZEND_FUNCTION(Sharp_Internal_keys)
 {
@@ -2808,7 +2825,7 @@ ZEND_FUNCTION(Sharp_Internal_sortedBy)
 	sharp_sorted_by(elements, &fci, &fcc, comparison, return_value);
 }
 
-ZEND_METHOD(Sharp_Sequence, getIterator)
+ZEND_METHOD(Sharp_Internal_Sequence, getIterator)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
 
@@ -8367,17 +8384,11 @@ bool sharp_property_for_write(zval *result, zend_object *object, zval *slot, con
 		return true;
 	}
 
-	/* A #[\Sharp\Crossing] property's index write, which passes `result`, changes the Map or the Set the array crosses
-	 * into in place: the reference takes it first, with the typed-reference assignment, as a write of the property
-	 * stores it. */
-	zend_reference *reference = Z_REF_P(slot);
-	if (result) {
-		return zend_try_assign_typed_ref(reference, &value) == SUCCESS;
-	}
 	/* A `ref` member's fetch finds the array the reference holds for plain PHP, and the reference holds the Map or the
 	 * Set it crosses back into while the member changes it in place. The unset fetch after the call finds that table,
 	 * and the reference takes the array it crosses into, with the typed-reference assignment, so plain PHP sees the
 	 * change, see zend_sharp_separate_place. */
+	zend_reference *reference = Z_REF_P(slot);
 	if (SHARP_IS_TABLE(&reference->val)) {
 		return zend_try_assign_typed_ref(reference, &value) == SUCCESS;
 	}
@@ -9468,7 +9479,7 @@ static void register_class_Sharp_Crossing(void)
 static PHP_MINIT_FUNCTION(sharp)
 {
 	REGISTER_INI_ENTRIES();
-	sharp_ce_sequence = register_class_Sharp_Sequence(zend_ce_aggregate);
+	sharp_ce_sequence = register_class_Sharp_Internal_Sequence(zend_ce_aggregate);
 	sharp_ce_sequence->create_object = sharp_sequence_create;
 	sharp_ce_sequence->get_iterator = sharp_sequence_get_iterator;
 	memcpy(&sharp_sequence_handlers, &std_object_handlers, sizeof(zend_object_handlers));

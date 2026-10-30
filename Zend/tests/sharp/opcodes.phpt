@@ -365,49 +365,61 @@ Site/Square: same opcodes and lines in 3 op arrays, same signatures in 1 classes
 Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in 1 classes
   check  Demo\Cart::fill string("List<Demo.Item>")
   check  Demo\Cart::withPrices string("List<int>, List<int>")
-  .sharp      ; (lines=58, args=1, vars=5, tmps=34)
+  .sharp      ; (lines=68, args=1, vars=5, tmps=36)
   .sharp L0013 0014 V12 = FETCH_OBJ_UNSET THIS string("items")
   .sharp L0013 0015 V12 = SEPARATE V12
-  .sharp L0014 0016 T15 = FETCH_OBJ_R THIS string("items")
-  .sharp L0014 0017 T16 = COUNT T15
-  .sharp L0014 0018 V13 = FETCH_OBJ_W (dim write) THIS string("counts")
-  .sharp L0014 0019 ASSIGN_DIM V13 string("items")
-  .sharp L0014 0020 OP_DATA T16
-  .sharp L0015 0021 T19 = COUNT CV0($extra)
-  .sharp L0015 0022 V17 = FETCH_OBJ_W (dim write) THIS string("counts")
-  .sharp L0015 0023 ASSIGN_DIM V17 string("extra")
-  .sharp L0015 0024 OP_DATA T19
-  .sharp L0016 0025 T20 = FETCH_OBJ_R THIS string("items")
-  .sharp L0016 0026 T21 = FETCH_DIM_R T20 int(0)
-  .sharp L0016 0027 T22 = FETCH_OBJ_R T21 string("cents")
-  .sharp L0016 0028 ASSIGN CV1($total) T22
-  .sharp L0017 0029 T24 = FETCH_OBJ_R THIS string("items")
-  .sharp L0017 0030 V25 = FE_RESET_R T24 0035
-  .sharp L0017 0031 FE_FETCH_R V25 CV2($item) 0035
-  .sharp L0018 0032 T26 = FETCH_OBJ_R CV2($item) string("cents")
-  .sharp L0018 0033 ASSIGN_OP (ADD) CV1($total) T26
-  .sharp L0017 0034 JMP 0031
-  .sharp L0017 0035 FE_FREE V25
-  .sharp L0020 0036 T28 = FETCH_OBJ_R THIS string("counts")
-  .sharp L0020 0037 V29 = FE_RESET_R T28 0045
-  .sharp L0020 0038 T30 = FE_FETCH_R V29 CV3($size) 0045
-  .sharp L0020 0039 ASSIGN CV4($name) T30
-  .sharp L0021 0040 T32 = IS_IDENTICAL CV4($name) string("items")
-  .sharp L0021 0041 JMPZ T32 0044
-  .sharp L0022 0042 T33 = MUL CV3($size) int(10)
-  .sharp L0022 0043 ASSIGN_OP (ADD) CV1($total) T33
-  .sharp L0020 0044 JMP 0038
-  .sharp L0020 0045 FE_FREE V29
-  .sharp L0025 0046 INIT_STATIC_METHOD_CALL 1 string("Lib\\Slots") string("fromArray")
-  .sharp L0025 0047 INIT_METHOD_CALL 0 THIS string("prices")
-  .sharp L0025 0049 SEND_VAR_NO_REF_EX V35 1
-  .sharp L0025 0051 INIT_METHOD_CALL 0 V36 string("getSize")
-  .sharp L0025 0052 V37 = DO_FCALL
-  .sharp L0025 0053 T38 = ADD CV1($total) V37
-  .sharp L0025 0054 VERIFY_RETURN_TYPE T38
-  .sharp L0025 0055 RETURN T38
-  .sharp L0026 0056 VERIFY_RETURN_TYPE
-  .sharp L0026 0057 RETURN null
+  .sharp L0014 0016 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp L0014 0017 V13 = FETCH_OBJ_W (ref) THIS string("counts")
+  .sharp L0014 0018 SEND_REF V13 1
+  .sharp L0014 0019 SEND_VAL string("items") 2
+  .sharp L0014 0020 T14 = FETCH_OBJ_R THIS string("items")
+  .sharp L0014 0021 T15 = COUNT T14
+  .sharp L0014 0022 SEND_VAL T15 3
+  .sharp L0014 0023 DO_ICALL
+  .sharp L0014 0024 V17 = FETCH_OBJ_UNSET THIS string("counts")
+  .sharp L0014 0025 V17 = SEPARATE V17
+  .sharp L0015 0026 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp L0015 0027 V18 = FETCH_OBJ_W (ref) THIS string("counts")
+  .sharp L0015 0028 SEND_REF V18 1
+  .sharp L0015 0029 SEND_VAL string("extra") 2
+  .sharp L0015 0030 T19 = COUNT CV0($extra)
+  .sharp L0015 0031 SEND_VAL T19 3
+  .sharp L0015 0032 DO_ICALL
+  .sharp L0015 0033 V21 = FETCH_OBJ_UNSET THIS string("counts")
+  .sharp L0015 0034 V21 = SEPARATE V21
+  .sharp L0016 0035 T22 = FETCH_OBJ_R THIS string("items")
+  .sharp L0016 0036 T23 = FETCH_DIM_R T22 int(0)
+  .sharp L0016 0037 T24 = FETCH_OBJ_R T23 string("cents")
+  .sharp L0016 0038 ASSIGN CV1($total) T24
+  .sharp L0017 0039 T26 = FETCH_OBJ_R THIS string("items")
+  .sharp L0017 0040 V27 = FE_RESET_R T26 0045
+  .sharp L0017 0041 FE_FETCH_R V27 CV2($item) 0045
+  .sharp L0018 0042 T28 = FETCH_OBJ_R CV2($item) string("cents")
+  .sharp L0018 0043 ASSIGN_OP (ADD) CV1($total) T28
+  .sharp L0017 0044 JMP 0041
+  .sharp L0017 0045 FE_FREE V27
+  .sharp L0020 0046 T30 = FETCH_OBJ_R THIS string("counts")
+  .sharp L0020 0047 V31 = FE_RESET_R T30 0055
+  .sharp L0020 0048 T32 = FE_FETCH_R V31 CV3($size) 0055
+  .sharp L0020 0049 ASSIGN CV4($name) T32
+  .sharp L0021 0050 T34 = IS_IDENTICAL CV4($name) string("items")
+  .sharp L0021 0051 JMPZ T34 0054
+  .sharp L0022 0052 T35 = MUL CV3($size) int(10)
+  .sharp L0022 0053 ASSIGN_OP (ADD) CV1($total) T35
+  .sharp L0020 0054 JMP 0048
+  .sharp L0020 0055 FE_FREE V31
+  .sharp L0025 0056 INIT_STATIC_METHOD_CALL 1 string("Lib\\Slots") string("fromArray")
+  .sharp L0025 0057 INIT_METHOD_CALL 0 THIS string("prices")
+  .sharp L0025 0058 V37 = DO_FCALL
+  .sharp L0025 0059 SEND_VAR_NO_REF_EX V37 1
+  .sharp L0025 0060 V38 = DO_FCALL
+  .sharp L0025 0061 INIT_METHOD_CALL 0 V38 string("getSize")
+  .sharp L0025 0062 V39 = DO_FCALL
+  .sharp L0025 0063 T40 = ADD CV1($total) V39
+  .sharp L0025 0064 VERIFY_RETURN_TYPE T40
+  .sharp L0025 0065 RETURN T40
+  .sharp L0026 0066 VERIFY_RETURN_TYPE
+  .sharp L0026 0067 RETURN null
   .sharp      ; (lines=16, args=0, vars=2, tmps=5)
   .sharp L0031 0002 V4 = FE_RESET_R T3 0011
   .sharp L0031 0003 FE_FETCH_R V4 CV1($item) 0011
@@ -418,54 +430,86 @@ Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in
   .sharp L0034 0013 RETURN CV0($prices)
   .sharp L0035 0014 VERIFY_RETURN_TYPE
   .sharp L0035 0015 RETURN null
-  .sharp      ; (lines=58, args=1, vars=5, tmps=34)
+  .sharp      ; (lines=22, args=1, vars=1, tmps=10)
+  .sharp L0039 0001 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp L0039 0002 V1 = FETCH_OBJ_W (ref) THIS string("counts")
+  .sharp L0039 0003 SEND_REF V1 1
+  .sharp L0039 0004 SEND_VAR CV0($name) 2
+  .sharp L0039 0005 T2 = FETCH_OBJ_IS THIS string("counts")
+  .sharp L0039 0006 T3 = FETCH_DIM_IS T2 CV0($name)
+  .sharp L0039 0007 T4 = COALESCE T3 0009
+  .sharp L0039 0008 T4 = QM_ASSIGN int(0)
+  .sharp L0039 0009 T5 = ADD T4 int(1)
+  .sharp L0039 0010 SEND_VAL T5 3
+  .sharp L0039 0011 DO_ICALL
+  .sharp L0039 0012 V7 = FETCH_OBJ_UNSET THIS string("counts")
+  .sharp L0039 0013 V7 = SEPARATE V7
+  .sharp L0040 0014 T8 = FETCH_OBJ_IS THIS string("counts")
+  .sharp L0040 0015 T9 = FETCH_DIM_IS T8 CV0($name)
+  .sharp L0040 0016 T10 = COALESCE T9 0018
+  .sharp L0040 0017 T10 = QM_ASSIGN int(0)
+  .sharp L0040 0018 VERIFY_RETURN_TYPE T10
+  .sharp L0040 0019 RETURN T10
+  .sharp L0041 0020 VERIFY_RETURN_TYPE
+  .sharp L0041 0021 RETURN null
+  .sharp      ; (lines=68, args=1, vars=5, tmps=36)
   .sharp 0014 V12 = FETCH_OBJ_UNSET THIS string("items")
   .sharp 0015 V12 = SEPARATE V12
-  .sharp 0016 T15 = FETCH_OBJ_R THIS string("items")
-  .sharp 0017 T16 = COUNT T15
-  .sharp 0018 V13 = FETCH_OBJ_W (dim write) THIS string("counts")
-  .sharp 0019 ASSIGN_DIM V13 string("items")
-  .sharp 0020 OP_DATA T16
-  .sharp 0021 T19 = COUNT CV0($extra)
-  .sharp 0022 V17 = FETCH_OBJ_W (dim write) THIS string("counts")
-  .sharp 0023 ASSIGN_DIM V17 string("extra")
-  .sharp 0024 OP_DATA T19
-  .sharp 0025 T20 = FETCH_OBJ_R THIS string("items")
-  .sharp 0026 T21 = FETCH_DIM_R T20 int(0)
-  .sharp 0027 T22 = FETCH_OBJ_R T21 string("cents")
-  .sharp 0028 ASSIGN CV1($total) T22
-  .sharp 0029 T24 = FETCH_OBJ_R THIS string("items")
-  .sharp 0030 V25 = FE_RESET_R T24 0035
-  .sharp 0031 FE_FETCH_R V25 CV2($item) 0035
-  .sharp 0032 T26 = FETCH_OBJ_R CV2($item) string("cents")
-  .sharp 0033 ASSIGN_OP (ADD) CV1($total) T26
-  .sharp 0034 JMP 0031
-  .sharp 0035 FE_FREE V25
-  .sharp 0036 T28 = FETCH_OBJ_R THIS string("counts")
-  .sharp 0037 V29 = FE_RESET_R T28 0045
-  .sharp 0038 T30 = FE_FETCH_R V29 CV3($size) 0045
-  .sharp 0039 ASSIGN CV4($name) T30
-  .sharp 0040 T32 = IS_IDENTICAL CV4($name) string("items")
-  .sharp 0041 JMPZ T32 0044
-  .sharp 0042 T33 = MUL CV3($size) int(10)
-  .sharp 0043 ASSIGN_OP (ADD) CV1($total) T33
-  .sharp 0044 JMP 0038
-  .sharp 0045 FE_FREE V29
-  .sharp 0046 INIT_STATIC_METHOD_CALL 1 string("Lib\\Slots") string("fromArray")
-  .sharp 0047 INIT_METHOD_CALL 0 THIS string("prices")
-  .sharp 0049 SEND_VAR_NO_REF_EX V35 1
-  .sharp 0051 INIT_METHOD_CALL 0 V36 string("getSize")
-  .sharp 0052 V37 = DO_FCALL
-  .sharp 0053 T38 = ADD CV1($total) V37
-  .sharp 0054 VERIFY_RETURN_TYPE T38
-  .sharp 0055 RETURN T38
-  .sharp 0056 VERIFY_RETURN_TYPE
-  .sharp 0057 RETURN null
-  .sharp      16: 0018 - 0019 (tmp/var)
-  .sharp      19: 0022 - 0023 (tmp/var)
-  .sharp      25: 0031 - 0035 (loop)
-  .sharp      29: 0038 - 0045 (loop)
-  .sharp      38: 0054 - 0055 (tmp/var)
+  .sharp 0016 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp 0017 V13 = FETCH_OBJ_W (ref) THIS string("counts")
+  .sharp 0018 SEND_REF V13 1
+  .sharp 0019 SEND_VAL string("items") 2
+  .sharp 0020 T14 = FETCH_OBJ_R THIS string("items")
+  .sharp 0021 T15 = COUNT T14
+  .sharp 0022 SEND_VAL T15 3
+  .sharp 0023 DO_ICALL
+  .sharp 0024 V17 = FETCH_OBJ_UNSET THIS string("counts")
+  .sharp 0025 V17 = SEPARATE V17
+  .sharp 0026 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp 0027 V18 = FETCH_OBJ_W (ref) THIS string("counts")
+  .sharp 0028 SEND_REF V18 1
+  .sharp 0029 SEND_VAL string("extra") 2
+  .sharp 0030 T19 = COUNT CV0($extra)
+  .sharp 0031 SEND_VAL T19 3
+  .sharp 0032 DO_ICALL
+  .sharp 0033 V21 = FETCH_OBJ_UNSET THIS string("counts")
+  .sharp 0034 V21 = SEPARATE V21
+  .sharp 0035 T22 = FETCH_OBJ_R THIS string("items")
+  .sharp 0036 T23 = FETCH_DIM_R T22 int(0)
+  .sharp 0037 T24 = FETCH_OBJ_R T23 string("cents")
+  .sharp 0038 ASSIGN CV1($total) T24
+  .sharp 0039 T26 = FETCH_OBJ_R THIS string("items")
+  .sharp 0040 V27 = FE_RESET_R T26 0045
+  .sharp 0041 FE_FETCH_R V27 CV2($item) 0045
+  .sharp 0042 T28 = FETCH_OBJ_R CV2($item) string("cents")
+  .sharp 0043 ASSIGN_OP (ADD) CV1($total) T28
+  .sharp 0044 JMP 0041
+  .sharp 0045 FE_FREE V27
+  .sharp 0046 T30 = FETCH_OBJ_R THIS string("counts")
+  .sharp 0047 V31 = FE_RESET_R T30 0055
+  .sharp 0048 T32 = FE_FETCH_R V31 CV3($size) 0055
+  .sharp 0049 ASSIGN CV4($name) T32
+  .sharp 0050 T34 = IS_IDENTICAL CV4($name) string("items")
+  .sharp 0051 JMPZ T34 0054
+  .sharp 0052 T35 = MUL CV3($size) int(10)
+  .sharp 0053 ASSIGN_OP (ADD) CV1($total) T35
+  .sharp 0054 JMP 0048
+  .sharp 0055 FE_FREE V31
+  .sharp 0056 INIT_STATIC_METHOD_CALL 1 string("Lib\\Slots") string("fromArray")
+  .sharp 0057 INIT_METHOD_CALL 0 THIS string("prices")
+  .sharp 0058 V37 = DO_FCALL
+  .sharp 0059 SEND_VAR_NO_REF_EX V37 1
+  .sharp 0060 V38 = DO_FCALL
+  .sharp 0061 INIT_METHOD_CALL 0 V38 string("getSize")
+  .sharp 0062 V39 = DO_FCALL
+  .sharp 0063 T40 = ADD CV1($total) V39
+  .sharp 0064 VERIFY_RETURN_TYPE T40
+  .sharp 0065 RETURN T40
+  .sharp 0066 VERIFY_RETURN_TYPE
+  .sharp 0067 RETURN null
+  .sharp      27: 0041 - 0045 (loop)
+  .sharp      31: 0048 - 0055 (loop)
+  .sharp      40: 0064 - 0065 (tmp/var)
   .sharp      ; (lines=16, args=0, vars=2, tmps=5)
   .sharp 0002 V4 = FE_RESET_R T3 0011
   .sharp 0003 FE_FETCH_R V4 CV1($item) 0011
@@ -475,6 +519,29 @@ Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in
   .sharp 0012 VERIFY_RETURN_TYPE CV0($prices)
   .sharp 0013 RETURN CV0($prices)
   .sharp      4: 0003 - 0011 (loop)
+  .sharp      ; (lines=22, args=1, vars=1, tmps=10)
+  .sharp 0001 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp 0002 V1 = FETCH_OBJ_W (ref) THIS string("counts")
+  .sharp 0003 SEND_REF V1 1
+  .sharp 0004 SEND_VAR CV0($name) 2
+  .sharp 0005 T2 = FETCH_OBJ_IS THIS string("counts")
+  .sharp 0006 T3 = FETCH_DIM_IS T2 CV0($name)
+  .sharp 0007 T4 = COALESCE T3 0009
+  .sharp 0008 T4 = QM_ASSIGN int(0)
+  .sharp 0009 T5 = ADD T4 int(1)
+  .sharp 0010 SEND_VAL T5 3
+  .sharp 0011 DO_ICALL
+  .sharp 0012 V7 = FETCH_OBJ_UNSET THIS string("counts")
+  .sharp 0013 V7 = SEPARATE V7
+  .sharp 0014 T8 = FETCH_OBJ_IS THIS string("counts")
+  .sharp 0015 T9 = FETCH_DIM_IS T8 CV0($name)
+  .sharp 0016 T10 = COALESCE T9 0018
+  .sharp 0017 T10 = QM_ASSIGN int(0)
+  .sharp 0018 VERIFY_RETURN_TYPE T10
+  .sharp 0019 RETURN T10
+  .sharp 0020 VERIFY_RETURN_TYPE
+  .sharp 0021 RETURN null
+  .sharp      10: 0018 - 0019 (tmp/var)
   .sharp     Property [ private Sharp\Map $counts = Closure({closure:<file>:8})() ]
   .php        ; (lines=56, args=1, vars=5, tmps=33)
   .php   L0014 0014 T14 = FETCH_OBJ_R THIS string("items")
@@ -511,7 +578,9 @@ Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in
   .php   L0025 0045 INIT_METHOD_CALL 0 THIS string("prices")
   .php   L0025 0046 V34 = DO_FCALL
   .php   L0025 0047 SEND_VAR_NO_REF_EX V34 1
+  .php   L0025 0048 V35 = DO_FCALL
   .php   L0025 0049 INIT_METHOD_CALL 0 V35 string("getSize")
+  .php   L0025 0050 V36 = DO_FCALL
   .php   L0025 0051 T37 = ADD CV1($total) V36
   .php   L0025 0052 VERIFY_RETURN_TYPE T37
   .php   L0025 0053 RETURN T37
@@ -526,6 +595,23 @@ Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in
   .php   L0034 0012 RETURN CV0($prices)
   .php   L0035 0013 VERIFY_RETURN_TYPE
   .php   L0035 0014 RETURN null
+  .php        ; (lines=17, args=1, vars=1, tmps=9)
+  .php   L0039 0001 T3 = FETCH_OBJ_IS THIS string("counts")
+  .php   L0039 0002 T4 = FETCH_DIM_IS T3 CV0($name)
+  .php   L0039 0003 T5 = COALESCE T4 0005
+  .php   L0039 0004 T5 = QM_ASSIGN int(0)
+  .php   L0039 0005 T6 = ADD T5 int(1)
+  .php   L0039 0006 V1 = FETCH_OBJ_W (dim write) THIS string("counts")
+  .php   L0039 0007 ASSIGN_DIM V1 CV0($name)
+  .php   L0039 0008 OP_DATA T6
+  .php   L0040 0009 T7 = FETCH_OBJ_IS THIS string("counts")
+  .php   L0040 0010 T8 = FETCH_DIM_IS T7 CV0($name)
+  .php   L0040 0011 T9 = COALESCE T8 0013
+  .php   L0040 0012 T9 = QM_ASSIGN int(0)
+  .php   L0040 0013 VERIFY_RETURN_TYPE T9
+  .php   L0040 0014 RETURN T9
+  .php   L0041 0015 VERIFY_RETURN_TYPE
+  .php   L0041 0016 RETURN null
   .php        ; (lines=56, args=1, vars=5, tmps=33)
   .php   0014 T14 = FETCH_OBJ_R THIS string("items")
   .php   0015 T15 = COUNT T14
@@ -561,7 +647,9 @@ Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in
   .php   0045 INIT_METHOD_CALL 0 THIS string("prices")
   .php   0046 V34 = DO_FCALL
   .php   0047 SEND_VAR_NO_REF_EX V34 1
+  .php   0048 V35 = DO_FCALL
   .php   0049 INIT_METHOD_CALL 0 V35 string("getSize")
+  .php   0050 V36 = DO_FCALL
   .php   0051 T37 = ADD CV1($total) V36
   .php   0052 VERIFY_RETURN_TYPE T37
   .php   0053 RETURN T37
@@ -582,6 +670,25 @@ Collections/Cart: different opcodes and lines in 8 op arrays, same signatures in
   .php   0013 VERIFY_RETURN_TYPE
   .php   0014 RETURN null
   .php        4: 0003 - 0010 (loop)
+  .php        ; (lines=17, args=1, vars=1, tmps=9)
+  .php   0001 T3 = FETCH_OBJ_IS THIS string("counts")
+  .php   0002 T4 = FETCH_DIM_IS T3 CV0($name)
+  .php   0003 T5 = COALESCE T4 0005
+  .php   0004 T5 = QM_ASSIGN int(0)
+  .php   0005 T6 = ADD T5 int(1)
+  .php   0006 V1 = FETCH_OBJ_W (dim write) THIS string("counts")
+  .php   0007 ASSIGN_DIM V1 CV0($name)
+  .php   0008 OP_DATA T6
+  .php   0009 T7 = FETCH_OBJ_IS THIS string("counts")
+  .php   0010 T8 = FETCH_DIM_IS T7 CV0($name)
+  .php   0011 T9 = COALESCE T8 0013
+  .php   0012 T9 = QM_ASSIGN int(0)
+  .php   0013 VERIFY_RETURN_TYPE T9
+  .php   0014 RETURN T9
+  .php   0015 VERIFY_RETURN_TYPE
+  .php   0016 RETURN null
+  .php        6: 0006 - 0007 (tmp/var)
+  .php        9: 0013 - 0014 (tmp/var)
   .php       Property [ private Sharp\Map $counts ]
 Collections/Item: same opcodes and lines in 2 op arrays, same signatures in 1 classes
 EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures in 1 classes
@@ -593,7 +700,26 @@ EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures
   check  Demo\Headcount::skus string("Map<string, int>")
   check  Demo\Headcount::grouped string("List<int>")
   check  Demo\Headcount::groupNames string("List<int>")
-  .sharp      ; (lines=37, args=2, vars=2, tmps=15)
+  .sharp      ; (lines=19, args=1, vars=1, tmps=8)
+  .sharp L0019 0001 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp L0019 0002 V1 = FETCH_OBJ_W (ref) THIS string("counts")
+  .sharp L0019 0003 SEND_REF V1 1
+  .sharp L0019 0004 SEND_VAR CV0($status) 2
+  .sharp L0019 0005 T2 = FETCH_OBJ_IS THIS string("counts")
+  .sharp L0019 0006 T3 = FETCH_DIM_IS T2 CV0($status)
+  .sharp L0019 0007 T4 = COALESCE T3 0009
+  .sharp L0019 0008 T4 = QM_ASSIGN int(0)
+  .sharp L0019 0009 T5 = ADD T4 int(1)
+  .sharp L0019 0010 SEND_VAL T5 3
+  .sharp L0019 0011 DO_ICALL
+  .sharp L0019 0012 V7 = FETCH_OBJ_UNSET THIS string("counts")
+  .sharp L0019 0013 V7 = SEPARATE V7
+  .sharp L0020 0014 T8 = FETCH_OBJ_R THIS string("counts")
+  .sharp L0020 0015 VERIFY_RETURN_TYPE T8
+  .sharp L0020 0016 RETURN T8
+  .sharp L0021 0017 VERIFY_RETURN_TYPE
+  .sharp L0021 0018 RETURN null
+  .sharp      ; (lines=41, args=2, vars=2, tmps=15)
   .sharp L0023 0003 JMPZ T2 0025
   .sharp L0023 0004 V3 = FETCH_CLASS (exception) string("Sharp\\Map")
   .sharp L0023 0005 T4 = SHARP_TYPE_ARGS string("Lib.Standing, int")
@@ -618,21 +744,25 @@ EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures
   .sharp L0023 0024 JMP 0026
   .sharp L0023 0025 T11 = QM_ASSIGN CV0($counts)
   .sharp L0023 0026 ASSIGN CV0($counts) T11
-  .sharp L0025 0027 T14 = FETCH_DIM_IS CV0($counts) CV1($status)
-  .sharp L0025 0028 T15 = COALESCE T14 0030
-  .sharp L0025 0029 T15 = QM_ASSIGN int(0)
-  .sharp L0025 0030 T16 = ADD T15 int(1)
-  .sharp L0025 0031 ASSIGN_DIM CV0($counts) CV1($status)
-  .sharp L0025 0032 OP_DATA T16
-  .sharp L0026 0033 VERIFY_RETURN_TYPE CV0($counts)
-  .sharp L0026 0034 RETURN CV0($counts)
-  .sharp L0027 0035 VERIFY_RETURN_TYPE
-  .sharp L0027 0036 RETURN null
+  .sharp L0025 0027 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp L0025 0028 SEND_REF CV0($counts) 1
+  .sharp L0025 0029 SEND_VAR CV1($status) 2
+  .sharp L0025 0030 T13 = FETCH_DIM_IS CV0($counts) CV1($status)
+  .sharp L0025 0031 T14 = COALESCE T13 0033
+  .sharp L0025 0032 T14 = QM_ASSIGN int(0)
+  .sharp L0025 0033 T15 = ADD T14 int(1)
+  .sharp L0025 0034 SEND_VAL T15 3
+  .sharp L0025 0035 DO_ICALL
+  .sharp L0025 0036 SEPARATE CV0($counts)
+  .sharp L0026 0037 VERIFY_RETURN_TYPE CV0($counts)
+  .sharp L0026 0038 RETURN CV0($counts)
+  .sharp L0027 0039 VERIFY_RETURN_TYPE
+  .sharp L0027 0040 RETURN null
   .sharp L0023 0000 CV0($key#1) = RECV 1
   .sharp L0023 0001 CV1($value#2) = RECV 2
   .sharp L0023 0003 T2 = CAST (string) CV0($key#1)
   .sharp L0023 0007 T4 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
-  .sharp      ; (lines=37, args=2, vars=2, tmps=14)
+  .sharp      ; (lines=44, args=2, vars=2, tmps=14)
   .sharp L0029 0003 JMPZ T2 0025
   .sharp L0029 0004 V3 = FETCH_CLASS (exception) string("Sharp\\Map")
   .sharp L0029 0005 T4 = SHARP_TYPE_ARGS string("Lib.Standing, int")
@@ -657,16 +787,23 @@ EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures
   .sharp L0029 0024 JMP 0026
   .sharp L0029 0025 T11 = QM_ASSIGN CV0($counts)
   .sharp L0029 0026 ASSIGN CV0($counts) T11
-  .sharp L0031 0027 T13 = FETCH_DIM_IS CV0($counts) CV1($status)
-  .sharp L0031 0028 T14 = COALESCE T13 0032
-  .sharp L0031 0029 T15 = ASSIGN_DIM CV0($counts) CV1($status)
-  .sharp L0031 0030 OP_DATA int(0)
-  .sharp L0031 0031 T14 = QM_ASSIGN T15
-  .sharp L0031 0032 FREE T14
-  .sharp L0032 0033 VERIFY_RETURN_TYPE CV0($counts)
-  .sharp L0032 0034 RETURN CV0($counts)
-  .sharp L0033 0035 VERIFY_RETURN_TYPE
-  .sharp L0033 0036 RETURN null
+  .sharp L0031 0027 INIT_FCALL 2 112 string("sharp\\internal\\get")
+  .sharp L0031 0028 SEND_VAR CV0($counts) 1
+  .sharp L0031 0029 SEND_VAR CV1($status) 2
+  .sharp L0031 0030 V13 = DO_ICALL
+  .sharp L0031 0031 T14 = COALESCE V13 0039
+  .sharp L0031 0032 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp L0031 0033 SEND_REF CV0($counts) 1
+  .sharp L0031 0034 SEND_VAR CV1($status) 2
+  .sharp L0031 0035 SEND_VAL int(0) 3
+  .sharp L0031 0036 V15 = DO_ICALL
+  .sharp L0031 0037 SEPARATE CV0($counts)
+  .sharp L0031 0038 T14 = QM_ASSIGN V15
+  .sharp L0031 0039 FREE T14
+  .sharp L0032 0040 VERIFY_RETURN_TYPE CV0($counts)
+  .sharp L0032 0041 RETURN CV0($counts)
+  .sharp L0033 0042 VERIFY_RETURN_TYPE
+  .sharp L0033 0043 RETURN null
   .sharp L0029 0000 CV0($key#1) = RECV 1
   .sharp L0029 0001 CV1($value#2) = RECV 2
   .sharp L0029 0003 T2 = CAST (string) CV0($key#1)
@@ -685,18 +822,22 @@ EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures
   .sharp L0037 0012 RETURN V4
   .sharp L0038 0013 VERIFY_RETURN_TYPE
   .sharp L0038 0014 RETURN null
-  .sharp      ; (lines=12, args=1, vars=2, tmps=6)
+  .sharp      ; (lines=16, args=1, vars=2, tmps=6)
   .sharp L0042 0001 V2 = FETCH_CLASS (exception) string("Sharp\\Map")
   .sharp L0042 0002 T3 = SHARP_TYPE_ARGS string("Lib.Code, int")
   .sharp L0042 0003 V4 = NEW 0 V2 T3
   .sharp L0042 0004 DO_FCALL
   .sharp L0042 0005 ASSIGN CV1($codes) V4
-  .sharp L0043 0006 ASSIGN_DIM CV1($codes) CV0($code)
-  .sharp L0043 0007 OP_DATA int(5)
-  .sharp L0044 0008 VERIFY_RETURN_TYPE CV1($codes)
-  .sharp L0044 0009 RETURN CV1($codes)
-  .sharp L0045 0010 VERIFY_RETURN_TYPE
-  .sharp L0045 0011 RETURN null
+  .sharp L0043 0006 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp L0043 0007 SEND_REF CV1($codes) 1
+  .sharp L0043 0008 SEND_VAR CV0($code) 2
+  .sharp L0043 0009 SEND_VAL int(5) 3
+  .sharp L0043 0010 DO_ICALL
+  .sharp L0043 0011 SEPARATE CV1($codes)
+  .sharp L0044 0012 VERIFY_RETURN_TYPE CV1($codes)
+  .sharp L0044 0013 RETURN CV1($codes)
+  .sharp L0045 0014 VERIFY_RETURN_TYPE
+  .sharp L0045 0015 RETURN null
   .sharp L0047 0003 JMPZ T2 0025
   .sharp L0047 0004 V3 = FETCH_CLASS (exception) string("Sharp\\Map")
   .sharp L0047 0005 T4 = SHARP_TYPE_ARGS string("Lib.Standing, int")
@@ -771,7 +912,7 @@ EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures
   .sharp L0052 0001 CV1($value#2) = RECV 2
   .sharp L0052 0003 T2 = CAST (string) CV0($key#1)
   .sharp L0052 0007 T4 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
-  .sharp      ; (lines=20, args=2, vars=4, tmps=12)
+  .sharp      ; (lines=28, args=2, vars=4, tmps=12)
   .sharp L0060 0002 V4 = FETCH_CLASS (exception) string("Sharp\\Map")
   .sharp L0060 0003 T5 = SHARP_TYPE_ARGS string("Lib.Standing, Map<Lib.Size, int>")
   .sharp L0060 0004 V6 = NEW 0 V4 T5
@@ -782,15 +923,23 @@ EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures
   .sharp L0061 0009 V11 = NEW 0 V9 T10
   .sharp L0061 0010 DO_FCALL
   .sharp L0061 0011 ASSIGN CV3($sizes) V11
-  .sharp L0062 0012 ASSIGN_DIM CV3($sizes) CV1($size)
-  .sharp L0062 0013 OP_DATA int(1)
-  .sharp L0063 0014 ASSIGN_DIM CV2($nested) CV0($status)
-  .sharp L0063 0015 OP_DATA CV3($sizes)
-  .sharp L0064 0016 VERIFY_RETURN_TYPE CV2($nested)
-  .sharp L0064 0017 RETURN CV2($nested)
-  .sharp L0065 0018 VERIFY_RETURN_TYPE
-  .sharp L0065 0019 RETURN null
-  .sharp      ; (lines=43, args=1, vars=4, tmps=21)
+  .sharp L0062 0012 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp L0062 0013 SEND_REF CV3($sizes) 1
+  .sharp L0062 0014 SEND_VAR CV1($size) 2
+  .sharp L0062 0015 SEND_VAL int(1) 3
+  .sharp L0062 0016 DO_ICALL
+  .sharp L0062 0017 SEPARATE CV3($sizes)
+  .sharp L0063 0018 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp L0063 0019 SEND_REF CV2($nested) 1
+  .sharp L0063 0020 SEND_VAR CV0($status) 2
+  .sharp L0063 0021 SEND_VAR CV3($sizes) 3
+  .sharp L0063 0022 DO_ICALL
+  .sharp L0063 0023 SEPARATE CV2($nested)
+  .sharp L0064 0024 VERIFY_RETURN_TYPE CV2($nested)
+  .sharp L0064 0025 RETURN CV2($nested)
+  .sharp L0065 0026 VERIFY_RETURN_TYPE
+  .sharp L0065 0027 RETURN null
+  .sharp      ; (lines=47, args=1, vars=4, tmps=21)
   .sharp L0067 0002 JMPZ T4 0024
   .sharp L0067 0003 V5 = FETCH_CLASS (exception) string("Sharp\\Map")
   .sharp L0067 0004 T6 = SHARP_TYPE_ARGS string("Lib.Standing, int")
@@ -820,18 +969,22 @@ EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures
   .sharp L0069 0028 V17 = NEW 0 V15 T16
   .sharp L0069 0029 DO_FCALL
   .sharp L0069 0030 ASSIGN CV1($named) V17
-  .sharp L0070 0031 V20 = FE_RESET_R CV0($counts) 0038
-  .sharp L0070 0032 T21 = FE_FETCH_R V20 CV2($n) 0038
+  .sharp L0070 0031 V20 = FE_RESET_R CV0($counts) 0042
+  .sharp L0070 0032 T21 = FE_FETCH_R V20 CV2($n) 0042
   .sharp L0070 0033 ASSIGN CV3($status) T21
-  .sharp L0071 0034 T23 = FETCH_OBJ_R CV3($status) string("name")
-  .sharp L0071 0035 ASSIGN_DIM CV1($named) T23
-  .sharp L0071 0036 OP_DATA CV2($n)
-  .sharp L0070 0037 JMP 0032
-  .sharp L0070 0038 FE_FREE V20
-  .sharp L0073 0039 VERIFY_RETURN_TYPE CV1($named)
-  .sharp L0073 0040 RETURN CV1($named)
-  .sharp L0074 0041 VERIFY_RETURN_TYPE
-  .sharp L0074 0042 RETURN null
+  .sharp L0071 0034 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp L0071 0035 SEND_REF CV1($named) 1
+  .sharp L0071 0036 T23 = FETCH_OBJ_R CV3($status) string("name")
+  .sharp L0071 0037 SEND_VAL T23 2
+  .sharp L0071 0038 SEND_VAR CV2($n) 3
+  .sharp L0071 0039 DO_ICALL
+  .sharp L0071 0040 SEPARATE CV1($named)
+  .sharp L0070 0041 JMP 0032
+  .sharp L0070 0042 FE_FREE V20
+  .sharp L0073 0043 VERIFY_RETURN_TYPE CV1($named)
+  .sharp L0073 0044 RETURN CV1($named)
+  .sharp L0074 0045 VERIFY_RETURN_TYPE
+  .sharp L0074 0046 RETURN null
   .sharp L0067 0000 CV0($key#1) = RECV 1
   .sharp L0067 0001 CV1($value#2) = RECV 2
   .sharp L0067 0003 T2 = CAST (string) CV0($key#1)
@@ -892,7 +1045,27 @@ EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures
   .sharp L0098 0020 RETURN CV1($names)
   .sharp L0099 0021 VERIFY_RETURN_TYPE
   .sharp L0099 0022 RETURN null
-  .sharp      ; (lines=37, args=2, vars=2, tmps=15)
+  .sharp      ; (lines=19, args=1, vars=1, tmps=8)
+  .sharp 0001 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp 0002 V1 = FETCH_OBJ_W (ref) THIS string("counts")
+  .sharp 0003 SEND_REF V1 1
+  .sharp 0004 SEND_VAR CV0($status) 2
+  .sharp 0005 T2 = FETCH_OBJ_IS THIS string("counts")
+  .sharp 0006 T3 = FETCH_DIM_IS T2 CV0($status)
+  .sharp 0007 T4 = COALESCE T3 0009
+  .sharp 0008 T4 = QM_ASSIGN int(0)
+  .sharp 0009 T5 = ADD T4 int(1)
+  .sharp 0010 SEND_VAL T5 3
+  .sharp 0011 DO_ICALL
+  .sharp 0012 V7 = FETCH_OBJ_UNSET THIS string("counts")
+  .sharp 0013 V7 = SEPARATE V7
+  .sharp 0014 T8 = FETCH_OBJ_R THIS string("counts")
+  .sharp 0015 VERIFY_RETURN_TYPE T8
+  .sharp 0016 RETURN T8
+  .sharp 0017 VERIFY_RETURN_TYPE
+  .sharp 0018 RETURN null
+  .sharp      8: 0015 - 0016 (tmp/var)
+  .sharp      ; (lines=41, args=2, vars=2, tmps=15)
   .sharp 0003 JMPZ T2 0025
   .sharp 0004 V3 = FETCH_CLASS (exception) string("Sharp\\Map")
   .sharp 0005 T4 = SHARP_TYPE_ARGS string("Lib.Standing, int")
@@ -917,22 +1090,26 @@ EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures
   .sharp 0024 JMP 0026
   .sharp 0025 T11 = QM_ASSIGN CV0($counts)
   .sharp 0026 ASSIGN CV0($counts) T11
-  .sharp 0027 T14 = FETCH_DIM_IS CV0($counts) CV1($status)
-  .sharp 0028 T15 = COALESCE T14 0030
-  .sharp 0029 T15 = QM_ASSIGN int(0)
-  .sharp 0030 T16 = ADD T15 int(1)
-  .sharp 0031 ASSIGN_DIM CV0($counts) CV1($status)
-  .sharp 0032 OP_DATA T16
-  .sharp 0033 VERIFY_RETURN_TYPE CV0($counts)
-  .sharp 0034 RETURN CV0($counts)
-  .sharp 0035 VERIFY_RETURN_TYPE
-  .sharp 0036 RETURN null
+  .sharp 0027 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp 0028 SEND_REF CV0($counts) 1
+  .sharp 0029 SEND_VAR CV1($status) 2
+  .sharp 0030 T13 = FETCH_DIM_IS CV0($counts) CV1($status)
+  .sharp 0031 T14 = COALESCE T13 0033
+  .sharp 0032 T14 = QM_ASSIGN int(0)
+  .sharp 0033 T15 = ADD T14 int(1)
+  .sharp 0034 SEND_VAL T15 3
+  .sharp 0035 DO_ICALL
+  .sharp 0036 SEPARATE CV0($counts)
+  .sharp 0037 VERIFY_RETURN_TYPE CV0($counts)
+  .sharp 0038 RETURN CV0($counts)
+  .sharp 0039 VERIFY_RETURN_TYPE
+  .sharp 0040 RETURN null
   .sharp      5: 0007 - 0023 (new)
   .sharp 0000 CV0($key#1) = RECV 1
   .sharp 0001 CV1($value#2) = RECV 2
   .sharp 0003 T2 = CAST (string) CV0($key#1)
   .sharp 0007 T4 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
-  .sharp      ; (lines=37, args=2, vars=2, tmps=14)
+  .sharp      ; (lines=44, args=2, vars=2, tmps=14)
   .sharp 0003 JMPZ T2 0025
   .sharp 0004 V3 = FETCH_CLASS (exception) string("Sharp\\Map")
   .sharp 0005 T4 = SHARP_TYPE_ARGS string("Lib.Standing, int")
@@ -957,18 +1134,25 @@ EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures
   .sharp 0024 JMP 0026
   .sharp 0025 T11 = QM_ASSIGN CV0($counts)
   .sharp 0026 ASSIGN CV0($counts) T11
-  .sharp 0027 T13 = FETCH_DIM_IS CV0($counts) CV1($status)
-  .sharp 0028 T14 = COALESCE T13 0032
-  .sharp 0029 T15 = ASSIGN_DIM CV0($counts) CV1($status)
-  .sharp 0030 OP_DATA int(0)
-  .sharp 0031 T14 = QM_ASSIGN T15
-  .sharp 0032 FREE T14
-  .sharp 0033 VERIFY_RETURN_TYPE CV0($counts)
-  .sharp 0034 RETURN CV0($counts)
-  .sharp 0035 VERIFY_RETURN_TYPE
-  .sharp 0036 RETURN null
+  .sharp 0027 INIT_FCALL 2 112 string("sharp\\internal\\get")
+  .sharp 0028 SEND_VAR CV0($counts) 1
+  .sharp 0029 SEND_VAR CV1($status) 2
+  .sharp 0030 V13 = DO_ICALL
+  .sharp 0031 T14 = COALESCE V13 0039
+  .sharp 0032 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp 0033 SEND_REF CV0($counts) 1
+  .sharp 0034 SEND_VAR CV1($status) 2
+  .sharp 0035 SEND_VAL int(0) 3
+  .sharp 0036 V15 = DO_ICALL
+  .sharp 0037 SEPARATE CV0($counts)
+  .sharp 0038 T14 = QM_ASSIGN V15
+  .sharp 0039 FREE T14
+  .sharp 0040 VERIFY_RETURN_TYPE CV0($counts)
+  .sharp 0041 RETURN CV0($counts)
+  .sharp 0042 VERIFY_RETURN_TYPE
+  .sharp 0043 RETURN null
   .sharp      5: 0007 - 0023 (new)
-  .sharp      15: 0030 - 0031 (tmp/var)
+  .sharp      15: 0037 - 0038 (tmp/var)
   .sharp 0000 CV0($key#1) = RECV 1
   .sharp 0001 CV1($value#2) = RECV 2
   .sharp 0003 T2 = CAST (string) CV0($key#1)
@@ -990,18 +1174,20 @@ EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures
   .sharp      4: 0005 - 0011 (new)
   .sharp      5: 0006 - 0009 (tmp/var)
   .sharp      4: 0011 - 0012 (tmp/var)
-  .sharp      ; (lines=12, args=1, vars=2, tmps=6)
+  .sharp      ; (lines=16, args=1, vars=2, tmps=6)
   .sharp 0001 V2 = FETCH_CLASS (exception) string("Sharp\\Map")
   .sharp 0002 T3 = SHARP_TYPE_ARGS string("Lib.Code, int")
   .sharp 0003 V4 = NEW 0 V2 T3
   .sharp 0004 DO_FCALL
   .sharp 0005 ASSIGN CV1($codes) V4
-  .sharp 0006 ASSIGN_DIM CV1($codes) CV0($code)
-  .sharp 0007 OP_DATA int(5)
-  .sharp 0008 VERIFY_RETURN_TYPE CV1($codes)
-  .sharp 0009 RETURN CV1($codes)
-  .sharp 0010 VERIFY_RETURN_TYPE
-  .sharp 0011 RETURN null
+  .sharp 0006 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp 0007 SEND_REF CV1($codes) 1
+  .sharp 0008 SEND_VAR CV0($code) 2
+  .sharp 0009 SEND_VAL int(5) 3
+  .sharp 0010 DO_ICALL
+  .sharp 0011 SEPARATE CV1($codes)
+  .sharp 0012 VERIFY_RETURN_TYPE CV1($codes)
+  .sharp 0013 RETURN CV1($codes)
   .sharp      4: 0004 - 0005 (new)
   .sharp 0003 JMPZ T2 0025
   .sharp 0004 V3 = FETCH_CLASS (exception) string("Sharp\\Map")
@@ -1078,7 +1264,7 @@ EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures
   .sharp 0001 CV1($value#2) = RECV 2
   .sharp 0003 T2 = CAST (string) CV0($key#1)
   .sharp 0007 T4 = ADD_ARRAY_ELEMENT CV1($value#2) NEXT
-  .sharp      ; (lines=20, args=2, vars=4, tmps=12)
+  .sharp      ; (lines=28, args=2, vars=4, tmps=12)
   .sharp 0002 V4 = FETCH_CLASS (exception) string("Sharp\\Map")
   .sharp 0003 T5 = SHARP_TYPE_ARGS string("Lib.Standing, Map<Lib.Size, int>")
   .sharp 0004 V6 = NEW 0 V4 T5
@@ -1089,17 +1275,25 @@ EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures
   .sharp 0009 V11 = NEW 0 V9 T10
   .sharp 0010 DO_FCALL
   .sharp 0011 ASSIGN CV3($sizes) V11
-  .sharp 0012 ASSIGN_DIM CV3($sizes) CV1($size)
-  .sharp 0013 OP_DATA int(1)
-  .sharp 0014 ASSIGN_DIM CV2($nested) CV0($status)
-  .sharp 0015 OP_DATA CV3($sizes)
-  .sharp 0016 VERIFY_RETURN_TYPE CV2($nested)
-  .sharp 0017 RETURN CV2($nested)
-  .sharp 0018 VERIFY_RETURN_TYPE
-  .sharp 0019 RETURN null
+  .sharp 0012 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp 0013 SEND_REF CV3($sizes) 1
+  .sharp 0014 SEND_VAR CV1($size) 2
+  .sharp 0015 SEND_VAL int(1) 3
+  .sharp 0016 DO_ICALL
+  .sharp 0017 SEPARATE CV3($sizes)
+  .sharp 0018 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp 0019 SEND_REF CV2($nested) 1
+  .sharp 0020 SEND_VAR CV0($status) 2
+  .sharp 0021 SEND_VAR CV3($sizes) 3
+  .sharp 0022 DO_ICALL
+  .sharp 0023 SEPARATE CV2($nested)
+  .sharp 0024 VERIFY_RETURN_TYPE CV2($nested)
+  .sharp 0025 RETURN CV2($nested)
+  .sharp 0026 VERIFY_RETURN_TYPE
+  .sharp 0027 RETURN null
   .sharp      6: 0005 - 0006 (new)
   .sharp      11: 0010 - 0011 (new)
-  .sharp      ; (lines=43, args=1, vars=4, tmps=21)
+  .sharp      ; (lines=47, args=1, vars=4, tmps=21)
   .sharp 0002 JMPZ T4 0024
   .sharp 0003 V5 = FETCH_CLASS (exception) string("Sharp\\Map")
   .sharp 0004 T6 = SHARP_TYPE_ARGS string("Lib.Standing, int")
@@ -1129,21 +1323,25 @@ EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures
   .sharp 0028 V17 = NEW 0 V15 T16
   .sharp 0029 DO_FCALL
   .sharp 0030 ASSIGN CV1($named) V17
-  .sharp 0031 V20 = FE_RESET_R CV0($counts) 0038
-  .sharp 0032 T21 = FE_FETCH_R V20 CV2($n) 0038
+  .sharp 0031 V20 = FE_RESET_R CV0($counts) 0042
+  .sharp 0032 T21 = FE_FETCH_R V20 CV2($n) 0042
   .sharp 0033 ASSIGN CV3($status) T21
-  .sharp 0034 T23 = FETCH_OBJ_R CV3($status) string("name")
-  .sharp 0035 ASSIGN_DIM CV1($named) T23
-  .sharp 0036 OP_DATA CV2($n)
-  .sharp 0037 JMP 0032
-  .sharp 0038 FE_FREE V20
-  .sharp 0039 VERIFY_RETURN_TYPE CV1($named)
-  .sharp 0040 RETURN CV1($named)
-  .sharp 0041 VERIFY_RETURN_TYPE
-  .sharp 0042 RETURN null
+  .sharp 0034 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp 0035 SEND_REF CV1($named) 1
+  .sharp 0036 T23 = FETCH_OBJ_R CV3($status) string("name")
+  .sharp 0037 SEND_VAL T23 2
+  .sharp 0038 SEND_VAR CV2($n) 3
+  .sharp 0039 DO_ICALL
+  .sharp 0040 SEPARATE CV1($named)
+  .sharp 0041 JMP 0032
+  .sharp 0042 FE_FREE V20
+  .sharp 0043 VERIFY_RETURN_TYPE CV1($named)
+  .sharp 0044 RETURN CV1($named)
+  .sharp 0045 VERIFY_RETURN_TYPE
+  .sharp 0046 RETURN null
   .sharp      7: 0006 - 0022 (new)
   .sharp      17: 0029 - 0030 (new)
-  .sharp      20: 0032 - 0038 (loop)
+  .sharp      20: 0032 - 0042 (loop)
   .sharp 0000 CV0($key#1) = RECV 1
   .sharp 0001 CV1($value#2) = RECV 2
   .sharp 0003 T2 = CAST (string) CV0($key#1)
@@ -1209,6 +1407,20 @@ EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures
   .sharp      7: 0009 - 0018 (loop)
   .sharp     Property [ private Sharp\Map $counts = Closure({closure:<file>:9})() ]
   .sharp     Property [ private Sharp\Map $seeded = Closure({closure:<file>:10})() ]
+  .php        ; (lines=14, args=1, vars=1, tmps=7)
+  .php   L0019 0001 T3 = FETCH_OBJ_IS THIS string("counts")
+  .php   L0019 0002 T4 = FETCH_DIM_IS T3 CV0($status)
+  .php   L0019 0003 T5 = COALESCE T4 0005
+  .php   L0019 0004 T5 = QM_ASSIGN int(0)
+  .php   L0019 0005 T6 = ADD T5 int(1)
+  .php   L0019 0006 V1 = FETCH_OBJ_W (dim write) THIS string("counts")
+  .php   L0019 0007 ASSIGN_DIM V1 CV0($status)
+  .php   L0019 0008 OP_DATA T6
+  .php   L0020 0009 T7 = FETCH_OBJ_R THIS string("counts")
+  .php   L0020 0010 VERIFY_RETURN_TYPE T7
+  .php   L0020 0011 RETURN T7
+  .php   L0021 0012 VERIFY_RETURN_TYPE
+  .php   L0021 0013 RETURN null
   .php        ; (lines=35, args=2, vars=2, tmps=13)
   .php   L0023 0003 JMPZ T2 0023
   .php   L0023 0004 V3 = NEW 1 string("Sharp\\Map")
@@ -1483,6 +1695,22 @@ EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures
   .php   L0098 0019 RETURN CV1($names)
   .php   L0099 0020 VERIFY_RETURN_TYPE
   .php   L0099 0021 RETURN null
+  .php        ; (lines=14, args=1, vars=1, tmps=7)
+  .php   0001 T3 = FETCH_OBJ_IS THIS string("counts")
+  .php   0002 T4 = FETCH_DIM_IS T3 CV0($status)
+  .php   0003 T5 = COALESCE T4 0005
+  .php   0004 T5 = QM_ASSIGN int(0)
+  .php   0005 T6 = ADD T5 int(1)
+  .php   0006 V1 = FETCH_OBJ_W (dim write) THIS string("counts")
+  .php   0007 ASSIGN_DIM V1 CV0($status)
+  .php   0008 OP_DATA T6
+  .php   0009 T7 = FETCH_OBJ_R THIS string("counts")
+  .php   0010 VERIFY_RETURN_TYPE T7
+  .php   0011 RETURN T7
+  .php   0012 VERIFY_RETURN_TYPE
+  .php   0013 RETURN null
+  .php        6: 0006 - 0007 (tmp/var)
+  .php        7: 0010 - 0011 (tmp/var)
   .php        ; (lines=35, args=2, vars=2, tmps=13)
   .php   0003 JMPZ T2 0023
   .php   0004 V3 = NEW 1 string("Sharp\\Map")
@@ -1666,8 +1894,6 @@ EnumKeys/Headcount: different opcodes and lines in 22 op arrays, same signatures
   .php   0011 OP_DATA CV3($sizes)
   .php   0012 VERIFY_RETURN_TYPE CV2($nested)
   .php   0013 RETURN CV2($nested)
-  .php   0014 VERIFY_RETURN_TYPE
-  .php   0015 RETURN null
   .php        4: 0003 - 0004 (new)
   .php        7: 0006 - 0007 (new)
   .php        ; (lines=39, args=1, vars=4, tmps=17)
@@ -5855,7 +6081,48 @@ Library: different opcodes and lines in 18 op arrays, same signatures in 1 class
   .php   0004 T3 = ADD_ARRAY_ELEMENT CV1($value) NEXT
 Inbox: different opcodes and lines in 9 op arrays, same signatures in 1 classes
   check  Demo\Inbox::keep string("Any")
+  .sharp      ; (lines=13, args=1, vars=1, tmps=4)
+  .sharp L0028 0001 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp L0028 0002 V1 = FETCH_OBJ_W (ref) THIS string("saved")
+  .sharp L0028 0003 SEND_REF V1 1
+  .sharp L0028 0004 SEND_VAR CV0($key) 2
+  .sharp L0028 0005 INIT_STATIC_METHOD_CALL 1 string("Demo\\Settings") string("get")
+  .sharp L0028 0006 SEND_VAR_EX CV0($key) 1
+  .sharp L0028 0007 V2 = DO_FCALL
+  .sharp L0028 0008 SEND_VAR V2 3
+  .sharp L0028 0009 DO_ICALL
+  .sharp L0028 0010 V4 = FETCH_OBJ_UNSET THIS string("saved")
+  .sharp L0028 0011 V4 = SEPARATE V4
+  .sharp L0029 0012 RETURN null
+  .sharp      ; (lines=13, args=1, vars=1, tmps=4)
+  .sharp 0001 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp 0002 V1 = FETCH_OBJ_W (ref) THIS string("saved")
+  .sharp 0003 SEND_REF V1 1
+  .sharp 0004 SEND_VAR CV0($key) 2
+  .sharp 0005 INIT_STATIC_METHOD_CALL 1 string("Demo\\Settings") string("get")
+  .sharp 0006 SEND_VAR_EX CV0($key) 1
+  .sharp 0007 V2 = DO_FCALL
+  .sharp 0008 SEND_VAR V2 3
+  .sharp 0009 DO_ICALL
+  .sharp 0010 V4 = FETCH_OBJ_UNSET THIS string("saved")
+  .sharp 0011 V4 = SEPARATE V4
+  .sharp 0012 RETURN null
   .sharp     Property [ private Sharp\Map $saved = Closure({closure:<file>:6})() ]
+  .php        ; (lines=8, args=1, vars=1, tmps=3)
+  .php   L0028 0001 INIT_STATIC_METHOD_CALL 1 string("Demo\\Settings") string("get")
+  .php   L0028 0002 SEND_VAR_EX CV0($key) 1
+  .php   L0028 0003 V3 = DO_FCALL
+  .php   L0028 0004 V1 = FETCH_OBJ_W (dim write) THIS string("saved")
+  .php   L0028 0005 ASSIGN_DIM V1 CV0($key)
+  .php   L0028 0006 OP_DATA V3
+  .php   L0029 0007 RETURN null
+  .php        ; (lines=8, args=1, vars=1, tmps=3)
+  .php   0003 V3 = DO_FCALL
+  .php   0004 V1 = FETCH_OBJ_W (dim write) THIS string("saved")
+  .php   0005 ASSIGN_DIM V1 CV0($key)
+  .php   0006 OP_DATA V3
+  .php   0007 RETURN null
+  .php        3: 0004 - 0005 (tmp/var)
   .php       Property [ private Sharp\Map $saved ]
 Patterns: different opcodes and lines in 18 op arrays, same signatures in 1 classes
   check  Demo\Patterns::lines string("List<Demo.Figure>")
@@ -7211,6 +7478,29 @@ Generics/Store: different opcodes and lines in 7 op arrays, same signatures in 1
   .sharp L0032 0006 RETURN T3
   .sharp L0032 0007 VERIFY_RETURN_TYPE
   .sharp L0032 0008 RETURN null
+  .sharp      ; (lines=24, args=2, vars=3, tmps=10)
+  .sharp L0034 0002 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp L0034 0003 V3 = FETCH_OBJ_W (ref) THIS string("saved")
+  .sharp L0034 0004 SEND_REF V3 1
+  .sharp L0034 0005 INIT_STATIC_METHOD_CALL 1 string("Lib\\Probe") string("named")
+  .sharp L0034 0006 SEND_VAR_EX CV0($type) 1
+  .sharp L0034 0007 V4 = DO_FCALL
+  .sharp L0034 0008 T5 = CONCAT V4 string("#")
+  .sharp L0034 0009 T6 = FETCH_OBJ_R CV1($entity) string("id")
+  .sharp L0034 0010 T7 = CAST (string) T6
+  .sharp L0034 0011 T8 = CONCAT T5 T7
+  .sharp L0034 0012 SEND_VAL T8 2
+  .sharp L0034 0013 T9 = ASSIGN CV2($stored#1) CV1($entity)
+  .sharp L0034 0014 SEND_VAL T9 3
+  .sharp L0034 0015 V10 = DO_ICALL
+  .sharp L0034 0016 V11 = FETCH_OBJ_UNSET THIS string("saved")
+  .sharp L0034 0017 V11 = SEPARATE V11
+  .sharp L0034 0018 JMPZ V10 0021
+  .sharp L0034 0019 T12 = QM_ASSIGN CV2($stored#1)
+  .sharp L0034 0020 JMP 0022
+  .sharp L0034 0021 T12 = QM_ASSIGN CV2($stored#1)
+  .sharp L0034 0022 FREE T12
+  .sharp L0034 0023 RETURN null
   .sharp      ; (lines=16, args=2, vars=4, tmps=3)
   .sharp 0002 CV2($) = SHARP_RECV_TYPE_ARGS string("Paging.DatabaseEntity")
   .sharp 0003 V4 = FE_RESET_R CV0($items) 0012
@@ -7236,6 +7526,31 @@ Generics/Store: different opcodes and lines in 7 op arrays, same signatures in 1
   .sharp 0002 INIT_METHOD_CALL 0 CV0($item) string("link")
   .sharp 0003 V2 = DO_FCALL
   .sharp 0004 T3 = SHARP_VERIFY_TYPE_ARGS V2 string("string")
+  .sharp      ; (lines=24, args=2, vars=3, tmps=10)
+  .sharp 0002 INIT_FCALL 3 128 string("sharp\\internal\\put")
+  .sharp 0003 V3 = FETCH_OBJ_W (ref) THIS string("saved")
+  .sharp 0004 SEND_REF V3 1
+  .sharp 0005 INIT_STATIC_METHOD_CALL 1 string("Lib\\Probe") string("named")
+  .sharp 0006 SEND_VAR_EX CV0($type) 1
+  .sharp 0007 V4 = DO_FCALL
+  .sharp 0008 T5 = CONCAT V4 string("#")
+  .sharp 0009 T6 = FETCH_OBJ_R CV1($entity) string("id")
+  .sharp 0010 T7 = CAST (string) T6
+  .sharp 0011 T8 = CONCAT T5 T7
+  .sharp 0012 SEND_VAL T8 2
+  .sharp 0013 T9 = ASSIGN CV2($stored#1) CV1($entity)
+  .sharp 0014 SEND_VAL T9 3
+  .sharp 0015 V10 = DO_ICALL
+  .sharp 0016 V11 = FETCH_OBJ_UNSET THIS string("saved")
+  .sharp 0017 V11 = SEPARATE V11
+  .sharp 0018 JMPZ V10 0021
+  .sharp 0019 T12 = QM_ASSIGN CV2($stored#1)
+  .sharp 0020 JMP 0022
+  .sharp 0021 T12 = QM_ASSIGN CV2($stored#1)
+  .sharp 0022 FREE T12
+  .sharp 0023 RETURN null
+  .sharp      5: 0009 - 0011 (tmp/var)
+  .sharp      10: 0016 - 0018 (tmp/var)
   .sharp     Property [ private Sharp\Map $saved = Closure({closure:<file>:8})() ]
   .sharp     Property [ private Sharp\Map $kinds = Closure({closure:<file>:10})() ]
   .php        ; (lines=15, args=2, vars=3, tmps=3)
@@ -7263,6 +7578,18 @@ Generics/Store: different opcodes and lines in 7 op arrays, same signatures in 1
   .php   L0032 0004 RETURN V1
   .php   L0032 0005 VERIFY_RETURN_TYPE
   .php   L0032 0006 RETURN null
+  .php        ; (lines=13, args=2, vars=2, tmps=7)
+  .php   L0034 0002 INIT_STATIC_METHOD_CALL 1 string("Lib\\Probe") string("named")
+  .php   L0034 0003 SEND_VAR_EX CV0($type) 1
+  .php   L0034 0004 V3 = DO_FCALL
+  .php   L0034 0005 T4 = CONCAT V3 string("#")
+  .php   L0034 0006 T5 = FETCH_OBJ_R CV1($entity) string("id")
+  .php   L0034 0007 T6 = CAST (string) T5
+  .php   L0034 0008 T7 = CONCAT T4 T6
+  .php   L0034 0009 V2 = FETCH_OBJ_W (dim write) THIS string("saved")
+  .php   L0034 0010 ASSIGN_DIM V2 T7
+  .php   L0034 0011 OP_DATA CV1($entity)
+  .php   L0034 0012 RETURN null
   .php        ; (lines=15, args=2, vars=3, tmps=3)
   .php   0002 V3 = FE_RESET_R CV0($items) 0011
   .php   0003 FE_FETCH_R V3 CV2($item) 0011
@@ -7274,6 +7601,7 @@ Generics/Store: different opcodes and lines in 7 op arrays, same signatures in 1
   .php   0009 RETURN CV2($item)
   .php   0010 JMP 0003
   .php   0011 FE_FREE V3
+  .php   0012 RETURN null
   .php   0013 VERIFY_RETURN_TYPE
   .php   0014 RETURN null
   .php        3: 0003 - 0008 (loop)
@@ -7290,6 +7618,16 @@ Generics/Store: different opcodes and lines in 7 op arrays, same signatures in 1
   .php   0005 VERIFY_RETURN_TYPE
   .php   0006 RETURN null
   .php        1: 0003 - 0004 (tmp/var)
+  .php        ; (lines=13, args=2, vars=2, tmps=7)
+  .php   0006 T5 = FETCH_OBJ_R CV1($entity) string("id")
+  .php   0007 T6 = CAST (string) T5
+  .php   0008 T7 = CONCAT T4 T6
+  .php   0009 V2 = FETCH_OBJ_W (dim write) THIS string("saved")
+  .php   0010 ASSIGN_DIM V2 T7
+  .php   0011 OP_DATA CV1($entity)
+  .php   0012 RETURN null
+  .php        4: 0006 - 0008 (tmp/var)
+  .php        7: 0009 - 0010 (tmp/var)
   .php       /** @template TItem of DatabaseEntity
   .php        *  @param list<TItem> $items
   .php        *  @return TItem|null */
