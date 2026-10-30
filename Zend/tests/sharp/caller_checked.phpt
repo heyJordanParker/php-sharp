@@ -1,5 +1,5 @@
 --TEST--
-A plain PHP method that declares no return type implements a PHP# interface's member, and each PHP# call of the member checks the result: through the interface, the plain PHP class, a PHP# subclass and its this, a null-safe call, each collection alone at any depth, and the bound type of a generic method's or a generic class's static method's result where its call binds it, naming the type the code wrote
+A plain PHP method that declares no return type implements a PHP# interface's member, and each PHP# call of the member checks the result: through the interface, the plain PHP class, a PHP# subclass and its this, a null-safe call, each collection alone at any depth, and the bound type of a generic method's or a generic class's static method's result where its call binds it, naming the type the code wrote. Each member of the Set or the Map such a call gives as the PHP array it crosses into runs on the object, a Map's keys keeping their type
 --FILE--
 <?php
 require __DIR__ . '/caller_checked.inc';
@@ -34,3 +34,34 @@ a generic class's static method: 42
 a generic class's static method, given text: TypeError: CallerChecked.Repo.first(): Return value must be of type int, string returned
 a method's type parameter: 42
 a method's type parameter, given text: TypeError: CallerChecked.Generic.readFrom(): Return value must be of type int, string returned
+Set count: 3
+Set isEmpty: false
+Set isNotEmpty: true
+Set contains: [true,false]
+Set toList: ["a","b","c"]
+Set filter: ["a","c"]
+Set map: ["a!","b!","c!"]
+Set sumOf: 5
+Set first: "b"
+Set any: true
+Set sortedBy: ["b","a","c"]
+Set add: [true,false,["a","b","c","d"]]
+Set remove: [true,false,["a","c"]]
+Set clear: 0
+Map count: 3
+Map isEmpty: false
+Map isNotEmpty: true
+Map get: [2,3,null]
+Map has: [true,true,false]
+Map keys: ["a","b","10"]
+Map values: [1,2,3]
+Map toList: [["a",1],["b",2],["10",3]]
+Map filter: [["b",2],["10",3]]
+Map map: [2,4,6]
+Map sumOf: 6
+Map first: 2
+Map any: true
+Map groupBy: [[1,[1,3]],[0,[2]]]
+Map associateBy: [[10,1],[20,2],[30,3]]
+Map sortedBy: [3,2,1]
+Map remove: [true,false,[["b",2],["10",3]]]

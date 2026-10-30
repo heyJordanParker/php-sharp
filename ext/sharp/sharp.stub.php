@@ -181,7 +181,7 @@ function clear(array|\Sharp\Map|\Sharp\Set &$collection): void {}
 
 function get(array|\Sharp\Map $collection, mixed $key): mixed {}
 
-function size(array|\Sharp\Map|\Sharp\Set $collection): int {}
+function size(\Sharp\Map|\Sharp\Set $table): int {}
 
 function containsKey(\Sharp\Map|\Sharp\Set $table, mixed $key): bool {}
 

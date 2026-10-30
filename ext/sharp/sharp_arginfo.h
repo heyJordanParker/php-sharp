@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 18b03ac657532d4cf88a5886bdf6396bf191fef9 */
+ * Stub hash: 8df02186c8c85e437778a535df9c2f2aa5575b8d */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -113,7 +113,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_get, 0, 2, IS_MIX
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_size, 0, 1, IS_LONG, 0)
-	ZEND_ARG_OBJ_TYPE_MASK(0, collection, Sharp\\Map|Sharp\\Set, MAY_BE_ARRAY, NULL)
+	ZEND_ARG_OBJ_TYPE_MASK(0, table, Sharp\\Map|Sharp\\Set, 0, NULL)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_containsKey, 0, 2, _IS_BOOL, 0)

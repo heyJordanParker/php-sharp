@@ -4,7 +4,7 @@ Each Sharp\Internal function a Map's or a Set's member runs reads, counts or cha
 <?php
 $map = new Sharp\Map(['a', 1, 'b', 2, 'c', 3]);
 $set = new Sharp\Set(['x', 'y']);
-var_dump(Sharp\Internal\size($map), Sharp\Internal\size($set), Sharp\Internal\size(['a' => 1]));
+var_dump(Sharp\Internal\size($map), Sharp\Internal\size($set));
 var_dump(Sharp\Internal\containsKey($map, 'a'), Sharp\Internal\containsKey($set, 'z'));
 echo json_encode(Sharp\Internal\keys($map)), ' ', json_encode(Sharp\Internal\keys($set)), ' ',
     json_encode(Sharp\Internal\values($map)), ' ', json_encode(Sharp\Internal\pairs($map)), "\n";
@@ -31,7 +31,7 @@ Sharp\Internal\clear($cleared);
 echo count($set), ' ', count($cleared), ' ', get_class($cleared), "\n";
 
 foreach ([
-    fn () => Sharp\Internal\size('x'),
+    fn () => Sharp\Internal\size(['a' => 1]),
     fn () => Sharp\Internal\containsKey([1], 1),
     fn () => Sharp\Internal\keys('x'),
     fn () => Sharp\Internal\map(5, fn ($value) => $value),
@@ -48,7 +48,6 @@ foreach ([
 --EXPECT--
 int(3)
 int(2)
-int(1)
 bool(true)
 bool(false)
 ["a","b","c"] ["x","y"] [1,2,3] [["a",1],["b",2],["c",3]]
@@ -69,7 +68,7 @@ bool(false)
 int(2)
 int(3)
 2 0 Sharp\Set
-Sharp\Internal\size(): Argument #1 ($collection) must be of type Sharp\Map|Sharp\Set|array, string given
+Sharp\Internal\size(): Argument #1 ($table) must be of type Sharp\Map|Sharp\Set, array given
 Sharp\Internal\containsKey(): Argument #1 ($table) must be of type Sharp\Map|Sharp\Set, array given
 Sharp\Internal\keys(): Argument #1 ($table) must be of type Sharp\Map|Sharp\Set, string given
 Sharp\Internal\map(): Argument #1 ($collection) must be of type Sharp\Map|Sharp\Set|array, int given

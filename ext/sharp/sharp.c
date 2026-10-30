@@ -3226,24 +3226,16 @@ ZEND_FUNCTION(Sharp_Internal_get)
 	}
 }
 
-/* A Map's and a Set's `count()`: how many keys it holds, which the table keeps, or how many entries the PHP array holds
- * that plain PHP gives for one, as a plain PHP member of a PHP# interface returns it. */
+/* A Map's and a Set's `count()`: how many keys it holds, which the table keeps. */
 ZEND_FUNCTION(Sharp_Internal_size)
 {
-	zval *collection;
+	zval *table;
 
 	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_ZVAL(collection)
+		Z_PARAM_ZVAL(table)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (Z_TYPE_P(collection) == IS_ARRAY) {
-		RETURN_LONG(zend_hash_num_elements(Z_ARRVAL_P(collection)));
-	}
-	if (UNEXPECTED(!SHARP_IS_TABLE(collection))) {
-		zend_argument_type_error(1, "must be of type Sharp\\Map|Sharp\\Set|array, %s given", zend_zval_value_name(collection));
-		RETURN_THROWS();
-	}
-	sharp_table *entries = sharp_table_entries(Z_OBJ_P(collection));
+	sharp_table *entries = sharp_table_argument(table, 1);
 	if (!entries) {
 		RETURN_THROWS();
 	}
