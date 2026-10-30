@@ -83,6 +83,7 @@ class Crossings
             Lib.json_of(prices),
             Lib.type_of_object(tags),
             Lib.count_of_map(prices),
+            Lib.count_of_bounded_countable(Crossings.limits()),
         ];
     }
 

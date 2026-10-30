@@ -396,6 +396,7 @@ Sharp\Set 2
 Sharp\Map {"tea":3,"5":1}
 Sharp\Set
 Sharp\Map 2
+Sharp\Map 2
 a plain PHP closure a local holds: array 2
 a plain PHP object a local holds: array 2
 a plain PHP closure behind a PHP# function type: array
