@@ -2,6 +2,8 @@
 
 Spec section 12's collection methods, with the parts of section 19 they reach (`==` on the element type). v1 plan Slice 2. This note is the design only. team-lead approves it before anyone builds.
 
+**Superseded in part by the standard library's collection members:** the engine has no `Sharp\Collection` and no PHP# method-call opcode. Every `List`, `Map` and `Set` method is a member of the `ListMembers`, `MapMembers` or `SetMembers` extension block in `sharp/composer/library/Sharp`, which calls a `Sharp\Internal` engine function, and a member that changes the collection takes it by `ref`. A `Map`'s `filter` runs as `Sharp\Internal\filterEntries`, and `filterValues` and `delete` exist nowhere. Every `Sharp\Collection` method, `sharp_collection_*` function, `ZEND_METHOD_CALL_SHARP` mark and `zend_compile_sharp_receiver` arm below describes the engine before that change.
+
 ## The answer first
 
 Section 12's collection methods `add`, `set`, `get`, `filter` on a `List`, `map`, `sumOf`, `first`, `any`, `groupBy`, `associateBy` and `sortedBy` work on master. The rest are missing or wrong, and two interim names the spec does not have still compile:

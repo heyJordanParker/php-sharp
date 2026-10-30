@@ -2,6 +2,8 @@
 
 R1 and R2 are php-sharp #102 and mago-sharp #152. This note covers what the one R3–R5 PR per repo adds, and fixes the names other Slices build against before the code lands.
 
+**Superseded in part by the standard library's collection members:** the engine has no `Sharp\Collection` and no PHP# method-call opcode. Every `List`, `Map` and `Set` method is a member of the `ListMembers`, `MapMembers` or `SetMembers` extension block in `sharp/composer/library/Sharp`, which calls a `Sharp\Internal` engine function, and a member that changes the collection takes it by `ref`. A `Map`'s `filter` runs as `Sharp\Internal\filterEntries`, and `filterValues` and `delete` exist nowhere. Every `Sharp\Collection` method, `sharp_collection_*` function, `ZEND_METHOD_CALL_SHARP` mark and `zend_compile_sharp_receiver` arm below describes the engine before that change.
+
 ## R3c: the one check of a value against a type
 
 Queue 19 rules that PHP# has one check of a value against a type: the engine walk in `sharp_type_accepts`. `is`, `as`, a `match` arm, a generic `catch`, every entry from plain PHP and struct `parse` all call it. It answers "is this value of this type". `sharp_type_fits` stays separate and answers "is this type within that type", by variance. `sharp_type_accepts` hands an object's type arguments to `sharp_type_fits` and never compares them itself, so every type-argument rule lives in one function.

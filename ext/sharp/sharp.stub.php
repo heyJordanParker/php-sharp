@@ -8,63 +8,6 @@ namespace Sharp;
  * @strict-properties
  * @not-serializable
  */
-final class Collection
-{
-    private function __construct() {}
-
-    public function add(mixed $value): bool {}
-
-    public function set(int $index, mixed $value): mixed {}
-
-    public function insert(int $index, mixed $value): void {}
-
-    public function removeAt(int $index): void {}
-
-    public function get(mixed $key): mixed {}
-
-    public function entries(?string $typeArguments = null): Map {}
-
-    public function has(mixed $key): bool {}
-
-    public function contains(mixed $value): bool {}
-
-    public function remove(mixed $value): bool {}
-
-    public function put(mixed $key, mixed $value): mixed {}
-
-    public function clear(): void {}
-
-    public function count(): int {}
-
-    public function keys(): array {}
-
-    public function values(): array {}
-
-    public function toList(): array {}
-
-    public function filter(\Closure $predicate): Map|Set|array {}
-
-    public function map(\Closure $transform): array {}
-
-    public function flatMap(\Closure $transform): array {}
-
-    public function sumOf(\Closure $selector): int|float {}
-
-    public function first(\Closure $predicate): mixed {}
-
-    public function any(\Closure $predicate): bool {}
-
-    public function groupBy(\Closure $key, ?string $typeArguments = null): Map {}
-
-    public function associateBy(\Closure $key, ?string $typeArguments = null): Map {}
-
-    public function sortedBy(\Closure $selector, ?\Closure $comparison = null): array {}
-}
-
-/**
- * @strict-properties
- * @not-serializable
- */
 final class Sequence implements \IteratorAggregate
 {
     private function __construct() {}

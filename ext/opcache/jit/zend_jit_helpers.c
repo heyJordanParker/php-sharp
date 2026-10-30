@@ -2383,10 +2383,6 @@ static void ZEND_FASTCALL zend_jit_check_array_promotion(zval *val, zend_propert
 			ZVAL_ERROR(result);
 			return;
 		}
-		/* The write goes through the Sharp\Collection of the Map or the Set plain PHP still holds. */
-		if (Z_TYPE_P(result) != IS_INDIRECT) {
-			return;
-		}
 	}
 
 	if ((Z_TYPE_P(val) <= IS_FALSE

@@ -4,6 +4,8 @@ Spec section 14: function types, lambdas, methods as values and the null operato
 
 **Superseded in part by [decision 83](../../decisions/083-php-through-the-standard-library.md):** `global.` does not exist in PHP# code, and a bare call of a PHP function or a bare PHP constant names nothing, as a misspelled name does. Every `global.` call in user code below is the error an unknown name gets, and every message that names a member to write in place of a PHP function is gone, with the checker's table of replacements (`REPLACEMENTS`, `WRAPPED_CLASSES`) and the functions that read it.
 
+**Superseded in part by the standard library's collection members:** the engine has no `Sharp\Collection` and no PHP# method-call opcode. Every `List`, `Map` and `Set` method is a member of the `ListMembers`, `MapMembers` or `SetMembers` extension block in `sharp/composer/library/Sharp`, which calls a `Sharp\Internal` engine function, and a member that changes the collection takes it by `ref`. A `Map`'s `filter` runs as `Sharp\Internal\filterEntries`, and `filterValues` and `delete` exist nowhere. Every `Sharp\Collection` method, `sharp_collection_*` function, `ZEND_METHOD_CALL_SHARP` mark and `zend_compile_sharp_receiver` arm below describes the engine before that change.
+
 ## The answer first
 
 All eight examples of section 14 pass on master, and most rule lines hold, engine included. Behind the examples, seven gaps remain:

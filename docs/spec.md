@@ -1760,6 +1760,8 @@ plans["pro"] = pro;
 plans.remove("pro");          // by key
 ```
 
+A `List`'s `removeAt(i)` removes the element at index `i` and returns it, `removeFirst()` and `removeLast()` remove the first and the last element and return it, and `set(i, v)`, which `list[i] = v` runs, replaces the element at `i` and returns the one it replaced. Each throws `OutOfRangeException` on an empty list or an index outside the list. `isEmpty()` and `isNotEmpty()` tell whether a `List`, a `Map` or a `Set` holds no element.
+
 **Each collection does the natural thing with a method:**
 
 - `remove` removes a value from a `List` and a key from a `Map`.
@@ -5191,6 +5193,8 @@ public static class Pairs
     }
 }
 ```
+
+- **The standard library's methods that change a collection take their receiver by `ref`, as C# 14 allows, and code outside the library can't.**
 
 ## 27. PHP# files
 
