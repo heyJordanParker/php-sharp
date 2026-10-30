@@ -16,4 +16,17 @@ public static class Tables
             global.count(rows, global.COUNT_RECURSIVE),
         ];
     }
+
+    // The PHP array iterator_to_array gives back for a Map<string, int>, which holds the key "5" as 5, crosses into a
+    // Map<string, int> with each int key back as its string.
+    public static string restored()
+    {
+        Map<string, int> counts = ["5": 1, "tea": 2];
+        Map<string, int> back = global.iterator_to_array(counts);
+        let keys = "";
+        for (const [key, n] of back) {
+            keys = `${keys}${global.get_debug_type(key)} ${key}=${n}, `;
+        }
+        return `${keys}has "5": ${back.has("5")}`;
+    }
 }

@@ -36,6 +36,7 @@ for ($round = 0; $round < 3; $round++) {
         Ledger::found(false, ['tea'], ['milk'], 'tea'),
     ]), "\n";
     echo json_encode(Sharp\Probe\Tables::crossed()), "\n";
+    echo Sharp\Probe\Tables::restored(), "\n";
 
     $shelf = new Shelf();
     $shelf->keep(false, [], [1, -1, 2]);

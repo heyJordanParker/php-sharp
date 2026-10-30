@@ -35,6 +35,7 @@ bool(false)
 bool(true)
 [true,false,true,false]
 ["open=1",{"open":1},{"open":1},5]
+string 5=1, string tea=2, has "5": true
 [1,2]
 Cannot assign string to Set<int>: [2] expected int, got string 'x'
 {"1":[1,3],"0":[2]} {"10":1,"20":2,"30":3}
