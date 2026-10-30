@@ -12,6 +12,7 @@ public static class Tables
         return [
             global.http_build_query(counts),
             global.iterator_to_array(named),
+            global.iterator_to_array(counts),
             global.count(rows, global.COUNT_RECURSIVE),
         ];
     }
