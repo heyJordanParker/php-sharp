@@ -255,7 +255,8 @@ FROM ${GOLANG_IMAGE} AS golang-base
 
 #
 # FrankenPHP v1.13.4's Dockerfile, with e-dant/watcher and install-php-extensions at fixed releases, each checked
-# against its SHA-256.
+# against its SHA-256. Its brotli build and the runner's libbrotli copy run only on Bookworm, which ships libbrotli
+# 1.0.9, so they are left out: trixie ships 1.1.0.
 #
 
 FROM php-base AS common
@@ -331,22 +332,6 @@ RUN apt-get update && \
 	&& \
 	apt-get clean
 
-# TODO: temporary, remove with Bookworm (and in the runner): it ships libbrotli 1.0.9, cbrotli needs >= 1.1 and 1.2.1 fixes CVE-2026-111497
-WORKDIR /usr/local/src/brotli
-RUN set -eux; \
-	if pkg-config --atleast-version=1.1 libbrotlienc; then \
-		exit 0; \
-	fi; \
-	curl -fsSL -o brotli.tar.gz https://github.com/google/brotli/archive/refs/tags/v1.2.1.tar.gz; \
-	echo '98d35d11a78dc453aebb7d10c3748f3f73ff78c8267c0dc697b8631f67bf7e8f  brotli.tar.gz' | sha256sum -c -; \
-	tar xzf brotli.tar.gz --strip-components 1; \
-	cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF; \
-	cmake --build build; \
-	cmake --install build; \
-	# Multiarch dirs sort before libc.conf on arm64, arm and i386, so the distro libbrotli would win
-	echo /usr/local/lib > /etc/ld.so.conf.d/000-brotli.conf; \
-	ldconfig
-
 # Install e-dant/watcher (necessary for file watching), at the release FrankenPHP v1.13.4's go.mod pins
 WORKDIR /usr/local/src/watcher
 RUN set -eux; \
@@ -384,13 +369,12 @@ FROM common AS runner
 
 ENV GODEBUG=cgocheck=0
 
-# copy watcher and brotli (Bookworm only, temporary) shared libraries
-COPY --from=builder /usr/local/lib/libwatcher* /usr/local/lib/libbrotli* /usr/local/lib/
+# copy watcher shared library
+COPY --from=builder /usr/local/lib/libwatcher* /usr/local/lib/
 # fix for the file watcher on arm
 RUN apt-get update && \
 	apt-get install -y --no-install-recommends libstdc++6 && \
 	apt-get clean && \
-	if [ -e /usr/local/lib/libbrotlicommon.so.1 ]; then echo /usr/local/lib > /etc/ld.so.conf.d/000-brotli.conf; fi && \
 	ldconfig && \
 	# Remove files with non-deterministic content (embedded timestamps and mtimes) to keep image digests reproducible
 	rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /var/log/alternatives.log /var/cache/ldconfig/aux-cache
