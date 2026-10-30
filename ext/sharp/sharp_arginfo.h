@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 8c6b6f62ad4c1fe99be16c63a7c50ae759ef12fa */
+ * Stub hash: 8df02186c8c85e437778a535df9c2f2aa5575b8d */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -104,13 +104,42 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_removeLast, 0, 1,
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_clear, 0, 1, IS_VOID, 0)
-	ZEND_ARG_TYPE_INFO(1, list, IS_ARRAY, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(1, collection, Sharp\\Map|Sharp\\Set, MAY_BE_ARRAY, NULL)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_get, 0, 2, IS_MIXED, 0)
-	ZEND_ARG_TYPE_INFO(0, list, IS_ARRAY, 0)
-	ZEND_ARG_TYPE_INFO(0, index, IS_LONG, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(0, collection, Sharp\\Map, MAY_BE_ARRAY, NULL)
+	ZEND_ARG_TYPE_INFO(0, key, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_size, 0, 1, IS_LONG, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(0, table, Sharp\\Map|Sharp\\Set, 0, NULL)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_containsKey, 0, 2, _IS_BOOL, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(0, table, Sharp\\Map|Sharp\\Set, 0, NULL)
+	ZEND_ARG_TYPE_INFO(0, key, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_removeKey, 0, 2, _IS_BOOL, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(1, table, Sharp\\Map|Sharp\\Set, 0, NULL)
+	ZEND_ARG_TYPE_INFO(0, key, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_addKey, 0, 2, _IS_BOOL, 0)
+	ZEND_ARG_OBJ_INFO(1, table, Sharp\\Set, 0)
+	ZEND_ARG_TYPE_INFO(0, key, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_keys, 0, 1, IS_ARRAY, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(0, table, Sharp\\Map|Sharp\\Set, 0, NULL)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_values, 0, 1, IS_ARRAY, 0)
+	ZEND_ARG_OBJ_INFO(0, map, Sharp\\Map, 0)
+ZEND_END_ARG_INFO()
+
+#define arginfo_Sharp_Internal_pairs arginfo_Sharp_Internal_values
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_contains, 0, 2, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, list, IS_ARRAY, 0)
@@ -141,30 +170,43 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_filter, 0, 2, IS_
 	ZEND_ARG_OBJ_INFO(0, predicate, Closure, 0)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_Sharp_Internal_filterEntries, 0, 2, Sharp\\Map, 0)
+	ZEND_ARG_OBJ_INFO(0, map, Sharp\\Map, 0)
+	ZEND_ARG_OBJ_INFO(0, predicate, Closure, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_Sharp_Internal_filterElements, 0, 2, Sharp\\Set, 0)
+	ZEND_ARG_OBJ_INFO(0, set, Sharp\\Set, 0)
+	ZEND_ARG_OBJ_INFO(0, predicate, Closure, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_map, 0, 2, IS_ARRAY, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(0, collection, Sharp\\Map|Sharp\\Set, MAY_BE_ARRAY, NULL)
+	ZEND_ARG_OBJ_INFO(0, transform, Closure, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_flatMap, 0, 2, IS_ARRAY, 0)
 	ZEND_ARG_TYPE_INFO(0, list, IS_ARRAY, 0)
 	ZEND_ARG_OBJ_INFO(0, transform, Closure, 0)
 ZEND_END_ARG_INFO()
 
-#define arginfo_Sharp_Internal_flatMap arginfo_Sharp_Internal_map
-
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_Sharp_Internal_sumOf, 0, 2, MAY_BE_LONG|MAY_BE_DOUBLE)
-	ZEND_ARG_TYPE_INFO(0, list, IS_ARRAY, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(0, collection, Sharp\\Map|Sharp\\Set, MAY_BE_ARRAY, NULL)
 	ZEND_ARG_OBJ_INFO(0, selector, Closure, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_first, 0, 2, IS_MIXED, 0)
-	ZEND_ARG_TYPE_INFO(0, list, IS_ARRAY, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(0, collection, Sharp\\Map|Sharp\\Set, MAY_BE_ARRAY, NULL)
 	ZEND_ARG_OBJ_INFO(0, predicate, Closure, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_any, 0, 2, _IS_BOOL, 0)
-	ZEND_ARG_TYPE_INFO(0, list, IS_ARRAY, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(0, collection, Sharp\\Map|Sharp\\Set, MAY_BE_ARRAY, NULL)
 	ZEND_ARG_OBJ_INFO(0, predicate, Closure, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_Sharp_Internal_groupBy, 0, 2, Sharp\\Map, 0)
-	ZEND_ARG_TYPE_INFO(0, list, IS_ARRAY, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(0, collection, Sharp\\Map|Sharp\\Set, MAY_BE_ARRAY, NULL)
 	ZEND_ARG_OBJ_INFO(0, key, Closure, 0)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, type, IS_STRING, 1, "null")
 ZEND_END_ARG_INFO()
@@ -172,7 +214,7 @@ ZEND_END_ARG_INFO()
 #define arginfo_Sharp_Internal_associateBy arginfo_Sharp_Internal_groupBy
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_sortedBy, 0, 2, IS_ARRAY, 0)
-	ZEND_ARG_TYPE_INFO(0, list, IS_ARRAY, 0)
+	ZEND_ARG_OBJ_TYPE_MASK(0, collection, Sharp\\Map|Sharp\\Set, MAY_BE_ARRAY, NULL)
 	ZEND_ARG_OBJ_INFO(0, selector, Closure, 0)
 	ZEND_ARG_OBJ_INFO_WITH_DEFAULT_VALUE(0, comparison, Closure, 1, "null")
 ZEND_END_ARG_INFO()
@@ -332,12 +374,21 @@ ZEND_FUNCTION(Sharp_Internal_removeAt);
 ZEND_FUNCTION(Sharp_Internal_removeLast);
 ZEND_FUNCTION(Sharp_Internal_clear);
 ZEND_FUNCTION(Sharp_Internal_get);
+ZEND_FUNCTION(Sharp_Internal_size);
+ZEND_FUNCTION(Sharp_Internal_containsKey);
+ZEND_FUNCTION(Sharp_Internal_removeKey);
+ZEND_FUNCTION(Sharp_Internal_addKey);
+ZEND_FUNCTION(Sharp_Internal_keys);
+ZEND_FUNCTION(Sharp_Internal_values);
+ZEND_FUNCTION(Sharp_Internal_pairs);
 ZEND_FUNCTION(Sharp_Internal_contains);
 ZEND_FUNCTION(Sharp_Internal_indexOf);
 ZEND_FUNCTION(Sharp_Internal_nonEmpty);
 ZEND_FUNCTION(Sharp_Internal_entries);
 ZEND_FUNCTION(Sharp_Internal_toSet);
 ZEND_FUNCTION(Sharp_Internal_filter);
+ZEND_FUNCTION(Sharp_Internal_filterEntries);
+ZEND_FUNCTION(Sharp_Internal_filterElements);
 ZEND_FUNCTION(Sharp_Internal_map);
 ZEND_FUNCTION(Sharp_Internal_flatMap);
 ZEND_FUNCTION(Sharp_Internal_sumOf);
@@ -409,12 +460,21 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "removeLast"), zif_Sharp_Internal_removeLast, arginfo_Sharp_Internal_removeLast, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "clear"), zif_Sharp_Internal_clear, arginfo_Sharp_Internal_clear, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "get"), zif_Sharp_Internal_get, arginfo_Sharp_Internal_get, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "size"), zif_Sharp_Internal_size, arginfo_Sharp_Internal_size, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "containsKey"), zif_Sharp_Internal_containsKey, arginfo_Sharp_Internal_containsKey, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "removeKey"), zif_Sharp_Internal_removeKey, arginfo_Sharp_Internal_removeKey, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "addKey"), zif_Sharp_Internal_addKey, arginfo_Sharp_Internal_addKey, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "keys"), zif_Sharp_Internal_keys, arginfo_Sharp_Internal_keys, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "values"), zif_Sharp_Internal_values, arginfo_Sharp_Internal_values, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "pairs"), zif_Sharp_Internal_pairs, arginfo_Sharp_Internal_pairs, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "contains"), zif_Sharp_Internal_contains, arginfo_Sharp_Internal_contains, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "indexOf"), zif_Sharp_Internal_indexOf, arginfo_Sharp_Internal_indexOf, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "nonEmpty"), zif_Sharp_Internal_nonEmpty, arginfo_Sharp_Internal_nonEmpty, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "entries"), zif_Sharp_Internal_entries, arginfo_Sharp_Internal_entries, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "toSet"), zif_Sharp_Internal_toSet, arginfo_Sharp_Internal_toSet, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "filter"), zif_Sharp_Internal_filter, arginfo_Sharp_Internal_filter, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "filterEntries"), zif_Sharp_Internal_filterEntries, arginfo_Sharp_Internal_filterEntries, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "filterElements"), zif_Sharp_Internal_filterElements, arginfo_Sharp_Internal_filterElements, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "map"), zif_Sharp_Internal_map, arginfo_Sharp_Internal_map, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "flatMap"), zif_Sharp_Internal_flatMap, arginfo_Sharp_Internal_flatMap, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "sumOf"), zif_Sharp_Internal_sumOf, arginfo_Sharp_Internal_sumOf, 0, NULL, NULL)

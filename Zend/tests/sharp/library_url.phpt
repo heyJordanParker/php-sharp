@@ -2,7 +2,9 @@
 A PHP# class calls every member of Sharp.Net.Url: parse splits an absolute URL into its parts and keeps their percent-encoding, toString writes them back, tryParse gives null and parse throws ValueError for text that is not an absolute URL, and the encoding, query and validity statics never throw
 --FILE--
 <?php
-require __DIR__ . '/../../../sharp/composer/library/Sharp/Net/Url.sharp';
+foreach (['Net/Url', 'MapMembers'] as $file) {
+    require __DIR__ . "/../../../sharp/composer/library/Sharp/$file.sharp";
+}
 require __DIR__ . '/UrlCalls.sharp';
 
 use Demo\UrlCalls;

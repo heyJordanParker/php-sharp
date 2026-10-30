@@ -1,0 +1,75 @@
+namespace TableChanges;
+
+// Each change through a `ref` member of a Map or a Set reaches the place it lives, and a copy changes apart from it.
+public class Ledger
+{
+    public static List<bool> emptiness(Map<string, int> counts, Set<int> tags) =>
+        [counts.isEmpty(), counts.isNotEmpty(), tags.isEmpty(), tags.isNotEmpty()];
+
+    // A change to a copy separates the table first, so the value it was copied from keeps what it held.
+    public static List<int> copiedSet()
+    {
+        Set<int> tags = [1];
+        let copy = tags;
+        copy.add(2);
+        return [tags.count(), copy.count()];
+    }
+
+    public static List<int> copiedMap()
+    {
+        Map<string, int> counts = ["x": 1, "y": 2];
+        let removed = counts;
+        removed.remove("x");
+        let written = counts;
+        written["z"] = 3;
+        return [counts.count(), removed.count(), written.count()];
+    }
+
+    // A change through an element of a List changes the table at that index, and a copy of the List keeps its own.
+    public static List<int> elements()
+    {
+        List<Set<int>> sets = [[1]];
+        List<Map<string, int>> maps = [["a": 1]];
+        let copied = sets;
+        let mapped = maps;
+        sets[0].add(2);
+        maps[0]["b"] = 2;
+        maps[0]["a"] ??= 9;
+        return [sets[0].count(), copied[0].count(), maps[0].count(), mapped[0].count(), maps[0]["a"] ?? 0];
+    }
+
+    // A filter keeps the keys and the type of what it filters.
+    public static List<Any> kept(Map<string, int> counts, Set<int> tags)
+    {
+        Any keptCounts = counts.filter(count => count > 1);
+        Any keptTags = tags.filter(tag => tag > 1);
+        return [
+            keptCounts is Map<string, int>,
+            keptCounts is Map<string, string>,
+            keptTags is Set<int>,
+            keptTags is Set<string>,
+            counts.filter(count => count > 1).keys(),
+        ];
+    }
+
+    // A member of a value that may be any collection or an object runs the member of the kind the value holds, or the
+    // object's own method.
+    public static int counted(int pick, List<int> items, Map<string, int> counts, Set<int> tags, Box box)
+    {
+        let held = pick == 0 ? items : (pick == 1 ? counts : (pick == 2 ? tags : box));
+        return held.count();
+    }
+
+    public static bool holds(bool boxed, Set<int> tags, Box box, int value)
+    {
+        let held = boxed ? box : tags;
+        return held.contains(value);
+    }
+
+    // A member every collection kind of a union has runs the member of the kind the value holds.
+    public static bool found(bool listed, List<string> names, Set<string> tags, string name)
+    {
+        let held = listed ? names : tags;
+        return held.contains(name);
+    }
+}

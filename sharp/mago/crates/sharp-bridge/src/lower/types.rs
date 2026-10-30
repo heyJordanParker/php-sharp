@@ -3,6 +3,7 @@ use std::sync::Arc;
 use mago_analyzer::CodebasePatternNames;
 use mago_analyzer::artifacts::AnalysisArtifacts;
 use mago_analyzer::artifacts::CallTarget;
+use mago_analyzer::artifacts::MemberCall;
 use mago_analyzer::chosen_operator;
 use mago_analyzer::effects::Effects;
 use mago_analyzer::is_collection_member;
@@ -39,6 +40,7 @@ use mago_codex::ttype::comparator::ComparisonResult;
 use mago_codex::ttype::comparator::union_comparator;
 use mago_codex::ttype::comparator::union_comparator::can_expression_types_be_identical;
 use mago_codex::ttype::get_array_parameters;
+use mago_codex::ttype::get_collection_object;
 use mago_codex::ttype::get_mixed;
 use mago_codex::ttype::get_sharp_type;
 use mago_codex::ttype::is_written_in_sharp;
@@ -75,11 +77,6 @@ use super::inline::TAKES_KEY_ORDER;
 use super::inline::TAKES_RESULT_TYPE;
 use super::inline::key;
 
-/// Each collection PHP# has a class of methods for, with that class, which the analyzer checks a call on it against. A
-/// `List`'s members are the standard library's extensions.
-const COLLECTION_METHODS: [(&str, &[u8]); 2] =
-    [("Map", b"Sharp\\Internal\\MapMethods"), ("Set", b"Sharp\\Internal\\SetMethods")];
-
 /// The checker's types for one file. The lowering reads a type only through these queries, so `--assert-types` can
 /// turn each answer it used into a runtime guard.
 pub struct Types<'analysis> {
@@ -104,6 +101,24 @@ pub struct Declaration {
     pub name: Word,
     /// Whether code outside the class may use it. A class is public.
     pub public: bool,
+}
+
+/// The members a method call runs on a value that may hold more than one kind of collection, or a collection or an
+/// object, spec section 12, as [`Types::members_by_kind`] gives them.
+pub(crate) struct MembersByKind<'analysis> {
+    /// Each kind's standard library member, in the order the analysis resolved them, a `List`'s first.
+    pub(crate) members: Vec<KindMember<'analysis>>,
+    /// Whether an object the value may hold runs its own method of that name.
+    pub(crate) object: bool,
+}
+
+/// One kind's standard library member of a [`MembersByKind`].
+pub(crate) struct KindMember<'analysis> {
+    /// The class of the object the kind runs as, `None` for a `List`, which runs as a PHP array.
+    pub(crate) runs_as: Option<Word>,
+    pub(crate) declaration: Declaration,
+    /// The type arguments and the type the member's call has.
+    pub(crate) call: &'analysis MemberCall,
 }
 
 /// What a declaration is.
@@ -459,8 +474,8 @@ impl<'analysis> Types<'analysis> {
 
     /// The type arguments the generic method call at `span` gives the method, as [`Self::type_arguments`] writes those
     /// of a `new`. None when the method declares no type parameter, or a built-in class declares it, whose method never
-    /// reads them, as the prelude's `Sharp\Internal\MapMethods` and `Sharp\Internal\SetMethods` declare a map's and a
-    /// set's. A method of any project class, PHP# or plain PHP, may run a PHP# method that overrides or implements it,
+    /// reads them, as the prelude's `Sharp\Internal\IterableMethods` declares an `Iterable`'s. A method of any project
+    /// class, PHP# or plain PHP, may run a PHP# method that overrides or implements it,
     /// so a call through a plain PHP `@template` interface or parent carries them, and a plain PHP method ignores them.
     /// The class that declares the method decides, so `super.m()` carries them through a plain PHP parent that inherits
     /// a PHP# `m`.
@@ -477,15 +492,33 @@ impl<'analysis> Types<'analysis> {
 
     /// The type arguments the access `access` of a generic extension member gives the static method it runs as, spec
     /// section 26: those the checker inferred from the receiver for the extension block's type parameters, then the
-    /// member's own, written as [`Self::type_arguments`] writes those of a `new`. None for a member that isn't generic,
-    /// and for one whose type arguments PHP# can't all write.
-    pub(crate) fn extension_type_arguments(&self, access: &Expression) -> Option<String> {
-        let span = access.span();
-        let arguments = self.artifacts.inferred_type_arguments.get(&(span.start.offset, span.end.offset))?;
+    /// member's own, written as [`Self::type_arguments`] writes those of a `new`, or those of `member`, where the call
+    /// runs it of several. None for a member that isn't generic, and for one whose type arguments PHP# can't all write.
+    pub(crate) fn extension_type_arguments(&self, access: &Expression, member: Option<&MemberCall>) -> Option<String> {
+        let arguments = self.call_type_arguments_of(access, member)?;
 
         // A collection's member may take one only a PHP docblock writes, which its static method runs without, as a
         // plain PHP caller calls it.
         arguments.iter().all(is_written_in_sharp).then(|| self.argument_texts(arguments))
+    }
+
+    /// The type arguments the checker inferred for the call `call`, or for `member`, where the call runs it of several.
+    fn call_type_arguments_of<'call>(
+        &'call self,
+        call: &Expression,
+        member: Option<&'call MemberCall>,
+    ) -> Option<&'call Vec<TUnion>> {
+        let span = call.span();
+
+        match member {
+            Some(member) => member.type_arguments.as_ref(),
+            None => self.artifacts.inferred_type_arguments.get(&(span.start.offset, span.end.offset)),
+        }
+    }
+
+    /// The type the call `call` gives, or `member` gives, where the call runs it of several.
+    pub(crate) fn call_type<'call>(&'call self, call: &Expression, member: Option<&'call MemberCall>) -> &'call TUnion {
+        member.map_or_else(|| self.expression_type(call), |member| &member.result)
     }
 
     /// The type arguments the method value `value` of a PHP# generic method takes from the function type it goes
@@ -938,6 +971,14 @@ impl<'analysis> Types<'analysis> {
         (runs_in_engine && takes_function_value).then(|| method.original_name.to_string())
     }
 
+    /// Whether the call `call` runs a member of a PHP# interface, as [`Self::result_checked_member`] finds it, which a
+    /// plain PHP class may implement, so its result may be plain PHP's value: a PHP array for a `Map` or a `Set`.
+    pub(crate) fn runs_result_checked_member(&self, call: &Expression) -> bool {
+        self.artifacts.get_callees(call).any(|target| {
+            matches!(target, CallTarget::FunctionLike { callee, .. } if self.result_checked_member(callee).is_some())
+        })
+    }
+
     /// The class and the metadata of `callee` when it is a member of a PHP# interface, whose result each PHP# call
     /// checks, spec section 22.
     fn result_checked_member(
@@ -1368,32 +1409,43 @@ impl<'analysis> Types<'analysis> {
         }
     }
 
-    /// The member of a `List` the method call `call` runs on a value that may also be a `Map` or a `Set`, spec section
-    /// 12: the analysis checked it against the standard library's member and the other collections' method of that
-    /// name. None for a call on one kind, or on anything else.
-    pub(crate) fn list_member_among_collections(&self, call: &Expression) -> Option<Declaration> {
-        let (mut member, mut others) = (None, false);
+    /// The members the method call `call` runs on a value that may hold more than one kind of collection, or a
+    /// collection or an object, spec section 12, as the analysis resolved them. None for a call that runs one member, or
+    /// no collection's.
+    pub(crate) fn members_by_kind(&self, call: &Expression) -> Option<MembersByKind<'_>> {
+        let (mut members, mut object) = (Vec::new(), false);
         for callee in self.artifacts.get_callees(call) {
-            let CallTarget::FunctionLike { callee: FunctionLikeIdentifier::Method(class, method), .. } = callee else {
+            let CallTarget::FunctionLike { callee: callee @ FunctionLikeIdentifier::Method(class, method), .. } =
+                callee
+            else {
                 return None;
             };
-            if COLLECTION_METHODS.iter().any(|(_, methods)| class.as_bytes().eq_ignore_ascii_case(methods)) {
-                others = true;
-            } else {
-                let metadata = self.codebase.get_method(class.as_bytes(), method.as_bytes())?;
-                if !metadata.flags.is_extension_method() {
-                    return None;
-                }
-                member = Some(Declaration {
+            let metadata = self.codebase.get_method(class.as_bytes(), method.as_bytes())?;
+            if !metadata.flags.is_extension_method() {
+                object = true;
+                continue;
+            }
+            let receiver = metadata.parameters.first()?.get_type_metadata()?.type_union.get_single_array()?;
+            let runs_as = match get_collection_object(receiver, self.codebase) {
+                Some(TAtomic::Object(object)) => object.get_name(),
+                _ => None,
+            };
+            let Some(member_call) = self.artifacts.get_member_call(call, callee) else {
+                unreachable!("the analysis records each member of a call that runs several");
+            };
+            members.push(KindMember {
+                runs_as,
+                declaration: Declaration {
                     kind: DeclarationKind::StaticMethod,
                     class: self.class_declaration(class.as_bytes()).name,
                     name: metadata.original_name,
                     public: true,
-                });
-            }
+                },
+                call: member_call,
+            });
         }
 
-        member.filter(|_| others)
+        (!members.is_empty() && members.len() + usize::from(object) > 1).then_some(MembersByKind { members, object })
     }
 
     /// The slot an inline form leaves for each parameter of the engine function `function`, which `written` calls, that
@@ -1450,18 +1502,6 @@ impl<'analysis> Types<'analysis> {
                     if self.codebase.get_method(class.as_bytes(), method.as_bytes())
                         .is_some_and(|metadata| metadata.flags.is_extension_method())
             )
-    }
-
-    /// The result type of the function the method value `value` is, as the checker typed it. None for one it typed
-    /// without.
-    pub(crate) fn value_result_type(&self, value: &Expression) -> Option<&'analysis TUnion> {
-        let Some(TAtomic::Callable(TCallable::Signature(signature))) =
-            self.expression_type(value).types.iter().find(|atomic| atomic.is_callable())
-        else {
-            unreachable!("the analysis types a method value as its signature, not the value at {:?}", value.span());
-        };
-
-        signature.get_return_type()
     }
 
     /// The parameters of the function the method value `value` is, as the checker typed it, each named as the method
@@ -1685,35 +1725,6 @@ impl<'analysis> Types<'analysis> {
         }
 
         element_type.unwrap_or_else(|| unreachable!("the checker types the value as a collection"))
-    }
-
-    /// The collection, `Map` or `Set`, and the name in lowercase of the collection method the analyzer checked the
-    /// method call `call` against, null-safe or not, or that the read `call` gives the value of, spec section 14.3: a
-    /// method of `Sharp\Internal\MapMethods` or `Sharp\Internal\SetMethods`. None for a call of any other method.
-    pub(crate) fn collection_method(&self, call: &Expression) -> Option<(&'static str, Vec<u8>)> {
-        let mut callees = self.artifacts.get_callees(call);
-        let (Some(CallTarget::FunctionLike { callee: FunctionLikeIdentifier::Method(class, method), .. }), None) =
-            (callees.next(), callees.next())
-        else {
-            return None;
-        };
-        let collection = COLLECTION_METHODS
-            .into_iter()
-            .find_map(|(collection, methods)| class.as_bytes().eq_ignore_ascii_case(methods).then_some(collection))?;
-
-        Some((collection, method.as_bytes().to_ascii_lowercase()))
-    }
-
-    /// Whether the method call `call`, null-safe or not, runs a `Map` method that leaves its receiver as it is, which
-    /// `Sharp\Internal\MapMethods` declares mutation-free.
-    pub(crate) fn reads_map(&self, call: &Expression) -> bool {
-        let Some(("Map", method)) = self.collection_method(call) else {
-            return false;
-        };
-
-        self.codebase
-            .get_method(b"Sharp\\Internal\\MapMethods", &method)
-            .is_some_and(|metadata| metadata.flags.is_mutation_free())
     }
 
     /// Whether the method call `call`, null-safe or not, runs a lazy operation of a PHP# `Iterable<T>`, spec section 12,
@@ -2127,12 +2138,11 @@ impl<'analysis> Types<'analysis> {
 
     /// The class-like whose `operator <=>` the call `call`, which sorts, orders two keys by, as `<` on two values of
     /// the key type its last type argument names chooses it, spec section 19, so a `List<Priced>` sorts by `Priced`'s
-    /// whatever classes it holds. A call sorts when it runs `sortedBy` or a form whose engine function takes
-    /// [`TAKES_KEY_ORDER`]. None for keys of a type that declares none, such as strings.
-    pub(crate) fn sorting_operator(&self, call: &Expression) -> Option<Word> {
-        let span = call.span();
-        let Some(key) = self.artifacts.inferred_type_arguments.get(&(span.start.offset, span.end.offset))?.last()
-        else {
+    /// whatever classes it holds. A call sorts when it runs a form whose engine function takes [`TAKES_KEY_ORDER`].
+    /// `member` is the member the call runs, where it runs one of several. None for keys of a type that declares none,
+    /// such as strings.
+    pub(crate) fn sorting_operator(&self, call: &Expression, member: Option<&MemberCall>) -> Option<Word> {
+        let Some(key) = self.call_type_arguments_of(call, member)?.last() else {
             unreachable!("a call that sorts takes the type of its keys as its last type argument");
         };
         let key = key.to_non_nullable();

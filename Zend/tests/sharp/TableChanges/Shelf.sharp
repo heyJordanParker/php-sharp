@@ -1,0 +1,26 @@
+namespace TableChanges;
+
+// A member of a value that may be a List or another collection makes the collection of the kind the value holds, of
+// that kind's type, as its call on that kind alone does.
+public class Shelf
+{
+    public Set<int> kept { get; set; } = [];
+    public Map<int, List<int>> grouped { get; set; } = [:];
+    public Map<int, int> associated { get; set; } = [:];
+
+    public void keep(bool listed, List<int> items, Set<int> tags)
+    {
+        let held = listed ? items : tags;
+        const filtered = held.filter(t => t > 0);
+        if (filtered is Set<int> set) {
+            this.kept = set;
+        }
+    }
+
+    public void group(bool listed, List<int> items, Map<string, int> counts)
+    {
+        let held = listed ? items : counts;
+        this.grouped = held.groupBy(value => value % 2);
+        this.associated = held.associateBy(value => value * 10);
+    }
+}

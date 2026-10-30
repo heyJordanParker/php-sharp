@@ -7,6 +7,7 @@ use mago_codex::identifier::method::MethodIdentifier;
 use mago_codex::ttype::TType;
 use mago_codex::ttype::add_optional_union_type;
 use mago_codex::ttype::atomic::TAtomic;
+use mago_codex::ttype::atomic::array::TArray;
 use mago_codex::ttype::atomic::object::TObject;
 use mago_codex::ttype::atomic::object::named::TNamedObject;
 use mago_codex::ttype::comparator::ComparisonResult;
@@ -17,6 +18,7 @@ use mago_codex::ttype::get_mixed;
 use mago_codex::ttype::get_never;
 use mago_codex::ttype::get_null;
 use mago_codex::ttype::get_void;
+use mago_codex::ttype::is_key_type;
 use mago_codex::ttype::template::TemplateResult;
 use mago_codex::ttype::union::TUnion;
 use mago_reporting::Annotation;
@@ -551,8 +553,10 @@ where
     if method_call::changes_receiver(context, &extension) {
         method_call::check_stored_in_static(context, artifacts, receiver, arguments);
     }
-    // A collection member compares the value of a parameter marked `ComparedByEquality` with each element as `==` does,
-    // spec section 12, once the value's type is known. A value that is no element is refused by its argument check.
+    // A collection member compares the value of a parameter marked `ComparedByEquality` with each element of a `List`,
+    // or each key of a `Map` or a `Set`, as `==` does, spec section 12, once the value's type is known. A value that is
+    // no element is refused by its argument check. A `Map` and a `Set` find a key by its `hash()` first, so a key of
+    // another type is never compared, and a search is refused only where a key declaration is, by `is_key_type`.
     for (parameter, argument) in metadata.parameters.iter().skip(1).zip(&arguments.arguments) {
         if parameter
             .attributes
@@ -567,22 +571,29 @@ where
                 .types
                 .iter()
                 .filter_map(|atomic| match atomic {
-                    TAtomic::Array(array) => Some(get_array_parameters(array, context.codebase).1),
+                    TAtomic::Array(array @ TArray::List(_)) => Some(get_array_parameters(array, context.codebase).1),
+                    TAtomic::Array(array) => Some(get_array_parameters(array, context.codebase).0),
                     _ => None,
                 })
                 .fold(None, |element_type, other| {
                     Some(add_optional_union_type(other, element_type.as_ref(), context.codebase))
                 })
                 .unwrap_or_else(get_never);
-            if union_comparator::is_contained_by(
-                context.codebase,
-                value_type,
-                &element_type,
-                false,
-                false,
-                false,
-                &mut ComparisonResult::new(),
-            ) {
+            let searches_list = receiver_type
+                .types
+                .iter()
+                .all(|atomic| matches!(atomic, TAtomic::Array(TArray::List(_)) | TAtomic::Null));
+            if (searches_list || !is_key_type(&element_type, context.codebase))
+                && union_comparator::is_contained_by(
+                    context.codebase,
+                    value_type,
+                    &element_type,
+                    false,
+                    false,
+                    false,
+                    &mut ComparisonResult::new(),
+                )
+            {
                 let method = metadata.original_name;
                 check_element_equality(
                     context,

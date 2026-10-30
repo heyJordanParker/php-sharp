@@ -177,9 +177,23 @@ function removeAt(array &$list, int $index): mixed {}
 
 function removeLast(array &$list): mixed {}
 
-function clear(array &$list): void {}
+function clear(array|\Sharp\Map|\Sharp\Set &$collection): void {}
 
-function get(array $list, int $index): mixed {}
+function get(array|\Sharp\Map $collection, mixed $key): mixed {}
+
+function size(\Sharp\Map|\Sharp\Set $table): int {}
+
+function containsKey(\Sharp\Map|\Sharp\Set $table, mixed $key): bool {}
+
+function removeKey(\Sharp\Map|\Sharp\Set &$table, mixed $key): bool {}
+
+function addKey(\Sharp\Set &$table, mixed $key): bool {}
+
+function keys(\Sharp\Map|\Sharp\Set $table): array {}
+
+function values(\Sharp\Map $map): array {}
+
+function pairs(\Sharp\Map $map): array {}
 
 function contains(array $list, mixed $value): bool {}
 
@@ -193,18 +207,22 @@ function toSet(array $list, ?string $type = null): \Sharp\Set {}
 
 function filter(array $list, \Closure $predicate): array {}
 
-function map(array $list, \Closure $transform): array {}
+function filterEntries(\Sharp\Map $map, \Closure $predicate): \Sharp\Map {}
+
+function filterElements(\Sharp\Set $set, \Closure $predicate): \Sharp\Set {}
+
+function map(array|\Sharp\Map|\Sharp\Set $collection, \Closure $transform): array {}
 
 function flatMap(array $list, \Closure $transform): array {}
 
-function sumOf(array $list, \Closure $selector): int|float {}
+function sumOf(array|\Sharp\Map|\Sharp\Set $collection, \Closure $selector): int|float {}
 
-function first(array $list, \Closure $predicate): mixed {}
+function first(array|\Sharp\Map|\Sharp\Set $collection, \Closure $predicate): mixed {}
 
-function any(array $list, \Closure $predicate): bool {}
+function any(array|\Sharp\Map|\Sharp\Set $collection, \Closure $predicate): bool {}
 
-function groupBy(array $list, \Closure $key, ?string $type = null): \Sharp\Map {}
+function groupBy(array|\Sharp\Map|\Sharp\Set $collection, \Closure $key, ?string $type = null): \Sharp\Map {}
 
-function associateBy(array $list, \Closure $key, ?string $type = null): \Sharp\Map {}
+function associateBy(array|\Sharp\Map|\Sharp\Set $collection, \Closure $key, ?string $type = null): \Sharp\Map {}
 
-function sortedBy(array $list, \Closure $selector, ?\Closure $comparison = null): array {}
+function sortedBy(array|\Sharp\Map|\Sharp\Set $collection, \Closure $selector, ?\Closure $comparison = null): array {}
