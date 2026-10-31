@@ -2,6 +2,12 @@
 
 Every PHP# release, newest first. PHP#, its engine and `mago` release together at one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Before 1.0, a minor release may break 0.x code, so each one opens with what to change when upgrading.
 
+## [Unreleased]
+
+### Fixed
+
+- An extension hook that runs past `request-timeout-ms` is now named in the error, as "made no progress for 30000 ms on the after-analysis hooks of plugin `dead-routes`", instead of by a request number. Each plugin's project-level hooks now get the whole deadline, as each file's hooks do (#222).
+
 ## [0.6.0] - 2026-10-31
 
 ### Upgrading from 0.5
@@ -208,6 +214,7 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.0...HEAD
 [0.6.0]: https://github.com/heyJordanParker/php-sharp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/heyJordanParker/php-sharp/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/heyJordanParker/php-sharp/compare/v0.4.1...v0.4.2
