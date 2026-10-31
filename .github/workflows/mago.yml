@@ -88,6 +88,12 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: cargo check -p mago-sharp-bridge --locked
 
+      # The fuzz crate is a workspace of its own, which fuzz.yml builds only when it changes, so a version bump that
+      # leaves its lock behind fails here, on the pull request that makes it.
+      - name: The fuzz crate's Cargo.lock is current
+        if: matrix.os == 'macos-latest'
+        run: cargo metadata --locked --format-version 1 --manifest-path crates/syntax/fuzz/Cargo.toml > /dev/null
+
       - name: keep the file watcher out of the PHP# bridge
         if: matrix.os == 'macos-latest'
         run: |
