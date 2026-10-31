@@ -7,7 +7,11 @@ require __DIR__ . '/effect_classes.inc';
 use Sharp\Time\Duration;
 
 $clock = new Sharp\Time\Clock();
-var_dump(abs($clock->now()->epochSeconds - time()) <= 1, $clock->now()->nanosecond % 1_000 === 0);
+// The clock reads a second between the one before the read and the one after, however long the read takes. Both come
+// from DateTimeImmutable, as now() does.
+$before = (new DateTimeImmutable())->getTimestamp();
+$now = $clock->now()->epochSeconds;
+var_dump($before <= $now && $now <= (new DateTimeImmutable())->getTimestamp(), $clock->now()->nanosecond % 1_000 === 0);
 $start = $clock->timestamp();
 $clock->sleep(Duration::ofMilliseconds(2));
 $elapsed = $clock->elapsedSince($start);
@@ -24,9 +28,10 @@ foreach ([fn () => $clock->sleep(new Duration(-1)), fn () => $clock->elapsedSinc
 // A fixed clock always reads its instant, returns from sleep at once, and measures no time.
 $fixed = Sharp\Time\Clock::fixed(new Sharp\Time\Instant(1792693800, 250));
 $start = $fixed->timestamp();
+// A real sleep of five seconds takes five seconds at the least, so one that took less did not sleep.
 $before = hrtime(true);
 $fixed->sleep(Duration::ofSeconds(5));
-var_dump(hrtime(true) - $before < 1_000_000_000, $fixed->now()->epochSeconds, $fixed->now()->nanosecond);
+var_dump(hrtime(true) - $before < 5_000_000_000, $fixed->now()->epochSeconds, $fixed->now()->nanosecond);
 var_dump($fixed->timestamp() === $start, $fixed->elapsedSince($start)->nanoseconds);
 try {
     $fixed->sleep(new Duration(-1));

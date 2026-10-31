@@ -6,6 +6,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ### Fixed
 
+- A save just after `mago analyze --watch` starts or restarts on a busy Mac is now analyzed (#221).
 - An extension hook that runs past `request-timeout-ms` is now named in the error, as "made no progress for 30000 ms on the after-analysis hooks of plugin `dead-routes`", instead of by a request number. Each plugin's project-level hooks now get the whole deadline, as each file's hooks do (#222).
 
 ## [0.6.0] - 2026-10-31
