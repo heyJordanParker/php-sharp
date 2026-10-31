@@ -13,6 +13,10 @@ permissions:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
   cancel-in-progress: true
+# mago's test-run profile builds without incremental state in CI, as sharp/mago/Cargo.toml explains. sharp/docker/run
+# and PHP_EXTENSIONS's docker run pass it into the container.
+env:
+  CARGO_INCREMENTAL: 0
 jobs:
   # CI_PASSED is this workflow's one required check, so the workflow always runs, and LINUX,
   # LINUX_ZTS, HOSTS, PHP_EXTENSIONS and MACOS skip a change to documentation alone. docs/spec.md, README.md and
@@ -103,8 +107,9 @@ jobs:
             sharp/build/rustup
           # rustup's toolchains are binaries for the runner's architecture, so each architecture keeps its own.
           key: SHARP_LINUX_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
-      # sharp/bin/test builds mago from sharp/mago into sharp/build/<os>-<arch>/mago, with the test-run profile
-      # sharp/mago/Cargo.toml holds. The cache keeps the dependencies' build, and cargo rebuilds Mago's own crates.
+      # sharp/bin/test builds mago from sharp/mago into sharp/build/<os>-<arch>/mago, in the test-run profile
+      # sharp/mago/Cargo.toml explains. The cache holds that build as the first run after its key changed made it: the
+      # dependencies, which change only with the key, and Mago's own crates, which cargo rebuilds when they changed since.
       - name: Mago cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -142,7 +147,7 @@ jobs:
       - name: Verify ext/sharp/sharp_unit.h, with its sharp_kind, SHARP_T_ tokens and SHARP_UNIT_ABI, is the header sharp/mago generates from Zend/zend_ast.h and Zend/zend_language_parser.h
         run: |
           sharp/docker/run php sharp/mago/scripts/regen-sharp-kinds.php Zend/zend_ast.h Zend/zend_language_parser.h | diff -u sharp/mago/crates/sharp-bridge/src/kind.rs -
-          # cargo builds nothing for the mago sharp/bin/test built, and names the out_dir of the bridge that mago links.
+          # cargo builds nothing for the test-run mago sharp/bin/test built, and names the out_dir of the bridge it links.
           # `-p mago-sharp-bridge` resolves other features, so it built a second bridge and its dependencies beside it.
           # shellcheck disable=SC2016 # The image's sh expands the cargo it finds there, and its own architecture.
           sharp/docker/run sh -c 'cargo="$(cd ext/sharp && rustup which cargo)" && PATH="$(dirname "$cargo"):$PATH" "$cargo" build --locked --profile test-run --manifest-path sharp/mago/Cargo.toml --target-dir "sharp/build/linux-$(uname -m)/mago" --bin mago --message-format=json' > "$RUNNER_TEMP/build.json"
@@ -374,6 +379,7 @@ jobs:
             --ulimit stack=8388608:-1 \
             --env CARGO_HOME=/src/sharp/build/cargo \
             --env RUSTUP_HOME=/src/sharp/build/rustup \
+            --env CARGO_INCREMENTAL \
             --env XDG_CACHE_HOME=/src/sharp/build/cache \
             --volume "$PWD:/src" \
             --workdir /src \

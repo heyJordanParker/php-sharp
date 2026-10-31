@@ -88,8 +88,7 @@ if [[ " ${MAKEFLAGS:-}" =~ [[:space:]](-j[[:space:]]*|--jobs=)([0-9]+) ]]; then
   jobs="${BASH_REMATCH[2]}"
 fi
 
-# The test-run profile is release without link-time optimization, so a run after a checker change rebuilds in seconds
-# and tests what release prints. sharp/mago/Cargo.toml says why.
+# mago builds in the test-run profile, which sharp/mago/Cargo.toml explains.
 cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
 PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --profile test-run --jobs "$jobs" \
   --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$mago_dir" --bin mago
