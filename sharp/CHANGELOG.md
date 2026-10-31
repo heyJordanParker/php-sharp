@@ -7,8 +7,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Fixed
 
 - A save just after `mago analyze --watch` starts or restarts on a busy Mac is now analyzed (#221).
-- A user's extension on `Iterable<TItem>` reaches a `Map<TKey, TValue>` with `TItem` as `[TKey, TValue]`, and an extension on `List<T>` reaches a `List<int>|List<string>` with `T` as `int|string`, as a generic call's parameter takes them.
-- An `int` no longer reaches the `float`-only methods `round`, `floor`, `ceil` and `isFinite`, since an `int` fills no `float` parameter. Convert with `(float)` first, as in `((float) count).round(2)`.
+- A user's extension on `Iterable<TItem>` reaches a `Map<TKey, TValue>` with `TItem` as `[TKey, TValue]`, and an extension on `List<T>` reaches a `List<int>|List<string>` with `T` as `int|string`, as a generic call's parameter takes them (#224).
+- An `int` no longer reaches the `float`-only methods `round`, `floor`, `ceil` and `isFinite`, since an `int` fills no `float` parameter. Convert with `(float)` first, as in `((float) count).round(2)` (#224).
 
 ## [0.6.0] - 2026-10-31
 
