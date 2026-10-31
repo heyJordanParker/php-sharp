@@ -48,6 +48,7 @@ bool(true)
 bool(true)
 [1,5] [1,5] {"milk":1} {"milk":1}
 55 55 [5,7] ["first","second"]
+{"z":1,"a":1}
 bool(true)
 bool(false)
 2 ["vip0","vip1","vip2"] 6

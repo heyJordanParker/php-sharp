@@ -1,4 +1,5 @@
 <?php
+require __DIR__ . '/harness/Basket.inc';
 require __DIR__ . '/harness/fixture.inc';
 fixture('TableChanges');
 require __DIR__ . '/LibraryProbe/Stage.sharp';
@@ -78,6 +79,7 @@ for ($round = 0; $round < 3; $round++) {
 
     $memo = new Memo();
     echo $memo->at(10), ' ', Memo::cached(10), ' ', json_encode($memo->stepped()), ' ', json_encode($memo->tagged()), "\n";
+    echo json_encode(Memo::counted(new Lib\Basket())), "\n";
 
     // The statics keep their values from round to round.
     Registry::count('tea', $round);
