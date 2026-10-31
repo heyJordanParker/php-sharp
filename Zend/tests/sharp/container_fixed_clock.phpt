@@ -44,13 +44,20 @@ SHARP,
 require "$root/tests/Billing/InvoiceTest.sharp";
 $container = new Sharp\Container();
 
-$isNow = static fn (string $issued): string => var_export(abs(Sharp\Time\Instant::parse($issued)->epochSeconds - time()) <= 1, true);
-echo "before a test, the real time: ", $isNow($container->get('App\Billing\Invoice')->issuedAt()), "\n";
+// The real time is between the second before the read and the second after, however long the read takes. Both come
+// from DateTimeImmutable, as the real clock's now() does.
+$isNow = static function () use ($container): string {
+    $before = (new DateTimeImmutable())->getTimestamp();
+    $issued = Sharp\Time\Instant::parse($container->get('App\Billing\Invoice')->issuedAt())->epochSeconds;
+
+    return var_export($before <= $issued && $issued <= (new DateTimeImmutable())->getTimestamp(), true);
+};
+echo "before a test, the real time: ", $isNow(), "\n";
 Sharp\Internal\startTest('App\Billing\InvoiceTest');
 echo "a test of the test file's class: ", $container->get('App\Billing\Invoice')->issuedAt(), "\n";
 echo "a second read in the test: ", $container->get('App\Billing\Invoice')->issuedAt(), "\n";
 Sharp\Internal\endTest();
-echo "after the test, the real time: ", $isNow($container->get('App\Billing\Invoice')->issuedAt()), "\n";
+echo "after the test, the real time: ", $isNow(), "\n";
 ?>
 --EXPECT--
 before a test, the real time: true

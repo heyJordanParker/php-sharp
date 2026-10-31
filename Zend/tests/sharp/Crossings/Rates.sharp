@@ -1,27 +1,18 @@
 namespace Demo;
 
-// The same ten entries as a constant and as a static, read the same way.
+import Lib.Probe;
+
+// A Map constant, which PHP# makes into its object on the first read and keeps.
 public class Rates
 {
-    public const Map<string, int> RATES = ["a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "h": 8, "i": 9, "j": 10];
+    public const Map<string, int> RATES = ["a": 1, "b": 2, "c": 3];
 
-    public static Map<string, int> rates { get; set; } = ["a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "h": 8, "i": 9, "j": 10];
-
-    public static int fromConstant(int times)
+    // The object id of two reads, both held at once, so a read that made a new Map could not reuse the first one's id.
+    public static List<int> readIds()
     {
-        int total = 0;
-        for (int i = 0; i < times; i++) {
-            total += Rates.RATES["c"] ?? 0;
-        }
-        return total;
-    }
+        Map<string, int> first = Rates.RATES;
+        Map<string, int> again = Rates.RATES;
 
-    public static int fromStatic(int times)
-    {
-        int total = 0;
-        for (int i = 0; i < times; i++) {
-            total += Rates.rates["c"] ?? 0;
-        }
-        return total;
+        return [Probe.id(first), Probe.id(again)];
     }
 }
