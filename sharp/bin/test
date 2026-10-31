@@ -93,6 +93,15 @@ PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --release --job
   --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$mago_dir" --bin mago
 mago="$mago_dir/release/mago"
 
+# run-tests.php writes the scripts of each test beside it, as signatures.php for signatures.phpt, and deletes them only
+# once the test passes. A run that failed or was stopped leaves them, and mago compile refuses one whose name is a
+# fixture class's in any case, as signatures.php is Signatures.sharp's. So every run deletes them before it compiles.
+scripts=()
+for test in "$root"/Zend/tests/sharp/*.phpt; do
+  scripts+=("${test%.phpt}".{php,skip.php,clean.php,preload.php})
+done
+rm -f "${scripts[@]}"
+
 echo "== mago compile, built from sharp/mago"
 if ! "$mago" --no-version-check --colors never --workspace "$root" --config "$root/Zend/tests/sharp/mago.toml" compile; then
   echo "mago compile refused a PHP# test fixture, and the engine runs only compiled files." >&2

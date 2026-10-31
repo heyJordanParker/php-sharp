@@ -60,6 +60,10 @@ A mistake that no check can catch yet goes in `docs/architecture/guards.md`, wit
 - A builder runs only these locally, and leaves the other runs to CI:
   - `sharp/bin/test`, the run without opcache. It builds `mago` from `sharp/mago/` first.
   - In `sharp/mago/`: `cargo test --workspace --locked`, `cargo clippy --workspace --all-targets --all-features -- -D warnings` and `cargo fmt --all -- --check`.
+- Each run of `sharp/bin/test` and `sharp/bin/bench` stands on its own:
+  - `sharp/bin/bench` compiles a copy of its rows inside its own container, so it runs beside `sharp/bin/test` in the same worktree.
+  - A run that failed or was stopped leaves nothing that breaks the next one.
+  - Every `sharp/bin/test` mode, `--linux` included, works the same in a git worktree as in the main checkout.
 
 ## Platforms
 

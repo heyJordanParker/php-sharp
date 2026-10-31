@@ -45,7 +45,7 @@ sharp/bin/php-extensions gd zip # check that php -m lists each PHP extension, an
 
 `sharp/bin/test` first compares the version the built engine prints in `php --ri sharp` with `PHP_SHARP_VERSION` in `ext/sharp/php_sharp.h`, and refuses to run until `sharp/bin/build` rebuilds an engine that differs.
 
-The engine runs only `.sharpc` files that `mago compile` wrote. So before any test runs, `sharp/bin/test` builds `mago` from `sharp/mago/` with cargo, into `sharp/build/<os>-<arch>/mago`, and runs `mago compile` from the repository root into its `.sharp/` folder. cargo rebuilds only what changed, so a run after a checker change tests that change. `Zend/tests/sharp/mago.toml` makes the `.sharp` fixtures, the plain PHP classes and functions they call, in `Zend/tests/sharp/harness/`, and the standard library in `sharp/composer/library/` one checker project. A fixture the checker refuses fails the run, because a refusal is Mago's to test. Tests that build their own project, such as the refusal tests, find `mago` in `TEST_MAGO_EXECUTABLE`.
+The engine runs only `.sharpc` files that `mago compile` wrote. So before any test runs, `sharp/bin/test` builds `mago` from `sharp/mago/` with cargo, into `sharp/build/<os>-<arch>/mago`, and runs `mago compile` from the repository root into its `.sharp/` folder. It first deletes the scripts `run-tests.php` writes beside each test, such as `signatures.php` for `signatures.phpt`, which a run that failed or was stopped leaves behind, because `mago compile` refuses one named like a fixture class in any case. cargo rebuilds only what changed, so a run after a checker change tests that change. `Zend/tests/sharp/mago.toml` makes the `.sharp` fixtures, the plain PHP classes and functions they call, in `Zend/tests/sharp/harness/`, and the standard library in `sharp/composer/library/` one checker project. A fixture the checker refuses fails the run, because a refusal is Mago's to test. Tests that build their own project, such as the refusal tests, find `mago` in `TEST_MAGO_EXECUTABLE`.
 
 `--differential` checks that every `.sharp` fixture `mago compile` accepted makes `php -l` print nothing but "No syntax errors detected", so a compile warning or deprecation also fails the run.
 
@@ -55,7 +55,7 @@ The engine runs only `.sharpc` files that `mago compile` wrote. So before any te
 
 `--census` runs `sharp/bin/census`. It reads the register of PHP# marks in `Zend/zend_compile.h` and fails on each line in `Zend/` and `ext/opcache/` that writes or compares a marked field of a marked opcode or AST kind without naming the mark, as the header of `sharp/bin/census` describes. A new mark goes in the register, beside the upstream flags of the same field and kind, with a `ZEND_STATIC_ASSERT` that fails the build when they overlap.
 
-`--linux` runs either command inside the Debian trixie image from `sharp/docker/`, for example `sharp/bin/build --linux` and `sharp/bin/test --linux --opcache`.
+`--linux` runs either command inside the Debian trixie image from `sharp/docker/`, for example `sharp/bin/build --linux` and `sharp/bin/test --linux --opcache`. In a git worktree, `sharp/docker/run` also mounts the main checkout's `.git` folder at its own path, because the worktree's `.git` file names a folder inside it, so git, `sharp/bin/spec` and `mago compile` find the repository in the container as they do in the main checkout.
 
 Every PHP# feature must pass `sharp/bin/test --opcache --repeat --passes --census --spec --differential --phpunit`. `sharp/bin/test` disables the JIT outside `--passes`.
 
