@@ -88,10 +88,12 @@ if [[ " ${MAKEFLAGS:-}" =~ [[:space:]](-j[[:space:]]*|--jobs=)([0-9]+) ]]; then
   jobs="${BASH_REMATCH[2]}"
 fi
 
+# The test-run profile is release without link-time optimization, so a run after a checker change rebuilds in seconds
+# and tests what release prints. sharp/mago/Cargo.toml says why.
 cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
-PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --release --jobs "$jobs" \
+PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --profile test-run --jobs "$jobs" \
   --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$mago_dir" --bin mago
-mago="$mago_dir/release/mago"
+mago="$mago_dir/test-run/mago"
 
 # run-tests.php writes each test's script beside it as <test>.php, and mago compile writes each PHP# class's companion
 # beside its source as <Class>.php. A disk that ignores case, as macOS's does, keeps one file for both when the two
