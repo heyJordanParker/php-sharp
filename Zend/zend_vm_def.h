@@ -1935,7 +1935,7 @@ ZEND_VM_INLINE_HELPER(zend_fetch_static_prop_helper, ANY, ANY, int type)
 	SAVE_OPLINE();
 
 	prop = zend_fetch_static_property_address(
-		&prop_info, opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR), type,
+		&prop_info, opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS, type,
 		type == BP_VAR_W ? opline->extended_value : 0 OPLINE_CC EXECUTE_DATA_CC);
 	if (UNEXPECTED(!prop)) {
 		ZEND_ASSERT(EG(exception) || (type == BP_VAR_IS));
@@ -1969,10 +1969,6 @@ ZEND_VM_C_LABEL(copy_deref):
 			}
 		} else {
 			ZVAL_COPY_DEREF(EX_VAR(opline->result.var), prop);
-		}
-		if (type == BP_VAR_R && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)
-		 && SHARP_IS_COLLECTION(EX_VAR(opline->result.var))) {
-			sharp_collection_of_static_property(EX_VAR(opline->result.var), prop, prop_info);
 		}
 		/* PHP#: plain PHP code reads a property whose type holds a Map or a Set as its PHP array. */
 		if ((type == BP_VAR_R || type == BP_VAR_IS) && prop != &EG(uninitialized_zval)
@@ -2195,8 +2191,7 @@ ZEND_VM_HOT_OBJ_HANDLER(82, ZEND_FETCH_OBJ_R, CONST|TMPVAR|UNUSED|THIS|CV, CONST
 		zval *retval;
 
 		if (OP2_TYPE == IS_CONST) {
-			/* FUNC_ARG fetch may contain ZEND_FETCH_REF, and a PHP# receiver ZEND_SHARP_OPERATOR */
-			cache_slot = CACHE_ADDR(opline->extended_value & ~(ZEND_FETCH_REF|ZEND_SHARP_OPERATOR));
+			cache_slot = CACHE_ADDR(opline->extended_value & ~ZEND_FETCH_REF /* FUNC_ARG fetch may contain it */);
 
 			if (EXPECTED(zobj->ce == CACHED_PTR_EX(cache_slot))) {
 				uintptr_t prop_offset = (uintptr_t)CACHED_PTR_EX(cache_slot + 1);
@@ -2215,9 +2210,6 @@ ZEND_VM_C_LABEL(fetch_obj_r_simple):
 						} else {
 ZEND_VM_C_LABEL(fetch_obj_r_fast_copy):
 							ZVAL_COPY_DEREF(EX_VAR(opline->result.var), retval);
-							if (OP2_TYPE == IS_CONST && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
-								ZEND_VM_C_GOTO(fetch_obj_r_sharp);
-							}
 							ZEND_VM_NEXT_OPCODE();
 						}
 					}
@@ -2226,9 +2218,7 @@ ZEND_VM_C_LABEL(fetch_obj_r_fast_copy):
 					if (ZEND_IS_PROPERTY_HOOK_SIMPLE_READ(prop_offset)) {
 						prop_offset = prop_info->offset;
 						ZEND_VM_C_GOTO(fetch_obj_r_simple);
-					} else if (EXPECTED(ZEND_IS_PROPERTY_HOOK_SIMPLE_GET(prop_offset))
-							/* A PHP# receiver reads the hook's result before the call runs. */
-							&& EXPECTED(!(opline->extended_value & ZEND_SHARP_OPERATOR))) {
+					} else if (EXPECTED(ZEND_IS_PROPERTY_HOOK_SIMPLE_GET(prop_offset))) {
 						zend_function *hook = prop_info->hooks[ZEND_PROPERTY_HOOK_GET];
 						ZEND_ASSERT(hook->type == ZEND_USER_FUNCTION);
 						ZEND_ASSERT(RUN_TIME_CACHE(&hook->op_array));
@@ -2332,12 +2322,6 @@ ZEND_VM_C_LABEL(fetch_obj_r_copy):
 			ZVAL_COPY_DEREF(EX_VAR(opline->result.var), retval);
 		} else if (UNEXPECTED(Z_ISREF_P(retval))) {
 			zend_unwrap_reference(retval);
-		}
-		if (OP2_TYPE == IS_CONST && UNEXPECTED(opline->extended_value & ZEND_SHARP_OPERATOR)) {
-ZEND_VM_C_LABEL(fetch_obj_r_sharp):
-			if (SHARP_IS_COLLECTION(EX_VAR(opline->result.var))) {
-				sharp_collection_of_property(EX_VAR(opline->result.var), zobj, Z_STR_P(GET_OP2_ZVAL_PTR(BP_VAR_R)), cache_slot);
-			}
 		}
 	} while (0);
 
@@ -6831,21 +6815,6 @@ ZEND_VM_COLD_CONST_HANDLER(51, ZEND_CAST, CONST|TMP|VAR|CV, ANY, TYPE)
 		case IS_STRING:
 			ZVAL_STR(result, zval_get_string(expr));
 			break;
-		case IS_OBJECT | ZEND_SHARP_OPERATOR: {
-			zval *value = expr;
-
-			ZVAL_DEREF(value);
-			if (!SHARP_IS_COLLECTION(value)) {
-				ZVAL_COPY(result, value);
-			} else if (OP1_TYPE == IS_CV) {
-				sharp_collection_of_local(result, expr);
-			} else if (Z_ISREF_P(expr)) {
-				sharp_collection_of_reference(result, expr);
-			} else {
-				sharp_collection_of_value(result, value);
-			}
-			break;
-		}
 		default:
 			ZEND_ASSERT(opline->extended_value != _IS_BOOL && "Must use ZEND_BOOL instead");
 			if (OP1_TYPE & (IS_VAR|IS_CV)) {

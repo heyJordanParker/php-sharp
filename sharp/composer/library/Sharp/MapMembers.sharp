@@ -2,10 +2,12 @@ namespace Sharp;
 
 import Sharp.Internal;
 import Sharp.Internal.ComparedByEquality;
+import Sharp.Internal.ComparedByOrder;
 
 extern Internal.size;
 extern Internal.containsKey;
 extern Internal.removeKey;
+extern Internal.put;
 extern Internal.keys;
 extern Internal.values;
 extern Internal.pairs;
@@ -46,11 +48,14 @@ public static class MapMembers
 
         public Map<TGroup, TValue> associateBy<TGroup>(Function<TGroup(TValue)> key) => Internal.associateBy(map, key);
 
-        public List<TValue> sortedBy<TOrder>(Function<TOrder(TValue)> selector) => Internal.sortedBy(map, selector);
+        public List<TValue> sortedBy<TOrder>([ComparedByOrder] Function<TOrder(TValue)> selector) => Internal.sortedBy(map, selector);
     }
 
     extension<TKey, TValue>(ref Map<TKey, TValue> map)
     {
         public bool remove([ComparedByEquality] TKey key) => Internal.removeKey(map, key);
+
+        // `map[key] = value` runs it, as Kotlin's runs `operator fun set`.
+        public void set(TKey key, TValue value) => Internal.put(map, key, value);
     }
 }

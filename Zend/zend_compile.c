@@ -2564,8 +2564,6 @@ static void zend_assert_not_short_circuited(const zend_ast *ast)
 
 ZEND_STATIC_ASSERT(!(ZEND_DIM_SHARP & ZEND_SHORT_CIRCUITING_INNER),
 	"ZEND_DIM_SHARP overlaps ZEND_SHORT_CIRCUITING_INNER in the attr of ZEND_AST_DIM");
-ZEND_STATIC_ASSERT(!(ZEND_METHOD_CALL_SHARP & ZEND_SHORT_CIRCUITING_INNER),
-	"ZEND_METHOD_CALL_SHARP overlaps ZEND_SHORT_CIRCUITING_INNER in the attr of ZEND_AST_METHOD_CALL");
 
 static void zend_short_circuiting_mark_inner(zend_ast *ast) {
 	if (zend_ast_kind_is_short_circuited(ast->kind)) {
@@ -5438,43 +5436,6 @@ static void zend_compile_call(znode *result, zend_ast *ast, uint32_t type) /* {{
 }
 /* }}} */
 
-/* A PHP# method call on a List or Map runs a Sharp\Collection method, so the receiver's fetch is
- * marked to make that object: the fetch of a property or a static property, so a changing method
- * writes the property back, or else a cast, which keeps a local's slot or a copy of any other value.
- * An index reads its element through the collection of what it indexes, because a List index is a
- * place (spec section 12): `grid[0].add(5)` changes the list stored at index 0. The cast then passes
- * that element on, and makes a collection of an array a plain PHP ArrayAccess object gives. A
- * missing index throws, as a bare PHP# index read does, before `?.` too.
- * Before a `?.` call the receiver ends its own null-safe chain ahead of the cast, as PHP's
- * ((object) $a?->b())?->c() does: the call's own JMP_NULL gives null for either. */
-static void zend_compile_sharp_receiver(znode *result, zend_ast *ast, bool nullsafe)
-{
-	zend_op *opline;
-
-	if (ast->kind == ZEND_AST_DIM && ast->child[1]) {
-		znode container_node, dim_node;
-
-		zend_compile_sharp_receiver(&container_node, ast->child[0], false);
-		zend_compile_expr(&dim_node, ast->child[1]);
-		zend_emit_op_tmp(result, ZEND_FETCH_DIM_R, &container_node, &dim_node);
-	} else if (ast->kind == ZEND_AST_PROP || ast->kind == ZEND_AST_NULLSAFE_PROP || ast->kind == ZEND_AST_STATIC_PROP) {
-		opline = zend_compile_var(result, ast, BP_VAR_R, 0);
-		if (opline && ((opline->opcode == ZEND_FETCH_OBJ_R && opline->op2_type == IS_CONST)
-				|| opline->opcode == ZEND_FETCH_STATIC_PROP_R)) {
-			opline->extended_value |= ZEND_SHARP_OPERATOR;
-			return;
-		}
-	} else {
-		if (nullsafe) {
-			ast->attr &= ~ZEND_SHORT_CIRCUITING_INNER;
-		}
-		zend_compile_expr(result, ast);
-	}
-
-	opline = zend_emit_op_tmp(result, ZEND_CAST, result, NULL);
-	opline->extended_value = IS_OBJECT | ZEND_SHARP_OPERATOR;
-}
-
 static void zend_compile_method_call(znode *result, zend_ast *ast, uint32_t type) /* {{{ */
 {
 	zend_ast *obj_ast = ast->child[0];
@@ -5499,11 +5460,7 @@ static void zend_compile_method_call(znode *result, zend_ast *ast, uint32_t type
 		 * check for a nullsafe access. */
 	} else {
 		zend_short_circuiting_mark_inner(obj_ast);
-		if (ast->attr & ZEND_METHOD_CALL_SHARP) {
-			zend_compile_sharp_receiver(&obj_node, obj_ast, nullsafe);
-		} else {
-			zend_compile_expr(&obj_node, obj_ast);
-		}
+		zend_compile_expr(&obj_node, obj_ast);
 		if (nullsafe) {
 			zend_emit_jmp_null(&obj_node, type);
 		}
@@ -12200,7 +12157,7 @@ typedef struct {
  * default may create one of those two, and no other object. PHP evaluates the default once, at the class's first use,
  * and every object of the class starts with that one object, which sharp_separate copies before any write, so sharing
  * it changes nothing another holder sees. */
-static bool zend_is_sharp_collection_default(const zend_ast *ast, const const_expr_context *ctx)
+static bool zend_is_sharp_table_default(const zend_ast *ast, const const_expr_context *ctx)
 {
 	const zend_ast *class_ast = ast->child[0];
 
@@ -12257,7 +12214,7 @@ static void zend_compile_const_expr(zend_ast **ast_ptr, void *context) /* {{{ */
 			}
 			break;
 		case ZEND_AST_NEW:
-			if (!ctx->allow_dynamic && !zend_is_sharp_collection_default(ast, ctx)) {
+			if (!ctx->allow_dynamic && !zend_is_sharp_table_default(ast, ctx)) {
 				zend_error_noreturn(E_COMPILE_ERROR,
 					"New expressions are not supported in this context");
 			}

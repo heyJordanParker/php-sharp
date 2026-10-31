@@ -3635,9 +3635,7 @@ static zend_always_inline void zend_fetch_property_address(zval *result, zval *c
 					 * a reference assignment replaces the slot, so it writes into nothing the slot holds. */
 					bool sharp = UNEXPECTED(prop_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
 						&& opline->opcode != ZEND_ASSIGN_OBJ_REF && sharp_function_is_sharp(EX(func));
-					if (sharp && UNEXPECTED(Z_ISREF_P(ptr))
-					 && UNEXPECTED(!sharp_property_for_write(
-						flags == ZEND_FETCH_DIM_WRITE ? result : NULL, zobj, ptr, prop_info))) {
+					if (sharp && UNEXPECTED(Z_ISREF_P(ptr)) && UNEXPECTED(!sharp_property_for_write(zobj, ptr, prop_info))) {
 						ZVAL_ERROR(result);
 						return;
 					}
@@ -3700,8 +3698,7 @@ static zend_always_inline void zend_fetch_property_address(zval *result, zval *c
 	zend_property_info *sharp_info = CACHED_PTR_EX(cache_slot + 2);
 	bool sharp = sharp_info && UNEXPECTED(sharp_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
 		&& opline->opcode != ZEND_ASSIGN_OBJ_REF && sharp_function_is_sharp(EX(func));
-	if (sharp && UNEXPECTED(Z_ISREF_P(ptr))
-	 && UNEXPECTED(!sharp_property_for_write(flags == ZEND_FETCH_DIM_WRITE ? result : NULL, zobj, ptr, sharp_info))) {
+	if (sharp && UNEXPECTED(Z_ISREF_P(ptr)) && UNEXPECTED(!sharp_property_for_write(zobj, ptr, sharp_info))) {
 		ZVAL_ERROR(result);
 		goto end;
 	}
@@ -3901,7 +3898,7 @@ static zend_always_inline zval* zend_fetch_static_property_address(zend_property
 	if ((fetch_type == BP_VAR_W || fetch_type == BP_VAR_RW || fetch_type == BP_VAR_UNSET) && UNEXPECTED(Z_ISREF_P(result))
 	 && UNEXPECTED(property_info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
 	 && opline->opcode != ZEND_ASSIGN_STATIC_PROP && opline->opcode != ZEND_ASSIGN_STATIC_PROP_REF
-	 && sharp_function_is_sharp(EX(func)) && UNEXPECTED(!sharp_property_for_write(NULL, NULL, result, property_info))) {
+	 && sharp_function_is_sharp(EX(func)) && UNEXPECTED(!sharp_property_for_write(NULL, result, property_info))) {
 		return NULL;
 	}
 

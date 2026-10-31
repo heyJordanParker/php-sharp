@@ -39,7 +39,7 @@ class Expressions
 
     public static function describe(string $label, Countable $items, string $word): string
     {
-        $count = ((object) $items)->count();
+        $count = $items->count();
         $edits = Words::distance($word, $label);
         $letters = \mb_strlen($label, "UTF-8");
         return "{$label} has {$count} items, {$letters} letters and {$edits} edit from {$word}";
@@ -48,7 +48,7 @@ class Expressions
     public static function label(string $name, Countable $items): string
     {
         $plain = '${name} {$name} $name';
-        $size = ((object) $items)->count();
+        $size = $items->count();
         return "{$name}: {$size} items\x21 \u{2713} `{$plain}`
 total";
     }
