@@ -114,6 +114,13 @@ export SKIP_IO_CAPTURE_TESTS=1
 export STACK_LIMIT_DEFAULTS_CHECK=1
 export RUN_RESOURCE_HEAVY_TESTS=1
 
+# run-tests.php keeps the opcache file cache of --opcache in the temporary folder, as each test keeps its own files, and
+# loads a file from it whose source looks unchanged. So each run takes a temporary folder of its own and removes it when
+# it ends, and no run loads bytecode another run cached.
+TMPDIR="$(mktemp -d)"
+export TMPDIR
+trap 'rm -rf "$TMPDIR"' EXIT
+
 # Every mode runs, and the script fails at the end if any mode failed.
 failed=()
 

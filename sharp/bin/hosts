@@ -38,6 +38,9 @@ for needed in "$fpm:sharp/bin/build" "$mago:sharp/bin/test" "$install/bin/php-co
 done
 
 fixture="$root/sharp/hosts"
+# Composer keeps the copy of sharp/composer an earlier run installed while composer.lock is unchanged, so the install
+# starts from nothing installed and the fixture compiles against the standard library the tree holds.
+rm -rf "$fixture/vendor"
 composer install --no-interaction --no-progress --quiet --working-dir="$fixture"
 "$mago" --no-version-check --colors never --workspace "$fixture" compile
 
