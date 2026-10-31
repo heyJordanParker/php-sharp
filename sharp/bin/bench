@@ -62,8 +62,10 @@ PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --release --job
   --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$mago_dir" --bin mago
 # mago compile keeps a workspace's .sharp folder to the files of its own project, so a compile of the rows in the tree
 # would delete the compiled fixtures a sharp/bin/test run there reads. The rows compile in a copy of sharp/bench and
-# sharp/composer in the throwaway container's /tmp instead, with a .sharp folder of their own.
-workspace="$(mktemp -d)"
+# sharp/composer in the throwaway container's /tmp instead, with a .sharp folder of their own. /tmp is as long as the
+# tree's /src, and a row's count changes with the length of the path it runs from, so each row counts what it counted
+# when it ran in the tree.
+workspace=/tmp
 mkdir "$workspace/sharp"
 cp -R "$root/sharp/bench" "$root/sharp/composer" "$workspace/sharp/"
 "$mago_dir/release/mago" --no-version-check --colors never --workspace "$workspace" \

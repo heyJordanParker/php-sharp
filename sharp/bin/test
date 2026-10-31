@@ -93,14 +93,26 @@ PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --release --job
   --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$mago_dir" --bin mago
 mago="$mago_dir/release/mago"
 
-# run-tests.php writes the scripts of each test beside it, as signatures.php for signatures.phpt, and deletes them only
-# once the test passes. A run that failed or was stopped leaves them, and mago compile refuses one whose name is a
-# fixture class's in any case, as signatures.php is Signatures.sharp's. So every run deletes them before it compiles.
-scripts=()
+# run-tests.php writes each test's script beside it as <test>.php, and mago compile writes each PHP# class's companion
+# beside its source as <Class>.php. A disk that ignores case, as macOS's does, keeps one file for both when the two
+# names differ only in case, so each run would overwrite and delete the companion, and a stopped run would leave a
+# script mago compile refuses. So no test shares the name of a PHP# file beside it.
+clashed=false
+shopt -s nocasematch
 for test in "$root"/Zend/tests/sharp/*.phpt; do
-  scripts+=("${test%.phpt}".{php,skip.php,clean.php,preload.php})
+  for fixture in "${test%/*}"/*.sharp; do
+    if [[ "${fixture%.sharp}" == "${test%.phpt}" ]]; then
+      script="${test%.phpt}.php"
+      companion="${fixture%.sharp}.php"
+      echo "${test#"$root"/} and ${fixture#"$root"/} differ only in case, so run-tests.php writes ${script##*/} where mago compile writes ${companion##*/}. Rename the test." >&2
+      clashed=true
+    fi
+  done
 done
-rm -f "${scripts[@]}"
+shopt -u nocasematch
+if $clashed; then
+  exit 1
+fi
 
 echo "== mago compile, built from sharp/mago"
 if ! "$mago" --no-version-check --colors never --workspace "$root" --config "$root/Zend/tests/sharp/mago.toml" compile; then
@@ -116,10 +128,12 @@ export RUN_RESOURCE_HEAVY_TESTS=1
 
 # run-tests.php keeps the opcache file cache of --opcache in the temporary folder, as each test keeps its own files, and
 # loads a file from it whose source looks unchanged. So each run takes a temporary folder of its own and removes it when
-# it ends, and no run loads bytecode another run cached.
+# it ends, and no run loads bytecode another run cached. run-tests.php runs in a process group of its own, so a run that
+# ends early, as on SIGTERM, first stops it, its workers and their tests, which would go on writing in the folder.
 TMPDIR="$(mktemp -d)"
 export TMPDIR
-trap 'rm -rf "$TMPDIR"' EXIT
+tests_group=
+trap 'if [[ -n $tests_group ]]; then kill -KILL -- "-$tests_group" || true; wait "$tests_group" || true; fi; rm -rf "$TMPDIR"' EXIT
 
 # Every mode runs, and the script fails at the end if any mode failed.
 failed=()
@@ -128,7 +142,8 @@ run_tests() {
   local mode="$1"
   shift
   echo "== $mode"
-  if ! (cd "$root" && "$php" run-tests.php -P -q \
+  set -m
+  (cd "$root" && exec "$php" run-tests.php -P -q \
     -d opcache.jit=disable \
     -d opcache.protect_memory=1 \
     -j"$jobs" \
@@ -138,9 +153,13 @@ run_tests() {
     --show-diff \
     --show-slow 1000 \
     --set-timeout 120 \
-    "$@" "${tests[@]}"); then
+    "$@" "${tests[@]}") &
+  tests_group=$!
+  set +m
+  if ! wait "$tests_group"; then
     failed+=("$mode")
   fi
+  tests_group=
 }
 
 if $upstream; then
