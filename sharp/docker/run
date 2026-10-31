@@ -2,6 +2,13 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
+volumes=(--volume "$root:/src")
+# A git worktree's .git is a file that names its folder in the main checkout's .git by absolute path, so that .git is
+# mounted at the same path, and git, sharp/bin/spec and mago compile find the repository in the container as outside it.
+if [[ -f "$root/.git" ]]; then
+  common="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)"
+  volumes+=(--volume "$common:$common")
+fi
 docker build --quiet --build-arg BASE_IMAGE --build-arg GOLANG_IMAGE --tag php-sharp-linux "$root/sharp/docker" >/dev/null
 exec docker run --rm --init \
   --user "$(id -u):$(id -g)" \
@@ -14,6 +21,6 @@ exec docker run --rm --init \
   --env GOPATH=/src/sharp/build/go \
   --env MAKEFLAGS \
   --env CARGO_BUILD_JOBS \
-  --volume "$root:/src" \
+  "${volumes[@]}" \
   --workdir /src \
   php-sharp-linux "$@"

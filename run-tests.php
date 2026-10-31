@@ -2070,7 +2070,7 @@ TEST $file
     $orig_ini_settings = settings2params($ini_settings);
 
     if ($file_cache !== null) {
-        $ini_settings['opcache.file_cache'] = '/tmp';
+        $ini_settings['opcache.file_cache'] = sys_get_temp_dir();
         // Make sure warnings still show up on the second run.
         $ini_settings['opcache.record_warnings'] = '1';
         // File cache is currently incompatible with JIT.

@@ -37,4 +37,4 @@ Lib\Inspector::pause: no object
 Demo\Inspection::{closure:Demo\Inspection::pause():16}: no object
 Sharp\Internal\filter: no object
 Demo\Inspection::pause: no object
-{closure:%sinspection.php:%d}: no object
+{closure:%slambda_backtrace.php:%d}: no object
