@@ -1,4 +1,5 @@
 <?php
+require __DIR__ . '/harness/Basket.inc';
 require __DIR__ . '/harness/fixture.inc';
 fixture('TableChanges');
 require __DIR__ . '/LibraryProbe/Stage.sharp';
@@ -8,6 +9,8 @@ use TableChanges\Box;
 use TableChanges\Drawer;
 use TableChanges\Journal;
 use TableChanges\Ledger;
+use TableChanges\Memo;
+use TableChanges\Registry;
 use TableChanges\Shelf;
 
 // Each round runs every change, so the JIT runs compiled code before the last round, whose output is printed.
@@ -38,6 +41,16 @@ for ($round = 0; $round < 3; $round++) {
     echo json_encode(Sharp\Probe\Tables::crossed()), "\n";
     echo Sharp\Probe\Tables::restored(), "\n";
     echo Sharp\Probe\Tables::sorted(), "\n";
+    $names = function () {
+        yield 'a';
+        yield 'b';
+        yield 'c';
+    };
+    echo implode(' ', [
+        Ledger::streamed(true, [1], $names()),
+        Ledger::streamed(false, [1], $names()),
+        ...array_map(fn ($pick) => Ledger::listed($pick, [1], $box, $names()), [0, 1, 2]),
+    ]), "\n";
 
     $shelf = new Shelf();
     $shelf->keep(false, [], [1, -1, 2]);
@@ -65,6 +78,15 @@ for ($round = 0; $round < 3; $round++) {
     var_dump($drawer->addNumber(5), $drawer->removePrice('tea'));
     echo json_encode($drawer->numbers), ' ', json_encode($numbers), ' ', json_encode($drawer->prices), ' ', json_encode($prices), "\n";
     unset($numbers, $prices);
+
+    $memo = new Memo();
+    echo $memo->at(10), ' ', Memo::cached(10), ' ', json_encode($memo->stepped()), ' ', json_encode($memo->tagged()), "\n";
+    echo json_encode(Memo::counted(new Lib\Basket())), "\n";
+
+    // The statics keep their values from round to round.
+    Registry::count('tea', $round);
+    var_dump(Registry::tag("vip$round"), Registry::tag("vip$round"));
+    echo Registry::counted('tea'), ' ', json_encode(Registry::tagged()), ' ', Registry::written(), "\n";
     $output = ob_get_clean();
 }
 

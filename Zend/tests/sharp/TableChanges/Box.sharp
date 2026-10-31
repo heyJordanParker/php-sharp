@@ -6,4 +6,6 @@ public class Box
     public int count() => 7;
 
     public bool contains(int value) => value == 7;
+
+    public List<int> toList() => [7, 7];
 }

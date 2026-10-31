@@ -7,19 +7,19 @@ class Roster
 {
     public static function report(\Sharp\Map|array $members): array { $members = \is_array($members) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [Standing::from((string) $key), $value], \array_keys($members), $members))) : $members;
 
-        $ranked = ((object) $members)->sortedBy(fn ($n) => -$n);
-        $tens = ((object) $members)->map(fn ($n) => $n * 10);
-        $busy = ((object) $members)->filter(fn ($n) => $n > 1);
-        $kept = ((object) $members)->filter(function ($n) use (&$members) { return $n >= (((object) $members)->get(Standing::Active) ?? 0); });
-        ((object) $members)->remove(Standing::Closed);
+        $ranked = \Sharp\Internal\sortedBy($members, fn ($n) => -$n, null);
+        $tens = \Sharp\Internal\map($members, fn ($n) => $n * 10);
+        $busy = \Sharp\Internal\filterEntries($members, fn ($n) => $n > 1);
+        $kept = \Sharp\Internal\filterEntries($members, function ($n) use (&$members) { return $n >= (\Sharp\Internal\get($members, Standing::Active) ?? 0); });
+        \Sharp\Internal\removeKey($members, Standing::Closed);
         return [
             Probe::join(",", $ranked),
             Probe::join(",", $tens),
-            Probe::join(",", ((object) $kept)->map(fn ($n) => $n)),
-            (string) (((object) $busy)->get(Standing::Active) ?? 0),
-            (string) (((object) $busy)->get(Standing::Closed) ?? 0),
-            (string) (((object) $members)->get(Standing::Active) ?? 0),
-            (string) (((object) $members)->get(Standing::Closed) ?? 0),
+            Probe::join(",", \Sharp\Internal\map($kept, fn ($n) => $n)),
+            (string) (\Sharp\Internal\get($busy, Standing::Active) ?? 0),
+            (string) (\Sharp\Internal\get($busy, Standing::Closed) ?? 0),
+            (string) (\Sharp\Internal\get($members, Standing::Active) ?? 0),
+            (string) (\Sharp\Internal\get($members, Standing::Closed) ?? 0),
         ];
     }
 }

@@ -6,8 +6,8 @@
  * declares one type, spec section 27, so a fixture of several types is a folder, and its files load in whatever order
  * the code reaches them. A class a type declares inside its name, as an interface's `HasDesign\Defaults` trait or an
  * enum case's `Verdict\Ruled`, spec section 22, loads from its type's file. With `$extension` `inc`, it loads each
- * type's plain PHP twin beside its file instead. The standard library's `Sharp\ListMembers`, `Sharp\MapMembers` and
- * `Sharp\SetMembers` load as a project's do.
+ * type's plain PHP twin beside its file instead. The standard library's `Sharp\ListMembers`, `Sharp\MapMembers`,
+ * `Sharp\SetMembers` and `Sharp\IterableMembers` load as a project's do.
  */
 function fixture(string $name, string $extension = 'sharp'): void
 {
@@ -25,7 +25,7 @@ function fixture(string $name, string $extension = 'sharp'): void
     }
     // A collection's member a call can't run in place, as a member's value, runs on the standard library's class of
     // the collection's members.
-    foreach (['ListMembers', 'MapMembers', 'SetMembers'] as $members) {
+    foreach (['ListMembers', 'MapMembers', 'SetMembers', 'IterableMembers'] as $members) {
         $files['sharp\\' . strtolower($members)] = dirname(__DIR__, 4) . "/sharp/composer/library/Sharp/$members.sharp";
     }
     fixture_files($files);

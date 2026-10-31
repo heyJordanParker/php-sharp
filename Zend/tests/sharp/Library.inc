@@ -39,7 +39,7 @@ class Library
 
     public static function extension(string $path): string { return \pathinfo($path, \PATHINFO_EXTENSION); }
 
-    public static function day(int $seconds): string { return ((object) new \Sharp\Time\Instant($seconds))->inZone(\Sharp\Time\TimeZone::{"utc#get"}())->date->toString(); }
+    public static function day(int $seconds): string { return (new \Sharp\Time\Instant($seconds))->inZone(\Sharp\Time\TimeZone::{"utc#get"}())->date->toString(); }
 
     public static function zones(): int { return \count(\Sharp\Time\TimeZone::names()); }
 

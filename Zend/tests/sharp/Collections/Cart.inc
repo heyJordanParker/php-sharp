@@ -22,7 +22,7 @@ class Cart
                 $total += $size * 10;
             }
         }
-        return $total + ((object) \Lib\Slots::fromArray($this->prices()))->getSize();
+        return $total + \Lib\Slots::fromArray($this->prices())->getSize();
     }
 
     public function prices(): array

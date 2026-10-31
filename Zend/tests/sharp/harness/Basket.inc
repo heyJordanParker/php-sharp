@@ -15,6 +15,14 @@ final class Basket
         }
     }
 
+    /** @var array<string, int> */
+    public array $counts = [] {
+        set(array $value) {
+            /** @var array<string, int> $value */
+            $this->counts = $value;
+        }
+    }
+
     /** @var list<int> */
     public array $totals {
         get => [array_sum($this->lines)];

@@ -62,7 +62,7 @@ class Patterns
 
     public function wide(\Demo\Circle $circle): bool { return \is_object($circle) && (${'match#1'} = $circle->radius) >= 2.0; }
 
-    public function first(\Demo\Patterns $patterns): string { return match (true) { (${'match#1'} = ((object) $patterns)->grade(95))
+    public function first(\Demo\Patterns $patterns): string { return match (true) { (${'match#1'} = $patterns->grade(95))
         === "top" => "first",
         default => "other",
     }; }

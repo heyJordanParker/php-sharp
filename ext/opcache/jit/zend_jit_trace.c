@@ -2041,10 +2041,9 @@ static zend_ssa *zend_jit_trace_build_tssa(zend_jit_trace_rec *trace_buffer, uin
 					}
 					break;
 				case ZEND_CAST:
-					/* PHP#'s (int) passes an int through, and the receiver of a PHP# method call an object. */
+					/* PHP#'s (int) passes an int through. */
 					if (opline->extended_value != op1_type
-					 && (opline->extended_value != (IS_LONG | ZEND_SHARP_OPERATOR) || op1_type != IS_LONG)
-					 && (opline->extended_value != (IS_OBJECT | ZEND_SHARP_OPERATOR) || op1_type != IS_OBJECT)) {
+					 && (opline->extended_value != (IS_LONG | ZEND_SHARP_OPERATOR) || op1_type != IS_LONG)) {
 						break;
 					}
 					ADD_OP1_TRACE_GUARD();
@@ -3458,9 +3457,6 @@ static bool zend_jit_may_delay_fetch_this(const zend_op_array *op_array, zend_ss
 		 || !TRACE_FRAME_IS_LAST_SEND_BY_VAL(JIT_G(current_frame)->call)) {
 			return 0;
 		}
-	} else if (opline->opcode == ZEND_FETCH_OBJ_R && (opline->extended_value & ZEND_SHARP_OPERATOR)) {
-		/* The VM runs the fetch of a PHP# method call's receiver, which reads ZEND_FETCH_THIS's result. */
-		return 0;
 	} else if (opline->opcode != ZEND_FETCH_OBJ_R
 			&& opline->opcode != ZEND_FETCH_OBJ_IS
 			&& opline->opcode != ZEND_FETCH_OBJ_W
@@ -5240,12 +5236,9 @@ static zend_vm_opcode_handler_t zend_jit_trace(zend_jit_trace_rec *trace_buffer,
 						}
 						goto done;
 					case ZEND_CAST:
-						/* PHP#'s (int) passes an int through, and the receiver of a PHP# method call an object that
-						 * is no Sharp\Map or Sharp\Set. */
+						/* PHP#'s (int) passes an int through. */
 						if (opline->extended_value != op1_type
-						 && (opline->extended_value != (IS_LONG | ZEND_SHARP_OPERATOR) || op1_type != IS_LONG)
-						 && (opline->extended_value != (IS_OBJECT | ZEND_SHARP_OPERATOR) || op1_type != IS_OBJECT
-						  || zend_jit_sharp_receiver_may_be_table(ssa, ssa_op))) {
+						 && (opline->extended_value != (IS_LONG | ZEND_SHARP_OPERATOR) || op1_type != IS_LONG)) {
 							break;
 						}
 						ZEND_FALLTHROUGH;
@@ -6135,10 +6128,6 @@ static zend_vm_opcode_handler_t zend_jit_trace(zend_jit_trace_rec *trace_buffer,
 								on_this = op_array->opcodes[op_array_ssa->vars[op_array_ssa->ops[opline-op_array->opcodes].op1_use].definition].opcode == ZEND_FETCH_THIS;
 							}
 						}
-						if (opline->opcode == ZEND_FETCH_OBJ_R
-						 && zend_jit_sharp_receiver_may_be_collection(op_array, opline, ce, on_this, op1_ce)) {
-							break;
-						}
 						if (!zend_jit_fetch_obj(&ctx, opline, op_array, ssa, ssa_op,
 								op1_info, op1_addr, op1_indirect, ce, ce_is_instanceof,
 								on_this, delayed_fetch_this, avoid_refcounting, op1_ce,
@@ -6166,9 +6155,7 @@ static zend_vm_opcode_handler_t zend_jit_trace(zend_jit_trace_rec *trace_buffer,
 						    || (opline->op2.num & ZEND_FETCH_CLASS_MASK) == ZEND_FETCH_CLASS_PARENT))))) {
 							break;
 						}
-						if ((opline->opcode == ZEND_FETCH_STATIC_PROP_R
-						  && zend_jit_sharp_receiver_may_be_collection(op_array, opline, NULL, 0, NULL))
-						 || zend_jit_sharp_static_may_be_referenced(op_array, opline)) {
+						if (zend_jit_sharp_static_may_be_referenced(op_array, opline)) {
 							break;
 						}
 						if (!zend_jit_fetch_static_prop(&ctx, opline, op_array)) {

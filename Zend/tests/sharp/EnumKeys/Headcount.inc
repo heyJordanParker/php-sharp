@@ -46,12 +46,12 @@ class Headcount
 
     public static function lookup(\Sharp\Map|array $counts, Standing $status): ?int { $counts = \is_array($counts) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [Standing::from((string) $key), $value], \array_keys($counts), $counts))) : $counts;
 
-        return ((object) $counts)->get($status); // PHP# makes the Map a Sharp\Collection
+        return \Sharp\Internal\get($counts, $status);
     }
 
     public static function without(\Sharp\Map|array $counts, Standing $status): \Sharp\Map|array { $counts = \is_array($counts) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [Standing::from((string) $key), $value], \array_keys($counts), $counts))) : $counts;
 
-        ((object) $counts)->remove($status);
+        \Sharp\Internal\removeKey($counts, $status);
         return $counts;
     }
 
@@ -78,7 +78,7 @@ class Headcount
         $skus = [];
         foreach ($stock as $sku => $n) {
             if ($n > 0) {
-                ((object) $skus)->add($sku); // PHP# makes the array a Sharp\Collection
+                \Sharp\Internal\add($skus, $sku);
             }
         }
         return $skus;
@@ -86,14 +86,14 @@ class Headcount
 
     public static function grouped(array $sizes): \Sharp\Map|array
     {
-        return ((object) $sizes)->groupBy(fn ($n) => $n > 1 ? Standing::Closed : Standing::Active); // PHP# makes the array a Sharp\Collection
+        return \Sharp\Internal\groupBy($sizes, fn ($n) => $n > 1 ? Standing::Closed : Standing::Active, "Lib.Standing, List<int>");
     }
 
     public static function groupNames(array $sizes): array
     {
         $names = [];
-        foreach (((object) $sizes)->groupBy(fn ($n) => $n > 1 ? Standing::Closed : Standing::Active) as $status => $group) {
-            ((object) $names)->add($status->name); // PHP# makes the array a Sharp\Collection
+        foreach (\Sharp\Internal\groupBy($sizes, fn ($n) => $n > 1 ? Standing::Closed : Standing::Active, "Lib.Standing, List<int>") as $status => $group) {
+            \Sharp\Internal\add($names, $status->name);
         }
         return $names;
     }

@@ -24,7 +24,7 @@ class Lambdas
 
     public static function doubled(array $numbers, int $by): array
     {
-        return ((object) $numbers)->map(fn ($n) => $n * $by);
+        return \Sharp\Internal\map($numbers, fn ($n) => $n * $by);
     }
 
     public static function passes(int $times): string
@@ -36,42 +36,42 @@ class Lambdas
                 $seen += 100;
             };
             $mark();
-            ((object) $marks)->add(function () use (&$seen) { return $seen; });
+            \Sharp\Internal\add($marks, function () use (&$seen) { return $seen; });
             $times -= 1;
         }
-        return Probe::join(",", ((object) $marks)->map(fn ($read) => $read()));
+        return Probe::join(",", \Sharp\Internal\map($marks, fn ($read) => $read()));
     }
 
     public static function pipeline(array $numbers, \Sharp\Map|array $prices): array { $prices = \is_array($prices) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [(string) $key, $value], \array_keys($prices), $prices))) : $prices; // PHP# makes the array a Map, its keys strings
 
-        $odd = ((object) $numbers)->filter(fn ($n) => $n % 2 === 1);
-        $labels = ((object) $odd)->map(fn ($n) => (string) ($n * 10));
-        $groups = ((object) $numbers)->groupBy(fn ($n) => $n % 2 === 0 ? "even" : "odd");
+        $odd = \Sharp\Internal\filter($numbers, fn ($n) => $n % 2 === 1);
+        $labels = \Sharp\Internal\map($odd, fn ($n) => (string) ($n * 10));
+        $groups = \Sharp\Internal\groupBy($numbers, fn ($n) => $n % 2 === 0 ? "even" : "odd", "string, List<int>");
         return [
             Probe::join(",", $labels),
-            Probe::join(",", ((object) $numbers)->sortedBy(fn ($n) => -$n)),
+            Probe::join(",", \Sharp\Internal\sortedBy($numbers, fn ($n) => -$n, null)),
             Probe::join(",", $groups["odd"] ?? []),
-            Probe::join(",", ((object) ((object) $labels)->associateBy(fn ($label) => $label))->keys()),
-            Probe::join(",", ((object) ((object) $prices)->filter(fn ($price) => $price < 100))->keys()),
-            Probe::join(",", \Sharp\Internal\arrayOf(((object) $prices)->filter(fn ($price) => $price < 100))), // PHP# passes plain PHP the Map's array
-            Probe::join(",", ((object) $prices)->map(fn ($price) => $price * 2)),
+            Probe::join(",", \Sharp\Internal\keys(\Sharp\Internal\associateBy($labels, fn ($label) => $label, "string, string"))),
+            Probe::join(",", \Sharp\Internal\keys(\Sharp\Internal\filterEntries($prices, fn ($price) => $price < 100))),
+            Probe::join(",", \Sharp\Internal\arrayOf(\Sharp\Internal\filterEntries($prices, fn ($price) => $price < 100))), // PHP# passes plain PHP the Map's array
+            Probe::join(",", \Sharp\Internal\map($prices, fn ($price) => $price * 2)),
         ];
     }
 
-    public static function total(array $numbers): int { return ((object) $numbers)->sumOf(fn ($n) => $n * 2) + ((object) $numbers)->first(fn ($n) => $n > 2) + (((object) $numbers)->any(fn ($n) => $n > 9) ? 1 : 0); }
+    public static function total(array $numbers): int { return \Sharp\Internal\sumOf($numbers, fn ($n) => $n * 2) + \Sharp\Internal\first($numbers, fn ($n) => $n > 2) + (\Sharp\Internal\any($numbers, fn ($n) => $n > 9) ? 1 : 0); }
 
     public static function failures(array $numbers): array
     {
         $messages = [];
         try {
-            ((object) $numbers)->first(fn ($n) => $n > 100);
+            \Sharp\Internal\first($numbers, fn ($n) => $n > 100);
         } catch (OutOfRangeException $missing) {
-            ((object) $messages)->add(((object) $missing)->getMessage());
+            \Sharp\Internal\add($messages, $missing->getMessage());
         }
         try {
-            ((object) $numbers)->map(fn ($n) => $n > 2 ? throw new OutOfRangeException((string) $n) : $n);
+            \Sharp\Internal\map($numbers, fn ($n) => $n > 2 ? throw new OutOfRangeException((string) $n) : $n);
         } catch (OutOfRangeException $stopped) {
-            ((object) $messages)->add(((object) $stopped)->getMessage());
+            \Sharp\Internal\add($messages, $stopped->getMessage());
         }
         return $messages;
     }
@@ -79,13 +79,13 @@ class Lambdas
     public static function captured(array $numbers): array
     {
         $seen = $numbers;
-        $kept = ((object) $seen)->filter(function ($n) use (&$seen) {
-            ((object) $seen)->add($n);
+        $kept = \Sharp\Internal\filter($seen, function ($n) use (&$seen) {
+            \Sharp\Internal\add($seen, $n);
             return true;
         });
         $grown = \count($seen);
         $size = function () use (&$seen) { return \count($seen); };
-        ((object) $seen)->add(0);
+        \Sharp\Internal\add($seen, 0);
         return [\count($kept), $grown, $size()];
     }
 
@@ -98,7 +98,7 @@ class Lambdas
         return $outer(2);
     }
 
-    public static function scaled(array $numbers): array { return ((object) $numbers)->map(Lambdas::twice(...)); }
+    public static function scaled(array $numbers): array { return \Sharp\Internal\map($numbers, Lambdas::twice(...)); }
 
     private static function twice(int $n): int { return $n * 2; }
 }
