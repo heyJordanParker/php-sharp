@@ -106,6 +106,14 @@ function counts_index(): mixed
 for ($round = 0; $round < 100; $round++) {
     ob_start();
     echo implode("\n", Crossings::outward(new Map(['tea', 3, '5', 1]), new Set(['a', 'b']))), "\n";
+    foreach ([
+        'a Map|Set holding the Map' => fn () => Crossings::mapOrSet(true, new Map(['tea', 3]), new Set(['a', 'b'])),
+        'a Map|Set holding the Set' => fn () => Crossings::mapOrSet(false, new Map(['tea', 3]), new Set(['a', 'b'])),
+        'a List|Map holding the List' => fn () => Crossings::listOrMap(true, [7], new Map(['tea', 3])),
+        'a List|Map holding the Map' => fn () => Crossings::listOrMap(false, [7], new Map(['tea', 3])),
+    ] as $row => $call) {
+        echo $row, ' into an array parameter: ', $call(), "\n";
+    }
     $prices = new Map(['tea', 3]);
     echo 'a plain PHP write leaves the Map: ', show(Crossings::written($prices)), ' / ', show($prices), "\n";
     echo 'a plain PHP result into a Map local: ', show(Crossings::local()), "\n";
@@ -372,6 +380,10 @@ array ["tea",5]
 array
 array
 array
+a Map|Set holding the Map into an array parameter: array ["tea"]
+a Map|Set holding the Set into an array parameter: array [0,1]
+a List|Map holding the List into an array parameter: array [0]
+a List|Map holding the Map into an array parameter: array ["tea"]
 a plain PHP write leaves the Map: 'tea' => 3 / 'tea' => 3
 a plain PHP result into a Map local: 'tea' => 3, 5 => 1, 'jam' => 5
 a plain PHP result into a Map return: 'tea' => 3, 5 => 1
@@ -383,6 +395,7 @@ Sharp\Map 2
 Sharp\Set 2
 Sharp\Map {"tea":3,"5":1}
 Sharp\Set
+Sharp\Map 2
 Sharp\Map 2
 a plain PHP closure a local holds: array 2
 a plain PHP object a local holds: array 2
