@@ -103,7 +103,7 @@ namespace {
     attempt(fn () => Demo\Pantry::shared(true, ['tea', 'pie'], ['tea' => 1, 'pie' => 2], ['cake']));
     attempt(fn () => Demo\Pantry::shared(false, ['tea', 'pie'], ['tea' => 1, 'pie' => 2], ['cake']));
 
-    // A collection kept for reuse lets go of the object whose property it changed when its call returns.
+    // A call that changes a property lets go of the object when it returns.
     $basket = new Lib\Basket();
     Demo\Pantry::fill($basket, 5);
     $kept = WeakReference::create($basket);
@@ -116,8 +116,4 @@ namespace {
     attempt(fn () => Demo\Pantry::share($basket, 5, 0));
     unset($basket);
     var_dump($kept->get());
-
-    // The wrapper exists only as the receiver of one call: PHP code cannot make, copy or keep one.
-    attempt(fn () => new Sharp\Collection());
-    attempt(fn () => (new ReflectionClass(Sharp\Collection::class))->newInstanceWithoutConstructor());
 }

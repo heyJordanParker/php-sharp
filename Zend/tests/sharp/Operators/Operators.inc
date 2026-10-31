@@ -62,9 +62,9 @@ class Operators
         return $left;
     }
 
-    public function byPrice(array $lines): array { return ((object) $lines)->sortedBy(fn ($l) => $l->price, \Billing\Money::op_Comparison(...)); }
+    public function byPrice(array $lines): array { return \Sharp\Internal\sortedBy($lines, fn ($l) => $l->price, \Billing\Money::op_Comparison(...)); }
 
-    public function byCode(array $codes): array { return ((object) $codes)->sortedBy(fn ($code) => $code); }
+    public function byCode(array $codes): array { return \Sharp\Internal\sortedBy($codes, fn ($code) => $code, null); }
 
     public function flags(int $read, int $write, int $delete): int
     {
@@ -168,7 +168,7 @@ class Operators
     public function design(mixed $entity): string
     {
         if ($entity instanceof \Billing\HasDesign) {
-            return ((object) $entity)->designKey();
+            return $entity->designKey();
         }
         return "";
     }
@@ -192,8 +192,8 @@ class Operators
 
     public function checkout(\Sharp\Map|array $payload, string $plan, \Sharp\Map|array $prices): \Billing\Receipt { $payload = \is_array($payload) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [(string) $key, $value], \array_keys($payload), $payload))) : $payload; $prices = \is_array($prices) ? new \Sharp\Map(\array_merge([], ...\array_map(fn ($key, $value) => [(string) $key, $value], \array_keys($prices), $prices))) : $prices; // PHP# makes each array a Map, its keys strings
 
-        if (!\is_int($orderId = ((object) $payload)->get("orderId"))) { throw new \Billing\BadPayload("orderId"); }
-        if (!\is_int($price = ((object) $prices)->get($plan))) { return \Billing\Receipt::unknownPlan($plan); }
+        if (!\is_int($orderId = \Sharp\Internal\get($payload, "orderId"))) { throw new \Billing\BadPayload("orderId"); }
+        if (!\is_int($price = \Sharp\Internal\get($prices, $plan))) { return \Billing\Receipt::unknownPlan($plan); }
         return $this->charge($orderId, $price);
     }
 

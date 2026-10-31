@@ -127,6 +127,6 @@ incompatible-return-type: Return type `string` of `Demo\Contact::morphToMany()` 
 Fatal error: Declaration of Acme\TextModel::morphToMany($related, $name): string must be compatible with Demo\Taggable::morphToMany(string $related, string $name): Demo\Relation
 Tags::of
   DO_FCALL
-  SHARP_VERIFY_TYPE_ARGS V3 string("Demo.Relation")
+  SHARP_VERIFY_TYPE_ARGS V2 string("Demo.Relation")
 Tags::ofPost
   DO_FCALL

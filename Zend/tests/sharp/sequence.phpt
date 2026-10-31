@@ -1,5 +1,5 @@
 --TEST--
-Sharp\Sequence reads its source only as far as toList or a loop asks, numbers toList from 0, and gives a Sequence back from from
+Sharp\Internal\Sequence reads its source only as far as toList or a loop asks, numbers toList from 0, and gives a Sequence back from from
 --FILE--
 <?php
 require __DIR__ . '/sequence.inc';
@@ -61,20 +61,20 @@ string(16) "InternalIterator"
 bool(true)
 string(16) "[0,1] => [20,40]"
 string(8) "[] => []"
-ValueError: Sharp\Sequence::take(): Argument #1 ($count) must be greater than or equal to 0 in sequence.inc on line 142
+ValueError: Sharp\Internal\Sequence::take(): Argument #1 ($count) must be greater than or equal to 0 in sequence.inc on line 142
 LogicException: filter 1 in sequence.inc on line 145
 LogicException: map 1 in sequence.inc on line 148
 yield 1
 yield 2
 string(14) "[0,1] => [1,2]"
 Exception: Cannot traverse an already closed generator in sequence.inc on line 153
-Error: Call to private Sharp\Sequence::__construct() from global scope in sequence.inc on line 155
-ReflectionException: Class Sharp\Sequence is an internal class marked as final that cannot be instantiated without invoking its constructor in sequence.inc on line 156
-Error: Trying to clone an uncloneable object of class Sharp\Sequence in sequence.inc on line 157
-Exception: Serialization of 'Sharp\Sequence' is not allowed in sequence.inc on line 158
-Exception: Unserialization of 'Sharp\Sequence' is not allowed in sequence.inc on line 159
-Error: Cannot create dynamic property Sharp\Sequence::$extra in sequence.inc on line 161
-TypeError: Sharp\Sequence::filter(): Argument #1 ($predicate) must be of type Closure, string given in sequence.inc on line 163
+Error: Call to private Sharp\Internal\Sequence::__construct() from global scope in sequence.inc on line 155
+ReflectionException: Class Sharp\Internal\Sequence is an internal class marked as final that cannot be instantiated without invoking its constructor in sequence.inc on line 156
+Error: Trying to clone an uncloneable object of class Sharp\Internal\Sequence in sequence.inc on line 157
+Exception: Serialization of 'Sharp\Internal\Sequence' is not allowed in sequence.inc on line 158
+Exception: Unserialization of 'Sharp\Internal\Sequence' is not allowed in sequence.inc on line 159
+Error: Cannot create dynamic property Sharp\Internal\Sequence::$extra in sequence.inc on line 161
+TypeError: Sharp\Internal\Sequence::filter(): Argument #1 ($predicate) must be of type Closure, string given in sequence.inc on line 163
 bool(true)
 NULL
 bool(true)

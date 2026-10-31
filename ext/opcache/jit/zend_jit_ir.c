@@ -14495,7 +14495,7 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 
 	if (!prop_info) {
 		ir_ref run_time_cache = ir_LOAD_A(jit_EX(run_time_cache));
-		ir_ref ref = ir_LOAD_A(ir_ADD_OFFSET(run_time_cache, opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR)));
+		ir_ref ref = ir_LOAD_A(ir_ADD_OFFSET(run_time_cache, opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS));
 		ir_ref if_same = ir_IF(ir_EQ(ref,
 			ir_LOAD_A(ir_ADD_OFFSET(obj_ref, offsetof(zend_object, ce)))));
 
@@ -14504,7 +14504,7 @@ static int zend_jit_fetch_obj(zend_jit_ctx         *jit,
 
 		ir_IF_TRUE(if_same);
 		ir_ref offset_ref = ir_LOAD_A(
-			ir_ADD_OFFSET(run_time_cache, (opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR)) + sizeof(void*)));
+			ir_ADD_OFFSET(run_time_cache, (opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS) + sizeof(void*)));
 
 		may_be_dynamic = zend_may_be_dynamic_property(ce, Z_STR_P(member), opline->op1_type == IS_UNUSED, op_array);
 		if (may_be_dynamic) {
@@ -16278,8 +16278,7 @@ static int zend_jit_incdec_obj(zend_jit_ctx         *jit,
 static int zend_jit_fetch_static_prop(zend_jit_ctx *jit, const zend_op *opline, const zend_op_array *op_array)
 {
 	zend_jit_addr res_addr = RES_ADDR();
-	/* A PHP# method call's receiver may carry ZEND_SHARP_OPERATOR */
-	uint32_t cache_slot = opline->extended_value & ~(ZEND_FETCH_OBJ_FLAGS|ZEND_SHARP_OPERATOR);
+	uint32_t cache_slot = opline->extended_value & ~ZEND_FETCH_OBJ_FLAGS;
 	uint32_t flags;
 	ir_ref ref, ref2, if_cached, fast_path, cold_path, prop_info_ref, if_typed, if_def;
 	int fetch_type;
@@ -16416,12 +16415,12 @@ static int zend_jit_fetch_static_prop(zend_jit_ctx *jit, const zend_op *opline, 
 	 * handler. */
 	if (known_prop_info && sharp_function_is_sharp((const zend_function *) op_array)
 	 && sharp_property_checks_on_read(known_prop_info)) {
-		// JIT: if (Z_ISREF_P(result) && !sharp_property_for_write(NULL, NULL, result, property_info))
+		// JIT: if (Z_ISREF_P(result) && !sharp_property_for_write(NULL, result, property_info))
 		ir_ref if_reference = ir_IF(ir_EQ(jit_Z_TYPE_ref(jit, ref), ir_CONST_U8(IS_REFERENCE)));
 		ir_IF_TRUE_cold(if_reference);
 		jit_SET_EX_OPLINE(jit, opline);
-		ir_ref if_held = ir_IF(ir_CALL_4(IR_BOOL, ir_CONST_FUNC(sharp_property_for_write),
-			IR_NULL, IR_NULL, ref, ir_CONST_ADDR(known_prop_info)));
+		ir_ref if_held = ir_IF(ir_CALL_3(IR_BOOL, ir_CONST_FUNC(sharp_property_for_write),
+			IR_NULL, ref, ir_CONST_ADDR(known_prop_info)));
 		ir_IF_FALSE_cold(if_held);
 		ir_IJMP(jit_STUB_ADDR(jit, jit_stub_exception_handler_undef));
 		ir_IF_TRUE(if_held);

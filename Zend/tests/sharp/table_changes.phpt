@@ -18,6 +18,7 @@ bool(false)
 bool(true)
 [true,false,true,false]
 ["open=1",{"open":1},5]
+1 3 1 2 3
 [1,2]
 Cannot assign string to Set<int>: [2] expected int, got string 'x'
 {"1":[1,3],"0":[2]} {"10":1,"20":2,"30":3}
@@ -29,3 +30,8 @@ Cannot assign string to Map<int, int>: [7] expected int, got string 'x'
 bool(true)
 bool(true)
 [1,5] [1,5] {"milk":1} {"milk":1}
+55 55 [5,7] ["first","second"]
+{"z":1,"a":1}
+bool(true)
+bool(false)
+2 ["vip0","vip1","vip2"] 6

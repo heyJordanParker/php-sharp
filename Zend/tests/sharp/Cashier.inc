@@ -15,14 +15,14 @@ class Cashier
     public function receipt(array $prices, Cashier $other, Ledger $ledger): array
     {
         $count = 0;
-        $paid = ((object) ((object) ((object) $prices)->filter(fn ($price) => $price > 0))->map(fn ($price) => ($this->discount)($price)))->sortedBy(fn ($price) => -$price);
+        $paid = \Sharp\Internal\sortedBy(\Sharp\Internal\map(\Sharp\Internal\filter($prices, fn ($price) => $price > 0), fn ($price) => ($this->discount)($price)), fn ($price) => -$price, null);
         $total = Ledger::fold($paid, function (int $sum, int $price) use (&$count) {
             $count += 1;
             return $sum + $price;
         }, 0);
-        $recorded = ((object) $ledger)->record($paid, fn ($price) => ($other->discount)($price));
+        $recorded = $ledger->record($paid, fn ($price) => ($other->discount)($price));
         return [
-            Probe::join(",", ((object) $paid)->map($this->format(...))),
+            Probe::join(",", \Sharp\Internal\map($paid, $this->format(...))),
             (string) $total,
             (string) $count,
             Probe::join(",", $recorded),
