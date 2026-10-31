@@ -30,7 +30,9 @@ bool(true)
 bool(false)
 bool(true)
 [true,false,true,false]
-["open=1",{"open":1},5]
+["open=1",{"open":1},{"open":1},5]
+string 5=1, string tea=2, has "5": true
+string 5=3, string apple=1, string tea=2, closed=1, open=2, has "5": true, has Stage.Open: true
 1 3 1 2 3
 [1,2]
 Cannot assign string to Set<int>: [2] expected int, got string 'x'

@@ -12,7 +12,39 @@ public static class Tables
         return [
             global.http_build_query(counts),
             global.iterator_to_array(named),
+            global.iterator_to_array(counts),
             global.count(rows, global.COUNT_RECURSIVE),
         ];
+    }
+
+    // The PHP array iterator_to_array gives back for a Map<string, int>, which holds the key "5" as 5, crosses into a
+    // Map<string, int> with each int key back as its string.
+    public static string restored()
+    {
+        Map<string, int> counts = ["5": 1, "tea": 2];
+        Map<string, int> back = global.iterator_to_array(counts);
+        let keys = "";
+        for (const [key, n] of back) {
+            keys = `${keys}${global.get_debug_type(key)} ${key}=${n}, `;
+        }
+        return `${keys}has "5": ${back.has("5")}`;
+    }
+
+    // A local declared with let that holds a Map goes into ksort's reference parameter as its PHP array, a backed
+    // enum's key as its value, and comes back as the Map ksort wrote, keyed by its strings and its cases again.
+    public static string sorted()
+    {
+        let named = ["tea": 2, "5": 3, "apple": 1];
+        let staged = [Stage.Open: 2, Stage.Closed: 1];
+        global.ksort(named);
+        global.ksort(staged);
+        let keys = "";
+        for (const [key, n] of named) {
+            keys = `${keys}${global.get_debug_type(key)} ${key}=${n}, `;
+        }
+        for (const [stage, n] of staged) {
+            keys = `${keys}${stage.value}=${n}, `;
+        }
+        return `${keys}has "5": ${named.has("5")}, has Stage.Open: ${staged.has(Stage.Open)}`;
     }
 }

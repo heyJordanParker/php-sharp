@@ -82,6 +82,15 @@ function count_of_map(Sharp\Map $values): string
     return get_debug_type($values) . ' ' . count($values);
 }
 
+/**
+ * @template T of Countable
+ * @param T $values
+ */
+function count_of_bounded_countable($values): string
+{
+    return get_debug_type($values) . ' ' . count($values);
+}
+
 /** @return Closure(array): string */
 function array_counter(): Closure
 {
