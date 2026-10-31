@@ -3,9 +3,9 @@ name: Release
 # A tag such as v0.4.0 releases PHP# and Mago at one version: ext/sharp/php_sharp.h's PHP_SHARP_VERSION and
 # sharp/mago/Cargo.toml's version must both be 0.4.0, and sharp/CHANGELOG.md must have a "## [0.4.0]" section. This
 # workflow builds the mago binary per platform, publishes php-sharp's GitHub release with that section as its notes
-# and the SHA-256 of every asset, and publishes the tag's
-# heyjordanparker/mago-sharp version with those SHA-256s. sharp.yml's IMAGE job publishes the engine's image from
-# the same tag, and its COMPOSER job publishes heyjordanparker/php-sharp-composer.
+# and the SHA-256 of every asset, and publishes the tag's heyjordanparker/mago-sharp version with those SHA-256s.
+# sharp.yml's IMAGE job publishes the engine's image from the same tag, and its COMPOSER job publishes
+# heyjordanparker/php-sharp-composer.
 on:
   workflow_dispatch:
   push:
