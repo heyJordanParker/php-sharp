@@ -7,7 +7,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Fixed
 
 - A save just after `mago analyze --watch` starts or restarts on a busy Mac is now analyzed (#221).
-- A save whose event macOS or Linux drops under a flood of changes is now analyzed by `mago analyze --watch`, which reads the watched files again when the OS says it dropped events (#228).
+- A save whose event macOS or Linux drops under a flood of changes is now analyzed by `mago analyze --watch`, which reads the watched files again when the OS says it dropped events, and restarts when they could hide a change to its configuration, baseline or Composer files (#228).
 
 ## [0.6.0] - 2026-10-31
 
