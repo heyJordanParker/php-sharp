@@ -9,7 +9,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 - A save just after `mago analyze --watch` starts or restarts on a busy Mac is now analyzed (#221).
 - A user's extension on `Iterable<TItem>` reaches a `Map<TKey, TValue>` with `TItem` as `[TKey, TValue]`, and an extension on `List<T>` reaches a value that may be one of several `List`s with `T` fixed by every one of them, as a generic call's parameter takes them. A member that changes that value, as `add`, takes only what every one of those `List`s takes (#224).
 - No extension whose receiver holds a `float` reaches an `int`, at any depth, as with `List<float>`, so an `int` no longer has the `float`-only methods `round`, `floor`, `ceil` and `isFinite`. Convert with `(float)` first, as in `((float) count).round(2)` (#224).
-- A property read through `?.` keeps each part of its type, as a plain PHP property that may hold a `List<int>` or a `List<string>` does, so `maybe?.rows.clear()` writes back the property's own type, and `maybe?.rows.add(1)` is refused as `box.rows.add(1)` is, where it took any element and refused the write-back.
+- A property read through `?.` keeps each part of its type, as a plain PHP property that may hold a `List<int>` or a `List<string>` does, so `maybe?.rows.clear()` writes back the property's own type, and `maybe?.rows.add(1)` is refused as `box.rows.add(1)` is, where it took any element and refused the write-back (#230).
 
 ## [0.6.0] - 2026-10-31
 
