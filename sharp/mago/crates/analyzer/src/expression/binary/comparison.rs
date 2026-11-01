@@ -65,6 +65,7 @@ use crate::expression::binary::utils::is_always_less_than;
 use crate::expression::binary::utils::is_always_less_than_or_equal;
 use crate::expression::binary::utils::report_tied_operator;
 use crate::expression::binary::utils::takes_operands;
+use crate::expression::is_refused_type;
 use crate::expression::with_type_arguments;
 use crate::statement::class_like::r#struct::data_enum;
 use crate::statement::class_like::r#struct::declares_equality;
@@ -1100,8 +1101,10 @@ pub(crate) fn sharp_refusal(
     rhs_type: &TUnion,
     codebase: &CodebaseMetadata,
 ) -> Option<Refusal> {
-    // A comparison no source writes, as the `===` a list pattern's count runs as, has no operator token to refuse.
-    if operator.span().length() == 0 {
+    // A comparison no source writes, as the `===` a list pattern's count runs as, has no operator token to refuse. A
+    // refused side, as a value of a type parameter whose bound the checker refused, has its one error already, as an
+    // arithmetic operand has.
+    if operator.span().length() == 0 || is_refused_type(lhs_type) || is_refused_type(rhs_type) {
         return None;
     }
 
