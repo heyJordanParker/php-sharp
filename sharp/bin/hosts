@@ -28,7 +28,7 @@ fi
 
 build_dir="$root/sharp/build/linux-$(uname -m)"
 fpm="$build_dir/sapi/fpm/php-fpm"
-mago="$build_dir/mago/release/mago"
+mago="$build_dir/mago/test-run/mago"
 install="$build_dir-zts/install"
 for needed in "$fpm:sharp/bin/build" "$mago:sharp/bin/test" "$install/bin/php-config:sharp/bin/build --zts"; do
   if [[ ! -x "${needed%%:*}" ]]; then

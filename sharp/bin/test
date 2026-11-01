@@ -88,10 +88,11 @@ if [[ " ${MAKEFLAGS:-}" =~ [[:space:]](-j[[:space:]]*|--jobs=)([0-9]+) ]]; then
   jobs="${BASH_REMATCH[2]}"
 fi
 
+# mago builds in the test-run profile, which sharp/mago/Cargo.toml explains.
 cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
-PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --release --jobs "$jobs" \
+PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --profile test-run --jobs "$jobs" \
   --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$mago_dir" --bin mago
-mago="$mago_dir/release/mago"
+mago="$mago_dir/test-run/mago"
 
 # run-tests.php writes each test's script beside it as <test>.php, and mago compile writes each PHP# class's companion
 # beside its source as <Class>.php. A disk that ignores case, as macOS's does, keeps one file for both when the two

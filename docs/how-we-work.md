@@ -58,7 +58,7 @@ A mistake that no check can catch yet goes in `docs/architecture/guards.md`, wit
 
 - CI runs every PHP# engine test 22 times, on Linux and on macOS: plain PHP, three runs with cached bytecode, each of PHP's 16 optimizer passes on its own, and both JIT compilers. A PR can't merge until all 22 pass on both. A PR that changes only documentation skips them, and GitHub counts the skipped `LINUX` and `MACOS` checks as passing.
 - A builder runs only these locally, and leaves the other runs to CI:
-  - `sharp/bin/test`, the run without opcache. It builds `mago` from `sharp/mago/` first.
+  - `sharp/bin/test`, the run without opcache. It builds `mago` from `sharp/mago/` first, in the `test-run` profile, which `sharp/mago/Cargo.toml` explains.
   - In `sharp/mago/`: `cargo test --workspace --locked`, `cargo clippy --workspace --all-targets --all-features -- -D warnings` and `cargo fmt --all -- --check`.
 - One `sharp/bin/test` runs per worktree at a time, and each run of it and of `sharp/bin/bench` stands on its own:
   - `sharp/bin/bench` compiles a copy of its rows inside its own container, so it runs beside `sharp/bin/test` in the same worktree.
