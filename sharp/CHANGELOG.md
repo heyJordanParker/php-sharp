@@ -7,7 +7,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Fixed
 
 - A save just after `mago analyze --watch` starts or restarts on a busy Mac is now analyzed (#221).
-- A method a collection lacks is an error whose help lists only the methods the collection can call. A `List` whose elements have no `==`, as a `List<TItem>` of `TItem : Object` or a `List<Cart>` of a class without `operator ==`, no longer lists `contains`, `indexOf` and `remove`. In a project without the standard library, the help names the library to install, where it read "has the methods ." (#229).
+- A method a collection lacks is an error whose help lists only the methods the collection can call. A `List` whose elements have no `==`, as a `List<TItem>` of `TItem : Object` or a `List<Cart>` of a class without `operator ==`, no longer lists `contains`, `indexOf` and `remove`, and a `Set<TItem>` of `TItem : Object` no longer lists `add`, `contains` and `remove`. In a project without the standard library, the help names the library to install, where it read "has the methods .", after any extension the project declares itself. The help of a collection, a `string` and a number lists `remove` before `removeLast` and `trim` before `trimEnd` (#229).
 
 ## [0.6.0] - 2026-10-31
 
