@@ -1,5 +1,5 @@
 --TEST--
-A backtrace taken inside a PHP# collection method's lambda shows the method's frame without its internal object
+A backtrace taken inside a PHP# collection member's lambda shows the engine function's frame without an object
 --FILE--
 <?php
 require __DIR__ . '/harness/Inspector.inc';
@@ -11,9 +11,6 @@ function show(array $frames): void
     foreach ($frames as $frame) {
         echo $frame['class'] ?? '', $frame['type'] ?? '', $frame['function'], ': ',
             isset($frame['object']) ? get_class($frame['object']) : 'no object', "\n";
-        if (($frame['object'] ?? null) instanceof Sharp\Collection) {
-            var_dump($frame['object']->entries());
-        }
     }
 }
 
@@ -40,4 +37,4 @@ Lib\Inspector::pause: no object
 Demo\Inspection::{closure:Demo\Inspection::pause():16}: no object
 Sharp\Internal\filter: no object
 Demo\Inspection::pause: no object
-{closure:%sinspection.php:%d}: no object
+{closure:%slambda_backtrace.php:%d}: no object

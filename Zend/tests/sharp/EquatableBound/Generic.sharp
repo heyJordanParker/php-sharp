@@ -1,0 +1,31 @@
+namespace Equatables;
+
+public class Generic
+{
+    public static bool same<T : Equatable>(T a, T b) => a == b;
+
+    public static bool sameEntity<T : DatabaseEntity>(T a, T b) => a == b;
+
+    public static bool points(int x, int otherX) => Generic.same(new Point(x), new Point(otherX));
+
+    public static bool orders(int id, int otherId) => Generic.same(new Order(id), new Order(otherId));
+
+    public static bool entities(int id, int otherId) => Generic.sameEntity(new Order(id), new Order(otherId));
+
+    public static bool numbers(int a, int b) => Generic.same(a, b);
+
+    public static bool lists(List<int> a, List<int> b) => Generic.same(a, b);
+
+    public static bool listed<T : Equatable>(List<T> items, T item) => items.contains(item);
+
+    public static bool pointListed(int x) => Generic.listed([new Point(1), new Point(2)], new Point(x));
+
+    public static int keys<T : Equatable>(List<T> items)
+    {
+        Map<T, int> counts = [:];
+        for (const item of items) {
+            counts[item] = (counts[item] ?? 0) + 1;
+        }
+        return counts.count();
+    }
+}

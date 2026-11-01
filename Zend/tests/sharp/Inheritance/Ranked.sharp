@@ -1,6 +1,6 @@
 namespace Demo;
 
-public class Ranked<TRank, TName> : Keyed<TName>
+public class Ranked<TRank, TName : Equatable> : Keyed<TName>
 {
     public Ranked(public TName name { get; }) { }
 

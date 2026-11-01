@@ -8,17 +8,21 @@
 
 use std::collections::HashMap;
 
+use mago_analyzer::artifacts::MemberCall;
 use mago_codex::ttype::union::TUnion;
 use mago_names::binding::Binding;
 use mago_names::binding::php_operator_name;
+use mago_span::HasSpan;
 use mago_span::Span;
 use mago_syntax::cst::Access;
 use mago_syntax::cst::Argument;
 use mago_syntax::cst::ArgumentList;
+use mago_syntax::cst::ArrayElement;
 use mago_syntax::cst::Binary;
 use mago_syntax::cst::BinaryOperator;
 use mago_syntax::cst::Call;
 use mago_syntax::cst::ClassLikeMember;
+use mago_syntax::cst::ClassLikeMemberSelector;
 use mago_syntax::cst::Expression;
 use mago_syntax::cst::FunctionLikeParameter;
 use mago_syntax::cst::Hint;
@@ -72,9 +76,9 @@ pub struct InlineForm {
     /// The node each value replaces: the receiver first for an instance method, then each parameter in declaration
     /// order.
     slots: Vec<u32>,
-    /// Whether the form reads every slot in declaration order, the receiver first, before its first call, so the
-    /// values run in the order the call runs them.
-    in_order: bool,
+    /// How many slots the form reads in declaration order, the receiver first, before its first call. Their values run
+    /// in the order the call runs them, so a value in a later slot must run nothing when read.
+    in_order: usize,
     /// The node the type arguments of the collection the inlined call gives replace, [`RESULT_TYPE_SLOT`].
     result_type: Option<u32>,
     /// The node the `operator <=>` of the keys the inlined call orders by replaces, [`KEY_ORDER_SLOT`].
@@ -286,25 +290,23 @@ impl Lowering<'_, '_> {
                     return None;
                 }
 
-                let reads: Vec<usize> = steps
+                let mut each_once: Vec<usize> = steps
                     .iter()
                     .filter_map(|step| match step {
                         Step::Read(slot) => Some(*slot),
                         Step::Call => None,
                     })
                     .collect();
-                let mut each_once = reads.clone();
                 each_once.sort_unstable();
                 if each_once != (0..names.len()).collect::<Vec<_>>() {
                     return None;
                 }
 
-                let in_order =
-                    reads == each_once && steps[..reads.len()].iter().all(|step| matches!(step, Step::Read(_)));
+                let in_order = steps.iter().zip(0..).take_while(|(step, slot)| **step == Step::Read(*slot)).count();
                 (self.expression(expression), in_order)
             }
             // The native call reads each parameter once, in order, and then calls.
-            Body::Native(method) => (self.native_call(method, class), true),
+            Body::Native(method) => (self.native_call(method, class), names.len()),
         };
         let mut slots = vec![NULL; names.len()];
         let (mut result_type, mut key_order) = (None, None);
@@ -425,8 +427,8 @@ impl Lowering<'_, '_> {
     }
 
     /// The call `call` as its standard library method's inline form, when the method has one and the call passes
-    /// each parameter one positional argument. A form that reads its slots out of order, or after a call, takes only
-    /// values that do nothing when read, since inlined they run in the form's order instead of the call's.
+    /// each parameter one positional argument. A slot the form reads out of order, or after a call, takes only a value
+    /// that does nothing when read, since inlined it runs in the form's order instead of the call's.
     pub(super) fn inlined_call(&mut self, expression: &Expression, call: &MethodCall) -> Option<u32> {
         // A type parameter's class is a subclass of its bound when the code runs, which may declare its own method.
         let receiver = match self.names.static_call_class(call) {
@@ -443,13 +445,15 @@ impl Lowering<'_, '_> {
             receiver.map(InlineReceiver::Expression),
             Some(&call.argument_list),
             None,
+            None,
         )
     }
 
     /// The call `call` of `declaration` on `receiver`, its first slot, with `arguments`, as the method's inline form on
     /// the call's line, under the rule [`Self::inlined_call`] states. A form that calls an engine function whose
-    /// parameter takes what the call gives, [`TAKES_RESULT_TYPE`] or [`TAKES_KEY_ORDER`], gets it from `call`. Each
-    /// argument goes in as an element of the type `element` does, where the receiver is a collection plain PHP declares.
+    /// parameter takes what the call gives, [`TAKES_RESULT_TYPE`] or [`TAKES_KEY_ORDER`], gets it from `call`, or from
+    /// `member`, where the call runs it of several. Each argument goes in as an element of the type `element` does,
+    /// where the receiver is a collection plain PHP declares.
     pub(super) fn inlined(
         &mut self,
         call: &Expression,
@@ -457,6 +461,7 @@ impl Lowering<'_, '_> {
         receiver: Option<InlineReceiver>,
         arguments: Option<&ArgumentList>,
         element: Option<&TUnion>,
+        member: Option<&MemberCall>,
     ) -> Option<u32> {
         let form = self.types.inline_form(declaration)?;
         let line = self.line(call);
@@ -475,7 +480,7 @@ impl Lowering<'_, '_> {
         // A place is lowered already, and reading it runs nothing.
         let runs_code =
             |value: &InlineReceiver| matches!(value, InlineReceiver::Expression(value) if !self.is_pure(value));
-        if values.len() != form.slots.len() || (!form.in_order && values.iter().any(runs_code)) {
+        if values.len() != form.slots.len() || values.iter().skip(form.in_order).any(runs_code) {
             return None;
         }
 
@@ -484,12 +489,12 @@ impl Lowering<'_, '_> {
             .enumerate()
             .map(|(position, value)| match value {
                 InlineReceiver::Expression(value) if position >= receivers => self.member_argument(value, element),
-                InlineReceiver::Expression(value) => self.expression(value),
+                InlineReceiver::Expression(value) => self.read_receiver(value),
                 InlineReceiver::Place(place) => place,
             })
             .collect();
-        let result_type = form.result_type.map(|_| self.result_type_argument(call, line));
-        let key_order = form.key_order.map(|_| self.key_order_argument(call, line));
+        let result_type = form.result_type.map(|_| self.result_type_argument(call, member, line));
+        let key_order = form.key_order.map(|_| self.key_order_argument(call, member, line));
         values.extend(result_type.into_iter().chain(key_order));
 
         Some(self.copied(declaration, form, &values, line))
@@ -500,7 +505,10 @@ impl Lowering<'_, '_> {
     /// that reads its slots out of order or takes what a call gives.
     pub(super) fn inlined_operation(&mut self, declaration: &Declaration, values: &[u32], line: u32) -> Option<u32> {
         let form = self.types.inline_form(declaration)?;
-        if values.len() != form.slots.len() || !form.in_order || form.result_type.is_some() || form.key_order.is_some()
+        if values.len() != form.slots.len()
+            || form.in_order != form.slots.len()
+            || form.result_type.is_some()
+            || form.key_order.is_some()
         {
             return None;
         }
@@ -519,20 +527,22 @@ impl Lowering<'_, '_> {
         self.copy(form, form.root, values, line)
     }
 
-    /// The type arguments of the `Map` or the `Set` `call` gives, as the engine function's [`TAKES_RESULT_TYPE`]
-    /// parameter takes them.
-    pub(super) fn result_type_argument(&mut self, call: &Expression, line: u32) -> u32 {
-        let Some(text) = self.table_type_arguments(self.types.expression_type(call)) else {
+    /// The type arguments of the `Map` or the `Set` `call` gives, or `member` gives, where the call runs it of several,
+    /// as the engine function's [`TAKES_RESULT_TYPE`] parameter takes them.
+    pub(super) fn result_type_argument(&mut self, call: &Expression, member: Option<&MemberCall>, line: u32) -> u32 {
+        let Some(text) = self.table_type_arguments(self.types.call_type(call, member)) else {
             unreachable!("the checker refuses a type argument PHP# can't write, as `never` of `map(x => throw …)`");
         };
 
         self.type_text(line, &text)
     }
 
-    /// The `operator <=>` the checker chose for the keys `call` orders by, spec section 19, as the engine function's
-    /// [`TAKES_KEY_ORDER`] parameter takes it: its first-class callable, or null for keys of a type that declares none.
-    pub(super) fn key_order_argument(&mut self, call: &Expression, line: u32) -> u32 {
-        match self.types.sorting_operator(call).zip(php_operator_name(&BinaryOperator::Spaceship(Span::zero()), 2)) {
+    /// The `operator <=>` the checker chose for the keys `call`, or its member `member`, orders by, spec section 19, as
+    /// the engine function's [`TAKES_KEY_ORDER`] parameter takes it: its first-class callable, or null for keys of a
+    /// type that declares none.
+    pub(super) fn key_order_argument(&mut self, call: &Expression, member: Option<&MemberCall>, line: u32) -> u32 {
+        let operator = self.types.sorting_operator(call, member);
+        match operator.zip(php_operator_name(&BinaryOperator::Spaceship(Span::zero()), 2)) {
             Some((owner, name)) => {
                 let callable = self.node(SHARP_AST_CALLABLE_CONVERT, 0, line, &[]);
 
@@ -542,9 +552,13 @@ impl Lowering<'_, '_> {
         }
     }
 
-    /// Whether reading `expression` runs nothing: a literal, a name, a plain PHP constant read through its namespace, a
-    /// lambda, `typeof(X)` or `nameof(X.y)`.
+    /// Whether reading `expression` runs nothing: a literal, a collection literal of such values, a name, a plain PHP
+    /// constant read through its namespace, a class's constant or enum case, a lambda, `typeof(X)` or `nameof(X.y)`, or
+    /// a value a hidden variable holds already, which reads the variable.
     pub(super) fn is_pure(&self, expression: &Expression) -> bool {
+        if self.held_receivers.iter().any(|(span, _)| *span == expression.span()) {
+            return true;
+        }
         match expression {
             Expression::Parenthesized(parenthesized) => self.is_pure(parenthesized.expression),
             Expression::Literal(_)
@@ -555,7 +569,21 @@ impl Lowering<'_, '_> {
             Expression::ConstantAccess(name) => {
                 matches!(self.names.binding(&name.name), Some(Binding::Local(_) | Binding::This | Binding::Constant))
             }
-            Expression::Access(Access::Property(_)) => self.types.namespace_constant(expression).is_some(),
+            // A collection literal of values that run nothing runs nothing. A spread reads a sequence, which may run, and
+            // the checker refuses an element left out.
+            Expression::Array(array) => array.elements.iter().all(|element| match element {
+                ArrayElement::KeyValue(element) => self.is_pure(element.key) && self.is_pure(element.value),
+                ArrayElement::Value(element) => self.is_pure(element.value),
+                ArrayElement::Variadic(_) | ArrayElement::Missing(_) => false,
+            }),
+            Expression::Access(Access::Property(access)) => {
+                self.types.namespace_constant(expression).is_some()
+                    || matches!(&access.property, ClassLikeMemberSelector::Identifier(name)
+                    if self.static_classes(access).is_some_and(|classes| classes.iter().all(|class| matches!(
+                        self.types.member_declaration(class, name.value).kind,
+                        DeclarationKind::Constant | DeclarationKind::EnumCase
+                    ))))
+            }
             _ => false,
         }
     }

@@ -8,7 +8,7 @@ echo shell_exec(escapeshellarg(getenv('TEST_PHP_EXECUTABLE')) . ' -n --ri sharp'
 --EXPECT--
 sharp
 
-Version => 0.5.0
+Version => 0.6.1
 
 Directive => Local Value => Master Value
 sharp.compile_command => no value => no value

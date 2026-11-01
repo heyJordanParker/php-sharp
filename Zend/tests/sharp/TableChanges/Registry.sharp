@@ -1,0 +1,39 @@
+namespace TableChanges;
+
+// A change to a Map or a Set a static property with a `set` body holds runs the `set` once it changed the table, as
+// an instance property's does.
+public class Registry
+{
+    public static int writes { get; set; } = 0;
+    public static Map<string, int> counts
+    {
+        get => field;
+        set
+        {
+            Registry.writes = Registry.writes + 1;
+            field = value;
+        }
+    } = [:];
+    public static Set<string> tags
+    {
+        get => field;
+        set
+        {
+            Registry.writes = Registry.writes + 1;
+            field = value;
+        }
+    } = [];
+
+    public static void count(string name, int count)
+    {
+        Registry.counts[name] = count;
+    }
+
+    public static bool tag(string name) => Registry.tags.add(name);
+
+    public static int counted(string name) => Registry.counts.get(name) ?? -1;
+
+    public static List<string> tagged() => Registry.tags.toList();
+
+    public static int written() => Registry.writes;
+}

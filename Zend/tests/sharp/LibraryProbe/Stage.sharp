@@ -1,0 +1,7 @@
+namespace Sharp.Probe;
+
+public enum Stage : string
+{
+    case Open = "open";
+    case Closed = "closed";
+}

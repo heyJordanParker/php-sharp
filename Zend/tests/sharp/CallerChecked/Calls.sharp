@@ -27,6 +27,59 @@ public static class Calls
 
     public static string counts(Taggable owner) => `${owner.counts().count()}`;
 
+    // Each member of the Set a plain PHP member returns as the PHP array a Set crosses into, by name, as a call plain
+    // PHP runs, so each one's error stands alone. A member that changes the Set changes a local that holds the array.
+    public static Map<string, Function<Any?()>> setMembers(Taggable owner) => [
+        "count": () => owner.labels().count(),
+        "isEmpty": () => owner.labels().isEmpty(),
+        "isNotEmpty": () => owner.labels().isNotEmpty(),
+        "contains": () => [owner.labels().contains("b"), owner.labels().contains("z")],
+        "toList": () => owner.labels().toList(),
+        "filter": () => owner.labels().filter(label => label != "b").toList(),
+        "map": () => owner.labels().map(label => `${label}!`),
+        "sumOf": () => owner.labels().sumOf(label => label == "a" ? 1 : 2),
+        "first": () => owner.labels().first(label => label != "a"),
+        "any": () => owner.labels().any(label => label == "c"),
+        "sortedBy": () => owner.labels().sortedBy(label => label == "b" ? 0 : 1),
+        "add": () => {
+            Set<string> labels = owner.labels();
+            return [labels.add("d"), labels.add("a"), labels.toList()];
+        },
+        "remove": () => {
+            Set<string> labels = owner.labels();
+            return [labels.remove("b"), labels.remove("z"), labels.toList()];
+        },
+        "clear": () => {
+            Set<string> labels = owner.labels();
+            labels.clear();
+            return labels.count();
+        },
+    ];
+
+    // Each member of the Map a plain PHP member returns as the PHP array a Map crosses into, as setMembers runs them.
+    public static Map<string, Function<Any?()>> mapMembers(Taggable owner) => [
+        "count": () => owner.counts().count(),
+        "isEmpty": () => owner.counts().isEmpty(),
+        "isNotEmpty": () => owner.counts().isNotEmpty(),
+        "get": () => [owner.counts().get("b"), owner.counts().get("10"), owner.counts().get("z")],
+        "has": () => [owner.counts().has("a"), owner.counts().has("10"), owner.counts().has("z")],
+        "keys": () => owner.counts().keys(),
+        "values": () => owner.counts().values(),
+        "toList": () => owner.counts().toList(),
+        "filter": () => owner.counts().filter(count => count > 1).toList(),
+        "map": () => owner.counts().map(count => count * 2),
+        "sumOf": () => owner.counts().sumOf(count => count),
+        "first": () => owner.counts().first(count => count > 1),
+        "any": () => owner.counts().any(count => count > 2),
+        "groupBy": () => owner.counts().groupBy(count => count % 2).toList(),
+        "associateBy": () => owner.counts().associateBy(count => count * 10).toList(),
+        "sortedBy": () => owner.counts().sortedBy(count => -count),
+        "remove": () => {
+            Map<string, int> counts = owner.counts();
+            return [counts.remove("a"), counts.remove("z"), counts.toList()];
+        },
+    ];
+
     public static string stream(Taggable owner)
     {
         int total = 0;

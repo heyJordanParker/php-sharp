@@ -1,12 +1,15 @@
 use std::sync::Arc;
 
 use mago_analyzer::CodebasePatternNames;
+use mago_analyzer::CollectionKind;
 use mago_analyzer::artifacts::AnalysisArtifacts;
 use mago_analyzer::artifacts::CallTarget;
+use mago_analyzer::artifacts::MemberCall;
 use mago_analyzer::chosen_operator;
+use mago_analyzer::collection_member;
+use mago_analyzer::collection_member_kind;
 use mago_analyzer::effects::Effects;
 use mago_analyzer::is_collection_member;
-use mago_analyzer::list_member;
 use mago_codex::defaults_trait_name;
 use mago_codex::identifier::function_like::FunctionLikeIdentifier;
 use mago_codex::identifier::method::MethodIdentifier;
@@ -39,9 +42,11 @@ use mago_codex::ttype::comparator::ComparisonResult;
 use mago_codex::ttype::comparator::union_comparator;
 use mago_codex::ttype::comparator::union_comparator::can_expression_types_be_identical;
 use mago_codex::ttype::get_array_parameters;
+use mago_codex::ttype::get_collection_object;
 use mago_codex::ttype::get_mixed;
 use mago_codex::ttype::get_sharp_type;
 use mago_codex::ttype::is_written_in_sharp;
+use mago_codex::ttype::takes_array;
 use mago_codex::ttype::template::variance::Variance;
 use mago_codex::ttype::union::TUnion;
 use mago_database::file::File;
@@ -60,6 +65,7 @@ use mago_syntax::cst::Expression;
 use mago_syntax::cst::FunctionCall;
 use mago_syntax::cst::Hint;
 use mago_syntax::cst::Inheritance;
+use mago_syntax::cst::LocalIdentifier;
 use mago_syntax::cst::MethodCall;
 use mago_syntax::cst::NullSafeFunctionCall;
 use mago_syntax::cst::NullSafePropertyAccess;
@@ -74,11 +80,6 @@ use super::inline::RESULT_TYPE_SLOT;
 use super::inline::TAKES_KEY_ORDER;
 use super::inline::TAKES_RESULT_TYPE;
 use super::inline::key;
-
-/// Each collection PHP# has a class of methods for, with that class, which the analyzer checks a call on it against. A
-/// `List`'s members are the standard library's extensions.
-const COLLECTION_METHODS: [(&str, &[u8]); 2] =
-    [("Map", b"Sharp\\Internal\\MapMethods"), ("Set", b"Sharp\\Internal\\SetMethods")];
 
 /// The checker's types for one file. The lowering reads a type only through these queries, so `--assert-types` can
 /// turn each answer it used into a runtime guard.
@@ -104,6 +105,26 @@ pub struct Declaration {
     pub name: Word,
     /// Whether code outside the class may use it. A class is public.
     pub public: bool,
+}
+
+/// The members a method call runs on a value that may hold more than one kind of collection, or a collection or an
+/// object, spec section 12, as [`Types::members_by_kind`] gives them.
+pub(crate) struct MembersByKind<'analysis> {
+    /// Each kind's standard library member, in [`CollectionKind`]'s order, as the analysis resolved them.
+    pub(crate) members: Vec<KindMember<'analysis>>,
+    /// The classes whose method of that name an object the value may hold runs, its own, none when it holds no object.
+    pub(crate) objects: Vec<Word>,
+}
+
+/// One kind's standard library member of a [`MembersByKind`].
+pub(crate) struct KindMember<'analysis> {
+    pub(crate) kind: CollectionKind,
+    /// The class of the object a `Map` or a `Set` runs as, which tells it apart. None for a `List`, which runs as a PHP
+    /// array, and for an `Iterable`.
+    pub(crate) runs_as: Option<Word>,
+    pub(crate) declaration: Declaration,
+    /// The type arguments and the type the member's call has.
+    pub(crate) call: &'analysis MemberCall,
 }
 
 /// What a declaration is.
@@ -459,8 +480,8 @@ impl<'analysis> Types<'analysis> {
 
     /// The type arguments the generic method call at `span` gives the method, as [`Self::type_arguments`] writes those
     /// of a `new`. None when the method declares no type parameter, or a built-in class declares it, whose method never
-    /// reads them, as the prelude's `Sharp\Internal\MapMethods` and `Sharp\Internal\SetMethods` declare a map's and a
-    /// set's. A method of any project class, PHP# or plain PHP, may run a PHP# method that overrides or implements it,
+    /// reads them, as the prelude's `Sharp\Internal\Sequence` declares its `map`. A method of any project
+    /// class, PHP# or plain PHP, may run a PHP# method that overrides or implements it,
     /// so a call through a plain PHP `@template` interface or parent carries them, and a plain PHP method ignores them.
     /// The class that declares the method decides, so `super.m()` carries them through a plain PHP parent that inherits
     /// a PHP# `m`.
@@ -477,15 +498,33 @@ impl<'analysis> Types<'analysis> {
 
     /// The type arguments the access `access` of a generic extension member gives the static method it runs as, spec
     /// section 26: those the checker inferred from the receiver for the extension block's type parameters, then the
-    /// member's own, written as [`Self::type_arguments`] writes those of a `new`. None for a member that isn't generic,
-    /// and for one whose type arguments PHP# can't all write.
-    pub(crate) fn extension_type_arguments(&self, access: &Expression) -> Option<String> {
-        let span = access.span();
-        let arguments = self.artifacts.inferred_type_arguments.get(&(span.start.offset, span.end.offset))?;
+    /// member's own, written as [`Self::type_arguments`] writes those of a `new`, or those of `member`, where the call
+    /// runs it of several. None for a member that isn't generic, and for one whose type arguments PHP# can't all write.
+    pub(crate) fn extension_type_arguments(&self, access: &Expression, member: Option<&MemberCall>) -> Option<String> {
+        let arguments = self.call_type_arguments_of(access, member)?;
 
         // A collection's member may take one only a PHP docblock writes, which its static method runs without, as a
         // plain PHP caller calls it.
         arguments.iter().all(is_written_in_sharp).then(|| self.argument_texts(arguments))
+    }
+
+    /// The type arguments the checker inferred for the call `call`, or for `member`, where the call runs it of several.
+    fn call_type_arguments_of<'call>(
+        &'call self,
+        call: &Expression,
+        member: Option<&'call MemberCall>,
+    ) -> Option<&'call Vec<TUnion>> {
+        let span = call.span();
+
+        match member {
+            Some(member) => member.type_arguments.as_ref(),
+            None => self.artifacts.inferred_type_arguments.get(&(span.start.offset, span.end.offset)),
+        }
+    }
+
+    /// The type the call `call` gives, or `member` gives, where the call runs it of several.
+    pub(crate) fn call_type<'call>(&'call self, call: &Expression, member: Option<&'call MemberCall>) -> &'call TUnion {
+        member.map_or_else(|| self.expression_type(call), |member| &member.result)
     }
 
     /// The type arguments the method value `value` of a PHP# generic method takes from the function type it goes
@@ -660,6 +699,13 @@ impl<'analysis> Types<'analysis> {
         self.artifacts
             .get_declared_type(hint)
             .unwrap_or_else(|| unreachable!("the analysis resolves the type of each declaration's hint, not `{hint}`"))
+    }
+
+    /// The type the local a declaration without a type names as `name` takes from its first value for its whole life,
+    /// as the checker inferred it: a literal's type made general, as `Map<string, int>` for `["tea": 2]`. None where the
+    /// first value gives it no type, as `null` does.
+    pub(crate) fn inferred_local_type(&self, name: &LocalIdentifier) -> Option<&'analysis TUnion> {
+        self.artifacts.get_declared_type(name)
     }
 
     /// The type a `Map` or `Set` the collection literal `literal` makes takes, spec section 12: the collection the place
@@ -936,6 +982,14 @@ impl<'analysis> Types<'analysis> {
         let runs_in_engine = !method.flags.is_user_defined() || is_collection_member(*class, method);
 
         (runs_in_engine && takes_function_value).then(|| method.original_name.to_string())
+    }
+
+    /// Whether the call `call` runs a member of a PHP# interface, as [`Self::result_checked_member`] finds it, which a
+    /// plain PHP class may implement, so its result may be plain PHP's value: a PHP array for a `Map` or a `Set`.
+    pub(crate) fn runs_result_checked_member(&self, call: &Expression) -> bool {
+        self.artifacts.get_callees(call).any(|target| {
+            matches!(target, CallTarget::FunctionLike { callee, .. } if self.result_checked_member(callee).is_some())
+        })
     }
 
     /// The class and the metadata of `callee` when it is a member of a PHP# interface, whose result each PHP# call
@@ -1349,13 +1403,14 @@ impl<'analysis> Types<'analysis> {
         })
     }
 
-    /// The standard library's member `name` of a `List`, which an operation on a List runs, as `list[i] = v` runs `set`.
-    pub(crate) fn list_operation(&self, name: &[u8]) -> Declaration {
-        let Some((class, member)) = list_member(self.codebase, name)
+    /// The standard library's member `name` of the collection `kind`, a `List` or a `Map`, which an operation on it runs,
+    /// as `list[i] = v` and `map[key] = value` run `set`.
+    pub(crate) fn collection_operation(&self, name: &[u8], kind: CollectionKind) -> Declaration {
+        let Some((class, member)) = collection_member(self.codebase, name, kind)
             .and_then(|method| Some((method.get_class_name(), self.codebase.get_method_by_id(method)?)))
         else {
             unreachable!(
-                "the analyzer refuses an operation of a `List` without the standard library's `{}`",
+                "the analyzer refuses an operation of a collection without the standard library's `{}`",
                 String::from_utf8_lossy(name)
             )
         };
@@ -1368,32 +1423,50 @@ impl<'analysis> Types<'analysis> {
         }
     }
 
-    /// The member of a `List` the method call `call` runs on a value that may also be a `Map` or a `Set`, spec section
-    /// 12: the analysis checked it against the standard library's member and the other collections' method of that
-    /// name. None for a call on one kind, or on anything else.
-    pub(crate) fn list_member_among_collections(&self, call: &Expression) -> Option<Declaration> {
-        let (mut member, mut others) = (None, false);
+    /// The members the method call `call` runs on a value that may hold more than one kind of collection, or a
+    /// collection or an object, spec section 12, as the analysis resolved them. None for a call that runs one member, or
+    /// no collection's.
+    pub(crate) fn members_by_kind(&self, call: &Expression) -> Option<MembersByKind<'_>> {
+        let (mut members, mut objects) = (Vec::new(), Vec::new());
         for callee in self.artifacts.get_callees(call) {
-            let CallTarget::FunctionLike { callee: FunctionLikeIdentifier::Method(class, method), .. } = callee else {
+            let CallTarget::FunctionLike { callee: callee @ FunctionLikeIdentifier::Method(class, method), .. } =
+                callee
+            else {
                 return None;
             };
-            if COLLECTION_METHODS.iter().any(|(_, methods)| class.as_bytes().eq_ignore_ascii_case(methods)) {
-                others = true;
-            } else {
-                let metadata = self.codebase.get_method(class.as_bytes(), method.as_bytes())?;
-                if !metadata.flags.is_extension_method() {
-                    return None;
+            let metadata = self.codebase.get_method(class.as_bytes(), method.as_bytes())?;
+            if !metadata.flags.is_extension_method() {
+                let class = self.class_declaration(class.as_bytes()).name;
+                if !objects.contains(&class) {
+                    objects.push(class);
                 }
-                member = Some(Declaration {
+                continue;
+            }
+            let kind = collection_member_kind(*class, metadata)?;
+            let receiver = &metadata.parameters.first()?.get_type_metadata()?.type_union;
+            let runs_as =
+                match receiver.get_single_array().and_then(|array| get_collection_object(array, self.codebase)) {
+                    Some(TAtomic::Object(object)) => object.get_name(),
+                    _ => None,
+                };
+            let Some(member_call) = self.artifacts.get_member_call(call, callee) else {
+                unreachable!("the analysis records each member of a call that runs several");
+            };
+            members.push(KindMember {
+                kind,
+                runs_as,
+                declaration: Declaration {
                     kind: DeclarationKind::StaticMethod,
                     class: self.class_declaration(class.as_bytes()).name,
                     name: metadata.original_name,
                     public: true,
-                });
-            }
+                },
+                call: member_call,
+            });
         }
 
-        member.filter(|_| others)
+        (!members.is_empty() && members.len() + usize::from(!objects.is_empty()) > 1)
+            .then_some(MembersByKind { members, objects })
     }
 
     /// The slot an inline form leaves for each parameter of the engine function `function`, which `written` calls, that
@@ -1450,18 +1523,6 @@ impl<'analysis> Types<'analysis> {
                     if self.codebase.get_method(class.as_bytes(), method.as_bytes())
                         .is_some_and(|metadata| metadata.flags.is_extension_method())
             )
-    }
-
-    /// The result type of the function the method value `value` is, as the checker typed it. None for one it typed
-    /// without.
-    pub(crate) fn value_result_type(&self, value: &Expression) -> Option<&'analysis TUnion> {
-        let Some(TAtomic::Callable(TCallable::Signature(signature))) =
-            self.expression_type(value).types.iter().find(|atomic| atomic.is_callable())
-        else {
-            unreachable!("the analysis types a method value as its signature, not the value at {:?}", value.span());
-        };
-
-        signature.get_return_type()
     }
 
     /// The parameters of the function the method value `value` is, as the checker typed it, each named as the method
@@ -1687,45 +1748,6 @@ impl<'analysis> Types<'analysis> {
         element_type.unwrap_or_else(|| unreachable!("the checker types the value as a collection"))
     }
 
-    /// The collection, `Map` or `Set`, and the name in lowercase of the collection method the analyzer checked the
-    /// method call `call` against, null-safe or not, or that the read `call` gives the value of, spec section 14.3: a
-    /// method of `Sharp\Internal\MapMethods` or `Sharp\Internal\SetMethods`. None for a call of any other method.
-    pub(crate) fn collection_method(&self, call: &Expression) -> Option<(&'static str, Vec<u8>)> {
-        let mut callees = self.artifacts.get_callees(call);
-        let (Some(CallTarget::FunctionLike { callee: FunctionLikeIdentifier::Method(class, method), .. }), None) =
-            (callees.next(), callees.next())
-        else {
-            return None;
-        };
-        let collection = COLLECTION_METHODS
-            .into_iter()
-            .find_map(|(collection, methods)| class.as_bytes().eq_ignore_ascii_case(methods).then_some(collection))?;
-
-        Some((collection, method.as_bytes().to_ascii_lowercase()))
-    }
-
-    /// Whether the method call `call`, null-safe or not, runs a `Map` method that leaves its receiver as it is, which
-    /// `Sharp\Internal\MapMethods` declares mutation-free.
-    pub(crate) fn reads_map(&self, call: &Expression) -> bool {
-        let Some(("Map", method)) = self.collection_method(call) else {
-            return false;
-        };
-
-        self.codebase
-            .get_method(b"Sharp\\Internal\\MapMethods", &method)
-            .is_some_and(|metadata| metadata.flags.is_mutation_free())
-    }
-
-    /// Whether the method call `call`, null-safe or not, runs a lazy operation of a PHP# `Iterable<T>`, spec section 12,
-    /// which `Sharp\Internal\IterableMethods` declares and the engine's `Sharp\Sequence` runs.
-    pub(crate) fn is_lazy_operation(&self, call: &Expression) -> bool {
-        matches!(
-            self.artifacts.get_callees(call).next(),
-            Some(CallTarget::FunctionLike { callee: FunctionLikeIdentifier::Method(class, _), .. })
-                if class.as_bytes().eq_ignore_ascii_case(b"Sharp\\Internal\\IterableMethods")
-        )
-    }
-
     /// The plain PHP function the method call `call` runs, as `Pdf.render(html)` calls one, spec section 23, with the
     /// name its declaration writes, as `abort` for Laravel's `abort()` of PHP's root namespace in `Foundation.abort(404)`.
     /// None for a call of a method.
@@ -1933,7 +1955,7 @@ impl<'analysis> Types<'analysis> {
     }
 
     /// Whether the property `property` of an object of `r#type` has hooks in a class the object can be. PHP gives no
-    /// reference to a hooked property, so a write into the `Map` it holds cannot go through one.
+    /// reference to a hooked property, so a write into the PHP array one plain PHP declares holds cannot go through one.
     pub(crate) fn property_has_hooks(&self, r#type: &TUnion, property: &[u8]) -> bool {
         let variable = [b"$", property].concat();
 
@@ -2127,12 +2149,11 @@ impl<'analysis> Types<'analysis> {
 
     /// The class-like whose `operator <=>` the call `call`, which sorts, orders two keys by, as `<` on two values of
     /// the key type its last type argument names chooses it, spec section 19, so a `List<Priced>` sorts by `Priced`'s
-    /// whatever classes it holds. A call sorts when it runs `sortedBy` or a form whose engine function takes
-    /// [`TAKES_KEY_ORDER`]. None for keys of a type that declares none, such as strings.
-    pub(crate) fn sorting_operator(&self, call: &Expression) -> Option<Word> {
-        let span = call.span();
-        let Some(key) = self.artifacts.inferred_type_arguments.get(&(span.start.offset, span.end.offset))?.last()
-        else {
+    /// whatever classes it holds. A call sorts when it runs a form whose engine function takes [`TAKES_KEY_ORDER`].
+    /// `member` is the member the call runs, where it runs one of several. None for keys of a type that declares none,
+    /// such as strings.
+    pub(crate) fn sorting_operator(&self, call: &Expression, member: Option<&MemberCall>) -> Option<Word> {
+        let Some(key) = self.call_type_arguments_of(call, member)?.last() else {
             unreachable!("a call that sorts takes the type of its keys as its last type argument");
         };
         let key = key.to_non_nullable();
@@ -2336,15 +2357,6 @@ pub(crate) struct FunctionType {
     pub(crate) result: Option<String>,
 }
 
-/// Whether a place plain PHP declares of the type `declared`, a parameter, a property or an element of one, takes a
-/// PHP array, which a `Map` or a `Set` crosses into, spec section 12: the type names `array`, `iterable`, `mixed` or a
-/// template. A type that takes only objects, such as `\Countable` or an interface, takes the object.
-pub(crate) fn takes_array(declared: &TUnion) -> bool {
-    declared.types.iter().any(|atomic| {
-        matches!(atomic, TAtomic::Array(_) | TAtomic::Iterable(_) | TAtomic::Mixed(_) | TAtomic::GenericParameter(_))
-    })
-}
-
 /// A parameter of plain PHP code a call runs, which a `Map` or a `Set` crosses into: a declared function's, method's or
 /// constructor's, or one of the signature of a plain PHP closure a local holds.
 #[derive(Clone, Copy, Debug)]
@@ -2372,7 +2384,8 @@ impl<'analysis> PlainParameter<'analysis> {
         }
     }
 
-    /// Whether the parameter takes a PHP array, as [`takes_array`] says of the type it declares, or it declares none.
+    /// Whether the parameter takes a PHP array, as the codex's [`takes_array`] says of the type it declares, or it
+    /// declares none.
     pub(crate) fn takes_array(self) -> bool {
         self.declared_type().is_none_or(takes_array)
     }
@@ -2638,6 +2651,7 @@ mod tests {
     use mago_codex::ttype::atomic::scalar::TScalar;
     use mago_codex::ttype::atomic::scalar::class_like_string::TClassLikeString;
     use mago_codex::ttype::atomic::scalar::class_like_string::TClassLikeStringKind;
+    use mago_codex::ttype::flags::UnionFlags;
     use mago_codex::ttype::get_bool;
     use mago_codex::ttype::get_float;
     use mago_codex::ttype::get_int;
@@ -2807,6 +2821,19 @@ mod tests {
         let bound = class("App\\Comparable", vec![wrap_atomic(TAtomic::GenericParameter(parameter))]);
 
         assert_eq!(super::text(&bound, &CodebaseMetadata::default(), Parameter::Bound), "App.Comparable<App.Order>");
+    }
+
+    /// `Equatable` adds no type the running code checks, spec section 11: a bound of it alone is `Any?`, as no bound
+    /// is, and one that joins it to a class is the class, as `T : Object` is PHP's `object`.
+    #[test]
+    fn an_equatable_bound_writes_the_bound_without_it() {
+        let equatable = |mut bound: TUnion| {
+            bound.flags.insert(UnionFlags::EQUATABLE);
+            super::text(&bound, &CodebaseMetadata::default(), Parameter::Bound)
+        };
+
+        assert_eq!(equatable(get_mixed()), "Any?");
+        assert_eq!(equatable(class("App\\Shareable", vec![])), "App.Shareable");
     }
 
     /// A receiver's intersection names its classes, and a part that is no class, as a PHP `@template` it is joined

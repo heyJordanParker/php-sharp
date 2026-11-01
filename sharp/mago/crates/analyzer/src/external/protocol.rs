@@ -89,6 +89,7 @@ use mago_codex::visibility::Visibility;
 use mago_database::file::File;
 use mago_extension::PayloadReader;
 use mago_extension::PayloadWriter;
+use mago_extension::WorkerError;
 use mago_extension::source::write_node_kind_table;
 use mago_php_version::PHPVersion;
 use mago_reporting::AnnotationKind;
@@ -104,6 +105,7 @@ use mago_word::ascii_lowercase_word;
 use mago_word::word;
 
 use crate::artifacts::AnalysisArtifacts;
+use crate::artifacts::get_expression_range;
 use crate::external::AnalysisHookRegistration;
 use crate::external::AttributedEntryPoint;
 use crate::external::ClassInitializerProvider;
@@ -111,10 +113,10 @@ use crate::external::ClassLikeAnalysisHookRegistration;
 use crate::external::CodebaseScanHookRegistration;
 use crate::external::EffectivePropertyType;
 use crate::external::EntryPoint;
+use crate::external::ExtensionReads;
 use crate::external::ExternalAnalysisSession;
 use crate::external::ExternalExtension;
 use crate::external::ExternalPlugin;
-use crate::external::FileReads;
 use crate::external::ForwardedCall;
 use crate::external::FunctionProvider;
 use crate::external::FunctionTarget;
@@ -138,7 +140,7 @@ use crate::invocation::MethodTargetContext;
 
 pub const ANALYZER_PROTOCOL_MAGIC: [u8; 4] = *b"MANA";
 pub const ANALYZER_PROTOCOL_MAJOR: u16 = 1;
-pub const ANALYZER_PROTOCOL_MINOR: u16 = 11;
+pub const ANALYZER_PROTOCOL_MINOR: u16 = 13;
 
 const HEADER_LENGTH: usize = 12;
 const INITIAL_MESSAGE_CAPACITY: usize = 256;
@@ -1427,8 +1429,16 @@ fn encode_return_type_arguments<'type_info>(
             .unwrap_or_default();
 
         writer.write_bytes(expression)?;
-        let argument_type =
-            include_argument_types.then(|| value.and_then(|value| artifacts.get_expression_type(value))).flatten();
+        // Each argument as the target receives it, as a plugin's provider reads it: a `Map` or a `Set` PHP# passes to
+        // plain PHP as the PHP array it crosses into, spec section 12, which is plain PHP's type.
+        let received = value
+            .zip(artifacts.get_received_argument_types(invocation.span))
+            .and_then(|(value, received)| received.get(&get_expression_range(value)));
+        let (argument_type, dialect) = match received {
+            Some(received) => (Some(&**received), Dialect::Php),
+            None => (value.and_then(|value| artifacts.get_expression_type(value)), Dialect::of(source_file)),
+        };
+        let argument_type = argument_type.filter(|_| include_argument_types);
         writer.write_bool(argument_type.is_some());
         if let Some(argument_type) = argument_type {
             typed_arguments += 1;
@@ -1439,7 +1449,7 @@ fn encode_return_type_arguments<'type_info>(
                 argument_type,
                 &mut argument_types,
                 codebase,
-                Dialect::of(source_file),
+                dialect,
                 receiver_type_count,
                 0,
             )?;
@@ -3323,13 +3333,38 @@ pub(super) fn message_reader(payload: &[u8], expected_kind: u16) -> Result<Paylo
 
 /// Splits the codebase reads a provider or issue filter made, which the SDK places right after the header, from the
 /// response they came with.
-pub(super) fn take_codebase_reads(response: &[u8]) -> Result<(FileReads, Vec<u8>), ExternalAnalyzerError> {
+pub(super) fn take_codebase_reads(response: &[u8]) -> Result<(ExtensionReads, Vec<u8>), ExternalAnalyzerError> {
     let header =
         response.get(..HEADER_LENGTH).ok_or_else(|| protocol("analyzer response is shorter than its header"))?;
     let mut reader = PayloadReader::new(&response[HEADER_LENGTH..]);
-    let reads = FileReads::decode(&mut reader)?;
+    let reads = ExtensionReads::decode(&mut reader)?;
 
     Ok((reads, [header, &response[response.len() - reader.remaining()..]].concat()))
+}
+
+/// How every SDK release before 0.6.1 starts its refusal of a request of another analyzer protocol. Those releases
+/// can't change, so a refusal that starts with it always comes from a worker on an SDK older than this mago's.
+const PRE_0_6_1_SDK_REFUSAL: &[u8] = b"Unsupported analyzer protocol version ";
+
+/// Says what to install when a worker on an SDK before 0.6.1 refuses Mago's first request, the describe request. That
+/// SDK names Mago's protocol alone and no fix. Every other refusal passes through unchanged: an SDK of 0.6.1 or later
+/// names both protocols and the fixes itself, and any other failure, such as an extension's own exception, says what
+/// failed.
+pub(super) fn refused_handshake(error: WorkerError) -> ExternalAnalyzerError {
+    match &error {
+        WorkerError::Remote { host, payload, .. } if payload.starts_with(PRE_0_6_1_SDK_REFUSAL) => {
+            let version = env!("CARGO_PKG_VERSION");
+            protocol(format!(
+                "extension host `{host}` refused the handshake of mago {version}, which speaks analyzer protocol \
+                 {ANALYZER_PROTOCOL_MAJOR}.{ANALYZER_PROTOCOL_MINOR}: {} Its SDK is from a \
+                 `heyjordanparker/mago-sharp` release before 0.6.1, so require the release of this mago with \
+                 `composer require --dev \"heyjordanparker/mago-sharp:{version}\"`, or run the mago of the release \
+                 the project requires with `vendor/bin/mago`.",
+                String::from_utf8_lossy(payload).trim_end()
+            ))
+        }
+        _ => error.into(),
+    }
 }
 
 pub(super) fn message_kind(payload: &[u8]) -> Result<u16, ExternalAnalyzerError> {
@@ -3433,6 +3468,8 @@ pub(super) mod testing {
     use mago_names::ResolvedNames;
     use mago_names::resolver::NameResolver;
     use mago_prelude::Prelude;
+    use mago_span::Position;
+    use mago_span::Span;
     use mago_syntax::cst::Node;
     use mago_syntax::cst::Program;
     use mago_syntax::parser::parse_file;
@@ -3748,12 +3785,22 @@ pub(super) mod testing {
         ));
     }
 
-    /// A return type provider request sends each argument's type as the code of the calling file sees it: a `Map` a
-    /// PHP# file passes goes as the `Sharp\Map` object it runs as, and a keyed array plain PHP passes as an array.
+    /// The span of the first `call` in the analyzed file, a call as its code writes it.
+    fn call_span(analysis: &Analysis<'_, '_>, call: &str) -> Span {
+        let file = analysis.file();
+        let start = std::str::from_utf8(&file.contents).unwrap().find(call).unwrap() as u32;
+
+        Span::new(file.id, Position::new(start), Position::new(start + call.len() as u32))
+    }
+
+    /// A return type provider request for a call the analysis checked sends each argument as the target receives it,
+    /// as the call's analysis recorded it, spec section 12: the `Map` `Shelf.total` passes to the plain PHP `array`
+    /// parameter of `Sink::take` goes as its PHP array, and so does the keyed array plain PHP's `Desk::total` passes.
     #[test]
-    fn a_provider_request_sends_each_argument_as_the_calling_file_sees_it() {
-        for (files, sends_map) in [([SHELF, SINK], true), ([DESK, SINK], false)] {
+    fn a_provider_request_sends_each_argument_as_the_target_receives_it() {
+        for (files, call) in [([SHELF, SINK], "Sink.take(this.stock)"), ([DESK, SINK], "Sink::take($this->stock)")] {
             let (typed_arguments, payload) = analyzed(&files, |analysis| {
+                let call_span = call_span(analysis, call);
                 let call = Node::Program(analysis.program).filter_map(|node| match node {
                     Node::ArgumentList(list) => Some(*list),
                     _ => None,
@@ -3772,10 +3819,9 @@ pub(super) mod testing {
                         class_type: StaticClassType::Name(sink.name),
                         declaring_object_type: None,
                     }),
-                    span: call[0].span(),
+                    span: call_span,
                 };
-                let invocation =
-                    Invocation::new(target, InvocationArgumentsSource::ArgumentList(call[0]), call[0].span());
+                let invocation = Invocation::new(target, InvocationArgumentsSource::ArgumentList(call[0]), call_span);
 
                 let request = encode_provider_request(
                     ProviderRequestKind::ReturnType,
@@ -3795,9 +3841,37 @@ pub(super) mod testing {
                 (request.typed_arguments, request.payload)
             });
 
-            assert_eq!(typed_arguments, 1, "{files:?}");
-            assert_eq!(names(&payload, b"Sharp\\Map"), sends_map, "{files:?}");
+            assert_eq!(typed_arguments, 1, "{call}");
+            assert!(!names(&payload, b"Sharp\\Map"), "{call}");
         }
+    }
+
+    /// A call inside a loop, which the analysis checks once per pass of the loop, keeps one record of what each of its
+    /// arguments arrives as, the one its last check wrote.
+    #[test]
+    fn a_call_checked_again_in_a_loop_keeps_one_record_of_its_arguments() {
+        let shelf = (
+            "src/App/Shelf.sharp",
+            "namespace App;\n\nimport Lib.Sink;\n\npublic class Shelf\n{\n    public Map<string, int> stock { get; set; } = [:];\n\n    public int total()\n    {\n        let total = 0;\n        for (const round of [1, 2, 3]) {\n            total += Sink.take(this.stock) + round;\n        }\n        return total;\n    }\n}\n",
+        );
+
+        analyzed(&[shelf, SINK], |analysis| {
+            let call = call_span(analysis, "Sink.take(this.stock)");
+            let recorded: Vec<String> = analysis
+                .artifacts
+                .received_argument_types
+                .iter()
+                .map(|(span, arguments)| {
+                    let mut arguments: Vec<String> =
+                        arguments.values().map(|r#type| r#type.get_id().to_string()).collect();
+                    arguments.sort();
+
+                    format!("{} {}", *span == get_expression_range(&call), arguments.join(", "))
+                })
+                .collect();
+
+            assert_eq!(recorded, ["true array<string, int>"]);
+        });
     }
 
     /// A `Map`'s key and a `Set`'s element, which a snapshot encodes as a type argument of the `Sharp\Map` or `Sharp\Set`
@@ -3842,6 +3916,34 @@ pub(super) mod testing {
 
         let result = decode_initialization_response(&writer.finish(), &[0]);
         assert!(matches!(result, Err(ExternalAnalyzerError::Protocol(message)) if message.contains("more than once")));
+    }
+
+    /// A worker of protocol 1.12 sends a bare file path as a progress frame, where 1.13 sends what it starts, so Mago
+    /// refuses it instead of printing "the hooks of the hooks of app/Hung.php".
+    #[test]
+    fn a_response_of_the_protocol_before_named_progress_is_refused() {
+        let mut response = message_writer(INITIALIZE_RESPONSE).finish();
+        response[6..8].copy_from_slice(&12u16.to_be_bytes());
+
+        let refusal = message_kind(&response);
+        assert!(
+            matches!(&refusal, Err(ExternalAnalyzerError::Protocol(message)) if message == "unsupported analyzer protocol version 1.12"),
+            "{refusal:?}"
+        );
+    }
+
+    /// A worker of protocol 1.11 records no before-analysis reads and writes no whole method search, so Mago refuses
+    /// its responses instead of reading them as 1.12.
+    #[test]
+    fn a_response_of_the_protocol_before_whole_method_searches_is_refused() {
+        let mut response = message_writer(INITIALIZE_RESPONSE).finish();
+        response[6..8].copy_from_slice(&11u16.to_be_bytes());
+
+        let refusal = message_kind(&response);
+        assert!(
+            matches!(&refusal, Err(ExternalAnalyzerError::Protocol(message)) if message == "unsupported analyzer protocol version 1.11"),
+            "{refusal:?}"
+        );
     }
 
     #[test]
@@ -4349,6 +4451,88 @@ pub(super) mod testing {
         writer.finish()
     }
 
+    /// A registration of one plugin, `demo`, with an after-file hook and one provider or hook of every kind a
+    /// request runs alone: a return-type and callable signature provider of the function `demo_fn` and of the member
+    /// `stock` of `Lib\Shelf`, an assertion provider of each, a property type, property initialization and call
+    /// forwarding provider of that member, a class initializer provider of `Lib\Shelf`, and an issue-filter hook of
+    /// `non-existent-function`.
+    pub fn registration_response_with_every_provider() -> Vec<u8> {
+        let mut writer = message_writer(DESCRIBE_RESPONSE);
+        writer.write_u32(1);
+        writer.write_string("demo/extension").unwrap();
+        writer.write_string("Demo").unwrap();
+        writer.write_string("1.0.0").unwrap();
+        writer.write_bool(false);
+        writer.write_u32(1);
+        writer.write_string("demo").unwrap();
+        writer.write_string("Demo analyzer").unwrap();
+        writer.write_string("Test provider").unwrap();
+        writer.write_bool(true);
+        // An after-file hook, and no alias.
+        writer.write_u8(2);
+        writer.write_u32(0);
+        // The return-type providers, which also give callable signatures.
+        write_demo_function_provider(&mut writer, |writer| writer.write_u8(super::super::PROVIDER_CALLABLE_SIGNATURE));
+        writer.write_u32(1);
+        writer.write_u16(0);
+        writer.write_u8(super::super::PROVIDER_CALLABLE_SIGNATURE);
+        writer.write_u32(1);
+        writer.write_bytes(b"Lib\\Shelf").unwrap();
+        writer.write_bytes(b"stock").unwrap();
+        // The property type and property initialization providers.
+        write_stock_provider(&mut writer);
+        write_stock_provider(&mut writer);
+        // The class initializer provider.
+        writer.write_u32(1);
+        writer.write_u16(0);
+        writer.write_u32(1);
+        writer.write_bytes(b"Lib\\Shelf").unwrap();
+        // No entry point or attributed entry point, then the issue-filter hook.
+        writer.write_u32(0);
+        writer.write_u32(0);
+        writer.write_u32(1);
+        writer.write_u16(0);
+        writer.write_u32(1);
+        writer.write_string("non-existent-function").unwrap();
+        // No node, method-call or class-like analysis hook, then the assertion providers, which memoize nothing.
+        writer.write_u32(0);
+        writer.write_u32(0);
+        writer.write_u32(0);
+        write_demo_function_provider(&mut writer, |writer| writer.write_bool(false));
+        writer.write_u32(1);
+        writer.write_u16(0);
+        writer.write_bool(false);
+        writer.write_u32(1);
+        writer.write_bytes(b"Lib\\Shelf").unwrap();
+        writer.write_bytes(b"stock").unwrap();
+        // No codebase-scan hook, then the call forwarding provider.
+        writer.write_u32(0);
+        write_stock_provider(&mut writer);
+        writer.finish()
+    }
+
+    /// A provider list of one provider, index 0, for the function `demo_fn`, whose capabilities `write_capabilities`
+    /// writes.
+    fn write_demo_function_provider(writer: &mut PayloadWriter, write_capabilities: impl FnOnce(&mut PayloadWriter)) {
+        writer.write_u32(1);
+        writer.write_u16(0);
+        write_capabilities(writer);
+        writer.write_u32(1);
+        writer.write_u8(TARGET_EXACT);
+        writer.write_bytes(b"demo_fn").unwrap();
+    }
+
+    /// A nested request that asks whether request-local type handle 0 equals `mixed`, as a hook that compares an
+    /// argument's type does.
+    pub fn type_comparison_of_handle_zero() -> Vec<u8> {
+        let mut writer = message_writer(TYPE_COMPARISON_REQUEST);
+        writer.write_u8(TYPE_COMPARISON_EQUAL);
+        writer.write_u8(TYPE_REFERENCE);
+        writer.write_u32(0);
+        writer.write_u8(TYPE_MIXED);
+        writer.finish()
+    }
+
     /// A provider list of one provider, index 0, for the member `stock` of `Lib\Shelf`.
     fn write_stock_provider(writer: &mut PayloadWriter) {
         writer.write_u32(1);
@@ -4359,7 +4543,7 @@ pub(super) mod testing {
     }
 
     /// The response that declines `request`, a property type or call forwarding request, after the codebase reads
-    /// the worker made for it: none.
+    /// the worker made for it: no issue read and no code read.
     pub fn declined_response(request: &[u8]) -> Vec<u8> {
         let kind = match message_kind(request).unwrap() {
             PROPERTY_TYPE_REQUEST => PROPERTY_TYPE_RESPONSE,
@@ -4367,6 +4551,7 @@ pub(super) mod testing {
             kind => unreachable!("no test declines a request of kind {kind}"),
         };
         let mut writer = message_writer(kind);
+        writer.write_u32(0);
         writer.write_u32(0);
         writer.write_bool(false);
         writer.finish()

@@ -37,9 +37,10 @@ mod template_inference;
 
 pub(crate) use resolver::rename_trait_objects;
 pub(crate) use resolver::resolve_invocation_type;
+pub(crate) use template_inference::InferenceOptions;
 pub(crate) use template_inference::TemplateInferenceViolation;
 pub(crate) use template_inference::infer_parameter_templates_from_argument;
-pub(crate) use template_inference::infer_unfixed_templates;
+pub(crate) use template_inference::infer_templates_from_input_and_container_types;
 
 pub(crate) mod arguments;
 
@@ -253,18 +254,6 @@ impl<'ctx> InvocationTarget<'ctx> {
             }
 
             return crate::utils::names::display_extension_member(context, metadata);
-        }
-
-        if let InvocationTarget::FunctionLike {
-            identifier: FunctionLikeIdentifier::Method(class_name, method_name),
-            method_context: Some(MethodTargetContext { class_type: StaticClassType::Object(receiver), .. }),
-            ..
-        } = self
-            && let Some(collection) = crate::utils::names::display_sharp_collection(context, receiver)
-        {
-            let method_name = crate::utils::names::display_method_name(context, *class_name, *method_name);
-
-            return format!("{collection}.{method_name}");
         }
 
         // A PHP# function value is named as the code writes it, as `f` or `this.scale`, spec section 14, an extension

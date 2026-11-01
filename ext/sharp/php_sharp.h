@@ -6,7 +6,7 @@
 extern zend_module_entry sharp_module_entry;
 #define phpext_sharp_ptr &sharp_module_entry
 
-#define PHP_SHARP_VERSION "0.5.0"
+#define PHP_SHARP_VERSION "0.6.1"
 
 #define SHARP_FILE_EXTENSION ".sharp"
 
@@ -45,17 +45,6 @@ static zend_always_inline bool sharp_runs_sharp_code(void)
 {
 	return sharp_code_at(EG(current_execute_data));
 }
-
-/* The VM makes the Sharp\Collection receiver of a PHP# method call on a collection with these, see
- * ZEND_SHARP_OPERATOR in Zend/zend_compile.h: an array, a List, or a Sharp\Map or Sharp\Set object, see
- * SHARP_IS_COLLECTION. The receiver may point at a local of the calling frame, so a backtrace never
- * hands it out as a frame's object. */
-extern zend_class_entry *sharp_ce_collection;
-void sharp_collection_of_local(zval *result, zval *local);
-void sharp_collection_of_value(zval *result, zval *value);
-void sharp_collection_of_reference(zval *result, zval *reference);
-void sharp_collection_of_property(zval *result, zend_object *object, zend_string *name, void **cache_slot);
-void sharp_collection_of_static_property(zval *result, zval *slot, const zend_property_info *info);
 
 /* Spec section 12: a Map and a Set are values, so the VM and the JIT copy a shared one into the holder an index
  * write or unset goes through, as SEPARATE_ARRAY copies a shared array. */
@@ -112,18 +101,19 @@ bool sharp_property_takes_reference(zval *slot, const zend_property_info *info);
  * reference holds against the property's type, and gives back `slot` once it holds the value itself, or `rv`, its copy,
  * while plain PHP still holds the reference or after the TypeError. */
 zval *sharp_property_from_reference(zval *slot, zend_object *object, const zend_property_info *info, zval *rv);
-/* PHP# code fetches `slot`, the reference of a property of `object`, or of no object for a static one, to write, in any
- * fetch mode, as `this.counts[1] += 1` reads it first. Checks it as sharp_property_from_reference does, and gives false
- * after the TypeError. While plain PHP still holds the reference, the write goes into what it holds, except that the
- * Map or Set of a #[\Sharp\Crossing] property's index write, which passes `result`, goes through a Sharp\Collection. */
-bool sharp_property_for_write(zval *result, zend_object *object, zval *slot, const zend_property_info *info);
+/* PHP# code fetches `slot`, the reference of a property of `object`, or of no object for a static one, to write, as
+ * `this.counts[1] += 1` reads it first. Checks it as sharp_property_from_reference does, and gives false after the
+ * TypeError. While plain PHP still holds the reference, the write goes into what it holds, except into a
+ * #[\Sharp\Crossing] property's Map or Set, which a `ref` member changes in the reference until the unset fetch after
+ * the call crosses it back. */
+bool sharp_property_for_write(zend_object *object, zval *slot, const zend_property_info *info);
 /* The running code is about to change `slot`, of the property `info` of `object`, with `++`, `--` or a compound
  * assignment, which reads it first. When PHP# code does and plain PHP turned the slot into a reference, checks it
  * through sharp_property_for_write. False after the TypeError. Plain PHP code changes it as it is. */
 static zend_always_inline bool sharp_property_for_change(zend_object *object, zval *slot, const zend_property_info *info)
 {
 	return !Z_ISREF_P(slot) || !info || !(info->flags & (ZEND_ACC_SHARP_CROSSING|ZEND_ACC_SHARP_TYPED))
-		|| !sharp_function_is_sharp(EG(current_execute_data)->func) || sharp_property_for_write(NULL, object, slot, info);
+		|| !sharp_function_is_sharp(EG(current_execute_data)->func) || sharp_property_for_write(object, slot, info);
 }
 /* Spec section 12: plain PHP fetches `slot`, of the property `info` with ZEND_ACC_SHARP_TYPED, an instance or a static
  * one, to write into what it holds, as `$o->items[] = $v`, `$o->items[0][1] = $v`, `unset($o->items[0])` and
@@ -170,23 +160,6 @@ static zend_always_inline bool sharp_property_checks_on_read(const zend_property
 #define SHARP_IS_TABLE(value) \
 	(Z_TYPE_P(value) == IS_OBJECT && (Z_OBJCE_P(value) == sharp_ce_map || Z_OBJCE_P(value) == sharp_ce_set))
 #define SHARP_IS_COLLECTION(value) (Z_TYPE_P(value) == IS_ARRAY || SHARP_IS_TABLE(value))
-
-/* Whether a value the optimizer or the JIT knows of type and class ce, ce one of its parents when is_instanceof, may be
- * a Sharp\Map or a Sharp\Set, which a PHP# method call's receiver turns into a Sharp\Collection. */
-static zend_always_inline bool sharp_may_be_table(uint32_t type, const zend_class_entry *ce, bool is_instanceof)
-{
-	if (!(type & MAY_BE_OBJECT)) {
-		return false;
-	}
-	if (!ce) {
-		return true;
-	}
-	if (!is_instanceof) {
-		return ce == sharp_ce_map || ce == sharp_ce_set;
-	}
-
-	return instanceof_function(sharp_ce_map, ce) || instanceof_function(sharp_ce_set, ce);
-}
 
 /* The holder holds an object. */
 #define SHARP_SEPARATE(holder) do { \

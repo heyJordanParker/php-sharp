@@ -3,7 +3,7 @@
 # one under sharp/docker.
 #
 # docker-library/php 8.5/trixie/zts at f6048b5f6e3c2202ee082665a4ccc0d90de291a3, built from this repository's source
-# instead of the php.net tarball, then FrankenPHP v1.13.1's Dockerfile stages on top of it, as FrankenPHP builds on
+# instead of the php.net tarball, then FrankenPHP v1.13.4's Dockerfile stages on top of it, as FrankenPHP builds on
 # php:8.5-zts-trixie.
 #
 
@@ -247,15 +247,16 @@ ENTRYPOINT ["docker-php-entrypoint"]
 
 FROM scratch AS frankenphp-source
 
-# v1.13.1 takes golang.org/x/net v0.61.0, which fixes CVE-2026-78669 in v1.13.0's v0.59.0. The source is fetched by
-# the commit its v1.13.1 tag names, so a moved tag builds nothing else.
-ADD https://github.com/php/frankenphp.git#99d4e119ca2e5a90a69d8dbee5d5c9a8016416c5 /
+# v1.13.4 takes github.com/go-jose/go-jose/v4 v4.1.6, which fixes CVE-2026-116587 in v1.13.1's v4.1.5. The source is
+# fetched by the commit its v1.13.4 tag names, so a moved tag builds nothing else.
+ADD https://github.com/php/frankenphp.git#7f50be9d86261bf7cff9b051ab4fb572e95020ed /
 
 FROM ${GOLANG_IMAGE} AS golang-base
 
 #
-# FrankenPHP v1.13.1's Dockerfile, with e-dant/watcher and install-php-extensions at fixed releases, each checked
-# against its SHA-256.
+# FrankenPHP v1.13.4's Dockerfile, with e-dant/watcher and install-php-extensions at fixed releases, each checked
+# against its SHA-256. Its brotli build and the runner's libbrotli copy run only on Bookworm, which ships libbrotli
+# 1.0.9, so they are left out: trixie ships 1.1.0.
 #
 
 FROM php-base AS common
@@ -267,6 +268,8 @@ RUN apt-get update && \
 		mailcap \
 		libcap2-bin \
 	&& \
+	# TODO: remove once the php base images ship the CVE-2026-111497 fix
+	apt-get -y --no-install-recommends install --only-upgrade libbrotli1 && \
 	apt-get clean && \
 	# Remove files with non-deterministic content (embedded timestamps and mtimes) to keep image digests reproducible
 	rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /var/log/alternatives.log /var/cache/ldconfig/aux-cache
@@ -303,7 +306,7 @@ EXPOSE 2019
 
 FROM common AS builder
 
-ARG FRANKENPHP_VERSION='1.13.1'
+ARG FRANKENPHP_VERSION='1.13.4'
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 COPY --from=golang-base /usr/local/go /usr/local/go
@@ -329,7 +332,7 @@ RUN apt-get update && \
 	&& \
 	apt-get clean
 
-# Install e-dant/watcher (necessary for file watching), at the release FrankenPHP v1.13.1's go.mod pins
+# Install e-dant/watcher (necessary for file watching), at the release FrankenPHP v1.13.4's go.mod pins
 WORKDIR /usr/local/src/watcher
 RUN set -eux; \
 	curl -fsSL -o /tmp/watcher.tar.gz https://github.com/e-dant/watcher/archive/refs/tags/0.14.5.tar.gz; \

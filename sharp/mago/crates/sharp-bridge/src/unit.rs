@@ -14,6 +14,8 @@ use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 
 use mago_build_id::BUILD_ID;
+use mago_database::error::DatabaseError;
+use mago_database::error::IOAction;
 use xxhash_rust::xxh3::Xxh3;
 use xxhash_rust::xxh3::xxh3_128;
 
@@ -128,8 +130,8 @@ pub struct Read {
 /// so an edit that changes none of them leaves the compiled code's name unchanged.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Reads {
-    /// Each declaration the check read through its signature, and each declaration an extension read with its
-    /// ancestors, fingerprinted by codex's `DefSignatureNode::signature_hash`.
+    /// Each declaration the check read through its signature, and each declaration an extension read in the analysis,
+    /// for any file, with its ancestors, fingerprinted by codex's `DefSignatureNode::signature_hash`.
     pub signatures: Vec<Read>,
     /// Each method whose inferred return the check read, named `Class::method` and fingerprinted by the xxh3-64 of
     /// that return type's `TUnion::get_id()`.
@@ -137,8 +139,9 @@ pub struct Reads {
     /// Each library method whose body the file inlines, named `Class::method` and fingerprinted by the xxh3-64 of the
     /// inlined form's bytes.
     pub inlined: Vec<Read>,
-    /// Each set of names an extension listed while it analyzed the file, fingerprinted by a hash of the names the set
-    /// holds, so a name joining or leaving it changes the key.
+    /// Each set of names an extension listed in the analysis, for any file, since a hook may answer the file from a set
+    /// it kept from another, fingerprinted by a hash of the names the set holds, so a name joining or leaving it changes
+    /// the key. A method search is fingerprinted by the methods it finds with the fields it projects of them.
     pub listed: Vec<Read>,
     /// The function type of each method and lambda the file declares, as `Unit::function_types` gives them, since its
     /// effects come from the bodies it calls, in any file.
@@ -362,7 +365,7 @@ pub fn header(bytes: &[u8]) -> Result<Header, FormatError> {
 /// # Errors
 ///
 /// Returns the error of reading the file or the folder, other than its absence.
-pub fn stamp(root: &Path, path: &[u8]) -> io::Result<Option<Input>> {
+pub fn stamp(root: &Path, path: &[u8]) -> Result<Option<Input>, DatabaseError> {
     if let Some(folder) = path.strip_suffix(SOURCE_LISTING.as_bytes())
         && (folder.is_empty() || folder.ends_with(b"/"))
     {
@@ -380,12 +383,17 @@ pub fn stamp(root: &Path, path: &[u8]) -> io::Result<Option<Input>> {
     if !folder_holds_name(&full)? {
         return Ok(None);
     }
-    let contents = match std::fs::read(&full) {
-        Ok(contents) => contents,
+    // The modification time is taken before the contents. A write between the two leaves a stamp whose time is older
+    // than the file's, so the engine hashes the file instead of trusting the time and size.
+    let read = std::fs::metadata(&full)
+        .and_then(|metadata| metadata.modified())
+        .and_then(|modified| Ok((std::fs::read(&full)?, modified)));
+    let (contents, modified) = match read {
+        Ok(read) => read,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error),
+        Err(error) => return Err(DatabaseError::io(IOAction::ReadFile, &full, error)),
     };
-    let mtime_ns = match std::fs::metadata(&full)?.modified()?.duration_since(UNIX_EPOCH) {
+    let mtime_ns = match modified.duration_since(UNIX_EPOCH) {
         Ok(after) => i64::try_from(after.as_nanos()).unwrap_or(i64::MAX),
         Err(before) => i64::try_from(before.duration().as_nanos()).map_or(i64::MIN, |nanos| -nanos),
     };
@@ -397,14 +405,16 @@ pub fn stamp(root: &Path, path: &[u8]) -> io::Result<Option<Input>> {
 /// as macOS's does by default, opens `environment.php` for `Environment.php`. Linux does not, so a file is there only
 /// under its exact name, and a compile on either disk stamps the same inputs, as the engine's
 /// `sharp_folder_holds_name` reads them. A folder that is not there holds nothing.
-fn folder_holds_name(full: &Path) -> io::Result<bool> {
-    let entries = match std::fs::read_dir(full.parent().unwrap_or(full)) {
+fn folder_holds_name(full: &Path) -> Result<bool, DatabaseError> {
+    let folder = full.parent().unwrap_or(full);
+    let entries = match std::fs::read_dir(folder) {
         Ok(entries) => entries,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
-        Err(error) => return Err(error),
+        Err(error) => return Err(DatabaseError::io(IOAction::OpenFolder, folder, error)),
     };
     for entry in entries {
-        if Some(entry?.file_name().as_os_str()) == full.file_name() {
+        let entry = entry.map_err(|error| DatabaseError::io(IOAction::WalkFolder, folder, error))?;
+        if Some(entry.file_name().as_os_str()) == full.file_name() {
             return Ok(true);
         }
     }
@@ -413,15 +423,15 @@ fn folder_holds_name(full: &Path) -> io::Result<bool> {
 }
 
 /// The listing of `folder` that [`SOURCE_LISTING`] stamps.
-fn source_listing(folder: &Path) -> io::Result<Vec<u8>> {
+fn source_listing(folder: &Path) -> Result<Vec<u8>, DatabaseError> {
     let entries = match std::fs::read_dir(folder) {
         Ok(entries) => entries,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(error),
+        Err(error) => return Err(DatabaseError::io(IOAction::OpenFolder, folder, error)),
     };
     let mut names = Vec::new();
     for entry in entries {
-        let entry = entry?;
+        let entry = entry.map_err(|error| DatabaseError::io(IOAction::WalkFolder, folder, error))?;
         let mut name = entry.file_name().into_encoded_bytes();
         let source = name.len() > b".sharp".len() && name.ends_with(b".sharp");
         // A link whose target is gone, or a file deleted since the folder was read, is neither, as the loader and the
@@ -449,8 +459,8 @@ fn source_listing(folder: &Path) -> io::Result<Vec<u8>> {
 /// # Errors
 ///
 /// Returns the error of resolving the real path of `source`.
-pub fn compiled_path(root: &Path, source: &Path) -> io::Result<Option<PathBuf>> {
-    let real = source.canonicalize()?;
+pub fn compiled_path(root: &Path, source: &Path) -> Result<Option<PathBuf>, DatabaseError> {
+    let real = source.canonicalize().map_err(|error| DatabaseError::io(IOAction::ResolvePath, source, error))?;
 
     Ok(real.strip_prefix(root).ok().map(|relative| root.join(COMPILED_FOLDER).join(relative).with_extension("sharpc")))
 }
@@ -464,7 +474,7 @@ pub fn compiled_path(root: &Path, source: &Path) -> io::Result<Option<PathBuf>> 
 /// # Errors
 ///
 /// Returns the error of reading an input.
-pub fn is_stale(root: &Path, bytes: &[u8]) -> io::Result<bool> {
+pub fn is_stale(root: &Path, bytes: &[u8]) -> Result<bool, DatabaseError> {
     let Ok(header) = header(bytes) else {
         return Ok(true);
     };

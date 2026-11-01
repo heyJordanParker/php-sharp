@@ -15,7 +15,6 @@ use mago_codex::metadata::property::PropertyMetadata;
 use mago_codex::metadata::ttype::TypeMetadata;
 use mago_codex::misc::GenericParent;
 use mago_codex::ttype::TType;
-use mago_codex::ttype::add_optional_union_type;
 use mago_codex::ttype::atomic::TAtomic;
 use mago_codex::ttype::atomic::array::TArray;
 use mago_codex::ttype::atomic::callable::TCallable;
@@ -70,17 +69,18 @@ use crate::expression::is_refused_type;
 use crate::expression::with::CREATED_OBJECT_PREFIX;
 use crate::expression::with::is_set_by_with;
 use crate::external::PropertyAccessKind;
+use crate::invocation::analyzer::report_type_arguments_without_equality;
 use crate::invocation::infer_parameter_templates_from_argument;
-use crate::invocation::infer_unfixed_templates;
 use crate::invocation::rename_trait_objects;
 use crate::resolver::class_name::class_value_classes;
 use crate::resolver::class_name::holds_no_class;
 use crate::resolver::class_name::report_non_existent_class_like;
 use crate::resolver::extension::Extension;
 use crate::resolver::extension::is_collection_member;
+use crate::resolver::extension::receiver_type_arguments;
 use crate::resolver::extension::resolve_extension;
 use crate::resolver::method::check_call_through_readonly;
-use crate::resolver::method::get_receiver_collections;
+use crate::resolver::method::get_receiver_atomics;
 use crate::resolver::method::object_member_issue;
 use crate::resolver::method::run_forwarded_methods;
 use crate::resolver::selector::resolve_member_selector;
@@ -186,9 +186,16 @@ where
         .types
         .iter()
         .any(|atomic| matches!(atomic, TAtomic::Array(TArray::List(list)) if list.tuple_elements().is_some()));
+    // A place declared `Iterable<T>` has the lazy operations whatever value it holds, spec section 12, as a call's
+    // receiver has them.
+    let receiver = if context.dialect.is_sharp() {
+        TUnion::from_vec(get_receiver_atomics(context, block_context, artifacts, object_expression, &object_type))
+    } else {
+        (*object_type).clone()
+    };
     if context.dialect.is_sharp()
         && let ClassLikeMemberSelector::Identifier(name) = property_selector
-        && let Some(extension) = resolve_extension(context, &object_type, name, MetadataFlags::EXTENSION_PROPERTY)
+        && let Some(extension) = resolve_extension(context, &receiver, name, MetadataFlags::EXTENSION_PROPERTY)
         && !matches!(extension, Extension::Value(method) if holds_tuple
         && context.codebase.get_method_by_id(&method).is_some_and(|metadata| {
             is_collection_member(method.get_class_name(), metadata)
@@ -228,7 +235,7 @@ where
                 });
                 let property_type = match changing {
                     Some(parameters) => report_changing_method_value(context, read, parameters),
-                    None => resolve_extension_value(context, artifacts, method, &object_type.to_non_nullable(), read),
+                    None => resolve_extension_value(context, artifacts, method, &receiver.to_non_nullable(), read),
                 };
                 artifacts.record_call_target(
                     read,
@@ -252,36 +259,6 @@ where
         if object_type.is_nullable() && !is_null_safe && !object_type.has_nullsafe_null() {
             report_access_on_null(context, block_context, object_expression.span(), operator_span, false, false);
         }
-
-        return Ok(result);
-    }
-
-    if context.dialect.is_sharp()
-        && !for_assignment
-        && let ClassLikeMemberSelector::Identifier(name) = property_selector
-        && let Some(collections) = get_receiver_collections(context, block_context, artifacts, object_expression)
-        && let Some(property_type) = resolve_collection_method_value(
-            context,
-            block_context,
-            artifacts,
-            &collections,
-            object_expression,
-            name,
-            operator_span,
-        )
-    {
-        result.encountered_null = object_type.is_nullable();
-        if object_type.is_nullable() && !is_null_safe && !object_type.has_nullsafe_null() {
-            report_access_on_null(context, block_context, object_expression.span(), operator_span, false, false);
-        }
-        result.properties.push(ResolvedProperty {
-            property_span: None,
-            property_name: concat_word!("$", name.value),
-            declaring_class_id: None,
-            property_type,
-            is_magic: false,
-            read_type: None,
-        });
 
         return Ok(result);
     }
@@ -2371,69 +2348,11 @@ where
     TUnion::from_atomic(TAtomic::Error)
 }
 
-/// Spec section 14.3: the value a read without `(…)` gives of the method `name` of a `List`, `Map`, `Set` or
-/// `Iterable`, on each of `collections`, the classes [`get_receiver_collections`] finds for the receiver `object`,
-/// typed as [`resolve_method_value`] types a method's value. None when one of them has no such method. The value holds
-/// the collection as it was when it was read, spec section 12, so a method that changes the collection would change
-/// only that copy, and it is refused, as Swift refuses the value of a `mutating` method, with the lambda that changes
-/// the collection itself. The read records the method it reads for the lowering.
-#[allow(clippy::too_many_arguments)]
-fn resolve_collection_method_value<A>(
-    context: &mut Context<'_, '_, A>,
-    block_context: &BlockContext<'_>,
-    artifacts: &mut AnalysisArtifacts,
-    collections: &[TObject],
-    object: &Expression<'_>,
-    name: &LocalIdentifier<'_>,
-    access_span: Span,
-) -> Option<TUnion>
-where
-    A: Arena,
-{
-    let codebase = context.codebase;
-    let method_name = ascii_lowercase_word(name.value);
-    let methods = collections
-        .iter()
-        .map(|collection| {
-            let class = collection.get_name()?;
-
-            Some((class, codebase.get_method(class.as_bytes(), method_name.as_bytes())?))
-        })
-        .collect::<Option<Vec<_>>>()?;
-    let read_span = object.span().join(name.span());
-
-    if let Some((_, changing)) = methods.iter().find(|(_, metadata)| !metadata.flags.is_mutation_free()) {
-        return Some(report_changing_method_value(context, read_span, &changing.parameters));
-    }
-
-    let mut value: Option<TUnion> = None;
-    for (collection, (class, _)) in collections.iter().zip(&methods) {
-        artifacts.record_call_target(
-            read_span,
-            CallTarget::FunctionLike { callee: FunctionLikeIdentifier::Method(*class, method_name), class: None },
-        );
-        let method_value = resolve_method_value(
-            context,
-            block_context,
-            artifacts,
-            collection,
-            None,
-            word(name.value),
-            access_span,
-            read_span,
-        )
-        .unwrap_or_else(|| unreachable!("a PHP# read of a method the collection's class declares is its value"));
-        value = Some(add_optional_union_type(method_value, value.as_ref(), context.codebase));
-    }
-
-    value
-}
-
 /// Spec section 14.3: the value a read without `(…)` at `read_span` gives of the extension method `extension` on a
 /// receiver of type `receiver`, spec section 26: the closure of the static method it runs as, without its first
-/// parameter, the receiver. The type parameters of the extension's block take what the receiver gives them, as a call
-/// infers them, and the method's own take theirs from the function type the read goes into, as
-/// [`fix_type_arguments`] fixes a generic method's.
+/// parameter, the receiver. The type parameters of the extension's block take what the receiver gives them, as
+/// [`receiver_type_arguments`] fixes them for a call, and the method's own take theirs from the function type the read
+/// goes into, as [`fix_type_arguments`] fixes a generic method's.
 pub(crate) fn resolve_extension_value<A>(
     context: &mut Context<'_, '_, A>,
     artifacts: &mut AnalysisArtifacts,
@@ -2462,13 +2381,8 @@ where
         return value;
     }
 
-    let mut template_result = unfixed_type_arguments(metadata);
-    let receiver_parameter = metadata
-        .parameters
-        .first()
-        .and_then(|parameter| parameter.get_type_metadata())
-        .map_or_else(get_mixed, |parameter| parameter.type_union.clone());
-    infer_unfixed_templates(context, &receiver_parameter, receiver, &mut template_result);
+    // The read reaches the extension only where the receiver fits it, so the receiver's type arguments are in bounds.
+    let (template_result, _) = receiver_type_arguments(context, receiver, metadata);
     let method_name = display_sharp_member(display_class_like_name(context, class), metadata.original_name);
 
     fix_type_arguments(context, artifacts, value, metadata, &method_name, read_span, template_result)
@@ -2595,7 +2509,11 @@ where
     let unfixed: Vec<String> = templates
         .iter()
         .zip(&type_arguments)
-        .filter(|((name, _), type_argument)| type_argument.is_none() && !violated_templates.contains(name))
+        // A bound the checker refused fixes nothing it names, so such a type parameter is left to the refusal, as a
+        // call leaves it.
+        .filter(|((name, template), type_argument)| {
+            type_argument.is_none() && !violated_templates.contains(name) && !template.named_by_refused_bound
+        })
         .map(|((name, _), _)| format!("`{name}`"))
         .collect();
     if !unfixed.is_empty() {
@@ -2616,6 +2534,15 @@ where
         return value;
     }
 
+    report_type_arguments_without_equality(
+        context,
+        span,
+        method_name,
+        templates,
+        &type_arguments,
+        None,
+        &violated_templates,
+    );
     artifacts.record_type_arguments(span, type_arguments.into_iter(), context.codebase);
 
     inferred_type_replacer::replace(&value, &template_result, context.codebase)

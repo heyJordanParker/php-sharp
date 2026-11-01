@@ -1,0 +1,70 @@
+namespace TableChanges;
+
+import Lib.Basket;
+
+// A change whose key, value or argument changes the same place first, as a memo does, runs that code before it takes
+// the place, so the change lands on the place as the code left it.
+public class Memo
+{
+    private Map<int, int> memo = [:];
+    private static Map<int, int> cache = [:];
+    private List<int> steps = [0];
+    private Set<string> tags = [];
+
+    public int at(int n)
+    {
+        if (n < 2) {
+            return n;
+        }
+        this.memo[n] = this.at(n - 1) + this.at(n - 2);
+        return this.memo.get(n) ?? -1;
+    }
+
+    public static int cached(int n)
+    {
+        if (n < 2) {
+            return n;
+        }
+        Memo.cache[n] = Memo.cached(n - 1) + Memo.cached(n - 2);
+        return Memo.cache.get(n) ?? -1;
+    }
+
+    public List<int> stepped()
+    {
+        this.steps[0] = this.step();
+        return this.steps;
+    }
+
+    public List<string> tagged()
+    {
+        this.tags.add(this.label());
+        return this.tags.toList();
+    }
+
+    // A `??=` into a `Map` a hooked plain PHP property holds runs its value only for a missing key, and keeps what the
+    // value wrote to the same property.
+    public static Map<string, int> counted(Basket basket)
+    {
+        basket.counts["a"] ??= Memo.count(basket);
+        basket.counts["a"] ??= Memo.count(basket);
+        return basket.counts;
+    }
+
+    private static int count(Basket basket)
+    {
+        basket.counts["z"] = basket.counts.count() + 1;
+        return 1;
+    }
+
+    private int step()
+    {
+        this.steps.add(7);
+        return 5;
+    }
+
+    private string label()
+    {
+        this.tags.add("first");
+        return "second";
+    }
+}

@@ -660,12 +660,15 @@ fn a_watch_starts_the_hosts_again_when_a_php_sharp_file_changes() {
         }
     };
 
+    // The watch's own log, outside the watched project, so a failure shows what the watch saw.
+    let watch_log = tempfile::NamedTempFile::new().unwrap();
     let mut watch = Command::new(env!("CARGO_BIN_EXE_mago"))
         .args(["--no-version-check", "--colors", "never", "analyze", "--watch"])
+        .env("MAGO_LOG", "info,mago=debug,mago_database=debug")
         .env("XDG_CACHE_HOME", Path::new(env!("CARGO_TARGET_TMPDIR")).join("cache"))
         .current_dir(root)
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stderr(watch_log.reopen().unwrap())
         .spawn()
         .unwrap();
     wait_for_lines(1);
@@ -674,12 +677,13 @@ fn a_watch_starts_the_hosts_again_when_a_php_sharp_file_changes() {
     watch.kill().unwrap();
     watch.wait().unwrap();
 
-    let log = log();
-    let runs: Vec<(&str, &str)> = log.lines().filter_map(|line| line.split_once(' ')).collect();
-    assert!(runs.len() >= 2, "{log}");
-    assert_eq!(runs[0].1, "first", "{log}");
-    assert_eq!(runs[1].1, "second", "{log}");
-    assert_ne!(runs[0].0, runs[1].0, "{log}");
+    let hosts = log();
+    let runs: Vec<(&str, &str)> = hosts.lines().filter_map(|line| line.split_once(' ')).collect();
+    let failure = format!("{hosts}\n{}", std::fs::read_to_string(watch_log.path()).unwrap());
+    assert!(runs.len() >= 2, "{failure}");
+    assert_eq!(runs[0].1, "first", "{failure}");
+    assert_eq!(runs[1].1, "second", "{failure}");
+    assert_ne!(runs[0].0, runs[1].0, "{failure}");
 }
 
 /// A host that types the project's code, as one that gives a plain PHP helper its return type does, can load the
@@ -810,6 +814,81 @@ fn compile_hides_the_host_errors_an_ignore_entry_or_the_baseline_hides_from_anal
         assert!(output.status.success(), "{hidden}: {}", printed(&output));
         assert!(compiled(root, "app/Marked.sharp").exists(), "{hidden}");
     }
+}
+
+/// An extension host whose node hook fails in any file but a PHP# file, so a compile that runs it anywhere else fails.
+const SHARP_ONLY_HOST: &str = r#"<?php
+
+declare(strict_types=1);
+
+use Mago\Sdk\Analyzer\NodeAnalysisContext;
+use Mago\Sdk\Analyzer\NodeAnalysisHook;
+use Mago\Sdk\Analyzer\Plugin;
+use Mago\Sdk\Analyzer\PluginDefinition;
+use Mago\Sdk\Analyzer\PluginRegistry;
+use Mago\Sdk\Extension;
+use Mago\Sdk\Syntax\NodeKind;
+use Mago\Sdk\Worker;
+
+require $argv[1];
+
+final class SharpOnlyRule implements Plugin, NodeAnalysisHook
+{
+    public function getDefinition(): PluginDefinition
+    {
+        return new PluginDefinition('acme', 'Acme rules', 'Inspects the classes of PHP# files.');
+    }
+
+    public function register(PluginRegistry $registry): void
+    {
+        $registry->registerNodeAnalysisHook($this);
+    }
+
+    public function getRequirements(): array
+    {
+        return [];
+    }
+
+    public function getTargets(): array
+    {
+        return [NodeKind::Class_];
+    }
+
+    public function analyze(NodeAnalysisContext $context): void
+    {
+        if (!str_ends_with($context->analysis->file, '.sharp')) {
+            throw new RuntimeException("The node hook ran in {$context->analysis->file}.");
+        }
+    }
+}
+
+(new Worker(new Extension('acme', 'Acme', '0.0.0', analyzerPlugins: [new SharpOnlyRule()])))->run();
+"#;
+
+/// `mago compile` lowers only PHP# files and refuses one only for the errors reported in it, and a node hook reports
+/// in the file it inspects, so the compile runs its hosts' node hooks in its PHP# files alone: here the classes of
+/// `app/Order.sharp` and the package's `Money.sharp`, and never `app/Legacy.php`'s.
+#[test]
+fn compile_runs_the_node_hooks_only_in_the_php_sharp_files_it_lowers() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
+    if !common::php_sdk_is_available(repository, "the scoped node hooks compile test") {
+        return;
+    }
+    let directory = project(ORDER, MONEY);
+    let root = directory.path();
+    write(root, "tools/host.php", SHARP_ONLY_HOST);
+    write(
+        root,
+        "mago.toml",
+        &format!(
+            "php-version = \"8.4\"\n\n[source]\npaths = [\"app\"]\nincludes = [\"vendor\"]\n\n[extension-hosts.acme]\nworkers = 1\ncommand = [\"php\", \"tools/host.php\", {:?}]\n",
+            repository.join("vendor/autoload.php").display().to_string()
+        ),
+    );
+
+    compile_succeeds(root);
+    assert!(compiled(root, "app/Order.sharp").exists());
+    assert!(compiled(root, MONEY_PATH).exists());
 }
 
 /// The typing host of [`a_typing_host_loads_a_class_only_its_typing_makes_correct_on_a_fresh_tree`]: it gives
@@ -1533,6 +1612,97 @@ fn compile_warns_when_the_exclude_file_cannot_be_written() {
     assert!(!printed(&output).contains(&format!("{}/.tmp", info.display())), "{}", printed(&output));
 }
 
+/// A `.sharp` folder the compile can't open fails the compile with the folder's path and what the compile was doing.
+/// Root opens a folder of mode 000, so the test has nothing to show there.
+#[cfg(unix)]
+#[test]
+fn compile_names_the_sharp_folder_it_cannot_open() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = project(ORDER, MONEY);
+    let root = std::fs::canonicalize(directory.path()).unwrap();
+    compile_succeeds(&root);
+    let compiled = root.join(".sharp");
+    std::fs::set_permissions(&compiled, std::fs::Permissions::from_mode(0o000)).unwrap();
+    if std::fs::read_dir(&compiled).is_ok() {
+        std::fs::set_permissions(&compiled, std::fs::Permissions::from_mode(0o755)).unwrap();
+        return;
+    }
+
+    let output = compile(&root);
+    std::fs::set_permissions(&compiled, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    assert!(!output.status.success(), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(&format!(
+            "mago: can't open the folder `{}`: Permission denied (os error 13)",
+            compiled.display()
+        )),
+        "{}",
+        printed(&output)
+    );
+}
+
+/// A folder the compile's walk of `.sharp` reaches and can't open is the one the error names, not `.sharp`. Root opens
+/// a folder of mode 000, so the test has nothing to show there.
+#[cfg(unix)]
+#[test]
+fn compile_names_the_folder_its_walk_of_the_sharp_folder_cannot_open() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = project(ORDER, MONEY);
+    let root = std::fs::canonicalize(directory.path()).unwrap();
+    compile_succeeds(&root);
+    let app = root.join(".sharp/app");
+    std::fs::set_permissions(&app, std::fs::Permissions::from_mode(0o000)).unwrap();
+    if std::fs::read_dir(&app).is_ok() {
+        std::fs::set_permissions(&app, std::fs::Permissions::from_mode(0o755)).unwrap();
+        return;
+    }
+
+    let output = compile(&root);
+    std::fs::set_permissions(&app, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    assert!(!output.status.success(), "{}", printed(&output));
+    assert!(
+        printed(&output)
+            .contains(&format!("mago: can't open the folder `{}`: Permission denied (os error 13)", app.display())),
+        "{}",
+        printed(&output)
+    );
+}
+
+/// A folder of `.sharp` the compile can't create is named as the folder, not as the compiled file it would hold. Root
+/// writes into a folder of mode 555, so the test has nothing to show there.
+#[cfg(unix)]
+#[test]
+fn compile_names_the_folder_of_the_sharp_folder_it_cannot_create() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = project(ORDER, MONEY);
+    let root = std::fs::canonicalize(directory.path()).unwrap();
+    compile_succeeds(&root);
+    let compiled = root.join(".sharp");
+    let app = compiled.join("app");
+    std::fs::remove_dir_all(&app).unwrap();
+    std::fs::set_permissions(&compiled, std::fs::Permissions::from_mode(0o555)).unwrap();
+    if std::fs::create_dir(&app).is_ok() {
+        std::fs::set_permissions(&compiled, std::fs::Permissions::from_mode(0o755)).unwrap();
+        return;
+    }
+
+    let output = compile(&root);
+    std::fs::set_permissions(&compiled, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    assert!(!output.status.success(), "{}", printed(&output));
+    assert!(
+        printed(&output)
+            .contains(&format!("mago: can't create the folder `{}`: Permission denied (os error 13)", app.display())),
+        "{}",
+        printed(&output)
+    );
+}
+
 /// A repository git refuses to read, as a checkout another user owns in a container or a CI job, or a broken `.git`,
 /// fails no compile: the block lists every PHP file, as with no git to run, and the compile warns once with git's
 /// reason.
@@ -2180,6 +2350,32 @@ fn compile_runs_the_lake_on_the_path_and_installs_no_lean() {
 
     assert!(printed(&output).contains("the lake on the PATH ran build"), "{}", printed(&output));
     assert!(!cache.path().join("mago/elan").exists(), "{}", printed(&output));
+}
+
+/// A cache folder the law checker can't create, as one a root container left, is named with what failed.
+#[cfg(unix)]
+#[test]
+fn compile_names_the_cache_folder_the_law_checker_cannot_create() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = lawful_project(&[("app/Shared/Money.sharp", LAWFUL_MONEY)]);
+    let lake = tempfile::tempdir().unwrap();
+    write(lake.path(), "lake", "#!/bin/sh\n[ \"$1\" = --version ]\n");
+    std::fs::set_permissions(lake.path().join("lake"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let cache = unwritable_cache();
+
+    let output =
+        command(directory.path(), "never").env("PATH", lake.path()).env("XDG_CACHE_HOME", &cache).output().unwrap();
+
+    assert!(!output.status.success(), "{}", printed(&output));
+    assert!(
+        printed(&output).contains(&format!(
+            "The laws could not be checked: can't create the folder `{}`: File exists (os error 17).",
+            cache.join("mago").display()
+        )),
+        "{}",
+        printed(&output)
+    );
 }
 
 /// Puts a `lake` first on the `PATH` that runs the real one, except that its first `--version`, the call on which elan

@@ -15,6 +15,7 @@ use mago_word::word;
 
 use mago_codex::context::ScopeContext;
 use mago_codex::identifier::function_like::FunctionLikeIdentifier;
+use mago_codex::metadata::CodebaseMetadata;
 use mago_codex::metadata::class_like::ClassLikeMetadata;
 use mago_codex::metadata::class_like::TemplateTypes;
 use mago_codex::metadata::function_like::FunctionLikeMetadata;
@@ -35,6 +36,7 @@ use mago_codex::ttype::atomic::object::named::TNamedObject;
 use mago_codex::ttype::atomic::reference::TReference;
 use mago_codex::ttype::atomic::scalar::TScalar;
 use mago_codex::ttype::atomic::scalar::class_like_string::TClassLikeString;
+use mago_codex::ttype::bound_is_equatable;
 use mago_codex::ttype::combiner::CombinerOptions;
 use mago_codex::ttype::comparator::ComparisonResult;
 use mago_codex::ttype::comparator::atomic_comparator;
@@ -56,7 +58,7 @@ use mago_codex::ttype::template::inferred_type_replacer;
 use mago_codex::ttype::union::TUnion;
 use mago_codex::ttype::wrap_atomic;
 use mago_codex::visibility::Visibility;
-use mago_names::ResolvedNames;
+use mago_names::TypeParametersNamed;
 use mago_names::binding::php_variable_name;
 use mago_names::display_sharp_member;
 use mago_php_version::feature::Feature;
@@ -72,7 +74,6 @@ use mago_syntax::cst::ConstructorInitializer;
 use mago_syntax::cst::Expression;
 use mago_syntax::cst::FunctionLikeParameterList;
 use mago_syntax::cst::Law;
-use mago_syntax::cst::LocalIdentifier;
 use mago_syntax::cst::Statement;
 use mago_syntax::walker::Walker;
 use mago_text_edit::Safety;
@@ -88,6 +89,9 @@ use crate::context::block::ReferenceConstraintSource;
 use crate::error::AnalysisError;
 use crate::expression::array::check_sharp_literal_kind;
 use crate::expression::array::get_set_literal_type;
+use crate::expression::binary::comparison::missing_equality;
+use crate::expression::binary::comparison::unbounded_parameter_reason;
+use crate::expression::binary::comparison::unequatable_parameter;
 use crate::expression::instantiation::report_missing_type_arguments;
 use crate::formula::get_formula;
 use crate::reconciler::reconcile_keyed_types;
@@ -554,6 +558,8 @@ where
             .and_then(|expected| closure_result_type(context, expected));
     }
 
+    report_undefined_bound_types(context, &function_like_metadata.template_types);
+
     if let Some(return_type) = &function_like_metadata.return_type_metadata {
         report_undefined_type_references(context, return_type);
         report_invalid_template_arguments(context, return_type, HintPlace::Declaration);
@@ -733,6 +739,8 @@ where
     parent_artifacts.variable_definedness.extend(std::mem::take(&mut artifacts.variable_definedness));
     parent_artifacts.resolved_method_calls.append(&mut artifacts.resolved_method_calls);
     parent_artifacts.call_targets.extend(std::mem::take(&mut artifacts.call_targets));
+    parent_artifacts.member_calls.extend(std::mem::take(&mut artifacts.member_calls));
+    parent_artifacts.received_argument_types.extend(std::mem::take(&mut artifacts.received_argument_types));
     parent_artifacts.tested_types.extend(std::mem::take(&mut artifacts.tested_types));
     parent_artifacts.declared_types.extend(std::mem::take(&mut artifacts.declared_types));
     parent_artifacts.namespace_constants.extend(std::mem::take(&mut artifacts.namespace_constants));
@@ -757,22 +765,51 @@ fn analyze_returned_expression<'ctx, 'arena, A>(
 where
     A: Arena,
 {
-    let return_type = function_like_metadata.return_type_metadata.as_ref();
-    let declared =
-        return_type.map(|return_type| return_type.type_union.clone()).or_else(|| artifacts.lambda_result.clone());
+    let declared = function_like_metadata.return_type_metadata.as_ref().map(|return_type| &return_type.type_union);
+    analyze_returned_value(context, block_context, artifacts, value, declared)?;
+    block_context.conditionally_referenced_variable_ids.clear();
+
+    let value_type = artifacts.get_rc_expression_type(value).cloned().unwrap_or_else(|| Rc::new(get_mixed()));
+    handle_return_value(context, block_context, artifacts, Some(value), value_type, value.span());
+
+    Ok(())
+}
+
+/// Analyzes `value`, which a body returns, against `declared`, the return type of the method, function or `get`
+/// accessor the body belongs to, or else the result of the function type a lambda goes into. The value is used where
+/// the body returns one, so a `void` call there gives none, spec section 14.1. A lambda's result is its callee's, and a
+/// result that holds a type parameter or is `Any?` takes a lambda that gives nothing too, as Kotlin's `() -> Any?`
+/// takes a `Unit` lambda, so `Scope.run(() => job.handle())` compiles.
+pub(crate) fn analyze_returned_value<'ctx, 'arena, A>(
+    context: &mut Context<'ctx, 'arena, A>,
+    block_context: &mut BlockContext<'ctx>,
+    artifacts: &mut AnalysisArtifacts,
+    value: &Expression<'arena>,
+    declared: Option<&TUnion>,
+) -> Result<(), AnalysisError>
+where
+    A: Arena,
+{
+    let uses_value = match declared {
+        Some(declared) => !declared.is_void(),
+        None => artifacts
+            .lambda_result
+            .as_ref()
+            .is_some_and(|result| !result.is_void() && !result.is_mixed() && !result.has_template_types()),
+    };
+    let declared = declared.cloned().or_else(|| artifacts.lambda_result.clone());
     expect_type(context, artifacts, value, declared.as_ref());
 
     block_context.flags.set_inside_return(true);
+    let was_inside_general_use = block_context.flags.inside_general_use();
+    block_context.flags.set_inside_general_use(uses_value);
     value.analyze(context, block_context, artifacts)?;
+    block_context.flags.set_inside_general_use(was_inside_general_use);
     block_context.flags.set_inside_return(false);
     // A lambda's result is checked against the function type that takes it, as a declared return type is.
     if let Some(declared) = &declared {
         check_sharp_literal_kind(context, Some(block_context), artifacts, value, declared);
     }
-    block_context.conditionally_referenced_variable_ids.clear();
-
-    let value_type = artifacts.get_rc_expression_type(value).cloned().unwrap_or_else(|| Rc::new(get_mixed()));
-    handle_return_value(context, block_context, artifacts, Some(value), value_type, value.span());
 
     Ok(())
 }
@@ -1990,6 +2027,8 @@ fn type_contains_function_template_param(
 /// - A parameter type
 /// - The return type
 /// - The PHP# `body`, as `catch (TError error)` names it, since a call can write its type argument
+/// - A bound the checker refused, as `TOther` in `<TOther, THolder : Order & TOther>`, since that bound bounds nothing
+///   and its refusal settles what it names
 pub fn check_unused_function_template_parameters<'ctx, A>(
     context: &mut Context<'ctx, '_, A>,
     function_like_metadata: &'ctx FunctionLikeMetadata,
@@ -2031,8 +2070,11 @@ pub fn check_unused_function_template_parameters<'ctx, A>(
         None => {}
     }
 
-    'templates: for (template_name, _) in &function_like_metadata.template_types {
-        if template_name.as_bytes().starts_with(b"_") || named_in_body.contains(&template_name.as_bytes()) {
+    'templates: for (template_name, template) in &function_like_metadata.template_types {
+        if template_name.as_bytes().starts_with(b"_")
+            || template.named_by_refused_bound
+            || named_in_body.contains(&template_name.as_bytes())
+        {
             continue;
         }
 
@@ -2075,17 +2117,6 @@ pub fn check_unused_function_template_parameters<'ctx, A>(
             IssueCode::UnusedTemplateParameter,
             Issue::warning(message).with_annotation(Annotation::primary(name_span).with_message(label)).with_help(help),
         );
-    }
-}
-
-/// Collects each name of a PHP# type parameter a body writes, as the binder bound it.
-struct TypeParametersNamed<'names, 'arena>(&'names ResolvedNames<'arena>);
-
-impl<'ast, 'arena> Walker<'ast, 'arena, Vec<&'arena [u8]>> for TypeParametersNamed<'_, '_> {
-    fn walk_in_local_identifier(&self, identifier: &'ast LocalIdentifier<'arena>, names: &mut Vec<&'arena [u8]>) {
-        if self.0.is_type_parameter(identifier) {
-            names.push(identifier.value);
-        }
     }
 }
 
@@ -2177,6 +2208,20 @@ where
 {
     if !type_metadata.inferred {
         report_undefined_types(context, &type_metadata.type_union, type_metadata.span);
+    }
+}
+
+/// Reports each type a PHP# bound of `templates` names that no analyzed file or stub declares, once, where the bound is
+/// written, spec section 11. Population reads such a bound as the refused type, so a use of its type parameter reports
+/// nothing more. A bound the checker refuses is the checker's one error.
+pub(crate) fn report_undefined_bound_types<A>(context: &mut Context<'_, '_, A>, templates: &TemplateTypes)
+where
+    A: Arena,
+{
+    for template in templates.values().filter(|template| !template.bound_refused) {
+        if let Some(bound) = &template.written_bound {
+            report_undefined_type_references(context, bound);
+        }
     }
 }
 
@@ -2410,6 +2455,31 @@ where
         template_result.add_lower_bound(*template_name, template.defining_entity, argument.clone());
     }
     for (argument, (template_name, template)) in arguments.iter().zip(templates.iter()) {
+        // Spec section 11: a type argument of `Equatable` has `==`, as `==` on two of its values decides.
+        if is_sharp
+            && bound_is_equatable(&template.constraint)
+            && let Some(reason) = missing_equality(context, argument, span)
+        {
+            let argument_id = display_type(context, argument);
+            let constraint_id = display_type(context, &template.constraint);
+            context.collector.report_with_code(
+                IssueCode::TemplateConstraintViolation,
+                Issue::error(format!(
+                    "Type argument `{argument_id}` does not satisfy `{generic_owner}`'s `{template_name}`: {reason}."
+                ))
+                .with_annotation(
+                    Annotation::primary(span)
+                        .with_message(format!("`{argument_id}` is supplied for `{template_name}` here...")),
+                )
+                .with_annotation(
+                    Annotation::secondary(owner_span)
+                        .with_message(format!("...but `{template_name}` is bounded by `{constraint_id}`.")),
+                )
+                .with_help("Supply a type that has `==`."),
+            );
+
+            continue;
+        }
         let names_a_template = template.constraint.has_template_types();
         // An explicit `mixed` argument is the written form of "any argument", which Mago accepts for every bound in
         // PHP. A written PHP# `Any` or `Any?` is a type like any other, so its bound checks it.
@@ -2535,8 +2605,9 @@ where
         if key_type.types.iter().any(|atomic| matches!(atomic, TAtomic::Reference(TReference::Symbol { .. }))) {
             continue;
         }
-        // The standard library's generic members of a `List` key a `Map` or fill a `Set` with a type parameter, which
-        // each call checks with the type argument it fixes, as `lines.toSet()` on a `List<Line>`.
+        // The standard library's generic members key a `Map` or fill a `Set` with a type parameter, which each call
+        // checks with the type argument it fixes, as `lines.toSet()` on a `List<Line>` and `tags.contains(tag)` on a
+        // `Set<T>`.
         if context.source_file.is_standard_library
             && key_type.types.iter().all(|atomic| matches!(atomic, TAtomic::GenericParameter(_)))
         {
@@ -2544,25 +2615,40 @@ where
         }
 
         let key_id = display_sharp_type(context, key_type);
-        let error = collection_key_error(key_id.as_str(), in_set, span);
+        let error = collection_key_error(context.codebase, key_type, key_id.as_str(), in_set, span);
         context.collector.report_with_code(IssueCode::TemplateConstraintViolation, error);
     }
 }
 
-/// The error for a PHP# `Map` keyed by, or a `Set` of, a type written `key_id` that has no `==` and `hash()`, at
-/// `span`. A `Map` or `Set` type, a literal and a `groupBy` key state the rule of spec section 12 in these words.
-pub(crate) fn collection_key_error(key_id: &str, in_set: bool, span: Span) -> Issue {
+/// The error for a PHP# `Map` keyed by, or a `Set` of, `key_type`, written `key_id`, that has no `==` and `hash()`, at
+/// `span`. A `Map` or `Set` type, a literal and a `groupBy` key state the rule of spec section 12 in these words, and
+/// name the fix of spec section 11 for a type parameter with no `Equatable` bound, as a search does.
+pub(crate) fn collection_key_error(
+    codebase: &CodebaseMetadata,
+    key_type: &TUnion,
+    key_id: &str,
+    in_set: bool,
+    span: Span,
+) -> Issue {
     let (rule, held, fix) = if in_set {
         ("A `Set`'s element", format!("`{key_id}` is this `Set`'s element."), "Fill the `Set` with")
     } else {
         ("A `Map`'s key", format!("`{key_id}` keys this `Map`."), "Key the `Map` by")
     };
+    let rule = format!(
+        "{rule} is anything with `==` and `hash()`: an `int`, a `float`, a `string`, a `bool`, `null`, an enum, a struct, a `List`, `Set` or `Map` of them, or a class that declares `operator ==`"
+    );
+    if let Some(parameter) = unequatable_parameter(key_type, codebase) {
+        return Issue::error(format!(
+            "{rule}, and `{parameter}` is {}.",
+            unbounded_parameter_reason(&parameter.to_string())
+        ))
+        .with_annotation(Annotation::primary(span).with_message(held));
+    }
 
-    Issue::error(format!(
-        "{rule} is anything with `==` and `hash()`: an `int`, a `float`, a `string`, a `bool`, `null`, an enum, a struct, a `List`, `Set` or `Map` of them, or a class that declares `operator ==`, and `{key_id}` is none of them."
-    ))
-    .with_annotation(Annotation::primary(span).with_message(held))
-    .with_help(format!(
-        "{fix} an `int`, a `float`, a `string`, a `bool`, `null`, an enum, a struct, a `List`, `Set` or `Map` of them, or a class that declares `public static bool operator ==` with `public int hash()`."
-    ))
+    Issue::error(format!("{rule}, and `{key_id}` is none of them."))
+        .with_annotation(Annotation::primary(span).with_message(held))
+        .with_help(format!(
+            "{fix} an `int`, a `float`, a `string`, a `bool`, `null`, an enum, a struct, a `List`, `Set` or `Map` of them, or a class that declares `public static bool operator ==` with `public int hash()`."
+        ))
 }

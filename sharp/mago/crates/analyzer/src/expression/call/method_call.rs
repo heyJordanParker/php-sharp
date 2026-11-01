@@ -50,11 +50,14 @@ use crate::expression::assignment::PropertyWriteKind;
 use crate::expression::assignment::property_assignment;
 use crate::expression::assignment::static_property_assignment;
 use crate::expression::call::analyze_extension_access;
+use crate::expression::call::analyze_extension_call;
 use crate::expression::call::analyze_invocation_targets;
 use crate::expression::call::function_call::resolve_callable_targets;
 use crate::expression::call::record_external_method_call;
 use crate::expression::call::record_external_method_call_targets;
+use crate::expression::call::report_comparisons;
 use crate::expression::call::static_method_call::analyze_static_method_call;
+use crate::expression::call::with_null_safe_null;
 use crate::expression::constant_access::field_storage;
 use crate::expression::instantiation::bare_generic_class;
 use crate::expression::is_refused_type;
@@ -87,8 +90,6 @@ use crate::resolver::static_property::StaticPropertyName;
 use crate::utils::expression::get_block_expression_id;
 use crate::utils::expression::is_this;
 use crate::utils::names::display_member;
-use crate::utils::names::display_type;
-use crate::utils::names::sharp_collection_name;
 use crate::visibility::check_method_visibility;
 
 impl<'ast, 'arena> Analyzable<'ast, 'arena> for MethodCall<'arena> {
@@ -133,7 +134,7 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for MethodCall<'arena> {
         )?;
 
         if context.plugin_registry.has_method_call_hooks() {
-            let mut hook_context = HookContext::new(context, block_context, artifacts);
+            let mut hook_context = HookContext::after_call(context, block_context, artifacts, self.span());
             context.plugin_registry.after_method_call(self, &mut hook_context)?;
             for reported in hook_context.take_issues() {
                 context.collector.report_with_code(reported.code, reported.issue);
@@ -194,7 +195,7 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for NullSafeMethodCall<'arena> {
         }
 
         if context.plugin_registry.has_nullsafe_method_call_hooks() {
-            let mut hook_context = HookContext::new(context, block_context, artifacts);
+            let mut hook_context = HookContext::after_call(context, block_context, artifacts, self.span());
             context.plugin_registry.after_nullsafe_method_call(self, &mut hook_context)?;
             for reported in hook_context.take_issues() {
                 context.collector.report_with_code(reported.code, reported.issue);
@@ -391,87 +392,95 @@ where
         );
     }
 
-    // The receiver's `List` parts run the standard library's member of a `List`, analyzed on those parts, and its other
-    // collections run their own methods below, spec section 12, as `held.contains("tea")` on a `List<string>|Set<string>`
-    // runs the member of the kind the value holds.
-    let mut list_copy = None;
-    let list_result = match method_resolution.list_member.take() {
-        // A receiver that is only a `List`, or null, runs the member alone, as any extension's.
-        Some((member, list))
-            if method_resolution.resolved_methods.is_empty()
-                && method_resolution.unresolved_methods.is_empty()
-                && method_resolution.called_properties.is_empty()
-                && method_resolution.undocumented_methods.is_empty() =>
-        {
-            let copy = if changes_receiver(context, &member) {
-                check_changed_collection(context, block_context, artifacts, object)
-            } else {
-                Ok(None)
-            };
-            report_receiver_issues(context, receiver_issues, &copy);
-            copy?;
-            // `?.` skips the null the receiver may hold, as on any extension's receiver, and a null an earlier `?.` of
-            // the chain gives makes the call's value null too.
-            let list = match artifacts.get_expression_type(object) {
-                Some(written) if written.is_nullable() => {
-                    let mut list = list.as_nullable();
-                    list.set_nullsafe_null(written.has_nullsafe_null());
-                    list
-                }
-                _ => list,
-            };
-
-            return analyze_rest_of_chain(
-                context,
-                block_context,
-                artifacts,
-                object,
-                is_null_safe,
-                |context, block_context, artifacts| {
-                    with_receiver_type(artifacts, object, list, |artifacts| {
-                        analyze_extension_access(
-                            context,
-                            block_context,
-                            artifacts,
-                            member,
-                            object,
-                            type_arguments,
-                            Some(argument_list),
-                            is_null_safe,
-                            span,
-                        )
-                    })
-                },
-            );
-        }
-        Some((member, list)) => {
+    // Each kind of collection among the receiver's parts runs the standard library's member of that kind, analyzed on
+    // those parts, and its objects run their own methods below, spec section 12, as `held.contains("tea")` on a
+    // `List<string>|Set<string>|Box` runs the member or the method of the kind the value holds.
+    // A member that changes its receiver runs on each part of the kind alone, so each part fixes its own type arguments
+    // and an `add` on a value that may be a `List<int>` or a `List<string>` takes only what both take, as a union of
+    // collections allows only what each of them allows.
+    let members: Vec<_> = std::mem::take(&mut method_resolution.collection_members)
+        .into_iter()
+        .flat_map(|(member, parts)| {
             if changes_receiver(context, &member) {
-                list_copy = Some(check_changed_collection(context, block_context, artifacts, object));
+                parts.types.iter().map(|part| (member, TUnion::from_atomic(part.clone()))).collect()
+            } else {
+                vec![(member, parts)]
             }
-            with_receiver_type(artifacts, object, list, |artifacts| {
-                analyze_extension_access(
+        })
+        .collect();
+    // A call one kind of the receiver lacks the member for is refused once, so its place is not checked too.
+    let changes =
+        !method_resolution.has_invalid_target && members.iter().any(|(member, _)| changes_receiver(context, member));
+    // A receiver whose every part is a collection, or null, runs the members alone, as any extension's.
+    if !members.is_empty()
+        && method_resolution.resolved_methods.is_empty()
+        && method_resolution.unresolved_methods.is_empty()
+        && method_resolution.called_properties.is_empty()
+        && method_resolution.undocumented_methods.is_empty()
+    {
+        let copy = if changes { check_changed_collection(context, block_context, artifacts, object) } else { Ok(None) };
+        report_receiver_issues(context, receiver_issues, &copy);
+        copy?;
+        // `?.` skips the null the receiver may hold, as on any extension's receiver, and a null an earlier `?.` of the
+        // chain gives makes the call's value null too.
+        let nullsafe_null = artifacts
+            .get_expression_type(object)
+            .filter(|written| written.is_nullable())
+            .map(TUnion::has_nullsafe_null);
+        let members: Vec<_> = members
+            .into_iter()
+            .map(|(member, kind)| match nullsafe_null {
+                Some(nullsafe_null) => {
+                    let mut kind = kind.as_nullable();
+                    kind.set_nullsafe_null(nullsafe_null);
+                    (member, kind)
+                }
+                None => (member, kind),
+            })
+            .collect();
+
+        return analyze_rest_of_chain(
+            context,
+            block_context,
+            artifacts,
+            object,
+            is_null_safe,
+            |context, block_context, artifacts| {
+                let runs_one_of = members.len() > 1;
+                analyze_collection_members(
                     context,
                     block_context,
                     artifacts,
-                    member,
+                    members,
+                    runs_one_of,
                     object,
                     type_arguments,
-                    Some(argument_list),
+                    argument_list,
                     is_null_safe,
                     span,
                 )
-            })?;
-
-            artifacts.get_rc_expression_type(&span).cloned()
-        }
-        None => None,
-    };
+                .map(|_| ())
+            },
+        );
+    }
+    let collection_copy = changes.then(|| check_changed_collection(context, block_context, artifacts, object));
+    let collection_result = analyze_collection_members(
+        context,
+        block_context,
+        artifacts,
+        members,
+        true,
+        object,
+        type_arguments,
+        argument_list,
+        is_null_safe,
+        span,
+    )?;
 
     let undocumented_template_result =
         (!method_resolution.undocumented_methods.is_empty()).then(|| method_resolution.template_result.clone());
 
     let mut invocation_targets = vec![];
-    let mut changes_collection = false;
     for resolved_method in method_resolution.resolved_methods {
         let metadata = context
             .codebase
@@ -489,11 +498,6 @@ where
             resolved_method.method_identifier.get_method_name(),
         );
         crate::utils::availability::check_method_availability(context, method_metadata, &method_display, span);
-
-        changes_collection |= matches!(
-            &resolved_method.static_class_type,
-            StaticClassType::Object(object) if sharp_collection_name(object).is_some()
-        ) && !method_metadata.flags.is_mutation_free();
 
         let method_target_context = MethodTargetContext {
             invocation_kind: MethodInvocationKind::Instance,
@@ -516,14 +520,8 @@ where
         });
     }
 
-    // The receiver's `List` parts checked its place already, as a place for every part of it.
-    let copy = if let Some(list_copy) = list_copy {
-        list_copy
-    } else if context.dialect.is_sharp() && changes_collection && !method_resolution.has_invalid_target {
-        check_changed_collection(context, block_context, artifacts, object)
-    } else {
-        Ok(None)
-    };
+    // The receiver's collection parts checked its place already, as a place for every part of it.
+    let copy = collection_copy.unwrap_or(Ok(None));
     report_receiver_issues(context, receiver_issues, &copy);
     copy?;
 
@@ -611,11 +609,6 @@ where
         )?;
     }
 
-    // The arguments a changing method stores have their types once the invocation is analyzed.
-    if context.dialect.is_sharp() && changes_collection {
-        check_stored_in_static(context, artifacts, object, argument_list);
-    }
-
     if !method_resolution.undocumented_methods.is_empty() {
         analyze_rest_of_chain(
             context,
@@ -624,7 +617,7 @@ where
             object,
             is_null_safe,
             |context, block_context, artifacts| {
-                analyze_undocumented_method_return_type(
+                let magic_type = analyze_undocumented_method_return_type(
                     context,
                     block_context,
                     artifacts,
@@ -634,7 +627,19 @@ where
                     span,
                     MethodInvocationKind::Instance,
                     !has_resolved_methods,
-                )
+                )?;
+                let object_has_nullsafe_null =
+                    artifacts.get_expression_type(object).is_some_and(|t| t.has_nullsafe_null());
+                record_magic_call_type(
+                    context,
+                    artifacts,
+                    span,
+                    magic_type,
+                    is_null_safe && method_resolution.encountered_null,
+                    object_has_nullsafe_null,
+                );
+
+                Ok(())
             },
         )?;
     }
@@ -654,55 +659,70 @@ where
             artifacts.set_expression_type(&span, TUnion::from_atomic(TAtomic::Error));
         }
     }
-    if let Some(list_result) = list_result {
-        let result =
-            add_optional_union_type((*list_result).clone(), artifacts.get_expression_type(&span), context.codebase);
+    if let Some(collection_result) = collection_result {
+        let result = add_optional_union_type(collection_result, artifacts.get_expression_type(&span), context.codebase);
         artifacts.set_expression_type(&span, result);
     }
 
     Ok(())
 }
 
-/// Reports a member of a `List` called on `object` when its value can also be an object, as `List<int>|Box`, as a
-/// method call on a value that is no object is reported. The bridge lowers such a call to the standard library's
-/// function on the array, so an object the value holds would never reach its own method of that name. Returns whether
-/// it reported the call.
-pub(crate) fn report_collection_method_on_object<A>(
-    context: &mut Context<'_, '_, A>,
-    artifacts: &AnalysisArtifacts,
-    object: &Expression<'_>,
-    selector: &ClassLikeMemberSelector<'_>,
-) -> bool
+/// Analyzes the call of each of `members`, a kind's member with the receiver's parts of that kind, or with one of them
+/// for a member that changes its receiver, on those parts of `object`, types the call `span` as the join of what each
+/// call gives, and gives that join, or None for no member.
+/// Where the call runs one of several, a member or an object's own method, each member's type arguments and type are
+/// recorded apart, as [`AnalysisArtifacts::get_member_call`] reads them, and the call's own are the last member's.
+/// What every member compares is reported together once it is all known, so an argument each kind's member searches
+/// or orders by is reported once for the call.
+#[allow(clippy::too_many_arguments)]
+fn analyze_collection_members<'ctx, 'ast, 'arena, A>(
+    context: &mut Context<'ctx, 'arena, A>,
+    block_context: &mut BlockContext<'ctx>,
+    artifacts: &mut AnalysisArtifacts,
+    members: Vec<(MethodIdentifier, TUnion)>,
+    runs_one_of: bool,
+    object: &'ast Expression<'arena>,
+    type_arguments: Option<&'ast TypeArgumentList<'arena>>,
+    argument_list: &'ast ArgumentList<'arena>,
+    is_null_safe: bool,
+    span: Span,
+) -> Result<Option<TUnion>, AnalysisError>
 where
     A: Arena,
 {
-    let (Some(object_type), ClassLikeMemberSelector::Identifier(method)) =
-        (artifacts.get_expression_type(object), selector)
-    else {
-        return false;
-    };
-    let holds = |kind: fn(&TAtomic) -> bool| object_type.types.iter().any(kind);
-    if !holds(|atomic| matches!(atomic, TAtomic::Array(_)))
-        || !holds(|atomic| matches!(atomic, TAtomic::Object(_) | TAtomic::Callable(_)))
-    {
-        return false;
+    let mut joined: Option<TUnion> = None;
+    let mut comparisons = Vec::new();
+    for (member, kind) in members {
+        // A member that isn't generic records no type arguments, so it keeps none of the member before it.
+        artifacts.inferred_type_arguments.remove(&(span.start.offset, span.end.offset));
+        comparisons.extend(with_receiver_type(artifacts, object, kind, |artifacts| {
+            analyze_extension_call(
+                context,
+                block_context,
+                artifacts,
+                member,
+                object,
+                type_arguments,
+                Some(argument_list),
+                is_null_safe,
+                span,
+            )
+        })?);
+        let Some(given) = artifacts.get_expression_type(&span).cloned() else {
+            unreachable!("the analysis of a PHP# member's call gives it a type, an error's included");
+        };
+        if runs_one_of {
+            let callee = FunctionLikeIdentifier::Method(member.get_class_name(), member.get_method_name());
+            artifacts.record_member_call(span, callee, given.clone(), context.codebase);
+        }
+        let given = add_optional_union_type(given, joined.as_ref(), context.codebase);
+        artifacts.set_expression_type(&span, given.clone());
+        joined = Some(given);
     }
+    // The receiver has its written type again, every part of it, which the help of a search reads.
+    report_comparisons(context, object, artifacts.get_expression_type(object), &comparisons, is_null_safe);
 
-    let method = String::from_utf8_lossy(method.value);
-    let receiver = display_type(context, object_type);
-    context.collector.report_with_code(
-        IssueCode::InvalidMethodAccess,
-        Issue::error(format!(
-            "`{receiver}` may be a collection or an object, and `{method}` runs a different method on each."
-        ))
-        .with_annotation(
-            Annotation::primary(selector.span()).with_message("The value can be a collection or an object."),
-        )
-        .with_annotation(Annotation::secondary(object.span()).with_message(format!("This is a `{receiver}`.")))
-        .with_help("Test which one the value is with `is` before the call."),
-    );
-
-    true
+    Ok(joined)
 }
 
 /// Runs `analyze` with the receiver `object` typed `receiver_type`, as an extension member's call takes it, and types
@@ -982,6 +1002,7 @@ where
 
 /// Gives return-type providers the first opportunity to describe an
 /// undocumented magic call, then falls back to the magic method's declaration.
+/// Returns the call's type, which the caller gives the `null` of `?->` as a declared call's.
 #[allow(clippy::expect_used)]
 pub(super) fn analyze_undocumented_method_return_type<'ctx, 'arena, A>(
     context: &mut Context<'ctx, 'arena, A>,
@@ -993,7 +1014,7 @@ pub(super) fn analyze_undocumented_method_return_type<'ctx, 'arena, A>(
     span: Span,
     invocation_kind: MethodInvocationKind,
     analyze_arguments: bool,
-) -> Result<(), AnalysisError>
+) -> Result<TUnion, AnalysisError>
 where
     A: Arena,
 {
@@ -1044,13 +1065,9 @@ where
         };
 
         let mut invocation = Invocation::new(target, InvocationArgumentsSource::ArgumentList(argument_list), span);
-        let signature_handled = if context.external_analysis_session.is_some()
+        let signature_handled = context.external_analysis_session.is_some()
             && context.plugin_registry.may_have_callable_signature_provider(&requested_identifier)
-        {
-            apply_callable_signature(context, artifacts, &requested_identifier, &mut invocation)
-        } else {
-            false
-        };
+            && apply_callable_signature(context, artifacts, &requested_identifier, &mut invocation);
 
         let mut invocation_template_result = template_result.clone();
         let mut parameter_types = WordMap::default();
@@ -1103,14 +1120,25 @@ where
         resulting_type = Some(add_optional_union_type(return_type, resulting_type.as_ref(), context.codebase));
     }
 
-    let mut resulting_type = resulting_type.unwrap_or_else(get_mixed);
-    if let Some(existing_type) = artifacts.get_expression_type(&span) {
-        resulting_type = add_optional_union_type(resulting_type, Some(existing_type), context.codebase);
-    }
+    Ok(resulting_type.unwrap_or_else(get_mixed))
+}
+
+/// Gives the call at `span` the type `magic_type` of its magic targets, with the `null` of `?->` as
+/// [`with_null_safe_null`] gives a declared call's, beside the type its declared targets gave it.
+pub(super) fn record_magic_call_type<A>(
+    context: &Context<'_, '_, A>,
+    artifacts: &mut AnalysisArtifacts,
+    span: Span,
+    magic_type: TUnion,
+    should_add_null: bool,
+    object_has_nullsafe_null: bool,
+) where
+    A: Arena,
+{
+    let magic_type = with_null_safe_null(artifacts, span, magic_type, should_add_null, object_has_nullsafe_null);
+    let resulting_type = add_optional_union_type(magic_type, artifacts.get_expression_type(&span), context.codebase);
 
     artifacts.set_expression_type(&span, resulting_type);
-
-    Ok(())
 }
 
 /// Checks if an expression ultimately derives from `$this` through a chain of method calls

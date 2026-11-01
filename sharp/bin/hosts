@@ -28,7 +28,7 @@ fi
 
 build_dir="$root/sharp/build/linux-$(uname -m)"
 fpm="$build_dir/sapi/fpm/php-fpm"
-mago="$build_dir/mago/release/mago"
+mago="$build_dir/mago/test-run/mago"
 install="$build_dir-zts/install"
 for needed in "$fpm:sharp/bin/build" "$mago:sharp/bin/test" "$install/bin/php-config:sharp/bin/build --zts"; do
   if [[ ! -x "${needed%%:*}" ]]; then
@@ -38,13 +38,16 @@ for needed in "$fpm:sharp/bin/build" "$mago:sharp/bin/test" "$install/bin/php-co
 done
 
 fixture="$root/sharp/hosts"
+# Composer keeps the copy of sharp/composer an earlier run installed while composer.lock is unchanged, so the install
+# starts from nothing installed and the fixture compiles against the standard library the tree holds.
+rm -rf "$fixture/vendor"
 composer install --no-interaction --no-progress --quiet --working-dir="$fixture"
 "$mago" --no-version-check --colors never --workspace "$fixture" compile
 
 # FrankenPHP's own build, as its go.sh runs it, without the modules that need C libraries the fixture doesn't use. It is
 # the release sharp/docker/runtime/frankenphp.Dockerfile builds, so the fixture is served by the server teams ship, and
 # each release builds in a folder of its own, so a new one never reuses an older one's source.
-frankenphp_release=v1.13.1
+frankenphp_release=v1.13.4
 frankenphp="$build_dir-zts/frankenphp/$frankenphp_release/frankenphp"
 if [[ ! -x "$frankenphp" || "$install/lib/libphp.so" -nt "$frankenphp" ]]; then
   source="$build_dir-zts/frankenphp/$frankenphp_release/source"

@@ -26,6 +26,7 @@ use mago_codex::ttype::atomic::callable::TCallableSignature;
 use mago_codex::ttype::atomic::generic::TGenericParameter;
 use mago_codex::ttype::atomic::scalar::TScalar;
 use mago_codex::ttype::atomic::scalar::class_like_string::TClassLikeString;
+use mago_codex::ttype::bound_is_equatable;
 use mago_codex::ttype::combine_union_types;
 use mago_codex::ttype::combiner::CombinerOptions;
 use mago_codex::ttype::comparator::ComparisonResult;
@@ -88,6 +89,7 @@ use crate::context::Context;
 use crate::context::block::BlockContext;
 use crate::effects::check::check_foreign_statics;
 use crate::error::AnalysisError;
+use crate::expression::binary::comparison::missing_equality;
 use crate::plugin::context::HookContext;
 use crate::resolver::class_name::report_missing_class;
 use crate::resolver::extension::class_member;
@@ -98,6 +100,7 @@ use crate::statement::function_like::FunctionLikeBody;
 use crate::statement::function_like::HintPlace;
 use crate::statement::function_like::analyze_function_like;
 use crate::statement::function_like::report_invalid_template_arguments;
+use crate::statement::function_like::report_undefined_bound_types;
 use crate::statement::function_like::report_undefined_type_references;
 use crate::utils::missing_type_hints;
 use crate::utils::names::and_list;
@@ -460,6 +463,7 @@ fn type_contains_template_param(type_union: &TUnion, param_name: Word, defining_
 /// - A method parameter type
 /// - A method return type
 /// - An `@extends`, `@implements`, or `@use` annotation
+/// - A bound the checker refused, as `TOther` in `<TOther, THolder : Order & TOther>`
 fn check_unused_template_parameters<'ctx, A>(
     context: &mut Context<'ctx, '_, A>,
     class_like_metadata: &'ctx ClassLikeMetadata,
@@ -480,8 +484,8 @@ fn check_unused_template_parameters<'ctx, A>(
     let class_name_span = class_like_metadata.name_span.unwrap_or(class_like_metadata.span);
     let sharp_class = context.dialect.is_sharp().then(|| short_name(class_original_name));
 
-    'templates: for (template_name, _) in &class_like_metadata.template_types {
-        if template_name.as_bytes().starts_with(b"_") {
+    'templates: for (template_name, template) in &class_like_metadata.template_types {
+        if template_name.as_bytes().starts_with(b"_") || template.named_by_refused_bound {
             continue;
         }
 
@@ -1566,6 +1570,7 @@ where
     if has_complete_hierarchy {
         check_unused_template_parameters(context, class_like_metadata);
     }
+    report_undefined_bound_types(context, &class_like_metadata.template_types);
     check_class_like_properties(context, class_like_metadata);
     check_docblock_declared_members(context, class_like_metadata, declaration_span);
     if links_to_sharp {
@@ -2876,6 +2881,28 @@ fn check_template_parameters<'ctx, A>(
                         );
                     }
                 }
+            }
+
+            // Spec section 11: a header's type argument of `Equatable` has `==`, as a written one anywhere else does.
+            if let Some(parent) = &sharp_parent
+                && bound_is_equatable(&parent_template.constraint)
+                && let Some(reason) = missing_equality(context, &extended_type, primary_annotation_span)
+            {
+                context.collector.report_with_code(
+                    IssueCode::TemplateConstraintViolation,
+                    Issue::error(format!(
+                        "Type argument `{extended_type_str}` does not satisfy `{parent}`'s `{template_name}`: {reason}."
+                    ))
+                    .with_annotation(
+                        Annotation::primary(primary_annotation_span)
+                            .with_message(format!("`{extended_type_str}` is supplied for `{template_name}` here...")),
+                    )
+                    .with_annotation(Annotation::secondary(parent_definition_span).with_message(format!(
+                        "...but `{template_name}` is bounded by `{}`.",
+                        display_type(context, &parent_template.constraint)
+                    )))
+                    .with_help("Supply a type that has `==`."),
+                );
             }
 
             if template_type.is_mixed() {

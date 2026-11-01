@@ -21,6 +21,8 @@ use std::process::Command;
 use std::slice;
 
 use mago_build_id::BUILD_ID;
+use mago_database::error::DatabaseError;
+use mago_database::error::IOAction;
 use mago_sharp_bridge::SHARP_UNIT_ABI;
 use mago_sharp_bridge::Unit;
 use mago_sharp_bridge::lower;
@@ -359,8 +361,34 @@ fn stamp_gives_the_size_and_hash_of_a_file_and_none_where_no_file_is() {
     assert_eq!(stamp(directory.path(), b"gone/Missing.sharp").unwrap(), None, "a missing folder holds no file");
     for under_a_file in [&b"app/Report.sharp/Inner.php"[..], b"app/Report.sharp/*.sharp"] {
         let error = stamp(directory.path(), under_a_file).expect_err("a file is no folder to read");
+        let DatabaseError::IOError { action, path, error } = error else { panic!("{error}") };
+        assert_eq!(action, IOAction::OpenFolder, "{}", String::from_utf8_lossy(under_a_file));
+        assert!(path.ends_with("app/Report.sharp"), "{}", path.display());
         assert_eq!(error.kind(), std::io::ErrorKind::NotADirectory, "{}", String::from_utf8_lossy(under_a_file));
     }
+}
+
+/// An input file the stamp can't read fails it with the file's path and "read the file". Root reads a file of mode
+/// 000, so the test has nothing to show there.
+#[cfg(unix)]
+#[test]
+fn stamp_names_an_input_file_it_cannot_read() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = tempfile::tempdir().unwrap();
+    write(directory.path(), "app/Report.sharp", SOURCE);
+    let file = directory.path().join("app/Report.sharp");
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o000)).unwrap();
+    if fs::read(&file).is_ok() {
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o644)).unwrap();
+        return;
+    }
+
+    let stamped = stamp(directory.path(), b"app/Report.sharp");
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o644)).unwrap();
+
+    let error = stamped.expect_err("a file that can't be read can't be stamped");
+    assert_eq!(error.to_string(), format!("can't read the file `{}`: Permission denied (os error 13)", file.display()));
 }
 
 /// `SOURCE_LISTING` stamps the names of a folder's `.sharp` files and of its namespace folders, so a file or a folder
@@ -701,27 +729,29 @@ const ZEND_LANGUAGE_PARSER_H: &str = "  enum zendtokentype
   };
 ";
 
+/// The paths in the repository of the generator and of the bridge sources whose layouts it hashes.
+const GENERATOR: &str = "scripts/regen-sharp-kinds.php";
+const LIB: &str = "crates/sharp-bridge/src/lib.rs";
+const UNIT: &str = "crates/sharp-bridge/src/unit.rs";
+
 /// The generator given only `zend_ast`, run in a copy of the repository's script and bridge sources after `edit`
-/// changes one of those sources. The copy lives as long as the returned folder.
+/// changes one of those files, named by its path in the repository. The copy lives as long as the returned folder.
 fn generator(zend_ast: &str, edit: Option<(&str, &str, &str)>) -> (tempfile::TempDir, Command) {
     let root = tempfile::tempdir().unwrap();
-    let sources = root.path().join("crates/sharp-bridge/src");
     fs::create_dir_all(root.path().join("scripts")).unwrap();
-    fs::create_dir_all(&sources).unwrap();
-    fs::copy(repository().join("scripts/regen-sharp-kinds.php"), root.path().join("scripts/regen-sharp-kinds.php"))
-        .unwrap();
-    for file in ["lib.rs", "unit.rs"] {
-        fs::copy(repository().join("crates/sharp-bridge/src").join(file), sources.join(file)).unwrap();
+    fs::create_dir_all(root.path().join("crates/sharp-bridge/src")).unwrap();
+    for file in [GENERATOR, LIB, UNIT] {
+        fs::copy(repository().join(file), root.path().join(file)).unwrap();
     }
     if let Some((file, from, to)) = edit {
-        let source = fs::read_to_string(sources.join(file)).unwrap();
+        let source = fs::read_to_string(root.path().join(file)).unwrap();
         assert!(source.contains(from), "{file} contains `{from}`");
-        fs::write(sources.join(file), source.replacen(from, to, 1)).unwrap();
+        fs::write(root.path().join(file), source.replacen(from, to, 1)).unwrap();
     }
     fs::write(root.path().join("zend_ast.h"), zend_ast).unwrap();
 
     let mut command = Command::new("php");
-    command.arg(root.path().join("scripts/regen-sharp-kinds.php")).arg(root.path().join("zend_ast.h"));
+    command.arg(root.path().join(GENERATOR)).arg(root.path().join("zend_ast.h"));
 
     (root, command)
 }
@@ -754,7 +784,7 @@ fn the_unit_abi_changes_with_the_kind_table_the_tokens_and_the_layouts() {
     let base = generated_abi(ZEND_AST_H, ZEND_LANGUAGE_PARSER_H, None);
     assert_eq!(generated_abi(ZEND_AST_H, ZEND_LANGUAGE_PARSER_H, None), base);
     assert_eq!(
-        generated_abi(ZEND_AST_H, ZEND_LANGUAGE_PARSER_H, Some(("lib.rs", "/// First line.", "/// The first line."))),
+        generated_abi(ZEND_AST_H, ZEND_LANGUAGE_PARSER_H, Some((LIB, "/// First line.", "/// The first line."))),
         base,
         "a comment is not layout"
     );
@@ -776,34 +806,38 @@ fn the_unit_abi_changes_with_the_kind_table_the_tokens_and_the_layouts() {
         ("a token", generated_abi(ZEND_AST_H, &ZEND_LANGUAGE_PARSER_H.replace("T_FILE = 347", "T_FILE = 348"), None)),
         (
             "a sharp_node field",
-            generated_abi(ZEND_AST_H, ZEND_LANGUAGE_PARSER_H, Some(("lib.rs", "pub line: u32,", "pub line: u64,"))),
+            generated_abi(ZEND_AST_H, ZEND_LANGUAGE_PARSER_H, Some((LIB, "pub line: u32,", "pub line: u64,"))),
         ),
         (
             "a sharp_value case",
             generated_abi(
                 ZEND_AST_H,
                 ZEND_LANGUAGE_PARSER_H,
-                Some(("lib.rs", "SHARP_LONG,", "SHARP_LONG,\n    SHARP_ARRAY,")),
+                Some((LIB, "SHARP_LONG,", "SHARP_LONG,\n    SHARP_ARRAY,")),
             ),
         ),
         (
             "a sharp_str field",
-            generated_abi(ZEND_AST_H, ZEND_LANGUAGE_PARSER_H, Some(("lib.rs", "pub len: u32,", "pub len: u64,"))),
+            generated_abi(ZEND_AST_H, ZEND_LANGUAGE_PARSER_H, Some((LIB, "pub len: u32,", "pub len: u64,"))),
         ),
         (
             "a header field",
             generated_abi(
                 ZEND_AST_H,
                 ZEND_LANGUAGE_PARSER_H,
-                Some(("unit.rs", "pub texts_size: u32,", "pub texts_size: u64,")),
+                Some((UNIT, "pub texts_size: u32,", "pub texts_size: u64,")),
             ),
         ),
         (
             "a sharp_input field",
+            generated_abi(ZEND_AST_H, ZEND_LANGUAGE_PARSER_H, Some((UNIT, "pub mtime_ns: i64,", "pub mtime_ns: u64,"))),
+        ),
+        (
+            "the revision",
             generated_abi(
                 ZEND_AST_H,
                 ZEND_LANGUAGE_PARSER_H,
-                Some(("unit.rs", "pub mtime_ns: i64,", "pub mtime_ns: u64,")),
+                Some((GENERATOR, "const REVISION = 1;", "const REVISION = 2;")),
             ),
         ),
     ] {

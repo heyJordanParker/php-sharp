@@ -12,10 +12,14 @@ var_dump($files->isDirectory("$folder/nested/deeper"), $files->exists("$folder/n
 
 $file = "$folder/notes.txt";
 var_dump($files->read($file), $files->readLines($file), $files->size($file), $files->lastModified($file));
+$written = (new DateTimeImmutable())->getTimestamp();
 $files->write($file, "one\r\ntwo\n");
 $files->append($file, "three\n");
 var_dump(json_encode($files->read($file)), $files->readLines($file), $files->size($file), $files->exists($file));
-var_dump(abs($files->lastModified($file)->epochSeconds - time()) <= 5);
+// The write's time is between the second before it and the second after, however long it takes. A file's time comes
+// from the kernel's coarse clock, which can be a tick behind, so its second can be the one before.
+$modified = $files->lastModified($file)->epochSeconds;
+var_dump($written - 1 <= $modified && $modified <= (new DateTimeImmutable())->getTimestamp());
 // Lines read one at a time, each line ending dropped, and null for a missing file.
 $lazy = $files->readLinesLazily($file);
 foreach ($lazy as $line) {

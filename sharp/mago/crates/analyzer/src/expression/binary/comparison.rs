@@ -9,12 +9,15 @@ use mago_codex::ttype::atomic::TAtomic;
 use mago_codex::ttype::atomic::array::TArray;
 use mago_codex::ttype::atomic::object::TObject;
 use mago_codex::ttype::atomic::scalar::TScalar;
+use mago_codex::ttype::atomic::scalar::class_like_string::TClassLikeString;
+use mago_codex::ttype::bound_is_equatable;
 use mago_codex::ttype::get_array_parameters;
 use mago_codex::ttype::get_bool;
 use mago_codex::ttype::get_false;
 use mago_codex::ttype::get_mixed;
 use mago_codex::ttype::get_named_object;
 use mago_codex::ttype::get_true;
+use mago_codex::ttype::is_key_type;
 use mago_codex::ttype::template::inferred_type_replacer;
 use mago_codex::ttype::union::TUnion;
 use mago_names::binding::php_operator_name;
@@ -62,6 +65,7 @@ use crate::expression::binary::utils::is_always_less_than;
 use crate::expression::binary::utils::is_always_less_than_or_equal;
 use crate::expression::binary::utils::report_tied_operator;
 use crate::expression::binary::utils::takes_operands;
+use crate::expression::is_refused_type;
 use crate::expression::with_type_arguments;
 use crate::statement::class_like::r#struct::data_enum;
 use crate::statement::class_like::r#struct::declares_equality;
@@ -658,7 +662,7 @@ fn involves_external_reference(expr: &Expression<'_>, block_context: &BlockConte
 
 /// Checks a single operand of a comparison by `operator` for problematic types, naming it `subject`, as "Left operand in
 /// `<` comparison" names it in PHP and "Left operand of `<`" in PHP#. `other_type` is the other operand's. In PHP# an
-/// `Any` operand is named `Any`, with the check that narrows it.
+/// `Any` operand is named `Any`, with the check that narrows it. Gives whether it reported the operand.
 fn check_comparison_operand<A>(
     context: &mut Context<'_, '_, A>,
     operand: &Expression<'_>,
@@ -666,7 +670,8 @@ fn check_comparison_operand<A>(
     other_type: &TUnion,
     subject: &str,
     operator: &BinaryOperator<'_>,
-) where
+) -> bool
+where
     A: Arena,
 {
     let op_str = BytesDisplay(operator.as_bytes());
@@ -698,10 +703,7 @@ fn check_comparison_operand<A>(
     {
         let issue = if context.dialect.is_sharp() {
             let (reason, note) = if operator.is_equality() {
-                (
-                    "compares by value only with a string, a number, a `bool`, an enum case, a struct or a collection",
-                    "An `Any` may hold any value, so `==` cannot compare it strictly until it is checked.",
-                )
+                (ANY_EQUALITY, "An `Any` may hold any value, so `==` cannot compare it strictly until it is checked.")
             } else {
                 (
                     "has no order",
@@ -745,7 +747,11 @@ fn check_comparison_operand<A>(
             .with_note(format!("If this operand is `false` at runtime, PHP's specific comparison rules for `false` with `{op_str}` will apply."))
             .with_help("Ensure this operand is non-false or that comparison with `false` is intended and handled safely."),
         );
+    } else {
+        return false;
     }
+
+    true
 }
 
 /// Whether a PHP# `Any?` compares with a value of `other_type` by value, as spec sections 19 and 24 decide for a string,
@@ -989,18 +995,35 @@ where
         unreachable!("`==` refuses elements only of two collections of one kind");
     };
 
-    match sharp_refusal(operator, &lhs, &rhs, codebase) {
+    refusal_reason(context, operator, &lhs, &rhs, sharp_refusal(operator, &lhs, &rhs, codebase))
+}
+
+/// Why `operator` cannot compare a value of `lhs_type` with one of `rhs_type`, as `refused` gives the reason, read
+/// through nested collections, as "`Cart` declares no `operator ==`".
+fn refusal_reason<A>(
+    context: &Context<'_, '_, A>,
+    operator: &BinaryOperator<'_>,
+    lhs_type: &TUnion,
+    rhs_type: &TUnion,
+    refused: Option<Refusal>,
+) -> String
+where
+    A: Arena,
+{
+    let codebase = context.codebase;
+    match refused {
         Some(Refusal::Instance) => {
-            let class = display_refused_side(context, &lhs, &rhs, Comparand::is_instance);
+            let class = display_refused_side(context, lhs_type, rhs_type, Comparand::is_instance);
 
             format!("`{class}` declares no `operator ==`")
         }
-        Some(Refusal::CollectionElement) => element_reason(context, operator, &lhs, &rhs),
+        Some(Refusal::CollectionElement) => element_reason(context, operator, lhs_type, rhs_type),
         Some(Refusal::StructProperty) => {
-            struct_property_issue(context, &lhs, &rhs).message.trim_end_matches('.').to_owned()
+            struct_property_issue(context, lhs_type, rhs_type).message.trim_end_matches('.').to_owned()
         }
-        Some(Refusal::Collection) => collection_reason(context, unsupported_collection(&lhs, &rhs, codebase)),
-        _ => format!("`{}` never equals `{}`", display_operand(context, &lhs), display_operand(context, &rhs)),
+        Some(Refusal::Collection) => collection_reason(context, unsupported_collection(lhs_type, rhs_type, codebase)),
+        Some(Refusal::TypeParameter) => type_parameter_reason(lhs_type, rhs_type, codebase),
+        _ => format!("`{}` never equals `{}`", display_operand(context, lhs_type), display_operand(context, rhs_type)),
     }
 }
 
@@ -1032,6 +1055,31 @@ pub(crate) enum Refusal {
     DifferentTypes,
     /// A comparison of instances that two operators take, of which neither is more specific.
     Tied,
+    /// `==` or `!=` on a value of a type parameter whose bound gives it no `==`, spec section 11: one with no bound.
+    TypeParameter,
+}
+
+/// The type parameter a value of `union` may be whose bound gives it no `==`, spec section 11: one bound by neither
+/// `Equatable` nor a type with `==`, which leaves its values `Any?`. A bound of a class that declares no `operator ==`
+/// keeps the refusal of an instance of that class.
+pub(crate) fn unequatable_parameter(union: &TUnion, codebase: &CodebaseMetadata) -> Option<Word> {
+    union.types.iter().find_map(|atomic| match atomic {
+        TAtomic::GenericParameter(parameter)
+            if !bound_is_equatable(&parameter.constraint)
+                && comparands(&parameter.constraint, codebase).contains(&Comparand::Any) =>
+        {
+            Some(parameter.parameter_name)
+        }
+        _ => None,
+    })
+}
+
+/// Whether every value of `union` but `null` is a value of a type parameter whose bound gives it `==` whatever its
+/// type argument, spec section 11.
+fn is_equatable_parameter(union: &TUnion) -> bool {
+    union.types.iter().filter(|atomic| !atomic.is_null()).all(
+        |atomic| matches!(atomic, TAtomic::GenericParameter(parameter) if bound_is_equatable(&parameter.constraint)),
+    )
 }
 
 /// Whether spec section 19 compares a value of `lhs_type` with one of `rhs_type` as two floats: both are numbers, `null`
@@ -1058,6 +1106,13 @@ pub(crate) fn sharp_refusal(
     rhs_type: &TUnion,
     codebase: &CodebaseMetadata,
 ) -> Option<Refusal> {
+    // A comparison no source writes, as the `===` a list pattern's count runs as, has no operator token to refuse. A
+    // refused side, as a value of a type parameter whose bound the checker refused, has its one error already, as an
+    // arithmetic operand has.
+    if operator.span().length() == 0 || is_refused_type(lhs_type) || is_refused_type(rhs_type) {
+        return None;
+    }
+
     refusal(operator, lhs_type, rhs_type, codebase, &mut Vec::new())
 }
 
@@ -1079,11 +1134,6 @@ fn refusal(
             .iter()
             .any(|side| side.types.iter().any(|atomic| matches!(atomic, TAtomic::Callable(_))));
 
-    // A comparison no source writes, as the `===` a list pattern's count runs as, has no operator token to refuse.
-    if operator.span().length() == 0 {
-        return None;
-    }
-
     match operator {
         BinaryOperator::Identical(_) | BinaryOperator::NotIdentical(_) => {
             if lhs.iter().chain(&rhs).any(|comparand| matches!(comparand, Comparand::Struct(_))) {
@@ -1097,6 +1147,17 @@ fn refusal(
         }
         // A side that is only `null` makes a null test, which `==` lifts.
         BinaryOperator::Equal(_) | BinaryOperator::NotEqual(_) if lhs.is_empty() || rhs.is_empty() => None,
+        // A type parameter has `==` only through its bound, spec section 11, and `Equatable` gives it one.
+        BinaryOperator::Equal(_) | BinaryOperator::NotEqual(_)
+            if [lhs_type, rhs_type].into_iter().any(|side| unequatable_parameter(side, codebase).is_some()) =>
+        {
+            Some(Refusal::TypeParameter)
+        }
+        BinaryOperator::Equal(_) | BinaryOperator::NotEqual(_)
+            if is_equatable_parameter(lhs_type) && is_equatable_parameter(rhs_type) =>
+        {
+            None
+        }
         BinaryOperator::Equal(_) | BinaryOperator::NotEqual(_) if compares_function => Some(Refusal::Instance),
         BinaryOperator::Equal(_) | BinaryOperator::NotEqual(_) => {
             let structs: Vec<Word> = lhs
@@ -1404,6 +1465,11 @@ pub(crate) fn report_sharp_refusal<A>(
             IssueCode::InvalidOperand,
             different_types_issue(&pair, "Convert one side so both sides have the same type."),
         ),
+        Refusal::TypeParameter => (
+            IssueCode::InvalidOperand,
+            Issue::error(format!("{}.", type_parameter_reason(lhs_type, rhs_type, context.codebase)))
+                .with_note(TYPE_PARAMETER_EQUALITY),
+        ),
     };
     // A pattern's read of its subject has no text of its own, so its refusal is at the operator: the one the pattern
     // writes, or the `==` a value pattern runs as, which spans the value.
@@ -1417,9 +1483,15 @@ pub(crate) fn report_sharp_refusal<A>(
     );
 }
 
-/// Reports `selector`, the function a PHP# `sortedBy` orders by, when `<` cannot compare two keys it returns, of
-/// `key_type`, with the report `<` gives. A `null` key sorts before every other key, so only the other keys must order.
-pub(crate) fn check_sorted_by_key<A>(context: &mut Context<'_, '_, A>, selector: &Expression<'_>, key_type: &TUnion)
+/// Reports `selector`, the function the PHP# collection member `member` orders by, as `sortedBy` does, when `<` cannot
+/// compare two keys it returns, of `key_type`, with the report `<` gives. A `null` key sorts before every other key, so
+/// only the other keys must order. Gives whether it reported the key.
+pub(crate) fn check_ordered_key<A>(
+    context: &mut Context<'_, '_, A>,
+    member: &str,
+    selector: &Expression<'_>,
+    key_type: &TUnion,
+) -> bool
 where
     A: Arena,
 {
@@ -1428,26 +1500,23 @@ where
     let issue = match ordering_refusal(&key_type, &key_type, context.codebase) {
         None => {
             let ordering = BinaryOperator::LessThan(Span::zero());
-            check_comparison_operand(context, selector, &key_type, &key_type, "The `sortedBy` key", &ordering);
+            let operand = format!("The `{member}` key");
 
-            return;
+            return check_comparison_operand(context, selector, &key_type, &key_type, &operand, &ordering);
         }
         Some(Refusal::DifferentTypes) => {
-            let comparison = format!("`sortedBy` cannot compare two keys of `{}`", display_operand(context, &key_type));
+            let comparison = format!("`{member}` cannot compare two keys of `{}`", display_operand(context, &key_type));
 
             different_types_issue(&comparison, "Convert the key so every key has the same type.")
         }
-        Some(refusal @ Refusal::Instance) => unordered_issue(
-            "sortedBy",
-            &display_refused_part(context, &key_type, Comparand::is_instance),
-            refusal,
-            None,
-        ),
+        Some(refusal @ Refusal::Instance) => {
+            unordered_issue(member, &display_refused_part(context, &key_type, Comparand::is_instance), refusal, None)
+        }
         Some(refusal @ Refusal::UnorderedOperand) => {
             let unordered_enum = unordered_enum(context, &key_type, &key_type);
             let part = display_refused_part(context, &key_type, Comparand::is_unordered);
 
-            unordered_issue("sortedBy", &part, refusal, unordered_enum.as_deref())
+            unordered_issue(member, &part, refusal, unordered_enum.as_deref())
         }
         Some(Refusal::Tied) => {
             let ordering = BinaryOperator::Spaceship(Span::zero());
@@ -1458,7 +1527,7 @@ where
             };
             report_tied_operator(context, &ordering, &[&key_type, &key_type], &tied, selector.span());
 
-            return;
+            return true;
         }
         Some(
             Refusal::Identity
@@ -1467,7 +1536,8 @@ where
             | Refusal::CollectionElement
             | Refusal::Collection
             | Refusal::UncheckedObject
-            | Refusal::NullableOperand,
+            | Refusal::NullableOperand
+            | Refusal::TypeParameter,
         ) => {
             unreachable!("an ordering of a key that is not `null` is refused only for its order or its types")
         }
@@ -1477,14 +1547,98 @@ where
         IssueCode::InvalidArgument,
         issue.with_annotation(Annotation::primary(selector.span()).with_message(format!("This returns `{key_name}`."))),
     );
+
+    true
 }
 
-/// Reports `value`, of `value_type`, which a PHP# `List`'s `method` searches `receiver` for, when `==` cannot compare
-/// an element of `element_type` with it, as spec section 12 decides: "`contains`, a `List`'s `remove`, `indexOf` and
-/// `Set<T>` need `==` on the element type." A search refuses what `element == value` refuses, so it agrees with
-/// `any(element => element == value)`: a class that declares no `operator ==` is refused with the reason `==` gives, as
-/// is an element the operator's call does not always take, an `Iterable` element is refused, as `==` on it is, and an `Any` element is refused unless the value is a string, a number or an enum case. A `null_safe` call's
-/// help keeps its `?.`.
+/// What a PHP# search compares its value with by `==`, spec section 12, which decides the `===` test a refused search's
+/// help offers in its place.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Searched {
+    /// Each element of a `List` or a `Set`, which its `any` reaches, as `carts.any(c => c === cart)`.
+    Elements,
+    /// Each key of a `Map`, which its `keys()` reaches, as `counts.keys().any(c => c === cart)`, since its `any` reaches
+    /// its values.
+    Keys,
+    /// Each value an `Iterable` gives a loop, which its `toList()` reaches, as `rows.toList().any(c => c === cart)`,
+    /// since an `Iterable` has no `any`.
+    Iterated,
+    /// The elements of a receiver of several kinds, as a `List<Cart>|Map<Cart, int>` or a `List<Cart>|Box`, which reach
+    /// them through different members or none, so no one `===` test reaches them all.
+    Kinds,
+    /// The elements of the list a spread passes, as `contains(...[cart])`, which are no one value a `===` tests.
+    Spread,
+}
+
+impl Searched {
+    /// What a search of a value of `receiver_type` compares its value with, read from every part of it, whether or not
+    /// that part's search is checked: a `List`'s or a `Set`'s elements, a `Map`'s keys, or what an `Iterable` gives a
+    /// loop, and `Kinds` where the parts differ or a part is no collection, as a class with its own `contains`. A member
+    /// that reads its receiver `by_loop`, as an extension of `Iterable<T>` does, reads a `Map` by its entries.
+    pub(crate) fn of(receiver_type: &TUnion, by_loop: bool) -> Searched {
+        receiver_type
+            .types
+            .iter()
+            .filter(|atomic| !matches!(atomic, TAtomic::Null))
+            .map(|atomic| match atomic {
+                TAtomic::Array(TArray::Keyed(_)) if by_loop => Searched::Iterated,
+                TAtomic::Array(TArray::Keyed(_)) => Searched::Keys,
+                TAtomic::Iterable(_) => Searched::Iterated,
+                TAtomic::Array(_) => Searched::Elements,
+                _ => Searched::Kinds,
+            })
+            .reduce(Searched::join)
+            .unwrap_or(Searched::Kinds)
+    }
+
+    /// What two searches with one argument compare it with together: what both compare it with, or `Kinds` where they
+    /// differ.
+    pub(crate) fn join(self, other: Searched) -> Searched {
+        if self == other { self } else { Searched::Kinds }
+    }
+
+    /// The members the help's `===` test runs through on the receiver, as `any` or `keys().any`, or none.
+    const fn identity_test(self) -> Option<&'static str> {
+        match self {
+            Searched::Elements => Some("any"),
+            Searched::Keys => Some("keys().any"),
+            Searched::Iterated => Some("toList().any"),
+            Searched::Kinds | Searched::Spread => None,
+        }
+    }
+}
+
+/// Why a search of a PHP# collection for a value of `value_type` cannot compare an element of `element_type` with it,
+/// or `None` when it can, as spec section 12 decides: "`contains`, a `List`'s `remove`, `indexOf` and `Set<T>` need
+/// `==` on the element type." A search refuses what `element == value` refuses, so it agrees with
+/// `any(element => element == value)`. `==` checks the operands of a declared operator as the arguments of its call,
+/// so `Money::op_Equality` refuses a `Money|Line` element as `element == money` does. An `Any` element is refused
+/// only by the value it is compared with, which [`check_element_equality`] checks.
+pub(crate) fn search_refusal(
+    element_type: &TUnion,
+    value_type: &TUnion,
+    codebase: &CodebaseMetadata,
+) -> Option<Refusal> {
+    // A search is always written in the source, so it skips the check `sharp_refusal` makes for a comparison no source
+    // writes, and `refusal` reads no span.
+    let equality = BinaryOperator::Equal(Span::zero());
+
+    refusal(&equality, element_type, value_type, codebase, &mut Vec::new()).or_else(|| {
+        let method = get_comparison_method(&equality, element_type, value_type, codebase)?.chosen()?;
+        let operands = [&element_type.to_non_nullable(), &value_type.to_non_nullable()];
+
+        (!element_type.is_mixed() && !takes_operands(codebase, method, &operands)).then_some(Refusal::DifferentTypes)
+    })
+}
+
+/// Reports `value`, of `value_type`, which a PHP# collection's `method` searches `receiver` for, when `==` cannot
+/// compare one of `element_type` with it: each element of a `List` or a `Set`, each key of a `Map`, or each value an
+/// `Iterable` gives a loop, as `contains`, `indexOf`, `remove`, `has` and an extension's marked parameter search them.
+/// [`search_refusal`] decides it: a class that declares no `operator ==` is
+/// refused with the reason `==` gives, as is an element the operator's call does not always take, an `Iterable`
+/// element is refused, as `==` on it is, and an `Any` element is refused unless the value is a string, a number or an
+/// enum case. A `null_safe` call's help keeps its `?.`. What is `searched` decides the `===` test the help offers
+/// instead, if any, and names an element a key where it is a `Map`'s. Gives whether it reported the search.
 pub(crate) fn check_element_equality<A>(
     context: &mut Context<'_, '_, A>,
     method: &str,
@@ -1493,40 +1647,34 @@ pub(crate) fn check_element_equality<A>(
     element_type: &TUnion,
     value_type: &TUnion,
     null_safe: bool,
-) where
+    searched: Searched,
+) -> bool
+where
     A: Arena,
 {
-    // The operator's span only marks it as written in the source, which `sharp_refusal` checks.
     let equality = BinaryOperator::Equal(value.span());
     let (element_name, value_name) = (
         display_operand(context, &element_type.to_non_nullable()),
         display_operand(context, &value_type.to_non_nullable()),
     );
-    // `==` checks the operands of a declared operator as the arguments of its call, so `Money::op_Equality` refuses a
-    // `Money|Line` element as `element == money` does. An `Any` element keeps its own report.
-    let refusal = sharp_refusal(&equality, element_type, value_type, context.codebase).or_else(|| {
-        let method = get_comparison_method(&equality, element_type, value_type, context.codebase)?.chosen()?;
-        let operands = [&element_type.to_non_nullable(), &value_type.to_non_nullable()];
-
-        (!element_type.is_mixed() && !takes_operands(context.codebase, method, &operands))
-            .then_some(Refusal::DifferentTypes)
-    });
+    let refusal = search_refusal(element_type, value_type, context.codebase);
     let (code, issue) = match refusal {
-        None => {
-            if element_type.is_mixed() {
-                let subject = format!("Each element of `List<{}>`", display_operand(context, element_type));
-                check_comparison_operand(context, value, element_type, value_type, &subject, &equality);
-            }
+        None if element_type.is_mixed() => {
+            // The receiver is named as the call writes it, since it may be several kinds of collection.
+            let element = if searched == Searched::Keys { "key" } else { "element" };
+            let subject = format!("Each {element} of `{}`", quoted_source(context, receiver.span()));
 
-            return;
+            return check_comparison_operand(context, value, element_type, value_type, &subject, &equality);
         }
+        None => return false,
         Some(Refusal::Instance) => {
             let class = display_refused_side(context, element_type, value_type, Comparand::is_instance);
-            let (receiver, value) = (quoted_source(context, receiver.span()), quoted_source(context, value.span()));
-            // The lambda names an element by the class's initial, as `l` for a `Line`, unless the call already uses it.
-            let initial = class.chars().next().map(|first| first.to_lowercase().to_string()).unwrap_or_default();
-            let element = if initial == receiver || initial == value { "element".to_owned() } else { initial };
-            let access = if null_safe { "?." } else { "." };
+            let help = match same_object_test(context, receiver, value, Some(&class), null_safe, searched) {
+                Some(test) => {
+                    format!("Declare `operator ==` and `hash()` in `{class}`, or test for the same object with {test}.")
+                }
+                None => format!("Declare `operator ==` and `hash()` in `{class}`."),
+            };
 
             (
                 IssueCode::InvalidArgument,
@@ -1534,24 +1682,23 @@ pub(crate) fn check_element_equality<A>(
                     "`{method}` compares elements with `==`, and `{class}` declares no `operator ==`."
                 ))
                 .with_note("`==` on a class instance exists only where its class declares `operator ==`.")
-                .with_help(format!(
-                    "Declare `operator ==` and `hash()` in `{class}`, or test for the same object with \
-                         `{receiver}{access}any({element} => {element} === {value})`."
-                )),
+                .with_help(help),
             )
         }
         Some(Refusal::UncheckedObject) => {
-            let (receiver, value) = (quoted_source(context, receiver.span()), quoted_source(context, value.span()));
-            let access = if null_safe { "?." } else { "." };
+            let quoted = quoted_source(context, value.span());
             let element = display_operand(context, element_type);
+            let same_object =
+                if searched == Searched::Spread { format!("an element of `{quoted}`") } else { format!("`{quoted}`") };
+            let issue = Issue::error(format!(
+                "`{method}` compares elements with `==`, and an unchecked `{element}` element can't tell the same object as {same_object} from an equal value."
+            ));
+            let issue = match same_object_test(context, receiver, value, None, null_safe, searched) {
+                Some(test) => issue.with_help(format!("Test for the same object with {test}.")),
+                None => issue,
+            };
 
-            (
-                IssueCode::InvalidArgument,
-                Issue::error(format!(
-                    "`{method}` compares elements with `==`, and an unchecked `{element}` element can't tell the same object as `{value}` from an equal value."
-                ))
-                .with_help(format!("Test for the same object with `{receiver}{access}any(element => element === {value})`.")),
-            )
+            (IssueCode::InvalidArgument, issue)
         }
         Some(Refusal::StructProperty) => {
             let issue = struct_property_issue(context, element_type, value_type);
@@ -1617,8 +1764,16 @@ pub(crate) fn check_element_equality<A>(
             };
             report_tied_operator(context, &equality, &operands, &tied, value.span());
 
-            return;
+            return true;
         }
+        Some(Refusal::TypeParameter) => (
+            IssueCode::InvalidArgument,
+            Issue::error(format!(
+                "`{method}` compares elements with `==`, and {}.",
+                type_parameter_reason(element_type, value_type, context.codebase)
+            ))
+            .with_note(TYPE_PARAMETER_EQUALITY),
+        ),
         Some(Refusal::Identity | Refusal::StructIdentity | Refusal::NullableOperand | Refusal::UnorderedOperand) => {
             unreachable!("`==` is refused only for a collection, an instance, or the operands of its operator")
         }
@@ -1631,6 +1786,35 @@ pub(crate) fn check_element_equality<A>(
                 .with_message(format!("Each `{element_name}` element is compared with this by `==`.")),
         ),
     );
+
+    true
+}
+
+/// The test for the same object a refused search's help offers in place of `==`, as `carts.any(c => c === cart)`, run
+/// on `receiver` through the member what is `searched` reaches its elements with, or None where no one member does.
+/// The lambda names an element by the initial of `class`, as `l` for a `Line`, unless the call already uses that
+/// name, and `element` otherwise. A `null_safe` call's test keeps its `?.`.
+fn same_object_test<A>(
+    context: &Context<'_, '_, A>,
+    receiver: &Expression<'_>,
+    value: &Expression<'_>,
+    class: Option<&str>,
+    null_safe: bool,
+    searched: Searched,
+) -> Option<String>
+where
+    A: Arena,
+{
+    let test = searched.identity_test()?;
+    let (receiver, value) = (quoted_source(context, receiver.span()), quoted_source(context, value.span()));
+    let element = class
+        .and_then(|class| class.chars().next())
+        .map(|first| first.to_lowercase().to_string())
+        .filter(|initial| *initial != receiver && *initial != value)
+        .unwrap_or_else(|| "element".to_owned());
+    let access = if null_safe { "?." } else { "." };
+
+    Some(format!("`{receiver}{access}{test}({element} => {element} === {value})`"))
 }
 
 /// The first property of the struct `name`, in declaration order, or field of a case of the enum `name`, that its own
@@ -1640,7 +1824,8 @@ pub(crate) fn check_element_equality<A>(
 /// `operator ==`, and a field of a generic enum's case as the type argument `type_of` gives the enum, spec section 31,
 /// with the property's type as those type arguments give it. `visiting` holds the structs and enums being checked, so
 /// one that holds itself, as in `Node? next`, compares by the rest. It alone decides whether a struct or a case has
-/// `==`, for `==`, a search, a `Map` key and a `Set` element.
+/// `==`, for `==`, a search, a `Map` key, a `Set` element and a type argument of `Equatable`, each property by
+/// [`equality_refusal`].
 pub(crate) fn struct_property_refusal<'codebase>(
     name: Word,
     type_of: &TUnion,
@@ -1674,16 +1859,85 @@ pub(crate) fn struct_property_refusal<'codebase>(
             Some(enum_type_arguments) => with_type_arguments(declared, class.name, Some(enum_type_arguments), codebase),
             None => inferred_type_replacer::replace(declared, &type_arguments, codebase),
         };
-        // `==` on two `Any` values is refused: an `Any` compares by value only with a value of a known type.
-        if comparands(&r#type, codebase).contains(&Comparand::Any) {
-            return Some((property, r#type, None));
-        }
-
-        refusal(&equality, &r#type, &r#type, codebase, visiting).map(|refusal| (property, r#type, Some(refusal)))
+        equality_refusal(&equality, &r#type, codebase, visiting).map(|reason| (property, r#type, reason))
     });
     visiting.pop();
 
     refused
+}
+
+/// Why `==`, written as `equality`, cannot compare two values of `r#type`, spec section 19, or `None` when it can: the
+/// one check of whether a type has `==`, which a struct's property, a case's field and a type argument of `Equatable`
+/// each pass. The reason is `None` for an `Any`, which `==` compares by value only with a value of a known type. A type
+/// parameter's bound decides its own, spec section 11.
+fn equality_refusal(
+    equality: &BinaryOperator<'_>,
+    r#type: &TUnion,
+    codebase: &CodebaseMetadata,
+    visiting: &mut Vec<Word>,
+) -> Option<Option<Refusal>> {
+    let holds_type_parameter = r#type.types.iter().any(|atomic| matches!(atomic, TAtomic::GenericParameter(_)));
+    if !holds_type_parameter && comparands(r#type, codebase).contains(&Comparand::Any) {
+        return Some(None);
+    }
+
+    refusal(equality, r#type, r#type, codebase, visiting).map(Some)
+}
+
+/// Why `r#type`, a type argument a call, a value or a type gives a type parameter bounded by `Equatable`, does not
+/// satisfy it, spec section 11, or `None` when it does: "`Cart` declares no `operator ==`". A type argument of
+/// `Equatable` has `==`, as [`equality_refusal`] decides, and keys a `Map` and fills a `Set`, as [`is_key_type`]
+/// decides, so a class value, which has `==` but keys no `Map`, does not satisfy it. `span` marks where the type
+/// argument is written or fixed.
+pub(crate) fn missing_equality<A>(context: &Context<'_, '_, A>, r#type: &TUnion, span: Span) -> Option<String>
+where
+    A: Arena,
+{
+    let codebase = context.codebase;
+    let equality = BinaryOperator::Equal(span);
+    let r#type = r#type.to_non_nullable();
+    let name = display_operand(context, &r#type);
+    let Some(reason) = equality_refusal(&equality, &r#type, codebase, &mut Vec::new()) else {
+        return (!is_key_type(&r#type, codebase)).then(|| key_reason(context, &r#type));
+    };
+
+    Some(match reason {
+        None => format!("`{name}` {ANY_EQUALITY}"),
+        Some(Refusal::TypeParameter) => {
+            let parameter =
+                unequatable_parameter(&r#type, codebase).map_or_else(|| name.clone(), |name| name.to_string());
+
+            format!("`{parameter}` is {}", unbounded_parameter_reason(&parameter))
+        }
+        Some(Refusal::Instance) if is_function(&r#type) => "a function has no `==`".to_owned(),
+        Some(Refusal::DifferentTypes) if r#type.types.len() > 1 => {
+            format!("the values of `{name}` may be of two different types, which never match")
+        }
+        refused => refusal_reason(context, &equality, &r#type, &r#type, refused),
+    })
+}
+
+/// Why a value of `r#type`, which has `==`, keys no `Map`, spec sections 11 and 12, as "a class value with type
+/// arguments can't key a `Map`": a class value runs as its plain class name, which `Class<Box<Order>>` and
+/// `Class<Box<Invoice>>` share.
+fn key_reason<A>(context: &Context<'_, '_, A>, r#type: &TUnion) -> String
+where
+    A: Arena,
+{
+    let has_type_arguments = r#type.types.iter().any(|atomic| match atomic {
+        TAtomic::Scalar(TScalar::ClassLikeString(TClassLikeString::OfType { constraint, .. })) => {
+            constraint.types.iter().any(|atomic| {
+                matches!(atomic, TAtomic::Object(TObject::Named(named)) if named.type_parameters.as_ref().is_some_and(|arguments| !arguments.is_empty()))
+            })
+        }
+        _ => false,
+    });
+
+    if has_type_arguments {
+        "a class value with type arguments can't key a `Map`".to_owned()
+    } else {
+        format!("`{}` can't key a `Map`", display_operand(context, r#type))
+    }
 }
 
 /// The type arguments a value of one of `unions` gives the generic enum `name`, as a `Result<int, PaymentError>.Ok`
@@ -1769,13 +2023,20 @@ where
         Some(Refusal::Collection) => "which `==` does not compare",
         Some(Refusal::CollectionElement) => "whose elements `==` cannot compare",
         Some(Refusal::StructProperty) => "which can't compare by value",
-        Some(_) => "which `==` cannot compare with another of its type",
-        None => {
-            "which compares by value only with a string, a number, a `bool`, an enum case, a struct or a collection"
+        Some(Refusal::TypeParameter) => {
+            return format!("`{name}` is {article} `{type}`, {}", unbounded_parameter_reason(&r#type), type = r#type);
         }
+        Some(_) => "which `==` cannot compare with another of its type",
+        None => return format!("`{name}` is {article} `{type}`, which {ANY_EQUALITY}", type = r#type),
     };
 
     format!("`{name}` is {article} `{type}`, {why}", type = r#type)
+}
+
+/// Why a value of the type parameter `name` has no `==`, with the fix, spec section 11: "a type parameter with no
+/// `Equatable` bound: bound it with `Equatable`, as in `<T : Equatable>`".
+pub(crate) fn unbounded_parameter_reason(name: &str) -> String {
+    format!("a type parameter with no `Equatable` bound: bound it with `Equatable`, as in `<{name} : Equatable>`")
 }
 
 /// Whether a value of `r#type` may be a function.
@@ -1790,8 +2051,26 @@ fn different_types_issue(comparison: &str, help: &str) -> Issue {
         .with_help(help)
 }
 
+/// What `==` compares an `Any` with, spec section 19, as a refusal of `==` on one names it.
+const ANY_EQUALITY: &str =
+    "compares by value only with a string, a number, a `bool`, an enum case, a struct or a collection";
+
 /// What PHP# orders, spec section 19, as an ordering's refusal names it.
 const ORDERED_TYPES: &str = "numbers, strings, and classes, structs and enums that declare `operator <=>`";
+
+/// The rule [`Refusal::TypeParameter`] refuses `==` by, spec section 11.
+const TYPE_PARAMETER_EQUALITY: &str = "A type parameter has `==` only through its bound: `Equatable`, or a class or interface that declares `operator ==`.";
+
+/// Why `==` cannot compare a value of `lhs_type` with one of `rhs_type`, which [`Refusal::TypeParameter`] refuses, as
+/// "`T` has no `==`: bound it with `Equatable`, as in `<T : Equatable>`".
+fn type_parameter_reason(lhs_type: &TUnion, rhs_type: &TUnion, codebase: &CodebaseMetadata) -> String {
+    let Some(name) = unequatable_parameter(lhs_type, codebase).or_else(|| unequatable_parameter(rhs_type, codebase))
+    else {
+        unreachable!("`==` is refused for a type parameter only when a side may be one without `==`");
+    };
+
+    format!("`{name}` has no `==`: bound it with `Equatable`, as in `<{name} : Equatable>`")
+}
 
 /// The issue that refuses ordering a value whose part `part` has no order by `orderer`, an operator or `sortedBy`, as
 /// `refusal` gives the reason: a `bool`, a case of an enum that declares no `operator <=>`, `unordered_enum` when it

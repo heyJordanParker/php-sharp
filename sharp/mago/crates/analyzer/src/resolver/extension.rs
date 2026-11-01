@@ -26,9 +26,11 @@ use mago_word::ascii_lowercase_word;
 
 use crate::code::IssueCode;
 use crate::context::Context;
+use crate::expression::call::can_compare_elements;
 use crate::expression::is_refused_type;
+use crate::invocation::InferenceOptions;
 use crate::invocation::TemplateInferenceViolation;
-use crate::invocation::infer_unfixed_templates;
+use crate::invocation::infer_templates_from_input_and_container_types;
 use crate::resolver::class_name::class_value_classes;
 use crate::utils::names::display_class_like_name;
 use crate::utils::names::display_missing_imports;
@@ -44,6 +46,61 @@ pub(crate) enum Extension {
     Value(MethodIdentifier),
     /// A computed property called, or a member the receiver gives a type outside its block's bound, already reported.
     Refused,
+}
+
+/// A kind of PHP# collection, spec section 12, each with the standard library's members of its own, in the order a
+/// value that may hold several tests them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum CollectionKind {
+    List,
+    Map,
+    Set,
+    Iterable,
+}
+
+impl CollectionKind {
+    /// The kind of collection `atomic` is, or None for any other type.
+    #[must_use]
+    pub fn of(atomic: &TAtomic) -> Option<Self> {
+        match atomic {
+            TAtomic::Array(TArray::List(_)) => Some(Self::List),
+            TAtomic::Array(TArray::Keyed(_)) => Some(Self::Map),
+            TAtomic::Array(TArray::Set(_)) => Some(Self::Set),
+            TAtomic::Iterable(_) => Some(Self::Iterable),
+            _ => None,
+        }
+    }
+
+    /// The kind's name, as code writes its type.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::List => "List",
+            Self::Map => "Map",
+            Self::Set => "Set",
+            Self::Iterable => "Iterable",
+        }
+    }
+
+    /// The article that starts a sentence about one of the kind, as "An `Iterable<int>` has …".
+    #[must_use]
+    pub fn article(self) -> &'static str {
+        match self {
+            Self::Iterable => "An",
+            Self::List | Self::Map | Self::Set => "A",
+        }
+    }
+
+    /// The help for a member of the kind that a project without the standard library lacks, as it lacks them all:
+    /// the library to install, as "… which declares the members of an `Iterable`."
+    #[must_use]
+    pub fn missing_library_help(self) -> String {
+        format!(
+            "Install the standard library, heyjordanparker/php-sharp-composer, which declares the members of {} `{}`.",
+            self.article().to_lowercase(),
+            self.name()
+        )
+    }
 }
 
 /// The extension member that `name`, written on a value of type `receiver`, reaches in this file: a method when
@@ -102,13 +159,24 @@ where
     let fitting: Vec<(MethodIdentifier, &'ctx FunctionLikeMetadata)> = extensions
         .iter()
         .filter_map(|(_, method)| Some((*method, codebase.get_method_by_id(method)?)))
-        .filter(|(_, metadata)| (!is_class_value || is_class_member(metadata)) && fits(context, receiver, metadata))
+        .filter(|(method, metadata)| {
+            (!is_class_value || is_class_member(metadata)) && fits(context, receiver, method.get_class_name(), metadata)
+        })
         .collect();
-    // A `List`'s member is the kind's own, which wins over any other extension, as a real member does.
+    // A collection's member is the kind's own, which wins over any other extension, as a real member does. An empty
+    // array fits every kind, and is a `List`, the most specific, as an empty literal is.
     let fitting = if fitting.iter().any(|(method, metadata)| is_collection_member(method.get_class_name(), metadata)) {
+        let empty = receiver.types.iter().all(|atomic| matches!(atomic, TAtomic::Array(array) if array.is_empty()));
+
         fitting
             .into_iter()
-            .filter(|(method, metadata)| is_collection_member(method.get_class_name(), metadata))
+            .filter(|(method, metadata)| {
+                if empty {
+                    collection_member_kind(method.get_class_name(), metadata) == Some(CollectionKind::List)
+                } else {
+                    is_collection_member(method.get_class_name(), metadata)
+                }
+            })
             .collect()
     } else {
         fitting
@@ -204,7 +272,9 @@ where
                         && (is_imported_or_in_namespace(context, method.get_class_name())
                             || is_imported_by_default(context, method.get_class_name(), metadata))
                 })
-                .find_map(|(_, metadata)| fit(context, receiver_type, metadata).err().flatten())?;
+                .find_map(|(method, metadata)| {
+                    fit(context, receiver_type, method.get_class_name(), metadata).err().flatten()
+                })?;
             context.collector.report_with_code(
                 code,
                 Issue::error(format!(
@@ -222,15 +292,16 @@ where
     }
 }
 
-/// The extension methods a call on a value of type `receiver` reaches in this file, each written as `` `name` ``, in
-/// order and once each: those of the file's namespace, its imports and the standard library's on the types every file
-/// has them for, whose receiver fits.
+/// The extension methods a call on a value of type `receiver` reaches in this file and can call, each written as
+/// `` `name` ``, in the order of their names, so `remove` comes before `removeLast`, and once each: those of the file's
+/// namespace, its imports and the standard library's on the types every file has them for, whose receiver fits, and
+/// whose search can compare the receiver's elements, as [`can_compare_elements`] decides for the call.
 pub(crate) fn extension_methods<A>(context: &Context<'_, '_, A>, receiver: &TUnion) -> Vec<String>
 where
     A: Arena,
 {
     let codebase = context.codebase;
-    let mut methods: Vec<String> = codebase
+    let mut names: Vec<String> = codebase
         .extensions
         .values()
         .flatten()
@@ -238,34 +309,73 @@ where
         .filter(|(class, metadata)| {
             metadata.flags.contains(MetadataFlags::EXTENSION_METHOD)
                 && (is_imported_or_in_namespace(context, *class) || is_imported_by_default(context, *class, metadata))
-                && fits(context, receiver, metadata)
+                && fits(context, receiver, *class, metadata)
+                && can_compare_elements(metadata, receiver, codebase)
         })
-        .map(|(_, metadata)| format!("`{}`", metadata.original_name))
+        .map(|(_, metadata)| metadata.original_name.to_string())
         .collect();
-    methods.sort();
-    methods.dedup();
+    names.sort();
+    names.dedup();
 
-    methods
+    names.into_iter().map(|name| format!("`{name}`")).collect()
 }
 
-/// Whether a value of type `receiver` fits the receiver of the extension member `metadata`, its first parameter, as
-/// [`fit`] decides it.
-fn fits<A>(context: &Context<'_, '_, A>, receiver: &TUnion, metadata: &FunctionLikeMetadata) -> bool
+/// Whether a value of type `receiver` fits the receiver of the extension member `metadata` of the static class `class`,
+/// its first parameter, as [`fit`] decides it.
+fn fits<A>(context: &Context<'_, '_, A>, receiver: &TUnion, class: Word, metadata: &FunctionLikeMetadata) -> bool
 where
     A: Arena,
 {
-    fit(context, receiver, metadata).is_ok()
+    fit(context, receiver, class, metadata).is_ok()
 }
 
-/// How a value of type `receiver` meets the receiver of the extension member `metadata`, its first parameter. The type
-/// parameters of an extension block, `T` in `extension<T>(List<T> items)`, are first inferred from `receiver`, as a call
-/// infers them from its argument, so a `List<Order>` fits as a `List<Order>`. A receiver outside a type parameter's
-/// bound fits none, and the error names that type parameter, the type the receiver gives it and the bound. Every other
+/// The type arguments a value of type `receiver` gives the generic extension member `metadata`, with the type parameters
+/// it gives a type outside their bound. Each type parameter of its block, `T` in `extension<T>(List<T> items)`, takes
+/// what every part of `receiver` gives it, as a call's argument fixes a generic call's, so a `List<Order>` gives `Order`
+/// and a value that may be a `List<int>` or a `List<string>` gives `int|string`. The member's own type parameters keep
+/// their bounds for the call or the function type to fix.
+pub(crate) fn receiver_type_arguments<A>(
+    context: &Context<'_, '_, A>,
+    receiver: &TUnion,
+    metadata: &FunctionLikeMetadata,
+) -> (TemplateResult, Vec<TemplateInferenceViolation>)
+where
+    A: Arena,
+{
+    let mut template_result = TemplateResult::new(
+        metadata.template_types.iter().map(|(name, template)| (*name, vec![template.clone()])).collect(),
+        HashMap::default(),
+    );
+    let Some(parameter) = metadata.parameters.first().and_then(|parameter| parameter.get_type_metadata()) else {
+        unreachable!(
+            "a receiver meets only an extension member whose receiver, its first parameter, has a type, as fit checks"
+        );
+    };
+    let mut violations = Vec::new();
+    infer_templates_from_input_and_container_types(
+        context,
+        &parameter.type_union,
+        receiver,
+        &mut template_result,
+        InferenceOptions::default(),
+        &mut violations,
+    );
+
+    (template_result, violations)
+}
+
+/// How a value of type `receiver` meets the receiver of the extension member `metadata` of the static class `class`,
+/// its first parameter. The type parameters of an extension block are first fixed as [`receiver_type_arguments`] fixes
+/// them, so a `List<Order>` fits as a `List<Order>`. The receiver then fits by the rules of the file's dialect, as a
+/// call's argument does, so a `Map<TKey, TValue>` fits an `Iterable<TItem>` as the `Iterable<[TKey, TValue]>` of its
+/// entries, spec section 12, and an `int` fits no `float`, spec section 24. A receiver outside a type parameter's bound
+/// fits none, and the error names that type parameter, the type the receiver gives it and the bound. Every other
 /// receiver that fits none gives no error, as does every receiver of a member whose own receiver has no type, which
 /// only a file the parser refused declares.
 fn fit<A>(
     context: &Context<'_, '_, A>,
     receiver: &TUnion,
+    class: Word,
     metadata: &FunctionLikeMetadata,
 ) -> Result<(), Option<TemplateInferenceViolation>>
 where
@@ -275,35 +385,61 @@ where
     let parameter = if metadata.template_types.is_empty() {
         Cow::Borrowed(&parameter.type_union)
     } else {
-        let mut template_result = TemplateResult::new(
-            metadata.template_types.iter().map(|(name, template)| (*name, vec![template.clone()])).collect(),
-            HashMap::default(),
-        );
-        if let Some(violation) =
-            infer_unfixed_templates(context, &parameter.type_union, receiver, &mut template_result).into_iter().next()
-        {
+        let (template_result, violations) = receiver_type_arguments(context, receiver, metadata);
+        if let Some(violation) = violations.into_iter().next() {
             return Err(Some(violation));
         }
 
         Cow::Owned(inferred_type_replacer::replace(&parameter.type_union, &template_result, context.codebase))
     };
 
-    union_comparator::is_contained_by(
-        context.codebase,
-        receiver,
-        &parameter,
-        false,
-        false,
-        false,
-        &mut ComparisonResult::new(),
-    )
+    // A `List`, a `Map` and a `Set` are each their own kind, spec section 12, where plain PHP takes a list as an array of
+    // any key and any of them as an iterable, so an extension of one kind fits no other, and a type parameter is the
+    // kind of its bound. The standard library's members of an `Iterable` belong to a value typed `Iterable`, which is a
+    // kind of its own for them alone, so one fits no value of another type, an object's class included, and a user's
+    // extension of an `Iterable` fits every value a loop reads. An empty array is no kind yet.
+    fn kinds(atomic: &TAtomic) -> Vec<CollectionKind> {
+        match atomic {
+            TAtomic::Array(array) if array.is_empty() => vec![],
+            TAtomic::GenericParameter(parameter) => parameter.constraint.types.iter().flat_map(kinds).collect(),
+            _ => CollectionKind::of(atomic).into_iter().collect(),
+        }
+    }
+    let iterable_is_kind = is_collection_member(class, metadata);
+    let parameter_kinds: Vec<_> = parameter
+        .types
+        .iter()
+        .flat_map(kinds)
+        .filter(|kind| *kind != CollectionKind::Iterable || iterable_is_kind)
+        .collect();
+    let same_kind = parameter_kinds.is_empty()
+        || if parameter_kinds.contains(&CollectionKind::Iterable) {
+            receiver.types.iter().all(|atomic| {
+                let kinds = kinds(atomic);
+                !kinds.is_empty() && kinds.iter().all(|kind| parameter_kinds.contains(kind))
+            })
+        } else {
+            receiver.types.iter().flat_map(kinds).all(|kind| parameter_kinds.contains(&kind))
+        };
+
+    (same_kind
+        && union_comparator::is_contained_by(
+            context.codebase,
+            receiver,
+            &parameter,
+            false,
+            false,
+            false,
+            &mut ComparisonResult::for_dialect(context.dialect),
+        ))
     .then_some(())
     .ok_or(None)
 }
 
 /// The members of `candidates` whose receiver fits inside every other candidate's, as C# overload resolution and
 /// Kotlin pick the most specific receiver, spec section 26: an extension on `AuditedWallet` over one on `Wallet`. All
-/// of `candidates` when none does, so they stay ambiguous.
+/// of `candidates` when none does, so they stay ambiguous. A receiver the checker refused, as a type parameter whose
+/// bound it refused, fits any value, so it is the least specific, and its member wins only when it fits alone.
 fn most_specific<'ctx, A>(
     context: &Context<'_, '_, A>,
     candidates: Vec<(MethodIdentifier, &'ctx FunctionLikeMetadata)>,
@@ -311,19 +447,29 @@ fn most_specific<'ctx, A>(
 where
     A: Arena,
 {
-    let specific: Vec<_> = candidates
+    let receiver = |metadata: &'ctx FunctionLikeMetadata| {
+        metadata.parameters.first().and_then(|parameter| parameter.get_type_metadata())
+    };
+    let ranked: Vec<_> = candidates
+        .iter()
+        .filter(|(_, metadata)| !receiver(metadata).is_some_and(|own| is_refused_type(&own.type_union)))
+        .copied()
+        .collect();
+    if ranked.is_empty() {
+        return candidates;
+    }
+
+    let specific: Vec<_> = ranked
         .iter()
         .filter(|(_, metadata)| {
-            metadata
-                .parameters
-                .first()
-                .and_then(|parameter| parameter.get_type_metadata())
-                .is_some_and(|own| candidates.iter().all(|(_, other)| fits(context, &own.type_union, other)))
+            receiver(metadata).is_some_and(|own| {
+                ranked.iter().all(|(method, other)| fits(context, &own.type_union, method.get_class_name(), other))
+            })
         })
         .copied()
         .collect();
 
-    if specific.is_empty() { candidates } else { specific }
+    if specific.is_empty() { ranked } else { specific }
 }
 
 /// The start of the error for the extensions `candidates`, which compete for the member `written`, naming where each
@@ -427,7 +573,7 @@ where
 
 /// Whether this file has the extension member `metadata` of the static class `class` with no import, spec section
 /// 23: the default import of `Sharp` binds the class, or the member is the standard library's, under `Sharp\`, on
-/// `string`, `int`, `float`, `List`, `Map` or `Set`.
+/// `string`, `int`, `float`, `List`, `Map`, `Set` or `Iterable`.
 pub(crate) fn is_imported_by_default<A>(
     context: &Context<'_, '_, A>,
     class: Word,
@@ -440,37 +586,59 @@ where
         || is_standard_library_member_on(class, metadata, |atomic| {
             matches!(
                 atomic,
-                TAtomic::Scalar(TScalar::String(_) | TScalar::Integer(_) | TScalar::Float(_)) | TAtomic::Array(_)
+                TAtomic::Scalar(TScalar::String(_) | TScalar::Integer(_) | TScalar::Float(_))
+                    | TAtomic::Array(_)
+                    | TAtomic::Iterable(_)
             )
         })
 }
 
 /// Whether `metadata` of the static class `class` is a member of a PHP# collection, spec section 12.
 ///
-/// It is an extension method of the standard library's, under `Sharp\`, on a `List`, a `Map` or a `Set`, which the
-/// semantic checks let take its receiver by `ref`. It is that collection's own member, so a union of collections
-/// reaches it on its parts of that kind.
+/// It is an extension method of the standard library's, under `Sharp\`, on a `List`, a `Map`, a `Set` or an
+/// `Iterable`, which the semantic checks let take a collection's receiver by `ref`. It is that collection's own member,
+/// so a union of collections reaches it on its parts of that kind.
 #[must_use]
 pub fn is_collection_member(class: Word, metadata: &FunctionLikeMetadata) -> bool {
-    metadata.flags.is_extension_method()
-        && is_standard_library_member_on(class, metadata, |atomic| matches!(atomic, TAtomic::Array(_)))
+    collection_member_kind(class, metadata).is_some()
 }
 
-/// Whether the extension member `metadata` of the static class `class` is the standard library's member of a `List`,
-/// as [`is_collection_member`] says of a collection's.
-pub(crate) fn is_list_member(class: Word, metadata: &FunctionLikeMetadata) -> bool {
-    is_standard_library_member_on(class, metadata, |atomic| matches!(atomic, TAtomic::Array(TArray::List(_))))
-}
-
-/// The standard library's member `name` of a `List`, which an operation on a List runs, as Kotlin runs an operator
-/// member: `list[i] = v` runs `set`. None when the library declares none.
+/// The kind of collection whose member `metadata` of the static class `class` is, as [`is_collection_member`] says,
+/// as `ListMembers.add` is a `List`'s. None for any other member.
 #[must_use]
-pub fn list_member<'codebase>(
+pub fn collection_member_kind(class: Word, metadata: &FunctionLikeMetadata) -> Option<CollectionKind> {
+    let receiver = &metadata.parameters.first()?.get_type_metadata()?.type_union;
+    let kind = CollectionKind::of(receiver.types.first()?)?;
+
+    (metadata.flags.is_extension_method()
+        && is_standard_library_member_on(class, metadata, |atomic| CollectionKind::of(atomic) == Some(kind)))
+    .then_some(kind)
+}
+
+/// The standard library's member `name` of the collection `kind`.
+///
+/// An operation on a `List` or a `Map` runs it, as Kotlin runs an operator member: `list[i] = v` and `map[key] = value`
+/// run `set`. None when the library declares none.
+#[must_use]
+pub fn collection_member<'codebase>(
     codebase: &'codebase CodebaseMetadata,
     name: &[u8],
+    kind: CollectionKind,
 ) -> Option<&'codebase MethodIdentifier> {
     codebase.extensions.get(&ascii_lowercase_word(name))?.iter().map(|(_, method)| method).find(|method| {
-        codebase.get_method_by_id(method).is_some_and(|metadata| is_list_member(method.get_class_name(), metadata))
+        codebase
+            .get_method_by_id(method)
+            .is_some_and(|metadata| collection_member_kind(method.get_class_name(), metadata) == Some(kind))
+    })
+}
+
+/// Whether the standard library declares any member of the collection `kind`, as [`collection_member`] finds one. A
+/// project without the library has none of them, whatever extensions of its own it declares.
+pub(crate) fn library_declares_members(codebase: &CodebaseMetadata, kind: CollectionKind) -> bool {
+    codebase.extensions.values().flatten().any(|(_, method)| {
+        codebase
+            .get_method_by_id(method)
+            .is_some_and(|metadata| collection_member_kind(method.get_class_name(), metadata) == Some(kind))
     })
 }
 
@@ -485,14 +653,19 @@ where
     codebase.extensions.get(&ascii_lowercase_word(name))?.iter().find_map(|(_, method)| {
         let metadata = codebase.get_method_by_id(method)?;
 
-        (is_collection_member(method.get_class_name(), metadata) && fits(context, receiver, metadata))
-            .then(|| method.get_class_name())
+        (is_collection_member(method.get_class_name(), metadata)
+            && fits(context, receiver, method.get_class_name(), metadata))
+        .then(|| method.get_class_name())
     })
 }
 
 /// Whether the extension member `metadata` of the static class `class` is the standard library's, under `Sharp\`, on a
 /// receiver whose every part `kind` takes.
-fn is_standard_library_member_on(class: Word, metadata: &FunctionLikeMetadata, kind: fn(&TAtomic) -> bool) -> bool {
+fn is_standard_library_member_on(
+    class: Word,
+    metadata: &FunctionLikeMetadata,
+    kind: impl Fn(&TAtomic) -> bool,
+) -> bool {
     class.as_bytes().get(..6).is_some_and(|root| root.eq_ignore_ascii_case(b"sharp\\"))
         && metadata
             .parameters

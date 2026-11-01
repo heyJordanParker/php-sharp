@@ -2168,7 +2168,7 @@ not_frameless_call:
 					ZVAL_STR(&tmp, object->handlers->get_class_name(object));
 				}
 				_zend_hash_append_ex(stack_frame, ZSTR_KNOWN(ZEND_STR_CLASS), &tmp, 1);
-				if ((options & DEBUG_BACKTRACE_PROVIDE_OBJECT) != 0 && object->ce != sharp_ce_collection) {
+				if ((options & DEBUG_BACKTRACE_PROVIDE_OBJECT) != 0) {
 					ZVAL_OBJ_COPY(&tmp, object);
 					_zend_hash_append_ex(stack_frame, ZSTR_KNOWN(ZEND_STR_OBJECT), &tmp, 1);
 				}

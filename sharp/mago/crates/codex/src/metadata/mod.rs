@@ -44,7 +44,6 @@ use crate::symbol::SymbolIdentifier;
 use crate::symbol::SymbolKind;
 use crate::symbol::Symbols;
 use crate::ttype::atomic::TAtomic;
-use crate::ttype::atomic::array::TArray;
 use crate::ttype::atomic::object::TObject;
 use crate::ttype::union::TUnion;
 use crate::visibility::Visibility;
@@ -1061,9 +1060,8 @@ impl CodebaseMetadata {
     /// The classes that declare a real member a PHP# extension member called `name` would hide on a value of type
     /// `receiver`, spec section 26, sorted: the member of that name that a class the value can be declares or
     /// inherits, a method or property, or one a docblock declares with `@method` or `@property`. `__call` and `__get`
-    /// declare none. A `Map`, `Set` or `Iterable` has the methods of `Sharp\Internal\MapMethods`,
-    /// `Sharp\Internal\SetMethods` or `Sharp\Internal\IterableMethods`, and a `List` has only the standard library's
-    /// extension members, spec section 12. A type parameter
+    /// declare none. A `List`, `Map`, `Set` or `Iterable` has only the standard library's extension members, spec
+    /// section 12. A type parameter
     /// shows its bound, so it has the members its bound's classes have. A class below the type competes with no
     /// extension, which is chosen from the type the code shows.
     #[must_use]
@@ -1085,9 +1083,6 @@ impl CodebaseMetadata {
             .flat_map(shown)
             .filter_map(|atomic| match atomic {
                 TAtomic::Object(object) => object.get_name(),
-                TAtomic::Array(TArray::Keyed(_)) => Some(word("Sharp\\Internal\\MapMethods")),
-                TAtomic::Array(TArray::Set(_)) => Some(word("Sharp\\Internal\\SetMethods")),
-                TAtomic::Iterable(_) => Some(word("Sharp\\Internal\\IterableMethods")),
                 _ => None,
             })
             .filter_map(|name| self.get_class_like(name.as_bytes()))
@@ -1370,18 +1365,19 @@ impl CodebaseMetadata {
     ///
     /// * `diff` - The computed diff between old and new code
     /// * `references` - Symbol reference graph from previous run
-    /// * `reads` - The symbols each file's extension hooks and providers read, by logical file name
+    /// * `read` - The symbols the extension callbacks read, which every file counts as its own
     ///
     /// # Returns
-    /// Returns the logical names of files whose top-level code references, or whose hooks and
-    /// providers read, an invalidated symbol. Returns `None` if the cascade was too large to compute.
-    pub fn mark_safe_symbols<'reads>(
+    /// Returns the logical names of files whose top-level code references an invalidated symbol,
+    /// and whether `read` names one. Returns `None` if the cascade was too large to compute.
+    pub fn mark_safe_symbols(
         &mut self,
         diff: &CodebaseDiff,
         references: &SymbolReferences,
-        reads: impl IntoIterator<Item = (Word, &'reads HashSet<SymbolIdentifier>)>,
-    ) -> Option<WordSet> {
-        let (invalid_symbols, partially_invalid, invalid_files) = references.get_invalid_symbols(self, diff, reads)?;
+        read: &HashSet<SymbolIdentifier>,
+    ) -> Option<(WordSet, bool)> {
+        let (invalid_symbols, partially_invalid, invalid_files, read_invalid) =
+            references.get_invalid_symbols(self, diff, read)?;
 
         // Mark all symbols in 'keep' set as safe (unless invalidated by cascade)
         for keep_symbol in diff.get_keep() {
@@ -1398,7 +1394,7 @@ impl CodebaseMetadata {
             }
         }
 
-        Some(invalid_files)
+        Some((invalid_files, read_invalid))
     }
 
     /// Merges information from another `CodebaseMetadata` into this one.
