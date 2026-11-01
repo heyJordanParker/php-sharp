@@ -10,18 +10,25 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 #### Move mago and `heyjordanparker/mago-sharp` to 0.6.1 together
 
-The analyzer protocol is 1.13, so an extension worker built on the 0.6.0 SDK refuses mago 0.6.1's first request, and `mago analyze` stops with this, here for an extension host `acme` (#223):
+The analyzer protocol is 1.13, so an extension worker built on the 0.6.0 SDK refuses mago 0.6.1's first request, and `mago analyze` stops with this, here for the extension host `acme` in `mago.toml` (#223):
 
 ```text
-ERROR Orchestrator error: External plugin error: external analyzer protocol error: extension host `acme` refused the handshake of mago 0.6.1, which speaks analyzer protocol 1.13: Unsupported analyzer protocol version 1.13. The host's worker runs on the SDK in `heyjordanparker/mago-sharp`, so require the release of this mago with `composer require --dev "heyjordanparker/mago-sharp:0.6.1"`, or run the mago of the release the project requires with `vendor/bin/mago`.
+ERROR Orchestrator error: External plugin error: external analyzer protocol error: extension host `acme` refused the handshake of mago 0.6.1, which speaks analyzer protocol 1.13: Unsupported analyzer protocol version 1.13. Its SDK is from a `heyjordanparker/mago-sharp` release before 0.6.1, so require the release of this mago with `composer require --dev "heyjordanparker/mago-sharp:0.6.1"`, or run the mago of the release the project requires with `vendor/bin/mago`.
 ```
 
-A worker on the 0.6.1 SDK under an older mago refuses its first request too, and says so itself: "The worker of `acme` can't read mago's request: Mago speaks analyzer protocol 1.12, and this worker's SDK, from `heyjordanparker/mago-sharp`, speaks 1.13." The SDK ships inside `heyjordanparker/mago-sharp`, so a project's extensions run on the SDK of the package the project requires. Upgrade the package and any `mago` installed another way at once:
+A worker on the 0.6.1 SDK under an older mago refuses its first request too, and names its extension, here `acme/routes`:
+
+```text
+ERROR Orchestrator error: External plugin error: external analyzer worker failed: extension worker 0 rejected request 1: The worker of `acme/routes` can't read mago's request: `mago` speaks analyzer protocol 1.12, and the extension SDK, heyjordanparker/mago-sharp 0.6.1, speaks 1.13. `mago` and heyjordanparker/mago-sharp must be the same release: run the `mago` that heyjordanparker/mago-sharp installs, `vendor/bin/mago`, or require the heyjordanparker/mago-sharp release `mago --version` prints.
+```
+
+The SDK ships inside `heyjordanparker/mago-sharp`, so a project's extensions run on the SDK of the package the project requires. Upgrade the package and any `mago` installed another way at once:
 
 ```sh
 composer require --dev "heyjordanparker/mago-sharp:^0.6.1"
 ```
 
+- `^0.6.1` suits a project that runs `vendor/bin/mago`, which is always the package's own release. A `mago` installed another way needs the exact release, `"heyjordanparker/mago-sharp:0.6.1"`, which is the command mago's error gives.
 - A `mago` from `install.sh` updates with `mago self-update --tag 0.6.1`.
 - An extension's own code needs no change.
 
@@ -63,7 +70,7 @@ mago 0.6.1 refuses a `mago.toml` that holds `config-file` or `config-file-is-exp
 ### Fixed
 
 - A save just after `mago analyze --watch` starts or restarts on a busy Mac is now analyzed (#221).
-- An extension hook that runs past `request-timeout-ms` is now named in the error, as "made no progress for 30000 ms on the after-analysis hooks of plugin `dead-routes`", instead of by a request number (#223). The deadline starts again each time the worker starts one of a request's units: a file's hooks in an after-file batch, one plugin's initialization, before-analysis or after-analysis hooks, a codebase-scan hook, or an extension's worker reducer. So each plugin's project-level hooks now get the whole deadline, as each file's hooks do. The analyzer protocol is 1.13, so a worker built on the 0.6.0 SDK refuses this mago's first request, and mago names the host and the package to require: "extension host `acme` refused the handshake of mago 0.6.1, which speaks analyzer protocol 1.13: Unsupported analyzer protocol version 1.13. The host's worker runs on the SDK in `heyjordanparker/mago-sharp`, so require the release of this mago with `composer require --dev "heyjordanparker/mago-sharp:0.6.1"`, or run the mago of the release the project requires with `vendor/bin/mago`." A worker on the 0.6.1 SDK under another mago names its extension and both protocols, as "The worker of `acme` can't read mago's request: Mago speaks analyzer protocol 1.12, and this worker's SDK, from `heyjordanparker/mago-sharp`, speaks 1.13. Run the mago of that release with `vendor/bin/mago`, or require the release of your mago with `composer require --dev "heyjordanparker/mago-sharp:<the version mago --version prints>"`."
+- An extension hook that runs past `request-timeout-ms` is now named in the error, as "made no progress for 30000 ms on the after-analysis hooks of plugin `dead-routes`", instead of by a request number (#223). The deadline starts again each time the worker starts one of a request's units: a file's hooks in an after-file batch, one plugin's initialization, before-analysis or after-analysis hooks, a codebase-scan hook, or an extension's worker reducer. So each plugin's project-level hooks now get the whole deadline, as each file's hooks do. The analyzer protocol is 1.13, so a worker built on the 0.6.0 SDK refuses this mago's first request, and mago names the host and the package to require: "extension host `acme` refused the handshake of mago 0.6.1, which speaks analyzer protocol 1.13: Unsupported analyzer protocol version 1.13. Its SDK is from a `heyjordanparker/mago-sharp` release before 0.6.1, so require the release of this mago with `composer require --dev "heyjordanparker/mago-sharp:0.6.1"`, or run the mago of the release the project requires with `vendor/bin/mago`." Any other refusal of that request, such as an extension's own exception, reads as the worker gave it. A worker on the 0.6.1 SDK refuses a request of another analyzer, linter, worker management or frame protocol naming its extension, both protocols and its own release, as "The worker of `acme/routes` can't read mago's request: `mago` speaks analyzer protocol 1.12, and the extension SDK, heyjordanparker/mago-sharp 0.6.1, speaks 1.13. `mago` and heyjordanparker/mago-sharp must be the same release: run the `mago` that heyjordanparker/mago-sharp installs, `vendor/bin/mago`, or require the heyjordanparker/mago-sharp release `mago --version` prints."
 - A user's extension on `Iterable<TItem>` reaches a `Map<TKey, TValue>` with `TItem` as `[TKey, TValue]`, and an extension on `List<T>` reaches a value that may be one of several `List`s with `T` fixed by every one of them, as a generic call's parameter takes them. A member that changes that value, as `add`, takes only what every one of those `List`s takes (#224).
 - No extension whose receiver holds a `float` reaches an `int`, at any depth, as with `List<float>`, so an `int` no longer has the `float`-only methods `round`, `floor`, `ceil` and `isFinite`. Convert with `(float)` first, as in `((float) count).round(2)` (#224).
 - When `mago analyze --watch` restarts on a configuration change, it now applies the edited file as a fresh start does (#225). That covers `php-version`, `threads` and `stack-size`, which now set the analysis's thread pool, `[source] workspace`, `allow-unsupported-php-version` and `no-version-check`. A flag passed on the command line still wins. An edit a fresh start refuses, such as `php-version = "7.4"`, keeps the previous configuration. Before, a restart kept the previous run's values. When `[source] workspace` named another folder, a restart without `--config` searched that folder for its configuration file instead of the current directory, and fell back to the defaults when it found none.
@@ -213,7 +220,7 @@ Plain PHP's `clone` of an object whose PHP# typed property holds a reference som
 
 #### Extension authors: require `heyjordanparker/mago-sharp` `^0.6`
 
-The analyzer protocol is 1.12, so mago 0.6.0 refuses a worker built on the 0.5 SDK at its first message: "unsupported analyzer protocol version 1.11" (#212). Require `"heyjordanparker/mago-sharp": "^0.6"` in the extension's `composer.json`.
+The analyzer protocol is 1.12, so a worker built on the 0.5 SDK refuses mago 0.6.0's first request: "Unsupported analyzer protocol version 1.12." (#212). Require `"heyjordanparker/mago-sharp": "^0.6"` in the extension's `composer.json`.
 
 `mago compile` runs node hooks only in the PHP# files it lowers (#212). `mago analyze` still runs them in every file.
 
