@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A file or folder `mago` can't read or write is named in the error with what `mago` was doing, as "Failed to load database: can't open the folder `/app/.sharp`: Operation not permitted (os error 1)" instead of "Failed to load database: I/O error: Operation not permitted (os error 1)". That covers loading the project's files, `mago compile`'s writes into `.sharp`, and the law checker's `.sharp/.lean` package. A `git` that `--staged` can't run is named as "Failed to run `git diff`", and a failed read of the standard input as "Failed to read the standard input", instead of either reading as a failed database load.
+
 ## [0.6.1] - 2026-11-01
 
 ### Upgrading from 0.6.0
