@@ -7,6 +7,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Fixed
 
 - A save just after `mago analyze --watch` starts or restarts on a busy Mac is now analyzed (#221).
+- A spread into a generic method's parameters fixes its type arguments, as each element fixes the parameter it fills, so `Pairs.pair(...[1, 2])` is a `List<int>`, in PHP# and in plain PHP. Each element of a spread is checked against the parameter it lands in, the ones before a variadic parameter included, and after a spread of unknown length against each parameter it may land in (#227).
 
 ## [0.6.0] - 2026-10-31
 

@@ -8,7 +8,7 @@ public class Desk
         const log = Reports.logSlow;
         const file = new FileLog();
         Logs logs = new FileLog();
-        List<Any> anything = [];
+        List<Position> positions = [];
         return [
             Reports.logSlow("a static call"),
             Reports.logSlow("a named argument", caller: new Position("Given.sharp", 1, 1, "Callers.given")),
@@ -23,7 +23,7 @@ public class Desk
             logs.log("through the interface"),
             "text".at(),
             Reports.logSlow(...["a spread that holds no position"]),
-            Reports.logSlow("a spread that may hold one", ...anything),
+            Reports.logSlow("a spread that may hold one", ...positions),
         ];
     }
 }
