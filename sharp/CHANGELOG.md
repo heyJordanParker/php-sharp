@@ -29,8 +29,6 @@ count.round(2);              // compile error: Method `round` does not exist on 
 ((float) count).round(2);    // compiles
 ```
 
-A member that changes a place through `?.` takes only what every `List` the place may hold takes, as it does through `.` (#230). On a plain PHP property typed `/** @var list<int>|list<string> */`, `maybe?.rows.add(1)` is refused as `box.rows.add(1)` is: "Invalid argument type for argument #1 of `List<string>.add`: expected `string`, but found `int`." Add an element that every one of those `List`s takes, or give the plain PHP property the one `List` type it holds, as `/** @var list<int> */`.
-
 A call that returns nothing gives no value through `?.`, as it gives none through `.` (#232). `const saved = maybe?.save();` on a `void` method `save` is refused as `const saved = box.save();` is. So is such a call as an argument, an operand or an interpolation, and below a `?.` in a chain, as `holder?.box.save()`. Call it as a statement of its own:
 
 ```csharp
