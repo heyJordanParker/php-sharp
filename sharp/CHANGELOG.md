@@ -6,13 +6,73 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ### Fixed
 
+- A search given its value by name or by a spread, as `carts.contains(value: cart)` or `carts.contains(...[cart])`, now needs `==` on the element type, as `carts.contains(cart)` does (#233). Before, either form skipped the check, so a `List`'s `contains`, `indexOf` or `remove` on a class without `operator ==` compiled and compared by identity at runtime. A `Set`'s and a `Map`'s searches given `value:` or `key:` are now refused beside their declaration, as their positional twins are. An extension's parameter marked `ComparedByOrder`, as `sortedBy`'s is, is now checked when a named argument fills it out of order.
+- An extension of `Iterable<T>` whose parameter is marked `ComparedByEquality` now needs `==` on what the `Iterable` gives a loop, as a `List`'s `contains` does, so its call on an `Iterable<Cart>` of a class without `operator ==` is refused, and the help of a method an `Iterable<Cart>` lacks no longer lists it (#233).
+- A search on a value that may be several kinds of collection, as `things.remove(cart)` on a `List<Cart>|Map<Cart, int>`, is refused once, where each kind refused it (#233).
+- A refused search's help tests for the same object through a member that reaches what the search compares: `counts.keys().any(c => c === cart)` for a `Map`'s keys, where `counts.any(…)` tested its values, and `rows.toList().any(c => c === cart)` for an `Iterable`, which has no `any`. A search on several kinds, or a spread, offers no such test (#233).
+
+## [0.6.1] - 2026-11-01
+
+### Upgrading from 0.6.0
+
+#### Move mago and `heyjordanparker/mago-sharp` to 0.6.1 together
+
+The analyzer protocol is 1.13, so mago 0.6.1 refuses an extension worker built on the 0.6.0 SDK at its first message: "unsupported analyzer protocol version 1.12" (#223). The SDK ships inside `heyjordanparker/mago-sharp`, so a project's extensions run on the SDK of the package the project requires. Upgrade the package and any `mago` installed another way at once:
+
+```sh
+composer require --dev "heyjordanparker/mago-sharp:^0.6.1"
+```
+
+- A `mago` from `install.sh` updates with `mago self-update --tag 0.6.1`.
+- An extension's own code needs no change.
+
+#### Fix the code the 0.6.1 checker refuses
+
+0.6.1 refuses each of these.
+
+An `int` no longer has the `float`-only methods `round`, `floor`, `ceil` and `isFinite`, because no extension whose receiver holds a `float` reaches an `int`, at any depth, as with `List<float>` (#224). Convert with `(float)` first:
+
+```csharp
+int count = 3;
+count.round(2);              // compile error: Method `round` does not exist on `int`.
+((float) count).round(2);    // compiles
+```
+
+A call that returns nothing gives no value through `?.`, as it gives none through `.` (#232). `const saved = maybe?.save();` on a `void` method `save` is refused as `const saved = box.save();` is. So is such a call as an argument, an operand or an interpolation, and below a `?.` in a chain, as `holder?.box.save()`. Call it as a statement of its own:
+
+```csharp
+const saved = maybe?.save();    // compile error: `maybe?.save()` returns nothing, so it has no value to use: call it as a statement of its own.
+maybe?.save();                  // compiles
+```
+
+A method, a function, a computed property or a `get` accessor that declares a return other than `void` can't return a call that returns nothing, as `return box.save();` or `=> box.save()` (#232). Neither can a lambda passed as a function type whose result holds no type parameter and isn't `Any?`, as `Function<int()>`, and `int n = Scope.run(() => box.save());` is refused too. Declare the method or the function type `void`:
+
+```csharp
+public Any? saved(Box box) => box.save();    // compile error: `box.save()` returns nothing, so it has no value to use: call it as a statement of its own.
+public void saved(Box box) => box.save();    // compiles
+
+Function<int()> later = () => box.save();    // compile error: `box.save()` returns nothing, so it has no value to use: call it as a statement of its own.
+Function<void()> later = () => box.save();   // compiles
+```
+
+A lambda passed where the result is a type parameter or `Any?` still compiles, as `Scope.run(() => job.handle());`.
+
+#### Remove `config-file` from `mago.toml`
+
+mago 0.6.1 refuses a `mago.toml` that holds `config-file` or `config-file-is-explicit`, as it refuses any key it doesn't know (#225). mago 0.6.0 accepted them and then replaced both with the file it loaded, so neither did anything. Delete them, and name another configuration file with `--config`.
+
+### Fixed
+
 - A save just after `mago analyze --watch` starts or restarts on a busy Mac is now analyzed (#221).
 - An extension hook that runs past `request-timeout-ms` is now named in the error, as "made no progress for 30000 ms on the after-analysis hooks of plugin `dead-routes`", instead of by a request number (#223). The deadline starts again each time the worker starts one of a request's units: a file's hooks in an after-file batch, one plugin's initialization, before-analysis or after-analysis hooks, a codebase-scan hook, or an extension's worker reducer. So each plugin's project-level hooks now get the whole deadline, as each file's hooks do. The analyzer protocol is 1.13, so this mago refuses a worker built on the 0.6.0 SDK at its first message: "unsupported analyzer protocol version 1.12".
 - A user's extension on `Iterable<TItem>` reaches a `Map<TKey, TValue>` with `TItem` as `[TKey, TValue]`, and an extension on `List<T>` reaches a value that may be one of several `List`s with `T` fixed by every one of them, as a generic call's parameter takes them. A member that changes that value, as `add`, takes only what every one of those `List`s takes (#224).
 - No extension whose receiver holds a `float` reaches an `int`, at any depth, as with `List<float>`, so an `int` no longer has the `float`-only methods `round`, `floor`, `ceil` and `isFinite`. Convert with `(float)` first, as in `((float) count).round(2)` (#224).
 - When `mago analyze --watch` restarts on a configuration change, it now applies the edited file as a fresh start does (#225). That covers `php-version`, `threads` and `stack-size`, which now set the analysis's thread pool, `[source] workspace`, `allow-unsupported-php-version` and `no-version-check`. A flag passed on the command line still wins. An edit a fresh start refuses, such as `php-version = "7.4"`, keeps the previous configuration. Before, a restart kept the previous run's values. When `[source] workspace` named another folder, a restart without `--config` searched that folder for its configuration file instead of the current directory, and fell back to the defaults when it found none.
 - A save whose event macOS or Linux drops under a flood of changes is now analyzed by `mago analyze --watch`, which reads the watched files again when the OS says it dropped events, and restarts when they could hide a change to its configuration, baseline or Composer files (#228).
-- A search given its value by name or by a spread, as `carts.contains(value: cart)` or `carts.contains(...[cart])`, now needs `==` on the element type, as `carts.contains(cart)` does (#233). Before, either form skipped the check, so a `List`'s `contains`, `indexOf` or `remove` on a class without `operator ==` compiled and compared by identity at runtime. A `Set`'s and a `Map`'s searches given `value:` or `key:` are now refused beside their declaration, as their positional twins are. A refused `Map` key search's help now tests the keys with `counts.keys().any(c => c === cart)`, instead of `counts.any(…)`, which tests the values. An extension's parameter marked `ComparedByOrder`, as `sortedBy`'s is, is now checked when a named argument fills it out of order.
+- A property read and a method call through `?.` keep each part of their type beside the `null`, as a plain PHP property or method that may give a `List<int>` or a `List<string>` keeps both, so `maybe?.rows.clear()` writes back the property's own type, and `maybe?.rows.add(1)` is refused as `box.rows.add(1)` is, where it took any element and refused the write-back (#230).
+- A method a collection lacks is an error whose help lists only the methods the collection can call. A `List` whose elements have no `==`, as a `List<TItem>` of `TItem : Object` or a `List<Cart>` of a class without `operator ==`, no longer lists `contains`, `indexOf` and `remove`, and a `Set<TItem>` of `TItem : Object` no longer lists `add`, `contains` and `remove`. In a project without the standard library, the help names the library to install, where it read "has the methods .", after any extension the project declares itself. The help of a collection, a `string` and a number lists `remove` before `removeLast` and `trim` before `trimEnd` (#229).
+- A type parameter bound PHP# refuses, such as `TPart : TItem & Shape`, `T : int` or `<T : TOther, TOther : T>`, gives only the error that refuses it. A call, a body and an unused type parameter check no longer read it, as "`TPart` is bounded by `never`" did (#231).
+- `const saved = maybe?.save();` on a `void` method `save` is now refused as `const saved = box.save();` is: a call that returns nothing gives no value through `?.` either, as an argument, an operand, an interpolation, or below a `?.` in a chain, as `holder?.box.save()`. A `?.` call stays a value where a part of its receiver runs a method that returns one. A method, a computed property or a `get` accessor that returns a value now refuses to return such a call too, as `return box.save();` in a method that returns `Any?`, and so does a lambda for a function type whose result holds no type parameter and isn't `Any?`, as `Function<int()>`. `Scope.run(() => box.save());` still compiles. Each such use is refused once, so `maybe?.save() ?? 1` no longer also says its left side is always `null` (#232).
 
 ## [0.6.0] - 2026-10-31
 
@@ -220,7 +280,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/heyJordanParker/php-sharp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/heyJordanParker/php-sharp/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/heyJordanParker/php-sharp/compare/v0.4.1...v0.4.2
