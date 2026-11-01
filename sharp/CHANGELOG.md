@@ -7,6 +7,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Fixed
 
 - A save just after `mago analyze --watch` starts or restarts on a busy Mac is now analyzed (#221).
+- When `mago analyze --watch` restarts on a configuration change, it now uses the file's new `php-version`, `threads`, `[source] workspace`, `allow-unsupported-php-version` and `no-version-check`. Before, it kept the values from the previous run. A value passed on the command line still wins.
 
 ## [0.6.0] - 2026-10-31
 
