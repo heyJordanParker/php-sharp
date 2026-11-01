@@ -8,6 +8,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 - A save just after `mago analyze --watch` starts or restarts on a busy Mac is now analyzed (#221).
 - An extension hook that runs past `request-timeout-ms` is now named in the error, as "made no progress for 30000 ms on the after-analysis hooks of plugin `dead-routes`", instead of by a request number (#223). The deadline starts again each time the worker starts one of a request's units: a file's hooks in an after-file batch, one plugin's initialization, before-analysis or after-analysis hooks, a codebase-scan hook, or an extension's worker reducer. So each plugin's project-level hooks now get the whole deadline, as each file's hooks do. The analyzer protocol is 1.13, so this mago refuses a worker built on the 0.6.0 SDK at its first message: "unsupported analyzer protocol version 1.12".
+- `const saved = maybe?.save();` on a `void` method `save` is now refused as `const saved = box.save();` is: a call that returns nothing gives no value through `?.` either, as an argument, an operand, an interpolation, or below a `?.` in a chain, as `holder?.box.save()`. A method, property or lambda that returns a value now refuses to return such a call too, as `return box.save();` in a method that returns `Any?`. Each such use is refused once, so `maybe?.save() ?? 1` no longer also says its left side is always `null`.
 
 ## [0.6.0] - 2026-10-31
 
