@@ -4,6 +4,12 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A type in parentheses that is neither a union nor an intersection before `?` gives one error that names the type to write, as "Write `Shareable` without parentheses" for `T : (Shareable)` and "Write `Line?` without parentheses" for `(Line)?`. That covers a bound, a catch clause and every other place a type is written. Before, PHP's "cannot be parenthesized" error came as well, and a bound got "A bound is `Object`…" too.
+- A type parameter bound that names a type no file declares, as `T : Missing`, gives one "Cannot find type" error, where the bound is written. Before, the error came at each use of `T`, and calls, type arguments and other type parameters bounded by `T` added errors such as "Nothing fixes the type argument". `T : Missing & Shareable` no longer reports the existing `Shareable` as missing. Once a file declares `Missing`, `mago analyze --watch` checks the bound again.
+- `$maybe?->method()` on a method only `__call` runs now has the `null` the `?->` adds.
+
 ## [0.6.1] - 2026-11-01
 
 ### Upgrading from 0.6.0
