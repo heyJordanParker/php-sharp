@@ -8369,7 +8369,7 @@ fn a_method_a_string_or_a_number_lacks_is_an_error_that_lists_the_methods_it_has
             ]
         ),
         [
-            "5:46 non-existent-method Method `shuffled` does not exist on `string`. | A `string` has the methods `capitalized`, `characters`, `codePoints`, `compareTo`, `contains`, `decapitalized`, `endsWith`, `indexOf`, `lastIndexOf`, `length`, `lines`, `lowercase`, `padEnd`, `padStart`, `parseCsv`, `removePrefix`, `removeSuffix`, `repeat`, `replace`, `slug`, `split`, `startsWith`, `substring`, `trimEnd`, `trimStart`, `trim`, `uppercase`.",
+            "5:46 non-existent-method Method `shuffled` does not exist on `string`. | A `string` has the methods `capitalized`, `characters`, `codePoints`, `compareTo`, `contains`, `decapitalized`, `endsWith`, `indexOf`, `lastIndexOf`, `length`, `lines`, `lowercase`, `padEnd`, `padStart`, `parseCsv`, `removePrefix`, `removeSuffix`, `repeat`, `replace`, `slug`, `split`, `startsWith`, `substring`, `trim`, `trimEnd`, `trimStart`, `uppercase`.",
             "6:36 non-existent-method Method `missing` does not exist on `int`. | An `int` has the methods `abs`, `clamp`, `floorDiv`, `format`, `mod`, `toByteString`, `toHex`.",
             "7:40 non-existent-method Method `missing` does not exist on `float`. | A `float` has the methods `abs`, `ceil`, `clamp`, `floor`, `format`, `isFinite`, `round`.",
             "8:44 non-existent-method Method `negate` does not exist on `bool`. | A `bool` has no methods.",
@@ -10531,6 +10531,47 @@ fn a_map_index_write_without_the_standard_library_is_refused() {
     );
 }
 
+/// A project without the standard library has no member of a `List`, an `Iterable` or a `Set`, so a method one lacks
+/// names the library to install, as an index write does, and never an empty list of methods. An extension the project
+/// declares itself is listed before it, and never stands in for the library.
+#[test]
+fn a_method_a_collection_lacks_without_the_standard_library_names_the_library() {
+    let sharp = "namespace Demo;\n\nclass Report\n{\n    public static int size(List<int> sizes) => sizes.missing();\n    public static int read(Iterable<int> rows) => rows.missing();\n    public static int held(Set<int> tags) => tags.missing();\n}\n";
+    let largest = (
+        "src/Demo/Sizes.sharp",
+        "namespace Demo;\n\npublic static class Sizes\n{\n    extension(List<int> sizes)\n    {\n        public int largest() => 0;\n    }\n}\n",
+    );
+    let refusals = |others: &[(&'static str, &'static str)]| {
+        let (issues, _, _) =
+            analyze_with_references(&PLUGIN_REGISTRY, settings(), ("src/Demo/Report.sharp", sharp), others, &[]);
+
+        issues
+            .iter()
+            .map(|issue| {
+                format!("{} {} | {}", located(sharp, issue), issue.message, issue.help.as_deref().unwrap_or_default())
+            })
+            .collect::<Vec<_>>()
+    };
+    let install = "Install the standard library, heyjordanparker/php-sharp-composer, which declares the members of";
+
+    assert_eq!(
+        refusals(&[]),
+        [
+            format!("5:54 non-existent-method Method `missing` does not exist on `List<int>`. | {install} a `List`."),
+            format!(
+                "6:56 non-existent-method Method `missing` does not exist on `Iterable<int>`. | {install} an `Iterable`."
+            ),
+            format!("7:51 non-existent-method Method `missing` does not exist on `Set<int>`. | {install} a `Set`."),
+        ]
+    );
+    assert_eq!(
+        refusals(&[largest])[0],
+        format!(
+            "5:54 non-existent-method Method `missing` does not exist on `List<int>`. | A `List<int>` has the methods `largest`. {install} a `List`."
+        )
+    );
+}
+
 /// A `List`'s keys are the `int`s from 0 to its last index, so a read whose index may be anything else is an error,
 /// as an unchecked `Any` is (spec section 24). A plain PHP `list<int>` keeps reading a wider key, as PHP does.
 #[test]
@@ -12150,6 +12191,53 @@ fn a_list_of_int_has_its_largest_and_smallest_element() {
         [
             "7:54 where-constraint-violation `max` needs elements of type `int`, and this is a `List<string>`. | Call it on a collection whose elements are `int`.",
             "8:56 non-existent-method Method `max` does not exist on `Map<string, int>`. | A `Map<string, int>` has the methods `any`, `associateBy`, `count`, `filter`, `first`, `get`, `groupBy`, `has`, `isEmpty`, `isNotEmpty`, `keys`, `map`, `remove`, `set`, `sortedBy`, `sumOf`, `toList`, `values`.",
+        ]
+    );
+}
+
+/// Spec section 11: "`contains`, `indexOf` and `remove` on a `List`, a `Map` key, a `Set` element and a value pattern
+/// each need `Equatable`", so the methods a collection lacking a method lists leave them out where its elements have no `==`, as
+/// a `TItem : Object` and a class that declares no `operator ==`, and list them where they have one, as an `int` and a
+/// `TItem : Equatable`. A `Set<TItem : Object>` leaves out `add` too, which compares the value with each element.
+#[test]
+fn a_collection_lacking_a_method_lists_only_the_methods_its_elements_let_it_call() {
+    let sharp = "namespace Demo;\n\npublic static class Shelf\n{\n    public static int objects<TItem : Object>(List<TItem> items) => items.missing();\n    public static int numbers(List<int> items) => items.missing();\n    public static int carts(List<Cart> carts) => carts.missing();\n    public static int equatables<TItem : Equatable>(List<TItem> items) => items.missing();\n    public static int sets<TItem : Object>(Set<TItem> items) => items.missing();\n}\n";
+
+    assert_eq!(
+        refusals(("src/Demo/Shelf.sharp", sharp), &[("src/Demo/Cart.php", CART)])
+            .into_iter()
+            .filter(|refusal| refusal.contains("non-existent-method"))
+            .collect::<Vec<_>>(),
+        [
+            "5:75 non-existent-method Method `missing` does not exist on `List<TItem>`. | A `List<TItem>` has the methods `add`, `all`, `any`, `associateBy`, `chunked`, `clear`, `count`, `distinct`, `entries`, `filter`, `first`, `flatMap`, `fold`, `getOrNull`, `groupBy`, `insert`, `isEmpty`, `isNotEmpty`, `last`, `map`, `removeAt`, `removeFirst`, `removeLast`, `reversed`, `set`, `slice`, `sortedBy`, `sumOf`, `toList`, `toSet`.",
+            "6:57 non-existent-method Method `missing` does not exist on `List<int>`. | A `List<int>` has the methods `add`, `all`, `any`, `associateBy`, `chunked`, `clear`, `contains`, `count`, `distinct`, `entries`, `filter`, `first`, `flatMap`, `fold`, `getOrNull`, `groupBy`, `indexOf`, `insert`, `isEmpty`, `isNotEmpty`, `last`, `map`, `max`, `min`, `remove`, `removeAt`, `removeFirst`, `removeLast`, `reversed`, `set`, `slice`, `sortedBy`, `sumOf`, `toList`, `toSet`.",
+            "7:56 non-existent-method Method `missing` does not exist on `List<Cart>`. | A `List<Cart>` has the methods `add`, `all`, `any`, `associateBy`, `chunked`, `clear`, `count`, `distinct`, `entries`, `filter`, `first`, `flatMap`, `fold`, `getOrNull`, `groupBy`, `insert`, `isEmpty`, `isNotEmpty`, `last`, `map`, `removeAt`, `removeFirst`, `removeLast`, `reversed`, `set`, `slice`, `sortedBy`, `sumOf`, `toList`, `toSet`.",
+            "8:81 non-existent-method Method `missing` does not exist on `List<TItem>`. | A `List<TItem>` has the methods `add`, `all`, `any`, `associateBy`, `chunked`, `clear`, `contains`, `count`, `distinct`, `entries`, `filter`, `first`, `flatMap`, `fold`, `getOrNull`, `groupBy`, `indexOf`, `insert`, `isEmpty`, `isNotEmpty`, `last`, `map`, `remove`, `removeAt`, `removeFirst`, `removeLast`, `reversed`, `set`, `slice`, `sortedBy`, `sumOf`, `toList`, `toSet`.",
+            "9:71 non-existent-method Method `missing` does not exist on `Set<TItem>`. | A `Set<TItem>` has the methods `any`, `clear`, `count`, `filter`, `first`, `isEmpty`, `isNotEmpty`, `map`, `sortedBy`, `sumOf`, `toList`.",
+        ]
+    );
+}
+
+/// A library-style extension of `Iterable<T>` whose parameter is marked `ComparedByEquality` reaches every value a
+/// loop reads, and its call compares that value with the elements only where they are a `List`'s, a `Map`'s keys or a
+/// `Set`'s, spec section 12. So an `Iterable<int>` lacking a method lists it, and a `List<Cart>` of a class without
+/// `operator ==` leaves it out, as it refuses the call.
+#[test]
+fn a_marked_extension_of_an_iterable_is_listed_where_its_call_compares_no_elements_it_cannot() {
+    let rows = (
+        "src/Lib/RowMembers.sharp",
+        "namespace Lib;\n\nimport Sharp.Internal.ComparedByEquality;\n\npublic static class RowMembers\n{\n    extension<T>(Iterable<T> items)\n    {\n        public bool holds([ComparedByEquality] T value) => false;\n    }\n}\n",
+    );
+    let sharp = "namespace Demo;\n\nimport Lib.RowMembers;\n\npublic static class Rows\n{\n    public static int numbers(Iterable<int> rows) => rows.missing();\n    public static int carts(List<Cart> carts) => carts.missing();\n}\n";
+
+    assert_eq!(
+        refusals(("src/Demo/Rows.sharp", sharp), &[rows, ("src/Demo/Cart.php", CART)])
+            .into_iter()
+            .filter(|refusal| refusal.contains("non-existent-method"))
+            .collect::<Vec<_>>(),
+        [
+            "7:59 non-existent-method Method `missing` does not exist on `Iterable<int>`. | An `Iterable<int>` has the methods `filter`, `holds`, `map`, `take`, `toList`.",
+            "8:56 non-existent-method Method `missing` does not exist on `List<Cart>`. | A `List<Cart>` has the methods `add`, `all`, `any`, `associateBy`, `chunked`, `clear`, `count`, `distinct`, `entries`, `filter`, `first`, `flatMap`, `fold`, `getOrNull`, `groupBy`, `insert`, `isEmpty`, `isNotEmpty`, `last`, `map`, `removeAt`, `removeFirst`, `removeLast`, `reversed`, `set`, `slice`, `sortedBy`, `sumOf`, `toList`, `toSet`.",
         ]
     );
 }
