@@ -4,6 +4,56 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-01
+
+### Upgrading from 0.6.0
+
+#### Move mago and `heyjordanparker/mago-sharp` to 0.6.1 together
+
+The analyzer protocol is 1.13, so mago 0.6.1 refuses an extension worker built on the 0.6.0 SDK at its first message: "unsupported analyzer protocol version 1.12" (#223). The SDK ships inside `heyjordanparker/mago-sharp`, so a project's extensions run on the SDK of the package the project requires. Upgrade the package and any `mago` installed another way at once:
+
+```sh
+composer require --dev "heyjordanparker/mago-sharp:^0.6.1"
+```
+
+- A `mago` from `install.sh` updates with `mago self-update --tag 0.6.1`.
+- An extension's own code needs no change.
+
+#### Fix the code the 0.6.1 checker refuses
+
+0.6.1 refuses each of these.
+
+An `int` no longer has the `float`-only methods `round`, `floor`, `ceil` and `isFinite`, because no extension whose receiver holds a `float` reaches an `int`, at any depth, as with `List<float>` (#224). Convert with `(float)` first:
+
+```csharp
+int count = 3;
+count.round(2);              // compile error: Method `round` does not exist on `int`.
+((float) count).round(2);    // compiles
+```
+
+A call that returns nothing gives no value through `?.`, as it gives none through `.` (#232). `const saved = maybe?.save();` on a `void` method `save` is refused as `const saved = box.save();` is. So is such a call as an argument, an operand or an interpolation, and below a `?.` in a chain, as `holder?.box.save()`. Call it as a statement of its own:
+
+```csharp
+const saved = maybe?.save();    // compile error: `maybe?.save()` returns nothing, so it has no value to use: call it as a statement of its own.
+maybe?.save();                  // compiles
+```
+
+A method, a function, a computed property or a `get` accessor that declares a return other than `void` can't return a call that returns nothing, as `return box.save();` or `=> box.save()` (#232). Neither can a lambda passed as a function type whose result holds no type parameter and isn't `Any?`, as `Function<int()>`, and `int n = Scope.run(() => box.save());` is refused too. Declare the method or the function type `void`:
+
+```csharp
+public Any? saved(Box box) => box.save();    // compile error: `box.save()` returns nothing, so it has no value to use: call it as a statement of its own.
+public void saved(Box box) => box.save();    // compiles
+
+Function<int()> later = () => box.save();    // compile error: `box.save()` returns nothing, so it has no value to use: call it as a statement of its own.
+Function<void()> later = () => box.save();   // compiles
+```
+
+A lambda passed where the result is a type parameter or `Any?` still compiles, as `Scope.run(() => job.handle());`.
+
+#### Remove `config-file` from `mago.toml`
+
+mago 0.6.1 refuses a `mago.toml` that holds `config-file` or `config-file-is-explicit`, as it refuses any key it doesn't know (#225). mago 0.6.0 accepted them and then replaced both with the file it loaded, so neither did anything. Delete them, and name another configuration file with `--config`.
+
 ### Fixed
 
 - A save just after `mago analyze --watch` starts or restarts on a busy Mac is now analyzed (#221).
@@ -223,7 +273,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/heyJordanParker/php-sharp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/heyJordanParker/php-sharp/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/heyJordanParker/php-sharp/compare/v0.4.1...v0.4.2
