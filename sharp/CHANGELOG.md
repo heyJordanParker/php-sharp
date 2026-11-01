@@ -7,7 +7,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Fixed
 
 - A save just after `mago analyze --watch` starts or restarts on a busy Mac is now analyzed (#221).
-- A type parameter bound PHP# refuses, such as `TPart : TItem & Shape`, `T : int` or `<T : TOther, TOther : T>`, gives only the error that refuses it. A call, a body and an unused type parameter check no longer read it, as "`TPart` is bounded by `never`" did.
+- An extension hook that runs past `request-timeout-ms` is now named in the error, as "made no progress for 30000 ms on the after-analysis hooks of plugin `dead-routes`", instead of by a request number (#223). The deadline starts again each time the worker starts one of a request's units: a file's hooks in an after-file batch, one plugin's initialization, before-analysis or after-analysis hooks, a codebase-scan hook, or an extension's worker reducer. So each plugin's project-level hooks now get the whole deadline, as each file's hooks do. The analyzer protocol is 1.13, so this mago refuses a worker built on the 0.6.0 SDK at its first message: "unsupported analyzer protocol version 1.12".
+- A type parameter bound PHP# refuses, such as `TPart : TItem & Shape`, `T : int` or `<T : TOther, TOther : T>`, gives only the error that refuses it. A call, a body and an unused type parameter check no longer read it, as "`TPart` is bounded by `never`" did (#231).
 
 ## [0.6.0] - 2026-10-31
 
