@@ -57,8 +57,10 @@ if [[ ! -x "$php" ]]; then
   exit 1
 fi
 
+# callgrind counts the engine's instructions alone, so the rows compile with the mago sharp/bin/test builds, in the
+# test-run profile of sharp/mago/Cargo.toml.
 cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
-PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --release --jobs "${CARGO_BUILD_JOBS:-2}" \
+PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --profile test-run --jobs "${CARGO_BUILD_JOBS:-2}" \
   --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$mago_dir" --bin mago
 # mago compile keeps a workspace's .sharp folder to the files of its own project, so a compile of the rows in the tree
 # would delete the compiled fixtures a sharp/bin/test run there reads. The rows compile in a copy of sharp/bench and
@@ -68,7 +70,7 @@ PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --release --job
 workspace=/tmp
 mkdir "$workspace/sharp"
 cp -R "$root/sharp/bench" "$root/sharp/composer" "$workspace/sharp/"
-"$mago_dir/release/mago" --no-version-check --colors never --workspace "$workspace" \
+"$mago_dir/test-run/mago" --no-version-check --colors never --workspace "$workspace" \
   --config "$workspace/sharp/bench/mago.toml" compile >/dev/null
 
 modes=("no JIT" "function JIT" "tracing JIT")
