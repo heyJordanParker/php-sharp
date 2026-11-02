@@ -17,8 +17,9 @@ permissions:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
   cancel-in-progress: true
-# mago's test-run profile builds without incremental state in CI, as sharp/mago/Cargo.toml explains. sharp/docker/run
-# and PHP_EXTENSIONS's docker run pass it into the container.
+# mago's test-run profile builds without incremental state from a cache, as sharp/mago/Cargo.toml explains.
+# sharp/docker/run and PHP_EXTENSIONS's docker run pass it into the container. MACOS, whose runner keeps its build
+# folder, builds with it.
 env:
   CARGO_INCREMENTAL: 0
 jobs:
@@ -435,6 +436,9 @@ jobs:
             --volume "$PWD:/src" \
             --workdir /src \
             php-sharp-extensions sharp/bin/test --installed --opcache --repeat --passes --jit
+  # On a pull request, the checks only macOS can fail: the engine's build, mago compile and the plain run on a disk that
+  # ignores case, the census and the differential. Linux runs every other mode on the same tests, and the nightly run
+  # runs them all here as well.
   MACOS:
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true'
@@ -442,16 +446,26 @@ jobs:
     # head.repo.fork can't tell, because it is itself a fork of php/php-src. A job never installs on them, so they
     # check that Homebrew already has the build's formulae and build without ccache. Only the runner labelled
     # macos-arm64-suite takes it, so suites queue one at a time: the runners share one Mac, and three suites at once
-    # each ran past the 60-minute limit. That Mac also builds the work the suite checks, so one suite alone takes 53
-    # minutes at moderate load and ran past 60 under a build. The limit leaves room for that, as php-src's own macOS
-    # jobs in test-suite.yml leave 180.
+    # each ran past the 60-minute limit. That Mac also builds the work the suite checks, so the nightly run's suite
+    # alone takes 53 minutes at moderate load and ran past 60 under a build. The limit leaves room for that, as
+    # php-src's own macOS jobs in test-suite.yml leave 180.
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'macos-arm64-suite' || 'macos-latest' }}
     timeout-minutes: 120
     env:
       FORMULAE: autoconf bison curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
+      # The runner keeps the build folder between jobs, so mago keeps the incremental state its test-run profile builds
+      # with, which a restored cache would let age.
+      CARGO_INCREMENTAL: 1
     steps:
+      # actions/checkout's clean deletes sharp/build. Each job on the self-hosted Macs keeps it instead and removes
+      # every other file git doesn't track, because the jobs of every workflow share one work folder per runner. So
+      # the engine and mago rebuild only what changed, which takes seconds, where a build from nothing took 19 minutes.
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: false
+      - name: Remove what an earlier job left, except the build folders
+        run: git clean -ffdx --exclude=/sharp/build/
       - name: brew
         if: runner.environment == 'github-hosted'
         run: |
@@ -474,16 +488,12 @@ jobs:
           type -a rustup rustc cargo
           rustc --version
           cargo --version
-      - name: Mago cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: sharp/build/*/mago
-          key: SHARP_MACOS_MAGO-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
       - name: Build
         run: sharp/bin/build
       - name: Test PHP#
-        run: sharp/bin/test --opcache --repeat --passes --jit --census --differential
+        run: sharp/bin/test --census --differential ${{ github.event_name == 'schedule' && '--opcache --repeat --passes --jit' || '' }}
       - name: Test upstream
+        if: github.event_name == 'schedule'
         run: sharp/bin/test --upstream --opcache
   # The checks that keep the release pipeline on pinned code. An action that is not ours runs only at a full commit
   # SHA, so a moved tag can't change what runs. No Dockerfile under sharp/docker names a `# syntax=` frontend, which

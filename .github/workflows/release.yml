@@ -250,8 +250,15 @@ jobs:
       BUILD_CMD: cargo
 
     steps:
+      # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout source code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: false
+
+      - name: Remove what an earlier job left, except the build folders
+        working-directory: .
+        run: git clean -ffdx --exclude=/sharp/build/
 
       - name: set version env variable
         id: version
