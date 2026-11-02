@@ -153,7 +153,9 @@ jobs:
         with:
           path: sharp/build/*/mago
           key: SHARP_LINUX_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}-${{ github.sha }}
-          restore-keys: SHARP_LINUX_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
+          # The trailing dash matches only a commit's folder: a restore key that matches a key exactly restores that cache
+          # before any newer one, and the other jobs' cache under the bare key holds no list of files.
+          restore-keys: SHARP_LINUX_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}-
       # A checkout gives every file the time it was written, which is newer than every cached build, so cargo would
       # rebuild every Mago crate. As Deno's mtime_cache action does, each file the cached build was built from, by its
       # blob, and each folder whose entries are the same, goes back to a time before that build. A file that changed
