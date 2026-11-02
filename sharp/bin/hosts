@@ -28,14 +28,19 @@ fi
 
 build_dir="$root/sharp/build/linux-$(uname -m)"
 fpm="$build_dir/sapi/fpm/php-fpm"
-mago="$build_dir/mago/test-run/mago"
 install="$build_dir-zts/install"
-for needed in "$fpm:sharp/bin/build" "$mago:sharp/bin/test" "$install/bin/php-config:sharp/bin/build --zts"; do
+for needed in "$fpm:sharp/bin/build" "$install/bin/php-config:sharp/bin/build --zts"; do
   if [[ ! -x "${needed%%:*}" ]]; then
     echo "${needed%%:*} is missing. Run ${needed#*:} first." >&2
     exit 1
   fi
 done
+
+# mago builds in the test-run profile, which sharp/mago/Cargo.toml explains, in the folder sharp/bin/test builds it in.
+cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
+PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --profile test-run \
+  --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$build_dir/mago" --bin mago
+mago="$build_dir/mago/test-run/mago"
 
 fixture="$root/sharp/hosts"
 # Composer keeps the copy of sharp/composer an earlier run installed while composer.lock is unchanged, so the install

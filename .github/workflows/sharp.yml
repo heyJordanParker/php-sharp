@@ -8,6 +8,10 @@ on:
   pull_request:
     branches:
       - master
+  # The nightly run: every job runs every mode on master's tip, where a pull request runs each mode once, on the build
+  # it is about.
+  schedule:
+    - cron: '17 2 * * *'
 permissions:
   contents: read
 concurrency:
@@ -18,12 +22,14 @@ concurrency:
 env:
   CARGO_INCREMENTAL: 0
 jobs:
-  # CI_PASSED is this workflow's one required check, so the workflow always runs, and LINUX,
+  # CI_PASSED is this workflow's one required check, so the workflow always runs, and LINUX, LINUX_PASSES,
   # LINUX_ZTS, HOSTS, PHP_EXTENSIONS and MACOS skip a change to documentation alone. docs/spec.md, README.md and
-  # sharp/spec-self-test.md count as code, because LINUX compiles and runs their examples. A tag runs none of them: it
-  # publishes only a commit whose suites all ran and passed on master, as release.yml does with Mago CI, so its MACOS
-  # never waits for the Mac runners behind the release's Apple builds. CI_PASSED alone isn't enough, because it also
-  # passes a change to documentation alone, whose suites skipped.
+  # sharp/spec-self-test.md count as code, because LINUX compiles and runs their examples. LINUX_PASSES runs only for a
+  # change to the engine's own code, outside its tests: a pass that drops a PHP# mark is a bug of the engine, and every
+  # pass failure a PHP# test found failed every other mode with it. The nightly run runs every job. A tag runs none of
+  # them: it publishes only a commit whose suites all ran and passed on master, as release.yml does with Mago CI, so
+  # its MACOS never waits for the Mac runners behind the release's Apple builds. CI_PASSED alone isn't enough, because
+  # it also passes a change to documentation alone, whose suites skipped.
   CHANGES:
     runs-on: ubuntu-24.04
     permissions:
@@ -31,6 +37,7 @@ jobs:
       contents: read
     outputs:
       code: ${{ steps.diff.outputs.code }}
+      engine: ${{ steps.diff.outputs.engine }}
     steps:
       - name: The tagged commit's suites ran and passed on master
         if: github.ref_type == 'tag'
@@ -54,22 +61,35 @@ jobs:
       - name: git checkout
         if: github.ref_type != 'tag'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Find changes outside documentation
+      - name: Find changes outside documentation, and changes to the engine
         id: diff
         if: github.ref_type != 'tag'
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
+          if [[ $GITHUB_EVENT_NAME == schedule ]]; then
+            echo code=true >> "$GITHUB_OUTPUT"
+            echo engine=true >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           git fetch --depth=1 origin "$BASE"
           git diff --name-only --no-renames "$BASE" HEAD > "$RUNNER_TEMP/changed"
+          code=false
+          engine=false
           while read -r file; do
             case "$file" in
-              docs/spec.md|README.md|sharp/spec-self-test.md) echo code=true >> "$GITHUB_OUTPUT"; break ;;
+              docs/spec.md|README.md|sharp/spec-self-test.md) code=true ;;
               .circleci/*|.github/CODEOWNERS|.github/ISSUE_TEMPLATE/*|*.md|*.rst|docs/*) ;;
               EXTENSIONS|LICENSE|NEWS|UPGRADING|UPGRADING.INTERNALS) ;;
-              *) echo code=true >> "$GITHUB_OUTPUT"; break ;;
+              *) code=true ;;
+            esac
+            case "$file" in
+              */tests/*|*.md) ;;
+              Zend/*|ext/opcache/*|main/*|ext/sharp/*.[ch]) engine=true ;;
             esac
           done < "$RUNNER_TEMP/changed"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "engine=$engine" >> "$GITHUB_OUTPUT"
   LINUX:
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true'
@@ -118,13 +138,14 @@ jobs:
       - name: Build
         run: sharp/bin/build --linux
       - name: Test PHP#
-        run: sharp/bin/test --linux --opcache --repeat --passes --census --spec --differential --phpunit
+        run: sharp/bin/test --linux --opcache --repeat --jit --census --spec --differential --phpunit
       - name: Check the standard library with the checker sharp/bin/test built
         run: |
           # shellcheck disable=SC2016 # The image's sh expands $(uname -m), to its own architecture.
           sharp/docker/run sh -c '"sharp/build/linux-$(uname -m)/mago/test-run/mago" --colors never --workspace sharp/composer analyze --minimum-fail-level note'
+      # The run without opcache shows that plain PHP still behaves as before. The nightly run adds the opcache modes.
       - name: Test upstream
-        run: sharp/bin/test --linux --upstream --opcache
+        run: sharp/bin/test --linux --upstream ${{ github.event_name == 'schedule' && '--opcache' || '' }}
       - name: Verify generated files are up to date
         run: |
           sharp/docker/run scripts/dev/credits
@@ -153,18 +174,49 @@ jobs:
           sharp/docker/run sh -c 'cargo="$(cd ext/sharp && rustup which cargo)" && PATH="$(dirname "$cargo"):$PATH" "$cargo" build --locked --profile test-run --manifest-path sharp/mago/Cargo.toml --target-dir "sharp/build/linux-$(uname -m)/mago" --bin mago --message-format=json' > "$RUNNER_TEMP/build.json"
           header="$(jq -r 'select(.reason == "build-script-executed" and (.package_id | contains("mago-sharp-bridge"))) | .out_dir | ltrimstr("/src/")' "$RUNNER_TEMP/build.json")/sharp_unit.h"
           diff -u ext/sharp/sharp_unit.h "$header"
-      # HOSTS serves the fixture from this build's php-fpm, and compiles it with this build's mago. A tar keeps
-      # their modes, which an artifact drops.
-      - name: Keep php-fpm and mago for HOSTS
-        run: tar -cf "$RUNNER_TEMP/hosts-nts.tar" "sharp/build/linux-$(uname -m)/sapi/fpm/php-fpm" "sharp/build/linux-$(uname -m)/mago/test-run/mago"
-      - name: Upload php-fpm and mago for HOSTS
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+  # Each of PHP's 16 optimizer passes alone, on the build LINUX tests, so a pass that drops a PHP# mark cannot hide
+  # behind another pass. CHANGES runs it for a change to the engine's own code, and the nightly run runs it.
+  LINUX_PASSES:
+    needs: CHANGES
+    if: needs.CHANGES.outputs.engine == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    # sharp/docker/run builds the image FROM base-images.yml's copies, as LINUX does.
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
+    steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Pull the base images from ghcr.io
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+          docker pull "$BASE_IMAGE"
+          docker pull "$GOLANG_IMAGE"
+      - name: Rust cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          name: hosts-nts
-          path: ${{ runner.temp }}/hosts-nts.tar
-          retention-days: 1
-  # The thread-safe build, which FrankenPHP and Octane on Swoole run, in every mode LINUX runs. Linux has a
-  # thread-safe JIT, so the JIT passes run too.
+          path: |
+            sharp/build/cargo
+            sharp/build/rustup
+          key: SHARP_LINUX_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
+      # sharp/bin/test builds mago before it runs the passes, as LINUX does.
+      - name: Mago cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: sharp/build/*/mago
+          key: SHARP_LINUX_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
+      - name: Build
+        run: sharp/bin/build --linux
+      - name: Test PHP# with each optimizer pass alone
+        run: sharp/bin/test --linux --passes
+  # The thread-safe build, which FrankenPHP and Octane on Swoole run, with the opcache and both JITs those hosts run,
+  # since Linux has a thread-safe JIT. The nightly run adds the file cache and the passes alone.
   LINUX_ZTS:
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true'
@@ -203,24 +255,15 @@ jobs:
       - name: Build
         run: sharp/bin/build --linux --zts
       - name: Test PHP#
-        run: sharp/bin/test --linux --zts --opcache --repeat --passes
-      # HOSTS builds FrankenPHP against the libphp, headers and php-config that sharp/bin/build --zts installed.
-      - name: Keep the installed engine for HOSTS
-        run: |
-          install="sharp/build/linux-$(uname -m)-zts/install"
-          tar -cf "$RUNNER_TEMP/hosts-zts.tar" "$install/lib" "$install/include" "$install/bin/php-config"
-      - name: Upload the installed engine for HOSTS
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: hosts-zts
-          path: ${{ runner.temp }}/hosts-zts.tar
-          retention-days: 1
-  # The fixture in sharp/hosts, served from php-fpm and from FrankenPHP's worker mode. FrankenPHP is built with Go
-  # against the engine LINUX_ZTS built, and php-fpm is the one LINUX built.
+        run: sharp/bin/test --linux --zts --repeat --jit ${{ github.event_name == 'schedule' && '--opcache --passes' || '' }}
+  # The fixture in sharp/hosts, served from php-fpm and from FrankenPHP's worker mode. HOSTS builds php-fpm, the
+  # thread-safe engine FrankenPHP is built against with Go, and mago itself, beside LINUX and LINUX_ZTS, so it never
+  # waits for their tests.
   HOSTS:
-    needs: [LINUX, LINUX_ZTS]
+    needs: CHANGES
+    if: needs.CHANGES.outputs.code == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: read
@@ -238,25 +281,28 @@ jobs:
           echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
           docker pull "$BASE_IMAGE"
           docker pull "$GOLANG_IMAGE"
+      - name: Rust cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            sharp/build/cargo
+            sharp/build/rustup
+          key: SHARP_LINUX_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
+      # sharp/bin/hosts builds mago before it compiles the fixture, as sharp/bin/test does in LINUX.
+      - name: Mago cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: sharp/build/*/mago
+          key: SHARP_LINUX_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
       - name: Go module cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: sharp/build/go/pkg/mod
           key: SHARP_HOSTS_GO-${{ hashFiles('sharp/bin/hosts', 'sharp/docker/Dockerfile') }}
-      - name: Download php-fpm and mago
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: hosts-nts
-          path: ${{ runner.temp }}
-      - name: Download the installed engine
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: hosts-zts
-          path: ${{ runner.temp }}
-      - name: Unpack them where they were built
-        run: |
-          tar -xf "$RUNNER_TEMP/hosts-nts.tar"
-          tar -xf "$RUNNER_TEMP/hosts-zts.tar"
+      - name: Build php-fpm
+        run: sharp/bin/build --linux
+      - name: Build and install the thread-safe engine
+        run: sharp/bin/build --linux --zts
       - name: Serve the fixture from php-fpm and FrankenPHP
         run: sharp/bin/hosts --linux
   # Each runtime image, with the extensions a typical Laravel app installs on top, installed the way such an app's
@@ -305,18 +351,6 @@ jobs:
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-      - name: Rust cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            sharp/build/cargo
-            sharp/build/rustup
-          key: SHARP_LINUX_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
-      - name: Mago cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: sharp/build/*/mago
-          key: SHARP_LINUX_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
       - name: Build the image
         run: git archive HEAD | docker build --build-arg REGISTRY --file "${{ matrix.host.file }}" --tag php-sharp -
       # A critical or high CVE that a fixed package resolves fails the build, so it is fixed before a tag, which takes
@@ -371,8 +405,25 @@ jobs:
         run: |
           # shellcheck disable=SC2086 # EXTENSIONS is a list of extensions.
           docker run --rm --volume "$PWD:/src" --workdir /src php-sharp-extensions ${{ matrix.host.php }} sharp/bin/php-extensions $EXTENSIONS
+      # The nightly run tests PHP# with the extensions loaded, in every mode. A pull request runs those modes on LINUX's
+      # build, and each time this run failed before it moved to the nightly run, LINUX failed with it.
+      - name: Rust cache
+        if: github.event_name == 'schedule'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            sharp/build/cargo
+            sharp/build/rustup
+          key: SHARP_LINUX_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
+      - name: Mago cache
+        if: github.event_name == 'schedule'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: sharp/build/*/mago
+          key: SHARP_LINUX_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
       # The container mounts the tree and its caches as sharp/docker/run does.
       - name: Test PHP# with the extensions loaded
+        if: github.event_name == 'schedule'
         run: |
           docker run --rm --init \
             --user "$(id -u):$(id -g)" \
@@ -383,7 +434,7 @@ jobs:
             --env XDG_CACHE_HOME=/src/sharp/build/cache \
             --volume "$PWD:/src" \
             --workdir /src \
-            php-sharp-extensions sharp/bin/test --installed --opcache --repeat --passes
+            php-sharp-extensions sharp/bin/test --installed --opcache --repeat --passes --jit
   MACOS:
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true'
@@ -431,7 +482,7 @@ jobs:
       - name: Build
         run: sharp/bin/build
       - name: Test PHP#
-        run: sharp/bin/test --opcache --repeat --passes --census --differential
+        run: sharp/bin/test --opcache --repeat --passes --jit --census --differential
       - name: Test upstream
         run: sharp/bin/test --upstream --opcache
   # The checks that keep the release pipeline on pinned code. An action that is not ours runs only at a full commit
@@ -472,13 +523,13 @@ jobs:
   # from Composer on plain PHP.
   CI_PASSED:
     if: always()
-    needs: [CHANGES, LINUX, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS, WORKFLOWS]
+    needs: [CHANGES, LINUX, LINUX_PASSES, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS, WORKFLOWS]
     runs-on: ubuntu-24.04
     steps:
-      - name: Every job passed, or skipped a change to documentation alone
+      - name: Every job passed, or skipped a change that doesn't need it
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
-          allowed-skips: LINUX, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS
+          allowed-skips: LINUX, LINUX_PASSES, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS
           jobs: ${{ toJSON(needs) }}
   COMPOSER:
     needs: [CHANGES, LINUX, MACOS]
