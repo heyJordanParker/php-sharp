@@ -499,15 +499,20 @@ jobs:
       # with, which a restored cache would let age.
       CARGO_INCREMENTAL: 1
     steps:
-      # actions/checkout's clean deletes sharp/build. Each job on the self-hosted Macs keeps it instead and removes
-      # every other file git doesn't track, because the jobs of every workflow share one work folder per runner. So
-      # the engine and mago rebuild only what changed, which takes seconds, where a build from nothing took 19 minutes.
+      # actions/checkout's clean deletes sharp/build. Each job on the self-hosted Macs keeps it instead, because the
+      # jobs of every workflow share one work folder per runner. It removes every untracked file, and every ignored file
+      # under sharp/ but sharp/build, and keeps the parsers, scanners and configure that php-src's build writes into
+      # the source tree: the kept build's dependency files name them, and make has no rule that makes some of them
+      # again, such as Zend/zend_ini_scanner_defs.h (run 41504845687). So the engine and mago rebuild only what
+      # changed, which takes seconds, where a build from nothing took 19 minutes.
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           clean: false
-      - name: Remove what an earlier job left, except the build folders
-        run: git clean -ffdx --exclude=/sharp/build/
+      - name: Remove what an earlier job left, except the builds and php-src's generated sources
+        run: |
+          git clean -ffd
+          git clean -ffdx --exclude=/sharp/build/ -- sharp
       - name: brew
         if: runner.environment == 'github-hosted'
         run: |
@@ -530,8 +535,15 @@ jobs:
           type -a rustup rustc cargo
           rustc --version
           cargo --version
+      # Without configure, php-src's generated sources are gone too, as on a new runner or after a clean that removed
+      # them, so the kept build can't make again what its dependency files name, and builds from nothing.
       - name: Build
-        run: sharp/bin/build
+        run: |
+          if [[ -f configure ]]; then
+            sharp/bin/build
+          else
+            sharp/bin/build --clean
+          fi
       - name: Test PHP#
         run: sharp/bin/test --census --differential ${{ github.event_name == 'schedule' && '--opcache --repeat --passes --jit' || '' }}
       - name: Test upstream

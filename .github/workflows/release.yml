@@ -238,9 +238,11 @@ jobs:
         with:
           clean: false
 
-      - name: Remove what an earlier job left, except the build folders
+      - name: Remove what an earlier job left, except the builds and php-src's generated sources
         working-directory: .
-        run: git clean -ffdx --exclude=/sharp/build/
+        run: |
+          git clean -ffd
+          git clean -ffdx --exclude=/sharp/build/ -- sharp
 
       - name: set version env variable
         id: version

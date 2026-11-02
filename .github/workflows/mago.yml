@@ -109,9 +109,11 @@ jobs:
         with:
           clean: false
 
-      - name: Remove what an earlier job left, except the build folders
+      - name: Remove what an earlier job left, except the builds and php-src's generated sources
         working-directory: .
-        run: git clean -ffdx --exclude=/sharp/build/
+        run: |
+          git clean -ffd
+          git clean -ffdx --exclude=/sharp/build/ -- sharp
 
       - name: install rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
@@ -253,9 +255,11 @@ jobs:
         with:
           clean: false
 
-      - name: Remove what an earlier job left, except the build folders
+      - name: Remove what an earlier job left, except the builds and php-src's generated sources
         working-directory: .
-        run: git clean -ffdx --exclude=/sharp/build/
+        run: |
+          git clean -ffd
+          git clean -ffdx --exclude=/sharp/build/ -- sharp
 
       - name: install rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
@@ -300,9 +304,11 @@ jobs:
         with:
           clean: false
 
-      - name: Remove what an earlier job left, except the build folders
+      - name: Remove what an earlier job left, except the builds and php-src's generated sources
         working-directory: .
-        run: git clean -ffdx --exclude=/sharp/build/
+        run: |
+          git clean -ffd
+          git clean -ffdx --exclude=/sharp/build/ -- sharp
 
       # The self-hosted runners already have Homebrew's PHP and Composer, and a job never installs on them.
       - name: brew
