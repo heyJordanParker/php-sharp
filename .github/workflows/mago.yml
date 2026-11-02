@@ -4,6 +4,9 @@ on:
   push:
     branches: [master]
   pull_request:
+  # The weekly run: every job on master's tip, and the workspace's tests on nightly Rust as well.
+  schedule:
+    - cron: '17 3 * * 1'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
@@ -17,12 +20,49 @@ defaults:
     working-directory: sharp/mago
 
 jobs:
+  # ci-passed is this workflow's one required check, so the workflow always runs, and every other job skips a change
+  # that leaves Mago alone: one outside sharp/mago/, sharp/composer/, this workflow and the setup-lean action it runs,
+  # as sharp.yml's CHANGES skips a change to documentation alone. The weekly run runs every job.
+  CHANGES:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: .
+    outputs:
+      mago: ${{ steps.diff.outputs.mago }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Find changes to Mago
+        id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ $GITHUB_EVENT_NAME == schedule ]]; then
+            echo mago=true >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git fetch --depth=1 origin "$BASE"
+          if git diff --quiet "$BASE" HEAD -- sharp/mago sharp/composer .github/workflows/mago.yml .github/actions/setup-lean; then
+            echo mago=false >> "$GITHUB_OUTPUT"
+          else
+            echo mago=true >> "$GITHUB_OUTPUT"
+          fi
+
+  # Every gate runs on Linux with 1.97.0, the toolchain sharp/mago/Cargo.toml's rust-version names and release.yml
+  # builds the binaries with. macOS runs only the workspace's tests, which cover the few lines of Mago that differ
+  # there, such as the watch mode's FSEvents. The weekly run adds the tests on nightly Rust.
   build-and-test:
+    needs: CHANGES
+    if: needs.CHANGES.outputs.mago == 'true'
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        rust: [stable, nightly]
+        rust: ${{ fromJSON(github.event_name == 'schedule' && '["1.97.0", "nightly"]' || '["1.97.0"]') }}
         exclude:
           - { os: macos-latest, rust: nightly }
 
@@ -76,33 +116,36 @@ jobs:
         run: composer install
 
       - name: Install just
+        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
         uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
         with:
           tool: just
 
+      # The workspace's tests run lake, so every leg installs Lean.
       - name: Install elan and Lean
         uses: ./.github/actions/setup-lean
 
       - name: Test PHP SDK
+        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
         run: just test-sdk
 
       - name: cargo check
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
         run: cargo check --workspace --locked
 
       # Workspace builds merge features, so only a build of the bridge alone shows what php links.
       - name: cargo check the PHP# bridge alone
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
         run: cargo check -p mago-sharp-bridge --locked
 
       # The fuzz crate is a workspace of its own, which fuzz.yml builds only when it changes, so a version bump that
       # leaves its lock behind fails here, on the pull request that makes it.
       - name: The fuzz crate's Cargo.lock is current
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
         run: cargo metadata --locked --format-version 1 --manifest-path crates/syntax/fuzz/Cargo.toml > /dev/null
 
       - name: keep the file watcher out of the PHP# bridge
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
         run: |
           if output=$(cargo tree -p mago-sharp-bridge -e normal -i notify --locked 2>&1); then
             echo "$output"
@@ -112,33 +155,34 @@ jobs:
           echo "$output" | grep -q "did not match any packages"
 
       - name: Verify the PHP SDK's NodeKind is generated from the syntax tree
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
         run: |
           php scripts/regen-sdk-node-kinds.php
           git diff --exit-code composer/src/Sdk/Syntax/NodeKind.php
 
       - name: cargo fmt
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
         run: cargo fmt --all -- --check
 
       - name: cargo clippy
+        if: matrix.os == 'ubuntu-latest'
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
       - name: cargo test
         run: cargo test --workspace --locked
 
       - name: cargo test (property)
-        if: matrix.rust == 'stable' && matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
         run: cargo test -p mago-codex --features property-tests --locked
 
       # Linux builds the release binary here because plain-php and the steps below run it. macOS builds
       # its own in release-build, alongside the tests instead of after them.
       - name: cargo build
-        if: matrix.rust == 'stable' && matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
         run: cargo build --release --locked
 
       - name: Upload the release binary for plain-php
-        if: matrix.rust == 'stable' && matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mago-${{ runner.os }}
@@ -146,22 +190,32 @@ jobs:
           if-no-files-found: error
 
       - name: Validate composer code format
-        if: matrix.rust == 'stable' && matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
         run: ./target/release/mago format --dry-run
 
       - name: Lint composer code
-        if: matrix.rust == 'stable' && matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
         run: ./target/release/mago lint --reporting-format=github
 
       - name: Analyze composer code
-        if: matrix.rust == 'stable' && matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
         run: ./target/release/mago analyze --reporting-format=github
 
+  # The macOS binary plain-php runs, in the test-run profile sharp/mago/Cargo.toml explains, since plain-php needs a
+  # binary that behaves as release's, not release's fat LTO. It builds where sharp/bin/test builds it, in the build
+  # folder the self-hosted Macs keep, so it rebuilds only what changed since that runner's last build.
   release-build:
+    needs: CHANGES
+    if: needs.CHANGES.outputs.mago == 'true'
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'macos-arm64-local' || 'macos-latest' }}
 
     permissions:
       contents: read
+
+    # With incremental state, as sharp.yml's MACOS builds the same mago in the same folder. dtolnay/rust-toolchain
+    # turns it off only when CARGO_INCREMENTAL is unset.
+    env:
+      CARGO_INCREMENTAL: 1
 
     steps:
       # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
@@ -177,67 +231,21 @@ jobs:
       - name: install rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: stable
-
-      - name: cache rust toolchain
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          workspaces: sharp/mago
-          key: ${{ runner.os }}-rust-release
-          cache-on-failure: true
+          toolchain: 1.97.0
 
       - name: cargo build
-        run: cargo build --release --locked
+        id: build
+        run: |
+          target_dir="$GITHUB_WORKSPACE/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago"
+          cargo build --locked --profile test-run --target-dir "$target_dir" --bin mago
+          echo "binary=$target_dir/test-run/mago" >> "$GITHUB_OUTPUT"
 
-      - name: Upload the release binary for plain-php
+      - name: Upload the binary for plain-php
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mago-${{ runner.os }}
-          path: sharp/mago/target/release/mago
+          path: ${{ steps.build.outputs.binary }}
           if-no-files-found: error
-
-  wasm-build:
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-
-    steps:
-      - name: checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: install rust toolchain
-        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
-        with:
-          toolchain: stable
-          targets: wasm32-unknown-unknown
-
-      - name: cache rust toolchain
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          workspaces: sharp/mago
-          key: ${{ runner.os }}-rust-wasm
-          cache-on-failure: true
-
-      - name: Cache wasm-pack
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cargo/bin/wasm-pack
-          key: wasm-pack-0.13.1-${{ runner.os }}
-
-      - name: Install wasm-pack and build WASM
-        run: |
-          if ! command -v wasm-pack &>/dev/null; then
-            cargo install wasm-pack --version 0.13.1 --locked
-          fi
-          cd crates/wasm
-          wasm-pack build -d pkg --release
-
-      - name: check the files release.yml packs
-        run: |
-          for file in mago_wasm.d.ts mago_wasm.js mago_wasm_bg.js mago_wasm_bg.wasm package.json; do
-            test -f "crates/wasm/pkg/$file" || { echo "::error::wasm-pack wrote no crates/wasm/pkg/$file"; exit 1; }
-          done
 
   # Installs heyjordanparker/mago-sharp from what git archive ships, the way Packagist ships it, and
   # heyjordanparker/php-sharp-composer from sharp/composer, on the runner's own PHP. A package that requires
@@ -275,9 +283,9 @@ jobs:
       - name: install rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: stable
+          toolchain: 1.97.0
 
-      - name: Download the release binary
+      - name: Download the binary the job before built
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mago-${{ runner.os }}
@@ -362,6 +370,8 @@ jobs:
           vendor/bin/mago compile
 
   typos-check:
+    needs: CHANGES
+    if: needs.CHANGES.outputs.mago == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -379,7 +389,8 @@ jobs:
 
   # Nightly, because only nightly honours #[coverage(off)], cargo-llvm-cov's way to exclude code that cannot run by design.
   patch-coverage:
-    if: github.event_name == 'pull_request'
+    needs: CHANGES
+    if: needs.CHANGES.outputs.mago == 'true' && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
 
     permissions:
@@ -479,18 +490,19 @@ jobs:
             exit 1
           }
 
-  # The one required check of this workflow: it passes only when every job above passed, so a job
-  # added later blocks merges without a change to the repository's rules.
+  # The one required check of this workflow: it passes only when every job above passed, or skipped a change that
+  # leaves Mago alone, so a job added later blocks merges without a change to the repository's rules. It runs always,
+  # so it reports on every pull request, even one whose every other job skipped.
   ci-passed:
     if: always()
-    needs: [build-and-test, release-build, wasm-build, plain-php, typos-check, patch-coverage]
+    needs: [CHANGES, build-and-test, release-build, plain-php, typos-check, patch-coverage]
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: .
     steps:
-      - name: Every job passed
+      - name: Every job passed, or skipped a change that leaves Mago alone
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
-          allowed-skips: ${{ github.event_name != 'pull_request' && 'patch-coverage' || '' }}
+          allowed-skips: build-and-test, release-build, plain-php, typos-check, patch-coverage
           jobs: ${{ toJSON(needs) }}
