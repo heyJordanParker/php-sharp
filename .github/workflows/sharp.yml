@@ -146,13 +146,36 @@ jobs:
           # rustup's toolchains are binaries for the runner's architecture, so each architecture keeps its own.
           key: SHARP_LINUX_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
       # sharp/bin/test builds mago from sharp/mago into sharp/build/<os>-<arch>/mago, in the test-run profile
-      # sharp/mago/Cargo.toml explains. The cache holds that build as the first run after its key changed made it: the
-      # dependencies, which change only with the key, and Mago's own crates, which cargo rebuilds when they changed since.
+      # sharp/mago/Cargo.toml explains. As Deno's ci.ts keeps its target folder, each run saves that folder under its
+      # commit and restores the newest one saved, with the list of sharp/mago's files it was built from.
       - name: Mago cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: sharp/build/*/mago
-          key: SHARP_LINUX_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
+          key: SHARP_LINUX_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: SHARP_LINUX_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
+      # A checkout gives every file the time it was written, which is newer than every cached build, so cargo would
+      # rebuild every Mago crate. As Deno's mtime_cache action does, each file the cached build was built from, by its
+      # blob, and each folder whose entries are the same, goes back to a time before that build. A file that changed
+      # keeps the checkout's time, and so does a folder that gained or lost an entry, which a build script that watches
+      # a folder reads, so cargo rebuilds what they reach.
+      - name: Give what the cached mago was built from a time before that build
+        run: |
+          export LC_ALL=C
+          sources="sharp/build/linux-$(uname -m)/mago/sources"
+          git -c core.quotePath=false ls-files -s sharp/mago | sort > "$RUNNER_TEMP/sources"
+          if [[ -f $sources ]]; then
+            # Each folder under sharp/mago, with each entry in it.
+            entries() { cut -f2 "$1" | awk -F/ '{ folder = $1 "/" $2; for (i = 3; i <= NF; i++) { print folder "\t" $i; folder = folder "/" $i } }' | sort -u; }
+            comm -3 <(entries "$sources") <(entries "$RUNNER_TEMP/sources") | sed 's/^\t//' | cut -f1 | sort -u > "$RUNNER_TEMP/changed-folders"
+            {
+              comm -12 "$sources" "$RUNNER_TEMP/sources" | cut -f2
+              entries "$RUNNER_TEMP/sources" | cut -f1 | sort -u | comm -23 - "$RUNNER_TEMP/changed-folders"
+            } | xargs -r -d '\n' touch -d @946684800 --
+            echo "$(comm -13 "$sources" "$RUNNER_TEMP/sources" | wc -l) files and $(wc -l < "$RUNNER_TEMP/changed-folders") folders changed since the cached build."
+          fi
+          mkdir -p "$(dirname "$sources")"
+          mv "$RUNNER_TEMP/sources" "$sources"
       - name: Build
         run: sharp/bin/build --linux
       - name: Test PHP#
