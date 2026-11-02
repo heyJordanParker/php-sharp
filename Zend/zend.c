@@ -17,7 +17,6 @@
    +----------------------------------------------------------------------+
 */
 
-/* Throwaway: CI's CHANGES sees an engine change, so LINUX_PASSES runs. */
 #include "zend.h"
 #include "zend_extensions.h"
 #include "zend_modules.h"
