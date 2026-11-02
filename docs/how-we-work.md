@@ -43,7 +43,7 @@ New example-marker or run-comment syntax lands in `sharp/bin/spec` one PR before
 
 One feature is one PR: the checker in `sharp/mago/`, the engine, the standard library, the spec and their tests change together, and every CI gate runs on it.
 
-Master requires CI to pass. It doesn't require a branch to include the latest master. CI runs on master after every merge, and a red master is fixed before anything else merges.
+Master requires CI to pass, and a branch must include the latest master before it merges, so master holds only trees CI tested. That costs no second run: a push to master finds the pull request run that passed the same tree, skips the suites and links that run. A red master is fixed before anything else merges.
 
 ## Every mistake becomes a check
 

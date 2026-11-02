@@ -27,44 +27,61 @@ jobs:
   # LINUX_ZTS, HOSTS, PHP_EXTENSIONS and MACOS skip a change to documentation alone. docs/spec.md, README.md and
   # sharp/spec-self-test.md count as code, because LINUX compiles and runs their examples. LINUX_PASSES runs only for a
   # change to the engine's own code, outside its tests: a pass that drops a PHP# mark is a bug of the engine, and every
-  # pass failure a PHP# test found failed every other mode with it. The nightly run runs every job. A tag runs none of
-  # them: it publishes only a commit whose suites all ran and passed on master, as release.yml does with Mago CI, so
-  # its MACOS never waits for the Mac runners behind the release's Apple builds. CI_PASSED alone isn't enough, because
-  # it also passes a change to documentation alone, whose suites skipped.
+  # pass failure a PHP# test found failed every other mode with it. The nightly run runs every job.
+  #
+  # A tree runs the suites once, as bors's "not rocket science" rule tests the exact tree that lands once. The "master
+  # merge gate" ruleset merges only a branch that holds the latest master, so a merge commit's tree is its pull
+  # request head's, and a push to master skips the suites when that head's pull request run passed them all, and links
+  # that run. A tag runs none of them: it publishes only a tree whose suites all ran and passed, on master or on the
+  # pull request that merged it, as release.yml does with Mago CI, so its MACOS never waits for the Mac runners behind
+  # the release's Apple builds. CI_PASSED alone isn't enough, because it also passes a change to documentation alone,
+  # whose suites skipped.
   CHANGES:
     runs-on: ubuntu-24.04
     permissions:
       actions: read
       contents: read
+      pull-requests: read
     outputs:
       code: ${{ steps.diff.outputs.code }}
       engine: ${{ steps.diff.outputs.engine }}
     steps:
-      - name: The tagged commit's suites ran and passed on master
-        if: github.ref_type == 'tag'
+      - name: Find the run that passed every suite on this tree
+        id: passed
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/sharp.yml/runs?head_sha=$GITHUB_SHA&branch=master&event=push" --jq '.workflow_runs[0].id // empty')
-          if [[ -z $run ]]; then
-            echo "::error::PHP# CI never ran on master for commit $GITHUB_SHA. Tag a commit whose suites master's PHP# CI ran and passed."
-            exit 1
-          fi
-          jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=100")
-          suites='.jobs[] | select(.name == "LINUX" or .name == "LINUX_ZTS" or .name == "HOSTS" or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS")))'
-          failed=$(jq -r "[$suites | select(.conclusion != \"success\") | \"\(.name): \(.conclusion // .status)\"] | join(\", \")" <<< "$jobs")
+          api() { gh api "repos/$GITHUB_REPOSITORY/$1" --jq "$2"; }
+          tree=$(api "git/commits/$GITHUB_SHA" .tree.sha)
+          runs=$(api "actions/workflows/sharp.yml/runs?head_sha=$GITHUB_SHA&branch=master&event=push&status=success" '.workflow_runs[].id')
+          for head in $(api "commits/$GITHUB_SHA/pulls" '.[] | select(.merged_at) | .head.sha'); do
+            if [[ $(api "git/commits/$head" .tree.sha) == "$tree" ]]; then
+              runs+=" $(api "actions/workflows/sharp.yml/runs?head_sha=$head&event=pull_request&status=success" '.workflow_runs[].id')"
+            fi
+          done
           # LINUX, LINUX_ZTS, HOSTS, MACOS, and PHP_EXTENSIONS for each of its two images on each of its two runners.
-          if [[ $(jq "[$suites | select(.conclusion == \"success\")] | length" <<< "$jobs") != 8 ]]; then
-            echo "::error::Commit $GITHUB_SHA has not run and passed every PHP# suite on master (${failed:-a suite is missing}): $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
-            exit 1
-          fi
-          echo "Commit $GITHUB_SHA ran and passed every PHP# suite on master: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
+          # LINUX_PASSES runs only for a change to the engine, and a run's success means it passed when it ran.
+          suites='[.jobs[] | select(.conclusion == "success" and (.name == "LINUX" or .name == "LINUX_ZTS" or .name == "HOSTS" or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS"))))] | length'
+          for run in $runs; do
+            if [[ $(api "actions/runs/$run/jobs?per_page=100" "$suites") == 8 ]]; then
+              echo "run=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run" >> "$GITHUB_OUTPUT"
+              echo "::notice::Tree $tree ran and passed every PHP# suite in $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run, so they don't run again."
+              exit 0
+            fi
+          done
+          echo "No PHP# CI run passed every suite on tree $tree. Runs checked: ${runs:-none}."
+      - name: The tagged commit's tree ran and passed every suite
+        if: github.ref_type == 'tag' && !steps.passed.outputs.run
+        run: |
+          echo "::error::No PHP# CI run passed every suite on commit $GITHUB_SHA's tree, on master or on the pull request that merged it. Tag a commit whose tree passed them."
+          exit 1
       - name: git checkout
-        if: github.ref_type != 'tag'
+        if: github.ref_type != 'tag' && !steps.passed.outputs.run
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Find changes outside documentation, and changes to the engine
         id: diff
-        if: github.ref_type != 'tag'
+        if: github.ref_type != 'tag' && !steps.passed.outputs.run
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |

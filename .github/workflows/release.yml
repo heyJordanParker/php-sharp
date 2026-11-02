@@ -23,33 +23,41 @@ defaults:
     working-directory: sharp/mago
 
 jobs:
-  # Every other job needs crate_metadata, which needs ci, so a release builds only a commit whose Mago CI already
-  # passed on master. The suite does not run again here.
+  # Every other job needs crate_metadata, which needs ci, so a release builds only a tree whose every Mago CI job
+  # already ran and passed, on master or on the pull request that merged it, as sharp.yml's CHANGES gates a tag. The
+  # suite does not run again here.
   ci:
-    name: Mago CI passed on master
+    name: Mago CI passed on the tree
     runs-on: ubuntu-latest
     permissions:
       actions: read
+      contents: read
+      pull-requests: read
     defaults:
       run:
         working-directory: .
     steps:
-      - name: The commit's ci-passed check passed on master
+      - name: Every Mago CI job ran and passed on the commit's tree
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mago.yml/runs?head_sha=$GITHUB_SHA&branch=master&event=push" --jq '.workflow_runs[0].id // empty')
-          if [[ -z $run ]]; then
-            echo "::error::Mago CI never ran on master for commit $GITHUB_SHA, so its ci-passed check is missing. Release a commit that master's Mago CI passed."
-            exit 1
-          fi
-          jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=100")
-          if [[ $(jq -r '.jobs[] | select(.name == "ci-passed") | .conclusion' <<< "$jobs") != success ]]; then
-            failed=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | "\(.name): \(.conclusion // .status)"] | join(", ")' <<< "$jobs")
-            echo "::error::Commit $GITHUB_SHA has not passed Mago CI's ci-passed check on master ($failed): $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
-            exit 1
-          fi
-          echo "Commit $GITHUB_SHA passed Mago CI's ci-passed check on master: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
+          api() { gh api "repos/$GITHUB_REPOSITORY/$1" --jq "$2"; }
+          tree=$(api "git/commits/$GITHUB_SHA" .tree.sha)
+          runs=$(api "actions/workflows/mago.yml/runs?head_sha=$GITHUB_SHA&branch=master&event=push&status=success" '.workflow_runs[].id')
+          for head in $(api "commits/$GITHUB_SHA/pulls" '.[] | select(.merged_at) | .head.sha'); do
+            if [[ $(api "git/commits/$head" .tree.sha) == "$tree" ]]; then
+              runs+=" $(api "actions/workflows/mago.yml/runs?head_sha=$head&event=pull_request&status=success" '.workflow_runs[].id')"
+            fi
+          done
+          # patch-coverage runs only on a pull request.
+          for run in $runs; do
+            if [[ $(api "actions/runs/$run/jobs?per_page=100" '[.jobs[] | select(.conclusion != "success" and .name != "patch-coverage")] | length') == 0 ]]; then
+              echo "Tree $tree ran and passed every Mago CI job: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
+              exit 0
+            fi
+          done
+          echo "::error::No Mago CI run passed every job on commit $GITHUB_SHA's tree $tree, on master or on the pull request that merged it (runs checked: ${runs:-none}). Release a commit whose tree passed them."
+          exit 1
 
   crate_metadata:
     name: extract crate metadata

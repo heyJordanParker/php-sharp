@@ -22,22 +22,51 @@ defaults:
 jobs:
   # ci-passed is this workflow's one required check, so the workflow always runs, and every other job skips a change
   # that leaves Mago alone: one outside sharp/mago/, sharp/composer/, this workflow and the setup-lean action it runs,
-  # as sharp.yml's CHANGES skips a change to documentation alone. The weekly run runs every job.
+  # as sharp.yml's CHANGES skips a change to documentation alone. The weekly run runs every job. A tree runs them once,
+  # as sharp.yml's CHANGES explains: a push to master skips them when its tree is the head of the pull request it
+  # merged, and that pull request's run passed every job, and links that run.
   CHANGES:
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
+      pull-requests: read
     defaults:
       run:
         working-directory: .
     outputs:
       mago: ${{ steps.diff.outputs.mago }}
     steps:
+      - name: Find the pull request run that passed every job on this tree
+        id: passed
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          api() { gh api "repos/$GITHUB_REPOSITORY/$1" --jq "$2"; }
+          tree=$(api "git/commits/$GITHUB_SHA" .tree.sha)
+          runs=
+          for head in $(api "commits/$GITHUB_SHA/pulls" '.[] | select(.merged_at) | .head.sha'); do
+            if [[ $(api "git/commits/$head" .tree.sha) == "$tree" ]]; then
+              runs+=" $(api "actions/workflows/mago.yml/runs?head_sha=$head&event=pull_request&status=success" '.workflow_runs[].id')"
+            fi
+          done
+          for run in $runs; do
+            if [[ $(api "actions/runs/$run/jobs?per_page=100" '[.jobs[] | select(.conclusion != "success")] | length') == 0 ]]; then
+              echo "run=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run" >> "$GITHUB_OUTPUT"
+              echo "::notice::Tree $tree ran and passed every Mago CI job in $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run, so they don't run again."
+              exit 0
+            fi
+          done
+          echo "No pull request run passed every Mago CI job on tree $tree. Runs checked: ${runs:-none}."
+
       - name: checkout
+        if: ${{ !steps.passed.outputs.run }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Find changes to Mago
         id: diff
+        if: ${{ !steps.passed.outputs.run }}
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
