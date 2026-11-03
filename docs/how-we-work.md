@@ -45,6 +45,16 @@ One feature is one PR: the checker in `sharp/mago/`, the engine, the standard li
 
 Master requires CI to pass, and a branch must include the latest master before it merges, so master holds only trees CI tested. That costs no second run: a push to master finds the pull request run that passed the same tree, skips the suites and links that run. A red master is fixed before anything else merges.
 
+## A release's path
+
+A release builds its assets once, on the bump's PR, and the tag publishes those same files:
+
+1. The bump's PR has a title that starts with `chore: release`. It changes only what `php sharp/mago/scripts/set-version.php <version>` writes, `PHP_SHARP_VERSION` in `ext/sharp/php_sharp.h`, the version `Zend/tests/sharp/ri_sharp.phpt` expects, and the release's section of `sharp/CHANGELOG.md`. Its CI checks that, then builds every release asset beside the suites: the six `mago` binaries with their attestations, Mago's source archives, their SHA-256s and both runtime images.
+2. The bump merges once its CI passes.
+3. The full run is dispatched on master with `gh workflow run sharp.yml --ref master`.
+4. Once that run passes, the bump's merge commit is tagged `v<version>`, and the tag is pushed.
+5. The tag publishes the assets the bump's PR built, and builds none. If they expired, or were built from another tree, the tag builds them itself, and its run says so.
+
 ## Every mistake becomes a check
 
 Agents make mistakes, and a rule written only in prose gets broken again. So when a reviewer, Cass or CI finds a mistake, the fix comes in two parts:

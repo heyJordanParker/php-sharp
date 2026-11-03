@@ -38,7 +38,8 @@ jobs:
   # links that run. The nightly run skips a tree a full run already passed. A tag runs none of them: it publishes only
   # a tree whose full run passed all 9 test jobs, as release.yml does with Mago CI, so its MACOS never waits for the
   # Mac runners behind the release's Apple builds. A pull request run isn't enough, because it runs each mode once,
-  # and CI_PASSED isn't, because it also passes a change to documentation alone, whose suites skipped.
+  # and CI_PASSED isn't, because it also passes a change to documentation alone, whose suites skipped. A tag publishes
+  # the images its bump's pull request pushed, as IMAGE explains, and CHANGES finds them.
   CHANGES:
     runs-on: ubuntu-24.04
     permissions:
@@ -51,6 +52,7 @@ jobs:
       code: ${{ steps.diff.outputs.code }}
       engine: ${{ steps.diff.outputs.engine }}
       full: ${{ env.FULL }}
+      images: ${{ steps.images.outputs.run-id }}
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -93,6 +95,49 @@ jobs:
             exit 1
           fi
           echo "Commit $GITHUB_SHA's tree passed all 9 test jobs in $RUN."
+      # The newest pull request run on this tree whose 4 IMAGE jobs pushed their images. Each digest's file holds the
+      # commit IMAGE built it from, the pull request's merge commit, which must have this commit's tree. When no run
+      # pushed them, or their digests expired, or they were built from another tree, IMAGE builds them, and says so.
+      - name: Find the bump's pull request run that pushed the images of this tree
+        id: bump
+        if: github.ref_type == 'tag'
+        uses: ./.github/actions/passed-tree
+        with:
+          workflow: sharp.yml
+          events: pull_request
+          passed: '[.jobs[] | select(.conclusion == "success" and (.name | startswith("IMAGE (")))] | length == 4'
+      - name: The bump's images were built from this tree
+        id: images
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ steps.bump.outputs.run }}
+        run: |
+          build() {
+            echo "::notice::$1 So IMAGE builds both images from commit $GITHUB_SHA."
+            exit 0
+          }
+          if [[ -z $RUN ]]; then
+            build "No pull request run pushed the images of commit $GITHUB_SHA's tree."
+          fi
+          id=${RUN##*/}
+          kept=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$id/artifacts?per_page=100" \
+            --jq '.artifacts[] | select((.name | startswith("digest-")) and (.expired | not)) | .name' | wc -l)
+          if [[ $kept != 4 ]]; then
+            build "Run $RUN keeps $kept of its 4 images' digests: the others expired or were deleted."
+          fi
+          gh run download "$id" --pattern 'digest-*' --dir "$RUNNER_TEMP/digests"
+          tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)
+          while IFS= read -r -d '' file; do
+            commit=$(< "$file")
+            built=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$commit" --jq .tree.sha)
+            if [[ $built != "$tree" ]]; then
+              build "Run $RUN built image sha256:${file##*/} from commit $commit, whose tree $built isn't commit $GITHUB_SHA's tree $tree."
+            fi
+            echo "Image sha256:${file##*/} was built from commit $commit, whose tree is $tree."
+          done < <(find "$RUNNER_TEMP/digests" -type f -print0)
+          echo "run-id=$id" >> "$GITHUB_OUTPUT"
+          echo "::notice::IMAGE_TAGS tags the images run $RUN pushed from commit $GITHUB_SHA's tree, and IMAGE builds none."
       - name: Find changes outside documentation, and changes to the engine
         id: diff
         if: github.ref_type != 'tag' && !steps.passed.outputs.run && !steps.full.outputs.run
@@ -547,6 +592,8 @@ jobs:
   # version Zend/tests/sharp/ri_sharp.phpt expects, and the release's section of sharp/CHANGELOG.md. So the full run a
   # release dispatches on its merge commit tests the tree the pull request already tested, with new version strings.
   # It isn't a required check, and CI_PASSED doesn't need it, so a pull request with another title never waits on it.
+  # Once it passes, RELEASE_ASSETS and IMAGE build the release's assets beside the suites, and the tag on the bump's
+  # merge commit publishes them.
   RELEASE_BUMP:
     if: "github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'chore: release')"
     runs-on: ubuntu-24.04
@@ -612,6 +659,21 @@ jobs:
             exit 1
           fi
           echo "sharp/CHANGELOG.md adds the $new section and its links."
+  # The bump's Mago binaries, their attestations, Mago's source archives and their SHA-256s, which release.yml builds
+  # and the tag on the bump's merge commit publishes, as release.yml explains. A called workflow's jobs may ask only
+  # for permissions its caller grants, and release.yml's release job, which runs only for a tag or a dispatch, asks
+  # for contents: write. A pull request from another repository gets a token that can't attest, and the Macs run only
+  # this repository's code, so only a bump from this repository builds them.
+  RELEASE_ASSETS:
+    needs: RELEASE_BUMP
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/release.yml
+    permissions:
+      actions: read
+      attestations: write
+      contents: write
+      id-token: write
+      pull-requests: read
   # This workflow's one required check. A job skipped by its `if` reports one check under the job's
   # name, so CI_PASSED stands in for every job it needs. It fails when any of them failed or was
   # cancelled. mago.yml's ci-passed is the other required check, and its plain-php job runs mago
@@ -715,11 +777,15 @@ jobs:
   # docker-library names 8.5-fpm and 8.5-zts. Each platform builds on a runner of its own architecture and pushes
   # its image by digest, with BuildKit's provenance and SBOM attestations, and IMAGE_TAGS tags the two as one.
   # BuildKit, its SBOM scanner and the bases are base-images.yml's copies in ghcr.io at pinned digests, pulled after
-  # the login, so no pull is an anonymous Docker Hub pull (#86).
+  # the login, so no pull is an anonymous Docker Hub pull (#86). It runs on the bump's pull request once RELEASE_BUMP
+  # passed, for a pull request from this repository as RELEASE_ASSETS does, so the tag tags the images it pushed, and
+  # on a tag only when CHANGES found none.
   IMAGE:
     name: IMAGE (${{ matrix.host.file }}, ${{ matrix.platform }})
-    if: github.ref_type == 'tag'
-    needs: CHANGES
+    if: >-
+      ${{ !failure() && !cancelled() && (github.ref_type == 'tag' && !needs.CHANGES.outputs.images
+      || needs.RELEASE_BUMP.result == 'success' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: [CHANGES, RELEASE_BUMP]
     runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     permissions:
       contents: read
@@ -741,8 +807,9 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
           driver-opts: image=ghcr.io/heyjordanparker/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
-      # The build's context is the tagged commit's tree, which BuildKit fetches from GitHub by the commit's SHA, so
-      # a tag moved after the push builds nothing else, as docker/github-builder's checksum pinned it.
+      # The build's context is the commit's tree, which BuildKit fetches from GitHub by the commit's SHA, so a ref
+      # moved after the push builds nothing else, as docker/github-builder's checksum pinned it. On the bump's pull
+      # request, that commit is the merge commit, whose tree the tag checks.
       - name: Build and push the image by digest
         id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -754,9 +821,8 @@ jobs:
           provenance: mode=max
           sbom: generator=ghcr.io/heyjordanparker/buildkit-syft-scanner:1.12.0@sha256:ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9
           outputs: type=image,name=ghcr.io/heyjordanparker/php-sharp,push-by-digest=true,name-canonical=true,push=true
-      # The tag builds the image again, with that day's packages, so the image IMAGE_TAGS publishes is scanned
-      # itself, on its own platform, as PHP_EXTENSIONS scans the merge's. A digest that fails is never uploaded, so
-      # IMAGE_TAGS tags none.
+      # The image IMAGE_TAGS publishes is scanned itself, on its own platform, as PHP_EXTENSIONS scans the one it
+      # builds and starts. A digest that fails is never uploaded, so IMAGE_TAGS tags none.
       - name: Scan the pushed image for fixable critical and high CVEs
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
@@ -767,27 +833,31 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: '1'
+      # The file is named by the digest and holds the commit the image was built from, whose tree the tag checks.
       - name: Keep the digest for IMAGE_TAGS
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           mkdir "$RUNNER_TEMP/digests"
-          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+          echo "$GITHUB_SHA" > "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      # As long as release.yml keeps the assets, so the bump's tag still finds them after a slow review.
       - name: Upload the digest for IMAGE_TAGS
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: digest-${{ matrix.host.name }}-${{ strategy.job-index }}
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 90
   # Tags each host's two platform images as one image, and attests its provenance with the repository's identity,
   # which `gh attestation verify oci://ghcr.io/heyjordanparker/php-sharp:<tag> --repo heyJordanParker/php-sharp`
-  # checks.
+  # checks. The images are the ones the run CHANGES found pushed, or the ones IMAGE pushed in this run.
   IMAGE_TAGS:
     name: IMAGE_TAGS (${{ matrix.host.name }})
-    needs: IMAGE
+    needs: [CHANGES, IMAGE]
+    if: ${{ !failure() && !cancelled() && github.ref_type == 'tag' }}
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: read
       packages: write
       id-token: write
@@ -804,6 +874,8 @@ jobs:
           pattern: digest-${{ matrix.host.name }}-*
           path: ${{ runner.temp }}/digests
           merge-multiple: true
+          run-id: ${{ needs.CHANGES.outputs.images || github.run_id }}
+          github-token: ${{ github.token }}
       - name: Log in to ghcr.io
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
