@@ -490,8 +490,8 @@ jobs:
             --workdir /src \
             php-sharp-extensions sharp/bin/test --installed --opcache --repeat --passes --jit
   # On a pull request, the checks only macOS can fail: the engine's build, mago compile and the plain run on a disk that
-  # ignores case, the census and the differential. Linux runs every other mode on the same tests, and the full run
-  # runs them all here as well.
+  # ignores case, the census and the differential, and both JITs, because no other pull request job runs on arm64. Linux
+  # runs every other mode on the same tests, and the full run runs them all here as well.
   MACOS:
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true'
@@ -552,7 +552,7 @@ jobs:
             sharp/bin/build --clean
           fi
       - name: Test PHP#
-        run: sharp/bin/test --census --differential ${{ needs.CHANGES.outputs.full == 'true' && '--opcache --repeat --passes --jit' || '' }}
+        run: sharp/bin/test --jit --census --differential ${{ needs.CHANGES.outputs.full == 'true' && '--opcache --repeat --passes' || '' }}
       - name: Test upstream
         if: needs.CHANGES.outputs.full == 'true'
         run: sharp/bin/test --upstream --opcache
