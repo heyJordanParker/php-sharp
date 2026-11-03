@@ -563,11 +563,14 @@ jobs:
 
   # install.sh checks a download against these SHA-256s when gh is missing, and the composer job pins them in the tag's
   # heyjordanparker/mago-sharp version. They are written where the assets were built, so a tag that publishes the
-  # bump's assets publishes the bump's SHA-256s too.
+  # bump's assets publishes the bump's SHA-256s too. A job whose condition names no status function runs only when
+  # every job before it passed, and ci and bump_assets skip on the bump's pull request, so each job after them names
+  # its own.
   sums:
     name: Write the SHA-256 of every asset
     runs-on: ubuntu-latest
-    needs: [crate_metadata, source_archive, build]
+    needs: [crate_metadata, bump_assets, source_archive, build]
+    if: ${{ !failure() && !cancelled() && !needs.bump_assets.outputs.run-id }}
     defaults:
       run:
         working-directory: .
@@ -705,7 +708,7 @@ jobs:
     name: Publish heyjordanparker/mago-sharp
     runs-on: ubuntu-latest
     needs: [crate_metadata, bump_assets, release]
-    if: github.ref_type == 'tag'
+    if: ${{ !failure() && !cancelled() && github.ref_type == 'tag' }}
     permissions:
       actions: read
       contents: read
