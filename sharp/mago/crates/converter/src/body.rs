@@ -180,7 +180,7 @@ impl Converter<'_, '_> {
                         return self.refuse(expression.span(), "the `@` silence operator has no PHP# form yet");
                     }
                     UnaryPrefixOperator::Reference(_) => {
-                        return self.refuse(expression.span(), "a reference has no PHP# form (spec section 14.3)");
+                        return self.refuse(expression.span(), "a reference has no PHP# form: PHP# has no references");
                     }
                     UnaryPrefixOperator::BoolCast(..)
                     | UnaryPrefixOperator::BooleanCast(..)

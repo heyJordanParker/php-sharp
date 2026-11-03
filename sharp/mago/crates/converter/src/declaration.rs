@@ -67,7 +67,7 @@ impl Converter<'_, '_> {
             }
             (None, None) => {}
         }
-        self.docblock(class.span(), true);
+        self.docblock(class.span());
 
         let is_final = class.modifiers.iter().any(|modifier| matches!(modifier, Modifier::Final(_)));
         self.class = Some(Class { name, metadata, is_final });
@@ -117,8 +117,8 @@ impl Converter<'_, '_> {
     }
 
     /// Takes each tag whose type the declaration now writes out of the docblock right before `declaration`, and the
-    /// whole docblock when nothing else is left in it. A class keeps the prose of its docblock.
-    fn docblock(&mut self, declaration: Span, _class: bool) {
+    /// whole docblock when nothing else is left in it. Its prose and every other tag stay.
+    fn docblock(&mut self, declaration: Span) {
         let start = declaration.start.offset;
         let Some(docblock) = self.input.program.trivia.iter().rev().find(|trivia| {
             trivia.kind.is_docblock()
@@ -235,7 +235,7 @@ impl Converter<'_, '_> {
             }
             PropertyItem::Abstract(_) => {}
         }
-        self.docblock(property.span(), false);
+        self.docblock(property.span());
     }
 
     fn method(&mut self, method: &Method<'_>) {
@@ -249,7 +249,7 @@ impl Converter<'_, '_> {
             return;
         };
         if let Some(ampersand) = method.ampersand {
-            self.refuse(ampersand, "a method that returns by reference has no PHP# form (spec section 14.3)");
+            self.refuse(ampersand, "a method that returns by reference has no PHP# form: PHP# has no references");
             return;
         }
         let is_constructor = name.eq_ignore_ascii_case(b"__construct");
@@ -276,7 +276,9 @@ impl Converter<'_, '_> {
             }
             self.edits.replace_range(function.span.start.offset, method.name.span.end.offset, class_name);
         } else {
-            if declared.return_from_body.is_some() {
+            if declared.return_from_body.is_some()
+                || declared.return_type_metadata.as_ref().is_some_and(|metadata| metadata.inferred)
+            {
                 self.refuse(method.name.span, format!(
                     "`{}`'s return is taken from its body, which the analysis infers, and the converter writes no inferred type",
                     String::from_utf8_lossy(name)
@@ -324,15 +326,18 @@ impl Converter<'_, '_> {
             MethodBody::Abstract(_) => {}
             MethodBody::Expression(_) => self.refuse(method.body.span(), "an expression body is PHP# only"),
         }
-        self.docblock(method.span(), false);
+        self.docblock(method.span());
     }
 
     fn parameter(&mut self, parameter: &FunctionLikeParameter<'_>, declared: Option<TUnion>) {
         let name = String::from_utf8_lossy(parameter.variable.name).into_owned();
         if parameter.ampersand.is_some() {
-            self.refuse(parameter.span(), format!(
-                "PHP# passes every argument by value (spec section 14.3), so `{name}` can't be taken by reference: return the new value instead"
-            ));
+            self.refuse(
+                parameter.span(),
+                format!(
+                    "a PHP# parameter is never taken by reference, so `{name}` can't be: return the new value instead"
+                ),
+            );
             return;
         }
         if parameter.hooks.is_some() {

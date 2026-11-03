@@ -202,7 +202,7 @@ impl<'input> Converter<'input, '_> {
             Statement::Trait(_) => {
                 self.refuse(statement.span(), "a trait has no PHP# form: PHP# declares no traits (spec section 22)");
             }
-            _ => self.refuse(statement.span(), "a file-level statement has no PHP# form (spec section 8)"),
+            _ => self.refuse(statement.span(), "a file-level statement or function has no PHP# form: a .sharp file declares one type (spec section 27)"),
         }
     }
 
