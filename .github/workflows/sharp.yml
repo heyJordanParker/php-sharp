@@ -8,6 +8,7 @@ on:
   pull_request:
     branches:
       - master
+      - scratch/262-base2
   # The full run: every job runs every mode, where a pull request runs each mode once, on the build it is about. It runs
   # nightly on master's tip, and on a dispatch, which a release runs on the bump's merge commit before its tag.
   schedule:
