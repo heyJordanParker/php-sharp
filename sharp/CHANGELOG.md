@@ -20,6 +20,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 - A refused search's help names its lambda's parameter with a name no local or parameter in scope holds, as `lines.any(element => element === line)` in a method with a parameter `l`. Before, it wrote `lines.any(l => l === line)`, which is refused because `l` is already declared.
 - A case written in a class or an interface is refused once, as "A class has no cases: declare `Open` in an enum." Before, mago's "Class `Shop` cannot contain enum cases." came as well.
 - `new Self(…)` in a `final` class or a struct compiles without a `required` constructor, since no subclass can lack it. Before, it was refused because `Self` can be any subclass.
+- Of two files that declare one full name, the file whose path sorts first keeps it, and the other file's error names it, as "Class `Cart` is already defined in `app/Shop/Cart.sharp`." Before, an internal file id decided, so a user could not tell which file would be refused, and the error said "already defined elsewhere".
 
 ## [0.6.1] - 2026-11-01
 
