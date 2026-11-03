@@ -563,6 +563,12 @@ struct Psr4Folder {
     is_test: bool,
 }
 
+/// Marks a `.sharp` file a caller makes itself, as the loader marks each one it reads, so a file converted into PHP#
+/// in memory is checked as the same file on disk would be.
+pub fn mark_sharp_file(file: &mut File, workspace: &Path) {
+    mark_package(file, workspace, &mut Manifests::default());
+}
+
 /// Marks a `.sharp` file from its nearest `composer.json`: whether it is a PHP# source of the standard library, which
 /// names the standard library's package, vendored or in the package's own repository, whether its package is a
 /// project, and what its PSR-4 folders say about its namespace, from the folder that holds it most closely.

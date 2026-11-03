@@ -157,6 +157,25 @@ where
     Ok(())
 }
 
+/// Moves the file `from` to `to`, both relative to `workspace`, with `git mv` when git tracks `from`. The index then
+/// holds the rename with the old contents, so the next commit is the rename alone, which `git log --follow` follows,
+/// and a change written to `to` afterwards shows as unstaged. Returns `false`, and moves nothing, when git does not
+/// track `from`.
+pub fn move_tracked(workspace: &Path, from: &Path, to: &Path) -> Result<bool, Error> {
+    let tracked = is_git_repository(workspace)
+        && Command::new("git")
+            .args(["ls-files", "--error-unmatch", "--"])
+            .arg(from)
+            .current_dir(workspace)
+            .output()
+            .is_ok_and(|output| output.status.success());
+    if tracked {
+        run_git("mv", Command::new("git").args(["mv", "--"]).arg(from).arg(to).current_dir(workspace))?;
+    }
+
+    Ok(tracked)
+}
+
 /// Keeps `paths`, each a file under `workspace`, out of git: the ones no `.gitignore` already ignores become the block
 /// of the repository's `info/exclude` that `owner` holds for `workspace`. A workspace git ignores, as a build folder,
 /// has no block, and neither has one whose paths are all ignored. Every other line of the file stays as it is, except
