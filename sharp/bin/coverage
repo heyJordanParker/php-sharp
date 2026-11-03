@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Fails unless a test runs every line a change adds to sharp/mago's analyzer, semantics and sharp-bridge crates. A
-# builder runs it before each push, and mago.yml's patch-coverage job runs it on a pull request's merge commit, so both
-# measure the same lines against the same bar. It compares with the merge base of HEAD and origin/master, which it
-# fetches first, or with the commit it is given. CI gives the merge commit's first parent, because its checkout holds
-# only two commits, and a fetch of a master that moved since then downloads master's whole history: 760 MB in 120 s.
+# Fails unless a test runs every line a change adds to sharp/mago's analyzer, semantics and sharp-bridge crates.
+# mago.yml's patch-coverage job runs it on a pull request's merge commit, and a builder runs it only to reproduce a
+# failure of that job, so both measure the same lines against the same bar. It compares with the merge base of HEAD
+# and origin/master, which it fetches first, or with the commit it is given. CI gives the merge commit's first parent,
+# because its checkout holds only two commits, and a fetch of a master that moved since then downloads master's whole
+# history: 760 MB in 120 s.
 usage() {
   echo "usage: sharp/bin/coverage [<base>]" >&2
   exit 2

@@ -485,8 +485,8 @@ jobs:
       - name: Search for misspellings
         run: typos
 
-  # sharp/bin/coverage measures it, with the nightly toolchain it installs and the cargo-llvm-cov this job installs, as
-  # a builder runs it before each push.
+  # sharp/bin/coverage measures it, with the nightly toolchain it installs and the cargo-llvm-cov this job installs. A
+  # builder runs it only to reproduce a failure of this job.
   patch-coverage:
     needs: CHANGES
     if: needs.CHANGES.outputs.mago == 'true' && github.event_name == 'pull_request'
