@@ -21,9 +21,11 @@ fi
 base="${1:-origin/master}"
 
 # Nightly, because only nightly honours #[coverage(off)], cargo-llvm-cov's way to exclude code that cannot run by design.
-# rustup updates it to the nightly a new CI runner installs, so a run here measures with CI's compiler.
-rustup toolchain install nightly --profile minimal --component llvm-tools-preview --allow-downgrade --no-self-update
-export RUSTUP_TOOLCHAIN=nightly
+# rustup updates it to the nightly a new CI runner installs, so a run here measures with CI's compiler. Its cargo and
+# rustc come first on the PATH, as sharp/bin/build-mago puts its toolchain's, before any other, such as Homebrew's rust.
+toolchain=nightly
+rustup toolchain install "$toolchain" --profile minimal --component llvm-tools-preview --allow-downgrade --no-self-update
+PATH="$(dirname "$(rustup which --toolchain "$toolchain" cargo)"):$PATH"
 
 llvm_cov="cargo-llvm-cov $(sed -n 's/^ *tool: cargo-llvm-cov@//p' "$root/.github/workflows/mago.yml")"
 if [[ "$(cargo llvm-cov --version)" != "$llvm_cov" ]]; then
