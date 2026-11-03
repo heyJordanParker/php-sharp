@@ -87,10 +87,146 @@ jobs:
             echo mago=true >> "$GITHUB_OUTPUT"
           fi
 
-  # Every gate runs on Linux with CHANGES's rust toolchain, the one sharp/mago/Cargo.toml's rust-version names and
-  # release.yml builds the binaries with. macOS runs only the workspace's tests, which cover the few lines of Mago that differ
-  # there, such as the watch mode's FSEvents. The weekly run adds the tests on nightly Rust.
-  build-and-test:
+  # The gates on Linux with CHANGES's rust toolchain, the one sharp/mago/Cargo.toml's rust-version names and
+  # release.yml builds the binaries with, and the Linux binary plain-php runs. They run beside tests, which takes as
+  # long. The weekly run adds clippy on nightly Rust.
+  checks:
+    needs: CHANGES
+    if: needs.CHANGES.outputs.mago == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: ${{ fromJSON(github.event_name == 'schedule' && format('["{0}", "nightly"]', needs.CHANGES.outputs.rust) || format('["{0}"]', needs.CHANGES.outputs.rust)) }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+
+      - name: show the Rust toolchain on PATH
+        run: |
+          type -a rustc cargo
+          rustc --version
+          cargo --version
+
+      - name: Rust and Mago caches
+        uses: ./.github/actions/mago-cache
+        with:
+          name: MAGO_CHECKS_${{ matrix.rust }}
+          rust: MAGO
+          rust-paths: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          save: ${{ github.event_name == 'schedule' }}
+          target-dir-env: true
+
+      - name: Install PHP
+        if: matrix.rust != 'nightly'
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: "8.3"
+          tools: "composer:v2"
+
+      - name: Install composer dependencies
+        if: matrix.rust != 'nightly'
+        run: composer install
+
+      - name: Install just
+        if: matrix.rust != 'nightly'
+        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        with:
+          tool: just
+
+      - name: Test PHP SDK
+        if: matrix.rust != 'nightly'
+        run: just test-sdk
+
+      - name: cargo check
+        if: matrix.rust != 'nightly'
+        run: cargo check --workspace --locked
+
+      # Workspace builds merge features, so only a build of the bridge alone shows what php links.
+      - name: cargo check the PHP# bridge alone
+        if: matrix.rust != 'nightly'
+        run: cargo check -p mago-sharp-bridge --locked
+
+      # The fuzz crate is a workspace of its own, which fuzz.yml builds only when it changes, so a version bump that
+      # leaves its lock behind fails here, on the pull request that makes it.
+      - name: The fuzz crate's Cargo.lock is current
+        if: matrix.rust != 'nightly'
+        run: cargo metadata --locked --format-version 1 --manifest-path crates/syntax/fuzz/Cargo.toml > /dev/null
+
+      - name: keep the file watcher out of the PHP# bridge
+        if: matrix.rust != 'nightly'
+        run: |
+          if output=$(cargo tree -p mago-sharp-bridge -e normal -i notify --locked 2>&1); then
+            echo "$output"
+            echo "::error::mago-sharp-bridge depends on notify, so php would link a file watcher"
+            exit 1
+          fi
+          echo "$output" | grep -q "did not match any packages"
+
+      - name: Verify the PHP SDK's NodeKind is generated from the syntax tree
+        if: matrix.rust != 'nightly'
+        run: |
+          php scripts/regen-sdk-node-kinds.php
+          git diff --exit-code composer/src/Sdk/Syntax/NodeKind.php
+
+      - name: cargo fmt
+        if: matrix.rust != 'nightly'
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      # The test-run binary, which behaves as release's without its fat LTO, as release-build builds macOS's.
+      - name: Build mago with sharp/bin/build-mago
+        id: build
+        if: matrix.rust != 'nightly'
+        working-directory: .
+        run: |
+          sharp/bin/build-mago
+          echo "binary=$GITHUB_WORKSPACE/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago/test-run/mago" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the binary for plain-php
+        if: matrix.rust != 'nightly'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mago-${{ runner.os }}
+          path: ${{ steps.build.outputs.binary }}
+          if-no-files-found: error
+
+      - name: Validate composer code format
+        if: matrix.rust != 'nightly'
+        env:
+          MAGO: ${{ steps.build.outputs.binary }}
+        run: '"$MAGO" format --dry-run'
+
+      - name: Lint composer code
+        if: matrix.rust != 'nightly'
+        env:
+          MAGO: ${{ steps.build.outputs.binary }}
+        run: '"$MAGO" lint --reporting-format=github'
+
+      - name: Analyze composer code
+        if: matrix.rust != 'nightly'
+        env:
+          MAGO: ${{ steps.build.outputs.binary }}
+        run: '"$MAGO" analyze --reporting-format=github'
+
+  # The workspace's tests, on Linux and on macOS, which covers the few lines of Mago that differ there, such as the
+  # watch mode's FSEvents. The weekly run adds them on nightly Rust on Linux.
+  tests:
     needs: CHANGES
     if: needs.CHANGES.outputs.mago == 'true'
     strategy:
@@ -108,6 +244,11 @@ jobs:
     permissions:
       contents: read
 
+    # The Macs build with incremental state in the folder they keep, as release-build does. dtolnay/rust-toolchain
+    # turns it off only when CARGO_INCREMENTAL is unset.
+    env:
+      CARGO_INCREMENTAL: ${{ matrix.os == 'macos-latest' && 1 || 0 }}
+
     steps:
       # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout
@@ -123,21 +264,18 @@ jobs:
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: ${{ matrix.rust }}
-          components: rustfmt, clippy
 
-      - name: show the Rust toolchain on PATH
-        run: |
-          type -a rustc cargo
-          rustc --version
-          cargo --version
-
-      - name: cache rust toolchain
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Rust and Mago caches
+        uses: ./.github/actions/mago-cache
         with:
-          workspaces: sharp/mago
-          key: ${{ runner.os }}-rust-${{ matrix.rust }}
-          shared-key: ${{ runner.os }}-rust-${{ matrix.rust }}
-          cache-on-failure: true
+          name: MAGO_TESTS_${{ matrix.rust }}
+          rust: MAGO
+          rust-paths: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          save: ${{ github.event_name == 'schedule' }}
+          target-dir-env: true
 
       # setup-php brew-installs PHP on macOS, so the self-hosted runners use their Homebrew PHP and Composer instead.
       - name: Install PHP
@@ -150,58 +288,9 @@ jobs:
       - name: Install composer dependencies
         run: composer install
 
-      - name: Install just
-        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
-        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
-        with:
-          tool: just
-
-      # The workspace's tests run lake, so every leg installs Lean.
+      # The workspace's tests run lake.
       - name: Install elan and Lean
         uses: ./.github/actions/setup-lean
-
-      - name: Test PHP SDK
-        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
-        run: just test-sdk
-
-      - name: cargo check
-        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
-        run: cargo check --workspace --locked
-
-      # Workspace builds merge features, so only a build of the bridge alone shows what php links.
-      - name: cargo check the PHP# bridge alone
-        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
-        run: cargo check -p mago-sharp-bridge --locked
-
-      # The fuzz crate is a workspace of its own, which fuzz.yml builds only when it changes, so a version bump that
-      # leaves its lock behind fails here, on the pull request that makes it.
-      - name: The fuzz crate's Cargo.lock is current
-        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
-        run: cargo metadata --locked --format-version 1 --manifest-path crates/syntax/fuzz/Cargo.toml > /dev/null
-
-      - name: keep the file watcher out of the PHP# bridge
-        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
-        run: |
-          if output=$(cargo tree -p mago-sharp-bridge -e normal -i notify --locked 2>&1); then
-            echo "$output"
-            echo "::error::mago-sharp-bridge depends on notify, so php would link a file watcher"
-            exit 1
-          fi
-          echo "$output" | grep -q "did not match any packages"
-
-      - name: Verify the PHP SDK's NodeKind is generated from the syntax tree
-        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
-        run: |
-          php scripts/regen-sdk-node-kinds.php
-          git diff --exit-code composer/src/Sdk/Syntax/NodeKind.php
-
-      - name: cargo fmt
-        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
-        run: cargo fmt --all -- --check
-
-      - name: cargo clippy
-        if: matrix.os == 'ubuntu-latest'
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
       - name: cargo test
         run: cargo test --workspace --locked
@@ -209,32 +298,6 @@ jobs:
       - name: cargo test (property)
         if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
         run: cargo test -p mago-codex --features property-tests --locked
-
-      # Linux builds the release binary here because plain-php and the steps below run it. macOS builds
-      # its own in release-build, alongside the tests instead of after them.
-      - name: cargo build
-        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
-        run: cargo build --release --locked
-
-      - name: Upload the release binary for plain-php
-        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: mago-${{ runner.os }}
-          path: sharp/mago/target/release/mago
-          if-no-files-found: error
-
-      - name: Validate composer code format
-        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
-        run: ./target/release/mago format --dry-run
-
-      - name: Lint composer code
-        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
-        run: ./target/release/mago lint --reporting-format=github
-
-      - name: Analyze composer code
-        if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
-        run: ./target/release/mago analyze --reporting-format=github
 
   # The macOS binary plain-php runs, in the test-run profile sharp/mago/Cargo.toml explains, since plain-php needs a
   # binary that behaves as release's, not release's fat LTO. It builds where sharp/bin/test builds it, in the build
@@ -268,6 +331,17 @@ jobs:
         with:
           toolchain: ${{ needs.CHANGES.outputs.rust }}
 
+      - name: Rust and Mago caches
+        uses: ./.github/actions/mago-cache
+        with:
+          name: MAGO_RELEASE_BUILD
+          rust: MAGO
+          rust-paths: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          save: ${{ github.event_name == 'schedule' }}
+
       - name: Build mago with sharp/bin/build-mago
         id: build
         working-directory: .
@@ -288,7 +362,7 @@ jobs:
   # installs no second checker, and one that requires a later release installs nothing. Then runs mago on
   # a one-class .sharp project with the binary the job before built.
   plain-php:
-    needs: [CHANGES, build-and-test, release-build]
+    needs: [CHANGES, checks, release-build]
     strategy:
       fail-fast: false
       matrix:
@@ -535,7 +609,7 @@ jobs:
   # so it reports on every pull request, even one whose every other job skipped.
   ci-passed:
     if: always()
-    needs: [CHANGES, build-and-test, release-build, plain-php, typos-check, patch-coverage]
+    needs: [CHANGES, checks, tests, release-build, plain-php, typos-check, patch-coverage]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -544,5 +618,5 @@ jobs:
       - name: Every job passed, or skipped a change that leaves Mago alone
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
-          allowed-skips: build-and-test, release-build, plain-php, typos-check, patch-coverage
+          allowed-skips: checks, tests, release-build, plain-php, typos-check, patch-coverage
           jobs: ${{ toJSON(needs) }}
