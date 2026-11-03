@@ -39,9 +39,9 @@ class Signatures
         return (first + second) * factor;
     }
 
-    public int doubled(int ...values)
+    public int doubled(int first, int second = 0)
     {
-        return this.scale(...values, factor: 2);
+        return this.scale(...[first, second], factor: 2);
     }
 
     public int|string pay(int|float amount)
