@@ -1,0 +1,13 @@
+namespace Demo.Labels;
+
+public static class Labels
+{
+    extension(Order|string value)
+    {
+        public string caption => value is string ? "caption " + value : "extension";
+
+        public string label() => value is string ? "text " + value : "extension";
+
+        public string badge() => value is string ? "badge " + value : "badge order";
+    }
+}

@@ -1,0 +1,21 @@
+namespace Demo.Labels;
+
+public class Shelf
+{
+    public static string label(Order|string value) => value.label();
+
+    public static string badge(Order|string value) => value.badge();
+
+    public static string text(string value) => value.label();
+
+    public static string order(Order value) => value.label();
+
+    public static string caption(Order|string value) => value.caption;
+
+    public static string labeled(Order|string value)
+    {
+        Function<string()> label = value.label;
+
+        return label();
+    }
+}
