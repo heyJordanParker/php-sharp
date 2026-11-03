@@ -1,0 +1,31 @@
+name: Delete a closed pull request's caches
+
+# A pull request's runs save their caches under its merge ref, refs/pull/<number>/merge, which only its own runs restore.
+# Once it closes, merged or not, nothing restores them, and they stayed until GitHub evicted them, so this deletes them,
+# as GitHub's "Force deleting cache entries" example does. A pull request from another repository gets a token that
+# can't delete, so its caches still wait for eviction.
+on:
+  pull_request:
+    types: [closed]
+
+permissions: {}
+
+jobs:
+  delete:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete every cache the pull request's runs saved
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: refs/pull/${{ github.event.pull_request.number }}/merge
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/caches?ref=$REF&per_page=100" \
+            --jq '.actions_caches[] | "\(.id)\t\(.key)"' > "$RUNNER_TEMP/caches"
+          echo "$(wc -l < "$RUNNER_TEMP/caches") caches on $REF."
+          while IFS=$'\t' read -r id key; do
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/caches/$id" --silent
+            echo "Deleted $key."
+          done < "$RUNNER_TEMP/caches"

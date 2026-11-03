@@ -1,9 +1,11 @@
 name: Restore the Rust and Mago caches
 description: >-
   Restores a job's Rust toolchain and registry, and the Mago target folder sharp/build/<os>-<arch>/mago, where
-  sharp/bin/build-mago builds and CARGO_TARGET_DIR points. As Deno's ci.ts keeps its target folder, a full run saves
-  that folder under its commit, and every other run restores the newest one a full run saved and saves nothing, so
-  the caches hold one target per job for master's recent full runs. A checkout gives every file a newer time than any
+  sharp/bin/build-mago builds and CARGO_TARGET_DIR points. As Deno's ci.ts keeps its target folder, master's full run
+  saves that folder under its commit, and every other run restores the newest one it saved and saves nothing, so the
+  caches hold one target per job for master's recent full runs. Only master saves the Rust cache too: a cache another
+  ref saves only that ref's runs restore, so a bump's full run or a branch's dispatch restores and never saves. A
+  checkout gives every file a newer time than any
   cached build, so cargo would rebuild every Mago crate. As Deno's mtime_cache action does, each file the cached build
   was built from, by its blob, and each folder whose entries are the same, goes back to a time before that build. A
   file that changed keeps the checkout's time, and so does a folder that gained or lost an entry, which a build script
@@ -22,7 +24,7 @@ inputs:
     description: The folders that hold the job's Rust toolchain and crates, one per line.
     required: true
   save:
-    description: true on a full run, which saves the target folder under its commit.
+    description: true on a full run, which on master saves the target folder under its commit.
     required: false
     default: ''
   target-dir-env:
@@ -33,24 +35,30 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Rust cache
-      if: runner.environment == 'github-hosted'
+    # rustup's toolchains are binaries for the runner's architecture, so each architecture keeps its own.
+    - name: Rust cache, saved on master
+      if: runner.environment == 'github-hosted' && github.ref == 'refs/heads/master'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ inputs.rust-paths }}
-        # rustup's toolchains are binaries for the runner's architecture, so each architecture keeps its own.
+        key: ${{ inputs.rust }}_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
+    - name: Rust cache, restored only
+      if: runner.environment == 'github-hosted' && github.ref != 'refs/heads/master'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ inputs.rust-paths }}
         key: ${{ inputs.rust }}_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
     # The trailing dash matches only a commit's folder: a restore key that matches a key exactly restores that cache
     # before any newer one.
-    - name: Mago cache, saved at the end of a full run
-      if: runner.environment == 'github-hosted' && inputs.save == 'true'
+    - name: Mago cache, saved at the end of master's full run
+      if: runner.environment == 'github-hosted' && inputs.save == 'true' && github.ref == 'refs/heads/master'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: sharp/build/*/mago
         key: ${{ inputs.name }}_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}-${{ github.sha }}
         restore-keys: ${{ inputs.name }}_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}-
     - name: Mago cache, restored only
-      if: runner.environment == 'github-hosted' && inputs.save != 'true'
+      if: runner.environment == 'github-hosted' && (inputs.save != 'true' || github.ref != 'refs/heads/master')
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: sharp/build/*/mago

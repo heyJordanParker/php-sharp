@@ -6,9 +6,11 @@ on:
   # Only a pull request into master, as sharp.yml runs, so the run CHANGES reuses passed against master.
   pull_request:
     branches: [master]
-  # The weekly run: every job on master's tip, and the workspace's tests on nightly Rust as well.
+  # The full run: every job, and the workspace's tests and clippy on nightly Rust as well. It runs weekly on master's
+  # tip, and on a dispatch, as sharp.yml's full run does.
   schedule:
     - cron: '17 3 * * 1'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
@@ -24,9 +26,9 @@ defaults:
 jobs:
   # ci-passed is this workflow's one required check, so the workflow always runs, and every other job skips a change
   # that leaves Mago alone: one outside sharp/mago/, sharp/composer/, this workflow, sharp/bin/build-mago,
-  # sharp/bin/coverage and the actions it runs, as sharp.yml's CHANGES skips a change to documentation alone. The
-  # weekly run runs every job. A tree runs them once: a push to master skips them when a pull request run passed every
-  # job on its tree, and links that run, as .github/actions/passed-tree explains.
+  # sharp/bin/coverage and the actions it runs, as sharp.yml's CHANGES skips a change to documentation alone. The full
+  # run runs every job, and its `full` output tells each job so. A tree runs them once: a push to master skips them when
+  # a pull request run passed every job on its tree, and links that run, as .github/actions/passed-tree explains.
   CHANGES:
     runs-on: ubuntu-latest
     permissions:
@@ -36,7 +38,10 @@ jobs:
     defaults:
       run:
         working-directory: .
+    env:
+      FULL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || '' }}
     outputs:
+      full: ${{ env.FULL }}
       mago: ${{ steps.diff.outputs.mago }}
       rust: ${{ steps.rust.outputs.version }}
     steps:
@@ -75,7 +80,7 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          if [[ $GITHUB_EVENT_NAME == schedule ]]; then
+          if [[ $FULL ]]; then
             echo mago=true >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -90,14 +95,14 @@ jobs:
 
   # The gates on Linux with CHANGES's rust toolchain, the one sharp/mago/Cargo.toml's rust-version names and
   # release.yml builds the binaries with, and the Linux binary plain-php runs. They run beside tests, which takes as
-  # long. The weekly run adds clippy on nightly Rust.
+  # long. The full run adds clippy on nightly Rust.
   checks:
     needs: CHANGES
     if: needs.CHANGES.outputs.mago == 'true'
     strategy:
       fail-fast: false
       matrix:
-        rust: ${{ fromJSON(github.event_name == 'schedule' && format('["{0}", "nightly"]', needs.CHANGES.outputs.rust) || format('["{0}"]', needs.CHANGES.outputs.rust)) }}
+        rust: ${{ fromJSON(needs.CHANGES.outputs.full == 'true' && format('["{0}", "nightly"]', needs.CHANGES.outputs.rust) || format('["{0}"]', needs.CHANGES.outputs.rust)) }}
     runs-on: ubuntu-latest
 
     permissions:
@@ -129,7 +134,7 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          save: ${{ github.event_name == 'schedule' && matrix.rust != 'nightly' }}
+          save: ${{ needs.CHANGES.outputs.full == 'true' && matrix.rust != 'nightly' }}
           target-dir-env: true
 
       - name: Install PHP
@@ -227,7 +232,7 @@ jobs:
         run: '"$MAGO" analyze --reporting-format=github'
 
   # The workspace's tests, on Linux and on macOS, which covers the few lines of Mago that differ there, such as the
-  # watch mode's FSEvents. The weekly run adds them on nightly Rust on Linux.
+  # watch mode's FSEvents. The full run adds them on nightly Rust on Linux.
   tests:
     needs: CHANGES
     if: needs.CHANGES.outputs.mago == 'true'
@@ -235,7 +240,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        rust: ${{ fromJSON(github.event_name == 'schedule' && format('["{0}", "nightly"]', needs.CHANGES.outputs.rust) || format('["{0}"]', needs.CHANGES.outputs.rust)) }}
+        rust: ${{ fromJSON(needs.CHANGES.outputs.full == 'true' && format('["{0}", "nightly"]', needs.CHANGES.outputs.rust) || format('["{0}"]', needs.CHANGES.outputs.rust)) }}
         exclude:
           - { os: macos-latest, rust: nightly }
 
@@ -274,7 +279,7 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          save: ${{ github.event_name == 'schedule' && matrix.rust != 'nightly' }}
+          save: ${{ needs.CHANGES.outputs.full == 'true' && matrix.rust != 'nightly' }}
           target-dir-env: true
 
       # setup-php brew-installs PHP on macOS, so the self-hosted runners use their Homebrew PHP and Composer instead.
@@ -544,14 +549,14 @@ jobs:
           allowed-skips: checks, tests, release-build, plain-php, typos-check, patch-coverage
           jobs: ${{ toJSON(needs) }}
 
-      # The weekly run's jobs saved their targets when they ended, so this job, which needs them all, deletes the ones
-      # the new targets replaced.
+      # Master's full run's jobs saved their targets when they ended, so this job, which needs them all, deletes the
+      # ones the new targets replaced. No other run saves one.
       - name: checkout
-        if: always() && github.event_name == 'schedule'
+        if: always() && needs.CHANGES.outputs.full == 'true' && github.ref == 'refs/heads/master'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: .github/actions
 
       - name: Delete the Mago target caches this run replaced
-        if: always() && github.event_name == 'schedule'
+        if: always() && needs.CHANGES.outputs.full == 'true' && github.ref == 'refs/heads/master'
         uses: ./.github/actions/mago-cache-prune
