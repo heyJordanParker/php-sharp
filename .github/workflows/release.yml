@@ -32,11 +32,12 @@ defaults:
 
 jobs:
   # Every other job needs crate_metadata, which needs ci, so a release publishes only a tree whose every Mago CI job
-  # already ran and passed, on master, on the pull request that merged it or in a full run, as sharp.yml's CHANGES
-  # gates a tag. The suite does not run again here. On the bump's pull request, Mago CI runs beside this workflow, so
-  # ci skips there, and the tag checks it.
+  # already ran and passed, on master, on the pull request that merged it or in a full run, and whose full PHP# run
+  # passed all 9 test jobs, through the same check as sharp.yml's CHANGES, so the two workflows publish a tag or
+  # neither does. The suites do not run again here. On the bump's pull request, CI runs beside this workflow, so ci
+  # skips there, and the tag checks it.
   ci:
-    name: Mago CI passed on the tree
+    name: Mago CI and the full PHP# run passed on the tree
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -68,6 +69,23 @@ jobs:
             exit 1
           fi
           echo "Every Mago CI job ran and passed on this tree in $RUN."
+
+      - name: Find the full PHP# run that passed all 9 test jobs on the commit's tree
+        id: full
+        uses: ./.github/actions/passed-tree
+        with:
+          events: pull_request schedule workflow_dispatch
+          full: true
+
+      - name: The full PHP# run passed on the commit's tree
+        env:
+          RUN: ${{ steps.full.outputs.run }}
+        run: |
+          if [[ -z $RUN ]]; then
+            echo "::error::No full PHP# CI run, the bump's pull request's, nightly or dispatched, passed all 9 test jobs on commit $GITHUB_SHA's tree, so sharp.yml's gate would refuse this tag too. Release a commit whose tree passed one."
+            exit 1
+          fi
+          echo "All 9 PHP# test jobs ran and passed on this tree in $RUN."
 
   # ci skips on the bump's pull request, and a job that needs a skipped job runs only by a condition of its own.
   crate_metadata:

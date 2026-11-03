@@ -72,18 +72,14 @@ jobs:
           passed: >-
             [.jobs[] | select(.conclusion == "success" and (.name == "LINUX" or .name == "LINUX_ZTS" or .name == "HOSTS"
             or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS"))))] | length == 8
-      # The 9 test jobs: those 8 and LINUX_PASSES, which a full run always runs.
+      # The 9 test jobs: those 8 and LINUX_PASSES, which a full run always runs, as .github/actions/passed-tree checks.
       - name: Find the full run that passed all 9 test jobs on this tree
         id: full
         if: github.ref_type == 'tag' || github.event_name == 'schedule'
         uses: ./.github/actions/passed-tree
         with:
-          workflow: sharp.yml
           events: schedule workflow_dispatch
-          passed: >-
-            [.jobs[] | select(.conclusion == "success" and (.name == "LINUX" or .name == "LINUX_PASSES"
-            or .name == "LINUX_ZTS" or .name == "HOSTS" or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS"))))]
-            | length == 9
+          full: true
       # The bump's pull request runs in full, since its title sets `full` as RELEASE_BUMP's does, and its passed
       # RELEASE_BUMP marks it apart from another pull request's run. Its merge commit, the tagged one, has its tree.
       - name: Find the bump's pull request run that passed all 9 test jobs on this tree
@@ -91,12 +87,8 @@ jobs:
         if: github.ref_type == 'tag'
         uses: ./.github/actions/passed-tree
         with:
-          workflow: sharp.yml
           events: pull_request
-          passed: >-
-            any(.jobs[]; .name == "RELEASE_BUMP" and .conclusion == "success") and ([.jobs[] | select(.conclusion ==
-            "success" and (.name == "LINUX" or .name == "LINUX_PASSES" or .name == "LINUX_ZTS" or .name == "HOSTS"
-            or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS"))))] | length == 9)
+          full: true
       - name: The suites don't run again
         if: github.ref_type == 'branch' && (steps.passed.outputs.run || steps.full.outputs.run)
         env:

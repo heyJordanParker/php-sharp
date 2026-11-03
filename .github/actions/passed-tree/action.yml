@@ -9,16 +9,25 @@ description: >-
 
 inputs:
   workflow:
-    description: The workflow file whose runs count, such as sharp.yml.
-    required: true
+    description: The workflow file whose runs count, such as mago.yml. A full check reads sharp.yml's.
+    required: false
+    default: ''
   events:
     description: The events whose successful runs count, separated by spaces, such as "pull_request push".
     required: true
   passed:
     description: >-
       A jq expression over a run's jobs, as GET /actions/runs/<id>/jobs returns them, that is true when the run passed
-      what the caller needs.
-    required: true
+      what the caller needs. A full check needs none.
+    required: false
+    default: ''
+  full:
+    description: >-
+      true to look for sharp.yml's full run, whose 9 test jobs passed. A pull request's run counts only when its
+      RELEASE_BUMP passed too, because only a bump's title makes a pull request's run the full one. Every gate that
+      needs a full run asks for it here, so the check is written once.
+    required: false
+    default: ''
 
 outputs:
   run:
@@ -33,11 +42,25 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-        WORKFLOW: ${{ inputs.workflow }}
+        WORKFLOW: ${{ inputs.full == 'true' && 'sharp.yml' || inputs.workflow }}
         EVENTS: ${{ inputs.events }}
         PASSED: ${{ inputs.passed }}
+        FULL: ${{ inputs.full }}
       run: |
         api() { gh api "repos/$GITHUB_REPOSITORY/$1" --jq "$2"; }
+        tests='[.jobs[] | select(.conclusion == "success" and (.name == "LINUX" or .name == "LINUX_PASSES"
+          or .name == "LINUX_ZTS" or .name == "HOSTS" or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS"))))]
+          | length == 9'
+        # The expression a run of the event must make true.
+        passed() {
+          if [[ $FULL != true ]]; then
+            echo "$PASSED"
+          elif [[ $1 == pull_request ]]; then
+            echo "any(.jobs[]; .name == \"RELEASE_BUMP\" and .conclusion == \"success\") and ($tests)"
+          else
+            echo "$tests"
+          fi
+        }
         tree=$(api "git/commits/$GITHUB_SHA" .tree.sha)
         commits=$GITHUB_SHA
         for head in $(api "commits/$GITHUB_SHA/pulls" '.[] | select(.base.ref == "master") | .head.sha'); do
@@ -48,11 +71,14 @@ runs:
         runs=
         for commit in $commits; do
           for event in $EVENTS; do
-            runs+=" $(api "actions/workflows/$WORKFLOW/runs?head_sha=$commit&event=$event&status=success" '.workflow_runs[] | select(.event != "push" or .head_branch == "master") | .id')"
+            for run in $(api "actions/workflows/$WORKFLOW/runs?head_sha=$commit&event=$event&status=success" '.workflow_runs[] | select(.event != "push" or .head_branch == "master") | .id'); do
+              runs+=" $run:$event"
+            done
           done
         done
-        for run in $runs; do
-          if [[ $(api "actions/runs/$run/jobs?per_page=100" "$PASSED") == true ]]; then
+        for entry in $runs; do
+          run=${entry%%:*}
+          if [[ $(api "actions/runs/$run/jobs?per_page=100" "$(passed "${entry#*:}")") == true ]]; then
             echo "run=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run" >> "$GITHUB_OUTPUT"
             echo "Tree $tree passed in $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run."
             exit 0
