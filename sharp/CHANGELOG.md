@@ -19,6 +19,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 - A `match` without `default` on a call's result, as `match (ticket.stage()) { Stage.Open => "open" }`, names the enum cases it misses, as one on a parameter does. Before, it compiled. When its arms name no case, as one that handles only `null`, it names the `import` the cases need.
 - A refused search's help names its lambda's parameter with a name no local or parameter in scope holds, as `lines.any(element => element === line)` in a method with a parameter `l`. Before, it wrote `lines.any(l => l === line)`, which is refused because `l` is already declared.
 - A case written in a class or an interface is refused once, as "A class has no cases: declare `Open` in an enum." Before, mago's "Class `Shop` cannot contain enum cases." came as well.
+- `new Self(…)` in a `final` class or a struct compiles without a `required` constructor, since no subclass can lack it. Before, it was refused because `Self` can be any subclass.
 
 ## [0.6.1] - 2026-11-01
 
