@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.99] - 2026-11-03
+
 ### Changed
 
 - A spread of a list of unknown length fills only a `...` parameter, as in Kotlin and TypeScript, into a PHP# method and into plain PHP alike. Anywhere else, a parameter with a default included, it is refused with the parameters it may not fill, as "`numbers` may not fill `a` and `b`. A spread of unknown length fills only a ... parameter.", where it compiled into a parameter with a default and was "Too few arguments" before a required one. Spread a list literal there, whose length is known, or pass each value as an argument of its own (#227).
@@ -302,7 +304,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.99...HEAD
+[0.6.99]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.1...v0.6.99
 [0.6.1]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/heyJordanParker/php-sharp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/heyJordanParker/php-sharp/compare/v0.4.2...v0.5.0
