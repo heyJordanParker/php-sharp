@@ -23,10 +23,10 @@ defaults:
 
 jobs:
   # ci-passed is this workflow's one required check, so the workflow always runs, and every other job skips a change
-  # that leaves Mago alone: one outside sharp/mago/, sharp/composer/, this workflow, sharp/bin/build-mago and the
-  # actions it runs, as sharp.yml's CHANGES skips a change to documentation alone. The weekly run runs every job. A
-  # tree runs them once: a push to master skips them when a pull request run passed every job on its tree, and links
-  # that run, as .github/actions/passed-tree explains.
+  # that leaves Mago alone: one outside sharp/mago/, sharp/composer/, this workflow, sharp/bin/build-mago,
+  # sharp/bin/coverage and the actions it runs, as sharp.yml's CHANGES skips a change to documentation alone. The
+  # weekly run runs every job. A tree runs them once: a push to master skips them when a pull request run passed every
+  # job on its tree, and links that run, as .github/actions/passed-tree explains.
   CHANGES:
     runs-on: ubuntu-latest
     permissions:
@@ -81,7 +81,7 @@ jobs:
           fi
           git fetch --depth=1 origin "$BASE"
           if git diff --quiet "$BASE" HEAD -- sharp/mago sharp/composer .github/workflows/mago.yml sharp/bin/build-mago \
-            .github/actions/setup-lean .github/actions/clean-kept-build .github/actions/passed-tree .github/actions/mago-cache \
+            sharp/bin/coverage .github/actions/setup-lean .github/actions/clean-kept-build .github/actions/passed-tree .github/actions/mago-cache \
             .github/actions/mago-cache-prune; then
             echo mago=false >> "$GITHUB_OUTPUT"
           else
@@ -485,7 +485,8 @@ jobs:
       - name: Search for misspellings
         run: typos
 
-  # Nightly, because only nightly honours #[coverage(off)], cargo-llvm-cov's way to exclude code that cannot run by design.
+  # sharp/bin/coverage measures it, with the nightly toolchain it installs and the cargo-llvm-cov this job installs, as
+  # a builder runs it before each push.
   patch-coverage:
     needs: CHANGES
     if: needs.CHANGES.outputs.mago == 'true' && github.event_name == 'pull_request'
@@ -501,13 +502,6 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: install rust toolchain
-        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
-        with:
-          toolchain: nightly
-          components: llvm-tools-preview
-
-      # cargo-llvm-cov builds in CARGO_TARGET_DIR's llvm-cov-target.
       - name: Rust and Mago caches
         uses: ./.github/actions/mago-cache
         with:
@@ -517,81 +511,26 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          target-dir-env: true
 
+      # sharp/bin/coverage reads this version, and fails on a builder's Mac when its cargo-llvm-cov is another.
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
         with:
           tool: cargo-llvm-cov@0.9.1
 
-      # The root crate's external analyzer tests run a PHP SDK worker, which needs PHP and the vendor directory.
+      # The root crate's external analyzer tests run a PHP SDK worker, which needs PHP.
       - name: Install PHP
         uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: "8.3"
           tools: "composer:v2"
 
-      - name: Install composer dependencies
-        run: composer install
-
-      # Every test of the three packages, because their code is shared with plain PHP and the PHP tests cover that part.
-      # Then the root crate's tests that analyze through a PHP SDK worker, the only tests of the analyzer's external
-      # providers: PluginRegistry takes an external analyzer only over a WorkerPool, a real worker process. The report
-      # names the three packages, because without them it reports only the root crate's own files.
-      - name: Measure the tests' coverage
-        env:
-          MAGO_REQUIRE_PHP_SDK_TESTS: "1"
-        run: |
-          cargo llvm-cov clean --profraw-only
-          cargo llvm-cov --no-report --locked -p mago-analyzer -p mago-semantics -p mago-sharp-bridge
-          cargo llvm-cov --no-report --locked -p mago \
-            --test external_analyzer_entry_points \
-            --test external_analyzer_invocation \
-            --test external_analyzer_lifecycle \
-            --test external_analyzer_refinement \
-            --test external_analyzer_scan \
-            --test server_engine
-          cargo llvm-cov report -p mago-analyzer -p mago-semantics -p mago-sharp-bridge --lcov --output-path lcov.info
-
-      # As coverage.py's exclude_lines leaves out `raise NotImplementedError`: an impossible arm is an unreachable!(…)
-      # call, which no test can run. Unlike coverage.py, a line is left out only when nothing before the call runs:
-      # nothing, a match arm's pattern without an `if` guard, `{`, `else {`, `||` or `.unwrap_or_else(||`. So
-      # `let kind = self.kind_of(call).unwrap_or_else(|| unreachable!(…));` still needs a test of `kind_of`.
-      # cargo-llvm-cov has no line exclusion, so its lcov loses the line's records: DA, and FN, which diff-cover reads
-      # as the line of a closure such as `|| unreachable!(…)`.
-      - name: Leave out the lines that only call unreachable!
-        run: |
-          awk '
-            function impossible(line,   prefix, pattern) {
-              prefix = substr(line, 1, index(line, "unreachable!(") - 1)
-              gsub(/^[ \t]+|[ \t]+$/, "", prefix)
-              if (prefix == "" || prefix ~ /^(\{|(\} )?else \{|\|\||\.unwrap_or_else\(\|\|)$/) return 1
-              if (prefix !~ /=>$/) return 0
-              pattern = substr(prefix, 1, length(prefix) - 2)
-              gsub(/\.\.=/, "", pattern)
-              return pattern !~ /[={;]/ && pattern !~ /(^|[^A-Za-z0-9_])if([^A-Za-z0-9_]|$)/
-            }
-            /^SF:/ { delete unreachable; file = substr($0, 4); for (n = 1; (getline line < file) > 0; n++) if (index(line, "unreachable!(") && impossible(line)) unreachable[n]; close(file) }
-            /^(DA|FN):/ { split(substr($0, 4), record, ","); if (record[1] in unreachable) next }
-            { print }
-          ' lcov.info > reachable.info
-
-      # From the repository root, where diff-cover's git paths and the lcov's source paths meet.
+      # Without incremental state, as dtolnay/rust-toolchain leaves the other jobs: this build starts from nothing.
       - name: Every line the pull request adds is covered
         working-directory: .
-        run: |
-          if ! git cat-file -e HEAD^1:sharp/mago; then
-            echo "sharp/mago does not exist at the base, so no Mago line is new to it."
-            exit 0
-          fi
-          pipx run --spec diff-cover==10.6.0 diff-cover sharp/mago/reachable.info \
-            --compare-branch HEAD^1 \
-            --include 'sharp/mago/crates/analyzer/src/**' 'sharp/mago/crates/semantics/src/**' 'sharp/mago/crates/sharp-bridge/src/**' \
-            --format github-annotations:error \
-            --fail-under 100 || {
-            echo "::error::A test must run every line above. Mark a function that cannot run by design with #[cfg_attr(coverage_nightly, coverage(off))], and write an impossible arm as unreachable!(…) with its reason, on a line where nothing else runs."
-            exit 1
-          }
+        env:
+          CARGO_INCREMENTAL: 0
+        run: sharp/bin/coverage HEAD^1
 
   # The one required check of this workflow: it passes only when every job above passed, or skipped a change that
   # leaves Mago alone, so a job added later blocks merges without a change to the repository's rules. It runs always,

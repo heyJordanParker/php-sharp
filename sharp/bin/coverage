@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Fails unless a test runs every line a change adds to sharp/mago's analyzer, semantics and sharp-bridge crates. A
+# builder runs it before each push, and mago.yml's patch-coverage job runs it on a pull request's merge commit, so both
+# measure the same lines against the same bar. It compares with the merge base of HEAD and origin/master, which it
+# fetches first, or with the commit it is given. CI gives the merge commit's first parent, because its checkout holds
+# only two commits, and a fetch of a master that moved since then downloads master's whole history: 760 MB in 120 s.
+usage() {
+  echo "usage: sharp/bin/coverage [<base>]" >&2
+  exit 2
+}
+
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+if [[ $# -gt 1 || ${1:-} == -* ]]; then
+  usage
+fi
+if [[ $# -eq 0 ]]; then
+  git -C "$root" fetch origin master
+fi
+base="${1:-origin/master}"
+
+# Nightly, because only nightly honours #[coverage(off)], cargo-llvm-cov's way to exclude code that cannot run by design.
+# rustup updates it to the nightly a new CI runner installs, so a run here measures with CI's compiler.
+rustup toolchain install nightly --profile minimal --component llvm-tools-preview --allow-downgrade --no-self-update
+export RUSTUP_TOOLCHAIN=nightly
+
+llvm_cov="cargo-llvm-cov $(sed -n 's/^ *tool: cargo-llvm-cov@//p' "$root/.github/workflows/mago.yml")"
+if [[ "$(cargo llvm-cov --version)" != "$llvm_cov" ]]; then
+  echo "mago.yml's patch-coverage job runs $llvm_cov. Install it with: cargo install --locked ${llvm_cov/ /@}" >&2
+  exit 1
+fi
+
+# The root crate's external analyzer tests run a PHP SDK worker, which needs PHP and the vendor directory. Without
+# either, they pass without running, unless MAGO_REQUIRE_PHP_SDK_TESTS makes that a failure.
+composer install --no-interaction --no-progress --working-dir="$root/sharp/mago"
+export MAGO_REQUIRE_PHP_SDK_TESTS=1
+
+# cargo-llvm-cov builds in CARGO_TARGET_DIR's llvm-cov-target, beside the mago sharp/bin/build-mago builds.
+CARGO_TARGET_DIR="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago"
+export CARGO_TARGET_DIR
+report="$CARGO_TARGET_DIR/llvm-cov-target"
+
+# Every test of the three packages, because their code is shared with plain PHP and the PHP tests cover that part.
+# Then the root crate's tests that analyze through a PHP SDK worker, the only tests of the analyzer's external
+# providers: PluginRegistry takes an external analyzer only over a WorkerPool, a real worker process. The report
+# names the three packages, because without them it reports only the root crate's own files. The clean removes only
+# the last run's profiles, so cargo rebuilds only what changed, and the report is the one a clean of the instrumented
+# build gives, which rebuilds every workspace crate.
+cd "$root/sharp/mago"
+cargo llvm-cov clean --profraw-only
+cargo llvm-cov --no-report --locked -p mago-analyzer -p mago-semantics -p mago-sharp-bridge
+cargo llvm-cov --no-report --locked -p mago \
+  --test external_analyzer_entry_points \
+  --test external_analyzer_invocation \
+  --test external_analyzer_lifecycle \
+  --test external_analyzer_refinement \
+  --test external_analyzer_scan \
+  --test server_engine
+cargo llvm-cov report -p mago-analyzer -p mago-semantics -p mago-sharp-bridge --lcov --output-path "$report/lcov.info"
+
+# As coverage.py's exclude_lines leaves out `raise NotImplementedError`: an impossible arm is an unreachable!(…)
+# call, which no test can run. Unlike coverage.py, a line is left out only when nothing before the call runs:
+# nothing, a match arm's pattern without an `if` guard, `{`, `else {`, `||` or `.unwrap_or_else(||`. So
+# `let kind = self.kind_of(call).unwrap_or_else(|| unreachable!(…));` still needs a test of `kind_of`.
+# cargo-llvm-cov has no line exclusion, so its lcov loses the line's records: DA, and FN, which diff-cover reads
+# as the line of a closure such as `|| unreachable!(…)`. The totals count the DA records left, one per line.
+awk '
+  function impossible(line,   prefix, pattern) {
+    prefix = substr(line, 1, index(line, "unreachable!(") - 1)
+    gsub(/^[ \t]+|[ \t]+$/, "", prefix)
+    if (prefix == "" || prefix ~ /^(\{|(\} )?else \{|\|\||\.unwrap_or_else\(\|\|)$/) return 1
+    if (prefix !~ /=>$/) return 0
+    pattern = substr(prefix, 1, length(prefix) - 2)
+    gsub(/\.\.=/, "", pattern)
+    return pattern !~ /[={;]/ && pattern !~ /(^|[^A-Za-z0-9_])if([^A-Za-z0-9_]|$)/
+  }
+  /^SF:/ { delete unreachable; file = substr($0, 4); for (n = 1; (getline line < file) > 0; n++) if (index(line, "unreachable!(") && impossible(line)) unreachable[n]; close(file) }
+  /^(DA|FN):/ { split(substr($0, 4), record, ","); if (record[1] in unreachable) next }
+  /^DA:/ { found++; if (record[2] > 0) hit++ }
+  { print }
+  END { printf "The three packages have %d lines, and the tests run %d of them.\n", found, hit > "/dev/stderr" }
+' "$report/lcov.info" > "$report/reachable.info"
+
+# From the repository root, where diff-cover's git paths and the lcov's source paths meet. diff-cover compares the
+# working tree with the merge base of HEAD and the base, as `git diff <base>...` does.
+cd "$root"
+pipx run --spec diff-cover==10.6.0 diff-cover "$report/reachable.info" \
+  --compare-branch "$base" \
+  --include 'sharp/mago/crates/analyzer/src/**' 'sharp/mago/crates/semantics/src/**' 'sharp/mago/crates/sharp-bridge/src/**' \
+  --format github-annotations:error \
+  --fail-under 100 || {
+  echo "::error::A test must run every line above. Mark a function that cannot run by design with #[cfg_attr(coverage_nightly, coverage(off))], and write an impossible arm as unreachable!(…) with its reason, on a line where nothing else runs."
+  exit 1
+}
