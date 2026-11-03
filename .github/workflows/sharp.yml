@@ -46,39 +46,30 @@ jobs:
       code: ${{ steps.diff.outputs.code }}
       engine: ${{ steps.diff.outputs.engine }}
     steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # LINUX, LINUX_ZTS, HOSTS, MACOS, and PHP_EXTENSIONS for each of its two images on each of its two runners.
+      # LINUX_PASSES runs only for a change to the engine, and a run's success means it passed when it ran.
       - name: Find the run that passed every suite on this tree
         id: passed
         if: github.event_name == 'push'
+        uses: ./.github/actions/passed-tree
+        with:
+          workflow: sharp.yml
+          events: pull_request push
+          passed: >-
+            [.jobs[] | select(.conclusion == "success" and (.name == "LINUX" or .name == "LINUX_ZTS" or .name == "HOSTS"
+            or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS"))))] | length == 8
+      - name: The suites don't run again
+        if: github.ref_type == 'branch' && steps.passed.outputs.run
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          api() { gh api "repos/$GITHUB_REPOSITORY/$1" --jq "$2"; }
-          tree=$(api "git/commits/$GITHUB_SHA" .tree.sha)
-          runs=$(api "actions/workflows/sharp.yml/runs?head_sha=$GITHUB_SHA&branch=master&event=push&status=success" '.workflow_runs[].id')
-          for head in $(api "commits/$GITHUB_SHA/pulls" '.[] | select(.merged_at) | .head.sha'); do
-            if [[ $(api "git/commits/$head" .tree.sha) == "$tree" ]]; then
-              runs+=" $(api "actions/workflows/sharp.yml/runs?head_sha=$head&event=pull_request&status=success" '.workflow_runs[].id')"
-            fi
-          done
-          # LINUX, LINUX_ZTS, HOSTS, MACOS, and PHP_EXTENSIONS for each of its two images on each of its two runners.
-          # LINUX_PASSES runs only for a change to the engine, and a run's success means it passed when it ran.
-          suites='[.jobs[] | select(.conclusion == "success" and (.name == "LINUX" or .name == "LINUX_ZTS" or .name == "HOSTS" or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS"))))] | length'
-          for run in $runs; do
-            if [[ $(api "actions/runs/$run/jobs?per_page=100" "$suites") == 8 ]]; then
-              echo "run=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run" >> "$GITHUB_OUTPUT"
-              echo "::notice::Tree $tree ran and passed every PHP# suite in $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run, so they don't run again."
-              exit 0
-            fi
-          done
-          echo "No PHP# CI run passed every suite on tree $tree. Runs checked: ${runs:-none}."
+          RUN: ${{ steps.passed.outputs.run }}
+        run: echo "::notice::This tree ran and passed every PHP# suite in $RUN, so they don't run again."
       - name: The tagged commit's tree ran and passed every suite
         if: github.ref_type == 'tag' && !steps.passed.outputs.run
         run: |
           echo "::error::No PHP# CI run passed every suite on commit $GITHUB_SHA's tree, on master or on the pull request that merged it. Tag a commit whose tree passed them."
           exit 1
-      - name: git checkout
-        if: github.ref_type != 'tag' && !steps.passed.outputs.run
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Find changes outside documentation, and changes to the engine
         id: diff
         if: github.ref_type != 'tag' && !steps.passed.outputs.run
@@ -213,8 +204,7 @@ jobs:
           sharp/docker/run php sharp/mago/scripts/regen-sharp-kinds.php Zend/zend_ast.h Zend/zend_language_parser.h | diff -u sharp/mago/crates/sharp-bridge/src/kind.rs -
           # cargo builds nothing for the test-run mago sharp/bin/test built, and names the out_dir of the bridge it links.
           # `-p mago-sharp-bridge` resolves other features, so it built a second bridge and its dependencies beside it.
-          # shellcheck disable=SC2016 # The image's sh expands the cargo it finds there, and its own architecture.
-          sharp/docker/run sh -c 'cargo="$(cd ext/sharp && rustup which cargo)" && PATH="$(dirname "$cargo"):$PATH" "$cargo" build --locked --profile test-run --manifest-path sharp/mago/Cargo.toml --target-dir "sharp/build/linux-$(uname -m)/mago" --bin mago --message-format=json' > "$RUNNER_TEMP/build.json"
+          sharp/docker/run sharp/bin/build-mago --message-format=json > "$RUNNER_TEMP/build.json"
           header="$(jq -r 'select(.reason == "build-script-executed" and (.package_id | contains("mago-sharp-bridge"))) | .out_dir | ltrimstr("/src/")' "$RUNNER_TEMP/build.json")/sharp_unit.h"
           diff -u ext/sharp/sharp_unit.h "$header"
   # Each of PHP's 16 optimizer passes alone, on the build LINUX tests, so a pass that drops a PHP# mark cannot hide
@@ -499,20 +489,16 @@ jobs:
       # with, which a restored cache would let age.
       CARGO_INCREMENTAL: 1
     steps:
-      # actions/checkout's clean deletes sharp/build. Each job on the self-hosted Macs keeps it instead, because the
-      # jobs of every workflow share one work folder per runner. It removes every untracked file, and every ignored file
-      # under sharp/ but sharp/build, and keeps the parsers, scanners and configure that php-src's build writes into
-      # the source tree: the kept build's dependency files name them, and make has no rule that makes some of them
-      # again, such as Zend/zend_ini_scanner_defs.h (run 41504845687). So the engine and mago rebuild only what
-      # changed, which takes seconds, where a build from nothing took 19 minutes.
+      # actions/checkout's clean deletes sharp/build. Each job on the self-hosted Macs keeps it instead, as
+      # .github/actions/clean-kept-build explains, so the engine and mago rebuild only what changed, which takes
+      # seconds, where a build from nothing took 19 minutes.
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           clean: false
-      - name: Remove what an earlier job left, except the builds and php-src's generated sources
-        run: |
-          git clean -ffd
-          git clean -ffdx --exclude=/sharp/build/ -- sharp
+      - name: Remove what an earlier job left, except the builds
+        if: runner.environment == 'self-hosted'
+        uses: ./.github/actions/clean-kept-build
       - name: brew
         if: runner.environment == 'github-hosted'
         run: |

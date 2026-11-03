@@ -3,7 +3,9 @@ name: Mago
 on:
   push:
     branches: [master]
+  # Only a pull request into master, as sharp.yml runs, so the run CHANGES reuses passed against master.
   pull_request:
+    branches: [master]
   # The weekly run: every job on master's tip, and the workspace's tests on nightly Rust as well.
   schedule:
     - cron: '17 3 * * 1'
@@ -21,10 +23,10 @@ defaults:
 
 jobs:
   # ci-passed is this workflow's one required check, so the workflow always runs, and every other job skips a change
-  # that leaves Mago alone: one outside sharp/mago/, sharp/composer/, this workflow and the setup-lean action it runs,
-  # as sharp.yml's CHANGES skips a change to documentation alone. The weekly run runs every job. A tree runs them once,
-  # as sharp.yml's CHANGES explains: a push to master skips them when its tree is the head of the pull request it
-  # merged, and that pull request's run passed every job, and links that run.
+  # that leaves Mago alone: one outside sharp/mago/, sharp/composer/, this workflow, sharp/bin/build-mago and the
+  # actions it runs, as sharp.yml's CHANGES skips a change to documentation alone. The weekly run runs every job. A
+  # tree runs them once: a push to master skips them when a pull request run passed every job on its tree, and links
+  # that run, as .github/actions/passed-tree explains.
   CHANGES:
     runs-on: ubuntu-latest
     permissions:
@@ -37,32 +39,23 @@ jobs:
     outputs:
       mago: ${{ steps.diff.outputs.mago }}
     steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
       - name: Find the pull request run that passed every job on this tree
         id: passed
         if: github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          api() { gh api "repos/$GITHUB_REPOSITORY/$1" --jq "$2"; }
-          tree=$(api "git/commits/$GITHUB_SHA" .tree.sha)
-          runs=
-          for head in $(api "commits/$GITHUB_SHA/pulls" '.[] | select(.merged_at) | .head.sha'); do
-            if [[ $(api "git/commits/$head" .tree.sha) == "$tree" ]]; then
-              runs+=" $(api "actions/workflows/mago.yml/runs?head_sha=$head&event=pull_request&status=success" '.workflow_runs[].id')"
-            fi
-          done
-          for run in $runs; do
-            if [[ $(api "actions/runs/$run/jobs?per_page=100" '[.jobs[] | select(.conclusion != "success")] | length') == 0 ]]; then
-              echo "run=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run" >> "$GITHUB_OUTPUT"
-              echo "::notice::Tree $tree ran and passed every Mago CI job in $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run, so they don't run again."
-              exit 0
-            fi
-          done
-          echo "No pull request run passed every Mago CI job on tree $tree. Runs checked: ${runs:-none}."
+        uses: ./.github/actions/passed-tree
+        with:
+          workflow: mago.yml
+          events: pull_request
+          passed: all(.jobs[]; .conclusion == "success")
 
-      - name: checkout
-        if: ${{ !steps.passed.outputs.run }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: The jobs don't run again
+        if: steps.passed.outputs.run
+        env:
+          RUN: ${{ steps.passed.outputs.run }}
+        run: echo "::notice::This tree ran and passed every Mago CI job in $RUN, so they don't run again."
 
       - name: Find changes to Mago
         id: diff
@@ -75,7 +68,8 @@ jobs:
             exit 0
           fi
           git fetch --depth=1 origin "$BASE"
-          if git diff --quiet "$BASE" HEAD -- sharp/mago sharp/composer .github/workflows/mago.yml .github/actions/setup-lean; then
+          if git diff --quiet "$BASE" HEAD -- sharp/mago sharp/composer .github/workflows/mago.yml sharp/bin/build-mago \
+            .github/actions/setup-lean .github/actions/clean-kept-build .github/actions/passed-tree; then
             echo mago=false >> "$GITHUB_OUTPUT"
           else
             echo mago=true >> "$GITHUB_OUTPUT"
@@ -109,11 +103,9 @@ jobs:
         with:
           clean: false
 
-      - name: Remove what an earlier job left, except the builds and php-src's generated sources
-        working-directory: .
-        run: |
-          git clean -ffd
-          git clean -ffdx --exclude=/sharp/build/ -- sharp
+      - name: Remove what an earlier job left, except the builds
+        if: runner.environment == 'self-hosted'
+        uses: ./.github/actions/clean-kept-build
 
       - name: install rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
@@ -255,23 +247,21 @@ jobs:
         with:
           clean: false
 
-      - name: Remove what an earlier job left, except the builds and php-src's generated sources
-        working-directory: .
-        run: |
-          git clean -ffd
-          git clean -ffdx --exclude=/sharp/build/ -- sharp
+      - name: Remove what an earlier job left, except the builds
+        if: runner.environment == 'self-hosted'
+        uses: ./.github/actions/clean-kept-build
 
       - name: install rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: 1.97.0
 
-      - name: cargo build
+      - name: Build mago with sharp/bin/build-mago
         id: build
+        working-directory: .
         run: |
-          target_dir="$GITHUB_WORKSPACE/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago"
-          cargo build --locked --profile test-run --target-dir "$target_dir" --bin mago
-          echo "binary=$target_dir/test-run/mago" >> "$GITHUB_OUTPUT"
+          sharp/bin/build-mago
+          echo "binary=$GITHUB_WORKSPACE/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago/test-run/mago" >> "$GITHUB_OUTPUT"
 
       - name: Upload the binary for plain-php
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -304,11 +294,9 @@ jobs:
         with:
           clean: false
 
-      - name: Remove what an earlier job left, except the builds and php-src's generated sources
-        working-directory: .
-        run: |
-          git clean -ffd
-          git clean -ffdx --exclude=/sharp/build/ -- sharp
+      - name: Remove what an earlier job left, except the builds
+        if: runner.environment == 'self-hosted'
+        uses: ./.github/actions/clean-kept-build
 
       # The self-hosted runners already have Homebrew's PHP and Composer, and a job never installs on them.
       - name: brew
