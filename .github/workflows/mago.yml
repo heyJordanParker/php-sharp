@@ -38,9 +38,21 @@ jobs:
         working-directory: .
     outputs:
       mago: ${{ steps.diff.outputs.mago }}
+      rust: ${{ steps.rust.outputs.version }}
     steps:
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The root package's rust-version, which release.yml builds the binaries with, so every job tests that toolchain.
+      - name: Read the toolchain sharp/mago/Cargo.toml's rust-version names
+        id: rust
+        run: |
+          version=$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' sharp/mago/Cargo.toml)
+          if [[ -z $version ]]; then
+            echo "::error::sharp/mago/Cargo.toml's [package] names no rust-version."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Find the pull request run that passed every job on this tree
         id: passed
@@ -75,8 +87,8 @@ jobs:
             echo mago=true >> "$GITHUB_OUTPUT"
           fi
 
-  # Every gate runs on Linux with 1.97.0, the toolchain sharp/mago/Cargo.toml's rust-version names and release.yml
-  # builds the binaries with. macOS runs only the workspace's tests, which cover the few lines of Mago that differ
+  # Every gate runs on Linux with CHANGES's rust toolchain, the one sharp/mago/Cargo.toml's rust-version names and
+  # release.yml builds the binaries with. macOS runs only the workspace's tests, which cover the few lines of Mago that differ
   # there, such as the watch mode's FSEvents. The weekly run adds the tests on nightly Rust.
   build-and-test:
     needs: CHANGES
@@ -85,7 +97,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        rust: ${{ fromJSON(github.event_name == 'schedule' && '["1.97.0", "nightly"]' || '["1.97.0"]') }}
+        rust: ${{ fromJSON(github.event_name == 'schedule' && format('["{0}", "nightly"]', needs.CHANGES.outputs.rust) || format('["{0}"]', needs.CHANGES.outputs.rust)) }}
         exclude:
           - { os: macos-latest, rust: nightly }
 
@@ -254,7 +266,7 @@ jobs:
       - name: install rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: 1.97.0
+          toolchain: ${{ needs.CHANGES.outputs.rust }}
 
       - name: Build mago with sharp/bin/build-mago
         id: build
@@ -276,7 +288,7 @@ jobs:
   # installs no second checker, and one that requires a later release installs nothing. Then runs mago on
   # a one-class .sharp project with the binary the job before built.
   plain-php:
-    needs: [build-and-test, release-build]
+    needs: [CHANGES, build-and-test, release-build]
     strategy:
       fail-fast: false
       matrix:
@@ -306,7 +318,7 @@ jobs:
       - name: install rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: 1.97.0
+          toolchain: ${{ needs.CHANGES.outputs.rust }}
 
       - name: Download the binary the job before built
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
