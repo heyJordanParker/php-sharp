@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.99] - 2026-11-03
+
 ### Fixed
 
 - A search given its value by name or by a spread, as `carts.contains(value: cart)` or `carts.contains(...[cart])`, now needs `==` on the element type, as `carts.contains(cart)` does (#233). Before, either form skipped the check, so a `List`'s `contains`, `indexOf` or `remove` on a class without `operator ==` compiled and compared by identity at runtime. A `Set`'s and a `Map`'s searches given `value:` or `key:` are now refused beside their declaration, as their positional twins are. An extension's parameter marked `ComparedByOrder`, as `sortedBy`'s is, is now checked when a named argument fills it out of order.
@@ -297,7 +299,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.99...HEAD
+[0.6.99]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.1...v0.6.99
 [0.6.1]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/heyJordanParker/php-sharp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/heyJordanParker/php-sharp/compare/v0.4.2...v0.5.0
