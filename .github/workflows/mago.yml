@@ -5,7 +5,7 @@ on:
     branches: [master]
   # Only a pull request into master, as sharp.yml runs, so the run CHANGES reuses passed against master.
   pull_request:
-    branches: [master]
+    branches: [master, scratch/262-base3]
   # The full run: every job, and the workspace's tests and clippy on nightly Rust as well. It runs weekly on master's
   # tip, and on a dispatch, as sharp.yml's full run does.
   schedule:
