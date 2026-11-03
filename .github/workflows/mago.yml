@@ -245,11 +245,8 @@ jobs:
     permissions:
       contents: read
 
-    # The Macs build with incremental state in the folder they keep, as release-build does. dtolnay/rust-toolchain
-    # turns it off only when CARGO_INCREMENTAL is unset.
-    env:
-      CARGO_INCREMENTAL: ${{ matrix.os == 'macos-latest' && 1 || 0 }}
-
+    # Without incremental state, which dtolnay/rust-toolchain turns off: on the Macs, the dev profile's took 6 GB of the
+    # folder they keep, and the leg's time is the tests' own.
     steps:
       # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout
