@@ -24,8 +24,8 @@ defaults:
 
 jobs:
   # Every other job needs crate_metadata, which needs ci, so a release builds only a tree whose every Mago CI job
-  # already ran and passed, on master or on the pull request that merged it, as sharp.yml's CHANGES gates a tag. The
-  # suite does not run again here.
+  # already ran and passed, on master, on the pull request that merged it or in a full run, as sharp.yml's CHANGES
+  # gates a tag. The suite does not run again here.
   ci:
     name: Mago CI passed on the tree
     runs-on: ubuntu-latest
@@ -46,7 +46,7 @@ jobs:
         uses: ./.github/actions/passed-tree
         with:
           workflow: mago.yml
-          events: push pull_request schedule
+          events: push pull_request schedule workflow_dispatch
           passed: all(.jobs[]; .conclusion == "success" or .name == "patch-coverage")
 
       - name: Every Mago CI job ran and passed on the commit's tree
@@ -54,7 +54,7 @@ jobs:
           RUN: ${{ steps.passed.outputs.run }}
         run: |
           if [[ -z $RUN ]]; then
-            echo "::error::No Mago CI run passed every job on commit $GITHUB_SHA's tree, on master or on a pull request into master that names it. Release a commit whose tree passed them."
+            echo "::error::No Mago CI run passed every job on commit $GITHUB_SHA's tree, on master, on a pull request into master that names it or in a full run. Release a commit whose tree passed them."
             exit 1
           fi
           echo "Every Mago CI job ran and passed on this tree in $RUN."
