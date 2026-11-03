@@ -56,7 +56,7 @@ jobs:
       code: ${{ steps.diff.outputs.code }}
       engine: ${{ steps.diff.outputs.engine }}
       full: ${{ env.FULL }}
-      images: ${{ steps.images.outputs.run-id }}
+      images-run-id: ${{ steps.images.outputs.run-id }}
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -72,29 +72,30 @@ jobs:
           passed: >-
             [.jobs[] | select(.conclusion == "success" and (.name == "LINUX" or .name == "LINUX_ZTS" or .name == "HOSTS"
             or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS"))))] | length == 8
-      # The 9 test jobs: those 8 and LINUX_PASSES, which a full run always runs, as .github/actions/passed-tree checks.
-      - name: Find the full run that passed all 9 test jobs on this tree
-        id: full
-        if: github.ref_type == 'tag' || github.event_name == 'schedule'
-        uses: ./.github/actions/passed-tree
-        with:
-          events: schedule workflow_dispatch
-          full: true
-          on-master: ${{ github.ref_type == 'tag' }}
       # The bump's pull request runs in full, since its title sets `full` as RELEASE_BUMP's does, and its passed
-      # RELEASE_BUMP marks it apart from another pull request's run. Its merge commit, the tagged one, has its tree.
+      # RELEASE_BUMP marks it apart from another pull request's run. Its merge commit, the tagged one, has its tree, so
+      # the nightly run after a release skips it too. The 9 test jobs: those 8 and LINUX_PASSES, which a full run
+      # always runs, as .github/actions/passed-tree checks.
       - name: Find the bump's pull request run that passed all 9 test jobs on this tree
         id: full_bump
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || github.event_name == 'schedule'
         uses: ./.github/actions/passed-tree
         with:
           events: pull_request
           full: true
           on-master: ${{ github.ref_type == 'tag' }}
+      - name: Find the full run that passed all 9 test jobs on this tree
+        id: full
+        if: (github.ref_type == 'tag' || github.event_name == 'schedule') && !steps.full_bump.outputs.run
+        uses: ./.github/actions/passed-tree
+        with:
+          events: schedule workflow_dispatch
+          full: true
+          on-master: ${{ github.ref_type == 'tag' }}
       - name: The suites don't run again
-        if: github.ref_type == 'branch' && (steps.passed.outputs.run || steps.full.outputs.run)
+        if: github.ref_type == 'branch' && (steps.passed.outputs.run || steps.full_bump.outputs.run || steps.full.outputs.run)
         env:
-          RUN: ${{ steps.passed.outputs.run || steps.full.outputs.run }}
+          RUN: ${{ steps.passed.outputs.run || steps.full_bump.outputs.run || steps.full.outputs.run }}
         run: echo "::notice::This tree ran and passed every PHP# suite in $RUN, so they don't run again."
       - name: The tagged commit's tree passed a full run
         if: github.ref_type == 'tag'
@@ -106,36 +107,29 @@ jobs:
             exit 1
           fi
           echo "Commit $GITHUB_SHA's tree passed all 9 test jobs in $RUN."
-      # The newest pull request run on this tree whose 4 IMAGE jobs pushed their images. Each digest's file holds the
-      # commit IMAGE built it from, the pull request's merge commit, which must have this commit's tree. When no run
-      # pushed them, or their digests expired, or they were built from another tree, IMAGE builds them, and says so.
-      - name: Find the bump's pull request run that pushed the images of this tree
-        id: bump
-        if: github.ref_type == 'tag'
-        uses: ./.github/actions/passed-tree
-        with:
-          workflow: sharp.yml
-          events: pull_request
-          passed: '[.jobs[] | select(.conclusion == "success" and (.name | startswith("IMAGE (")))] | length == 4'
+      # The images the bump's full run pushed. Each digest's file holds the commit IMAGE built it from, the pull
+      # request's merge commit, which must have this commit's tree. When no run of the bump passed, or its digests
+      # expired or were never pushed, as for a bump from a fork, or they were built from another tree, IMAGE builds
+      # them, and warns so.
       - name: The bump's images were built from this tree
         id: images
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN: ${{ steps.bump.outputs.run }}
+          RUN: ${{ steps.full_bump.outputs.run }}
         run: |
           build() {
-            echo "::notice::$1 So IMAGE builds both images from commit $GITHUB_SHA."
+            echo "::warning::$1 So IMAGE builds both images from commit $GITHUB_SHA."
             exit 0
           }
           if [[ -z $RUN ]]; then
-            build "No pull request run pushed the images of commit $GITHUB_SHA's tree."
+            build "No run of the bump's pull request passed on commit $GITHUB_SHA's tree."
           fi
           id=${RUN##*/}
           kept=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$id/artifacts?per_page=100" \
             --jq '.artifacts[] | select((.name | startswith("digest-")) and (.expired | not)) | .name' | wc -l)
           if [[ $kept != 4 ]]; then
-            build "Run $RUN keeps $kept of its 4 images' digests: the others expired or were deleted."
+            build "Run $RUN keeps $kept of its 4 images' digests: the others expired, were deleted or were never pushed."
           fi
           gh run download "$id" --pattern 'digest-*' --dir "$RUNNER_TEMP/digests"
           tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)
@@ -767,7 +761,7 @@ jobs:
   IMAGE:
     name: IMAGE (${{ matrix.host.file }}, ${{ matrix.platform }})
     if: >-
-      ${{ !failure() && !cancelled() && (github.ref_type == 'tag' && !needs.CHANGES.outputs.images
+      ${{ !failure() && !cancelled() && (github.ref_type == 'tag' && !needs.CHANGES.outputs.images-run-id
       || needs.RELEASE_BUMP.result == 'success' && github.event.pull_request.head.repo.full_name == github.repository) }}
     needs: [CHANGES, RELEASE_BUMP]
     runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
@@ -834,14 +828,13 @@ jobs:
         run: |
           mkdir "$RUNNER_TEMP/digests"
           echo "$GITHUB_SHA" > "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
-      # As long as release.yml keeps the assets, so the bump's tag still finds them after a slow review.
+      # Kept as long as release.yml's assets, as the repository's artifact retention sets.
       - name: Upload the digest for IMAGE_TAGS
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: digest-${{ matrix.host.name }}-${{ strategy.job-index }}
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
-          retention-days: 90
   # Tags each host's two platform images as one image, and attests its provenance with the repository's identity,
   # which `gh attestation verify oci://ghcr.io/heyjordanparker/php-sharp:<tag> --repo heyJordanParker/php-sharp`
   # checks. The images are the ones the run CHANGES found pushed, or the ones IMAGE pushed in this run.
@@ -868,7 +861,7 @@ jobs:
           pattern: digest-${{ matrix.host.name }}-*
           path: ${{ runner.temp }}/digests
           merge-multiple: true
-          run-id: ${{ needs.CHANGES.outputs.images || github.run_id }}
+          run-id: ${{ needs.CHANGES.outputs.images-run-id || github.run_id }}
           github-token: ${{ github.token }}
       - name: Log in to ghcr.io
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
