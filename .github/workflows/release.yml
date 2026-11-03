@@ -329,18 +329,19 @@ jobs:
           #   sets it. x86_64 macOS's PGO job, which profiled under Rosetta, took up to 59 minutes, and nothing here
           #   measures what PGO gains, so it and x86_64 musl build without it, as rust-lang/rust's Apple dist jobs do.
 
-          ## macOS: aarch64, x86_64, on GitHub's Apple silicon runners, free for this public repository, so they build
-          ## beside sharp.yml's MACOS instead of queueing behind it on the one self-hosted Mac. The x86_64 binary
-          ## cross-compiles there, and its smoke check runs it under Rosetta.
+          ## macOS: aarch64, x86_64, on the self-hosted Apple silicon runners. The x86_64 binary cross-compiles there,
+          ## and its smoke check runs it under Rosetta. GitHub's macos-latest never started either on throwaway bump
+          ## #248: twice its jobs ended "not acquired by Runner of type hosted even after multiple attempts", for
+          ## macOS arm64's capacity, so a release that waits on it can't publish.
           - {
               target: aarch64-apple-darwin,
-              os: macos-latest,
+              os: macos-arm64-local,
               smoke: true,
               pgo: true,
             }
           - {
               target: x86_64-apple-darwin,
-              os: macos-latest,
+              os: macos-arm64-local,
               smoke: true,
             }
           ## Linux: aarch64, x86_64
@@ -365,8 +366,15 @@ jobs:
       BUILD_CMD: cargo
 
     steps:
+      # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout source code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: false
+
+      - name: Remove what an earlier job left, except the builds
+        if: runner.environment == 'self-hosted'
+        uses: ./.github/actions/clean-kept-build
 
       - name: set version env variable
         id: version
@@ -439,8 +447,9 @@ jobs:
           cargo -V
           rustc -V
 
+      # setup-php brew-installs PHP on macOS, so the self-hosted runners use their Homebrew PHP and Composer instead.
       - name: setup PHP for PGO profiling
-        if: matrix.job.pgo
+        if: matrix.job.pgo && runner.environment == 'github-hosted'
         uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: "8.3"
