@@ -1,0 +1,25 @@
+namespace TypeStatics;
+
+public class Builds
+{
+    // A generic method's type parameter reaches the statics of its call's type argument.
+    public static string made<TItem : Maker>() => TItem.make();
+
+    public static string sized<TItem : Maker>() => TItem.size;
+
+    public static List<string> ofClasses() => [
+        new Builder<Fancy>().build(),
+        new Builder<Fancy>().size(),
+        new Builder<Plain>().build(),
+        new Builder<Plain>().size(),
+        new Builder<Maker>().build(),
+        Builds.made<Fancy>(),
+        Builds.sized<Fancy>(),
+        Builds.made<Plain>(),
+        Builds.sized<Plain>(),
+    ];
+
+    // The checker accepts a type argument of two classes the bound holds, which is no one class, so `TItem.make()`
+    // names no class while the code runs and throws.
+    public static string ofUnion() => new Builder<Fancy|Plain>().build();
+}
