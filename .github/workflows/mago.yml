@@ -542,7 +542,7 @@ jobs:
         env:
           MAGO_REQUIRE_PHP_SDK_TESTS: "1"
         run: |
-          cargo llvm-cov clean --workspace
+          cargo llvm-cov clean --profraw-only
           cargo llvm-cov --no-report --locked -p mago-analyzer -p mago-semantics -p mago-sharp-bridge
           cargo llvm-cov --no-report --locked -p mago \
             --test external_analyzer_entry_points \
