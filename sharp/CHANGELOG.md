@@ -63,6 +63,11 @@ In plain PHP, a call through `?->` to a method only `__call` runs may give `null
 ### Changed
 
 - A spread of a list of unknown length fills only a `...` parameter, as in Kotlin and TypeScript, into a PHP# method and into plain PHP alike. Anywhere else, a parameter with a default included, it is refused with the parameters it may not fill, as "`numbers` may not fill `a` and `b`. A spread of unknown length fills only a ... parameter.", where it compiled into a parameter with a default and was "Too few arguments" before a required one. Spread a list literal there, whose length is known, or pass each value as an argument of its own (#227).
+- The x86_64 macOS and musl `mago` binaries are built without profile-guided optimization (#241).
+
+### Removed
+
+- The release no longer publishes `mago-<version>-wasm.tar.gz`. 0.6.1 was the last release with it (#241).
 
 ### Fixed
 
