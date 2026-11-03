@@ -51,13 +51,12 @@ Master requires CI to pass, and a branch must include the latest master before i
 
 ## A release's path
 
-A release builds its assets once, on the bump's PR, and the tag publishes those same files:
+A release tests and builds once, on the bump's PR, and the tag publishes those same files:
 
-1. The bump's PR has a title that starts with `chore: release`. It changes only what `php sharp/mago/scripts/set-version.php <version>` writes, `PHP_SHARP_VERSION` in `ext/sharp/php_sharp.h`, the version `Zend/tests/sharp/ri_sharp.phpt` expects, and the release's section of `sharp/CHANGELOG.md`. Its CI checks that, then builds every release asset beside the suites: the six `mago` binaries with their attestations, Mago's source archives, their SHA-256s and both runtime images.
+1. The bump's PR has a title that starts with `chore: release`. It changes only what `php sharp/mago/scripts/set-version.php <version>` writes, `PHP_SHARP_VERSION` in `ext/sharp/php_sharp.h`, the version `Zend/tests/sharp/ri_sharp.phpt` expects, and the release's section of `sharp/CHANGELOG.md`. Its CI checks that. The title makes its run the full run, which runs all 22 modes on every build, and the run builds every release asset beside the suites: the six `mago` binaries with their attestations, Mago's source archives, their SHA-256s and both runtime images.
 2. The bump merges once its CI passes.
-3. The full run is dispatched on master with `gh workflow run sharp.yml --ref master`.
-4. Once that run passes, the bump's merge commit is tagged `v<version>`, and the tag is pushed.
-5. The tag publishes the assets the bump's PR built, and builds none. If they expired, or were built from another tree, the tag builds them itself, and its run says so.
+3. The bump's merge commit is tagged `v<version>`, and the tag is pushed.
+4. The tag publishes the assets the bump's PR built, and builds none. If they expired, or were built from another tree, the tag builds them itself, and its run says so.
 
 ## Every mistake becomes a check
 
@@ -70,7 +69,7 @@ A mistake that no check can catch yet goes in `docs/architecture/guards.md`, wit
 
 ## Test runs
 
-- A PR runs each PHP# engine mode once, on the build it is about. Linux runs plain PHP, the three runs with cached bytecode and both JIT compilers, 6 modes. The thread-safe build runs plain PHP, the shared-memory run and both JIT compilers, 4 modes. macOS runs plain PHP and both JIT compilers, 3 modes, the only arm64 JIT runs a PR has. Each of PHP's 16 optimizer passes also runs alone on Linux, unless the PR changes only Mago, the Composer plugin, the test fixtures, tests or documentation. Every night, and before each release, master runs all 22 modes on every build. A PR can't merge until its runs pass. A PR that changes only documentation skips them, and GitHub counts the skipped checks as passing.
+- A PR runs each PHP# engine mode once, on the build it is about. Linux runs plain PHP, the three runs with cached bytecode and both JIT compilers, 6 modes. The thread-safe build runs plain PHP, the shared-memory run and both JIT compilers, 4 modes. macOS runs plain PHP and both JIT compilers, 3 modes, the only arm64 JIT runs a PR has. Each of PHP's 16 optimizer passes also runs alone on Linux, unless the PR changes only Mago, the Composer plugin, the test fixtures, tests or documentation. Every night, master runs all 22 modes on every build, and so does a release's bump PR. A PR can't merge until its runs pass. A PR that changes only documentation skips them, and GitHub counts the skipped checks as passing.
 - A builder runs only these locally, and leaves the other runs to CI:
   - `sharp/bin/test`, the run without opcache. It builds `mago` from `sharp/mago/` first, in the `test-run` profile, which `sharp/mago/Cargo.toml` explains.
   - When the change is under `sharp/mago/`, in `sharp/mago/`: `cargo test --workspace --locked --target-dir ../build/<os>-<arch>/mago`, `cargo clippy --workspace --all-targets --all-features --target-dir ../build/<os>-<arch>/mago -- -D warnings` and `cargo fmt --all -- --check`. The target folder is the one `sharp/bin/test` builds `mago` in, so a slot keeps every Mago build in one folder, where `cargo test` without it wrote a second folder of 49 GB.

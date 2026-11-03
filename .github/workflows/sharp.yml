@@ -9,7 +9,7 @@ on:
     branches:
       - master
   # The full run: every job runs every mode, where a pull request runs each mode once, on the build it is about. It runs
-  # nightly on master's tip, and on a dispatch, which a release runs on the bump's merge commit before its tag.
+  # nightly on master's tip, on a dispatch, and on a release's bump pull request, as RELEASE_BUMP explains.
   schedule:
     - cron: '17 2 * * *'
   workflow_dispatch:
@@ -31,16 +31,17 @@ jobs:
   # sharp/bench fixtures, tests or documentation:
   # a pass that drops a PHP# mark is a bug of the engine, and every pass failure a PHP# test found failed every other
   # mode with it. Every other path counts as the engine, so an input of the engine's build that no one listed, such as
-  # ext/sharp/src or sharp/bin/build, runs the passes. The full run, nightly or dispatched, runs every job in every
-  # mode, and its `full` output tells each job so.
+  # ext/sharp/src or sharp/bin/build, runs the passes. The full run, nightly, dispatched or a release's bump, runs every
+  # job in every mode, and its `full` output tells each job so.
   #
   # A tree runs the suites once, as bors's "not rocket science" rule tests the exact tree that lands once. A push to
   # master skips them when a pull request run passed them on its tree, as .github/actions/passed-tree explains, and
   # links that run. The nightly run skips a tree a full run already passed. A tag runs none of them: it publishes only
   # a tree whose full run passed all 9 test jobs, as release.yml does with Mago CI, so its MACOS never waits for the
-  # Mac runners behind the release's Apple builds. A pull request run isn't enough, because it runs each mode once,
-  # and CI_PASSED isn't, because it also passes a change to documentation alone, whose suites skipped. A tag publishes
-  # the images its bump's pull request pushed, as IMAGE explains, and CHANGES finds them.
+  # Mac runners behind the release's Apple builds. That run is the bump's own, whose RELEASE_BUMP passed, or a nightly
+  # or dispatched one. Another pull request's run isn't enough, because it runs each mode once, and CI_PASSED isn't,
+  # because it also passes a change to documentation alone, whose suites skipped. A tag publishes the images its bump's
+  # pull request pushed, as IMAGE explains, and CHANGES finds them.
   CHANGES:
     runs-on: ubuntu-24.04
     permissions:
@@ -48,7 +49,9 @@ jobs:
       contents: read
       pull-requests: read
     env:
-      FULL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || '' }}
+      FULL: >-
+        ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+        && startsWith(github.event.pull_request.title, 'chore: release')) && 'true' || '' }}
     outputs:
       code: ${{ steps.diff.outputs.code }}
       engine: ${{ steps.diff.outputs.engine }}
@@ -81,6 +84,19 @@ jobs:
             [.jobs[] | select(.conclusion == "success" and (.name == "LINUX" or .name == "LINUX_PASSES"
             or .name == "LINUX_ZTS" or .name == "HOSTS" or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS"))))]
             | length == 9
+      # The bump's pull request runs in full, since its title sets `full` as RELEASE_BUMP's does, and its passed
+      # RELEASE_BUMP marks it apart from another pull request's run. Its merge commit, the tagged one, has its tree.
+      - name: Find the bump's pull request run that passed all 9 test jobs on this tree
+        id: full_bump
+        if: github.ref_type == 'tag'
+        uses: ./.github/actions/passed-tree
+        with:
+          workflow: sharp.yml
+          events: pull_request
+          passed: >-
+            any(.jobs[]; .name == "RELEASE_BUMP" and .conclusion == "success") and ([.jobs[] | select(.conclusion ==
+            "success" and (.name == "LINUX" or .name == "LINUX_PASSES" or .name == "LINUX_ZTS" or .name == "HOSTS"
+            or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS"))))] | length == 9)
       - name: The suites don't run again
         if: github.ref_type == 'branch' && (steps.passed.outputs.run || steps.full.outputs.run)
         env:
@@ -89,10 +105,10 @@ jobs:
       - name: The tagged commit's tree passed a full run
         if: github.ref_type == 'tag'
         env:
-          RUN: ${{ steps.full.outputs.run }}
+          RUN: ${{ steps.full_bump.outputs.run || steps.full.outputs.run }}
         run: |
           if [[ -z $RUN ]]; then
-            echo "::error::No full PHP# CI run, nightly or dispatched, passed all 9 test jobs on commit $GITHUB_SHA's tree. Dispatch one on the commit with gh workflow run sharp.yml --ref master, and tag the commit once it passes."
+            echo "::error::No full PHP# CI run, the bump's pull request's, nightly or dispatched, passed all 9 test jobs on commit $GITHUB_SHA's tree. Dispatch one on the commit with gh workflow run sharp.yml --ref master, and tag the commit once it passes."
             exit 1
           fi
           echo "Commit $GITHUB_SHA's tree passed all 9 test jobs in $RUN."
@@ -590,11 +606,11 @@ jobs:
         run: '"$RUNNER_TEMP/actionlint"'
   # A release's pull request, whose title starts with "chore: release", changes only what the bump writes: what
   # sharp/mago/scripts/set-version.php writes for the new version, PHP_SHARP_VERSION in ext/sharp/php_sharp.h and the
-  # version Zend/tests/sharp/ri_sharp.phpt expects, and the release's section of sharp/CHANGELOG.md. So the full run a
-  # release dispatches on its merge commit tests the tree the pull request already tested, with new version strings.
-  # It isn't a required check, and CI_PASSED doesn't need it, so a pull request with another title never waits on it.
-  # Once it passes, RELEASE_ASSETS and IMAGE build the release's assets beside the suites, and the tag on the bump's
-  # merge commit publishes them.
+  # version Zend/tests/sharp/ri_sharp.phpt expects, and the release's section of sharp/CHANGELOG.md. Its title also
+  # makes its run the full run, which CHANGES accepts for the tag on its merge commit, whose tree is the run's, when
+  # this job passed in it. It isn't a required check, and CI_PASSED doesn't need it, so a pull request with another
+  # title never waits on it. Once it passes, RELEASE_ASSETS and IMAGE build the release's assets beside the suites,
+  # and the tag on the bump's merge commit publishes them.
   RELEASE_BUMP:
     if: "github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'chore: release')"
     runs-on: ubuntu-24.04
