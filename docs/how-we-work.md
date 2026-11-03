@@ -26,10 +26,9 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 
 ## Worktree slots
 
-- The pool has 8 slots, `~/Developer/sharp-worktrees/2` to `~/Developer/sharp-worktrees/9`. Each slot holds a `php-sharp` worktree, with Mago in its `sharp/mago/`.
-- Cass names a free slot in every task file.
+- Cass creates a slot for each task, a `php-sharp` worktree under `~/Developer/sharp-worktrees/`, with Mago in its `sharp/mago/`, and names it in the task file.
 - Cass creates the task's branch from `origin/master` in the slot before the builder starts. The builder builds in that slot's own build folders.
-- Before its PR merges, the builder leaves no uncommitted files. After the merge, Cass detaches the slot at the new `origin/master` and deletes the slot's `debug/` and `llvm-cov-target/` in `sharp/build/<os>-<arch>/mago/` to free disk. The other build folders stay, so the next task rebuilds only what changed.
+- Before its PR merges, the builder leaves no uncommitted files. After the merge, Cass removes the slot. No idle slot is kept, because a slot's build fills the disk.
 
 ## A PR's path to master
 
@@ -37,7 +36,7 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 1. The builder opens the PR, and CI must pass.
 2. One fresh reviewer reviews the details and the architecture once, while Cass reads the PR against the whole system and the plan. Cass sends a PR that misses its Goal back to its builder at once. Otherwise Cass posts one verdict on the PR that holds the review's findings, Cass's own and any coverage gap. The builder makes every change it asks for, and Cass checks each fix by reading it. No second review round runs.
 3. When every fix is read, Cass posts an approval on the PR.
-4. Cass merges with `gh pr merge --merge --match-head-commit <full head SHA>`, then detaches the slot.
+4. Cass merges with `gh pr merge --merge --match-head-commit <full head SHA>`, then removes the slot.
 
 A PR that finishes spec sections says so in its body, on its own line, exactly as `Completes: §6.1, §9`. The `COMPLETES` check fails while `sharp/baseline/spec` still lists an example of a named section.
 
