@@ -503,15 +503,8 @@ jobs:
           type -a rustup rustc cargo
           rustc --version
           cargo --version
-      # Without configure, php-src's generated sources are gone too, as on a new runner or after a clean that removed
-      # them, so the kept build can't make again what its dependency files name, and builds from nothing.
       - name: Build
-        run: |
-          if [[ -f configure ]]; then
-            sharp/bin/build
-          else
-            sharp/bin/build --clean
-          fi
+        run: sharp/bin/build
       - name: Test PHP#
         run: sharp/bin/test --jit --census --differential ${{ needs.CHANGES.outputs.full == 'true' && '--opcache --repeat --passes' || '' }}
       - name: Test upstream

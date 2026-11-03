@@ -199,8 +199,8 @@ fi
 # Each JIT runs with every hot counter at 1, so it compiles the code the tests run as soon as it runs. Each run expects
 # the same output as the run without opcache.
 if $jit; then
-  for jit in tracing function; do
-    run_tests "with the $jit JIT" -d opcache.enable_cli=1 -d opcache.jit="$jit" -d opcache.jit_buffer_size=32M \
+  for jit_mode in tracing function; do
+    run_tests "with the $jit_mode JIT" -d opcache.enable_cli=1 -d opcache.jit="$jit_mode" -d opcache.jit_buffer_size=32M \
       -d opcache.jit_hot_func=1 -d opcache.jit_hot_loop=1 -d opcache.jit_hot_return=1 -d opcache.jit_hot_side_exit=1
   done
 fi
