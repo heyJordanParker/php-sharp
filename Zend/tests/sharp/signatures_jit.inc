@@ -40,9 +40,3 @@ try {
 } catch (TypeError $e) {
     echo $e->getMessage(), "\n";
 }
-
-try {
-    $made->doubled(1, 2, 3);
-} catch (Error $e) {
-    echo $e::class, ': ', $e->getMessage(), "\n";
-}
