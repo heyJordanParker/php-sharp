@@ -43,7 +43,7 @@ New example-marker or run-comment syntax lands in `sharp/bin/spec` one PR before
 
 One feature is one PR: the checker in `sharp/mago/`, the engine, the standard library, the spec and their tests change together, and every CI gate runs on it.
 
-Master requires CI to pass. It doesn't require a branch to include the latest master. CI runs on master after every merge, and a red master is fixed before anything else merges.
+Master requires CI to pass, and a branch must include the latest master before it merges, so master holds only trees CI tested. That costs no second run: a push to master finds the pull request run that passed the same tree, skips the suites and links that run. A red master is fixed before anything else merges.
 
 ## Every mistake becomes a check
 
@@ -56,10 +56,10 @@ A mistake that no check can catch yet goes in `docs/architecture/guards.md`, wit
 
 ## Test runs
 
-- CI runs every PHP# engine test 22 times, on Linux and on macOS: plain PHP, three runs with cached bytecode, each of PHP's 16 optimizer passes on its own, and both JIT compilers. A PR can't merge until all 22 pass on both. A PR that changes only documentation skips them, and GitHub counts the skipped `LINUX` and `MACOS` checks as passing.
+- A PR runs each PHP# engine mode once, on the build it is about. Linux runs plain PHP, the three runs with cached bytecode and both JIT compilers, 6 modes. The thread-safe build runs plain PHP, the shared-memory run and both JIT compilers, 4 modes. macOS runs plain PHP and both JIT compilers, 3 modes, the only arm64 JIT runs a PR has. Each of PHP's 16 optimizer passes also runs alone on Linux, unless the PR changes only Mago, the Composer plugin, the test fixtures, tests or documentation. Every night, and before each release, master runs all 22 modes on every build. A PR can't merge until its runs pass. A PR that changes only documentation skips them, and GitHub counts the skipped checks as passing.
 - A builder runs only these locally, and leaves the other runs to CI:
   - `sharp/bin/test`, the run without opcache. It builds `mago` from `sharp/mago/` first, in the `test-run` profile, which `sharp/mago/Cargo.toml` explains.
-  - In `sharp/mago/`: `cargo test --workspace --locked`, `cargo clippy --workspace --all-targets --all-features -- -D warnings` and `cargo fmt --all -- --check`.
+  - When the change is under `sharp/mago/`, in `sharp/mago/`: `cargo test --workspace --locked --target-dir ../build/<os>-<arch>/mago`, `cargo clippy --workspace --all-targets --all-features --target-dir ../build/<os>-<arch>/mago -- -D warnings` and `cargo fmt --all -- --check`. The target folder is the one `sharp/bin/test` builds `mago` in, so a slot keeps every Mago build in one folder, where `cargo test` without it wrote a second folder of 49 GB.
 - One `sharp/bin/test` runs per worktree at a time, and each run of it and of `sharp/bin/bench` stands on its own:
   - `sharp/bin/bench` compiles a copy of its rows inside its own container, so it runs beside `sharp/bin/test` in the same worktree.
   - A run that failed or was stopped leaves nothing that breaks the next one, and no run loads the opcache file cache another run primed.

@@ -23,33 +23,41 @@ defaults:
     working-directory: sharp/mago
 
 jobs:
-  # Every other job needs crate_metadata, which needs ci, so a release builds only a commit whose Mago CI already
-  # passed on master. The suite does not run again here.
+  # Every other job needs crate_metadata, which needs ci, so a release builds only a tree whose every Mago CI job
+  # already ran and passed, on master or on the pull request that merged it, as sharp.yml's CHANGES gates a tag. The
+  # suite does not run again here.
   ci:
-    name: Mago CI passed on master
+    name: Mago CI passed on the tree
     runs-on: ubuntu-latest
     permissions:
       actions: read
+      contents: read
+      pull-requests: read
     defaults:
       run:
         working-directory: .
     steps:
-      - name: The commit's ci-passed check passed on master
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # patch-coverage runs only on a pull request.
+      - name: Find the Mago CI run that passed every job on the commit's tree
+        id: passed
+        uses: ./.github/actions/passed-tree
+        with:
+          workflow: mago.yml
+          events: push pull_request schedule
+          passed: all(.jobs[]; .conclusion == "success" or .name == "patch-coverage")
+
+      - name: Every Mago CI job ran and passed on the commit's tree
         env:
-          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ steps.passed.outputs.run }}
         run: |
-          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mago.yml/runs?head_sha=$GITHUB_SHA&branch=master&event=push" --jq '.workflow_runs[0].id // empty')
-          if [[ -z $run ]]; then
-            echo "::error::Mago CI never ran on master for commit $GITHUB_SHA, so its ci-passed check is missing. Release a commit that master's Mago CI passed."
+          if [[ -z $RUN ]]; then
+            echo "::error::No Mago CI run passed every job on commit $GITHUB_SHA's tree, on master or on a pull request into master that names it. Release a commit whose tree passed them."
             exit 1
           fi
-          jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=100")
-          if [[ $(jq -r '.jobs[] | select(.name == "ci-passed") | .conclusion' <<< "$jobs") != success ]]; then
-            failed=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | "\(.name): \(.conclusion // .status)"] | join(", ")' <<< "$jobs")
-            echo "::error::Commit $GITHUB_SHA has not passed Mago CI's ci-passed check on master ($failed): $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
-            exit 1
-          fi
-          echo "Commit $GITHUB_SHA passed Mago CI's ci-passed check on master: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
+          echo "Every Mago CI job ran and passed on this tree in $RUN."
 
   crate_metadata:
     name: extract crate metadata
@@ -114,32 +122,6 @@ jobs:
       maintainer: ${{ steps.crate_metadata.outputs.maintainer }}
       homepage: ${{ steps.crate_metadata.outputs.homepage }}
       msrv: ${{ steps.crate_metadata.outputs.msrv }}
-
-  min_version:
-    name: Minimum supported rust version
-    runs-on: ubuntu-latest
-    needs: crate_metadata
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install rust toolchain (v${{ needs.crate_metadata.outputs.msrv }})
-        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
-        with:
-          toolchain: ${{ needs.crate_metadata.outputs.msrv }}
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          workspaces: sharp/mago
-          key: msrv-${{ needs.crate_metadata.outputs.msrv }}
-          cache-on-failure: true
-
-      - name: Install elan and Lean
-        uses: ./.github/actions/setup-lean
-
-      - name: Run tests
-        run: cargo test --workspace --locked --all-targets
 
   # sharp/mago/.gitattributes leaves Mago's sources out of git archive, and so out of php-sharp's own tag archives.
   source_archive:
@@ -211,9 +193,12 @@ jobs:
         job:
           # Each job in this matrix defines a build target. The following custom keys control the pipeline steps:
           # - `smoke: true`: Smoke-checks the built binary. Only targets the job's runner can execute set it.
-          # - `wasm: true`: Triggers an additional WebAssembly build and packaging for this release.
+          # - `pgo: true`: Builds with profile-guided optimization, profiled on corpus/. Only aarch64-apple-darwin
+          #   sets it. x86_64 macOS's PGO job, which profiled under Rosetta, took up to 59 minutes, and nothing here
+          #   measures what PGO gains, so it and x86_64 musl build without it, as rust-lang/rust's Apple dist jobs do.
 
-          ## macOS: aarch64, x86_64, on the self-hosted Apple silicon runners. The x86_64 binary runs under Rosetta.
+          ## macOS: aarch64, x86_64, on the self-hosted Apple silicon runners. The x86_64 binary cross-compiles there,
+          ## and its smoke check runs it under Rosetta.
           - {
               target: aarch64-apple-darwin,
               os: macos-arm64-local,
@@ -224,7 +209,6 @@ jobs:
               target: x86_64-apple-darwin,
               os: macos-arm64-local,
               smoke: true,
-              pgo: true,
             }
           ## Linux: aarch64, x86_64
           - { target: aarch64-unknown-linux-gnu, os: ubuntu-latest, smoke: false }
@@ -237,21 +221,26 @@ jobs:
               target: x86_64-unknown-linux-gnu,
               os: ubuntu-latest,
               smoke: true,
-              wasm: true,
             }
           - {
               target: x86_64-unknown-linux-musl,
               os: ubuntu-latest,
               smoke: true,
-              pgo: true,
             }
 
     env:
       BUILD_CMD: cargo
 
     steps:
+      # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout source code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: false
+
+      - name: Remove what an earlier job left, except the builds
+        if: runner.environment == 'self-hosted'
+        uses: ./.github/actions/clean-kept-build
 
       - name: set version env variable
         id: version
@@ -266,7 +255,6 @@ jobs:
           sudo apt-get remove -y libssl-dev
           case ${{ matrix.job.target }} in
             aarch64-unknown-linux-gnu) sudo apt-get -y install gcc-aarch64-linux-gnu ;;
-            x86_64-unknown-linux-musl) sudo apt-get -y install musl-tools ;;
           esac
 
       - name: install Rust toolchain
@@ -427,26 +415,6 @@ jobs:
           "$mago" analyze
           "$mago" compile
 
-      - name: Cache wasm-pack
-        if: matrix.job.wasm
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cargo/bin/wasm-pack
-          key: wasm-pack-0.13.1-${{ runner.os }}
-
-      - name: Install wasm-pack and build WASM
-        if: matrix.job.wasm
-        run: |
-          if ! command -v wasm-pack &>/dev/null; then
-            cargo install wasm-pack --version 0.13.1 --locked
-          fi
-          cd crates/wasm
-          wasm-pack build -d pkg --release
-          cd ../..
-          WASM_STAGING="${{ env.CICD_INTERMEDIATES_DIR }}/wasm"
-          mkdir -p "${WASM_STAGING}"
-          cp -r crates/wasm/pkg/* "${WASM_STAGING}/"
-
       - name: create tarball (main binary)
         id: package
         shell: bash
@@ -472,33 +440,10 @@ jobs:
 
           echo "PKG_PATH=${PKG_STAGING}/${PKG_NAME}" >> "$GITHUB_OUTPUT"
 
-      - name: create WASM tarball
-        id: wasm_package
-        if: matrix.job.wasm
-        shell: bash
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          # Since WASM is universal, just name it 'mago-{VERSION}-wasm.tar.gz'
-          WASM_PKG_NAME="mago-${VERSION}-wasm.tar.gz"
-          echo "WASM_PKG_NAME=${WASM_PKG_NAME}" >> "$GITHUB_OUTPUT"
-
-          WASM_STAGING="${{ env.CICD_INTERMEDIATES_DIR }}/wasm"
-          pushd "${WASM_STAGING}" >/dev/null
-          tar czf "${WASM_PKG_NAME}" mago_wasm.d.ts mago_wasm.js mago_wasm_bg.js mago_wasm_bg.wasm package.json
-          popd >/dev/null
-
-          echo "WASM_PKG_PATH=${WASM_STAGING}/${WASM_PKG_NAME}" >> "$GITHUB_OUTPUT"
-
       - name: Generate artifact attestation (binary)
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-path: ${{ steps.package.outputs.PKG_PATH }}
-
-      - name: Generate artifact attestation (WASM)
-        if: matrix.job.wasm
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
-        with:
-          subject-path: ${{ steps.wasm_package.outputs.WASM_PKG_PATH }}
 
       - name: "Artifact upload: tarball"
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -507,18 +452,10 @@ jobs:
           path: ${{ steps.package.outputs.PKG_PATH }}
           if-no-files-found: error
 
-      - name: "Artifact upload: WASM"
-        if: matrix.job.wasm
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: ${{ steps.wasm_package.outputs.WASM_PKG_NAME }}
-          path: ${{ steps.wasm_package.outputs.WASM_PKG_PATH }}
-          if-no-files-found: error
-
   release:
     name: Publish the release
     runs-on: ubuntu-latest
-    needs: [crate_metadata, min_version, source_archive, build]
+    needs: [crate_metadata, source_archive, build]
     permissions:
       contents: write
     defaults:
@@ -540,7 +477,6 @@ jobs:
           sort > expected-assets.txt <<EOF
           mago-${VERSION}-source.tar.gz
           mago-${VERSION}-source.zip
-          mago-${VERSION}-wasm.tar.gz
           mago-${VERSION}-aarch64-apple-darwin.tar.gz
           mago-${VERSION}-x86_64-apple-darwin.tar.gz
           mago-${VERSION}-aarch64-unknown-linux-gnu.tar.gz

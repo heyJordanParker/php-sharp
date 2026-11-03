@@ -8,68 +8,122 @@ on:
   pull_request:
     branches:
       - master
+  # The full run: every job runs every mode, where a pull request runs each mode once, on the build it is about. It runs
+  # nightly on master's tip, and on a dispatch, which a release runs on the bump's merge commit before its tag.
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
   cancel-in-progress: true
-# mago's test-run profile builds without incremental state in CI, as sharp/mago/Cargo.toml explains. sharp/docker/run
-# and PHP_EXTENSIONS's docker run pass it into the container.
+# mago's test-run profile builds without incremental state from a cache, as sharp/mago/Cargo.toml explains.
+# sharp/docker/run and PHP_EXTENSIONS's docker run pass it into the container. MACOS, whose runner keeps its build
+# folder, builds with it.
 env:
   CARGO_INCREMENTAL: 0
 jobs:
-  # CI_PASSED is this workflow's one required check, so the workflow always runs, and LINUX,
+  # CI_PASSED is this workflow's one required check, so the workflow always runs, and LINUX, LINUX_PASSES,
   # LINUX_ZTS, HOSTS, PHP_EXTENSIONS and MACOS skip a change to documentation alone. docs/spec.md, README.md and
-  # sharp/spec-self-test.md count as code, because LINUX compiles and runs their examples. A tag runs none of them: it
-  # publishes only a commit whose suites all ran and passed on master, as release.yml does with Mago CI, so its MACOS
-  # never waits for the Mac runners behind the release's Apple builds. CI_PASSED alone isn't enough, because it also
-  # passes a change to documentation alone, whose suites skipped.
+  # sharp/spec-self-test.md count as code, because LINUX compiles and runs their examples. LINUX_PASSES skips a change
+  # only to Mago, the Composer plugin, the sharp/hosts, sharp/phpunit and sharp/bench fixtures, tests or documentation:
+  # a pass that drops a PHP# mark is a bug of the engine, and every pass failure a PHP# test found failed every other
+  # mode with it. Every other path counts as the engine, so an input of the engine's build that no one listed, such as
+  # ext/sharp/src or sharp/bin/build, runs the passes. The full run, nightly or dispatched, runs every job in every
+  # mode, and its `full` output tells each job so.
+  #
+  # A tree runs the suites once, as bors's "not rocket science" rule tests the exact tree that lands once. A push to
+  # master skips them when a pull request run passed them on its tree, as .github/actions/passed-tree explains, and
+  # links that run. The nightly run skips a tree a full run already passed. A tag runs none of them: it publishes only
+  # a tree whose full run passed all 9 test jobs, as release.yml does with Mago CI, so its MACOS never waits for the
+  # Mac runners behind the release's Apple builds. A pull request run isn't enough, because it runs each mode once,
+  # and CI_PASSED isn't, because it also passes a change to documentation alone, whose suites skipped.
   CHANGES:
     runs-on: ubuntu-24.04
     permissions:
       actions: read
       contents: read
+      pull-requests: read
+    env:
+      FULL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || '' }}
     outputs:
       code: ${{ steps.diff.outputs.code }}
+      engine: ${{ steps.diff.outputs.engine }}
+      full: ${{ env.FULL }}
     steps:
-      - name: The tagged commit's suites ran and passed on master
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # LINUX, LINUX_ZTS, HOSTS, MACOS, and PHP_EXTENSIONS for each of its two images on each of its two runners.
+      # LINUX_PASSES runs only for a change to the engine, and a run's success means it passed when it ran.
+      - name: Find the pull request run that passed every suite on this tree
+        id: passed
+        if: github.event_name == 'push' && github.ref_type == 'branch'
+        uses: ./.github/actions/passed-tree
+        with:
+          workflow: sharp.yml
+          events: pull_request push
+          passed: >-
+            [.jobs[] | select(.conclusion == "success" and (.name == "LINUX" or .name == "LINUX_ZTS" or .name == "HOSTS"
+            or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS"))))] | length == 8
+      # The 9 test jobs: those 8 and LINUX_PASSES, which a full run always runs.
+      - name: Find the full run that passed all 9 test jobs on this tree
+        id: full
+        if: github.ref_type == 'tag' || github.event_name == 'schedule'
+        uses: ./.github/actions/passed-tree
+        with:
+          workflow: sharp.yml
+          events: schedule workflow_dispatch
+          passed: >-
+            [.jobs[] | select(.conclusion == "success" and (.name == "LINUX" or .name == "LINUX_PASSES"
+            or .name == "LINUX_ZTS" or .name == "HOSTS" or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS"))))]
+            | length == 9
+      - name: The suites don't run again
+        if: github.ref_type == 'branch' && (steps.passed.outputs.run || steps.full.outputs.run)
+        env:
+          RUN: ${{ steps.passed.outputs.run || steps.full.outputs.run }}
+        run: echo "::notice::This tree ran and passed every PHP# suite in $RUN, so they don't run again."
+      - name: The tagged commit's tree passed a full run
         if: github.ref_type == 'tag'
         env:
-          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ steps.full.outputs.run }}
         run: |
-          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/sharp.yml/runs?head_sha=$GITHUB_SHA&branch=master&event=push" --jq '.workflow_runs[0].id // empty')
-          if [[ -z $run ]]; then
-            echo "::error::PHP# CI never ran on master for commit $GITHUB_SHA. Tag a commit whose suites master's PHP# CI ran and passed."
+          if [[ -z $RUN ]]; then
+            echo "::error::No full PHP# CI run, nightly or dispatched, passed all 9 test jobs on commit $GITHUB_SHA's tree. Dispatch one on the commit with gh workflow run sharp.yml --ref master, and tag the commit once it passes."
             exit 1
           fi
-          jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=100")
-          suites='.jobs[] | select(.name == "LINUX" or .name == "LINUX_ZTS" or .name == "HOSTS" or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS")))'
-          failed=$(jq -r "[$suites | select(.conclusion != \"success\") | \"\(.name): \(.conclusion // .status)\"] | join(\", \")" <<< "$jobs")
-          # LINUX, LINUX_ZTS, HOSTS, MACOS, and PHP_EXTENSIONS for each of its two images on each of its two runners.
-          if [[ $(jq "[$suites | select(.conclusion == \"success\")] | length" <<< "$jobs") != 8 ]]; then
-            echo "::error::Commit $GITHUB_SHA has not run and passed every PHP# suite on master (${failed:-a suite is missing}): $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
-            exit 1
-          fi
-          echo "Commit $GITHUB_SHA ran and passed every PHP# suite on master: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run"
-      - name: git checkout
-        if: github.ref_type != 'tag'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Find changes outside documentation
+          echo "Commit $GITHUB_SHA's tree passed all 9 test jobs in $RUN."
+      - name: Find changes outside documentation, and changes to the engine
         id: diff
-        if: github.ref_type != 'tag'
+        if: github.ref_type != 'tag' && !steps.passed.outputs.run && !steps.full.outputs.run
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
+          if [[ $FULL ]]; then
+            echo code=true >> "$GITHUB_OUTPUT"
+            echo engine=true >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           git fetch --depth=1 origin "$BASE"
           git diff --name-only --no-renames "$BASE" HEAD > "$RUNNER_TEMP/changed"
+          code=false
+          engine=false
           while read -r file; do
             case "$file" in
-              docs/spec.md|README.md|sharp/spec-self-test.md) echo code=true >> "$GITHUB_OUTPUT"; break ;;
+              docs/spec.md|README.md|sharp/spec-self-test.md) code=true ;;
               .circleci/*|.github/CODEOWNERS|.github/ISSUE_TEMPLATE/*|*.md|*.rst|docs/*) ;;
               EXTENSIONS|LICENSE|NEWS|UPGRADING|UPGRADING.INTERNALS) ;;
-              *) echo code=true >> "$GITHUB_OUTPUT"; break ;;
+              *) code=true ;;
+            esac
+            case "$file" in
+              sharp/mago/*|sharp/composer/*|sharp/hosts/*|sharp/phpunit/*|sharp/bench/*|*/tests/*) ;;
+              .circleci/*|.github/CODEOWNERS|.github/ISSUE_TEMPLATE/*|*.md|*.rst|docs/*) ;;
+              EXTENSIONS|LICENSE|NEWS|UPGRADING|UPGRADING.INTERNALS) ;;
+              *) engine=true ;;
             esac
           done < "$RUNNER_TEMP/changed"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "engine=$engine" >> "$GITHUB_OUTPUT"
   LINUX:
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true'
@@ -99,32 +153,28 @@ jobs:
             echo "::error::A committed Cargo.lock names a local source. Keep a [patch] in an untracked .cargo/config.toml."
             exit 1
           fi
-      - name: Rust cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # sharp/bin/test builds mago with sharp/bin/build-mago, inside the image, where CARGO_HOME and RUSTUP_HOME are
+      # sharp/build/cargo and sharp/build/rustup. Every Linux job that builds mago shares these caches.
+      - name: Rust and Mago caches
+        uses: ./.github/actions/mago-cache
         with:
-          path: |
+          name: SHARP_LINUX
+          rust: SHARP_LINUX
+          rust-paths: |
             sharp/build/cargo
             sharp/build/rustup
-          # rustup's toolchains are binaries for the runner's architecture, so each architecture keeps its own.
-          key: SHARP_LINUX_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
-      # sharp/bin/test builds mago from sharp/mago into sharp/build/<os>-<arch>/mago, in the test-run profile
-      # sharp/mago/Cargo.toml explains. The cache holds that build as the first run after its key changed made it: the
-      # dependencies, which change only with the key, and Mago's own crates, which cargo rebuilds when they changed since.
-      - name: Mago cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: sharp/build/*/mago
-          key: SHARP_LINUX_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
+          save: ${{ needs.CHANGES.outputs.full }}
       - name: Build
         run: sharp/bin/build --linux
       - name: Test PHP#
-        run: sharp/bin/test --linux --opcache --repeat --passes --census --spec --differential --phpunit
+        run: sharp/bin/test --linux --opcache --repeat --jit --census --spec --differential --phpunit
       - name: Check the standard library with the checker sharp/bin/test built
         run: |
           # shellcheck disable=SC2016 # The image's sh expands $(uname -m), to its own architecture.
           sharp/docker/run sh -c '"sharp/build/linux-$(uname -m)/mago/test-run/mago" --colors never --workspace sharp/composer analyze --minimum-fail-level note'
+      # The run without opcache shows that plain PHP still behaves as before. The full run adds the opcache modes.
       - name: Test upstream
-        run: sharp/bin/test --linux --upstream --opcache
+        run: sharp/bin/test --linux --upstream ${{ needs.CHANGES.outputs.full == 'true' && '--opcache' || '' }}
       - name: Verify generated files are up to date
         run: |
           sharp/docker/run scripts/dev/credits
@@ -149,22 +199,49 @@ jobs:
           sharp/docker/run php sharp/mago/scripts/regen-sharp-kinds.php Zend/zend_ast.h Zend/zend_language_parser.h | diff -u sharp/mago/crates/sharp-bridge/src/kind.rs -
           # cargo builds nothing for the test-run mago sharp/bin/test built, and names the out_dir of the bridge it links.
           # `-p mago-sharp-bridge` resolves other features, so it built a second bridge and its dependencies beside it.
-          # shellcheck disable=SC2016 # The image's sh expands the cargo it finds there, and its own architecture.
-          sharp/docker/run sh -c 'cargo="$(cd ext/sharp && rustup which cargo)" && PATH="$(dirname "$cargo"):$PATH" "$cargo" build --locked --profile test-run --manifest-path sharp/mago/Cargo.toml --target-dir "sharp/build/linux-$(uname -m)/mago" --bin mago --message-format=json' > "$RUNNER_TEMP/build.json"
+          sharp/docker/run sharp/bin/build-mago --message-format=json > "$RUNNER_TEMP/build.json"
           header="$(jq -r 'select(.reason == "build-script-executed" and (.package_id | contains("mago-sharp-bridge"))) | .out_dir | ltrimstr("/src/")' "$RUNNER_TEMP/build.json")/sharp_unit.h"
           diff -u ext/sharp/sharp_unit.h "$header"
-      # HOSTS serves the fixture from this build's php-fpm, and compiles it with this build's mago. A tar keeps
-      # their modes, which an artifact drops.
-      - name: Keep php-fpm and mago for HOSTS
-        run: tar -cf "$RUNNER_TEMP/hosts-nts.tar" "sharp/build/linux-$(uname -m)/sapi/fpm/php-fpm" "sharp/build/linux-$(uname -m)/mago/test-run/mago"
-      - name: Upload php-fpm and mago for HOSTS
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+  # Each of PHP's 16 optimizer passes alone, on the build LINUX tests, so a pass that drops a PHP# mark cannot hide
+  # behind another pass. CHANGES runs it for a change to the engine's own code, and the full run runs it.
+  LINUX_PASSES:
+    needs: CHANGES
+    if: needs.CHANGES.outputs.engine == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    # sharp/docker/run builds the image FROM base-images.yml's copies, as LINUX does.
+    env:
+      BASE_IMAGE: ghcr.io/heyjordanparker/debian:trixie
+      GOLANG_IMAGE: ghcr.io/heyjordanparker/golang:1.27-trixie
+    steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Pull the base images from ghcr.io
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+          docker pull "$BASE_IMAGE"
+          docker pull "$GOLANG_IMAGE"
+      # sharp/bin/test builds mago before it runs the passes, as LINUX does.
+      - name: Rust and Mago caches
+        uses: ./.github/actions/mago-cache
         with:
-          name: hosts-nts
-          path: ${{ runner.temp }}/hosts-nts.tar
-          retention-days: 1
-  # The thread-safe build, which FrankenPHP and Octane on Swoole run, in every mode LINUX runs. Linux has a
-  # thread-safe JIT, so the JIT passes run too.
+          name: SHARP_LINUX
+          rust: SHARP_LINUX
+          rust-paths: |
+            sharp/build/cargo
+            sharp/build/rustup
+          save: ${{ needs.CHANGES.outputs.full }}
+      - name: Build
+        run: sharp/bin/build --linux
+      - name: Test PHP# with each optimizer pass alone
+        run: sharp/bin/test --linux --passes
+  # The thread-safe build, which FrankenPHP and Octane on Swoole run, with the opcache and both JITs those hosts run,
+  # since Linux has a thread-safe JIT. The full run adds the file cache and the passes alone.
   LINUX_ZTS:
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true'
@@ -187,40 +264,28 @@ jobs:
           echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
           docker pull "$BASE_IMAGE"
           docker pull "$GOLANG_IMAGE"
-      - name: Rust cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # sharp/bin/test --zts builds mago into the other build's folder, sharp/build/<os>-<arch>/mago, as LINUX does.
+      - name: Rust and Mago caches
+        uses: ./.github/actions/mago-cache
         with:
-          path: |
+          name: SHARP_LINUX
+          rust: SHARP_LINUX
+          rust-paths: |
             sharp/build/cargo
             sharp/build/rustup
-          key: SHARP_LINUX_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
-      # sharp/bin/test --zts builds mago into the other build's folder, sharp/build/<os>-<arch>/mago, as LINUX does.
-      - name: Mago cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: sharp/build/*/mago
-          key: SHARP_LINUX_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
+          save: ${{ needs.CHANGES.outputs.full }}
       - name: Build
         run: sharp/bin/build --linux --zts
       - name: Test PHP#
-        run: sharp/bin/test --linux --zts --opcache --repeat --passes
-      # HOSTS builds FrankenPHP against the libphp, headers and php-config that sharp/bin/build --zts installed.
-      - name: Keep the installed engine for HOSTS
-        run: |
-          install="sharp/build/linux-$(uname -m)-zts/install"
-          tar -cf "$RUNNER_TEMP/hosts-zts.tar" "$install/lib" "$install/include" "$install/bin/php-config"
-      - name: Upload the installed engine for HOSTS
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: hosts-zts
-          path: ${{ runner.temp }}/hosts-zts.tar
-          retention-days: 1
-  # The fixture in sharp/hosts, served from php-fpm and from FrankenPHP's worker mode. FrankenPHP is built with Go
-  # against the engine LINUX_ZTS built, and php-fpm is the one LINUX built.
+        run: sharp/bin/test --linux --zts --repeat --jit ${{ needs.CHANGES.outputs.full == 'true' && '--opcache --passes' || '' }}
+  # The fixture in sharp/hosts, served from php-fpm and from FrankenPHP's worker mode. HOSTS builds php-fpm, the
+  # thread-safe engine FrankenPHP is built against with Go, and mago itself, beside LINUX and LINUX_ZTS, so it never
+  # waits for their tests.
   HOSTS:
-    needs: [LINUX, LINUX_ZTS]
+    needs: CHANGES
+    if: needs.CHANGES.outputs.code == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: read
@@ -238,25 +303,25 @@ jobs:
           echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
           docker pull "$BASE_IMAGE"
           docker pull "$GOLANG_IMAGE"
+      # sharp/bin/hosts builds mago before it compiles the fixture, as sharp/bin/test does in LINUX.
+      - name: Rust and Mago caches
+        uses: ./.github/actions/mago-cache
+        with:
+          name: SHARP_LINUX
+          rust: SHARP_LINUX
+          rust-paths: |
+            sharp/build/cargo
+            sharp/build/rustup
+          save: ${{ needs.CHANGES.outputs.full }}
       - name: Go module cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: sharp/build/go/pkg/mod
           key: SHARP_HOSTS_GO-${{ hashFiles('sharp/bin/hosts', 'sharp/docker/Dockerfile') }}
-      - name: Download php-fpm and mago
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: hosts-nts
-          path: ${{ runner.temp }}
-      - name: Download the installed engine
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: hosts-zts
-          path: ${{ runner.temp }}
-      - name: Unpack them where they were built
-        run: |
-          tar -xf "$RUNNER_TEMP/hosts-nts.tar"
-          tar -xf "$RUNNER_TEMP/hosts-zts.tar"
+      - name: Build php-fpm
+        run: sharp/bin/build --linux
+      - name: Build and install the thread-safe engine
+        run: sharp/bin/build --linux --zts
       - name: Serve the fixture from php-fpm and FrankenPHP
         run: sharp/bin/hosts --linux
   # Each runtime image, with the extensions a typical Laravel app installs on top, installed the way such an app's
@@ -305,18 +370,6 @@ jobs:
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-      - name: Rust cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            sharp/build/cargo
-            sharp/build/rustup
-          key: SHARP_LINUX_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.lock') }}
-      - name: Mago cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: sharp/build/*/mago
-          key: SHARP_LINUX_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
       - name: Build the image
         run: git archive HEAD | docker build --build-arg REGISTRY --file "${{ matrix.host.file }}" --tag php-sharp -
       # A critical or high CVE that a fixed package resolves fails the build, so it is fixed before a tag, which takes
@@ -371,8 +424,21 @@ jobs:
         run: |
           # shellcheck disable=SC2086 # EXTENSIONS is a list of extensions.
           docker run --rm --volume "$PWD:/src" --workdir /src php-sharp-extensions ${{ matrix.host.php }} sharp/bin/php-extensions $EXTENSIONS
+      # The full run tests PHP# with the extensions loaded, in every mode. A pull request runs those modes on LINUX's
+      # build, and each time this run failed before it moved to the full run, LINUX failed with it.
+      - name: Rust and Mago caches
+        if: needs.CHANGES.outputs.full == 'true'
+        uses: ./.github/actions/mago-cache
+        with:
+          name: SHARP_LINUX
+          rust: SHARP_LINUX
+          rust-paths: |
+            sharp/build/cargo
+            sharp/build/rustup
+          save: ${{ needs.CHANGES.outputs.full }}
       # The container mounts the tree and its caches as sharp/docker/run does.
       - name: Test PHP# with the extensions loaded
+        if: needs.CHANGES.outputs.full == 'true'
         run: |
           docker run --rm --init \
             --user "$(id -u):$(id -g)" \
@@ -383,7 +449,10 @@ jobs:
             --env XDG_CACHE_HOME=/src/sharp/build/cache \
             --volume "$PWD:/src" \
             --workdir /src \
-            php-sharp-extensions sharp/bin/test --installed --opcache --repeat --passes
+            php-sharp-extensions sharp/bin/test --installed --opcache --repeat --passes --jit
+  # On a pull request, the checks only macOS can fail: the engine's build, mago compile and the plain run on a disk that
+  # ignores case, the census and the differential, and both JITs, because no other pull request job runs on arm64. Linux
+  # runs every other mode on the same tests, and the full run runs them all here as well.
   MACOS:
     needs: CHANGES
     if: needs.CHANGES.outputs.code == 'true'
@@ -391,16 +460,27 @@ jobs:
     # head.repo.fork can't tell, because it is itself a fork of php/php-src. A job never installs on them, so they
     # check that Homebrew already has the build's formulae and build without ccache. Only the runner labelled
     # macos-arm64-suite takes it, so suites queue one at a time: the runners share one Mac, and three suites at once
-    # each ran past the 60-minute limit. That Mac also builds the work the suite checks, so one suite alone takes 53
-    # minutes at moderate load and ran past 60 under a build. The limit leaves room for that, as php-src's own macOS
-    # jobs in test-suite.yml leave 180.
+    # each ran past the 60-minute limit. That Mac also builds the work the suite checks, so the full run's suite
+    # alone takes 53 minutes at moderate load and ran past 60 under a build. The limit leaves room for that, as
+    # php-src's own macOS jobs in test-suite.yml leave 180.
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'macos-arm64-suite' || 'macos-latest' }}
     timeout-minutes: 120
     env:
       FORMULAE: autoconf bison curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
+      # The runner keeps the build folder between jobs, so mago keeps the incremental state its test-run profile builds
+      # with, which a restored cache would let age.
+      CARGO_INCREMENTAL: 1
     steps:
+      # actions/checkout's clean deletes sharp/build. Each job on the self-hosted Macs keeps it instead, as
+      # .github/actions/clean-kept-build explains, so the engine and mago rebuild only what changed, which takes
+      # seconds, where a build from nothing took 19 minutes.
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: false
+      - name: Remove what an earlier job left, except the builds
+        if: runner.environment == 'self-hosted'
+        uses: ./.github/actions/clean-kept-build
       - name: brew
         if: runner.environment == 'github-hosted'
         run: |
@@ -423,16 +503,12 @@ jobs:
           type -a rustup rustc cargo
           rustc --version
           cargo --version
-      - name: Mago cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: sharp/build/*/mago
-          key: SHARP_MACOS_MAGO-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
       - name: Build
         run: sharp/bin/build
       - name: Test PHP#
-        run: sharp/bin/test --opcache --repeat --passes --census --differential
+        run: sharp/bin/test --jit --census --differential ${{ needs.CHANGES.outputs.full == 'true' && '--opcache --repeat --passes' || '' }}
       - name: Test upstream
+        if: needs.CHANGES.outputs.full == 'true'
         run: sharp/bin/test --upstream --opcache
   # The checks that keep the release pipeline on pinned code. An action that is not ours runs only at a full commit
   # SHA, so a moved tag can't change what runs. No Dockerfile under sharp/docker names a `# syntax=` frontend, which
@@ -466,20 +542,121 @@ jobs:
           tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
       - name: actionlint
         run: '"$RUNNER_TEMP/actionlint"'
+  # A release's pull request, whose title starts with "chore: release", changes only what the bump writes: what
+  # sharp/mago/scripts/set-version.php writes for the new version, PHP_SHARP_VERSION in ext/sharp/php_sharp.h and the
+  # version Zend/tests/sharp/ri_sharp.phpt expects, and the release's section of sharp/CHANGELOG.md. So the full run a
+  # release dispatches on its merge commit tests the tree the pull request already tested, with new version strings.
+  # It isn't a required check, and CI_PASSED doesn't need it, so a pull request with another title never waits on it.
+  RELEASE_BUMP:
+    if: "github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'chore: release')"
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The bump, made again on the base, must give the pull request's tree.
+      - name: The pull request changes only what the version bump writes, and the changelog
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --depth=1 origin "$BASE"
+          version() { git show "$1:sharp/mago/Cargo.toml" | sed -n '/^version = /{s/^version = "\(.*\)"$/\1/p;q}'; }
+          old=$(version "$BASE")
+          new=$(version "$GITHUB_SHA")
+          if [[ $old == "$new" ]]; then
+            echo "::error::sharp/mago/Cargo.toml's version is still $old. Run php sharp/mago/scripts/set-version.php <version>."
+            exit 1
+          fi
+          git switch --quiet --detach "$BASE"
+          php sharp/mago/scripts/set-version.php "$new"
+          sed -i "s/^#define PHP_SHARP_VERSION \"${old//./\\.}\"\$/#define PHP_SHARP_VERSION \"$new\"/" ext/sharp/php_sharp.h
+          sed -i "s/^Version => ${old//./\\.}\$/Version => $new/" Zend/tests/sharp/ri_sharp.phpt
+          git checkout "$GITHUB_SHA" -- sharp/CHANGELOG.md
+          git add --all
+          if ! git diff --cached --quiet "$GITHUB_SHA"; then
+            git diff --cached -R "$GITHUB_SHA"
+            echo "::error::The pull request changes more than the bump from $old to $new and sharp/CHANGELOG.md: the diff above is what it changes beyond them. Move that change to a pull request of its own."
+            exit 1
+          fi
+          echo "The pull request changes only the bump from $old to $new and sharp/CHANGELOG.md."
+      # The release's section is new text, so the changelog loses only the old link of [Unreleased].
+      - name: sharp/CHANGELOG.md gains the release's section and links, and loses nothing else
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          version() { git show "$1:sharp/mago/Cargo.toml" | sed -n '/^version = /{s/^version = "\(.*\)"$/\1/p;q}'; }
+          old=$(version "$BASE")
+          new=$(version "$GITHUB_SHA")
+          compare="https://github.com/$GITHUB_REPOSITORY/compare"
+          git diff --unified=0 "$BASE" "$GITHUB_SHA" -- sharp/CHANGELOG.md > "$RUNNER_TEMP/changelog.diff"
+          sed -n '/^---/d; s/^-//p' "$RUNNER_TEMP/changelog.diff" > "$RUNNER_TEMP/removed"
+          sed -n '/^+++/d; s/^+//p' "$RUNNER_TEMP/changelog.diff" > "$RUNNER_TEMP/added"
+          failed=false
+          if [[ $(cat "$RUNNER_TEMP/removed") != "[Unreleased]: $compare/v$old...HEAD" ]]; then
+            echo "::error::sharp/CHANGELOG.md may remove only the line [Unreleased]: $compare/v$old...HEAD. It removes:"
+            cat "$RUNNER_TEMP/removed"
+            failed=true
+          fi
+          for line in "[Unreleased]: $compare/v$new...HEAD" "[$new]: $compare/v$old...v$new"; do
+            if ! grep -qxF "$line" "$RUNNER_TEMP/added"; then
+              echo "::error::sharp/CHANGELOG.md doesn't add the line $line."
+              failed=true
+            fi
+          done
+          if ! grep -qE "^## \[${new//./\\.}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}\$" "$RUNNER_TEMP/added"; then
+            echo "::error::sharp/CHANGELOG.md doesn't add the heading ## [$new] - <YYYY-MM-DD>."
+            failed=true
+          fi
+          if $failed; then
+            exit 1
+          fi
+          echo "sharp/CHANGELOG.md adds the $new section and its links."
   # This workflow's one required check. A job skipped by its `if` reports one check under the job's
   # name, so CI_PASSED stands in for every job it needs. It fails when any of them failed or was
   # cancelled. mago.yml's ci-passed is the other required check, and its plain-php job runs mago
   # from Composer on plain PHP.
   CI_PASSED:
     if: always()
-    needs: [CHANGES, LINUX, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS, WORKFLOWS]
+    needs: [CHANGES, LINUX, LINUX_PASSES, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS, WORKFLOWS]
     runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+      contents: read
+      issues: write
     steps:
-      - name: Every job passed, or skipped a change to documentation alone
+      - name: Every job passed, or skipped a change that doesn't need it
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
-          allowed-skips: LINUX, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS
+          allowed-skips: LINUX, LINUX_PASSES, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS
           jobs: ${{ toJSON(needs) }}
+      # A red nightly run fails no pull request, so it opens one issue, or comments on the one still open, and the next
+      # tag can't wait on a failure nobody saw.
+      - name: Open an issue for the failed nightly run
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="The nightly PHP# CI run failed"
+          body="The nightly run on master's $GITHUB_SHA failed: $RUN"
+          issue=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [[ -n $issue ]]; then
+            gh issue comment "$issue" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
+      # A full run's jobs saved their targets when they ended, so this job, which needs them all, deletes the ones the
+      # new targets replaced.
+      - name: git checkout
+        if: always() && needs.CHANGES.outputs.full == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
+      - name: Delete the Mago target caches this run replaced
+        if: always() && needs.CHANGES.outputs.full == 'true'
+        uses: ./.github/actions/mago-cache-prune
   COMPOSER:
     needs: [CHANGES, LINUX, MACOS]
     if: ${{ !failure() && !cancelled() && github.event_name == 'push' }}

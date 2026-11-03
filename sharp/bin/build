@@ -77,13 +77,20 @@ if ! $release; then
   flags+=(--enable-debug)
 fi
 
+status="$build_dir/config.status"
+# php-src's build writes its parsers, scanners and configure into the source tree, and a configured build's dependency
+# files name them. make has no rule that makes some of them again, such as Zend/zend_ini_scanner_defs.h (CI run
+# 41504845687), so a configured build in a tree without configure, as git clean -x leaves it, builds from nothing. It
+# keeps mago, which sharp/bin/build-mago builds there from sharp/mago alone, and which CI restores into a new checkout.
 if $clean; then
   rm -rf "$build_dir"
+elif [[ -f "$status" && ! -f "$root/configure" ]]; then
+  find "$build_dir" -mindepth 1 -maxdepth 1 ! -name mago -exec rm -rf {} +
 fi
 
-status="$build_dir/config.status"
-# A build configured with the other werror setting configures again, so the setting this run asks for holds.
-if [[ ! -f "$status" || " $("$status" --config) " != *" $werror "* || "$0" -nt "$status" || "$root/sharp/docker/Dockerfile" -nt "$status" || "$root/Zend/zend_modules.h" -nt "$status" || -n "$(find "$root" \( -path "$root/.git" -o -path "$root/sharp" \) -prune -o \( -name configure.ac -o -name '*.m4' -o -name Makefile.frag -o -name Makefile.global \) -newer "$status" -print -quit)" ]]; then
+# A build configured with the other werror setting configures again, so the setting this run asks for holds. So does
+# a change to an input configure reads, such as a *.in file it writes a file from.
+if [[ ! -f "$status" || " $("$status" --config) " != *" $werror "* || "$0" -nt "$status" || "$root/sharp/docker/Dockerfile" -nt "$status" || "$root/Zend/zend_modules.h" -nt "$status" || -n "$(find "$root" \( -path "$root/.git" -o -path "$root/sharp" \) -prune -o \( -name configure.ac -o -name '*.m4' -o -name '*.in' -o -name Makefile.frag -o -name Makefile.global \) -newer "$status" -print -quit)" ]]; then
   (cd "$root" && ./buildconf --force)
   mkdir -p "$build_dir"
   (cd "$build_dir" && "$root/configure" "${flags[@]}")
