@@ -18,4 +18,6 @@ public class Shelf
 
         return label();
     }
+
+    public static string tag(Note|string value) => value.tag();
 }

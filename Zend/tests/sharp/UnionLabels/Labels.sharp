@@ -10,4 +10,9 @@ public static class Labels
 
         public string badge() => value is string ? "badge " + value : "badge order";
     }
+
+    extension(Note|string value)
+    {
+        public string tag() => value is string ? "tag " + value : "extension";
+    }
 }

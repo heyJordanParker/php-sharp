@@ -1,11 +1,13 @@
 --TEST--
-PHP# runs an extension member on the parts of a union receiver that declare no member of its name: label() on an Order|string runs Order's own label() for an Order and the extension for a string, as the caption property and label read as a method's value do, badge(), which Order lacks, runs the extension for both, and a value shown as a string or an Order runs the extension or the method alone
+PHP# runs an extension member on the parts of a union receiver that declare no member of its name: label() on an Order|string runs Order's own label() for an Order and the extension for a string, as the caption property and label read as a method's value do, tag() on a Note|string calls the function Note's tag property holds for a Note, badge(), which Order lacks, runs the extension for both, and a value shown as a string or an Order runs the extension or the method alone
 --FILE--
 <?php
 require __DIR__ . '/UnionLabels/Order.sharp';
+require __DIR__ . '/UnionLabels/Note.sharp';
 require __DIR__ . '/UnionLabels/Labels.sharp';
 require __DIR__ . '/UnionLabels/Shelf.sharp';
 
+use Demo\Labels\Note;
 use Demo\Labels\Order;
 use Demo\Labels\Shelf;
 
@@ -16,6 +18,7 @@ for ($run = 0; $run < 2; $run++) {
     echo Shelf::text('plain'), ' | ', Shelf::order(new Order()), "\n";
     echo Shelf::caption(new Order()), ' | ', Shelf::caption('plain'), "\n";
     echo Shelf::labeled(new Order()), ' | ', Shelf::labeled('plain'), "\n";
+    echo Shelf::tag(new Note()), ' | ', Shelf::tag('plain'), "\n";
 }
 ?>
 --EXPECT--
@@ -24,8 +27,10 @@ badge order | badge plain
 text plain | order
 order caption | caption plain
 order | text plain
+note tag | tag plain
 order | text plain
 badge order | badge plain
 text plain | order
 order caption | caption plain
 order | text plain
+note tag | tag plain
