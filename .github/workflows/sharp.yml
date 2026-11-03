@@ -608,9 +608,9 @@ jobs:
   # sharp/mago/scripts/set-version.php writes for the new version, PHP_SHARP_VERSION in ext/sharp/php_sharp.h and the
   # version Zend/tests/sharp/ri_sharp.phpt expects, and the release's section of sharp/CHANGELOG.md. Its title also
   # makes its run the full run, which CHANGES accepts for the tag on its merge commit, whose tree is the run's, when
-  # this job passed in it. It isn't a required check, and CI_PASSED doesn't need it, so a pull request with another
-  # title never waits on it. Once it passes, RELEASE_ASSETS and IMAGE build the release's assets beside the suites,
-  # and the tag on the bump's merge commit publishes them.
+  # this job passed in it. Once it passes, RELEASE_ASSETS and IMAGE build the release's assets beside the suites, and
+  # the tag on the bump's merge commit publishes them. CI_PASSED needs all three, so a bump merges only once every
+  # asset is built, and the tag never finds half of them. A pull request with another title skips them.
   RELEASE_BUMP:
     if: "github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'chore: release')"
     runs-on: ubuntu-24.04
@@ -697,7 +697,8 @@ jobs:
   # from Composer on plain PHP.
   CI_PASSED:
     if: always()
-    needs: [CHANGES, LINUX, LINUX_PASSES, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS, WORKFLOWS]
+    needs:
+      [CHANGES, LINUX, LINUX_PASSES, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS, WORKFLOWS, RELEASE_BUMP, RELEASE_ASSETS, IMAGE]
     runs-on: ubuntu-24.04
     permissions:
       actions: write
@@ -707,7 +708,7 @@ jobs:
       - name: Every job passed, or skipped a change that doesn't need it
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
-          allowed-skips: LINUX, LINUX_PASSES, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS
+          allowed-skips: LINUX, LINUX_PASSES, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS, RELEASE_BUMP, RELEASE_ASSETS, IMAGE
           jobs: ${{ toJSON(needs) }}
       # A red nightly run fails no pull request, so it opens one issue, or comments on the one still open, and the next
       # tag can't wait on a failure nobody saw.
