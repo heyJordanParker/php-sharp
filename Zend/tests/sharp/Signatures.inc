@@ -39,9 +39,9 @@ class Signatures
         return ($first + $second) * $factor;
     }
 
-    public function doubled(int ...$values): int
+    public function doubled(int $first, int $second = 0): int
     {
-        return $this->scale(...$values, factor: 2);
+        return $this->scale(...[$first, $second], factor: 2);
     }
 
     public function pay(int|float $amount): int|string
