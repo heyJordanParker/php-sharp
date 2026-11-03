@@ -90,7 +90,7 @@ if [[ " ${MAKEFLAGS:-}" =~ [[:space:]](-j[[:space:]]*|--jobs=)([0-9]+) ]]; then
   jobs="${BASH_REMATCH[2]}"
 fi
 
-"$root/sharp/bin/build-mago" --verbose --jobs "$jobs"
+"$root/sharp/bin/build-mago" --quiet --jobs "$jobs"
 mago="$mago_dir/test-run/mago"
 
 # run-tests.php writes each test's script beside it as <test>.php, and mago compile writes each PHP# class's companion

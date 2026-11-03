@@ -119,7 +119,7 @@ jobs:
               sharp/mago/*|sharp/composer/*|sharp/hosts/*|sharp/phpunit/*|sharp/bench/*|*/tests/*) ;;
               .circleci/*|.github/CODEOWNERS|.github/ISSUE_TEMPLATE/*|*.md|*.rst|docs/*) ;;
               EXTENSIONS|LICENSE|NEWS|UPGRADING|UPGRADING.INTERNALS) ;;
-              *) engine=true; echo "engine: $file" ;;
+              *) engine=true ;;
             esac
           done < "$RUNNER_TEMP/changed"
           echo "code=$code" >> "$GITHUB_OUTPUT"
