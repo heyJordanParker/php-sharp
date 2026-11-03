@@ -5,9 +5,9 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 ## Who does what
 
 - **Jordan, the Architect,** owns the language: `docs/spec.md` and the proposals in `docs/decisions/`. He approves or corrects proposals. He doesn't review code or plan work.
-- **Cass, the CTO agent,** owns everything else: the plan, the order of work, the architecture, and this file. Cass starts every agent, approves every PR's architecture after its review, and checks that what lands works.
+- **Cass, the CTO agent,** owns everything else: the plan, the order of work, the architecture, and this file. Cass starts every agent, posts every PR's one verdict and its approval, and checks that what lands works.
 - **A builder** is an agent that does one task: one PR, from a new branch to its merge.
-- **A reviewer** is an agent that reviews one PR once. It changes nothing, and Cass posts its verdict on the PR.
+- **A reviewer** is an agent that reviews one task file or one PR once. It changes nothing, and Cass writes its findings into the task file or the PR's one verdict.
 - **A helper** is an agent that reads, searches or researches for Cass, and changes nothing.
 
 ## One agent, one task
@@ -36,7 +36,8 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 0. Before a task with design decisions gets a builder, one fresh reviewer attacks its task file and research against the code, and Cass writes the findings into the task file. A mechanical task skips this step: a rename, a version bump or a docs edit.
 1. The builder opens the PR, and CI must pass.
 2. One fresh reviewer reviews the details and the architecture once, while Cass reads the PR against the whole system and the plan. Cass sends a PR that misses its Goal back to its builder at once. Otherwise Cass posts one verdict on the PR that holds the review's findings, Cass's own and any coverage gap. The builder makes every change it asks for, and Cass checks each fix by reading it. No second review round runs.
-3. The builder merges with `gh pr merge --merge --match-head-commit <full head SHA>`.
+3. When every fix is read, Cass posts an approval on the PR.
+4. The builder merges with `gh pr merge --merge --match-head-commit <full head SHA>`.
 
 A PR that finishes spec sections says so in its body, on its own line, exactly as `Completes: §6.1, §9`. The `COMPLETES` check fails while `sharp/baseline/spec` still lists an example of a named section.
 
