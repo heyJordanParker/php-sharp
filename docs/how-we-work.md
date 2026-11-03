@@ -15,10 +15,13 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 - Every task has a task file, and every task gets a fresh agent.
 - Only Cass starts agents.
 - The changes a review asks for belong to the same task, so the same builder makes them.
+- Cass resumes a builder that dies on an API or network error in the same turn its failure notice arrives.
 
 ## Parallelism
 
 - At most 2 builders run at once, each in its own worktree slot. Cass never stops a running builder to meet the cap. Cass starts a new builder only while fewer than 2 run.
+- Fix rounds go first. A builder that resumes to fix its own open PR runs before any new task gets a builder.
+- As an experiment, a third builder may run while free disk is at least 20 GiB, plus 28 GiB for each slot whose `sharp/build/<os>-<arch>/mago/debug/` is still under 19 GB, plus 28 GiB for the new slot. The experiment ends after 5 merges if the median time from founding to merge doesn't fall, or if agent-hours per merge rise. Then the cap returns to 2.
 - At most 4 helpers and reviewers run at once, on top of the builders. Each does one short task.
 
 ## Worktree slots
@@ -30,10 +33,10 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 
 ## A PR's path to master
 
+0. Before a task with design decisions gets a builder, one fresh reviewer attacks its task file and research against the code, and Cass writes the findings into the task file. A mechanical task skips this step: a rename, a version bump or a docs edit.
 1. The builder opens the PR, and CI must pass.
-2. One fresh reviewer reviews the details and the architecture once, and Cass posts its verdict on the PR. The builder makes every change it asks for, and Cass checks each fix by reading it. No second review round runs.
-3. Cass checks the architecture across the whole system and the plan, and posts an approval on the PR. If Cass asks for changes, the builder makes them and Cass checks them by reading.
-4. The builder merges with `gh pr merge --merge --match-head-commit <full head SHA>`.
+2. One fresh reviewer reviews the details and the architecture once, while Cass reads the PR against the whole system and the plan. Cass sends a PR that misses its Goal back to its builder at once. Otherwise Cass posts one verdict on the PR that holds the review's findings, Cass's own and any coverage gap. The builder makes every change it asks for, and Cass checks each fix by reading it. No second review round runs.
+3. The builder merges with `gh pr merge --merge --match-head-commit <full head SHA>`.
 
 A PR that finishes spec sections says so in its body, on its own line, exactly as `Completes: §6.1, §9`. The `COMPLETES` check fails while `sharp/baseline/spec` still lists an example of a named section.
 
