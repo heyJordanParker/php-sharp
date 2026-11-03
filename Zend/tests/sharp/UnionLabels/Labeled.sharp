@@ -1,0 +1,6 @@
+namespace Demo.Labels;
+
+public interface Labeled
+{
+    string label();
+}

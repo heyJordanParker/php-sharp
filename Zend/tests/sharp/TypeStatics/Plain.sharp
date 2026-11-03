@@ -1,0 +1,6 @@
+namespace TypeStatics;
+
+// Inherits both statics of `Maker`.
+public class Plain : Maker
+{
+}

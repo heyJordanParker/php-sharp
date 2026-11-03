@@ -1381,6 +1381,52 @@ public abstract class Posting
 }
 ```
 
+**`TItem.make()`, `TItem.size` and `typeof(TItem).make()` reach the static members of the type argument the code runs with,** as a class value does (section 25), and as C# 11's static abstract members, Swift's static requirements and Rust's associated functions do. The bound declares them, and a type argument that redeclares one runs its own:
+
+<!-- example type-parameter-statics -->
+```csharp
+public class Maker
+{
+    public static virtual string make() => "maker";
+    public static string size { get; } = "maker size";
+}
+
+public class Fancy : Maker
+{
+    public static override string make() => "fancy";
+}
+
+public class Builder<TItem : Maker>
+{
+    public string build() => TItem.make();           // compiles: the make of TItem's type argument
+    public string size() => TItem.size;
+    public string typed() => typeof(TItem).make();
+}
+```
+<!-- run type-parameter-statics
+new Builder<Fancy>().build();   // "fancy"
+new Builder<Maker>().build();   // "maker"
+new Builder<Fancy>().size();    // "maker size"
+new Builder<Fancy>().typed();   // "fancy"
+-->
+
+**A type parameter bounded by a class takes one class.** Its code reaches the statics of its type argument and creates its objects, and a union of classes, as `Fancy|Plain`, is no one class. So `Builder<Fancy|Plain>` is a compile error at the type argument, which names the type to write, as in "`TItem`'s bound is a class, so its type argument is one class. Write `Builder<Maker>`." A type parameter bounded by an interface, or with no bound, takes a union, as `List<int|string>` does:
+
+<!-- example class-bound-type-arguments: members
+public class Maker { public static string make() => "maker"; }
+public interface Labeled { }
+public class Fancy : Maker, Labeled { }
+public class Plain : Maker, Labeled { }
+public class Builder<TItem : Maker> { public string build() => TItem.make(); }
+public class Tagged<TItem : Labeled> { }
+-->
+```csharp
+public string one() => new Builder<Fancy>().build();               // compiles
+public string either() => new Builder<Fancy|Plain>().build();      // compile error: TItem's bound is a class, so its type argument is one class
+public Tagged<Fancy|Plain>? labeled() => null;                     // compiles: Labeled is an interface
+public List<int|string> values() => [];                            // compiles
+```
+
 ### 11.1 Variance
 
 Variance is declared on the type parameter. Classes and interfaces can both declare it.
@@ -5049,7 +5095,7 @@ App\Tables\OrderStore::pick();    // "orders"
 App\Tables\OrderStore::holds("orders");   // true
 ```
 
-**`new Self(…)` compiles only when the class's constructor is marked `required`.** `Self` can be any subclass, so every class below it keeps a constructor that `new Self(…)` can call:
+**`new Self(…)` compiles only when the class's constructor is marked `required`, or no class can extend the class.** `Self` can be any subclass, so every class below it keeps a constructor that `new Self(…)` can call:
 
 - its leading parameters match the parameters of the `required` constructor
 - every parameter it adds has a default
@@ -5084,6 +5130,32 @@ public class Invoice : DatabaseEntity
 ```
 
 `required` is optional. A class that never writes `new Self(…)` never writes it.
+
+**A `final` class or a struct needs no `required` constructor for `new Self(…)`,** as Swift asks `required init` only of a class that is not `final`. No class extends it, so `Self` is the class itself, and `new Self(…)` calls its own constructor:
+
+<!-- example final-self -->
+```csharp
+// app/Voucher.sharp
+namespace App;
+
+public final class Voucher
+{
+    public Voucher(public int cents { get; }) { }
+    public Self doubled() => new Self(this.cents * 2);   // compiles: no class extends Voucher
+}
+```
+
+<!-- example final-self -->
+```csharp
+// app/Memo.sharp
+namespace App;
+
+public class Memo
+{
+    public Memo(public string text { get; }) { }
+    public Self copied() => new Self(this.text);         // compile error: a subclass of Memo may lack a constructor new Self(text) can call
+}
+```
 
 ## 26. Extension methods
 
