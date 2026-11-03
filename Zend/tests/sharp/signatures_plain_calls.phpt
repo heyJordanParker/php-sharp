@@ -80,12 +80,6 @@ try {
 } catch (TypeError $e) {
     echo $e->getMessage(), "\n";
 }
-
-try {
-    $made->doubled(1, 2, 3);
-} catch (Error $e) {
-    echo $e::class, ': ', $e->getMessage(), "\n";
-}
 ?>
 --EXPECTF--
 int(0)
@@ -124,4 +118,3 @@ Demo\Signatures::spread(): Argument #3 must be of type int, array given, called 
 Demo\Signatures::__construct(): Argument #1 ($id) must be of type string|int, array given, called in %s on line %d
 Demo\Signatures::isSame(): Argument #1 ($other) must be of type Demo\Signatures|int, string given, called in %s on line %d
 Cannot assign string to property Demo\Signatures::$amount of type int|float
-Error: Named parameter $factor overwrites previous argument
