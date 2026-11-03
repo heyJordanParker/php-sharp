@@ -4,9 +4,70 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-11-03
+
+### Upgrading from 0.6.1
+
+#### Fix the code the 0.6.2 checker refuses
+
+0.6.2 refuses each of these.
+
+A spread of a list whose length is unknown fills only a `...` parameter, as in Kotlin and TypeScript, into a PHP# method and into plain PHP alike (#227). Into any other parameter, a parameter with a default included, it is refused with the parameters it may not fill. 0.6.1 compiled such a spread into a parameter with a default, and refused one before a required parameter as "Too few arguments". Spread a list literal, whose length is known, start the spread at the `...` parameter, or pass each value as an argument of its own:
+
+```csharp
+public static List<T> pair<T>(T a, T b) => [a, b];
+public static int tagged(int count, string ...tags) { … }
+public static void logSlow(string message, Position caller = Position.current()) { }
+
+Pairs.pair(...numbers);               // compile error: `numbers` may not fill `a` and `b`. A spread of unknown length fills only a ... parameter.
+Pairs.pair(...[900, 2900]);           // compiles: a list literal's length is known
+Pairs.logSlow("slow", ...positions);  // compile error: `positions` may not fill `caller`. A spread of unknown length fills only a ... parameter.
+Pairs.tagged(...tags);                // compile error: `tags` may not fill `count`. A spread of unknown length fills only a ... parameter.
+Pairs.tagged(1, ...tags);             // compiles
+```
+
+A search given its value by name or by a spread, as `carts.contains(value: cart)` or `carts.contains(...[cart])`, needs `==` on the element type, as `carts.contains(cart)` does (#233). That covers a `List`'s `contains`, `indexOf` and `remove`, and a `Set`'s and a `Map`'s searches given `value:` or `key:`. Declare `operator ==` and `hash()` in the class, or test for the same object with `===`:
+
+```csharp
+carts.contains(value: cart);    // compile error: `contains` compares elements with `==`, and `Cart` declares no `operator ==`.
+carts.any(c => c === cart);     // compiles
+```
+
+An extension of `Iterable<T>` whose parameter is marked `ComparedByEquality` needs `==` on what the `Iterable` gives a loop, as a `List`'s `contains` does (#233). So its call is refused on an `Iterable<Cart>` of a class without `operator ==`, on a `Map<string, Cart>`, whose `[string, Cart]` entries it compares, and on a `Set<Money|Ticket>` whose `Money` has an `operator ==` that can't take a `Ticket`. Declare `operator ==` on what it compares, or test for the same object, as with `rows.toList().any(c => c === cart)`.
+
+A `match` without `default` on a call's result names the enum cases it misses, as a `match` on a parameter does (#247). 0.6.1 compiled it. Add an arm for each case it misses, or add `default => …` as the last arm:
+
+```csharp
+public string called() => match (this.stage()) {    // compile error: This `match` misses `Stage.Paid` and `Stage.Closed`.
+    Stage.Open => "open",
+};
+```
+
+A type parameter bounded by a class takes one class as its type argument, in a type, in a call's or a `new`'s type arguments, and in a class header (#247). 0.6.1 compiled a union there, and `TItem.make()` then threw `Error: Class "App.Fancy|App.Plain" not found` while the code ran. Write the one class the error names. A type parameter bounded by an interface, or with no bound, still takes a union:
+
+```csharp
+public class Builder<TItem : Maker> { public string build() => TItem.make(); }
+
+new Builder<Fancy|Plain>().build();    // compile error: `TItem`'s bound is a class, so its type argument is one class. Write `Builder<Maker>`.
+new Builder<Fancy>().build();          // compiles
+```
+
+`new TItem()` and `new (typeof(TItem))()`, where `TItem`'s bound is an interface, are refused, where 0.6.1 gave a warning (#247). Bound `TItem` by a class that implements the interface:
+
+```csharp
+public class Tagged<TItem : Labeled> { public TItem create() => new TItem(); }    // compile error: `TItem`'s bound `Labeled` is an interface, so `new` of it creates no object. Bound `TItem` by a class.
+```
+
+In plain PHP, a call through `?->` to a method only `__call` runs may give `null`, as one to a declared method does (#237). So `return $bag?->untagged();` in a function declared to return `int` is refused as `nullable-return-statement`. Handle the `null` first, or declare the return type nullable.
+
 ### Changed
 
 - A spread of a list of unknown length fills only a `...` parameter, as in Kotlin and TypeScript, into a PHP# method and into plain PHP alike. Anywhere else, a parameter with a default included, it is refused with the parameters it may not fill, as "`numbers` may not fill `a` and `b`. A spread of unknown length fills only a ... parameter.", where it compiled into a parameter with a default and was "Too few arguments" before a required one. Spread a list literal there, whose length is known, or pass each value as an argument of its own (#227).
+- The x86_64 macOS and musl `mago` binaries are built without profile-guided optimization (#241).
+
+### Removed
+
+- The release no longer publishes `mago-<version>-wasm.tar.gz`. 0.6.1 was the last release with it (#241).
 
 ### Fixed
 
@@ -314,7 +375,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/heyJordanParker/php-sharp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/heyJordanParker/php-sharp/compare/v0.4.2...v0.5.0
