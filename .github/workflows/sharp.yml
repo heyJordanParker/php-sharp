@@ -621,6 +621,7 @@ jobs:
     needs: [CHANGES, LINUX, LINUX_PASSES, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS, WORKFLOWS]
     runs-on: ubuntu-24.04
     permissions:
+      actions: write
       contents: read
       issues: write
     steps:
@@ -646,6 +647,16 @@ jobs:
           else
             gh issue create --title "$title" --body "$body"
           fi
+      # A full run's jobs saved their targets when they ended, so this job, which needs them all, deletes the ones the
+      # new targets replaced.
+      - name: git checkout
+        if: always() && needs.CHANGES.outputs.full == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
+      - name: Delete the Mago target caches this run replaced
+        if: always() && needs.CHANGES.outputs.full == 'true'
+        uses: ./.github/actions/mago-cache-prune
   COMPOSER:
     needs: [CHANGES, LINUX, MACOS]
     if: ${{ !failure() && !cancelled() && github.event_name == 'push' }}

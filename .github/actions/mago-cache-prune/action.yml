@@ -1,0 +1,26 @@
+name: Prune the Mago target caches
+description: >-
+  Runs in a full run's last job, once every job has saved its target with .github/actions/mago-cache. A target's key is
+  its name, architecture and inputs' hash, then -<commit>, so each full run saves a new key beside the old ones. For
+  each name, architecture and hash, it keeps the newest key on the run's branch and deletes the older ones, so the
+  caches hold one target per job. The calling job needs actions: write.
+
+runs:
+  using: composite
+  steps:
+    - name: Delete each Mago target cache a newer one of its kind replaced
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        # Each line is the key without its commit, the time it was saved, its id and its key, newest first per kind.
+        gh api --paginate "repos/$GITHUB_REPOSITORY/actions/caches?ref=$GITHUB_REF&per_page=100" --jq '
+          .actions_caches[] | select(.key | test("_MAGO-[^-]+-[0-9a-f]{64}-[0-9a-f]{40}$"))
+          | "\(.key | sub("-[0-9a-f]{40}$"; ""))\t\(.created_at)\t\(.id)\t\(.key)"' \
+          | sort -t "$(printf '\t')" -k1,1 -k2,2r > "$RUNNER_TEMP/targets"
+        awk -F '\t' '$1 == kind { print $3 "\t" $4 } { kind = $1 }' "$RUNNER_TEMP/targets" > "$RUNNER_TEMP/older"
+        echo "$(wc -l < "$RUNNER_TEMP/targets") Mago target caches on $GITHUB_REF, $(wc -l < "$RUNNER_TEMP/older") replaced by a newer one."
+        while IFS=$'\t' read -r id key; do
+          gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/caches/$id" --silent
+          echo "Deleted $key."
+        done < "$RUNNER_TEMP/older"

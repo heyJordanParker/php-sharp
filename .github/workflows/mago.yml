@@ -81,7 +81,8 @@ jobs:
           fi
           git fetch --depth=1 origin "$BASE"
           if git diff --quiet "$BASE" HEAD -- sharp/mago sharp/composer .github/workflows/mago.yml sharp/bin/build-mago \
-            .github/actions/setup-lean .github/actions/clean-kept-build .github/actions/passed-tree .github/actions/mago-cache; then
+            .github/actions/setup-lean .github/actions/clean-kept-build .github/actions/passed-tree .github/actions/mago-cache \
+            .github/actions/mago-cache-prune; then
             echo mago=false >> "$GITHUB_OUTPUT"
           else
             echo mago=true >> "$GITHUB_OUTPUT"
@@ -599,6 +600,9 @@ jobs:
     if: always()
     needs: [CHANGES, checks, tests, release-build, plain-php, typos-check, patch-coverage]
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
     defaults:
       run:
         working-directory: .
@@ -608,3 +612,15 @@ jobs:
         with:
           allowed-skips: checks, tests, release-build, plain-php, typos-check, patch-coverage
           jobs: ${{ toJSON(needs) }}
+
+      # The weekly run's jobs saved their targets when they ended, so this job, which needs them all, deletes the ones
+      # the new targets replaced.
+      - name: checkout
+        if: always() && github.event_name == 'schedule'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
+
+      - name: Delete the Mago target caches this run replaced
+        if: always() && github.event_name == 'schedule'
+        uses: ./.github/actions/mago-cache-prune
