@@ -26,10 +26,12 @@ env:
 jobs:
   # CI_PASSED is this workflow's one required check, so the workflow always runs, and LINUX, LINUX_PASSES,
   # LINUX_ZTS, HOSTS, PHP_EXTENSIONS and MACOS skip a change to documentation alone. docs/spec.md, README.md and
-  # sharp/spec-self-test.md count as code, because LINUX compiles and runs their examples. LINUX_PASSES runs only for a
-  # change to the engine's own code, outside its tests: a pass that drops a PHP# mark is a bug of the engine, and every
-  # pass failure a PHP# test found failed every other mode with it. The full run, nightly or dispatched, runs every job
-  # in every mode, and its `full` output tells each job so.
+  # sharp/spec-self-test.md count as code, because LINUX compiles and runs their examples. LINUX_PASSES skips a change
+  # only to Mago, the Composer plugin, the sharp/hosts, sharp/phpunit and sharp/bench fixtures, tests or documentation:
+  # a pass that drops a PHP# mark is a bug of the engine, and every pass failure a PHP# test found failed every other
+  # mode with it. Every other path counts as the engine, so an input of the engine's build that no one listed, such as
+  # ext/sharp/src or sharp/bin/build, runs the passes. The full run, nightly or dispatched, runs every job in every
+  # mode, and its `full` output tells each job so.
   #
   # A tree runs the suites once, as bors's "not rocket science" rule tests the exact tree that lands once. A push to
   # master skips them when a pull request run passed them on its tree, as .github/actions/passed-tree explains, and
@@ -114,8 +116,10 @@ jobs:
               *) code=true ;;
             esac
             case "$file" in
-              */tests/*|*.md) ;;
-              Zend/*|ext/opcache/*|main/*|ext/sharp/*.[ch]) engine=true ;;
+              sharp/mago/*|sharp/composer/*|sharp/hosts/*|sharp/phpunit/*|sharp/bench/*|*/tests/*) ;;
+              .circleci/*|.github/CODEOWNERS|.github/ISSUE_TEMPLATE/*|*.md|*.rst|docs/*) ;;
+              EXTENSIONS|LICENSE|NEWS|UPGRADING|UPGRADING.INTERNALS) ;;
+              *) engine=true ;;
             esac
           done < "$RUNNER_TEMP/changed"
           echo "code=$code" >> "$GITHUB_OUTPUT"
