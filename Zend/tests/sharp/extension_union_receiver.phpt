@@ -3,12 +3,20 @@ PHP# runs an extension member on the parts of a union receiver that declare no m
 --FILE--
 <?php
 require __DIR__ . '/UnionLabels/Order.sharp';
+require __DIR__ . '/UnionLabels/Ticket.sharp';
+require __DIR__ . '/UnionLabels/Labeled.sharp';
+require __DIR__ . '/UnionLabels/Card.sharp';
+require __DIR__ . '/harness/UnionLabels.inc';
 require __DIR__ . '/UnionLabels/Note.sharp';
 require __DIR__ . '/UnionLabels/Labels.sharp';
 require __DIR__ . '/UnionLabels/Shelf.sharp';
 
+use Demo\Labels\Card;
 use Demo\Labels\Note;
 use Demo\Labels\Order;
+use Demo\Labels\PhpOrder;
+use Demo\Labels\PlainOrder;
+use Demo\Labels\Ticket;
 use Demo\Labels\Shelf;
 
 // Each run repeats, so the JIT variants compile the calls before the second run.
@@ -19,6 +27,14 @@ for ($run = 0; $run < 2; $run++) {
     echo Shelf::caption(new Order()), ' | ', Shelf::caption('plain'), "\n";
     echo Shelf::labeled(new Order()), ' | ', Shelf::labeled('plain'), "\n";
     echo Shelf::tag(new Note()), ' | ', Shelf::tag('plain'), "\n";
+    echo Shelf::three(new Ticket()), ' | ', Shelf::three(new Order()), ' | ', Shelf::three('plain'), "\n";
+    echo Shelf::maybe(new Order()), ' | ', Shelf::maybe('plain'), ' | ', Shelf::maybe(null) ?? 'null', "\n";
+    echo Shelf::maybeCaption(new Order()), ' | ', Shelf::maybeCaption('plain'), ' | ', Shelf::maybeCaption(null) ?? 'null', "\n";
+    echo Shelf::named(new Card()), ' | ', Shelf::named('plain'), "\n";
+    echo Shelf::plain(new PlainOrder()), ' | ', Shelf::plain('plain'), "\n";
+    echo Shelf::traited(new PhpOrder()), ' | ', Shelf::traited('plain'), "\n";
+    echo Shelf::boundedOrder(new Order()), ' | ', Shelf::boundedText('plain'), "\n";
+    echo Shelf::picked(true), ' | ', Shelf::picked(false), ' | ', Shelf::pickCount(), "\n";
 }
 ?>
 --EXPECT--
@@ -28,9 +44,25 @@ text plain | order
 order caption | caption plain
 order | text plain
 note tag | tag plain
+ticket | order | text plain
+order | text plain | null
+order caption | caption plain | null
+card | text plain
+plain order | text plain
+trait | text plain
+order | text plain
+order | text picked | 2
 order | text plain
 badge order | badge plain
 text plain | order
 order caption | caption plain
 order | text plain
 note tag | tag plain
+ticket | order | text plain
+order | text plain | null
+order caption | caption plain | null
+card | text plain
+plain order | text plain
+trait | text plain
+order | text plain
+order | text picked | 4

@@ -20,4 +20,35 @@ public class Shelf
     }
 
     public static string tag(Note|string value) => value.tag();
+
+    public static string three(Order|Ticket|string value) => value.label();
+
+    public static string? maybe((Order|string)? value) => value?.label();
+
+    public static string? maybeCaption((Order|string)? value) => value?.caption;
+
+    public static string named(Labeled|string value) => value.label();
+
+    public static string plain(PlainOrder|string value) => value.label();
+
+    public static string traited(PhpOrder|string value) => value.label();
+
+    public static string bounded<T : Order>(T|string value) => value.label();
+
+    public static string boundedOrder(Order value) => Shelf.bounded<Order>(value);
+
+    public static string boundedText(string value) => Shelf.bounded<Order>(value);
+
+    protected static int picks = 0;
+
+    public static int pickCount() => Shelf.picks;
+
+    public static string picked(bool order) => Shelf.pick(order).label();
+
+    private static Order|string pick(bool order)
+    {
+        Shelf.picks += 1;
+
+        return order ? new Order() : "picked";
+    }
 }
