@@ -118,6 +118,7 @@ jobs:
           rustc --version
           cargo --version
 
+      # Next week's nightly is another compiler, which rebuilds every crate, so only the pinned toolchain saves.
       - name: Rust and Mago caches
         uses: ./.github/actions/mago-cache
         with:
@@ -127,7 +128,7 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          save: ${{ github.event_name == 'schedule' }}
+          save: ${{ github.event_name == 'schedule' && matrix.rust != 'nightly' }}
           target-dir-env: true
 
       - name: Install PHP
@@ -265,6 +266,7 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
 
+      # Only the pinned toolchain saves, as in checks.
       - name: Rust and Mago caches
         uses: ./.github/actions/mago-cache
         with:
@@ -274,7 +276,7 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          save: ${{ github.event_name == 'schedule' }}
+          save: ${{ github.event_name == 'schedule' && matrix.rust != 'nightly' }}
           target-dir-env: true
 
       # setup-php brew-installs PHP on macOS, so the self-hosted runners use their Homebrew PHP and Composer instead.
@@ -330,17 +332,6 @@ jobs:
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: ${{ needs.CHANGES.outputs.rust }}
-
-      - name: Rust and Mago caches
-        uses: ./.github/actions/mago-cache
-        with:
-          name: MAGO_RELEASE_BUILD
-          rust: MAGO
-          rust-paths: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-          save: ${{ github.event_name == 'schedule' }}
 
       - name: Build mago with sharp/bin/build-mago
         id: build
