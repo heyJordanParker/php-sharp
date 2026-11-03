@@ -18,8 +18,4 @@ public class Builds
         Builds.made<Plain>(),
         Builds.sized<Plain>(),
     ];
-
-    // The checker accepts a type argument of two classes the bound holds, which is no one class, so `TItem.make()`
-    // names no class while the code runs and throws.
-    public static string ofUnion() => new Builder<Fancy|Plain>().build();
 }

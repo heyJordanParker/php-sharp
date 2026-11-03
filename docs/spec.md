@@ -1381,6 +1381,23 @@ public abstract class Posting
 }
 ```
 
+**A type parameter bounded by a class takes one class.** Its code reaches the statics of its type argument and creates its objects, and a union of classes, as `Fancy|Plain`, is no one class. So `Builder<Fancy|Plain>` is a compile error at the type argument, which names the type to write, as in "`TItem`'s bound is a class, so its type argument is one class. Write `Builder<Maker>`." A type parameter bounded by an interface, or with no bound, takes a union, as `List<int|string>` does:
+
+<!-- example class-bound-type-arguments: members
+public class Maker { public static string make() => "maker"; }
+public interface Labeled { }
+public class Fancy : Maker, Labeled { }
+public class Plain : Maker, Labeled { }
+public class Builder<TItem : Maker> { public string build() => TItem.make(); }
+public class Tagged<TItem : Labeled> { }
+-->
+```csharp
+public string one() => new Builder<Fancy>().build();               // compiles
+public string either() => new Builder<Fancy|Plain>().build();      // compile error: TItem's bound is a class, so its type argument is one class
+public Tagged<Fancy|Plain>? labeled() => null;                     // compiles: Labeled is an interface
+public List<int|string> values() => [];                            // compiles
+```
+
 ### 11.1 Variance
 
 Variance is declared on the type parameter. Classes and interfaces can both declare it.
