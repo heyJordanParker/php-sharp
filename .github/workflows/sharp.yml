@@ -399,18 +399,8 @@ jobs:
       fail-fast: false
       matrix:
         host:
-          # php-fpm answers FastCGI on port 9000 for the app in /var/www/html.
-          - file: sharp/docker/runtime/Dockerfile
-            php: php
-            docker-run: --publish 9000:9000 --volume "$RUNNER_TEMP/public:/var/www/html:ro"
-            request: SCRIPT_FILENAME=/var/www/html/index.php REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000
-            sapi: fpm-fcgi
-          # FrankenPHP's default Caddyfile serves the app in /app/public on https://localhost, with its own certificate.
-          - file: sharp/docker/runtime/frankenphp.Dockerfile
-            php: frankenphp php-cli
-            docker-run: --publish 8443:443 --volume "$RUNNER_TEMP/public:/app/public:ro"
-            request: curl --silent --show-error --fail --insecure https://localhost:8443/
-            sapi: frankenphp
+          - { file: sharp/docker/runtime/Dockerfile, php: php, sapi: fpm-fcgi }
+          - { file: sharp/docker/runtime/frankenphp.Dockerfile, php: frankenphp php-cli, sapi: frankenphp }
         runner: [ubuntu-24.04, ubuntu-24.04-arm]
     # The image builds FROM base-images.yml's copies at the digests the Dockerfiles pin, as IMAGE's does.
     env:
@@ -440,29 +430,11 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: '1'
-      - name: Install cgi-fcgi
-        if: matrix.host.sapi == 'fpm-fcgi'
-        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libfcgi-bin
-      # The image starts on its own default command, as an app's container does, and serves the app's page. A wrong
-      # entrypoint stops the container here, before IMAGE publishes it.
-      - name: Start the image on its default command and request a page from ${{ matrix.host.sapi }}
-        run: |
-          mkdir "$RUNNER_TEMP/public"
-          echo '<?php echo "Served by ", PHP_SAPI, PHP_EOL;' > "$RUNNER_TEMP/public/index.php"
-          docker run --detach --name server ${{ matrix.host.docker-run }} php-sharp
-          for ((second = 1; ; second++)); do
-            if response="$(${{ matrix.host.request }} 2>&1)" && grep -qx 'Served by ${{ matrix.host.sapi }}' <<< "$response"; then
-              echo "$response"
-              break
-            fi
-            if [[ "$(docker inspect --format '{{.State.Running}}' server)" != true || $second == 30 ]]; then
-              docker logs server
-              echo "::error::The image's default command stopped, or served no page in 30 seconds. Its log is above, and the last request printed: $response"
-              exit 1
-            fi
-            sleep 1
-          done
-          docker rm --force server
+      - name: Start the image on its default command and request a page
+        uses: ./.github/actions/boot-image
+        with:
+          image: php-sharp
+          sapi: ${{ matrix.host.sapi }}
       # rustup comes after the extensions, so they build as in the app's image, and lets sharp/bin/test build mago.
       - name: Install the extensions
         run: |
@@ -805,10 +777,15 @@ jobs:
     strategy:
       matrix:
         host:
-          - { file: sharp/docker/runtime/Dockerfile, name: fpm }
-          - { file: sharp/docker/runtime/frankenphp.Dockerfile, name: frankenphp }
+          - { file: sharp/docker/runtime/Dockerfile, name: fpm, sapi: fpm-fcgi }
+          - { file: sharp/docker/runtime/frankenphp.Dockerfile, name: frankenphp, sapi: frankenphp }
         platform: [linux/amd64, linux/arm64]
     steps:
+      # Only for .github/actions/boot-image. The build fetches its own context.
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
       - name: Log in to ghcr.io
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -833,8 +810,8 @@ jobs:
           provenance: mode=max
           sbom: generator=ghcr.io/heyjordanparker/buildkit-syft-scanner:1.12.0@sha256:ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9
           outputs: type=image,name=ghcr.io/heyjordanparker/php-sharp,push-by-digest=true,name-canonical=true,push=true
-      # The image IMAGE_TAGS publishes is scanned itself, on its own platform, as PHP_EXTENSIONS scans the one it
-      # builds and starts. A digest that fails is never uploaded, so IMAGE_TAGS tags none.
+      # The image IMAGE_TAGS publishes is scanned and started itself, on its own platform, as PHP_EXTENSIONS scans and
+      # starts the one it builds. A digest that fails either is never uploaded, so IMAGE_TAGS tags none.
       - name: Scan the pushed image for fixable critical and high CVEs
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
@@ -845,6 +822,11 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: '1'
+      - name: Start the pushed image on its default command and request a page
+        uses: ./.github/actions/boot-image
+        with:
+          image: ghcr.io/heyjordanparker/php-sharp@${{ steps.build.outputs.digest }}
+          sapi: ${{ matrix.host.sapi }}
       # The file is named by the digest and holds the commit the image was built from, whose tree the tag checks.
       - name: Keep the digest for IMAGE_TAGS
         env:
