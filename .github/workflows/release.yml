@@ -394,20 +394,8 @@ jobs:
           toolchain: ${{ needs.crate_metadata.outputs.msrv }}
           targets: ${{ matrix.job.target }}
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          workspaces: sharp/mago
-          key: ${{ matrix.job.target }}
-          cache-on-failure: true
-
-      - name: Cache cargo-pgo
-        if: matrix.job.pgo
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ env.CARGO_HOME }}/bin/cargo-pgo
-          key: cargo-pgo-${{ runner.os }}
-
+      # No cache: a pull request's or a tag's cache is restored only by that ref's own runs, and no later run of a bump
+      # or a tag builds again.
       - name: install PGO tools
         if: matrix.job.pgo
         shell: bash
@@ -463,13 +451,6 @@ jobs:
         with:
           php-version: "8.3"
           tools: composer
-
-      - name: Cache composer dependencies for PGO corpus
-        if: matrix.job.pgo
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: sharp/mago/corpus/vendor
-          key: composer-corpus-${{ hashFiles('sharp/mago/corpus/composer.lock') }}
 
       - name: setup PHP corpus for PGO profiling
         if: matrix.job.pgo

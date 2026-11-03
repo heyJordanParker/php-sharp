@@ -549,14 +549,14 @@ jobs:
           allowed-skips: checks, tests, release-build, plain-php, typos-check, patch-coverage
           jobs: ${{ toJSON(needs) }}
 
-      # A full run's jobs saved their targets when they ended, so this job, which needs them all, deletes the ones the
-      # new targets replaced.
+      # Master's full run's jobs saved their targets when they ended, so this job, which needs them all, deletes the
+      # ones the new targets replaced. No other run saves one.
       - name: checkout
-        if: always() && needs.CHANGES.outputs.full == 'true'
+        if: always() && needs.CHANGES.outputs.full == 'true' && github.ref == 'refs/heads/master'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: .github/actions
 
       - name: Delete the Mago target caches this run replaced
-        if: always() && needs.CHANGES.outputs.full == 'true'
+        if: always() && needs.CHANGES.outputs.full == 'true' && github.ref == 'refs/heads/master'
         uses: ./.github/actions/mago-cache-prune
