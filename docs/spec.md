@@ -5049,7 +5049,7 @@ App\Tables\OrderStore::pick();    // "orders"
 App\Tables\OrderStore::holds("orders");   // true
 ```
 
-**`new Self(…)` compiles only when the class's constructor is marked `required`.** `Self` can be any subclass, so every class below it keeps a constructor that `new Self(…)` can call:
+**`new Self(…)` compiles only when the class's constructor is marked `required`, or no class can extend the class.** `Self` can be any subclass, so every class below it keeps a constructor that `new Self(…)` can call:
 
 - its leading parameters match the parameters of the `required` constructor
 - every parameter it adds has a default
@@ -5084,6 +5084,32 @@ public class Invoice : DatabaseEntity
 ```
 
 `required` is optional. A class that never writes `new Self(…)` never writes it.
+
+**A `final` class or a struct needs no `required` constructor for `new Self(…)`,** as Swift asks `required init` only of a class that is not `final`. No class extends it, so `Self` is the class itself, and `new Self(…)` calls its own constructor:
+
+<!-- example final-self -->
+```csharp
+// app/Voucher.sharp
+namespace App;
+
+public final class Voucher
+{
+    public Voucher(public int cents { get; }) { }
+    public Self doubled() => new Self(this.cents * 2);   // compiles: no class extends Voucher
+}
+```
+
+<!-- example final-self -->
+```csharp
+// app/Memo.sharp
+namespace App;
+
+public class Memo
+{
+    public Memo(public string text { get; }) { }
+    public Self copied() => new Self(this.text);         // compile error: a subclass of Memo may lack a constructor new Self(text) can call
+}
+```
 
 ## 26. Extension methods
 
