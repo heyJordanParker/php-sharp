@@ -96,7 +96,7 @@ The states are **works**, **refused** (rejected, with the message noted), **sile
 | 3508, 3516 | A second type is a compile error | **Silently accepted:** `one-type-per-file` line 3516 | Semantics (decision 2), and `sharp/bin/spec` keeps the example one file (decision 3) | |
 | 3508 | An `extern` file and a `Module.sharp` hold no type, so the rule doesn't cover them | Works: `Externs.sharp` (two `extern` lines), `Module.sharp` and `Module.Production.sharp` compile, and must keep compiling under the rule | None new: the rule counts types only | |
 | 3519 | Plain PHP files keep `.php` and `<?php`, and the two call each other freely | Works: plain PHP's `(new App\Shop\Order())->total()` gives `500` through Composer's PSR-4 loader and its optimized class map, with and without opcache. PHP# calling plain PHP: section 23's probes (#145) and #124 | None new | |
-| 3519 | Composer's autoloader tries `.sharp` after `.php` | Works: with `Twin.php` and `Twin.sharp` both declaring `App\Shop\Twin`, the class says `php`, and `mago compile` refuses `Twin.sharp` with "Class `Twin` is already defined elsewhere." | None new | `autoload.php` registers after Composer's loader |
+| 3519 | Composer's autoloader tries `.sharp` after `.php` | Works: with `Twin.php` and `Twin.sharp` both declaring `App\Shop\Twin`, the class says `php`, and `mago compile` refuses `Twin.sharp`, whose path sorts after `Twin.php`'s, with "Class `Twin` is already defined in `app/Shop/Twin.php`." | None new | `autoload.php` registers after Composer's loader |
 
 ## `Position`
 

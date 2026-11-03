@@ -1,0 +1,8 @@
+namespace Demo.Labels;
+
+public class Card : Labeled
+{
+    public Card() { }
+
+    public string label() => "card";
+}

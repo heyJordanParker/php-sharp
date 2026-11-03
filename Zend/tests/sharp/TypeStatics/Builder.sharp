@@ -1,0 +1,9 @@
+namespace TypeStatics;
+
+// `TItem.make()` and `TItem.size` reach the statics of the type argument the object was made with, spec section 25.
+public class Builder<TItem : Maker>
+{
+    public string build() => TItem.make();
+
+    public string size() => TItem.size;
+}

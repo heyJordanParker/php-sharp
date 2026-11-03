@@ -1,0 +1,10 @@
+namespace Demo.Labels;
+
+public class Order
+{
+    public Order() { }
+
+    public string caption => "order caption";
+
+    public string label() => "order";
+}
