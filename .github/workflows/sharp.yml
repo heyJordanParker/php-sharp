@@ -80,6 +80,7 @@ jobs:
         with:
           events: schedule workflow_dispatch
           full: true
+          on-master: ${{ github.ref_type == 'tag' }}
       # The bump's pull request runs in full, since its title sets `full` as RELEASE_BUMP's does, and its passed
       # RELEASE_BUMP marks it apart from another pull request's run. Its merge commit, the tagged one, has its tree.
       - name: Find the bump's pull request run that passed all 9 test jobs on this tree
@@ -89,6 +90,7 @@ jobs:
         with:
           events: pull_request
           full: true
+          on-master: ${{ github.ref_type == 'tag' }}
       - name: The suites don't run again
         if: github.ref_type == 'branch' && (steps.passed.outputs.run || steps.full.outputs.run)
         env:

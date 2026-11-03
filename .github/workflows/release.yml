@@ -76,6 +76,7 @@ jobs:
         with:
           events: pull_request schedule workflow_dispatch
           full: true
+          on-master: ${{ github.ref_type == 'tag' }}
 
       - name: The full PHP# run passed on the commit's tree
         env:

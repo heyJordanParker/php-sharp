@@ -28,6 +28,12 @@ inputs:
       needs a full run asks for it here, so the check is written once.
     required: false
     default: ''
+  on-master:
+    description: >-
+      true to fail unless the commit is on master, as a tag's gates do. A tag on a bump's head that master has moved
+      past would pass with a run that tested that head merged with master, another tree.
+    required: false
+    default: ''
 
 outputs:
   run:
@@ -46,8 +52,16 @@ runs:
         EVENTS: ${{ inputs.events }}
         PASSED: ${{ inputs.passed }}
         FULL: ${{ inputs.full }}
+        ON_MASTER: ${{ inputs.on-master }}
       run: |
         api() { gh api "repos/$GITHUB_REPOSITORY/$1" --jq "$2"; }
+        if [[ $ON_MASTER == true ]]; then
+          status=$(api "compare/$GITHUB_SHA...master" .status)
+          if [[ $status != ahead && $status != identical ]]; then
+            echo "::error::Commit $GITHUB_SHA isn't on master, which is $status of it. Tag the bump's merge commit."
+            exit 1
+          fi
+        fi
         tests='[.jobs[] | select(.conclusion == "success" and (.name == "LINUX" or .name == "LINUX_PASSES"
           or .name == "LINUX_ZTS" or .name == "HOSTS" or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS"))))]
           | length == 9'
