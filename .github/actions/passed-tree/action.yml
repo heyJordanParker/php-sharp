@@ -58,7 +58,7 @@ runs:
         if [[ $ON_MASTER == true ]]; then
           status=$(api "compare/$GITHUB_SHA...master" .status)
           if [[ $status != ahead && $status != identical ]]; then
-            echo "::error::Commit $GITHUB_SHA isn't on master, which is $status of it. Tag the bump's merge commit."
+            echo "::error::Commit $GITHUB_SHA isn't on master: GitHub compares master to it as $status. Tag the bump's merge commit."
             exit 1
           fi
         fi
