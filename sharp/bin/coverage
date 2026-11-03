@@ -22,11 +22,13 @@ fi
 base="${1:-origin/master}"
 
 # Nightly, because only nightly honours #[coverage(off)], cargo-llvm-cov's way to exclude code that cannot run by design.
-# rustup updates it to the nightly a new CI runner installs, so a run here measures with CI's compiler. Its cargo and
-# rustc come first on the PATH, as sharp/bin/build-mago puts its toolchain's, before any other, such as Homebrew's rust.
-toolchain=nightly
-rustup toolchain install "$toolchain" --profile minimal --component llvm-tools-preview --allow-downgrade --no-self-update
-PATH="$(dirname "$(rustup which --toolchain "$toolchain" cargo)"):$PATH"
+# A dated one, so CI and a reproduction build with one compiler, and a new nightly that breaks the instrumentation
+# fails only the change that moves this date. Its cargo and rustc come first on the PATH, as sharp/bin/build-mago puts
+# its toolchain's, before any other, such as Homebrew's rust.
+toolchain=nightly-2026-11-03
+rustup toolchain install "$toolchain" --profile minimal --component llvm-tools-preview --no-self-update
+cargo="$(rustup which --toolchain "$toolchain" cargo)"
+PATH="$(dirname "$cargo"):$PATH"
 
 llvm_cov="cargo-llvm-cov $(sed -n 's/^ *tool: cargo-llvm-cov@//p' "$root/.github/workflows/mago.yml")"
 if [[ "$(cargo llvm-cov --version)" != "$llvm_cov" ]]; then
@@ -67,7 +69,7 @@ cargo llvm-cov report -p mago-analyzer -p mago-semantics -p mago-sharp-bridge --
 # nothing, a match arm's pattern without an `if` guard, `{`, `else {`, `||` or `.unwrap_or_else(||`. So
 # `let kind = self.kind_of(call).unwrap_or_else(|| unreachable!(…));` still needs a test of `kind_of`.
 # cargo-llvm-cov has no line exclusion, so its lcov loses the line's records: DA, and FN, which diff-cover reads
-# as the line of a closure such as `|| unreachable!(…)`. The totals count the DA records left, one per line.
+# as the line of a closure such as `|| unreachable!(…)`.
 awk '
   function impossible(line,   prefix, pattern) {
     prefix = substr(line, 1, index(line, "unreachable!(") - 1)
@@ -80,9 +82,7 @@ awk '
   }
   /^SF:/ { delete unreachable; file = substr($0, 4); for (n = 1; (getline line < file) > 0; n++) if (index(line, "unreachable!(") && impossible(line)) unreachable[n]; close(file) }
   /^(DA|FN):/ { split(substr($0, 4), record, ","); if (record[1] in unreachable) next }
-  /^DA:/ { found++; if (record[2] > 0) hit++ }
   { print }
-  END { printf "The three packages have %d lines, and the tests run %d of them.\n", found, hit > "/dev/stderr" }
 ' "$report/lcov.info" > "$report/reachable.info"
 
 # From the repository root, where diff-cover's git paths and the lcov's source paths meet. diff-cover compares the

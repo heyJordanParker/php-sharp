@@ -485,8 +485,10 @@ jobs:
       - name: Search for misspellings
         run: typos
 
-  # sharp/bin/coverage measures it, with the nightly toolchain it installs and the cargo-llvm-cov this job installs. A
-  # builder runs it only to reproduce a failure of this job.
+  # Fails unless a test runs every line the pull request adds to Mago's analyzer, semantics and sharp-bridge crates.
+  # sharp/bin/coverage measures that, with the dated nightly it installs and the cargo-llvm-cov this job installs. A
+  # builder runs sharp/bin/coverage only to reproduce a failure of this job, after merging the latest origin/master,
+  # because this job measures the branch merged into master.
   patch-coverage:
     needs: CHANGES
     if: needs.CHANGES.outputs.mago == 'true' && github.event_name == 'pull_request'
@@ -501,16 +503,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
-
-      - name: Rust and Mago caches
-        uses: ./.github/actions/mago-cache
-        with:
-          name: MAGO_COVERAGE
-          rust: MAGO
-          rust-paths: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
 
       # sharp/bin/coverage reads this version, and fails on a builder's Mac when its cargo-llvm-cov is another.
       - name: Install cargo-llvm-cov

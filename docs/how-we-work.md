@@ -64,7 +64,7 @@ A mistake that no check can catch yet goes in `docs/architecture/guards.md`, wit
 - A builder runs only these locally, and leaves the other runs to CI:
   - `sharp/bin/test`, the run without opcache. It builds `mago` from `sharp/mago/` first, in the `test-run` profile, which `sharp/mago/Cargo.toml` explains.
   - When the change is under `sharp/mago/`, in `sharp/mago/`: `cargo test --workspace --locked --target-dir ../build/<os>-<arch>/mago`, `cargo clippy --workspace --all-targets --all-features --target-dir ../build/<os>-<arch>/mago -- -D warnings` and `cargo fmt --all -- --check`. The target folder is the one `sharp/bin/test` builds `mago` in, so a slot keeps every Mago build in one folder, where `cargo test` without it wrote a second folder of 49 GB.
-- `sharp/bin/coverage` is the one coverage measurement and CI's patch-coverage job runs it. A builder runs it only to reproduce a CI coverage failure.
+- `sharp/bin/coverage` is the one coverage measurement, and CI's `patch-coverage` job runs it. A builder runs it only to reproduce a `patch-coverage` failure, and first merges the latest `origin/master`, because CI measures the branch merged into master.
 - One `sharp/bin/test` runs per worktree at a time, and each run of it and of `sharp/bin/bench` stands on its own:
   - `sharp/bin/bench` compiles a copy of its rows inside its own container, so it runs beside `sharp/bin/test` in the same worktree.
   - A run that failed or was stopped leaves nothing that breaks the next one, and no run loads the opcache file cache another run primed.
