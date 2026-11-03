@@ -552,6 +552,8 @@ jobs:
             --test external_analyzer_scan \
             --test server_engine
           cargo llvm-cov report -p mago-analyzer -p mago-semantics -p mago-sharp-bridge --lcov --output-path lcov.info
+          awk '/^DA:/ { split(substr($0, 4), r, ","); total++; if (r[2] == 0) missed++ } END { print "throwaway: " total " lines, " missed " not run" }' lcov.info
+          awk '/^SF:/ { f = substr($0, 4) } /^DA:/ { split(substr($0, 4), r, ","); print f ":" r[1] ":" (r[2] > 0) }' lcov.info | sort | sha256sum | sed 's/^/throwaway: per-line results /'
 
       # As coverage.py's exclude_lines leaves out `raise NotImplementedError`: an impossible arm is an unreachable!(…)
       # call, which no test can run. Unlike coverage.py, a line is left out only when nothing before the call runs:
