@@ -102,7 +102,7 @@ jobs:
           RUN: ${{ steps.full_bump.outputs.run || steps.full.outputs.run }}
         run: |
           if [[ -z $RUN ]]; then
-            echo "::error::No full PHP# CI run, the bump's pull request's, nightly or dispatched, passed all 9 test jobs on commit $GITHUB_SHA's tree. Dispatch one on the commit with gh workflow run sharp.yml --ref master, and tag the commit once it passes."
+            echo "::error::No full PHP# CI run, the bump's pull request's, nightly or dispatched, passed all 9 test jobs on commit $GITHUB_SHA's tree. Push a branch at the commit with git push origin $GITHUB_SHA:refs/heads/full-run, dispatch one on it with gh workflow run sharp.yml --ref full-run, and once it passes, rerun this run with gh run rerun $GITHUB_RUN_ID."
             exit 1
           fi
           echo "Commit $GITHUB_SHA's tree passed all 9 test jobs in $RUN."

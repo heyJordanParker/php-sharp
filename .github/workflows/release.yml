@@ -9,8 +9,9 @@ name: Release
 #
 # A release builds its binaries once, as Humble and Farley's Continuous Delivery asks. The bump's pull request builds
 # every asset beside its CI: sharp.yml's RELEASE_ASSETS calls this workflow once RELEASE_BUMP passed. The tag then
-# publishes exactly those assets, as bump_assets explains, and builds them itself only when they expired or were built
-# from another tree. A dispatch checks what a tag would publish, and publishes nothing.
+# publishes exactly those assets, as bump_assets explains, and builds them itself only when no run of the bump passed,
+# or its assets expired or were built from another tree. A dispatch checks what a tag would publish, and publishes
+# nothing.
 on:
   workflow_call:
   workflow_dispatch:
