@@ -81,7 +81,7 @@ jobs:
           fi
           git fetch --depth=1 origin "$BASE"
           if git diff --quiet "$BASE" HEAD -- sharp/mago sharp/composer .github/workflows/mago.yml sharp/bin/build-mago \
-            .github/actions/setup-lean .github/actions/clean-kept-build .github/actions/passed-tree; then
+            .github/actions/setup-lean .github/actions/clean-kept-build .github/actions/passed-tree .github/actions/mago-cache; then
             echo mago=false >> "$GITHUB_OUTPUT"
           else
             echo mago=true >> "$GITHUB_OUTPUT"
