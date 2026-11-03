@@ -444,12 +444,17 @@ jobs:
           toolchain: nightly
           components: llvm-tools-preview
 
-      - name: cache rust toolchain
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # cargo-llvm-cov builds in CARGO_TARGET_DIR's llvm-cov-target.
+      - name: Rust and Mago caches
+        uses: ./.github/actions/mago-cache
         with:
-          workspaces: sharp/mago
-          key: ${{ runner.os }}-rust-coverage
-          cache-on-failure: true
+          name: MAGO_COVERAGE
+          rust: MAGO
+          rust-paths: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          target-dir-env: true
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
