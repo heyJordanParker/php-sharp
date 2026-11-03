@@ -230,8 +230,12 @@ jobs:
           for asset in "${assets[@]}"; do
             if ! commits=$(gh attestation verify "assets/$asset" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" --format json \
-              --jq '.[].verificationResult.statement.predicate.buildDefinition.resolvedDependencies[].digest.gitCommit'); then
+              --jq '.[].verificationResult.statement.predicate.buildDefinition.resolvedDependencies[].digest.gitCommit // empty'); then
               echo "::error::$asset from run $RUN has no build attestation signed by $GITHUB_REPOSITORY/.github/workflows/release.yml, so nothing is published. Delete that run's artifacts, and this run builds every asset."
+              exit 1
+            fi
+            if [[ -z $commits ]]; then
+              echo "::error::$asset's attestation from run $RUN names no commit it was built from, so its tree can't be checked and nothing is published. Delete that run's artifacts, and this run builds every asset."
               exit 1
             fi
             for commit in $commits; do
