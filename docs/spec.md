@@ -698,6 +698,26 @@ Math.max(0, ...prices);  // into the standard library too. The 0 gives max a val
 - Only a `List` spreads into a call. Spreading a `Map` into a call is a compile error (section 12).
 - An override of a plain PHP method declared with `...` declares that parameter with `...` too.
 
+**A spread of unknown length fills only a `...` parameter,** as Kotlin spreads only into a `vararg`, TypeScript spreads a list that is no tuple only into a rest parameter, and Go, C# and Java spread only into their variadic parameter. A list literal's length is known, so its spread fills parameters as its elements written out do. Any other list's spread may start only at the `...` parameter. Anywhere else, a parameter with a default included, it is a compile error that names the parameters it may not fill:
+
+<!-- example spread-of-unknown-length: statements in Pairs
+List<int> numbers = [900, 2900];
+List<string> tags = ["vip"];
+List<Position> positions = [];
+-->
+```csharp
+public static List<T> pair<T>(T a, T b) => [a, b];
+public static int tagged(int count, string ...tags) { … }
+public static void logSlow(string message, Position caller = Position.current()) { }
+
+Pairs.pair(...numbers);               // compile error: numbers may not fill a and b. A spread of unknown length fills only a ... parameter
+Pairs.pair(...[900, 2900]);           // compiles: a list literal's length is known
+Pairs.logSlow("slow", ...positions);  // compile error: positions may not fill caller
+Pairs.tagged(...tags);                // compile error: tags may not fill count
+Pairs.tagged(1, ...tags);             // compiles
+Math.max(0, ...numbers);              // compiles: into plain PHP's max(mixed $value, mixed ...$values) too
+```
+
 **A class has one method per name, so there is no overloading by argument types.** A second method with the same name is a compile error, whatever it takes. Give each method a name that says what it takes, so a reader of the call knows which one runs:
 
 <!-- example one-method-per-name: members -->
@@ -5263,7 +5283,6 @@ Log.info("charged", ["class": typeof(Order)]);                   // compiles: re
 - `Position.current()` in a body gives the position where it is written.
 - As a parameter's default, `Position.current()` gives the caller's position, as C++20's `std::source_location::current()` and Swift's `#file` defaults do.
 - A call through a function value gives the position of the parameter's declaration, because C++ and Swift fill the default only at a direct call too.
-- A call that spreads a list whose elements may be a `Position`, as a `List<Any>`, gives the position of the parameter's declaration too, because the list may fill the parameter. A spread of any other list gives the caller's position.
 - The parameter takes the whole position. A default that only uses it, as `int line = Position.current().line` or `int next = Position.current().line + 1`, is a compile error: write `Position caller = Position.current()`.
 
 **A `.sharp` file runs only after the checker accepts it.** A type error stops it from running, as in C# and Java. A pragma, `mago.toml`'s `ignore` or the baseline can hide a warning, never one of the language's errors. They can hide an error of an extension host's rule, whose code names its host, as `acme/no-raw-sql`, as C#'s `#pragma warning disable` hides an analyzer's error and ESLint's `eslint-disable-next-line` hides a plugin's rule.
