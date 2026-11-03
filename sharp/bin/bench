@@ -57,11 +57,8 @@ if [[ ! -x "$php" ]]; then
   exit 1
 fi
 
-# callgrind counts the engine's instructions alone, so the rows compile with the mago sharp/bin/test builds, in the
-# test-run profile of sharp/mago/Cargo.toml.
-cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
-PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --profile test-run --jobs "${CARGO_BUILD_JOBS:-2}" \
-  --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$mago_dir" --bin mago
+# callgrind counts the engine's instructions alone, so the rows compile with the mago sharp/bin/test builds.
+"$root/sharp/bin/build-mago" --quiet --jobs "${CARGO_BUILD_JOBS:-2}"
 # mago compile keeps a workspace's .sharp folder to the files of its own project, so a compile of the rows in the tree
 # would delete the compiled fixtures a sharp/bin/test run there reads. The rows compile in a copy of sharp/bench and
 # sharp/composer in the throwaway container's /tmp instead, with a .sharp folder of their own. /tmp is as long as the

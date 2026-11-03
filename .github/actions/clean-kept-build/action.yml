@@ -1,0 +1,35 @@
+name: Clean the kept build
+description: >-
+  Runs after actions/checkout with clean: false on the self-hosted Macs, whose jobs of every workflow share one work
+  folder per runner. It removes every untracked file, and every ignored file under sharp/ but sharp/build, so a job
+  starts from the tree it checked out while the engine and mago rebuild only what changed since that runner's last
+  build. It keeps the parsers, scanners and configure that php-src's build writes into the source tree, because the
+  kept build's dependency files name them and make has no rule that makes some of them again, such as
+  Zend/zend_ini_scanner_defs.h (run 41504845687). Cargo never removes what an old build left, so the Mago target grows
+  with every dependency and crate that changes. Above 12 GB it goes, and the next job builds it from nothing: a fresh
+  one held 8.8 GB on these Macs, 2.9 GB of test-run and 5.8 GB of debug. The engine's build, 224 MB, stays.
+
+runs:
+  using: composite
+  steps:
+    - name: Remove what an earlier job left, except the builds and php-src's generated sources
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        git clean -ffd
+        git clean -ffdx --exclude=/sharp/build/ -- sharp
+    - name: Remove the Mago target above 12 GB
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        target="sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago"
+        if [[ ! -d $target ]]; then
+          exit 0
+        fi
+        size=$(du -sm "$target" | cut -f1)
+        if (( size > 12 * 1024 )); then
+          echo "::notice::$target held $size MB, above the 12 GB bound, so mago builds from nothing."
+          rm -rf "$target"
+        else
+          echo "$target holds $size MB, within the 12 GB bound."
+        fi

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: sharp/bin/test [--linux] [--zts | --installed] [--opcache] [--repeat] [--passes] [--census] [--spec] [--differential] [--phpunit] [--upstream | paths...]" >&2
+  echo "usage: sharp/bin/test [--linux] [--zts | --installed] [--opcache] [--repeat] [--passes] [--jit] [--census] [--spec] [--differential] [--phpunit] [--upstream | paths...]" >&2
   exit 2
 }
 
@@ -13,6 +13,7 @@ installed=false
 opcache=false
 repeat=false
 passes=false
+jit=false
 census=false
 spec=false
 differential=false
@@ -28,6 +29,7 @@ for arg in "$@"; do
     --opcache) opcache=true ;;
     --repeat) repeat=true ;;
     --passes) passes=true ;;
+    --jit) jit=true ;;
     --census) census=true ;;
     --spec) spec=true ;;
     --differential) differential=true ;;
@@ -88,10 +90,7 @@ if [[ " ${MAKEFLAGS:-}" =~ [[:space:]](-j[[:space:]]*|--jobs=)([0-9]+) ]]; then
   jobs="${BASH_REMATCH[2]}"
 fi
 
-# mago builds in the test-run profile, which sharp/mago/Cargo.toml explains.
-cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
-PATH="$(dirname "$cargo"):$PATH" "$cargo" build --quiet --locked --profile test-run --jobs "$jobs" \
-  --manifest-path "$root/sharp/mago/Cargo.toml" --target-dir "$mago_dir" --bin mago
+"$root/sharp/bin/build-mago" --quiet --jobs "$jobs"
 mago="$mago_dir/test-run/mago"
 
 # run-tests.php writes each test's script beside it as <test>.php, and mago compile writes each PHP# class's companion
@@ -189,14 +188,19 @@ if $repeat; then
   run_tests "with opcache shared memory, running each test twice in one process" -d opcache.enable_cli=1 --repeat 2
 fi
 
-# Every optimizer pass runs alone, and then each JIT, so a pass that drops a PHP# mark cannot hide
-# behind another pass. Each run expects the same output as the run without opcache.
+# Every optimizer pass runs alone, so a pass that drops a PHP# mark cannot hide behind another pass. Each run expects
+# the same output as the run without opcache.
 if $passes; then
   for ((pass = 0; pass < 16; pass++)); do
     run_tests "with optimizer pass $((pass + 1)) alone" -d opcache.enable_cli=1 -d "opcache.optimization_level=$((1 << pass))"
   done
-  for jit in tracing function; do
-    run_tests "with the $jit JIT" -d opcache.enable_cli=1 -d opcache.jit="$jit" -d opcache.jit_buffer_size=32M \
+fi
+
+# Each JIT runs with every hot counter at 1, so it compiles the code the tests run as soon as it runs. Each run expects
+# the same output as the run without opcache.
+if $jit; then
+  for jit_mode in tracing function; do
+    run_tests "with the $jit_mode JIT" -d opcache.enable_cli=1 -d opcache.jit="$jit_mode" -d opcache.jit_buffer_size=32M \
       -d opcache.jit_hot_func=1 -d opcache.jit_hot_loop=1 -d opcache.jit_hot_return=1 -d opcache.jit_hot_side_exit=1
   done
 fi
