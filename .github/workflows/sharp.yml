@@ -639,8 +639,10 @@ jobs:
   # The bump's Mago binaries, their attestations, Mago's source archives and their SHA-256s, which release.yml builds
   # and the tag on the bump's merge commit publishes, as release.yml explains. A called workflow's jobs may ask only
   # for permissions its caller grants, and release.yml's release job, which runs only for a tag or a dispatch, asks
-  # for contents: write. A pull request from another repository gets a token that can't attest, and the Macs run only
-  # this repository's code, so only a bump from this repository builds them.
+  # for contents: write. A pull request from another repository gets a token whose write permissions GitHub turns to
+  # read, which can't attest, and GitHub's documentation doesn't say whether it still checks that token against what
+  # release.yml's jobs ask for. So the job's condition skips a fork's bump outright, and a skipped job never expands
+  # the workflow it calls: run 41634828625 lists RELEASE_ASSETS alone, skipped, with none of release.yml's jobs.
   RELEASE_ASSETS:
     needs: RELEASE_BUMP
     if: github.event.pull_request.head.repo.full_name == github.repository
