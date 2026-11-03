@@ -2,17 +2,17 @@ name: Delete a closed pull request's caches
 
 # A pull request's runs save their caches under its merge ref, refs/pull/<number>/merge, which only its own runs restore.
 # Once it closes, merged or not, nothing restores them, and they stayed until GitHub evicted them, so this deletes them,
-# as GitHub's "Force deleting cache entries" example does. pull_request_target gives a pull request from another
-# repository a token that can delete them too, and is safe here because the job checks out and runs nothing the pull
-# request wrote.
+# as GitHub's "Force deleting cache entries" example does. A pull request from another repository gets a token that
+# can't delete, so its caches still wait for eviction.
 on:
-  pull_request_target:
+  pull_request:
     types: [closed]
 
 permissions: {}
 
 jobs:
   delete:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       actions: write
