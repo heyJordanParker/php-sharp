@@ -542,6 +542,76 @@ jobs:
           tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
       - name: actionlint
         run: '"$RUNNER_TEMP/actionlint"'
+  # A release's pull request, whose title starts with "chore: release", changes only what the bump writes: what
+  # sharp/mago/scripts/set-version.php writes for the new version, PHP_SHARP_VERSION in ext/sharp/php_sharp.h and the
+  # version Zend/tests/sharp/ri_sharp.phpt expects, and the release's section of sharp/CHANGELOG.md. So the full run a
+  # release dispatches on its merge commit tests the tree the pull request already tested, with new version strings.
+  # It isn't a required check, and CI_PASSED doesn't need it, so a pull request with another title never waits on it.
+  RELEASE_BUMP:
+    if: "github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'chore: release')"
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: git checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The bump, made again on the base, must give the pull request's tree.
+      - name: The pull request changes only what the version bump writes, and the changelog
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --depth=1 origin "$BASE"
+          version() { git show "$1:sharp/mago/Cargo.toml" | sed -n '/^version = /{s/^version = "\(.*\)"$/\1/p;q}'; }
+          old=$(version "$BASE")
+          new=$(version "$GITHUB_SHA")
+          if [[ $old == "$new" ]]; then
+            echo "::error::sharp/mago/Cargo.toml's version is still $old. Run php sharp/mago/scripts/set-version.php <version>."
+            exit 1
+          fi
+          git switch --quiet --detach "$BASE"
+          php sharp/mago/scripts/set-version.php "$new"
+          sed -i "s/^#define PHP_SHARP_VERSION \"${old//./\\.}\"\$/#define PHP_SHARP_VERSION \"$new\"/" ext/sharp/php_sharp.h
+          sed -i "s/^Version => ${old//./\\.}\$/Version => $new/" Zend/tests/sharp/ri_sharp.phpt
+          git checkout "$GITHUB_SHA" -- sharp/CHANGELOG.md
+          git add --all
+          if ! git diff --cached --quiet "$GITHUB_SHA"; then
+            git diff --cached -R "$GITHUB_SHA"
+            echo "::error::The pull request changes more than the bump from $old to $new and sharp/CHANGELOG.md: the diff above is what it changes beyond them. Move that change to a pull request of its own."
+            exit 1
+          fi
+          echo "The pull request changes only the bump from $old to $new and sharp/CHANGELOG.md."
+      # The release's section is new text, so the changelog loses only the old link of [Unreleased].
+      - name: sharp/CHANGELOG.md gains the release's section and links, and loses nothing else
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          version() { git show "$1:sharp/mago/Cargo.toml" | sed -n '/^version = /{s/^version = "\(.*\)"$/\1/p;q}'; }
+          old=$(version "$BASE")
+          new=$(version "$GITHUB_SHA")
+          compare="https://github.com/$GITHUB_REPOSITORY/compare"
+          git diff --unified=0 "$BASE" "$GITHUB_SHA" -- sharp/CHANGELOG.md > "$RUNNER_TEMP/changelog.diff"
+          sed -n '/^---/d; s/^-//p' "$RUNNER_TEMP/changelog.diff" > "$RUNNER_TEMP/removed"
+          sed -n '/^+++/d; s/^+//p' "$RUNNER_TEMP/changelog.diff" > "$RUNNER_TEMP/added"
+          failed=false
+          if [[ $(cat "$RUNNER_TEMP/removed") != "[Unreleased]: $compare/v$old...HEAD" ]]; then
+            echo "::error::sharp/CHANGELOG.md may remove only the line [Unreleased]: $compare/v$old...HEAD. It removes:"
+            cat "$RUNNER_TEMP/removed"
+            failed=true
+          fi
+          for line in "[Unreleased]: $compare/v$new...HEAD" "[$new]: $compare/v$old...v$new"; do
+            if ! grep -qxF "$line" "$RUNNER_TEMP/added"; then
+              echo "::error::sharp/CHANGELOG.md doesn't add the line $line."
+              failed=true
+            fi
+          done
+          if ! grep -qE "^## \[${new//./\\.}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}\$" "$RUNNER_TEMP/added"; then
+            echo "::error::sharp/CHANGELOG.md doesn't add the heading ## [$new] - <YYYY-MM-DD>."
+            failed=true
+          fi
+          if $failed; then
+            exit 1
+          fi
+          echo "sharp/CHANGELOG.md adds the $new section and its links."
   # This workflow's one required check. A job skipped by its `if` reports one check under the job's
   # name, so CI_PASSED stands in for every job it needs. It fails when any of them failed or was
   # cancelled. mago.yml's ci-passed is the other required check, and its plain-php job runs mago
