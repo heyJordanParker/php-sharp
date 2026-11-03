@@ -36,7 +36,7 @@ for needed in "$fpm:sharp/bin/build" "$install/bin/php-config:sharp/bin/build --
   fi
 done
 
-"$root/sharp/bin/build-mago" --quiet
+"$root/sharp/bin/build-mago" --verbose
 mago="$build_dir/mago/test-run/mago"
 
 fixture="$root/sharp/hosts"
