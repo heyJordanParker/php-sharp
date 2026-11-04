@@ -4,7 +4,7 @@
 //! new `import` line the conversion adds. A type PHP# can't write, as `get_sharp_type` reads it, is the reason the file
 //! is refused.
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use foldhash::HashMap;
 
@@ -15,51 +15,89 @@ use mago_codex::ttype::atomic::TAtomic;
 use mago_codex::ttype::atomic::scalar::class_like_string::TClassLikeString;
 use mago_codex::ttype::get_sharp_type;
 use mago_codex::ttype::union::TUnion;
+use mago_names::STANDARD_ROOT_CLASSES;
 use mago_word::Word;
 
-/// The names a file reaches classes by: its namespace, its `use` lines, and the imports the conversion adds.
+/// The names a file reaches classes and library namespaces by: its namespace, its `use` lines, and the imports the
+/// conversion adds.
 #[derive(Debug)]
 pub struct Imports {
     namespace: String,
-    /// Each `use` line's name, lowercase, and the class it names.
-    used: HashMap<String, (String, String)>,
-    added: BTreeSet<String>,
+    /// Each name the file's `use` lines and added imports take, lowercase, with the name as written and the full PHP
+    /// name it takes.
+    taken: HashMap<String, (String, String)>,
+    /// Each import the conversion adds, by the name it takes.
+    added: BTreeMap<String, String>,
 }
 
 impl Imports {
     pub fn new(namespace: &str) -> Self {
-        Self { namespace: namespace.trim_matches('\\').to_owned(), used: HashMap::default(), added: BTreeSet::new() }
+        Self { namespace: namespace.trim_matches('\\').to_owned(), taken: HashMap::default(), added: BTreeMap::new() }
     }
 
-    pub fn add_use(&mut self, alias: &str, class: &str) {
-        self.used.insert(alias.to_ascii_lowercase(), (alias.to_owned(), class.trim_start_matches('\\').to_owned()));
+    pub fn add_use(&mut self, alias: &str, name: &str) {
+        self.taken.insert(alias.to_ascii_lowercase(), (alias.to_owned(), name.trim_start_matches('\\').to_owned()));
     }
 
-    /// The imports the conversion adds, by their full dotted names.
+    /// Whether `class`, a full PHP name, is one a `.sharp` file names bare with no import: a root class of
+    /// `Builtins.sharp`, as `Throwable` and `Attribute` (spec section 23), or a class declared directly in `Sharp`.
+    pub fn is_default(class: &str) -> bool {
+        let class = class.trim_start_matches('\\');
+        STANDARD_ROOT_CLASSES.iter().any(|root| root.eq_ignore_ascii_case(class))
+            || class.rsplit_once('\\').is_some_and(|(namespace, _)| namespace == "Sharp")
+    }
+
+    /// The imports the conversion adds, each as its `import` line writes it, as `Proof.Spec` or `Cache.Key as CacheKey`.
     pub fn added(&self) -> impl Iterator<Item = String> + '_ {
-        self.added.iter().map(|class| class.replace('\\', "."))
+        self.added.iter().map(|(alias, name)| {
+            let dotted = name.replace('\\', ".");
+            if short(name) == alias { dotted } else { format!("{dotted} as {alias}") }
+        })
     }
 
     /// The name this file writes for `class`, a full PHP name, or the reason no name reaches it.
     pub fn name_of(&mut self, class: &str) -> Result<String, String> {
         let class = class.trim_start_matches('\\');
         let (namespace, short) = class.rsplit_once('\\').unwrap_or(("", class));
-        if namespace.eq_ignore_ascii_case(&self.namespace) {
+        if namespace.eq_ignore_ascii_case(&self.namespace) && !self.taken.contains_key(&short.to_ascii_lowercase()) {
             return Ok(short.to_owned());
         }
-        if let Some((alias, _)) = self.used.values().find(|(_, used)| used.eq_ignore_ascii_case(class)) {
-            return Ok(alias.clone());
+        if Self::is_default(class) && !self.taken.contains_key(&short.to_ascii_lowercase()) {
+            return Ok(short.to_owned());
         }
-        if let Some((_, used)) = self.used.get(&short.to_ascii_lowercase()) {
-            return Err(format!("`{short}` names `{used}` in this file, so `{class}` has no name here"));
-        }
-        if namespace.is_empty() {
-            return Err(format!("`{class}` is a PHP built-in class, which PHP# names only in the standard library"));
+        if namespace.is_empty() && !self.taken.values().any(|(_, taken)| taken.eq_ignore_ascii_case(class)) {
+            return Err(format!(
+                "`{class}` is a PHP built-in class, which PHP# names only in the standard library (spec section 23)"
+            ));
         }
 
-        self.added.insert(class.to_owned());
-        Ok(short.to_owned())
+        Ok(self.import(class))
     }
+
+    /// The name this file writes for `name`, a class or a library's namespace, importing it under its last part, or
+    /// under its namespace's last part before it when another import takes that (spec section 23).
+    pub fn import(&mut self, name: &str) -> String {
+        let name = name.trim_start_matches('\\');
+        if let Some((alias, _)) = self.taken.values().find(|(_, taken)| taken.eq_ignore_ascii_case(name)) {
+            return alias.clone();
+        }
+        let mut alias = short(name).to_owned();
+        let parts: Vec<&str> = name.split('\\').collect();
+        let mut prefix = parts.len().saturating_sub(1);
+        while self.taken.contains_key(&alias.to_ascii_lowercase()) && prefix > 0 {
+            prefix -= 1;
+            alias = format!("{}{alias}", parts[prefix]);
+        }
+        self.add_use(&alias, name);
+        self.added.insert(alias.clone(), name.to_owned());
+
+        alias
+    }
+}
+
+/// The last part of a full PHP name.
+fn short(name: &str) -> &str {
+    name.rsplit('\\').next().unwrap_or(name)
 }
 
 /// `union` in PHP#'s spelling, or the reason PHP# can't write it.

@@ -13,11 +13,11 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
-mago-allocator = { workspace = true }
 mago-analyzer = { workspace = true }
 mago-codex = { workspace = true }
 mago-database = { workspace = true }
 mago-names = { workspace = true }
+mago-sharp-bridge = { workspace = true }
 mago-span = { workspace = true }
 mago-syntax = { workspace = true }
 mago-text-edit = { workspace = true }

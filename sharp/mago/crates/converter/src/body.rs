@@ -1,10 +1,15 @@
 //! Statements and expressions: `$` leaves each name, `->` and `::` become `.`, and each construct whose PHP# form is not
 //! a token's rewrite builds its text from its children's, rendered with their own edits.
 
+use mago_codex::metadata::function_like::FunctionLikeMetadata;
 use mago_codex::ttype::SharpType;
+use mago_codex::ttype::TType;
 use mago_codex::ttype::atomic::TAtomic;
+use mago_codex::ttype::comparator::ComparisonResult;
+use mago_codex::ttype::comparator::union_comparator::is_contained_by;
 use mago_codex::ttype::get_sharp_type;
 use mago_codex::ttype::union::TUnion;
+use mago_sharp_bridge::PhpCallArgument;
 use mago_span::HasSpan;
 use mago_syntax::cst::Access;
 use mago_syntax::cst::Argument;
@@ -28,25 +33,27 @@ use mago_syntax::cst::UnaryPrefixOperator;
 use mago_syntax::cst::Variable;
 
 use crate::Converter;
-use crate::library::Form;
-use crate::library::Receiver;
-use crate::library::Slot;
-use crate::library::literal_value;
+use crate::library::Member;
+use crate::library::Shape;
+use crate::library::differs;
+use crate::library::short;
+use crate::library::type_test;
 use crate::types::type_text;
 
-impl Converter<'_, '_> {
+impl<'input> Converter<'input, '_> {
     pub(crate) fn block(&mut self, block: &Block<'_>) {
         for statement in &block.statements {
             self.statement(statement);
         }
     }
 
-    fn statement(&mut self, statement: &Statement<'_>) {
+    pub(crate) fn statement(&mut self, statement: &Statement<'_>) {
         match statement {
             Statement::Expression(statement) => self.expression(statement.expression, None),
             Statement::Return(r#return) => {
                 if let Some(value) = r#return.value {
-                    self.expression(value, None);
+                    let returning = self.returning.clone();
+                    self.expression(value, returning.as_ref());
                 }
             }
             Statement::Block(block) => self.block(block),
@@ -149,25 +156,33 @@ impl Converter<'_, '_> {
                     && let Some(class) = self.input.codebase.get_class_like(self.input.names.get(identifier))
                     && !class.template_types.is_empty()
                 {
-                    // `new` names a generic class's type arguments (spec section 11): the ones the analysis gives the
-                    // object, which the checker checks, as it checks every expression.
-                    let arguments = self.type_of(expression).and_then(|union| match union.types.as_ref() {
-                        [TAtomic::Object(object)] => object.get_type_parameters().map(<[TUnion]>::to_vec),
-                        _ => None,
-                    });
-                    match arguments {
-                        Some(arguments) => {
-                            let mut written = Vec::new();
-                            for argument in &arguments {
-                                match type_text(argument, self.input.codebase, &mut self.imports) {
-                                    Ok(text) => written.push(text),
-                                    Err(reason) => return self.refuse(expression.span(), reason),
-                                }
+                    // `new` names a generic class's type arguments (spec section 11), and generics are reified, so an
+                    // argument the analysis inferred would be a runtime `TypeError` when it is wrong. The arguments are
+                    // the declared type's the value goes into, or the class's bounds, which plain PHP's `new` has.
+                    let declared = expected.and_then(|union| {
+                        let mut objects = union.types.iter().filter(|atomic| !atomic.is_null());
+                        match (objects.next(), objects.next()) {
+                            (Some(TAtomic::Object(object)), None)
+                                if object.get_name().is_some_and(|name| {
+                                    name.as_bytes().eq_ignore_ascii_case(class.name.as_bytes())
+                                }) =>
+                            {
+                                object.get_type_parameters().map(<[TUnion]>::to_vec)
                             }
-                            self.edits.insert(identifier.span().end.offset, format!("<{}>", written.join(", ")));
+                            _ => None,
                         }
-                        None => self.refuse(expression.span(), "the analysis gives this object no type arguments"),
+                    });
+                    let arguments = declared.unwrap_or_else(|| {
+                        class.template_types.values().map(|template| template.constraint.clone()).collect()
+                    });
+                    let mut written = Vec::new();
+                    for argument in &arguments {
+                        match type_text(argument, self.input.codebase, &mut self.imports) {
+                            Ok(text) => written.push(text),
+                            Err(reason) => return self.refuse(expression.span(), reason),
+                        }
                     }
+                    self.edits.insert(identifier.span().end.offset, format!("<{}>", written.join(", ")));
                 }
                 if let Some(arguments) = &instantiation.argument_list {
                     self.arguments(arguments);
@@ -187,15 +202,23 @@ impl Converter<'_, '_> {
                     | UnaryPrefixOperator::ArrayCast(..)
                     | UnaryPrefixOperator::ObjectCast(..)
                     | UnaryPrefixOperator::UnsetCast(..)
-                    | UnaryPrefixOperator::IntegerCast(..)
-                    | UnaryPrefixOperator::DoubleCast(..)
-                    | UnaryPrefixOperator::RealCast(..)
-                    | UnaryPrefixOperator::BinaryCast(..)
                     | UnaryPrefixOperator::VoidCast(..) => {
                         return self.refuse(expression.span(), "this cast has no PHP# form (spec section 24)");
                     }
+                    // PHP's cast aliases are its `(int)`, `(float)` and `(string)` (spec section 24).
+                    UnaryPrefixOperator::IntegerCast(span, _) => self.edits.replace(*span, "(int)"),
+                    UnaryPrefixOperator::DoubleCast(span, _) | UnaryPrefixOperator::RealCast(span, _) => {
+                        self.edits.replace(*span, "(float)");
+                    }
+                    UnaryPrefixOperator::BinaryCast(span, _) => self.edits.replace(*span, "(string)"),
                     UnaryPrefixOperator::Not(_) if !self.is_bool(unary.operand) => {
                         return self.refuse(expression.span(), "`!` on a value that is no `bool` is not converted yet");
+                    }
+                    // `!is_string($x)` and `!$x instanceof A` are `x is not string` and `x is not A` (spec section 21).
+                    UnaryPrefixOperator::Not(_) => {
+                        if let Some((value, tested)) = self.test(unary.operand) {
+                            return self.edits.replace(expression.span(), format!("{value} is not {tested}"));
+                        }
                     }
                     _ => {}
                 }
@@ -241,6 +264,50 @@ impl Converter<'_, '_> {
             Expression::Throw(throw) => self.expression(throw.exception, None),
             _ => self.refuse(expression.span(), "this expression is not converted yet"),
         }
+    }
+
+    /// The value and the type `expression` tests, each converted, when it is `$x instanceof A`, or a call of the
+    /// prelude's type test of a type PHP# writes, as `is_string($x)`.
+    fn test(&mut self, expression: &Expression<'_>) -> Option<(String, String)> {
+        match expression {
+            Expression::Parenthesized(parenthesized) => self.test(parenthesized.expression),
+            Expression::Binary(Binary { lhs, operator: BinaryOperator::Instanceof(_), rhs }) => {
+                self.expression(lhs, None);
+                self.expression(rhs, None);
+
+                Some((self.render(lhs), self.render(rhs)))
+            }
+            Expression::Call(Call::Function(call)) => {
+                let target = type_test(self.function_of(call)?)?;
+                if target.is_null() {
+                    return None;
+                }
+                let tested = type_text(target, self.input.codebase, &mut self.imports).ok()?;
+                let [Argument::Positional(value)] = call.argument_list.arguments.as_slice() else {
+                    return None;
+                };
+                if value.ellipsis.is_some() {
+                    return None;
+                }
+                self.expression(value.value, None);
+
+                Some((self.render(value.value), tested))
+            }
+            _ => None,
+        }
+    }
+
+    /// The function a bare call runs: the one its resolved name names, or PHP's own of the name it writes, as PHP falls
+    /// back to a function of the root namespace.
+    fn function_of(&self, call: &FunctionCall<'_>) -> Option<&'input FunctionLikeMetadata> {
+        let Expression::Identifier(identifier) = call.function else {
+            return None;
+        };
+        let codebase = self.input.codebase;
+
+        codebase.get_function(self.input.names.get(identifier)).or_else(|| {
+            (!identifier.value().contains(&b'\\')).then(|| codebase.get_function(identifier.value())).flatten()
+        })
     }
 
     fn literal(&mut self, literal: &Literal<'_>) {
@@ -300,7 +367,7 @@ impl Converter<'_, '_> {
         }
     }
 
-    fn arguments(&mut self, arguments: &ArgumentList<'_>) {
+    pub(crate) fn arguments(&mut self, arguments: &ArgumentList<'_>) {
         for argument in &arguments.arguments {
             match argument {
                 Argument::Positional(argument) => self.expression(argument.value, None),
@@ -334,126 +401,183 @@ impl Converter<'_, '_> {
         }
     }
 
-    /// A bare PHP function call, which PHP# writes as the form a declaration gives it (see `library`), or refuses.
+    /// A bare PHP function call, as the form a declaration gives it (see `library`), or a refusal that names the
+    /// function and why it has none.
     fn function_call(&mut self, call: &FunctionCall<'_>) {
         let span = call.span();
-        let Expression::Identifier(identifier) = call.function else {
+        if !matches!(call.function, Expression::Identifier(_)) {
             return self.refuse(span, "a call of a value is not converted yet");
-        };
-        let name = identifier.value().strip_prefix(b"\\").unwrap_or(identifier.value());
-        if name.contains(&b'\\') {
-            return self.refuse(span, "a call of a library's namespaced function is not converted yet");
         }
-        let display = String::from_utf8_lossy(name).into_owned();
+        let Some(function) = self.function_of(call) else {
+            return self.refuse(span, "the analysis holds no function this call runs");
+        };
+        let name = function.original_name.as_str_lossy().into_owned();
+
+        // A library's function is called through its namespace, and one in PHP's root namespace through the namespace
+        // of the library's classes beside it (spec section 23).
+        if !function.flags.is_built_in() {
+            let namespace = match name.rsplit_once('\\') {
+                Some((namespace, _)) => namespace.to_owned(),
+                None => match self.input.codebase.folder_namespaces(function.span).first() {
+                    Some(namespace) => namespace.as_str_lossy().into_owned(),
+                    None => {
+                        return self.refuse(span, format!(
+                            "`{name}` is declared in PHP's root namespace beside no class of its library, so it has no namespace to be called through (spec section 23)"
+                        ));
+                    }
+                },
+            };
+            self.arguments(&call.argument_list);
+            let list = call.argument_list.span();
+            let arguments = self.edits.render(self.source, list.start.offset, list.end.offset);
+            let alias = self.imports.import(&namespace);
+            let member = name.rsplit('\\').next().unwrap_or(&name);
+            return self.edits.replace(span, format!("{alias}.{member}{arguments}"));
+        }
+
         let mut values = Vec::new();
         for argument in &call.argument_list.arguments {
             match argument {
                 Argument::Positional(argument) if argument.ellipsis.is_none() => values.push(argument.value),
                 _ => {
-                    return self
-                        .refuse(span, format!("`{display}` with a named or spread argument is not converted yet"));
+                    return self.refuse(span, format!("`{name}` with a named or spread argument is not converted yet"));
                 }
             }
         }
-
-        for form in self.input.library.forms(name, self.input.codebase) {
-            match form {
-                Form::TypeTest(target) if values.len() == 1 => {
-                    self.expression(values[0], None);
-                    let value = self.render(values[0]);
-                    let text = if target.is_null() {
-                        format!("{value} == null")
-                    } else {
-                        match type_text(&target, self.input.codebase, &mut self.imports) {
-                            Ok(written) => format!("{value} is {written}"),
-                            Err(reason) => {
-                                return self
-                                    .refuse(span, format!("`{display}` tests a type PHP# can't write: {reason}"));
-                            }
-                        }
-                    };
-                    return self.edits.replace(span, text);
-                }
-                Form::Member { class, member, receiver, arguments } if arguments.len() == values.len() => {
-                    let fits = arguments.iter().zip(&values).all(|(slot, value)| match slot {
-                        Slot::Constant(constant) => match value {
-                            Expression::Literal(literal) => {
-                                literal_value(literal).as_deref() == Some(constant.as_slice())
-                            }
-                            Expression::ConstantAccess(access) => {
-                                access.name.value().strip_prefix(b"\\").unwrap_or(access.name.value())
-                                    == constant.as_slice()
-                            }
-                            _ => false,
-                        },
-                        Slot::Value(_) => true,
-                    });
-                    let receiver_fits = receiver.as_ref().is_none_or(|receiver| {
-                        arguments
-                            .iter()
-                            .zip(&values)
-                            .any(|(slot, value)| *slot == Slot::Value(0) && self.receives(value, receiver))
-                    });
-                    if !fits || !receiver_fits {
-                        continue;
+        if let Some(target) = type_test(function) {
+            let [value] = values.as_slice() else {
+                return self.refuse(span, format!("`{name}` takes one argument"));
+            };
+            let text = if target.is_null() {
+                "null".to_owned()
+            } else {
+                match type_text(target, self.input.codebase, &mut self.imports) {
+                    Ok(text) => text,
+                    Err(reason) => {
+                        return self.refuse(span, format!("`{name}` tests a type PHP# can't write: {reason}"));
                     }
-
-                    let mut slots: Vec<(usize, String)> = Vec::new();
-                    for (slot, value) in arguments.iter().zip(&values) {
-                        if let Slot::Value(index) = slot {
-                            self.expression(value, None);
-                            let rendered = self.render(value);
-                            slots.push((
-                                *index,
-                                if *index == 0 && receiver.is_some() && !is_postfix(value) {
-                                    format!("({rendered})")
-                                } else {
-                                    rendered
-                                },
-                            ));
-                        }
-                    }
-                    slots.sort_by_key(|(index, _)| *index);
-                    let text = if receiver.is_some() {
-                        let others: Vec<&str> = slots.iter().skip(1).map(|(_, text)| text.as_str()).collect();
-                        format!("{}.{member}({})", slots[0].1, others.join(", "))
-                    } else {
-                        let class = match self.imports.name_of(&class) {
-                            Ok(class) => class,
-                            Err(reason) => return self.refuse(span, reason),
-                        };
-                        let all: Vec<&str> = slots.iter().map(|(_, text)| text.as_str()).collect();
-                        format!("{class}.{member}({})", all.join(", "))
-                    };
-                    return self.edits.replace(span, text);
                 }
-                _ => {}
-            }
+            };
+            self.expression(value, None);
+            let value = self.render(value);
+            let test = if target.is_null() { format!("{value} == null") } else { format!("{value} is {text}") };
+            return self.edits.replace(span, test);
         }
 
-        self.refuse(span, format!(
-            "`{display}` has no PHP# form: no standard library member runs it, and the prelude declares no type test for it"
-        ));
+        let mut differences = Vec::new();
+        for member in self.input.library.members(name.as_bytes()) {
+            match self.fits(member, function, &values) {
+                Ok(()) => return self.member_call(span, member, &values),
+                Err(difference) => differences.push(difference),
+            }
+        }
+        let reason = if differences.is_empty() {
+            format!("no standard library member runs `{name}` with PHP's meaning (decision 083)")
+        } else {
+            differences.join(", and ")
+        };
+        self.refuse(span, format!("`{name}` has no PHP# form: {reason}"));
     }
 
-    /// Whether `value` is of the kind a standard library extension's receiver is.
-    fn receives(&self, value: &Expression<'_>, receiver: &Receiver) -> bool {
-        let Some(union) = self.type_of(value) else {
-            return false;
-        };
-        !union.types.is_empty()
-            && union.types.iter().all(|atomic| match (get_sharp_type(atomic), receiver) {
-                (Some(SharpType::String), Receiver::String)
-                | (Some(SharpType::Int), Receiver::Int)
-                | (Some(SharpType::Float), Receiver::Float)
-                | (Some(SharpType::List(_)), Receiver::List)
-                | (Some(SharpType::Map(..)), Receiver::Map)
-                | (Some(SharpType::Set(_)), Receiver::Set) => true,
-                (Some(SharpType::List(element)), Receiver::ListOfStrings) => {
-                    element.types.iter().all(|atomic| matches!(get_sharp_type(atomic), Some(SharpType::String)))
-                }
+    /// Whether the call of the PHP built-in `function` with `values` runs as `member` with PHP's meaning, or the
+    /// difference.
+    fn fits(&self, member: &Member, function: &FunctionLikeMetadata, values: &[&Expression<'_>]) -> Result<(), String> {
+        let shown = format!("`{}.{}`", short(&member.class), member.name);
+        let arguments = &member.call.arguments;
+        if arguments.len() != values.len() {
+            return Err(format!(
+                "{shown} runs it with {} arguments, and this call passes {}",
+                arguments.len(),
+                values.len()
+            ));
+        }
+        for (position, (argument, value)) in arguments.iter().zip(values).enumerate() {
+            let fixed = match argument {
+                PhpCallArgument::Slot(_) => continue,
+                PhpCallArgument::Literal(text) | PhpCallArgument::Constant(text) => text,
+            };
+            let passed = self.text(value.span());
+            let same = match value {
+                Expression::Literal(_) => passed.eq_ignore_ascii_case(fixed),
+                Expression::ConstantAccess(_) => passed.strip_prefix(b"\\").unwrap_or(passed) == fixed.as_slice(),
                 _ => false,
+            };
+            if !same {
+                return Err(format!(
+                    "{shown} runs it with `{}` as argument {}, and this call passes `{}`",
+                    String::from_utf8_lossy(fixed),
+                    position + 1,
+                    String::from_utf8_lossy(passed)
+                ));
+            }
+        }
+        if member.shape != Shape::Static
+            && let Some((_, receiver)) =
+                arguments.iter().zip(values).find(|(argument, _)| **argument == PhpCallArgument::Slot(0))
+        {
+            let method = self.input.codebase.get_method(member.class.as_bytes(), member.name.as_bytes());
+            let takes = method.and_then(|method| method.parameters.first()?.type_metadata.as_ref());
+            let fits = match (self.type_of(receiver), takes) {
+                (Some(given), Some(takes)) => is_contained_by(
+                    self.input.codebase,
+                    given,
+                    &takes.type_union,
+                    false,
+                    false,
+                    false,
+                    &mut ComparisonResult::new(),
+                ),
+                _ => false,
+            };
+            if !fits {
+                return Err(format!("{shown} takes a receiver this call's argument doesn't fit"));
+            }
+        }
+        if let Some(difference) = differs(member, function, self.input.codebase) {
+            return Err(difference);
+        }
+        // PHP runs the arguments in the call's order, and PHP# in the member's, so an argument that moves runs nothing.
+        let order: Vec<usize> = arguments
+            .iter()
+            .filter_map(|argument| match argument {
+                PhpCallArgument::Slot(slot) => Some(*slot),
+                _ => None,
             })
+            .collect();
+        if order.windows(2).any(|pair| pair[0] > pair[1])
+            && let Some(position) = values.iter().position(|value| !is_plain_read(value))
+        {
+            return Err(format!(
+                "{shown} runs the arguments in another order, and argument {} runs code",
+                position + 1
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// The call of `member` that runs the call at `span`, with `values` in their slots.
+    fn member_call(&mut self, span: mago_span::Span, member: &Member, values: &[&Expression<'_>]) {
+        let mut slots: Vec<(usize, String)> = Vec::new();
+        for (argument, value) in member.call.arguments.iter().zip(values) {
+            if let PhpCallArgument::Slot(slot) = argument {
+                self.expression(value, None);
+                let rendered = self.render(value);
+                let receiver = *slot == 0 && member.shape != Shape::Static;
+                slots.push((*slot, if receiver && !is_postfix(value) { format!("({rendered})") } else { rendered }));
+            }
+        }
+        slots.sort_by_key(|(slot, _)| *slot);
+        let texts: Vec<&str> = slots.iter().map(|(_, text)| text.as_str()).collect();
+        let text = match member.shape {
+            Shape::Property => format!("{}.{}", texts[0], member.name),
+            Shape::Method => format!("{}.{}({})", texts[0], member.name, texts[1..].join(", ")),
+            Shape::Static => match self.imports.name_of(&member.class) {
+                Ok(class) => format!("{class}.{}({})", member.name, texts.join(", ")),
+                Err(reason) => return self.refuse(span, reason),
+            },
+        };
+        self.edits.replace(span, text);
     }
 
     fn binary(&mut self, expression: &Expression<'_>, binary: &Binary<'_>) {
@@ -463,12 +587,13 @@ impl Converter<'_, '_> {
                 return self.refuse(expression.span(), "`and`, `or` and `xor` are removed (spec section 21)");
             }
             BinaryOperator::Identical(span) | BinaryOperator::NotIdentical(span) => {
-                // PHP#'s `===` asks for the same object (spec section 19), and its `==` compares other values strictly.
-                let is_object =
-                    |union: Option<&TUnion>| union.is_some_and(|union| union.types.iter().all(TAtomic::is_object_type));
-                if !is_object(self.type_of(binary.lhs)) || !is_object(self.type_of(binary.rhs)) {
-                    let equal = matches!(binary.operator, BinaryOperator::Identical(_));
-                    self.edits.replace(*span, if equal { "==" } else { "!=" });
+                match identity(self.type_of(binary.lhs), self.type_of(binary.rhs)) {
+                    Ok(true) => {
+                        let equal = matches!(binary.operator, BinaryOperator::Identical(_));
+                        self.edits.replace(*span, if equal { "==" } else { "!=" });
+                    }
+                    Ok(false) => {}
+                    Err(reason) => return self.refuse(expression.span(), reason),
                 }
             }
             BinaryOperator::Equal(_) | BinaryOperator::NotEqual(_) | BinaryOperator::AngledNotEqual(_) => {
@@ -557,9 +682,29 @@ impl Converter<'_, '_> {
             self.edits.replace(span, "+=");
         }
 
-        let expected = self.type_of(assignment.lhs).cloned();
+        let expected = self.declared_type(assignment.lhs);
         self.expression(assignment.lhs, None);
         self.expression(assignment.rhs, expected.as_ref());
+    }
+
+    /// The declared type of the place `place` names, when it is a property of `this`: the type a value written there
+    /// takes, which the analysis's type of the place, narrowed by the code before it, may not be.
+    fn declared_type(&self, place: &Expression<'_>) -> Option<TUnion> {
+        let Expression::Access(Access::Property(access)) = place else {
+            return None;
+        };
+        let (Expression::Variable(Variable::Direct(object)), ClassLikeMemberSelector::Identifier(name)) =
+            (access.object, &access.property)
+        else {
+            return None;
+        };
+        if object.name != b"$this" {
+            return None;
+        }
+        let property = [b"$".as_slice(), name.value].concat();
+        let metadata = self.class.as_ref()?.metadata.properties.get(&mago_word::word(&property))?;
+
+        Some(metadata.type_metadata.as_ref()?.type_union.clone())
     }
 }
 
@@ -596,4 +741,92 @@ fn is_postfix(expression: &Expression<'_>) -> bool {
             | Expression::Literal(_)
             | Expression::Array(_)
     )
+}
+
+/// Whether reading `expression` runs no code: a variable, a literal, a constant, or a property read of one.
+fn is_plain_read(expression: &Expression<'_>) -> bool {
+    match expression {
+        Expression::Variable(Variable::Direct(_)) | Expression::Literal(_) | Expression::ConstantAccess(_) => true,
+        Expression::Parenthesized(parenthesized) => is_plain_read(parenthesized.expression),
+        Expression::Access(Access::Property(access)) => is_plain_read(access.object),
+        Expression::Access(Access::NullSafeProperty(access)) => is_plain_read(access.object),
+        _ => false,
+    }
+}
+
+/// What a value of `union` is to `===`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Null,
+    Int,
+    Float,
+    String,
+    Bool,
+    Enum,
+    /// It may hold an object, as a class, `object` or `mixed` does.
+    Object,
+    Collection,
+    Other,
+}
+
+fn kinds(union: &TUnion) -> Vec<Kind> {
+    let mut kinds: Vec<Kind> = union
+        .types
+        .iter()
+        .map(|atomic| {
+            if atomic.is_null() {
+                return Kind::Null;
+            }
+            if atomic.is_mixed() {
+                return Kind::Object;
+            }
+            match get_sharp_type(atomic) {
+                Some(SharpType::Int) => Kind::Int,
+                Some(SharpType::Float) => Kind::Float,
+                Some(SharpType::String) => Kind::String,
+                Some(SharpType::Bool) => Kind::Bool,
+                Some(SharpType::Enum(_)) => Kind::Enum,
+                Some(SharpType::Class(..) | SharpType::Object | SharpType::Parameter(_)) => Kind::Object,
+                Some(SharpType::List(_) | SharpType::Map(..) | SharpType::Set(_) | SharpType::Iterable(_)) => {
+                    Kind::Collection
+                }
+                _ => Kind::Other,
+            }
+        })
+        .collect();
+    kinds.sort_by_key(|kind| *kind as u8);
+    kinds.dedup();
+
+    kinds
+}
+
+/// Whether PHP's `===` between values of `lhs` and `rhs` is PHP#'s `==`, `Ok(true)`, stays `===`, `Ok(false)`, or has
+/// no form. `==` gives `===`'s answer when both sides have one scalar type, both are enums, or one side is `null`.
+/// `===` stays where a side may hold an object, since PHP#'s `===` asks for the same object (spec section 19).
+fn identity(lhs: Option<&TUnion>, rhs: Option<&TUnion>) -> Result<bool, String> {
+    let (Some(lhs), Some(rhs)) = (lhs, rhs) else {
+        return Err("the analysis gives a side of this `===` no type".to_owned());
+    };
+    let (left, right) = (kinds(lhs), kinds(rhs));
+    if left.contains(&Kind::Object) || right.contains(&Kind::Object) {
+        return Ok(false);
+    }
+    if left.contains(&Kind::Collection) || right.contains(&Kind::Collection) {
+        return Err(
+            "PHP's `===` on arrays compares keys, order and types, and PHP#'s `==` on collections compares their elements (spec section 19)"
+                .to_owned(),
+        );
+    }
+    if left == [Kind::Null] || right == [Kind::Null] {
+        return Ok(true);
+    }
+    let bare = |kinds: &[Kind]| kinds.iter().copied().filter(|kind| *kind != Kind::Null).collect::<Vec<_>>();
+    match (bare(&left).as_slice(), bare(&right).as_slice()) {
+        ([Kind::Int], [Kind::Float]) | ([Kind::Float], [Kind::Int]) => {
+            Err("PHP's `1 === 1.0` is false, and PHP# compares an `int` with a `float` by value (spec section 12)"
+                .to_owned())
+        }
+        ([a], [b]) if a == b && *a != Kind::Other => Ok(true),
+        _ => Err(format!("`===` between `{}` and `{}` is not converted yet", lhs.get_id(), rhs.get_id())),
+    }
 }

@@ -23,4 +23,19 @@ final class Order
     {
         return $this->reference . ': ' . $this->spec->label() . ' x' . $this->quantity;
     }
+
+    public function isFor(string $reference): bool
+    {
+        return $this->reference === $reference;
+    }
+
+    public function isOf(Spec $spec): bool
+    {
+        return $this->spec === $spec;
+    }
+
+    public function loud(): string
+    {
+        return shout($this->reference);
+    }
 }

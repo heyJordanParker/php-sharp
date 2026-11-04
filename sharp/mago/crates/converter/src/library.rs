@@ -1,150 +1,100 @@
 //! The PHP# form of a bare PHP function call, read from declarations and never from a table of the converter's own.
 //!
-//! Two declarations give a form:
+//! - A PHP built-in has a form two ways. The prelude's stub of a type test, whose return is `($value is T ? true :
+//!   false)`, as `is_string`'s is, gives `value is T` (spec section 21). A standard library member whose inline form,
+//!   as the bridge's `inline_forms` takes it, is one call of exactly that function gives that member, called with the
+//!   call's arguments in its slots. The bridge owns the forms, so the library is never read a second time here.
+//! - A function a plain PHP library declares in a namespace, or in PHP's root namespace beside the classes of one, is
+//!   called through that namespace (spec section 23), which the body rewrite imports.
 //!
-//! - The prelude's stub of a type test, whose return is `($value is T ? true : false)`, as `is_string`'s is, gives
-//!   `value is T`, the pattern of spec section 21, or `value == null` for `null`.
-//! - A standard library member whose body is one call of a PHP function through `global`, with each of its receiver
-//!   and parameters read once and every other argument a constant, as `contains(string other) =>
-//!   global.str_contains(text, other)` is, gives that member, called with the call's arguments in its slots. This is
-//!   the inlining rule of the bridge's `inline_forms`, read the other way.
-//!
-//! A function no declaration gives a form has none, and the converter refuses the file with its name.
+//! A member runs a built-in with PHP's meaning only when every constant it passes is the call's own, its return holds
+//! the function's, and it feeds no by-reference parameter but a `ref` receiver. Any other built-in has no form, and the
+//! converter refuses its file, naming the function and the difference.
 
 use foldhash::HashMap;
 
-use mago_allocator::LocalArena;
 use mago_codex::metadata::CodebaseMetadata;
+use mago_codex::metadata::function_like::FunctionLikeMetadata;
+use mago_codex::ttype::TType;
 use mago_codex::ttype::atomic::TAtomic;
 use mago_codex::ttype::atomic::scalar::TScalar;
+use mago_codex::ttype::comparator::ComparisonResult;
+use mago_codex::ttype::comparator::union_comparator::is_contained_by;
 use mago_codex::ttype::union::TUnion;
-use mago_database::file::File;
-use mago_span::HasSpan;
-use mago_syntax::cst::Access;
-use mago_syntax::cst::Argument;
-use mago_syntax::cst::Call;
-use mago_syntax::cst::ClassLikeMember;
-use mago_syntax::cst::ClassLikeMemberSelector;
-use mago_syntax::cst::Expression;
-use mago_syntax::cst::FunctionLikeParameter;
-use mago_syntax::cst::Literal;
-use mago_syntax::cst::Method;
-use mago_syntax::cst::MethodBody;
-use mago_syntax::cst::Modifier;
-use mago_syntax::cst::Statement;
-use mago_syntax::parser::parse_file;
+use mago_sharp_bridge::InlineForms;
+use mago_sharp_bridge::PhpCall;
 
-/// What the receiver of a standard library extension is, so a call's first argument picks the member of its kind.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Receiver {
-    String,
-    Int,
-    Float,
-    List,
-    ListOfStrings,
-    Map,
-    Set,
+/// How a standard library member is called.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shape {
+    /// `Class.member(…)`.
+    Static,
+    /// `receiver.member(…)`, an extension method (spec section 26).
+    Method,
+    /// `receiver.member`, an extension's computed property.
+    Property,
 }
 
-/// One argument of a member's body call: one of the member's slots, or a constant every call must pass as it is.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Slot {
-    Value(usize),
-    Constant(Vec<u8>),
-}
-
+/// A standard library member whose inline form is one call of a plain PHP function.
 #[derive(Debug, Clone)]
-pub enum Form {
-    /// `value is T`, from the prelude's type test.
-    TypeTest(TUnion),
-    /// A standard library member: an extension member of `receiver`, or a static member of `class`.
-    Member { class: String, member: String, receiver: Option<Receiver>, arguments: Vec<Slot> },
+pub struct Member {
+    /// Its class's full PHP name, as `Sharp\Encoding\Base64`.
+    pub class: String,
+    pub name: String,
+    pub shape: Shape,
+    /// What its form passes the PHP function.
+    pub call: PhpCall,
+    /// How many slots its form reads in order before its call, as the bridge's `InlineForm::in_order` gives.
+    pub in_order: usize,
 }
 
 #[derive(Debug, Default)]
 pub struct Library {
-    /// Each PHP function's lowercase name, and the member forms that run it.
-    members: HashMap<Vec<u8>, Vec<Form>>,
+    /// Each PHP function's lowercase name, and the members whose form calls it.
+    members: HashMap<Vec<u8>, Vec<Member>>,
 }
 
 impl Library {
-    /// The member forms of the standard library files among `files`.
-    pub fn new<'file>(files: impl IntoIterator<Item = &'file File>) -> Self {
-        let mut members: HashMap<Vec<u8>, Vec<Form>> = HashMap::default();
-        for file in files.into_iter().filter(|file| file.is_standard_library) {
-            let arena = LocalArena::new();
-            let program = parse_file(&arena, file);
-            let namespace = program
-                .statements
-                .iter()
-                .find_map(|statement| match statement {
-                    Statement::Namespace(namespace) => namespace.name.as_ref().map(|name| name.value()),
-                    _ => None,
-                })
-                .unwrap_or_default();
-            let classes = program.statements.iter().filter_map(|statement| match statement {
-                Statement::Class(class) => Some(class),
-                Statement::Namespace(namespace) => {
-                    namespace.statements().iter().find_map(|statement| match statement {
-                        Statement::Class(class) => Some(class),
-                        _ => None,
-                    })
-                }
-                _ => None,
+    /// The members of `forms` whose form is one call of a plain PHP function.
+    pub fn new(forms: &InlineForms, codebase: &CodebaseMetadata) -> Self {
+        let mut members: HashMap<Vec<u8>, Vec<Member>> = HashMap::default();
+        for (class, member, form) in forms.iter() {
+            let (Some(call), Some(class), Some(method)) =
+                (form.php_call(), codebase.get_class_like(class), codebase.get_method(class, member))
+            else {
+                continue;
+            };
+            let shape = if method.flags.is_extension_property() {
+                Shape::Property
+            } else if method.flags.is_extension_method() {
+                Shape::Method
+            } else {
+                Shape::Static
+            };
+            members.entry(call.function.to_ascii_lowercase()).or_default().push(Member {
+                class: class.original_name.as_str_lossy().into_owned(),
+                name: method.original_name.as_str_lossy().into_owned(),
+                shape,
+                call: call.clone(),
+                in_order: form.in_order(),
             });
-            for class in classes {
-                let class_name = format!(
-                    "{}\\{}",
-                    String::from_utf8_lossy(namespace).replace('.', "\\"),
-                    String::from_utf8_lossy(class.name.value)
-                );
-                for member in &class.members {
-                    match member {
-                        ClassLikeMember::Method(method) if is_public_static(method) => {
-                            if let Some((function, form)) = member_form(&file.contents, &class_name, method, None) {
-                                members.entry(function).or_default().push(form);
-                            }
-                        }
-                        ClassLikeMember::Extension(extension) => {
-                            let [receiver] = extension.parameter_list.parameters.as_slice() else {
-                                continue;
-                            };
-                            for member in &extension.members {
-                                if let ClassLikeMember::Method(method) = member
-                                    && let Some((function, form)) =
-                                        member_form(&file.contents, &class_name, method, Some(receiver))
-                                {
-                                    members.entry(function).or_default().push(form);
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            }
+        }
+        for candidates in members.values_mut() {
+            candidates.sort_by(|a, b| (&a.class, &a.name).cmp(&(&b.class, &b.name)));
         }
 
         Self { members }
     }
 
-    /// The forms of the PHP function `name`: its prelude type test, then each standard library member that runs it.
-    pub fn forms(&self, name: &[u8], codebase: &CodebaseMetadata) -> Vec<Form> {
-        let name = name.to_ascii_lowercase();
-        let mut forms: Vec<Form> = type_test(&name, codebase).into_iter().collect();
-        forms.extend(self.members.get(&name).into_iter().flatten().cloned());
-
-        forms
+    /// The members whose form calls the PHP function `name`.
+    pub fn members(&self, name: &[u8]) -> &[Member] {
+        self.members.get(&name.to_ascii_lowercase()).map_or(&[], Vec::as_slice)
     }
 }
 
-fn is_public_static(method: &Method) -> bool {
-    method.modifiers.iter().any(|modifier| matches!(modifier, Modifier::Static(_)))
-        && method.modifiers.iter().any(|modifier| matches!(modifier, Modifier::Public(_)))
-}
-
-/// The type test the prelude declares for `name`: one parameter, and a return of `($value is T ? true : false)`.
-fn type_test(name: &[u8], codebase: &CodebaseMetadata) -> Option<Form> {
-    let function = codebase.get_function(name)?;
+/// The type the prelude's type test `function` tests for: one parameter, and a return of `($value is T ? true :
+/// false)`.
+pub fn type_test(function: &FunctionLikeMetadata) -> Option<&TUnion> {
     if function.parameters.len() != 1 {
         return None;
     }
@@ -157,107 +107,67 @@ fn type_test(name: &[u8], codebase: &CodebaseMetadata) -> Option<Form> {
         return None;
     }
 
-    Some(Form::TypeTest((*conditional.target).clone()))
+    Some(&conditional.target)
 }
 
-/// The PHP function `method`'s body calls, and its form, when the body is one `global.f(…)` call that reads each slot,
-/// the receiver first, once.
-fn member_form(
-    contents: &[u8],
-    class: &str,
-    method: &Method,
-    receiver: Option<&FunctionLikeParameter>,
-) -> Option<(Vec<u8>, Form)> {
-    let MethodBody::Expression(body) = &method.body else {
-        return None;
-    };
-    let Expression::Call(Call::Method(call)) = body.expression else {
-        return None;
-    };
-    let Expression::ConstantAccess(object) = call.object else {
-        return None;
-    };
-    if object.name.value() != b"global" {
-        return None;
+/// Why `member` doesn't run the PHP built-in `function` with PHP's meaning, or `None` when it does: its return holds
+/// the function's, and no slot of it feeds a by-reference parameter but a `ref` receiver.
+pub fn differs(member: &Member, function: &FunctionLikeMetadata, codebase: &CodebaseMetadata) -> Option<String> {
+    let method = codebase.get_method(member.class.as_bytes(), member.name.as_bytes())?;
+    let name = function.original_name.as_str_lossy();
+    if let (Some(php), Some(sharp)) = (&function.return_type_metadata, &method.return_type_metadata)
+        && !is_contained_by(
+            codebase,
+            &branches(&php.type_union),
+            &sharp.type_union,
+            false,
+            false,
+            false,
+            &mut ComparisonResult::new(),
+        )
+    {
+        return Some(format!(
+            "`{name}` returns `{}`, and `{}.{}` returns `{}`, which doesn't hold it",
+            php.type_union.get_id(),
+            short(&member.class),
+            member.name,
+            sharp.type_union.get_id()
+        ));
     }
-    let ClassLikeMemberSelector::Identifier(function) = &call.method else {
-        return None;
-    };
-
-    let slots: Vec<&[u8]> =
-        receiver.into_iter().chain(method.parameter_list.parameters.iter()).map(|p| p.variable.name).collect();
-    let mut read = vec![false; slots.len()];
-    let mut arguments = Vec::new();
-    for argument in &call.argument_list.arguments {
-        let Argument::Positional(argument) = argument else {
-            return None;
+    for (position, argument) in member.call.arguments.iter().enumerate() {
+        let mago_sharp_bridge::PhpCallArgument::Slot(slot) = argument else {
+            continue;
         };
-        if argument.ellipsis.is_some() {
-            return None;
+        let by_reference = function.parameters.get(position).is_some_and(|parameter| parameter.flags.is_by_reference());
+        let ref_receiver = *slot == 0
+            && member.shape != Shape::Static
+            && method.parameters.first().is_some_and(|receiver| receiver.flags.is_by_reference());
+        if by_reference && !ref_receiver {
+            return Some(format!("`{name}` takes its argument {} by reference", position + 1));
         }
-        arguments.push(match argument.value {
-            Expression::ConstantAccess(name) => {
-                let slot = slots.iter().position(|slot| *slot == name.name.value())?;
-                if std::mem::replace(&mut read[slot], true) {
-                    return None;
-                }
-                Slot::Value(slot)
-            }
-            Expression::Literal(literal) => Slot::Constant(literal_value(literal)?),
-            Expression::Access(Access::Property(access))
-                if matches!(access.object, Expression::ConstantAccess(global) if global.name.value() == b"global") =>
-            {
-                let ClassLikeMemberSelector::Identifier(constant) = &access.property else {
-                    return None;
-                };
-                Slot::Constant(constant.value.to_vec())
-            }
-            _ => return None,
-        });
-    }
-    if read.iter().any(|read| !read) {
-        return None;
     }
 
-    let receiver = match receiver {
-        None => None,
-        Some(receiver) => Some(receiver_of(contents, receiver)?),
-    };
-
-    Some((
-        function.value.to_ascii_lowercase(),
-        Form::Member {
-            class: class.to_owned(),
-            member: String::from_utf8_lossy(method.name.value).into_owned(),
-            receiver,
-            arguments,
-        },
-    ))
+    None
 }
 
-fn receiver_of(contents: &[u8], receiver: &FunctionLikeParameter) -> Option<Receiver> {
-    let span = receiver.hint.as_ref()?.span();
-    let text = String::from_utf8_lossy(&contents[span.start.offset as usize..span.end.offset as usize])
-        .split_whitespace()
-        .collect::<String>();
+/// `union` with each conditional type replaced by both of its branches, which together are every value it gives, as
+/// `count`'s `($value is non-empty-array ? positive-int : non-negative-int)` gives an `int`.
+fn branches(union: &TUnion) -> TUnion {
+    let mut types = Vec::new();
+    for atomic in union.types.iter() {
+        match atomic {
+            TAtomic::Conditional(conditional) => {
+                types.extend(branches(&conditional.then).types.iter().cloned());
+                types.extend(branches(&conditional.otherwise).types.iter().cloned());
+            }
+            atomic => types.push(atomic.clone()),
+        }
+    }
 
-    Some(match text.as_str() {
-        _ if text.starts_with("List<string>") => Receiver::ListOfStrings,
-        _ if text.starts_with("List<") => Receiver::List,
-        _ if text.starts_with("Map<") => Receiver::Map,
-        _ if text.starts_with("Set<") => Receiver::Set,
-        "string" => Receiver::String,
-        "int" => Receiver::Int,
-        "float" => Receiver::Float,
-        _ => return None,
-    })
+    TUnion::from_vec(types)
 }
 
-/// The value a literal writes: a string's text without its quotes, or a number's digits.
-pub fn literal_value(literal: &Literal) -> Option<Vec<u8>> {
-    match literal {
-        Literal::String(string) => string.value.map(<[u8]>::to_vec),
-        Literal::Integer(integer) => Some(integer.raw.to_vec()),
-        _ => None,
-    }
+/// The last part of a full PHP name.
+pub fn short(name: &str) -> &str {
+    name.rsplit('\\').next().unwrap_or(name)
 }

@@ -6,10 +6,12 @@ namespace Runner;
 
 use Proof\Box;
 use Proof\Factory;
+use Proof\Shop\Crate;
 use Proof\Shop\Note;
 use Proof\Shop\Order;
 use Proof\Shop\Pair;
 use Proof\Shop\Shelf;
+use Proof\Shop\Tagged;
 use Proof\Spec;
 use Proof\Special;
 
@@ -39,6 +41,13 @@ $order = new Order($spec, 'R-1');
 $order->add(2);
 $order->add(3);
 echo $order->summary(), ' ', $order->reference, "\n";
+echo $order->isFor('R-1') ? 'for R-1' : 'not for R-1', ' ', $order->isOf($special) ? 'of beta' : 'not of beta', ' ', $order->loud(), "\n";
+
+$crate = new Crate(new Spec('gamma'));
+echo $crate->open()->label(), ' ', $crate->special()->get()->label(), "\n";
+
+$tagged = new Tagged('delta', 'new');
+echo $tagged->label(), ' ', $tagged->tag, ' ', $tagged->name, "\n";
 
 $note = new Note();
 echo $note->describe('hi'), ' / ', $note->describe(5), "\n";

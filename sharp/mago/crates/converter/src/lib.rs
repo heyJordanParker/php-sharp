@@ -1,8 +1,9 @@
 //! Raises one plain PHP file into PHP#, the other way from `sharp-bridge`, which lowers PHP# into the engine's PHP.
 //!
-//! Each declaration's type is the one the project's analysis holds for it: its native declaration, its PHPDoc, or an
-//! extension's refinement, and never a type the analysis inferred. A declaration with no type anywhere is `mixed`, which
-//! PHP# writes `Any?`. The output is edits on the file's own text, so its comments and layout stay.
+//! Each declaration's type is the one the project's analysis holds for it: its native declaration, its PHPDoc, an
+//! extension's refinement, or the type it inherits from its parent, and never a type the analysis inferred from a body.
+//! A declaration with no type anywhere is `mixed`, which PHP# writes `Any?`. The output is edits on the file's own text,
+//! so its comments and layout stay.
 //!
 //! A file converts whole or not at all: each construct with no PHP# form yet, or none at all, is a [`Refusal`] that
 //! names its place and its reason, and the file then stays plain PHP.
@@ -19,6 +20,7 @@ use mago_span::Span;
 use mago_syntax::cst::Program;
 use mago_syntax::cst::Statement;
 use mago_syntax::cst::UseItems;
+use mago_syntax::cst::UseType;
 use mago_syntax::token::is_sharp_keyword;
 
 use crate::edits::Edits;
@@ -62,6 +64,7 @@ pub fn convert(input: &Input<'_, '_>) -> Result<Vec<u8>, Vec<Refusal>> {
         imports: Imports::new(""),
         refusals: Vec::new(),
         class: None,
+        returning: None,
         imports_at: None,
     };
     converter.program();
@@ -72,7 +75,7 @@ pub fn convert(input: &Input<'_, '_>) -> Result<Vec<u8>, Vec<Refusal>> {
     let added: Vec<String> = converter.imports.added().collect();
     if !added.is_empty() {
         let at = converter.imports_at.unwrap_or(0);
-        let lines: String = added.iter().map(|class| format!("\nimport {class};")).collect();
+        let lines: String = added.iter().map(|import| format!("\nimport {import};")).collect();
         converter.edits.insert(at, lines);
     }
 
@@ -96,6 +99,8 @@ struct Converter<'input, 'arena> {
     imports: Imports,
     refusals: Vec<Refusal>,
     class: Option<Class<'input>>,
+    /// The declared return of the method being converted, which a returned `new` takes its type arguments from.
+    returning: Option<TUnion>,
     /// Where a new `import` line goes: after the last `use` line, else after the `namespace` line.
     imports_at: Option<u32>,
 }
@@ -116,6 +121,25 @@ impl<'input> Converter<'input, '_> {
             end += 1;
         }
         end as u32
+    }
+
+    /// The start and end of the whole lines `span` fills, its indentation and its line break included, so deleting
+    /// them leaves the lines around it as they were. Only `span` when other code shares its lines.
+    fn lines_of(&self, span: Span) -> (u32, u32) {
+        let (mut start, mut end) = (span.start.offset as usize, span.end.offset as usize);
+        while start > 0 && matches!(self.source[start - 1], b' ' | b'\t') {
+            start -= 1;
+        }
+        while end < self.source.len() && matches!(self.source[end], b' ' | b'\t' | b'\r') {
+            end += 1;
+        }
+        let whole =
+            (start == 0 || self.source[start - 1] == b'\n') && self.source.get(end).is_none_or(|byte| *byte == b'\n');
+        if !whole {
+            return (span.start.offset, span.end.offset);
+        }
+
+        (start as u32, (end + 1).min(self.source.len()) as u32)
     }
 
     /// `union` in PHP#, or a refusal at `span` with the type PHP# can't write.
@@ -176,13 +200,33 @@ impl<'input> Converter<'input, '_> {
                 }
             }
             Statement::Use(r#use) => {
-                let UseItems::Sequence(sequence) = &r#use.items else {
-                    self.refuse(
-                        r#use.span(),
-                        "a `use function`, `use const` or grouped `use` line is not converted yet",
-                    );
-                    return;
+                let end = self.skip_whitespace(r#use.span().end.offset);
+                let sequence = match &r#use.items {
+                    UseItems::Sequence(sequence) => sequence,
+                    // A function is called through its namespace, which each call imports (spec section 23).
+                    UseItems::TypedSequence(typed) if matches!(typed.r#type, UseType::Function(_)) => {
+                        self.edits.delete(r#use.span().start.offset, end);
+                        return;
+                    }
+                    _ => {
+                        self.refuse(r#use.span(), "a `use const` or grouped `use` line is not converted yet");
+                        return;
+                    }
                 };
+                // A root class of `Builtins.sharp` is named bare, with no import (spec section 23).
+                let defaults = sequence
+                    .items
+                    .iter()
+                    .filter(|item| item.alias.is_none() && Imports::is_default(&String::from_utf8_lossy(item.name.value())))
+                    .count();
+                if defaults == sequence.items.len() {
+                    self.edits.delete(r#use.span().start.offset, end);
+                    return;
+                }
+                if defaults > 0 {
+                    self.refuse(r#use.span(), "a `use` line that names a root class beside another is not converted yet");
+                    return;
+                }
                 self.edits.replace(r#use.r#use.span, "import");
                 for item in &sequence.items {
                     let name = String::from_utf8_lossy(item.name.value()).trim_start_matches('\\').to_owned();

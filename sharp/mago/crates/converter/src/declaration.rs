@@ -9,7 +9,10 @@ use mago_codex::ttype::union::TUnion;
 use mago_span::HasSpan;
 use mago_span::Span;
 use mago_syntax::cst::AttributeList;
+use mago_syntax::cst::Call;
 use mago_syntax::cst::ClassLikeMember;
+use mago_syntax::cst::ClassLikeMemberSelector;
+use mago_syntax::cst::Expression;
 use mago_syntax::cst::FunctionLikeParameter;
 use mago_syntax::cst::Method;
 use mago_syntax::cst::MethodBody;
@@ -19,6 +22,8 @@ use mago_syntax::cst::PlainProperty;
 use mago_syntax::cst::Property;
 use mago_syntax::cst::PropertyItem;
 use mago_syntax::cst::Sequence;
+use mago_syntax::cst::Statement;
+use mago_syntax::cst::StaticMethodCall;
 
 use crate::Class;
 use crate::Converter;
@@ -176,14 +181,11 @@ impl Converter<'_, '_> {
             return;
         };
         let variable = item.variable();
+        // A type the codex marks `inferred` here is inherited: declared in the parent, which the override rules need.
         let Some(declared) = metadata.properties.get(&mago_word::word(variable.name)) else {
             self.refuse(variable.span, "the analysis holds no property of this name");
             return;
         };
-        if declared.type_metadata.as_ref().is_some_and(|metadata| metadata.inferred) {
-            self.refuse(variable.span, "this property's type is inferred, and the converter writes no inferred type");
-            return;
-        }
 
         self.attributes(&property.attribute_lists);
         let union = declared.type_metadata.as_ref().map_or_else(get_mixed, |metadata| metadata.type_union.clone());
@@ -269,16 +271,19 @@ impl Converter<'_, '_> {
             self.edits.insert(at, "public ");
         }
 
+        let mut skipped = 0;
         if is_constructor {
-            if metadata.direct_parent_class.is_some() {
-                self.refuse(method.name.span, "a subclass's constructor is not converted yet: it calls `: super(…)`");
-                return;
-            }
             self.edits.replace_range(function.span.start.offset, method.name.span.end.offset, class_name);
+            if metadata.direct_parent_class.is_some() {
+                let Some(skip) = self.super_call(method, metadata.name.as_bytes()) else {
+                    return;
+                };
+                skipped = skip;
+            }
         } else {
-            if declared.return_from_body.is_some()
-                || declared.return_type_metadata.as_ref().is_some_and(|metadata| metadata.inferred)
-            {
+            // A return the codex marks `inferred` is inherited from the parent, which is declared. A return taken from the
+            // body is the analysis's inference.
+            if declared.return_from_body.is_some() {
                 self.refuse(method.name.span, format!(
                     "`{}`'s return is taken from its body, which the analysis infers, and the converter writes no inferred type",
                     String::from_utf8_lossy(name)
@@ -321,12 +326,68 @@ impl Converter<'_, '_> {
             self.parameter(parameter, metadata.map(|metadata| metadata.type_union));
         }
 
+        self.returning = (!is_constructor).then(|| {
+            declared.return_type_metadata.as_ref().map_or_else(get_mixed, |metadata| metadata.type_union.clone())
+        });
         match &method.body {
-            MethodBody::Concrete(block) => self.block(block),
+            MethodBody::Concrete(block) => {
+                for statement in block.statements.iter().skip(skipped) {
+                    self.statement(statement);
+                }
+            }
             MethodBody::Abstract(_) => {}
             MethodBody::Expression(_) => self.refuse(method.body.span(), "an expression body is PHP# only"),
         }
+        self.returning = None;
         self.docblock(method.span());
+    }
+
+    /// Writes `: super(…)` after a subclass constructor's parameters, which PHP# writes on every one (spec section 9),
+    /// and gives how many of the body's statements it took: the `parent::__construct(…)` call the body starts with, whose
+    /// arguments it takes, or none when no class above `class` declares a constructor, for `: super()`. `None` when PHP
+    /// runs the parent's constructor later or never, which `: super(…)` would run first.
+    fn super_call(&mut self, method: &Method<'_>, class: &[u8]) -> Option<usize> {
+        let MethodBody::Concrete(block) = &method.body else {
+            return Some(0);
+        };
+        let after = method.parameter_list.right_parenthesis.end.offset;
+        let first = block.statements.first();
+        if let Some(statement) = first
+            && let Some(call) = parent_call(statement)
+        {
+            self.arguments(&call.argument_list);
+            let list = call.argument_list.span();
+            let arguments = self.edits.render(self.source, list.start.offset, list.end.offset);
+            self.edits.insert(after, format!(" : super{arguments}"));
+            let (start, end) = self.lines_of(statement.span());
+            self.edits.delete(start, end);
+            if let Some(later) = block.statements.iter().skip(1).find(|statement| parent_call(statement).is_some()) {
+                self.refuse(
+                    later.span(),
+                    "a second call of the parent's constructor has no PHP# form (spec section 9)",
+                );
+                return None;
+            }
+
+            return Some(1);
+        }
+        if let Some(later) = block.statements.iter().find(|statement| parent_call(statement).is_some()) {
+            self.refuse(
+                later.span(),
+                "the parent's constructor runs after other statements here, and `: super(…)` runs it first (spec section 9)",
+            );
+            return None;
+        }
+        if self.input.codebase.get_parent_constructor(class).is_some() {
+            self.refuse(
+                method.name.span,
+                "PHP never runs the parent's constructor here, and PHP# runs it through `: super(…)` (spec section 9)",
+            );
+            return None;
+        }
+        self.edits.insert(after, " : super()");
+
+        Some(0)
     }
 
     fn parameter(&mut self, parameter: &FunctionLikeParameter<'_>, declared: Option<TUnion>) {
@@ -394,4 +455,19 @@ impl Converter<'_, '_> {
             self.expression(default.value, Some(&union));
         }
     }
+}
+
+/// The `parent::__construct(…)` call `statement` is, when it is one.
+fn parent_call<'statement, 'arena>(
+    statement: &'statement Statement<'arena>,
+) -> Option<&'statement StaticMethodCall<'arena>> {
+    let Statement::Expression(statement) = statement else {
+        return None;
+    };
+    let Expression::Call(Call::StaticMethod(call)) = statement.expression else {
+        return None;
+    };
+    let is_constructor = matches!(&call.method, ClassLikeMemberSelector::Identifier(name) if name.value.eq_ignore_ascii_case(b"__construct"));
+
+    (matches!(call.class, Expression::Parent(_)) && is_constructor).then_some(call)
 }

@@ -4,9 +4,20 @@
     "type": "project",
     "license": "PHP-3.01",
     "require": {
+        "acme/format": "*@dev",
         "heyjordanparker/php-sharp-composer": "*@dev"
     },
     "repositories": [
+        {
+            "type": "path",
+            "url": "packages/format",
+            "options": {
+                "symlink": false,
+                "versions": {
+                    "acme/format": "dev-master"
+                }
+            }
+        },
         {
             "type": "path",
             "url": "../../../../../composer",
