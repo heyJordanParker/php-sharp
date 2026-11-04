@@ -328,8 +328,17 @@ sharp/mago/
 │   │                                     pub fn type_test(function) -> Option<&TUnion>
 │   │                                     pub fn differs(member, function, codebase) -> Option<String>
 │   │                                     pub fn short(name) -> &str
-│   ├── src/declaration.rs                classes, properties, methods, constructors and parameters; crate-private
-│   ├── src/body.rs                       statements and expressions; crate-private
+│   ├── src/declaration/                  crate-private: mod.rs holds attributes, docblocks and visibility
+│   │   ├── class.rs                      the class header
+│   │   ├── members.rs                    properties and methods
+│   │   └── constructor.rs                parameters, promoted ones included, and what a constructor sets
+│   ├── src/body/                         crate-private: mod.rs walks statements and expressions
+│   │   ├── locals.rs                     variables, locals and assignment
+│   │   ├── access.rs                     member and constant access
+│   │   ├── calls.rs                      calls, their arguments, type tests and `new`
+│   │   ├── operators.rs                  operators and casts
+│   │   ├── strings.rs                    literals and concatenation
+│   │   └── collections.rs                array literals
 │   └── tests/                            cases/<construct>/{input.php, output.sharp}, and project/, the
 │                                         whole-project fixture, with project.sh
 ├── crates/sharp-bridge/src/lower/inline.rs   InlineForm::php_call() -> Option<&PhpCall>, InlineForm::in_order()
@@ -348,7 +357,7 @@ sharp/mago/
 └── src/utils/git.rs                      pub fn move_tracked(workspace, from, to) -> Result<bool, Error>
 ```
 
-`declaration.rs` and `body.rs` hold one `impl Converter` each, the state of one file's conversion. The command alone talks to the server, the file system and git, so the crate reads nothing but its `Input`.
+Each module of `declaration/` and `body/` holds one `impl Converter` for one construct family, the state of one file's conversion, so a family grows in its own file. The command alone talks to the server, the file system and git, so the crate reads nothing but its `Input`.
 
 ## Slices
 
