@@ -161,7 +161,7 @@ Each line gives the plain PHP form, the PHP# form, what finds it, and the slice 
 - A `public` property → `public T name { get; set; }`. Both. Slice 1.
 - An untyped property, which PHP fills with `null` → `Any? name = null`. Both. Slice 1.
 - Two names in one declaration → one declaration per name, each on its own line (line 383). Tree. Slice 1.
-- Property hooks → accessors. Tree. Slice 4.
+- Property hooks → accessors, where `$this->name` is `field`, `$value` is `value` and a short `set => expr` is `set => field = expr`. A property with storage gains the accessor it declares no hook for, and its initial value follows the accessors. A `set` hook whose parameter is other than `$value` of the property's type, a `set` hook with no `get` on a property with no storage, and `&get` refuse. Tree. Slice 4.
 
 ### Section 7. Methods
 
