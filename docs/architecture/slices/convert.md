@@ -168,7 +168,8 @@ Each line gives the plain PHP form, the PHP# form, what finds it, and the slice 
 - `public function name(int $a): string` → `public virtual string name(int a)`. Both. Slice 1.
 - A static method a subclass may replace → `static virtual` (lines 1390 and 1396). Tree. Slice 4.
 - Named arguments `f(name: $v)` → `f(name: v)`. Tree. Slice 1.
-- Argument spread `f(...$items)` → `f(...items)`. Both. Slice 5.
+- Argument spread `f(...$items)` → `f(...items)`, of a `List` into a `...` parameter. Any other spread into a call refuses (line 701). Both. Slice 5.
+- A spread in a literal `[...$a]` → `[...a]`, of a `List`, or of a `Map` keyed by `string`. A `Map` spread keeps an `int` key PHP renumbers, so it refuses (line 1618). Both. Slice 5.
 
 ### Section 8. Functions
 
@@ -266,7 +267,7 @@ Each line gives the plain PHP form, the PHP# form, what finds it, and the slice 
 - `namespace A\B;` → `namespace A.B;`, and `use A\B;` → `import A.B;`. Tree. Slice 1.
 - A class in code → its name as [how a name prints](#how-a-name-prints) says. Both. Slice 1.
 - `use function` → no line, since each call imports the namespace. `use const Vendor\Pdf\SIZE` → `import Vendor.Pdf;` and `Pdf.SIZE` (line 4345). Tree. Slice 1.
-- `new $class(…)` of a class value → `new (type)(…)`, when the class's constructor is `required` (line 4968). Both. Slice 5.
+- `new $class(…)` of a class value → `new (type)(…)`, when the class's constructor is `required` (line 4968), which the checker checks. `new` of a string, and `new static(…)`, whose `new Self(…)` needs a `required` constructor the converter doesn't write, refuse. Both. Slice 5.
 
 ### Section 24. Built-in types and `Any`
 
