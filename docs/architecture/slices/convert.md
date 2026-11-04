@@ -202,7 +202,7 @@ Each line gives the plain PHP form, the PHP# form, what finds it, and the slice 
 - `$list[] = $value` → `list.add(value)`. Tree. Slice 1.
 - `empty($items)` → `items.isEmpty()`, and `unset($map[$key])` → `map.remove(key)`. Both. Slice 2.
 - `isset($map[$key])` → `map[key] != null`, since a `Map` read gives null for a missing key (line 1625) and `isset` is false for a null value. Both. Slice 2.
-- `['id' => $id] = $row;` of a `Map` → one read per key, `const id = row["id"];`, each handled as a `TValue?` (lines 1625 and 1664). Both. Slice 5. 16 files.
+- `['id' => $id] = $row;` of a `Map` variable → one read per key, `const id = row.get("id");`, each a `TValue?` (lines 1625 and 1664). Both. Slice 5. 16 files. Destructuring by position, a `Map` a call gives, and destructuring inside another expression refuse.
 - `array` with no PHPDoc type, and an array shape → refuses with the type. Type.
 
 ### Section 13. `readonly`
@@ -293,7 +293,7 @@ Each line gives the plain PHP form, the PHP# form, what finds it, and the slice 
 
 ### Section 30. Tuples
 
-- `[$a, $b] = $this->pair()` of a tuple type → `const [a, b] = this.pair();`. Both. Slice 5.
+- `[$a, $b] = $this->pair()` of a tuple type → refuses. Only a PHP# hint makes a tuple type (`scanner/ttype.rs`), so a plain PHP file meets one only from a hand-written `.sharp` method, which the fixture cases can't hold.
 
 ### Refused by the language
 
