@@ -339,6 +339,7 @@ sharp/mago/
 │   │   ├── matching.rs                   `match`
 │   │   ├── access.rs                     member and constant access
 │   │   ├── calls.rs                      calls, their arguments, type tests and `new`
+│   │   ├── builtins.rs                   a built-in's call as the library member that runs it
 │   │   ├── operators.rs                  operators and casts
 │   │   ├── strings.rs                    literals and concatenation
 │   │   └── collections.rs                array literals
@@ -347,6 +348,7 @@ sharp/mago/
 ├── crates/sharp-bridge/src/lower/inline.rs   InlineForm::php_call() -> Option<&PhpCall>, InlineForm::in_order()
 │                                         pub struct PhpCall { function, arguments }
 │                                         pub enum PhpCallArgument { Slot(usize), Literal(bytes), Constant(bytes) }
+│                                         PhpCallArgument::literal(literal), which both sides compare by
 │                                         InlineForms::iter() -> (class, member, form)
 ├── crates/orchestrator/src/service/incremental_analysis/compile.rs
 │                                         IncrementalAnalysisService::standard_library_forms() -> InlineForms,
