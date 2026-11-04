@@ -216,7 +216,7 @@ Each line gives the plain PHP form, the PHP# form, what finds it, and the slice 
 - A by-value capture `use ($total)`, and each variable an arrow function reads → the same plain capture, only when nothing writes `total` after its declaration, in the lambda or around it. Both. Slice 5.
 - A call of a function value `$f($x)` → `f(x)`, and a call of a string or an array that names a function refuses (line 2165). Both. Slice 5.
 - A closure type `\Closure(int): int` → `Function<int(int)>`, and one with a parameter by reference, a variadic or an optional one refuses. Type. Slice 5.
-- `[$this, 'name']`, `'Class::name'` and `name(...)` → `this.name`. Both. Slice 5.
+- `[$this, 'name']`, `'Class::name'` and `name(...)` → `this.name`. Both. Slice 5. An array or a string converts where a function type is declared, and refuses when the analysis finds no such method. A partial application with placeholders, and a built-in function's value, refuse.
 - A method and a property of one name → refuses (line 2346). 51 files.
 - `??` stays. `?:` → refuses (line 3764).
 
