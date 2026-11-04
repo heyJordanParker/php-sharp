@@ -137,6 +137,7 @@ Each line gives the plain PHP form, the PHP# form, what finds it, and the slice 
 - A local's first assignment → `const name = …`, `let name = …`, or `T name = …` when the value's type is not the one PHP# infers, as an empty literal. Both. Slice 1.
 - `$$name`, `global`, `compact()` and `extract()` → removed (line 199). Tree. Refuses. 10 files hold `global`, 3 `compact` or `extract`.
 - Superglobals → removed (section 29). Tree. Refuses. 18 files.
+- A `static` local → refuses, as the converter's own refusal: its PHP# form is a private static field with an initial value (lines 441 to 443), which the converter doesn't write yet. Tree. 2 files.
 
 ### Section 3. Scope
 
@@ -300,7 +301,6 @@ Each of these refuses its file, and the message names the line:
 - `include`, `require` and `eval` (lines 827 and 5306): 7 files
 - a keyed `yield` (decision 042): 2 files
 - `goto`: 1 file
-- a `static` local: 2 files
 
 `__invoke` (2 files) and `__destruct` (1 file) refuse too. The spec doesn't settle them, so Cass brings them to Jordan batched with the next language questions.
 
