@@ -334,6 +334,9 @@ sharp/mago/
 │   │   └── constructor.rs                parameters, promoted ones included, and what a constructor sets
 │   ├── src/body/                         crate-private: mod.rs walks statements and expressions
 │   │   ├── locals.rs                     variables, locals and assignment
+│   │   ├── conditions.rs                 conditions from PHP's truthiness, `isset` and `empty`
+│   │   ├── loops.rs                      loops, `break`, `continue` and `unset`
+│   │   ├── matching.rs                   `match`
 │   │   ├── access.rs                     member and constant access
 │   │   ├── calls.rs                      calls, their arguments, type tests and `new`
 │   │   ├── operators.rs                  operators and casts
