@@ -192,7 +192,7 @@ Each line gives the plain PHP form, the PHP# form, what finds it, and the slice 
 
 - `@template T of Spec` → `class Shelf<T : Spec>`, and `@template-covariant` → `out T`. Type. Slice 1.
 - `new Box($x)` of a generic class → `new Box<Spec>(x)`, with the declared type's arguments or the class's bounds, [never the analysis's](#how-a-new-gets-its-type-arguments). Type. Slice 1.
-- `@extends Base<T>` → `: Base<T>`. Type. Slice 4.
+- `@extends Base<T>` → `: Base<T>`, and the same for `@implements` and a trait's `@use`. The tags leave the docblock. Type. Slice 4.
 
 ### Section 12. Collections
 
