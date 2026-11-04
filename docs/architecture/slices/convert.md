@@ -1,6 +1,6 @@
 # Slice: `mago convert`, plain PHP into PHP#
 
-A design for a command that raises a project's plain PHP class files into PHP#, file by file, and proves each one before it writes it. This note is the design only. Cass approves it before any slice starts. The spike behind it is `spike/converter` at `ed784cfd2c801c1e70bba42c82f213b9c2428a98`. Line numbers refer to `docs/spec.md`.
+A design for a command that raises a project's plain PHP class files into PHP#, file by file, and proves each one before it writes it. This note is the design only. Cass approves it before any work starts. The spike behind it is `spike/converter` at `ed784cfd2c801c1e70bba42c82f213b9c2428a98`. Line numbers refer to `docs/spec.md`.
 
 ## The answer first
 
@@ -127,169 +127,166 @@ The next `mago compile` writes `src/Shop/Shelf.php` again, as decision 081's dis
 
 ## Every construct, by spec section
 
-Each line gives the plain PHP form, the PHP# form, what finds it, and the slice that converts it, or "refuses". "Tree" is the syntax tree, "type" is the analyzer's type of an expression or declaration, and "both" needs both. Every refusal's message names its spec line.
+Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, and what finds it. "Tree" is the syntax tree, "type" is the analyzer's type of an expression or declaration, and "both" needs both. Every refusal's message names its spec line.
 
 ### Section 1. Attributes
 
-- `#[Name(args)]` → `[Name(args)]`, each kept with its arguments. Tree. Slice 1.
+- `#[Name(args)]` → `[Name(args)]`, each kept with its arguments. Tree.
 
 ### Section 2. Variables
 
-- `$name` → `name`, and `$let` → `@let` for a PHP# keyword. Tree. Slice 1.
-- A local's first assignment → `const name = …`, `let name = …`, or `T name = …` when the value's type is not the one PHP# infers, as an empty literal. Both. Slice 1.
+- `$name` → `name`, and `$let` → `@let` for a PHP# keyword. Tree.
+- A local's first assignment → `const name = …`, `let name = …`, or `T name = …` when the value's type is not the one PHP# infers, as an empty literal. Both.
 - `$$name`, `global`, `compact()` and `extract()` → removed (line 199). Tree. Refuses. 10 files hold `global`, 3 `compact` or `extract`.
 - Superglobals → removed (section 29). Tree. Refuses. 18 files.
 - A `static` local → refuses, as the converter's own refusal: its PHP# form is a private static field with an initial value (lines 441 to 443), which the converter doesn't write yet. Tree. 2 files.
 
 ### Section 3. Scope
 
-- A local first assigned in a block and read after it → declared before the block, as `T? name = null;`. Both. Slice 2. Slice 1 refuses it.
-
+- A local first assigned in a block and read after it → declared before the block, as `T? name = null;`. Both.
 ### Section 4. Member access
 
-- `->` and `::` → `.`, and `?->` → `?.`. Tree. Slice 1.
+- `->` and `::` → `.`, and `?->` → `?.`. Tree.
 - A static and an instance member of one name → refuses (line 323).
 
 ### Section 5. Access modifiers
 
-- A class → `public class`, since PHP reaches every class. Tree. Slice 1.
-- A member with no visibility, or `var` → `public`. Tree. Slice 1.
+- A class → `public class`, since PHP reaches every class. Tree.
+- A member with no visibility, or `var` → `public`. Tree.
 
 ### Section 6. Fields and properties
 
-- A `private` or `protected` property → a field, `private int count = 0;`. Both. Slice 1.
-- A `public` property → `public T name { get; set; }`, and `public virtual T name { get; set; }` where a subclass may replace it, since a PHP# property is closed otherwise (line 586). Both. Slice 1.
-- An untyped property, which PHP fills with `null` → `Any? name = null`. Both. Slice 1.
-- Two names in one declaration → one declaration per name, each on its own line (line 383). Tree. Slice 1.
-- Property hooks → accessors, where `$this->name` is `field`, `$value` is `value` and a short `set => expr` is `set => field = expr`. A property with storage gains the accessor it declares no hook for, and its initial value follows the accessors. A `set` hook whose parameter is other than `$value` of the property's type, a `set` hook with no `get` on a property with no storage, and `&get` refuse. Tree. Slice 4.
+- A `private` or `protected` property → a field, `private int count = 0;`. Both.
+- A `public` property → `public T name { get; set; }`, and `public virtual T name { get; set; }` where a subclass may replace it, since a PHP# property is closed otherwise (line 586). Both.
+- An untyped property, which PHP fills with `null` → `Any? name = null`. Both.
+- Two names in one declaration → one declaration per name, each on its own line (line 383). Tree.
+- Property hooks → accessors, where `$this->name` is `field`, `$value` is `value` and a short `set => expr` is `set => field = expr`. A property with storage gains the accessor it declares no hook for, and its initial value follows the accessors. A `set` hook whose parameter is other than `$value` of the property's type, a `set` hook with no `get` on a property with no storage, and `&get` refuse. Tree.
 
 ### Section 7. Methods
 
-- `public function name(int $a): string` → `public virtual string name(int a)`. Both. Slice 1.
-- A static method a subclass may replace → `static virtual` (lines 1390 and 1396). Tree. Slice 4.
-- Named arguments `f(name: $v)` → `f(name: v)`. Tree. Slice 1.
-- Argument spread `f(...$items)` → `f(...items)`, of a `List` into a `...` parameter. Any other spread into a call refuses (line 701). Both. Slice 5.
-- A spread in a literal `[...$a]` → `[...a]`, of a `List`, or of a `Map` keyed by `string`. A `Map` spread keeps an `int` key PHP renumbers, so it refuses (line 1618). Both. Slice 5.
+- `public function name(int $a): string` → `public virtual string name(int a)`. Both.
+- A static method a subclass may replace → `static virtual` (lines 1390 and 1396). Tree.
+- Named arguments `f(name: $v)` → `f(name: v)`. Tree.
+- Argument spread `f(...$items)` → `f(...items)`, of a `List` into a `...` parameter. Any other spread into a call refuses (line 701). Both.
+- A spread in a literal `[...$a]` → `[...a]`, of a `List`, or of a `Map` keyed by `string`. A `Map` spread keeps an `int` key PHP renumbers, so it refuses (line 1618). Both.
 
 ### Section 8. Functions
 
 - A file-level function or statement → refuses, since a `.sharp` file declares one type (line 5306). Tree.
-- `echo`, `print`, `exit` and `die` → `Console` and `Process`, which a class receives through its constructor (line 830). Tree. Refuses until a slice injects them. 29 files.
-- A bare function call → [how a bare function call converts](#how-a-bare-function-call-converts). Both. Slice 1 for type tests and library functions, slice 3 for built-in members.
+- `echo`, `print`, `exit` and `die` → refuses. PHP# writes output through `Console` and exits through `Process`, which a class receives through its constructor (line 830), and adding a constructor parameter changes every caller. Tree. 29 files.
+- A bare function call → [how a bare function call converts](#how-a-bare-function-call-converts). Both.
 - `include`, `require` and `eval` → refuses (lines 827 and 5306). 7 files.
 
 ### Section 9. Constructors
 
-- `__construct` → the class's name. Tree. Slice 1.
-- A promoted parameter → `private Spec spec` for a field, `public string reference { get; set; }` for a property. Both. Slice 1.
-- A subclass constructor → `: super(…)` on every one (line 926): the arguments of the `parent::__construct(…)` its body starts with, which leaves the body, or `: super()` when no ancestor declares a constructor. Tree. Slice 4. 162 files have a parent with none.
+- `__construct` → the class's name. Tree.
+- A promoted parameter → `private Spec spec` for a field, `public string reference { get; set; }` for a property. Both.
+- A subclass constructor → `: super(…)` on every one (line 926): the arguments of the `parent::__construct(…)` its body starts with, which leaves the body, or `: super()` when no ancestor declares a constructor. Tree. 162 files have a parent with none.
 - A parent constructor call after other statements, or none where an ancestor declares one → refuses, since `: super(…)` runs it first. Tree. 6 files.
 
 ### Section 10. Structs and `with`
 
-- `clone $x` with no property set → `x with { }` (line 1020). Tree. Slice 4. 13 files.
+- `clone $x` with no property set → `x with { }` (line 1020). Tree. 13 files.
 
 ### Section 11. Generics
 
-- `@template T of Spec` → `class Shelf<T : Spec>`, and `@template-covariant` → `out T`. Type. Slice 1.
-- `new Box($x)` of a generic class → `new Box<Spec>(x)`, with the declared type's arguments or the class's bounds, [never the analysis's](#how-a-new-gets-its-type-arguments). Type. Slice 1.
-- `@extends Base<T>` → `: Base<T>`, and the same for `@implements` and a trait's `@use`. The tags leave the docblock. Type. Slice 4.
+- `@template T of Spec` → `class Shelf<T : Spec>`, and `@template-covariant` → `out T`. Type.
+- `new Box($x)` of a generic class → `new Box<Spec>(x)`, with the declared type's arguments or the class's bounds, [never the analysis's](#how-a-new-gets-its-type-arguments). Type.
+- `@extends Base<T>` → `: Base<T>`, and the same for `@implements` and a trait's `@use`. The tags leave the docblock. Type.
 
 ### Section 12. Collections
 
-- `list<T>` → `List<T>`, `array<K, V>` → `Map<K, V>`. Type. Slice 1.
-- `[]` where a `Map` is declared → `[:]`, and where a `List|Map` union is declared → refuses rather than pick one. Type. Slice 1.
-- `$list[] = $value` → `list.add(value)`. Tree. Slice 1.
-- `empty($items)` → `items.isEmpty()`, and `unset($map[$key])` → `map.remove(key)`. Both. Slice 2.
-- `isset($map[$key])` → `map[key] != null`, since a `Map` read gives null for a missing key (line 1625) and `isset` is false for a null value. Both. Slice 2.
-- `['id' => $id] = $row;` of a `Map` variable → one read per key, `const id = row.get("id");`, each a `TValue?` (lines 1625 and 1664). Both. Slice 5. 16 files. Destructuring by position, a `Map` a call gives, and destructuring inside another expression refuse.
+- `list<T>` → `List<T>`, `array<K, V>` → `Map<K, V>`. Type.
+- `[]` where a `Map` is declared → `[:]`, and where a `List|Map` union is declared → refuses rather than pick one. Type.
+- `$list[] = $value` → `list.add(value)`. Tree.
+- `empty($items)` → `items.isEmpty()`, and `unset($map[$key])` → `map.remove(key)`. Both.
+- `isset($map[$key])` → `map[key] != null`, since a `Map` read gives null for a missing key (line 1625) and `isset` is false for a null value. Both.
+- `['id' => $id] = $row;` of a `Map` variable → one read per key, `const id = row.get("id");`, each a `TValue?` (lines 1625 and 1664). Both. 16 files. Destructuring by position, a `Map` a call gives, and destructuring inside another expression refuse.
 - `array` with no PHPDoc type, and an array shape → refuses with the type. Type.
 
 ### Section 13. `readonly`
 
-- A `readonly` property or promoted parameter → `{ get; }` (line 2095). Tree. Slice 1.
-- A `readonly` class → each property `{ get; }`. Tree. Slice 4.
+- A `readonly` property or promoted parameter → `{ get; }` (line 2095). Tree.
+- A `readonly` class → each property `{ get; }`. Tree.
 
 ### Section 14. Functions as values
 
-- `fn($x) => …` and `function ($x) use ($y) { … }` → `(T x) => …`. Both. Slice 5.
-- A by-reference capture `use (&$total)` → a plain capture, since a lambda captures the variable itself (line 2200). Tree. Slice 5. 26 files.
-- A by-value capture `use ($total)`, and each variable an arrow function reads → the same plain capture, only when nothing writes `total` after its declaration, in the lambda or around it. Both. Slice 5.
-- A call of a function value `$f($x)` → `f(x)`, and a call of a string or an array that names a function refuses (line 2165). Both. Slice 5.
-- A closure type `\Closure(int): int` → `Function<int(int)>`, and one with a parameter by reference, a variadic or an optional one refuses. Type. Slice 5.
-- `[$this, 'name']`, `'Class::name'` and `name(...)` → `this.name`. Both. Slice 5. An array or a string converts where a function type is declared, and refuses when the analysis finds no such method. A partial application with placeholders, and a built-in function's value, refuse.
+- `fn($x) => …` and `function ($x) use ($y) { … }` → `(T x) => …`. Both.
+- A by-reference capture `use (&$total)` → a plain capture, since a lambda captures the variable itself (line 2200). Tree. 26 files.
+- A by-value capture `use ($total)`, and each variable an arrow function reads → the same plain capture, only when nothing writes `total` after its declaration, in the lambda or around it. Both.
+- A call of a function value `$f($x)` → `f(x)`, and a call of a string or an array that names a function refuses (line 2165). Both.
+- A closure type `\Closure(int): int` → `Function<int(int)>`, and one with a parameter by reference, a variadic or an optional one refuses. Type.
+- `[$this, 'name']`, `'Class::name'` and `name(...)` → `this.name`. Both. An array or a string converts where a function type is declared, and refuses when the analysis finds no such method. A partial application with placeholders, and a built-in function's value, refuse.
 - A method and a property of one name → refuses (line 2346). 51 files.
 - `??` stays. `?:` → refuses (line 3764).
 
 ### Section 17. Loops
 
-- `foreach ($items as $item)` → `for (const item of items)`, and `foreach ($map as $key => $value)` → `for (const [key, value] of map)`. Both. Slice 2.
-- A body without braces → braces added (line 2903). Tree. Slice 2. Slice 1 refuses it.
-
+- `foreach ($items as $item)` → `for (const item of items)`, and `foreach ($map as $key => $value)` → `for (const [key, value] of map)`. Both.
+- A body without braces → braces added (line 2903). Tree.
 ### Section 18. Strings
 
-- `.` between two strings → `+`. Type. Slice 1.
-- `.` with an `int` or a `float` → a template, `` `x${count}` ``, which prints a number through PHP's own conversion. Type. Slice 1.
+- `.` between two strings → `+`. Type.
+- `.` with an `int` or a `float` → a template, `` `x${count}` ``, which prints a number through PHP's own conversion. Type.
 - `.` with a `bool`, which PHP prints as `1` or nothing, and a template as `true` or `false` (line 2940) → refuses. Type.
-- `"Hi $name"` → `` `Hi ${name}` ``, each value an `int`, a `float` or a `string`, which a template shows as PHP does. A `bool` refuses (line 2940). Both. Slice 6.
-- Heredoc and nowdoc → a template (line 2927), without the closing label's indentation and the line break before it. Text takes JavaScript's escapes for `\`, a backtick, `$` and control characters. A heredoc indented with both spaces and tabs, and text that is no UTF-8, refuse. Tree. Slice 6. 7 files.
-- `__toString()` → `string toString()` (line 2977). Tree. Slice 4.
+- `"Hi $name"` → `` `Hi ${name}` ``, each value an `int`, a `float` or a `string`, which a template shows as PHP does. A `bool` refuses (line 2940). Both.
+- Heredoc and nowdoc → a template (line 2927), without the closing label's indentation and the line break before it. Text takes JavaScript's escapes for `\`, a backtick, `$` and control characters. A heredoc indented with both spaces and tabs, and text that is no UTF-8, refuse. Tree. 7 files.
+- `__toString()` → `string toString()` (line 2977). Tree.
 
 ### Section 19. Equality, comparison and operators
 
-- `===` and `!==` → `==` and `!=` when both sides have one scalar type, both are enums, or one side is `null`. Type. Slice 1.
-- `===` where either side may hold an object → stays `===` (line 3029). Type. Slice 1.
+- `===` and `!==` → `==` and `!=` when both sides have one scalar type, both are enums, or one side is `null`. Type.
+- `===` where either side may hold an object → stays `===` (line 3029). Type.
 - `===` between an `int` and a `float` → refuses, since `1 === 1.0` is false and PHP# compares them by value (line 1705). Type.
 - `===` on a collection → refuses, since PHP compares keys and order and PHP# compares elements (lines 3023 and 3032). Type.
-- Loose `==` → `==` when both sides have one scalar type, and refuses otherwise. Type. Slice 2.
-- `instanceof` → `is`, and `!$x instanceof A` → `x is not A` (line 3652). Tree. Slice 1.
+- Loose `==` → `==` when both sides have one scalar type, and refuses otherwise. Type.
+- `instanceof` → `is`, and `!$x instanceof A` → `x is not A` (line 3652). Tree.
 
 ### Section 20. Enums
 
-- A PHP enum → a PHP# enum. Tree. Slice 4.
+- A PHP enum → a PHP# enum. Tree.
 
 ### Section 21. Pattern matching
 
-- A condition that is no `bool` → the comparison its type gives: `x != null` for `T?`, `!list.isEmpty()` for a collection, `x != "" && x != "0"` for a string (line 3752). Type. Slice 2. Slice 1 refuses it.
-- `match` → `match`, when each arm's comparison passes the `===` rule of section 19, since PHP's `match` compares with `===` (line 3426). Both. Slice 2.
-- `switch` → `match` with block arms, when no arm falls through (line 3426). Tree. Slice 6. 6 files. Cases with no statements of their own join the next with `or`, a `switch` without `default` gains `default => {},`, and each case passes the `===` rule above, since `==` and `===` agree there. A case that runs on into the next, a `break` or `continue` that leaves before its case ends, a `case` of a numeric string or `null`, and `switch … endswitch` refuse.
-- `and`, `or` and `xor` → `&&` and `||`, and `xor` refuses. Tree. Slice 2.
+- A condition that is no `bool` → the comparison its type gives: `x != null` for `T?`, `!list.isEmpty()` for a collection, `x != "" && x != "0"` for a string (line 3752). Type.- `match` → `match`, when each arm's comparison passes the `===` rule of section 19, since PHP's `match` compares with `===` (line 3426). Both.
+- `switch` → `match` with block arms, when no arm falls through (line 3426). Tree. 6 files. Cases with no statements of their own join the next with `or`, a `switch` without `default` gains `default => {},`, and each case passes the `===` rule above, since `==` and `===` agree there. A case that runs on into the next, a `break` or `continue` that leaves before its case ends, a `case` of a numeric string or `null`, and `switch … endswitch` refuse.
+- `and`, `or` and `xor` → `&&` and `||`, and `xor` refuses. Tree.
 
 ### Section 22. Inheritance
 
-- `extends A implements B` → `: A, B`. Tree. Slice 1.
-- An open method → `virtual`, one that replaces a parent class's → `override`, and a `final` or `private` one → nothing (line 3782). Both. Slice 1.
-- A plain PHP trait a class uses → listed in the header (line 4205). Tree. Slice 4. A `use` block with `insteadof` or `as` refuses.
+- `extends A implements B` → `: A, B`. Tree.
+- An open method → `virtual`, one that replaces a parent class's → `override`, and a `final` or `private` one → nothing (line 3782). Both.
+- A plain PHP trait a class uses → listed in the header (line 4205). Tree. A `use` block with `insteadof` or `as` refuses.
 - A trait declaration → refuses, since PHP# declares no traits. Tree. 16 files.
 
 ### Section 23. Namespaces and imports
 
-- `namespace A\B;` → `namespace A.B;`, and `use A\B;` → `import A.B;`. Tree. Slice 1.
-- A class in code → its name as [how a name prints](#how-a-name-prints) says. Both. Slice 1.
-- `use function` → no line, since each call imports the namespace. `use const Vendor\Pdf\SIZE` → `import Vendor.Pdf;` and `Pdf.SIZE` (line 4345). Tree. Slice 1.
-- `new $class(…)` of a class value → `new (type)(…)`, when the class's constructor is `required` (line 4968), which the checker checks. `new` of a string, and `new static(…)`, whose `new Self(…)` needs a `required` constructor the converter doesn't write, refuse. Both. Slice 5.
+- `namespace A\B;` → `namespace A.B;`, and `use A\B;` → `import A.B;`. Tree.
+- A class in code → its name as [how a name prints](#how-a-name-prints) says. Both.
+- `use function` → no line, since each call imports the namespace. `use const Vendor\Pdf\SIZE` → `import Vendor.Pdf;` and `Pdf.SIZE` (line 4345). Tree.
+- `new $class(…)` of a class value → `new (type)(…)`, when the class's constructor is `required` (line 4968), which the checker checks. `new` of a string, and `new static(…)`, whose `new Self(…)` needs a `required` constructor the converter doesn't write, refuse. Both.
 
 ### Section 24. Built-in types and `Any`
 
-- `mixed` → `Any?`, `?T` → `T?`, `object` → `Object`. Type. Slice 1.
-- `(int)`, `(float)` and `(string)` stay, and the aliases `(integer)`, `(double)`, `(real)` and `(binary)` become them. Tree. Slice 1.
+- `mixed` → `Any?`, `?T` → `T?`, `object` → `Object`. Type.
+- `(int)`, `(float)` and `(string)` stay, and the aliases `(integer)`, `(double)`, `(real)` and `(binary)` become them. Tree.
 - `(bool)`, `(array)` and `(object)` → refuses (line 4717). Tree.
-- `try`, `catch` and `finally` stay, and `catch (Exception $e)` → `catch (Exception e)` (line 6151). Tree. Slice 1.
+- `try`, `catch` and `finally` stay, and `catch (Exception $e)` → `catch (Exception e)` (line 6151). Tree.
 
 ### Section 25. Referring to classes
 
-- `X::class` → `typeof(X)`, `static` → `Self`, `self` → the class's name (line 4870). Tree. Slice 1.
+- `X::class` → `typeof(X)`, `static` → `Self`, `self` → the class's name (line 4870). Tree.
 - A property or a method named by a variable, `$x->$name` and `$x->$name()` → refuses (line 4973, decision 030). Tree. 23 and 10 files.
 
 ### Section 27. PHP# files
 
-- `<?php` and `declare(strict_types=1);` → removed, since PHP# is always strict (line 5295). Tree. Slice 1.
-- A file without `strict_types` → the same removal, which makes its calls strict. The proof's analysis and the project's tests catch a call that relied on coercion. Tree. Slice 1.
-- `__DIR__`, `__FILE__` and `__LINE__` → `Position.current().directory`, `.file` and `.line` (line 5319). Tree. Slice 6. 66 files. `__CLASS__`, `__METHOD__`, `__FUNCTION__`, `__NAMESPACE__` and the rest refuse, since `Position` names a function by its dotted name and no class or namespace.
+- `<?php` and `declare(strict_types=1);` → removed, since PHP# is always strict (line 5295). Tree.
+- A file without `strict_types` → the same removal, which makes its calls strict. The proof's analysis and the project's tests catch a call that relied on coercion. Tree.
+- `__DIR__`, `__FILE__` and `__LINE__` → `Position.current().directory`, `.file` and `.line` (line 5319). Tree. 66 files. `__CLASS__`, `__METHOD__`, `__FUNCTION__`, `__NAMESPACE__` and the rest refuse, since `Position` names a function by its dotted name and no class or namespace.
 
 ### Section 29. Effects
 
-- `getenv()`, `echo` and `exit` → `Environment`, `Console` and `Process`, which a class receives through its constructor. Refuses until a slice injects them.
+- `getenv()`, `echo` and `exit` → refuses. PHP# reaches them through `Environment`, `Console` and `Process`, which a class receives through its constructor, and adding a constructor parameter changes every caller.
 
 ### Section 30. Tuples
 
@@ -368,15 +365,15 @@ sharp/mago/
 
 Each module of `declaration/` and `body/` holds one `impl Converter` for one construct family, the state of one file's conversion, so a family grows in its own file. The command alone talks to the server, the file system and git, so the crate reads nothing but its `Input`.
 
-## Slices
+## Order of work
 
-Each slice ends in a fixture pair per construct and a run of the whole-project proof. Slice 1 is the smallest set that converts a real class file.
+The converter lands in one pull request, family by family, in this order. Each family ends in a fixture pair per construct and a run of the whole-project proof. The first is the smallest set that converts a real class file.
 
-1. **Declarations.** Files, namespaces, imports and names, classes with their header, properties and fields, methods, constructors of classes with no parent class, attributes, `$` and member access, `+` and templates, `===`, `is` and `is not`, `X::class`, `new` with its type arguments, casts, `try`, named arguments, locals, type tests, and library functions. Proves a real class file converts, compiles, links to its plain PHP subclasses, and keeps git's history. The whole-project proof lands here, so every later slice runs it.
+1. **Declarations.** Files, namespaces, imports and names, classes with their header, properties and fields, methods, constructors of classes with no parent class, attributes, `$` and member access, `+` and templates, `===`, `is` and `is not`, `X::class`, `new` with its type arguments, casts, `try`, named arguments, locals, type tests, and library functions. Proves a real class file converts, compiles, links to its plain PHP subclasses, and keeps git's history. The whole-project proof lands here, so every later family runs it.
 2. **Conditions and loops.** Conditions from their type, loose `==`, `match`, `empty()`, `isset()` and `unset()`, `foreach`, bodies without braces, and locals across blocks. Proves PHP's truthiness and loops convert with their meaning kept.
 3. **Built-in calls.** Every member `inline_forms` gives with PHP's meaning, and each refusal that names the difference. Proves the forms grow with the standard library and nothing else.
 4. **Types and inheritance.** Subclass constructors with `: super(…)`, interfaces, abstract classes, enums, class constants, statics and `static virtual`, `@extends`, header traits, property hooks, `readonly` classes, `clone` as `with { }` and `__toString()`. Proves a whole class hierarchy converts in either order.
-5. **Functions as values.** Lambdas, captures, method values, argument spread, `new` of a class value, tuples and keyed destructuring. Proves capture keeps its meaning.
+5. **Functions as values.** Lambdas, captures, method values, calls of a function value, spreads, `new` of a class value and keyed destructuring. Tuple destructuring refuses, since no plain PHP type is a tuple. Proves capture keeps its meaning.
 6. **Text and branches.** Interpolation, heredoc, magic constants and `switch`. Proves the last syntax-only constructs.
 
 ## Tests
@@ -404,7 +401,7 @@ Decisions 1, 3, 5, 8, 10, 11 and 12 are approved as they stand. Decisions 2, 4, 
 
 ## Found, not fixed
 
-1. **A function the census finds neither among PHP's built-ins nor in Composer's `files` autoload:** 88 functions in 28 files. They are namespaced functions or functions loaded another way, and the slice measures them with the converter itself.
+1. **A function the census finds neither among PHP's built-ins nor in Composer's `files` autoload:** 88 functions in 28 files. They are namespaced functions or functions loaded another way, and the converter itself measures them.
 
 ## Evidence
 
