@@ -213,7 +213,9 @@ Each line gives the plain PHP form, the PHP# form, what finds it, and the slice 
 
 - `fn($x) => …` and `function ($x) use ($y) { … }` → `(T x) => …`. Both. Slice 5.
 - A by-reference capture `use (&$total)` → a plain capture, since a lambda captures the variable itself (line 2200). Tree. Slice 5. 26 files.
-- A by-value capture `use ($total)` → the same plain capture, only when nothing writes `total` after the lambda is made. Both. Slice 5.
+- A by-value capture `use ($total)`, and each variable an arrow function reads → the same plain capture, only when nothing writes `total` after its declaration, in the lambda or around it. Both. Slice 5.
+- A call of a function value `$f($x)` → `f(x)`, and a call of a string or an array that names a function refuses (line 2165). Both. Slice 5.
+- A closure type `\Closure(int): int` → `Function<int(int)>`, and one with a parameter by reference, a variadic or an optional one refuses. Type. Slice 5.
 - `[$this, 'name']`, `'Class::name'` and `name(...)` → `this.name`. Both. Slice 5.
 - A method and a property of one name → refuses (line 2346). 51 files.
 - `??` stays. `?:` → refuses (line 3764).
@@ -338,7 +340,8 @@ sharp/mago/
 │   │   ├── loops.rs                      loops, `break`, `continue` and `unset`
 │   │   ├── matching.rs                   `match`
 │   │   ├── access.rs                     member and constant access
-│   │   ├── calls.rs                      calls, their arguments, type tests and `new`
+│   │   ├── calls.rs                      calls, their arguments, calls of a function value, type tests and `new`
+│   │   ├── lambdas.rs                    lambdas and what they capture
 │   │   ├── builtins.rs                   a built-in's call as the library member that runs it
 │   │   ├── operators.rs                  operators and casts
 │   │   ├── strings.rs                    literals and concatenation
