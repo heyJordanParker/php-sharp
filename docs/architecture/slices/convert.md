@@ -252,7 +252,7 @@ Each line gives the plain PHP form, the PHP# form, what finds it, and the slice 
 
 - A condition that is no `bool` → the comparison its type gives: `x != null` for `T?`, `!list.isEmpty()` for a collection, `x != "" && x != "0"` for a string (line 3752). Type. Slice 2. Slice 1 refuses it.
 - `match` → `match`, when each arm's comparison passes the `===` rule of section 19, since PHP's `match` compares with `===` (line 3426). Both. Slice 2.
-- `switch` → `match` with block arms, when no arm falls through (line 3426). Tree. Slice 6. 6 files.
+- `switch` → `match` with block arms, when no arm falls through (line 3426). Tree. Slice 6. 6 files. Cases with no statements of their own join the next with `or`, a `switch` without `default` gains `default => {},`, and each case passes the `===` rule above, since `==` and `===` agree there. A case that runs on into the next, a `break` or `continue` that leaves before its case ends, a `case` of a numeric string or `null`, and `switch … endswitch` refuse.
 - `and`, `or` and `xor` → `&&` and `||`, and `xor` refuses. Tree. Slice 2.
 
 ### Section 22. Inheritance
@@ -339,7 +339,7 @@ sharp/mago/
 │   │   ├── locals.rs                     variables, locals and assignment
 │   │   ├── conditions.rs                 conditions from PHP's truthiness, `isset` and `empty`
 │   │   ├── loops.rs                      loops, `break`, `continue` and `unset`
-│   │   ├── matching.rs                   `match`
+│   │   ├── matching.rs                   `match`, and `switch` as a `match` statement
 │   │   ├── access.rs                     member and constant access
 │   │   ├── calls.rs                      calls, their arguments, calls of a function value, type tests and `new`
 │   │   ├── lambdas.rs                    lambdas and what they capture
