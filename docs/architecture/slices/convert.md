@@ -96,15 +96,17 @@ A call's function is the one its resolved name names, `names.get(identifier)`, o
 
 ### How a file is proven before it is written
 
-The command puts the converted text in the server's database in place of the plain file, under the `.sharp` name, marked by `mark_sharp_file` as the loader marks a `.sharp` file it reads, and runs `analyze_incremental`. It compares every issue before and after, warnings and errors alike, keyed by file, level, code, message and line, with duplicates counted. It then lowers every file through `Server::compile`, in memory. The file stays plain PHP when:
+The command analyzes the plain project once, with fresh extension hosts. It then puts every converted text in a fresh database in place of its plain file, under the `.sharp` name, marked by `mark_sharp_file` as the loader marks a `.sharp` file it reads, and analyzes that project with fresh hosts. It compares every issue with the plain project's, warnings and errors alike, keyed by file, level, code, message and line, with duplicates counted. It then lowers every file through `Server::compile`, in memory. A file stays plain PHP when:
 
 - the converted file has any error or warning, since nothing hides a language error in a `.sharp` file (lines 5360 and 5384)
 - any other file gains an error, or a warning decision 9 doesn't expect
 - the compile refuses a file it accepted before, a plain PHP subclass included
 
-The database then gets the plain file back. The project's `ignore` entries and baseline apply to the codes of an extension host's rules only, never to a language error, as line 5360 says. The spike applies none at all.
+A file with issues of its own stays plain PHP, and the rest are proven again. An issue in another file names no converted file, so the files are proven in halves, each on top of the ones already proven, until one file is left to keep plain PHP. A folder whose files all convert costs two analyses. The project's `ignore` entries and baseline apply to the codes of an extension host's rules only, never to a language error, as line 5360 says.
 
-Files convert in path order, each proven against the earlier ones already converted. An extension host loads the project's own classes (line 5385), so after each written file the command compiles the project for the hosts again, and when that changes what they load, it starts a new analysis with fresh hosts for the files left, as `mago analyze --watch` restarts its hosts.
+Every proof is a fresh analysis because a per-file proof cost too much and was wrong. With extension hosts, an incremental analysis of one changed file costs a whole analysis, 20 s a file on a 1,200-file application. It also reports issues a fresh analysis doesn't: a host rule's state left from the first pass, and `@mago-expect` pragmas it didn't revisit.
+
+An extension host loads the project's own classes (line 5385), and during the proof the hosts load the plain ones. So after a run writes its files, the command compiles the project for the hosts again. When that changes what they load, fresh hosts that load the converted classes prove the project once more, and each issue they add is an error, with the plain PHP in git.
 
 `--dry-run` prints each diff and changes nothing.
 
@@ -329,7 +331,7 @@ sharp/mago/
 │   ├── src/declaration.rs                classes, properties, methods, constructors and parameters; crate-private
 │   ├── src/body.rs                       statements and expressions; crate-private
 │   └── tests/                            cases/<construct>/{input.php, output.sharp}, and project/, the
-│                                         whole-project fixture, with spike.sh
+│                                         whole-project fixture, with project.sh
 ├── crates/sharp-bridge/src/lower/inline.rs   InlineForm::php_call() -> Option<&PhpCall>, InlineForm::in_order()
 │                                         pub struct PhpCall { function, arguments }
 │                                         pub enum PhpCallArgument { Slot(usize), Literal(bytes), Constant(bytes) }
@@ -362,7 +364,7 @@ Each slice ends in a fixture pair per construct and a run of the whole-project p
 ## Tests
 
 - **A fixture pair per construct:** `crates/converter/tests/cases/<construct>/input.php` and `output.sharp`, with a `refusal.txt` instead for a refusing construct. One test runs each through the converter against a small project of the case's own files, and compares the text exactly. The first pair is `new-generic`, the spike's `Crate`: a `new` whose arguments come from a property's declared type, and one whose come from a method's declared return. A float in a template keeps a pair too.
-- **The whole-project proof:** `crates/converter/tests/project/`, a Composer project with the PHP# Composer plugin, one PSR-4 folder, a plain PHP library with a root function, and the neutral refinement worker as its extension host. `crates/converter/tests/spike.sh` runs it today. The slice turns it into a test that checks, after `mago convert`: `mago compile` accepts every file, plain PHP subclasses included; `mago analyze` has no new error and only the warnings decision 9 lists; `run.php` prints the same output on the engine; and every test of the project's suite gives the same result, test by test, from the suite's XML report before and after.
+- **The whole-project proof:** `crates/converter/tests/project/`, a Composer project with the PHP# Composer plugin, one PSR-4 folder, a plain PHP library with a root function, and the neutral refinement worker as its extension host. `crates/converter/tests/project.sh` checks, after `mago convert`: `mago compile` accepts every file, plain PHP subclasses included; `mago analyze` has no new error and only the warnings decision 9 lists; and `run.php` prints the same output on the engine. `sharp/bin/test` runs it after the PHP# suite, so every pull request runs it. The fixture has no test suite: a project's own tests are its user's gate, as decision 9 says.
 
 ## Decisions Cass approves
 

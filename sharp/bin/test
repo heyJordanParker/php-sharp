@@ -272,6 +272,16 @@ if $phpunit; then
   check_phpunit
 fi
 
+# The whole-project proof of mago convert runs after the PHP# suite, on this build's engine, with the fixture's refinement
+# worker on the php the PATH holds.
+if ! $upstream && ! $zts && ! $installed && [[ "${tests[*]}" == Zend/tests/sharp ]]; then
+  echo "== mago convert on sharp/mago/crates/converter/tests/project"
+  mkdir "$TMPDIR/convert" "$TMPDIR/convert/project"
+  if ! "$root/sharp/mago/crates/converter/tests/project.sh" "$TMPDIR/convert/project"; then
+    failed+=("the whole-project proof of mago convert")
+  fi
+fi
+
 if [[ ${#failed[@]} -gt 0 ]]; then
   printf 'Failed: %s\n' "${failed[@]}" >&2
   exit 1
