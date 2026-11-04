@@ -231,8 +231,8 @@ Each line gives the plain PHP form, the PHP# form, what finds it, and the slice 
 - `.` between two strings → `+`. Type. Slice 1.
 - `.` with an `int` or a `float` → a template, `` `x${count}` ``, which prints a number through PHP's own conversion. Type. Slice 1.
 - `.` with a `bool`, which PHP prints as `1` or nothing, and a template as `true` or `false` (line 2940) → refuses. Type.
-- `"Hi $name"` → `` `Hi ${name}` ``. Tree. Slice 6.
-- Heredoc and nowdoc → a template (line 2927). Tree. Slice 6. 7 files.
+- `"Hi $name"` → `` `Hi ${name}` ``, each value an `int`, a `float` or a `string`, which a template shows as PHP does. A `bool` refuses (line 2940). Both. Slice 6.
+- Heredoc and nowdoc → a template (line 2927), without the closing label's indentation and the line break before it. Text takes JavaScript's escapes for `\`, a backtick, `$` and control characters. A heredoc indented with both spaces and tabs, and text that is no UTF-8, refuse. Tree. Slice 6. 7 files.
 - `__toString()` → `string toString()` (line 2977). Tree. Slice 4.
 
 ### Section 19. Equality, comparison and operators
@@ -285,7 +285,7 @@ Each line gives the plain PHP form, the PHP# form, what finds it, and the slice 
 
 - `<?php` and `declare(strict_types=1);` → removed, since PHP# is always strict (line 5295). Tree. Slice 1.
 - A file without `strict_types` → the same removal, which makes its calls strict. The proof's analysis and the project's tests catch a call that relied on coercion. Tree. Slice 1.
-- Magic constants such as `__DIR__` → `Position` (line 5319). Tree. Slice 6. 66 files.
+- `__DIR__`, `__FILE__` and `__LINE__` → `Position.current().directory`, `.file` and `.line` (line 5319). Tree. Slice 6. 66 files. `__CLASS__`, `__METHOD__`, `__FUNCTION__`, `__NAMESPACE__` and the rest refuse, since `Position` names a function by its dotted name and no class or namespace.
 
 ### Section 29. Effects
 
