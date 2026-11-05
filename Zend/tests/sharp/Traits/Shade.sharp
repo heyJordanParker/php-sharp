@@ -1,8 +1,0 @@
-namespace Demo;
-
-import Lib.Copies;
-
-public enum Shade : Copies
-{
-    case Light;
-}

@@ -1,6 +1,0 @@
-namespace App;
-
-public class VerifiedUser
-{
-    public int id { get; set; } = 1;
-}

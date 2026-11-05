@@ -1,7 +1,0 @@
-namespace ParameterDefaults;
-
-public enum Shade
-{
-    case Plain;
-    case Blend(int parts);
-}

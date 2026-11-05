@@ -1,6 +1,0 @@
-namespace Demo;
-
-public class PopupInteraction : Interaction
-{
-    public string name() => "popup";
-}

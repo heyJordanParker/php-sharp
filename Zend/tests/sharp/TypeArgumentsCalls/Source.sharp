@@ -1,7 +1,0 @@
-namespace Calls;
-
-import App.DatabaseEntity;
-
-public class Source<TItem : DatabaseEntity>
-{
-}

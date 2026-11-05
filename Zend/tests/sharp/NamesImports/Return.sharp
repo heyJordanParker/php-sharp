@@ -1,6 +1,0 @@
-namespace Imports;
-
-public class Return
-{
-    public static string label() => "return";
-}

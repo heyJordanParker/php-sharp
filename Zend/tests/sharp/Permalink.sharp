@@ -1,6 +1,0 @@
-namespace Demo;
-
-class Permalink
-{
-    public static string of(string title) => title.slug();
-}

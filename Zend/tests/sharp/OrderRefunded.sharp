@@ -1,3 +1,0 @@
-namespace Shop;
-
-public event OrderRefunded(int orderId) : OrderEvent;

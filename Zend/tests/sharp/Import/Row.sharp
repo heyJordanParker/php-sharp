@@ -1,8 +1,0 @@
-namespace Demo;
-
-public class Row
-{
-    public Row(public string number { get; })
-    {
-    }
-}

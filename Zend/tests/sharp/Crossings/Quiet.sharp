@@ -1,8 +1,0 @@
-namespace Demo;
-
-import Shouter;
-
-public class Quiet : Shouter
-{
-    public override string word { get => field; set; } = "b";
-}

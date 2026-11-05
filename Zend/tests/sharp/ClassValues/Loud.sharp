@@ -1,9 +1,0 @@
-namespace Classes;
-
-import Attribute;
-
-[Attribute]
-public class Loud : Listen
-{
-    public Loud(string topic) : super(topic) { }
-}

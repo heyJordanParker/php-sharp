@@ -1,6 +1,0 @@
-namespace App.Shared.Schema.Entities;
-
-public abstract class DatabaseEntity
-{
-    public int id { get; set; } = 1;
-}

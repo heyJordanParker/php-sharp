@@ -1,5 +1,0 @@
-namespace Checks;
-
-public class Page<T>
-{
-}

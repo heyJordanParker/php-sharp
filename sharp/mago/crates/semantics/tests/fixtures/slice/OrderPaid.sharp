@@ -1,3 +1,0 @@
-namespace App.Tenant;
-
-public event OrderPaid(int orderId, int amount = 0) : OrderEvent;

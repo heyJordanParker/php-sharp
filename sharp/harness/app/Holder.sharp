@@ -1,8 +1,0 @@
-namespace App;
-
-public class Holder
-{
-    public Holder(private Function<string() uses Environment> body) { }
-
-    public string run() => this.body();
-}

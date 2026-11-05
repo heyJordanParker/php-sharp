@@ -1,6 +1,0 @@
-namespace App.Tenant;
-
-public interface OrderEvent
-{
-    int orderId { get; }
-}

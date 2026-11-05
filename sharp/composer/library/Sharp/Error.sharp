@@ -1,3 +1,0 @@
-namespace Sharp;
-
-public interface Error { string message { get; } }

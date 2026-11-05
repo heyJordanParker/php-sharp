@@ -1,5 +1,0 @@
-namespace Paging;
-
-public class OrderPage : PaginatedList<Order>
-{
-}

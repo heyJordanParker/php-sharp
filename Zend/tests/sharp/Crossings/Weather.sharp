@@ -1,7 +1,0 @@
-namespace Demo;
-
-public enum Weather
-{
-    case Sunny;
-    case Rainy;
-}

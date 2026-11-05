@@ -1,7 +1,0 @@
-namespace Tests.Fakes;
-
-import App.Mail.Mailer;
-
-public class FakeMailer : Mailer
-{
-}

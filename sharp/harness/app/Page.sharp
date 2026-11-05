@@ -1,6 +1,0 @@
-namespace App;
-
-public class Page : DatabaseEntity, HasDesign
-{
-    public string designKey() => "design:design";
-}

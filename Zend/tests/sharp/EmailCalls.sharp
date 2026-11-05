@@ -1,8 +1,0 @@
-namespace Demo;
-
-import Sharp.Net.MailAddress;
-
-class EmailCalls
-{
-    public static bool isValid(string address) => MailAddress.isValid(address);
-}

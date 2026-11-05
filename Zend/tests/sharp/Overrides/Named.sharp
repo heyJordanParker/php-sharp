@@ -1,6 +1,0 @@
-namespace Overrides;
-
-public interface Named
-{
-    string name { get; }
-}

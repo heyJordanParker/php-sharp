@@ -1,5 +1,0 @@
-namespace Orchard;
-
-public class Pear : Fruit
-{
-}

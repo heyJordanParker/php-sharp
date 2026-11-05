@@ -1,3 +1,0 @@
-namespace Shop;
-
-public event OrderPaid(int orderId, int amount) : OrderEvent;

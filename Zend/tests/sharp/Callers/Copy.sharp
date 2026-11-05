@@ -1,6 +1,0 @@
-namespace Callers;
-
-public class Copy : Note
-{
-    public Copy() : super() { }
-}

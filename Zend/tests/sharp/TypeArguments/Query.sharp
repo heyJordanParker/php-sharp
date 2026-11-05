@@ -1,5 +1,0 @@
-namespace App;
-
-public interface Query<TItem : DatabaseEntity>
-{
-}

@@ -1,5 +1,0 @@
-namespace CallerChecked;
-
-public interface IntSource : Source<int>
-{
-}
