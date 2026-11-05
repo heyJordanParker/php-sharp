@@ -201,7 +201,8 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - `[]` where a `Map` is declared → `[:]`, and where a `List|Map` union is declared → refuses rather than pick one. Type.
 - `$list[] = $value` → `list.add(value)`. Tree.
 - `empty($items)` → `items.isEmpty()`, and `unset($map[$key])` → `map.remove(key)`. Both.
-- `isset($map[$key])` → `map[key] != null`, since a `Map` read gives null for a missing key (line 1625) and `isset` is false for a null value. Both.
+- `isset($map[$key])` → `map.get(key) != null`, since a `Map` read gives null for a missing key (line 1625) and `isset` is false for a null value. Both.
+- `isset` and `empty` of a property → the property's null check or truthiness test, only when the property always holds a value, as one with a default or a promoted one does, and no class its object may be declares `__isset` or `__get`. PHP gives a typed property that holds no value as unset, and asks those methods, where PHP# reads the property. `isset` and `empty` at a `List` index refuse, since PHP reads past the end without an error. Both.
 - `['id' => $id] = $row;` of a `Map` variable → one read per key, `const id = row.get("id");`, each a `TValue?` (lines 1625 and 1664). Both. 16 files. Destructuring by position, a `Map` a call gives, and destructuring inside another expression refuse.
 - `array` with no PHPDoc type, and an array shape → refuses with the type. Type.
 
