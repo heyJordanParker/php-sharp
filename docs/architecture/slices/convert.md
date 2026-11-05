@@ -96,7 +96,7 @@ A call's function is the one its resolved name names, `names.get(identifier)`, o
 
 ### How a file is proven before it is written
 
-The command analyzes the plain project once, with fresh extension hosts. It then puts every converted text in a fresh database in place of its plain file, under the `.sharp` name, marked by `mark_sharp_file` as the loader marks a `.sharp` file it reads, and analyzes that project with fresh hosts. It compares every issue with the plain project's, warnings and errors alike, keyed by file, level, code, message and line, with duplicates counted. It then lowers every file through `Server::compile`, in memory. A file stays plain PHP when:
+The command analyzes the plain project once, with fresh extension hosts. It then puts every converted text in a fresh database, built by `mago compile`'s own `project_database`, so the standard library's and each package's PHP# files are the project's and the compile inlines the library's forms, in place of its plain file, under the `.sharp` name, marked by `mark_sharp_file` as the loader marks a `.sharp` file it reads, and analyzes that project with fresh hosts. It compares every issue with the plain project's, warnings and errors alike, keyed by file, level, code, message and line, with duplicates counted. It then lowers every file through `Server::compile`, in memory. A file stays plain PHP when:
 
 - the converted file has any error or warning, since nothing hides a language error in a `.sharp` file (lines 5360 and 5384)
 - any other file gains an error, or a warning decision 9 doesn't expect
