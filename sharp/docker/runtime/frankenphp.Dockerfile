@@ -69,6 +69,8 @@ RUN set -eux; \
 		curl \
 		xz-utils \
 	; \
+	# PHP#: remove once the Debian base image ships apt 3.0.4, the CVE-2026-109518 fix.
+	apt-get install -y --no-install-recommends --only-upgrade apt libapt-pkg7.0; \
 	apt-get dist-clean
 
 ENV PHP_INI_DIR /usr/local/etc/php
