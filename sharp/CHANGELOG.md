@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Changed
+
+- `mago compile` proves the laws of every `.sharp` file it compiles in one Lean process, where it ran one per file at once. Lean and the runtime library load once per compile instead of once per file, so a compile of many files with laws uses far less processor time and memory. The processor-time limit on a check holds for each file, so the one process may use that limit once for each file it checks.
+
 ### Fixed
 
 - A test run on plain PHP stops with "This project needs the PHP# engine" before the runner includes a `.sharp` test file, once `phpunit.xml` names `heyjordanparker/php-sharp-composer`'s test bootstrap, `<phpunit bootstrap="vendor/heyjordanparker/php-sharp-composer/require-engine.php">`, in place of `vendor/autoload.php`. Before, PHPUnit, Pest and ParaTest included a listed `.sharp` test file themselves, so plain PHP printed its whole source as output, and Pest then reported "No tests found" and exited 0.
