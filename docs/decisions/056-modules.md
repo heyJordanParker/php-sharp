@@ -1,6 +1,6 @@
 # 56. Modules
 
-Superseded in part by [decision 78](078-hosts.md): a host starts and ends each scope with the standard library's `Scope.run`, and PHP# ships no `php-sharp/laravel` adapter. A `singleton` and a static live as long as the app runs, which is one request under PHP-FPM and many under a long-running worker.
+Superseded in part by [decision 78](078-hosts.md): a host starts and ends each scope with the standard library's `Scope.run`, and PHP# ships no `php-sharp/laravel` adapter. So the `php-sharp/laravel` package below does not exist: no package starts and ends Laravel's scopes, or makes Laravel's container ask PHP#'s container for every PHP# class. Any framework's container can ask PHP#'s container for a PHP# class through PSR-11, as [spec section 32](../spec.md#32-modules) says. A `singleton` and a static live as long as the app runs, which is one request under PHP-FPM and many under a long-running worker.
 
 ## Decision
 

@@ -79,11 +79,25 @@ Run one build per tree at a time. Parallel Agents each work in their own git wor
 
 A `compile error` line needs the error its rule gives: a "not supported yet" refusal, a missing class the line doesn't name itself, or an unreadable line never satisfies it, and an error moves to it from another line only when it is one of the whole-construct errors in `MOVES` and its line's brackets enclose it. A value or `throws` annotation that no run reaches fails the check, unless a hidden `<!-- run <id> -->` comment after the example's last block holds a run line that makes the same claim.
 
-`sharp/baseline/spec/` lists every example that fails today, one empty file `<section>/<id>` each, so pull requests that fix different examples never conflict. Its count is how far PHP# is from v1. The run fails when an unlisted example fails or a listed one passes, and prints the `git rm`, `mkdir -p` and `touch` commands that make the folder match. The list records which examples fail, not how, so a listed example may change its errors.
+`sharp/baseline/spec/` lists every example that fails today, one empty file `<section>/<id>` each, so pull requests that fix different examples never conflict. Its count is how far PHP# is from v1. Git tracks files, not folders, so once no example fails, a checkout has no `sharp/baseline/spec/` at all. A missing folder means no example fails: `sharp/bin/spec` reads it as an empty list, in the working tree and, with `--base`, at the base commit. The run fails when an unlisted example fails or a listed one passes, and prints the `git rm`, `mkdir -p` and `touch` commands that make the folder match. The list records which examples fail, not how, so a listed example may change its errors.
 
 On a pull request, the `SPEC_GUARD` job runs the base commit's `sharp/bin/spec --base <commit>`, from the base branch's `.github/workflows/completes.yml` on `pull_request_target`, so a pull request never runs or changes its own comparison. A feature pull request changes the spec, its examples and `sharp/baseline/spec` together with its code. `GUARDED` in `sharp/bin/spec` names what measures the examples, `sharp/bin/spec` itself, and a pull request that changes any other file leaves it exactly as the base has it. Markdown never runs, so a Markdown file may change beside it. A pull request that adds or changes a file in `sharp/harness/` lists it in its body, and its review checks that no stub makes an example pass falsely. The guard lists changed files with `--no-renames`, so a renamed guarded file shows its old path, and it fails on a symbolic link at a file it reads or guards, naming the path only. The fingerprint covers the whole example but its id: its section, and every block's marker line, setup, fence language, code and run comment. An example the base has with the same fingerprint, under its id or another, never joins the list, except that a renamed example takes over its old id's entry. An `ignore` on code the base checked counts as an entry.
 
 ## Runtime images
+
+PHP# ships its engine only as two runtime images: php-fpm's `ghcr.io/heyjordanparker/php-sharp:<version>` and FrankenPHP's `ghcr.io/heyjordanparker/php-sharp:<version>-frankenphp`. A release's other assets are `mago` archives, Mago's source and their SHA-256s, with no `php` or `php-fpm` build. A server that can't run the images builds the engine from source, with the [Linux dependencies](#linux-dependencies).
+
+`php --ri sharp` shows that a `php` is the PHP# engine. It prints the engine's version, and plain PHP prints `Extension 'sharp' not present.` and exits with status 1:
+
+```text
+$ docker run --rm ghcr.io/heyjordanparker/php-sharp:0.6.2 php --ri sharp
+sharp
+
+Version => 0.6.2
+
+Directive => Local Value => Master Value
+sharp.compile_command => no value => no value
+```
 
 `sharp/docker/runtime/Dockerfile` holds docker-library's `php:8.5-fpm-trixie` recipe, built from this repository's source instead of the php.net tarball, with `ext/sharp` built in. It keeps docker-library's layout, so `docker-php-ext-*` and `install-php-extensions` work unchanged and an app switches to PHP# by changing only its `FROM` line. The `docker-php-*` scripts are verbatim copies. `docker-php-entrypoint` is the one script that differs between docker-library's variants, so each image copies its own from `fpm/` or `zts/`, and the shared ones sit beside the Dockerfiles. Compare the Dockerfile, the shared scripts and `fpm/docker-php-entrypoint` with docker-library's `8.5/trixie/fpm` on every merge from upstream.
 
@@ -115,17 +129,53 @@ The queue workers and the scheduler run from the same image with the same mount,
 
 ## Composer
 
-`sharp/composer/` is the Composer plugin `heyjordanparker/php-sharp-composer`. Composer's autoloader then tries `.sharp` after `.php` by the PSR-4 rules, the way it tries `.hh` on HHVM. Composer's class map scanner reads only `<?php` files, so on `composer dump-autoload --optimize` the plugin writes every `.sharp` file under a PSR-4 folder to `vendor/composer/autoload_sharp.php`, and the autoloader reads it. The package's autoloader includes every `.sharp` class itself, never Composer's, so on plain PHP the first one stops with "This project needs the PHP# engine" before its source can reach the output. `mago compile` also writes a `.php` file beside each of a project's `.sharp` files that declares a type, outside `autoload-dev` folders and `vendor/`, which loads the `.sharp` file the same way, so PHP code that lists `*.php` files finds PHP# classes (spec section 27, decision 81).
+`sharp/composer/` is the Composer plugin `heyjordanparker/php-sharp-composer`. Composer's autoloader then tries `.sharp` after `.php` by the PSR-4 rules, the way it tries `.hh` on HHVM. Composer's class map scanner reads only `<?php` files, so on `composer dump-autoload --optimize` the plugin writes every `.sharp` file under a PSR-4 folder to `vendor/composer/autoload_sharp.php`, and the autoloader reads it. The package's autoloader includes every `.sharp` class itself, never Composer's, so on plain PHP the first one stops with "This project needs the PHP# engine" before its source can reach the output. The engine comes from the [runtime images](#runtime-images). `mago compile` also writes a `.php` file beside each of a project's `.sharp` files that declares a type, outside `autoload-dev` folders and `vendor/`, which loads the `.sharp` file the same way, so PHP code that lists `*.php` files finds PHP# classes (spec section 27, decision 81).
 
 `sharp/composer/library/Sharp/Internal/Builtins.sharp` gives each PHP built-in function its effect, as `extern global.fopen uses Files;`. `sharp/bin/builtins` writes it from PHPStan's php-8-stubs, at the version and SHA-256 it pins, for every PHP 8.5 function in PHP's root namespace that Mago's prelude in `sharp/mago/crates/prelude/` declares. `RULES` in the script maps each function to its effects, or to none, by its extension and name, and the run fails on a function no rule covers. The file also declares pure each PHP 8.5 exception class the prelude declares, as `extern ValueError;`: `Exception`, `Error` and every class whose parents reach one of them. `sharp/bin/builtins --self-test` checks that each rule gives the effect of its row in `ROWS`, and that removing the rule changes that row. The Linux job runs both and fails when the file differs from the committed one.
 
 `sharp/composer/` is the plugin's source of truth. Composer installs it from `heyJordanParker/php-sharp-composer`, a read-only split that CI rewrites from this folder's history, the way Symfony splits its components. Change the plugin here, never in the split.
+
+## Running tests
+
+An app's tests run on the PHP# engine under PHPUnit or Pest, through the same loading as the app:
+
+```sh
+vendor/bin/mago compile         # first, after every change to a .sharp file
+vendor/bin/phpunit
+vendor/bin/pest --parallel      # or vendor/bin/pest
+```
+
+A test run loads a PHP# class the way the app does. A class in an `autoload` folder loads through the `<Name>.php` file `mago compile` writes beside its `.sharp` file, which Composer's own loader finds first. A class in an `autoload-dev` folder, such as a test class, has no such file: the test runner includes a test file it lists itself, and the plugin's loader includes any other `.sharp` file by the PSR-4 rules. Either way, the engine runs the compiled unit, `.sharp/<path of the source>c` under the project root, and never the source. So `mago compile` runs before the tests. A test that loads a class whose unit is missing or out of date fails with the refusal, such as `app/Mail/SmtpMailer.sharp is out of date (app/Mail/SmtpMailer.sharp changed). Run vendor/bin/mago compile.`
+
+**PHPUnit** finds a PHP# test class when `phpunit.xml` lists its files, as `<directory suffix="Test.sharp">tests</directory>` beside `<directory suffix="Test.php">tests</directory>`. A test file's test module applies while each of its tests runs (spec section 32), in PHPUnit's process, in the child process of `#[RunInSeparateProcess]` and under `--process-isolation`. `sharp/phpunit/` is such a project, and `sharp/bin/test --phpunit` runs it.
+
+**Pest** runs on PHPUnit, with the same `phpunit.xml`. A Pest test file is plain PHP, so its `test()` and `it()` calls use PHP# classes as any PHP code does, and it declares no test module. Pest also runs a PHP# test class that `phpunit.xml` lists, and that class's test module applies.
+
+**Parallel Pest** runs each worker as its own PHP process, started with the `php` that runs Pest, so start Pest with the engine. Every worker reads the same `.sharp/` folder, which the one `mago compile` before the run wrote. In the CLI, opcache's shared memory belongs to one process, so the workers share bytecode only through `opcache.file_cache`, when `php.ini` sets it with `opcache.enable_cli=1`. The engine caches a `.sharp` file under the revision of its compiled unit, not under the source's modification time. With `opcache.validate_timestamps=1`, the default, workers that share a file cache need nothing beyond the one compile before the run:
+
+- after a source edit with no compile, every worker refuses the out-of-date unit, as without opcache
+- after the compile, each worker reads the new unit, and the file cache replaces the entry of each file whose unit changed
+- a worker writes an entry only when no other worker has written it, under an exclusive lock, and reads one under a shared lock, as upstream opcache does
+
+The file cache outlives each run, and `opcache.validate_timestamps=0` skips the check. Then every worker runs the bytecode an earlier run cached, of `.sharp` and `.php` files alike, and a suite can pass against code that no longer exists. So keep `opcache.validate_timestamps=1` wherever tests run with `opcache.file_cache`, or empty the file cache folder after each `mago compile`.
 
 ## macOS dependencies
 
 ```sh
 brew install autoconf bison curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
 ```
+
+## Linux dependencies
+
+A source build on Debian or Ubuntu needs the packages `sharp/docker/runtime/Dockerfile` installs to build the php-fpm image's engine, without `xz-utils` and `curl`, which only its source archive and the image's users need:
+
+```sh
+apt-get install --no-install-recommends autoconf bison ca-certificates dpkg-dev file g++ gcc git libargon2-dev libc-dev \
+  libcurl4-openssl-dev libonig-dev libreadline-dev libsodium-dev libsqlite3-dev libssl-dev libxml2-dev make pkg-config \
+  re2c rustup zlib1g-dev
+```
+
+On a fresh Debian trixie with only these, `./buildconf --force`, then that Dockerfile's `./configure` line and `make`, build `sapi/cli/php` and `sapi/fpm/php-fpm`, and `php --ri sharp` prints the tree's version. Ubuntu 24.04 has the same packages, and its gcc 13 warns in upstream `ext/readline/readline_cli.c`, so there the `./configure` line takes `--disable-werror` in place of `--enable-werror`. `rustup` downloads the Rust toolchain `ext/sharp/rust-toolchain.toml` names at the first build. `sharp/bin/build` also configures `--enable-intl`, `--with-zip` and `--with-pgsql`, so it needs `libicu-dev`, `libzip-dev` and `libpq-dev` as well, which `sharp/docker/Dockerfile` installs.
 
 ## CI
 
