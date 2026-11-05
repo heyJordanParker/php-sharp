@@ -143,7 +143,8 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 
 ### Section 3. Scope
 
-- A local first assigned in a block and read after it → declared before the block, as `T? name = null;`. Both.
+- A local first assigned in a block and read after it → declared first in the body of its method or lambda, as `T? name = null;`, and each assignment of it writes it. A PHP variable lives for the whole function, so a loop's pass keeps the value an earlier pass gave it, and a declaration inside the loop would reset it on every pass. A lambda that captures such a local by value refuses, since each assignment writes it after its declaration (section 14). Both.
+
 ### Section 4. Member access
 
 - `->` and `::` → `.`, and `?->` → `?.`. Tree.
