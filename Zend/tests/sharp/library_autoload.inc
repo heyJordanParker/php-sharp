@@ -8,7 +8,9 @@
 // plain PHP class, or App\Stamp, whose type line starts with an attribute. The class map lists the classes the package's
 // Composer plugin finds in each file, which it prints. With composer, Composer itself requires autoload.php, as it does to load a plugin.
 // With uncompiled, autoload.php is required before mago compiles the project, as on a fresh clone, and the project's
-// module binds App\Greeting through the library's Environment, which Sharp\Container then builds.
+// module binds App\Greeting through the library's Environment, which Sharp\Container then builds. With runner, a test run
+// requires the package's require-engine.php after autoload.php, as phpunit.xml's bootstrap, then the class's file
+// itself, as a test runner includes each .sharp test file it lists.
 
 namespace Composer\Plugin {
     if (($argv[5] ?? null) === 'composer') {
@@ -99,6 +101,7 @@ namespace {
     @mkdir("$package/library/Sharp/IO", 0777, true);
     @mkdir("$package/library/Sharp/System", 0777, true);
     copy("$root/sharp/composer/autoload.php", "$package/autoload.php");
+    copy("$root/sharp/composer/require-engine.php", "$package/require-engine.php");
     file_put_contents("$package/composer.json", '{"name": "heyjordanparker/php-sharp-composer"}');
     foreach (LIBRARY_MODULE as $library) {
         copy("$root/sharp/composer/library/Sharp/$library.sharp", "$package/library/Sharp/$library.sharp");
@@ -151,6 +154,10 @@ namespace {
         echo 'class map handed to Composer: ', json_encode(array_keys($loader->classMap)), "\n";
         if ($uncompiled) {
             run_mago($package);
+        }
+        if (($argv[5] ?? null) === 'runner') {
+            require "$package/require-engine.php";
+            require "$package/src/" . strtr($class, '\\', '/') . '.sharp';
         }
         echo match ($class) {
             'Sharp\Text\StringMembers' => \Sharp\Text\StringMembers::slug('A B'),

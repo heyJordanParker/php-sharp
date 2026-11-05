@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- A test run on plain PHP stops with "This project needs the PHP# engine" before the runner includes a `.sharp` test file, once `phpunit.xml` names `heyjordanparker/php-sharp-composer`'s test bootstrap, `<phpunit bootstrap="vendor/heyjordanparker/php-sharp-composer/require-engine.php">`, in place of `vendor/autoload.php`. Before, PHPUnit, Pest and ParaTest included a listed `.sharp` test file themselves, so plain PHP printed its whole source as output, and Pest then reported "No tests found" and exited 0.
+
 ## [0.6.2] - 2026-11-03
 
 ### Upgrading from 0.6.1
