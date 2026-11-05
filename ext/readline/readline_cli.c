@@ -212,7 +212,9 @@ static int cli_is_valid_code(char *code, size_t len, zend_string **prompt) /* {{
 	size_t i;
 	php_code_type code_type = body;
 	char *heredoc_tag = NULL;
-	size_t heredoc_len;
+	/* PHP#: only the "<<<" case enters a heredoc state, and it sets heredoc_len to 0 first, but gcc 13 at -O2, as on
+	 * Ubuntu 24.04, warns that heredoc_len may be read unset. php-src's master and PHP-8.5 still leave it unset. */
+	size_t heredoc_len = 0;
 
 	for (i = 0; i < len; ++i) {
 		switch(code_type) {
