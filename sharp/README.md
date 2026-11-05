@@ -110,13 +110,95 @@ git archive HEAD | docker build -f sharp/docker/runtime/Dockerfile -t php-sharp 
 git archive HEAD | docker build -f sharp/docker/runtime/frankenphp.Dockerfile -t php-sharp:frankenphp -
 ```
 
-A server whose PHP comes from its distribution, such as Ubuntu's packages, can't load PHP#'s extensions there: PHP# reports module API `20261009`, and every distribution extension is built for PHP's own. There nginx stays on the host, and PHP runs in the php-fpm image, which listens on port 9000. The app is mounted at the same path in the container as on the host, because nginx passes that path in `SCRIPT_FILENAME`:
+A server whose PHP comes from its distribution, such as Ubuntu's packages, can't load PHP#'s extensions there: PHP# reports module API `20261009`, and every distribution extension is built for PHP's own. There nginx stays on the host, and PHP runs in the php-fpm image. General php-fpm and Docker practice is docker-library's, and [its documentation](https://github.com/docker-library/docs/blob/master/php/README.md) applies to this image unchanged. What follows is what a production app on PHP# gets wrong without being told.
 
-```sh
-docker run -d --name app --restart always -p 127.0.0.1:9000:9000 -v /srv/www/app:/srv/www/app ghcr.io/heyjordanparker/php-sharp:<version>
+### Extensions
+
+The image ships the extensions its release's `php -m` lists. For 0.6.2:
+
+```text
+$ docker run --rm ghcr.io/heyjordanparker/php-sharp:0.6.2 php -m
+[PHP Modules]
+Core
+ctype
+curl
+date
+dom
+fileinfo
+filter
+hash
+iconv
+json
+lexbor
+libxml
+mbstring
+mysqlnd
+openssl
+pcre
+PDO
+pdo_sqlite
+Phar
+posix
+random
+readline
+Reflection
+session
+sharp
+SimpleXML
+sodium
+SPL
+sqlite3
+standard
+tokenizer
+uri
+xml
+xmlreader
+xmlwriter
+Zend OPcache
+zlib
+
+[Zend Modules]
+Zend OPcache
 ```
 
+The list has no `pcntl`, which Laravel's queue worker needs to stop between jobs when `docker restart` signals it, and no driver for a database but SQLite. The app's image builds every other extension it needs with [`install-php-extensions`](https://github.com/mlocati/docker-php-extension-installer), as `pgsql`, `redis`, `imagick`, `intl`, `gd`, `zip`, `bcmath`, `exif` and `pcntl` build on 0.6.2.
+
+### The app's image
+
+The app builds its own image on the release, with its extensions, the production `php.ini`, its own ini settings and its pool file:
+
+```dockerfile
+FROM ghcr.io/heyjordanparker/php-sharp:0.6.2
+COPY --from=ghcr.io/mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /usr/local/bin/
+RUN install-php-extensions pcntl redis
+RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+COPY app.ini "$PHP_INI_DIR/conf.d/"
+COPY app.conf /usr/local/etc/php-fpm.d/zz-app.conf
+```
+
+The image loads no `php.ini`, so until the app copies `php.ini-production`, php-fpm runs with `display_errors` on. `php.ini-production` still leaves `expose_php` on and `memory_limit` at `128M`, so `app.ini` sets them, with the opcache setting the deploy below depends on:
+
+```ini
+expose_php = Off
+memory_limit = 256M
+opcache.validate_timestamps = 0
+```
+
+php-fpm reads `/usr/local/etc/php-fpm.d/*.conf` in name order. The image's `docker.conf` gives the default `[www]` pool `listen = 9000`, on every address, and `www.conf` after it sets `pm.max_children = 5`. So the app's `[www]` settings go in a file whose name sorts after `www.conf`, as `zz-app.conf` does. A file named `app.conf` sorts first, and its `pm.max_children` loses to `www.conf`'s. The pool listens on the host's loopback address, because php-fpm runs on the host's network:
+
+```ini
+[www]
+listen = 127.0.0.1:9000
+pm.max_children = 20
+```
+
+### php-fpm, the workers and the scheduler
+
+A Capistrano-style deploy root, such as `/srv/www/app`, holds `releases/<timestamp>`, `shared/` and the `current` link. The `current` link and each release's links into `shared/` name absolute paths, so the container mounts the whole deploy root at its own path, where every link resolves. nginx serves `current/public` and passes `$realpath_root`, so `SCRIPT_FILENAME` names the release itself, such as `/srv/www/app/releases/<timestamp>/public/index.php`:
+
 ```nginx
+root /srv/www/app/current/public;
+
 location ~ \.php$ {
     include fastcgi_params;
     fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
@@ -125,7 +207,39 @@ location ~ \.php$ {
 }
 ```
 
-The queue workers and the scheduler run from the same image with the same mount, each as its own container, as `docker run -d --restart always -v /srv/www/app:/srv/www/app -w /srv/www/app ghcr.io/heyjordanparker/php-sharp:<version> php artisan queue:work` does for Laravel's worker.
+php-fpm, the queue worker and the scheduler each run as their own container of the app's image, here `app-php`:
+
+```sh
+docker run -d --name app --restart always --user "$(id -u web):$(id -g web)" --network host \
+  -v /srv/www/app:/srv/www/app app-php
+docker run -d --name worker --restart always --user "$(id -u web):$(id -g web)" --network host --memory 512m \
+  -v /srv/www/app:/srv/www/app -w /srv/www/app/current app-php php artisan queue:work
+docker run -d --name scheduler --restart always --user "$(id -u web):$(id -g web)" --network host --memory 256m \
+  -v /srv/www/app:/srv/www/app -w /srv/www/app/current app-php php artisan schedule:work
+```
+
+The image runs the pool as `www-data`, uid 33. `--user` runs php-fpm, its pool and the workers as the deploy user that owns the releases, here `web`, so the app writes `shared/storage` as that user. php-fpm then logs that it ignores the pool's `user` and `group`, as [docker-library describes](https://github.com/docker-library/docs/blob/master/php/README.md#running-as-an-arbitrary-user). `--network host` gives each container the host's `127.0.0.1`, where nginx reaches php-fpm and the app reaches a Redis or a database that listens only there.
+
+### Deploying a release
+
+The engine runs only the `.sharp/…c` units that `mago compile` writes, never a `.sharp` source. So each release compiles in its own folder before `current` moves to it, and then php-fpm reloads and the workers restart:
+
+```sh
+cd /srv/www/app/releases/<timestamp>
+composer install --no-dev --optimize-autoloader
+docker run --rm --user "$(id -u web):$(id -g web)" -v /srv/www/app:/srv/www/app -w "$PWD" app-php vendor/bin/mago compile
+ln -sfn "$PWD" /srv/www/app/current.next && mv -T /srv/www/app/current.next /srv/www/app/current
+docker kill --signal USR2 app
+docker restart worker scheduler
+```
+
+`composer install --no-dev` installs no `require-dev` package, so `heyjordanparker/mago-sharp` goes in the app's `require`, or the release has no `vendor/bin/mago`.
+
+With `opcache.validate_timestamps=0`, opcache never checks a file it cached, and the engine checks a unit against its source only when opcache compiles the file. A `.sharp` file that php-fpm ran before its source changed, or before `mago compile` rewrote its unit at the same path, keeps running its cached bytecode with no refusal until php-fpm reloads. After the reload, the first request compiles it again, and the engine refuses a unit that is missing or out of date, as in [Running tests](#running-tests), or runs the new one. With the default `opcache.validate_timestamps=1`, opcache asks the engine for the unit's revision every `opcache.revalidate_freq` seconds, 2 by default, so php-fpm refuses an uncompiled edit and runs a compiled one without a reload.
+
+`$realpath_root` gives every release its own paths, so a request after the switch reaches the new release even without a reload. A path through `current` does not: with nginx's `$document_root`, which passes `current/public/index.php`, php-fpm keeps running the old release's bytecode. Every earlier release's bytecode also stays in opcache's shared memory. `docker kill --signal USR2 app` reloads php-fpm gracefully: it starts again on the same socket, with an empty opcache.
+
+A worker or scheduler container resolves `-w /srv/www/app/current` once, when it starts, so it keeps running the release it started in. `docker restart` starts each in the new release, and Laravel's worker with `pcntl` stops between jobs on its signal.
 
 ## Composer
 
