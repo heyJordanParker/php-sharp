@@ -72,12 +72,12 @@ PHPDoc tags whose type the declaration now writes leave the docblock: `@var`, `@
 
 `types::type_text` prints an analysis type in PHP#'s spelling, as the bridge's `type_text` prints one in PHP's. A class prints by the name the file reaches it by:
 
-- its bare name, when it is a root class of `Builtins.sharp`, as `Throwable`, the standard exceptions, `Attribute`, `Countable` and `JsonSerializable`, or a class declared directly in `Sharp` (line 4409). A `use` line of a root class goes
+- its bare name, when it is a root class of `Builtins.sharp`, as `Throwable`, the standard exceptions, `Attribute`, `Countable` and `JsonSerializable`, or a class declared directly in `Sharp` (line 4409)
 - its short name, when it is in the file's own namespace
 - its alias, when a `use` line names it
 - a new `import` line otherwise, under its short name, or `import … as …` with the namespace's last part before it when another import takes the short name (line 4452), or when PHP# reserves it: `Any` and `Equatable` for a type (section 11), and `Error` for its interface of every failure (line 6148), as `import Lib.Payments.Error as PaymentsError;`
 
-A PHP built-in class outside `Builtins.sharp` refuses the file, since section 23 names it only in the standard library.
+A `use` line of a root class of `Builtins.sharp` goes, since the file names the class bare. A PHP built-in class outside `Builtins.sharp` refuses the file, since section 23 names it only in the standard library.
 
 ### How a bare function call converts
 
@@ -96,7 +96,7 @@ A call's function is the one its resolved name names, `names.get(identifier)`, o
 
 ### How a file is proven before it is written
 
-The command analyzes the plain project once, with fresh extension hosts. It then puts every converted text in a fresh database, built by `mago compile`'s own `project_database`, so the standard library's and each package's PHP# files are the project's and the compile inlines the library's forms, in place of its plain file, under the `.sharp` name, marked by `mark_sharp_file` as the loader marks a `.sharp` file it reads, and analyzes that project with fresh hosts. It compares every issue with the plain project's, warnings and errors alike, keyed by file, level, code, message and line, with duplicates counted. It then lowers every file through `Server::compile`, in memory. A file stays plain PHP when:
+The command builds each database through `project_database`, the function `mago compile` builds its own with, so the standard library's and each package's PHP# files are the project's, and the proof's compile inlines the library's forms as `mago compile` does. It analyzes the plain project once, with fresh extension hosts. It then puts every converted text in a fresh database in place of its plain file, under the `.sharp` name, marked by `mark_sharp_file` as the loader marks a `.sharp` file it reads, and analyzes that project with fresh hosts. It compares every issue with the plain project's, warnings and errors alike, keyed by file, level, code, message and line, with duplicates counted. It then lowers every file through `Server::compile`, in memory. A file stays plain PHP when:
 
 - the converted file has any error or warning, since nothing hides a language error in a `.sharp` file (lines 5360 and 5384)
 - any other file gains an error, or a warning decision 9 doesn't expect
@@ -228,6 +228,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 
 - `foreach ($items as $item)` → `for (const item of items)`, and `foreach ($map as $key => $value)` → `for (const [key, value] of map)`. Both.
 - A body without braces → braces added (line 2903). Tree.
+
 ### Section 18. Strings
 
 - `.` between two strings → `+`. Type.
@@ -252,7 +253,8 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 
 ### Section 21. Pattern matching
 
-- A condition that is no `bool` → the comparison its type gives: `x != null` for `T?`, `!list.isEmpty()` for a collection, `x != "" && x != "0"` for a string (line 3752). Type.- `match` → `match`, when each arm's comparison passes the `===` rule of section 19, since PHP's `match` compares with `===` (line 3426). Both.
+- A condition that is no `bool` → the comparison its type gives: `x != null` for `T?`, `!list.isEmpty()` for a collection, `x != "" && x != "0"` for a string (line 3752). Type.
+- `match` → `match`, when each arm's comparison passes the `===` rule of section 19, since PHP's `match` compares with `===` (line 3426). Both.
 - `switch` → `match` with block arms, when no arm falls through (line 3426). Tree. 6 files. Cases with no statements of their own join the next with `or`, a `switch` without `default` gains `default => {},`, and each case passes the `===` rule above, since `==` and `===` agree there. A case that runs on into the next, a `break` or `continue` that leaves before its case ends, a `case` of a numeric string or `null`, and `switch … endswitch` refuse. A constant's value counts as a literal's does. On a value that may be `null`, a `case` of a value PHP reads as `false` refuses too, `false`, `0`, `0.0` and `''`, since PHP's `null == ''` holds and the pattern doesn't match `null`, as does a `case` whose value the analysis doesn't know.
 - `and`, `or` and `xor` → `&&` and `||`, and `xor` refuses. Tree.
 
@@ -396,11 +398,11 @@ The converter lands in one pull request, family by family, in this order. Each f
 Decisions 1, 3, 5, 8, 10, 11 and 12 are approved as they stand. Decisions 2, 4, 6, 7 and 9 change as Cass's verdict on this PR asks, and 13 is new.
 
 1. **Approved: the crate is `crates/converter`, `mago-converter`, and the command `mago convert <paths> [--dry-run]`.** Paths are required.
-2. **The converter writes declared, PHPDoc, refined and inherited types, and never an inferred one.** It refuses a method with `return_from_body.is_some()`. A type the codex marks `inferred: true` on a parameter, a return or a property is inherited, and it writes it. `new` takes its type arguments from the declared type its value goes into, or the class's bounds, never from the analysis.
+2. **The converter writes declared, PHPDoc, refined and inherited types, and never an inferred one.** It refuses a method with `return_from_body.is_some()`. A type the codex marks `inferred: true` on a parameter, a return or a property is inherited, and it writes it. `new` takes its type arguments from the declared type its value goes into, or the class's bounds, never from the analysis. A local declared first in the body takes the types of the values assigned to it only when a declaration gives each, or its `@var` tag's, and refuses otherwise, as [section 3](#section-3-scope) says.
 3. **Approved: visibility keeps PHP's reach.** `public` where PHP leaves it out, every class `public`, an open method `virtual`, and a method that replaces a parent class's `override`. The design recommends no narrowing: `too-wide-member` can't see templates, string callables or routes.
 4. **A bare function call's form comes only from declarations,** as [how a bare function call converts](#how-a-bare-function-call-converts) says: a library's function through its namespace or its folder's, a type test as `is`, and a built-in only as a standard library member whose inline form runs exactly that function with PHP's meaning. Any other built-in refuses the call, naming the function and the difference, and nothing is added to the library for the converter.
 5. **Approved: nested rewrites are edits on owned tokens, and a reordering rewrite renders its children.**
-6. **A name prints by the file's own names,** a root class of `Builtins.sharp` bare, and a missing one gets an `import`, `import … as …` where the short name is taken.
+6. **A name prints by the file's own names,** a root class of `Builtins.sharp` bare, and a missing one gets an `import`, `import … as …` where the short name is taken or PHP# reserves it, as `Any`, `Equatable` and `Error`.
 7. **Each file is proven in memory before it is written:** analysis and lowering through `Server::compile`, against the whole project with the earlier conversions in place, with fresh extension hosts once they load a converted file. The project's `ignore` entries and baseline apply to host rules' codes only.
 8. **Approved: a file converts only as the last commit holds it, its converted text is written at its `.sharp` name, then the index records the rename as `git mv` does, and then the plain file leaves.** Review 301 found that an untracked file lost its plain PHP, which nothing held, so a file git holds no commit of as it is refuses, and a write that fails leaves the plain file where it was.
 9. **The proof compares warnings and errors, keyed by file, level, code, message and line, with duplicates counted.** A conversion may add `too-wide-member` on a member it made `public`, and `redundant-docblock-type` in a plain PHP caller whose PHPDoc the converted class now declares. The summary lists both, and any other new issue refuses the file. The summary also says the project's tests, compared test by test, are the gate for what analysis can't see: a `TypeError` at entry (line 1076), a renumbered `int`-keyed array (line 1514), and an `int` that becomes a `float` in a `List<float>` (decision 074).
