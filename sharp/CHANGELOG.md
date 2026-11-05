@@ -4,9 +4,81 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-11-05
+
+### Upgrading from 0.6.2
+
+#### Name the test bootstrap in `phpunit.xml`
+
+A test runner includes each `.sharp` test file it lists itself, past the plugin's loader, so on plain PHP it printed the file's whole source as output (#259). Pest then reported "No tests found" and exited 0, so a CI job on plain PHP passed and published the source. 0.6.3's `heyjordanparker/php-sharp-composer` ships a test bootstrap that stops such a run before any test file loads. Upgrade the package:
+
+```sh
+composer require "heyjordanparker/php-sharp-composer:^0.6.3"
+```
+
+Then name its bootstrap in `phpunit.xml` in place of `vendor/autoload.php`:
+
+```xml
+<phpunit bootstrap="vendor/heyjordanparker/php-sharp-composer/require-engine.php">
+```
+
+- The bootstrap loads `vendor/autoload.php` when the runner hasn't, so it needs nothing beside it.
+- PHPUnit, Pest and ParaTest load it before any test file, in each worker too. On plain PHP every run stops with "This project needs the PHP# engine, and this is plain PHP." and exits with an error, where Pest exited 0.
+- On the engine it changes nothing.
+
+#### Build the app's image on the 0.6.3 images
+
+The 0.6.2 images hold apt 3.0.3, which CVE-2026-109518 (HIGH) affects (#256). The 0.6.3 images hold apt 3.0.4, Debian's fix. Change the app's `FROM` line to `ghcr.io/heyjordanparker/php-sharp:0.6.3`, or `ghcr.io/heyjordanparker/php-sharp:0.6.3-frankenphp`, and build it again.
+
+### Added
+
+#### `mago convert`, plain PHP class files into PHP#
+
+`mago convert <paths>` turns each plain PHP class file the paths name into PHP#, in place, so `src/Shop/Order.php` becomes `src/Shop/Order.sharp` (#251). It converts a file whole, or keeps it plain PHP and names each construct that keeps it so, with its place and reason. Run it one folder at a time, with `--dry-run` first, which prints each conversion as a diff and changes nothing:
+
+```sh
+mago convert src/Shop --dry-run
+mago convert src/Shop
+```
+
+It takes a file under a PSR-4 folder of `composer.json`'s `autoload` that declares one class, interface or enum, named like the file. A script, a test under `autoload-dev`, a file of two types and one whose type is named unlike the file stay plain PHP. It never writes a type the analysis inferred: each type comes from a declaration, a PHPDoc tag or an extension host's refinement.
+
+Before it writes a file, it analyzes the converted files with the whole project, as `mago analyze` does, and compiles them in memory, as `mago compile` does. A file stays plain PHP when it has any error or warning, when another file gains an error or a warning the summary doesn't name as expected, or when `mago compile` refuses a file it accepted before. The command exits with status 1 when any file the paths name stays plain PHP.
+
+It refuses each of these, with its reason as `file:line:column: reason`:
+
+- what PHP# removes, as `global`, references, `echo`, `goto` and `compact`, and a trait declaration
+- a type PHP# can't write, as the `false` of `int|false`, `array-key`, a bare `array` and an array shape
+- a method's return the analysis takes from its body
+- a built-in call no standard library member runs with PHP's meaning, as "`trim` has no PHP# form: no standard library member runs `trim` with PHP's meaning (decision 083)"
+- a construct whose meaning PHP# would change, as a `switch` case that falls through, a capture by value of a variable written again, `self::m()` outside a `final` class or an enum, and `__LINE__`
+
+`docs/architecture/slices/convert.md` lists every construct it converts and refuses, by spec section.
+
+A file converts only as git's last commit holds it. A file that is untracked, or changed since that commit, staged or not, stays plain PHP: "git holds no commit of it as it is: commit it first, so git holds its plain PHP". For each file it converts, the index records the rename alone, as `git mv` does, and the converted text is an unstaged change on top, as `RM src/Shop/Order.php -> src/Shop/Order.sharp` in `git status --short`. So `git commit` records the rename alone, which `git log --follow` follows, and the conversion is the next commit.
+
+After converting:
+
+- `mago lint`, `mago guard` and `mago fmt` read only plain PHP, so their rules no longer check the converted files.
+- A PHPDoc type is now checked while the code runs, so run the project's tests on the PHP# engine and compare them test by test.
+
+#### Guides
+
+- `sharp/README.md`'s "Running tests" says what a test run of PHP# classes needs: `mago compile` first, how PHPUnit lists `Test.sharp` files, how Pest runs PHP# classes and test classes, and what a shared `opcache.file_cache` serves when `opcache.validate_timestamps=0` (#253).
+- `sharp/README.md`'s "Runtime images" says the engine ships only as the php-fpm and FrankenPHP images, and that `php --ri sharp` shows whether a `php` is the engine (#253). It now runs a production app on the php-fpm image: the extensions the image ships, the app's own image and pool file, php-fpm, the queue worker and the scheduler as the deploy user, and a deploy that runs `mago compile` and reloads php-fpm (#258).
+- `sharp/README.md`'s "Linux dependencies" lists the packages a source build installs on Debian trixie and Ubuntu 24.04 (#253, #255).
+- Mago's installation guide says a project with `.sharp` files requires `heyjordanparker/mago-sharp` without `--dev`, since its deploy runs `mago compile` and `composer install --no-dev` installs no `require-dev` package (#258).
+
 ### Fixed
 
 - A test run on plain PHP stops with "This project needs the PHP# engine" before the runner includes a `.sharp` test file, once `phpunit.xml` names `heyjordanparker/php-sharp-composer`'s test bootstrap, `<phpunit bootstrap="vendor/heyjordanparker/php-sharp-composer/require-engine.php">`, in place of `vendor/autoload.php`. Before, PHPUnit, Pest and ParaTest included a listed `.sharp` test file themselves, so plain PHP printed its whole source as output, and Pest then reported "No tests found" and exited 0.
+- Brackets before a modifier and `(` are a parameter's attributes, so `[Field(label: "Value")] public (int|string)? value { get; set; }` in a constructor parses, as brackets before the class's own name do (#251). Before, the parser read them as a tuple type.
+- `mago compile` compiles a file that creates a generic class whose bound the checker refuses, as `new Box<int>(1)` of `Box<T : Any?>`, where it panicked. The class's own file stays refused with its own error (#251).
+- The engine builds from source with `--enable-werror` on Ubuntu 24.04, whose gcc 13 stopped `make` with "'heredoc_len' may be used uninitialized" in `ext/readline/readline_cli.c` (#255). The interactive shell behaves as before.
+
+### Security
+
+- The php-fpm and FrankenPHP images upgrade apt and libapt-pkg7.0 to 3.0.4, Debian's fix for CVE-2026-109518 (HIGH), which their pinned `debian:trixie-slim` base still holds at 3.0.3 (#256).
 
 ## [0.6.2] - 2026-11-03
 
@@ -379,7 +451,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/heyJordanParker/php-sharp/compare/v0.5.0...v0.6.0
