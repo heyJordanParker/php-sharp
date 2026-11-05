@@ -1,6 +1,0 @@
-namespace App.Mail;
-
-public class SmtpMailer : Mailer
-{
-    public string name() => "smtp";
-}

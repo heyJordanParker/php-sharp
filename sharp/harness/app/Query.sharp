@@ -1,6 +1,0 @@
-namespace App;
-
-public class Query<T>
-{
-    public void orderBy(string column) { }
-}

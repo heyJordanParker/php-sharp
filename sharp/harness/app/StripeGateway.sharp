@@ -1,8 +1,0 @@
-namespace App;
-
-public class StripeGateway : PaymentGateway
-{
-    public Money quote(Cart cart) => throw new Elided();
-
-    public Charge charge(Cart cart) => new Charge();
-}

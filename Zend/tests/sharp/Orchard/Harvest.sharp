@@ -1,5 +1,0 @@
-namespace Orchard;
-
-public interface Harvest<out TFruit>
-{
-}

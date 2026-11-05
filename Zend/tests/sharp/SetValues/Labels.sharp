@@ -1,6 +1,0 @@
-namespace SetValues;
-
-public struct Labels
-{
-    public Labels(public Set<string> names { get; }) { }
-}

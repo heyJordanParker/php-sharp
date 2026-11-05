@@ -1,8 +1,0 @@
-namespace Demo;
-
-class Item
-{
-    public Item(public string name { get; }, public int cents { get; })
-    {
-    }
-}

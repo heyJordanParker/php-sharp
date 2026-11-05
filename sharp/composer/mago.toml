@@ -1,3 +1,0 @@
-[source]
-paths = ["library", "src/Psr/ListenerProvider.php"]
-includes = ["../harness/Psr/EventDispatcher"]

@@ -1,9 +1,0 @@
-namespace Demo;
-
-class Strict
-{
-    public static int run()
-    {
-        return Helper.take(Helper.trusted("5"));
-    }
-}

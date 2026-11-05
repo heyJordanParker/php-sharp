@@ -1,6 +1,0 @@
-namespace Demo;
-
-public class Courier : Ticketholder
-{
-    public Courier(int id) : super(id) { }
-}

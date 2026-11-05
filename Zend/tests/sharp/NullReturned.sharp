@@ -1,9 +1,0 @@
-namespace Demo;
-
-class NullReturned
-{
-    public int must(int? value)
-    {
-        return Helper.trusted(value);
-    }
-}

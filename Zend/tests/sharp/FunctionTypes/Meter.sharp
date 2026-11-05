@@ -1,6 +1,0 @@
-namespace Demo;
-
-public foreign class Meter
-{
-    public int now() => 7;
-}

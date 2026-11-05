@@ -1,3 +1,0 @@
-namespace SetValues;
-
-public event Rows(int id, List<Set<int>> rows);

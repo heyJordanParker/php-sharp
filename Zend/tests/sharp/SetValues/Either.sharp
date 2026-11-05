@@ -1,6 +1,0 @@
-namespace SetValues;
-
-public struct Either
-{
-    public Either(public Set<int>|int value { get; }) { }
-}

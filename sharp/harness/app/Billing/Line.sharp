@@ -1,5 +1,0 @@
-namespace App.Billing;
-
-public class Line
-{
-}

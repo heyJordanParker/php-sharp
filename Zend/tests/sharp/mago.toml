@@ -1,3 +1,0 @@
-[source]
-paths = ["Zend/tests/sharp/*.sharp", "Zend/tests/sharp/*/*.sharp", "Zend/tests/sharp/harness", "sharp/composer/library"]
-extensions = ["sharp", "inc"]

@@ -1,8 +1,0 @@
-namespace Demo;
-
-import Lib.Named;
-
-public interface Linkable : Named
-{
-    string link();
-}

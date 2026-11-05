@@ -1,6 +1,0 @@
-namespace Demo;
-
-public struct Wristband
-{
-    public Wristband(public Map<string, int> counts { get; }) { }
-}

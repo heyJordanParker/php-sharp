@@ -1,8 +1,0 @@
-namespace Demo;
-
-import Lib.Report;
-
-class SalesReport : Report
-{
-    public SalesReport(int id) : super(id) { }
-}

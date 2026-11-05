@@ -1,7 +1,0 @@
-namespace Calls;
-
-import App.Order;
-
-public class Tallies : Tally<Order>
-{
-}

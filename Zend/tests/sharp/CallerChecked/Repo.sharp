@@ -1,8 +1,0 @@
-namespace CallerChecked;
-
-public class Repo<T>
-{
-    public Repo() { }
-
-    public static T first(Source<T> source) => source.read();
-}

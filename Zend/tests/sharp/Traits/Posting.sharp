@@ -1,9 +1,0 @@
-namespace Demo;
-
-import Lib.HasUniqueStringIds;
-import Lib.Persisted;
-import Lib.SoftDeletes;
-
-public class Posting : Persisted, SoftDeletes, HasUniqueStringIds
-{
-}

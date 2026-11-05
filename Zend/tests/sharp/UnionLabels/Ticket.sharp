@@ -1,8 +1,0 @@
-namespace Demo.Labels;
-
-public class Ticket
-{
-    public Ticket() { }
-
-    public string label() => "ticket";
-}

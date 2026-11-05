@@ -1,5 +1,0 @@
-namespace Classes;
-
-public class Archive : Ledger
-{
-}

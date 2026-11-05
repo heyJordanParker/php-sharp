@@ -1,6 +1,0 @@
-namespace App.Tenant;
-
-public interface Comparable<TOther>
-{
-    int compareTo(TOther other);
-}

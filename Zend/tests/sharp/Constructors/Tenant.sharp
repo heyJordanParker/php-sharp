@@ -1,6 +1,0 @@
-namespace Demo;
-
-class Tenant
-{
-    public bool active { get; set; } = true;
-}

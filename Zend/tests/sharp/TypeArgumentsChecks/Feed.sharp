@@ -1,6 +1,0 @@
-namespace Checks;
-
-public interface Feed<out TItem>
-{
-    TItem? next();
-}

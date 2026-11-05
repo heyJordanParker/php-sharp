@@ -1,4 +1,0 @@
-Sphinx
-sphinx-design
-sphinxawesome-theme
-rstfmt

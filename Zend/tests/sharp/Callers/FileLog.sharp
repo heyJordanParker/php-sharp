@@ -1,3 +1,0 @@
-namespace Callers;
-
-public class FileLog : Logs { }

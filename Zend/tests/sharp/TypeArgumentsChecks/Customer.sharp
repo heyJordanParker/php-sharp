@@ -1,7 +1,0 @@
-namespace Checks;
-
-import App.DatabaseEntity;
-
-public class Customer : DatabaseEntity
-{
-}

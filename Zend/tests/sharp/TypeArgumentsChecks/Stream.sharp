@@ -1,6 +1,0 @@
-namespace Checks;
-
-public class Stream<out TItem> : Feed<TItem>
-{
-    public TItem? next() => null;
-}
