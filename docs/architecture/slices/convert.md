@@ -275,6 +275,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - `mixed` → `Any?`, `?T` → `T?`, `object` → `Object`. Type.
 - `(int)`, `(float)` and `(string)` stay, and the aliases `(integer)`, `(double)`, `(real)` and `(binary)` become them. Tree.
 - `(bool)`, `(array)` and `(object)` → refuses (line 4717). Tree.
+- An `int` literal where a `float` goes, which PHP turns into a `float` → the `float` of the value it writes, so `1` is `1.0`, the octal `017` is `15.0` and the hex `0x1F` is `31.0`. Type.
 - `try`, `catch` and `finally` stay, and `catch (Exception $e)` → `catch (Exception e)` (line 6151). Tree.
 
 ### Section 25. Referring to classes
