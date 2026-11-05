@@ -287,7 +287,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 
 - `<?php` and `declare(strict_types=1);` → removed, since PHP# is always strict (line 5295). Tree.
 - A file without `strict_types` → the same removal, which makes its calls strict. The proof's analysis and the project's tests catch a call that relied on coercion. Tree.
-- `__DIR__`, `__FILE__` and `__LINE__` → `Position.current().directory`, `.file` and `.line` (line 5319). Tree. 66 files. `__CLASS__`, `__METHOD__`, `__FUNCTION__`, `__NAMESPACE__` and the rest refuse, since `Position` names a function by its dotted name and no class or namespace.
+- `__DIR__` and `__FILE__` → `Position.current().directory` and `.file` (line 5319). Tree. 66 files with `__DIR__`, `__FILE__` or `__LINE__`. `__LINE__` refuses, since the conversion moves lines and `Position.current().line` gives the `.sharp` file's. `__CLASS__`, `__METHOD__`, `__FUNCTION__`, `__NAMESPACE__` and the rest refuse, since `Position` names a function by its dotted name and no class or namespace.
 
 ### Section 29. Effects
 
