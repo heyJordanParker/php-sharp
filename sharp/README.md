@@ -175,7 +175,7 @@ apt-get install --no-install-recommends autoconf bison ca-certificates dpkg-dev 
   re2c rustup zlib1g-dev
 ```
 
-On a fresh Debian trixie with only these, `./buildconf --force`, then that Dockerfile's `./configure` line and `make`, build `sapi/cli/php` and `sapi/fpm/php-fpm`, and `php --ri sharp` prints the tree's version. Ubuntu 24.04 has the same packages, and its gcc 13 warns in upstream `ext/readline/readline_cli.c`, so there the `./configure` line takes `--disable-werror` in place of `--enable-werror`. `rustup` downloads the Rust toolchain `ext/sharp/rust-toolchain.toml` names at the first build. `sharp/bin/build` also configures `--enable-intl`, `--with-zip` and `--with-pgsql`, so it needs `libicu-dev`, `libzip-dev` and `libpq-dev` as well, which `sharp/docker/Dockerfile` installs.
+On a fresh Debian trixie or Ubuntu 24.04 with only these, `./buildconf --force`, then that Dockerfile's `./configure` line and `make`, build `sapi/cli/php` and `sapi/fpm/php-fpm`, and `php --ri sharp` prints the tree's version. `rustup` downloads the Rust toolchain `ext/sharp/rust-toolchain.toml` names at the first build. `sharp/bin/build` also configures `--enable-intl`, `--with-zip` and `--with-pgsql`, so it needs `libicu-dev`, `libzip-dev` and `libpq-dev` as well, which `sharp/docker/Dockerfile` installs.
 
 ## CI
 
