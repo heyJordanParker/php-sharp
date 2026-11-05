@@ -25,7 +25,7 @@ defaults:
 
 jobs:
   # ci-passed is this workflow's one required check, so the workflow always runs, and every other job skips a change
-  # that leaves Mago alone: one outside sharp/mago/, sharp/composer/, this workflow, sharp/bin/build-mago,
+  # that leaves Mago alone: one outside sharp/mago/, sharp/composer/, sharp/phpunit/, this workflow, sharp/bin/build-mago,
   # sharp/bin/coverage and the actions it runs, as sharp.yml's CHANGES skips a change to documentation alone. The full
   # run runs every job, and its `full` output tells each job so. A tree runs them once: a push to master skips them when
   # a pull request run passed every job on its tree, and links that run, as .github/actions/passed-tree explains.
@@ -85,7 +85,7 @@ jobs:
             exit 0
           fi
           git fetch --depth=1 origin "$BASE"
-          if git diff --quiet "$BASE" HEAD -- sharp/mago sharp/composer .github/workflows/mago.yml sharp/bin/build-mago \
+          if git diff --quiet "$BASE" HEAD -- sharp/mago sharp/composer sharp/phpunit .github/workflows/mago.yml sharp/bin/build-mago \
             sharp/bin/coverage .github/actions/setup-lean .github/actions/clean-kept-build .github/actions/passed-tree .github/actions/mago-cache \
             .github/actions/mago-cache-prune; then
             echo mago=false >> "$GITHUB_OUTPUT"
@@ -354,7 +354,7 @@ jobs:
   # heyjordanparker/php-sharp-composer from sharp/composer, on the runner's own PHP. A package that requires
   # upstream's carthage-software/mago at the release this checker left from, as an extension host does,
   # installs no second checker, and one that requires a later release installs nothing. Then runs mago on
-  # a one-class .sharp project with the binary the job before built.
+  # a one-class .sharp project with the binary the job before built, and sharp/phpunit's tests, which stop.
   plain-php:
     needs: [CHANGES, checks, release-build]
     strategy:
@@ -471,6 +471,27 @@ jobs:
           test "$output" = "mago $version"
           vendor/bin/mago analyze
           vendor/bin/mago compile
+
+      # Plain PHP prints a .sharp file's source, and PHPUnit includes the fixture's .sharp test file itself, past the
+      # plugin's loader. The fixture's bootstrap, sharp/composer/require-engine.php, stops the run before it does.
+      - name: Stop sharp/phpunit's tests on plain PHP before a .sharp test file's source prints
+        working-directory: sharp/phpunit
+        run: |
+          composer install --no-interaction --no-progress
+          if output=$(vendor/bin/phpunit 2>&1); then
+            echo "$output"
+            echo "::error::PHPUnit passed on plain PHP."
+            exit 1
+          fi
+          echo "$output"
+          if ! grep -q 'This project needs the PHP# engine' <<<"$output"; then
+            echo "::error::PHPUnit stopped on plain PHP without the engine's error."
+            exit 1
+          fi
+          if grep -q 'singleton Mailer = LogMailer' <<<"$output"; then
+            echo "::error::PHPUnit printed tests/Shop/CheckoutTest.sharp's source."
+            exit 1
+          fi
 
   typos-check:
     needs: CHANGES
