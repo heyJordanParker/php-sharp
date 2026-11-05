@@ -75,7 +75,7 @@ PHPDoc tags whose type the declaration now writes leave the docblock: `@var`, `@
 - its bare name, when it is a root class of `Builtins.sharp`, as `Throwable`, the standard exceptions, `Attribute`, `Countable` and `JsonSerializable`, or a class declared directly in `Sharp` (line 4409). A `use` line of a root class goes
 - its short name, when it is in the file's own namespace
 - its alias, when a `use` line names it
-- a new `import` line otherwise, under its short name, or `import … as …` with the namespace's last part before it when another import takes the short name (line 4452)
+- a new `import` line otherwise, under its short name, or `import … as …` with the namespace's last part before it when another import takes the short name (line 4452), or when PHP# reserves it: `Any` and `Equatable` for a type (section 11), and `Error` for its interface of every failure (line 6148), as `import Lib.Payments.Error as PaymentsError;`
 
 A PHP built-in class outside `Builtins.sharp` refuses the file, since section 23 names it only in the standard library.
 
