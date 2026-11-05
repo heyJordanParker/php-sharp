@@ -139,6 +139,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - A local's first assignment → `const name = …`, `let name = …`, or `T name = …` when the value's type is not the one PHP# infers, as an empty literal. Both.
 - `$$name`, `global`, `compact()` and `extract()` → removed (line 199). Tree. Refuses. 10 files hold `global`, 3 `compact` or `extract`.
 - Superglobals → removed (section 29). Tree. Refuses. 18 files.
+- A class constant → `public const int LIMIT = 3;`, with the type PHP declares, its PHPDoc's, or its value's. The lowering writes that type into the constant's PHP, and PHP then makes a subclass's constant of the name take a compatible one: `Type of Child::LIMIT must be compatible with Base::LIMIT of type int`, which the engine gives. So a constant with no PHP type converts only in a `final` class, in an enum, or as `private`, which no subclass declares again, and refuses otherwise. Both.
 - A `static` local → refuses, as the converter's own refusal. Its PHP# form is a private static field with an initial value, which the converter doesn't write yet. Lines 441 to 443 are that field's rule: it needs an initial value, which runs once, when the app first uses its class's statics. Tree. 2 files.
 
 ### Section 3. Scope
