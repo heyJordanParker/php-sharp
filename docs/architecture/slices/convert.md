@@ -139,7 +139,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - A local's first assignment → `const name = …`, `let name = …`, or `T name = …` when the value's type is not the one PHP# infers, as an empty literal. Both.
 - `$$name`, `global`, `compact()` and `extract()` → removed (line 199). Tree. Refuses. 10 files hold `global`, 3 `compact` or `extract`.
 - Superglobals → removed (section 29). Tree. Refuses. 18 files.
-- A `static` local → refuses, as the converter's own refusal: its PHP# form is a private static field with an initial value (lines 441 to 443), which the converter doesn't write yet. Tree. 2 files.
+- A `static` local → refuses, as the converter's own refusal. Its PHP# form is a private static field with an initial value, which the converter doesn't write yet. Lines 441 to 443 are that field's rule: it needs an initial value, which runs once, when the app first uses its class's statics. Tree. 2 files.
 
 ### Section 3. Scope
 
@@ -212,6 +212,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 ### Section 14. Functions as values
 
 - `fn($x) => …` and `function ($x) use ($y) { … }` → `(T x) => …`. Both.
+- `static fn` and `static function` → the same lambda, without `static`. A static closure can't use `$this` and can't be bound to an object, so its body names no `this`, and each call of the lambda gives the result PHP's gives. The PHP# lambda is no static closure: in an instance method it holds the object, so plain PHP that binds it with `bindTo` or `Closure::bind`, or serializes it with what it holds, sees the object PHP's static closure never held. Both. 464 lines in 153 files, and 119 in 60.
 - A by-reference capture `use (&$total)` → a plain capture, since a lambda captures the variable itself (line 2200). Tree. 26 files.
 - A by-value capture `use ($total)`, and each variable an arrow function reads → the same plain capture, only when nothing writes `total` after its declaration, in the lambda or around it. Both.
 - A call of a function value `$f($x)` → `f(x)`, and a call of a string or an array that names a function refuses (line 2165). Both.
