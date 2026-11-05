@@ -277,6 +277,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 ### Section 25. Referring to classes
 
 - `X::class` → `typeof(X)`, `static` → `Self`, `self` → the class's name (line 4870). Tree.
+- A static call through `self`, `self::m()`, → `Name.m()` in a `final` class or an enum, and refuses elsewhere. PHP's `self::m()` forwards the class PHP called, which late static binding in `m` reads, and a call through the class's name doesn't. `self` in a constant, a static property and `new self` keeps the class's name, which means the declaring class (line 5015). Tree.
 - A property or a method named by a variable, `$x->$name` and `$x->$name()` → refuses (line 4973, decision 030). Tree. 23 and 10 files.
 
 ### Section 27. PHP# files
