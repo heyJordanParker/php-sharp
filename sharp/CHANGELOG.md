@@ -6,12 +6,13 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ### Changed
 
-- `mago compile` proves the laws of every `.sharp` file it compiles in one Lean process, where it ran one per file at once. Lean and the runtime library load once per compile instead of once per file, so a compile of many files with laws uses far less processor time and memory. The processor-time limit on a check holds for each file, so the one process may use that limit once for each file it checks.
+- `mago compile` proves the laws of every `.sharp` file it compiles in one Lean process, where it built the Lean code it generates with Lake and then ran one Lean process per file at once, each importing Lean, the runtime library and that code. Lean and the runtime library now load once per compile, and the generated code is elaborated once, in that process, so a compile of many files with laws uses far less processor time and memory. Mago no longer writes the generated code to `.sharp/.lean/`, and deletes the `Code` folder and the Lake build an earlier `mago` left there. The processor-time limit and the deadline still hold for each file's check.
 - `mago compile` builds the law checker's Lean library in Mago's cache folder once for each version of the library's Lean sources and of Lean, where it built one for each `mago` build. A `mago` built from other Rust code with the same Lean sources, as each edit to Mago makes, uses the library that is there, where it built a new one and deleted the other.
-- `mago compile` elaborates the Lean code it generates for a law's file once, in the Lean process that proves the laws, where Lake compiled it first and that process elaborated it again. A generated module Lean rejects, or that runs past the checker's limit or deadline, refuses the laws of each file whose proof reaches it, where it failed the whole compile when another file's law reached it.
+- A law whose proof reaches another file's generated Lean code, where Lean rejects that code or it runs past the checker's limit or deadline, is refused with that code's refusal, where the whole compile failed with "the law checker failed with exit status: 1". The file's other laws are still checked.
 
 ### Fixed
 
+- A law whose code names something `sharp_prove`, `sharp_close` or `sharp_condition` is checked. Lean read the name as one of the law checker's proof steps, so the law was refused as a bug in the checker.
 - A test run on plain PHP stops with "This project needs the PHP# engine" before the runner includes a `.sharp` test file, once `phpunit.xml` names `heyjordanparker/php-sharp-composer`'s test bootstrap, `<phpunit bootstrap="vendor/heyjordanparker/php-sharp-composer/require-engine.php">`, in place of `vendor/autoload.php`. Before, PHPUnit, Pest and ParaTest included a listed `.sharp` test file themselves, so plain PHP printed its whole source as output, and Pest then reported "No tests found" and exited 0.
 
 ## [0.6.2] - 2026-11-03
