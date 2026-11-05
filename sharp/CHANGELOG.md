@@ -7,6 +7,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Changed
 
 - `mago compile` proves the laws of every `.sharp` file it compiles in one Lean process, where it ran one per file at once. Lean and the runtime library load once per compile instead of once per file, so a compile of many files with laws uses far less processor time and memory. The processor-time limit on a check holds for each file, so the one process may use that limit once for each file it checks.
+- `mago compile` builds the law checker's Lean library in Mago's cache folder once for each version of the library's Lean sources and of Lean, where it built one for each `mago` build. A `mago` built from other Rust code with the same Lean sources, as each edit to Mago makes, uses the library that is there, where it built a new one and deleted the other.
 
 ### Fixed
 
