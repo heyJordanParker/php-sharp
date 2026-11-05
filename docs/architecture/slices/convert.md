@@ -143,7 +143,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 
 ### Section 3. Scope
 
-- A local first assigned in a block and read after it → declared first in the body of its method or lambda, as `T? name = null;`, and each assignment of it writes it. A PHP variable lives for the whole function, so a loop's pass keeps the value an earlier pass gave it, and a declaration inside the loop would reset it on every pass. A lambda that captures such a local by value refuses, since each assignment writes it after its declaration (section 14). Both.
+- A local first assigned in a block and read after it → declared first in the body of its method or lambda, as `T? name = null;`, and each assignment of it writes it. A PHP variable lives for the whole function, so a loop's pass keeps the value an earlier pass gave it, and a declaration inside the loop would reset it on every pass. `T` joins the types of the values assigned to it, and each must come from a declaration (decision 2): a literal, a parameter, a property with a declared type, the declared return of a call, `new` of a class with no type parameters, or another local whose values do. A `@var` tag on any of its assignments declares `T` instead. Any other value refuses, as `$count * 2` does, "no declaration gives the type of `$count * 2`, which it is assigned: declare its type with a `@var` tag". A lambda that captures such a local by value refuses, since each assignment writes it after its declaration (section 14). Both.
 
 ### Section 4. Member access
 
