@@ -47,7 +47,7 @@ Before it writes a file, it analyzes the converted files with the whole project,
 
 It refuses each of these, with its reason as `file:line:column: reason`:
 
-- what PHP# removes, as `global`, references, `echo`, `goto` and `compact`, and a trait
+- what PHP# removes, as `global`, references, `echo`, `goto` and `compact`, and a trait declaration
 - a type PHP# can't write, as the `false` of `int|false`, `array-key`, a bare `array` and an array shape
 - a method's return the analysis takes from its body
 - a built-in call no standard library member runs with PHP's meaning, as "`trim` has no PHP# form: no standard library member runs `trim` with PHP's meaning (decision 083)"
