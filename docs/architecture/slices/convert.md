@@ -1,6 +1,6 @@
 # Slice: `mago convert`, plain PHP into PHP#
 
-A design for a command that raises a project's plain PHP class files into PHP#, file by file, and proves each one before it writes it. This note is the design only. Cass approves it before any slice starts. The spike behind it is `spike/converter` at `ed784cfd2c801c1e70bba42c82f213b9c2428a98`. Line numbers refer to `docs/spec.md`.
+A design for a command that raises a project's plain PHP class files into PHP#, file by file, and proves each one before it writes it. This note is the design only. Cass approves it before any work starts. The spike behind it is `spike/converter` at `ed784cfd2c801c1e70bba42c82f213b9c2428a98`. Line numbers refer to `docs/spec.md`.
 
 ## The answer first
 
@@ -24,7 +24,7 @@ The command takes a file when it is under a PSR-4 folder of `composer.json`'s `a
 - a file that declares no class-like is a script
 - a file that declares two types, or one named unlike the file, breaks section 27
 
-`autoload-dev` folders are refused, as line 5380 keeps a test runner's files apart (decision 10). On the application, 1,058 of 1,144 files under `autoload` pass the shape check: 24 declare no class-like, and 62 declare one named unlike the file.
+`autoload-dev` folders are refused, as line 5380 keeps a test runner's files apart (decision 10). On the application, 1,058 of 1,144 files under `autoload` pass the shape check: 24 declare no class-like, and 62 declare one named unlike the file. Of those 24, 4 are scripts, and 20 are the `.php` files `mago compile` writes beside the application's 20 `.sharp` files, which declare their class only inside `if (false)` and which `mago convert` never loads. So the command sees 1,124 plain PHP files there, and each file a run converts moves from the 1,058 to the 24.
 
 ### Where the types come from
 
@@ -72,12 +72,12 @@ PHPDoc tags whose type the declaration now writes leave the docblock: `@var`, `@
 
 `types::type_text` prints an analysis type in PHP#'s spelling, as the bridge's `type_text` prints one in PHP's. A class prints by the name the file reaches it by:
 
-- its bare name, when it is a root class of `Builtins.sharp`, as `Throwable`, the standard exceptions, `Attribute`, `Countable` and `JsonSerializable`, or a class declared directly in `Sharp` (line 4409). A `use` line of a root class goes
+- its bare name, when it is a root class of `Builtins.sharp`, as `Throwable`, the standard exceptions, `Attribute`, `Countable` and `JsonSerializable`, or a class declared directly in `Sharp` (line 4409)
 - its short name, when it is in the file's own namespace
 - its alias, when a `use` line names it
-- a new `import` line otherwise, under its short name, or `import … as …` with the namespace's last part before it when another import takes the short name (line 4452)
+- a new `import` line otherwise, under its short name, or `import … as …` with the namespace's last part before it when another import takes the short name (line 4452), or when PHP# reserves it: `Any` and `Equatable` for a type (section 11), and `Error` for its interface of every failure (line 6148), as `import Lib.Payments.Error as PaymentsError;`
 
-A PHP built-in class outside `Builtins.sharp` refuses the file, since section 23 names it only in the standard library.
+A `use` line of a root class of `Builtins.sharp` goes, since the file names the class bare. A PHP built-in class outside `Builtins.sharp` refuses the file, since section 23 names it only in the standard library.
 
 ### How a bare function call converts
 
@@ -96,28 +96,30 @@ A call's function is the one its resolved name names, `names.get(identifier)`, o
 
 ### How a file is proven before it is written
 
-The command puts the converted text in the server's database in place of the plain file, under the `.sharp` name, marked by `mark_sharp_file` as the loader marks a `.sharp` file it reads, and runs `analyze_incremental`. It compares every issue before and after, warnings and errors alike, keyed by file, level, code, message and line, with duplicates counted. It then lowers every file through `Server::compile`, in memory. The file stays plain PHP when:
+The command builds each database through `project_database`, the function `mago compile` builds its own with, so the standard library's and each package's PHP# files are the project's, and the proof's compile inlines the library's forms as `mago compile` does. It analyzes the plain project once, with fresh extension hosts. It then puts every converted text in a fresh database in place of its plain file, under the `.sharp` name, marked by `mark_sharp_file` as the loader marks a `.sharp` file it reads, and analyzes that project with fresh hosts. It compares every issue with the plain project's, warnings and errors alike, keyed by file, level, code, message and line, with duplicates counted. It then lowers every file through `Server::compile`, in memory. A file stays plain PHP when:
 
 - the converted file has any error or warning, since nothing hides a language error in a `.sharp` file (lines 5360 and 5384)
 - any other file gains an error, or a warning decision 9 doesn't expect
 - the compile refuses a file it accepted before, a plain PHP subclass included
 
-The database then gets the plain file back. The project's `ignore` entries and baseline apply to the codes of an extension host's rules only, never to a language error, as line 5360 says. The spike applies none at all.
+A file with issues of its own stays plain PHP, and the rest are proven again. An issue in another file sends the files to be proven in two parts, each on top of the files already proven, until one file is left to keep plain PHP. Such an issue comes from the converted files it points into, as an override's issue points at the method it overrides. When it points into none, it comes from a converted file whose edit makes the analysis's warm path re-analyze a file it points into, as a callee's edit does for its caller, and `Server::files_reaching` gives those files from the proof's own analysis. The second part is the second half of the fewest files one issue can come from, and the first part is the rest. Only when no converted file can bring an issue are the parts the files' halves. A file stays plain PHP for another file's issue only when a proof of it alone, on top of the files already proven, brings that issue. When the first part is proven whole and the second is one file, the proof that split them was that proof, so none runs again. Each proof is a whole analysis with fresh hosts, and each split costs one, so a file found this way costs a proof per halving of the files that can bring its issue, not of all the files. A folder whose files all convert costs two analyses. The project's `ignore` entries and baseline apply to the codes of an extension host's rules only, never to a language error, as line 5360 says.
 
-Files convert in path order, each proven against the earlier ones already converted. An extension host loads the project's own classes (line 5385), so after each written file the command compiles the project for the hosts again, and when that changes what they load, it starts a new analysis with fresh hosts for the files left, as `mago analyze --watch` restarts its hosts.
+Every proof is a fresh analysis because a per-file proof cost too much and was wrong. With extension hosts, an incremental analysis of one changed file costs a whole analysis, 20 s a file on a 1,200-file application. It also reports issues a fresh analysis doesn't: a host rule's state left from the first pass, and `@mago-expect` pragmas it didn't revisit.
+
+An extension host loads the project's own classes (line 5385), and during the proof the hosts load the plain ones. So after a run writes its files, the command compiles the project for the hosts again. When that changes what they load, fresh hosts that load the converted classes prove the project once more, and each issue they add is an error, with the plain PHP in git.
 
 `--dry-run` prints each diff and changes nothing.
 
 ### What git sees
 
-A tracked file moves with `git mv`, then the converted text is written over it. The index holds the rename alone, `R100`, and the conversion is an unstaged change on top:
+A file converts only as the last commit holds it, and one that is untracked or changed since stays plain PHP: "git holds no commit of it as it is: commit it first, so git holds its plain PHP". The converted text is written at the `.sharp` name first. Then `git::stage_rename` records the rename in the index with the plain file's contents, as `git mv` does, and only then does the plain file leave, so a write that fails leaves it where it was. The index holds the rename alone, `R100`, and the conversion is an unstaged change on top:
 
 ```text
 $ git status --short
 RM src/Shop/Shelf.php -> src/Shop/Shelf.sharp
 ```
 
-The next `mago compile` writes `src/Shop/Shelf.php` again, as decision 081's discovery file, and its `info/exclude` block hides it, so `git status --ignored` shows it as `!!`, never as the tracked file come back. An untracked file is renamed on disk only.
+The next `mago compile` writes `src/Shop/Shelf.php` again, as decision 081's discovery file, and its `info/exclude` block hides it, so `git status --ignored` shows it as `!!`, never as the tracked file come back.
 
 ### What a converted file loses
 
@@ -125,170 +127,178 @@ The next `mago compile` writes `src/Shop/Shelf.php` again, as decision 081's dis
 
 ## Every construct, by spec section
 
-Each line gives the plain PHP form, the PHP# form, what finds it, and the slice that converts it, or "refuses". "Tree" is the syntax tree, "type" is the analyzer's type of an expression or declaration, and "both" needs both. Every refusal's message names its spec line.
+Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, and what finds it. "Tree" is the syntax tree, "type" is the analyzer's type of an expression or declaration, and "both" needs both. Every refusal's message names its spec line.
 
 ### Section 1. Attributes
 
-- `#[Name(args)]` → `[Name(args)]`, each kept with its arguments. Tree. Slice 1.
+- `#[Name(args)]` → `[Name(args)]`, each kept with its arguments. Tree.
 
 ### Section 2. Variables
 
-- `$name` → `name`, and `$let` → `@let` for a PHP# keyword. Tree. Slice 1.
-- A local's first assignment → `const name = …`, `let name = …`, or `T name = …` when the value's type is not the one PHP# infers, as an empty literal. Both. Slice 1.
+- `$name` → `name`, and `$let` → `@let` for a PHP# keyword. Tree.
+- A local's first assignment → `const name = …`, `let name = …`, or `T name = …` when the value's type is not the one PHP# infers, as an empty literal. Both.
 - `$$name`, `global`, `compact()` and `extract()` → removed (line 199). Tree. Refuses. 10 files hold `global`, 3 `compact` or `extract`.
 - Superglobals → removed (section 29). Tree. Refuses. 18 files.
-- A `static` local → refuses, as the converter's own refusal: its PHP# form is a private static field with an initial value (lines 441 to 443), which the converter doesn't write yet. Tree. 2 files.
+- A class constant → `public const int LIMIT = 3;`, with the type PHP declares, its PHPDoc's, or its value's. The lowering writes that type into the constant's PHP, and PHP then makes a subclass's constant of the name take a compatible one: `Type of Child::LIMIT must be compatible with Base::LIMIT of type int`, which the engine gives. So a constant with no PHP type converts only in a `final` class, in an enum, or as `private`, which no subclass declares again, and refuses otherwise. Both.
+- A `static` local → refuses, as the converter's own refusal. Its PHP# form is a private static field with an initial value, which the converter doesn't write yet. Lines 441 to 443 are that field's rule: it needs an initial value, which runs once, when the app first uses its class's statics. Tree. 2 files.
 
 ### Section 3. Scope
 
-- A local first assigned in a block and read after it → declared before the block, as `T? name = null;`. Both. Slice 2. Slice 1 refuses it.
+- A local first assigned in a block and read after it → declared first in the body of its method or lambda, as `T? name = null;`, and each assignment of it writes it. A PHP variable lives for the whole function, so a loop's pass keeps the value an earlier pass gave it, and a declaration inside the loop would reset it on every pass. `T` joins the types of the values assigned to it, and each must come from a declaration (decision 2): a literal, a parameter, a property with a declared type, the declared return of a call, `new` of a class with no type parameters, or another local whose values do. A `@var` tag on any of its assignments declares `T` instead. Any other value refuses, as `$count * 2` does, "no declaration gives the type of `$count * 2`, which it is assigned: declare its type with a `@var` tag". A lambda that captures such a local by value refuses, since each assignment writes it after its declaration (section 14). Both.
 
 ### Section 4. Member access
 
-- `->` and `::` → `.`, and `?->` → `?.`. Tree. Slice 1.
+- `->` and `::` → `.`, and `?->` → `?.`. Tree.
 - A static and an instance member of one name → refuses (line 323).
 
 ### Section 5. Access modifiers
 
-- A class → `public class`, since PHP reaches every class. Tree. Slice 1.
-- A member with no visibility, or `var` → `public`. Tree. Slice 1.
+- A class → `public class`, since PHP reaches every class. Tree.
+- A member with no visibility, or `var` → `public`. Tree.
 
 ### Section 6. Fields and properties
 
-- A `private` or `protected` property → a field, `private int count = 0;`. Both. Slice 1.
-- A `public` property → `public T name { get; set; }`. Both. Slice 1.
-- An untyped property, which PHP fills with `null` → `Any? name = null`. Both. Slice 1.
-- Two names in one declaration → one declaration per name, each on its own line (line 383). Tree. Slice 1.
-- Property hooks → accessors. Tree. Slice 4.
+- A `private` or `protected` property → a field, `private int count = 0;`. Both.
+- A `public` property → `public T name { get; set; }`, and `public virtual T name { get; set; }` where a subclass may replace it, since a PHP# property is closed otherwise (line 586). Both.
+- An untyped property, which PHP fills with `null` → `Any? name = null`. Both.
+- Two names in one declaration → one declaration per name, each on its own line (line 383). Tree.
+- Property hooks → accessors, where `$this->name` is `field`, `$value` is `value` and a short `set => expr` is `set => field = expr`. A property with storage gains the accessor it declares no hook for, and its initial value follows the accessors. A `set` hook whose parameter is other than `$value` of the property's type, a `set` hook with no `get` on a property with no storage, and `&get` refuse. Tree.
 
 ### Section 7. Methods
 
-- `public function name(int $a): string` → `public virtual string name(int a)`. Both. Slice 1.
-- A static method a subclass may replace → `static virtual` (lines 1390 and 1396). Tree. Slice 4.
-- Named arguments `f(name: $v)` → `f(name: v)`. Tree. Slice 1.
-- Argument spread `f(...$items)` → `f(...items)`. Both. Slice 5.
+- `public function name(int $a): string` → `public virtual string name(int a)`. Both.
+- A static method a subclass may replace → `static virtual` (lines 1390 and 1396). Tree.
+- Named arguments `f(name: $v)` → `f(name: v)`. Tree.
+- Argument spread `f(...$items)` → `f(...items)`, of a `List` into a `...` parameter. Any other spread into a call refuses (line 701). Both.
+- A spread in a literal `[...$a]` → `[...a]`, of a `List`, or of a `Map` keyed by `string`. A `Map` spread keeps an `int` key PHP renumbers, so it refuses (line 1618). Both.
 
 ### Section 8. Functions
 
 - A file-level function or statement → refuses, since a `.sharp` file declares one type (line 5306). Tree.
-- `echo`, `print`, `exit` and `die` → `Console` and `Process`, which a class receives through its constructor (line 830). Tree. Refuses until a slice injects them. 29 files.
-- A bare function call → [how a bare function call converts](#how-a-bare-function-call-converts). Both. Slice 1 for type tests and library functions, slice 3 for built-in members.
+- `echo`, `print`, `exit` and `die` → refuses. PHP# writes output through `Console` and exits through `Process`, which a class receives through its constructor (line 830), and adding a constructor parameter changes every caller. Tree. 29 files.
+- A bare function call → [how a bare function call converts](#how-a-bare-function-call-converts). Both.
 - `include`, `require` and `eval` → refuses (lines 827 and 5306). 7 files.
 
 ### Section 9. Constructors
 
-- `__construct` → the class's name. Tree. Slice 1.
-- A promoted parameter → `private Spec spec` for a field, `public string reference { get; set; }` for a property. Both. Slice 1.
-- A subclass constructor → `: super(…)` on every one (line 926): the arguments of the `parent::__construct(…)` its body starts with, which leaves the body, or `: super()` when no ancestor declares a constructor. Tree. Slice 4. 162 files have a parent with none.
+- `__construct` → the class's name. Tree.
+- A promoted parameter → `private Spec spec` for a field, `public string reference { get; set; }` for a property. Both.
+- A subclass constructor → `: super(…)` on every one (line 926): the arguments of the `parent::__construct(…)` its body starts with, which leaves the body, or `: super()` when no ancestor declares a constructor. Tree. 162 files have a parent with none.
 - A parent constructor call after other statements, or none where an ancestor declares one → refuses, since `: super(…)` runs it first. Tree. 6 files.
 
 ### Section 10. Structs and `with`
 
-- `clone $x` with no property set → `x with { }` (line 1020). Tree. Slice 4. 13 files.
+- `clone $x` with no property set → `x with { }` (line 1020). Tree. 13 files. `with` lowers to PHP's `clone`, so a class's `__clone` runs on the copy as it does in PHP, which `run.php` shows on the engine with `Tally::stamped`.
 
 ### Section 11. Generics
 
-- `@template T of Spec` → `class Shelf<T : Spec>`, and `@template-covariant` → `out T`. Type. Slice 1.
-- `new Box($x)` of a generic class → `new Box<Spec>(x)`, with the declared type's arguments or the class's bounds, [never the analysis's](#how-a-new-gets-its-type-arguments). Type. Slice 1.
-- `@extends Base<T>` → `: Base<T>`. Type. Slice 4.
+- `@template T of Spec` → `class Shelf<T : Spec>`, and `@template-covariant` → `out T`. Type.
+- `new Box($x)` of a generic class → `new Box<Spec>(x)`, with the declared type's arguments or the class's bounds, [never the analysis's](#how-a-new-gets-its-type-arguments). Type.
+- `@extends Base<T>` → `: Base<T>`, and the same for `@implements` and a trait's `@use`. The tags leave the docblock. Type.
 
 ### Section 12. Collections
 
-- `list<T>` → `List<T>`, `array<K, V>` → `Map<K, V>`. Type. Slice 1.
-- `[]` where a `Map` is declared → `[:]`, and where a `List|Map` union is declared → refuses rather than pick one. Type. Slice 1.
-- `$list[] = $value` → `list.add(value)`. Tree. Slice 1.
-- `empty($items)` → `items.isEmpty()`, and `unset($map[$key])` → `map.remove(key)`. Both. Slice 2.
-- `isset($map[$key])` → `map[key] != null`, since a `Map` read gives null for a missing key (line 1625) and `isset` is false for a null value. Both. Slice 2.
-- `['id' => $id] = $row;` of a `Map` → one read per key, `const id = row["id"];`, each handled as a `TValue?` (lines 1625 and 1664). Both. Slice 5. 16 files.
+- `list<T>` → `List<T>`, `array<K, V>` → `Map<K, V>`. Type.
+- `[]` where a `Map` is declared → `[:]`, and where a `List|Map` union is declared → refuses rather than pick one. Type.
+- `$list[] = $value` → `list.add(value)`. Tree.
+- `empty($items)` → `items.isEmpty()`, and `unset($map[$key])` → `map.remove(key)`. Both.
+- `isset($map[$key])` → `map.get(key) != null`, since a `Map` read gives null for a missing key (line 1625) and `isset` is false for a null value. Both.
+- `isset` and `empty` of a property → the property's null check or truthiness test, only when the property always holds a value, as one with a default or a promoted one does, and no class its object may be declares `__isset` or `__get`. PHP gives a typed property that holds no value as unset, and asks those methods, where PHP# reads the property. `isset` and `empty` at a `List` index refuse, since PHP reads past the end without an error. Both.
+- `['id' => $id] = $row;` of a `Map` variable → one read per key, `const id = row.get("id");`, each a `TValue?` (lines 1625 and 1664). Both. 16 files. Destructuring by position, a `Map` a call gives, and destructuring inside another expression refuse.
 - `array` with no PHPDoc type, and an array shape → refuses with the type. Type.
 
 ### Section 13. `readonly`
 
-- A `readonly` property or promoted parameter → `{ get; }` (line 2095). Tree. Slice 1.
-- A `readonly` class → each property `{ get; }`. Tree. Slice 4.
+- A `readonly` property or promoted parameter → `{ get; }` (line 2095). Tree.
+- A `readonly` class → each property `{ get; }`. Tree.
 
 ### Section 14. Functions as values
 
-- `fn($x) => …` and `function ($x) use ($y) { … }` → `(T x) => …`. Both. Slice 5.
-- A by-reference capture `use (&$total)` → a plain capture, since a lambda captures the variable itself (line 2200). Tree. Slice 5. 26 files.
-- A by-value capture `use ($total)` → the same plain capture, only when nothing writes `total` after the lambda is made. Both. Slice 5.
-- `[$this, 'name']`, `'Class::name'` and `name(...)` → `this.name`. Both. Slice 5.
+- `fn($x) => …` and `function ($x) use ($y) { … }` → `(T x) => …`. Both.
+- `static fn` and `static function` → the same lambda, without `static`. A static closure can't use `$this` and can't be bound to an object, so its body names no `this`, and each call of the lambda gives the result PHP's gives. The PHP# lambda is no static closure: in an instance method it holds the object, so plain PHP that binds it with `bindTo` or `Closure::bind`, or serializes it with what it holds, sees the object PHP's static closure never held. Both. 464 lines in 153 files, and 119 in 60.
+- A by-reference capture `use (&$total)` → a plain capture, since a lambda captures the variable itself (line 2200). Tree. 26 files.
+- A by-value capture `use ($total)`, and each variable an arrow function reads → the same plain capture, only when nothing writes `total` after its declaration, in the lambda or around it. Both.
+- A call of a function value `$f($x)` → `f(x)`, and a call of a string or an array that names a function refuses (line 2165). Both.
+- A closure type `\Closure(int): int` → `Function<int(int)>`, and one with a parameter by reference, a variadic or an optional one refuses. Type.
+- `[$this, 'name']`, `'Class::name'` and `name(...)` → `this.name`. Both. An array or a string converts where a function type is declared, and refuses when the analysis finds no such method. A partial application with placeholders, and a built-in function's value, refuse.
 - A method and a property of one name → refuses (line 2346). 51 files.
 - `??` stays. `?:` → refuses (line 3764).
 
 ### Section 17. Loops
 
-- `foreach ($items as $item)` → `for (const item of items)`, and `foreach ($map as $key => $value)` → `for (const [key, value] of map)`. Both. Slice 2.
-- A body without braces → braces added (line 2903). Tree. Slice 2. Slice 1 refuses it.
+- `foreach ($items as $item)` → `for (const item of items)`, and `foreach ($map as $key => $value)` → `for (const [key, value] of map)`. Both.
+- A body without braces → braces added (line 2903). Tree.
 
 ### Section 18. Strings
 
-- `.` between two strings → `+`. Type. Slice 1.
-- `.` with an `int` or a `float` → a template, `` `x${count}` ``, which prints a number through PHP's own conversion. Type. Slice 1.
+- `.` between two strings → `+`. Type.
+- `.` with an `int` or a `float` → a template, `` `x${count}` ``, which prints a number through PHP's own conversion. Type.
 - `.` with a `bool`, which PHP prints as `1` or nothing, and a template as `true` or `false` (line 2940) → refuses. Type.
-- `"Hi $name"` → `` `Hi ${name}` ``. Tree. Slice 6.
-- Heredoc and nowdoc → a template (line 2927). Tree. Slice 6. 7 files.
-- `__toString()` → `string toString()` (line 2977). Tree. Slice 4.
+- `"Hi $name"` → `` `Hi ${name}` ``, each value an `int`, a `float` or a `string`, which a template shows as PHP does. A `bool` refuses (line 2940). Both.
+- Heredoc and nowdoc → a template (line 2927), without the closing label's indentation and the line break before it. Text takes JavaScript's escapes for `\`, a backtick, `$` and control characters. A heredoc indented with both spaces and tabs, and text that is no UTF-8, refuse. Tree. 7 files.
+- `__toString()` → `string toString()` (line 2977). Tree.
 
 ### Section 19. Equality, comparison and operators
 
-- `===` and `!==` → `==` and `!=` when both sides have one scalar type, both are enums, or one side is `null`. Type. Slice 1.
-- `===` where either side may hold an object → stays `===` (line 3029). Type. Slice 1.
+- `===` and `!==` → `==` and `!=` when both sides have one scalar type, both are enums, or one side is `null`. Type.
+- `===` where either side may hold an object → stays `===` (line 3029). Type.
 - `===` between an `int` and a `float` → refuses, since `1 === 1.0` is false and PHP# compares them by value (line 1705). Type.
 - `===` on a collection → refuses, since PHP compares keys and order and PHP# compares elements (lines 3023 and 3032). Type.
-- Loose `==` → `==` when both sides have one scalar type, and refuses otherwise. Type. Slice 2.
-- `instanceof` → `is`, and `!$x instanceof A` → `x is not A` (line 3652). Tree. Slice 1.
+- Loose `==` → `==` when both sides have one scalar type, and refuses otherwise. Type.
+- `instanceof` → `is`, and `!$x instanceof A` → `x is not A` (line 3652). Tree.
 
 ### Section 20. Enums
 
-- A PHP enum → a PHP# enum. Tree. Slice 4.
+- A PHP enum → a PHP# enum. Tree.
 
 ### Section 21. Pattern matching
 
-- A condition that is no `bool` → the comparison its type gives: `x != null` for `T?`, `!list.isEmpty()` for a collection, `x != "" && x != "0"` for a string (line 3752). Type. Slice 2. Slice 1 refuses it.
-- `match` → `match`, when each arm's comparison passes the `===` rule of section 19, since PHP's `match` compares with `===` (line 3426). Both. Slice 2.
-- `switch` → `match` with block arms, when no arm falls through (line 3426). Tree. Slice 6. 6 files.
-- `and`, `or` and `xor` → `&&` and `||`, and `xor` refuses. Tree. Slice 2.
+- A condition that is no `bool` → the comparison its type gives: `x != null` for `T?`, `!list.isEmpty()` for a collection, `x != "" && x != "0"` for a string (line 3752). Type.
+- `match` → `match`, when each arm's comparison passes the `===` rule of section 19, since PHP's `match` compares with `===` (line 3426). Both.
+- `switch` → `match` with block arms, when no arm falls through (line 3426). Tree. 6 files. Cases with no statements of their own join the next with `or`, a `switch` without `default` gains `default => {},`, and each case passes the `===` rule above, since `==` and `===` agree there. A case that runs on into the next, a `break` or `continue` that leaves before its case ends, a `case` of a numeric string or `null`, and `switch … endswitch` refuse. A constant's value counts as a literal's does. On a value that may be `null`, a `case` of a value PHP reads as `false` refuses too, `false`, `0`, `0.0` and `''`, since PHP's `null == ''` holds and the pattern doesn't match `null`, as does a `case` whose value the analysis doesn't know.
+- `and`, `or` and `xor` → `&&` and `||`, and `xor` refuses. Tree.
 
 ### Section 22. Inheritance
 
-- `extends A implements B` → `: A, B`. Tree. Slice 1.
-- An open method → `virtual`, one that replaces a parent class's → `override`, and a `final` or `private` one → nothing (line 3782). Both. Slice 1.
-- A plain PHP trait a class uses → listed in the header (line 4205). Tree. Slice 4. A `use` block with `insteadof` or `as` refuses.
+- `extends A implements B` → `: A, B`. Tree.
+- An open method → `virtual`, one that replaces a parent class's → `override`, and a `final` or `private` one → nothing (line 3782). Both.
+- A plain PHP trait a class uses → listed in the header (line 4205). Tree. A `use` block with `insteadof` or `as` refuses.
 - A trait declaration → refuses, since PHP# declares no traits. Tree. 16 files.
 
 ### Section 23. Namespaces and imports
 
-- `namespace A\B;` → `namespace A.B;`, and `use A\B;` → `import A.B;`. Tree. Slice 1.
-- A class in code → its name as [how a name prints](#how-a-name-prints) says. Both. Slice 1.
-- `use function` → no line, since each call imports the namespace. `use const Vendor\Pdf\SIZE` → `import Vendor.Pdf;` and `Pdf.SIZE` (line 4345). Tree. Slice 1.
-- `new $class(…)` of a class value → `new (type)(…)`, when the class's constructor is `required` (line 4968). Both. Slice 5.
+- `namespace A\B;` → `namespace A.B;`, and `use A\B;` → `import A.B;`. Tree.
+- A class in code → its name as [how a name prints](#how-a-name-prints) says. Both.
+- `use function` → no line, since each call imports the namespace. `use const Vendor\Pdf\SIZE` → `import Vendor.Pdf;` and `Pdf.SIZE` (line 4345). Tree.
+- `new $class(…)` of a class value → `new (type)(…)`, when the class's constructor is `required` (line 4968), which the checker checks. `new` of a string, and `new static(…)`, whose `new Self(…)` needs a `required` constructor the converter doesn't write, refuse. Both.
 
 ### Section 24. Built-in types and `Any`
 
-- `mixed` → `Any?`, `?T` → `T?`, `object` → `Object`. Type. Slice 1.
-- `(int)`, `(float)` and `(string)` stay, and the aliases `(integer)`, `(double)`, `(real)` and `(binary)` become them. Tree. Slice 1.
+- `mixed` → `Any?`, `?T` → `T?`, `object` → `Object`. Type.
+- `(int)`, `(float)` and `(string)` stay, and the aliases `(integer)`, `(double)`, `(real)` and `(binary)` become them. Tree.
 - `(bool)`, `(array)` and `(object)` → refuses (line 4717). Tree.
-- `try`, `catch` and `finally` stay, and `catch (Exception $e)` → `catch (Exception e)` (line 6151). Tree. Slice 1.
+- An `int` literal where a `float` goes, which PHP turns into a `float` → the `float` of the value it writes, so `1` is `1.0`, the octal `017` is `15.0` and the hex `0x1F` is `31.0`. Type.
+- `try`, `catch` and `finally` stay, and `catch (Exception $e)` → `catch (Exception e)` (line 6151). Tree.
 
 ### Section 25. Referring to classes
 
-- `X::class` → `typeof(X)`, `static` → `Self`, `self` → the class's name (line 4870). Tree. Slice 1.
+- `X::class` → `typeof(X)`, `static` → `Self`, `self` → the class's name (line 4870). Tree.
+- A static call through `self`, `self::m()`, → `Name.m()` in a `final` class or an enum, and refuses elsewhere. PHP's `self::m()` forwards the class PHP called, which late static binding in `m` reads, and a call through the class's name doesn't. `self` in a constant, a static property and `new self` keeps the class's name, which means the declaring class (line 5015). Tree.
 - A property or a method named by a variable, `$x->$name` and `$x->$name()` → refuses (line 4973, decision 030). Tree. 23 and 10 files.
 
 ### Section 27. PHP# files
 
-- `<?php` and `declare(strict_types=1);` → removed, since PHP# is always strict (line 5295). Tree. Slice 1.
-- A file without `strict_types` → the same removal, which makes its calls strict. The proof's analysis and the project's tests catch a call that relied on coercion. Tree. Slice 1.
-- Magic constants such as `__DIR__` → `Position` (line 5319). Tree. Slice 6. 66 files.
+- `<?php` and `declare(strict_types=1);` → removed, since PHP# is always strict (line 5295). Tree.
+- A file without `strict_types` → the same removal, which makes its calls strict. The proof's analysis and the project's tests catch a call that relied on coercion. Tree.
+- `__DIR__` and `__FILE__` → `Position.current().directory` and `.file` (line 5319). Tree. 66 files with `__DIR__`, `__FILE__` or `__LINE__`. `__LINE__` refuses, since the conversion moves lines and `Position.current().line` gives the `.sharp` file's. `__CLASS__`, `__METHOD__`, `__FUNCTION__`, `__NAMESPACE__` and the rest refuse, since `Position` names a function by its dotted name and no class or namespace.
 
 ### Section 29. Effects
 
-- `getenv()`, `echo` and `exit` → `Environment`, `Console` and `Process`, which a class receives through its constructor. Refuses until a slice injects them.
+- `getenv()`, `echo` and `exit` → refuses. PHP# reaches them through `Environment`, `Console` and `Process`, which a class receives through its constructor, and adding a constructor parameter changes every caller.
 
 ### Section 30. Tuples
 
-- `[$a, $b] = $this->pair()` of a tuple type → `const [a, b] = this.pair();`. Both. Slice 5.
+- `[$a, $b] = $this->pair()` of a tuple type → refuses. Only a PHP# hint makes a tuple type (`scanner/ttype.rs`), so a plain PHP file meets one only from a hand-written `.sharp` method, which the fixture cases can't hold.
 
 ### Refused by the language
 
@@ -326,71 +336,90 @@ sharp/mago/
 │   │                                     pub fn type_test(function) -> Option<&TUnion>
 │   │                                     pub fn differs(member, function, codebase) -> Option<String>
 │   │                                     pub fn short(name) -> &str
-│   ├── src/declaration.rs                classes, properties, methods, constructors and parameters; crate-private
-│   ├── src/body.rs                       statements and expressions; crate-private
+│   ├── src/declaration/                  crate-private: mod.rs holds attributes, docblocks and visibility
+│   │   ├── class.rs                      the class header
+│   │   ├── members.rs                    properties and methods
+│   │   └── constructor.rs                parameters, promoted ones included, and what a constructor sets
+│   ├── src/body/                         crate-private: mod.rs walks statements and expressions
+│   │   ├── locals.rs                     variables, locals and assignment
+│   │   ├── conditions.rs                 conditions from PHP's truthiness, `isset` and `empty`
+│   │   ├── loops.rs                      loops, `break`, `continue` and `unset`
+│   │   ├── matching.rs                   `match`, and `switch` as a `match` statement
+│   │   ├── access.rs                     member and constant access
+│   │   ├── calls.rs                      calls, their arguments, calls of a function value, type tests and `new`
+│   │   ├── lambdas.rs                    lambdas and what they capture
+│   │   ├── builtins.rs                   a built-in's call as the library member that runs it
+│   │   ├── operators.rs                  operators and casts
+│   │   ├── strings.rs                    literals and concatenation
+│   │   └── collections.rs                array literals
 │   └── tests/                            cases/<construct>/{input.php, output.sharp}, and project/, the
-│                                         whole-project fixture, with spike.sh
+│                                         whole-project fixture, with project.sh
 ├── crates/sharp-bridge/src/lower/inline.rs   InlineForm::php_call() -> Option<&PhpCall>, InlineForm::in_order()
 │                                         pub struct PhpCall { function, arguments }
 │                                         pub enum PhpCallArgument { Slot(usize), Literal(bytes), Constant(bytes) }
+│                                         PhpCallArgument::literal(literal), which both sides compare by
 │                                         InlineForms::iter() -> (class, member, form)
 ├── crates/orchestrator/src/service/incremental_analysis/compile.rs
-│                                         IncrementalAnalysisService::standard_library_forms() -> InlineForms,
-│                                         and lower_library, which compile now shares
+│                                         IncrementalAnalysisService::standard_library_forms(refusing) -> InlineForms,
+│                                         and lower_library, sharp_files and errors, which compile now shares
 ├── crates/server/src/server.rs           pub fn codebase(&self) -> &CodebaseMetadata
 │                                         pub fn analyze_file_with_artifacts(&self, file_id)
-│                                         pub fn standard_library_forms(&self) -> Result<InlineForms, ServerError>
+│                                         pub fn standard_library_forms(&mut self, refusing)
+│                                             -> Result<InlineForms, ServerError>
+│                                         pub fn files_reaching(&self, files: &[FileId]) -> Vec<HashSet<FileId>>
 ├── crates/database/src/loader.rs         pub fn mark_sharp_file(file: &mut File, workspace: &Path)
 ├── src/commands/convert.rs               new: ConvertCommand { paths, dry_run }, execute(configuration, color_choice)
-├── src/commands/compile.rs               standard_library(root, database), now pub(crate) for convert
-└── src/utils/git.rs                      pub fn move_tracked(workspace, from, to) -> Result<bool, Error>
+├── src/commands/compile.rs               standard_library(root, database) and project_database(orchestrator,
+│                                         workspace), now pub(crate) for convert
+└── src/utils/git.rs                      pub fn committed_files(workspace) -> Result<HashSet<PathBuf>, Error>
+                                          pub fn stage_rename(workspace, from, to) -> Result<(), Error>
 ```
 
-`declaration.rs` and `body.rs` hold one `impl Converter` each, the state of one file's conversion. The command alone talks to the server, the file system and git, so the crate reads nothing but its `Input`.
+Each module of `declaration/` and `body/` holds one `impl Converter` for one construct family, the state of one file's conversion, so a family grows in its own file. The command alone talks to the server, the file system and git, so the crate reads nothing but its `Input`.
 
-## Slices
+## Order of work
 
-Each slice ends in a fixture pair per construct and a run of the whole-project proof. Slice 1 is the smallest set that converts a real class file.
+The converter lands in one pull request, family by family, in this order. Each family ends in a fixture pair per construct and a run of the whole-project proof. The first is the smallest set that converts a real class file.
 
-1. **Declarations.** Files, namespaces, imports and names, classes with their header, properties and fields, methods, constructors of classes with no parent class, attributes, `$` and member access, `+` and templates, `===`, `is` and `is not`, `X::class`, `new` with its type arguments, casts, `try`, named arguments, locals, type tests, and library functions. Proves a real class file converts, compiles, links to its plain PHP subclasses, and keeps git's history. The whole-project proof lands here, so every later slice runs it.
+1. **Declarations.** Files, namespaces, imports and names, classes with their header, properties and fields, methods, constructors of classes with no parent class, attributes, `$` and member access, `+` and templates, `===`, `is` and `is not`, `X::class`, `new` with its type arguments, casts, `try`, named arguments, locals, type tests, and library functions. Proves a real class file converts, compiles, links to its plain PHP subclasses, and keeps git's history. The whole-project proof lands here, so every later family runs it.
 2. **Conditions and loops.** Conditions from their type, loose `==`, `match`, `empty()`, `isset()` and `unset()`, `foreach`, bodies without braces, and locals across blocks. Proves PHP's truthiness and loops convert with their meaning kept.
 3. **Built-in calls.** Every member `inline_forms` gives with PHP's meaning, and each refusal that names the difference. Proves the forms grow with the standard library and nothing else.
 4. **Types and inheritance.** Subclass constructors with `: super(…)`, interfaces, abstract classes, enums, class constants, statics and `static virtual`, `@extends`, header traits, property hooks, `readonly` classes, `clone` as `with { }` and `__toString()`. Proves a whole class hierarchy converts in either order.
-5. **Functions as values.** Lambdas, captures, method values, argument spread, `new` of a class value, tuples and keyed destructuring. Proves capture keeps its meaning.
+5. **Functions as values.** Lambdas, captures, method values, calls of a function value, spreads, `new` of a class value and keyed destructuring. Tuple destructuring refuses, since no plain PHP type is a tuple. Proves capture keeps its meaning.
 6. **Text and branches.** Interpolation, heredoc, magic constants and `switch`. Proves the last syntax-only constructs.
 
 ## Tests
 
 - **A fixture pair per construct:** `crates/converter/tests/cases/<construct>/input.php` and `output.sharp`, with a `refusal.txt` instead for a refusing construct. One test runs each through the converter against a small project of the case's own files, and compares the text exactly. The first pair is `new-generic`, the spike's `Crate`: a `new` whose arguments come from a property's declared type, and one whose come from a method's declared return. A float in a template keeps a pair too.
-- **The whole-project proof:** `crates/converter/tests/project/`, a Composer project with the PHP# Composer plugin, one PSR-4 folder, a plain PHP library with a root function, and the neutral refinement worker as its extension host. `crates/converter/tests/spike.sh` runs it today. The slice turns it into a test that checks, after `mago convert`: `mago compile` accepts every file, plain PHP subclasses included; `mago analyze` has no new error and only the warnings decision 9 lists; `run.php` prints the same output on the engine; and every test of the project's suite gives the same result, test by test, from the suite's XML report before and after.
+- **The whole-project proof:** `crates/converter/tests/project/`, a Composer project with the PHP# Composer plugin, one PSR-4 folder, a plain PHP library with a root function, and the neutral refinement worker as its extension host. `crates/converter/tests/project.sh` checks, after `mago convert`: `mago compile` accepts every file, plain PHP subclasses included; `mago analyze` has no new error and only the warnings decision 9 lists; and `run.php` prints the same output on the engine. `sharp/bin/test` runs it after the PHP# suite, so every pull request runs it. The fixture has no test suite: a project's own tests are its user's gate, as decision 9 says.
 
 ## Decisions Cass approves
 
 Decisions 1, 3, 5, 8, 10, 11 and 12 are approved as they stand. Decisions 2, 4, 6, 7 and 9 change as Cass's verdict on this PR asks, and 13 is new.
 
 1. **Approved: the crate is `crates/converter`, `mago-converter`, and the command `mago convert <paths> [--dry-run]`.** Paths are required.
-2. **The converter writes declared, PHPDoc, refined and inherited types, and never an inferred one.** It refuses a method with `return_from_body.is_some()`. A type the codex marks `inferred: true` on a parameter, a return or a property is inherited, and it writes it. `new` takes its type arguments from the declared type its value goes into, or the class's bounds, never from the analysis.
+2. **The converter writes declared, PHPDoc, refined and inherited types, and never an inferred one.** It refuses a method with `return_from_body.is_some()`. A type the codex marks `inferred: true` on a parameter, a return or a property is inherited, and it writes it. `new` takes its type arguments from the declared type its value goes into, or the class's bounds, never from the analysis. A local declared first in the body takes the types of the values assigned to it only when a declaration gives each, or its `@var` tag's, and refuses otherwise, as [section 3](#section-3-scope) says.
 3. **Approved: visibility keeps PHP's reach.** `public` where PHP leaves it out, every class `public`, an open method `virtual`, and a method that replaces a parent class's `override`. The design recommends no narrowing: `too-wide-member` can't see templates, string callables or routes.
 4. **A bare function call's form comes only from declarations,** as [how a bare function call converts](#how-a-bare-function-call-converts) says: a library's function through its namespace or its folder's, a type test as `is`, and a built-in only as a standard library member whose inline form runs exactly that function with PHP's meaning. Any other built-in refuses the call, naming the function and the difference, and nothing is added to the library for the converter.
 5. **Approved: nested rewrites are edits on owned tokens, and a reordering rewrite renders its children.**
-6. **A name prints by the file's own names,** a root class of `Builtins.sharp` bare, and a missing one gets an `import`, `import … as …` where the short name is taken.
+6. **A name prints by the file's own names,** a root class of `Builtins.sharp` bare, and a missing one gets an `import`, `import … as …` where the short name is taken or PHP# reserves it, as `Any`, `Equatable` and `Error`.
 7. **Each file is proven in memory before it is written:** analysis and lowering through `Server::compile`, against the whole project with the earlier conversions in place, with fresh extension hosts once they load a converted file. The project's `ignore` entries and baseline apply to host rules' codes only.
-8. **Approved: a tracked file moves with `git mv`, then takes its converted text.**
+8. **Approved: a file converts only as the last commit holds it, its converted text is written at its `.sharp` name, then the index records the rename as `git mv` does, and then the plain file leaves.** Review 301 found that an untracked file lost its plain PHP, which nothing held, so a file git holds no commit of as it is refuses, and a write that fails leaves the plain file where it was.
 9. **The proof compares warnings and errors, keyed by file, level, code, message and line, with duplicates counted.** A conversion may add `too-wide-member` on a member it made `public`, and `redundant-docblock-type` in a plain PHP caller whose PHPDoc the converted class now declares. The summary lists both, and any other new issue refuses the file. The summary also says the project's tests, compared test by test, are the gate for what analysis can't see: a `TypeError` at entry (line 1076), a renumbered `int`-keyed array (line 1514), and an `int` that becomes a `float` in a `List<float>` (decision 074).
 10. **Approved: `autoload-dev` files stay out** (line 5380).
 11. **Approved: the command names what a converted file leaves:** lint, guard and format rules.
 12. **Approved: three public functions join existing modules:** `Server::codebase`, `Server::analyze_file_with_artifacts` and `loader::mark_sharp_file`.
-13. **New public API for the standard library's forms,** which decision 4 reads from the bridge as Cass asked: `InlineForm::php_call` and `InlineForm::in_order`, the `PhpCall` and `PhpCallArgument` types, `InlineForms::iter`, `IncrementalAnalysisService::standard_library_forms` and `Server::standard_library_forms`. `compile` and `standard_library_forms` share one private `lower_library`, so the library is lowered by one path.
+13. **New public API for the standard library's forms,** which decision 4 reads from the bridge as Cass asked: `InlineForm::php_call` and `InlineForm::in_order`, the `PhpCall` and `PhpCallArgument` types, `InlineForms::iter`, `IncrementalAnalysisService::standard_library_forms` and `Server::standard_library_forms`. `compile` and `standard_library_forms` share one private `lower_library`, so the library is lowered by one path. They also share one selection of its files, `sharp_files`, the workspace's own PHP# files, and `errors`, which applies the `refusing` each is given, so no form comes from a library file `compile` refuses, or from one it doesn't lower.
 
 ## Found, not fixed
 
-1. **A function the census finds neither among PHP's built-ins nor in Composer's `files` autoload:** 88 functions in 28 files. They are namespaced functions or functions loaded another way, and the slice measures them with the converter itself.
+1. **A function the census finds neither among PHP's built-ins nor in Composer's `files` autoload:** 88 functions in 28 files. They are namespaced functions or functions loaded another way, and the converter itself measures them.
 
 ## Evidence
 
 ### The census
 
-`census.php`, outside the repository, reads a production application's `composer.json`, every file under its `autoload` PSR-4 folders with PHP's tokenizer, and Composer's `vendor/composer/autoload_files.php`, and changes nothing. A function is a built-in when PHP's reflection says it is internal. It has a form when it is a writable type test or one of the 42 built-ins whose standard library member the converter's `Library` keeps, as `mago convert` listed them on the fixture. A library root function has a folder namespace when a class of a namespace sits in its file's folder. It printed:
+`census.php`, outside the repository, reads a production application's `composer.json`, every file under its `autoload` PSR-4 folders with PHP's tokenizer, and Composer's `vendor/composer/autoload_files.php`, and changes nothing. A function is a built-in when PHP's reflection says it is internal. It has a form when it is a writable type test or one of the 42 built-ins whose standard library member the converter's `Library` keeps, as `mago convert` listed them on the fixture. A library root function has a folder namespace when a class of a namespace sits in its file's folder. It counts a class-like only outside every `{ }`, so a `.php` file `mago compile` writes counts as "no class-like", and a rerun on a copy with more converted files prints that many fewer convertible files. On the application's copy, with its 20 `.sharp` files, it printed:
 
 ```text
 files under autoload psr-4: 1144
