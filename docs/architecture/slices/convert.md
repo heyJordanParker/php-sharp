@@ -357,11 +357,12 @@ sharp/mago/
 │                                         PhpCallArgument::literal(literal), which both sides compare by
 │                                         InlineForms::iter() -> (class, member, form)
 ├── crates/orchestrator/src/service/incremental_analysis/compile.rs
-│                                         IncrementalAnalysisService::standard_library_forms() -> InlineForms,
-│                                         and lower_library, which compile now shares
+│                                         IncrementalAnalysisService::standard_library_forms(refusing) -> InlineForms,
+│                                         and lower_library, sharp_files and errors, which compile now shares
 ├── crates/server/src/server.rs           pub fn codebase(&self) -> &CodebaseMetadata
 │                                         pub fn analyze_file_with_artifacts(&self, file_id)
-│                                         pub fn standard_library_forms(&self) -> Result<InlineForms, ServerError>
+│                                         pub fn standard_library_forms(&mut self, refusing)
+│                                             -> Result<InlineForms, ServerError>
 │                                         pub fn files_reaching(&self, files: &[FileId]) -> Vec<HashSet<FileId>>
 ├── crates/database/src/loader.rs         pub fn mark_sharp_file(file: &mut File, workspace: &Path)
 ├── src/commands/convert.rs               new: ConvertCommand { paths, dry_run }, execute(configuration, color_choice)
@@ -405,7 +406,7 @@ Decisions 1, 3, 5, 8, 10, 11 and 12 are approved as they stand. Decisions 2, 4, 
 10. **Approved: `autoload-dev` files stay out** (line 5380).
 11. **Approved: the command names what a converted file leaves:** lint, guard and format rules.
 12. **Approved: three public functions join existing modules:** `Server::codebase`, `Server::analyze_file_with_artifacts` and `loader::mark_sharp_file`.
-13. **New public API for the standard library's forms,** which decision 4 reads from the bridge as Cass asked: `InlineForm::php_call` and `InlineForm::in_order`, the `PhpCall` and `PhpCallArgument` types, `InlineForms::iter`, `IncrementalAnalysisService::standard_library_forms` and `Server::standard_library_forms`. `compile` and `standard_library_forms` share one private `lower_library`, so the library is lowered by one path.
+13. **New public API for the standard library's forms,** which decision 4 reads from the bridge as Cass asked: `InlineForm::php_call` and `InlineForm::in_order`, the `PhpCall` and `PhpCallArgument` types, `InlineForms::iter`, `IncrementalAnalysisService::standard_library_forms` and `Server::standard_library_forms`. `compile` and `standard_library_forms` share one private `lower_library`, so the library is lowered by one path. They also share one selection of its files, `sharp_files`, the workspace's own PHP# files, and `errors`, which applies the `refusing` each is given, so no form comes from a library file `compile` refuses, or from one it doesn't lower.
 
 ## Found, not fixed
 
