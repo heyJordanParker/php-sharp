@@ -85,6 +85,20 @@ On a pull request, the `SPEC_GUARD` job runs the base commit's `sharp/bin/spec -
 
 ## Runtime images
 
+PHP# ships its engine only as two runtime images: php-fpm's `ghcr.io/heyjordanparker/php-sharp:<version>` and FrankenPHP's `ghcr.io/heyjordanparker/php-sharp:<version>-frankenphp`. A release's other assets are `mago` archives, Mago's source and their SHA-256s, with no `php` or `php-fpm` build. A server that can't run the images builds the engine from source, with the [Linux dependencies](#linux-dependencies).
+
+`php --ri sharp` shows that a `php` is the PHP# engine. It prints the engine's version, and plain PHP prints `Extension 'sharp' not present.` and exits with status 1:
+
+```text
+$ docker run --rm ghcr.io/heyjordanparker/php-sharp:0.6.2 php --ri sharp
+sharp
+
+Version => 0.6.2
+
+Directive => Local Value => Master Value
+sharp.compile_command => no value => no value
+```
+
 `sharp/docker/runtime/Dockerfile` holds docker-library's `php:8.5-fpm-trixie` recipe, built from this repository's source instead of the php.net tarball, with `ext/sharp` built in. It keeps docker-library's layout, so `docker-php-ext-*` and `install-php-extensions` work unchanged and an app switches to PHP# by changing only its `FROM` line. The `docker-php-*` scripts are verbatim copies. `docker-php-entrypoint` is the one script that differs between docker-library's variants, so each image copies its own from `fpm/` or `zts/`, and the shared ones sit beside the Dockerfiles. Compare the Dockerfile, the shared scripts and `fpm/docker-php-entrypoint` with docker-library's `8.5/trixie/fpm` on every merge from upstream.
 
 `sharp/docker/runtime/frankenphp.Dockerfile` builds the engine with docker-library's `8.5/trixie/zts` recipe, then runs FrankenPHP v1.13.4's own Dockerfile stages on it, as FrankenPHP's images build on `php:8.5-zts-trixie`. `sharp/bin/hosts` builds the same release for `HOSTS`. Go 1.27, `e-dant/watcher` 0.14.5 and `install-php-extensions` 2.12.0 are pinned where FrankenPHP takes the latest. FrankenPHP's source is fetched by its release's commit, and the `e-dant/watcher` archive and the `install-php-extensions` script are checked against their SHA-256s. Compare it and `zts/docker-php-entrypoint` with docker-library's `8.5/trixie/zts`, and it with FrankenPHP's `Dockerfile`, on every merge from either. FrankenPHP's stage rewrites `php` in the `zts` entrypoint to `frankenphp run`, so the image starts FrankenPHP on its default command.
@@ -115,7 +129,7 @@ The queue workers and the scheduler run from the same image with the same mount,
 
 ## Composer
 
-`sharp/composer/` is the Composer plugin `heyjordanparker/php-sharp-composer`. Composer's autoloader then tries `.sharp` after `.php` by the PSR-4 rules, the way it tries `.hh` on HHVM. Composer's class map scanner reads only `<?php` files, so on `composer dump-autoload --optimize` the plugin writes every `.sharp` file under a PSR-4 folder to `vendor/composer/autoload_sharp.php`, and the autoloader reads it. The package's autoloader includes every `.sharp` class itself, never Composer's, so on plain PHP the first one stops with "This project needs the PHP# engine" before its source can reach the output. `mago compile` also writes a `.php` file beside each of a project's `.sharp` files that declares a type, outside `autoload-dev` folders and `vendor/`, which loads the `.sharp` file the same way, so PHP code that lists `*.php` files finds PHP# classes (spec section 27, decision 81).
+`sharp/composer/` is the Composer plugin `heyjordanparker/php-sharp-composer`. Composer's autoloader then tries `.sharp` after `.php` by the PSR-4 rules, the way it tries `.hh` on HHVM. Composer's class map scanner reads only `<?php` files, so on `composer dump-autoload --optimize` the plugin writes every `.sharp` file under a PSR-4 folder to `vendor/composer/autoload_sharp.php`, and the autoloader reads it. The package's autoloader includes every `.sharp` class itself, never Composer's, so on plain PHP the first one stops with "This project needs the PHP# engine" before its source can reach the output. The engine comes from the [runtime images](#runtime-images). `mago compile` also writes a `.php` file beside each of a project's `.sharp` files that declares a type, outside `autoload-dev` folders and `vendor/`, which loads the `.sharp` file the same way, so PHP code that lists `*.php` files finds PHP# classes (spec section 27, decision 81).
 
 `sharp/composer/library/Sharp/Internal/Builtins.sharp` gives each PHP built-in function its effect, as `extern global.fopen uses Files;`. `sharp/bin/builtins` writes it from PHPStan's php-8-stubs, at the version and SHA-256 it pins, for every PHP 8.5 function in PHP's root namespace that Mago's prelude in `sharp/mago/crates/prelude/` declares. `RULES` in the script maps each function to its effects, or to none, by its extension and name, and the run fails on a function no rule covers. The file also declares pure each PHP 8.5 exception class the prelude declares, as `extern ValueError;`: `Exception`, `Error` and every class whose parents reach one of them. `sharp/bin/builtins --self-test` checks that each rule gives the effect of its row in `ROWS`, and that removing the rule changes that row. The Linux job runs both and fails when the file differs from the committed one.
 
@@ -150,6 +164,18 @@ The file cache outlives each run, and `opcache.validate_timestamps=0` skips the 
 ```sh
 brew install autoconf bison curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
 ```
+
+## Linux dependencies
+
+A source build on Debian or Ubuntu needs the packages `sharp/docker/runtime/Dockerfile` installs to build the php-fpm image's engine, without `xz-utils` and `curl`, which only its source archive and the image's users need:
+
+```sh
+apt-get install --no-install-recommends autoconf bison ca-certificates dpkg-dev file g++ gcc git libargon2-dev libc-dev \
+  libcurl4-openssl-dev libonig-dev libreadline-dev libsodium-dev libsqlite3-dev libssl-dev libxml2-dev make pkg-config \
+  re2c rustup zlib1g-dev
+```
+
+On a fresh Debian trixie with only these, `./buildconf --force`, then that Dockerfile's `./configure` line and `make`, build `sapi/cli/php` and `sapi/fpm/php-fpm`, and `php --ri sharp` prints the tree's version. Ubuntu 24.04 has the same packages, and its gcc 13 warns in upstream `ext/readline/readline_cli.c`, so there the `./configure` line takes `--disable-werror` in place of `--enable-werror`. `rustup` downloads the Rust toolchain `ext/sharp/rust-toolchain.toml` names at the first build. `sharp/bin/build` also configures `--enable-intl`, `--with-zip` and `--with-pgsql`, so it needs `libicu-dev`, `libzip-dev` and `libpq-dev` as well, which `sharp/docker/Dockerfile` installs.
 
 ## CI
 
