@@ -112,14 +112,14 @@ An extension host loads the project's own classes (line 5385), and during the pr
 
 ### What git sees
 
-A tracked file moves with `git mv`, then the converted text is written over it. The index holds the rename alone, `R100`, and the conversion is an unstaged change on top:
+A file converts only as the last commit holds it, and one that is untracked or changed since stays plain PHP: "git holds no commit of it as it is: commit it first, so git holds its plain PHP". The converted text is written at the `.sharp` name first. Then `git::stage_rename` records the rename in the index with the plain file's contents, as `git mv` does, and only then does the plain file leave, so a write that fails leaves it where it was. The index holds the rename alone, `R100`, and the conversion is an unstaged change on top:
 
 ```text
 $ git status --short
 RM src/Shop/Shelf.php -> src/Shop/Shelf.sharp
 ```
 
-The next `mago compile` writes `src/Shop/Shelf.php` again, as decision 081's discovery file, and its `info/exclude` block hides it, so `git status --ignored` shows it as `!!`, never as the tracked file come back. An untracked file is renamed on disk only.
+The next `mago compile` writes `src/Shop/Shelf.php` again, as decision 081's discovery file, and its `info/exclude` block hides it, so `git status --ignored` shows it as `!!`, never as the tracked file come back.
 
 ### What a converted file loses
 
@@ -361,10 +361,13 @@ sharp/mago/
 ├── crates/server/src/server.rs           pub fn codebase(&self) -> &CodebaseMetadata
 │                                         pub fn analyze_file_with_artifacts(&self, file_id)
 │                                         pub fn standard_library_forms(&self) -> Result<InlineForms, ServerError>
+│                                         pub fn files_reaching(&self, files: &[FileId]) -> Vec<HashSet<FileId>>
 ├── crates/database/src/loader.rs         pub fn mark_sharp_file(file: &mut File, workspace: &Path)
 ├── src/commands/convert.rs               new: ConvertCommand { paths, dry_run }, execute(configuration, color_choice)
-├── src/commands/compile.rs               standard_library(root, database), now pub(crate) for convert
-└── src/utils/git.rs                      pub fn move_tracked(workspace, from, to) -> Result<bool, Error>
+├── src/commands/compile.rs               standard_library(root, database) and project_database(orchestrator,
+│                                         workspace), now pub(crate) for convert
+└── src/utils/git.rs                      pub fn committed_files(workspace) -> Result<HashSet<PathBuf>, Error>
+                                          pub fn stage_rename(workspace, from, to) -> Result<(), Error>
 ```
 
 Each module of `declaration/` and `body/` holds one `impl Converter` for one construct family, the state of one file's conversion, so a family grows in its own file. The command alone talks to the server, the file system and git, so the crate reads nothing but its `Input`.
@@ -396,7 +399,7 @@ Decisions 1, 3, 5, 8, 10, 11 and 12 are approved as they stand. Decisions 2, 4, 
 5. **Approved: nested rewrites are edits on owned tokens, and a reordering rewrite renders its children.**
 6. **A name prints by the file's own names,** a root class of `Builtins.sharp` bare, and a missing one gets an `import`, `import … as …` where the short name is taken.
 7. **Each file is proven in memory before it is written:** analysis and lowering through `Server::compile`, against the whole project with the earlier conversions in place, with fresh extension hosts once they load a converted file. The project's `ignore` entries and baseline apply to host rules' codes only.
-8. **Approved: a tracked file moves with `git mv`, then takes its converted text.**
+8. **Approved: a file converts only as the last commit holds it, its converted text is written at its `.sharp` name, then the index records the rename as `git mv` does, and then the plain file leaves.** Review 301 found that an untracked file lost its plain PHP, which nothing held, so a file git holds no commit of as it is refuses, and a write that fails leaves the plain file where it was.
 9. **The proof compares warnings and errors, keyed by file, level, code, message and line, with duplicates counted.** A conversion may add `too-wide-member` on a member it made `public`, and `redundant-docblock-type` in a plain PHP caller whose PHPDoc the converted class now declares. The summary lists both, and any other new issue refuses the file. The summary also says the project's tests, compared test by test, are the gate for what analysis can't see: a `TypeError` at entry (line 1076), a renumbered `int`-keyed array (line 1514), and an `int` that becomes a `float` in a `List<float>` (decision 074).
 10. **Approved: `autoload-dev` files stay out** (line 5380).
 11. **Approved: the command names what a converted file leaves:** lint, guard and format rules.
