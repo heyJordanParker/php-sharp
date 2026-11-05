@@ -24,7 +24,7 @@ The command takes a file when it is under a PSR-4 folder of `composer.json`'s `a
 - a file that declares no class-like is a script
 - a file that declares two types, or one named unlike the file, breaks section 27
 
-`autoload-dev` folders are refused, as line 5380 keeps a test runner's files apart (decision 10). On the application, 1,058 of 1,144 files under `autoload` pass the shape check: 24 declare no class-like, and 62 declare one named unlike the file.
+`autoload-dev` folders are refused, as line 5380 keeps a test runner's files apart (decision 10). On the application, 1,058 of 1,144 files under `autoload` pass the shape check: 24 declare no class-like, and 62 declare one named unlike the file. Of those 24, 4 are scripts, and 20 are the `.php` files `mago compile` writes beside the application's 20 `.sharp` files, which declare their class only inside `if (false)` and which `mago convert` never loads. So the command sees 1,124 plain PHP files there, and each file a run converts moves from the 1,058 to the 24.
 
 ### Where the types come from
 
@@ -408,7 +408,7 @@ Decisions 1, 3, 5, 8, 10, 11 and 12 are approved as they stand. Decisions 2, 4, 
 
 ### The census
 
-`census.php`, outside the repository, reads a production application's `composer.json`, every file under its `autoload` PSR-4 folders with PHP's tokenizer, and Composer's `vendor/composer/autoload_files.php`, and changes nothing. A function is a built-in when PHP's reflection says it is internal. It has a form when it is a writable type test or one of the 42 built-ins whose standard library member the converter's `Library` keeps, as `mago convert` listed them on the fixture. A library root function has a folder namespace when a class of a namespace sits in its file's folder. It printed:
+`census.php`, outside the repository, reads a production application's `composer.json`, every file under its `autoload` PSR-4 folders with PHP's tokenizer, and Composer's `vendor/composer/autoload_files.php`, and changes nothing. A function is a built-in when PHP's reflection says it is internal. It has a form when it is a writable type test or one of the 42 built-ins whose standard library member the converter's `Library` keeps, as `mago convert` listed them on the fixture. A library root function has a folder namespace when a class of a namespace sits in its file's folder. It counts a class-like only outside every `{ }`, so a `.php` file `mago compile` writes counts as "no class-like", and a rerun on a copy with more converted files prints that many fewer convertible files. On the application's copy, with its 20 `.sharp` files, it printed:
 
 ```text
 files under autoload psr-4: 1144
