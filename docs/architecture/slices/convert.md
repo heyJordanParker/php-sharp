@@ -188,7 +188,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 
 ### Section 10. Structs and `with`
 
-- `clone $x` with no property set → `x with { }` (line 1020). Tree. 13 files.
+- `clone $x` with no property set → `x with { }` (line 1020). Tree. 13 files. `with` lowers to PHP's `clone`, so a class's `__clone` runs on the copy as it does in PHP, which `run.php` shows on the engine with `Tally::stamped`.
 
 ### Section 11. Generics
 
