@@ -86,6 +86,7 @@ PHP# supports macOS and Linux. CI and releases build for those two only.
 
 - `docs/spec.md`: the language, as the Architect approved it. CI compiles and runs its examples, and `sharp/baseline/spec` lists the ones that fail today, which is the distance to v1.
 - `docs/decisions/`: each approved language proposal, with the options it chose between.
-- `docs/architecture/`: how the checker and the engine are built, and why. Until it lands, the architecture is in `~/Developer/php-sharp/sharp/agents/architecture.md`, which git ignores.
+- `docs/architecture/`: how the checker and the engine are built, and why, once the change lands on master.
+- `~/Developer/php-sharp/sharp/agents/architecture.md`: the architecture of the change in flight, which Cass writes for builders. Git ignores it, and it moves into `docs/architecture/` with the PR.
 - `docs/how-we-work.md`: this file.
 - `~/Developer/php-sharp/sharp/agents/`: task files. Git ignores them, so they exist only in that checkout and not in the worktree slots.
