@@ -53,20 +53,34 @@ The `tsc` model: the compiler emits a file beside each source, where every tool 
 ```php
 <?php
 
-// mago compile writes this file from SharpController.sharp, so PHP code that lists *.php files finds its class.
+// mago compile writes this file from SharpController.sharp, so PHP code that finds *.php files finds its type.
+// phpcs:ignoreFile
 
 declare(strict_types=1);
 
-if (!is_file(__DIR__ . '/SharpController.sharp')) {
-    return;
+namespace App\Http\Controllers;
+
+use Error;
+
+use function function_exists;
+use function is_file;
+use function sprintf;
+
+if (is_file(sprintf('%s/SharpController.sharp', __DIR__))) {
+    function_exists('Sharp\Internal\requireNative')
+        || throw new Error(
+            'This project needs the PHP# engine, and this is plain PHP. Install php-sharp, or run the ghcr.io/heyjordanparker/php-sharp image.',
+        );
+
+    require_once sprintf('%s/SharpController.sharp', __DIR__);
 }
 
-function_exists('Sharp\Internal\requireNative')
-    || throw new Error(
-        'This project needs the PHP# engine, and this is plain PHP. Install php-sharp, or run the ghcr.io/heyjordanparker/php-sharp image.',
-    );
-
-require_once __DIR__ . '/SharpController.sharp';
+if (false) {
+    class SharpController
+    {
+        // The engine declares SharpController from SharpController.sharp, and this declaration never runs.
+    }
+}
 ```
 
 Composer's own loader tries `.php` first, so it loads this file, which loads the `.sharp` file, which the engine compiles from `.sharp/`. Stack traces, `Position` and opcache still name the `.sharp` file.
