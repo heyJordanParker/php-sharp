@@ -67,7 +67,7 @@ fi
 workspace=/tmp
 mkdir "$workspace/sharp"
 cp -R "$root/sharp/bench" "$root/sharp/composer" "$workspace/sharp/"
-"$mago_dir/test-run/mago" --no-version-check --colors never --workspace "$workspace" \
+"$mago_dir/debug/mago" --no-version-check --colors never --workspace "$workspace" \
   --config "$workspace/sharp/bench/mago.toml" compile >/dev/null
 
 modes=("no JIT" "function JIT" "tracing JIT")
