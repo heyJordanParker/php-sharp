@@ -18,10 +18,6 @@ permissions:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
   cancel-in-progress: true
-# mago's test-run profile, which LINUX's standard library check builds, builds without incremental state from a cache,
-# as sharp/mago/Cargo.toml explains. sharp/docker/run passes it into the container.
-env:
-  CARGO_INCREMENTAL: 0
 jobs:
   # CI_PASSED is this workflow's one required check, so the workflow always runs, and LINUX, LINUX_PASSES,
   # LINUX_ZTS, HOSTS, PHP_EXTENSIONS and MACOS skip a change to documentation alone. docs/spec.md, README.md and
@@ -217,15 +213,6 @@ jobs:
         run: sharp/bin/build --linux
       - name: Test PHP#
         run: sharp/bin/test --linux --opcache --repeat --jit --census --spec --differential --phpunit
-      # With the test-run checker, which behaves as release's, as sharp/mago/Cargo.toml explains. sharp/bin/test ran the
-      # dev mago, which logs at DEBUG and reports a missing code that release never prints, so this builds test-run
-      # beside it, with the cargo ext/sharp/rust-toolchain.toml pins, as sharp/bin/build-mago finds it.
-      - name: Check the standard library with the test-run checker
-        run: |
-          # shellcheck disable=SC2016 # The image's sh expands these, with its own architecture and toolchain.
-          sharp/docker/run sh -c 'cargo="$(cd ext/sharp && rustup which cargo)" && target="sharp/build/linux-$(uname -m)/mago" &&
-            PATH="$(dirname "$cargo"):$PATH" "$cargo" build --locked --profile test-run --manifest-path sharp/mago/Cargo.toml --target-dir "$target" --bin mago &&
-            "$target/test-run/mago" --colors never --workspace sharp/composer analyze --minimum-fail-level note'
       # The run without opcache shows that plain PHP still behaves as before. The full run adds the opcache modes.
       - name: Test upstream
         run: sharp/bin/test --linux --upstream ${{ needs.CHANGES.outputs.full == 'true' && '--opcache' || '' }}

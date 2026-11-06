@@ -25,9 +25,9 @@ defaults:
 
 jobs:
   # ci-passed is this workflow's one required check, so the workflow always runs, and every other job skips a change
-  # that leaves Mago alone: one outside sharp/mago/, sharp/composer/, sharp/phpunit/, this workflow, sharp/bin/coverage
-  # and the actions it runs, as sharp.yml's CHANGES skips a change to documentation alone. The full
-  # run runs every job, and its `full` output tells each job so. A tree runs them once: a push to master skips them when
+  # that leaves Mago alone: one outside sharp/mago/, sharp/composer/, the sharp/harness/Psr/ interfaces sharp/composer's
+  # mago.toml includes, sharp/phpunit/, this workflow, sharp/bin/coverage and the actions it runs, as sharp.yml's
+  # CHANGES skips a change to documentation alone. The full run runs every job, and its `full` output tells each job so. A tree runs them once: a push to master skips them when
   # a pull request run passed every job on its tree, and links that run, as .github/actions/passed-tree explains.
   CHANGES:
     runs-on: ubuntu-latest
@@ -85,7 +85,7 @@ jobs:
             exit 0
           fi
           git fetch --depth=1 origin "$BASE"
-          if git diff --quiet "$BASE" HEAD -- sharp/mago sharp/composer sharp/phpunit .github/workflows/mago.yml \
+          if git diff --quiet "$BASE" HEAD -- sharp/mago sharp/composer sharp/harness/Psr sharp/phpunit .github/workflows/mago.yml \
             sharp/bin/coverage .github/actions/setup-lean .github/actions/clean-kept-build .github/actions/passed-tree .github/actions/mago-cache \
             .github/actions/mago-cache-prune; then
             echo mago=false >> "$GITHUB_OUTPUT"
@@ -205,6 +205,13 @@ jobs:
         run: |
           cargo build --locked --profile test-run --bin mago
           echo "binary=$CARGO_TARGET_DIR/test-run/mago" >> "$GITHUB_OUTPUT"
+
+      # The PHP# standard library, with the sharp/harness interfaces its mago.toml includes, analyzes with no note.
+      - name: Check the standard library
+        if: matrix.rust != 'nightly'
+        env:
+          MAGO: ${{ steps.build.outputs.binary }}
+        run: '"$MAGO" --colors never --workspace "$GITHUB_WORKSPACE/sharp/composer" analyze --minimum-fail-level note'
 
       - name: Upload the binary for plain-php
         if: matrix.rust != 'nightly'
