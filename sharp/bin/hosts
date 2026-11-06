@@ -37,7 +37,7 @@ for needed in "$fpm:sharp/bin/build" "$install/bin/php-config:sharp/bin/build --
 done
 
 "$root/sharp/bin/build-mago" --quiet
-mago="$build_dir/mago/test-run/mago"
+mago="$build_dir/mago/debug/mago"
 
 fixture="$root/sharp/hosts"
 # Composer keeps the copy of sharp/composer an earlier run installed while composer.lock is unchanged, so the install
