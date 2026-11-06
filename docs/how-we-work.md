@@ -28,6 +28,7 @@ One Architect, one CTO agent and a team of agents build PHP#. This file says how
 
 - Cass creates a slot for each task, a `php-sharp` worktree under `~/Developer/sharp-worktrees/`, with Mago in its `sharp/mago/`, and names it in the task file.
 - Cass creates the task's branch from `origin/master` in the slot before the builder starts. The builder builds in that slot's own build folders.
+- A slot holds one build of Mago, in `sharp/build/<os>-<arch>/mago/debug/`: `sharp/bin/build-mago`, `sharp/bin/test` and the `cargo test --workspace` below share it, so a run after another compiles only what changed. It keeps no incremental state, so it stays near the size of a fresh build, about 6 GiB.
 - Before its PR merges, the builder leaves no uncommitted files. After the merge, Cass removes the slot. No idle slot is kept, because a slot's build fills the disk.
 
 ## A PR's path to master
@@ -70,7 +71,7 @@ A mistake that no check can catch yet goes in `docs/architecture/guards.md`, wit
 
 - A PR runs each PHP# engine mode once, on the build it is about. Linux runs plain PHP, the three runs with cached bytecode and both JIT compilers, 6 modes. The thread-safe build runs plain PHP, the shared-memory run and both JIT compilers, 4 modes. macOS runs plain PHP and both JIT compilers, 3 modes, the only arm64 JIT runs a PR has. Each of PHP's 16 optimizer passes also runs alone on Linux, unless the PR changes only Mago, the Composer plugin, the test fixtures, tests or documentation. Every night, master runs all 22 modes on every build, and so does a release's bump PR. A PR can't merge until its runs pass. A PR that changes only documentation skips them, and GitHub counts the skipped checks as passing.
 - A builder runs only these locally, and leaves the other runs to CI:
-  - `sharp/bin/test`, the run without opcache. It builds `mago` from `sharp/mago/` first, in the `test-run` profile, which `sharp/mago/Cargo.toml` explains.
+  - `sharp/bin/test`, the run without opcache. It first builds `sharp/mago/` with `sharp/bin/build-mago`, as `cargo test --workspace` builds it, in the dev profile `sharp/mago/Cargo.toml` explains, and runs the `mago` that build makes.
   - When the change is under `sharp/mago/`, in `sharp/mago/`: `cargo test --workspace --locked --target-dir ../build/<os>-<arch>/mago`, `cargo clippy --workspace --all-targets --all-features --target-dir ../build/<os>-<arch>/mago -- -D warnings` and `cargo fmt --all -- --check`. The target folder is the one `sharp/bin/test` builds `mago` in, so a slot keeps every Mago build in one folder, where `cargo test` without it wrote a second folder of 49 GB.
 - `sharp/bin/coverage` is the one coverage measurement, and CI's `patch-coverage` job runs it. A builder runs it only to reproduce a `patch-coverage` failure, and first merges the latest `origin/master`, because CI measures the branch merged into master.
 - One `sharp/bin/test` runs per worktree at a time, and each run of it and of `sharp/bin/bench` stands on its own:

@@ -18,9 +18,8 @@ permissions:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
   cancel-in-progress: true
-# mago's test-run profile builds without incremental state from a cache, as sharp/mago/Cargo.toml explains.
-# sharp/docker/run and PHP_EXTENSIONS's docker run pass it into the container. MACOS, whose runner keeps its build
-# folder, builds with it.
+# mago's test-run profile, which LINUX's standard library check builds, builds without incremental state from a cache,
+# as sharp/mago/Cargo.toml explains. sharp/docker/run passes it into the container.
 env:
   CARGO_INCREMENTAL: 0
 jobs:
@@ -218,10 +217,15 @@ jobs:
         run: sharp/bin/build --linux
       - name: Test PHP#
         run: sharp/bin/test --linux --opcache --repeat --jit --census --spec --differential --phpunit
-      - name: Check the standard library with the checker sharp/bin/test built
+      # With the test-run checker, which behaves as release's, as sharp/mago/Cargo.toml explains. sharp/bin/test ran the
+      # dev mago, which logs at DEBUG and reports a missing code that release never prints, so this builds test-run
+      # beside it, with the cargo ext/sharp/rust-toolchain.toml pins, as sharp/bin/build-mago finds it.
+      - name: Check the standard library with the test-run checker
         run: |
-          # shellcheck disable=SC2016 # The image's sh expands $(uname -m), to its own architecture.
-          sharp/docker/run sh -c '"sharp/build/linux-$(uname -m)/mago/test-run/mago" --colors never --workspace sharp/composer analyze --minimum-fail-level note'
+          # shellcheck disable=SC2016 # The image's sh expands these, with its own architecture and toolchain.
+          sharp/docker/run sh -c 'cargo="$(cd ext/sharp && rustup which cargo)" && target="sharp/build/linux-$(uname -m)/mago" &&
+            PATH="$(dirname "$cargo"):$PATH" "$cargo" build --locked --profile test-run --manifest-path sharp/mago/Cargo.toml --target-dir "$target" --bin mago &&
+            "$target/test-run/mago" --colors never --workspace sharp/composer analyze --minimum-fail-level note'
       # The run without opcache shows that plain PHP still behaves as before. The full run adds the opcache modes.
       - name: Test upstream
         run: sharp/bin/test --linux --upstream ${{ needs.CHANGES.outputs.full == 'true' && '--opcache' || '' }}
@@ -247,7 +251,7 @@ jobs:
       - name: Verify ext/sharp/sharp_unit.h, with its sharp_kind, SHARP_T_ tokens and SHARP_UNIT_ABI, is the header sharp/mago generates from Zend/zend_ast.h and Zend/zend_language_parser.h
         run: |
           sharp/docker/run php sharp/mago/scripts/regen-sharp-kinds.php Zend/zend_ast.h Zend/zend_language_parser.h | diff -u sharp/mago/crates/sharp-bridge/src/kind.rs -
-          # cargo builds nothing for the test-run mago sharp/bin/test built, and names the out_dir of the bridge it links.
+          # cargo builds nothing for the mago sharp/bin/test built, and names the out_dir of the bridge it links.
           # `-p mago-sharp-bridge` resolves other features, so it built a second bridge and its dependencies beside it.
           sharp/docker/run sharp/bin/build-mago --message-format=json > "$RUNNER_TEMP/build.json"
           header="$(jq -r 'select(.reason == "build-script-executed" and (.package_id | contains("mago-sharp-bridge"))) | .out_dir | ltrimstr("/src/")' "$RUNNER_TEMP/build.json")/sharp_unit.h"
@@ -467,7 +471,6 @@ jobs:
             --ulimit stack=8388608:-1 \
             --env CARGO_HOME=/src/sharp/build/cargo \
             --env RUSTUP_HOME=/src/sharp/build/rustup \
-            --env CARGO_INCREMENTAL \
             --env XDG_CACHE_HOME=/src/sharp/build/cache \
             --volume "$PWD:/src" \
             --workdir /src \
@@ -489,9 +492,6 @@ jobs:
     timeout-minutes: 120
     env:
       FORMULAE: autoconf bison curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
-      # The runner keeps the build folder between jobs, so mago keeps the incremental state its test-run profile builds
-      # with, which a restored cache would let age.
-      CARGO_INCREMENTAL: 1
     steps:
       # actions/checkout's clean deletes sharp/build. Each job on the self-hosted Macs keeps it instead, as
       # .github/actions/clean-kept-build explains, so the engine and mago rebuild only what changed, which takes
