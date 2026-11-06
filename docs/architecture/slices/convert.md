@@ -217,7 +217,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - `isset` and `empty` of a property → the property's null check or truthiness test, only when the property always holds a value, as one with a default or a promoted one does, and no class its object may be declares `__isset` or `__get`. PHP gives a typed property that holds no value as unset, and asks those methods, where PHP# reads the property. `isset` and `empty` at a `List` index refuse, since PHP reads past the end without an error. Both.
 - `['id' => $id] = $row;` of a `Map` variable → one read per key, `const id = row.get("id");`, each a `TValue?` (lines 1625 and 1664). Both. 16 files. Destructuring by position, a `Map` a call gives, and destructuring inside another expression refuse.
 - `array` with no PHPDoc type, and an array shape → refuses with the type. Type.
-- A union of two collections, as `list<string>|array<string, int>`, and an `iterable<K, V>` with a key type → refuses, since a PHP# type holds one collection and `Iterable<V>` reads values only. Type.
+- A union of two collections, as `list<string>|array<string, int>`, and an `iterable<K, V>` whose key is other than `array-key` or `mixed` → refuses, since a PHP# type holds one collection and `Iterable<V>` reads values only. `iterable<V>` → `Iterable<V>`, and a plain PHP keyed loop over the generator it gives reads the keys PHP gave, as the engine shows. Type.
 
 ### Section 13. `readonly`
 
@@ -232,7 +232,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - A by-value capture `use ($total)`, and each variable an arrow function reads → the same plain capture, only when nothing writes `total` after its declaration, in the lambda or around it. Both.
 - A call of a function value `$f($x)` → `f(x)`, and a call of a string or an array that names a function refuses (line 2165). Both.
 - A closure type `\Closure(int): int` → `Function<int(int)>`, and one with a parameter by reference, a variadic or an optional one refuses. Type.
-- A lambda that takes fewer parameters than the function type it is passed to → refuses, since PHP drops the extra arguments and a PHP# lambda takes each one (section 14.1). Both.
+- A lambda that takes fewer parameters than the function type it is passed to → refuses, since PHP drops the extra arguments and a PHP# lambda takes each one (section 14.1). It counts the parameters with no default and no `...`, as the checker does, so a plain `callable`, which takes `mixed ...`, takes any lambda. Both.
 - `[$this, 'name']`, `'Class::name'` and `name(...)` → `this.name`. Both. An array or a string converts where a function type is declared, and refuses when the analysis finds no such method. A partial application with placeholders, and a built-in function's value, refuse.
 - A method and a property of one name → refuses (line 2346). 51 files.
 - `??` stays. `?:` → refuses (line 3764).
