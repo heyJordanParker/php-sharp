@@ -4,6 +4,16 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Changed
+
+- `mago compile` proves the laws of every `.sharp` file it compiles in one Lean process, where it built the Lean code it generates with Lake and then ran one Lean process per file at once, each importing Lean, the runtime library and that code. Lean and the runtime library now load once per compile, and the generated code is elaborated once, in that process, so a compile of many files with laws uses far less processor time and memory. Mago no longer writes the generated code to `.sharp/.lean/`, and deletes the `Code` folder and the Lake build an earlier `mago` left there. The processor-time limit and the deadline still hold for each file's check.
+- `mago compile` builds the law checker's Lean library in Mago's cache folder once for each version of the library's Lean sources and of Lean, where it built one for each `mago` build. A `mago` built from other Rust code with the same Lean sources, as each edit to Mago makes, uses the library that is there, where it built a new one and deleted the other.
+- A law whose proof reaches another file's generated Lean code, where Lean rejects that code or it runs past the checker's limit or deadline, is refused with that code's refusal, where the whole compile failed with "the law checker failed with exit status: 1". The file's other laws are still checked.
+
+### Fixed
+
+- A law whose code names something `sharp_prove`, `sharp_close` or `sharp_condition` is checked. Lean read the name as one of the law checker's proof steps, so the law was refused as a bug in the checker.
+
 ## [0.6.3] - 2026-11-05
 
 ### Upgrading from 0.6.2
