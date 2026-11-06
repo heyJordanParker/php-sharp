@@ -147,16 +147,17 @@ sharp/mago/
 │                                        and refuses a hand-written <Name>.php beside a .sharp, in any case
 ├── src/utils/mod.rs                     write_by_rename, moved from compile.rs: a new file's mode, 0644 under the
 │                                        usual umask, not tempfile's 0600
-├── src/utils/git.rs                     exclude: the checkout's block in git rev-parse --git-path info/exclude, for
-│                                        the paths no .gitignore ignores; drops blocks of gone or ignored folders
+├── src/utils/git.rs                     remove_exclude_blocks: drops the blocks an older compile wrote in the
+│                                        info/exclude every checkout shares; compile.rs's keep_out_of_git writes a
+│                                        .gitignore of mago's own in each folder, listing itself and each <Name>.php
 ├── crates/prelude/assets/extensions/sharp.php   Sharp\Container and Sharp\ContainerError for plain PHP
 ├── crates/analyzer/tests/sharp.rs       row: plain PHP knows the container
 └── tests/compile.rs                     rows: written, kept current, deleted with its source whatever the analyzer
                                          loads, refused beside a hand-written file in any case, named exactly like
                                          its source, never written into vendor/, none in autoload-dev, mago fmt and
                                          lint pass, every unit still current after it, readable by other users, the
-                                         exclude block in a clone and in a worktree, no block for ignored files,
-                                         stale blocks dropped
+                                         folder's own .gitignore in each checkout alone, a .gitignore someone else
+                                         wrote left as it is, old info/exclude blocks dropped
 ext/sharp/
 └── sharp.c                              the container_library global; readModule records the path, and
                                          sharp_container_read_folders and sharp_container_binding read it first
@@ -168,7 +169,6 @@ sharp/phpunit/
 ├── mago.toml                            starts it
 └── composer.json, composer.lock         revolt/event-loop, which the SDK's worker runs on
 sharp/bin/test                           --phpunit compiles from nothing compiled, and runs composer run-script
-sharp/.gitignore                         the hosts fixture's <Name>.php files
 Zend/tests/sharp/
 ├── library_autoload.inc                 uncompiled: requires autoload.php before mago compiles
 ├── library_autoload_uncompiled.phpt     new: vendor/autoload.php loads with nothing compiled, then PHP# code resolves
@@ -206,7 +206,7 @@ The extension-host probe's worker exits with status 1 after it loads `vendor/aut
 Each one decides what appears in a user's project. The note recommends and decides none.
 
 1. **Is a generated `<Name>.php` beside each `.sharp` file acceptable in a user's folders?** It is the only Solution that every `*.php` scanner sees, and the user sees it too. Recommended: yes, hidden by the PHP# editor setup, as `tsc`'s `.js` files are. The alternative is B, which hides it from users but misses every scanner that uses `glob()`.
-2. **How does version control skip the generated files?** A pattern can't. Recommended: `mago compile` keeps their paths in `.git/info/exclude`, which belongs to the clone, is never committed, and is rebuilt by each clone's first compile. The alternatives are a block `mago compile` rewrites in the project's `.gitignore`, which commits a list that changes with every new class, or committing the files.
+2. **How does version control skip the generated files?** A pattern can't. Recommended then: `mago compile` keeps their paths in `.git/info/exclude`, which belongs to the clone, is never committed, and is rebuilt by each clone's first compile. The alternatives were a block `mago compile` rewrites in the project's `.gitignore`, which commits a list that changes with every new class, or committing the files. Since #273, `mago compile` writes a `.gitignore` of its own in each folder that holds the files, which lists itself and each file, so it is never committed either. Every worktree of a repository shares `.git/info/exclude`, so a block there hid one worktree's files in every other.
 3. **Should a package's PHP# classes get the file too?** A package that discovers its own classes, as one that loads its console commands from a folder, needs it. Recommended: not now, because it writes into `vendor/`, which decision 29 rules out, and no case has come up.
 4. **Should `mago compile` work when an extension host boots the project's own PHP# code?** After the fix, the library loads, but a host that runs project PHP# code still fails until a first compile without it. Recommended: leave it, because a host's facts can change what compiles. The alternative is a first pass without hosts.
 
@@ -228,7 +228,7 @@ team-lead's answers changed the design in three places:
 
 - **`Sharp\Internal\readModule` keeps its name** (decision 3 changed to the runner-up). A rename would cost three pull requests, or an alias, through the guarded `sharp/bin/spec`, which writes `readModule` into every example's run script. The rename waits for the next pull request that changes `sharp/bin/spec`.
 - **A `.sharp` file in an `autoload-dev` folder gets no `.php` file.** PHPUnit's `TestSuiteLoader` skips a class whose `getFileName()` is not the file it listed, so through `CheckoutTest.php` it found no test class, and `sharp/bin/test --phpunit` failed. A test class keeps one file, and `phpunit.xml` lists `suffix="Test.sharp"`, as on master.
-- **Each checkout keeps its own block in `.git/info/exclude`,** named by its path, because a repository's worktrees share that file, and one worktree's compile would otherwise drop another's paths.
+- **Each checkout keeps its own files out of git** through a `.gitignore` of mago's own in each folder that holds them, which lists itself and each file. Its working tree holds the file, so no other checkout reads it. The first design kept a block per checkout in `.git/info/exclude`, but git reads that file from the folder every worktree shares, so one worktree's block hid the same paths in every other (#273).
 
 `mago compile` writes the `.php` files before it compiles, because a compiled file stamps the `.php` file a default class's name could name in its folder as an input. Written after, they made `Zend/tests/sharp/NamesImports/Printer.sharp` out of date (`names_imports.phpt` failed).
 
@@ -236,8 +236,8 @@ The review of #160 changed these:
 
 - **A `.php` file whose source is gone declares nothing.** It returns before its `require_once`, so a scanner finds no class through it, as on master.
 - **`autoload.php` names the library's module whenever the engine runs,** inside Composer's own process too. A post-autoload-dump callback there loads a PHP# class through its `.php` file, which skips the plugin's loader, and the container then found no binding of `Sharp\Environment`.
-- **The orphans are found on disk,** in the folders of the sources and of the last compile's units, by the file's own first line. A project whose analyzer loads only `.sharp` files deleted none.
-- **The exclude block lists only the files no `.gitignore` ignores.** `sharp/bin/spec`'s projects sit in the ignored `sharp/build/`, the engine suite's in `Zend/tests/`, which `**/tests/**/*.php` ignores, and the hosts fixture's in `sharp/hosts/app/`, which `sharp/.gitignore` now ignores. A block whose folder is gone or ignored is dropped, and the file is replaced by rename: parallel spec runs had left 210 blocks and torn lines in the shared `.git/info/exclude`.
+- **The orphans are found on disk,** by the file's own first line, in the folders of the sources, of the last compile's units, and of each `.gitignore` of mago's under the source `paths`. A project whose analyzer loads only `.sharp` files deleted none, and a refused source's folder holds no unit.
+- **Each folder keeps its own `.gitignore`,** so `sharp/bin/spec`'s parallel projects in `sharp/build/`, the engine suite's in `Zend/tests/`, and the hosts fixture's in `sharp/hosts/app/` need no shared file and no rule in `sharp/.gitignore`. The shared `.git/info/exclude` had collected 210 blocks and torn lines from parallel spec runs, and the compile now removes every block an older compile left there.
 - **The file is in `mago fmt`'s layout,** and the refusal names the class in PHP# terms and the file by its exact name, whatever its case.
 - **Written files get a new file's mode,** `0644` under the usual umask. `tempfile` gave `0600`, which a PHP-FPM pool user cannot read.
 - **`sharp/phpunit` runs an extension host** that loads `vendor/autoload.php`, and `sharp/bin/test --phpunit` compiles it from nothing compiled.
