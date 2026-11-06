@@ -9,7 +9,7 @@ Every state below was observed on master 754ab7ce08, in the `php-sharp:754ab7ce0
 - **On a fresh tree, every PHP process on the engine that loads `vendor/autoload.php` dies, `vendor/bin/mago compile` included.** The plugin's `autoload.php` reads the standard library's compiled `Module.sharp` the moment it loads, since 4567fd69. Nothing is compiled yet, so it throws `Module.sharp isn't compiled. Run vendor/bin/mago compile.` The extension host is one such process. `vendor/bin/mago` itself is another, because its PHP wrapper loads `vendor/autoload.php` before it starts the binary. So the command the refusal names fails with that same refusal, and a project can only compile with a `mago` binary called directly.
 - **Fix for the first compile:** the container reads the library's module the first time it reads modules, as it already reads every app module. `vendor/autoload.php` then needs nothing compiled again, as before 4567fd69.
 - **Compiled output is a binary unit in `.sharp/`, which no PHP scanner looks at.** Scanners list `*.php` files in a source folder and turn each path into a class name by dropping `.php`. A `.sharp` class has no such file, so all three listing styles in the scanner fixture miss it, while the same class loads by name.
-- **Fix for discovery:** `mago compile` writes a `<Name>.php` file beside each project `.sharp` file that declares a type. The file only loads the `.sharp` file through the engine, and on plain PHP it throws the plugin's "needs the PHP# engine" error, so no source leaks. A prototype of that file made every listing style find the class and its attribute, with no engine change.
+- **Fix for discovery:** `mago compile` writes a `<Name>.php` file beside each project `.sharp` file that declares a type. The file loads the `.sharp` file through the engine, and on plain PHP it throws the plugin's "needs the PHP# engine" error, so no source leaks. It ends with the type's declaration in an `if (false)` that never runs, so a tool that reads PHP source finds the type, and the engine declares it once, from the `.sharp` file. A prototype of that file made every listing style find the class and its attribute, with no engine change.
 
 ## Where compiled output lives today
 
@@ -53,20 +53,34 @@ The `tsc` model: the compiler emits a file beside each source, where every tool 
 ```php
 <?php
 
-// mago compile writes this file from SharpController.sharp, so PHP code that lists *.php files finds its class.
+// mago compile writes this file from SharpController.sharp, so PHP code that finds *.php files finds its type.
+// phpcs:ignoreFile
 
 declare(strict_types=1);
 
-if (!is_file(__DIR__ . '/SharpController.sharp')) {
-    return;
+namespace App\Http\Controllers;
+
+use Error;
+
+use function function_exists;
+use function is_file;
+use function sprintf;
+
+if (is_file(sprintf('%s/SharpController.sharp', __DIR__))) {
+    function_exists('Sharp\Internal\requireNative')
+        || throw new Error(
+            'This project needs the PHP# engine, and this is plain PHP. Install php-sharp, or run the ghcr.io/heyjordanparker/php-sharp image.',
+        );
+
+    require_once sprintf('%s/SharpController.sharp', __DIR__);
 }
 
-function_exists('Sharp\Internal\requireNative')
-    || throw new Error(
-        'This project needs the PHP# engine, and this is plain PHP. Install php-sharp, or run the ghcr.io/heyjordanparker/php-sharp image.',
-    );
-
-require_once __DIR__ . '/SharpController.sharp';
+if (false) {
+    class SharpController
+    {
+        // The engine declares SharpController from SharpController.sharp, and this declaration never runs.
+    }
+}
 ```
 
 Composer's own loader tries `.php` first, so it loads this file, which loads the `.sharp` file, which the engine compiles from `.sharp/`. Stack traces, `Position` and opcache still name the `.sharp` file.
@@ -74,7 +88,7 @@ Composer's own loader tries `.php` first, so it loads this file, which loads the
 - **Folders:** one `<Name>.php` beside each project `.sharp` file that declares a type. A `Module.sharp`, an environment module and an `extern` file get none. Nothing is written into `vendor/`, so decision 29's "nothing is written into `vendor/`" holds. `.sharp/` does not change.
 - **Version control:** the files are generated, so the project should not commit them. Git cannot ignore "a `.php` beside a `.sharp`" with a pattern, and `*.php` would ignore the user's own PHP. So `mago compile` has to keep the ignore list itself. That is a question below.
 - **Tooling:** every listing sees a real file: Finder, `glob()`, `scandir()`, `find`, and Composer's PSR-4. Editors show the files unless the PHP# editor setup hides them, as VS Code's `files.exclude` with `"when": "$(basename).sharp"` and PhpStorm's file nesting hide `tsc`'s `.js` files.
-- **Analysis:** the file declares no class, so PHPStan, Psalm and PhpStorm see no second declaration. `mago` loads it as plain PHP from `source.paths`. The prototype compiled clean with it in place. A deploy already runs `mago compile` (section 27), so the files exist wherever the code runs.
+- **Analysis:** the file's one declaration sits in an `if (false)` that never runs, so PHP declares the type once, from the `.sharp` file. `mago` reads the `.sharp` file and never the `.php` file beside it, as `tsc` reads `Order.ts` and never the `Order.d.ts` beside it. The prototype compiled clean with it in place. A deploy already runs `mago compile` (section 27), so the files exist wherever the code runs.
 - **Cost:** `compile.rs` writes, refreshes and deletes the files, and refuses a hand-written `<Name>.php` beside a `<Name>.sharp`. One extra small include per PHP# class. No engine change.
 
 The literal `tsc` variant, the unit itself written as `<Name>.php` inside a PHP envelope, is rejected. The engine would have to recognize a compiled `.php` file and check it against its `.sharp` source. Vendor units would stay in `.sharp/` or move into `vendor/`, so compiled output would live in two places or reverse decision 29. It gains no Capability over A.
@@ -212,7 +226,7 @@ Each one decides what appears in a user's project. The note recommends and decid
 
 ## Found, not fixed
 
-1. **Composer's class map never lists a PHP# class.** After `composer dump-autoload --optimize`, `$loader->getClassMap()` holds `App\Http\Controllers\PlainController` but not `App\Http\Controllers\SharpController`, which only the plugin's `autoload_sharp.php` lists. Discovery that reads the class map instead of the folders misses PHP# classes. Solution A does not change this, because the file it writes declares no class. Probe: [the class map](#the-class-map).
+1. **Composer's class map never lists a PHP# class.** After `composer dump-autoload --optimize`, `$loader->getClassMap()` holds `App\Http\Controllers\PlainController` but not `App\Http\Controllers\SharpController`, which only the plugin's `autoload_sharp.php` lists. Discovery that reads the class map instead of the folders misses PHP# classes. Solution A's file now fixes this: the class map generator reads the declaration in its `if (false)`, so `composer dump-autoload --optimize` lists the class at its `.php` file. Probe: [the class map](#the-class-map).
 2. **A `.php` link to a `.sharp` file prints the PHP# source.** Composer's PSR-4 finds the link, the engine compiles it as PHP because of its name, and the source reaches the output. A user who tries a link to fix discovery leaks code. Probe: [the link](#the-link).
 3. **A package's PHP# classes get no `.php` file** (question 3, not now). A package that discovers its own classes by listing its folders, as one that loads its console commands from a folder, misses them. Probe: put a `.sharp` command class in `vendor/acme/tools/src/Commands/`, run `mago compile`, and list that folder's `*.php` files.
 4. **An extension host that runs the project's own PHP# code fails until a first compile without it** (question 4, not now). The library's module no longer stops `vendor/autoload.php`, but a host that boots the app and loads a project class meets "isn't compiled". Probe: the extension-host fixture with a worker that calls `App\Greeting::text()` after it requires `vendor/autoload.php`, on a fresh tree.

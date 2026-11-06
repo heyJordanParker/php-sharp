@@ -5,12 +5,19 @@
 `mago compile` writes a `.php` file beside each of the project's `.sharp` files that declares a type, as `StoreService.php` beside `StoreService.sharp`. The file loads its `.sharp` file through the engine, and on plain PHP it throws the "needs the PHP# engine" error, so no source reaches the output. Its last statement states the type's declaration and never runs, so PHP code that reads `*.php` source finds the type in it with no change of its own, as Composer's class map generator and Symfony's attribute routing do. The engine declares the type once, from the `.sharp` file, and mago reads the `.sharp` file and never the `.php` file:
 
 ```php
-require_once __DIR__ . '/StoreService.sharp';
+if (is_file(sprintf('%s/StoreService.sharp', __DIR__))) {
+    function_exists('Sharp\Internal\requireNative')
+        || throw new Error(
+            'This project needs the PHP# engine, and this is plain PHP. Install php-sharp, or run the ghcr.io/heyjordanparker/php-sharp image.',
+        );
 
-// The engine declares StoreService from StoreService.sharp, and this declaration never runs.
+    require_once sprintf('%s/StoreService.sharp', __DIR__);
+}
+
 if (false) {
     class StoreService
     {
+        // The engine declares StoreService from StoreService.sharp, and this declaration never runs.
     }
 }
 ```
