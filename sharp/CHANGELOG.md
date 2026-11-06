@@ -13,6 +13,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 ### Fixed
 
 - A law whose code names something `sharp_prove`, `sharp_close` or `sharp_condition` is checked. Lean read the name as one of the law checker's proof steps, so the law was refused as a bug in the checker.
+- An extension host whose worker dies, as one does at startup when `composer install --no-dev` left out a require-dev package it loads, now stops `mago` with the host's name and what the worker wrote to stderr: "extension host `reports` disconnected (worker 0): worker closed stdout; stderr: PHP Fatal error:  Uncaught Error: Class "Acme\DevTools\ReportPlugin" not found in …". Before, the error was "extension worker 0 disconnected: worker is not running", which named neither. Mago restarts a dead worker before it sends the first request, so the request reached a worker that had died again, and that error dropped the stderr Mago had kept. A worker that dies while Mago writes it a request now fails the same way, where the error was "violated the protocol: … Broken pipe".
 
 ## [0.6.3] - 2026-11-05
 

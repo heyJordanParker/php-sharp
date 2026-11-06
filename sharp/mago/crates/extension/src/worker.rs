@@ -16,8 +16,11 @@ use std::process::ChildStderr;
 #[cfg(not(windows))]
 use std::process::ChildStdin;
 use std::sync::Arc;
+use std::sync::Condvar;
 use std::sync::Mutex;
 use std::sync::MutexGuard;
+use std::sync::OnceLock;
+use std::sync::PoisonError;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::AtomicU64;
@@ -29,6 +32,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 use crate::command::WorkerCommand;
+use crate::error::ProtocolError;
 use crate::error::WorkerError;
 use crate::pool::WorkerPoolOptions;
 use crate::protocol::Frame;
@@ -42,6 +46,10 @@ const STATE_FAILED: u8 = 3;
 const IO_THREAD_STACK_SIZE: usize = 256 * 1024;
 const INITIAL_SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_micros(50);
 const MAXIMUM_SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(1);
+/// The longest a failed worker's error waits for the stderr reader to read the rest of the worker's stderr. A dead
+/// worker's stderr ends when it exits, so only a process it started that still holds its stderr reaches this. Eight PHP
+/// workers that died at startup on a loaded Mac waited from 5 µs to 179 µs.
+const STDERR_END_TIMEOUT: Duration = Duration::from_secs(1);
 #[cfg(windows)]
 const INPUT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 #[cfg(any(windows, test))]
@@ -127,20 +135,30 @@ impl Write for WorkerStdin {
     }
 }
 
+/// Why a frame did not reach the worker.
+enum WriteFailure {
+    /// The worker failed or shut down, so Mago no longer writes to it.
+    Stopped,
+    Protocol(ProtocolError),
+}
+
 enum PendingEvent {
     Frame(Frame),
     Started,
-    Failure(String),
+    /// The worker failed or shut down, so it will never answer.
+    Stopped,
 }
 
 struct StderrTail {
     bytes: VecDeque<u8>,
     capacity: usize,
+    /// Whether the stderr reader has read the worker's stderr to its end, so the tail holds all the worker wrote.
+    ended: bool,
 }
 
 impl StderrTail {
     fn new(capacity: usize) -> Self {
-        Self { bytes: VecDeque::with_capacity(capacity.min(4096)), capacity }
+        Self { bytes: VecDeque::with_capacity(capacity.min(4096)), capacity, ended: false }
     }
 
     fn extend(&mut self, bytes: &[u8]) {
@@ -165,8 +183,23 @@ impl StderrTail {
     }
 }
 
+/// The failure `fail` builds for a worker, which it records as the worker's failure when it drops. A panic while `fail`
+/// builds it still records what it has, so no request waits for the failure forever.
+struct FailureRecord<'worker> {
+    inner: &'worker WorkerInner,
+    message: String,
+}
+
+impl Drop for FailureRecord<'_> {
+    fn drop(&mut self) {
+        let _result = self.inner.failure.set(std::mem::take(&mut self.message));
+    }
+}
+
 struct WorkerInner {
     id: usize,
+    /// The worker's host in the configuration, which every error of the worker names.
+    host: String,
     state: AtomicU8,
     next_request_id: AtomicU64,
     in_flight: AtomicUsize,
@@ -175,6 +208,10 @@ struct WorkerInner {
     child: Mutex<Option<Child>>,
     pending: Mutex<BTreeMap<u64, mpsc::Sender<PendingEvent>>>,
     stderr: Mutex<StderrTail>,
+    /// Notified when the stderr reader reaches the end of the worker's stderr.
+    stderr_ended: Condvar,
+    /// Why the worker failed, with the tail of its stderr. `fail` sets it once, after the worker's state turns failed.
+    failure: OnceLock<String>,
     trace_enabled: bool,
     trace_summary_emitted: AtomicBool,
     telemetry: WorkerTelemetry,
@@ -252,25 +289,36 @@ impl WorkerInner {
         }
     }
 
-    fn write(&self, writer: &mut Option<BufWriter<WorkerStdin>>, frame: &Frame) -> Result<(), WorkerError> {
+    /// Writes `frame` to the worker under the writer's lock. It fails with why the frame did not go out, and
+    /// `finish_write` turns that into the error once the lock is released, as the error of a failed worker waits for
+    /// `fail` to record the failure.
+    fn write(&self, writer: &mut Option<BufWriter<WorkerStdin>>, frame: &Frame) -> Result<(), WriteFailure> {
         if self.state.load(Ordering::Acquire) != STATE_RUNNING {
-            return Err(self.disconnected("worker is not running"));
+            return Err(WriteFailure::Stopped);
         }
 
-        let writer = writer.as_mut().ok_or_else(|| self.disconnected("worker stdin is closed"))?;
+        let writer = writer.as_mut().ok_or(WriteFailure::Stopped)?;
         frame
             .write_to(writer, self.maximum_payload_size)
             .and_then(|()| writer.flush().map_err(Into::into))
-            .map_err(|source| WorkerError::Protocol { worker: self.id, source })
+            .map_err(WriteFailure::Protocol)
     }
 
-    fn finish_write(&self, frame: &Frame, written: Result<(), WorkerError>) -> Result<(), WorkerError> {
-        if let Err(error) = written {
-            if matches!(error, WorkerError::Protocol { .. }) {
-                self.fail(error.to_string());
+    fn finish_write(&self, frame: &Frame, written: Result<(), WriteFailure>) -> Result<(), WorkerError> {
+        match written {
+            Ok(()) => {}
+            Err(WriteFailure::Stopped) => return Err(self.disconnected("worker is not running")),
+            // A worker that exited closed the pipe Mago writes its requests to.
+            Err(WriteFailure::Protocol(ProtocolError::Io(source))) => {
+                let reason = format!("failed to write to the worker: {source}");
+                self.fail(reason.clone());
+                return Err(self.disconnected(reason));
             }
-
-            return Err(error);
+            Err(WriteFailure::Protocol(source)) => {
+                let error = WorkerError::Protocol { worker: self.id, source };
+                self.fail(error.to_string());
+                return Err(error);
+            }
         }
 
         if self.trace_enabled {
@@ -324,37 +372,76 @@ impl WorkerInner {
         }
     }
 
+    /// Stops the worker for `reason`, and records the reason with the tail of the worker's stderr as its failure, which
+    /// every request the worker fails from then on reads.
     fn fail(&self, reason: impl Into<String>) {
         if self.state.compare_exchange(STATE_RUNNING, STATE_FAILED, Ordering::AcqRel, Ordering::Acquire).is_err() {
             return;
         }
 
+        let mut failure = FailureRecord { inner: self, message: reason.into() };
         if self.trace_enabled {
             self.telemetry.failures.fetch_add(1, Ordering::Relaxed);
         }
 
+        // Closing stdin first lets a process the worker started, which reads stdin to its end, exit and close stderr.
         lock(&self.writer).take();
         if let Some(child) = lock(&self.child).as_mut() {
             let _result = child.kill();
         }
 
-        let mut message = reason.into();
-        let stderr = lock(&self.stderr).display();
+        let stderr_wait_start = Instant::now();
+        let (stderr, ended) = self.stderr_tail();
+        let stderr_wait = stderr_wait_start.elapsed();
+        if !ended {
+            failure.message =
+                format!("{}; stderr still open after {} ms", failure.message, STDERR_END_TIMEOUT.as_millis());
+        }
         if !stderr.is_empty() {
-            message.push_str("; stderr: ");
-            message.push_str(&stderr);
+            failure.message.push_str("; stderr: ");
+            failure.message.push_str(&stderr);
         }
 
-        let failure = message;
-        tracing::trace!(worker = self.id, reason = %failure, "Extension worker failed.");
+        tracing::trace!(worker = self.id, reason = %failure.message, ?stderr_wait, "Extension worker failed.");
+        drop(failure);
         let pending = std::mem::take(&mut *lock(&self.pending));
         for sender in pending.into_values() {
-            let _result = sender.send(PendingEvent::Failure(failure.clone()));
+            let _result = sender.send(PendingEvent::Stopped);
         }
     }
 
+    /// Marks the worker's stderr read to its end, so a failure stops waiting for more of it.
+    fn end_stderr(&self) {
+        lock(&self.stderr).ended = true;
+        self.stderr_ended.notify_all();
+    }
+
+    /// The tail of the worker's stderr, and whether it holds all the worker wrote. A worker that dies writes why just
+    /// before it exits, and the stdout reader can see it exit before the stderr reader has read that, so this waits up
+    /// to `STDERR_END_TIMEOUT` for the stderr reader to reach the end.
+    fn stderr_tail(&self) -> (String, bool) {
+        let (tail, _) = self
+            .stderr_ended
+            .wait_timeout_while(lock(&self.stderr), STDERR_END_TIMEOUT, |tail| !tail.ended)
+            .unwrap_or_else(PoisonError::into_inner);
+
+        (tail.display(), tail.ended)
+    }
+
+    /// The error for a request the worker can't serve. A worker that failed says why it failed, which `fail` records
+    /// just after the worker's state turns failed. A worker that Mago stopped says `message`.
     fn disconnected(&self, message: impl Into<String>) -> WorkerError {
-        WorkerError::Disconnected { worker: self.id, message: message.into() }
+        let failure = if self.state.load(Ordering::Acquire) == STATE_FAILED {
+            Some(self.failure.wait())
+        } else {
+            self.failure.get()
+        };
+
+        WorkerError::Disconnected {
+            host: self.host.clone(),
+            worker: self.id,
+            message: failure.map_or_else(|| message.into(), Clone::clone),
+        }
     }
 
     fn emit_trace_summary(&self) {
@@ -414,7 +501,6 @@ impl Drop for WorkerRequestTrace<'_> {
 
 pub(crate) struct Worker {
     inner: Arc<WorkerInner>,
-    host: String,
     request_timeout: Duration,
     shutdown_timeout: Duration,
     reader_thread: Mutex<Option<JoinHandle<()>>>,
@@ -465,6 +551,7 @@ impl Worker {
 
         let inner = Arc::new(WorkerInner {
             id,
+            host: options.host.clone(),
             state: AtomicU8::new(STATE_RUNNING),
             next_request_id: AtomicU64::new(1),
             in_flight: AtomicUsize::new(0),
@@ -473,6 +560,8 @@ impl Worker {
             child: Mutex::new(Some(child)),
             pending: Mutex::new(BTreeMap::new()),
             stderr: Mutex::new(StderrTail::new(options.stderr_tail_size)),
+            stderr_ended: Condvar::new(),
+            failure: OnceLock::new(),
             trace_enabled,
             trace_summary_emitted: AtomicBool::new(false),
             telemetry: WorkerTelemetry::default(),
@@ -487,6 +576,8 @@ impl Worker {
             .stack_size(IO_THREAD_STACK_SIZE)
             .spawn(move || read_worker_stream(&reader_inner, stdout))
             .map_err(|source| {
+                // No stderr reader runs, so none will reach the end of the worker's stderr.
+                inner.end_stderr();
                 inner.fail("failed to start stdout reader thread");
                 reap_child(&inner);
                 WorkerError::ThreadSpawn { worker: id, role: "stdout reader", source }
@@ -500,6 +591,7 @@ impl Worker {
         {
             Ok(thread) => thread,
             Err(source) => {
+                inner.end_stderr();
                 inner.fail("failed to start stderr reader thread");
                 reap_child(&inner);
                 let _result = reader_thread.join();
@@ -509,7 +601,6 @@ impl Worker {
 
         let worker = Arc::new(Self {
             inner,
-            host: options.host.clone(),
             request_timeout: options.request_timeout,
             shutdown_timeout: options.shutdown_timeout,
             reader_thread: Mutex::new(Some(reader_thread)),
@@ -601,7 +692,7 @@ impl Worker {
                                 self.inner.telemetry.remote_errors.fetch_add(1, Ordering::Relaxed);
                             }
                             return Err(WorkerError::Remote {
-                                host: self.host.clone(),
+                                host: self.inner.host.clone(),
                                 worker: self.id(),
                                 request: request_id,
                                 payload: frame.payload,
@@ -658,8 +749,8 @@ impl Worker {
                         self.inner.fail("worker requested shutdown");
                     }
                 },
-                Ok(PendingEvent::Failure(failure)) => {
-                    return Err(self.inner.disconnected(failure));
+                Ok(PendingEvent::Stopped) => {
+                    return Err(self.inner.disconnected("worker shut down"));
                 }
                 // The worker may have made progress on another request in the meantime, which the next pass reads.
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -684,7 +775,12 @@ impl Worker {
         let _result = self.inner.send(&Frame::cancel(request_id));
         self.inner.fail(format!("request {request_id} timed out"));
 
-        WorkerError::Timeout { host: self.host.clone(), worker: self.id(), running, duration: self.request_timeout }
+        WorkerError::Timeout {
+            host: self.inner.host.clone(),
+            worker: self.id(),
+            running,
+            duration: self.request_timeout,
+        }
     }
 
     pub fn reserve(self: &Arc<Self>) -> WorkerReservation {
@@ -702,6 +798,10 @@ impl Worker {
         loop {
             match state {
                 STATE_RUNNING | STATE_FAILED => {
+                    // A failed worker records why before it stops, so a request it fails while it stops reads why.
+                    if state == STATE_FAILED {
+                        self.inner.failure.wait();
+                    }
                     match self.inner.state.compare_exchange(state, STATE_STOPPING, Ordering::AcqRel, Ordering::Acquire)
                     {
                         Ok(_) => break,
@@ -768,10 +868,9 @@ impl Worker {
         }
 
         self.inner.state.store(STATE_STOPPED, Ordering::Release);
-        let failure = String::from("worker shut down");
         let pending = std::mem::take(&mut *lock(&self.inner.pending));
         for sender in pending.into_values() {
-            let _result = sender.send(PendingEvent::Failure(failure.clone()));
+            let _result = sender.send(PendingEvent::Stopped);
         }
 
         self.join_threads();
@@ -795,6 +894,7 @@ impl Worker {
     ) -> Arc<Self> {
         let inner = Arc::new(WorkerInner {
             id,
+            host: options.host.clone(),
             state: AtomicU8::new(STATE_RUNNING),
             next_request_id: AtomicU64::new(1),
             in_flight: AtomicUsize::new(0),
@@ -802,7 +902,10 @@ impl Worker {
             writer: Mutex::new(Some(BufWriter::new(WorkerStdin::Test(writer)))),
             child: Mutex::new(None),
             pending: Mutex::new(BTreeMap::new()),
-            stderr: Mutex::new(StderrTail::new(options.stderr_tail_size)),
+            // A peer on streams has no stderr.
+            stderr: Mutex::new(StderrTail { ended: true, ..StderrTail::new(options.stderr_tail_size) }),
+            stderr_ended: Condvar::new(),
+            failure: OnceLock::new(),
             trace_enabled: tracing::enabled!(tracing::Level::TRACE),
             trace_summary_emitted: AtomicBool::new(false),
             telemetry: WorkerTelemetry::default(),
@@ -814,7 +917,6 @@ impl Worker {
 
         Arc::new(Self {
             inner,
-            host: options.host.clone(),
             request_timeout: options.request_timeout,
             shutdown_timeout: options.shutdown_timeout,
             reader_thread: Mutex::new(Some(reader_thread)),
@@ -970,11 +1072,11 @@ fn read_worker_stderr(inner: &WorkerInner, stderr: ChildStderr) {
         match reader.read(&mut buffer) {
             Ok(0) => {
                 tracing::trace!(worker = inner.id, "Extension worker stderr reader reached EOF.");
-                return;
+                break;
             }
             Err(error) => {
                 tracing::trace!(worker = inner.id, error = %error, "Extension worker stderr reader failed.");
-                return;
+                break;
             }
             Ok(read) => {
                 if inner.trace_enabled {
@@ -984,6 +1086,8 @@ fn read_worker_stderr(inner: &WorkerInner, stderr: ChildStderr) {
             }
         }
     }
+
+    inner.end_stderr();
 }
 
 fn reap_child(inner: &WorkerInner) {
@@ -1428,6 +1532,152 @@ mod tests {
 
         worker.shutdown();
         peer.join().expect("peer thread should join");
+    }
+
+    /// A pool restarts its dead workers one after another before it sends them a request, so a worker that dies at
+    /// startup, as one whose require-dev package `composer install --no-dev` left out does, has died again when the
+    /// request reaches it. The error still names its host and says why it died.
+    #[cfg(unix)]
+    #[test]
+    fn a_request_to_a_worker_that_died_at_startup_names_its_host_and_its_stderr() {
+        let worker = dead_shell_worker(&format!("echo '{FATAL_ERROR}' >&2; exit 255"));
+
+        let error = worker.request(b"describe".to_vec(), None).expect_err("the dead worker should fail the request");
+
+        assert_eq!(
+            error.to_string(),
+            format!("extension host `acme` disconnected (worker 0): worker closed stdout; stderr: {FATAL_ERROR}")
+        );
+        worker.shutdown();
+    }
+
+    /// The stdout reader can see a worker exit before the stderr reader reads what it wrote last, here written by a
+    /// process the worker started that writes it 200 ms later, so the failure waits for the end of the stderr.
+    #[cfg(unix)]
+    #[test]
+    fn a_failure_holds_the_stderr_the_worker_writes_after_its_stdout_closes() {
+        let worker = dead_shell_worker(&format!("( exec >&-; sleep 0.2; echo '{FATAL_ERROR}' >&2 ) & exit 255"));
+
+        let error = worker.request(b"describe".to_vec(), None).expect_err("the dead worker should fail the request");
+
+        assert_eq!(
+            error.to_string(),
+            format!("extension host `acme` disconnected (worker 0): worker closed stdout; stderr: {FATAL_ERROR}")
+        );
+        worker.shutdown();
+    }
+
+    /// A wrapper that forks its worker rather than replacing itself with it, as `docker compose exec` does, leaves a
+    /// child that runs until its stdin ends. The failure closes stdin before it waits for the end of the stderr, so the
+    /// child's last words make it into the error.
+    #[cfg(unix)]
+    #[test]
+    fn a_failure_closes_stdin_before_it_waits_for_the_end_of_the_stderr() {
+        let worker =
+            dead_shell_worker("exec 3<&0; ( exec >&- 0<&3; cat >/dev/null; echo 'stdin closed' >&2 ) & exit 255");
+
+        let error = worker.request(b"describe".to_vec(), None).expect_err("the dead worker should fail the request");
+
+        assert_eq!(
+            error.to_string(),
+            "extension host `acme` disconnected (worker 0): worker closed stdout; stderr: stdin closed"
+        );
+        worker.shutdown();
+    }
+
+    /// A process the worker started that keeps its stderr open stops the wait at `STDERR_END_TIMEOUT`, and the error
+    /// says the stderr was still open.
+    #[cfg(unix)]
+    #[test]
+    fn a_failure_says_when_the_stderr_was_still_open_at_the_end_of_the_wait() {
+        let worker = dead_shell_worker("( exec >&-; sleep 2 ) & exit 255");
+
+        let error = worker.request(b"describe".to_vec(), None).expect_err("the dead worker should fail the request");
+
+        assert_eq!(
+            error.to_string(),
+            "extension host `acme` disconnected (worker 0): worker closed stdout; stderr still open after 1000 ms"
+        );
+        worker.shutdown();
+    }
+
+    /// A worker that closed its stdin refuses the request as Mago writes it, and the error says so with its stderr.
+    #[cfg(unix)]
+    #[test]
+    fn a_request_written_to_a_worker_that_closed_its_stdin_holds_the_write_error_and_the_stderr() {
+        const TIMEOUT: Duration = Duration::from_secs(10);
+
+        let worker = shell_worker(&format!("exec 0<&-; echo '{FATAL_ERROR}' >&2; exec sleep 10"));
+        let deadline = Instant::now() + TIMEOUT;
+        while lock(&worker.inner.stderr).display().is_empty() {
+            assert!(Instant::now() < deadline, "the worker wrote no stderr within {TIMEOUT:?}");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+
+        let error = worker.request(b"describe".to_vec(), None).expect_err("the closed stdin should fail the request");
+
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "extension host `acme` disconnected (worker 0): failed to write to the worker: Broken pipe (os error 32); stderr: {FATAL_ERROR}"
+            )
+        );
+        worker.shutdown();
+    }
+
+    /// A worker that Mago shuts down while it fails gives the request it served the failure, not a shutdown.
+    #[cfg(unix)]
+    #[test]
+    fn a_worker_shut_down_while_it_fails_fails_its_request_with_the_failure() {
+        let worker = shell_worker(&format!(
+            "head -c 1 >/dev/null; ( exec >&-; sleep 0.5; echo '{FATAL_ERROR}' >&2 ) & exit 255"
+        ));
+
+        let error = std::thread::scope(|scope| {
+            let request = scope.spawn(|| worker.request(b"describe".to_vec(), None));
+            wait_until_stopped(&worker);
+            worker.shutdown();
+
+            request.join().expect("request thread should join").expect_err("the dead worker should fail the request")
+        });
+
+        assert_eq!(
+            error.to_string(),
+            format!("extension host `acme` disconnected (worker 0): worker closed stdout; stderr: {FATAL_ERROR}")
+        );
+    }
+
+    /// What a PHP worker writes to stderr when it loads a class its missing require-dev package declares.
+    #[cfg(unix)]
+    const FATAL_ERROR: &str = r#"PHP Fatal error:  Uncaught Error: Class "ReportPlugin" not found"#;
+
+    /// A worker of the host `acme` that runs `script` in `sh`.
+    #[cfg(unix)]
+    fn shell_worker(script: &str) -> Arc<Worker> {
+        let command = WorkerCommand::new("sh").with_arguments(["-c", script]);
+        let options = WorkerPoolOptions { host: "acme".to_owned(), ..WorkerPoolOptions::default() };
+
+        Worker::spawn(0, &command, &options).expect("worker process should start")
+    }
+
+    /// A worker that runs `script` and has stopped, as a pool's restarted worker has when a request reaches it.
+    #[cfg(unix)]
+    fn dead_shell_worker(script: &str) -> Arc<Worker> {
+        let worker = shell_worker(script);
+        wait_until_stopped(&worker);
+
+        worker
+    }
+
+    #[cfg(unix)]
+    fn wait_until_stopped(worker: &Worker) {
+        const TIMEOUT: Duration = Duration::from_secs(10);
+
+        let deadline = Instant::now() + TIMEOUT;
+        while worker.is_running() {
+            assert!(Instant::now() < deadline, "the worker still ran after {TIMEOUT:?}");
+            std::thread::sleep(Duration::from_millis(1));
+        }
     }
 
     fn send_at_once<const N: usize>(worker: &Arc<Worker>) -> [Result<Vec<u8>, WorkerError>; N] {
