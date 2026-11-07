@@ -5378,7 +5378,7 @@ app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mag
 - **A deploy** runs `vendor/bin/mago compile` before the code runs.
 - **In development, the engine compiles a file that isn't current when it loads,** as Phoenix's code reloader compiles before a request. The engine's `sharp.compile_command` setting names the command, in a dev `php.ini`:
 
-```ini
+```text
 sharp.compile_command = "vendor/bin/mago --no-version-check --no-extensions compile"
 ```
 
