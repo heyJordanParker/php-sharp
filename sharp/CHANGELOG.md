@@ -4,6 +4,44 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-11-07
+
+### Upgrading from 0.6.3
+
+#### Build the app's image on the 0.6.4 images
+
+The 0.6.0 to 0.6.3 FrankenPHP images build FrankenPHP v1.13.4, which holds CVE-2026-78661 (HIGH) and the 17 FrankenPHP advisories that v1.13.5 fixes (#277). The 0.6.4 FrankenPHP image builds v1.13.5, as Security says. Change the app's `FROM` line to `ghcr.io/heyjordanparker/php-sharp:0.6.4`, or `ghcr.io/heyjordanparker/php-sharp:0.6.4-frankenphp`, and build it again.
+
+#### Clear four values after each request in FrankenPHP's worker mode
+
+The 0.6.0 to 0.6.3 FrankenPHP images reset `error_get_last()`, the libxml errors, `http_get_last_response_headers()` and `strtok()`'s string between the requests a worker handles. v1.13.5 no longer resets them ([php/frankenphp#2790](https://github.com/php/frankenphp/pull/2790)), so each can carry another client's data into the next request, as [FrankenPHP's worker guide](https://github.com/php/frankenphp/blob/v1.13.5/docs/worker.md#state-persistence) says. A worker loop clears the first three after each `frankenphp_handle_request()` call:
+
+```php
+while (frankenphp_handle_request($handler)) {
+    error_clear_last();
+    libxml_clear_errors();
+    http_clear_last_response_headers();
+}
+```
+
+Each request passes its own string to its first `strtok()` call, where a call with only the separators continues the string an earlier request gave it.
+
+#### Expect these answers from FrankenPHP and Caddy
+
+FrankenPHP v1.13.5 builds on Caddy 2.11.9, and in both modes:
+
+- A request for a script that doesn't exist gets `404 No input file specified.`, and one for a script FrankenPHP can't read gets `403 Access denied.`, where each got a 200 with a fatal error ([php/frankenphp#2791](https://github.com/php/frankenphp/pull/2791)).
+- A request whose body is over `request_body`'s `max_size` gets 413, and PHP code that reads such a body gets a `FrankenPHP\RequestBodyTooLargeException`, where it read the body cut short ([php/frankenphp#2785](https://github.com/php/frankenphp/pull/2785)).
+- `$_SERVER['SERVER_ADDR']` holds the address that accepted the connection ([php/frankenphp#2809](https://github.com/php/frankenphp/pull/2809)).
+- Over HTTP/2, `$_SERVER['HTTP_HOST']` is the `:authority` Caddy routed the request on, and a value set with `env` wins over the client's header of the same name.
+- Dot segments after a script, as `/admin/tool.php/../../missing.php`, resolve before FrankenPHP picks the script, so it runs the script Caddy's `path` rules saw. A request whose escaped and decoded paths pick different scripts, as `/public/tool.php%2f..%2f..%2fadmin%2ftool.php`, gets 400.
+- The image's `encode` compresses a response even when the request sends `Cache-Control: no-transform`, and adds `Vary: Accept-Encoding` to each response it could compress.
+
+In worker mode only:
+
+- A worker that restarts, or reaches `max_requests`, closes its persistent resources, as `PDO::ATTR_PERSISTENT` connections, where each restart left them open until the database refused new connections ([php/frankenphp#2812](https://github.com/php/frankenphp/pull/2812)).
+- `frankenphp_handle_request()` empties the superglobals and runs the garbage collector before it waits for the next request, so the destructor of an object left in `$_SESSION` or another superglobal runs inside that call, and an exception it throws comes out of it.
+
 ### Changed
 
 - `mago compile` proves the laws of every `.sharp` file it compiles in one Lean process, where it built the Lean code it generates with Lake and then ran one Lean process per file at once, each importing Lean, the runtime library and that code. Lean and the runtime library now load once per compile, and the generated code is elaborated once, in that process, so a compile of many files with laws uses far less processor time and memory. Mago no longer writes the generated code to `.sharp/.lean/`, and deletes the `Code` folder and the Lake build an earlier `mago` left there. The processor-time limit and the deadline still hold for each file's check.
@@ -12,6 +50,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 - A law whose proof reaches another file's generated Lean code, where Lean rejects that code or it runs past the checker's limit or deadline, is refused with that code's refusal, where the whole compile failed with "the law checker failed with exit status: 1". The file's other laws are still checked.
 - `mago compile` with nothing to do returns at once, where it analyzed the whole workspace every time. A compile that succeeds keeps `.sharp/inputs.json`, a record of every file and setting it read and every file it wrote, and the next compile checks it before any analysis. When nothing in it changed, the compile prints the same summary and stops. A compile that is refused, fails or warns keeps no record, so the next one prints the same errors and warnings. A project with an extension host enabled still compiles every time, because a host doesn't say what it reads.
 - The compile of the project for the extension hosts, which `mago analyze` and `mago lint` run before they start the hosts, checks the same record before it loads the project, where it loaded the whole workspace and checked each compiled file's inputs, an input once per file that names it. It runs again after an edit in `vendor/` or a change to `mago.toml` or a `composer.json`, where the hosts kept loading code compiled before it.
+- `mago convert` converts more of a project, with the same guarantee: a converted file runs as its PHP did, and the converter writes no type the analysis only inferred (#266). On a Laravel application of 1,124 class files, a dry run of the whole app converts 323 files, where it converted 115. Most of the gain is one refusal: a class named `Module` stays plain PHP up front, since spec section 32 keeps `Module.sharp` for its folder's module. Converted, such a class made the application's extension host misread every module, and about 200 other files stayed plain PHP for the errors that caused. A local that starts as `null` or `[]` now converts, to `T? name = null`, a `List<V>` the body only appends to, or a `Map<K, V>` it only writes by key, when the values written to it have declared types. Each construct the proof refused in a converted file now converts, or keeps its file plain PHP up front with the spec section that rules it out, as a static method of an interface (section 22) or a `get` hook that writes `$this` (section 6.1). A member whose PHPDoc tag narrows the type PHP# writes, as `@return non-empty-string` narrows `string`, keeps its file plain PHP and names the tag, where the narrowing was dropped. `docs/architecture/slices/convert.md` lists each construct by spec section.
 
 ### Fixed
 
@@ -48,6 +87,29 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 - A `mago convert` proof that can't finish, as when an extension host's hook makes no progress within its `request-timeout-ms`, logs its error once, "Proof 4 could not finish, so the files it proves stay plain PHP: … extension host `dent` made no progress for 120000 ms on the after-analysis hooks of plugin `routes` …", and keeps each of those files plain PHP with "src/Shop/Order.php: proof 4 could not finish" as its reason. The run goes on and reports every other file. Before, the run stopped with exit code 2 and reported nothing it had found.
 - Once `mago convert` has written its files, a write that fails, a compile of the project for the extension hosts that fails, or a proof by fresh hosts that can't finish now logs its error, says git holds the plain PHP, and ends the run with exit code 1, where each stopped it with exit code 2 and no report. The run names each file it wrote, as `src/Shop/Order.php -> src/Shop/Order.sharp`, where only a dry run named them.
 - `mago compile` keeps the `.php` files it writes beside `.sharp` files out of git with a `.gitignore` of its own in each folder that holds them, which lists itself and each file. It listed them in `.git/info/exclude`, which every worktree of a repository shares, so a compile in one worktree hid the same paths in every other: an untracked `app/Tenant/Publishable.php` someone wrote in another worktree left `git status`, and a branch switch could overwrite it without a warning. A folder whose `.gitignore` the compile didn't write keeps it as it is, and the compile warns: "app/Tenant/.gitignore doesn't list /Order.php, so git may show app/Tenant/Order.php as untracked: add /Order.php to it." A compile also removes the blocks an earlier `mago compile` wrote in `.git/info/exclude`, and keeps every other byte. Run this `mago` in every checkout of a repository: a compile by an older `mago` in any worktree writes its block again, which hides its paths in all of them.
+- `mago convert` says why it can't read git, where it kept every file plain PHP with "commit it first" (#268). In a Docker container on a git worktree, whose git folder sits outside the mount, git can't read the repository, and the run now stops with exit code 2 and git's own reason, which Mago's FAQ explains:
+
+  ```text
+  ERROR `git rev-parse` failed (exit status: 128): fatal: not a git repository: /missing/.git/worktrees/design
+  ```
+
+  With no `git` on `PATH`, the run stops with "Failed to run `git rev-parse`: git isn't installed or isn't on PATH". A file in a git submodule stays plain PHP with "it is in the git submodule `src/Library`: run mago convert there", and one that changes after git is read stays plain PHP with "it changed since mago convert read git: commit it first". An issue in a converted file names the file the user has: a dry run names the plain file, the member, its line and the line of the PHP# its diff shows, as `src/Contracts/Box.php:7, in Box::$item, at line 5 of its PHP#: …`, and a run that writes names the `.sharp` file. A named path that reaches no file says why, as "src/Generated/Made.php is excluded from the project's analysis.", and a run with nothing to prove starts no extension host.
+- The `.php` file `mago compile` writes beside each `.sharp` file passes Laravel Pint's `laravel`, `per` and `psr12` presets, PHP-CS-Fixer's `@PER-CS2x0`, PHPCS's `PSR12` and `mago fmt` as written (#274). Pint refused every one, so a project's lint failed the day it adopted PHP#, and excluding the files didn't help, since Pint reads no `.gitignore`. Spec section 27 says how a project on PHP-CS-Fixer's `@Symfony` set or Pint's `symfony` preset skips them. On plain PHP the file still throws "This project needs the PHP# engine" while its `.sharp` source exists.
+- Mago parses and walks a file nested many levels deep, as a PHP sum of 100,000 terms, and a union or intersection of many types, with no call frame per level (#281). Its memory grew with the depth: Mago's dev build took 2.58 GB for that sum, and takes 0.16 GB now.
+
+### Security
+
+- The FrankenPHP image builds FrankenPHP v1.13.5, whose golang.org/x/net v0.62.0 fixes CVE-2026-78661 (HIGH), a denial of service through crafted HTML (#277). Upgrading from 0.6.3 says what changes in worker mode.
+- FrankenPHP v1.13.5 fixes 17 FrankenPHP advisories in v1.13.4, which every earlier 0.6.x FrankenPHP image builds (#277). The image's default configuration runs `php_server`. Among them:
+  - [GHSA-j99q-3wr8-xj43](https://github.com/php/frankenphp/security/advisories/GHSA-j99q-3wr8-xj43) (High): `php_server` ran an uploaded file as PHP, as `/uploads/photos.php.php/avatar.jpg`.
+  - [GHSA-jvmv-5538-pqpg](https://github.com/php/frankenphp/security/advisories/GHSA-jvmv-5538-pqpg): `php_server`'s trailing-slash redirect for a folder could send a client to another host.
+  - [GHSA-2725-rh2w-9j9w](https://github.com/php/frankenphp/security/advisories/GHSA-2725-rh2w-9j9w): over HTTP/2, a `host` field beside `:authority` set `$_SERVER['HTTP_HOST']` to a host Caddy didn't route the request on.
+  - [GHSA-j45x-h238-h4xx](https://github.com/php/frankenphp/security/advisories/GHSA-j45x-h238-h4xx): slow request bodies held every PHP thread, one slow connection per thread.
+  - [GHSA-xh92-4p94-ch7x](https://github.com/php/frankenphp/security/advisories/GHSA-xh92-4p94-ch7x): `php_server` served a Caddyfile kept in the document root.
+  - [GHSA-8qcf-v46r-g2mc](https://github.com/php/frankenphp/security/advisories/GHSA-8qcf-v46r-g2mc): in worker mode, destructors of one request's objects sent output and cookies to the next client.
+  - [GHSA-2x4j-r638-wxff](https://github.com/php/frankenphp/security/advisories/GHSA-2x4j-r638-wxff): dot segments after a script, as `/admin/tool.php/../../missing.php`, ran a script a Caddy `path` rule denied.
+
+  [The v1.13.5 release notes](https://github.com/php/frankenphp/releases/tag/v1.13.5) list the other ten.
 
 ## [0.6.3] - 2026-11-05
 
@@ -496,7 +558,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.0...v0.6.1
