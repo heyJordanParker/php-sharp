@@ -539,8 +539,12 @@ jobs:
           sudo apt-get update
           # shellcheck disable=SC2086 # PACKAGES is a list of packages.
           sudo apt-get install --yes --no-install-recommends $PACKAGES
+      # Each build prints the CFLAGS its Makefile passes gcc, since make's output is hidden and configure adds -Werror
+      # without a word, so the log shows -O2 and -Werror reach the compiler.
       - name: Build at -O2 with --enable-werror
-        run: sharp/bin/build --release
+        run: |
+          sharp/bin/build --release
+          grep -E '^CFLAGS(_CLEAN)? =' "sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)-release/Makefile"
       # sharp/bin/build wrote configure.
       - name: Build both images' configure lines at -O2 with --enable-werror
         run: |
@@ -548,7 +552,7 @@ jobs:
             options="$(sharp/docker/runtime/configure-options "$image")"
             mkdir "$RUNNER_TEMP/$image"
             # shellcheck disable=SC2086 # configure-options prints one option per line.
-            (cd "$RUNNER_TEMP/$image" && "$GITHUB_WORKSPACE/configure" $options && make -j"$(nproc)" >/dev/null)
+            (cd "$RUNNER_TEMP/$image" && "$GITHUB_WORKSPACE/configure" $options && grep -E '^CFLAGS(_CLEAN)? =' Makefile && make -j"$(nproc)" >/dev/null)
           done
   # The engine built with AddressSanitizer, so a memory error of the engine fails a test. sharp/bin/build has no flag
   # for php-src's --enable-address-sanitizer, so it builds as php-src's own CI does: a debug build whose CFLAGS and
