@@ -3603,7 +3603,7 @@ const paid = result as PaymentResult.Paid ?? throw new NotPaid(result);
 ```
 
 - **`is`** tests a value against any pattern, and creates the pattern's variables when it matches.
-- **Narrowing:** after `is` without a name, a local variable or parameter counts as the tested type for the rest of the block. Assigning to it inside the block ends the narrowing. A local or parameter that a lambda assigns is never narrowed, because the lambda may run between the test and the use, as Kotlin decides a smart cast. A lambda keeps the narrowing of a local it reads only when no assignment can run after the lambda is created, as TypeScript decides. Properties are not narrowed, because they could change between the test and the use. To use the tested value of such a local or of a property, bind it to a name, as in `is int t`.
+- **Narrowing:** after `is` without a name, a local variable or parameter counts as the tested type for the rest of the block. Assigning to it inside the block ends the narrowing. A local or parameter that a lambda assigns is never narrowed, because the lambda may run between the test and the use, as Kotlin decides a smart cast. A lambda keeps the narrowing of a local it reads only when no assignment can run after the lambda is created, as TypeScript decides. A stored property narrows after a test or an assignment, until the next call or assignment, as Mago, Psalm and PHPStan decide: PHP runs one thread, so only a call or an assignment can change it between the test and the use. A property with a `get` accessor never narrows, because each read runs its accessor. To use the tested value of such a local or property past that point, bind it to a name, as in `is int t`.
 
 <!-- example narrowing: statements
 Any? entity = new Page();
@@ -3617,10 +3617,12 @@ if (entity is HasDesign) {
 
 <!-- example property-narrowing: statements
 Tab order = new Tab();
+private void save() { }
 -->
 ```csharp
-if (order.total is int) { order.total + 1; }    // compile error: order.total may have changed since the test
-if (order.total is int t) { let next = t + 1; } // compiles: t holds the value that was tested
+if (order.total is int) { order.total + 1; }                 // compiles: nothing ran between the test and the use
+if (order.total is int) { this.save(); order.total + 1; }    // compile error: the call may have changed order.total
+if (order.total is int t) { this.save(); let next = t + 1; } // compiles: t holds the value that was tested
 ```
 
 - **A variable that `is` creates exists only where the test held:** inside the `if` for `is`, and after an `if` whose block always exits for `is not`, as in C#. A block always exits when every path through it ends in `return`, `throw`, `break` or `continue`.
