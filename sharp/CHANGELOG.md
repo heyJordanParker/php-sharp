@@ -4,6 +4,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- An extension host that refines a PHP# member's type to a type PHP# can't write, such as an `array{key: string, reason: string}` shape on a `Map<string, string>?` property, no longer stops `mago analyze`. 0.6.4 panicked in every analysis of the project, whatever file it was scoped to: "internal error: entered unreachable code: PHP# writes no array shape". The member keeps the type it declares, and the analysis goes on with an error at the member: "The host `typing` refines `Notice.fields` to `array{'key': string, 'reason': string}`, which PHP# can't write, so it keeps its declared type `Map<string, string>?`." A refinement PHP# writes that doesn't fit the declared type, as `Other` on a `Spec?` member, is an error at the member too, in the same words, where it was a "Docblock property type" mismatch. A refinement that fits, as `Special` on `Spec?`, still applies. The same holds for a parameter, a result, a type parameter's bound, a parent's type argument and a lambda's `this`.
+
 ## [0.6.4] - 2026-11-07
 
 ### Upgrading from 0.6.3
