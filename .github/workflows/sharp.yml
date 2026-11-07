@@ -29,14 +29,20 @@ jobs:
   # ext/sharp/src or sharp/bin/build, runs the passes. The full run, nightly, dispatched or a release's bump, runs every
   # job in every mode, and its `full` output tells each job so.
   #
+  # A pull request's run that isn't the full run skips MACOS and LINUX_PASSES, so a merge never waits for the Mac, and
+  # the push to master runs them after the merge. In the runs sampled, LINUX_PASSES never failed without LINUX. So a
+  # defect only MACOS finds, of a disk that ignores case or of the arm64 JIT, lands on master first, and its red push
+  # opens an issue, as CI_PASSED does, for a pull request that fixes it forward.
+  #
   # A tree runs the suites once, as bors's "not rocket science" rule tests the exact tree that lands once. A push to
-  # master skips them when a pull request run passed them on its tree, as .github/actions/passed-tree explains, and
-  # links that run. The nightly run skips a tree a full run already passed. A tag runs none of them: it publishes only
-  # a tree whose full run passed all 9 test jobs, as release.yml does with Mago CI, so its MACOS never waits for the
-  # Mac runners behind the release's Apple builds. That run is the bump's own, whose RELEASE_BUMP passed, or a nightly
-  # or dispatched one. Another pull request's run isn't enough, because it runs each mode once, and CI_PASSED isn't,
-  # because it also passes a change to documentation alone, whose suites skipped. A tag publishes the images its bump's
-  # pull request pushed, as IMAGE explains, and CHANGES finds them.
+  # master skips them when a run passed all 8 suites on its tree, as .github/actions/passed-tree explains, and links
+  # that run: only the bump's pull request runs MACOS, so every other push runs them. The nightly run skips a tree a
+  # full run already passed. A tag runs none of them: it publishes only a tree whose full run passed all 9 test jobs,
+  # as release.yml does with Mago CI, so its MACOS never waits for the Mac runners behind the release's Apple builds.
+  # That run is the bump's own, whose RELEASE_BUMP passed, or a nightly or dispatched one. Another pull request's run
+  # isn't enough, because it runs each mode once, and CI_PASSED isn't, because it also passes a change to documentation
+  # alone, whose suites skipped. A tag publishes the images its bump's pull request pushed, as IMAGE explains, and
+  # CHANGES finds them.
   CHANGES:
     runs-on: ubuntu-24.04
     permissions:
@@ -56,7 +62,8 @@ jobs:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # LINUX, LINUX_ZTS, HOSTS, MACOS, and PHP_EXTENSIONS for each of its two images on each of its two runners.
-      # LINUX_PASSES runs only for a change to the engine, and a run's success means it passed when it ran.
+      # LINUX_PASSES runs only for a change to the engine, and a run's success means it passed when it ran. A pull
+      # request's run skips MACOS unless it is the bump's full run, so the bump's is the one pull request run that counts.
       - name: Find the pull request run that passed every suite on this tree
         id: passed
         if: github.event_name == 'push' && github.ref_type == 'branch'
@@ -244,10 +251,11 @@ jobs:
           header="$(jq -r 'select(.reason == "build-script-executed" and (.package_id | contains("mago-sharp-bridge"))) | .out_dir | ltrimstr("/src/")' "$RUNNER_TEMP/build.json")/sharp_unit.h"
           diff -u ext/sharp/sharp_unit.h "$header"
   # Each of PHP's 16 optimizer passes alone, on the build LINUX tests, so a pass that drops a PHP# mark cannot hide
-  # behind another pass. CHANGES runs it for a change to the engine's own code, and the full run runs it.
+  # behind another pass. CHANGES runs it for a change to the engine's own code, and the full run runs it. A pull
+  # request's run skips it unless it is the full run, and the push to master runs it, as CHANGES explains.
   LINUX_PASSES:
     needs: CHANGES
-    if: needs.CHANGES.outputs.engine == 'true'
+    if: needs.CHANGES.outputs.engine == 'true' && (github.event_name != 'pull_request' || needs.CHANGES.outputs.full == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -462,12 +470,13 @@ jobs:
             --volume "$PWD:/src" \
             --workdir /src \
             php-sharp-extensions sharp/bin/test --installed --opcache --repeat --passes --jit
-  # On a pull request, the checks only macOS can fail: the engine's build, mago compile and the plain run on a disk that
-  # ignores case, the census and the differential, and both JITs, because no other pull request job runs on arm64. Linux
-  # runs every other mode on the same tests, and the full run runs them all here as well.
+  # The checks only macOS can fail: the engine's build, mago compile and the plain run on a disk that ignores case, the
+  # census and the differential, and both JITs on arm64. Linux runs every other mode on the same tests, and the full run
+  # runs them all here as well. A pull request's run skips it unless it is the full run, so a merge never waits for the
+  # Mac, and the push to master runs it, as CHANGES explains.
   MACOS:
     needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true'
+    if: needs.CHANGES.outputs.code == 'true' && (github.event_name != 'pull_request' || needs.CHANGES.outputs.full == 'true')
     # The self-hosted Mac runners run it, except for a pull request from another repository: this one is public, and
     # head.repo.fork can't tell, because it is itself a fork of php/php-src. A job never installs on them, so they
     # check that Homebrew already has the build's formulae and build without ccache. Only the runner labelled
@@ -668,22 +677,24 @@ jobs:
         with:
           allowed-skips: LINUX, LINUX_PASSES, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS, RELEASE_BUMP, RELEASE_ASSETS, IMAGE
           jobs: ${{ toJSON(needs) }}
-      # A red nightly run fails no pull request, so it opens one issue, or comments on the one still open, and the next
-      # tag can't wait on a failure nobody saw.
-      - name: Open an issue for the failed nightly run
-        if: failure() && github.event_name == 'schedule'
+      # A red nightly run or push to master fails no pull request, so it opens one issue, or comments on the one still
+      # open, and the next tag can't wait on a failure nobody saw. A pull request fixes it forward. Nobody reverts
+      # first: a merge commit can't land again cleanly once reverted, a revert hides what merged on top of it, and it
+      # would revert a healthy merge that failed on the Mac's load.
+      - name: Open an issue for the failed run on master
+        if: failure() && (github.event_name == 'schedule' || github.event_name == 'push' && github.ref_type == 'branch')
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TITLE: ${{ github.event_name == 'schedule' && 'The nightly PHP# CI run failed' || 'A push to master failed PHP# CI' }}
         run: |
-          title="The nightly PHP# CI run failed"
-          body="The nightly run on master's $GITHUB_SHA failed: $RUN"
-          issue=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          body="The $GITHUB_EVENT_NAME run on master's $GITHUB_SHA failed: $RUN"
+          issue=$(gh issue list --state open --search "\"$TITLE\" in:title" --json number,title --jq '[.[] | select(.title == env.TITLE)][0].number // empty')
           if [[ -n $issue ]]; then
             gh issue comment "$issue" --body "$body"
           else
-            gh issue create --title "$title" --body "$body"
+            gh issue create --title "$TITLE" --body "$body"
           fi
       # Master's full run's jobs saved their targets when they ended, so this job, which needs them all, deletes the
       # ones the new targets replaced. No other run saves one.
