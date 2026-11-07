@@ -25,6 +25,13 @@ final class Note
         return "Dear {$name}," . $name . '.';
     }
 
+    // `(bool)`, which the truthiness test of the value's type replaces: `'0'`, `''` and `0` are false, as in PHP.
+    /** @return list<bool> */
+    public function flagged(int $count, ?string $note): array
+    {
+        return [(bool) $count, (bool) $note];
+    }
+
     public function describe($value): string
     {
         if (is_string($value)) {

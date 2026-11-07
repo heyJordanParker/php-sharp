@@ -47,9 +47,23 @@ impl Converter<'_, '_> {
                 return self
                     .refuse(expression.span(), "a reference has no PHP# form: PHP# passes every value as it is");
             }
-            UnaryPrefixOperator::BoolCast(..)
-            | UnaryPrefixOperator::BooleanCast(..)
-            | UnaryPrefixOperator::ArrayCast(..)
+            // PHP# has no `(bool)`, and a condition's comparison replaces it (spec section 24): the test of PHP's
+            // truthiness that a condition of the value's type gives, as `count != 0` (spec section 21).
+            UnaryPrefixOperator::BoolCast(..) | UnaryPrefixOperator::BooleanCast(..) => {
+                if self.is(operand, &[Kind::Bool]) {
+                    let shown = self.shown(operand);
+                    return self.refuse(
+                        expression.span(),
+                        format!("`(bool)` of `{shown}` has no PHP# form: PHP# has no `(bool)`, and a type only PHPDoc gives is no proof that the value is a `bool` (spec section 24)"),
+                    );
+                }
+                if let Some(test) = self.truthiness(operand, false, false) {
+                    let test = if test.starts_with('(') || !test.contains(' ') { test } else { format!("({test})") };
+                    self.edits.replace(expression.span(), test);
+                }
+                return;
+            }
+            UnaryPrefixOperator::ArrayCast(..)
             | UnaryPrefixOperator::ObjectCast(..)
             | UnaryPrefixOperator::UnsetCast(..)
             | UnaryPrefixOperator::VoidCast(..) => {
