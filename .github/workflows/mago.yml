@@ -315,25 +315,23 @@ jobs:
 
       - name: cargo test
         run: |
-          beside_pool() {
-            failed=0
-            for run in $(seq 1 15); do
-              echo "=== 346 $1 beside the pool tests, run $run"
-              if ! cargo test -p mago-extension --lib --locked -- --nocapture pool:: closed_its_stdin; then
-                failed=$((failed + 1))
-              fi
-            done
-            echo "=== 346: $1: $failed of 15 runs beside the pool tests failed"
-          }
-          failed=0
-          for run in $(seq 1 6); do
+          # The workspace's own tests run beside the loops, as the load the stall needs.
+          cargo test --workspace --locked --no-run
+          binary=$(cargo test -p mago-extension --lib --locked --no-run --message-format=json \
+            | jq -r 'select(.profile.test == true and .target.name == "mago_extension") | .executable')
+          cargo test --workspace --locked > "$RUNNER_TEMP/workspace.log" 2>&1 &
+          workspace=$!
+          others=0
+          beside=0
+          for run in $(seq 1 10); do
             echo "=== 346 others variant, run $run"
-            if ! cargo test -p mago-extension --lib --locked -- --nocapture diagnostic_closed_stdin; then
-              failed=$((failed + 1))
-            fi
+            (cd crates/extension && "$binary" --nocapture diagnostic_closed_stdin) || others=$((others + 1))
+            echo "=== 346 beside the pool tests, run $run"
+            (cd crates/extension && "$binary" --nocapture pool:: closed_its_stdin) || beside=$((beside + 1))
           done
-          echo "=== 346: $failed of 6 others variant runs failed"
-          beside_pool "alone"
+          echo "=== 346: $others of 10 others variant runs failed, $beside of 10 runs beside the pool tests failed"
+          if wait "$workspace"; then echo "=== 346: the workspace run passed"; else echo "=== 346: the workspace run failed"; fi
+          grep -E "test result|FAILED|panicked" "$RUNNER_TEMP/workspace.log" | tail -n 40
 
       - name: cargo test (property)
         if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'

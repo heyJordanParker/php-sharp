@@ -1415,9 +1415,7 @@ mod diagnostic {
             let length = unsafe { libc::proc_pidpath(pid, path.as_mut_ptr().cast(), 4096) };
             let path = String::from_utf8_lossy(&path[..length.max(0) as usize]).into_owned();
             if got > 0 {
-                if info.pbsi_ruid != user && info.pbsi_ppid != own as u32 {
-                    continue;
-                }
+                let _ = (user, own);
                 found.push(format!(
                     "pid {pid} ({errno}) uid {} ruid {} ppid {} pgid {} status {} name {name} path {path}",
                     info.pbsi_uid, info.pbsi_ruid, info.pbsi_ppid, info.pbsi_pgid, info.pbsi_status
