@@ -47,6 +47,9 @@ pub struct ProcessGroup {
     /// The slot that holds the group's id for `forward`.
     #[cfg(unix)]
     slot: &'static Slot,
+    /// Why a process of the group outlived an end, which every later end returns at once rather than wait again.
+    #[cfg(target_os = "macos")]
+    outlived: Option<String>,
 }
 
 impl ProcessGroup {
@@ -79,7 +82,12 @@ impl ProcessGroup {
                 forward(signal);
             }
 
-            Ok(Self { leader: spawned?, slot })
+            Ok(Self {
+                leader: spawned?,
+                slot,
+                #[cfg(target_os = "macos")]
+                outlived: None,
+            })
         }
         #[cfg(not(unix))]
         {
@@ -106,7 +114,8 @@ impl ProcessGroup {
     /// # Errors
     ///
     /// Returns an error if the signal cannot be sent, as when every process of the group has ended, and on macOS one of
-    /// kind `TimedOut` that names the group when a process of it still runs `END_TIMEOUT` after the first signal.
+    /// kind `TimedOut` that names the group when a process of it still runs `END_TIMEOUT` after the first signal. Once
+    /// an end timed out, each later one that still finds a process of the group returns that error at once.
     pub fn end(&mut self) -> io::Result<()> {
         #[cfg(unix)]
         {
@@ -114,6 +123,8 @@ impl ProcessGroup {
             // SAFETY: `killpg` only sends a signal, to the group the leader leads since it started with `process_group(0)`.
             // The leader is not waited for yet, so its id still names the group.
             let signal = || unsafe { libc::killpg(group, libc::SIGKILL) } == 0;
+            #[cfg(test)]
+            let signal = || signal() || unending(group);
             if !signal() {
                 return Err(io::Error::last_os_error());
             }
@@ -121,7 +132,13 @@ impl ProcessGroup {
             // live on with what the group held, as a worker's pipes, and Mago would wait for them to close forever.
             // Linux hands such a process the signal too.
             #[cfg(target_os = "macos")]
-            signal_until_ended(group, END_TIMEOUT, signal)?;
+            {
+                if let Some(outlived) = &self.outlived {
+                    return Err(io::Error::new(io::ErrorKind::TimedOut, outlived.clone()));
+                }
+                signal_until_ended(group, END_TIMEOUT, signal)
+                    .inspect_err(|error| self.outlived = Some(error.to_string()))?;
+            }
 
             Ok(())
         }
@@ -182,14 +199,27 @@ fn signal_until_ended(group: libc::pid_t, timeout: Duration, mut signal: impl Fn
 #[cfg(unix)]
 impl Drop for ProcessGroup {
     /// Ends the group and reaps the leader unless Mago already waited for it, then frees the group's slot, so a signal
-    /// no longer ends the group: once the group ends, its id may name another. A leader that still runs after the end's
-    /// timeout is left unreaped, since waiting for it could wait forever.
+    /// no longer ends the group: once the group ends, its id may name another. When a process of the group outlives the
+    /// end, the leader is reaped only if it has exited, since waiting for it could wait forever.
     fn drop(&mut self) {
-        if self.leader_state().is_ok() && !self.end().is_err_and(|error| error.kind() == io::ErrorKind::TimedOut) {
-            let _result = self.leader.wait();
+        if self.leader_state().is_ok() {
+            let _result = match self.end() {
+                Err(error) if error.kind() == io::ErrorKind::TimedOut => self.leader.try_wait().map(drop),
+                _ => self.leader.wait().map(drop),
+            };
         }
         self.slot.group.store(0, Ordering::SeqCst);
     }
+}
+
+/// The groups a test says SIGKILL cannot end, as the kernel cannot end a process it holds on a stalled disk.
+#[cfg(all(test, unix))]
+pub(crate) static UNENDING: std::sync::Mutex<Vec<libc::pid_t>> = std::sync::Mutex::new(Vec::new());
+
+/// Whether a test said SIGKILL cannot end `group`, which `end` then finds running.
+#[cfg(all(test, unix))]
+fn unending(group: libc::pid_t) -> bool {
+    UNENDING.lock().unwrap_or_else(std::sync::PoisonError::into_inner).contains(&group)
 }
 
 /// Makes the calling thread's writes to `stdin`, a child's standard input, fail with `ErrorKind::BrokenPipe` once the
@@ -353,5 +383,75 @@ mod tests {
         assert_eq!(error.kind(), io::ErrorKind::TimedOut);
         assert_eq!(error.to_string(), "process group 4321 still ran 20 ms after SIGKILL");
         assert!(started.elapsed() >= TIMEOUT, "the end stopped after {:?}", started.elapsed());
+    }
+
+    /// DIAGNOSTIC for task 346, removed before the PR is reported: how long `end` takes, under the load it runs beside.
+    #[allow(clippy::print_stderr, clippy::use_debug, clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_sign_loss)]
+    #[test]
+    fn diagnostic_measure_end() {
+        let measure = |label: &str, script: &str, runs: usize| {
+            let mut ended = Vec::with_capacity(runs);
+            for _ in 0..runs {
+                let mut command = Command::new("sh");
+                command.args(["-c", script]).stdout(std::process::Stdio::piped());
+                let mut group = ProcessGroup::spawn(&mut command).expect("sh should start");
+                let mut ready = [0u8; 1];
+                std::io::Read::read_exact(group.leader().stdout.as_mut().expect("piped"), &mut ready)
+                    .expect("the group should say it is ready");
+                let started = Instant::now();
+                let result = group.end();
+                ended.push(started.elapsed());
+                assert!(result.is_ok(), "{label}: {result:?}");
+            }
+            ended.sort();
+            let at = |share: f64| ended[((ended.len() - 1) as f64 * share) as usize];
+            eprintln!(
+                "=== 346 end {label}: {runs} runs, median {:?}, p99 {:?}, max {:?}",
+                at(0.5),
+                at(0.99),
+                ended[ended.len() - 1]
+            );
+        };
+        measure("small", "sleep 1000 & sleep 1000 & echo; wait", 300);
+        measure(
+            "1 GiB",
+            "perl -e '$| = 1; my $x = \"a\" x (1 << 30); print \"r\"; sleep 1000' & wait",
+            20,
+        );
+    }
+
+    /// A group whose end timed out answers each later end at once with the same error, and dropping it reaps a leader
+    /// that has exited, so the leader is no zombie for as long as Mago runs.
+    #[test]
+    fn a_group_that_outlived_its_end_ends_again_at_once_and_its_drop_reaps_an_exited_leader() {
+        let mut group = ProcessGroup::spawn(&mut Command::new("true")).expect("true should start");
+        while !group.leader_exited() {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        let id = libc::pid_t::try_from(group.leader().id()).expect("a process id fits a pid_t");
+        UNENDING.lock().expect("no test panics with the list held").push(id);
+
+        let first = group.end().expect_err("the end should time out");
+        let started = Instant::now();
+        let again = group.end().expect_err("the end should time out again");
+        let ended_again_after = started.elapsed();
+        drop(group);
+        UNENDING.lock().expect("no test panics with the list held").retain(|unending| *unending != id);
+
+        assert_eq!(first.kind(), io::ErrorKind::TimedOut);
+        assert_eq!((again.kind(), again.to_string()), (first.kind(), first.to_string()));
+        assert!(ended_again_after < END_TIMEOUT, "the second end took {ended_again_after:?}");
+        // SAFETY: `siginfo_t` is plain data, which zeroes make valid, and `waitid` only fills it.
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        // SAFETY: as for `info`; `WNOWAIT` leaves a leader that is still there to be waited for.
+        let waited = unsafe {
+            libc::waitid(libc::P_PID, id.cast_unsigned(), &raw mut info, libc::WEXITED | libc::WNOHANG | libc::WNOWAIT)
+        };
+        assert_eq!(
+            (waited, io::Error::last_os_error().raw_os_error()),
+            (-1, Some(libc::ECHILD)),
+            "the dropped group's leader should be reaped"
+        );
     }
 }

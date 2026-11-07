@@ -887,15 +887,18 @@ impl Worker {
         };
 
         let child = lock(&self.inner.child).take();
-        if let Some(group) = child {
+        // A process of the group that SIGKILL cannot end holds the worker's pipes, so the I/O threads never end.
+        let mut outlived = false;
+        if let Some(mut group) = child {
             if !group.leader_exited() {
                 if self.inner.trace_enabled {
                     self.inner.telemetry.forced_shutdowns.fetch_add(1, Ordering::Relaxed);
                 }
                 tracing::trace!(worker = self.id(), "Killing extension worker after shutdown grace period.");
             }
-            // Dropping the group ends it, whether its leader still runs past the grace period or exited and left a
-            // process it started running, which would keep the worker's pipes open, and then reaps the leader.
+            // The group ends whether its leader still runs past the grace period or exited and left a process it started
+            // running, which would keep the worker's pipes open. Dropping it then reaps the leader.
+            outlived = group.end().is_err_and(|error| error.kind() == std::io::ErrorKind::TimedOut);
             drop(group);
         }
 
@@ -905,7 +908,11 @@ impl Worker {
             let _result = sender.send(PendingEvent::Stopped);
         }
 
-        self.join_threads();
+        if outlived {
+            self.leave_threads();
+        } else {
+            self.join_threads();
+        }
         if let Some(start) = trace_start {
             tracing::trace!(
                 worker = self.id(),
@@ -980,6 +987,19 @@ impl Worker {
         tracing::trace!(worker = self.id(), "Joining extension worker I/O threads.");
         for thread in threads.into_iter().flatten() {
             let _result = thread.join();
+        }
+    }
+
+    /// Lets the I/O threads run on without waiting for them, as each waits on a pipe that a process of the worker's
+    /// group, which outlived its end, holds open. Each ends once that process does.
+    fn leave_threads(&self) {
+        tracing::warn!(
+            "A process of extension host `{}`'s worker {} outlived its end, so Mago stops waiting for the worker.",
+            self.inner.host,
+            self.id()
+        );
+        for thread in [&self.reader_thread, &self.stderr_thread, &self.writer_thread] {
+            drop(lock(thread).take());
         }
     }
 }

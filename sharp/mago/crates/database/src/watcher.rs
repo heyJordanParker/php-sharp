@@ -240,7 +240,7 @@ impl<'config> DatabaseWatcher<'config> {
 
         let watch_list: Vec<(PathBuf, RecursiveMode)> =
             watched_paths.iter().map(|path| (path.clone(), RecursiveMode::Recursive)).collect();
-        let polled = Self::polled(config, &all_exclusions, &extensions)?;
+        let polled = Self::polled(config, &all_exclusions, &extensions, &explicit_watch_paths)?;
         let watcher = start_watcher_of::<W, _, _>(
             move |res: Result<Event, notify::Error>| {
                 if let Ok(event) = res
@@ -278,22 +278,27 @@ impl<'config> DatabaseWatcher<'config> {
         Ok(())
     }
 
-    /// Whether a poll of the watched folders reads a folder, given as `true`, or the file at a path: no folder the loader
-    /// skips with `exclusions`, the watch's own among them, and only a file of one of `extensions`.
+    /// Whether a poll of the watched folders reads a folder, given as `true`, or the file at a path: each folder under
+    /// one of `explicit_watch_paths`, whose changes `handle_event` reports whatever the exclusions say, and no other
+    /// folder the loader skips with `exclusions`, the watch's own among them; and only a file of one of `extensions`.
     fn polled<'scope>(
         config: &DatabaseConfiguration<'scope>,
         exclusions: &[Exclusion<'scope>],
         extensions: &HashSet<Vec<u8>>,
+        explicit_watch_paths: &[PathBuf],
     ) -> Result<impl Fn(&Path, bool) -> bool + Send + 'static, DatabaseError> {
         let skipped = ExcludedFolders::from_configuration(&DatabaseConfiguration {
             excludes: exclusions.to_vec(),
             ..config.clone()
         })?;
         let extensions = extensions.clone();
+        // The poll gives a folder at its real path.
+        let explicit: Vec<PathBuf> =
+            explicit_watch_paths.iter().map(|path| path.canonicalize().unwrap_or_else(|_| path.clone())).collect();
 
         Ok(move |path: &Path, is_folder: bool| {
             if is_folder {
-                !skipped.contains(path)
+                explicit.iter().any(|root| path.starts_with(root)) || !skipped.contains(path)
             } else {
                 path.extension().is_some_and(|extension| extensions.contains(extension.as_encoded_bytes()))
             }
@@ -815,16 +820,22 @@ where
         .enumerate()
         .map(|(index, (path, recursive_mode))| (path.clone(), *recursive_mode, format!("{cookie}{index}")))
         .collect();
+    // A folder that takes no cookie is never synced: the watcher's changes there reach `handler` once every other folder
+    // is, and otherwise a poll checks it for as long as it runs.
+    let mut uncookied: Vec<(PathBuf, RecursiveMode, String)> = Vec::new();
+    let mut cookies_written = None;
     let (native, unreported) = match starts.recv_timeout(cookie_timeout) {
         Ok(watcher) => {
             let watcher = StopsAside(Some(Box::new(watcher?)));
             let mut unreported: Vec<(PathBuf, RecursiveMode, String)> = Vec::new();
+            cookies_written = Some(Instant::now());
             for folder in folders {
                 if let Err(error) = write_cookie(&folder.0, &folder.2) {
                     tracing::warn!(
                         "Could not write the file watcher's cookie in {}, so a change made there as the watch starts can be missed: {error}",
                         folder.0.display()
                     );
+                    uncookied.push((folder.0, folder.1, String::new()));
                     continue;
                 }
                 unreported.push(folder);
@@ -852,13 +863,14 @@ where
         "The file watcher reported no change in {} within {cookie_timeout:?}, so this run checks the files there every {poll_interval:?} until it does.",
         unreported.iter().map(|(folder, _, _)| folder.display().to_string()).collect::<Vec<_>>().join(", "),
     );
-    // A watched path that is no folder takes no cookie, so the poll checks it for as long as it runs.
+    // A watched path that is no folder takes no cookie either, so the poll checks it for as long as it runs.
     let mut polled_paths = unreported;
+    polled_paths.extend(uncookied);
     polled_paths.extend(
         paths.iter().filter(|(path, _)| !path.is_dir()).map(|(path, mode)| (path.clone(), *mode, String::new())),
     );
     let (stop, stopped) = mpsc::channel();
-    let mut poll = Poll { folders: polled_paths, polled, seen: HashMap::new() };
+    let mut poll = Poll { folders: polled_paths, polled, seen: HashMap::new(), cookies_written };
     // The poll reports only what changes after this first scan, which ends before the watcher is returned.
     poll.seen = poll.scan();
     // The poll logs where its caller logs.
@@ -867,7 +879,7 @@ where
         .name("mago-watch-poll".to_owned())
         .spawn(move || {
             tracing::dispatcher::with_default(&dispatch, || {
-                poll.run(handler, native, &cookies_reported, poll_interval, &stopped);
+                poll.run(handler, native, &cookies_reported, poll_interval, cookie_timeout, &stopped);
             });
         })
         .map_err(|error| DatabaseError::WatcherInit(notify::Error::io(error)))?;
@@ -911,21 +923,24 @@ struct Poll<P> {
     /// go into either.
     polled: P,
     seen: HashMap<PathBuf, Seen>,
+    /// When the folders' cookies were last written, which a poll writes again a cookie timeout later.
+    cookies_written: Option<Instant>,
 }
 
 impl<P> Poll<P>
 where
     P: Fn(&Path, bool) -> bool,
 {
-    /// Checks the files every `poll_interval` until `stopped` ends, and gives `handler` each change. Each poll writes
-    /// each folder's cookie again once the operating system watcher started, and a folder whose cookie it reports goes
-    /// back to it.
+    /// Checks the files every `poll_interval` until `stopped` ends, and gives `handler` each change. Once the operating
+    /// system watcher started, a poll writes each folder's cookie again every `cookie_timeout`, and a folder whose
+    /// cookie it reports goes back to it.
     fn run<W, H>(
         mut self,
         mut handler: H,
         mut native: Starting<W>,
         cookies_reported: &Receiver<String>,
         poll_interval: Duration,
+        cookie_timeout: Duration,
         stopped: &Receiver<()>,
     ) where
         W: NotifyWatcher + Send + 'static,
@@ -953,10 +968,13 @@ where
                     );
                 }
             }
-            if matches!(native, Starting::Started(_)) {
+            if matches!(native, Starting::Started(_))
+                && self.cookies_written.is_none_or(|written| written.elapsed() >= cookie_timeout)
+            {
                 for (folder, _, cookie) in self.folders.iter().filter(|(_, _, cookie)| !cookie.is_empty()) {
                     let _result = write_cookie(folder, cookie);
                 }
+                self.cookies_written = Some(Instant::now());
             }
 
             let now = self.scan();
@@ -986,10 +1004,10 @@ where
             let depth = if *recursive_mode == RecursiveMode::Recursive { usize::MAX } else { 1 };
             let walk = walkdir::WalkDir::new(folder).follow_links(true).max_depth(depth).into_iter();
             for entry in walk.filter_entry(|entry| {
-                // A folder is matched at its real path, as the loader matches it.
-                entry.depth() == 0
-                    || !entry.file_type().is_dir()
-                    || (self.polled)(&real.join(entry.path().strip_prefix(folder).unwrap_or(entry.path())), true)
+                // A folder is matched at its real path, as the loader matches it, the polled folder itself among them.
+                let relative = entry.path().strip_prefix(folder).unwrap_or(entry.path());
+                !entry.file_type().is_dir()
+                    || (self.polled)(&if entry.depth() == 0 { real.clone() } else { real.join(relative) }, true)
             }) {
                 let Ok(entry) = entry else { continue };
                 let path = entry.path();
@@ -1755,17 +1773,117 @@ mod tests {
         write(&root, "app/vendor/b.php", "<?php echo 2;\n");
         let configuration = DatabaseConfiguration::new(&root, vec![b"app"], vec![], vec![], vec![b"php"]);
         let exclusions = [Exclusion::Pattern(Cow::Borrowed("**/vendor/**"))];
-        let polled = DatabaseWatcher::polled(&configuration, &exclusions, &HashSet::from([b"php".to_vec()]))
+        let polled = DatabaseWatcher::polled(&configuration, &exclusions, &HashSet::from([b"php".to_vec()]), &[])
             .expect("the exclusions should build");
         let poll = Poll {
             folders: vec![(root.join("app"), RecursiveMode::Recursive, TEST_COOKIE.to_owned())],
             polled,
             seen: HashMap::new(),
+            cookies_written: None,
         };
 
         let read: HashSet<PathBuf> = poll.scan().into_keys().collect();
 
         assert_eq!(read, HashSet::from([root.join("app/a.php")]));
+    }
+
+    /// A poll reads nothing of a watched folder the exclusions name, as `vendor` when it is an `includes` root, which
+    /// the watch's own `**/vendor/**` exclusion keeps out of what the watcher reports, and every folder of a watched
+    /// folder the watch reports whatever the exclusions say, as an `includes` root inside a `vendor` folder, its own
+    /// `vendor` folder among them.
+    #[test]
+    fn a_poll_reads_nothing_of_an_excluded_root_and_all_of_an_explicitly_watched_one() {
+        let (_directory, root) = project();
+        for folder in ["vendor/symfony/console", "plugins/vendor/acme/src", "plugins/vendor/acme/vendor"] {
+            std::fs::create_dir_all(root.join(folder)).expect("the folder should be made");
+        }
+        write(&root, "vendor/symfony/console/c.php", "<?php echo 1;\n");
+        write(&root, "plugins/vendor/acme/src/d.php", "<?php echo 2;\n");
+        write(&root, "plugins/vendor/acme/vendor/e.php", "<?php echo 3;\n");
+        let configuration = DatabaseConfiguration::new(&root, vec![], vec![b"vendor"], vec![], vec![b"php"]);
+        let exclusions = [Exclusion::Pattern(Cow::Borrowed("**/vendor/**"))];
+        let explicit = [root.join("plugins/vendor/acme")];
+        let polled = DatabaseWatcher::polled(&configuration, &exclusions, &HashSet::from([b"php".to_vec()]), &explicit)
+            .expect("the exclusions should build");
+        let poll = Poll {
+            folders: vec![
+                (root.join("vendor"), RecursiveMode::Recursive, format!("{TEST_COOKIE}0")),
+                (root.join("plugins/vendor/acme"), RecursiveMode::Recursive, format!("{TEST_COOKIE}1")),
+            ],
+            polled,
+            seen: HashMap::new(),
+            cookies_written: None,
+        };
+
+        let read: HashSet<PathBuf> = poll.scan().into_keys().collect();
+
+        assert_eq!(
+            read,
+            HashSet::from([root.join("plugins/vendor/acme/src/d.php"), root.join("plugins/vendor/acme/vendor/e.php")])
+        );
+    }
+
+    /// A folder whose cookie the watch cannot write, as a folder the user cannot write to, is never synced, so once
+    /// another folder's cookie is missed, a poll checks it, as it checks a watched path that is no folder.
+    #[cfg(unix)]
+    #[test]
+    fn a_folder_that_takes_no_cookie_is_polled_once_another_folder_falls_back() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (_directory, root) = project();
+        std::fs::create_dir_all(root.join("locked")).expect("locked should be made");
+        write(&root, "locked/c.php", "<?php echo 1;\n");
+        let locked = root.join("locked");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o555)).expect("locked should be locked");
+        let folders = [
+            (root.join("app"), RecursiveMode::Recursive),
+            (root.join("vendor"), RecursiveMode::Recursive),
+            (locked.clone(), RecursiveMode::Recursive),
+        ];
+        let (events, received) = mpsc::channel();
+        let watcher = start_watcher_of::<ReportsCookies<1>, _, _>(
+            events,
+            &folders,
+            TEST_COOKIE,
+            Duration::from_millis(50),
+            Duration::from_millis(50),
+            |_: &Path, _| true,
+        );
+
+        let edited = locked.join("c.php");
+        std::fs::write(&edited, "<?php echo 2;\n").expect("locked/c.php should be written");
+        let paths = watcher.as_ref().map(|_| paths_until(&received, &edited));
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).expect("locked should be unlocked");
+
+        let paths = paths.expect("the watcher should start");
+        assert!(paths.contains(&edited), "the poll reported no edit of locked/c.php: {paths:?}");
+    }
+
+    /// A poll writes the cookie the watcher missed again once per cookie timeout, where it made and deleted a file in
+    /// the user's folder at every check.
+    #[test]
+    fn a_poll_writes_a_missed_cookie_again_only_once_per_cookie_timeout() {
+        const COOKIE_TIMEOUT: Duration = Duration::from_secs(2);
+
+        let (_directory, root) = project();
+        let app = root.join("app");
+        let modified = || std::fs::metadata(&app).and_then(|metadata| metadata.modified()).expect("app should be read");
+        let _watcher = start_watcher_of::<ReportsCookies<0>, _, _>(
+            |_: notify::Result<Event>| {},
+            &[(app.clone(), RecursiveMode::Recursive)],
+            TEST_COOKIE,
+            Duration::from_millis(10),
+            COOKIE_TIMEOUT,
+            |_: &Path, _| true,
+        )
+        .expect("the watcher should start");
+
+        // The poll writes the cookie again at its first check, a cookie timeout after the start wrote it.
+        std::thread::sleep(Duration::from_millis(500));
+        let before = modified();
+        std::thread::sleep(Duration::from_secs(1));
+
+        assert_eq!(modified(), before, "the poll wrote the cookie again within the cookie timeout");
     }
 
     /// A watcher that reports the cookie of one folder but not of another gets a poll of the other alone, so an edit

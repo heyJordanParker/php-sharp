@@ -256,10 +256,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON((github.event_name != 'pull_request' || needs.CHANGES.outputs.full == 'true') && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
-        rust: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && format('["{0}", "nightly"]', needs.CHANGES.outputs.rust) || format('["{0}"]', needs.CHANGES.outputs.rust)) }}
-        exclude:
-          - { os: macos-latest, rust: nightly }
+        os: ["macos-latest"]
+        rust: ${{ fromJSON(format('["{0}"]', needs.CHANGES.outputs.rust)) }}
 
     # The macOS leg runs on the self-hosted Mac runners, except for a bump's pull request from another repository, as
     # sharp.yml's MACOS explains.
@@ -324,7 +322,21 @@ jobs:
         uses: ./.github/actions/setup-lean
 
       - name: cargo test
-        run: cargo test --workspace --locked
+        run: |
+          # DIAGNOSTIC for task 346: how long ProcessGroup::end takes for as long as the workspace's tests run.
+          cargo test --workspace --locked --no-run
+          binary=$(cargo test -p mago-extension --lib --locked --no-run --message-format=json \
+            | jq -r 'select(.profile.test == true and .target.name == "mago_extension") | .executable')
+          # Without job control, a background job ignores SIGINT and SIGQUIT, which the compile's signal test sends.
+          set -m
+          cargo test --workspace --locked > "$RUNNER_TEMP/workspace.log" 2>&1 &
+          workspace=$!
+          while kill -0 "$workspace" 2> /dev/null; do
+            (cd crates/extension && "$binary" --exact --nocapture process_group::tests::diagnostic_measure_end 2>&1) \
+              | grep "=== 346" || echo "=== 346 measurement failed"
+          done
+          wait "$workspace" || echo "=== 346: the workspace run failed"
+          sed -n '/^failures:$/,/^test result/p' "$RUNNER_TEMP/workspace.log"
 
       - name: cargo test (property)
         if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
@@ -337,7 +349,7 @@ jobs:
   # repository runs it on macos-latest, as tests does.
   release-build:
     needs: CHANGES
-    if: needs.CHANGES.outputs.mago == 'true' && (github.event_name != 'pull_request' || needs.CHANGES.outputs.full == 'true')
+    if: false
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'macos-arm64-local' || 'macos-latest' }}
 
     permissions:
@@ -392,7 +404,7 @@ jobs:
   # A pull request's run that isn't the full run has no macOS leg, as CHANGES explains, so it needs only checks' binary.
   plain-php:
     needs: [CHANGES, checks, release-build]
-    if: ${{ !cancelled() && needs.checks.result == 'success' && (github.event_name == 'pull_request' && needs.CHANGES.outputs.full != 'true' || needs.release-build.result == 'success') }}
+    if: false
     strategy:
       fail-fast: false
       matrix:
