@@ -1346,27 +1346,52 @@ mod diagnostic {
         log(&format!("{label}: scan done"));
     }
 
+    /// Only cheap probes, so the write is not delayed: Mago's own end, and the worker's fds.
     pub(super) fn before_write(inner: &WorkerInner, fd: i32) {
+        let own = pipe_state(std::process::id() as i32, fd);
         let worker = lock(&inner.child).as_mut().map(|group| group.leader().id());
-        log(&format!("before write: worker {worker:?}, stderr so far {:?}", lock(&inner.stderr).display()));
-        if let Some(worker) = worker {
-            let worker = worker as i32;
-            log(&format!("before write: worker is {}", describe(worker)));
-            for fd in fds(worker) {
-                let pipe = if fd.proc_fdtype as i32 == libc::PROX_FDTYPE_PIPE {
-                    pipe_state(worker, fd.proc_fd).map(|state| state.to_string()).unwrap_or_default()
-                } else {
-                    String::new()
-                };
-                log(&format!("before write: worker fd {} type {} {pipe}", fd.proc_fd, fd.proc_fdtype));
-            }
-        }
-        report("before write", fd);
+        let worker_fds = worker.map(|worker| {
+            fds(worker as i32)
+                .iter()
+                .map(|fd| {
+                    let pipe = if fd.proc_fdtype as i32 == libc::PROX_FDTYPE_PIPE {
+                        pipe_state(worker as i32, fd.proc_fd).map(|state| state.to_string()).unwrap_or_default()
+                    } else {
+                        String::new()
+                    };
+                    format!("fd {} type {} {pipe}", fd.proc_fd, fd.proc_fdtype)
+                })
+                .collect::<Vec<_>>()
+        });
+        log(&format!(
+            "before write: stdin write end fd {fd}: {}",
+            own.as_ref().map(|state| state.to_string()).unwrap_or_default()
+        ));
+        PEER.set(own.map_or(0, |state| state.peer)).ok();
+        log(&format!("before write: worker {worker:?} fds {worker_fds:?}"));
+        log(&format!("before write: stderr so far {:?}", lock(&inner.stderr).display()));
+        WORKER.set(worker.unwrap_or(0) as i32).ok();
     }
+
+    static WORKER: OnceLock<i32> = OnceLock::new();
+    static PEER: OnceLock<u64> = OnceLock::new();
 
     pub(super) fn after_write(fd: i32, written: &std::io::Result<()>) {
         log(&format!("write returned {written:?}"));
+        if let Some(peer) = PEER.get()
+            && *peer != 0
+        {
+            for holder in holders(*peer) {
+                log(&format!("after write: the read end seen before the write is held by {holder}"));
+            }
+        }
         report("after write", fd);
+        if let Some(worker) = WORKER.get() {
+            log(&format!("after write: worker is {}", describe(*worker)));
+            for fd in fds(*worker) {
+                log(&format!("after write: worker fd {} type {}", fd.proc_fd, fd.proc_fdtype));
+            }
+        }
     }
 
     pub(super) fn environment_names() -> String {
