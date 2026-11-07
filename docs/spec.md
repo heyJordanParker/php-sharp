@@ -3603,7 +3603,7 @@ const paid = result as PaymentResult.Paid ?? throw new NotPaid(result);
 ```
 
 - **`is`** tests a value against any pattern, and creates the pattern's variables when it matches.
-- **Narrowing:** after `is` without a name, a local variable or parameter counts as the tested type for the rest of the block. Assigning to it inside the block ends the narrowing. A local or parameter that a lambda assigns is never narrowed, because the lambda may run between the test and the use, as Kotlin decides a smart cast. A lambda keeps the narrowing of a local it reads only when no assignment can run after the lambda is created, as TypeScript decides. Properties are not narrowed, because they could change between the test and the use. To use the tested value of such a local or of a property, bind it to a name, as in `is int t`.
+- **Narrowing:** after `is` without a name, a local variable or parameter counts as the tested type for the rest of the block. Assigning to it inside the block ends the narrowing. A local or parameter that a lambda assigns is never narrowed, because the lambda may run between the test and the use, as Kotlin decides a smart cast. A lambda keeps the narrowing of a local it reads only when no assignment can run after the lambda is created, as TypeScript decides. A stored property narrows after a test or an assignment, until the next call or assignment, as Mago, Psalm and PHPStan decide: PHP runs one thread, so only a call or an assignment can change it between the test and the use. A property with a `get` accessor never narrows, because each read runs its accessor. To use the tested value of such a local or property past that point, bind it to a name, as in `is int t`.
 
 <!-- example narrowing: statements
 Any? entity = new Page();
@@ -3617,10 +3617,12 @@ if (entity is HasDesign) {
 
 <!-- example property-narrowing: statements
 Tab order = new Tab();
+private void save() { }
 -->
 ```csharp
-if (order.total is int) { order.total + 1; }    // compile error: order.total may have changed since the test
-if (order.total is int t) { let next = t + 1; } // compiles: t holds the value that was tested
+if (order.total is int) { let next = order.total + 1; }              // compiles: nothing ran between the test and the use
+if (order.total is int) { this.save(); let next = order.total + 1; } // compile error: the call may have changed order.total
+if (order.total is int t) { this.save(); let next = t + 1; }         // compiles: t holds the value that was tested
 ```
 
 - **A variable that `is` creates exists only where the test held:** inside the `if` for `is`, and after an `if` whose block always exits for `is not`, as in C#. A block always exits when every path through it ends in `return`, `throw`, `break` or `continue`.
@@ -5376,6 +5378,7 @@ app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mag
 ```
 
 - **A deploy** runs `vendor/bin/mago compile` before the code runs.
+- **A compile with nothing to do returns at once.** A compile that succeeds keeps `.sharp/inputs.json`, a record of everything it read and wrote: each `.php` and `.sharp` file under the configured paths, includes and patches with its real path, every `composer.json` the loader reads, Composer's `installed.json`, the baseline, each `.gitignore` someone else wrote in a folder of the compile's `.php` files, the configuration, the checker build, and each file it wrote. The next compile checks the record before it analyzes anything, and when nothing in it changed, it prints the same summary and stops, as cargo and `tsc --incremental` skip a build whose inputs are unchanged. A file whose size, times, inode or device changed is hashed. On a filesystem whose change time records every write, as APFS, ext4 and most others do, that sees a rewrite that keeps the size and sets the time back. On FAT and exFAT, and on a system other than macOS and Linux, the compile hashes every file. A compile that is refused, fails or warns keeps no record, so the next one prints the same errors and warnings. A project with an extension host enabled compiles every time, because a host doesn't say what it reads. The compile for the hosts keeps the same record in its own folder.
 - **`mago compile` writes a `.php` file beside each of the project's `.sharp` files that declares a type,** as `StoreService.php` beside `StoreService.sharp`. So PHP code that finds classes by listing `*.php` files and naming each class by its path, as route-attribute and event discovery do, finds PHP# classes too, the way Java's classpath scanners find Kotlin classes. The file loads its `.sharp` file through the engine, and on plain PHP it throws the "needs the PHP# engine" error. It ends with the type's declaration in an `if (false)` that never runs, naming the type and its kind, so PHP code that reads `*.php` source, as Composer's class map generator and Symfony's attribute routing do, finds the type too, the way tools read a TypeScript `.d.ts` file. A type named after a word PHP reserves, as `Case` or `Match`, gets the file without the declaration, which PHP would refuse, so a tool that reads source never finds it, and Composer's PSR-4 rule still loads it. The engine declares the type once, from the `.sharp` file, and the checker reads the `.sharp` file and never the `.php` file. Once its `.sharp` file is deleted, it declares nothing until the next compile deletes it. Nobody edits it: a `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, and the next compile rewrites or deletes the file with its source.
 - **`mago compile` keeps the `.php` files out of git with a `.gitignore` of its own in each folder that holds one.** The file lists itself and each `.php` file the compile wrote there, so git shows neither. Each checkout of a repository, a linked worktree included, has its own working tree, so each ignores its own files and never another checkout's, and the compile needs no `git` program. The compile rewrites the file on every compile, and deletes it with the `.php` files once the folder holds no source, even when no other source brings the compile back to that folder. It is the compile's own only while its first line is this one and each other line names itself or a `.php` file:
 
