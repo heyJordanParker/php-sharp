@@ -306,9 +306,20 @@ jobs:
           save: false
           target-dir-env: true
 
+      - name: Install composer dependencies
+        run: composer install
+
+      # The workspace's tests run lake.
+      - name: Install elan and Lean
+        uses: ./.github/actions/setup-lean
+
       - name: cargo test
         run: |
-          cargo test -p mago-extension --lib --locked --no-run
+          if cargo test --workspace --locked; then
+            echo "=== 346: the workspace run passed"
+          else
+            echo "=== 346: the workspace run failed"
+          fi
           failed=0
           for run in $(seq 1 12); do
             echo "=== 346 extension run $run"
