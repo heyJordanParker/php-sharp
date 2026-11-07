@@ -212,6 +212,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 
 - `list<T>` → `List<T>`, `array<K, V>` → `Map<K, V>`. Type.
 - `[]` where a `Map` is declared → `[:]`, and where a `List|Map` union is declared → refuses rather than pick one. Type.
+- `['a', 'b']` where a `Map` is declared → `[0: 'a', 1: 'b']`, the keys PHP numbers the elements with, since `[a, b]` is a `List` literal (line 1586). Each element of a literal lands in the value type of its place, so `['x' => ['a']]` in a `Map<string, Map<int, string>>` is `['x': [0: 'a']]`, and `['x' => []]` is `['x': [:]]`. A literal of keys and of elements without one, where a `Map` is declared, refuses, since PHP numbers those after the greatest `int` key. Type.
 - `$list[] = $value` → `list.add(value)`. Tree.
 - `empty($items)` → `items.isEmpty()`, and `unset($map[$key])` → `map.remove(key)`. Both.
 - `isset($map[$key])` → `map.get(key) != null`, since a `Map` read gives null for a missing key (line 1625) and `isset` is false for a null value. Both.
@@ -293,6 +294,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - An open method → `virtual`, one that replaces a parent class's → `override`, and a `final` or `private` one → nothing (line 3782). Both.
 - A static method of an interface → refuses, since a PHP# interface declares instance members. Tree.
 - An override whose parameter, as PHP# writes its type into PHP, takes less than the PHP declaration of the method it replaces → refuses, since PHP links an override only when it takes at least that. An untyped PHP parameter typed by the parent's PHPDoc does. Type.
+- An override whose return, as PHP# writes its type into PHP, is wider than the PHP declaration of the method it replaces → refuses, since PHP links an override only when it returns at most that. A `Map` returns `Sharp\Map|array` there, which a plain PHP parent's `array` doesn't hold, so the class would not load. Type.
 - A plain PHP trait a class uses → listed in the header (line 4205). Tree. A `use` block with `insteadof` or `as` refuses.
 - A trait declaration → refuses, since PHP# declares no traits. Tree. 16 files.
 

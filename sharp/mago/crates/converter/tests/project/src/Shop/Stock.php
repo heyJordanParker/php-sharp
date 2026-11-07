@@ -78,6 +78,13 @@ final class Stock
         return $keys;
     }
 
+    // Elements PHP numbers from 0, where an `int`-keyed array is declared, at two depths.
+    /** @return array<string, array<int, string>> */
+    public function shelves(): array
+    {
+        return ['top' => ['jam', 'tea'], 'bottom' => []];
+    }
+
     // A `List` index that may be missing, behind `isset` and `??`, past the end and below 0.
     /** @param list<string> $jobs */
     public function nth(array $jobs, int $at): string

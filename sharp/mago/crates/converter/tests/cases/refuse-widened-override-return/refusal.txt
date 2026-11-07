@@ -1,0 +1,1 @@
+12:21: `totals` returns `Sharp\Map`, which PHP# writes in the PHP it compiles to, and `App\Report::totals`'s PHP returns `array<array-key, mixed>` there, which PHP links an override to only when it returns at most that (spec section 22)

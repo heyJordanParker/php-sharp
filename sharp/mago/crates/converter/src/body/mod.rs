@@ -406,7 +406,7 @@ impl<'input> Converter<'input, '_> {
                 if array.elements.is_empty() {
                     return self.empty_array(expression, expected);
                 }
-                self.elements(array.elements.iter());
+                self.elements(expression, array.elements.iter(), expected);
             }
             Expression::LegacyArray(array) => {
                 if array.elements.is_empty() {
@@ -414,7 +414,7 @@ impl<'input> Converter<'input, '_> {
                 }
                 self.edits.replace_range(array.array.span.start.offset, array.left_parenthesis.end.offset, "[");
                 self.edits.replace(array.right_parenthesis, "]");
-                self.elements(array.elements.iter());
+                self.elements(expression, array.elements.iter(), expected);
             }
             Expression::ArrayAccess(access) => {
                 self.untyped(access.array, "an index");

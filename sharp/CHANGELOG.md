@@ -36,6 +36,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ### Fixed
 
+- A `List` literal inside a literal, where its value type is a `Map`, as `["x": ['a']]` in a `Map<string, Map<int, string>>`, is the compile error spec section 12 names, and so is a `Map` literal where it is a `List`: the checker read only the outer literal, and `mago compile` panicked.
+- `mago convert` refuses an override whose return compiles to a type wider than the plain PHP parent's, as a `Map` return, `Sharp\Map|array`, under an `array` one, where PHP then refused to load the class. It writes `['a', 'b']` as `[0: 'a', 1: 'b']` where a `Map` is declared, at any depth.
 - An interface method or an abstract method with a parameter default, as `int read(Map<string, int> limits = [:]);`, compiles: the analysis types and checks the default, and `mago compile` panicked on it before.
 
 ## [0.6.4] - 2026-11-07
