@@ -260,6 +260,15 @@ jobs:
     permissions:
       contents: read
 
+    # The self-hosted Macs cap each job's parallelism, as sharp.yml's MACOS explains. On the Linux leg the caps are
+    # the defaults of ubuntu-latest's 4 cores, Lean's too. Lean reads an empty LEAN_NUM_THREADS as 0 threads, and then
+    # panics on its first promise, so the Linux leg names its 4.
+    env:
+      CARGO_BUILD_JOBS: 4
+      RUST_TEST_THREADS: 4
+      RAYON_NUM_THREADS: 4
+      LEAN_NUM_THREADS: ${{ matrix.os == 'macos-latest' && 2 || 4 }}
+
     steps:
       # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
       - name: checkout
@@ -323,9 +332,14 @@ jobs:
       contents: read
 
     # With incremental state, which the test-run profile builds with in the folder the runner keeps.
-    # dtolnay/rust-toolchain turns it off only when CARGO_INCREMENTAL is unset.
+    # dtolnay/rust-toolchain turns it off only when CARGO_INCREMENTAL is unset. The self-hosted Macs cap each job's
+    # parallelism, as sharp.yml's MACOS explains.
     env:
       CARGO_INCREMENTAL: 1
+      CARGO_BUILD_JOBS: 4
+      RUST_TEST_THREADS: 4
+      RAYON_NUM_THREADS: 4
+      LEAN_NUM_THREADS: 2
 
     steps:
       # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
@@ -373,6 +387,13 @@ jobs:
 
     permissions:
       contents: read
+
+    # The self-hosted Macs cap each job's parallelism, as sharp.yml's MACOS explains.
+    env:
+      CARGO_BUILD_JOBS: 4
+      RUST_TEST_THREADS: 4
+      RAYON_NUM_THREADS: 4
+      LEAN_NUM_THREADS: 2
 
     steps:
       # The self-hosted Macs keep sharp/build between jobs, as sharp.yml's MACOS explains.
