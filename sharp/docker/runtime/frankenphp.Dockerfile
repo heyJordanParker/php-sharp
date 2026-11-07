@@ -144,56 +144,15 @@ RUN set -eux; \
 			;; \
 	esac; \
 	test "$PHP_INI_DIR" != "${PHP_INI_DIR%/php}"; \
+# PHP#: the options are sharp/docker/runtime/configure-options's, which sharp.yml's UBUNTU_WERROR builds with gcc 13,
+# one per line, so $options splits into one word each. Its own line, so its failure stops the build.
+	options="$(sharp/docker/runtime/configure-options zts)"; \
 	./configure \
 		--build="$gnuArch" \
 		--sysconfdir="${PHP_INI_DIR%/php}" \
 		--with-config-file-path="$PHP_INI_DIR" \
 		--with-config-file-scan-dir="$PHP_INI_DIR/conf.d" \
-		\
-# make sure invalid --configure-flags are fatal errors instead of just warnings
-		--enable-option-checking=fatal \
-# a compiler warning fails the release build, as php-src's own CI builds
-		--enable-werror \
-		\
-# https://github.com/docker-library/php/issues/439
-		--with-mhash \
-		\
-# https://github.com/docker-library/php/issues/822
-		--with-pic \
-		\
-# --enable-mbstring is included here because otherwise there's no way to get pecl to use it properly (see https://github.com/docker-library/php/issues/195)
-		--enable-mbstring \
-# --enable-mysqlnd is included here because it's harder to compile after the fact than extensions are (since it's a plugin for several extensions, not an extension in itself)
-		--enable-mysqlnd \
-# https://wiki.php.net/rfc/argon2_password_hash
-		--with-password-argon2 \
-# https://wiki.php.net/rfc/libsodium
-		--with-sodium=shared \
-# always build against system sqlite3 (https://github.com/php/php-src/commit/6083a387a81dbbd66d6316a3a12a63f06d5f7109)
-		--with-pdo-sqlite=/usr \
-		--with-sqlite3=/usr \
-		\
-		--with-curl \
-		--with-iconv \
-		--with-openssl \
-		--with-readline \
-		--with-zlib \
-		\
-# https://github.com/docker-library/php/pull/1259
-		--enable-phpdbg \
-		--enable-phpdbg-readline \
-		\
-# in PHP 7.4+, the pecl/pear installers are officially deprecated (requiring an explicit "--with-pear")
-		--with-pear \
-		\
-		--with-libdir="lib/$debMultiarch" \
-		\
-# https://github.com/docker-library/php/pull/939#issuecomment-730501748
-		--enable-embed \
-		\
-		--enable-zts \
-# https://externals.io/message/118859
-		--disable-zend-signals \
+		$options \
 	; \
 	make -j "$(nproc)"; \
 	find -type f -name '*.a' -delete; \

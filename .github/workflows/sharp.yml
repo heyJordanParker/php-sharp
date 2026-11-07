@@ -511,11 +511,13 @@ jobs:
             --volume "$PWD:/src" \
             --workdir /src \
             php-sharp-extensions sharp/bin/test --installed --opcache --repeat --passes --jit
-  # The release build sharp/bin/build --release makes, at -O2 with --enable-werror, on the runner itself, with Ubuntu
-  # 24.04's gcc 13, which warns where the Debian trixie image's gcc 14 doesn't, as #255 found by hand (2d4ac5f6c7b). It
-  # compiles the extensions sharp/bin/build configures, so ext/readline, where #255's warning was, builds only in the
-  # images. CHANGES runs it for a change to the engine's own code, as it runs LINUX_PASSES, and the full run runs it. A
-  # pull request's run skips it unless it is the full run, and the push to master runs it, as CHANGES explains.
+  # The engine at -O2 with --enable-werror, on the runner itself, with Ubuntu 24.04's gcc 13, which warns where the
+  # Debian trixie image's gcc 14 doesn't, as #255 found by hand (2d4ac5f6c7b). It builds sharp/bin/build --release,
+  # then both images' configure lines, sharp/docker/runtime/configure-options's, so the extensions only the images
+  # build, such as ext/readline, where #255's warning was, compile with gcc 13 too. They build out of the tree, as
+  # sharp/bin/build does, with Ubuntu's own CFLAGS, as a source build that sharp/README.md describes runs them. CHANGES
+  # runs it for a change to the engine's own code, as it runs LINUX_PASSES, and the full run runs it. A pull request's
+  # run skips it unless it is the full run, and the push to master runs it, as CHANGES explains.
   UBUNTU_WERROR:
     needs: CHANGES
     if: needs.CHANGES.outputs.engine == 'true' && (github.event_name != 'pull_request' || needs.CHANGES.outputs.full == 'true')
@@ -523,11 +525,12 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-    # The build's packages, as sharp/docker/Dockerfile installs them.
+    # The build's packages, as sharp/docker/Dockerfile installs them, then those the images' options add, as
+    # sharp/docker/runtime/Dockerfile installs them, with dpkg-dev for configure-options's dpkg-architecture.
     env:
       PACKAGES: >-
         autoconf bison pkg-config re2c libcurl4-openssl-dev libicu-dev libonig-dev libpq-dev libsodium-dev libsqlite3-dev
-        libxml2-dev libzip-dev
+        libxml2-dev libzip-dev libargon2-dev libreadline-dev libssl-dev dpkg-dev
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -538,6 +541,15 @@ jobs:
           sudo apt-get install --yes --no-install-recommends $PACKAGES
       - name: Build at -O2 with --enable-werror
         run: sharp/bin/build --release
+      # sharp/bin/build wrote configure.
+      - name: Build both images' configure lines at -O2 with --enable-werror
+        run: |
+          for image in fpm zts; do
+            options="$(sharp/docker/runtime/configure-options "$image")"
+            mkdir "$RUNNER_TEMP/$image"
+            # shellcheck disable=SC2086 # configure-options prints one option per line.
+            (cd "$RUNNER_TEMP/$image" && "$GITHUB_WORKSPACE/configure" $options && make -j"$(nproc)" >/dev/null)
+          done
   # The engine built with AddressSanitizer, so a memory error of the engine fails a test. sharp/bin/build has no flag
   # for php-src's --enable-address-sanitizer, so it builds as php-src's own CI does: a debug build whose CFLAGS and
   # LDFLAGS add -fsanitize=address and ZEND_TRACK_ARENA_ALLOC. sharp/docker/run passes no CFLAGS into the image, so it
@@ -553,7 +565,8 @@ jobs:
     timeout-minutes: 120
     permissions:
       contents: read
-    # The build's packages, as UBUNTU_WERROR installs them.
+    # The build's packages, as sharp/docker/Dockerfile installs them. sharp/bin/build alone needs no more, so it leaves
+    # out those UBUNTU_WERROR adds for the images' options.
     env:
       PACKAGES: >-
         autoconf bison pkg-config re2c libcurl4-openssl-dev libicu-dev libonig-dev libpq-dev libsodium-dev libsqlite3-dev
