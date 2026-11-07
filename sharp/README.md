@@ -99,6 +99,8 @@ Directive => Local Value => Master Value
 sharp.compile_command => no value => no value
 ```
 
+`sharp.compile_command` is the engine's one setting. It stays empty in production, and [Development](#development) says what it does in a dev container.
+
 `sharp/docker/runtime/Dockerfile` holds docker-library's `php:8.5-fpm-trixie` recipe, built from this repository's source instead of the php.net tarball, with `ext/sharp` built in. It keeps docker-library's layout, so `docker-php-ext-*` and `install-php-extensions` work unchanged and an app switches to PHP# by changing only its `FROM` line. The `docker-php-*` scripts are verbatim copies. `docker-php-entrypoint` is the one script that differs between docker-library's variants, so each image copies its own from `fpm/` or `zts/`, and the shared ones sit beside the Dockerfiles. Compare the Dockerfile, the shared scripts and `fpm/docker-php-entrypoint` with docker-library's `8.5/trixie/fpm` on every merge from upstream.
 
 `sharp/docker/runtime/frankenphp.Dockerfile` builds the engine with docker-library's `8.5/trixie/zts` recipe, then runs FrankenPHP v1.13.4's own Dockerfile stages on it, as FrankenPHP's images build on `php:8.5-zts-trixie`. `sharp/bin/hosts` builds the same release for `HOSTS`. Go 1.27, `e-dant/watcher` 0.14.5 and `install-php-extensions` 2.12.0 are pinned where FrankenPHP takes the latest. FrankenPHP's source is fetched by its release's commit, and the `e-dant/watcher` archive and the `install-php-extensions` script are checked against their SHA-256s. Compare it and `zts/docker-php-entrypoint` with docker-library's `8.5/trixie/zts`, and it with FrankenPHP's `Dockerfile`, on every merge from either. FrankenPHP's stage rewrites `php` in the `zts` entrypoint to `frankenphp run`, so the image starts FrankenPHP on its default command.
@@ -240,6 +242,37 @@ With `opcache.validate_timestamps=0`, opcache never checks a file it cached, and
 `$realpath_root` gives every release its own paths, so a request after the switch reaches the new release even without a reload. A path through `current` does not: with nginx's `$document_root`, which passes `current/public/index.php`, php-fpm keeps running the old release's bytecode. Every earlier release's bytecode also stays in opcache's shared memory. `docker kill --signal USR2 app` reloads php-fpm gracefully: it starts again on the same socket, with an empty opcache.
 
 A worker or scheduler container resolves `-w /srv/www/app/current` once, when it starts, so it keeps running the release it started in. `docker restart` starts each in the new release, and Laravel's worker with `pcntl` stops between jobs on its signal.
+
+### Development
+
+An edit to a `.sharp` file, or to a plain PHP file whose signature a unit read, such as a base model's, makes the unit out of date, and the engine refuses it until the next `mago compile`. A dev container compiles it when it loads instead, with this line in its `php.ini`, or in a file in `conf.d`:
+
+```ini
+sharp.compile_command = "vendor/bin/mago --no-version-check --no-extensions compile"
+```
+
+- **The engine runs the command at most once per request,** when a `.sharp` file it loads isn't compiled or is out of date, then loads what it wrote. php-fpm, `php` on the command line and FrankenPHP's worker mode all run it.
+- **It runs in the project root,** the nearest folder above the file that holds `.sharp/`. A project with no `.sharp/` folder has no root, so its first compile is by hand.
+- **`vendor/bin/mago` is the Composer wrapper,** and it runs on the engine's own `php`. The binary it wraps sits under a folder named for its version and platform, so no line names it.
+- **`--no-extensions` keeps the extension hosts out of the compile a request waits for.** Their rules run in `mago analyze` and in CI, and the deploy's `mago compile` checks every one.
+- **A compile never starts another.** The command runs with `SHARP_COMPILING=1`, and so does every process `mago` starts, such as an extension host's `php`. A process that has it set never runs the command, and gets the refusal. 0.6.3 set neither, so an extension host that loaded a file the checker refused compiled again, and that compile's hosts again, until `fork` failed.
+- **The user that runs PHP must be able to write the project,** `.sharp/` and the `.php` files beside the `.sharp` files. A command that fails adds how it ended and its last three lines of stderr to the refusal, as "… failed with exit 2: … ERROR can't write the file `…/.sharp/app/Orders/Order.sharpc`: Permission denied (os error 13)" for a project the user can't write.
+- **Two requests that find a file stale at once each run a compile,** in one container or in two on one mount, as php-fpm, the queue worker and the scheduler are. Each waits for its own. `mago compile` writes each file beside the old one and renames it over it, so a request reads the old file or the new one, never part of one.
+- **The compile writes a `.gitignore` in each folder that holds the `.php` files it writes,** and runs no `git`, so a container that can't reach the repository's `.git` keeps them out of git too. 0.6.3 listed them in `.git/info/exclude` instead, and in such a container it only warned that git shows them as untracked.
+- **With opcache's default `opcache.validate_timestamps=1`,** php-fpm checks a file it cached every `opcache.revalidate_freq` seconds, 2 by default. A request within 2 seconds of an edit runs the bytecode it cached, with no compile.
+- **FrankenPHP's worker mode sees an edit only after the worker restarts,** as plain PHP's worker mode does. A worker keeps the classes it loaded, reads each input of a unit once, and runs the command at most once. The first stale file it loads after a restart compiles.
+
+A request after an edit waits for one whole `mago compile`. On the 0.6.3 image, for projects with no extension host, on a Mac whose load averaged 120 on 12 cores:
+
+| Project | Where | Request after an edit | The request after it |
+| --- | --- | --- | --- |
+| One PHP# class and the standard library | php-fpm, a folder in the container | 491 to 745 ms | 2 to 6 ms |
+| One PHP# class and the standard library | `php`, a folder in the container | 670 to 850 ms | 13 to 70 ms |
+| 79 PHP# classes and 1,979 PHP files | `php`, an OrbStack bind mount | 7.1 s, the median of 3 | 67 ms |
+
+The compile alone took a median of 3.8 s in that container through the mount, and 1.9 s on the Mac itself, with the same `mago` built for macOS.
+
+Production leaves the setting empty. A stale deploy is then refused, loudly, instead of compiled by the first request, which would wait seconds and need a release the PHP user can write. The deploy runs `mago compile` before the code runs, as in [Deploying a release](#deploying-a-release).
 
 ## Composer
 

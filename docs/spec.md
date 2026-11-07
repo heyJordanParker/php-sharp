@@ -5376,6 +5376,22 @@ app/Orders/Order.sharp was compiled for a different PHP# engine. Install the mag
 ```
 
 - **A deploy** runs `vendor/bin/mago compile` before the code runs.
+- **In development, the engine compiles a file that isn't current when it loads,** as Phoenix's code reloader compiles before a request. The engine's `sharp.compile_command` setting names the command, in a dev `php.ini`:
+
+```ini
+sharp.compile_command = "vendor/bin/mago --no-version-check --no-extensions compile"
+```
+
+- **A request runs the command at most once,** in the project root, waits for it, and loads what it wrote. The root is the nearest folder above the file that holds `.sharp/`, so a project's first compile is by hand.
+- **`--no-extensions` leaves the extension hosts' rules out of the compile a request waits for.** They run in `mago analyze` and in CI.
+- **A compile never starts another.** The command runs with `SHARP_COMPILING=1`, and so does every process `mago` starts. A process that has it set never runs the command.
+- **A command that fails adds how it ended to the refusal,** with its last lines of stderr:
+
+```text
+app/Orders/Order.sharp is out of date (app/Shared/Database/BaseModel.php changed). Run vendor/bin/mago compile. `vendor/bin/no-such-mago compile` failed with exit 127: /bin/sh: 1: vendor/bin/no-such-mago: not found
+```
+
+- **Production leaves the setting empty,** as the runtime images do. A stale deploy is then refused, and no request waits for a compile.
 - **`mago compile` writes a `.php` file beside each of the project's `.sharp` files that declares a type,** as `StoreService.php` beside `StoreService.sharp`. So PHP code that finds classes by listing `*.php` files and naming each class by its path, as route-attribute and event discovery do, finds PHP# classes too, the way Java's classpath scanners find Kotlin classes. The file loads its `.sharp` file through the engine, and on plain PHP it throws the "needs the PHP# engine" error. It ends with the type's declaration in an `if (false)` that never runs, naming the type and its kind, so PHP code that reads `*.php` source, as Composer's class map generator and Symfony's attribute routing do, finds the type too, the way tools read a TypeScript `.d.ts` file. A type named after a word PHP reserves, as `Case` or `Match`, gets the file without the declaration, which PHP would refuse, so a tool that reads source never finds it, and Composer's PSR-4 rule still loads it. The engine declares the type once, from the `.sharp` file, and the checker reads the `.sharp` file and never the `.php` file. Once its `.sharp` file is deleted, it declares nothing until the next compile deletes it. Nobody edits it: a `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, and the next compile rewrites or deletes the file with its source.
 - **`mago compile` keeps the `.php` files out of git with a `.gitignore` of its own in each folder that holds one.** The file lists itself and each `.php` file the compile wrote there, so git shows neither. Each checkout of a repository, a linked worktree included, has its own working tree, so each ignores its own files and never another checkout's, and the compile needs no `git` program. The compile rewrites the file on every compile, and deletes it with the `.php` files once the folder holds no source, even when no other source brings the compile back to that folder. It is the compile's own only while its first line is this one and each other line names itself or a `.php` file:
 
