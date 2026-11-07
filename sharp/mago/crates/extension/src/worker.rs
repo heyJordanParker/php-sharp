@@ -1682,7 +1682,7 @@ mod tests {
     fn a_request_written_to_a_worker_that_closed_its_stdin_holds_the_write_error_and_the_stderr() {
         let worker = shell_worker(&format!("exec 0<&-; echo '{FATAL_ERROR}' >&2; exec {SLEEP_UNTIL_ENDED}"));
         wait_until_stderr_arrives(&worker);
-        // FORCED OFF for task 346's proof: wait_until_stdin_has_no_reader(&worker);
+        wait_until_stdin_has_no_reader(&worker);
 
         let error = worker.request(b"describe".to_vec(), None).expect_err("the closed stdin should fail the request");
 
@@ -1918,7 +1918,6 @@ mod tests {
     /// alive once the stderr line arrived, for 204 µs to 18.7 ms, held by no process the user could read. Beside the
     /// same tests, this test's write found it alive in 9 of 20 runs, for up to 183 ms more.
     #[cfg(unix)]
-    #[allow(dead_code, reason = "FORCED OFF for task 346's proof")]
     fn wait_until_stdin_has_no_reader(worker: &Worker) {
         const TIMEOUT: Duration = Duration::from_secs(10);
 

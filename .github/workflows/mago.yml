@@ -327,6 +327,8 @@ jobs:
           cargo test --workspace --locked --no-run
           binary=$(cargo test -p mago-extension --lib --locked --no-run --message-format=json \
             | jq -r 'select(.profile.test == true and .target.name == "mago_extension") | .executable')
+          # Without job control, a background job ignores SIGINT and SIGQUIT, which the compile's signal test sends.
+          set -m
           cargo test --workspace --locked > "$RUNNER_TEMP/workspace.log" 2>&1 &
           workspace=$!
           runs=0
