@@ -55,7 +55,7 @@ A PR's CI skips the jobs that run on the Architect's Mac, so a merge never waits
 - one in the arm64 JIT
 - one in Mago code that only macOS runs, such as the watch mode's FSEvents
 
-A red push run opens one issue, or comments on the one still open, and a PR fixes it forward. No one reverts first: a merge commit can't land again cleanly once reverted, a revert hides a PR that merged on top of it, and it would revert healthy merges that failed only on the Mac's load. A red master gets a fix PR first, and other merges continue. A release tags only while master's newest finished push run is green. The bump's own push run may be cancelled by a later merge, and its tag doesn't need it: the tag's gates accept the bump PR's full run, as the release path explains.
+A red push run opens one issue, or comments on the one still open, with the range of commits it tests, and a PR fixes it forward. No one reverts first: a merge commit can't land again cleanly once reverted, a revert hides a PR that merged on top of it, and it would revert healthy merges that failed only on the Mac's load. A red master gets a fix PR first, and other merges continue. A release tags only while master's newest finished push run is green. The bump's own push run may be cancelled by a later merge, and its tag doesn't need it: the tag's gates accept the bump PR's full run, as the release path explains.
 
 ## A release's path
 

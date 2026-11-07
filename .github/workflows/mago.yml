@@ -49,6 +49,7 @@ jobs:
         ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
         && startsWith(github.event.pull_request.title, 'chore: release')) && 'true' || '' }}
     outputs:
+      base: ${{ steps.base.outputs.sha }}
       full: ${{ env.FULL }}
       mago: ${{ steps.diff.outputs.mago }}
       rust: ${{ steps.rust.outputs.version }}
@@ -67,17 +68,24 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      # A push's changes start at the commit of master's newest push run that GitHub didn't cancel, as sharp.yml's
+      # CHANGES explains.
+      - name: Find the commit of master's last push run that ran
+        id: base
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mago.yml/runs?branch=master&event=push&status=completed&per_page=100" \
+            --jq '[.workflow_runs[] | select(.conclusion != "cancelled" and .id < (env.GITHUB_RUN_ID | tonumber))][0].head_sha // empty')
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "This push's changes start at ${sha:-no commit, so every job runs}."
+
       - name: Find changes to Mago
         id: diff
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.pull_request.base.sha || steps.base.outputs.sha }}
         run: |
-          # A push diffs from the commit of master's newest push run GitHub didn't cancel, as sharp.yml's CHANGES does.
-          if [[ $GITHUB_EVENT_NAME == push ]]; then
-            BASE=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mago.yml/runs?branch=master&event=push&status=completed&per_page=100" \
-              --jq '[.workflow_runs[] | select(.conclusion != "cancelled")][0].head_sha // empty')
-          fi
           if [[ $FULL || -z $BASE ]]; then
             echo mago=true >> "$GITHUB_OUTPUT"
             exit 0
@@ -617,6 +625,7 @@ jobs:
         uses: ./.github/actions/red-master-issue
         with:
           title: ${{ github.event_name == 'schedule' && 'The weekly Mago CI run failed' || 'A push to master failed Mago CI' }}
+          range: ${{ needs.CHANGES.outputs.base && format('{0}..{1}', needs.CHANGES.outputs.base, github.sha) || '' }}
 
       # Master's full run's jobs saved their targets when they ended, so this job, which needs them all, deletes the
       # ones the new targets replaced. No other run saves one.

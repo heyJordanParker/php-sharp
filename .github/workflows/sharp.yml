@@ -57,6 +57,7 @@ jobs:
         ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
         && startsWith(github.event.pull_request.title, 'chore: release')) && 'true' || '' }}
     outputs:
+      base: ${{ steps.base.outputs.sha }}
       code: ${{ steps.diff.outputs.code }}
       engine: ${{ steps.diff.outputs.engine }}
       full: ${{ env.FULL }}
@@ -148,19 +149,26 @@ jobs:
           done < <(find "$RUNNER_TEMP/digests" -type f -print0)
           echo "run-id=$id" >> "$GITHUB_OUTPUT"
           echo "::notice::IMAGE_TAGS tags the images run $RUN pushed from commit $GITHUB_SHA's tree, and IMAGE builds none."
+      # A push's changes start at the commit of master's newest push run that GitHub didn't cancel, so a merge whose
+      # pending run a later push replaced still counts, and a red run's issue names every commit it tests. Pushes run
+      # one at a time, so every earlier run has ended. Only an earlier run counts, so a rerun of an old run diffs from
+      # the run before it, as its first attempt did. With none among the last 100 runs, every job runs.
+      - name: Find the commit of master's last push run that ran
+        id: base
+        if: github.event_name == 'push' && github.ref_type == 'branch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/sharp.yml/runs?branch=master&event=push&status=completed&per_page=100" \
+            --jq '[.workflow_runs[] | select(.conclusion != "cancelled" and .id < (env.GITHUB_RUN_ID | tonumber))][0].head_sha // empty')
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "This push's changes start at ${sha:-no commit, so every job runs}."
       - name: Find changes outside documentation, and changes to the engine
         id: diff
         if: github.ref_type != 'tag' && !steps.passed.outputs.run && !steps.full.outputs.run
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.pull_request.base.sha || steps.base.outputs.sha }}
         run: |
-          # A push diffs from the commit of master's newest push run that GitHub didn't cancel, so a merge whose
-          # pending run a later push replaced still counts. With none among the last 100 runs, every job runs.
-          if [[ $GITHUB_EVENT_NAME == push ]]; then
-            BASE=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/sharp.yml/runs?branch=master&event=push&status=completed&per_page=100" \
-              --jq '[.workflow_runs[] | select(.conclusion != "cancelled")][0].head_sha // empty')
-          fi
           if [[ $FULL || -z $BASE ]]; then
             echo code=true >> "$GITHUB_OUTPUT"
             echo engine=true >> "$GITHUB_OUTPUT"
@@ -701,6 +709,7 @@ jobs:
         uses: ./.github/actions/red-master-issue
         with:
           title: ${{ github.event_name == 'schedule' && 'The nightly PHP# CI run failed' || 'A push to master failed PHP# CI' }}
+          range: ${{ needs.CHANGES.outputs.base && format('{0}..{1}', needs.CHANGES.outputs.base, github.sha) || '' }}
       # Master's full run's jobs saved their targets when they ended, so this job, which needs them all, deletes the
       # ones the new targets replaced. No other run saves one.
       - name: Delete the Mago target caches this run replaced
