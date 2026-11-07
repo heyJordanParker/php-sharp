@@ -1133,10 +1133,10 @@ impl Converter<'_, '_> {
 }
 
 /// The elements of a destructuring's place.
-type Elements<'ast, 'arena> = &'ast TokenSeparatedSequence<'arena, ArrayElement<'arena>>;
+pub(super) type Elements<'ast, 'arena> = &'ast TokenSeparatedSequence<'arena, ArrayElement<'arena>>;
 
-/// The elements `place` destructures into, when the place of a write is a destructuring.
-fn destructured<'ast, 'arena>(place: &'ast Expression<'arena>) -> Option<Elements<'ast, 'arena>> {
+/// The elements `place` destructures into, when the place of a write, or of a loop's value, is a destructuring.
+pub(super) fn destructured<'ast, 'arena>(place: &'ast Expression<'arena>) -> Option<Elements<'ast, 'arena>> {
     match place {
         Expression::Array(array) => Some(&array.elements),
         Expression::LegacyArray(array) => Some(&array.elements),

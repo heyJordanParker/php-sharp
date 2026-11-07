@@ -8,6 +8,7 @@ use mago_codex::ttype::TType;
 use mago_codex::ttype::atomic::TAtomic;
 use mago_codex::ttype::atomic::object::TObject;
 use mago_codex::ttype::atomic::scalar::TScalar;
+use mago_codex::ttype::atomic::scalar::class_like_string::TClassLikeString;
 use mago_codex::ttype::union::TUnion;
 use mago_span::HasSpan;
 use mago_span::Span;
@@ -15,6 +16,7 @@ use mago_syntax::cst::Access;
 use mago_syntax::cst::Binary;
 use mago_syntax::cst::BinaryOperator;
 use mago_syntax::cst::Call;
+use mago_syntax::cst::ClassLikeConstantSelector;
 use mago_syntax::cst::ClassLikeMemberSelector;
 use mago_syntax::cst::Construct;
 use mago_syntax::cst::Expression;
@@ -228,24 +230,64 @@ impl Converter<'_, '_> {
         }
     }
 
+    /// The PHP# string literal of the class name `X::class` gives, for `X` a class's name or `self`, which name the
+    /// class where PHP compiles the code. `static::class` names the class PHP called, which only the running code knows.
+    fn class_name_text(&self, expression: &Expression<'_>) -> Option<String> {
+        let Expression::Access(Access::ClassConstant(access)) = expression else {
+            return None;
+        };
+        let ClassLikeConstantSelector::Identifier(constant) = &access.constant else {
+            return None;
+        };
+        if !constant.value.eq_ignore_ascii_case(b"class")
+            || !matches!(access.class, Expression::Identifier(_) | Expression::Self_(_))
+        {
+            return None;
+        }
+        let [TAtomic::Scalar(TScalar::ClassLikeString(TClassLikeString::Literal { value }))] =
+            self.type_of(expression)?.types.as_ref()
+        else {
+            return None;
+        };
+
+        Some(format!("\"{}\"", value.as_str_lossy().replace('\\', "\\\\")))
+    }
+
     pub(super) fn binary(&mut self, expression: &Expression<'_>, binary: &Binary<'_>) {
         let (lhs, rhs) = (binary.lhs, binary.rhs);
         let numbers = [Kind::Int, Kind::Float];
         let operator = String::from_utf8_lossy(self.text(binary.operator.span())).into_owned();
         let refusal = match &binary.operator {
             BinaryOperator::StringConcat(_) => return self.concatenation(expression),
+            // `self` names the class that declares the method. `static` names the class PHP called, which PHP#'s `Self`
+            // names only as a return type.
             BinaryOperator::Instanceof(keyword) => {
-                let Expression::Identifier(class) = rhs else {
-                    return self.refuse(expression.span(), "`instanceof` of a class value is not converted yet");
-                };
+                if !matches!(rhs, Expression::Identifier(_) | Expression::Self_(_)) {
+                    return self.refuse(
+                        expression.span(),
+                        "`instanceof` of a class value or of `static` has no PHP# form: `is` tests a type the code names, which a class value is not, and `Self` names the class PHP called only as a return type (spec sections 21 and 25)",
+                    );
+                }
                 self.edits.replace(keyword.span, "is");
-                self.rename_class(class);
+                self.expression(rhs, None);
                 return self.expression(lhs, None);
             }
             BinaryOperator::Identical(span) | BinaryOperator::NotIdentical(span) => {
+                let equal = matches!(binary.operator, BinaryOperator::Identical(_));
+                // `Order::class` is the string of the class's name, which PHP compiles in, so a string compares with
+                // that text, `"Shop\\Order"`, as PHP's `===` compares two strings (spec section 25).
+                for (named, other) in [(lhs, rhs), (rhs, lhs)] {
+                    if let Some(text) = self.class_name_text(named)
+                        && self.is(other, &[Kind::String, Kind::Null])
+                        && !self.is(other, &[Kind::Null])
+                    {
+                        self.edits.replace(named.span(), text);
+                        self.edits.replace(*span, if equal { "==" } else { "!=" });
+                        return self.expression(other, None);
+                    }
+                }
                 match identity(self.type_of(lhs), self.type_of(rhs)) {
                     Ok(true) => {
-                        let equal = matches!(binary.operator, BinaryOperator::Identical(_));
                         self.edits.replace(*span, if equal { "==" } else { "!=" });
                         None
                     }

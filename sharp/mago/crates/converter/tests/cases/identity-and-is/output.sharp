@@ -58,4 +58,9 @@ public final class Check
     {
         return answer == 'yes' || answer == true;
     }
+
+    public bool names(string? name)
+    {
+        return name == "App\\Spec" || "App\\Check" != name;
+    }
 }

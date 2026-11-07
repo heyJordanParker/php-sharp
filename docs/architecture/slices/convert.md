@@ -42,7 +42,7 @@ The last one is inferred, and it looks like the second and third. `FunctionLikeM
 src/Factory.php:15:21: `make`'s return is taken from its body, which the analysis infers, and the converter writes no inferred type
 ```
 
-A declaration with no type anywhere is `mixed`, which PHP# writes `Any?`. A type `get_sharp_type` returns `None` for refuses the file with the type in its reason, as `array-key`, `scalar`, `array{…}`, a bare `array`, which is `array<array-key, mixed>`, and a literal type such as the `false` of `int|false`.
+A declaration with no type anywhere is `mixed`, which PHP# writes `Any?`. A type `get_sharp_type` returns `None` for refuses the file with the type in its reason, as `scalar`, `numeric`, an array shape `array{…}`, the element type `never` of an empty array, and a literal type such as the `true` of `true|ActionError` or the `false` of `int|false`. PHP# has none of them, and its nearest type, as `bool` for `true`, is wider: it changes the type PHP code reads by reflection and what a subclass may declare, and drops what the narrower type proved. `array-key` is `int|string`, and so a bare `array`, `array<array-key, mixed>`, is `Map<int|string, Any?>` (section 12).
 
 ### How a `new` gets its type arguments
 
@@ -245,6 +245,8 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 
 - `foreach ($items as $item)` → `for (const item of items)`, and `foreach ($map as $key => $value)` → `for (const [key, value] of map)`. Both.
 - A loop over the values of an object whose class implements `Traversable`, as a framework's collection or a generator → `for (const item of items)`, which the bridge lowers to PHP's own `foreach` over the object. A keyed loop over one refuses, since a PHP# loop gives a key only from a `List` or a `Map`. Both.
+- A loop over any other value, as a `mixed`, a value that may be `null`, or a keyed loop over a `Traversable` object → refuses. A PHP# loop takes a collection its type names, and gives a key only from a `List` or a `Map` (section 17), where PHP's loop over `null` warns and runs no pass. Both.
+- A loop into a pattern by position, `foreach ($pairs as [$key, $value])` → refuses, since a plain PHP array is no tuple, as destructuring by position refuses (section 12). A loop into a pattern of keys refuses as the converter's own refusal: its form is a loop over the rows and one read per key, which the converter writes only for an assignment. Tree.
 - A body without braces → braces added (line 2903). Tree.
 
 ### Section 18. Strings
@@ -263,10 +265,12 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - `===` and `!==` → `==` and `!=` when both sides hold only scalars and enums and share a type, as `string|bool` and `false`, or one side is `null`. The bridge lowers PHP#'s `==` between such types to PHP's `===`, so `'' !== false` holds both ways. Two sides that share no type, as `bool` and `int`, refuse: PHP's `===` is always false there, and PHP# has no `==` between them (line 3055). Type.
 - `===` where either side may hold an object → stays `===` (line 3029). Type.
 - `===` between a `mixed` and a string, a `bool`, an enum or `null` → `==`, since an `Any?` compared with `==` against those is equal only when it holds the same type and value (line 3028). Against a number it refuses, since an `Any?` compares an `int` with a `float` by value, where PHP's `1 === 1.0` is false. Type.
+- `===` between a string and `Order::class` or `self::class` → `==` with the text of the class's name, `name == "Shop\\Order"`, which PHP compiles in for `::class` and compares as two strings. `static::class` names the class PHP called, which only the running code knows, so it keeps the `===` rule above. Type.
 - `===` where the sides may hold an `int` and a `float` → refuses, since `1 === 1.0` is false and PHP# compares them by value (line 1705). Type.
 - `===` on a collection → refuses, since PHP compares keys and order and PHP# compares elements (lines 3023 and 3032). Type.
 - Loose `==` → `==` when both sides have one scalar type, and refuses otherwise. Type.
-- `instanceof` → `is`, and `!$x instanceof A` → `x is not A` (line 3652). Tree.
+- `instanceof` → `is`, and `!$x instanceof A` → `x is not A` (line 3652). `instanceof self` → `is` the class's name, as `self` converts. Tree.
+- `instanceof` of a class value, as `$item instanceof $class`, and `instanceof static` → refuses. `is` tests a type the code names (line 3691), which a class value is not, and `Self` names the class PHP called only as a return type. Tree.
 
 ### Section 20. Enums
 

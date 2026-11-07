@@ -42,6 +42,12 @@ final class Note
         return $text . ($answer === 'yes' ? ' agreed' : ' not');
     }
 
+    // `===` of a string with `X::class`, the text of the class's name.
+    public function namesSpec(?string $name): bool
+    {
+        return $name === \Proof\Spec::class;
+    }
+
     public function describe($value): string
     {
         if (is_string($value)) {

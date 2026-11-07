@@ -26,6 +26,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
   - `.=` of an `int`, a `float` or a `string` that may be null onto a string, as `` text += `${count}` ``
   - `===` between a `mixed` and a string, a `bool` or an enum, as `==`
   - an `if` whose condition assigns a local, as the assignment on its own line and the local's test
+  - `instanceof self`, as `is` the class's name
+  - `===` between a string and `Order::class`, as `==` with the text of the class's name
 
 ### Fixed
 

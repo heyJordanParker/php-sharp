@@ -61,6 +61,7 @@ $special = new Special('beta');
 echo $spec->label(), "\n";
 echo $special->label(), "\n";
 echo $spec->name, "\n";
+echo json_encode([$spec->sameKind($special), $special->sameKind($spec), $spec->sameKind(new \stdClass())]), "\n";
 
 /** @var Box<Special> $box */
 $box = new Box($special);
@@ -95,6 +96,7 @@ echo $note->describe('hi'), ' / ', $note->describe(5), "\n";
 echo $note->headed('memo'), ' ', $note->headed('0'), ' ', $note->headed(''), ' ', $note->headed(null), "\n";
 echo $note->signed('Ann'), ' ', $note->signed(null), "\n";
 echo $note->tagged('yes', 3, '!'), ' ', $note->tagged(1, 0, null), ' ', $note->tagged(true, -2, ''), "\n";
+echo json_encode([$note->namesSpec('Proof\Spec'), $note->namesSpec('proof\spec'), $note->namesSpec(null)]), "\n";
 echo json_encode([$note->flagged(0, '0'), $note->flagged(2, ''), $note->flagged(-1, 'x'), $note->flagged(0, null)]), "\n";
 
 echo (new Factory())->make()->get()->label(), "\n";
