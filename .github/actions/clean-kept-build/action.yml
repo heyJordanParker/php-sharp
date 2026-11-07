@@ -7,7 +7,8 @@ description: >-
   kept build's dependency files name them and make has no rule that makes some of them again, such as
   Zend/zend_ini_scanner_defs.h (run 41504845687). Cargo never removes what an old build left, so the Mago target grows
   with every dependency and crate that changes. Above 12 GB it goes, and the next job builds it from nothing: a fresh
-  one held 8.8 GB on these Macs, 2.9 GB of test-run and 5.8 GB of debug. The engine's build, 224 MB, stays.
+  dev build, which sharp/bin/test and mago.yml's tests share, held 6.0 GiB on a builder's Mac, and the test-run
+  build mago.yml's release-build makes beside it held 2.9 GB. The engine's build, 224 MB, stays.
 
 runs:
   using: composite

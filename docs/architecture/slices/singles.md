@@ -324,10 +324,9 @@ In a `.sharp` file each fallback, `report_undefined_type` and `report_non_existe
 
 - **A default body's call messages name the `Defaults` trait.** `p6`: `super<HasLabel>.label(5)` gives "Too many arguments provided for method `Defaults.label`.", and `tag.size("y")` "… argument #1 of `Defaults.size` …". `sharp_class_like_name` in `analyzer/src/utils/names.rs` names the trait `X\Defaults` of an interface `X` (codex's `DEFAULTS_TRAIT_SUFFIX`) by the interface, `HasLabel.label`.
 - **The false "Redundant `&&`" hint.** `p6`, `mago analyze`: `ChargeError.Declined(string reason) => …` gives `help[redundant-logical-operation]` at the arm, twice. `analyze_php_shape` in `analyzer/src/expression/mod.rs` already drops `RedundantLogicalOperation` for an `is` or `as` without fields. It drops it for a type pattern with fields too, whose field tests `handled_test` already knows are always true (decision 14 of `21-pattern-matching.md`).
-- **#131's four.** The descriptions are in no note or PR body, so these are the readings the code gives, for team-lead to confirm:
+- **#131's remaining three.** The descriptions are in no note or PR body, so these are the readings the code gives, for team-lead to confirm:
   - **A list rest's trailing element message:** `[...List<int> before, string tail]` on a `List<int>` gives "Impossible type assertion: `tail` of type `int` can never be `string`." It will read "`tail` is an `int` in a `List<int>`, so it is never a `string`."
   - **Coverage combining only simple arms:** `p7`'s two-field `Delivery.Noted(string?, bool)` match over all four combinations compiles with no `default`. No form that fails was found.
-  - **HIR lowering of PHP# bodies:** `hir/src/lower/expression/mod.rs` reaches `unreachable_unchecked` on `Leave`, `Propagate`, `Is`, `As`, `PatternMatch`, `TypeOf`, `NameOf`, `With`, `GenericClass` and `SuperOf`. No crate but `mago-hir`'s own tests depends on `mago-hir`, so no user reaches it. Proposed: lower the ten kinds, or record that HIR reads plain PHP alone.
   - **`continue.rs` against `break.rs`:** `continue;` outside a loop gives "Continue statement used outside of loop.", where `break;` gives the PHP# "A `break` stands only inside a loop.". `continue.rs` takes `break.rs`'s `.sharp` messages, and both drop "or switch" in a `.sharp` file.
 
 # The spec sweep: rules that make PHP# code work around PHP

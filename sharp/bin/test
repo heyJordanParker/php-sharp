@@ -91,7 +91,7 @@ if [[ " ${MAKEFLAGS:-}" =~ [[:space:]](-j[[:space:]]*|--jobs=)([0-9]+) ]]; then
 fi
 
 "$root/sharp/bin/build-mago" --quiet --jobs "$jobs"
-mago="$mago_dir/test-run/mago"
+mago="$mago_dir/debug/mago"
 
 # run-tests.php writes each test's script beside it as <test>.php, and mago compile writes each PHP# class's companion
 # beside its source as <Class>.php. A disk that ignores case, as macOS's does, keeps one file for both when the two

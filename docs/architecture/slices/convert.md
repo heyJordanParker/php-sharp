@@ -119,7 +119,7 @@ $ git status --short
 RM src/Shop/Shelf.php -> src/Shop/Shelf.sharp
 ```
 
-The next `mago compile` writes `src/Shop/Shelf.php` again, as decision 081's discovery file, and its `info/exclude` block hides it, so `git status --ignored` shows it as `!!`, never as the tracked file come back.
+The next `mago compile` writes `src/Shop/Shelf.php` again, as decision 081's discovery file, and the `src/Shop/.gitignore` it writes beside it hides it, so `git status --ignored` shows it as `!!`, never as the tracked file come back.
 
 ### What a converted file loses
 
@@ -132,6 +132,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 ### Section 1. Attributes
 
 - `#[Name(args)]` → `[Name(args)]`, each kept with its arguments. Tree.
+- An attribute on an enum case whose class doesn't target class constants → refuses. PHP refuses it only when reflection creates the attribute, and the PHP# checker where it is written. Both.
 
 ### Section 2. Variables
 
@@ -144,12 +145,14 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 
 ### Section 3. Scope
 
-- A local first assigned in a block and read after it → declared first in the body of its method or lambda, as `T? name = null;`, and each assignment of it writes it. A PHP variable lives for the whole function, so a loop's pass keeps the value an earlier pass gave it, and a declaration inside the loop would reset it on every pass. `T` joins the types of the values assigned to it, and each must come from a declaration (decision 2): a literal, a parameter, a property with a declared type, the declared return of a call, `new` of a class with no type parameters, or another local whose values do. A `@var` tag on any of its assignments declares `T` instead. Any other value refuses, as `$count * 2` does, "no declaration gives the type of `$count * 2`, which it is assigned: declare its type with a `@var` tag". A lambda that captures such a local by value refuses, since each assignment writes it after its declaration (section 14). Both.
+- A local that starts as `null` → `T? name = null;`, and one that starts as `[]` → `List<V> name = [];` when the body only appends to it, or `Map<K, V> name = [:];` when it only writes it by key. `T`, `K` and `V` join the declared types of the values written to it, by the rule below. One first assigned in the body itself keeps its declaration there, and one first assigned in a block is declared first in the body, as below. A `[]` both appended to and written by key, one assigned another value, and any value no declaration gives the type of, refuse. Both.
+- A local first assigned in a block and read after it → declared first in the body of its method or lambda, as `T? name = null;`, and each assignment of it writes it. A PHP variable lives for the whole function, so a loop's pass keeps the value an earlier pass gave it, and a declaration inside the loop would reset it on every pass. `T` joins the types of the values assigned to it, and each must come from a declaration (decision 2): a literal, a parameter, a property with a declared type, the declared return of a call that names no type parameter, as `@return T|null` does, `new` of a class with no type parameters, or another local whose values do. A `@var` tag on any of its assignments declares `T` instead. Any other value refuses, as `$count * 2` does, "no declaration gives the type of `$count * 2`, which it is assigned: declare its type with a `@var` tag". A lambda that captures such a local by value refuses, since each assignment writes it after its declaration (section 14). Both.
 
 ### Section 4. Member access
 
 - `->` and `::` → `.`, and `?->` → `?.`. Tree.
 - A static and an instance member of one name → refuses (line 323).
+- A member reached on a value the analysis gives `mixed` or `object` → refuses, since PHP# reaches a member only from a known class. Type.
 
 ### Section 5. Access modifiers
 
@@ -162,15 +165,20 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - A `public` property → `public T name { get; set; }`, and `public virtual T name { get; set; }` where a subclass may replace it, since a PHP# property is closed otherwise (line 586). Both.
 - An untyped property, which PHP fills with `null` → `Any? name = null`. Both.
 - Two names in one declaration → one declaration per name, each on its own line (line 383). Tree.
+- A value the analysis gives `mixed`, written to a property of a known type → refuses. Type.
+- A property read that lands where only the type PHP narrowed it to fits, as `$this->owner` returned after `$this->owner instanceof Page` → refuses, since PHP# reads a property by its declared type (line 3606). Both.
+- A `get` hook that writes `$this` → refuses, since a `get` body never writes `this`. Tree.
 - Property hooks → accessors, where `$this->name` is `field`, `$value` is `value` and a short `set => expr` is `set => field = expr`. A property with storage gains the accessor it declares no hook for, and its initial value follows the accessors. A `set` hook whose parameter is other than `$value` of the property's type, a `set` hook with no `get` on a property with no storage, and `&get` refuse. Tree.
 
 ### Section 7. Methods
 
 - `public function name(int $a): string` → `public virtual string name(int a)`. Both.
 - A static method a subclass may replace → `static virtual` (lines 1390 and 1396). Tree.
+- A method no subclass replaces, `final`, `private` or in a `final` class, that declares `?T` and whose every `return` gives a `T` the analysis types → refuses, naming `T`. PHP# refuses the `?` there, and the converter would infer the narrower type (decision 2). Type.
+- A PHPDoc type that narrows the type PHP# writes, as `@return non-empty-string` narrows `string`, `@param positive-int` narrows `int`, or `@var non-empty-list<T>` narrows `List<T>` → refuses, naming the tag. The analysis of a `.sharp` file reads no PHPDoc, as a probe shows: a `.sharp` method with `/** @return non-empty-string */` returns `string` to its plain PHP caller. Type.
 - Named arguments `f(name: $v)` → `f(name: v)`. Tree.
 - Argument spread `f(...$items)` → `f(...items)`, of a `List` into a `...` parameter. Any other spread into a call refuses (line 701). Both.
-- A spread in a literal `[...$a]` → `[...a]`, of a `List`, or of a `Map` keyed by `string`. A `Map` spread keeps an `int` key PHP renumbers, so it refuses (line 1618). Both.
+- A spread in a literal `[...$a]` → `[...a]`, of a `List`. A `Map` spread keeps each key, where PHP renumbers an `int` key and reads a numeric string key as one, so it refuses (line 1618). Both.
 
 ### Section 8. Functions
 
@@ -185,6 +193,8 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - A promoted parameter → `private Spec spec` for a field, `public string reference { get; set; }` for a property. Both.
 - A subclass constructor → `: super(…)` on every one (line 926): the arguments of the `parent::__construct(…)` its body starts with, which leaves the body, or `: super()` when no ancestor declares a constructor. Tree. 162 files have a parent with none.
 - A parent constructor call after other statements, or none where an ancestor declares one → refuses, since `: super(…)` runs it first. Tree. 6 files.
+- The arguments of `new Name(…)` → passed to the constructor's parameters as a method's are: `[:]` for a `Map`, and a value of another type than the parameter's refuses. Both.
+- A promoted parameter whose name an inherited method takes → refuses, as a property does (line 2346). Type.
 
 ### Section 10. Structs and `with`
 
@@ -195,6 +205,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - `@template T of Spec` → `class Shelf<T : Spec>`, and `@template-covariant` → `out T`. Type.
 - `new Box($x)` of a generic class → `new Box<Spec>(x)`, with the declared type's arguments or the class's bounds, [never the analysis's](#how-a-new-gets-its-type-arguments). Type.
 - `@extends Base<T>` → `: Base<T>`, and the same for `@implements` and a trait's `@use`. The tags leave the docblock. Type.
+- A generic class named without type arguments, as a native `Box` with no PHPDoc → refuses, since PHP# names them (line 1106). Type.
 
 ### Section 12. Collections
 
@@ -206,6 +217,8 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - `isset` and `empty` of a property → the property's null check or truthiness test, only when the property always holds a value, as one with a default or a promoted one does, and no class its object may be declares `__isset` or `__get`. PHP gives a typed property that holds no value as unset, and asks those methods, where PHP# reads the property. `isset` and `empty` at a `List` index refuse, since PHP reads past the end without an error. Both.
 - `['id' => $id] = $row;` of a `Map` variable → one read per key, `const id = row.get("id");`, each a `TValue?` (lines 1625 and 1664). Both. 16 files. Destructuring by position, a `Map` a call gives, and destructuring inside another expression refuse.
 - `array` with no PHPDoc type, and an array shape → refuses with the type. Type.
+- A union of two collections, as `list<string>|array<string, int>`, and an `iterable<K, V>` whose key is other than `array-key` or `mixed` → refuses, since a PHP# type holds one collection and `Iterable<V>` reads values only. `iterable<V>` → `Iterable<V>`. A PHP# `Iterable<V>` parameter takes a new sequence of the values it is given, numbered from 0, as `Sharp\Internal\Sequence` on the engine, so an `iterable` parameter of a method or a lambda converts only where the body loops over its values alone. A keyed loop over it, a return of it, a call that passes it on, `instanceof` and a method call on it refuse, and so does a constructor's promoted `iterable` parameter, which every other method may read. Both.
+- A keyed loop over a `Map`, and a spread of one, convert only where the keys are `int`. PHP turns a numeric string key into an `int`, and a PHP# `Map` keeps it as written: on the engine, a PHP loop over `['42' => 'a']` gives the key `int 42`, and a PHP# `Map<string, string>` gives `string 42`. Type.
 
 ### Section 13. `readonly`
 
@@ -220,6 +233,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - A by-value capture `use ($total)`, and each variable an arrow function reads → the same plain capture, only when nothing writes `total` after its declaration, in the lambda or around it. Both.
 - A call of a function value `$f($x)` → `f(x)`, and a call of a string or an array that names a function refuses (line 2165). Both.
 - A closure type `\Closure(int): int` → `Function<int(int)>`, and one with a parameter by reference, a variadic or an optional one refuses. Type.
+- A lambda that takes fewer parameters than every function type it may be passed as → refuses, since PHP drops the extra arguments and a PHP# lambda takes each one (section 14.1). It asks the checker's own rule, `TCallableSignature::takes_more_parameters_than`, of each function type, so a plain `callable`, which takes `mixed ...`, takes any lambda. Both.
 - `[$this, 'name']`, `'Class::name'` and `name(...)` → `this.name`. Both. An array or a string converts where a function type is declared, and refuses when the analysis finds no such method. A partial application with placeholders, and a built-in function's value, refuse.
 - A method and a property of one name → refuses (line 2346). 51 files.
 - `??` stays. `?:` → refuses (line 3764).
@@ -262,6 +276,8 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 
 - `extends A implements B` → `: A, B`. Tree.
 - An open method → `virtual`, one that replaces a parent class's → `override`, and a `final` or `private` one → nothing (line 3782). Both.
+- A static method of an interface → refuses, since a PHP# interface declares instance members. Tree.
+- An override whose parameter, as PHP# writes its type into PHP, takes less than the PHP declaration of the method it replaces → refuses, since PHP links an override only when it takes at least that. An untyped PHP parameter typed by the parent's PHPDoc does. Type.
 - A plain PHP trait a class uses → listed in the header (line 4205). Tree. A `use` block with `insteadof` or `as` refuses.
 - A trait declaration → refuses, since PHP# declares no traits. Tree. 16 files.
 
@@ -269,13 +285,16 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 
 - `namespace A\B;` → `namespace A.B;`, and `use A\B;` → `import A.B;`. Tree.
 - A class in code → its name as [how a name prints](#how-a-name-prints) says. Both.
+- A root function of a library whose name is a class of its folder's namespace in another case, as `str()` beside `Str` → refuses, since `Text.str` names the class. Type.
+- A namespace part, a type, an enum case, a constant, a method, a property, a field, a parameter or a local whose name breaks the case section 24 gives it → refuses, naming the PHP# name. The checker warns on it, and renaming it changes the name PHP code reaches it by. A method that overrides one keeps its parent's name. Tree.
+- A class named `Module` → refuses, since `Module.sharp` holds only its folder's module (section 32). Tree.
 - `use function` → no line, since each call imports the namespace. `use const Vendor\Pdf\SIZE` → `import Vendor.Pdf;` and `Pdf.SIZE` (line 4345). Tree.
 - `new $class(…)` of a class value → `new (type)(…)`, when the class's constructor is `required` (line 4968), which the checker checks. `new` of a string, and `new static(…)`, whose `new Self(…)` needs a `required` constructor the converter doesn't write, refuse. Both.
 
 ### Section 24. Built-in types and `Any`
 
 - `mixed` → `Any?`, `?T` → `T?`, `object` → `Object`. Type.
-- `(int)`, `(float)` and `(string)` stay, and the aliases `(integer)`, `(double)`, `(real)` and `(binary)` become them. Tree.
+- `(int)` and `(float)` of a number, and `(string)` of a number, stay, and the aliases `(integer)`, `(double)`, `(real)` and `(binary)` become them. `(int)` and `(float)` stay even on a value of their own type, since PHP#'s run PHP's conversion at runtime and a type only PHPDoc gives, as a framework's `@property int` that holds `"5"`, is no proof of the value. `(string)` of a string leaves only where a native declaration or a literal makes the value one at runtime: a literal, a text expression, a parameter of the method, or a property or a call declared `string` natively or by the converted class. Any other cast refuses, since a PHP# cast converts a number. Both.
 - `(bool)`, `(array)` and `(object)` → refuses (line 4717). Tree.
 - An `int` literal where a `float` goes, which PHP turns into a `float` → the `float` of the value it writes, so `1` is `1.0`, the octal `017` is `15.0` and the hex `0x1F` is `31.0`. Type.
 - `try`, `catch` and `finally` stay, and `catch (Exception $e)` → `catch (Exception e)` (line 6151). Tree.
@@ -283,6 +302,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 ### Section 25. Referring to classes
 
 - `X::class` → `typeof(X)`, `static` → `Self`, `self` → the class's name (line 4870). Tree.
+- `$x::class` of an object → `Class.of(x)`, and of a value that may be `null` refuses, since PHP's throws there. Type.
 - A static call through `self`, `self::m()`, → `Name.m()` in a `final` class or an enum, and refuses elsewhere. PHP's `self::m()` forwards the class PHP called, which late static binding in `m` reads, and a call through the class's name doesn't. `self` in a constant, a static property and `new self` keeps the class's name, which means the declaring class (line 5015). Tree.
 - A property or a method named by a variable, `$x->$name` and `$x->$name()` → refuses (line 4973, decision 030). Tree. 23 and 10 files.
 
@@ -405,7 +425,7 @@ Decisions 1, 3, 5, 8, 10, 11 and 12 are approved as they stand. Decisions 2, 4, 
 6. **A name prints by the file's own names,** a root class of `Builtins.sharp` bare, and a missing one gets an `import`, `import … as …` where the short name is taken or PHP# reserves it, as `Any`, `Equatable` and `Error`.
 7. **Each file is proven in memory before it is written:** analysis and lowering through `Server::compile`, against the whole project with the earlier conversions in place, with fresh extension hosts once they load a converted file. The project's `ignore` entries and baseline apply to host rules' codes only.
 8. **Approved: a file converts only as the last commit holds it, its converted text is written at its `.sharp` name, then the index records the rename as `git mv` does, and then the plain file leaves.** Review 301 found that an untracked file lost its plain PHP, which nothing held, so a file git holds no commit of as it is refuses, and a write that fails leaves the plain file where it was.
-9. **The proof compares warnings and errors, keyed by file, level, code, message and line, with duplicates counted.** A conversion may add `too-wide-member` on a member it made `public`, and `redundant-docblock-type` in a plain PHP caller whose PHPDoc the converted class now declares. The summary lists both, and any other new issue refuses the file. The summary also says the project's tests, compared test by test, are the gate for what analysis can't see: a `TypeError` at entry (line 1076), a renumbered `int`-keyed array (line 1514), and an `int` that becomes a `float` in a `List<float>` (decision 074).
+9. **The proof compares warnings and errors, keyed by file, level, code, message and line, with duplicates counted.** A conversion may add `too-wide-member` on a member it made `public`, and `redundant-docblock-type` in a plain PHP caller whose PHPDoc the converted class now declares. The summary lists both, and any other new issue refuses the file. The summary also says the project's tests, compared test by test, are the gate for what analysis can't see: a `TypeError` at entry (line 1076), a renumbered `int`-keyed array (line 1514), an `int` that becomes a `float` in a `List<float>` (decision 074), `(int)` of a `float` no `int` holds, where PHP warns and gives `7766279631452241920` for `1.0E+20` and `0` for `NAN` and PHP# throws `ArithmeticError: The float 1.0E+20 is not representable as an int`, and an `int` that overflows, where PHP's `PHP_INT_MAX + 1` gives the `float` `9.223372036854776E+18` and PHP#'s throws `ArithmeticError: Integer overflow`. The converter can't refuse every cast and every sum, so it refuses none of them.
 10. **Approved: `autoload-dev` files stay out** (line 5380).
 11. **Approved: the command names what a converted file leaves:** lint, guard and format rules.
 12. **Approved: three public functions join existing modules:** `Server::codebase`, `Server::analyze_file_with_artifacts` and `loader::mark_sharp_file`.
