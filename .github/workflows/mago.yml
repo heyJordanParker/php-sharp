@@ -106,7 +106,7 @@ jobs:
   # that breaks never holds a release.
   checks:
     needs: CHANGES
-    if: needs.CHANGES.outputs.mago == 'true'
+    if: false
     strategy:
       fail-fast: false
       matrix:
@@ -256,10 +256,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON((github.event_name != 'pull_request' || needs.CHANGES.outputs.full == 'true') && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
-        rust: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && format('["{0}", "nightly"]', needs.CHANGES.outputs.rust) || format('["{0}"]', needs.CHANGES.outputs.rust)) }}
-        exclude:
-          - { os: macos-latest, rust: nightly }
+        os: ["macos-latest"]
+        rust: ${{ fromJSON(format('["{0}"]', needs.CHANGES.outputs.rust)) }}
 
     # The macOS leg runs on the self-hosted Mac runners, except for a bump's pull request from another repository, as
     # sharp.yml's MACOS explains.
@@ -305,26 +303,20 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          save: ${{ needs.CHANGES.outputs.full == 'true' && matrix.rust != 'nightly' }}
+          save: false
           target-dir-env: true
 
-      # setup-php brew-installs PHP on macOS, so the self-hosted runners use their Homebrew PHP and Composer instead.
-      - name: Install PHP
-        if: runner.environment == 'github-hosted'
-        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
-        with:
-          php-version: "8.3"
-          tools: "composer:v2"
-
-      - name: Install composer dependencies
-        run: composer install
-
-      # The workspace's tests run lake.
-      - name: Install elan and Lean
-        uses: ./.github/actions/setup-lean
-
       - name: cargo test
-        run: cargo test --workspace --locked
+        run: |
+          cargo test -p mago-extension --lib --locked --no-run
+          failed=0
+          for run in $(seq 1 12); do
+            echo "=== 346 extension run $run"
+            if ! cargo test -p mago-extension --lib --locked -- --nocapture; then
+              failed=$((failed + 1))
+            fi
+          done
+          echo "=== 346: $failed of 12 runs failed"
 
       - name: cargo test (property)
         if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
@@ -337,7 +329,7 @@ jobs:
   # repository runs it on macos-latest, as tests does.
   release-build:
     needs: CHANGES
-    if: needs.CHANGES.outputs.mago == 'true' && (github.event_name != 'pull_request' || needs.CHANGES.outputs.full == 'true')
+    if: false
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'macos-arm64-local' || 'macos-latest' }}
 
     permissions:
@@ -392,7 +384,7 @@ jobs:
   # A pull request's run that isn't the full run has no macOS leg, as CHANGES explains, so it needs only checks' binary.
   plain-php:
     needs: [CHANGES, checks, release-build]
-    if: ${{ !cancelled() && needs.checks.result == 'success' && (github.event_name == 'pull_request' && needs.CHANGES.outputs.full != 'true' || needs.release-build.result == 'success') }}
+    if: false
     strategy:
       fail-fast: false
       matrix:
@@ -540,7 +532,7 @@ jobs:
 
   typos-check:
     needs: CHANGES
-    if: needs.CHANGES.outputs.mago == 'true'
+    if: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
