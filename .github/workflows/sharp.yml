@@ -15,9 +15,12 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# A pull request's new commit cancels its run in progress. Master runs one push at a time, and only the newest push
+# waits, since its tree holds every merge before it, so the Mac never tests a tree master already moved past. A
+# schedule, a dispatch and a tag each run in a group of their own.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.url || (github.event_name == 'push' && github.ref) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   # CI_PASSED is this workflow's one required check, so the workflow always runs, and LINUX, LINUX_PASSES,
   # LINUX_ZTS, HOSTS, PHP_EXTENSIONS and MACOS skip a change to documentation alone. docs/spec.md, README.md and

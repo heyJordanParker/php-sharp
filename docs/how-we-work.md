@@ -62,7 +62,7 @@ A red push run opens one issue, or comments on the one still open, and a PR fixe
 A release tests and builds once, on the bump's PR, and the tag publishes those same files:
 
 1. The bump's PR has a title that starts with `chore: release`. It changes only what `php sharp/mago/scripts/set-version.php <version>` writes, `PHP_SHARP_VERSION` in `ext/sharp/php_sharp.h`, the version `Zend/tests/sharp/ri_sharp.phpt` expects, and the release's section of `sharp/CHANGELOG.md`. Its CI checks that. The title makes its run the full run, which runs all 22 modes on every build and every Mago job, the macOS ones included, and the run builds every release asset beside the suites: the six `mago` binaries with their attestations, Mago's source archives, their SHA-256s and both runtime images.
-2. The bump merges once `CI_PASSED` passes, which needs the jobs that build the assets too.
+2. The bump merges once `CI_PASSED` passes, which needs the jobs that build the assets too. Update the bump's PR with master right before merging it, so its own full run covers the merge commit.
 3. The bump's merge commit is tagged `v<version>`, and the tag is pushed. A tag on any other commit fails.
 4. The tag publishes the assets the bump's PR built, and builds none. If no run of the PR passed, or its assets expired or were built from another tree, the tag builds them itself, and its run warns so. A bump from a fork builds no assets, so its tag always builds them.
 

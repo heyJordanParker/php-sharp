@@ -12,9 +12,10 @@ on:
     - cron: '17 3 * * 1'
   workflow_dispatch:
 
+# Master runs one push at a time, and only the newest push waits, as sharp.yml's concurrency explains.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.url || (github.event_name == 'push' && github.ref) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
