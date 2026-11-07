@@ -1379,9 +1379,73 @@ mod diagnostic {
         static PEER: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
     }
 
+    /// Every process whose fds this user cannot list, with what can be read of it: those this user started, those
+    /// `own` started, and those of which nothing can be read.
+    fn unreadable(own: i32) -> Vec<String> {
+        let user = unsafe { libc::getuid() };
+        let mut found = Vec::new();
+        for pid in pids() {
+            let bytes = unsafe { libc::proc_pidinfo(pid, libc::PROC_PIDLISTFDS, 0, std::ptr::null_mut(), 0) };
+            if bytes > 0 {
+                continue;
+            }
+            let errno = std::io::Error::last_os_error();
+            let mut info: libc::proc_bsdshortinfo = unsafe { std::mem::zeroed() };
+            let got = unsafe {
+                libc::proc_pidinfo(
+                    pid,
+                    13, // PROC_PIDT_SHORTBSDINFO
+                    0,
+                    (&raw mut info).cast(),
+                    std::mem::size_of::<libc::proc_bsdshortinfo>() as i32,
+                )
+            };
+            let mut name = [0u8; 256];
+            let length = unsafe { libc::proc_name(pid, name.as_mut_ptr().cast(), 256) };
+            let name = String::from_utf8_lossy(&name[..length.max(0) as usize]).into_owned();
+            let mut path = [0u8; 4096];
+            let length = unsafe { libc::proc_pidpath(pid, path.as_mut_ptr().cast(), 4096) };
+            let path = String::from_utf8_lossy(&path[..length.max(0) as usize]).into_owned();
+            if got > 0 {
+                if info.pbsi_ruid != user && info.pbsi_ppid != own as u32 {
+                    continue;
+                }
+                found.push(format!(
+                    "pid {pid} ({errno}) uid {} ruid {} ppid {} pgid {} status {} name {name} path {path}",
+                    info.pbsi_uid, info.pbsi_ruid, info.pbsi_ppid, info.pbsi_pgid, info.pbsi_status
+                ));
+            } else {
+                found.push(format!("pid {pid} ({errno}) no short info, name {name} path {path}"));
+            }
+        }
+        found
+    }
+
     pub(super) fn after_write(fd: i32, written: &std::io::Result<()>) {
         let worker = WORKER.get();
         log(&format!("worker {worker}: write returned {written:?}"));
+        let own = std::process::id() as i32;
+        if written.is_ok()
+            && let Some(state) = pipe_state(own, fd)
+            && state.peer != 0
+        {
+            log(&format!("worker {worker}: the read end outlived the write: {state}"));
+            for process in unreadable(own) {
+                log(&format!("worker {worker}: unreadable {process}"));
+            }
+            let started = Instant::now();
+            while started.elapsed() < std::time::Duration::from_secs(3) {
+                if pipe_state(own, fd).is_some_and(|state| state.peer == 0) {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            log(&format!(
+                "worker {worker}: the read end lived {:?} more, now {}",
+                started.elapsed(),
+                pipe_state(own, fd).map(|state| state.to_string()).unwrap_or_default()
+            ));
+        }
         let peer = PEER.get();
         if peer != 0 {
             for holder in holders(peer) {

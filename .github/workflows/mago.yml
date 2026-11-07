@@ -333,21 +333,7 @@ jobs:
             fi
           done
           echo "=== 346: $failed of 6 others variant runs failed"
-          beside_pool "before the workspace"
-          failed=0
-          for run in $(seq 1 10); do
-            echo "=== 346 whole extension binary, run $run"
-            if ! cargo test -p mago-extension --lib --locked -- --nocapture; then
-              failed=$((failed + 1))
-            fi
-          done
-          echo "=== 346: $failed of 10 whole extension binary runs failed"
-          if cargo test --workspace --locked; then
-            echo "=== 346: the workspace run passed"
-          else
-            echo "=== 346: the workspace run failed"
-          fi
-          beside_pool "after the workspace"
+          beside_pool "alone"
 
       - name: cargo test (property)
         if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
