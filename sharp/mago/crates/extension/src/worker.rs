@@ -225,6 +225,9 @@ struct WorkerInner {
     started_at: Option<Instant>,
     /// The request the worker last sent a progress frame for, when, and what it said the request started then.
     progress: Mutex<Option<(u64, Instant, String)>>,
+    /// The pipe the stdin writer writes the worker's requests to, which a test polls to see the worker's end close.
+    #[cfg(all(test, unix))]
+    stdin_pipe: Option<std::os::fd::RawFd>,
 }
 
 impl WorkerInner {
@@ -372,12 +375,6 @@ impl WorkerInner {
         }
 
         let mut failure = FailureRecord { inner: self, message: reason.into() };
-        #[cfg(all(test, target_os = "macos"))]
-        let diagnosed = self.host == diagnostic::HOST;
-        #[cfg(all(test, target_os = "macos"))]
-        if diagnosed {
-            diagnostic::log(&format!("fail start: {}", failure.message));
-        }
         if self.trace_enabled {
             self.telemetry.failures.fetch_add(1, Ordering::Relaxed);
         }
@@ -388,32 +385,18 @@ impl WorkerInner {
         if let Some(group) = lock(&self.child).as_mut() {
             let _result = group.leader().kill();
         }
-        #[cfg(all(test, target_os = "macos"))]
-        if diagnosed {
-            diagnostic::log("fail: stdin closed and leader killed");
-        }
 
         let stderr_wait_start = Instant::now();
         let (stderr, ended) = self.stderr_tail();
         let stderr_wait = stderr_wait_start.elapsed();
-        #[cfg(all(test, target_os = "macos"))]
-        if diagnosed {
-            diagnostic::log(&format!("fail: stderr ended {ended} after {stderr_wait:?}"));
-        }
         // What the worker started and still runs, such as the worker a wrapper forked, can hold the pipe the stdin
-        // writer is stuck on, and the worker's stdout and stderr, so the failure ends it too.
-        #[cfg(all(test, target_os = "macos"))]
-        let ending = Instant::now();
-        // A process of the group that SIGKILL cannot end stops the end at its timeout, and the failure says so.
+        // writer is stuck on, and the worker's stdout and stderr, so the failure ends it too. A process of the group that
+        // SIGKILL cannot end stops the end at its timeout, and the failure says so.
         if let Some(group) = lock(&self.child).as_mut()
             && let Err(error) = group.end()
             && error.kind() == std::io::ErrorKind::TimedOut
         {
             failure.message = format!("{}; {error}", failure.message);
-        }
-        #[cfg(all(test, target_os = "macos"))]
-        if diagnosed {
-            diagnostic::log(&format!("fail: group ended after {:?}", ending.elapsed()));
         }
         if !ended {
             failure.message =
@@ -576,6 +559,8 @@ impl Worker {
             }
             Err(source) => return Err(WorkerError::Spawn { program: command.program().to_owned(), source }),
         };
+        #[cfg(all(test, unix))]
+        let stdin_pipe = std::os::fd::AsRawFd::as_raw_fd(&process_stdin);
         #[cfg(not(windows))]
         let stdin = WorkerStdin::Process(process_stdin);
 
@@ -599,6 +584,8 @@ impl Worker {
             telemetry: WorkerTelemetry::default(),
             started_at,
             progress: Mutex::new(None),
+            #[cfg(all(test, unix))]
+            stdin_pipe: Some(stdin_pipe),
         });
         tracing::trace!(worker = id, process_id, "Extension worker process spawned.");
 
@@ -958,6 +945,8 @@ impl Worker {
             telemetry: WorkerTelemetry::default(),
             started_at: tracing::enabled!(tracing::Level::TRACE).then(Instant::now),
             progress: Mutex::new(None),
+            #[cfg(unix)]
+            stdin_pipe: None,
         });
         let reader_inner = Arc::clone(&inner);
         let reader_thread = std::thread::spawn(move || read_worker_stream(&reader_inner, reader));
@@ -1113,18 +1102,7 @@ fn write_worker_stdin(inner: &WorkerInner, mut stdin: WorkerStdin, queued: mpsc:
         if inner.state.load(Ordering::Acquire) == STATE_FAILED {
             break;
         }
-        #[cfg(all(test, target_os = "macos"))]
-        let diagnosed = inner.host == diagnostic::HOST;
-        #[cfg(all(test, target_os = "macos"))]
-        if diagnosed && let WorkerStdin::Process(pipe) = &stdin {
-            diagnostic::before_write(inner, std::os::fd::AsRawFd::as_raw_fd(pipe));
-        }
-        let written = stdin.write_all(&frame).and_then(|()| stdin.flush());
-        #[cfg(all(test, target_os = "macos"))]
-        if diagnosed && let WorkerStdin::Process(pipe) = &stdin {
-            diagnostic::after_write(std::os::fd::AsRawFd::as_raw_fd(pipe), &written);
-        }
-        if let Err(error) = written {
+        if let Err(error) = stdin.write_all(&frame).and_then(|()| stdin.flush()) {
             tracing::trace!(worker = inner.id, error = %error, "Extension worker stdin writer failed.");
             // A worker that exited closed the pipe Mago writes its requests to.
             inner.fail(format!("failed to write to the worker: {error}"));
@@ -1179,10 +1157,6 @@ fn read_worker_stderr(inner: &WorkerInner, stderr: ChildStderr) {
                 if inner.trace_enabled {
                     inner.telemetry.stderr_bytes.fetch_add(read as u64, Ordering::Relaxed);
                 }
-                #[cfg(all(test, target_os = "macos"))]
-                if inner.host == diagnostic::HOST {
-                    diagnostic::log(&format!("stderr chunk {:?}", String::from_utf8_lossy(&buffer[..read])));
-                }
                 lock(&inner.stderr).extend(&buffer[..read]);
             }
         }
@@ -1213,278 +1187,6 @@ pub(crate) fn nanos_millis(nanos: u64) -> f64 {
 
 pub(crate) fn average_micros(nanos: u64, count: u64) -> u64 {
     nanos.checked_div(count).unwrap_or(0) / 1_000
-}
-
-/// Diagnostic for task 346, removed before the PR is reported.
-#[cfg(all(test, target_os = "macos"))]
-#[allow(clippy::all, clippy::pedantic, clippy::nursery, clippy::restriction, unsafe_code)]
-mod diagnostic {
-    use std::sync::OnceLock;
-    use std::time::Instant;
-
-    use super::WorkerInner;
-    use super::lock;
-
-    pub(super) const HOST: &str = "acme-diagnosed";
-    const PROC_PIDFDPIPEINFO: i32 = 6;
-    const PIPE_FDINFO_SIZE: usize = 184;
-    static START: OnceLock<Instant> = OnceLock::new();
-
-    pub(super) fn log(message: &str) {
-        let elapsed = START.get_or_init(Instant::now).elapsed();
-        eprintln!("[346 {:>10.3} ms] {message}", elapsed.as_secs_f64() * 1000.0);
-    }
-
-    struct PipeState {
-        handle: u64,
-        peer: u64,
-        status: i32,
-        size: u64,
-    }
-
-    impl std::fmt::Display for PipeState {
-        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(formatter, "handle {:#x} peer {:#x} status {:#x} size {}", self.handle, self.peer, self.status, self.size)
-        }
-    }
-
-    fn pipe_state(pid: i32, fd: i32) -> Option<PipeState> {
-        let mut buffer = [0u8; PIPE_FDINFO_SIZE];
-        let got = unsafe {
-            libc::proc_pidfdinfo(pid, fd, PROC_PIDFDPIPEINFO, buffer.as_mut_ptr().cast(), PIPE_FDINFO_SIZE as i32)
-        };
-        if got != PIPE_FDINFO_SIZE as i32 {
-            return None;
-        }
-        let at = |offset: usize| u64::from_le_bytes(buffer[offset..offset + 8].try_into().unwrap());
-        Some(PipeState {
-            handle: at(160),
-            peer: at(168),
-            status: i32::from_le_bytes(buffer[176..180].try_into().unwrap()),
-            size: at(112),
-        })
-    }
-
-    fn fds(pid: i32) -> Vec<libc::proc_fdinfo> {
-        let size = std::mem::size_of::<libc::proc_fdinfo>();
-        let bytes = unsafe { libc::proc_pidinfo(pid, libc::PROC_PIDLISTFDS, 0, std::ptr::null_mut(), 0) };
-        if bytes <= 0 {
-            return Vec::new();
-        }
-        let mut fds = vec![libc::proc_fdinfo { proc_fd: 0, proc_fdtype: 0 }; bytes as usize / size + 32];
-        let got = unsafe {
-            libc::proc_pidinfo(pid, libc::PROC_PIDLISTFDS, 0, fds.as_mut_ptr().cast(), (fds.len() * size) as i32)
-        };
-        fds.truncate(got.max(0) as usize / size);
-        fds
-    }
-
-    fn describe(pid: i32) -> String {
-        let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
-        let got = unsafe {
-            libc::proc_pidinfo(
-                pid,
-                libc::PROC_PIDTBSDINFO,
-                0,
-                (&raw mut info).cast(),
-                std::mem::size_of::<libc::proc_bsdinfo>() as i32,
-            )
-        };
-        let mut path = [0u8; 4096];
-        let length = unsafe { libc::proc_pidpath(pid, path.as_mut_ptr().cast(), 4096) };
-        let path = String::from_utf8_lossy(&path[..length.max(0) as usize]).into_owned();
-        if got <= 0 {
-            return format!("pid {pid} (no bsd info) {path}");
-        }
-        let comm: Vec<u8> = info.pbi_comm.iter().take_while(|byte| **byte != 0).map(|byte| *byte as u8).collect();
-        format!(
-            "pid {pid} ppid {} pgid {} status {} comm {} started {}.{:06} path {path}",
-            info.pbi_ppid,
-            info.pbi_pgid,
-            info.pbi_status,
-            String::from_utf8_lossy(&comm),
-            info.pbi_start_tvsec,
-            info.pbi_start_tvusec,
-        )
-    }
-
-    fn pids() -> Vec<i32> {
-        let count = unsafe { libc::proc_listallpids(std::ptr::null_mut(), 0) };
-        let mut pids = vec![0i32; count.max(0) as usize + 512];
-        let got = unsafe { libc::proc_listallpids(pids.as_mut_ptr().cast(), (pids.len() * 4) as i32) };
-        pids.truncate(got.max(0) as usize);
-        pids
-    }
-
-    /// Every process fd whose pipe end is `handle`.
-    fn holders(handle: u64) -> Vec<String> {
-        let mut found = Vec::new();
-        for pid in pids() {
-            for fd in fds(pid) {
-                if fd.proc_fdtype as i32 != libc::PROX_FDTYPE_PIPE {
-                    continue;
-                }
-                if let Some(state) = pipe_state(pid, fd.proc_fd)
-                    && state.handle == handle
-                {
-                    found.push(format!("fd {} of {}", fd.proc_fd, describe(pid)));
-                }
-            }
-        }
-        found
-    }
-
-    fn report(label: &str, fd: i32) {
-        let own = std::process::id() as i32;
-        let Some(state) = pipe_state(own, fd) else {
-            log(&format!("{label}: fd {fd} is no pipe"));
-            return;
-        };
-        log(&format!("{label}: stdin write end fd {fd}: {state}"));
-        if state.peer != 0 {
-            for holder in holders(state.peer) {
-                log(&format!("{label}: read end held by {holder}"));
-            }
-        }
-        for holder in holders(state.handle) {
-            log(&format!("{label}: write end held by {holder}"));
-        }
-        log(&format!("{label}: scan done"));
-    }
-
-    /// Only cheap probes, so the write is not delayed: Mago's own end, and the worker's fds.
-    pub(super) fn before_write(inner: &WorkerInner, fd: i32) {
-        let spawning = mago_database::process::diagnostic_spawning();
-        let own = pipe_state(std::process::id() as i32, fd);
-        log(&format!("before write: another thread is starting a process: {spawning}"));
-        let worker = lock(&inner.child).as_mut().map(|group| group.leader().id());
-        let worker_fds = worker.map(|worker| {
-            fds(worker as i32)
-                .iter()
-                .map(|fd| {
-                    let pipe = if fd.proc_fdtype as i32 == libc::PROX_FDTYPE_PIPE {
-                        pipe_state(worker as i32, fd.proc_fd).map(|state| state.to_string()).unwrap_or_default()
-                    } else {
-                        String::new()
-                    };
-                    format!("fd {} type {} {pipe}", fd.proc_fd, fd.proc_fdtype)
-                })
-                .collect::<Vec<_>>()
-        });
-        log(&format!(
-            "before write: stdin write end fd {fd}: {}",
-            own.as_ref().map(|state| state.to_string()).unwrap_or_default()
-        ));
-        PEER.set(own.map_or(0, |state| state.peer));
-        log(&format!("before write: worker {worker:?} fds {worker_fds:?}"));
-        log(&format!("before write: stderr so far {:?}", lock(&inner.stderr).display()));
-        WORKER.set(worker.unwrap_or(0) as i32);
-    }
-
-    // Each worker has a stdin writer thread of its own.
-    thread_local! {
-        static WORKER: std::cell::Cell<i32> = const { std::cell::Cell::new(0) };
-        static PEER: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
-    }
-
-    /// Every process whose fds this user cannot list, with what can be read of it: those this user started, those
-    /// `own` started, and those of which nothing can be read.
-    fn unreadable(own: i32) -> Vec<String> {
-        let user = unsafe { libc::getuid() };
-        let mut found = Vec::new();
-        for pid in pids() {
-            let bytes = unsafe { libc::proc_pidinfo(pid, libc::PROC_PIDLISTFDS, 0, std::ptr::null_mut(), 0) };
-            if bytes > 0 {
-                continue;
-            }
-            let errno = std::io::Error::last_os_error();
-            let mut info: libc::proc_bsdshortinfo = unsafe { std::mem::zeroed() };
-            let got = unsafe {
-                libc::proc_pidinfo(
-                    pid,
-                    13, // PROC_PIDT_SHORTBSDINFO
-                    0,
-                    (&raw mut info).cast(),
-                    std::mem::size_of::<libc::proc_bsdshortinfo>() as i32,
-                )
-            };
-            let mut name = [0u8; 256];
-            let length = unsafe { libc::proc_name(pid, name.as_mut_ptr().cast(), 256) };
-            let name = String::from_utf8_lossy(&name[..length.max(0) as usize]).into_owned();
-            let mut path = [0u8; 4096];
-            let length = unsafe { libc::proc_pidpath(pid, path.as_mut_ptr().cast(), 4096) };
-            let path = String::from_utf8_lossy(&path[..length.max(0) as usize]).into_owned();
-            if got > 0 {
-                let _ = (user, own);
-                found.push(format!(
-                    "pid {pid} ({errno}) uid {} ruid {} ppid {} pgid {} status {} name {name} path {path}",
-                    info.pbsi_uid, info.pbsi_ruid, info.pbsi_ppid, info.pbsi_pgid, info.pbsi_status
-                ));
-            } else {
-                found.push(format!("pid {pid} ({errno}) no short info, name {name} path {path}"));
-            }
-        }
-        found
-    }
-
-    pub(super) fn after_write(fd: i32, written: &std::io::Result<()>) {
-        let worker = WORKER.get();
-        log(&format!("worker {worker}: write returned {written:?}"));
-        let own = std::process::id() as i32;
-        if written.is_ok()
-            && let Some(state) = pipe_state(own, fd)
-            && state.peer != 0
-        {
-            log(&format!("worker {worker}: the read end outlived the write: {state}"));
-            // First the processes this user can read, while the read end is alive.
-            for round in 0..3 {
-                let held = holders(state.peer);
-                log(&format!("worker {worker}: scan {round} of the readable processes: {} hold the read end", held.len()));
-                for holder in held {
-                    log(&format!("worker {worker}: read end held by {holder}"));
-                }
-                if pipe_state(own, fd).is_some_and(|state| state.peer == 0) {
-                    break;
-                }
-            }
-            log(&format!(
-                "worker {worker}: the read end is alive after the scans: {}",
-                pipe_state(own, fd).is_some_and(|state| state.peer != 0)
-            ));
-            for process in unreadable(own).into_iter().filter(|process| !process.contains(" ppid 1 ")) {
-                log(&format!("worker {worker}: unreadable {process}"));
-            }
-            let started = Instant::now();
-            while started.elapsed() < std::time::Duration::from_secs(3) {
-                if pipe_state(own, fd).is_some_and(|state| state.peer == 0) {
-                    break;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(1));
-            }
-            log(&format!(
-                "worker {worker}: the read end lived {:?} more, now {}",
-                started.elapsed(),
-                pipe_state(own, fd).map(|state| state.to_string()).unwrap_or_default()
-            ));
-        }
-        let peer = PEER.get();
-        if peer != 0 {
-            for holder in holders(peer) {
-                log(&format!("worker {worker}: after write: the read end seen before the write is held by {holder}"));
-            }
-        }
-        report(&format!("worker {worker}: after write"), fd);
-        if worker != 0 {
-            log(&format!("worker {worker}: after write: worker is {}", describe(worker)));
-            for fd in fds(worker) {
-                log(&format!("worker {worker}: after write: worker fd {} type {}", fd.proc_fd, fd.proc_fdtype));
-            }
-        }
-    }
-
-    pub(super) fn environment_names() -> String {
-        std::env::vars_os().map(|(name, _)| name.to_string_lossy().into_owned()).collect::<Vec<_>>().join(" ")
-    }
 }
 
 #[cfg(test)]
@@ -1972,98 +1674,25 @@ mod tests {
         worker.shutdown();
     }
 
-    /// A worker that closed its stdin refuses the request as Mago writes it, and the error says so with its stderr.
+    /// A worker that closed its stdin refuses the request as Mago writes it, and the error says so with its stderr. The
+    /// request goes out once no process holds the stdin's read end, which on a loaded Mac can outlive the worker's
+    /// close, as `wait_until_stdin_has_no_reader` says.
     #[cfg(unix)]
     #[test]
     fn a_request_written_to_a_worker_that_closed_its_stdin_holds_the_write_error_and_the_stderr() {
-        const TIMEOUT: Duration = Duration::from_secs(10);
-
-        #[cfg(target_os = "macos")]
-        diagnostic::log("test start");
-        let command = WorkerCommand::new("sh")
-            .with_arguments(["-c", &format!("exec 0<&-; echo '{FATAL_ERROR}' >&2; exec {SLEEP_UNTIL_ENDED}")]);
-        #[cfg(target_os = "macos")]
-        let host = diagnostic::HOST;
-        #[cfg(not(target_os = "macos"))]
-        let host = "acme";
-        let options = WorkerPoolOptions { host: host.to_owned(), ..WorkerPoolOptions::default() };
-        let worker = Worker::spawn_with_stderr_end_timeout(0, &command, &options, STDERR_END_TIMEOUT)
-            .expect("worker process should start");
-        #[cfg(target_os = "macos")]
-        diagnostic::log("worker spawned");
-        let deadline = Instant::now() + TIMEOUT;
-        while lock(&worker.inner.stderr).display().is_empty() {
-            assert!(Instant::now() < deadline, "the worker wrote no stderr within {TIMEOUT:?}");
-            std::thread::sleep(Duration::from_millis(1));
-        }
-        #[cfg(target_os = "macos")]
-        diagnostic::log(&format!("stderr arrived: {:?}", lock(&worker.inner.stderr).display()));
+        let worker = shell_worker(&format!("exec 0<&-; echo '{FATAL_ERROR}' >&2; exec {SLEEP_UNTIL_ENDED}"));
+        wait_until_stderr_arrives(&worker);
+        wait_until_stdin_has_no_reader(&worker);
 
         let error = worker.request(b"describe".to_vec(), None).expect_err("the closed stdin should fail the request");
-        #[cfg(target_os = "macos")]
-        diagnostic::log(&format!("request returned: {error}"));
-        #[cfg(target_os = "macos")]
-        if error.to_string().contains("made no progress") {
-            diagnostic::log(&format!("environment names: {}", diagnostic::environment_names()));
-        }
 
         assert_eq!(
             error.to_string(),
             format!(
-                "extension host `{host}` disconnected (worker 0): failed to write to the worker: Broken pipe (os error 32); stderr: {FATAL_ERROR}"
+                "extension host `acme` disconnected (worker 0): failed to write to the worker: Broken pipe (os error 32); stderr: {FATAL_ERROR}"
             )
         );
         worker.shutdown();
-    }
-
-    /// DIAGNOSTIC for task 346: task 337's version of the closed-stdin test, which failed 7 of 7 on macOS CI, with
-    /// other processes starting and ending while each of eight workers starts.
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn diagnostic_closed_stdin_while_others_start() {
-        const OTHERS: usize = 64;
-
-        let script = format!("exec 0<&-; echo '{FATAL_ERROR}' >&2; exec {SLEEP_UNTIL_ENDED}");
-        let (stop, stopped) = mpsc::channel::<()>();
-        let stalled = std::thread::scope(|scope| {
-            scope.spawn(move || {
-                let mut others = VecDeque::new();
-                while stopped.try_recv() == Err(mpsc::TryRecvError::Empty) {
-                    let mut other = std::process::Command::new("sh");
-                    other.args(["-c", SLEEP_UNTIL_ENDED]);
-                    others.push_back(ProcessGroup::spawn(&mut other).expect("another process should start"));
-                    if others.len() > OTHERS {
-                        others.pop_front();
-                    }
-                }
-            });
-
-            let mut stalled = 0;
-            for index in 0..8 {
-                let command = WorkerCommand::new("sh").with_arguments(["-c", &script]);
-                let options = WorkerPoolOptions {
-                    host: diagnostic::HOST.to_owned(),
-                    request_timeout: Duration::from_secs(5),
-                    ..WorkerPoolOptions::default()
-                };
-                let worker =
-                    Worker::spawn_with_stderr_end_timeout(index, &command, &options, UNREACHED_STDERR_END_TIMEOUT)
-                        .expect("worker process should start");
-                wait_until_stderr_arrives(&worker);
-                diagnostic::log(&format!("others worker {index}: stderr arrived"));
-                let error =
-                    worker.request(b"describe".to_vec(), None).expect_err("the closed stdin should fail the request");
-                diagnostic::log(&format!("others worker {index}: request returned: {error}"));
-                if error.to_string().contains("made no progress") {
-                    stalled += 1;
-                }
-                worker.shutdown();
-            }
-            drop(stop);
-            stalled
-        });
-
-        assert_eq!(stalled, 0, "{stalled} of 8 workers stalled");
     }
 
     /// A worker that Mago shuts down while it fails gives the request it served the failure, not a shutdown. A process
@@ -2279,6 +1908,30 @@ mod tests {
         let deadline = Instant::now() + TIMEOUT;
         while lock(&worker.inner.stderr).display().is_empty() {
             assert!(Instant::now() < deadline, "the worker wrote no stderr within {TIMEOUT:?}");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    /// Waits until no process holds the read end of the pipe Mago writes `worker`'s requests to, so a write to it fails
+    /// at once. A process that closed its end is not always the last to hold it: on a Mac loaded by the workspace's
+    /// tests, 6 of 3000 runs of `exec 0<&-; echo x >&2` from a program that started nothing else found the read end
+    /// alive once the stderr line arrived, for 204 µs to 18.7 ms, held by no process the user could read. Beside the
+    /// same tests, this test's write found it alive in 9 of 20 runs, for up to 183 ms more.
+    #[cfg(unix)]
+    fn wait_until_stdin_has_no_reader(worker: &Worker) {
+        const TIMEOUT: Duration = Duration::from_secs(10);
+
+        let pipe = worker.inner.stdin_pipe.expect("a worker Mago started writes to a pipe");
+        let deadline = Instant::now() + TIMEOUT;
+        loop {
+            let mut entry = libc::pollfd { fd: pipe, events: libc::POLLOUT, revents: 0 };
+            // SAFETY: `poll` reads the fd `entry` names, which the stdin writer holds open, and writes only `revents`.
+            let ready = unsafe { libc::poll(&raw mut entry, 1, 0) };
+            // macOS says a pipe whose read end is gone hung up, and Linux says it failed.
+            if ready == 1 && entry.revents & (libc::POLLHUP | libc::POLLERR) != 0 {
+                return;
+            }
+            assert!(Instant::now() < deadline, "the worker's stdin still had a reader after {TIMEOUT:?}");
             std::thread::sleep(Duration::from_millis(1));
         }
     }

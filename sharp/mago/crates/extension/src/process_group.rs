@@ -185,31 +185,10 @@ impl Drop for ProcessGroup {
     /// no longer ends the group: once the group ends, its id may name another. A leader that still runs after the end's
     /// timeout is left unreaped, since waiting for it could wait forever.
     fn drop(&mut self) {
-        if self.leader_state().is_ok()
-            && !self.end().is_err_and(|error| error.kind() == io::ErrorKind::TimedOut)
-        {
+        if self.leader_state().is_ok() && !self.end().is_err_and(|error| error.kind() == io::ErrorKind::TimedOut) {
             let _result = self.leader.wait();
         }
         self.slot.group.store(0, Ordering::SeqCst);
-    }
-}
-
-#[cfg(all(test, target_os = "macos"))]
-mod tests {
-    use super::*;
-
-    /// A process that SIGKILL cannot end keeps `signal` saying a process of the group runs, and the end stops at its
-    /// timeout with the group's id.
-    #[test]
-    fn a_group_whose_process_never_ends_stops_its_end_at_the_timeout_and_names_the_group() {
-        const TIMEOUT: Duration = Duration::from_millis(20);
-        let started = Instant::now();
-
-        let error = signal_until_ended(4321, TIMEOUT, || true).expect_err("the end should stop at its timeout");
-
-        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
-        assert_eq!(error.to_string(), "process group 4321 still ran 20 ms after SIGKILL");
-        assert!(started.elapsed() >= TIMEOUT, "the end stopped after {:?}", started.elapsed());
     }
 }
 
@@ -354,5 +333,25 @@ extern "C" fn forward(signal: libc::c_int) {
     if !starting {
         // SAFETY: `raise` is async-signal-safe.
         unsafe { libc::raise(signal) };
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    /// A process that SIGKILL cannot end keeps `signal` saying a process of the group runs, and the end stops at its
+    /// timeout with the group's id.
+    #[test]
+    fn a_group_whose_process_never_ends_stops_its_end_at_the_timeout_and_names_the_group() {
+        const TIMEOUT: Duration = Duration::from_millis(20);
+        let started = Instant::now();
+
+        let error = signal_until_ended(4321, TIMEOUT, || true).expect_err("the end should stop at its timeout");
+
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        assert_eq!(error.to_string(), "process group 4321 still ran 20 ms after SIGKILL");
+        assert!(started.elapsed() >= TIMEOUT, "the end stopped after {:?}", started.elapsed());
     }
 }

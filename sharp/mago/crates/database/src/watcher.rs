@@ -285,8 +285,10 @@ impl<'config> DatabaseWatcher<'config> {
         exclusions: &[Exclusion<'scope>],
         extensions: &HashSet<Vec<u8>>,
     ) -> Result<impl Fn(&Path, bool) -> bool + Send + 'static, DatabaseError> {
-        let skipped =
-            ExcludedFolders::from_configuration(&DatabaseConfiguration { excludes: exclusions.to_vec(), ..config.clone() })?;
+        let skipped = ExcludedFolders::from_configuration(&DatabaseConfiguration {
+            excludes: exclusions.to_vec(),
+            ..config.clone()
+        })?;
         let extensions = extensions.clone();
 
         Ok(move |path: &Path, is_folder: bool| {
@@ -929,7 +931,7 @@ where
         W: NotifyWatcher + Send + 'static,
         H: EventHandler,
     {
-        while let Err(RecvTimeoutError::Timeout) = stopped.recv_timeout(poll_interval) {
+        while stopped.recv_timeout(poll_interval) == Err(RecvTimeoutError::Timeout) {
             if let Starting::Waiting(starts) = &native
                 && let Ok(watcher) = starts.try_recv()
             {
@@ -1864,8 +1866,10 @@ mod tests {
 
         tell(app.join(format!("{TEST_COOKIE}0")));
 
-        let line =
-            format!("The file watcher reported a change in {}, so this run stops checking the files there.", app.display());
+        let line = format!(
+            "The file watcher reported a change in {}, so this run stops checking the files there.",
+            app.display()
+        );
         let deadline = Instant::now() + Duration::from_mins(1);
         while !log.text().contains(&line) {
             assert!(Instant::now() < deadline, "{}", log.text());

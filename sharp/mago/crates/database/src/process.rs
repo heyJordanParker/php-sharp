@@ -21,13 +21,6 @@ use std::sync::PoisonError;
 /// Held while a process starts, so no process starts while another one's pipes are created.
 static SPAWNING: Mutex<()> = Mutex::new(());
 
-/// DIAGNOSTIC for task 346, removed before the PR is reported: whether a thread is starting a process now.
-#[doc(hidden)]
-#[must_use]
-pub fn diagnostic_spawning() -> bool {
-    SPAWNING.try_lock().is_err()
-}
-
 /// Starts `command`, as `Command::spawn` does.
 ///
 /// # Errors
