@@ -33,6 +33,7 @@ use mago_syntax::cst::Block;
 use mago_syntax::cst::ClassLikeMemberSelector;
 use mago_syntax::cst::Expression;
 use mago_syntax::cst::Hint;
+use mago_syntax::cst::If;
 use mago_syntax::cst::IfBody;
 use mago_syntax::cst::Literal;
 use mago_syntax::cst::Statement;
@@ -182,25 +183,7 @@ impl<'input> Converter<'input, '_> {
                 }
             }
             Statement::Block(block) => self.block(block),
-            Statement::If(r#if) => {
-                self.condition(r#if.condition, true);
-                let IfBody::Statement(body) = &r#if.body else {
-                    self.refuse(r#if.span(), "an `if` with `:` and `endif` has no PHP# form: write its body in braces");
-                    return;
-                };
-                self.braced(body.statement);
-                for clause in &body.else_if_clauses {
-                    self.edits.replace(clause.elseif.span, "else if");
-                    self.condition(clause.condition, true);
-                    self.braced(clause.statement);
-                }
-                if let Some(clause) = &body.else_clause {
-                    match clause.statement {
-                        Statement::If(_) => self.statement(clause.statement),
-                        statement => self.braced(statement),
-                    }
-                }
-            }
+            Statement::If(r#if) => self.if_statement(statement, r#if, false),
             Statement::Try(r#try) => self.try_statement(r#try),
             Statement::Noop(_) => {}
             Statement::Foreach(foreach) => self.foreach(statement, foreach),
@@ -247,6 +230,31 @@ impl<'input> Converter<'input, '_> {
         self.statement(statement);
         if let Some(locals) = self.locals() {
             locals.blocks.pop();
+        }
+    }
+
+    /// `if`, whose condition may assign the local it tests unless the `if` follows an `else`.
+    fn if_statement(&mut self, statement: &Statement<'_>, r#if: &If<'_>, follows_else: bool) {
+        if follows_else {
+            self.chained_condition(r#if.condition);
+        } else if !self.assigned_condition(statement, r#if) {
+            self.condition(r#if.condition, true);
+        }
+        let IfBody::Statement(body) = &r#if.body else {
+            self.refuse(r#if.span(), "an `if` with `:` and `endif` has no PHP# form: write its body in braces");
+            return;
+        };
+        self.braced(body.statement);
+        for clause in &body.else_if_clauses {
+            self.edits.replace(clause.elseif.span, "else if");
+            self.chained_condition(clause.condition);
+            self.braced(clause.statement);
+        }
+        if let Some(clause) = &body.else_clause {
+            match clause.statement {
+                Statement::If(nested) => self.if_statement(clause.statement, nested, true),
+                statement => self.braced(statement),
+            }
         }
     }
 

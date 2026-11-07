@@ -39,6 +39,22 @@ final class CountedSpec extends Spec implements \Countable
     }
 }
 
+// An untyped parameter takes the `array|Sharp\Map` a PHP# `Map` parameter erases to.
+final class ArraySource implements \Proof\Shop\Source
+{
+    /** @param array<string, int> $limits */
+    public function limited($limits = []): int
+    {
+        return count($limits);
+    }
+
+    /** @param array<array-key, mixed> $options */
+    public function read($options = []): int
+    {
+        return count($options);
+    }
+}
+
 // Calls each class of the fixture from plain PHP in another namespace, before and after the conversion.
 $spec = new Spec('alpha');
 $special = new Special('beta');
@@ -82,6 +98,8 @@ echo $note->tagged('yes', 3, '!'), ' ', $note->tagged(1, 0, null), ' ', $note->t
 echo json_encode([$note->flagged(0, '0'), $note->flagged(2, ''), $note->flagged(-1, 'x'), $note->flagged(0, null)]), "\n";
 
 echo (new Factory())->make()->get()->label(), "\n";
+$source = new ArraySource();
+echo $source->limited(), ' ', $source->limited(['a' => 1]), ' ', $source->read(), ' ', $source->read([1, 2]), "\n";
 echo (new Pair())->both(), "\n";
 
 $tally = new Tally();

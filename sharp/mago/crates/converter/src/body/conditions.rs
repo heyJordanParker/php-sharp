@@ -5,12 +5,16 @@
 use mago_codex::ttype::TType;
 use mago_codex::ttype::atomic::TAtomic;
 use mago_codex::ttype::atomic::object::TObject;
+use mago_codex::ttype::union::TUnion;
 use mago_span::HasSpan;
+use mago_span::Span;
 use mago_syntax::cst::Access;
 use mago_syntax::cst::ClassLikeMemberSelector;
 use mago_syntax::cst::EmptyConstruct;
 use mago_syntax::cst::Expression;
+use mago_syntax::cst::If;
 use mago_syntax::cst::IssetConstruct;
+use mago_syntax::cst::Statement;
 use mago_syntax::cst::Variable;
 
 use super::Kind;
@@ -28,6 +32,54 @@ impl Converter<'_, '_> {
         if let Some(test) = self.truthiness(condition, false, top) {
             self.edits.replace(condition.span(), test);
         }
+    }
+
+    /// The condition of an `else if`, which refuses an assignment of a local: PHP runs it only when the conditions
+    /// before it fail, and the line of its own [`Converter::assigned_condition`] writes before an `if` runs every time.
+    pub(super) fn chained_condition(&mut self, condition: &Expression<'_>) {
+        if let Expression::Assignment(assignment) = condition
+            && let Expression::Variable(Variable::Direct(variable)) = assignment.lhs
+            && assignment.operator.is_assign()
+        {
+            let shown = String::from_utf8_lossy(variable.name);
+            return self.refuse(
+                condition.span(),
+                format!("an `else if` whose condition assigns `{shown}` is not converted: a PHP# assignment is a statement, and the converter writes it on its own line only before an `if` that follows no `else`, since PHP runs this one only when the conditions before it fail"),
+            );
+        }
+        self.condition(condition, true);
+    }
+
+    /// `if ($user = $this->find($id))`, which tests the value it assigns, as the assignment on its own line and the
+    /// test of the local it writes, `const user = this.find(id);` and `if (user != null)`, since a PHP# assignment is
+    /// a statement. PHP runs the assignment first and then tests the local, as the two lines do. Gives whether the
+    /// condition is such an assignment. An `else if` keeps it as a condition, which refuses, since its assignment runs
+    /// only when the conditions before it fail.
+    pub(super) fn assigned_condition(&mut self, statement: &Statement<'_>, r#if: &If<'_>) -> bool {
+        let condition = r#if.condition;
+        let Expression::Assignment(assignment) = condition else {
+            return false;
+        };
+        let (Expression::Variable(Variable::Direct(variable)), true) =
+            (assignment.lhs, assignment.operator.is_assign())
+        else {
+            return false;
+        };
+        let Some(union) = self.type_of(assignment.rhs).filter(|_| self.is_local(variable.name)) else {
+            return false;
+        };
+        if !self.declaration(statement, condition) {
+            self.expression(condition, None);
+        }
+        let named = |this: &mut Self| this.variable_name(variable.name);
+        let Some((test, _)) = self.test_of(union, condition.span(), named, true, false, true) else {
+            return true;
+        };
+        let indentation = self.indentation(statement.span().start.offset);
+        self.edits.delete(r#if.r#if.span.start.offset, condition.span().start.offset);
+        self.edits.insert(condition.span().end.offset, format!(";\n{indentation}if ({test}"));
+
+        true
     }
 
     /// The `bool` test of PHP's truthiness of `expression`, or of its falsiness when `negated`, which is what `!` and
@@ -103,6 +155,26 @@ impl Converter<'_, '_> {
             self.refuse(expression.span(), "the analysis gives this condition no type");
             return None;
         };
+        let rendered = |this: &mut Self| {
+            this.expression(expression, None);
+            let rendered = this.render(expression);
+            if is_primary(expression) { rendered } else { format!("({rendered})") }
+        };
+        let rereads = self.rereads(expression);
+        self.test_of(union, expression.span(), rendered, rereads, negated, top)
+    }
+
+    /// The test of PHP's truthiness of a value of type `union`, at `span`, whose PHP# text `rendered` gives once the
+    /// test is known to exist, with that text. `rereads` says whether a second read of the value gives the first's.
+    fn test_of(
+        &mut self,
+        union: &TUnion,
+        span: Span,
+        rendered: impl FnOnce(&mut Self) -> String,
+        rereads: bool,
+        negated: bool,
+        top: bool,
+    ) -> Option<(String, String)> {
         let shown = union.get_id().to_string();
         let kinds = kinds(union);
         let nullable = kinds.contains(&Kind::Null);
@@ -111,15 +183,13 @@ impl Converter<'_, '_> {
         let is_object = matches!(bare.as_slice(), [Kind::Object] | [Kind::Enum] | []);
         if union.types.iter().any(mago_codex::ttype::atomic::TAtomic::is_mixed) || (is_object && !nullable) {
             self.refuse(
-                expression.span(),
+                span,
                 format!("a condition of `{shown}` reads PHP's truthiness, which PHP# has no test for: a PHP# condition is a `bool` (spec section 21)"),
             );
             return None;
         }
 
-        self.expression(expression, None);
-        let rendered = self.render(expression);
-        let value = if is_primary(expression) { rendered } else { format!("({rendered})") };
+        let value = rendered(self);
         // PHP's truthiness of each type, as the test for a value that is truthy, and the test for one that is not.
         let (truthy, falsy) = match bare.as_slice() {
             [Kind::Bool] => (format!("{value} == true"), format!("{value} != true")),
@@ -132,7 +202,7 @@ impl Converter<'_, '_> {
             _ if is_object => (format!("{value} != null"), format!("{value} == null")),
             _ => {
                 self.refuse(
-                    expression.span(),
+                    span,
                     format!("a condition of `{shown}` reads PHP's truthiness, which PHP# has no test for: a PHP# condition is a `bool` (spec section 21)"),
                 );
                 return None;
@@ -146,9 +216,9 @@ impl Converter<'_, '_> {
         };
         let test = if negated { falsy } else { truthy };
         let parts = test.matches("&&").count() + test.matches("||").count();
-        if parts > 0 && !self.rereads(expression) {
+        if parts > 0 && !rereads {
             self.refuse(
-                expression.span(),
+                span,
                 format!("a condition of `{shown}` has no PHP# form here: its PHP# test reads the value more than once, which gives what PHP's one read gives only for a variable or a property"),
             );
             return None;

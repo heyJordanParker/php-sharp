@@ -25,6 +25,11 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
   - a `catch` of several classes, as `catch (Timeout|Refused e)`
   - `.=` of an `int`, a `float` or a `string` that may be null onto a string, as `` text += `${count}` ``
   - `===` between a `mixed` and a string, a `bool` or an enum, as `==`
+  - an `if` whose condition assigns a local, as the assignment on its own line and the local's test
+
+### Fixed
+
+- An interface method or an abstract method with a parameter default, as `int read(Map<string, int> limits = [:]);`, compiles: the analysis types and checks the default, and `mago compile` panicked on it before.
 
 ## [0.6.4] - 2026-11-07
 

@@ -1,0 +1,2 @@
+20:19: an `else if` whose condition assigns `$found` is not converted: a PHP# assignment is a statement, and the converter writes it on its own line only before an `if` that follows no `else`, since PHP runs this one only when the conditions before it fail
+21:20: `$found` is first named here, outside an assignment of its own, which is not converted yet: a PHP# local is declared where it is first assigned

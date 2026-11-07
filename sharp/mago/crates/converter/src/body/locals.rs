@@ -441,7 +441,8 @@ impl Converter<'_, '_> {
             at: variable.span.start.offset,
             block: block.unwrap_or(statement.span()),
             written,
-            hoistable: matches!(statement, Statement::Expression(_)),
+            // An `if` whose condition assigns it declares it before the `if`, as its own statement.
+            hoistable: matches!(statement, Statement::Expression(_) | Statement::If(_)),
         };
         method
             .locals
@@ -617,7 +618,7 @@ impl Converter<'_, '_> {
 
     /// Whether `name` is a local of the method being converted: no parameter, no `catch` variable, no variable a
     /// lambda captures and not `$this`.
-    fn is_local(&self, name: &[u8]) -> bool {
+    pub(super) fn is_local(&self, name: &[u8]) -> bool {
         name != b"$this"
             && self.method.as_ref().is_some_and(|method| {
                 !method.parameters.iter().any(|parameter| parameter == name)
