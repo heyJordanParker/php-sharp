@@ -155,7 +155,7 @@ The states are **missing** (no code holds the rule), **refused** (an error says 
 - `parse_type_hint` reads `readonly` followed by a type as `Hint::Readonly(ReadonlyHint { readonly, hint })`, as it reads `?` into `NullableHint`. `readonly readonly Order` is a parse error.
 - The modifier parser stops at `readonly` when a type follows it, so `private readonly Money total;`, `public readonly Money due` and `render(readonly Order order)` all reach `parse_type_hint`. Before `class`, `struct`, `abstract`, `final` or another modifier, `readonly` stays a modifier, so `public readonly class Receipt` parses as today.
 - `parse_sharp_member_with_attributes_and_modifiers` reads `readonly` after the parameter list into `Method::readonly: Option<Keyword>`, as the last clause, after `on` and `uses` (question 5). One written before `on` or `uses` is the parse error `ReadonlyNotLastInSharp`, which names the last place. An interface method and an abstract method take it too.
-- Every `match` on `Hint` gains an arm: `Hint::Readonly` is its inner hint. These are the formatter (which prints `readonly ` and the hint), the fingerprint, the guard, three linter rules, `hir`, `sharp-lean`, `missing_type_hints`, the walker, `Node::visit_children` and `HasSpan`.
+- Every `match` on `Hint` gains an arm: `Hint::Readonly` is its inner hint. These are the formatter (which prints `readonly ` and the hint), the fingerprint, the guard, three linter rules, `sharp-lean`, `missing_type_hints`, the walker, `Node::visit_children` and `HasSpan`.
 
 ## The checker: semantics
 
@@ -353,7 +353,7 @@ sharp/
         ├── sharp-bridge/
         │   ├── src/lower.rs                    erases both marks
         │   └── tests/lower.rs
-        ├── formatter/, fingerprint/, guard/, linter/ (3 rules), hir/, sharp-lean/   a Hint::Readonly arm each
+        ├── formatter/, fingerprint/, guard/, linter/ (3 rules), sharp-lean/   a Hint::Readonly arm each
 Zend/tests/sharp/
 ├── Readonly.sharp                          new
 ├── readonly.inc                            new: the plain PHP caller

@@ -178,7 +178,6 @@ sharp/mago/
     │       └── type_hint.rs, local_declaration.rs,
     │           name_of.rs, attribute.rs, extern.rs,
     │           class_like/method.rs                   a dotted name parses where it stopped (G4)
-    ├── hir/src/lower/error/mod.rs                     lowers the new variant (G6)
     ├── semantics/src/internal/mod.rs                  checks_slice runs past a miscased keyword (G1)
     ├── semantics/src/internal/checker/sharp.rs        a dotted bound and a `new` a chain reads through pass on (G4)
     ├── sharp-bridge/src/lower/
