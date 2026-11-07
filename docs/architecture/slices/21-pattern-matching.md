@@ -405,7 +405,7 @@ sharp/mago/crates/
 │   ├── src/lower/checked.rs              <- check takes the effects solve
 │   ├── src/lib.rs, src/unit.rs           <- Unit::function_types, Reads::function_types in the key
 │   └── tests/lower.rs                    <- one tree per new lowering; the `extra is limit` row removed
-└── formatter/, linter/, codex/, hir/, fingerprint/, sharp-lean/
+└── formatter/, linter/, codex/, fingerprint/, sharp-lean/
                                           <- each exhaustive match on Call, Expression and Pattern takes the
                                              new variants: the formatter prints them, the others treat them
                                              as the forms they lower to
