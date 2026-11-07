@@ -674,37 +674,25 @@ jobs:
       contents: read
       issues: write
     steps:
+      # Only for the actions below.
+      - name: git checkout
+        if: always()
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
       - name: Every job passed, or skipped a change that doesn't need it
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
           allowed-skips: LINUX, LINUX_PASSES, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS, RELEASE_BUMP, RELEASE_ASSETS, IMAGE
           jobs: ${{ toJSON(needs) }}
-      # A red nightly run or push to master fails no pull request, so it opens one issue, or comments on the one still
-      # open, and the next tag can't wait on a failure nobody saw. A pull request fixes it forward. Nobody reverts
-      # first: a merge commit can't land again cleanly once reverted, a revert hides what merged on top of it, and it
-      # would revert a healthy merge that failed on the Mac's load.
+      # As .github/actions/red-master-issue explains.
       - name: Open an issue for the failed run on master
         if: failure() && (github.event_name == 'schedule' || github.event_name == 'push' && github.ref_type == 'branch')
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          TITLE: ${{ github.event_name == 'schedule' && 'The nightly PHP# CI run failed' || 'A push to master failed PHP# CI' }}
-        run: |
-          body="The $GITHUB_EVENT_NAME run on master's $GITHUB_SHA failed: $RUN"
-          issue=$(gh issue list --state open --search "\"$TITLE\" in:title" --json number,title --jq '[.[] | select(.title == env.TITLE)][0].number // empty')
-          if [[ -n $issue ]]; then
-            gh issue comment "$issue" --body "$body"
-          else
-            gh issue create --title "$TITLE" --body "$body"
-          fi
+        uses: ./.github/actions/red-master-issue
+        with:
+          title: ${{ github.event_name == 'schedule' && 'The nightly PHP# CI run failed' || 'A push to master failed PHP# CI' }}
       # Master's full run's jobs saved their targets when they ended, so this job, which needs them all, deletes the
       # ones the new targets replaced. No other run saves one.
-      - name: git checkout
-        if: always() && needs.CHANGES.outputs.full == 'true' && github.ref == 'refs/heads/master'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          sparse-checkout: .github/actions
       - name: Delete the Mago target caches this run replaced
         if: always() && needs.CHANGES.outputs.full == 'true' && github.ref == 'refs/heads/master'
         uses: ./.github/actions/mago-cache-prune
