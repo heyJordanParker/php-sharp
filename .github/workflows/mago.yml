@@ -256,8 +256,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["macos-latest"]
-        rust: ${{ fromJSON(format('["{0}"]', needs.CHANGES.outputs.rust)) }}
+        os: ${{ fromJSON((github.event_name != 'pull_request' || needs.CHANGES.outputs.full == 'true') && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
+        rust: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && format('["{0}", "nightly"]', needs.CHANGES.outputs.rust) || format('["{0}"]', needs.CHANGES.outputs.rust)) }}
+        exclude:
+          - { os: macos-latest, rust: nightly }
 
     # The macOS leg runs on the self-hosted Mac runners, except for a bump's pull request from another repository, as
     # sharp.yml's MACOS explains.
@@ -322,31 +324,7 @@ jobs:
         uses: ./.github/actions/setup-lean
 
       - name: cargo test
-        run: |
-          # PROOF for task 346: the closed-stdin test, every second for as long as the workspace's tests run.
-          cargo test --workspace --locked --no-run
-          binary=$(cargo test -p mago-extension --lib --locked --no-run --message-format=json \
-            | jq -r 'select(.profile.test == true and .target.name == "mago_extension") | .executable')
-          # Without job control, a background job ignores SIGINT and SIGQUIT, which the compile's signal test sends.
-          set -m
-          cargo test --workspace --locked > "$RUNNER_TEMP/workspace.log" 2>&1 &
-          workspace=$!
-          runs=0
-          failed=0
-          while kill -0 "$workspace" 2> /dev/null; do
-            runs=$((runs + 1))
-            if ! (cd crates/extension && "$binary" --exact worker::tests::a_request_written_to_a_worker_that_closed_its_stdin_holds_the_write_error_and_the_stderr > "$RUNNER_TEMP/proof.log" 2>&1); then
-              failed=$((failed + 1))
-              echo "=== 346 proof: run $runs failed"
-              grep -E "left:|right:|panicked" "$RUNNER_TEMP/proof.log"
-            fi
-            sleep 1
-          done
-          echo "=== 346 proof: $failed of $runs runs of the closed-stdin test failed"
-          wait "$workspace" || echo "=== 346 proof: the workspace run failed"
-          sed -n '/^failures:$/,/^test result/p' "$RUNNER_TEMP/workspace.log"
-          grep -E "test result|FAILED|panicked" "$RUNNER_TEMP/workspace.log" | tail -n 40
-          test "$failed" -eq 0
+        run: cargo test --workspace --locked
 
       - name: cargo test (property)
         if: matrix.os == 'ubuntu-latest' && matrix.rust != 'nightly'
@@ -359,7 +337,7 @@ jobs:
   # repository runs it on macos-latest, as tests does.
   release-build:
     needs: CHANGES
-    if: false
+    if: needs.CHANGES.outputs.mago == 'true' && (github.event_name != 'pull_request' || needs.CHANGES.outputs.full == 'true')
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'macos-arm64-local' || 'macos-latest' }}
 
     permissions:
@@ -414,7 +392,7 @@ jobs:
   # A pull request's run that isn't the full run has no macOS leg, as CHANGES explains, so it needs only checks' binary.
   plain-php:
     needs: [CHANGES, checks, release-build]
-    if: false
+    if: ${{ !cancelled() && needs.checks.result == 'success' && (github.event_name == 'pull_request' && needs.CHANGES.outputs.full != 'true' || needs.release-build.result == 'success') }}
     strategy:
       fail-fast: false
       matrix:
