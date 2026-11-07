@@ -99,7 +99,7 @@ jobs:
         if: steps.linux.outputs.run
         env:
           RUN: ${{ steps.linux.outputs.run }}
-        run: echo "::notice::This tree ran and passed every Linux PHP# suite in $RUN, so only MACOS and LINUX_PASSES run."
+        run: echo "::notice::This tree ran and passed every Linux PHP# suite in $RUN, so only MACOS, LINUX_PASSES and UBUNTU_WERROR run."
       # The bump's pull request runs in full, since its title sets `full` as RELEASE_BUMP's does, and its passed
       # RELEASE_BUMP marks it apart from another pull request's run. Its merge commit, the tagged one, has its tree, so
       # the nightly run after a release skips it too. The 9 test jobs: those 8 and LINUX_PASSES, which a full run
