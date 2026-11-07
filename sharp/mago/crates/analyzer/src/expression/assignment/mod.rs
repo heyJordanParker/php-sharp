@@ -1089,9 +1089,10 @@ pub fn analyze_assignment_to_variable<'ctx, 'arena, A>(
 
     block_context.locals.retain(|var_id, _| !var_references_dynamic(*var_id, variable_id));
     block_context.derived_local_sources.remove(&variable_id);
-    // A hidden local holds the value its pattern tests, so its test narrows that value too, as `!= null` on the value
-    // narrows it: a property after `is`, spec section 21.
-    if is_hidden
+    // A variable a pattern's PHP assigns, hidden or the name the pattern binds, holds the value the pattern tests, and
+    // spans nothing, since no source writes it there. So its test narrows that value too, as `!= null` on the value
+    // narrows it: a property after `is`, with a name or without, spec section 21.
+    if variable_span.length() == 0
         && let Some(source_id) =
             source_expression.and_then(|source| get_block_expression_id(source, context, block_context))
     {

@@ -173,7 +173,7 @@ The states are **works**, **refused** (an error that names the feature as missin
 | P21 | it can test the type at the same time, and bind: `Paid { amount: > 1000 } big` | refused: parse error | checker (parser, binder, `php_shape`), bridge | the properties arm of `php_shape` (decision 4) |
 | P22 | `is` tests a value against any pattern and creates its variables | works for every form above | none | |
 | P23 | after `is` without a name, a local or parameter counts as the tested type; assigning to it ends that | works | none | |
-| P24 | a stored property narrows after a test or an assignment, until the next call or assignment, and one with a `get` accessor never narrows | works | checker: the hidden variable a test assigns narrows the value it holds, a call ends every property's narrowing, and a read through a `get` accessor is the declared type | `derived_local_sources`, the lambda's unnarrowed-read note |
+| P24 | a stored property narrows after a test or an assignment, until the next call or assignment, and one with a `get` accessor never narrows | works | checker: the hidden variable or the name a test assigns narrows the value it holds, a call or an accessor's run ends every property's narrowing, and a read through a `get` accessor is the declared type | `derived_local_sources`, the lambda's unnarrowed-read note |
 | P25 | a variable `is` creates exists only where the test held, and after an always-exiting `if` for `is not` | works | none | |
 | P26 | a negative test is `is not`; `!entity is HasDesign` is a compile error | works | none | |
 | P27 | in a pattern, `not` beside `or` needs parentheses | works | none | |

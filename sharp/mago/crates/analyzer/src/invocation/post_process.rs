@@ -797,6 +797,31 @@ fn clear_object_property_narrowings<'ctx, 'arena, A>(
         escaped_roots.push(Word::new(b"$this"));
     }
 
+    forget_changed_narrowings(context, block_context, container_escapes, this_escapes, &escaped_roots);
+}
+
+/// Ends what a PHP# accessor may change as it runs, a `get` on a read and a `set` on a write, as a call ends it: spec
+/// section 21 narrows a property only until the next call, and running an accessor is one.
+pub(crate) fn end_narrowings_at_accessor<A>(context: &Context<'_, '_, A>, block_context: &mut BlockContext<'_>)
+where
+    A: Arena,
+{
+    forget_changed_narrowings(context, block_context, false, false, &[]);
+}
+
+/// Ends the narrowing of each property and index a call may change, with the clauses and the derived locals that read
+/// it: in PHP# every property, and otherwise those it reaches through an escaped plain variable, `$this` when
+/// `this_escapes`, or one of `escaped_roots`. One that never changes keeps its narrowing.
+fn forget_changed_narrowings<A>(
+    context: &Context<'_, '_, A>,
+    block_context: &mut BlockContext<'_>,
+    container_escapes: bool,
+    this_escapes: bool,
+    escaped_roots: &[Word],
+) where
+    A: Arena,
+{
+    let reaches_every_property = context.dialect.is_sharp();
     let preserved: WordSet = block_context
         .locals
         .keys()
@@ -827,10 +852,11 @@ fn clear_object_property_narrowings<'ctx, 'arena, A>(
             return true;
         }
 
-        is_descendant_of_any(var_id, &escaped_roots)
+        is_descendant_of_any(var_id, escaped_roots)
     };
 
     block_context.locals.retain(|var_id, _| !should_wipe(*var_id));
+    block_context.end_property_derivations(should_wipe);
 
     block_context.clauses.retain(|clause| clause.wedge || !clause.possibilities.keys().copied().any(should_wipe));
     block_context

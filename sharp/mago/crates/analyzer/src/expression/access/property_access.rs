@@ -21,7 +21,6 @@ use mago_syntax::cst::NullSafePropertyAccess;
 use mago_syntax::cst::PropertyAccess;
 use mago_word::Word;
 use mago_word::concat_word;
-use mago_word::word;
 
 use crate::analyzable::Analyzable;
 use crate::artifacts::AnalysisArtifacts;
@@ -35,9 +34,12 @@ use crate::expression::call::analyze_extension_access;
 use crate::expression::call::method_call::with_receiver_type;
 use crate::expression::constant_access::explain_unnarrowed_read;
 use crate::expression::is_refused_type;
+use crate::invocation::post_process::end_narrowings_at_accessor;
 use crate::resolver::class_name::class_value_classes;
+use crate::resolver::property::has_accessor;
 use crate::resolver::property::is_backing_store_access;
 use crate::resolver::property::resolve_instance_properties;
+use crate::resolver::property::runs_accessor;
 use crate::utils::expression::get_block_expression_id;
 use crate::utils::expression::get_property_access_expression_id;
 use crate::utils::expression::is_this;
@@ -112,14 +114,15 @@ where
     );
     // Spec section 21: a PHP# read of a property with a `get` accessor runs it, so no test or write before the read
     // narrows it. The type a test or a write gave it explains an error at the read.
-    let runs_accessor =
+    let reads_through_accessor =
         context.dialect.is_sharp() && runs_get_accessor(context, block_context, object, property_selector);
-    let unnarrowed =
-        property_access_id.filter(|_| runs_accessor).and_then(|id| Some((id, block_context.locals.get(&id).cloned()?)));
+    let unnarrowed = property_access_id
+        .filter(|_| reads_through_accessor)
+        .and_then(|id| Some((id, block_context.locals.get(&id).cloned()?)));
 
     // A read the code takes as a function may be a method's value, spec section 14.3, so it is resolved again.
     if context.settings.memoize_properties
-        && !runs_accessor
+        && !reads_through_accessor
         && !artifacts.get_expected_type(&span).is_some_and(|expected| expected.to_non_nullable().is_callable())
         && let Some(property_access_id) = &property_access_id
         && let Some(existing_type) = block_context.locals.get(property_access_id).cloned()
@@ -205,6 +208,15 @@ where
         );
     }
 
+    // The `get` accessor the read runs may change any property, as a call may.
+    if context.dialect.is_sharp()
+        && resolution_result.properties.iter().any(|resolved| {
+            runs_accessor(context.codebase, resolved, b"get", object, block_context, context.resolved_names)
+        })
+    {
+        end_narrowings_at_accessor(context, block_context);
+    }
+
     let mut resulting_expression_type = None;
     if !resolution_result.has_error_path {
         for resolved_property in resolution_result.properties {
@@ -234,7 +246,7 @@ where
     }
 
     let narrowed_from_non_nullsafe = if is_null_safe
-        && !runs_accessor
+        && !reads_through_accessor
         && let Some(object_type) = artifacts.get_rc_expression_type(object)
         && !object_type.can_be_null()
         && !object_type.possibly_undefined()
@@ -321,9 +333,9 @@ where
     Ok(())
 }
 
-/// Whether a PHP# read of `property_selector` on `object` runs a `get` accessor of a class the object may hold. The
-/// object's type is the one the block holds for it, as a narrowed read is one the block holds. A read in one of the
-/// property's own accessors reads its storage, and runs none.
+/// Whether a PHP# read of `property_selector` on `object` runs a `get` accessor of a class the object may hold, before
+/// the read resolves it. The object's type is the one the block holds for it, as a narrowed read is one the block
+/// holds. A read in one of the property's own accessors reads its storage, and runs none.
 fn runs_get_accessor<A>(
     context: &Context<'_, '_, A>,
     block_context: &BlockContext<'_>,
@@ -347,10 +359,9 @@ where
     };
 
     object_type.types.iter().any(|atomic| match atomic {
-        TAtomic::Object(TObject::Named(object)) => context
-            .codebase
-            .get_declaring_property(object.name.as_bytes(), property.as_bytes())
-            .is_some_and(|declared| declared.hooks.contains_key(&word(b"get"))),
+        TAtomic::Object(TObject::Named(object)) => {
+            has_accessor(context.codebase, object.name.as_bytes(), property.as_bytes(), b"get")
+        }
         _ => false,
     })
 }

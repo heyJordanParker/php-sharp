@@ -31,8 +31,10 @@ use crate::expression::array::check_sharp_literal_kind;
 use crate::expression::assignment::PropertyWriteKind;
 use crate::expression::assignment::get_written_literal_type;
 use crate::expression::assignment::static_property_assignment;
+use crate::invocation::post_process::end_narrowings_at_accessor;
 use crate::resolver::method::get_declared_type;
 use crate::resolver::property::resolve_instance_properties;
+use crate::resolver::property::runs_accessor;
 use crate::resolver::static_property::StaticProperty;
 use crate::resolver::static_property::StaticPropertyName;
 use crate::utils::expression::expression_is_nullsafe;
@@ -163,6 +165,22 @@ where
         );
     }
     let assigned_value_type = literal_type.as_ref().unwrap_or(assigned_value_type);
+
+    // The `set` accessor the write runs may change any property, as a call may, spec section 21.
+    if context.dialect.is_sharp()
+        && resolution_result.properties.iter().any(|resolved| {
+            runs_accessor(
+                context.codebase,
+                resolved,
+                b"set",
+                property_access.object,
+                block_context,
+                context.resolved_names,
+            )
+        })
+    {
+        end_narrowings_at_accessor(context, block_context);
+    }
 
     let mut resolved_property_type = None;
     let mut readable_type: Option<TUnion> = None;

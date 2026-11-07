@@ -22,7 +22,9 @@
 //! A tested value that is not a local or a parameter goes into a hidden variable, `$match#N` or `$as#N`, which no
 //! PHP# source can name. Its first test assigns it, so it is evaluated once, and the analyzer narrows the hidden
 //! variable and the value it holds, as a property, which spec section 21 narrows until the next call. The `#` marks it
-//! as hidden, so the analyzer reports no issue on its assignment. A value one named type pattern tests needs none, because the name holds it.
+//! as hidden, so the analyzer reports no issue on its assignment. A value one named type pattern tests needs none,
+//! because the name holds it. Each variable the PHP assigns, hidden or named, spans nothing, so the analyzer tells it
+//! from one the source assigns and narrows the value it holds with it.
 //!
 //! Each node of the PHP keeps a span inside the form it comes from, and a span never ends before it starts. A node
 //! the form has no token for, such as `instanceof` or `(`, has an empty span.

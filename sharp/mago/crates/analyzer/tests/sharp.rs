@@ -4654,6 +4654,40 @@ fn a_property_with_a_get_accessor_is_never_narrowed() {
     );
 }
 
+/// A test that binds a name narrows the property it tests as one without a name does, spec section 21: `order.total`
+/// is an `int` after `order.total is int kept`, until the next call.
+#[test]
+fn a_tested_property_bound_to_a_name_narrows_as_without_one() {
+    let sharp = "namespace Demo;\n\npublic class Order\n{\n    public Any? total { get; set; } = 1;\n\n    public int next(Order order)\n    {\n        if (order.total is int kept) {\n            int t = order.total + kept;\n            return t;\n        }\n        if (order.total is int again) {\n            this.save();\n            return order.total + again;\n        }\n        return 0;\n    }\n\n    private void save()\n    {\n    }\n}\n";
+
+    assert_eq!(issues(("src/Demo/Order.sharp", sharp), &[]), ["15:20 mixed-operand", "15:20 mixed-return-statement"]);
+}
+
+/// Reading a property with a `get` accessor runs the accessor, which may change any property, so it ends a narrowing
+/// as a call does, spec section 21. A property's own accessor reaches its storage through `field`, and runs no
+/// accessor, so it ends nothing.
+#[test]
+fn a_read_through_a_get_accessor_ends_a_narrowing_as_a_call_does() {
+    let sharp = "namespace Demo;\n\npublic class Order\n{\n    public Any? total { get; set; } = 1;\n    public string label { get => \"order\"; }\n    public int doubled { get { if (this.total is int) { int kept = field; return this.total + kept; } return field; } set => field = value; } = 0;\n\n    public int next(Order order)\n    {\n        if (order.total is int) {\n            let s = order.label;\n            int t = order.total + 1;\n            return t;\n        }\n        return 0;\n    }\n}\n";
+
+    assert_eq!(
+        issues(("src/Demo/Order.sharp", sharp), &[]),
+        ["13:21 mixed-operand", "13:21 invalid-local-assignment-value"]
+    );
+}
+
+/// Writing a property with a `set` accessor runs the accessor, which may change any property, so it ends a narrowing as
+/// a call does, spec section 21. Writing a property without one runs no code, and ends only its own.
+#[test]
+fn a_write_through_a_set_accessor_ends_a_narrowing_as_a_call_does() {
+    let sharp = "namespace Demo;\n\npublic class Order\n{\n    public Any? total { get; set; } = 1;\n    public string label { get; set => field = value; } = \"\";\n    public string note { get; set; } = \"\";\n\n    public int next(Order order)\n    {\n        if (order.total is int) {\n            order.note = \"seen\";\n            order.label = \"paid\";\n            int t = order.total + 1;\n            return t;\n        }\n        if (order.total is int) {\n            order.note = \"seen\";\n            int t = order.total + 1;\n            return t;\n        }\n        return 0;\n    }\n}\n";
+
+    assert_eq!(
+        issues(("src/Demo/Order.sharp", sharp), &[]),
+        ["14:21 mixed-operand", "14:21 invalid-local-assignment-value"]
+    );
+}
+
 /// A condition that always holds names its PHP# type, as the condition error beside it does. PHP names its own type.
 #[test]
 fn a_condition_that_always_holds_names_its_php_sharp_type() {

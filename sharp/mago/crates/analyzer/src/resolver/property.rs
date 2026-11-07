@@ -814,6 +814,31 @@ where
     }
 }
 
+/// Whether a PHP# access of `resolved` on `object_expr` runs its `accessor`, `get` or `set`, as each read or write of a
+/// property with that accessor does. An access in one of the property's own accessors reaches its storage, and runs
+/// none.
+pub(crate) fn runs_accessor(
+    codebase: &CodebaseMetadata,
+    resolved: &ResolvedProperty,
+    accessor: &[u8],
+    object_expr: &Expression,
+    block_context: &BlockContext,
+    resolved_names: &ResolvedNames<'_>,
+) -> bool {
+    resolved
+        .declaring_class_id
+        .is_some_and(|class| has_accessor(codebase, class.as_bytes(), resolved.property_name.as_bytes(), accessor))
+        && !is_backing_store_access(object_expr, resolved.property_name, block_context, resolved_names)
+}
+
+/// Whether the property `property`, written `$name`, that `class` declares or inherits has the accessor `accessor`,
+/// `get` or `set`: a PHP# accessor with a body, or a PHP hook.
+pub(crate) fn has_accessor(codebase: &CodebaseMetadata, class: &[u8], property: &[u8], accessor: &[u8]) -> bool {
+    codebase
+        .get_declaring_property(class, property)
+        .is_some_and(|declared| declared.hooks.contains_key(&word(accessor)))
+}
+
 /// Checks if this is a backing store access: `$this->prop` inside a hook for that property.
 pub(crate) fn is_backing_store_access(
     object_expr: &Expression,

@@ -586,6 +586,16 @@ impl<'ctx> BlockContext<'ctx> {
                 self.locals.remove(&var_id);
             }
         }
+        self.end_property_derivations(|source| var_has_root(source, remove_var_id));
+    }
+
+    /// Ends the derivation of each local derived from a property whose narrowing `ends`, as the name a test binds or the
+    /// hidden variable that holds the value it tests: once the property may have changed, the local no longer holds it.
+    /// A foreach value, derived from its array's entry once before the loop, keeps its derivation past the writes its
+    /// loop makes, as the loop's analysis expects.
+    pub(crate) fn end_property_derivations(&mut self, ends: impl Fn(Word) -> bool) {
+        self.derived_local_sources
+            .retain(|_, source| memchr::memmem::find(source.as_bytes(), b"->").is_none() || !ends(*source));
     }
 
     /// Registers a variable that is referenced conditionally, like in a property
