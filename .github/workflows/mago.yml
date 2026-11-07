@@ -267,6 +267,7 @@ jobs:
       CARGO_BUILD_JOBS: 4
       RUST_TEST_THREADS: 4
       RAYON_NUM_THREADS: 4
+      MAGO_THREADS: 4
       LEAN_NUM_THREADS: ${{ matrix.os == 'macos-latest' && 2 || 4 }}
 
     steps:
@@ -339,6 +340,7 @@ jobs:
       CARGO_BUILD_JOBS: 4
       RUST_TEST_THREADS: 4
       RAYON_NUM_THREADS: 4
+      MAGO_THREADS: 4
       LEAN_NUM_THREADS: 2
 
     steps:
@@ -393,6 +395,7 @@ jobs:
       CARGO_BUILD_JOBS: 4
       RUST_TEST_THREADS: 4
       RAYON_NUM_THREADS: 4
+      MAGO_THREADS: 4
       LEAN_NUM_THREADS: 2
 
     steps:
