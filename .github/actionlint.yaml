@@ -1,11 +1,9 @@
 # sharp.yml's WORKFLOWS job runs actionlint over every workflow with this configuration.
 self-hosted-runner:
-  # test-suite.yml's LINUX_PPC64 job runs on php-src's self-hosted Gentoo runner on POWER, and mago.yml's release-build
-  # on the self-hosted Mac runners sharp/README.md's CI section names.
+  # test-suite.yml's LINUX_PPC64 job runs on php-src's self-hosted Gentoo runner on POWER.
   labels:
     - gentoo
     - ppc64
-    - macos-arm64-local
 paths:
   # The composite actions under .github/actions come from php-src, whose actions name no `description`, and each
   # merge from php-src would undo one added here.
