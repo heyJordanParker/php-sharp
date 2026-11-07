@@ -57,4 +57,9 @@ final class Check
     {
         return is_null($value);
     }
+
+    public function agreed(mixed $answer): bool
+    {
+        return $answer === 'yes' || $answer === true;
+    }
 }

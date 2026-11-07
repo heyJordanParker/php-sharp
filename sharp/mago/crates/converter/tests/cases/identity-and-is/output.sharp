@@ -53,4 +53,9 @@ public final class Check
     {
         return value == null;
     }
+
+    public bool agreed(Any? answer)
+    {
+        return answer == 'yes' || answer == true;
+    }
 }

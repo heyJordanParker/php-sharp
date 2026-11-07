@@ -32,6 +32,16 @@ final class Note
         return [(bool) $count, (bool) $note];
     }
 
+    // `.=` of a number and of a string that may be null, and `===` of a value of no known type with a string.
+    public function tagged(mixed $answer, int $count, ?string $tag): string
+    {
+        $text = 'note';
+        $text .= $count;
+        $text .= $tag;
+
+        return $text . ($answer === 'yes' ? ' agreed' : ' not');
+    }
+
     public function describe($value): string
     {
         if (is_string($value)) {

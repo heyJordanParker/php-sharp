@@ -23,6 +23,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
   - `array-key`, as `int|string`, and so a plain `array`, as `Map<int|string, Any?>`, where each key the body reads or writes by is an `int` or a string literal PHP keeps a string
   - `isset($list[$i])` and `$list[$i] ?? $x`, through `list.getOrNull(i)`
   - a `catch` of several classes, as `catch (Timeout|Refused e)`
+  - `.=` of an `int`, a `float` or a `string` that may be null onto a string, as `` text += `${count}` ``
+  - `===` between a `mixed` and a string, a `bool` or an enum, as `==`
 
 ## [0.6.4] - 2026-11-07
 

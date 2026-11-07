@@ -250,6 +250,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 
 - `.` between two strings → `+`, and `.=` of a string → `+=`, a `.` and an interpolated string among them, which give a string whatever the analysis keeps of them. Type.
 - `.` with an `int` or a `float` → a template, `` `x${count}` ``, which prints a number through PHP's own conversion. Type.
+- `.=` of an `int`, a `float` or a `string` that may be null onto a string → `` text += `${count}` `` and `` text += `${note ?? ""}` ``, the template part `.` writes for the value. Type.
 - `.` with a `bool`, which PHP prints as `1` or nothing, and a template as `true` or `false` (line 2940) → refuses. Type.
 - `"Hi $name"` → `` `Hi ${name}` ``, each value an `int`, a `float` or a `string`, which a template shows as PHP does. A `bool` refuses (line 2940). Both.
 - A `string` that may be null, in `.` or interpolated → `` `${title ?? ""}` ``, since PHP shows `null` as nothing. An `int` or a `float` that may be null refuses, since `?? ""` would give a union, which a template doesn't show. Both.
@@ -260,6 +261,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 
 - `===` and `!==` → `==` and `!=` when both sides hold only scalars and enums and share a type, as `string|bool` and `false`, or one side is `null`. The bridge lowers PHP#'s `==` between such types to PHP's `===`, so `'' !== false` holds both ways. Two sides that share no type, as `bool` and `int`, refuse: PHP's `===` is always false there, and PHP# has no `==` between them (line 3055). Type.
 - `===` where either side may hold an object → stays `===` (line 3029). Type.
+- `===` between a `mixed` and a string, a `bool`, an enum or `null` → `==`, since an `Any?` compared with `==` against those is equal only when it holds the same type and value (line 3028). Against a number it refuses, since an `Any?` compares an `int` with a `float` by value, where PHP's `1 === 1.0` is false. Type.
 - `===` where the sides may hold an `int` and a `float` → refuses, since `1 === 1.0` is false and PHP# compares them by value (line 1705). Type.
 - `===` on a collection → refuses, since PHP compares keys and order and PHP# compares elements (lines 3023 and 3032). Type.
 - Loose `==` → `==` when both sides have one scalar type, and refuses otherwise. Type.

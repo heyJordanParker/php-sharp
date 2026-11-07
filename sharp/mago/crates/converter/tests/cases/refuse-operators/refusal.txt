@@ -7,7 +7,7 @@
 19:18: `**` between `int` and `int` has PHP's meaning in PHP# only with a `float`, or an `int` power written as a number (spec section 24)
 20:19: `<` between `string` and `string('b')` compares PHP's way, which PHP# does only between numbers (spec section 19)
 21:28: `.` of `bool` shows it PHP's way, and a template shows only `int`, `float` and `string` that way (spec section 18)
-22:9: `.=` between `string` and `int` shows a value PHP's way, which is not converted yet: PHP# joins only strings with `+=`
+22:9: `.=` between `string` and `bool` shows a value PHP's way, and a template shows only `int`, `float` and `string` that way (spec section 18)
 23:9: `++` and `--` on `non-empty-string` step PHP's way, which PHP# does only for a number
 24:21: a sign on `float|int|string` turns it into a number PHP's way, which PHP# does only for a number
 25:21: `~` on `float` has no PHP# form: `~` takes an `int`

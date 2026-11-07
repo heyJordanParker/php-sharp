@@ -430,10 +430,20 @@ pub(super) fn identity(lhs: Option<&TUnion>, rhs: Option<&TUnion>) -> Result<boo
     if left == [Kind::Null] || right == [Kind::Null] {
         return Ok(true);
     }
-    // PHP#'s `===` compares two objects only, and a value of no known type may hold anything.
-    if [lhs, rhs].iter().any(|union| union.types.iter().any(TAtomic::is_mixed)) {
+    // An `Any?` compared with `==` against a string, a `bool` or an enum is equal only when it holds the same type and
+    // value, as PHP's `===` (spec section 19). Against a number it compares an `int` with a `float` by value, and
+    // PHP#'s `===` compares two objects only, so any other value of no known type refuses.
+    let mixed = |union: &TUnion| union.types.iter().any(TAtomic::is_mixed);
+    let exact = |kinds: &[Kind]| {
+        !kinds.is_empty()
+            && kinds.iter().all(|kind| matches!(kind, Kind::String | Kind::Bool | Kind::Enum | Kind::Null))
+    };
+    if (mixed(lhs) && !mixed(rhs) && exact(&right)) || (mixed(rhs) && !mixed(lhs) && exact(&left)) {
+        return Ok(true);
+    }
+    if mixed(lhs) || mixed(rhs) {
         return Err(format!(
-            "`===` between `{}` and `{}` is not converted yet: PHP#'s `===` compares two objects, so narrow the value with `is` first (spec section 19)",
+            "`===` between `{}` and `{}` has no PHP# form: PHP#'s `===` compares two objects, and an `Any?` compares an `int` with a `float` by value, so narrow the value with `is` first (spec section 19)",
             lhs.get_id(),
             rhs.get_id()
         ));

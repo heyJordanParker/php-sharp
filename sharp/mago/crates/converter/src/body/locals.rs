@@ -1010,15 +1010,38 @@ impl Converter<'_, '_> {
                     Expression::Binary(Binary { operator: BinaryOperator::StringConcat(_), .. })
                         | Expression::CompositeString(_)
                 );
-                if self.is(lhs, &[Kind::String]) && (text || self.is(rhs, &[Kind::String])) {
+                let appended = self.is(lhs, &[Kind::String]);
+                if appended && (text || self.is(rhs, &[Kind::String])) {
                     self.edits.replace(*span, "+=");
+                    None
+                } else if appended
+                    && (self.is(rhs, &[Kind::Int, Kind::Float]) || self.is(rhs, &[Kind::String, Kind::Null]))
+                {
+                    // A number shows in a template as PHP's `.` shows it, and `null` as nothing, which `?? ""` gives
+                    // a `string` that may be null (spec section 18).
+                    self.edits.replace(*span, "+=");
+                    let (start, end) = (rhs.span().start.offset, rhs.span().end.offset);
+                    match (self.is(rhs, &[Kind::Int, Kind::Float]), super::is_primary(rhs)) {
+                        (true, _) => {
+                            self.edits.insert(start, "`${");
+                            self.edits.insert(end, "}`");
+                        }
+                        (false, true) => {
+                            self.edits.insert(start, "`${");
+                            self.edits.insert(end, " ?? \"\"}`");
+                        }
+                        (false, false) => {
+                            self.edits.insert(start, "`${(");
+                            self.edits.insert(end, ") ?? \"\"}`");
+                        }
+                    }
                     None
                 } else {
                     Some(self.operands(
                         ".=",
                         lhs,
                         rhs,
-                        "shows a value PHP's way, which is not converted yet: PHP# joins only strings with `+=`",
+                        "shows a value PHP's way, and a template shows only `int`, `float` and `string` that way (spec section 18)",
                     ))
                 }
             }
