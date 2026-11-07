@@ -33,9 +33,10 @@ const INITIAL_END_POLL_INTERVAL: Duration = Duration::from_micros(50);
 const MAXIMUM_END_POLL_INTERVAL: Duration = Duration::from_millis(1);
 /// The longest `ProcessGroup::end` signals a group again whose processes still run. A process that SIGKILL cannot end,
 /// as one the kernel holds on a stalled disk, keeps it signalling past this, and it fails with an error that names the
-/// group.
+/// group. On the CI Mac beside the workspace's tests, 13,500 ends of a shell and two `sleep`s took at most 753 ms, and
+/// 900 ends of a process holding 1 GiB, as a Lean process does, at most 44 ms.
 #[cfg(target_os = "macos")]
-const END_TIMEOUT: Duration = Duration::from_secs(1);
+const END_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// A child process that leads a process group of its own.
 ///
@@ -383,42 +384,6 @@ mod tests {
         assert_eq!(error.kind(), io::ErrorKind::TimedOut);
         assert_eq!(error.to_string(), "process group 4321 still ran 20 ms after SIGKILL");
         assert!(started.elapsed() >= TIMEOUT, "the end stopped after {:?}", started.elapsed());
-    }
-
-    /// DIAGNOSTIC for task 346, removed before the PR is reported: how long `end` takes, under the load it runs beside.
-    #[allow(clippy::print_stderr, clippy::use_debug, clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-    #[allow(clippy::cast_sign_loss)]
-    #[test]
-    fn diagnostic_measure_end() {
-        let measure = |label: &str, script: &str, runs: usize| {
-            let mut ended = Vec::with_capacity(runs);
-            for _ in 0..runs {
-                let mut command = Command::new("sh");
-                command.args(["-c", script]).stdout(std::process::Stdio::piped());
-                let mut group = ProcessGroup::spawn(&mut command).expect("sh should start");
-                let mut ready = [0u8; 1];
-                std::io::Read::read_exact(group.leader().stdout.as_mut().expect("piped"), &mut ready)
-                    .expect("the group should say it is ready");
-                let started = Instant::now();
-                let result = group.end();
-                ended.push(started.elapsed());
-                assert!(result.is_ok(), "{label}: {result:?}");
-            }
-            ended.sort();
-            let at = |share: f64| ended[((ended.len() - 1) as f64 * share) as usize];
-            eprintln!(
-                "=== 346 end {label}: {runs} runs, median {:?}, p99 {:?}, max {:?}",
-                at(0.5),
-                at(0.99),
-                ended[ended.len() - 1]
-            );
-        };
-        measure("small", "sleep 1000 & sleep 1000 & echo; wait", 300);
-        measure(
-            "1 GiB",
-            "perl -e '$| = 1; my $x = \"a\" x (1 << 30); print \"r\"; sleep 1000' & wait",
-            20,
-        );
     }
 
     /// A group whose end timed out answers each later end at once with the same error, and dropping it reaps a leader

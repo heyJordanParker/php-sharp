@@ -1384,8 +1384,9 @@ mod tests {
             request_timeout: Duration::from_millis(200),
             ..WorkerPoolOptions::default()
         };
-        let pool = WorkerPool::spawn(WorkerCommand::new("sh").with_arguments(["-c", &script]), NonZeroUsize::MIN, options)
-            .expect("worker pool should start");
+        let pool =
+            WorkerPool::spawn(WorkerCommand::new("sh").with_arguments(["-c", &script]), NonZeroUsize::MIN, options)
+                .expect("worker pool should start");
         let read = |name: &str| {
             let deadline = Instant::now() + TIMEOUT;
             loop {
