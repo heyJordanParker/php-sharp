@@ -15,6 +15,7 @@ use mago_algebra::find_satisfying_assignments;
 use mago_algebra::saturate_clauses;
 use mago_codex::assertion::Assertion;
 use mago_codex::identifier::function_like::FunctionLikeIdentifier;
+use mago_codex::metadata::class_like::ClassLikeMetadata;
 use mago_codex::ttype::atomic::TAtomic;
 use mago_codex::ttype::atomic::array::TArray;
 use mago_codex::ttype::atomic::resource::TResource;
@@ -544,19 +545,10 @@ fn clear_object_property_narrowings<'ctx, 'arena, A>(
     }
 
     let this_property_is_readonly = |property_name: &[u8]| -> bool {
-        let Some(class_metadata) = block_context.scope.get_class_like() else {
-            return false;
-        };
-
-        if class_metadata.flags.is_readonly() {
-            return true;
-        }
-
-        let Some(property_metadata) = class_metadata.properties.get(&Word::new(property_name)) else {
-            return false;
-        };
-
-        property_metadata.flags.is_readonly()
+        block_context
+            .scope
+            .get_class_like()
+            .is_some_and(|class_metadata| property_never_changes(class_metadata, property_name))
     };
 
     let preserves_this_property = |var_id: Word| -> bool {
@@ -939,14 +931,20 @@ where
         return false;
     };
 
-    if class_metadata.flags.is_readonly() || class_metadata.flags.is_mutation_free() {
-        return true;
-    }
+    class_metadata.flags.is_mutation_free() || property_never_changes(class_metadata, property)
+}
 
-    class_metadata
-        .properties
-        .get(&Word::new(property))
-        .is_some_and(|property_metadata| property_metadata.flags.is_readonly())
+/// Whether the property `property`, named without its `$` as an access's id names it, of `class_metadata` never changes
+/// once its object is created, so no call changes it: a `readonly` one or one of a `readonly` class, as a PHP# get-only
+/// property is, and a PHP# `init` property or a struct's field, spec sections 6.1 and 10, which only the creation of the
+/// object sets.
+fn property_never_changes(class_metadata: &ClassLikeMetadata, property: &[u8]) -> bool {
+    class_metadata.flags.is_readonly()
+        || class_metadata.flags.is_struct()
+        || class_metadata
+            .properties
+            .get(&concat_word!(b"$", property))
+            .is_some_and(|property_metadata| property_metadata.flags.is_readonly() || property_metadata.flags.is_init())
 }
 
 /// A variable ID like `$_SESSION['user_id']` - an index access rooted at a PHP

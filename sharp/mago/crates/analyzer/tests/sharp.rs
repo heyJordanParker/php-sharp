@@ -4702,6 +4702,20 @@ fn a_write_through_a_set_accessor_ends_a_narrowing_as_a_call_does() {
     );
 }
 
+/// A property that only its object's creation sets never changes after it, so a call ends none of its narrowing, spec
+/// section 21: a struct's field, an `init` property, of `this` too, and a get-only one, spec sections 6.1 and 10. A
+/// property with a `set` accessor may change, so the call ends its narrowing.
+#[test]
+fn a_property_only_creation_sets_stays_narrowed_past_a_call() {
+    let reading = "namespace App;\n\npublic struct Reading\n{\n    public Any? value { get; init; } = null;\n}\n";
+    let sharp = "namespace App;\n\npublic class Meter\n{\n    public Any? stored { get; set; } = 1;\n    public Any? rate { get; } = 1;\n    public Any? label { get; init; } = 1;\n\n    public int read(Reading reading, Meter other)\n    {\n        if (reading.value is not int) { return 0; }\n        if (other.rate is not int) { return 0; }\n        if (other.label is not int) { return 0; }\n        if (this.label is not int) { return 0; }\n        if (other.stored is not int) { return 0; }\n        this.log();\n        int a = reading.value + other.rate + other.label + this.label;\n        int b = other.stored + 1;\n        return a + b;\n    }\n\n    private void log()\n    {\n    }\n}\n";
+
+    assert_eq!(
+        issues(("src/App/Meter.sharp", sharp), &[("src/App/Reading.sharp", reading)]),
+        ["18:17 mixed-operand", "18:17 invalid-local-assignment-value"]
+    );
+}
+
 /// A condition that always holds names its PHP# type, as the condition error beside it does. PHP names its own type.
 #[test]
 fn a_condition_that_always_holds_names_its_php_sharp_type() {
