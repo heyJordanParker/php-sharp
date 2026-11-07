@@ -4,6 +4,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-11-07
+
 ### Changed
 
 - `mago compile` proves the laws of every `.sharp` file it compiles in one Lean process, where it built the Lean code it generates with Lake and then ran one Lean process per file at once, each importing Lean, the runtime library and that code. Lean and the runtime library now load once per compile, and the generated code is elaborated once, in that process, so a compile of many files with laws uses far less processor time and memory. Mago no longer writes the generated code to `.sharp/.lean/`, and deletes the `Code` folder and the Lake build an earlier `mago` left there. The processor-time limit and the deadline still hold for each file's check.
@@ -48,6 +50,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 - A `mago convert` proof that can't finish, as when an extension host's hook makes no progress within its `request-timeout-ms`, logs its error once, "Proof 4 could not finish, so the files it proves stay plain PHP: … extension host `dent` made no progress for 120000 ms on the after-analysis hooks of plugin `routes` …", and keeps each of those files plain PHP with "src/Shop/Order.php: proof 4 could not finish" as its reason. The run goes on and reports every other file. Before, the run stopped with exit code 2 and reported nothing it had found.
 - Once `mago convert` has written its files, a write that fails, a compile of the project for the extension hosts that fails, or a proof by fresh hosts that can't finish now logs its error, says git holds the plain PHP, and ends the run with exit code 1, where each stopped it with exit code 2 and no report. The run names each file it wrote, as `src/Shop/Order.php -> src/Shop/Order.sharp`, where only a dry run named them.
 - `mago compile` keeps the `.php` files it writes beside `.sharp` files out of git with a `.gitignore` of its own in each folder that holds them, which lists itself and each file. It listed them in `.git/info/exclude`, which every worktree of a repository shares, so a compile in one worktree hid the same paths in every other: an untracked `app/Tenant/Publishable.php` someone wrote in another worktree left `git status`, and a branch switch could overwrite it without a warning. A folder whose `.gitignore` the compile didn't write keeps it as it is, and the compile warns: "app/Tenant/.gitignore doesn't list /Order.php, so git may show app/Tenant/Order.php as untracked: add /Order.php to it." A compile also removes the blocks an earlier `mago compile` wrote in `.git/info/exclude`, and keeps every other byte. Run this `mago` in every checkout of a repository: a compile by an older `mago` in any worktree writes its block again, which hides its paths in all of them.
+
+### Security
+
+- The FrankenPHP image builds FrankenPHP v1.13.5, whose golang.org/x/net v0.62.0 fixes CVE-2026-78661 (HIGH), a denial of service through crafted HTML (#277). In worker mode, v1.13.5 resets only what the HTTP request set between requests, so `strtok()`, `error_get_last()`, `http_get_last_response_headers()` and the libxml errors carry over to the next request: a worker that reads them calls `error_clear_last()`, `libxml_clear_errors()` or `http_clear_last_response_headers()` first.
 
 ## [0.6.3] - 2026-11-05
 
@@ -496,7 +502,8 @@ Tagged on the merge of [#52](https://github.com/heyJordanParker/php-sharp/pull/5
 
 Tagged on the merge of [#47](https://github.com/heyJordanParker/php-sharp/pull/47), with no release pull request.
 
-[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/heyJordanParker/php-sharp/compare/v0.6.0...v0.6.1
