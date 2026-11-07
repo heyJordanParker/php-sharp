@@ -6,8 +6,9 @@ on:
   # Only a pull request into master, as sharp.yml runs, so a run .github/actions/passed-tree finds passed against master.
   pull_request:
     branches: [master]
-  # The full run: every job, and the workspace's tests and clippy on nightly Rust as well. It runs weekly on master's
-  # tip, on a dispatch, and on a release's bump pull request, as sharp.yml's full run does.
+  # The full run: every job. It runs weekly on master's tip, on a dispatch, and on a release's bump pull request, as
+  # sharp.yml's full run does. The weekly and dispatched runs also run the workspace's tests and clippy on nightly
+  # Rust, and the bump's doesn't, so a nightly that breaks never holds a release.
   schedule:
     - cron: '17 3 * * 1'
   workflow_dispatch:
@@ -85,14 +86,15 @@ jobs:
 
   # The gates on Linux with CHANGES's rust toolchain, the one sharp/mago/Cargo.toml's rust-version names and
   # release.yml builds the binaries with, and the Linux binary plain-php runs. They run beside tests, which takes as
-  # long. The full run adds clippy on nightly Rust.
+  # long. The weekly and dispatched runs add clippy on nightly Rust, and the bump's full run doesn't, so a nightly
+  # that breaks never holds a release.
   checks:
     needs: CHANGES
     if: needs.CHANGES.outputs.mago == 'true'
     strategy:
       fail-fast: false
       matrix:
-        rust: ${{ fromJSON(needs.CHANGES.outputs.full == 'true' && format('["{0}", "nightly"]', needs.CHANGES.outputs.rust) || format('["{0}"]', needs.CHANGES.outputs.rust)) }}
+        rust: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && format('["{0}", "nightly"]', needs.CHANGES.outputs.rust) || format('["{0}"]', needs.CHANGES.outputs.rust)) }}
     runs-on: ubuntu-latest
 
     permissions:
@@ -230,8 +232,8 @@ jobs:
         run: '"$MAGO" analyze --reporting-format=github'
 
   # The workspace's tests, on Linux and on macOS, which covers the few lines of Mago that differ there, such as the
-  # watch mode's FSEvents. The full run adds them on nightly Rust on Linux. A pull request's run that isn't the full run
-  # has no macOS leg, as CHANGES explains.
+  # watch mode's FSEvents. The weekly and dispatched runs add them on nightly Rust on Linux, as checks adds clippy. A
+  # pull request's run that isn't the full run has no macOS leg, as CHANGES explains.
   tests:
     needs: CHANGES
     if: needs.CHANGES.outputs.mago == 'true'
@@ -239,7 +241,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ${{ fromJSON((github.event_name != 'pull_request' || needs.CHANGES.outputs.full == 'true') && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
-        rust: ${{ fromJSON(needs.CHANGES.outputs.full == 'true' && format('["{0}", "nightly"]', needs.CHANGES.outputs.rust) || format('["{0}"]', needs.CHANGES.outputs.rust)) }}
+        rust: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && format('["{0}", "nightly"]', needs.CHANGES.outputs.rust) || format('["{0}"]', needs.CHANGES.outputs.rust)) }}
         exclude:
           - { os: macos-latest, rust: nightly }
 
