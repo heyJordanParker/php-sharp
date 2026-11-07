@@ -54,7 +54,8 @@ jobs:
 
       # patch-coverage runs only on a pull request. A pull request's run skips release-build unless it is the full run,
       # as mago.yml's CHANGES explains, so the run that passes is a full run, the bump's pull request's among them, or
-      # the push of the commit to master.
+      # the push of the commit to master. A push that reused its pull request's Linux results skipped checks, so it
+      # passes only with a dispatched full run, as the error says.
       - name: Find the Mago CI run that passed every job on the commit's tree
         id: passed
         uses: ./.github/actions/passed-tree
@@ -68,7 +69,7 @@ jobs:
           RUN: ${{ steps.passed.outputs.run }}
         run: |
           if [[ -z $RUN ]]; then
-            echo "::error::No Mago CI run passed every job on commit $GITHUB_SHA's tree, on master, on a pull request into master that names it or in a full run. Release a commit whose tree passed them."
+            echo "::error::No Mago CI run passed every job on commit $GITHUB_SHA's tree, on master, on a pull request into master that names it or in a full run. Push a branch at the commit with git push origin $GITHUB_SHA:refs/heads/full-run, dispatch one on it with gh workflow run mago.yml --ref full-run, and once it passes, rerun this run with gh run rerun $GITHUB_RUN_ID."
             exit 1
           fi
           echo "Every Mago CI job ran and passed on this tree in $RUN."
