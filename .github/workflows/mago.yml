@@ -323,19 +323,26 @@ jobs:
 
       - name: cargo test
         run: |
-          # PROOF for task 346: the closed-stdin test, 10 times beside the workspace's tests.
+          # PROOF for task 346: the closed-stdin test, every second for as long as the workspace's tests run.
           cargo test --workspace --locked --no-run
           binary=$(cargo test -p mago-extension --lib --locked --no-run --message-format=json \
             | jq -r 'select(.profile.test == true and .target.name == "mago_extension") | .executable')
           cargo test --workspace --locked > "$RUNNER_TEMP/workspace.log" 2>&1 &
           workspace=$!
+          runs=0
           failed=0
-          for run in $(seq 1 10); do
-            echo "=== 346 proof, run $run"
-            (cd crates/extension && "$binary" --exact worker::tests::a_request_written_to_a_worker_that_closed_its_stdin_holds_the_write_error_and_the_stderr) || failed=$((failed + 1))
+          while kill -0 "$workspace" 2> /dev/null; do
+            runs=$((runs + 1))
+            if ! (cd crates/extension && "$binary" --exact worker::tests::a_request_written_to_a_worker_that_closed_its_stdin_holds_the_write_error_and_the_stderr > "$RUNNER_TEMP/proof.log" 2>&1); then
+              failed=$((failed + 1))
+              echo "=== 346 proof: run $runs failed"
+              grep -E "left:|right:|panicked" "$RUNNER_TEMP/proof.log"
+            fi
+            sleep 1
           done
-          echo "=== 346 proof: $failed of 10 runs of the closed-stdin test failed"
+          echo "=== 346 proof: $failed of $runs runs of the closed-stdin test failed"
           wait "$workspace" || echo "=== 346 proof: the workspace run failed"
+          sed -n '/^failures:$/,/^test result/p' "$RUNNER_TEMP/workspace.log"
           grep -E "test result|FAILED|panicked" "$RUNNER_TEMP/workspace.log" | tail -n 40
           test "$failed" -eq 0
 
