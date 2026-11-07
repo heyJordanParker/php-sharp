@@ -53,6 +53,9 @@ SHARP,
     'app/Kinds/Outcome.sharp' => "namespace App.Kinds;\n\npublic enum Outcome\n{\n    case Paid(string id);\n    case Declined;\n}\n",
     'app/Kinds/Spot.sharp' => "namespace App.Kinds;\n\npublic struct Spot\n{\n    public Spot(public int x { get; }) { }\n}\n",
     'app/Kinds/Placed.sharp' => "namespace App.Kinds;\n\npublic event Placed(int orderId);\n",
+    // PHP names a class whatever its case, so a type named `Error` in any case is in a namespace of its own.
+    'app/Kinds/Error.sharp' => "namespace App.Kinds;\n\npublic class Error\n{\n}\n",
+    'app/Kinds/Upper/ERROR.sharp' => "namespace App.Kinds.Upper;\n\npublic class ERROR\n{\n}\n",
     ...array_merge(...array_map(
         static fn (string $name): array => ["app/Keywords/$name.sharp" => "namespace App.Keywords;\n\npublic class $name\n{\n    public string label() => \"$name\";\n}\n"],
         ['Case', 'Match', 'Print', 'Function', 'Echo', 'Include', 'Global'],
@@ -113,7 +116,7 @@ $kind = static function (string $type): string {
 
     return $reflection->isInterface() ? 'interface' : ($reflection->isEnum() ? 'enum' : 'class');
 };
-$read_files = glob("$root/app/{Http/Controllers,Kinds}/*.php", GLOB_BRACE);
+$read_files = glob("$root/app/{Http/Controllers,Kinds,Kinds/Upper}/*.php", GLOB_BRACE);
 sort($read_files);
 foreach ($read_files as $path) {
     $stated = $read($path);
@@ -146,11 +149,13 @@ glob:
 app/Http/Controllers/GoneController.php: class App\Http\Controllers\GoneController, no type loads
 app/Http/Controllers/PlainController.php: class App\Http\Controllers\PlainController, reflection: class
 app/Http/Controllers/SharpController.php: class App\Http\Controllers\SharpController, reflection: class
+app/Kinds/Error.php: class App\Kinds\Error, reflection: class
 app/Kinds/Outcome.php: class App\Kinds\Outcome, reflection: class
 app/Kinds/Placed.php: class App\Kinds\Placed, reflection: class
 app/Kinds/Shape.php: interface App\Kinds\Shape, reflection: interface
 app/Kinds/Size.php: enum App\Kinds\Size, reflection: enum
 app/Kinds/Spot.php: class App\Kinds\Spot, reflection: class
+app/Kinds/Upper/ERROR.php: class App\Kinds\Upper\ERROR, reflection: class
 app/Keywords/Case.php: parses, no type, Case
 app/Keywords/Echo.php: parses, no type, Echo
 app/Keywords/Function.php: parses, no type, Function

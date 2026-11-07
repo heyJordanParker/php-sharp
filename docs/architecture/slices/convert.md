@@ -119,7 +119,7 @@ $ git status --short
 RM src/Shop/Shelf.php -> src/Shop/Shelf.sharp
 ```
 
-The next `mago compile` writes `src/Shop/Shelf.php` again, as decision 081's discovery file, and its `info/exclude` block hides it, so `git status --ignored` shows it as `!!`, never as the tracked file come back.
+The next `mago compile` writes `src/Shop/Shelf.php` again, as decision 081's discovery file, and the `src/Shop/.gitignore` it writes beside it hides it, so `git status --ignored` shows it as `!!`, never as the tracked file come back.
 
 ### What a converted file loses
 
