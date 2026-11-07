@@ -15,9 +15,12 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# A pull request's new commit cancels its run in progress. Master runs one push at a time, and only the newest push
+# waits, since its tree holds every merge before it, so the Mac never tests a tree master already moved past. A
+# schedule, a dispatch and a tag each run in a group of their own.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.url || github.run_id }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.url || (github.event_name == 'push' && github.ref) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   # CI_PASSED is this workflow's one required check, so the workflow always runs, and LINUX, LINUX_PASSES,
   # LINUX_ZTS, HOSTS, PHP_EXTENSIONS and MACOS skip a change to documentation alone. docs/spec.md, README.md and
@@ -29,14 +32,20 @@ jobs:
   # ext/sharp/src or sharp/bin/build, runs the passes. The full run, nightly, dispatched or a release's bump, runs every
   # job in every mode, and its `full` output tells each job so.
   #
+  # A pull request's run that isn't the full run skips MACOS and LINUX_PASSES, so a merge never waits for the Mac, and
+  # the push to master runs them after the merge. In the runs sampled, LINUX_PASSES never failed without LINUX. So a
+  # defect only MACOS finds, of a disk that ignores case or of the arm64 JIT, lands on master first, and its red push
+  # opens an issue, as CI_PASSED does, for a pull request that fixes it forward.
+  #
   # A tree runs the suites once, as bors's "not rocket science" rule tests the exact tree that lands once. A push to
-  # master skips them when a pull request run passed them on its tree, as .github/actions/passed-tree explains, and
-  # links that run. The nightly run skips a tree a full run already passed. A tag runs none of them: it publishes only
-  # a tree whose full run passed all 9 test jobs, as release.yml does with Mago CI, so its MACOS never waits for the
-  # Mac runners behind the release's Apple builds. That run is the bump's own, whose RELEASE_BUMP passed, or a nightly
-  # or dispatched one. Another pull request's run isn't enough, because it runs each mode once, and CI_PASSED isn't,
-  # because it also passes a change to documentation alone, whose suites skipped. A tag publishes the images its bump's
-  # pull request pushed, as IMAGE explains, and CHANGES finds them.
+  # master skips them when a run passed all 8 suites on its tree, as .github/actions/passed-tree explains, and links
+  # that run: only the bump's pull request runs MACOS, so every other push runs them. The nightly run skips a tree a
+  # full run already passed. A tag runs none of them: it publishes only a tree whose full run passed all 9 test jobs,
+  # as release.yml does with Mago CI, so its MACOS never waits for the Mac runners behind the release's Apple builds.
+  # That run is the bump's own, whose RELEASE_BUMP passed, or a nightly or dispatched one. Another pull request's run
+  # isn't enough, because it runs each mode once, and CI_PASSED isn't, because it also passes a change to documentation
+  # alone, whose suites skipped. A tag publishes the images its bump's pull request pushed, as IMAGE explains, and
+  # CHANGES finds them.
   CHANGES:
     runs-on: ubuntu-24.04
     permissions:
@@ -48,6 +57,7 @@ jobs:
         ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
         && startsWith(github.event.pull_request.title, 'chore: release')) && 'true' || '' }}
     outputs:
+      base: ${{ steps.base.outputs.sha }}
       code: ${{ steps.diff.outputs.code }}
       engine: ${{ steps.diff.outputs.engine }}
       full: ${{ env.FULL }}
@@ -56,7 +66,8 @@ jobs:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # LINUX, LINUX_ZTS, HOSTS, MACOS, and PHP_EXTENSIONS for each of its two images on each of its two runners.
-      # LINUX_PASSES runs only for a change to the engine, and a run's success means it passed when it ran.
+      # LINUX_PASSES runs only for a change to the engine, and a run's success means it passed when it ran. A pull
+      # request's run skips MACOS unless it is the bump's full run, so the bump's is the one pull request run that counts.
       - name: Find the pull request run that passed every suite on this tree
         id: passed
         if: github.event_name == 'push' && github.ref_type == 'branch'
@@ -138,13 +149,27 @@ jobs:
           done < <(find "$RUNNER_TEMP/digests" -type f -print0)
           echo "run-id=$id" >> "$GITHUB_OUTPUT"
           echo "::notice::IMAGE_TAGS tags the images run $RUN pushed from commit $GITHUB_SHA's tree, and IMAGE builds none."
+      # A push's changes start at the commit of master's newest push run that GitHub didn't cancel, so a merge whose
+      # pending run a later push replaced still counts, and a red run's issue names every commit it tests. Pushes run
+      # one at a time, so every earlier run has ended. Only an earlier run counts, so a rerun of an old run diffs from
+      # the run before it, as its first attempt did. With none among the last 100 runs, every job runs.
+      - name: Find the commit of master's last push run that ran
+        id: base
+        if: github.event_name == 'push' && github.ref_type == 'branch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/sharp.yml/runs?branch=master&event=push&status=completed&per_page=100" \
+            --jq '[.workflow_runs[] | select(.conclusion != "cancelled" and .id < (env.GITHUB_RUN_ID | tonumber))][0].head_sha // empty')
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "This push's changes start at ${sha:-no commit, so every job runs}."
       - name: Find changes outside documentation, and changes to the engine
         id: diff
         if: github.ref_type != 'tag' && !steps.passed.outputs.run && !steps.full.outputs.run
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha || steps.base.outputs.sha }}
         run: |
-          if [[ $FULL ]]; then
+          if [[ $FULL || -z $BASE ]]; then
             echo code=true >> "$GITHUB_OUTPUT"
             echo engine=true >> "$GITHUB_OUTPUT"
             exit 0
@@ -244,10 +269,11 @@ jobs:
           header="$(jq -r 'select(.reason == "build-script-executed" and (.package_id | contains("mago-sharp-bridge"))) | .out_dir | ltrimstr("/src/")' "$RUNNER_TEMP/build.json")/sharp_unit.h"
           diff -u ext/sharp/sharp_unit.h "$header"
   # Each of PHP's 16 optimizer passes alone, on the build LINUX tests, so a pass that drops a PHP# mark cannot hide
-  # behind another pass. CHANGES runs it for a change to the engine's own code, and the full run runs it.
+  # behind another pass. CHANGES runs it for a change to the engine's own code, and the full run runs it. A pull
+  # request's run skips it unless it is the full run, and the push to master runs it, as CHANGES explains.
   LINUX_PASSES:
     needs: CHANGES
-    if: needs.CHANGES.outputs.engine == 'true'
+    if: needs.CHANGES.outputs.engine == 'true' && (github.event_name != 'pull_request' || needs.CHANGES.outputs.full == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -462,12 +488,13 @@ jobs:
             --volume "$PWD:/src" \
             --workdir /src \
             php-sharp-extensions sharp/bin/test --installed --opcache --repeat --passes --jit
-  # On a pull request, the checks only macOS can fail: the engine's build, mago compile and the plain run on a disk that
-  # ignores case, the census and the differential, and both JITs, because no other pull request job runs on arm64. Linux
-  # runs every other mode on the same tests, and the full run runs them all here as well.
+  # The checks only macOS can fail: the engine's build, mago compile and the plain run on a disk that ignores case, the
+  # census and the differential, and both JITs on arm64. Linux runs every other mode on the same tests, and the full run
+  # runs them all here as well. A pull request's run skips it unless it is the full run, so a merge never waits for the
+  # Mac, and the push to master runs it, as CHANGES explains.
   MACOS:
     needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true'
+    if: needs.CHANGES.outputs.code == 'true' && (github.event_name != 'pull_request' || needs.CHANGES.outputs.full == 'true')
     # The self-hosted Mac runners run it, except for a pull request from another repository: this one is public, and
     # head.repo.fork can't tell, because it is itself a fork of php/php-src. A job never installs on them, so they
     # check that Homebrew already has the build's formulae and build without ccache. Only the runner labelled
@@ -477,8 +504,19 @@ jobs:
     # php-src's own macOS jobs in test-suite.yml leave 180.
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'macos-arm64-suite' || 'macos-latest' }}
     timeout-minutes: 120
+    # The 12-core Mac runs this job beside the other runners' jobs and the work the suite checks, and two or three jobs
+    # that each took every core held its load between 200 and 480 for hours. So every job on the self-hosted Macs caps
+    # its parallelism: CARGO_BUILD_JOBS sets cargo's jobs, and sharp/bin/build's make and sharp/bin/test's run-tests.php
+    # read it as their -j. RUST_TEST_THREADS sets libtest's threads, RAYON_NUM_THREADS a rayon pool that sets no size of
+    # its own, MAGO_THREADS mago's pool, which sets its own size and so never reads RAYON_NUM_THREADS, and
+    # LEAN_NUM_THREADS Lean's.
     env:
       FORMULAE: autoconf bison curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
+      CARGO_BUILD_JOBS: 4
+      RUST_TEST_THREADS: 4
+      RAYON_NUM_THREADS: 4
+      MAGO_THREADS: 4
+      LEAN_NUM_THREADS: 2
     steps:
       # actions/checkout's clean deletes sharp/build. Each job on the self-hosted Macs keeps it instead, as
       # .github/actions/clean-kept-build explains, so the engine and mago rebuild only what changed, which takes
@@ -654,35 +692,26 @@ jobs:
       contents: read
       issues: write
     steps:
+      # Only for the actions below.
+      - name: git checkout
+        if: always()
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
       - name: Every job passed, or skipped a change that doesn't need it
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
           allowed-skips: LINUX, LINUX_PASSES, LINUX_ZTS, HOSTS, PHP_EXTENSIONS, MACOS, RELEASE_BUMP, RELEASE_ASSETS, IMAGE
           jobs: ${{ toJSON(needs) }}
-      # A red nightly run fails no pull request, so it opens one issue, or comments on the one still open, and the next
-      # tag can't wait on a failure nobody saw.
-      - name: Open an issue for the failed nightly run
-        if: failure() && github.event_name == 'schedule'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          title="The nightly PHP# CI run failed"
-          body="The nightly run on master's $GITHUB_SHA failed: $RUN"
-          issue=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
-          if [[ -n $issue ]]; then
-            gh issue comment "$issue" --body "$body"
-          else
-            gh issue create --title "$title" --body "$body"
-          fi
+      # As .github/actions/red-master-issue explains.
+      - name: Open an issue for the failed run on master
+        if: failure() && (github.event_name == 'schedule' || github.event_name == 'push' && github.ref_type == 'branch')
+        uses: ./.github/actions/red-master-issue
+        with:
+          title: ${{ github.event_name == 'schedule' && 'The nightly PHP# CI run failed' || 'A push to master failed PHP# CI' }}
+          range: ${{ needs.CHANGES.outputs.base && format('{0}..{1}', needs.CHANGES.outputs.base, github.sha) || '' }}
       # Master's full run's jobs saved their targets when they ended, so this job, which needs them all, deletes the
       # ones the new targets replaced. No other run saves one.
-      - name: git checkout
-        if: always() && needs.CHANGES.outputs.full == 'true' && github.ref == 'refs/heads/master'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          sparse-checkout: .github/actions
       - name: Delete the Mago target caches this run replaced
         if: always() && needs.CHANGES.outputs.full == 'true' && github.ref == 'refs/heads/master'
         uses: ./.github/actions/mago-cache-prune

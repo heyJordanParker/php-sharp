@@ -1124,7 +1124,9 @@ mod tests {
     fn commit_all(root: &Path) {
         let commit = ["-c", "user.name=test", "-c", "user.email=test@localhost", "commit", "--quiet", "-m", "plain"];
         for arguments in [&["init", "--quiet"][..], &["add", "--all"], &commit] {
-            let output = std::process::Command::new("git").args(arguments).current_dir(root).output().unwrap();
+            let output =
+                mago_database::process::output(std::process::Command::new("git").args(arguments).current_dir(root))
+                    .unwrap();
             assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
         }
     }
@@ -1179,15 +1181,22 @@ mod tests {
         ]
     }
 
-    /// An interface `Named{index}` whose PHPDoc gives `name()` a `non-empty-string`, which PHP# writes `string`, and its
-    /// plain PHP caller `Greeter{index}`, which passes the name where a `non-empty-string` goes. Once the interface
-    /// converts, the caller gains an issue that points into no converted file.
-    fn named(index: usize) -> [(String, String); 2] {
+    /// An interface `Named{index}` whose `name()` inherits a `non-empty-string` from the PHPDoc of its plain PHP parent
+    /// `Base{index}`, which PHP# writes `string`, and its plain PHP caller `Greeter{index}`, which passes the name where
+    /// a `non-empty-string` goes. Once the interface converts, the caller gains an issue that points into no converted
+    /// file.
+    fn named(index: usize) -> [(String, String); 3] {
         [
+            (
+                format!("Plain/Base{index}.php"),
+                format!(
+                    "<?php\n\nnamespace Generated\\Plain;\n\ninterface Base{index}\n{{\n    /** @return non-empty-string */\n    public function name(): string;\n}}\n"
+                ),
+            ),
             (
                 format!("Contracts/Named{index}.php"),
                 format!(
-                    "<?php\n\nnamespace Generated\\Contracts;\n\ninterface Named{index}\n{{\n    /** @return non-empty-string */\n    public function name(): string;\n}}\n"
+                    "<?php\n\nnamespace Generated\\Contracts;\n\nuse Generated\\Plain\\Base{index};\n\ninterface Named{index} extends Base{index}\n{{\n    public function name(): string;\n}}\n"
                 ),
             ),
             (
@@ -1349,7 +1358,8 @@ final class CountsWorkers implements Plugin, BeforeAnalysisHook, AfterAnalysisHo
     fn php_sdk() -> Option<PathBuf> {
         let autoload = Path::new(env!("CARGO_MANIFEST_DIR")).join("vendor/autoload.php");
         let available = autoload.is_file()
-            && std::process::Command::new("php").arg("--version").output().is_ok_and(|output| output.status.success());
+            && mago_database::process::output(std::process::Command::new("php").arg("--version"))
+                .is_ok_and(|output| output.status.success());
         assert!(
             available || std::env::var_os("MAGO_REQUIRE_PHP_SDK_TESTS").is_none(),
             "PHP and vendor dependencies are required for the extension host tests"
@@ -1879,7 +1889,9 @@ final class CountsWorkers implements Plugin, BeforeAnalysisHook, AfterAnalysisHo
             &["-c", "protocol.file.allow=always", "submodule", "add", "--quiet", &source, "src/Library"][..],
             &["-c", "user.name=test", "-c", "user.email=test@localhost", "commit", "--quiet", "-m", "library"],
         ] {
-            let output = std::process::Command::new("git").args(arguments).current_dir(&root).output().unwrap();
+            let output =
+                mago_database::process::output(std::process::Command::new("git").args(arguments).current_dir(&root))
+                    .unwrap();
             assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
         }
 

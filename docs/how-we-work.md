@@ -47,14 +47,22 @@ New example-marker or run-comment syntax lands in `sharp/bin/spec` one PR before
 
 One feature is one PR: the checker in `sharp/mago/`, the engine, the standard library, the spec and their tests change together, and every CI gate runs on it.
 
-Master requires CI to pass, and a branch must include the latest master before it merges, so master holds only trees CI tested. That costs no second run: a push to master finds the pull request run that passed the same tree, skips the suites and links that run. A red master is fixed before anything else merges.
+Master requires CI to pass, and a branch must include the latest master before it merges, so master holds only trees CI tested.
+
+A PR's CI skips the jobs that run on the Architect's Mac, so a merge never waits for it: `MACOS` in `sharp.yml`, and `tests (macos-latest)`, `release-build` and `plain-php (macos-latest)` in `mago.yml`. It skips `LINUX_PASSES` too, which never failed without `LINUX` in the runs sampled. Only a release's bump PR still runs them and `LINUX_PASSES`, because its full runs are the ones the tag checks. Master runs one push at a time, and a newer push replaces the one still waiting. A push run runs every job after the merge, the Linux suites again included, on every change since master's last push run that wasn't cancelled. So three kinds of defect now land on master first:
+
+- one on a disk that ignores case
+- one in the arm64 JIT
+- one in Mago code that only macOS runs, such as the watch mode's FSEvents
+
+A red push run opens one issue, or comments on the one still open, with the range of commits it tests, and a PR fixes it forward. No one reverts first: a merge commit can't land again cleanly once reverted, a revert hides a PR that merged on top of it, and it would revert healthy merges that failed only on the Mac's load. A red master gets a fix PR first, and other merges continue. A release tags only while master's newest finished push run is green. The bump's own push run may be cancelled by a later merge, and its tag doesn't need it: the tag's gates accept the bump PR's full run, as the release path explains.
 
 ## A release's path
 
 A release tests and builds once, on the bump's PR, and the tag publishes those same files:
 
-1. The bump's PR has a title that starts with `chore: release`. It changes only what `php sharp/mago/scripts/set-version.php <version>` writes, `PHP_SHARP_VERSION` in `ext/sharp/php_sharp.h`, the version `Zend/tests/sharp/ri_sharp.phpt` expects, and the release's section of `sharp/CHANGELOG.md`. Its CI checks that. The title makes its run the full run, which runs all 22 modes on every build, and the run builds every release asset beside the suites: the six `mago` binaries with their attestations, Mago's source archives, their SHA-256s and both runtime images.
-2. The bump merges once `CI_PASSED` passes, which needs the jobs that build the assets too.
+1. The bump's PR has a title that starts with `chore: release`. It changes only what `php sharp/mago/scripts/set-version.php <version>` writes, `PHP_SHARP_VERSION` in `ext/sharp/php_sharp.h`, the version `Zend/tests/sharp/ri_sharp.phpt` expects, and the release's section of `sharp/CHANGELOG.md`. Its CI checks that. The title makes its run the full run, which runs all 22 modes on every build and every Mago job, the macOS ones included, and the run builds every release asset beside the suites: the six `mago` binaries with their attestations, Mago's source archives, their SHA-256s and both runtime images.
+2. The bump merges once `CI_PASSED` passes, which needs the jobs that build the assets too. Update the bump's PR with master right before merging it, so its own full run covers the merge commit.
 3. The bump's merge commit is tagged `v<version>`, and the tag is pushed. A tag on any other commit fails.
 4. The tag publishes the assets the bump's PR built, and builds none. If no run of the PR passed, or its assets expired or were built from another tree, the tag builds them itself, and its run warns so. A bump from a fork builds no assets, so its tag always builds them.
 
@@ -69,7 +77,7 @@ A mistake that no check can catch yet goes in `docs/architecture/guards.md`, wit
 
 ## Test runs
 
-- A PR runs each PHP# engine mode once, on the build it is about. Linux runs plain PHP, the three runs with cached bytecode and both JIT compilers, 6 modes. The thread-safe build runs plain PHP, the shared-memory run and both JIT compilers, 4 modes. macOS runs plain PHP and both JIT compilers, 3 modes, the only arm64 JIT runs a PR has. Each of PHP's 16 optimizer passes also runs alone on Linux, unless the PR changes only Mago, the Composer plugin, the test fixtures, tests or documentation. Every night, master runs all 22 modes on every build, and so does a release's bump PR. A PR can't merge until its runs pass. A PR that changes only documentation skips them, and GitHub counts the skipped checks as passing.
+- A PR runs each PHP# engine mode once, on the build it is about. Linux runs plain PHP, the three runs with cached bytecode and both JIT compilers, 6 modes. The thread-safe build runs plain PHP, the shared-memory run and both JIT compilers, 4 modes. After the merge, the push to master also runs macOS's plain PHP and both JIT compilers, 3 modes, the only arm64 JIT runs outside the full run, and each of PHP's 16 optimizer passes alone on Linux, unless the PR changes only Mago, the Composer plugin, the test fixtures, tests or documentation. Every night, master runs all 22 modes on every build, and so does a release's bump PR. A PR can't merge until its runs pass. A PR that changes only documentation skips them, and GitHub counts the skipped checks as passing.
 - A builder runs only these locally, and leaves the other runs to CI:
   - `sharp/bin/test`, the run without opcache. It first builds `sharp/mago/` with `sharp/bin/build-mago`, as `cargo test --workspace` builds it, in the dev profile `sharp/mago/Cargo.toml` explains, and runs the `mago` that build makes.
   - When the change is under `sharp/mago/`, in `sharp/mago/`: `rustup run 1.97.0 cargo test --workspace --locked --target-dir ../build/<os>-<arch>/mago`, `rustup run 1.97.0 cargo clippy --workspace --all-targets --all-features --target-dir ../build/<os>-<arch>/mago -- -D warnings` and `rustup run 1.97.0 cargo fmt --all -- --check`. 1.97.0 is the toolchain `ext/sharp/rust-toolchain.toml` pins and `sharp/bin/build-mago` builds with. `sharp/mago/` has no toolchain file of its own, so a plain `cargo` there runs the machine's default, 1.92.0 on the builders' Mac, which is older than the `rust-version` Mago needs, and a toolchain other than the pin would compile every crate a second time. The target folder is the one `sharp/bin/test` builds `mago` in, so a slot keeps every Mago build in one folder, where `cargo test` without it wrote a second folder of 49 GB.

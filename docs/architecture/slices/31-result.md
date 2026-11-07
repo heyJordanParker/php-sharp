@@ -301,7 +301,7 @@ sharp/mago/crates/
 │   │                                         type arguments; Propagate as a conditional with a RETURN node
 │   ├── src/lower/types.rs                 <- the header and bounds of a generic enum's case classes
 │   └── tests/lower.rs                     <- one tree per row of "The PHP the bridge emits"
-└── formatter/, linter/, fingerprint/, hir/, sharp-lean/
+└── formatter/, linter/, fingerprint/, sharp-lean/
                                            <- each exhaustive match on Expression takes Propagate: the formatter prints
                                               it, sharp-lean reports it unmodeled, the others treat it as its operand
 sharp/composer/library/Sharp/
