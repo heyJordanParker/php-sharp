@@ -152,9 +152,16 @@ jobs:
         id: diff
         if: github.ref_type != 'tag' && !steps.passed.outputs.run && !steps.full.outputs.run
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ $FULL ]]; then
+          # A push diffs from the commit of master's newest push run that GitHub didn't cancel, so a merge whose
+          # pending run a later push replaced still counts. With none among the last 100 runs, every job runs.
+          if [[ $GITHUB_EVENT_NAME == push ]]; then
+            BASE=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/sharp.yml/runs?branch=master&event=push&status=completed&per_page=100" \
+              --jq '[.workflow_runs[] | select(.conclusion != "cancelled")][0].head_sha // empty')
+          fi
+          if [[ $FULL || -z $BASE ]]; then
             echo code=true >> "$GITHUB_OUTPUT"
             echo engine=true >> "$GITHUB_OUTPUT"
             exit 0

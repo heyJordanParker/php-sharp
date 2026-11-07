@@ -39,6 +39,7 @@ jobs:
   CHANGES:
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
     defaults:
       run:
@@ -69,9 +70,15 @@ jobs:
       - name: Find changes to Mago
         id: diff
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ $FULL ]]; then
+          # A push diffs from the commit of master's newest push run GitHub didn't cancel, as sharp.yml's CHANGES does.
+          if [[ $GITHUB_EVENT_NAME == push ]]; then
+            BASE=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mago.yml/runs?branch=master&event=push&status=completed&per_page=100" \
+              --jq '[.workflow_runs[] | select(.conclusion != "cancelled")][0].head_sha // empty')
+          fi
+          if [[ $FULL || -z $BASE ]]; then
             echo mago=true >> "$GITHUB_OUTPUT"
             exit 0
           fi
