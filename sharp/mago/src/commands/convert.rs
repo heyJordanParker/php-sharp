@@ -50,6 +50,7 @@ use mago_database::matcher::contains_glob_metacharacters;
 use mago_names::resolver::NameResolver;
 use mago_orchestrator::Orchestrator;
 use mago_orchestrator::service::incremental_analysis::compile::Compilation;
+use mago_orchestrator::service::incremental_analysis::compile::LOWERING_PANIC;
 use mago_reporting::CompiledIgnoreSet;
 use mago_reporting::IssueCollection;
 use mago_reporting::Level;
@@ -153,10 +154,11 @@ struct Candidate {
     text: Vec<u8>,
 }
 
-/// What one analysis and in-memory compile of the project found: each issue, and each file `mago compile` refuses.
+/// What one analysis and in-memory compile of the project found: each issue, and each file `mago compile` refuses,
+/// with the errors that refuse it.
 struct Proof {
     issues: Issues,
-    refused: HashSet<Vec<u8>>,
+    refused: HashMap<Vec<u8>, IssueCollection>,
 }
 
 /// What a proof found that the plain project's didn't: each converted file's own issues, by its plain name, the other
@@ -570,8 +572,10 @@ impl<'configuration> Session<'configuration> {
         )?;
         let refused = compilations
             .into_iter()
-            .filter(|(_, compilation)| matches!(compilation, Compilation::Refused(_)))
-            .filter_map(|(file_id, _)| database.get(&file_id).ok().map(|file| file.name.to_vec()))
+            .filter_map(|(file_id, compilation)| match compilation {
+                Compilation::Refused(errors) => database.get(&file_id).ok().map(|file| (file.name.to_vec(), errors)),
+                Compilation::Accepted(_) => None,
+            })
             .collect();
         tracing::trace!("The project's proof ran in {:?}.", start.elapsed());
 
@@ -703,15 +707,20 @@ fn judge(plain: &Proof, proof: &Proof, swaps: &[&Candidate]) -> Judgement {
             judgement.others.push(found);
         }
     }
-    for file in proof.refused.difference(&plain.refused) {
-        let written = format!("{}: mago compile would refuse it", display(file));
+    for (file, errors) in proof.refused.iter().filter(|(file, _)| !plain.refused.contains_key(*file)) {
+        // A lowering that panicked names a defect of the checker, so its text is the reason, never hidden.
+        let panicked: String = errors
+            .iter()
+            .filter(|error| error.code.as_deref() == Some(LOWERING_PANIC))
+            .map(|error| format!(": {}", error.message))
+            .collect();
+        let written = format!("{}: mago compile would refuse it{panicked}", display(file));
         let found = |shown: String| Found { shown, written: written.clone(), files: BTreeSet::from([file.clone()]) };
         match owner(file) {
-            Some(candidate) => judgement
-                .own
-                .entry(candidate.name.clone())
-                .or_default()
-                .push(found(format!("{}: mago compile would refuse it once converted", display(&candidate.name)))),
+            Some(candidate) => judgement.own.entry(candidate.name.clone()).or_default().push(found(format!(
+                "{}: mago compile would refuse it once converted{panicked}",
+                display(&candidate.name)
+            ))),
             None => judgement.others.push(found(written.clone())),
         }
     }
@@ -1805,6 +1814,29 @@ final class CountsWorkers implements Plugin, BeforeAnalysisHook, AfterAnalysisHo
         assert!(lines[4].contains("int item") && lines[8].contains("int size()"), "{written}");
     }
 
+    /// A converted file whose lowering panicked fails its proof with the panic's text, a defect of the checker that the
+    /// compile's refusal names beside its other errors.
+    #[test]
+    fn a_lowering_that_panicked_refuses_its_file_with_the_panic() {
+        let candidate = Candidate {
+            name: b"src/Box.php".to_vec(),
+            path: None,
+            original: b"<?php\n\nnamespace App;\n\nfinal class Box\n{\n}\n".to_vec(),
+            text: Vec::new(),
+        };
+        let errors = IssueCollection::from(vec![
+            Issue::error("A defect of the checker: boom").with_code(LOWERING_PANIC),
+            Issue::error("Invalid return.").with_code("invalid-return-statement"),
+        ]);
+        let plain = Proof { issues: Issues::default(), refused: HashMap::new() };
+        let proof = Proof { issues: Issues::default(), refused: HashMap::from([(b"src/Box.sharp".to_vec(), errors)]) };
+
+        let judgement = judge(&plain, &proof, &[&candidate]);
+
+        let shown: Vec<&str> = judgement.own[&candidate.name].iter().map(|found| found.shown.as_str()).collect();
+        assert_eq!(shown, ["src/Box.php: mago compile would refuse it once converted: A defect of the checker: boom"]);
+    }
+
     /// Two issues of one member with one message stay two, told apart by their line of the PHP#, and an issue outside
     /// any class-like keeps its line.
     #[test]
@@ -1821,8 +1853,8 @@ final class CountsWorkers implements Plugin, BeforeAnalysisHook, AfterAnalysisHo
         };
         let issues =
             Issues::from([issue(9, &["Box::size()", "Box"]), issue(10, &["Box::size()", "Box"]), issue(3, &[])]);
-        let plain = Proof { issues: Issues::default(), refused: HashSet::new() };
-        let proof = Proof { issues, refused: HashSet::new() };
+        let plain = Proof { issues: Issues::default(), refused: HashMap::new() };
+        let proof = Proof { issues, refused: HashMap::new() };
 
         let judgement = judge(&plain, &proof, &[&candidate]);
 
