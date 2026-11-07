@@ -938,26 +938,27 @@ where
         if (is_map_literal && takes_map_literal) || (!is_map_literal && takes_list_literal) {
             // Each element lands in the value type of the collections that take the literal, so a literal it holds is
             // checked there, as `["x": ['a', 'b']]` in a `Map<string, Map<int, string>>`.
-            let values: Vec<TAtomic> = collections
-                .clone()
-                .filter_map(|array| match (is_map_literal, array) {
-                    (true, TArray::Keyed(TKeyedArray { parameters: Some((_, value)), .. })) => Some(&value.types),
-                    (false, TArray::List(list)) => Some(&list.element_type.types),
-                    (false, TArray::Set(element)) => Some(&element.types),
-                    _ => None,
-                })
-                .flat_map(|types| types.iter().cloned())
-                .collect();
-            if !values.is_empty() {
-                let value_type = TUnion::from_vec(values);
-                for element in &literal.elements {
-                    let element_value = match element {
-                        ArrayElement::KeyValue(element) => element.value,
-                        ArrayElement::Value(element) => element.value,
-                        _ => continue,
-                    };
-                    refused |= check_sharp_literal_kind(context, block_context, artifacts, element_value, &value_type);
-                }
+            // `never` keeps the union whole where no collection names its value type, and judges nothing there.
+            let value_type = TUnion::from_vec(
+                collections
+                    .clone()
+                    .filter_map(|array| match (is_map_literal, array) {
+                        (true, TArray::Keyed(TKeyedArray { parameters: Some((_, value)), .. })) => Some(&value.types),
+                        (false, TArray::List(list)) => Some(&list.element_type.types),
+                        (false, TArray::Set(element)) => Some(&element.types),
+                        _ => None,
+                    })
+                    .flat_map(|types| types.iter().cloned())
+                    .chain([TAtomic::Never])
+                    .collect(),
+            );
+            for element in &literal.elements {
+                let element_value = match element {
+                    ArrayElement::KeyValue(element) => element.value,
+                    ArrayElement::Value(element) => element.value,
+                    _ => continue,
+                };
+                refused |= check_sharp_literal_kind(context, block_context, artifacts, element_value, &value_type);
             }
             continue;
         }
