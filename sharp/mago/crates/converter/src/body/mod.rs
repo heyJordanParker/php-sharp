@@ -32,6 +32,7 @@ use mago_syntax::cst::Access;
 use mago_syntax::cst::Block;
 use mago_syntax::cst::ClassLikeMemberSelector;
 use mago_syntax::cst::Expression;
+use mago_syntax::cst::Hint;
 use mago_syntax::cst::IfBody;
 use mago_syntax::cst::Literal;
 use mago_syntax::cst::Statement;
@@ -252,10 +253,7 @@ impl<'input> Converter<'input, '_> {
     fn try_statement(&mut self, r#try: &Try<'_>) {
         self.block(&r#try.block);
         for clause in &r#try.catch_clauses {
-            match &clause.hint {
-                mago_syntax::cst::Hint::Identifier(identifier) => self.rename_class(identifier),
-                hint => self.refuse(hint.span(), "a `catch` of several types is not converted yet"),
-            }
+            self.caught(&clause.hint);
             // A `catch` variable is bound by the clause, never declared by an assignment.
             if let Some(variable) = &clause.variable {
                 self.misnamed_local(variable);
@@ -269,6 +267,18 @@ impl<'input> Converter<'input, '_> {
         }
         if let Some(clause) = &r#try.finally_clause {
             self.block(&clause.block);
+        }
+    }
+
+    /// The classes a `catch` takes, as a union of them, `catch (Timeout | Refused failure)`, takes several.
+    fn caught(&mut self, hint: &Hint<'_>) {
+        match hint {
+            Hint::Identifier(identifier) => self.rename_class(identifier),
+            Hint::Union(union) => {
+                self.caught(union.left);
+                self.caught(union.right);
+            }
+            hint => self.refuse(hint.span(), "a `catch` of this type has no PHP# form: a `catch` takes classes"),
         }
     }
 

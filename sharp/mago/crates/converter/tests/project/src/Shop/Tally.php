@@ -102,6 +102,20 @@ final class Tally
         }
     }
 
+    // A `catch` of several classes, which catches either.
+    public function bounded(int $count): string
+    {
+        try {
+            if ($count < 0) {
+                throw new \LogicException('negative');
+            }
+
+            return 'items: ' . $this->checked($count);
+        } catch (\RuntimeException|\LogicException $failure) {
+            return $failure->getMessage();
+        }
+    }
+
     private function checked(int $count): int
     {
         if ($count === 0) {

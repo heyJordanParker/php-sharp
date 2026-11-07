@@ -299,6 +299,13 @@ impl Converter<'_, '_> {
                 self.untyped(access.array, "an index");
                 self.untyped(access.index, "a key");
                 self.numeric_key(access.array, access.index);
+                // A `List` read past its end throws, and `getOrNull(i)` gives null there, as PHP's `??` reads it.
+                if self.is(access.array, &[Kind::List]) && self.is(access.index, &[Kind::Int]) {
+                    let list = self.render(access.array);
+                    let list = if super::is_primary(access.array) { list } else { format!("({list})") };
+                    let index = self.render(access.index);
+                    self.edits.replace(lhs.span(), format!("{list}.getOrNull({index})"));
+                }
                 return self.expression(rhs, None);
             }
             BinaryOperator::NullCoalesce(_) => None,

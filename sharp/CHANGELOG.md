@@ -21,6 +21,8 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
   - a `string` that may be null in `.` or an interpolated string, as `` `${title ?? ""}` ``, since PHP shows `null` as nothing
   - `(bool)`, as the comparison a condition of the value's type gives, as `(count != 0)`
   - `array-key`, as `int|string`, and so a plain `array`, as `Map<int|string, Any?>`, where each key the body reads or writes by is an `int` or a string literal PHP keeps a string
+  - `isset($list[$i])` and `$list[$i] ?? $x`, through `list.getOrNull(i)`
+  - a `catch` of several classes, as `catch (Timeout|Refused e)`
 
 ## [0.6.4] - 2026-11-07
 

@@ -157,8 +157,8 @@ impl Converter<'_, '_> {
         Some((if parts > 0 && !top { format!("({test})") } else { test }, value))
     }
 
-    /// `isset($a, $b)` as `a != null && b != null`, and a `Map` key as `map.get(key) != null`, since `get` gives null
-    /// for a missing key, as PHP's `isset` reads it (spec section 12). `negated` writes `!isset(…)`, which replaces
+    /// `isset($a, $b)` as `a != null && b != null`, a `Map` key as `map.get(key) != null`, since `get` gives null for a
+    /// missing key, as PHP's `isset` reads it, and a `List` index as `list.getOrNull(i) != null` (spec section 12). `negated` writes `!isset(…)`, which replaces
     /// `expression`, as the comparisons that test the opposite, since `!` binds tighter than `!=`.
     pub(super) fn isset(&mut self, expression: &Expression<'_>, isset: &IssetConstruct<'_>, negated: bool) {
         let compared = if negated { "==" } else { "!=" };
@@ -178,11 +178,24 @@ impl Converter<'_, '_> {
                     let map = if is_primary(access.array) { map } else { format!("({map})") };
                     format!("{map}.get({}) {compared} null", self.render(access.index))
                 }
+                // A `List` gives `getOrNull(i)` past its end, where PHP's `isset` is false (spec section 12).
+                Expression::ArrayAccess(access)
+                    if self.is(access.array, &[Kind::List]) && self.is(access.index, &[Kind::Int]) =>
+                {
+                    if self.unread(access.array, "isset") {
+                        return;
+                    }
+                    self.untyped(access.array, "an index");
+                    self.untyped(access.index, "an index");
+                    let list = self.render(access.array);
+                    let list = if is_primary(access.array) { list } else { format!("({list})") };
+                    format!("{list}.getOrNull({}) {compared} null", self.render(access.index))
+                }
                 Expression::ArrayAccess(access) => {
                     let shown = self.shown(access.array);
                     return self.refuse(
                         value.span(),
-                        format!("`isset` at an index of `{shown}` is not converted yet: PHP# reads a missing key only from a `Map`"),
+                        format!("`isset` at an index of `{shown}` has no PHP# form: PHP# reads a missing key from a `Map`, and a missing `int` index from a `List`"),
                     );
                 }
                 Expression::Variable(Variable::Direct(_)) | Expression::Access(_) => {

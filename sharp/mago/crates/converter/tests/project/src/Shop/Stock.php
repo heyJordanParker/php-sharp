@@ -78,6 +78,13 @@ final class Stock
         return $keys;
     }
 
+    // A `List` index that may be missing, behind `isset` and `??`, past the end and below 0.
+    /** @param list<string> $jobs */
+    public function nth(array $jobs, int $at): string
+    {
+        return (isset($jobs[$at]) ? 'has ' : 'no ') . ($jobs[$at] ?? 'none');
+    }
+
     // A lambda that ignores the index plain PHP passes it, which its PHP# form takes as `unused`.
     /** @return list<string> */
     public function marked(Lines $lines): array

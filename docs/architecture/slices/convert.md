@@ -214,6 +214,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - `$list[] = $value` → `list.add(value)`. Tree.
 - `empty($items)` → `items.isEmpty()`, and `unset($map[$key])` → `map.remove(key)`. Both.
 - `isset($map[$key])` → `map.get(key) != null`, since a `Map` read gives null for a missing key (line 1625) and `isset` is false for a null value. Both.
+- `isset($list[$i])` and `$list[$i] ?? $x` of an `int` index → `list.getOrNull(i) != null` and `list.getOrNull(i) ?? x`, since a `List` read past its end throws, and `getOrNull` gives null there and below 0 (line 1624). Both.
 - `isset` and `empty` of a property → the property's null check or truthiness test, only when the property always holds a value, as one with a default or a promoted one does, and no class its object may be declares `__isset` or `__get`. PHP gives a typed property that holds no value as unset, and asks those methods, where PHP# reads the property. `isset` and `empty` at a `List` index refuse, since PHP reads past the end without an error. Both.
 - `['id' => $id] = $row;` of a `Map` variable → one read per key, `const id = row.get("id");`, each a `TValue?` (lines 1625 and 1664). Both. 16 files. Destructuring by position, a `Map` a call gives, and destructuring inside another expression refuse.
 - `array-key` → `int|string`, and so `array` with no PHPDoc type, PHP's `array<array-key, mixed>`, → `Map<int|string, Any?>` (line 1514). A PHP array crosses into a `Map` keyed by `int|string` with each key as PHP holds it, so a keyed loop over one gives PHP's keys: on the engine, `['email' => 'a', 5 => 'x', '42' => 'y']` gives `'email'`, `5` and `42` both ways. A key the body reads, writes, tests or removes by is an `int`, or a string literal PHP keeps a string, as `'email'`. Any other key refuses, as a `string` local and `'42'`: PHP turns a string of an integer's digits into the `int`, and the `Map` keeps it a string, so the two reach different entries. Both.
@@ -305,7 +306,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - `(bool)` → the comparison a condition of the value's type gives (section 21), as `(count != 0)` and `!items.isEmpty()`, since PHP# has no `(bool)` and a comparison replaces it (line 4719). A value the analysis types `bool` refuses, since a type only PHPDoc gives is no proof of the value, and so does a value of no test, as a `mixed`. Both.
 - `(array)` and `(object)` → refuses (line 4719). Tree.
 - An `int` literal where a `float` goes, which PHP turns into a `float` → the `float` of the value it writes, so `1` is `1.0`, the octal `017` is `15.0` and the hex `0x1F` is `31.0`. Type.
-- `try`, `catch` and `finally` stay, and `catch (Exception $e)` → `catch (Exception e)` (line 6151). Tree.
+- `try`, `catch` and `finally` stay, and `catch (Exception $e)` → `catch (Exception e)` (line 6151), `catch (Timeout|Refused $e)` → `catch (Timeout|Refused e)`, which the bridge lowers to PHP's own multi-catch. Both.
 
 ### Section 25. Referring to classes
 
