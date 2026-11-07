@@ -8,7 +8,6 @@ use mago_codex::ttype::atomic::scalar::TScalar;
 use mago_codex::ttype::union::TUnion;
 use mago_span::HasSpan;
 use mago_syntax::cst::ArrayAccess;
-use mago_syntax::cst::ArrayElement;
 use mago_syntax::cst::Assignment;
 use mago_syntax::cst::AssignmentOperator;
 use mago_syntax::cst::Binary;
@@ -138,21 +137,10 @@ impl Converter<'_, '_> {
                         "a `foreach` by reference has no PHP# form: PHP# passes every value as it is, so the loop writes the collection back",
                     );
                 }
-                // A plain PHP array is no tuple, so a pattern by position has no PHP# form, as an assignment's has none.
-                _ if super::locals::destructured(target).is_some_and(|elements| {
-                    elements.iter().any(|element| !matches!(element, ArrayElement::KeyValue(_)))
-                }) =>
-                {
-                    return self.refuse(
-                        target.span(),
-                        "destructuring by position, or by a key that is no literal, has no PHP# form: PHP# destructures a tuple, and reads a `Map` key by key (spec sections 12 and 30)",
-                    );
-                }
                 _ => {
-                    return self.refuse(
-                        target.span(),
-                        "a `foreach` into a pattern of keys is not converted: the converter reads keys into locals only in an assignment, as `['id' => $id] = $row;` of a `Map` variable",
-                    );
+                    let reason = super::locals::destructured(target)
+                        .map_or("a `foreach` into this place has no PHP# form", super::locals::unpacked);
+                    return self.refuse(target.span(), reason);
                 }
             }
         }

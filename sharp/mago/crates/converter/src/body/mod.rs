@@ -60,6 +60,10 @@ enum Kind {
     Other,
 }
 
+/// Why a read of a `Map` at a key it may lack refuses, by an index or by destructuring: PHP's meaning depends on the
+/// app's error handler, and no PHP# read keeps it under every one (spec section 12).
+const MISSING_KEY: &str = "a `Map` read at a key it may lack has no PHP# form: PHP warns on a missing key and gives `null`, an error handler such as Laravel's turns the warning into an exception, and a PHP# `Map` read gives `null` without a word, so it converts behind `??` or `isset` only (spec section 12)";
+
 /// Whether `expression` binds tighter than any operator, so text built around it, as `x.isEmpty()` or `x != 0`, needs
 /// no parentheses around it.
 fn is_primary(expression: &Expression<'_>) -> bool {
@@ -415,10 +419,7 @@ impl<'input> Converter<'input, '_> {
                 self.untyped(access.array, "an index");
                 self.untyped(access.index, "a key");
                 if self.is(access.array, &[Kind::Map]) {
-                    self.refuse(
-                        expression.span(),
-                        "a `Map` read at a key it may lack has no PHP# form: PHP warns on a missing key and gives `null`, and a PHP# `Map` read gives `null` without a word, so it converts behind `??` or `isset` only (spec section 12)",
-                    );
+                    self.refuse(expression.span(), MISSING_KEY);
                 }
             }
             Expression::Conditional(conditional) => {

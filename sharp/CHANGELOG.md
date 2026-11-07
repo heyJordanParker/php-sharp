@@ -28,6 +28,11 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
   - an `if` whose condition assigns a local, as the assignment on its own line and the local's test
   - `instanceof self`, as `is` the class's name
   - `===` between a string and `Order::class`, as `==` with the text of the class's name
+  - `(string)`, `.` and interpolation of a plain PHP object whose class declares `__toString`, as `email.__toString()`
+
+### Changed
+
+- `mago convert` refuses `['id' => $id] = $row;`, which it converted to one `row.get("id")` per key: PHP warns on a missing key, which an error handler such as Laravel's turns into an exception, and a PHP# `Map` read gives `null`, so the file's meaning depended on its error handler. A key read converts behind `??` or `isset`.
 
 ### Fixed
 

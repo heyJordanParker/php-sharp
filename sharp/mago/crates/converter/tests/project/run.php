@@ -96,6 +96,7 @@ echo $note->describe('hi'), ' / ', $note->describe(5), "\n";
 echo $note->headed('memo'), ' ', $note->headed('0'), ' ', $note->headed(''), ' ', $note->headed(null), "\n";
 echo $note->signed('Ann'), ' ', $note->signed(null), "\n";
 echo $note->tagged('yes', 3, '!'), ' ', $note->tagged(1, 0, null), ' ', $note->tagged(true, -2, ''), "\n";
+echo $note->labelled(new \Acme\Format\Sku('A1')), "\n";
 echo json_encode([$note->namesSpec('Proof\Spec'), $note->namesSpec('proof\spec'), $note->namesSpec(null)]), "\n";
 echo json_encode([$note->flagged(0, '0'), $note->flagged(2, ''), $note->flagged(-1, 'x'), $note->flagged(0, null)]), "\n";
 

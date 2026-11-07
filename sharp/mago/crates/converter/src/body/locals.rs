@@ -203,7 +203,7 @@ impl Converter<'_, '_> {
             && assignment.operator.is_assign()
             && let Some(elements) = destructured(assignment.lhs)
         {
-            self.destructure(statement, assignment, elements);
+            self.destructure(assignment, elements);
             return true;
         }
         let Expression::Assignment(Assignment { lhs: Expression::Variable(Variable::Direct(variable)), operator, rhs }) =
@@ -452,73 +452,12 @@ impl Converter<'_, '_> {
         self.edits.replace(variable.span, name);
     }
 
-    /// `['id' => $id, 'name' => $name] = $row;` of a `Map` as one read per key, `const id = row.get('id');`, each a
-    /// `TValue?` as PHP gives `null` for a missing key (spec section 12). The `Map` is read once per key, so it must be
-    /// a variable.
-    fn destructure(&mut self, statement: &Statement<'_>, assignment: &Assignment<'_>, elements: Elements<'_, '_>) {
-        let source = assignment.rhs;
-        let mut targets = Vec::new();
-        for element in elements.iter() {
-            match element {
-                ArrayElement::KeyValue(element)
-                    if matches!(element.key, Expression::Literal(Literal::String(_) | Literal::Integer(_))) =>
-                {
-                    let Expression::Variable(Variable::Direct(variable)) = element.value else {
-                        self.refuse(
-                            element.value.span(),
-                            "destructuring into a place that is no variable has no PHP# form: read each key into a local",
-                        );
-                        return self.unassigned(elements);
-                    };
-                    targets.push((element.key, variable));
-                }
-                _ => {
-                    self.refuse(
-                        assignment.lhs.span(),
-                        "destructuring by position, or by a key that is no literal, has no PHP# form: PHP# destructures a tuple, and reads a `Map` key by key (spec sections 12 and 30)",
-                    );
-                    return self.unassigned(elements);
-                }
-            }
-        }
-        if targets.is_empty()
-            || !matches!(source, Expression::Variable(Variable::Direct(_)))
-            || !self.is(source, &[Kind::Map])
-        {
-            let shown = self.shown(source);
-            self.refuse(
-                source.span(),
-                format!("destructuring `{shown}` by key converts for a `Map` variable only, which PHP# reads once per key (spec section 12)"),
-            );
-            return self.unassigned(elements);
-        }
-
-        self.expression(source, None);
-        let read = self.render(source);
-        let indentation = self.indentation(statement.span().start.offset);
-        let mut start = assignment.lhs.span().start.offset;
-        let last = targets.len() - 1;
-        for (index, (key, variable)) in targets.into_iter().enumerate() {
-            self.numeric_key(source, key);
-            self.expression(key, None);
-            let key = self.render(key);
-            self.edits.delete(start, variable.span.start.offset);
-            if !self.is_local(variable.name) || self.in_scope(variable.name, variable.span.start.offset) {
-                self.variable(variable, true);
-            } else {
-                self.declare(statement, variable, None);
-            }
-            let union = self.input.artifacts.get_expression_type(variable).cloned();
-            self.wrote(variable.name, variable.span, union, self.source(source));
-            let end = variable.span.end.offset;
-            if index == last {
-                self.edits.insert(end, format!(" = {read}.get({key})"));
-                self.edits.delete(end, assignment.rhs.span().end.offset);
-            } else {
-                self.edits.insert(end, format!(" = {read}.get({key});\n{indentation}"));
-            }
-            start = end;
-        }
+    /// Refuses `['id' => $id] = $row;` and `[$first, $second] = $pair;`. A destructuring by key reads keys the array may
+    /// lack, as a `Map` read does, and a plain PHP array is no tuple, so a destructuring by position has no PHP# form
+    /// (spec sections 12 and 30).
+    fn destructure(&mut self, assignment: &Assignment<'_>, elements: Elements<'_, '_>) {
+        self.refuse(assignment.lhs.span(), unpacked(elements));
+        self.unassigned(elements);
     }
 
     /// Takes the variables a refused destructuring assigns as given, so the refusal covers each later read of them,
@@ -1134,6 +1073,15 @@ impl Converter<'_, '_> {
 
 /// The elements of a destructuring's place.
 pub(super) type Elements<'ast, 'arena> = &'ast TokenSeparatedSequence<'arena, ArrayElement<'arena>>;
+
+/// Why a destructuring into `elements`, an assignment's or a loop's, has no PHP# form.
+pub(super) fn unpacked(elements: Elements<'_, '_>) -> &'static str {
+    if elements.iter().all(|element| matches!(element, ArrayElement::KeyValue(_))) {
+        super::MISSING_KEY
+    } else {
+        "destructuring by position has no PHP# form: a plain PHP array is no tuple, which PHP# destructures (spec sections 12 and 30)"
+    }
+}
 
 /// The elements `place` destructures into, when the place of a write, or of a loop's value, is a destructuring.
 pub(super) fn destructured<'ast, 'arena>(place: &'ast Expression<'arena>) -> Option<Elements<'ast, 'arena>> {

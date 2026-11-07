@@ -1,2 +1,2 @@
-15:28: destructuring by position, or by a key that is no literal, has no PHP# form: PHP# destructures a tuple, and reads a `Map` key by key (spec sections 12 and 30)
-26:27: a `foreach` into a pattern of keys is not converted: the converter reads keys into locals only in an assignment, as `['id' => $id] = $row;` of a `Map` variable
+15:28: destructuring by position has no PHP# form: a plain PHP array is no tuple, which PHP# destructures (spec sections 12 and 30)
+26:27: a `Map` read at a key it may lack has no PHP# form: PHP warns on a missing key and gives `null`, an error handler such as Laravel's turns the warning into an exception, and a PHP# `Map` read gives `null` without a word, so it converts behind `??` or `isset` only (spec section 12)

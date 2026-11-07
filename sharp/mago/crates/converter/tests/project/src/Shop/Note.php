@@ -42,6 +42,12 @@ final class Note
         return $text . ($answer === 'yes' ? ' agreed' : ' not');
     }
 
+    // `(string)`, `.` and interpolation of a plain PHP object, which PHP shows by its `__toString`.
+    public function labelled(\Acme\Format\Sku $sku): string
+    {
+        return (string) $sku . ' ' . $sku . " {$sku}";
+    }
+
     // `===` of a string with `X::class`, the text of the class's name.
     public function namesSpec(?string $name): bool
     {
