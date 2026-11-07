@@ -3620,9 +3620,9 @@ Tab order = new Tab();
 private void save() { }
 -->
 ```csharp
-if (order.total is int) { order.total + 1; }                 // compiles: nothing ran between the test and the use
-if (order.total is int) { this.save(); order.total + 1; }    // compile error: the call may have changed order.total
-if (order.total is int t) { this.save(); let next = t + 1; } // compiles: t holds the value that was tested
+if (order.total is int) { let next = order.total + 1; }              // compiles: nothing ran between the test and the use
+if (order.total is int) { this.save(); let next = order.total + 1; } // compile error: the call may have changed order.total
+if (order.total is int t) { this.save(); let next = t + 1; }         // compiles: t holds the value that was tested
 ```
 
 - **A variable that `is` creates exists only where the test held:** inside the `if` for `is`, and after an `if` whose block always exits for `is not`, as in C#. A block always exits when every path through it ends in `return`, `throw`, `break` or `continue`.
