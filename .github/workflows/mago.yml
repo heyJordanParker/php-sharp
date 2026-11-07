@@ -33,15 +33,17 @@ jobs:
   # Its rule is sharp.yml's CHANGES's, so a release's bump pull request, whose title starts with "chore: release", runs
   # in full in both workflows.
   # A pull request's run that isn't the full run skips the macOS jobs, so a merge never waits for the Mac, and the push
-  # to master runs every job after the merge. So a defect only macOS finds, such as one in the watch mode's FSEvents
+  # to master runs them after the merge. So a defect only macOS finds, such as one in the watch mode's FSEvents
   # code, lands on master first, and its red push opens an issue, as ci-passed does, for a pull request that fixes it
-  # forward. The bump's run runs every job, so once it passes, release.yml's ci gate accepts it for the tag on its
-  # merge commit.
+  # forward. The push skips the Linux jobs when a pull request's run passed them on its tree, as sharp.yml's CHANGES
+  # explains, and runs every job otherwise. The bump's run runs every job, so once it passes, release.yml's ci gate
+  # accepts it for the tag on its merge commit.
   CHANGES:
     runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
+      pull-requests: read
     defaults:
       run:
         working-directory: .
@@ -52,6 +54,7 @@ jobs:
     outputs:
       base: ${{ steps.base.outputs.sha }}
       full: ${{ env.FULL }}
+      linux-passed: ${{ steps.linux.outputs.run && 'true' || '' }}
       mago: ${{ steps.diff.outputs.mago }}
       rust: ${{ steps.rust.outputs.version }}
     steps:
@@ -100,13 +103,30 @@ jobs:
             echo mago=true >> "$GITHUB_OUTPUT"
           fi
 
+      # Every job but release-build, which a pull request's run skips whole, as it runs tests and plain-php without
+      # their macOS legs. Those Linux jobs run as a push's do, so their pass holds for the push.
+      - name: Find the pull request run that passed every Linux job on this tree
+        id: linux
+        if: github.event_name == 'push'
+        uses: ./.github/actions/passed-tree
+        with:
+          workflow: mago.yml
+          events: pull_request
+          passed: all(.jobs[]; .conclusion == "success" or .name == "release-build")
+
+      - name: The Linux jobs don't run again
+        if: steps.linux.outputs.run
+        env:
+          RUN: ${{ steps.linux.outputs.run }}
+        run: echo "::notice::This tree ran and passed every Linux Mago job in $RUN, so only the macOS jobs run."
+
   # The gates on Linux with CHANGES's rust toolchain, the one sharp/mago/Cargo.toml's rust-version names and
   # release.yml builds the binaries with, and the Linux binary plain-php runs. They run beside tests, which takes as
   # long. The weekly and dispatched runs add clippy on nightly Rust, and the bump's full run doesn't, so a nightly
   # that breaks never holds a release.
   checks:
     needs: CHANGES
-    if: needs.CHANGES.outputs.mago == 'true'
+    if: needs.CHANGES.outputs.mago == 'true' && needs.CHANGES.outputs.linux-passed != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -249,14 +269,15 @@ jobs:
 
   # The workspace's tests, on Linux and on macOS, which covers the few lines of Mago that differ there, such as the
   # watch mode's FSEvents. The weekly and dispatched runs add them on nightly Rust on Linux, as checks adds clippy. A
-  # pull request's run that isn't the full run has no macOS leg, as CHANGES explains.
+  # pull request's run that isn't the full run has no macOS leg, and a push whose Linux jobs passed has only that leg,
+  # as CHANGES explains.
   tests:
     needs: CHANGES
     if: needs.CHANGES.outputs.mago == 'true'
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON((github.event_name != 'pull_request' || needs.CHANGES.outputs.full == 'true') && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
+        os: ${{ fromJSON(needs.CHANGES.outputs.linux-passed == 'true' && '["macos-latest"]' || (github.event_name != 'pull_request' || needs.CHANGES.outputs.full == 'true') && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
         rust: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && format('["{0}", "nightly"]', needs.CHANGES.outputs.rust) || format('["{0}"]', needs.CHANGES.outputs.rust)) }}
         exclude:
           - { os: macos-latest, rust: nightly }
@@ -390,13 +411,14 @@ jobs:
   # installs no second checker, and one that requires a later release installs nothing. Then runs mago on
   # a one-class .sharp project with the binary the job before built, and sharp/phpunit's tests, which stop.
   # A pull request's run that isn't the full run has no macOS leg, as CHANGES explains, so it needs only checks' binary.
+  # A push whose Linux jobs passed has only the macOS leg, so it needs only release-build's.
   plain-php:
     needs: [CHANGES, checks, release-build]
-    if: ${{ !cancelled() && needs.checks.result == 'success' && (github.event_name == 'pull_request' && needs.CHANGES.outputs.full != 'true' || needs.release-build.result == 'success') }}
+    if: ${{ !cancelled() && (needs.checks.result == 'success' || needs.CHANGES.outputs.linux-passed == 'true') && (github.event_name == 'pull_request' && needs.CHANGES.outputs.full != 'true' || needs.release-build.result == 'success') }}
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON((github.event_name != 'pull_request' || needs.CHANGES.outputs.full == 'true') && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
+        os: ${{ fromJSON(needs.CHANGES.outputs.linux-passed == 'true' && '["macos-latest"]' || (github.event_name != 'pull_request' || needs.CHANGES.outputs.full == 'true') && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
 
     # The macOS leg runs where tests' does.
     runs-on: ${{ matrix.os == 'macos-latest' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'macos-arm64-local' || matrix.os }}
@@ -540,7 +562,7 @@ jobs:
 
   typos-check:
     needs: CHANGES
-    if: needs.CHANGES.outputs.mago == 'true'
+    if: needs.CHANGES.outputs.mago == 'true' && needs.CHANGES.outputs.linux-passed != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -595,7 +617,8 @@ jobs:
   # The one required check of this workflow: it passes only when every job above passed, or skipped a change that
   # leaves Mago alone, so a job added later blocks merges without a change to the repository's rules. It runs always,
   # so it reports on every pull request, even one whose every other job skipped. On a pull request that isn't the full
-  # run, release-build skips and tests and plain-php run without their macOS legs, as CHANGES explains.
+  # run, release-build skips and tests and plain-php run without their macOS legs, and on a push whose Linux jobs
+  # passed, checks and typos-check skip and tests and plain-php run only their macOS legs, as CHANGES explains.
   ci-passed:
     if: always()
     needs: [CHANGES, checks, tests, release-build, plain-php, typos-check, patch-coverage]
