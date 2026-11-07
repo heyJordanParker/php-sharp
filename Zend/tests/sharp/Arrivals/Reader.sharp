@@ -1,0 +1,47 @@
+namespace Arrivals;
+
+import Lib.Folder;
+
+public class Reader
+{
+    public bool records(Folder folder) => folder.records as List<Map<string, string?>> != null;
+
+    public bool heldRecords(Folder folder)
+    {
+        const records = folder.records;
+        return records as List<Map<string, string?>> != null;
+    }
+
+    public bool heldRecordsAfterNull(Folder folder)
+    {
+        const records = folder.records;
+        if (records == null) {
+            return false;
+        }
+        return records as List<Map<string, string?>> != null;
+    }
+
+    public bool recordsMap(Folder folder) => folder.records is Map<int|string, Any?>;
+
+    public bool listed(Folder folder) => folder.listed as List<Map<string, string?>> != null;
+
+    public bool heldListed(Folder folder)
+    {
+        const listed = folder.listed;
+        return listed as List<Map<string, string?>> != null;
+    }
+
+    public string? status(Source source) => source.status().get("status");
+
+    public string? heldStatus(Source source)
+    {
+        const status = source.status();
+        return status.get("status");
+    }
+
+    public string? typedStatus(Source source)
+    {
+        Map<string, string> status = source.status();
+        return status.get("status");
+    }
+}

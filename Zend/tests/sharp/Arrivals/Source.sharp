@@ -1,0 +1,6 @@
+namespace Arrivals;
+
+public class Source
+{
+    public virtual Map<string, string> status() => ["status": "active"];
+}
