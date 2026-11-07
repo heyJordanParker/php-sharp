@@ -402,12 +402,18 @@ impl WorkerInner {
         }
         // What the worker started and still runs, such as the worker a wrapper forked, can hold the pipe the stdin
         // writer is stuck on, and the worker's stdout and stderr, so the failure ends it too.
-        if let Some(group) = lock(&self.child).as_mut() {
-            let _result = group.end();
+        #[cfg(all(test, target_os = "macos"))]
+        let ending = Instant::now();
+        // A process of the group that SIGKILL cannot end stops the end at its timeout, and the failure says so.
+        if let Some(group) = lock(&self.child).as_mut()
+            && let Err(error) = group.end()
+            && error.kind() == std::io::ErrorKind::TimedOut
+        {
+            failure.message = format!("{}; {error}", failure.message);
         }
         #[cfg(all(test, target_os = "macos"))]
         if diagnosed {
-            diagnostic::log("fail: group ended");
+            diagnostic::log(&format!("fail: group ended after {:?}", ending.elapsed()));
         }
         if !ended {
             failure.message =
@@ -1348,7 +1354,9 @@ mod diagnostic {
 
     /// Only cheap probes, so the write is not delayed: Mago's own end, and the worker's fds.
     pub(super) fn before_write(inner: &WorkerInner, fd: i32) {
+        let spawning = mago_database::process::diagnostic_spawning();
         let own = pipe_state(std::process::id() as i32, fd);
+        log(&format!("before write: another thread is starting a process: {spawning}"));
         let worker = lock(&inner.child).as_mut().map(|group| group.leader().id());
         let worker_fds = worker.map(|worker| {
             fds(worker as i32)
