@@ -298,6 +298,7 @@ impl Converter<'_, '_> {
             BinaryOperator::NullCoalesce(_) if let Expression::ArrayAccess(access) = lhs => {
                 self.untyped(access.array, "an index");
                 self.untyped(access.index, "a key");
+                self.numeric_key(access.array, access.index);
                 return self.expression(rhs, None);
             }
             BinaryOperator::NullCoalesce(_) => None,

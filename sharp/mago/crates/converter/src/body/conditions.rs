@@ -171,6 +171,9 @@ impl Converter<'_, '_> {
                     }
                     self.untyped(access.array, "an index");
                     self.untyped(access.index, "a key");
+                    if self.numeric_key(access.array, access.index) {
+                        return;
+                    }
                     let map = self.render(access.array);
                     let map = if is_primary(access.array) { map } else { format!("({map})") };
                     format!("{map}.get({}) {compared} null", self.render(access.index))

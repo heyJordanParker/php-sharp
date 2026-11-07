@@ -62,6 +62,22 @@ final class Stock
         return $joined;
     }
 
+    // A plain `array` is a `Map` keyed by `int|string`, whose keys a loop gives as PHP holds them: `5` stays an `int`.
+    /** @return list<array-key> */
+    public function given(array $input): array
+    {
+        $input['source'] = 'form';
+        $keys = [];
+        foreach ($input as $key => $value) {
+            $keys[] = $key;
+        }
+        if (isset($input['email'])) {
+            $keys[] = 'email given';
+        }
+
+        return $keys;
+    }
+
     // A lambda that ignores the index plain PHP passes it, which its PHP# form takes as `unused`.
     /** @return list<string> */
     public function marked(Lines $lines): array

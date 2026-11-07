@@ -179,7 +179,13 @@ impl Converter<'_, '_> {
             reads.walk_statement(body, &mut ());
             reads.named == reads.as_text
         };
-        if key.is_some_and(|key| !read_as_text(key)) && map && !self.keyed_by_int(iterable) {
+        // A `Map` keyed by `int|string` holds each key as the PHP array gave it, and each key the body writes passes
+        // [`Converter::numeric_key`], so a loop gives PHP's keys too.
+        if key.is_some_and(|key| !read_as_text(key))
+            && map
+            && !self.keyed_by_int(iterable)
+            && !self.keyed_by_both(iterable)
+        {
             let shown = self.shown(iterable);
             return self.refuse(
                 iterable.span(),
@@ -329,6 +335,9 @@ impl Converter<'_, '_> {
             }
             self.written(access.array);
             self.untyped(access.index, "a key");
+            if self.numeric_key(access.array, access.index) {
+                return;
+            }
             let map = self.render(access.array);
             let map = if is_primary(access.array) { map } else { format!("({map})") };
             removals.push(format!("{map}.remove({});", self.render(access.index)));

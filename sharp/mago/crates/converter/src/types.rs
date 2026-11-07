@@ -128,6 +128,15 @@ pub fn type_text(union: &TUnion, codebase: &CodebaseMetadata, imports: &mut Impo
     let mut members = Vec::new();
     let mut collections = Vec::new();
     for atomic in union.types.iter().filter(|atomic| !atomic.is_null()) {
+        // PHP's `array-key` is `int|string`, the keys a PHP array holds.
+        if matches!(atomic, TAtomic::Scalar(TScalar::ArrayKey)) {
+            for text in ["int", "string"] {
+                if !members.iter().any(|member| member == text) {
+                    members.push(text.to_owned());
+                }
+            }
+            continue;
+        }
         let text = atomic_text(atomic, codebase, imports)?;
         if matches!(get_sharp_type(atomic), Some(SharpType::List(_) | SharpType::Set(_) | SharpType::Map(..))) {
             collections.push(text.clone());

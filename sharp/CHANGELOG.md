@@ -20,6 +20,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
   - a lambda that takes fewer parameters than the function type it is passed as, which takes each one it lacks, named `unused` where the function type names none
   - a `string` that may be null in `.` or an interpolated string, as `` `${title ?? ""}` ``, since PHP shows `null` as nothing
   - `(bool)`, as the comparison a condition of the value's type gives, as `(count != 0)`
+  - `array-key`, as `int|string`, and so a plain `array`, as `Map<int|string, Any?>`, where each key the body reads or writes by is an `int` or a string literal PHP keeps a string
 
 ## [0.6.4] - 2026-11-07
 

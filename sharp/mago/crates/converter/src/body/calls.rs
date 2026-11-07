@@ -391,6 +391,13 @@ impl<'input> Converter<'input, '_> {
         if value.ellipsis.is_some() {
             return self.refuse(span, format!("`{name}` with a named or spread argument has no PHP# form"));
         }
+        // A PHP array is a `List` or a `Map` to PHP#, by its keys, so no one PHP# type tests what `is_array` does.
+        if target.types.iter().any(|atomic| matches!(atomic, TAtomic::Array(_))) {
+            return self.refuse(
+                span,
+                format!("`{name}` has no PHP# form: a PHP array is a `List` or a `Map` by its keys, and a PHP# type test names one"),
+            );
+        }
         let tested = if target.is_null() {
             None
         } else {

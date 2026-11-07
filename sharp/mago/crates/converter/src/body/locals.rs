@@ -498,6 +498,7 @@ impl Converter<'_, '_> {
         let mut start = assignment.lhs.span().start.offset;
         let last = targets.len() - 1;
         for (index, (key, variable)) in targets.into_iter().enumerate() {
+            self.numeric_key(source, key);
             self.expression(key, None);
             let key = self.render(key);
             self.edits.delete(start, variable.span.start.offset);
@@ -993,6 +994,7 @@ impl Converter<'_, '_> {
                 );
             }
             self.written(access.array);
+            self.numeric_key(access.array, access.index);
             self.expression(access.index, None);
             return self.expression(rhs, None);
         }

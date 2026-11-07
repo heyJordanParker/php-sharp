@@ -20,7 +20,9 @@ pub(crate) use locals::Locals;
 use mago_codex::ttype::SharpType;
 use mago_codex::ttype::TType;
 use mago_codex::ttype::atomic::TAtomic;
+use mago_codex::ttype::atomic::array::TArray;
 use mago_codex::ttype::atomic::object::TObject;
+use mago_codex::ttype::atomic::scalar::TScalar;
 use mago_codex::ttype::comparator::ComparisonResult;
 use mago_codex::ttype::comparator::union_comparator::is_contained_by;
 use mago_codex::ttype::get_sharp_type;
@@ -70,6 +72,19 @@ fn is_primary(expression: &Expression<'_>) -> bool {
             | Expression::Identifier(_)
             | Expression::ConstantAccess(_)
     )
+}
+
+/// Whether PHP turns the string key `value` into an `int`: a decimal integer with no `+`, no leading zero and no
+/// space, which fits an `int`, as `'42'` and `'-7'` are and `'042'` and `'4.2'` are not.
+fn is_integer_key(value: &[u8]) -> bool {
+    let digits = value.strip_prefix(b"-").unwrap_or(value);
+    let canonical = match digits {
+        [b'0'] => value.len() == 1,
+        [first, rest @ ..] => (b'1'..=b'9').contains(first) && rest.iter().all(u8::is_ascii_digit),
+        [] => false,
+    };
+
+    canonical && std::str::from_utf8(value).is_ok_and(|text| text.parse::<i64>().is_ok())
 }
 
 /// Each kind of value `union` holds, sorted, once each.
@@ -271,6 +286,45 @@ impl<'input> Converter<'input, '_> {
         self.type_of(expression).is_some_and(|union| {
             let kinds = kinds(union);
             !kinds.is_empty() && kinds.iter().all(|kind| allowed.contains(kind))
+        })
+    }
+
+    /// Refuses `key` of the `Map` `map`, and gives whether it did, where the `Map` is keyed by `int` and `string` both,
+    /// as PHP's `array<array-key, V>` is, and `key` may be a string of an integer's digits. PHP turns such a key into
+    /// the `int`, as `'42'` into 42, and a PHP# `Map<int|string, V>` keeps it a string, so the two read and write
+    /// different entries. An `int` key, and a string literal PHP keeps a string, give the same entry.
+    fn numeric_key(&mut self, map: &Expression<'_>, key: &Expression<'_>) -> bool {
+        let keyed_by_both = self.keyed_by_both(map);
+        let keeps = match key {
+            Expression::Literal(Literal::String(string)) => string.value.is_some_and(|value| !is_integer_key(value)),
+            key => self.is(key, &[Kind::Int]),
+        };
+        if !keyed_by_both || keeps {
+            return false;
+        }
+        let shown = self.shown(key);
+        self.refuse(
+            key.span(),
+            format!("a key of `{shown}` has no PHP# form in a `Map` keyed by `int|string`: PHP turns a string of an integer's digits into the `int`, as `'42'` into 42, and a PHP# `Map` keeps it a string (spec section 12)"),
+        );
+
+        true
+    }
+
+    /// Whether `map` is a `Map` keyed by `int` and `string` both, as PHP's `array<array-key, V>` is, whose keys a PHP
+    /// array gives as PHP holds them (spec section 12).
+    fn keyed_by_both(&self, map: &Expression<'_>) -> bool {
+        self.type_of(map).is_some_and(|union| {
+            union.types.iter().any(|atomic| {
+                let TAtomic::Array(TArray::Keyed(keyed)) = atomic else {
+                    return false;
+                };
+                keyed.parameters.as_ref().is_some_and(|(keys, _)| {
+                    let kinds = kinds(keys);
+                    keys.types.iter().any(|atomic| matches!(atomic, TAtomic::Scalar(TScalar::ArrayKey)))
+                        || (kinds.contains(&Kind::Int) && kinds.contains(&Kind::String))
+                })
+            })
         })
     }
 

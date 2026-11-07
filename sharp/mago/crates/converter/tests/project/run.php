@@ -101,6 +101,7 @@ echo var_export($stock->quantity(new \Acme\Format\Record(['quantity' => '5'])), 
 echo var_export($stock->coded(new \Acme\Format\Record(['code' => 5])), true), "\n";
 echo $stock->counted(new \Acme\Format\Lines(['a', 'b', 'c'])), ' ', implode(',', $stock->marked(new \Acme\Format\Lines(['a', 'b']))), "\n";
 echo (new Ledger())->priceOf(['42' => 1, 'x' => 2], '42'), "\n";
+echo var_export($stock->given(['email' => 'a', 5 => 'x', '42' => 'y']), true), "\n";
 echo $stock->listed(['42' => 1, 'x' => 2]), ' ', var_export($stock->kept(['42' => 1, 'x' => 2], ['42' => true]), true), "\n";
 $through = (new Feed())->through(keyed());
 foreach ($through as $key => $item) {
