@@ -1,11 +1,10 @@
 name: Mutants
 
 # Every pull request's builder proves each new test fails with its code removed, and the reviewer checks those
-# proofs, so mutants runs on master instead of on every pull request: on each merge, against the merge's diff,
-# and nightly, against the last day's diff. It reports surviving mutants and never blocks a merge.
+# proofs, so mutants runs on master instead of on every pull request. It runs nightly, against every commit since the
+# last nightly run, and not on each merge, because a merge's run took up to 8 runners for about 15 minutes from the
+# pull requests queued behind it. It reports surviving mutants and never blocks a merge.
 on:
-  push:
-    branches: [master]
   schedule:
     - cron: "0 3 * * *"
   workflow_dispatch:
@@ -25,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
+      actions: read
       contents: read
 
     outputs:
@@ -43,15 +43,21 @@ jobs:
         with:
           tool: cargo-mutants@27.1.0
 
+      # The head of the last nightly run that tested its diff, so no commit falls between two nights. GitHub started
+      # the 03:00 run anywhere from 07:14 to 10:11 UTC between 2026-10-14 and 2026-11-07, so a day's window dropped
+      # the commits of a later start. A surviving mutant fails a run, so a failed run tested its diff and a cancelled
+      # one did not.
       - name: The commit the diff starts from
         id: base
         env:
-          BEFORE: ${{ github.event.before }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
-            base="$BEFORE"
-          else
-            base=$(git rev-list -1 --first-parent --before="1 day ago" HEAD)
+          base=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mutants.yml/runs" -X GET \
+            -f event=schedule -f status=completed -F per_page=100 \
+            --jq 'first(.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure") | .head_sha)')
+          if [[ -z $base ]]; then
+            echo "::error::No nightly run of the last 100 succeeded or failed, so the diff has no commit to start from."
+            exit 1
           fi
           echo "base=$base" >> "$GITHUB_OUTPUT"
 
