@@ -435,7 +435,6 @@ mago-sharp
 │   │                                             control with `: super(…)` or `: this(…)`." (PR 2)
 │   └── parser/internal/class_like/method.rs   <- parse_named_constructor and parse_optional_constructor_initializer added;
 │                                                 both NotSupportedYetInSharp("A named constructor") paths deleted
-├── crates/hir/src/ir/item/modifier.rs         <- ModifierKind::Lazy, the mirror every Modifier variant has
 ├── crates/codex/src/
 │   ├── metadata/flags.rs                      <- MetadataFlags::NAMED_CONSTRUCTOR added; MetadataFlags::INIT added (PR 5)
 │   └── signature_builder.rs                   <- walk_in_named_constructor: the static method a named constructor lowers to
@@ -480,7 +479,7 @@ The names, each with the slate it was picked from:
 - `missing-super-call`: also considered `missing-constructor-initializer`, `missing-parent-constructor-call`, `implicit-super-needs-arguments`.
 - `named-constructor-without-new`: also considered `named-constructor-call`, `constructor-called-as-method`, `missing-new`.
 
-Every exhaustive match over `ClassLikeMember` gains the `NamedConstructor` arm, as each did for `Operator`: the analyzer's `analyze_class_like`, the codex scanner, `crates/fingerprint/src/class_like/mod.rs`, the formatter (which refuses `.sharp` files), `crates/hir/src/lower/item/member/mod.rs`, both semantics checkers, the bridge, and `crates/sharp-lean/src/translate/mod.rs`, where a law that reaches a named constructor is refused with the existing `CONSTRUCTOR_BODY` reason, "Mago does not translate constructor bodies to Lean."
+Every exhaustive match over `ClassLikeMember` gains the `NamedConstructor` arm, as each did for `Operator`: the analyzer's `analyze_class_like`, the codex scanner, `crates/fingerprint/src/class_like/mod.rs`, the formatter (which refuses `.sharp` files), both semantics checkers, the bridge, and `crates/sharp-lean/src/translate/mod.rs`, where a law that reaches a named constructor is refused with the existing `CONSTRUCTOR_BODY` reason, "Mago does not translate constructor bodies to Lean."
 
 # The PRs, in order
 

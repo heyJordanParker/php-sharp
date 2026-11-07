@@ -338,7 +338,7 @@ sharp/mago/crates/
 ├── sharp-bridge/src/lower.rs                <- Lowering::hooks (observers, behaviors), Lowering::property (lazy,
 │                                               abstract, behavior slots), Lowering::name_of, the static member
 │                                               read of a lazy, computed or hooked static
-└── (every exhaustive match over Expression)  <- the NameOf arm: formatter, fingerprint, hir, sharp-lean, as each
+└── (every exhaustive match over Expression)  <- the NameOf arm: formatter, fingerprint, sharp-lean, as each
                                                 did for TypeOf
 sharp/mago/composer/src/Sdk/Syntax/NodeKind.php   <- regenerated with scripts/regen-sdk-node-kinds.php
 sharp/composer/library/Sharp/Behavior.sharp       <- added if question 10 says so: interface Behavior<T>

@@ -1642,6 +1642,7 @@ version = "0.6.3"
 dependencies = [
  "anyhow",
  "clap",
+ "mago-database",
  "mago-linter",
  "mago-php-version",
  "mago-reporting",
@@ -1663,6 +1664,7 @@ version = "0.6.3"
 dependencies = [
  "foldhash",
  "libc",
+ "mago-database",
  "mago-names",
  "mago-span",
  "mago-syntax",
@@ -1685,13 +1687,6 @@ dependencies = [
  "mago-syntax-core",
  "memchr",
  "pretty_assertions",
-]
-
-[[package]]
-name = "mago-flags"
-version = "0.6.3"
-dependencies = [
- "serde",
 ]
 
 [[package]]
@@ -1736,26 +1731,6 @@ dependencies = [
  "schemars",
  "serde",
  "toml 1.1.5+spec-1.1.0",
-]
-
-[[package]]
-name = "mago-hir"
-version = "0.6.3"
-dependencies = [
- "itoa",
- "mago-allocator",
- "mago-database",
- "mago-flags",
- "mago-names",
- "mago-php-version",
- "mago-phpdoc-syntax",
- "mago-span",
- "mago-syntax",
- "mago-syntax-core",
- "memchr",
- "ordered-float",
- "paste",
- "serde",
 ]
 
 [[package]]

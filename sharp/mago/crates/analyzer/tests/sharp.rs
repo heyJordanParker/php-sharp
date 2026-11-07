@@ -42,7 +42,6 @@ use mago_analyzer::plugin::provider::method::MethodTarget;
 use mago_analyzer::settings::Settings;
 use mago_codex::identifier::function_like::FunctionLikeIdentifier;
 use mago_codex::metadata::CodebaseMetadata;
-use mago_codex::populator::populate_codebase;
 use mago_codex::reference::SymbolReferences;
 use mago_codex::scanner::scan_program;
 use mago_codex::ttype::TType;
@@ -77,7 +76,6 @@ use mago_syntax::cst::Program;
 use mago_syntax::dialect::Dialect;
 use mago_syntax::parser::parse_file;
 use mago_word::Word;
-use mago_word::WordSet;
 use mago_word::ascii_lowercase_word;
 use mago_word::empty_word;
 use mago_word::word;
@@ -88,10 +86,14 @@ mod sharp_words;
 #[path = "../../../tests/support/effect_classes.rs"]
 mod effect_classes;
 
+#[path = "../../../tests/support/prelude_population.rs"]
+mod prelude_population;
+
 use effect_classes::EFFECT_CLASSES;
 use effect_classes::LIST_MEMBERS;
 use effect_classes::MAP_MEMBERS;
 use effect_classes::SET_MEMBERS;
+use prelude_population::populate_on_prelude;
 
 static PRELUDE: LazyLock<Prelude> = LazyLock::new(Prelude::build);
 static PLUGIN_REGISTRY: LazyLock<PluginRegistry> = LazyLock::new(PluginRegistry::with_library_providers);
@@ -259,7 +261,7 @@ fn analyze_with_references(
         programs.push((file, program, names));
     }
 
-    populate_codebase(&mut metadata, &mut symbol_references, WordSet::default(), HashSet::default());
+    populate_on_prelude(&mut metadata, &mut symbol_references);
 
     let (file, program, names) = &programs[0];
     let semantic_issues = SemanticsChecker::new(settings.version).check(file, program, names);
@@ -331,7 +333,7 @@ fn too_wide(files: &[(&'static str, &'static str)]) -> Vec<String> {
         metadata.extend(scan_program(&arena, file, program, &names, settings().version));
         programs.push((file, program, names));
     }
-    populate_codebase(&mut metadata, &mut symbol_references, WordSet::default(), HashSet::default());
+    populate_on_prelude(&mut metadata, &mut symbol_references);
 
     for (file, program, names) in programs.iter().filter(|(file, _, _)| file.is_project) {
         let mut result = AnalysisResult::new(mago_codex::reference::SymbolReferences::new());
@@ -500,7 +502,7 @@ fn the_analyzer_reads_the_dialect_from_the_program_not_the_file_name() {
     let program = parse_file(&arena, &sharp_file);
     let names = NameResolver::new(&arena).resolve(program);
     metadata.extend(scan_program(&arena, &sharp_file, program, &names, settings.version));
-    populate_codebase(&mut metadata, &mut symbol_references, WordSet::default(), HashSet::default());
+    populate_on_prelude(&mut metadata, &mut symbol_references);
 
     let mut result = AnalysisResult::new(symbol_references);
     Analyzer::new(&arena, &php_named_file, &names, &metadata, &PLUGIN_REGISTRY, settings)
@@ -508,6 +510,18 @@ fn the_analyzer_reads_the_dialect_from_the_program_not_the_file_name() {
         .expect("analysis succeeds");
 
     assert!(result.issues.iter().any(|issue| issue.code.as_deref() == Some("invalid-operand")), "{:#?}", result.issues);
+}
+
+/// A project's class of a built-in class's name, as a polyfill declares one, takes the built-in's place with its own
+/// members and types, as `mago analyze` reads it.
+#[test]
+fn a_project_class_of_a_built_in_class_s_name_gets_its_own_types() {
+    let array_object = "<?php\n\nfinal class ArrayObject\n{\n    public ?Countable $inner = null;\n\n    public function size(): int\n    {\n        if ($this->inner === null) {\n            return 0;\n        }\n\n        return $this->inner->count();\n    }\n\n    public function label(): string\n    {\n        return $this->size();\n    }\n\n    public function reset(): void\n    {\n        $this->clear();\n    }\n}\n";
+
+    assert_eq!(
+        issues(("src/ArrayObject.php", array_object), &[]),
+        ["18:16 invalid-return-statement", "23:16 non-existent-method"]
+    );
 }
 
 /// A bare PHP# name of a class alias of the file's own namespace reads the alias, as an import of it would: the
@@ -25129,7 +25143,7 @@ fn summarized(files: &[(&'static str, &'static str)]) -> (CodebaseMetadata, Vec<
         programs.push((file, program, names));
     }
 
-    populate_codebase(&mut metadata, &mut symbol_references, WordSet::default(), HashSet::default());
+    populate_on_prelude(&mut metadata, &mut symbol_references);
 
     let mut summaries = Vec::new();
     for (file, program, names) in &programs[..files.len()] {
