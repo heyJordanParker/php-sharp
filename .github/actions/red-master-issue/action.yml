@@ -9,6 +9,12 @@ inputs:
   title:
     description: The issue's title, one per workflow and event, such as "A push to master failed PHP# CI".
     required: true
+  range:
+    description: >-
+      The commits the run tests, as <base>..<sha>, which a push run starts at the commit of master's last push run
+      that ran. A scheduled or dispatched run passes none, and the body names only its commit.
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -20,8 +26,12 @@ runs:
         GH_REPO: ${{ github.repository }}
         RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         TITLE: ${{ inputs.title }}
+        RANGE: ${{ inputs.range }}
       run: |
         body="The $GITHUB_EVENT_NAME run on master's $GITHUB_SHA failed: $RUN"
+        if [[ -n $RANGE ]]; then
+          body+=$'\n\n'"It tests the commits $RANGE: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/${RANGE/../...}"
+        fi
         issue=$(gh issue list --state open --search "\"$TITLE\" in:title" --json number,title --jq '[.[] | select(.title == env.TITLE)][0].number // empty')
         if [[ -n $issue ]]; then
           gh issue comment "$issue" --body "$body"

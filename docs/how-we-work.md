@@ -49,20 +49,20 @@ One feature is one PR: the checker in `sharp/mago/`, the engine, the standard li
 
 Master requires CI to pass, and a branch must include the latest master before it merges, so master holds only trees CI tested.
 
-A PR's CI skips the jobs that run on the Architect's Mac, so a merge never waits for it: `MACOS` in `sharp.yml`, and `tests (macos-latest)`, `release-build` and `plain-php (macos-latest)` in `mago.yml`. It skips `LINUX_PASSES` too, which never failed without `LINUX` in the runs sampled. Only a release's bump PR still runs them and `LINUX_PASSES`, because its full runs are the ones the tag checks. The push to master runs every job after the merge, the Linux suites again included. So three kinds of defect now land on master first:
+A PR's CI skips the jobs that run on the Architect's Mac, so a merge never waits for it: `MACOS` in `sharp.yml`, and `tests (macos-latest)`, `release-build` and `plain-php (macos-latest)` in `mago.yml`. It skips `LINUX_PASSES` too, which never failed without `LINUX` in the runs sampled. Only a release's bump PR still runs them and `LINUX_PASSES`, because its full runs are the ones the tag checks. Master runs one push at a time, and a newer push replaces the one still waiting. A push run runs every job after the merge, the Linux suites again included, on every change since master's last push run that wasn't cancelled. So three kinds of defect now land on master first:
 
 - one on a disk that ignores case
 - one in the arm64 JIT
 - one in Mago code that only macOS runs, such as the watch mode's FSEvents
 
-A red push run opens one issue, or comments on the one still open, and a PR fixes it forward. No one reverts first: a merge commit can't land again cleanly once reverted, a revert hides a PR that merged on top of it, and it would revert healthy merges that failed only on the Mac's load. A red master gets a fix PR first, and other merges continue. A release tags only on a green master push run.
+A red push run opens one issue, or comments on the one still open, with the range of commits it tests, and a PR fixes it forward. No one reverts first: a merge commit can't land again cleanly once reverted, a revert hides a PR that merged on top of it, and it would revert healthy merges that failed only on the Mac's load. A red master gets a fix PR first, and other merges continue. A release tags only while master's newest finished push run is green. The bump's own push run may be cancelled by a later merge, and its tag doesn't need it: the tag's gates accept the bump PR's full run, as the release path explains.
 
 ## A release's path
 
 A release tests and builds once, on the bump's PR, and the tag publishes those same files:
 
 1. The bump's PR has a title that starts with `chore: release`. It changes only what `php sharp/mago/scripts/set-version.php <version>` writes, `PHP_SHARP_VERSION` in `ext/sharp/php_sharp.h`, the version `Zend/tests/sharp/ri_sharp.phpt` expects, and the release's section of `sharp/CHANGELOG.md`. Its CI checks that. The title makes its run the full run, which runs all 22 modes on every build and every Mago job, the macOS ones included, and the run builds every release asset beside the suites: the six `mago` binaries with their attestations, Mago's source archives, their SHA-256s and both runtime images.
-2. The bump merges once `CI_PASSED` passes, which needs the jobs that build the assets too.
+2. The bump merges once `CI_PASSED` passes, which needs the jobs that build the assets too. Update the bump's PR with master right before merging it, so its own full run covers the merge commit.
 3. The bump's merge commit is tagged `v<version>`, and the tag is pushed. A tag on any other commit fails.
 4. The tag publishes the assets the bump's PR built, and builds none. If no run of the PR passed, or its assets expired or were built from another tree, the tag builds them itself, and its run warns so. A bump from a fork builds no assets, so its tag always builds them.
 
