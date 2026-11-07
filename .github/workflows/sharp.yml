@@ -165,7 +165,7 @@ jobs:
           echo "This push's changes start at ${sha:-no commit, so every job runs}."
       - name: Find changes outside documentation, and changes to the engine
         id: diff
-        if: github.ref_type != 'tag' && !steps.passed.outputs.run && !steps.full.outputs.run
+        if: github.ref_type != 'tag' && !steps.passed.outputs.run && !steps.full_bump.outputs.run && !steps.full.outputs.run
         env:
           BASE: ${{ github.event.pull_request.base.sha || steps.base.outputs.sha }}
         run: |
