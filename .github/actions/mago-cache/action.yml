@@ -49,21 +49,26 @@ runs:
         path: ${{ inputs.rust-paths }}
         key: ${{ inputs.rust }}_RUST-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'ext/sharp/Cargo.lock', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}
     # The trailing dash matches only a commit's folder: a restore key that matches a key exactly restores that cache
-    # before any newer one.
+    # before any newer one. A change to the hashed files misses the first restore key, as every Cargo.toml change
+    # did, so the second restores the newest target of any hash, and cargo rebuilds only what the change reaches.
     - name: Mago cache, saved at the end of master's full run
       if: runner.environment == 'github-hosted' && inputs.save == 'true' && github.ref == 'refs/heads/master'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: sharp/build/*/mago
         key: ${{ inputs.name }}_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}-${{ github.sha }}
-        restore-keys: ${{ inputs.name }}_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}-
+        restore-keys: |
+          ${{ inputs.name }}_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}-
+          ${{ inputs.name }}_MAGO-${{ runner.arch }}-
     - name: Mago cache, restored only
       if: runner.environment == 'github-hosted' && (inputs.save != 'true' || github.ref != 'refs/heads/master')
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: sharp/build/*/mago
         key: ${{ inputs.name }}_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}-${{ github.sha }}
-        restore-keys: ${{ inputs.name }}_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}-
+        restore-keys: |
+          ${{ inputs.name }}_MAGO-${{ runner.arch }}-${{ hashFiles('ext/sharp/rust-toolchain.toml', 'sharp/mago/Cargo.toml', 'sharp/mago/Cargo.lock') }}-
+          ${{ inputs.name }}_MAGO-${{ runner.arch }}-
     - name: Give what the cached mago was built from a time before that build
       if: runner.environment == 'github-hosted'
       shell: bash
