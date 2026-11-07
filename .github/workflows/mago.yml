@@ -316,11 +316,16 @@ jobs:
       - name: cargo test
         run: |
           # The workspace's own tests run beside the loops, as the load the stall needs.
+          clang -O2 -o "$RUNNER_TEMP/reader" diagnostic-346-reader.c
+          echo "=== 346 probe, idle"
+          "$RUNNER_TEMP/reader" 1000
           cargo test --workspace --locked --no-run
           binary=$(cargo test -p mago-extension --lib --locked --no-run --message-format=json \
             | jq -r 'select(.profile.test == true and .target.name == "mago_extension") | .executable')
           cargo test --workspace --locked > "$RUNNER_TEMP/workspace.log" 2>&1 &
           workspace=$!
+          echo "=== 346 probe, beside the workspace's tests"
+          "$RUNNER_TEMP/reader" 3000
           others=0
           beside=0
           for run in $(seq 1 10); do
