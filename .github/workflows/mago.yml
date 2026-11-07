@@ -251,12 +251,14 @@ jobs:
       contents: read
 
     # The self-hosted Macs cap each job's parallelism, as sharp.yml's MACOS explains. On the Linux leg the caps are
-    # the defaults of ubuntu-latest's 4 cores, Lean's too. Lean reads an empty LEAN_NUM_THREADS as 0 threads, and then
-    # panics on its first promise, so the Linux leg names its 4.
+    # the defaults of ubuntu-latest's 4 cores, Lean's and mago's too. An empty value can't stand in for a default: Lean
+    # reads an empty LEAN_NUM_THREADS as 0 threads and panics on its first promise, and mago refuses to start on an
+    # empty MAGO_THREADS. So the Linux leg names Lean's 4, and MAGO_THREADS is 4 on both legs.
     env:
       CARGO_BUILD_JOBS: 4
       RUST_TEST_THREADS: 4
       RAYON_NUM_THREADS: 4
+      MAGO_THREADS: 4
       LEAN_NUM_THREADS: ${{ matrix.os == 'macos-latest' && 2 || 4 }}
 
     steps:
@@ -331,6 +333,7 @@ jobs:
       CARGO_BUILD_JOBS: 4
       RUST_TEST_THREADS: 4
       RAYON_NUM_THREADS: 4
+      MAGO_THREADS: 4
       LEAN_NUM_THREADS: 2
 
     steps:
@@ -388,6 +391,7 @@ jobs:
       CARGO_BUILD_JOBS: 4
       RUST_TEST_THREADS: 4
       RAYON_NUM_THREADS: 4
+      MAGO_THREADS: 4
       LEAN_NUM_THREADS: 2
 
     steps:
