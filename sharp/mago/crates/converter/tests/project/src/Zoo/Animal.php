@@ -22,6 +22,17 @@ abstract class Animal
 
     abstract public function kind(): string;
 
+    // A call through `self` of a static method that reads no late static binding, called through a subclass.
+    public static function counted(int $animals): string
+    {
+        return $animals . ' ' . self::plural($animals);
+    }
+
+    private static function plural(int $count): string
+    {
+        return $count === 1 ? 'animal' : 'animals';
+    }
+
     public function describe(): string
     {
         return $this->name . ' ' . $this->kind() . ' says ' . $this->sound . ' on ' . $this->legs . ' legs';

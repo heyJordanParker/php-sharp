@@ -16,20 +16,53 @@ use mago_syntax::cst::ArgumentList;
 use mago_syntax::cst::Binary;
 use mago_syntax::cst::BinaryOperator;
 use mago_syntax::cst::Call;
+use mago_syntax::cst::ClassLikeMember;
 use mago_syntax::cst::ClassLikeMemberSelector;
 use mago_syntax::cst::Expression;
 use mago_syntax::cst::FunctionCall;
 use mago_syntax::cst::Identifier;
 use mago_syntax::cst::Instantiation;
+use mago_syntax::cst::MethodBody;
+use mago_syntax::cst::Modifier;
+use mago_syntax::cst::PartialApplication;
+use mago_syntax::cst::Statement;
 use mago_syntax::cst::StaticMethodCall;
+use mago_syntax::walker::MutWalker;
 
 use super::Kind;
 use crate::Converter;
 use crate::library::type_test;
 use crate::types::type_text;
 
+/// What a method's body reads of the class PHP called: whether it names `static` or `parent`, and the methods it calls
+/// through `self`, which forward that class.
+#[derive(Default)]
+struct CalledClass {
+    names_static: bool,
+    through_self: Vec<Vec<u8>>,
+}
+
+impl<'ast, 'arena> MutWalker<'ast, 'arena, ()> for CalledClass {
+    fn walk_in_expression(&mut self, expression: &'ast Expression<'arena>, _: &mut ()) {
+        let (class, method) = match expression {
+            Expression::Static(_) | Expression::Parent(_) => return self.names_static = true,
+            Expression::Call(Call::StaticMethod(call)) => (call.class, &call.method),
+            Expression::PartialApplication(PartialApplication::StaticMethod(value)) => (value.class, &value.method),
+            _ => return,
+        };
+        match (class, method) {
+            (Expression::Self_(_), ClassLikeMemberSelector::Identifier(name)) => {
+                self.through_self.push(name.value.to_vec());
+            }
+            (Expression::Self_(_), _) => self.names_static = true,
+            _ => {}
+        }
+    }
+}
+
 impl<'input> Converter<'input, '_> {
-    /// The method `selector` names on a value of type `object`, when the analysis knows the value's class.
+    /// The method `selector` names on a value of type `object`, when the analysis knows the value's class, or the first
+    /// class of an intersection, as `Item & Shareable`, that has it.
     pub(super) fn method_of(
         &self,
         object: Option<&TUnion>,
@@ -38,11 +71,19 @@ impl<'input> Converter<'input, '_> {
         let ClassLikeMemberSelector::Identifier(name) = selector else {
             return None;
         };
-        let [TAtomic::Object(TObject::Named(class))] = object?.types.as_ref() else {
+        let [atomic @ TAtomic::Object(TObject::Named(class))] = object?.types.as_ref() else {
             return None;
         };
+        let codebase = self.input.codebase;
 
-        self.input.codebase.get_declaring_method(class.name.as_bytes(), name.value)
+        std::iter::once(class.name)
+            .chain(atomic.get_intersection_types().unwrap_or_default().iter().filter_map(
+                |intersected| match intersected {
+                    TAtomic::Object(TObject::Named(other)) => Some(other.name),
+                    _ => None,
+                },
+            ))
+            .find_map(|class| codebase.get_declaring_method(class.as_bytes(), name.value))
     }
 
     /// The method `selector` names, written as its class declares it: PHP finds a method in any case, and PHP# only in
@@ -206,9 +247,11 @@ impl<'input> Converter<'input, '_> {
         self.input.codebase.get_declaring_method(class, name.value)
     }
 
-    /// Refuses `self::m()`, or its method value `self::m(...)`, at `span` in a class a subclass can extend, and gives
-    /// whether it did. PHP's call through `self` forwards the class PHP called, which late static binding in `m` reads,
-    /// and a call through the class's name doesn't, so only a `final` class or an enum keeps that meaning.
+    /// Refuses `self::m()`, or its method value `self::m(...)`, at `span` in a class a subclass can extend, where `m` may
+    /// read the class PHP called, and gives whether it did. PHP's call through `self` forwards the class PHP called,
+    /// which late static binding in `m` reads, and a call through the class's name doesn't. So it converts in a `final`
+    /// class or an enum, and for a static method this file declares whose body, and each such method it calls through
+    /// `self` in turn, names neither `static` nor `parent`.
     pub(super) fn forwards_called_class(
         &mut self,
         span: Span,
@@ -224,14 +267,63 @@ impl<'input> Converter<'input, '_> {
         {
             return false;
         }
+        if let ClassLikeMemberSelector::Identifier(name) = method
+            && !self.reads_called_class(name.value, &mut Vec::new())
+        {
+            return false;
+        }
         let method = String::from_utf8_lossy(self.text(method.span())).into_owned();
         let named = current.name.clone();
         self.refuse(
             span,
-            format!("`self::{method}` forwards the class PHP called, which late static binding reads, and `{named}.{method}` doesn't, so a static call through `self` converts only in a `final` class"),
+            format!("`self::{method}` forwards the class PHP called, which late static binding in `{method}` reads, and `{named}.{method}` doesn't: it converts in a `final` class, and for a static method of this file that names neither `static` nor `parent`"),
         );
 
         true
+    }
+
+    /// Whether the method `name`, called through `self`, may read the class PHP called: it is no static method this file
+    /// declares, its return type or body names `static` or `parent`, or it calls a method through `self` that may.
+    /// `seen` holds the methods already read, which one calling itself reads again.
+    fn reads_called_class(&self, name: &[u8], seen: &mut Vec<Vec<u8>>) -> bool {
+        if seen.iter().any(|method| method.eq_ignore_ascii_case(name)) {
+            return false;
+        }
+        seen.push(name.to_vec());
+        let declared = self.input.program.statements.iter().flat_map(|statement| match statement {
+            Statement::Namespace(namespace) => namespace.statements().iter().collect::<Vec<_>>(),
+            statement => vec![statement],
+        });
+        let method = declared
+            .filter_map(|statement| match statement {
+                Statement::Class(class) => Some(class.members.iter()),
+                _ => None,
+            })
+            .flatten()
+            .find_map(|member| match member {
+                ClassLikeMember::Method(method) if method.name.value.eq_ignore_ascii_case(name) => Some(method),
+                _ => None,
+            });
+        let Some(method) = method else {
+            return true;
+        };
+        let is_static = method.modifiers.iter().any(|modifier| matches!(modifier, Modifier::Static(_)));
+        // A return type of `static`, alone or in a union, checks the value against the class PHP called.
+        let returns_static = method.return_type_hint.as_ref().is_some_and(|hint| {
+            self.text(hint.hint.span())
+                .split(|byte| !byte.is_ascii_alphanumeric())
+                .any(|word| word.eq_ignore_ascii_case(b"static"))
+        });
+        let MethodBody::Concrete(body) = &method.body else {
+            return true;
+        };
+        if !is_static || returns_static {
+            return true;
+        }
+        let mut reads = CalledClass::default();
+        reads.walk_block(body, &mut ());
+
+        reads.names_static || reads.through_self.iter().any(|called| self.reads_called_class(called, seen))
     }
 
     /// The function a bare call runs: the one its resolved name names, or PHP's own of the name it writes, as PHP falls

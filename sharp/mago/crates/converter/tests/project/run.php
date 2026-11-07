@@ -31,6 +31,14 @@ function keyed(): \Generator
     yield 'second' => 'b';
 }
 
+final class CountedSpec extends Spec implements \Countable
+{
+    public function count(): int
+    {
+        return 2;
+    }
+}
+
 // Calls each class of the fixture from plain PHP in another namespace, before and after the conversion.
 $spec = new Spec('alpha');
 $special = new Special('beta');
@@ -57,6 +65,8 @@ $order->add(2);
 $order->add(3);
 echo $order->summary(), ' ', $order->reference, "\n";
 echo $order->isFor('R-1') ? 'for R-1' : 'not for R-1', ' ', $order->isOf($special) ? 'of beta' : 'not of beta', ' ', $order->loud(), "\n";
+echo $order->labelled(new CountedSpec('omega')), ' ', $order->same(Spec::class), "\n";
+echo $order->found('0'), ' ', $order->found(''), ' ', $order->found(false), ' ', $order->found(true), "\n";
 
 $crate = new Crate(new Spec('gamma'));
 echo $crate->open()->label(), ' ', $crate->special()->get()->label(), "\n";
@@ -87,7 +97,7 @@ echo $label->size(500, false), ' ', $label->size(5, true), ' ', $label->size(20,
 $stock = new Stock();
 echo var_export($stock->quantity(new \Acme\Format\Record(['quantity' => '5'])), true), ' ', $stock->joined(keyed()), "\n";
 echo var_export($stock->coded(new \Acme\Format\Record(['code' => 5])), true), "\n";
-echo $stock->counted(new \Acme\Format\Lines(['a', 'b', 'c'])), "\n";
+echo $stock->counted(new \Acme\Format\Lines(['a', 'b', 'c'])), ' ', implode(',', $stock->marked(new \Acme\Format\Lines(['a', 'b']))), "\n";
 echo (new Ledger())->priceOf(['42' => 1, 'x' => 2], '42'), "\n";
 echo $stock->listed(['42' => 1, 'x' => 2]), ' ', var_export($stock->kept(['42' => 1, 'x' => 2], ['42' => true]), true), "\n";
 $through = (new Feed())->through(keyed());
@@ -99,6 +109,7 @@ echo get_debug_type($through), "\n";
 $cat = new Cat('tom');
 $bird = new Bird('tweety');
 echo $cat->describe(), "\n", $bird->describe(), "\n";
+echo Cat::counted(1), ' ', Bird::counted(3), "\n";
 $bird->sound = 'chirp';
 $bird->name = 'polly';
 echo $bird->describe(), "\n";

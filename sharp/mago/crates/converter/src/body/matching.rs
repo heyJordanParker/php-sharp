@@ -322,7 +322,7 @@ impl Converter<'_, '_> {
             let (compared, constant) = (self.shown(subject), self.shown(condition));
             return self.refuse(
                 condition.span(),
-                format!("a `match` arm compares `{compared}` with `{constant}` by PHP's `===`, which a PHP# pattern gives only between one scalar type, enums, or `null` (spec sections 19 and 21)"),
+                format!("a `match` arm compares `{compared}` with `{constant}` by PHP's `===`, which a PHP# pattern gives only between scalars of a type they share, with no `int` beside a `float`, enums, or `null` (spec sections 19 and 21)"),
             );
         }
         self.expression(condition, None);

@@ -25,7 +25,7 @@ final class Operators
         $inverted = ~$rate;
         $same = $count === $rate;
         $lists = $list === $list;
-        $mixed = $text === $count;
+        $mixed = $flag === $count;
         $rate /= 2;
     }
 }

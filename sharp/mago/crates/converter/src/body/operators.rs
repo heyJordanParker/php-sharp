@@ -425,13 +425,26 @@ pub(super) fn identity(lhs: Option<&TUnion>, rhs: Option<&TUnion>) -> Result<boo
                 .to_owned(),
         );
     }
-    let bare = |kinds: &[Kind]| kinds.iter().copied().filter(|kind| *kind != Kind::Null).collect::<Vec<_>>();
-    match (bare(&left).as_slice(), bare(&right).as_slice()) {
-        ([Kind::Int], [Kind::Float]) | ([Kind::Float], [Kind::Int]) => {
-            Err("PHP's `1 === 1.0` is false, and PHP# compares an `int` with a `float` by value (spec section 12)"
-                .to_owned())
-        }
-        ([a], [b]) if a == b && *a != Kind::Other => Ok(true),
-        _ => Err(format!("`===` between `{}` and `{}` is not converted yet", lhs.get_id(), rhs.get_id())),
+    let either = |kind: Kind| left.contains(&kind) || right.contains(&kind);
+    if either(Kind::Int) && either(Kind::Float) {
+        return Err("PHP's `1 === 1.0` is false, and PHP# compares an `int` with a `float` by value (spec section 12)"
+            .to_owned());
+    }
+    // PHP#'s `==` between two scalar types, or unions of them, as `string|false` and `false`, is PHP's `===`: equal
+    // when both hold the same type and value. Two sides that share no type never compare in PHP#.
+    let scalar = |kinds: &[Kind]| {
+        kinds
+            .iter()
+            .all(|kind| matches!(kind, Kind::Null | Kind::Int | Kind::Float | Kind::String | Kind::Bool | Kind::Enum))
+    };
+    let shared = left.iter().any(|kind| *kind != Kind::Null && right.contains(kind));
+    match (scalar(&left) && scalar(&right), shared) {
+        (true, true) => Ok(true),
+        (true, false) => Err(format!(
+            "`===` between `{}` and `{}` is always false, and PHP# has no `==` between types that share no value (spec section 19)",
+            lhs.get_id(),
+            rhs.get_id()
+        )),
+        (false, _) => Err(format!("`===` between `{}` and `{}` is not converted yet", lhs.get_id(), rhs.get_id())),
     }
 }

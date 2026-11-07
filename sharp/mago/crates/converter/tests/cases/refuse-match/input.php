@@ -23,7 +23,7 @@ final class Picker
         };
     }
 
-    public function mixedTypes(int|string $code): string
+    public function mixedTypes(int|float $code): string
     {
         return match ($code) {
             200 => 'ok',

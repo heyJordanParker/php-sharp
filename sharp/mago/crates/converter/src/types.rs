@@ -16,6 +16,7 @@ use mago_codex::ttype::atomic::array::TArray;
 use mago_codex::ttype::atomic::object::TObject;
 use mago_codex::ttype::atomic::scalar::TScalar;
 use mago_codex::ttype::atomic::scalar::class_like_string::TClassLikeString;
+use mago_codex::ttype::atomic::scalar::class_like_string::TClassLikeStringKind;
 use mago_codex::ttype::atomic::scalar::int::TInteger;
 use mago_codex::ttype::atomic::scalar::string::TStringCasing;
 use mago_codex::ttype::get_sharp_type;
@@ -143,6 +144,15 @@ pub fn type_text(union: &TUnion, codebase: &CodebaseMetadata, imports: &mut Impo
         ));
     }
 
+    // An intersection inside a union or a nullable type takes parentheses, as `(Order & Shareable)?`.
+    if members.len() > 1 || union.has_null() {
+        for member in &mut members {
+            if member.contains(" & ") {
+                *member = format!("({member})");
+            }
+        }
+    }
+
     Ok(match (union.has_null(), members.as_slice()) {
         (_, []) => return Err("`null` alone is no PHP# type".to_owned()),
         (false, [member]) => member.clone(),
@@ -153,8 +163,19 @@ pub fn type_text(union: &TUnion, codebase: &CodebaseMetadata, imports: &mut Impo
 }
 
 fn atomic_text(atomic: &TAtomic, codebase: &CodebaseMetadata, imports: &mut Imports) -> Result<String, String> {
-    if atomic.get_intersection_types().is_some_and(|intersected| !intersected.is_empty()) {
-        return Err(format!("the intersection type `{}` is not converted yet", atomic.get_id()));
+    // `Order & Shareable` holds a value of each class (spec section 21).
+    if let Some(intersected) = atomic.get_intersection_types().filter(|intersected| !intersected.is_empty()) {
+        let TAtomic::Object(TObject::Named(named)) = atomic else {
+            return Err(format!("PHP# has no type `{}`", atomic.get_id()));
+        };
+        let mut alone = named.clone();
+        alone.intersection_types = None;
+        let mut parts = vec![atomic_text(&TAtomic::Object(TObject::Named(alone)), codebase, imports)?];
+        for other in intersected {
+            parts.push(atomic_text(other, codebase, imports)?);
+        }
+
+        return Ok(parts.join(" & "));
     }
     // `get_sharp_type` reads a literal as its general type, which would widen `int|false` to `int|bool`.
     let literal = matches!(atomic, TAtomic::Scalar(scalar) if scalar.is_literal_value());
@@ -263,6 +284,11 @@ fn atomic_text(atomic: &TAtomic, codebase: &CodebaseMetadata, imports: &mut Impo
                 });
             }
             format!("[{}]", written.join(", "))
+        }
+        // `class-string` holds the name of any class, whose PHP# class value is a `Class<Object>`: a string that names
+        // no class is none, which PHP's PHPDoc type says too (spec section 21).
+        SharpType::ClassValue(TClassLikeString::Any { kind: TClassLikeStringKind::Class }) => {
+            "Class<Object>".to_owned()
         }
         SharpType::ClassValue(_) => return Err(format!("the type `{}` is not converted yet", atomic.get_id())),
     })

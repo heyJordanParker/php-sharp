@@ -21,4 +21,20 @@ final class Lines implements \IteratorAggregate
     {
         return new \ArrayIterator($this->lines);
     }
+
+    /**
+     * Calls `$each` with each line and its index, as a framework's `map` does.
+     *
+     * @param \Closure(string, int): string $each
+     * @return list<string>
+     */
+    public function mapped(\Closure $each): array
+    {
+        $mapped = [];
+        foreach ($this->lines as $index => $line) {
+            $mapped[] = $each($line, $index);
+        }
+
+        return $mapped;
+    }
 }

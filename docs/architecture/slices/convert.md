@@ -233,7 +233,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - A by-value capture `use ($total)`, and each variable an arrow function reads → the same plain capture, only when nothing writes `total` after its declaration, in the lambda or around it. Both.
 - A call of a function value `$f($x)` → `f(x)`, and a call of a string or an array that names a function refuses (line 2165). Both.
 - A closure type `\Closure(int): int` → `Function<int(int)>`, and one with a parameter by reference, a variadic or an optional one refuses. Type.
-- A lambda that takes fewer parameters than every function type it may be passed as → refuses, since PHP drops the extra arguments and a PHP# lambda takes each one (section 14.1). It asks the checker's own rule, `TCallableSignature::takes_more_parameters_than`, of each function type, so a plain `callable`, which takes `mixed ...`, takes any lambda. Both.
+- A lambda that takes fewer parameters than every function type it may be passed as → the same lambda with each parameter it lacks of the function type that passes fewest, after its own, as `fn ($line) => …` that a collection's `map` calls with a value and a key → `(string line, int unused) => …`. PHP drops the extra arguments, and a PHP# lambda takes each one (section 14.1), which its body never reads. Each takes the type the function type gives it, or `Any?`, and the name the function type gives it when that name is camel case, or `unused`, with a number where the file already names a variable so. It asks the checker's own rule, `TCallableSignature::takes_more_parameters_than`, of each function type, so a plain `callable`, which takes `mixed ...`, takes any lambda. One whose next parameter the function type passes by reference refuses, since a PHP# parameter is never taken by reference. Both.
 - `[$this, 'name']`, `'Class::name'` and `name(...)` → `this.name`. Both. An array or a string converts where a function type is declared, and refuses when the analysis finds no such method. A partial application with placeholders, and a built-in function's value, refuse.
 - A method and a property of one name → refuses (line 2346). 51 files.
 - `??` stays. `$title ?: 'Dear'` → `(title != null && title != "" && title != "0") ? title : 'Dear'`, the truthiness test section 21's rule gives and the value, for a value that a second read gives again, as below. `?:` of any other value refuses, since PHP# has no `?:` (line 3764) and the test would run it twice. Both.
@@ -255,9 +255,9 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 
 ### Section 19. Equality, comparison and operators
 
-- `===` and `!==` → `==` and `!=` when both sides have one scalar type, both are enums, or one side is `null`. Type.
+- `===` and `!==` → `==` and `!=` when both sides hold only scalars and enums and share a type, as `string|bool` and `false`, or one side is `null`. The bridge lowers PHP#'s `==` between such types to PHP's `===`, so `'' !== false` holds both ways. Two sides that share no type, as `bool` and `int`, refuse: PHP's `===` is always false there, and PHP# has no `==` between them (line 3055). Type.
 - `===` where either side may hold an object → stays `===` (line 3029). Type.
-- `===` between an `int` and a `float` → refuses, since `1 === 1.0` is false and PHP# compares them by value (line 1705). Type.
+- `===` where the sides may hold an `int` and a `float` → refuses, since `1 === 1.0` is false and PHP# compares them by value (line 1705). Type.
 - `===` on a collection → refuses, since PHP compares keys and order and PHP# compares elements (lines 3023 and 3032). Type.
 - Loose `==` → `==` when both sides have one scalar type, and refuses otherwise. Type.
 - `instanceof` → `is`, and `!$x instanceof A` → `x is not A` (line 3652). Tree.
@@ -297,6 +297,8 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 ### Section 24. Built-in types and `Any`
 
 - `mixed` → `Any?`, `?T` → `T?`, `object` → `Object`. Type.
+- An intersection, `Item&Shareable` → `Item & Shareable`, in parentheses inside a union or a nullable type, as `(Item & Shareable)?` (line 3730). Type.
+- `class-string` → `Class<Object>`, the class value of any class (line 3736). A string that names no class is none, which the engine checks where the value enters PHP#, as decision 9's `TypeError` at entry says of every PHPDoc type. Type.
 - `(int)` and `(float)` of a number, and `(string)` of a number, stay, and the aliases `(integer)`, `(double)`, `(real)` and `(binary)` become them. `(int)` and `(float)` stay even on a value of their own type, since PHP#'s run PHP's conversion at runtime and a type only PHPDoc gives, as a framework's `@property int` that holds `"5"`, is no proof of the value. `(string)` of a string leaves only where a native declaration or a literal makes the value one at runtime: a literal, a text expression, a parameter of the method, or a property or a call declared `string` natively or by the converted class. `(string)` of any other value the analysis types `string` → `` `${label}` ``, and of a `string` that may be null → `` `${note ?? ""}` ``: the bridge lowers a template's `string` value into PHP's interpolation, which converts the value it holds at runtime as `(string)` does, a `5` a `@property string` holds included, and `(string)` of `null` is `""`. Any other cast refuses, since a PHP# cast converts a number and a template shows one type. Both.
 - `(bool)`, `(array)` and `(object)` → refuses (line 4717). Tree.
 - An `int` literal where a `float` goes, which PHP turns into a `float` → the `float` of the value it writes, so `1` is `1.0`, the octal `017` is `15.0` and the hex `0x1F` is `31.0`. Type.
@@ -306,7 +308,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 
 - `X::class` → `typeof(X)`, `static` → `Self`, `self` → the class's name (line 4870). Tree.
 - `$x::class` of an object → `Class.of(x)`, and of a value that may be `null` refuses, since PHP's throws there. Type.
-- A static call through `self`, `self::m()`, → `Name.m()` in a `final` class or an enum, and refuses elsewhere. PHP's `self::m()` forwards the class PHP called, which late static binding in `m` reads, and a call through the class's name doesn't. `self` in a constant, a static property and `new self` keeps the class's name, which means the declaring class (line 5015). Tree.
+- A static call through `self`, `self::m()`, → `Name.m()` in a `final` class or an enum, and in any class where `m` is a static method the file declares whose return type and body, and those of each method it calls through `self` in turn, name neither `static` nor `parent`. PHP's `self::m()` forwards the class PHP called, which only late static binding in `m` reads, and a call through the class's name doesn't. Any other `self::m()` refuses, as a method a parent declares, whose body is in another file. `self` in a constant, a static property and `new self` keeps the class's name, which means the declaring class (line 5015). Tree.
 - A property or a method named by a variable, `$x->$name` and `$x->$name()` → refuses (line 4973, decision 030). Tree. 23 and 10 files.
 
 ### Section 27. PHP# files

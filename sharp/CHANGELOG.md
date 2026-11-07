@@ -14,6 +14,10 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
   - a loop over the values of an object whose class implements `Traversable`, as a framework's collection
   - a condition of several parts and `?:` on a property its class declares with no hook and no `__get`, which a second read gives again, and `?:` on a variable
   - `match (true)` with `bool` conditions and a `default` arm, as a chain of ternaries, or as `if … else if … else` where it stands as a statement
+  - `self::m()` in a class a subclass can extend, where `m` is a static method of the file that names neither `static` nor `parent`, nor calls through `self` one that does
+  - an intersection type, as `Item&Shareable`, and `class-string`, as `Class<Object>`
+  - `===` between unions of scalars that share a type, as `string|false` and `false`, as `==`
+  - a lambda that takes fewer parameters than the function type it is passed as, which takes each one it lacks, named `unused` where the function type names none
 
 ### Changed
 

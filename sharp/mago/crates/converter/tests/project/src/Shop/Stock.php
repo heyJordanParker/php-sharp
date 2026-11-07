@@ -62,6 +62,13 @@ final class Stock
         return $joined;
     }
 
+    // A lambda that ignores the index plain PHP passes it, which its PHP# form takes as `unused`.
+    /** @return list<string> */
+    public function marked(Lines $lines): array
+    {
+        return $lines->mapped(fn (string $line): string => $line . '!');
+    }
+
     /** @param iterable<string> $names */
     public function joined(iterable $names): string
     {

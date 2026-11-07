@@ -345,7 +345,7 @@ impl<'input> Converter<'input, '_> {
                 if self.is(access.array, &[Kind::Map]) {
                     self.refuse(
                         expression.span(),
-                        "a `Map` read at a key it may lack is not converted yet: PHP gives `null` for a missing key, and PHP# reads one only behind `??` (spec section 12)",
+                        "a `Map` read at a key it may lack has no PHP# form: PHP warns on a missing key and gives `null`, and a PHP# `Map` read gives `null` without a word, so it converts behind `??` or `isset` only (spec section 12)",
                     );
                 }
             }
