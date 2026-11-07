@@ -18,6 +18,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
   - an intersection type, as `Item&Shareable`, and `class-string`, as `Class<Object>`
   - `===` between unions of scalars that share a type, as `string|false` and `false`, as `==`
   - a lambda that takes fewer parameters than the function type it is passed as, which takes each one it lacks, named `unused` where the function type names none
+  - a `string` that may be null in `.` or an interpolated string, as `` `${title ?? ""}` ``, since PHP shows `null` as nothing
 
 ### Changed
 

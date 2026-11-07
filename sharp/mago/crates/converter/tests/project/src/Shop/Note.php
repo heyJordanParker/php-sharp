@@ -19,6 +19,12 @@ final class Note
         return $title ?: 'untitled';
     }
 
+    // A string that may be null, which PHP's `.` and interpolation show as nothing.
+    public function signed(?string $name): string
+    {
+        return "Dear {$name}," . $name . '.';
+    }
+
     public function describe($value): string
     {
         if (is_string($value)) {

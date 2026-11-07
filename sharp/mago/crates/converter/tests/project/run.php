@@ -77,6 +77,7 @@ echo $tagged->label(), ' ', $tagged->tag, ' ', $tagged->name, "\n";
 $note = new Note();
 echo $note->describe('hi'), ' / ', $note->describe(5), "\n";
 echo $note->headed('memo'), ' ', $note->headed('0'), ' ', $note->headed(''), ' ', $note->headed(null), "\n";
+echo $note->signed('Ann'), ' ', $note->signed(null), "\n";
 
 echo (new Factory())->make()->get()->label(), "\n";
 echo (new Pair())->both(), "\n";

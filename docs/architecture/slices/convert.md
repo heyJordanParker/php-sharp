@@ -250,6 +250,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - `.` with an `int` or a `float` → a template, `` `x${count}` ``, which prints a number through PHP's own conversion. Type.
 - `.` with a `bool`, which PHP prints as `1` or nothing, and a template as `true` or `false` (line 2940) → refuses. Type.
 - `"Hi $name"` → `` `Hi ${name}` ``, each value an `int`, a `float` or a `string`, which a template shows as PHP does. A `bool` refuses (line 2940). Both.
+- A `string` that may be null, in `.` or interpolated → `` `${title ?? ""}` ``, since PHP shows `null` as nothing. An `int` or a `float` that may be null refuses, since `?? ""` would give a union, which a template doesn't show. Both.
 - Heredoc and nowdoc → a template (line 2927), without the closing label's indentation and the line break before it. Text takes JavaScript's escapes for `\`, a backtick, `$` and control characters. A heredoc indented with both spaces and tabs, and text that is no UTF-8, refuse. Tree. 7 files.
 - `__toString()` → `string toString()` (line 2977). Tree.
 
