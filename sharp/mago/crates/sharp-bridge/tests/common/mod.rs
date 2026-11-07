@@ -7,15 +7,12 @@
 use std::borrow::Cow;
 use std::sync::LazyLock;
 
-use foldhash::HashSet;
-
 use mago_allocator::LocalArena;
 use mago_analyzer::Analyzer;
 use mago_analyzer::analysis_result::AnalysisResult;
 use mago_analyzer::effects::Effects;
 use mago_analyzer::plugin::PluginRegistry;
 use mago_analyzer::settings::Settings;
-use mago_codex::populator::populate_codebase;
 use mago_codex::scanner::scan_program;
 use mago_database::file::File;
 use mago_names::resolver::ChangingMembers;
@@ -37,7 +34,6 @@ use mago_syntax::dialect::Dialect;
 use mago_syntax::parser::parse_file;
 use mago_syntax::parser::parse_file_with_dialect;
 use mago_syntax::settings::ParserSettings;
-use mago_word::WordSet;
 
 #[path = "../../../../tests/support/sharp_files.rs"]
 pub mod sharp_files;
@@ -46,6 +42,10 @@ mod sharp_words;
 
 #[path = "../../../../tests/support/effect_classes.rs"]
 pub mod effect_classes;
+#[path = "../../../../tests/support/prelude_population.rs"]
+mod prelude_population;
+
+use prelude_population::populate_on_prelude;
 
 /// `Lib\Model`, a plain PHP parent whose accessors read and write an attribute by name, as Eloquent's do.
 pub const MODEL: (&str, &str) = (
@@ -235,7 +235,7 @@ pub fn checked_file<R>(
     let semantic_issues = SemanticsChecker::new(PHPVersion::ENGINE).check(file, program, &names);
 
     metadata.extend(scan_program(&arena, file, program, &names, settings.version));
-    populate_codebase(&mut metadata, &mut symbol_references, WordSet::default(), HashSet::default());
+    populate_on_prelude(&mut metadata, &mut symbol_references);
     let mut result = AnalysisResult::new(symbol_references);
     let artifacts = Analyzer::new(&arena, file, &names, &metadata, &PLUGIN_REGISTRY, settings)
         .analyze_with_artifacts(program, &mut result)
