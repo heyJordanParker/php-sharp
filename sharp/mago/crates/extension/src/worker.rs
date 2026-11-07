@@ -1436,7 +1436,22 @@ mod diagnostic {
             && state.peer != 0
         {
             log(&format!("worker {worker}: the read end outlived the write: {state}"));
-            for process in unreadable(own) {
+            // First the processes this user can read, while the read end is alive.
+            for round in 0..3 {
+                let held = holders(state.peer);
+                log(&format!("worker {worker}: scan {round} of the readable processes: {} hold the read end", held.len()));
+                for holder in held {
+                    log(&format!("worker {worker}: read end held by {holder}"));
+                }
+                if pipe_state(own, fd).is_some_and(|state| state.peer == 0) {
+                    break;
+                }
+            }
+            log(&format!(
+                "worker {worker}: the read end is alive after the scans: {}",
+                pipe_state(own, fd).is_some_and(|state| state.peer != 0)
+            ));
+            for process in unreadable(own).into_iter().filter(|process| !process.contains(" ppid 1 ")) {
                 log(&format!("worker {worker}: unreadable {process}"));
             }
             let started = Instant::now();
