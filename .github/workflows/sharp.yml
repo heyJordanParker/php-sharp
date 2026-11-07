@@ -477,8 +477,17 @@ jobs:
     # php-src's own macOS jobs in test-suite.yml leave 180.
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'macos-arm64-suite' || 'macos-latest' }}
     timeout-minutes: 120
+    # The 12-core Mac runs this job beside the other runners' jobs and the work the suite checks, and two or three jobs
+    # that each took every core held its load between 200 and 480 for hours. So every job on the self-hosted Macs caps
+    # its parallelism: CARGO_BUILD_JOBS sets cargo's jobs, and sharp/bin/build's make and sharp/bin/test's run-tests.php
+    # read it as their -j. RUST_TEST_THREADS sets libtest's threads, RAYON_NUM_THREADS a rayon pool that sets no size of
+    # its own, and LEAN_NUM_THREADS Lean's.
     env:
       FORMULAE: autoconf bison curl re2c pkgconf icu4c libiconv libpq libsodium libzip oniguruma
+      CARGO_BUILD_JOBS: 4
+      RUST_TEST_THREADS: 4
+      RAYON_NUM_THREADS: 4
+      LEAN_NUM_THREADS: 2
     steps:
       # actions/checkout's clean deletes sharp/build. Each job on the self-hosted Macs keeps it instead, as
       # .github/actions/clean-kept-build explains, so the engine and mago rebuild only what changed, which takes
