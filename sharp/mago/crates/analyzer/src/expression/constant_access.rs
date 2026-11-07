@@ -65,9 +65,11 @@ impl<'arena> Analyzable<'_, 'arena> for ConstantAccess<'arena> {
                 && let Some(declared_type) = block_context.declared_type(&variable_id)
             {
                 if resulting_type.get_id() != declared_type.get_id() {
+                    let line = context.source_file.line_number(lambda) + 1;
+                    let reason = format!("the lambda on line {line} assigns it, so it may change before this read");
                     let explained =
-                        explain_unnarrowed_read(context, variable_id, lambda, &resulting_type, &declared_type);
-                    context.lambda_assigned_reads.insert(self.span(), explained);
+                        explain_unnarrowed_read(context, variable_id, &reason, &resulting_type, &declared_type);
+                    context.unnarrowed_reads.insert(self.span(), explained);
                 }
                 resulting_type = declared_type.into();
             }
@@ -167,14 +169,14 @@ impl<'arena> Analyzable<'_, 'arena> for ConstantAccess<'arena> {
     }
 }
 
-/// The note and the help an error at a read of the local `variable_id` adds, when a test or an assignment narrowed it
-/// to `narrowed` but it reads at `declared` because the lambda that starts at `lambda` assigns it. As Kotlin's "smart
-/// cast is impossible" error, the note names the lambda's line, and the help binds the value to a name, as spec section
-/// 21 keeps a property's tested value.
-fn explain_unnarrowed_read<A>(
+/// The note and the help an error at a read of the local or the property `variable_id` adds, when a test or an
+/// assignment narrowed it to `narrowed` but it reads at `declared` for `reason`: a lambda that assigns the local, or a
+/// `get` accessor that gives the property. As Kotlin's "smart cast is impossible" error, the note names the reason, and
+/// the help binds the value to a name, as spec section 21 keeps a tested value.
+pub(crate) fn explain_unnarrowed_read<A>(
     context: &Context<'_, '_, A>,
     variable_id: Word,
-    lambda: u32,
+    reason: &str,
     narrowed: &TUnion,
     declared: &TUnion,
 ) -> (String, String)
@@ -182,14 +184,11 @@ where
     A: Arena,
 {
     let name = display_variable_name(context, variable_id.as_bytes());
-    let line = context.source_file.line_number(lambda) + 1;
     let narrowed = display_value_type(context, narrowed, declared);
     let bound = if name == "t" { "tested" } else { "t" };
 
     (
-        format!(
-            "`{name}` is not narrowed to `{narrowed}` here: the lambda on line {line} assigns it, so it may change before this read."
-        ),
+        format!("`{name}` is not narrowed to `{narrowed}` here: {reason}."),
         format!("Bind the tested value to a name, as in `{name} is {narrowed} {bound}`, and read `{bound}`."),
     )
 }

@@ -4588,18 +4588,19 @@ fn bitwise_not_of_an_int_is_an_int_in_both_dialects() {
     assert_eq!(messages(("src/Demo/Report.php", php), &[]), Vec::<String>::new());
 }
 
-/// Spec section 21 narrows no property, because it could change between the test and the use, so `order.total` stays
-/// `Any?` after `is int`. The error says so and names the fix, a name bound by the test. PHP narrows the property, and
-/// its error on an untested `mixed` operand keeps its wording.
+/// Spec section 21 narrows a stored property after `is`, as it does after `!= null`, until the next call, since PHP
+/// runs one thread and only a call or an assignment can change it. So `order.total` is an `int` after `is int`, and
+/// `Any?` again after `this.save()`, where the error says why and names the fix, a name bound by the test. PHP narrows
+/// the property, and its error on an untested `mixed` operand keeps its wording.
 #[test]
-fn an_operand_read_from_a_tested_property_says_properties_are_not_narrowed() {
-    let sharp = "namespace Demo;\n\npublic class Order\n{\n    public Any? total { get; set; }\n\n    public Order(Any? total)\n    {\n        this.total = total;\n    }\n\n    public static int next(Order order)\n    {\n        if (order.total is int) {\n            return order.total + 1;\n        }\n        if (order.total is int t) {\n            return t + 1;\n        }\n        return 0;\n    }\n}\n";
+fn a_tested_property_narrows_until_the_next_call() {
+    let sharp = "namespace Demo;\n\npublic class Order\n{\n    public Any? total { get; set; }\n\n    public Order(Any? total)\n    {\n        this.total = total;\n    }\n\n    public int next(Order order)\n    {\n        if (order.total is int) {\n            int t = order.total + 1;\n            return t;\n        }\n        if (order.total is int) {\n            this.save();\n            return order.total + 1;\n        }\n        if (order.total is int kept) {\n            this.save();\n            return kept + 1;\n        }\n        return 0;\n    }\n\n    private void save()\n    {\n    }\n}\n";
 
     assert_eq!(
         refusals(("src/Demo/Order.sharp", sharp), &[]),
         [
-            "15:20 mixed-operand `order.total` is `Any?` here: a property is not narrowed, because it could change between the test and the use. | Copy the value into a local first: test it with a name, as in `if (order.total is int t)`, and use `t`.",
-            "15:20 mixed-return-statement Could not infer a precise return type for method `Order.next`. Saw type `Any?`. | Add specific type hints to variables, parameters, or properties involved in calculating the return value. Consider adding a specific return type declaration to the method signature to catch potential mismatches earlier.",
+            "20:20 mixed-operand `order.total` is `Any?` here: a property stays narrowed only until the next call or assignment, and one with a `get` accessor is never narrowed. | Copy the value into a local first: test it with a name, as in `if (order.total is int t)`, and use `t`.",
+            "20:20 mixed-return-statement Could not infer a precise return type for method `Order.next`. Saw type `Any?`. | Add specific type hints to variables, parameters, or properties involved in calculating the return value. Consider adding a specific return type declaration to the method signature to catch potential mismatches earlier.",
         ]
     );
 
@@ -4611,6 +4612,44 @@ fn an_operand_read_from_a_tested_property_says_properties_are_not_narrowed() {
             "13:14 mixed-argument The first value for `echo` is too general. | Add a specific type hint or assertion for this value.",
             "14:18 mixed-operand Right operand in binary operation has type `mixed`. | Ensure the right operand has a known type (e.g., `int`, `float`, `string`) using type hints, assertions, or checks.",
             "14:14 mixed-argument The first value for `echo` is too general. | Add a specific type hint or assertion for this value.",
+        ]
+    );
+}
+
+/// A property with a `get` accessor runs it at each read, so spec section 21 never narrows it: after `this.next !=
+/// null`, `this.next` is still `Hooked?`, and the error says why and binds the tested value to a name instead. A stored
+/// property narrows after the same test.
+#[test]
+fn a_property_with_a_get_accessor_is_never_narrowed() {
+    let sharp = "namespace Demo;\n\npublic class Hooked\n{\n    public Hooked? source { get; set; } = null;\n\n    public Hooked? next { get => this.source; }\n\n    public Hooked first()\n    {\n        if (this.source != null) {\n            return this.source;\n        }\n        if (this.next != null) {\n            return this.next;\n        }\n        return this;\n    }\n}\n";
+
+    let explained: Vec<(String, Vec<String>, Option<String>)> =
+        analyze(&PLUGIN_REGISTRY, settings(), ("src/Demo/Hooked.sharp", sharp), &[])
+            .into_iter()
+            .map(|issue| (located(sharp, &issue), issue.notes, issue.help))
+            .collect();
+    let unnarrowed = "`this.next` is not narrowed to `Hooked` here: its `get` accessor runs at each read, so it may give another value.";
+    let bound = Some("Bind the tested value to a name, as in `this.next is Hooked t`, and read `t`.".to_owned());
+    assert_eq!(
+        explained,
+        [
+            (
+                "15:20 nullable-return-statement".to_owned(),
+                vec![
+                    "The declared return type does not permit null, but the analysis indicates that 'null' or a nullable type could be returned from this path."
+                        .to_owned(),
+                    unnarrowed.to_owned(),
+                ],
+                bound.clone(),
+            ),
+            (
+                "15:20 invalid-return-statement".to_owned(),
+                vec![
+                    "The type `Hooked?` returned here is not compatible with the declared return type `Hooked`.".to_owned(),
+                    unnarrowed.to_owned(),
+                ],
+                bound,
+            ),
         ]
     );
 }
@@ -12849,7 +12888,8 @@ fn a_method_one_collection_of_a_union_lacks_is_refused_once_naming_it() {
 
 /// A collection property read through a receiver that may also be a scalar is the collection its class declares, beside
 /// the refused read on the scalar: `basket.items.add(1)` on an `int|Basket` whose `items` is a `Set<string>` is refused
-/// for its element, and `basket.items.get(0)` names the `Set` that has no `get`.
+/// for its element, and `basket.items.get(0)` names the `Set` that has no `get`. The call ends the first read's
+/// narrowing, spec section 21, so the second read is refused on the scalar too.
 #[test]
 fn a_collection_property_read_through_a_union_with_a_scalar_is_the_declared_collection() {
     let basket = (
@@ -12864,6 +12904,7 @@ fn a_collection_property_read_through_a_union_with_a_scalar_is_the_declared_coll
             "7:16 invalid-property-access Attempting to access a property on a non-object type (`int`). | Cannot access property here | This expression has type `int`",
             "7:9 possible-method-access-on-null Attempting to call a method on `null`. | This expression can be `null` | Use the nullsafe operator (`?.`) if `null` is an expected value.",
             "7:26 invalid-argument Invalid argument type for argument #1 of `Set<string>.add`: expected `string`, but found `int`. | This has type `int` | Arguments to this method are incorrect | The provided type `int` is not compatible with the expected type `string`. | Change the argument value to match `string`, or update the parameter's type declaration.",
+            "8:16 invalid-property-access Attempting to access a property on a non-object type (`int`). | Cannot access property here | This expression has type `int`",
             "8:9 possible-method-access-on-null Attempting to call a method on `null`. | This expression can be `null` | Use the nullsafe operator (`?.`) if `null` is an expected value.",
             "8:22 non-existent-method Method `get` does not exist on `Set<string>`. | This method selection is invalid | This expression has type `Set<string>` | A `Set<string>` has the methods `add`, `any`, `clear`, `contains`, `count`, `filter`, `first`, `isEmpty`, `isNotEmpty`, `map`, `remove`, `sortedBy`, `sumOf`, `toList`.",
         ]

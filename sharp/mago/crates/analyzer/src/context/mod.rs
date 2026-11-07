@@ -82,10 +82,10 @@ where
     /// of its hidden variables apart. A later body takes a name again only once the body that took it first is analyzed.
     pub(super) hidden_variables: HashMap<&'arena [u8], &'arena Expression<'arena>>,
     class_initializers: WordMap<WordSet>,
-    /// Each read of a PHP# local that a test or an assignment narrowed, but that reads at its declared type because a
-    /// lambda assigns the local, with the note and the help an error at the read adds, as Kotlin names why a smart
-    /// cast is impossible.
-    pub(super) lambda_assigned_reads: HashMap<Span, (String, String)>,
+    /// Each read of a PHP# local or property that a test or an assignment narrowed, but that reads at its declared type
+    /// because a lambda assigns the local or a `get` accessor gives the property, with the note and the help an error
+    /// at the read adds, as Kotlin names why a smart cast is impossible.
+    pub(super) unnarrowed_reads: HashMap<Span, (String, String)>,
     /// How many class-likes of the codebase have each lowercase short name, counted the first time a message asks.
     pub(super) short_name_counts: OnceCell<HashMap<String, u32>>,
 }
@@ -127,7 +127,7 @@ where
             patterns: Vec::new(),
             hidden_variables: HashMap::default(),
             class_initializers: WordMap::default(),
-            lambda_assigned_reads: HashMap::default(),
+            unnarrowed_reads: HashMap::default(),
             short_name_counts: OnceCell::new(),
         }
     }
@@ -294,7 +294,7 @@ where
     /// [`crate::artifacts::AnalysisArtifacts`] for its caller after analysis completes.
     pub fn finish_collector(self, analysis_result: &mut AnalysisResult, defer_pragmas: bool) {
         let (issues, pragmas) = if defer_pragmas { self.collector.defer() } else { (self.collector.finish(), None) };
-        analysis_result.issues.extend(explain_lambda_assigned_reads(issues, &self.lambda_assigned_reads));
+        analysis_result.issues.extend(explain_unnarrowed_reads(issues, &self.unnarrowed_reads));
         analysis_result.add_deferred_pragmas(pragmas);
     }
 }
@@ -302,7 +302,7 @@ where
 /// `issues`, where each error whose primary annotation is a read in `reads` says why the read is not narrowed and how
 /// to keep the tested value, with its note and help. Every rule that reports at a value reports there, so one pass
 /// covers a method call, a property read, an argument and an operand alike.
-fn explain_lambda_assigned_reads(issues: IssueCollection, reads: &HashMap<Span, (String, String)>) -> IssueCollection {
+fn explain_unnarrowed_reads(issues: IssueCollection, reads: &HashMap<Span, (String, String)>) -> IssueCollection {
     if reads.is_empty() {
         return issues;
     }

@@ -35,6 +35,7 @@ use mago_syntax::cst::Literal;
 use mago_syntax::cst::Statement;
 use mago_syntax::cst::Try;
 use mago_syntax::cst::Variable;
+use mago_word::word;
 
 use crate::Converter;
 use crate::declaration::NameCase;
@@ -406,8 +407,8 @@ impl<'input> Converter<'input, '_> {
     /// Refuses each property read that `value`, a value that lands in the declared type `place`, as a method returns
     /// it or a call passes it, gives as itself or as a branch of `?:`, where the analysis narrows the property past
     /// its declared type and `place` holds only the narrowed one, as `$this->owner` after `$this->owner instanceof
-    /// Page`. PHP# reads a property by its declared type wherever it is read, since it may change between a test and a
-    /// read (spec section 21).
+    /// Page`, and PHP# reads it by its declared type: a property with a `get` accessor, which runs at each read (spec
+    /// section 21).
     pub(crate) fn narrowed(&mut self, value: &Expression<'_>, place: &TUnion) {
         let (object, property) = match value {
             Expression::Parenthesized(parenthesized) => return self.narrowed(parenthesized.expression, place),
@@ -436,9 +437,15 @@ impl<'input> Converter<'input, '_> {
         };
         let property = [b"$".as_slice(), name.value].concat();
         let codebase = self.input.codebase;
-        let Some(declared) = codebase
-            .get_declaring_property(class.name.as_bytes(), &property)
-            .and_then(|metadata| metadata.type_metadata.as_ref())
+        let Some(metadata) = codebase.get_declaring_property(class.name.as_bytes(), &property) else {
+            return;
+        };
+        if !metadata.hooks.contains_key(&word(b"get")) {
+            return;
+        }
+        let Some(declared) = metadata
+            .type_metadata
+            .as_ref()
             .map(|metadata| &metadata.type_union)
             .filter(|declared| !declared.has_template_types() && !declared.types.iter().any(TAtomic::is_mixed))
         else {
@@ -454,7 +461,7 @@ impl<'input> Converter<'input, '_> {
         self.refuse(
             value.span(),
             format!(
-                "`{shown}` reads as `{}` here, which PHP narrows it to, and PHP# reads a property by its declared type `{}`, since it may change between a test and a read (spec section 21): read it into a local first",
+                "`{shown}` reads as `{}` here, which PHP narrows it to, and PHP# reads it by its declared type `{}`, since its `get` accessor runs at each read (spec section 21): read it into a local first",
                 read.get_id(),
                 declared.get_id()
             ),

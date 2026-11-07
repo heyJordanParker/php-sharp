@@ -66,7 +66,7 @@ public class Refusals
 
     public Any? total(Tab order)
     {
-        if (order.total is int) { return order.total + 1; }
+        if (order.total is int) { this.drained(1); return order.total + 1; }
         return null;
     }
 
@@ -145,8 +145,8 @@ line 23: This `match` misses `Status.Closed`.
 line 32: A `match` needs a `default` arm.
   A `match` may leave out `default` only when its arms handle every case of an enum or a sealed interface, or every value of a `List`.
   help: Add `default => …` as the last arm.
-line 40: `order.total` is `Any?` here: a property is not narrowed, because it could change between the test and the use.
-  PHP# narrows a local or a parameter after `is`, never a property.
+line 40: `order.total` is `Any?` here: a property stays narrowed only until the next call or assignment, and one with a `get` accessor is never narrowed.
+  A call may change a property, and a `get` accessor runs at each read.
   help: Copy the value into a local first: test it with a name, as in `if (order.total is int t)`, and use `t`.
 line 50: `circle` exists only where `shape is Circle circle` is true.
   help: A pattern variable holds a value only where its pattern matches. Test the value again here, or declare a local for `circle` before the test.

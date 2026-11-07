@@ -2,8 +2,10 @@ use mago_allocator::Arena;
 use std::rc::Rc;
 
 use mago_codex::assertion::Assertion;
+use mago_codex::ttype::TType;
 use mago_codex::ttype::add_optional_union_type;
 use mago_codex::ttype::atomic::TAtomic;
+use mago_codex::ttype::atomic::object::TObject;
 use mago_codex::ttype::expander::StaticClassType;
 use mago_codex::ttype::expander::TypeExpansionOptions;
 use mago_codex::ttype::expander::expand_union;
@@ -19,6 +21,7 @@ use mago_syntax::cst::NullSafePropertyAccess;
 use mago_syntax::cst::PropertyAccess;
 use mago_word::Word;
 use mago_word::concat_word;
+use mago_word::word;
 
 use crate::analyzable::Analyzable;
 use crate::artifacts::AnalysisArtifacts;
@@ -30,8 +33,10 @@ use crate::expression::access::analyze_through_value;
 use crate::expression::access::refuse_statics_of_no_class;
 use crate::expression::call::analyze_extension_access;
 use crate::expression::call::method_call::with_receiver_type;
+use crate::expression::constant_access::explain_unnarrowed_read;
 use crate::expression::is_refused_type;
 use crate::resolver::class_name::class_value_classes;
+use crate::resolver::property::is_backing_store_access;
 use crate::resolver::property::resolve_instance_properties;
 use crate::utils::expression::get_block_expression_id;
 use crate::utils::expression::get_property_access_expression_id;
@@ -105,9 +110,16 @@ where
         context.resolved_names,
         Some(context.codebase),
     );
+    // Spec section 21: a PHP# read of a property with a `get` accessor runs it, so no test or write before the read
+    // narrows it. The type a test or a write gave it explains an error at the read.
+    let runs_accessor =
+        context.dialect.is_sharp() && runs_get_accessor(context, block_context, object, property_selector);
+    let unnarrowed =
+        property_access_id.filter(|_| runs_accessor).and_then(|id| Some((id, block_context.locals.get(&id).cloned()?)));
 
     // A read the code takes as a function may be a method's value, spec section 14.3, so it is resolved again.
     if context.settings.memoize_properties
+        && !runs_accessor
         && !artifacts.get_expected_type(&span).is_some_and(|expected| expected.to_non_nullable().is_callable())
         && let Some(property_access_id) = &property_access_id
         && let Some(existing_type) = block_context.locals.get(property_access_id).cloned()
@@ -222,6 +234,7 @@ where
     }
 
     let narrowed_from_non_nullsafe = if is_null_safe
+        && !runs_accessor
         && let Some(object_type) = artifacts.get_rc_expression_type(object)
         && !object_type.can_be_null()
         && !object_type.possibly_undefined()
@@ -290,6 +303,14 @@ where
         },
     );
 
+    if let Some((id, narrowed)) = unnarrowed
+        && narrowed.get_id() != resulting_type.get_id()
+    {
+        let reason = "its `get` accessor runs at each read, so it may give another value";
+        let explained = explain_unnarrowed_read(context, id, reason, &narrowed, &resulting_type);
+        context.unnarrowed_reads.insert(span, explained);
+    }
+
     let resulting_type = Rc::new(resulting_type);
     if let Some(property_access_id) = property_access_id {
         block_context.locals.insert(property_access_id, Rc::clone(&resulting_type));
@@ -298,6 +319,40 @@ where
     artifacts.set_rc_expression_type(&span, resulting_type);
 
     Ok(())
+}
+
+/// Whether a PHP# read of `property_selector` on `object` runs a `get` accessor of a class the object may hold. The
+/// object's type is the one the block holds for it, as a narrowed read is one the block holds. A read in one of the
+/// property's own accessors reads its storage, and runs none.
+fn runs_get_accessor<A>(
+    context: &Context<'_, '_, A>,
+    block_context: &BlockContext<'_>,
+    object: &Expression<'_>,
+    property_selector: &ClassLikeMemberSelector<'_>,
+) -> bool
+where
+    A: Arena,
+{
+    let ClassLikeMemberSelector::Identifier(name) = property_selector else {
+        return false;
+    };
+    let property = concat_word!(b"$", name.value);
+    if is_backing_store_access(object, property, block_context, context.resolved_names) {
+        return false;
+    }
+    let Some(object_type) =
+        get_block_expression_id(object, context, block_context).and_then(|id| block_context.locals.get(&id))
+    else {
+        return false;
+    };
+
+    object_type.types.iter().any(|atomic| match atomic {
+        TAtomic::Object(TObject::Named(object)) => context
+            .codebase
+            .get_declaring_property(object.name.as_bytes(), property.as_bytes())
+            .is_some_and(|declared| declared.hooks.contains_key(&word(b"get"))),
+        _ => false,
+    })
 }
 
 /// Adds symbol reference for a memoized property access.

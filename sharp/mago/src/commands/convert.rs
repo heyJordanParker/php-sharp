@@ -1566,6 +1566,28 @@ final class CountsWorkers implements Plugin, BeforeAnalysisHook, AfterAnalysisHo
         assert_eq!(outcome.proofs, 2);
     }
 
+    /// PHP keeps `$this->total` narrowed past `$other->reset()`, a call that gets no `$this`, and PHP# narrows a property
+    /// only until the next call (spec section 21). The converter leaves that rule to the checker, so the proof keeps the
+    /// file plain PHP and names the checker's reason.
+    #[test]
+    fn a_property_read_past_a_call_keeps_its_file_plain_php_with_the_checker_s_reason() {
+        let tally = (
+            "Contracts/Tally.php".to_owned(),
+            "<?php\n\nnamespace Generated\\Contracts;\n\nfinal class Tally\n{\n    public function __construct(private mixed $total)\n    {\n    }\n\n    public function next(Tally $other): int\n    {\n        if (is_int($this->total)) {\n            $other->reset();\n\n            return $this->total + 1;\n        }\n\n        return 0;\n    }\n\n    public function reset(): void\n    {\n        $this->total = null;\n    }\n}\n".to_owned(),
+        );
+
+        let (exit_code, outcome) = convert_contracts(&[tally]);
+
+        assert_eq!(exit_code, ExitCode::FAILURE);
+        assert!(outcome.converted.is_empty(), "{:#?}", outcome.converted);
+        let reasons = &outcome.refused[b"src/Contracts/Tally.php".as_slice()];
+        assert!(
+            reasons.iter().any(|reason| reason
+                == "src/Contracts/Tally.php:11, in Tally::next(), at line 14 of its PHP#: error mixed-operand: `this.total` is `Any?` here: a property stays narrowed only until the next call or assignment, and one with a `get` accessor is never narrowed."),
+            "{reasons:#?}"
+        );
+    }
+
     /// A folder of 200 classes, each calling the one before it, converts in one proof of them all, so the proof's cost
     /// stays one analysis of the project, never one per file.
     #[test]

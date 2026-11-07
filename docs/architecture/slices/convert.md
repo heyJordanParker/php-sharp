@@ -166,7 +166,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - An untyped property, which PHP fills with `null` → `Any? name = null`. Both.
 - Two names in one declaration → one declaration per name, each on its own line (line 383). Tree.
 - A value the analysis gives `mixed`, written to a property of a known type → refuses. Type.
-- A property read that lands where only the type PHP narrowed it to fits, as `$this->owner` returned after `$this->owner instanceof Page` → refuses, since PHP# reads a property by its declared type (line 3606). Both.
+- A read of a property with a `get` hook that lands where only the type PHP narrowed it to fits, as `$this->owner` returned after `$this->owner instanceof Page` → refuses, since PHP# never narrows a property with a `get` accessor, whose every read runs it (line 3606). A stored property's read converts, since PHP# narrows it until the next call. A read past a call that PHP keeps the narrowing across, as `$other->reset()`, is the checker's to refuse, so the proof keeps the file plain PHP and names the checker's error. Both.
 - A `get` hook that writes `$this` → refuses, since a `get` body never writes `this`. Tree.
 - Property hooks → accessors, where `$this->name` is `field`, `$value` is `value` and a short `set => expr` is `set => field = expr`. A property with storage gains the accessor it declares no hook for, and its initial value follows the accessors. A `set` hook whose parameter is other than `$value` of the property's type, a `set` hook with no `get` on a property with no storage, and `&get` refuse. Tree.
 

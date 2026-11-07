@@ -610,8 +610,8 @@ where
 }
 
 /// Reports the `side` operand of `mixed` type, which a PHP# file names `Any` or `Any?`. In a PHP# file, a property read
-/// is named with the rule that keeps it `Any?`: spec section 21 narrows a local or a parameter after `is`, never a
-/// property.
+/// is named with the rules that keep it `Any?` after a test: spec section 21 narrows a stored property only until the
+/// next call or assignment, and never one with a `get` accessor.
 fn report_mixed_operand<A>(
     context: &mut Context<'_, '_, A>,
     operand: &Expression<'_>,
@@ -629,11 +629,11 @@ fn report_mixed_operand<A>(
         context.collector.report_with_code(
             IssueCode::MixedOperand,
             Issue::error(format!(
-                "`{written}` is `{}` here: a property is not narrowed, because it could change between the test and the use.",
+                "`{written}` is `{}` here: a property stays narrowed only until the next call or assignment, and one with a `get` accessor is never narrowed.",
                 display_operand(context, operand_type)
             ))
-            .with_annotation(Annotation::primary(operand.span()).with_message("This property keeps its declared type."))
-            .with_note("PHP# narrows a local or a parameter after `is`, never a property.")
+            .with_annotation(Annotation::primary(operand.span()).with_message("This property reads at its declared type."))
+            .with_note("A call may change a property, and a `get` accessor runs at each read.")
             .with_help(format!(
                 "Copy the value into a local first: test it with a name, as in `if ({written} is int t)`, and use `t`."
             )),

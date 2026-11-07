@@ -783,7 +783,10 @@ fn clear_object_property_narrowings<'ctx, 'arena, A>(
         }
     }
 
-    if !has_object_argument {
+    // Spec section 21: PHP runs one thread, so a call is what may change a property between its test and its use, and
+    // the callee may reach any object. A PHP# call ends the narrowing of every property but one that never changes.
+    let reaches_every_property = context.dialect.is_sharp();
+    if !has_object_argument && !reaches_every_property {
         block_context.retain_valid_class_type_relations();
 
         return;
@@ -810,6 +813,10 @@ fn clear_object_property_narrowings<'ctx, 'arena, A>(
 
         if preserved.contains(&var_id) {
             return false;
+        }
+
+        if reaches_every_property && memchr::memmem::find(var_id.as_bytes(), b"->").is_some() {
+            return true;
         }
 
         if container_escapes {

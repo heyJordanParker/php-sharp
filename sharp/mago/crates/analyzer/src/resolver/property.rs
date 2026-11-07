@@ -815,7 +815,7 @@ where
 }
 
 /// Checks if this is a backing store access: `$this->prop` inside a hook for that property.
-fn is_backing_store_access(
+pub(crate) fn is_backing_store_access(
     object_expr: &Expression,
     prop_name: Word,
     block_context: &BlockContext,

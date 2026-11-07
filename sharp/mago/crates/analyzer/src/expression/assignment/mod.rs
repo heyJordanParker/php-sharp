@@ -1089,6 +1089,14 @@ pub fn analyze_assignment_to_variable<'ctx, 'arena, A>(
 
     block_context.locals.retain(|var_id, _| !var_references_dynamic(*var_id, variable_id));
     block_context.derived_local_sources.remove(&variable_id);
+    // A hidden local holds the value its pattern tests, so its test narrows that value too, as `!= null` on the value
+    // narrows it: a property after `is`, spec section 21.
+    if is_hidden
+        && let Some(source_id) =
+            source_expression.and_then(|source| get_block_expression_id(source, context, block_context))
+    {
+        block_context.derived_local_sources.insert(variable_id, source_id);
+    }
     block_context.possibly_undefined_variable_ids.remove(&variable_id);
 
     block_context.locals.insert(variable_id, assigned_type);
