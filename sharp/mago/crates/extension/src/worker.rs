@@ -1367,29 +1367,32 @@ mod diagnostic {
             "before write: stdin write end fd {fd}: {}",
             own.as_ref().map(|state| state.to_string()).unwrap_or_default()
         ));
-        PEER.set(own.map_or(0, |state| state.peer)).ok();
+        PEER.set(own.map_or(0, |state| state.peer));
         log(&format!("before write: worker {worker:?} fds {worker_fds:?}"));
         log(&format!("before write: stderr so far {:?}", lock(&inner.stderr).display()));
-        WORKER.set(worker.unwrap_or(0) as i32).ok();
+        WORKER.set(worker.unwrap_or(0) as i32);
     }
 
-    static WORKER: OnceLock<i32> = OnceLock::new();
-    static PEER: OnceLock<u64> = OnceLock::new();
+    // Each worker has a stdin writer thread of its own.
+    thread_local! {
+        static WORKER: std::cell::Cell<i32> = const { std::cell::Cell::new(0) };
+        static PEER: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    }
 
     pub(super) fn after_write(fd: i32, written: &std::io::Result<()>) {
-        log(&format!("write returned {written:?}"));
-        if let Some(peer) = PEER.get()
-            && *peer != 0
-        {
-            for holder in holders(*peer) {
-                log(&format!("after write: the read end seen before the write is held by {holder}"));
+        let worker = WORKER.get();
+        log(&format!("worker {worker}: write returned {written:?}"));
+        let peer = PEER.get();
+        if peer != 0 {
+            for holder in holders(peer) {
+                log(&format!("worker {worker}: after write: the read end seen before the write is held by {holder}"));
             }
         }
-        report("after write", fd);
-        if let Some(worker) = WORKER.get() {
-            log(&format!("after write: worker is {}", describe(*worker)));
-            for fd in fds(*worker) {
-                log(&format!("after write: worker fd {} type {}", fd.proc_fd, fd.proc_fdtype));
+        report(&format!("worker {worker}: after write"), fd);
+        if worker != 0 {
+            log(&format!("worker {worker}: after write: worker is {}", describe(worker)));
+            for fd in fds(worker) {
+                log(&format!("worker {worker}: after write: worker fd {} type {}", fd.proc_fd, fd.proc_fdtype));
             }
         }
     }
@@ -1926,6 +1929,56 @@ mod tests {
             )
         );
         worker.shutdown();
+    }
+
+    /// DIAGNOSTIC for task 346: task 337's version of the closed-stdin test, which failed 7 of 7 on macOS CI, with
+    /// other processes starting and ending while each of eight workers starts.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn diagnostic_closed_stdin_while_others_start() {
+        const OTHERS: usize = 64;
+
+        let script = format!("exec 0<&-; echo '{FATAL_ERROR}' >&2; exec {SLEEP_UNTIL_ENDED}");
+        let (stop, stopped) = mpsc::channel::<()>();
+        let stalled = std::thread::scope(|scope| {
+            scope.spawn(move || {
+                let mut others = VecDeque::new();
+                while stopped.try_recv() == Err(mpsc::TryRecvError::Empty) {
+                    let mut other = std::process::Command::new("sh");
+                    other.args(["-c", SLEEP_UNTIL_ENDED]);
+                    others.push_back(ProcessGroup::spawn(&mut other).expect("another process should start"));
+                    if others.len() > OTHERS {
+                        others.pop_front();
+                    }
+                }
+            });
+
+            let mut stalled = 0;
+            for index in 0..8 {
+                let command = WorkerCommand::new("sh").with_arguments(["-c", &script]);
+                let options = WorkerPoolOptions {
+                    host: diagnostic::HOST.to_owned(),
+                    request_timeout: Duration::from_secs(5),
+                    ..WorkerPoolOptions::default()
+                };
+                let worker =
+                    Worker::spawn_with_stderr_end_timeout(index, &command, &options, UNREACHED_STDERR_END_TIMEOUT)
+                        .expect("worker process should start");
+                wait_until_stderr_arrives(&worker);
+                diagnostic::log(&format!("others worker {index}: stderr arrived"));
+                let error =
+                    worker.request(b"describe".to_vec(), None).expect_err("the closed stdin should fail the request");
+                diagnostic::log(&format!("others worker {index}: request returned: {error}"));
+                if error.to_string().contains("made no progress") {
+                    stalled += 1;
+                }
+                worker.shutdown();
+            }
+            drop(stop);
+            stalled
+        });
+
+        assert_eq!(stalled, 0, "{stalled} of 8 workers stalled");
     }
 
     /// A worker that Mago shuts down while it fails gives the request it served the failure, not a shutdown. A process

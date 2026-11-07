@@ -325,6 +325,14 @@ jobs:
             done
             echo "=== 346: $1: $failed of 15 runs beside the pool tests failed"
           }
+          failed=0
+          for run in $(seq 1 6); do
+            echo "=== 346 others variant, run $run"
+            if ! cargo test -p mago-extension --lib --locked -- --nocapture diagnostic_closed_stdin; then
+              failed=$((failed + 1))
+            fi
+          done
+          echo "=== 346: $failed of 6 others variant runs failed"
           beside_pool "before the workspace"
           failed=0
           for run in $(seq 1 10); do
