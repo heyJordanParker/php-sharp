@@ -5,12 +5,19 @@
 `mago compile` writes a `.php` file beside each of the project's `.sharp` files that declares a type, as `StoreService.php` beside `StoreService.sharp`. The file loads its `.sharp` file through the engine, and on plain PHP it throws the "needs the PHP# engine" error, so no source reaches the output. Its last statement states the type's declaration and never runs, so PHP code that reads `*.php` source finds the type in it with no change of its own, as Composer's class map generator and Symfony's attribute routing do. The engine declares the type once, from the `.sharp` file, and mago reads the `.sharp` file and never the `.php` file:
 
 ```php
-require_once __DIR__ . '/StoreService.sharp';
+if (is_file(sprintf('%s/StoreService.sharp', __DIR__))) {
+    function_exists('Sharp\Internal\requireNative')
+        || throw new Error(
+            'This project needs the PHP# engine, and this is plain PHP. Install php-sharp, or run the ghcr.io/heyjordanparker/php-sharp image.',
+        );
 
-// The engine declares StoreService from StoreService.sharp, and this declaration never runs.
+    require_once sprintf('%s/StoreService.sharp', __DIR__);
+}
+
 if (false) {
     class StoreService
     {
+        // The engine declares StoreService from StoreService.sharp, and this declaration never runs.
     }
 }
 ```
@@ -21,7 +28,7 @@ A type named after a word PHP reserves, compared ignoring case, as `Case`, `Matc
 
 `mago compile` writes the installed standard library's native fingerprint into each compiled file, and the engine refuses a compiled file whose fingerprint is not its own, whatever loads it: the `.php` file, a `require`, the plugin's loader, opcache or preloading. Composer's own process runs on any engine, so `composer install` runs there and prints the refusal as an error line. PHP code that lists a folder's `*.php` files and names each class by its path, as Spatie's route attributes, Laravel's console kernel and Laravel's event discovery do, finds and loads the PHP# class with no change of its own.
 
-Nobody edits the file. A `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, because PHP names a class whatever its case. The next compile rewrites a changed file and deletes the file of a removed source, which until then declares nothing. In a git repository, `mago compile` lists the files no `.gitignore` already ignores in a block of `.git/info/exclude`, one per checkout. Editors hide them, as they hide `tsc`'s `.js` files: VS Code through `"files.exclude": {"**/*.php": {"when": "$(basename).sharp"}}`, PhpStorm through file nesting.
+Nobody edits the file. A `.php` file someone wrote beside a `.sharp` file, under its name in any case, is a compile error, because PHP names a class whatever its case. The next compile rewrites a changed file and deletes the file of a removed source, which until then declares nothing. `mago compile` lists the files in a `.gitignore` of its own in each folder that holds one, which lists itself too, so each checkout of a repository ignores its own files alone. Editors hide them, as they hide `tsc`'s `.js` files: VS Code through `"files.exclude": {"**/*.php": {"when": "$(basename).sharp"}}`, PhpStorm through file nesting.
 
 A `.sharp` file in an `autoload-dev` folder gets no file, so a test class keeps one file: PHPUnit loads a test class only from the file it lists, and a project lists its PHP# tests with `suffix="Test.sharp"`. A package in `vendor/` gets none, because nothing is written into `vendor/` (decision 29).
 
