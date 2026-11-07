@@ -87,6 +87,8 @@ ZEND_BEGIN_MODULE_GLOBALS(sharp)
 	char *compile_command;
 	/* Undefined until the request runs its compile command, then the checker report the command printed, or null. */
 	zval compile_command_report;
+	/* NULL, or why the request's compile command failed: how it ended and the last lines it wrote to stderr. */
+	zend_string *compile_command_failure;
 	zval arguments;
 	/* The types and argument lists first read from input this request, NULL until there is one. See sharp_types. */
 	HashTable *request_types;
@@ -939,37 +941,47 @@ static ZEND_COLD bool sharp_refuse_checked(const sharp_compiled *compiled, const
 	return count > 0;
 }
 
+/* Refuses a file the checker didn't refuse with what is wrong with its compiled file, and, when the request's compile
+ * command failed, with how it failed. */
 static ZEND_COLD void sharp_refuse(const sharp_compiled *compiled, sharp_state state)
 {
 	const char *name = ZSTR_VAL(compiled->source) + (compiled->rooted ? compiled->root_length + 1 : 0);
+	zend_string *refusal = NULL;
 
 	if (sharp_refuse_checked(compiled, name)) {
 		return;
 	}
 	switch (state) {
 		case SHARP_NOT_COMPILED:
-			zend_throw_exception_ex(zend_ce_compile_error, 0,
-				"%s isn't compiled. Run vendor/bin/mago compile.", name);
+			refusal = zend_strpprintf(0, "%s isn't compiled. Run vendor/bin/mago compile.", name);
 			break;
 		case SHARP_OTHER_ENGINE:
-			zend_throw_exception_ex(zend_ce_compile_error, 0,
+			refusal = zend_strpprintf(0,
 				"%s was compiled for a different PHP# engine. Install the mago-sharp release that matches this engine.", name);
 			break;
 		case SHARP_OTHER_LIBRARY: {
 			const sharp_unit_header *header = (const sharp_unit_header *) ZSTR_VAL(compiled->bytes);
-			zend_string *refusal = sharp_native_refusal(
-				compiled->unit.texts + header->library_version.offset, header->library_version.len);
 
-			zend_throw_exception(zend_ce_compile_error, ZSTR_VAL(refusal), 0);
-			zend_string_release(refusal);
+			refusal = sharp_native_refusal(
+				compiled->unit.texts + header->library_version.offset, header->library_version.len);
 			break;
 		}
 		case SHARP_OUT_OF_DATE:
-			zend_throw_exception_ex(zend_ce_compile_error, 0,
-				"%s is out of date (%.*s changed). Run vendor/bin/mago compile.", name, (int) compiled->changed_length, compiled->changed);
+			refusal = zend_strpprintf(0, "%s is out of date (%.*s changed). Run vendor/bin/mago compile.",
+				name, (int) compiled->changed_length, compiled->changed);
 			break;
 		EMPTY_SWITCH_DEFAULT_CASE();
 	}
+	if (SHARP_G(compile_command_failure)) {
+		zend_string *failure = SHARP_G(compile_command_failure);
+		zend_string *explained = zend_string_concat3(
+			ZSTR_VAL(refusal), ZSTR_LEN(refusal), " ", 1, ZSTR_VAL(failure), ZSTR_LEN(failure));
+
+		zend_string_release(refusal);
+		refusal = explained;
+	}
+	zend_throw_exception(zend_ce_compile_error, ZSTR_VAL(refusal), 0);
+	zend_string_release(refusal);
 }
 
 /* Decodes the checker report stream holds into the request's report for its refusals, and closes stream. A report that
@@ -993,34 +1005,136 @@ static void sharp_decode_report(php_stream *stream)
 	}
 }
 
+/* The variable sharp.compile_command runs with, and that mago sets on every process it starts. */
+#define SHARP_COMPILING "SHARP_COMPILING"
+/* How much of what a failed compile command wrote to stderr its refusal shows: its last lines, of its last bytes.
+ * mago's own failures write one line, as the 140 bytes of "ERROR can't write the file `…`: Permission denied" for a
+ * project its user can't write. */
+#define SHARP_FAILURE_LINES 3
+#define SHARP_FAILURE_BYTES 1024
+
+/* Whether a file that isn't current runs sharp.compile_command: when it is set, and this process doesn't run inside a
+ * compile, as the command itself and every process mago starts do, with SHARP_COMPILING set. mago compile starts the
+ * extension hosts, which are php too, so a host that loads a file the checker refused would otherwise compile again,
+ * and that compile's hosts again, with no end. The process's own environment decides, never a request's. */
+static bool sharp_compiles_on_demand(void)
+{
+	return SHARP_G(compile_command) && *SHARP_G(compile_command) && !getenv(SHARP_COMPILING);
+}
+
+/* The descriptor of a temporary file, or -1. */
+static int sharp_temporary_fd(php_stream *stream)
+{
+	int fd = -1;
+
+	if (!stream || php_stream_cast(stream, PHP_STREAM_AS_FD, (void **) &fd, false) != SUCCESS) {
+		return -1;
+	}
+
+	return fd;
+}
+
+/* Appends to failure the last SHARP_FAILURE_LINES lines of the last SHARP_FAILURE_BYTES bytes of the file stream holds,
+ * each trimmed, after ": " and joined by an indented line break, and closes stream. A line cut by the byte limit shows
+ * its end. */
+static void sharp_append_stderr(smart_str *failure, php_stream *stream)
+{
+	char tail[SHARP_FAILURE_BYTES];
+	const char *lines[SHARP_FAILURE_LINES];
+	size_t lengths[SHARP_FAILURE_LINES];
+	uint32_t count = 0;
+	zend_off_t size;
+	ssize_t kept;
+	size_t end;
+
+	php_stream_seek(stream, 0, SEEK_END);
+	size = php_stream_tell(stream);
+	php_stream_seek(stream, size > SHARP_FAILURE_BYTES ? size - SHARP_FAILURE_BYTES : 0, SEEK_SET);
+	kept = php_stream_read(stream, tail, sizeof(tail));
+	php_stream_close(stream);
+	end = kept > 0 ? (size_t) kept : 0;
+	while (count < SHARP_FAILURE_LINES) {
+		size_t start;
+
+		while (end > 0 && isspace((unsigned char) tail[end - 1])) {
+			end--;
+		}
+		if (end == 0) {
+			break;
+		}
+		for (start = end; start > 0 && tail[start - 1] != '\n'; start--);
+		lines[count] = tail + start;
+		lengths[count] = end - start;
+		while (lengths[count] > 0 && isspace((unsigned char) *lines[count])) {
+			lines[count]++;
+			lengths[count]--;
+		}
+		count++;
+		end = start;
+	}
+	for (uint32_t i = count; i-- > 0;) {
+		smart_str_appends(failure, i + 1 == count ? ": " : "\n  ");
+		smart_str_appendl(failure, lines[i], lengths[i]);
+	}
+}
+
+/* Why the compile command failed, or NULL when it exited 0: it could not start, a signal killed it, or it exited with
+ * another status, each with what it wrote to stderr last. Closes errors. */
+static zend_string *sharp_command_failure(pid_t child, int start_error, int status, php_stream *errors)
+{
+	const char *command = SHARP_G(compile_command);
+	smart_str failure = {0};
+
+	if (child < 0) {
+		smart_str_append_printf(&failure, "`%s` could not start: %s", command, strerror(start_error));
+	} else if (WIFSIGNALED(status)) {
+		smart_str_append_printf(&failure, "`%s` was killed by signal %d", command, WTERMSIG(status));
+	} else if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+		smart_str_append_printf(&failure, "`%s` failed with exit %d", command, WEXITSTATUS(status));
+	}
+	if (errors && failure.s) {
+		sharp_append_stderr(&failure, errors);
+	} else if (errors) {
+		php_stream_close(errors);
+	}
+	smart_str_0(&failure);
+
+	return failure.s;
+}
+
 /* Runs sharp.compile_command through /bin/sh in the project root, the first root_length bytes of path, and waits for
  * it however long it takes. The command runs with MAGO_REPORTING_FORMAT=json, and the checker report it prints is
- * decoded for the request's refusals. What it prints goes to a temporary file, read once it exits: a pipe would also
- * wait on every process it leaves running. */
+ * decoded for the request's refusals, and with SHARP_COMPILING=1, so nothing it starts compiles again. What it prints
+ * goes to temporary files, read once it exits: a pipe would also wait on every process it leaves running. When it
+ * fails, the request's refusals say how. */
 static void sharp_run_compile_command(const char *path, size_t root_length)
 {
 	char *root = estrndup(path, root_length ? root_length : 1);
 	php_stream *output = php_stream_fopen_tmpfile();
-	int output_fd = -1;
-	int status;
+	php_stream *errors = php_stream_fopen_tmpfile();
+	int output_fd = sharp_temporary_fd(output);
+	int errors_fd = sharp_temporary_fd(errors);
+	int start_error = 0;
+	int status = 0;
 	pid_t child;
 
 	ZVAL_NULL(&SHARP_G(compile_command_report));
-	if (output && php_stream_cast(output, PHP_STREAM_AS_FD, (void **) &output_fd, false) != SUCCESS) {
-		output_fd = -1;
-	}
 	child = fork();
 	if (child == 0) {
 		int nowhere = open("/dev/null", O_RDWR);
 
 		if (chdir(root) != 0 || nowhere < 0 || dup2(nowhere, STDIN_FILENO) < 0
-				|| dup2(output_fd >= 0 ? output_fd : nowhere, STDOUT_FILENO) < 0 || dup2(nowhere, STDERR_FILENO) < 0) {
+				|| dup2(output_fd >= 0 ? output_fd : nowhere, STDOUT_FILENO) < 0
+				|| dup2(errors_fd >= 0 ? errors_fd : nowhere, STDERR_FILENO) < 0) {
 			_exit(127);
 		}
-		execl("/usr/bin/env", "env", "MAGO_REPORTING_FORMAT=json", "/bin/sh", "-c", SHARP_G(compile_command), (char *) NULL);
+		execl("/usr/bin/env", "env", "MAGO_REPORTING_FORMAT=json", SHARP_COMPILING "=1", "/bin/sh", "-c",
+			SHARP_G(compile_command), (char *) NULL);
 		_exit(127);
 	}
-	if (child > 0) {
+	if (child < 0) {
+		start_error = errno;
+	} else {
 		while (waitpid(child, &status, 0) < 0 && errno == EINTR);
 	}
 	efree(root);
@@ -1028,6 +1142,7 @@ static void sharp_run_compile_command(const char *path, size_t root_length)
 		php_stream_rewind(output);
 		sharp_decode_report(output);
 	}
+	SHARP_G(compile_command_failure) = sharp_command_failure(child, start_error, status, errors);
 }
 
 /* For a worker of an extension host, reads report.json, the checker's report mago wrote beside the files it compiled
@@ -1065,7 +1180,7 @@ static int sharp_parse(void)
 	state = sharp_check(&compiled, source, source_length);
 	/* A file with no root has no project to compile, and the current folder is no guess for one. */
 	if (state != SHARP_CURRENT && compiled.rooted
-			&& SHARP_G(compile_command) && *SHARP_G(compile_command) && Z_ISUNDEF(SHARP_G(compile_command_report))) {
+			&& sharp_compiles_on_demand() && Z_ISUNDEF(SHARP_G(compile_command_report))) {
 		sharp_run_compile_command(ZSTR_VAL(compiled.source), compiled.root_length);
 		sharp_release(&compiled);
 		sharp_locate(&compiled, filename);
@@ -7207,9 +7322,9 @@ static void sharp_read_listener_table(zend_string *path, bool past_opcache, zval
 /* The listener table in the compiled folder of the root, the first root_length bytes of path, read once per request
  * through zend_compile_file, so opcache serves it. A missing table lists no listener and no dispatcher. With
  * sharp.compile_command set, the table is read past opcache, since this request or an earlier one may have rewritten
- * it, and a table whose inputs changed since mago compile wrote it makes the request run the command, as an
- * out-of-date compiled file does, and the table it writes is read instead. Throws and returns NULL when the table is
- * damaged. */
+ * it, and outside a compile a table whose inputs changed since mago compile wrote it makes the request run the
+ * command, as an out-of-date compiled file does, and the table it writes is read instead. Throws and returns NULL when
+ * the table is damaged. */
 static HashTable *sharp_listener_table(const char *path, size_t root_length)
 {
 	zend_string *folder = sharp_compiled_folder(path, strlen(path), root_length);
@@ -7225,7 +7340,7 @@ static HashTable *sharp_listener_table(const char *path, size_t root_length)
 		return Z_ARRVAL_P(known);
 	}
 	sharp_read_listener_table(table_path, developing, &table);
-	if (!Z_ISUNDEF(table) && sharp_listener_table_fits(&table) && !EG(exception) && developing
+	if (!Z_ISUNDEF(table) && sharp_listener_table_fits(&table) && !EG(exception) && sharp_compiles_on_demand()
 			&& Z_ISUNDEF(SHARP_G(compile_command_report)) && !sharp_listener_inputs_current(path, root_length, &table)) {
 		zval_ptr_dtor(&table);
 		sharp_run_compile_command(path, root_length);
@@ -9581,6 +9696,7 @@ static PHP_RINIT_FUNCTION(sharp)
 	SHARP_G(next_scoped_listener) = 0;
 	SHARP_G(sort_comparison) = NULL;
 	ZVAL_UNDEF(&SHARP_G(compile_command_report));
+	SHARP_G(compile_command_failure) = NULL;
 	zend_hash_init(&SHARP_G(container_bindings), 8, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(container_environment), 8, NULL, ZVAL_PTR_DTOR, false);
 	zend_hash_init(&SHARP_G(container_modules), 8, NULL, NULL, false);
@@ -9629,6 +9745,10 @@ static PHP_RSHUTDOWN_FUNCTION(sharp)
 	} ZEND_HASH_FOREACH_END();
 	zend_hash_destroy(&SHARP_G(scoped_listeners));
 	zval_ptr_dtor(&SHARP_G(compile_command_report));
+	if (SHARP_G(compile_command_failure)) {
+		zend_string_release(SHARP_G(compile_command_failure));
+		SHARP_G(compile_command_failure) = NULL;
+	}
 	zval_ptr_dtor(&SHARP_G(arguments));
 	ZVAL_UNDEF(&SHARP_G(arguments));
 

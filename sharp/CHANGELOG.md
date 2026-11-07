@@ -15,6 +15,18 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ### Fixed
 
+- A compile that `sharp.compile_command` runs never starts another. With the setting in a `php.ini` that `php` on the command line reads, an extension host's `php` that loaded a PHP# file the checker refused ran the command itself, and that compile started the hosts again, with no end. In a container capped at 300 processes, one `mago compile` nested 18 compiles in 34 s and stopped only when `fork` failed. The engine now runs the command with `SHARP_COMPILING=1`, `mago` starts every process with it, and a process that has it set never runs the command, so it gets the refusal. The dev line for a Composer install is in sharp/README.md's Development section and spec section 27:
+
+  ```ini
+  sharp.compile_command = "vendor/bin/mago --no-version-check --no-extensions compile"
+  ```
+
+  `--no-extensions` keeps the extension hosts out of the compile a request waits for, and their rules run in `mago analyze` and CI. Production leaves the setting empty, so a stale deploy is refused.
+- A refusal after a compile command that failed says how it failed: its exit status, or the signal that killed it, and its last three lines of stderr. The engine sent the command's stderr to `/dev/null`, so a command that couldn't run, or a user that can't write the project, gave the plain "is out of date" with no reason. Now:
+
+  ```text
+  app/Orders/Order.sharp is out of date (app/Shared/Database/BaseModel.php changed). Run vendor/bin/mago compile. `vendor/bin/no-such-mago compile` failed with exit 127: /bin/sh: 1: vendor/bin/no-such-mago: not found
+  ```
 - A law whose code names something `sharp_prove`, `sharp_close` or `sharp_condition` is checked. Lean read the name as one of the law checker's proof steps, so the law was refused as a bug in the checker.
 - An extension host whose worker dies, as one does at startup when `composer install --no-dev` left out a require-dev package it loads, now stops `mago` with the host's name and what the worker wrote to stderr: "extension host `reports` disconnected (worker 0): worker closed stdout; stderr: PHP Fatal error:  Uncaught Error: Class "Acme\DevTools\ReportPlugin" not found in …". Before, the error was "extension worker 0 disconnected: worker is not running", which named neither. Mago restarts a dead worker before it sends the first request, so the request reached a worker that had died again, and that error dropped the stderr Mago had kept. A worker that dies while Mago writes it a request now fails the same way, where the error was "violated the protocol: … Broken pipe".
 - An extension host whose worker stops reading its standard input, as one deadlocked in an extension or held at a debugger breakpoint does, now fails the request at the host's `request-timeout-ms`, as a worker that stops answering does: "extension host `reports` made no progress for 30000 ms (worker 0): raise its `request-timeout-ms` for hooks that run that long". Before, once a request no longer fit in the pipe Mago writes to, which holds 64 KiB on macOS and Linux, Mago waited on the write forever, so `mago analyze` in a CI job or a watch session froze with no message. The worker's other requests now fail with that deadline too, as "extension host `reports` disconnected (worker 0): made no progress for 30000 ms on the hooks of app/User.php", where they said only "request 2 timed out".

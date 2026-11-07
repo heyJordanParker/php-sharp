@@ -2,8 +2,9 @@ name: Find the run that passed this tree
 description: >-
   Looks for a run of a workflow that passed on the tree of the commit the job runs on, as bors's "not rocket science"
   rule tests the exact tree that lands once. It checks the commit's own runs, and the runs of the head of each pull
-  request into master that names the commit, when that head has the same tree: the "master merge gate" ruleset merges
-  only a branch that holds the latest master, so a merge commit's tree is its pull request head's. GitHub empties a
+  request into master that names the commit, when that head has the same tree, as a merge commit has when its pull
+  request held the latest master. The "master merge gate" ruleset also merges a pull request behind master, whose
+  merge commit's tree no run tested, so nothing passed on it. GitHub empties a
   run's pull requests once they merge, so a run is tied to master through its pull request, and both workflows run
   only for a pull request into master.
 

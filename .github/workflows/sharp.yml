@@ -40,9 +40,12 @@ jobs:
   #
   # A tree runs the suites once, as bors's "not rocket science" rule tests the exact tree that lands once. A push to
   # master skips them when a run passed all 8 suites on its tree, as .github/actions/passed-tree explains, and links
-  # that run: only the bump's pull request runs MACOS, so every other push runs them. The nightly run skips a tree a
-  # full run already passed. A tag runs none of them: it publishes only a tree whose full run passed all 9 test jobs,
-  # as release.yml does with Mago CI, so its MACOS never waits for the Mac runners behind the release's Apple builds.
+  # that run: only the bump's pull request runs MACOS. Every other push skips the 7 Linux suites, LINUX, LINUX_ZTS,
+  # HOSTS and PHP_EXTENSIONS, when a pull request's run passed them on its tree, as it does when the pull request held
+  # the latest master, links that run, and runs only MACOS, LINUX_PASSES and UBUNTU_WERROR. A push whose tree no pull
+  # request's run passed runs them all, as the check of the merge. The nightly run skips a tree a full run already
+  # passed. A tag runs none of them: it publishes only a tree whose full run passed all 9 test jobs, as release.yml
+  # does with Mago CI, so its MACOS never waits for the Mac runners behind the release's Apple builds.
   # That run is the bump's own, whose RELEASE_BUMP passed, or a nightly or dispatched one. Another pull request's run
   # isn't enough, because it runs each mode once, and CI_PASSED isn't, because it also passes a change to documentation
   # alone, whose suites skipped. A tag publishes the images its bump's pull request pushed, as IMAGE explains, and
@@ -63,6 +66,7 @@ jobs:
       engine: ${{ steps.diff.outputs.engine }}
       full: ${{ env.FULL }}
       images-run-id: ${{ steps.images.outputs.run-id }}
+      linux-passed: ${{ steps.linux.outputs.run && 'true' || '' }}
     steps:
       - name: git checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -79,6 +83,23 @@ jobs:
           passed: >-
             [.jobs[] | select(.conclusion == "success" and (.name == "LINUX" or .name == "LINUX_ZTS" or .name == "HOSTS"
             or .name == "MACOS" or (.name | startswith("PHP_EXTENSIONS"))))] | length == 8
+      # Those 8 but MACOS. A pull request's run runs them in the modes a push does, and the full run in every mode, so
+      # its pass holds for the push.
+      - name: Find the pull request run that passed every Linux suite on this tree
+        id: linux
+        if: github.event_name == 'push' && github.ref_type == 'branch' && !steps.passed.outputs.run
+        uses: ./.github/actions/passed-tree
+        with:
+          workflow: sharp.yml
+          events: pull_request
+          passed: >-
+            [.jobs[] | select(.conclusion == "success" and (.name == "LINUX" or .name == "LINUX_ZTS" or .name == "HOSTS"
+            or (.name | startswith("PHP_EXTENSIONS"))))] | length == 7
+      - name: The Linux suites don't run again
+        if: steps.linux.outputs.run
+        env:
+          RUN: ${{ steps.linux.outputs.run }}
+        run: echo "::notice::This tree ran and passed every Linux PHP# suite in $RUN, so only MACOS and LINUX_PASSES run."
       # The bump's pull request runs in full, since its title sets `full` as RELEASE_BUMP's does, and its passed
       # RELEASE_BUMP marks it apart from another pull request's run. Its merge commit, the tagged one, has its tree, so
       # the nightly run after a release skips it too. The 9 test jobs: those 8 and LINUX_PASSES, which a full run
@@ -166,7 +187,7 @@ jobs:
           echo "This push's changes start at ${sha:-no commit, so every job runs}."
       - name: Find changes outside documentation, and changes to the engine
         id: diff
-        if: github.ref_type != 'tag' && !steps.passed.outputs.run && !steps.full.outputs.run
+        if: github.ref_type != 'tag' && !steps.passed.outputs.run && !steps.full_bump.outputs.run && !steps.full.outputs.run
         env:
           BASE: ${{ github.event.pull_request.base.sha || steps.base.outputs.sha }}
         run: |
@@ -197,7 +218,7 @@ jobs:
           echo "engine=$engine" >> "$GITHUB_OUTPUT"
   LINUX:
     needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true'
+    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.linux-passed != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -312,7 +333,7 @@ jobs:
   # since Linux has a thread-safe JIT. The full run adds the file cache and the passes alone.
   LINUX_ZTS:
     needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true'
+    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.linux-passed != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -351,7 +372,7 @@ jobs:
   # waits for their tests.
   HOSTS:
     needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true'
+    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.linux-passed != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -401,7 +422,7 @@ jobs:
   PHP_EXTENSIONS:
     name: PHP_EXTENSIONS (${{ matrix.host.file }}, ${{ matrix.host.php }}, ${{ matrix.runner }})
     needs: CHANGES
-    if: needs.CHANGES.outputs.code == 'true'
+    if: needs.CHANGES.outputs.code == 'true' && needs.CHANGES.outputs.linux-passed != 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
@@ -432,7 +453,7 @@ jobs:
       - name: Build the image
         run: git archive HEAD | docker build --build-arg REGISTRY --file "${{ matrix.host.file }}" --tag php-sharp -
       # A critical or high CVE that a fixed package resolves fails the build, so it is fixed before a tag, which takes
-      # only a commit whose PHP_EXTENSIONS passed on master, and IMAGE scans what it pushes again.
+      # only a tree whose full run passed PHP_EXTENSIONS, and IMAGE scans what it pushes again.
       # aquasecurity/trivy-action's v0.35.0 and later are immutable releases, made after its tags were rewritten to
       # malware on 2026-03-19, and Trivy's v0.71.1 and later fix GHSA-mcj4-mphf-j9ff.
       - name: Scan the image for fixable critical and high CVEs
