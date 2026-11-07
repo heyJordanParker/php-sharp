@@ -32,7 +32,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ### Changed
 
-- `mago convert` refuses `['id' => $id] = $row;`, which it converted to one `row.get("id")` per key: PHP warns on a missing key, which an error handler such as Laravel's turns into an exception, and a PHP# `Map` read gives `null`, so the file's meaning depended on its error handler. A key read converts behind `??` or `isset`.
+- `mago convert` refuses `['id' => $id] = $row;`, which it converted to one `row.get("id")` per key: PHP warns on a missing key, and a PHP# `Map` read gives `null` and goes on, and a converted file never succeeds where PHP warned. A key read converts behind `??` or `isset`.
 
 ### Fixed
 

@@ -60,9 +60,10 @@ enum Kind {
     Other,
 }
 
-/// Why a read of a `Map` at a key it may lack refuses, by an index or by destructuring: PHP's meaning depends on the
-/// app's error handler, and no PHP# read keeps it under every one (spec section 12).
-const MISSING_KEY: &str = "a `Map` read at a key it may lack has no PHP# form: PHP warns on a missing key and gives `null`, an error handler such as Laravel's turns the warning into an exception, and a PHP# `Map` read gives `null` without a word, so it converts behind `??` or `isset` only (spec section 12)";
+/// Why a read of a `Map` at a key it may lack refuses, by an index or by destructuring. A converted file never
+/// succeeds where PHP warned or failed, and a PHP# `Map` read gives `null` and goes on where PHP warns (spec section
+/// 12).
+const MISSING_KEY: &str = "a `Map` read at a key it may lack has no PHP# form: PHP warns on a missing key, and a PHP# `Map` read gives `null` and goes on, which succeeds where PHP warned, so it converts behind `??` or `isset` only (spec section 12)";
 
 /// Whether `expression` binds tighter than any operator, so text built around it, as `x.isEmpty()` or `x != 0`, needs
 /// no parentheses around it.
