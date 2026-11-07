@@ -218,7 +218,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - `['id' => $id] = $row;` of a `Map` variable → one read per key, `const id = row.get("id");`, each a `TValue?` (lines 1625 and 1664). Both. 16 files. Destructuring by position, a `Map` a call gives, and destructuring inside another expression refuse.
 - `array` with no PHPDoc type, and an array shape → refuses with the type. Type.
 - A union of two collections, as `list<string>|array<string, int>`, and an `iterable<K, V>` whose key is other than `array-key` or `mixed` → refuses, since a PHP# type holds one collection and `Iterable<V>` reads values only. `iterable<V>` → `Iterable<V>`. A PHP# `Iterable<V>` parameter takes a new sequence of the values it is given, numbered from 0, as `Sharp\Internal\Sequence` on the engine, so an `iterable` parameter of a method or a lambda converts only where the body loops over its values alone. A keyed loop over it, a return of it, a call that passes it on, `instanceof` and a method call on it refuse, and so does a constructor's promoted `iterable` parameter, which every other method may read. Both.
-- A keyed loop over a `Map`, and a spread of one, convert only where the keys are `int`. PHP turns a numeric string key into an `int`, and a PHP# `Map` keeps it as written: on the engine, a PHP loop over `['42' => 'a']` gives the key `int 42`, and a PHP# `Map<string, string>` gives `string 42`. Type.
+- A keyed loop over a `Map` converts where the keys are `int`, or where the body reads the key only as text or as a key: a part of `.`, `.=` or an interpolated string, an index, or an array element's key. PHP turns a numeric string key into an `int`, and a PHP# `Map<string, V>` keeps a string: a PHP array that crosses into one gives its `int` key back as the string of its digits, which the engine's crossing plan names `string`, and the bridge lowers a loop over a `Map` that may be a PHP array through that crossing. So on the engine, a PHP loop over `['42' => 'a']` gives the key `int 42`, and a PHP# `Map<string, string>` gives `string 42`. The two show as the same text and find the same entry, so those reads keep PHP's meaning, and any other read, as `$key === $sku`, refuses. A spread of a `Map` converts only where the keys are `int`. Type.
 
 ### Section 13. `readonly`
 
@@ -236,16 +236,17 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - A lambda that takes fewer parameters than every function type it may be passed as → refuses, since PHP drops the extra arguments and a PHP# lambda takes each one (section 14.1). It asks the checker's own rule, `TCallableSignature::takes_more_parameters_than`, of each function type, so a plain `callable`, which takes `mixed ...`, takes any lambda. Both.
 - `[$this, 'name']`, `'Class::name'` and `name(...)` → `this.name`. Both. An array or a string converts where a function type is declared, and refuses when the analysis finds no such method. A partial application with placeholders, and a built-in function's value, refuse.
 - A method and a property of one name → refuses (line 2346). 51 files.
-- `??` stays. `?:` → refuses (line 3764).
+- `??` stays. `$title ?: 'Dear'` → `(title != null && title != "" && title != "0") ? title : 'Dear'`, the truthiness test section 21's rule gives and the value, for a value that a second read gives again, as below. `?:` of any other value refuses, since PHP# has no `?:` (line 3764) and the test would run it twice. Both.
 
 ### Section 17. Loops
 
 - `foreach ($items as $item)` → `for (const item of items)`, and `foreach ($map as $key => $value)` → `for (const [key, value] of map)`. Both.
+- A loop over the values of an object whose class implements `Traversable`, as a framework's collection or a generator → `for (const item of items)`, which the bridge lowers to PHP's own `foreach` over the object. A keyed loop over one refuses, since a PHP# loop gives a key only from a `List` or a `Map`. Both.
 - A body without braces → braces added (line 2903). Tree.
 
 ### Section 18. Strings
 
-- `.` between two strings → `+`. Type.
+- `.` between two strings → `+`, and `.=` of a string → `+=`, a `.` and an interpolated string among them, which give a string whatever the analysis keeps of them. Type.
 - `.` with an `int` or a `float` → a template, `` `x${count}` ``, which prints a number through PHP's own conversion. Type.
 - `.` with a `bool`, which PHP prints as `1` or nothing, and a template as `true` or `false` (line 2940) → refuses. Type.
 - `"Hi $name"` → `` `Hi ${name}` ``, each value an `int`, a `float` or a `string`, which a template shows as PHP does. A `bool` refuses (line 2940). Both.
@@ -267,8 +268,9 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 
 ### Section 21. Pattern matching
 
-- A condition that is no `bool` → the comparison its type gives: `x != null` for `T?`, `!list.isEmpty()` for a collection, `x != "" && x != "0"` for a string (line 3752). Type.
+- A condition that is no `bool` → the comparison its type gives: `x != null` for `T?`, `!list.isEmpty()` for a collection, `x != "" && x != "0"` for a string (line 3752). Type. A comparison of several parts reads the value more than once, so it converts for a value a second read gives again: a variable, or a property of a value that is never null, which every class it may be declares with no `get` hook and no `__get` for. PHP runs no code between the reads of one test. A call, a property read through `__get` or a hook, and anything else refuse. Both.
 - `match` → `match`, when each arm's comparison passes the `===` rule of section 19, since PHP's `match` compares with `===` (line 3426). Both.
+- `match (true)` with conditions that are no constants, and a `default` arm → a chain of ternaries, `weight > 30 ? 'freight' : express || abroad ? 'priority' : 'standard'` (line 3767), or `if … else if … else` where it stands as a statement. PHP runs the arm of the first condition that `===` finds `true`, which for a `bool` condition is the first one that holds, and `a, b =>` is `a || b`. A condition of another type refuses, since PHP's `true === 5` is false where a PHP# condition takes a `bool`. A PHP# `match (true)` with `true when …` arms is no form, since the checker warns on its pattern `true` as always equal to its value. Both.
 - `switch` → `match` with block arms, when no arm falls through (line 3426). Tree. 6 files. Cases with no statements of their own join the next with `or`, a `switch` without `default` gains `default => {},`, and each case passes the `===` rule above, since `==` and `===` agree there. A case that runs on into the next, a `break` or `continue` that leaves before its case ends, a `case` of a numeric string or `null`, and `switch … endswitch` refuse. A constant's value counts as a literal's does. On a value that may be `null`, a `case` of a value PHP reads as `false` refuses too, `false`, `0`, `0.0` and `''`, since PHP's `null == ''` holds and the pattern doesn't match `null`, as does a `case` whose value the analysis doesn't know.
 - `and`, `or` and `xor` → `&&` and `||`, and `xor` refuses. Tree.
 
@@ -286,7 +288,8 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - `namespace A\B;` → `namespace A.B;`, and `use A\B;` → `import A.B;`. Tree.
 - A class in code → its name as [how a name prints](#how-a-name-prints) says. Both.
 - A root function of a library whose name is a class of its folder's namespace in another case, as `str()` beside `Str` → refuses, since `Text.str` names the class. Type.
-- A namespace part, a type, an enum case, a constant, a method, a property, a field, a parameter or a local whose name breaks the case section 24 gives it → refuses, naming the PHP# name. The checker warns on it, and renaming it changes the name PHP code reaches it by. A method that overrides one keeps its parent's name. Tree.
+- A namespace part, a type, an enum case, a constant, a method, a property, a field or a parameter whose name breaks the case section 24 gives it → refuses, naming the PHP# name. The checker warns on it, and renaming it changes the name PHP code reaches it by. A method that overrides one keeps its parent's name. Tree.
+- A local or a `catch` variable whose name breaks section 24's camel case → its camel case name, wherever the method names it, its lambdas included: `$line_total` → `lineTotal`. No code outside the method reaches a local by its name, since `compact`, `extract` and a variable named by a variable refuse. One whose camel case name is another variable's or parameter's of the method refuses. Tree.
 - A class named `Module` → refuses, since `Module.sharp` holds only its folder's module (section 32). Tree.
 - `use function` → no line, since each call imports the namespace. `use const Vendor\Pdf\SIZE` → `import Vendor.Pdf;` and `Pdf.SIZE` (line 4345). Tree.
 - `new $class(…)` of a class value → `new (type)(…)`, when the class's constructor is `required` (line 4968), which the checker checks. `new` of a string, and `new static(…)`, whose `new Self(…)` needs a `required` constructor the converter doesn't write, refuse. Both.
@@ -294,7 +297,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 ### Section 24. Built-in types and `Any`
 
 - `mixed` → `Any?`, `?T` → `T?`, `object` → `Object`. Type.
-- `(int)` and `(float)` of a number, and `(string)` of a number, stay, and the aliases `(integer)`, `(double)`, `(real)` and `(binary)` become them. `(int)` and `(float)` stay even on a value of their own type, since PHP#'s run PHP's conversion at runtime and a type only PHPDoc gives, as a framework's `@property int` that holds `"5"`, is no proof of the value. `(string)` of a string leaves only where a native declaration or a literal makes the value one at runtime: a literal, a text expression, a parameter of the method, or a property or a call declared `string` natively or by the converted class. Any other cast refuses, since a PHP# cast converts a number. Both.
+- `(int)` and `(float)` of a number, and `(string)` of a number, stay, and the aliases `(integer)`, `(double)`, `(real)` and `(binary)` become them. `(int)` and `(float)` stay even on a value of their own type, since PHP#'s run PHP's conversion at runtime and a type only PHPDoc gives, as a framework's `@property int` that holds `"5"`, is no proof of the value. `(string)` of a string leaves only where a native declaration or a literal makes the value one at runtime: a literal, a text expression, a parameter of the method, or a property or a call declared `string` natively or by the converted class. `(string)` of any other value the analysis types `string` → `` `${label}` ``, and of a `string` that may be null → `` `${note ?? ""}` ``: the bridge lowers a template's `string` value into PHP's interpolation, which converts the value it holds at runtime as `(string)` does, a `5` a `@property string` holds included, and `(string)` of `null` is `""`. Any other cast refuses, since a PHP# cast converts a number and a template shows one type. Both.
 - `(bool)`, `(array)` and `(object)` → refuses (line 4717). Tree.
 - An `int` literal where a `float` goes, which PHP turns into a `float` → the `float` of the value it writes, so `1` is `1.0`, the octal `017` is `15.0` and the hex `0x1F` is `31.0`. Type.
 - `try`, `catch` and `finally` stay, and `catch (Exception $e)` → `catch (Exception e)` (line 6151). Tree.
@@ -310,7 +313,8 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 
 - `<?php` and `declare(strict_types=1);` → removed, since PHP# is always strict (line 5295). Tree.
 - A file without `strict_types` → the same removal, which makes its calls strict. The proof's analysis and the project's tests catch a call that relied on coercion. Tree.
-- `__DIR__` and `__FILE__` → `Position.current().directory` and `.file` (line 5319). Tree. 66 files with `__DIR__`, `__FILE__` or `__LINE__`. `__LINE__` refuses, since the conversion moves lines and `Position.current().line` gives the `.sharp` file's. `__CLASS__`, `__METHOD__`, `__FUNCTION__`, `__NAMESPACE__` and the rest refuse, since `Position` names a function by its dotted name and no class or namespace.
+- `__DIR__` and `__FILE__` → `Position.current().directory` and `.file` (line 5319). Tree. 66 files with `__DIR__`, `__FILE__` or `__LINE__`. `__LINE__` refuses, since the conversion moves lines and `Position.current().line` gives the `.sharp` file's.
+- `__CLASS__` → `typeof(Order)`, as `self::class` converts. `__METHOD__`, `__FUNCTION__`, `__NAMESPACE__` and `__TRAIT__` → the text PHP compiles in their place, as `"Shop\\Order::total"`, `"total"`, `"Shop"` and `""`: the class file's own declarations fix it, and the conversion keeps the class, the method and the namespace PHP names. In a lambda, `__FUNCTION__` and `__METHOD__` refuse, since PHP's name of a lambda holds the line it starts on, which the conversion moves, and so do they in a property accessor. Tree.
 
 ### Section 29. Effects
 

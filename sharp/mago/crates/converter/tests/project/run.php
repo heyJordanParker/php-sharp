@@ -66,6 +66,7 @@ echo $tagged->label(), ' ', $tagged->tag, ' ', $tagged->name, "\n";
 
 $note = new Note();
 echo $note->describe('hi'), ' / ', $note->describe(5), "\n";
+echo $note->headed('memo'), ' ', $note->headed('0'), ' ', $note->headed(''), ' ', $note->headed(null), "\n";
 
 echo (new Factory())->make()->get()->label(), "\n";
 echo (new Pair())->both(), "\n";
@@ -74,17 +75,21 @@ $tally = new Tally();
 $plusThree = $tally->adder(3);
 echo $tally->sum(2, 5, 10), ' ', $plusThree(4), ' ', $tally->halved(10), "\n";
 echo $tally->counted([3]), ' ', $tally->made(Pair::class), ' ', $tally->priced(['price' => 4, 'count' => 3]), "\n";
-echo $tally->carried([3, -1, 4, -2]), "\n";
+echo $tally->carried([3, -1, 4, -2]), ' ', $tally->guarded(3), ' ', $tally->guarded(0), "\n";
 echo $tally->stamped(new \Acme\Format\Stamp()), "\n";
 
 $label = new Label();
-echo $label->render('shelf', 3), "\n", $label->folder(), "\n";
+echo $label->render('shelf', 3), "\n", $label->folder(), "\n", $label->traced(), ' ', $label->kind(), "\n";
 echo $label->status(201), ' ', $label->status(404), ' ', $label->status(500), "\n";
+echo $label->size(500, false), ' ', $label->size(5, true), ' ', $label->size(20, false), ' ', $label->size(1, false), "\n";
 
 // A PHPDoc `int` that holds `"5"`, a `string` key PHP reads as `int`, and generator keys through a PHP# parameter.
 $stock = new Stock();
 echo var_export($stock->quantity(new \Acme\Format\Record(['quantity' => '5'])), true), ' ', $stock->joined(keyed()), "\n";
+echo var_export($stock->coded(new \Acme\Format\Record(['code' => 5])), true), "\n";
+echo $stock->counted(new \Acme\Format\Lines(['a', 'b', 'c'])), "\n";
 echo (new Ledger())->priceOf(['42' => 1, 'x' => 2], '42'), "\n";
+echo $stock->listed(['42' => 1, 'x' => 2]), ' ', var_export($stock->kept(['42' => 1, 'x' => 2], ['42' => true]), true), "\n";
 $through = (new Feed())->through(keyed());
 foreach ($through as $key => $item) {
     echo var_export($key, true), '=', $item, ' ';

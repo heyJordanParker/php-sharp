@@ -73,7 +73,8 @@ impl Converter<'_, '_> {
                 self.edits.insert(at, format!("{written} "));
             }
         }
-        self.edits.replace(parameter.variable.span, Self::variable_name(parameter.variable.name));
+        let name = self.variable_name(parameter.variable.name);
+        self.edits.replace(parameter.variable.span, name);
 
         if promoted {
             // PHP's `private(set)` is the `set` accessor's own visibility in PHP# (spec section 6).

@@ -22,21 +22,24 @@ use mago_syntax::cst::Access;
 use mago_syntax::cst::ArrayElement;
 use mago_syntax::cst::Assignment;
 use mago_syntax::cst::AssignmentOperator;
+use mago_syntax::cst::Binary;
+use mago_syntax::cst::BinaryOperator;
 use mago_syntax::cst::Call;
 use mago_syntax::cst::ClassLikeMemberSelector;
 use mago_syntax::cst::DirectVariable;
 use mago_syntax::cst::Expression;
 use mago_syntax::cst::FunctionCall;
+use mago_syntax::cst::FunctionLikeParameter;
 use mago_syntax::cst::Instantiation;
 use mago_syntax::cst::Literal;
 use mago_syntax::cst::Statement;
 use mago_syntax::cst::TokenSeparatedSequence;
 use mago_syntax::cst::UnaryPrefixOperator;
 use mago_syntax::cst::Variable;
+use mago_syntax::walker::MutWalker;
 
 use super::Kind;
 use crate::Converter;
-use crate::declaration::NameCase;
 
 /// The variables PHP fills for every scope, which PHP# removes (spec sections 2 and 29).
 const SUPERGLOBALS: [&[u8]; 9] =
@@ -59,6 +62,26 @@ pub(crate) struct Locals {
     copied: Vec<(Vec<u8>, Span)>,
     /// Each parameter the body writes.
     written_parameters: Vec<Vec<u8>>,
+}
+
+/// Each variable a method's body names and each parameter of a lambda in it, by their PHP names, which a local's new
+/// name must be none of.
+#[derive(Debug, Default)]
+pub(crate) struct Names {
+    variables: Vec<Vec<u8>>,
+    parameters: Vec<Vec<u8>>,
+}
+
+impl<'ast, 'arena> MutWalker<'ast, 'arena, ()> for Names {
+    fn walk_in_direct_variable(&mut self, variable: &'ast DirectVariable<'arena>, _: &mut ()) {
+        if !self.variables.iter().any(|name| name == variable.name) {
+            self.variables.push(variable.name.to_vec());
+        }
+    }
+
+    fn walk_in_function_like_parameter(&mut self, parameter: &'ast FunctionLikeParameter<'arena>, _: &mut ()) {
+        self.parameters.push(parameter.variable.name.to_vec());
+    }
 }
 
 /// What a lambda captures from the body around it (spec section 14.2).
@@ -364,9 +387,52 @@ impl Converter<'_, '_> {
             .is_some_and(|metadata| metadata.type_metadata.is_some())
     }
 
+    /// Names each local and `catch` variable of the method `walk` visits, whose own parameters are `parameters`, in the
+    /// camel case spec section 24 gives a local, as `$line_total` is `lineTotal`. Code outside the method never reaches
+    /// one by its name, since the converter refuses `compact`, `extract` and a variable named by a variable, so the
+    /// new name keeps PHP's meaning where no other variable or parameter of the method, its lambdas' included, has it.
+    pub(crate) fn rename_locals(&mut self, parameters: &[Vec<u8>], walk: impl FnOnce(&mut Names)) {
+        let mut names = Names::default();
+        walk(&mut names);
+        let parameters: Vec<&[u8]> = parameters.iter().chain(&names.parameters).map(Vec::as_slice).collect();
+        let taken = |name: &[u8]| parameters.contains(&name) || names.variables.iter().any(|variable| variable == name);
+        let candidates: Vec<(Vec<u8>, String)> = names
+            .variables
+            .iter()
+            .filter(|name| name.as_slice() != b"$this" && !parameters.contains(&name.as_slice()))
+            .filter(|name| !mago_casing::is_camel_case(&name[1..]))
+            .filter_map(|name| {
+                let camel = String::from_utf8_lossy(&mago_casing::to_camel_case(&name[1..])).into_owned();
+                let fits = mago_casing::is_camel_case(camel.as_bytes()) && !taken(format!("${camel}").as_bytes());
+                fits.then(|| (name.clone(), camel))
+            })
+            .collect();
+        // Two names of one camel case name, as `$line_total` and `$line__total`, would be one variable.
+        self.renamed = candidates
+            .iter()
+            .filter(|(_, camel)| candidates.iter().filter(|(_, other)| other == camel).count() == 1)
+            .cloned()
+            .collect();
+    }
+
+    /// Refuses the local or `catch` variable `variable` when its name breaks the camel case spec section 24 gives a
+    /// local, and the method couldn't rename it, since its camel case name is another variable's or parameter's.
+    pub(super) fn misnamed_local(&mut self, variable: &DirectVariable<'_>) {
+        let name = &variable.name[1..];
+        if mago_casing::is_camel_case(name) || self.renamed.iter().any(|(local, _)| local == variable.name) {
+            return;
+        }
+        let (shown, camel) =
+            (String::from_utf8_lossy(name), String::from_utf8_lossy(&mago_casing::to_camel_case(name)).into_owned());
+        self.refuse(
+            variable.span,
+            format!("the local `{shown}` has no PHP# name: PHP# names a local in camel case, and `{camel}` is the name of another variable or parameter of the method (spec section 24)"),
+        );
+    }
+
     /// Declares the local `variable` at its first assignment, in `statement`, with the type `written` gives.
     fn declare(&mut self, statement: &Statement<'_>, variable: &DirectVariable<'_>, written: Option<String>) {
-        self.misnamed(&variable.name[1..], variable.span, "local", NameCase::Camel);
+        self.misnamed_local(variable);
         let block = self.method.as_ref().and_then(|method| method.locals.blocks.last().copied());
         let Some(method) = self.method.as_mut() else {
             return;
@@ -381,7 +447,8 @@ impl Converter<'_, '_> {
             .locals
             .entries
             .push((variable.name.to_vec(), Local::new(variable.span, Some(declaration), false, Vec::new())));
-        self.edits.replace(variable.span, Self::variable_name(variable.name));
+        let name = self.variable_name(variable.name);
+        self.edits.replace(variable.span, name);
     }
 
     /// `['id' => $id, 'name' => $name] = $row;` of a `Map` as one read per key, `const id = row.get('id');`, each a
@@ -528,7 +595,7 @@ impl Converter<'_, '_> {
             );
             return false;
         }
-        self.misnamed(&variable.name[1..], variable.span, "local", NameCase::Camel);
+        self.misnamed_local(variable);
         // Each pass writes the loop's variable an element of what it loops over, whose type that value's source gives.
         let write = Write {
             at: variable.span,
@@ -675,7 +742,7 @@ impl Converter<'_, '_> {
             }
             let first = self.skip_whitespace(body.start.offset + 1);
             let indentation = self.indentation(first);
-            let declared = format!("{written} {} = {initial};\n{indentation}", Self::variable_name(name));
+            let declared = format!("{written} {} = {initial};\n{indentation}", self.variable_name(name));
             self.edits.insert(first, declared);
         }
         // Each assignment of a hoisted local writes it after its declaration.
@@ -865,7 +932,8 @@ impl Converter<'_, '_> {
             );
         }
         self.local(variable, write);
-        self.edits.replace(variable.span, Self::variable_name(variable.name));
+        let name = self.variable_name(variable.name);
+        self.edits.replace(variable.span, name);
     }
 
     /// Converts `place`, the target of a write, and records the write on the local it names.
@@ -933,7 +1001,14 @@ impl Converter<'_, '_> {
         let refusal = match &assignment.operator {
             AssignmentOperator::Assign(_) | AssignmentOperator::Coalesce(_) => None,
             AssignmentOperator::Concat(span) => {
-                if self.is(lhs, &[Kind::String]) && self.is(rhs, &[Kind::String]) {
+                // PHP's `.` and an interpolated string give a string, which their own conversion checks part by part,
+                // and the analysis keeps no type of such a value `.=` appends.
+                let text = matches!(
+                    rhs,
+                    Expression::Binary(Binary { operator: BinaryOperator::StringConcat(_), .. })
+                        | Expression::CompositeString(_)
+                );
+                if self.is(lhs, &[Kind::String]) && (text || self.is(rhs, &[Kind::String])) {
                     self.edits.replace(*span, "+=");
                     None
                 } else {

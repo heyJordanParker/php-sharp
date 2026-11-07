@@ -126,16 +126,21 @@ impl Converter<'_, '_> {
         }
         // PHP# casts a number, and its `(int)` and `(float)` run PHP's own conversion at runtime, so they stay. A
         // `(string)` of a string leaves only where a native declaration or a literal makes it one at runtime: a type
-        // only PHPDoc gives, as a framework's `@property`, is no proof of the value.
-        if kind == Kind::String && self.is(operand, &[Kind::String]) {
-            if self.holds_string_at_runtime(operand) {
+        // only PHPDoc gives, as a framework's `@property`, is no proof of the value. A template shows any other value
+        // the analysis types `string` as PHP's interpolation does, which converts it to text as `(string)` does, and
+        // `null` as `""` once `?? ""` gives it (spec section 18).
+        if kind == Kind::String && self.is(operand, &[Kind::String, Kind::Null]) {
+            let nullable = !self.is(operand, &[Kind::String]);
+            if !nullable && self.holds_string_at_runtime(operand) {
                 return self.edits.delete(expression.span().start.offset, operand.span().start.offset);
             }
-            let written = String::from_utf8_lossy(self.text(operand.span())).into_owned();
-            return self.refuse(
-                expression.span(),
-                format!("`(string)` of `{written}` has no PHP# form: a PHP# cast converts a number, and nothing but PHPDoc makes `{written}` a string at runtime (spec section 24)"),
-            );
+            let rendered = self.render(operand);
+            let text = match (nullable, super::is_primary(operand)) {
+                (false, _) => rendered,
+                (true, true) => format!("{rendered} ?? \"\""),
+                (true, false) => format!("({rendered}) ?? \"\""),
+            };
+            return self.edits.replace(expression.span(), format!("`${{{text}}}`"));
         }
         if !self.is(operand, &[Kind::Int, Kind::Float]) {
             let shown = self.shown(operand);

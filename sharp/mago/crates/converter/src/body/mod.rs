@@ -37,7 +37,6 @@ use mago_syntax::cst::Try;
 use mago_syntax::cst::Variable;
 
 use crate::Converter;
-use crate::declaration::NameCase;
 
 /// What a value of an atomic type is to the operators PHP and PHP# share.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -244,8 +243,9 @@ impl<'input> Converter<'input, '_> {
             }
             // A `catch` variable is bound by the clause, never declared by an assignment.
             if let Some(variable) = &clause.variable {
-                self.misnamed(&variable.name[1..], variable.span, "local", NameCase::Camel);
-                self.edits.replace(variable.span, Self::variable_name(variable.name));
+                self.misnamed_local(variable);
+                let name = self.variable_name(variable.name);
+                self.edits.replace(variable.span, name);
                 if let Some(method) = self.method.as_mut() {
                     method.parameters.push(variable.name.to_vec());
                 }
@@ -351,7 +351,7 @@ impl<'input> Converter<'input, '_> {
             }
             Expression::Conditional(conditional) => {
                 let Some(then) = conditional.then else {
-                    return self.refuse(expression.span(), "`?:` has no PHP# form: `??` covers null (spec section 14)");
+                    return self.elvis(expression, conditional.condition, conditional.r#else);
                 };
                 self.condition(conditional.condition, false);
                 self.expression(then, expected);

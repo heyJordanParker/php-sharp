@@ -122,6 +122,7 @@ impl Converter<'_, '_> {
         let resolution = self.method.as_ref().map(|method| method.resolution.clone()).unwrap_or_default();
         let around = self.method.take();
         self.method = Some(Method {
+            name: None,
             returning: returning.clone(),
             resolution,
             parameters: parameters.parameters.iter().map(|parameter| parameter.variable.name.to_vec()).collect(),
@@ -203,7 +204,8 @@ impl Converter<'_, '_> {
                 (Some(hint), None) => self.refuse(hint.span(), "the analysis holds no type of this parameter"),
                 (None, None) => {}
             }
-            self.edits.replace(parameter.variable.span, Self::variable_name(parameter.variable.name));
+            let name = self.variable_name(parameter.variable.name);
+            self.edits.replace(parameter.variable.span, name);
             if let Some(default) = &parameter.default_value {
                 self.expression(default.value, None);
             }

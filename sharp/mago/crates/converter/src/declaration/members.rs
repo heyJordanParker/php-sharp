@@ -263,10 +263,16 @@ impl Converter<'_, '_> {
             }
         }
 
+        let parameters = if is_set { vec![b"$value".to_vec()] } else { Vec::new() };
+        self.rename_locals(&parameters, |names| match body {
+            PropertyHookConcreteBody::Block(block) => names.walk_block(block, &mut ()),
+            PropertyHookConcreteBody::Expression(body) => names.walk_expression(body.expression, &mut ()),
+        });
         self.method = Some(Method {
+            name: None,
             returning: (!is_set).then(|| union.clone()),
             resolution: TypeResolutionContext::default(),
-            parameters: if is_set { vec![b"$value".to_vec()] } else { Vec::new() },
+            parameters,
             variadic: None,
             locals: Locals::default(),
             super_call: None,
@@ -289,6 +295,7 @@ impl Converter<'_, '_> {
         }
         self.declare_locals();
         self.method = None;
+        self.renamed.clear();
     }
 
     /// `public override string name`, which the declaration of the property `variable` names starts with, its type,
@@ -310,7 +317,7 @@ impl Converter<'_, '_> {
         }
         let union = declared.type_metadata.as_ref().map_or_else(get_mixed, |metadata| metadata.type_union.clone());
         let written = self.type_text(&union, variable.span)?;
-        let name = Self::variable_name(variable.name);
+        let name = self.variable_name(variable.name);
         if self.names_inherited_method(variable) {
             return None;
         }
@@ -370,7 +377,7 @@ impl Converter<'_, '_> {
         if !metadata.appearing_method_ids.contains_key(&method) || metadata.methods.contains(&method) {
             return false;
         }
-        let name = Self::variable_name(variable.name);
+        let name = self.variable_name(variable.name);
         self.refuse(
             variable.span,
             format!(
@@ -670,7 +677,9 @@ impl Converter<'_, '_> {
         match &method.body {
             MethodBody::Concrete(block) => {
                 let resolution = declared.type_resolution_context.clone().unwrap_or_default();
+                self.rename_locals(&parameters, |names| names.walk_block(block, &mut ()));
                 self.method = Some(Method {
+                    name: Some(name.to_vec()),
                     returning,
                     resolution,
                     parameters,
@@ -693,6 +702,7 @@ impl Converter<'_, '_> {
                     self.unused_null(method, block);
                 }
                 self.method = None;
+                self.renamed.clear();
             }
             MethodBody::Abstract(_) => {}
             MethodBody::Expression(_) => self.refuse(method.body.span(), "an expression body is PHP# only"),

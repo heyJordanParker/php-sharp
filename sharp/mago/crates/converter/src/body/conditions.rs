@@ -32,8 +32,73 @@ impl Converter<'_, '_> {
 
     /// The `bool` test of PHP's truthiness of `expression`, or of its falsiness when `negated`, which is what `!` and
     /// `empty` read (spec section 21). A test of several parts reads the value more than once, so it is written only
-    /// for a local, and in parentheses unless `top`. Refuses the type where PHP# has no such test.
+    /// for a value [`Converter::rereads`] gives again, and in parentheses unless `top`. Refuses the type where PHP# has
+    /// no such test.
     pub(super) fn truthiness(&mut self, expression: &Expression<'_>, negated: bool, top: bool) -> Option<String> {
+        self.tested(expression, negated, top).map(|(test, _)| test)
+    }
+
+    /// PHP's `$value ?: $other` as `test ? value : other`, where `test` is the truthiness of `value`, which reads it
+    /// again, so `value` is one [`Converter::rereads`] gives again (spec section 21).
+    pub(super) fn elvis(&mut self, expression: &Expression<'_>, value: &Expression<'_>, other: &Expression<'_>) {
+        if !self.rereads(value) {
+            let shown = String::from_utf8_lossy(self.text(value.span())).into_owned();
+            return self.refuse(
+                expression.span(),
+                format!("`?:` of `{shown}` has no PHP# form: `??` covers null, and PHP's truthiness test reads the value a second time, which the converter writes only for a variable or a property (spec section 21)"),
+            );
+        }
+        let (test, value) = if self.is(value, &[Kind::Bool]) {
+            self.expression(value, None);
+            let rendered = self.render(value);
+            (rendered.clone(), rendered)
+        } else {
+            let Some(tested) = self.tested(value, false, false) else {
+                return;
+            };
+            tested
+        };
+        self.expression(other, None);
+        let other = self.render(other);
+        self.edits.replace(expression.span(), format!("{test} ? {value} : {other}"));
+    }
+
+    /// Whether reading `expression` a second time gives what the first read gave: a variable, or a property of one that
+    /// is never null, which every class it may be declares with no `get` hook, and no class it may be declares `__get`
+    /// for. PHP runs no code between the two reads of one test, so nothing changes the value between them.
+    pub(super) fn rereads(&self, expression: &Expression<'_>) -> bool {
+        match expression {
+            Expression::Parenthesized(parenthesized) => self.rereads(parenthesized.expression),
+            Expression::Variable(Variable::Direct(_)) => true,
+            Expression::Access(Access::Property(access)) => {
+                let ClassLikeMemberSelector::Identifier(name) = &access.property else {
+                    return false;
+                };
+                let property = [b"$".as_slice(), name.value].concat();
+                let codebase = self.input.codebase;
+                let plain = |class: &[u8]| {
+                    let declared = codebase
+                        .get_declaring_property(class, &property)
+                        .is_some_and(|metadata| metadata.hooks.is_empty() && !metadata.flags.is_virtual_property());
+                    let descendants = codebase.get_all_descendants(class);
+                    declared
+                        && std::iter::once(class)
+                            .chain(descendants.iter().map(|descendant| descendant.as_bytes()))
+                            .all(|class| codebase.get_declaring_method(class, b"__get").is_none())
+                };
+                self.rereads(access.object)
+                    && self.type_of(access.object).is_some_and(|union| {
+                        union.types.iter().all(|atomic| {
+                            matches!(atomic, TAtomic::Object(TObject::Named(named)) if plain(named.name.as_bytes()))
+                        })
+                    })
+            }
+            _ => false,
+        }
+    }
+
+    /// The test [`Converter::truthiness`] gives, with the PHP# text of the value it tests.
+    fn tested(&mut self, expression: &Expression<'_>, negated: bool, top: bool) -> Option<(String, String)> {
         let Some(union) = self.type_of(expression) else {
             self.refuse(expression.span(), "the analysis gives this condition no type");
             return None;
@@ -81,15 +146,15 @@ impl Converter<'_, '_> {
         };
         let test = if negated { falsy } else { truthy };
         let parts = test.matches("&&").count() + test.matches("||").count();
-        if parts > 0 && !matches!(expression, Expression::Variable(Variable::Direct(_))) {
+        if parts > 0 && !self.rereads(expression) {
             self.refuse(
                 expression.span(),
-                format!("a condition of `{shown}` is not converted yet: its PHP# test reads the value more than once, which the converter writes only for a local"),
+                format!("a condition of `{shown}` has no PHP# form here: its PHP# test reads the value more than once, which gives what PHP's one read gives only for a variable or a property"),
             );
             return None;
         }
 
-        Some(if parts > 0 && !top { format!("({test})") } else { test })
+        Some((if parts > 0 && !top { format!("({test})") } else { test }, value))
     }
 
     /// `isset($a, $b)` as `a != null && b != null`, and a `Map` key as `map.get(key) != null`, since `get` gives null

@@ -76,18 +76,39 @@ final class Tally
     }
 
     // A local one pass of a loop assigns keeps its value into the next pass, as PHP's variable lives for the method.
+    // Each local and `catch` variable takes its camel case name.
     /** @param list<int> $values */
     public function carried(array $values): int
     {
-        $sum = 0;
+        $running_sum = 0;
         foreach ($values as $value) {
             if ($value > 0) {
-                $last = $value;
+                $last_positive = $value;
             }
-            $sum += $last ?? 0;
+            $running_sum += $last_positive ?? 0;
         }
 
-        return $sum;
+        return $running_sum;
+    }
+
+    public function guarded(int $count): string
+    {
+        try {
+            $item_count = $this->checked($count);
+
+            return "items: {$item_count}";
+        } catch (\RuntimeException $not_counted) {
+            return $not_counted->getMessage();
+        }
+    }
+
+    private function checked(int $count): int
+    {
+        if ($count === 0) {
+            throw new \RuntimeException('no items');
+        }
+
+        return $count;
     }
 
     /** @param class-string<Pair> $type */

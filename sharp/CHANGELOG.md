@@ -4,6 +4,17 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Added
+
+- `mago convert` converts more of plain PHP with its meaning kept, where it kept the file plain PHP:
+  - a local or a `catch` variable named outside camel case, as `$line_total`, which takes its camel case name, `lineTotal`, wherever its method names it
+  - `__METHOD__`, `__FUNCTION__`, `__NAMESPACE__` and `__TRAIT__`, as the text PHP compiles in their place, and `__CLASS__` as `self::class` converts
+  - a keyed loop over a `string`-keyed array whose body reads the key only as text or as a key, where PHP's `int` key `42` and PHP#'s `"42"` give the same
+  - `(string)` of a value only PHPDoc types `string`, as a template, which converts what the value holds at runtime as `(string)` does, and of a `?string` as `` `${note ?? ""}` ``
+  - a loop over the values of an object whose class implements `Traversable`, as a framework's collection
+  - a condition of several parts and `?:` on a property its class declares with no hook and no `__get`, which a second read gives again, and `?:` on a variable
+  - `match (true)` with `bool` conditions and a `default` arm, as a chain of ternaries, or as `if … else if … else` where it stands as a statement
+
 ### Changed
 
 - `mago compile` proves the laws of every `.sharp` file it compiles in one Lean process, where it built the Lean code it generates with Lake and then ran one Lean process per file at once, each importing Lean, the runtime library and that code. Lean and the runtime library now load once per compile, and the generated code is elaborated once, in that process, so a compile of many files with laws uses far less processor time and memory. Mago no longer writes the generated code to `.sharp/.lean/`, and deletes the `Code` folder and the Lake build an earlier `mago` left there. The processor-time limit and the deadline still hold for each file's check.
