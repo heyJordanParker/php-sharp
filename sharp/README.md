@@ -262,7 +262,7 @@ sharp.compile_command = "vendor/bin/mago --no-version-check --no-extensions comp
 - **With opcache's default `opcache.validate_timestamps=1`,** php-fpm checks a file it cached every `opcache.revalidate_freq` seconds, 2 by default. A request within 2 seconds of an edit runs the bytecode it cached, with no compile.
 - **FrankenPHP's worker mode sees an edit only after the worker restarts,** as plain PHP's worker mode does. A worker keeps the classes it loaded, reads each input of a unit once, and runs the command at most once. The first stale file it loads after a restart compiles.
 
-A request after an edit waits for one whole `mago compile`. On the 0.6.3 image, for projects with no extension host, on a Mac whose load averaged 120 on 12 cores:
+A request after an edit waits for one whole `mago compile`. On a project of 79 PHP# classes and about 1,900 PHP files, the request right after an edit waits about 7 s in a container. On the 0.6.3 image, for projects with no extension host, on a Mac whose load averaged 120 on 12 cores:
 
 | Project | Where | Request after an edit | The request after it |
 | --- | --- | --- | --- |
