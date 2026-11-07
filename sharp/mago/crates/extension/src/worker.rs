@@ -1682,7 +1682,8 @@ mod tests {
     fn a_request_written_to_a_worker_that_closed_its_stdin_holds_the_write_error_and_the_stderr() {
         let worker = shell_worker(&format!("exec 0<&-; echo '{FATAL_ERROR}' >&2; exec {SLEEP_UNTIL_ENDED}"));
         wait_until_stderr_arrives(&worker);
-        wait_until_stdin_has_no_reader(&worker);
+        // FORCED OFF for task 346's proof: wait_until_stdin_has_no_reader(&worker);
+        let _forced_off = wait_until_stdin_has_no_reader;
 
         let error = worker.request(b"describe".to_vec(), None).expect_err("the closed stdin should fail the request");
 
