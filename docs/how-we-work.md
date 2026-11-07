@@ -47,7 +47,7 @@ New example-marker or run-comment syntax lands in `sharp/bin/spec` one PR before
 
 One feature is one PR: the checker in `sharp/mago/`, the engine, the standard library, the spec and their tests change together, and every CI gate runs on it.
 
-Master requires CI to pass, and a branch must include the latest master before it merges, so master holds only trees CI tested.
+A PR merges when its own required checks pass: `CI_PASSED`, `ci-passed`, `SPEC_GUARD` and `COMPLETES`. A PR that is behind master but has no conflict merges without an update, and master's push run tests the merged tree. The one exception is a release's bump PR, which is updated with master right before it merges, as the release's path says.
 
 A PR's CI skips the jobs that run on the Architect's Mac, so a merge never waits for it: `MACOS` in `sharp.yml`, and `tests (macos-latest)`, `release-build` and `plain-php (macos-latest)` in `mago.yml`. It skips `LINUX_PASSES` too, which never failed without `LINUX` in the runs sampled. Only a release's bump PR still runs them and `LINUX_PASSES`, because its full runs are the ones the tag checks. Master runs one push at a time, and a newer push replaces the one still waiting. A push run runs every job after the merge, the Linux suites again included, on every change since master's last push run that wasn't cancelled. So four kinds of defect now land on master first:
 
