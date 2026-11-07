@@ -1091,8 +1091,10 @@ pub fn analyze_assignment_to_variable<'ctx, 'arena, A>(
     block_context.derived_local_sources.remove(&variable_id);
     // A variable a pattern's PHP assigns, hidden or the name the pattern binds, holds the value the pattern tests, and
     // spans nothing, since no source writes it there. So its test narrows that value too, as `!= null` on the value
-    // narrows it: a property after `is`, with a name or without, spec section 21.
+    // narrows it: a property after `is`, with a name or without, spec section 21. A local narrows only after `is`
+    // without a name, which tests the local itself, so a name never narrows the local it holds.
     if variable_span.length() == 0
+        && source_expression.is_some_and(|source| !is_variable(source, context.resolved_names))
         && let Some(source_id) =
             source_expression.and_then(|source| get_block_expression_id(source, context, block_context))
     {
