@@ -33,6 +33,7 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
   - `=` and `unset` at an index of an object whose class implements `ArrayAccess`, as the index write and `bag.offsetUnset(key)`
   - an `if` whose condition first assigns a local that a comparison reads, as `if (($at = $this->find($id)) !== null)`, as the assignment on its own line
   - `new static(…)`, as `new Self(…)`, in a `final` class, and in any other class that declares a constructor, which becomes `required`
+  - PHP's own constant whose value a standard library constant is, as `PHP_INT_MAX` as `Int.MAX`, which the codex now records for each standard library constant
 
 ### Changed
 

@@ -28,11 +28,19 @@ impl Converter<'_, '_> {
             return self.refuse(expression.span(), "the analysis holds no constant of this name");
         };
         let name = metadata.name.as_str_lossy().into_owned();
+        // PHP# code reads PHP's own constant through the standard library constant whose value it is, as `Int.MAX`
+        // reads `PHP_INT_MAX` (spec section 23).
         if metadata.flags.is_built_in() {
-            return self.refuse(
-                expression.span(),
-                format!("`{name}` is PHP's own constant, which is not converted yet: the standard library names it"),
-            );
+            let Some((class, member)) = self.input.library.constant(metadata.name.as_bytes()) else {
+                return self.refuse(
+                    expression.span(),
+                    format!("`{name}` has no PHP# form: no standard library member reads it (decision 083)"),
+                );
+            };
+            return match self.imports.name_of(&class.as_str_lossy()) {
+                Ok(class) => self.edits.replace(expression.span(), format!("{class}.{member}")),
+                Err(reason) => self.refuse(expression.span(), reason),
+            };
         }
         let Some(text) = self.through_namespace(expression.span(), &name, metadata.span) else {
             return;

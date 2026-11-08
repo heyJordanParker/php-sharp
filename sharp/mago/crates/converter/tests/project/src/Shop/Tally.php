@@ -124,6 +124,12 @@ final class Tally
         return $count;
     }
 
+    // PHP's own constants, which PHP# reads through the standard library's `Int.MAX` and `Int.MIN`.
+    public function bounds(): string
+    {
+        return PHP_INT_MAX . ' ' . \PHP_INT_MIN;
+    }
+
     // An `if` whose condition first assigns a local that a comparison reads, which runs before the rest of it.
     public function graded(int $amount): string
     {
