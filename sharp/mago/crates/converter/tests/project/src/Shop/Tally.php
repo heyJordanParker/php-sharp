@@ -130,6 +130,14 @@ final class Tally
         return PHP_INT_MAX . ' ' . \PHP_INT_MIN;
     }
 
+    // A local renamed to camel case beside a static property of its name, which keeps the name its class declares.
+    public function stepped(int $count): int
+    {
+        $step_size = Counter::$step_size;
+
+        return $count * $step_size;
+    }
+
     // An `if` whose condition first assigns a local that a comparison reads, which runs before the rest of it.
     public function graded(int $amount): string
     {

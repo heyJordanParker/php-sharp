@@ -117,7 +117,7 @@ echo $tally->sum(2, 5, 10), ' ', $plusThree(4), ' ', $tally->halved(10), "\n";
 echo $tally->counted([3]), ' ', $tally->made(Pair::class), ' ', $tally->priced(['price' => 4, 'count' => 3]), "\n";
 echo $tally->carried([3, -1, 4, -2]), ' ', $tally->guarded(3), ' ', $tally->guarded(0), "\n";
 echo $tally->bounded(2), ' ', $tally->bounded(0), ' ', $tally->bounded(-1), "\n";
-echo $tally->graded(20), ' ', $tally->graded(6), ' ', $tally->graded(2), ' ', $tally->bounds(), "\n";
+echo $tally->graded(20), ' ', $tally->graded(6), ' ', $tally->graded(2), ' ', $tally->bounds(), ' ', $tally->stepped(3), "\n";
 $gift = (new GiftCoupon(5))->doubled();
 echo $gift::class, ' ', $gift->cents, ' ', (new \Proof\Shop\Coupon(3))->doubled()::class, "\n";
 echo $tally->stamped(new \Acme\Format\Stamp()), "\n";
