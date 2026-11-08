@@ -9,6 +9,20 @@ set -euo pipefail
 # --quiet, --jobs 2 or --message-format=json.
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cargo="$(cd "$root/ext/sharp" && rustup which cargo)"
+target="$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago"
+
+# Cargo never deletes a copy of a crate it no longer uses. Each distinct `cargo test -p` or `cargo clippy -p` list
+# compiles its own copy of the shared crates, and so does each version bump or Cargo.lock change. A fresh build holds
+# 5.9 GiB, 7 lists took one slot from 5.85 to 7.37 GiB, and live slots reached 16 GiB. So above 10 GiB the folder goes,
+# and mago builds from nothing, as clean-kept-build bounds it in CI.
+if [[ -d $target ]]; then
+  size=$(du -sk "$target" | cut -f1)
+  if (( size > 10 * 1024 * 1024 )); then
+    echo "$target held $((size / 1024)) MiB, above the 10 GiB bound, so mago builds from nothing." >&2
+    rm -rf "$target"
+  fi
+fi
+
 PATH="$(dirname "$cargo"):$PATH" exec "$cargo" test --workspace --locked --no-run \
   --manifest-path "$root/sharp/mago/Cargo.toml" \
-  --target-dir "$root/sharp/build/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/mago" "$@"
+  --target-dir "$target" "$@"
