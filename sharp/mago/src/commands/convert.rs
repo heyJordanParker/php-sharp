@@ -708,17 +708,18 @@ fn judge(plain: &Proof, proof: &Proof, swaps: &[&Candidate]) -> Judgement {
         }
     }
     for (file, errors) in proof.refused.iter().filter(|(file, _)| !plain.refused.contains_key(*file)) {
-        // A lowering that panicked names a defect of the checker, so its text is the reason, never hidden.
-        let panicked: String = errors
+        // The compile's first error says why it refuses the file. A lowering that panicked names a defect of the
+        // checker, so its text is the reason whatever else the file holds, never hidden.
+        let reason = errors
             .iter()
-            .filter(|error| error.code.as_deref() == Some(LOWERING_PANIC))
-            .map(|error| format!(": {}", error.message))
-            .collect();
-        let written = format!("{}: mago compile would refuse it{panicked}", display(file));
+            .find(|error| error.code.as_deref() == Some(LOWERING_PANIC))
+            .or_else(|| errors.iter().next())
+            .map_or_else(String::new, |error| format!(": {}", error.message));
+        let written = format!("{}: mago compile would refuse it{reason}", display(file));
         let found = |shown: String| Found { shown, written: written.clone(), files: BTreeSet::from([file.clone()]) };
         match owner(file) {
             Some(candidate) => judgement.own.entry(candidate.name.clone()).or_default().push(found(format!(
-                "{}: mago compile would refuse it once converted{panicked}",
+                "{}: mago compile would refuse it once converted{reason}",
                 display(&candidate.name)
             ))),
             None => judgement.others.push(found(written.clone())),
@@ -1814,27 +1815,36 @@ final class CountsWorkers implements Plugin, BeforeAnalysisHook, AfterAnalysisHo
         assert!(lines[4].contains("int item") && lines[8].contains("int size()"), "{written}");
     }
 
-    /// A converted file whose lowering panicked fails its proof with the panic's text, a defect of the checker that the
-    /// compile's refusal names beside its other errors.
+    /// A file the compile refuses once converted fails its proof with the compile's first error, and a converted file
+    /// whose lowering panicked with the panic's text, a defect of the checker, whatever else the refusal names.
     #[test]
-    fn a_lowering_that_panicked_refuses_its_file_with_the_panic() {
+    fn a_refused_compile_names_its_first_error_and_a_lowering_that_panicked_names_the_panic() {
         let candidate = Candidate {
             name: b"src/Box.php".to_vec(),
             path: None,
             original: b"<?php\n\nnamespace App;\n\nfinal class Box\n{\n}\n".to_vec(),
             text: Vec::new(),
         };
-        let errors = IssueCollection::from(vec![
-            Issue::error("A defect of the checker: boom").with_code(LOWERING_PANIC),
+        let panicked = IssueCollection::from(vec![
             Issue::error("Invalid return.").with_code("invalid-return-statement"),
+            Issue::error("A defect of the checker: boom").with_code(LOWERING_PANIC),
         ]);
+        let linked = IssueCollection::from(vec![Issue::error("Shelf::size() must be compatible with Box::size().")]);
         let plain = Proof { issues: Issues::default(), refused: HashMap::new() };
-        let proof = Proof { issues: Issues::default(), refused: HashMap::from([(b"src/Box.sharp".to_vec(), errors)]) };
+        let proof = Proof {
+            issues: Issues::default(),
+            refused: HashMap::from([(b"src/Box.sharp".to_vec(), panicked), (b"src/Shelf.php".to_vec(), linked)]),
+        };
 
         let judgement = judge(&plain, &proof, &[&candidate]);
 
         let shown: Vec<&str> = judgement.own[&candidate.name].iter().map(|found| found.shown.as_str()).collect();
         assert_eq!(shown, ["src/Box.php: mago compile would refuse it once converted: A defect of the checker: boom"]);
+        let others: Vec<&str> = judgement.others.iter().map(|found| found.shown.as_str()).collect();
+        assert_eq!(
+            others,
+            ["src/Shelf.php: mago compile would refuse it: Shelf::size() must be compatible with Box::size()."]
+        );
     }
 
     /// Two issues of one member with one message stay two, told apart by their line of the PHP#, and an issue outside
