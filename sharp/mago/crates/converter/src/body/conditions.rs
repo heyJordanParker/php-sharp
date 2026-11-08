@@ -39,11 +39,46 @@ fn first_compared<'condition, 'arena>(
     }
 }
 
+/// Whether each value of `union` but null is a `bool`, an `int`, a `float` or a string, which a condition reads by its
+/// type.
+fn is_scalar(union: &TUnion) -> bool {
+    let bare: Vec<Kind> = kinds(union).into_iter().filter(|kind| *kind != Kind::Null).collect();
+
+    !bare.is_empty() && bare.iter().all(|kind| matches!(kind, Kind::Bool | Kind::Int | Kind::Float | Kind::String))
+}
+
+/// Why a condition of `shown`, a scalar no native declaration types, has no PHP# form.
+pub(super) fn unproven_scalar(shown: &str) -> String {
+    format!(
+        "a condition of `{shown}` has no PHP# form: no native declaration makes it the type the analysis gives it at runtime, as a framework's PHPDoc `@property` doesn't, and PHP may hold another type there, as `1` for a `bool` or `\"0\"` for an `int`, which PHP# reads by its type (spec section 21)"
+    )
+}
+
 impl Converter<'_, '_> {
+    /// Whether a condition may read `value` as the scalar the analysis types it, which it holds at runtime, or refuses
+    /// it. A local it reads keeps that only while every value written to it holds its type.
+    pub(super) fn proven(&mut self, value: &Expression<'_>) -> bool {
+        if !self.holds_type_at_runtime(value) {
+            let shown = String::from_utf8_lossy(self.text(value.span())).into_owned();
+            self.refuse(value.span(), unproven_scalar(&shown));
+            return false;
+        }
+        if let Expression::Variable(Variable::Direct(variable)) = value.unparenthesized()
+            && self.is_local(variable.name)
+        {
+            self.tested_local(variable.name, value.span());
+        }
+
+        true
+    }
+
     /// A condition, which PHP# takes only as a `bool` (spec section 21). `top` says it stands alone, as an `if`'s does,
     /// so a comparison of several parts needs no parentheses.
     pub(super) fn condition(&mut self, condition: &Expression<'_>, top: bool) {
         if self.is(condition, &[Kind::Bool]) {
+            if !self.proven(condition) {
+                return;
+            }
             return self.expression(condition, None);
         }
         if let Some(test) = self.truthiness(condition, false, top) {
@@ -87,6 +122,9 @@ impl Converter<'_, '_> {
         };
         if !self.declaration(statement, condition) {
             self.expression(condition, None);
+        }
+        if is_scalar(union) && !self.proven(assignment.lhs) {
+            return true;
         }
         let named = |this: &mut Self| this.variable_name(variable.name);
         let Some((test, _)) = self.test_of(union, condition.span(), named, true, false, true) else {
@@ -150,6 +188,9 @@ impl Converter<'_, '_> {
             );
         }
         let (test, value) = if self.is(value, &[Kind::Bool]) {
+            if !self.proven(value) {
+                return;
+            }
             self.expression(value, None);
             let rendered = self.render(value);
             (rendered.clone(), rendered)
@@ -204,6 +245,10 @@ impl Converter<'_, '_> {
             self.refuse(expression.span(), "the analysis gives this condition no type");
             return None;
         };
+        // A scalar's test reads it by its type, which it holds at runtime only where a declaration makes it.
+        if is_scalar(union) && !self.proven(expression) {
+            return None;
+        }
         let rendered = |this: &mut Self| {
             this.expression(expression, None);
             let rendered = this.render(expression);

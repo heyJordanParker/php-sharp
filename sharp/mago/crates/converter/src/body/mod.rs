@@ -41,6 +41,7 @@ use mago_syntax::cst::Try;
 use mago_syntax::cst::Variable;
 
 use crate::Converter;
+use matching::MatchPlace;
 
 /// What a value of an atomic type is to the operators PHP and PHP# share.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -158,7 +159,7 @@ impl<'input> Converter<'input, '_> {
                 if let Expression::Match(r#match) = expression.expression {
                     let terminator = expression.terminator.span();
                     self.edits.delete(r#match.right_brace.end.offset, terminator.end.offset);
-                    return self.match_expression(r#match, true);
+                    return self.match_expression(r#match, MatchPlace::Statement);
                 }
                 if !self.declaration(statement, expression.expression) {
                     self.expression(expression.expression, None);
@@ -171,7 +172,7 @@ impl<'input> Converter<'input, '_> {
                 }
                 if let Some(value) = r#return.value {
                     let returning = self.method.as_ref().and_then(|method| method.returning.clone());
-                    self.expression(value, returning.as_ref());
+                    self.value(value, returning.as_ref());
                     if let Some(returning) = &returning {
                         self.narrowed(value, returning);
                     }
@@ -380,6 +381,15 @@ impl<'input> Converter<'input, '_> {
         self.edits.render(self.source, span.start.offset, span.end.offset)
     }
 
+    /// `value`, the whole value a `return` gives or an assignment writes, in PHP#, where nothing binds around it, as
+    /// [`Converter::expression`] converts it.
+    pub(super) fn value(&mut self, value: &Expression<'_>, expected: Option<&TUnion>) {
+        match value {
+            Expression::Match(r#match) => self.match_expression(r#match, MatchPlace::Value),
+            _ => self.expression(value, expected),
+        }
+    }
+
     /// `expression` in PHP#. `expected` is the declared type of the place its value lands, when there is one, which
     /// decides the PHP# form of a literal, as `[]` is an empty `Map`, `[:]`, where a `Map` is declared (spec section
     /// 12).
@@ -453,7 +463,7 @@ impl<'input> Converter<'input, '_> {
             Expression::Throw(throw) => self.expression(throw.exception, None),
             Expression::Closure(_) | Expression::ArrowFunction(_) => self.lambda(expression, expected),
             Expression::PartialApplication(application) => self.method_value(expression, application),
-            Expression::Match(r#match) => self.match_expression(r#match, false),
+            Expression::Match(r#match) => self.match_expression(r#match, MatchPlace::Operand),
             Expression::Clone(clone) => self.clone(expression, clone.object),
             Expression::List(_) => self.refuse(expression.span(), "destructuring is not converted yet"),
             Expression::CompositeString(string) => self.template(expression, string),

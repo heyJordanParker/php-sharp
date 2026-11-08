@@ -201,7 +201,8 @@ impl Converter<'_, '_> {
         true
     }
     /// `match`, whose arms take blocks when it stands as a statement, as a PHP# `match` statement's do.
-    pub(super) fn match_expression(&mut self, r#match: &Match<'_>, statement: bool) {
+    pub(super) fn match_expression(&mut self, r#match: &Match<'_>, place: MatchPlace) {
+        let statement = place == MatchPlace::Statement;
         let subject = r#match.expression;
         if !r#match.arms.iter().any(MatchArm::is_default) && !self.is(subject, &[Kind::Enum]) {
             let shown = self.shown(subject);
@@ -216,7 +217,7 @@ impl Converter<'_, '_> {
             .iter()
             .any(|arm| matches!(arm, MatchArm::Expression(arm) if arm.conditions.iter().any(|condition| !is_constant(condition))));
         if guarded && matches!(subject, Expression::Literal(Literal::True(_))) {
-            return self.match_true(r#match, statement);
+            return self.match_true(r#match, place);
         }
 
         self.expression(subject, None);
@@ -258,8 +259,10 @@ impl Converter<'_, '_> {
     /// `match (true)`, which runs the arm of the first condition that is `true`, as a chain of ternaries, `a ? x : b ? y
     /// : z`, or as `if … else if … else` where it stands as a statement (spec section 21). PHP compares each condition
     /// with `true` by `===`, which holds for a `bool` just when it is `true`, and tries them in order, as the chain does.
-    /// The `match` has a `default` arm, which ends the chain.
-    fn match_true(&mut self, r#match: &Match<'_>, statement: bool) {
+    /// The `match` has a `default` arm, which ends the chain. The chain takes parentheses where an operator around it
+    /// would bind tighter than `?:`, as `match (true) { … } + $extra` is `(express ? 5 : 0) + extra`.
+    fn match_true(&mut self, r#match: &Match<'_>, place: MatchPlace) {
+        let statement = place == MatchPlace::Statement;
         let mut arms: Vec<(Option<String>, String)> = Vec::new();
         for arm in r#match.arms.iter() {
             let (conditions, value) = match arm {
@@ -276,6 +279,9 @@ impl Converter<'_, '_> {
                                 condition.span(),
                                 format!("a `match (true)` arm on `{shown}` compares it with `true` by PHP's `===`, which a PHP# condition gives only for a `bool` (spec sections 19 and 21)"),
                             );
+                        }
+                        if !self.proven(condition) {
+                            return;
                         }
                         self.expression(condition, None);
                         tests.push(grouped(condition, self.render(condition)));
@@ -305,7 +311,8 @@ impl Converter<'_, '_> {
             format!("{} else {{\n{indentation}    {otherwise};\n{indentation}}}", branches.join(" else "))
         } else {
             let arms: Vec<String> = tested.iter().map(|(test, value)| format!("{test} ? {value}")).collect();
-            format!("{}\n{indentation}    : {otherwise}", arms.join(&format!("\n{indentation}    : ")))
+            let chain = format!("{}\n{indentation}    : {otherwise}", arms.join(&format!("\n{indentation}    : ")));
+            if place == MatchPlace::Operand { format!("({chain})") } else { chain }
         };
         self.edits.replace(r#match.span(), text);
     }
@@ -327,6 +334,17 @@ impl Converter<'_, '_> {
         }
         self.expression(condition, None);
     }
+}
+
+/// Where a `match` stands, which decides its PHP# form.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum MatchPlace {
+    /// A statement of its own.
+    Statement,
+    /// The whole value a `return` gives or an assignment writes, where nothing binds around it.
+    Value,
+    /// Inside another expression, as an operand.
+    Operand,
 }
 
 /// `rendered`, the PHP# text of `expression`, in parentheses where an operator of a ternary chain around it would bind

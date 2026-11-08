@@ -54,10 +54,10 @@ final class Note
         return $name === \Proof\Spec::class;
     }
 
-    // `===` of two class values, and of an `array-key` with a string.
+    // `===` of two class values of a class no PHP# generic class extends, and of an `array-key` with a string.
     /**
-     * @param class-string $kind
-     * @param class-string|null $other
+     * @param class-string<\Proof\Spec> $kind
+     * @param class-string<\Proof\Spec>|null $other
      * @param array-key $key
      * @return list<bool>
      */

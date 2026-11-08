@@ -33,12 +33,14 @@ use mago_syntax::cst::FunctionLikeParameter;
 use mago_syntax::cst::Instantiation;
 use mago_syntax::cst::Literal;
 use mago_syntax::cst::Statement;
+use mago_syntax::cst::StaticPropertyAccess;
 use mago_syntax::cst::TokenSeparatedSequence;
 use mago_syntax::cst::UnaryPrefixOperator;
 use mago_syntax::cst::Variable;
 use mago_syntax::walker::MutWalker;
 
 use super::Kind;
+use super::conditions::unproven_scalar;
 use crate::Converter;
 
 /// The variables PHP fills for every scope, which PHP# removes (spec sections 2 and 29).
@@ -81,6 +83,14 @@ impl<'ast, 'arena> MutWalker<'ast, 'arena, ()> for Names {
 
     fn walk_in_function_like_parameter(&mut self, parameter: &'ast FunctionLikeParameter<'arena>, _: &mut ()) {
         self.parameters.push(parameter.variable.name.to_vec());
+    }
+
+    /// `Settings::$page_size` names a member of its class, which keeps its name, and no variable of the method.
+    fn walk_static_property_access(&mut self, access: &'ast StaticPropertyAccess<'arena>, context: &mut ()) {
+        self.walk_expression(access.class, context);
+        if !matches!(access.property, Variable::Direct(_)) {
+            self.walk_variable(&access.property, context);
+        }
     }
 }
 
@@ -129,6 +139,9 @@ struct Local {
     keyed: Vec<(Write, Write)>,
     /// Each `[]` written to it, whose PHP# form, `[]` or `[:]`, its declared type decides.
     empties: Vec<Span>,
+    /// The first condition that reads it as the scalar it holds, which every later write keeps true only when it holds
+    /// its type at runtime too.
+    tested: Option<Span>,
 }
 
 impl Local {
@@ -144,6 +157,7 @@ impl Local {
             appends: Vec::new(),
             keyed: Vec::new(),
             empties: Vec::new(),
+            tested: None,
         }
     }
 }
@@ -164,6 +178,8 @@ struct Write {
     /// The analysis's type of what the write leaves in the local.
     union: Option<TUnion>,
     source: Source,
+    /// Whether the value holds that type at runtime, which [`Converter::holds_type_at_runtime`] gives.
+    runtime: bool,
 }
 
 /// Where the type of a value written to a local comes from (decision 2).
@@ -244,21 +260,53 @@ impl Converter<'_, '_> {
         }
         let expected = written.map(|(_, union)| union);
         match &expected {
-            Some(tagged) => self.wrote(variable.name, rhs.span(), Some(tagged.clone()), Source::Tagged),
-            None => self.wrote(variable.name, rhs.span(), self.type_of(rhs).cloned(), self.source(rhs)),
+            Some(tagged) => self.wrote(variable.name, rhs, rhs, Some(tagged.clone()), Source::Tagged),
+            None => self.wrote(variable.name, rhs, rhs, self.type_of(rhs).cloned(), self.source(rhs)),
         }
-        self.expression(rhs, expected.as_ref());
+        self.value(rhs, expected.as_ref());
 
         true
     }
 
-    /// Records that a write gives the local `name` the value at `at`, of type `union`, whose type comes from `source`.
-    fn wrote(&mut self, name: &[u8], at: Span, union: Option<TUnion>, source: Source) {
-        let Some(method) = self.method.as_mut() else {
+    /// Records that a write gives the local `name` the value `value`, of type `union`, whose type comes from `source`,
+    /// and which `left`, the value or the compound assignment that makes it, leaves. A condition that read the local as
+    /// the scalar it holds refuses when this value may not hold that type at runtime.
+    fn wrote(
+        &mut self,
+        name: &[u8],
+        value: &Expression<'_>,
+        left: &Expression<'_>,
+        union: Option<TUnion>,
+        source: Source,
+    ) {
+        let runtime = self.holds_type_at_runtime(left);
+        let Some(local) = self.current(name) else {
             return;
         };
-        if let Some((_, local)) = method.locals.entries.iter_mut().rev().find(|(local, _)| local.as_slice() == name) {
-            local.writes.push(Write { at, union, source });
+        local.writes.push(Write { at: value.span(), union, source, runtime });
+        if let (false, Some(tested)) = (runtime, local.tested) {
+            self.refuse(tested, unproven_scalar(&String::from_utf8_lossy(name)));
+        }
+    }
+
+    /// Whether the local `name` holds the type the analysis gives it at runtime: each value written to it so far
+    /// does, and it has one.
+    pub(super) fn local_holds_type_at_runtime(&self, name: &[u8]) -> bool {
+        let local = self
+            .method
+            .as_ref()
+            .and_then(|method| method.locals.entries.iter().rev().find(|(local, _)| local.as_slice() == name));
+
+        local.is_some_and(|(_, local)| !local.writes.is_empty() && local.writes.iter().all(|write| write.runtime))
+    }
+
+    /// Records that a condition at `at` reads the local `name` as the scalar it holds, which a later write that may not
+    /// hold that type at runtime refuses.
+    pub(super) fn tested_local(&mut self, name: &[u8], at: Span) {
+        if let Some(local) = self.current(name)
+            && local.tested.is_none()
+        {
+            local.tested = Some(at);
         }
     }
 
@@ -297,7 +345,12 @@ impl Converter<'_, '_> {
 
     /// The write of `value`, written to a local at its own place: its type and where that comes from.
     fn write_of(&self, value: &Expression<'_>) -> Write {
-        Write { at: value.span(), union: self.type_of(value).cloned(), source: self.source(value) }
+        Write {
+            at: value.span(),
+            union: self.type_of(value).cloned(),
+            source: self.source(value),
+            runtime: self.holds_type_at_runtime(value),
+        }
     }
 
     /// Where the type of `value`, written to a local, comes from: a literal, a parameter, a property, the return of a
@@ -460,11 +513,7 @@ impl Converter<'_, '_> {
             return;
         };
         let block = self.method.as_ref().and_then(|method| method.locals.blocks.last().copied());
-        let write = Write {
-            at: assignment.rhs.span(),
-            union: self.type_of(assignment.rhs).cloned(),
-            source: self.source(assignment.rhs),
-        };
+        let write = self.write_of(assignment.rhs);
         let Some(local) = self.current(variable.name).filter(|local| local.first == variable.span) else {
             return;
         };
@@ -564,11 +613,13 @@ impl Converter<'_, '_> {
             return false;
         }
         self.misnamed_local(variable);
-        // Each pass writes the loop's variable an element of what it loops over, whose type that value's source gives.
+        // Each pass writes the loop's variable an element of what it loops over, whose type that value's source gives,
+        // and which nothing proves holds that type at runtime.
         let write = Write {
             at: variable.span,
             union: self.input.artifacts.get_expression_type(variable).cloned(),
             source: self.source(iterable),
+            runtime: false,
         };
         let Some(method) = self.method.as_mut() else {
             return false;
@@ -1076,9 +1127,9 @@ impl Converter<'_, '_> {
         if let Expression::Variable(Variable::Direct(variable)) = lhs {
             // A compound write leaves what its operator gives, as `$sum += 0.5` makes an `int` sum a `float`.
             let left = if assignment.operator.is_assign() { rhs } else { expression };
-            self.wrote(variable.name, rhs.span(), self.type_of(left).cloned(), self.source(rhs));
+            self.wrote(variable.name, rhs, left, self.type_of(left).cloned(), self.source(rhs));
         }
-        self.expression(rhs, declared.as_ref());
+        self.value(rhs, declared.as_ref());
         // PHP stores any value in a typed property and checks it there, and PHP# takes one of a known type.
         if property.is_some_and(|property| !property.types.iter().any(TAtomic::is_mixed)) {
             self.mixed(rhs, "a property of a known type");

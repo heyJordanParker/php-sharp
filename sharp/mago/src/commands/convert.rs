@@ -306,6 +306,12 @@ impl ConvertCommand {
             return Ok((ExitCode::FAILURE, outcome));
         };
         let plain = session.proof(&prover)?;
+        // The judgement leaves out a file the plain project's compile refuses too, so a lowering that panicked there,
+        // a defect of the checker, is an error of the run of its own.
+        let panics = panics(&plain);
+        for panic in &panics {
+            tracing::error!("{panic}");
+        }
         // The forms come from the library files the proof's compile accepts, so a converted call runs what it does.
         let database = session.server.database().read_only();
         let forms = session.server.standard_library_forms(|issues| prover.hidden.shown(issues, &database))?;
@@ -360,7 +366,7 @@ impl ConvertCommand {
 
         outcome.report(self.dry_run, color_choice);
 
-        let failed = !outcome.refused.is_empty() || !outcome.unreached.is_empty() || unproven;
+        let failed = !outcome.refused.is_empty() || !outcome.unreached.is_empty() || unproven || !panics.is_empty();
         Ok((if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS }, outcome))
     }
 }
@@ -668,6 +674,19 @@ fn whole_workspace(configuration: &Configuration, color_choice: ColorChoice) -> 
     orchestrator.add_exclude_patterns(configuration.analyzer.excludes.iter());
 
     orchestrator
+}
+
+/// The text of each lowering of `proof` that panicked, in file name order, each a defect of the checker.
+fn panics(proof: &Proof) -> Vec<String> {
+    let mut refused: Vec<(&Vec<u8>, &IssueCollection)> = proof.refused.iter().collect();
+    refused.sort_by(|a, b| a.0.cmp(b.0));
+
+    refused
+        .into_iter()
+        .flat_map(|(_, errors)| errors.iter())
+        .filter(|error| error.code.as_deref() == Some(LOWERING_PANIC))
+        .map(|error| error.message.clone())
+        .collect()
 }
 
 /// What `proof`, of the project with `swaps` converted, found that `plain`, of the plain project, didn't: each issue
@@ -1845,6 +1864,24 @@ final class CountsWorkers implements Plugin, BeforeAnalysisHook, AfterAnalysisHo
             others,
             ["src/Shelf.php: mago compile would refuse it: Shelf::size() must be compatible with Box::size()."]
         );
+    }
+
+    /// A lowering that panicked in the plain project's proof, which the judgement leaves out with the file it refuses,
+    /// names its panic, so the run fails on it, and a file refused for another error names none.
+    #[test]
+    fn a_lowering_that_panicked_in_the_plain_proof_names_its_panic() {
+        let panicked = IssueCollection::from(vec![
+            Issue::error("Invalid return.").with_code("invalid-return-statement"),
+            Issue::error("The lowering of src/Box.sharp panicked: boom").with_code(LOWERING_PANIC),
+        ]);
+        let refused =
+            IssueCollection::from(vec![Issue::error("Invalid return.").with_code("invalid-return-statement")]);
+        let plain = Proof {
+            issues: Issues::default(),
+            refused: HashMap::from([(b"src/Box.sharp".to_vec(), panicked), (b"src/Shelf.sharp".to_vec(), refused)]),
+        };
+
+        assert_eq!(panics(&plain), ["The lowering of src/Box.sharp panicked: boom"]);
     }
 
     /// Two issues of one member with one message stay two, told apart by their line of the PHP#, and an issue outside

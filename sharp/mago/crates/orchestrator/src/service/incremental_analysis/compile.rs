@@ -716,7 +716,20 @@ impl IncrementalAnalysisService {
         let session = self.plugin_registry.create_external_analysis_session(self.database.files());
         let reach = Reach::new(&self.codebase, &self.native_symbol_references);
         let effects = self.effects();
-        let (_, forms) = self.lower_library(&library, (&errors, &unrefused), &reach, &effects, session.as_ref())?;
+        let (lowered, forms) =
+            self.lower_library(&library, (&errors, &unrefused), &reach, &effects, session.as_ref())?;
+        // A library file whose lowering panicked gives no forms, so a defect of the checker never leaves a caller
+        // without them unseen: it fails the call with the panic's text.
+        let panics: Vec<&str> = lowered
+            .iter()
+            .filter_map(|lowered| lowered.as_ref().err())
+            .flat_map(|issues| issues.iter())
+            .filter(|issue| issue.code.as_deref() == Some(LOWERING_PANIC))
+            .map(|issue| issue.message.as_str())
+            .collect();
+        if !panics.is_empty() {
+            return Err(OrchestratorError::General(panics.join("\n")));
+        }
 
         Ok(forms)
     }
@@ -1749,6 +1762,27 @@ mod tests {
             Compilation::Refused(_)
         ));
         assert!(!compiled.contains_key(name));
+    }
+
+    /// A library file whose lowering panics fails the library's forms with the panic's text, where its forms would
+    /// leave unseen. Its errors refuse nothing here, as the hosts' compile's don't, and a `Map` spread into a `List`
+    /// literal is an error the bridge doesn't survive.
+    #[test]
+    fn a_library_file_whose_lowering_panics_fails_the_library_forms_with_the_panic() {
+        let menu = "namespace Sharp;\n\npublic class Menu\n{\n    public static List<int|string> names(Map<string, int> counts)\n    {\n        return [...counts, \"soup\"];\n    }\n}\n";
+        let database =
+            project(&[(TEXT_PATH, TEXT), ("vendor/heyjordanparker/php-sharp-composer/library/Sharp/Menu.sharp", menu)]);
+        let mut service = analyzed(&database);
+
+        let Err(OrchestratorError::General(message)) = service.standard_library_forms(|_| IssueCollection::default())
+        else {
+            panic!("the library's forms ignore the panic");
+        };
+
+        assert_eq!(
+            message,
+            "The lowering of vendor/heyjordanparker/php-sharp-composer/library/Sharp/Menu.sharp panicked on the checker's errors in it: internal error: entered unreachable code: the checker refuses a `List` element in a `Map` literal"
+        );
     }
 
     /// A function several polyfill files declare, each its own way, is read as the declaration the codebase keeps,

@@ -153,8 +153,9 @@ impl Converter<'_, '_> {
                 self.expression(access.class, None);
                 self.edits.replace(access.double_colon, ".");
                 match &access.property {
+                    // The name its class declares, which no renamed local of the method changes.
                     Variable::Direct(variable) => {
-                        let name = self.variable_name(variable.name);
+                        let name = String::from_utf8_lossy(&variable.name[1..]).into_owned();
                         self.edits.replace(variable.span, name);
                     }
                     _ => self.refuse(

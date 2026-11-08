@@ -13,6 +13,17 @@ public final class Shipping
             : 'standard';
     }
 
+    // An operator around the chain binds tighter than `?:`, so the chain takes parentheses, and a local's value takes
+    // none.
+    public int fee(bool express, int extra)
+    {
+        const base = express ? 5
+            : 0;
+
+        return (express ? 5
+            : 0) + extra + base;
+    }
+
     public void mark(bool fragile, bool heavy)
     {
         if (fragile) {

@@ -19,6 +19,21 @@ final class Shipping
         };
     }
 
+    // An operator around the chain binds tighter than `?:`, so the chain takes parentheses, and a local's value takes
+    // none.
+    public function fee(bool $express, int $extra): int
+    {
+        $base = match (true) {
+            $express => 5,
+            default => 0,
+        };
+
+        return match (true) {
+            $express => 5,
+            default => 0,
+        } + $extra + $base;
+    }
+
     public function mark(bool $fragile, bool $heavy): void
     {
         match (true) {
