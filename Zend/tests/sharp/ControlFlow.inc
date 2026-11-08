@@ -61,7 +61,7 @@ class ControlFlow
         foreach (Prices::listed() as $price) {
             $total += $price * $factor;
         }
-        $slots = \is_array(${'crossing#1'} = Prices::all()) ? \Sharp\Map::from(${'crossing#1'}) : ${'crossing#1'};
+        $slots = \Sharp\Internal\returned(Prices::all(), null, '', 'Map<int, int>', 'Demo\Prices::all()');
         foreach ($slots as $slot => $price) {
             $total += $slot;
             $price = 0;

@@ -29,7 +29,7 @@ class Store
 
     /** @template TItem of DatabaseEntity&Shareable
      *  @param TItem $item */
-    public function share(DatabaseEntity&Shareable $item): string { return $item->link(); }
+    public function share(DatabaseEntity&Shareable $item): string { return \Sharp\Internal\returned($item->link(), $item, 'link', 'string', 'Paging.Shareable.link()'); }
     /** @param class-string<DatabaseEntity> $type */
     public function save(string $type, DatabaseEntity $entity): void { $this->saved[Probe::named($type) . "#" . (string) $entity->id] = $entity; }
     /** @param class-string<DatabaseEntity> $type */

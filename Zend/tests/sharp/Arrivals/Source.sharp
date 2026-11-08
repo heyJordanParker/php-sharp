@@ -3,4 +3,8 @@ namespace Arrivals;
 public class Source
 {
     public virtual Map<string, string> status() => ["status": "active"];
+
+    public static virtual Map<string, string> made() => ["status": "made"];
+
+    public Map<string, string> madeBySelf() => Self.made();
 }

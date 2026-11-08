@@ -1,5 +1,6 @@
 namespace Arrivals;
 
+import Lib.Feed;
 import Lib.Folder;
 
 public class Reader
@@ -45,4 +46,40 @@ public class Reader
         Map<string, string> status = source.status();
         return status.get("status");
     }
+
+    public string? argument(Source source) => this.first(source.status());
+
+    public string? constructed(Source source) => new Holder(source.status()).status();
+
+    public string? element(Source source)
+    {
+        List<Map<string, string>> all = [source.status()];
+        return all[0].get("status");
+    }
+
+    public string? spread(Source source)
+    {
+        Map<string, string> all = [...source.status()];
+        return all.get("status");
+    }
+
+    public string? late(Source source) => source.madeBySelf().get("status");
+
+    public string? ofClass(Source source) => Class.of(source).made().get("status");
+
+    public string? maybe(Source? source) => source?.status().get("status");
+
+    public string? fed(Feed feed)
+    {
+        Map<int|string, Any?> payload = [...feed.payload(), "extra": "kept"];
+        return payload.get("status") as string;
+    }
+
+    public int named(Feed feed)
+    {
+        List<string> names = [...feed.names(), "third"];
+        return names.count();
+    }
+
+    private string? first(Map<string, string> status) => status.get("status");
 }
