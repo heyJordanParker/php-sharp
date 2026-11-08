@@ -5267,6 +5267,29 @@ static const sharp_type *sharp_frame_method_type_arguments(const zend_execute_da
 	return NULL;
 }
 
+/* Whether the type text list `text`, which an internal function takes as its argument `argument`, holds `count` types,
+ * or any number for 0, and names a type parameter of this only for an `object` and one of the method only for a
+ * `method`. Plain PHP may pass any text, and sharp_type_list_of_frame reads only a text that passes. False after the
+ * ValueError. */
+static bool sharp_caller_type_text(zend_string *text, uint32_t argument, uint32_t count, bool object, bool method)
+{
+	sharp_type_reader reader = sharp_type_reader_of(ZSTR_VAL(text), ZSTR_LEN(text), zend_arena_create(1024));
+	const sharp_type_node *read = sharp_type_read_list(&reader);
+	bool is_list = read && (!count || read->count == count) && reader.at == reader.end;
+	uint32_t names = reader.names;
+	zend_arena_destroy(reader.arena);
+	if (!is_list) {
+		zend_argument_value_error(argument, count == 1 ? "must be one PHP# type" : "must be a PHP# type list");
+		return false;
+	}
+	if (((names & SHARP_TYPE_NAMES_THIS) && !object) || ((names & SHARP_TYPE_NAMES_METHOD) && !method)) {
+		zend_argument_value_error(argument, "must name only type parameters the calling code has type arguments for");
+		return false;
+	}
+
+	return true;
+}
+
 /* The type text list `text` that the internal function `execute_data` runs takes as its argument `argument`, spelled
  * for the user code that calls it, as ZEND_SHARP_VERIFY_TYPE_ARGS spells its own, so it can name `$0` or `#0`. It holds
  * `count` types, or any number for 0. NULL after the ValueError for a text that is no such list or names a type
@@ -5278,18 +5301,7 @@ static const sharp_type *sharp_caller_type_list(
 	bool is_user_code = caller && caller->func && ZEND_USER_CODE(caller->func->type);
 	zend_object *object = is_user_code && Z_TYPE(caller->This) == IS_OBJECT ? Z_OBJ(caller->This) : NULL;
 	const sharp_type *method = is_user_code ? sharp_frame_method_type_arguments(caller) : NULL;
-
-	sharp_type_reader reader = sharp_type_reader_of(ZSTR_VAL(text), ZSTR_LEN(text), zend_arena_create(1024));
-	const sharp_type_node *read = sharp_type_read_list(&reader);
-	bool is_list = read && (!count || read->count == count) && reader.at == reader.end;
-	uint32_t names = reader.names;
-	zend_arena_destroy(reader.arena);
-	if (!is_list) {
-		zend_argument_value_error(argument, count == 1 ? "must be one PHP# type" : "must be a PHP# type list");
-		return NULL;
-	}
-	if (((names & SHARP_TYPE_NAMES_THIS) && !object) || ((names & SHARP_TYPE_NAMES_METHOD) && !method)) {
-		zend_argument_value_error(argument, "must name only type parameters the calling code has type arguments for");
+	if (!sharp_caller_type_text(text, argument, count, object, method)) {
 		return NULL;
 	}
 
@@ -5584,11 +5596,16 @@ ZEND_FUNCTION(Sharp_Internal_returned)
 
 	const zend_execute_data *caller = EX(prev_execute_data);
 	bool is_user_code = caller && caller->func && ZEND_USER_CODE(caller->func->type);
+	zend_object *object = is_user_code && Z_TYPE(caller->This) == IS_OBJECT ? Z_OBJ(caller->This) : NULL;
+	/* The list is spelled for the calling frame as ZEND_SHARP_VERIFY_TYPE_ARGS spells its own, a method's own type
+	 * parameter as any type, since a call from plain PHP gives the method none. */
+	if (!sharp_caller_type_text(types, 4, 0, object, true)) {
+		RETURN_THROWS();
+	}
 	zval spelled;
 	ZVAL_STR(&spelled, types);
 	void *cache[4] = {NULL};
-	const sharp_type *expected = sharp_type_list_of_frame(&spelled,
-		is_user_code && Z_TYPE(caller->This) == IS_OBJECT ? Z_OBJ(caller->This) : NULL, NULL, true,
+	const sharp_type *expected = sharp_type_list_of_frame(&spelled, object, NULL, true,
 		is_user_code ? sharp_type_scope(caller->func->common.scope, caller->func) : NULL, cache);
 	if (!expected) {
 		if (EG(exception)) {

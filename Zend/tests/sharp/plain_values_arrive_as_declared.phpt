@@ -1,5 +1,5 @@
 --TEST--
-A plain PHP value arrives in PHP# as its declared type says wherever PHP# holds it: a bare array is a Map, read straight or through a local, whose values() is a List, and a list its PHPDoc declares is a List, and a plain PHP override of a PHP# method, a generated test double's included, gives its PHP array as the Map the method declares where the call is written, as an argument, a constructor's argument, a literal's element, a spread, a static call through Self or a class value, and a null-safe call, and a plain PHP interface's array spreads into a Map and a List literal
+A plain PHP value arrives in PHP# as its declared type says wherever PHP# holds it: a bare array is a Map, read straight or through a local, whose values() is a List, and a list its PHPDoc declares is a List, and a plain PHP override of a PHP# method, a generated test double's included, gives its PHP array as the Map the method declares where the call is written, as an argument, a constructor's argument, a literal's element, a spread, a static call through Self or a class value, and a null-safe call, and a plain PHP interface's array spreads into a Map and a List literal, and Sharp\Internal\returned refuses a type text plain PHP passes that is no list the calling code spells
 --FILE--
 <?php
 require __DIR__ . '/harness/Folder.inc';
@@ -29,6 +29,13 @@ $feed = new Lib\ArrayFeed();
 var_dump($reader->fed($feed), $reader->named($feed));
 // A null-safe call on null gives null, and on an override the `Map` its array crosses into.
 var_dump($reader->maybe(null), $reader->maybe(new Lib\MovedSource()));
+foreach (['List<', 'List<$0>'] as $types) {
+    try {
+        \Sharp\Internal\returned([], null, '', $types, 'x');
+    } catch (ValueError $error) {
+        echo $error->getMessage(), "\n";
+    }
+}
 ?>
 --EXPECT--
 bool(true)
@@ -47,3 +54,5 @@ string(3) "fed"
 int(3)
 NULL
 string(5) "moved"
+Sharp\Internal\returned(): Argument #4 ($types) must be a PHP# type list
+Sharp\Internal\returned(): Argument #4 ($types) must name only type parameters the calling code has type arguments for
