@@ -9,8 +9,8 @@ class Cell
 
 final class LooseCounter
 {
-    /** @var int */
-    public $value;
+    /** @var int The default keeps it `int` in PHP#, which reads an untyped property PHP starts at `null` as `int?`. */
+    public $value = 0;
 
     /** @param int $value */
     public function __construct($value)
