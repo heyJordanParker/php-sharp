@@ -1,5 +1,5 @@
 --TEST--
-A plain PHP value arrives in PHP# as its declared type says wherever PHP# holds it: a bare array is a Map, read straight or through a local, and a list its PHPDoc declares is a List, and a plain PHP override of a PHP# method, a generated test double's included, gives its PHP array as the Map the method declares
+A plain PHP value arrives in PHP# as its declared type says wherever PHP# holds it: a bare array is a Map, read straight or through a local, whose values() is a List, and a list its PHPDoc declares is a List, and a plain PHP override of a PHP# method, a generated test double's included, gives its PHP array as the Map the method declares
 --FILE--
 <?php
 require __DIR__ . '/harness/Folder.inc';
@@ -22,9 +22,9 @@ foreach ([new Arrivals\Source(), new Lib\MovedSource(), new Lib\SourceDouble()] 
 }
 ?>
 --EXPECT--
-bool(false)
-bool(false)
-bool(false)
+bool(true)
+bool(true)
+bool(true)
 bool(true)
 bool(true)
 bool(true)

@@ -4,12 +4,12 @@ import Lib.Folder;
 
 public class Reader
 {
-    public bool records(Folder folder) => folder.records as List<Map<string, string?>> != null;
+    public bool records(Folder folder) => folder.records as Map<int|string, Any?> != null;
 
     public bool heldRecords(Folder folder)
     {
         const records = folder.records;
-        return records as List<Map<string, string?>> != null;
+        return records as Map<int|string, Any?> != null;
     }
 
     public bool heldRecordsAfterNull(Folder folder)
@@ -18,7 +18,8 @@ public class Reader
         if (records == null) {
             return false;
         }
-        return records as List<Map<string, string?>> != null;
+        List<Any?> rows = records.values();
+        return rows.count() == 1;
     }
 
     public bool recordsMap(Folder folder) => folder.records is Map<int|string, Any?>;
