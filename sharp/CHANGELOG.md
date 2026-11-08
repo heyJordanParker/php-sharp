@@ -4,6 +4,11 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
 
 ## [Unreleased]
 
+### Fixed
+
+- On a busy Mac, `mago analyze --watch` checks only the folders FSEvents has not started on, where a watcher FSEvents didn't start in time checked every watched file, `vendor/` included, every half second for the rest of the session. A folder goes back to FSEvents once FSEvents reports a change there, and the watch prints "The file watcher reported a change in …, so this run stops checking the files there." The warning now names those folders: "The file watcher reported no change in … within 30s, so this run checks the files there every 500ms until it does." The checks of the project's files skip the folders the watch's changes skip, as `vendor/` when it is an `includes` root and `node_modules/`, and read only the files of the configured extensions. The checks of `mago.toml`, `composer.json` and `composer.lock` still read every file beside them.
+- On macOS, `mago` no longer hangs when a process of an extension worker's or the law checker's process group never ends, as one the kernel holds on a stalled disk. Mago sent the group SIGKILL until no process of it ran, so it waited forever, and a worker's restart and the end of every run waited too. It now stops after 10 seconds, leaves that process running, and goes on: the worker's error says "process group 4321 still ran 10000 ms after SIGKILL", and the law checker refuses the law as one that "did not finish within … seconds".
+
 ## [0.6.4] - 2026-11-07
 
 ### Upgrading from 0.6.3
