@@ -78,11 +78,11 @@ final class Stock
         return $keys;
     }
 
-    // Elements PHP numbers from 0, where an `int`-keyed array is declared, at two depths.
+    // Elements PHP numbers from 0, where an `int`-keyed array is declared, at two depths, and class values among them.
     /** @return array<string, array<int, string>> */
     public function shelves(): array
     {
-        return ['top' => ['jam', 'tea'], 'bottom' => []];
+        return ['top' => ['jam', 'tea'], 'bottom' => [], 'kinds' => [self::class, Coupon::class]];
     }
 
     // A `List` index that may be missing, behind `isset` and `??`, past the end and below 0.

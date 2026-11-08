@@ -58,10 +58,13 @@ impl Converter<'_, '_> {
                     self.expression(element.value, value.as_ref());
                 }
                 ArrayElement::Value(element) => {
-                    if numbered {
-                        self.edits.insert(element.value.span().start.offset, format!("{index}: "));
-                    }
                     self.expression(element.value, value.as_ref());
+                    // The key goes before the element's own text, and an insert at its start would land inside a
+                    // rewrite that renders the element, as `typeof(0: Order)`, so the element's span takes both.
+                    if numbered {
+                        let text = self.render(element.value);
+                        self.edits.replace(element.value.span(), format!("{index}: {text}"));
+                    }
                 }
                 // A `List` spread appends as PHP's does. A `Map` spread keeps each key as written, where PHP's
                 // renumbers an `int` key, and a numeric string key is one to PHP, as `'42'` is 42 (spec section 12).

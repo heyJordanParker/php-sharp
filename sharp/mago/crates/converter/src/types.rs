@@ -11,6 +11,7 @@ use foldhash::HashMap;
 use mago_codex::metadata::CodebaseMetadata;
 use mago_codex::ttype::SharpType;
 use mago_codex::ttype::TType;
+use mago_codex::ttype::TypeRef;
 use mago_codex::ttype::atomic::TAtomic;
 use mago_codex::ttype::atomic::array::TArray;
 use mago_codex::ttype::atomic::object::TObject;
@@ -116,6 +117,27 @@ impl Imports {
 /// always names (spec section 31). PHP reserves every other type name itself.
 fn reserved(name: &str) -> bool {
     ["Any", EQUATABLE, "Error"].iter().any(|reserved| reserved.eq_ignore_ascii_case(name))
+}
+
+/// The first PHP# generic class `union` holds, at any depth, with a type argument other than its bound, as
+/// `Page<Order>` under `Page<TItem : Item>`, and the class with its bounds, `Page<Item>`. Plain PHP creates a PHP#
+/// generic object without type arguments, so such an object holds its bounds, and PHP# checks it against the narrower
+/// type where it enters PHP#, and throws (spec section 11).
+pub fn raw_generic(union: &TUnion, codebase: &CodebaseMetadata) -> Option<(String, String)> {
+    union.get_all_child_nodes().into_iter().find_map(|node| {
+        let TypeRef::Atomic(atomic @ TAtomic::Object(TObject::Named(object))) = node else {
+            return None;
+        };
+        let arguments = object.get_type_parameters()?;
+        let class = codebase.get_class_like(object.name.as_bytes()).filter(|class| class.flags.is_sharp())?;
+        let bounds: Vec<&TUnion> = class.template_types.iter().map(|(_, template)| &template.constraint).collect();
+        if bounds.iter().zip(arguments).all(|(bound, argument)| bound.get_id() == argument.get_id()) {
+            return None;
+        }
+        let bounds: Vec<String> = bounds.iter().map(|bound| bound.get_id().to_string()).collect();
+
+        Some((atomic.get_id().to_string(), format!("{}<{}>", class.original_name, bounds.join(", "))))
+    })
 }
 
 /// `union` in PHP#'s spelling, or the reason PHP# can't write it.

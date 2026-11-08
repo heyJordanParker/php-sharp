@@ -20,6 +20,12 @@ final class Menu
         return ['starters' => ['soup', 'bread'], 'mains' => []];
     }
 
+    /** @return array<int, class-string> */
+    public function kinds(): array
+    {
+        return [Menu::class, self::class];
+    }
+
     /** @return array<string, list<string>> */
     public function grouped(bool $vegan): array
     {

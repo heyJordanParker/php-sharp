@@ -208,6 +208,7 @@ Each line gives the plain PHP form, the PHP# form or "refuses" with its reason, 
 - `new Box($x)` of a generic class → `new Box<Spec>(x)`, with the declared type's arguments or the class's bounds, [never the analysis's](#how-a-new-gets-its-type-arguments). Type.
 - `@extends Base<T>` → `: Base<T>`, and the same for `@implements` and a trait's `@use`. The tags leave the docblock. Type.
 - A generic class named without type arguments, as a native `Box` with no PHPDoc → refuses, since PHP# names them (line 1106). Type.
+- A PHP# generic class with a type argument other than its bound, as `Page<Order>` under `Page<TItem : Item>`, in a parameter's or a property's type, or in the result of a plain PHP call → refuses. Plain PHP creates such an object without type arguments, so it holds its bounds, a `Page<Item>`, and PHP# checks it against `Page<Order>` where it enters and throws, where PHP went on (line 1127). A converted file never fails where PHP succeeded, and the static analysis can't tell such an object from one PHP# made. Its bounds, as `Page<Item>`, convert. Type.
 
 ### Section 12. Collections
 

@@ -41,6 +41,7 @@ use mago_word::word;
 use crate::Converter;
 use crate::Method;
 use crate::body::Locals;
+use crate::types::raw_generic;
 
 use super::NameCase;
 use super::accessors;
@@ -316,6 +317,13 @@ impl Converter<'_, '_> {
             return None;
         }
         let union = declared.type_metadata.as_ref().map_or_else(get_mixed, |metadata| metadata.type_union.clone());
+        if let Some((shown, raw)) = raw_generic(&union, self.input.codebase) {
+            self.refuse(
+                variable.span,
+                format!("a `{shown}` property has no PHP# form: plain PHP creates a PHP# generic object without type arguments, so it sets a `{raw}`, and PHP# checks it where it enters and throws (spec section 11)"),
+            );
+            return None;
+        }
         let written = self.type_text(&union, variable.span)?;
         let name = self.variable_name(variable.name);
         if self.names_inherited_method(variable) {

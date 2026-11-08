@@ -21,6 +21,7 @@ use mago_syntax::walker::MutWalker;
 use mago_word::word;
 
 use crate::Converter;
+use crate::types::raw_generic;
 
 use super::NameCase;
 use super::accessors;
@@ -65,6 +66,13 @@ impl Converter<'_, '_> {
             declared
         };
         let union = declared.unwrap_or_else(get_mixed);
+        if let Some((shown, raw)) = raw_generic(&union, self.input.codebase) {
+            self.refuse(
+                parameter.variable.span,
+                format!("a `{shown}` {kind} has no PHP# form: plain PHP creates a PHP# generic object without type arguments, so it passes a `{raw}`, and PHP# checks it where it enters and throws (spec section 11)"),
+            );
+            return;
+        }
         let Some(written) = self.type_text(&union, parameter.variable.span) else {
             return;
         };

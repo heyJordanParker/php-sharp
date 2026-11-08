@@ -32,6 +32,7 @@ use mago_syntax::walker::MutWalker;
 use super::Kind;
 use crate::Converter;
 use crate::library::type_test;
+use crate::types::raw_generic;
 use crate::types::type_text;
 
 /// What a method's body reads of the class PHP called: whether it names `static` or `parent`, and the methods it calls
@@ -209,6 +210,7 @@ impl<'input> Converter<'input, '_> {
                 let method = self.method_of(self.type_of(call.object), &call.method);
                 self.method_name(call.object, &call.method, method);
                 self.arguments(&call.argument_list, method);
+                self.raw_result(call.span(), method);
             }
             Call::NullSafeMethod(call) => {
                 self.member_of(call.object, "a method call");
@@ -217,6 +219,7 @@ impl<'input> Converter<'input, '_> {
                 let method = self.method_of(self.type_of(call.object), &call.method);
                 self.method_name(call.object, &call.method, method);
                 self.arguments(&call.argument_list, method);
+                self.raw_result(call.span(), method);
             }
             Call::StaticMethod(call) => {
                 if self.forwards_called_class(call.span(), call.class, &call.method) {
@@ -227,9 +230,27 @@ impl<'input> Converter<'input, '_> {
                 self.member(&call.method);
                 let method = self.static_method_of(call);
                 self.arguments(&call.argument_list, method);
+                self.raw_result(call.span(), method);
             }
             Call::Function(call) => self.function_call(call),
             Call::NullSafeFunction(_) => self.refuse(call.span(), "`?.(…)` on a function has no PHP# form"),
+        }
+    }
+
+    /// Refuses the call at `call` of `callee`, a plain PHP function or method, whose result holds a PHP# generic class
+    /// with a type argument other than its bound, which [`raw_generic`] finds.
+    fn raw_result(&mut self, call: Span, callee: Option<&FunctionLikeMetadata>) {
+        if callee.is_none_or(|callee| callee.flags.is_sharp()) {
+            return;
+        }
+        let Some(result) = self.input.artifacts.get_expression_type(&call) else {
+            return;
+        };
+        if let Some((shown, raw)) = raw_generic(result, self.input.codebase) {
+            self.refuse(
+                call,
+                format!("a plain PHP call that returns `{shown}` has no PHP# form: plain PHP creates a PHP# generic object without type arguments, so it is a `{raw}`, and PHP# checks it where it enters and throws (spec section 11)"),
+            );
         }
     }
 
@@ -374,6 +395,7 @@ impl<'input> Converter<'input, '_> {
                 return;
             };
             self.arguments(&call.argument_list, Some(function));
+            self.raw_result(span, Some(function));
             let list = call.argument_list.span();
             let arguments = self.edits.render(self.source, list.start.offset, list.end.offset);
             return self.edits.replace(span, format!("{callee}{arguments}"));

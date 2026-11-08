@@ -14,6 +14,11 @@ public final class Menu
         return ['starters': [0: 'soup', 1: 'bread'], 'mains': [:]];
     }
 
+    public Map<int, Class<Object>> kinds()
+    {
+        return [0: typeof(Menu), 1: typeof(Menu)];
+    }
+
     public Map<string, List<string>> grouped(bool vegan)
     {
         return ['starters': vegan ? ['soup'] : []];
