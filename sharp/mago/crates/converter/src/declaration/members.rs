@@ -564,7 +564,12 @@ impl Converter<'_, '_> {
         let is_abstract = has(&method.modifiers, |modifier| matches!(modifier, Modifier::Abstract(_))).is_some();
 
         if is_constructor {
-            self.edits.replace_range(function.span.start.offset, method.name.span.end.offset, class_name);
+            let required = if self.class.as_ref().is_some_and(|class| class.required) { "required " } else { "" };
+            self.edits.replace_range(
+                function.span.start.offset,
+                method.name.span.end.offset,
+                format!("{required}{class_name}"),
+            );
         } else {
             // A return the codex marks `inferred` is inherited from the parent, which is declared. A return taken from
             // the body is the analysis's inference.

@@ -124,6 +124,16 @@ final class Tally
         return $count;
     }
 
+    // An `if` whose condition first assigns a local that a comparison reads, which runs before the rest of it.
+    public function graded(int $amount): string
+    {
+        if (($half = $this->halved($amount)) >= 2 && $half !== 3) {
+            return 'large ' . $half;
+        }
+
+        return 'small';
+    }
+
     /** @param class-string<Pair> $type */
     public function made(string $type): string
     {

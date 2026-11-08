@@ -317,8 +317,9 @@ impl Converter<'_, '_> {
         }
     }
 
-    /// `unset($map[$key])` as `map.remove(key);` (spec section 12). A PHP# value is never unset, so `unset` of
-    /// anything else has no PHP# form.
+    /// `unset($map[$key])` as `map.remove(key);` (spec section 12), and `unset($bag[$key])` of an `ArrayAccess` object
+    /// as `bag.offsetUnset(key);`, the call PHP's `unset` makes. A PHP# value is never unset, so `unset` of anything
+    /// else has no PHP# form.
     pub(super) fn unset(&mut self, unset: &Unset<'_>) {
         let mut removals = Vec::new();
         for value in unset.values.iter() {
@@ -328,15 +329,20 @@ impl Converter<'_, '_> {
                     "`unset` of a variable or a property has no PHP# form: a PHP# value is never unset",
                 );
             };
-            if !self.is(access.array, &[Kind::Map]) {
+            let removal = if self.is(access.array, &[Kind::Map]) {
+                "remove"
+            } else if self.is_array_access(access.array) {
+                "offsetUnset"
+            } else {
                 let shown = self.shown(access.array);
-                return self.refuse(
-                    value.span(),
-                    format!(
-                        "`unset` at an index of `{shown}` is not converted yet: PHP# removes a key only from a `Map`"
-                    ),
-                );
-            }
+                let reason = if self.is(access.array, &[Kind::List]) {
+                    "PHP leaves the keys after it as they are, and a PHP# `List` renumbers its elements after it (spec section 12)"
+                } else {
+                    "PHP# removes a key from a `Map` and an `ArrayAccess` object only (spec section 12)"
+                };
+                return self
+                    .refuse(value.span(), format!("`unset` at an index of `{shown}` has no PHP# form: {reason}"));
+            };
             self.written(access.array);
             self.untyped(access.index, "a key");
             if self.numeric_key(access.array, access.index) {
@@ -344,7 +350,7 @@ impl Converter<'_, '_> {
             }
             let map = self.render(access.array);
             let map = if is_primary(access.array) { map } else { format!("({map})") };
-            removals.push(format!("{map}.remove({});", self.render(access.index)));
+            removals.push(format!("{map}.{removal}({});", self.render(access.index)));
         }
         self.edits.replace(unset.span(), removals.join(" "));
     }

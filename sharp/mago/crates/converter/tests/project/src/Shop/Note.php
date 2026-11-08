@@ -54,6 +54,18 @@ final class Note
         return $name === \Proof\Spec::class;
     }
 
+    // `===` of two class values, and of an `array-key` with a string.
+    /**
+     * @param class-string $kind
+     * @param class-string|null $other
+     * @param array-key $key
+     * @return list<bool>
+     */
+    public function matched(string $kind, ?string $other, int|string $key): array
+    {
+        return [$kind === $other, $key === 'id'];
+    }
+
     public function describe($value): string
     {
         if (is_string($value)) {

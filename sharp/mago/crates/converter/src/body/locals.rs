@@ -452,6 +452,33 @@ impl Converter<'_, '_> {
         self.edits.replace(variable.span, name);
     }
 
+    /// Declares the local `assignment` writes in the condition of `statement`, an `if`, where the condition named it
+    /// first, since the converter writes the assignment on its own line before the `if`. A local assigned before keeps
+    /// its declaration, and this is a write of it.
+    pub(super) fn declared_by(&mut self, statement: &Statement<'_>, assignment: &Assignment<'_>) {
+        let Expression::Variable(Variable::Direct(variable)) = assignment.lhs else {
+            return;
+        };
+        let block = self.method.as_ref().and_then(|method| method.locals.blocks.last().copied());
+        let write = Write {
+            at: assignment.rhs.span(),
+            union: self.type_of(assignment.rhs).cloned(),
+            source: self.source(assignment.rhs),
+        };
+        let Some(local) = self.current(variable.name).filter(|local| local.first == variable.span) else {
+            return;
+        };
+        local.declaration = Some(Declaration {
+            at: variable.span.start.offset,
+            block: block.unwrap_or(statement.span()),
+            written: None,
+            hoistable: true,
+        });
+        local.rewritten = false;
+        local.writes.push(write);
+        self.misnamed_local(variable);
+    }
+
     /// Refuses `['id' => $id] = $row;` and `[$first, $second] = $pair;`. A destructuring by key reads keys the array may
     /// lack, as a `Map` read does, and a plain PHP array is no tuple, so a destructuring by position has no PHP# form
     /// (spec sections 12 and 30).
@@ -706,7 +733,7 @@ impl Converter<'_, '_> {
             let Some(declaration) = local.declaration else {
                 self.refuse(
                     local.first,
-                    format!("`{shown}` is first named here, outside an assignment of its own, which is not converted yet: a PHP# local is declared where it is first assigned"),
+                    format!("`{shown}` is first named here, outside an assignment of its own, which has no PHP# form: a PHP# local is declared by a statement that assigns it (spec section 2), and PHP assigns this one inside an expression, through a reference, or not at all"),
                 );
                 continue;
             };
@@ -719,10 +746,12 @@ impl Converter<'_, '_> {
                 }
                 continue;
             }
+            // A local an assignment declares is declared first in the body when it escapes its block, so one that
+            // escapes here is a loop's variable.
             if let Some(span) = local.escapes {
                 self.refuse(
                     span,
-                    format!("`{shown}` is named here, after the block it is first assigned in, which is not converted yet: PHP# scopes a local to its block (spec section 3)"),
+                    format!("`{shown}` is named here, after the loop that declares it, which has no PHP# form: a PHP# loop declares its own variables, which live in its block (spec sections 3 and 17)"),
                 );
                 continue;
             }
@@ -925,13 +954,19 @@ impl Converter<'_, '_> {
                     local.keyed.push(written);
                 }
             }
-            // A `Map` sets a key PHP's way, and a `List`'s index write replaces an element where PHP's adds one.
-            if !starts_empty && !self.is(access.array, &[Kind::Map]) {
+            // A `Map` sets a key PHP's way, and `=` at an index of an `ArrayAccess` object calls its `offsetSet`, as the
+            // bridge lowers it. A `List`'s index write replaces an element and throws past its end, where PHP's adds the
+            // key.
+            let array_access = assignment.operator.is_assign() && self.is_array_access(access.array);
+            if !starts_empty && !self.is(access.array, &[Kind::Map]) && !array_access {
                 let shown = self.shown(access.array);
-                return self.refuse(
-                    expression.span(),
-                    format!("a write at an index of `{shown}` is not converted yet: a PHP# `Map` sets a key, and a `List` replaces an element"),
-                );
+                let reason = if self.is(access.array, &[Kind::List]) {
+                    "PHP adds a key past a list's end, and a PHP# `List` replaces an element and throws past its end (spec section 12)"
+                } else {
+                    "PHP# writes by index into a `Map`, a `List` or an `ArrayAccess` object only (spec section 12)"
+                };
+                return self
+                    .refuse(expression.span(), format!("a write at an index of `{shown}` has no PHP# form: {reason}"));
             }
             self.written(access.array);
             self.numeric_key(access.array, access.index);

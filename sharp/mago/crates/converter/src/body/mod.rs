@@ -51,12 +51,15 @@ enum Kind {
     String,
     Bool,
     Enum,
-    /// It may hold an object, as a class, `object` or `mixed` does.
+    /// It may hold an object, as a class, `object`, a closure or `mixed` does.
     Object,
+    /// A class value, `class-string` to PHP, whose value is the class's name.
+    Class,
     List,
     Map,
     /// A `Set` or an `Iterable`.
     Collection,
+    /// A tuple, or a type PHP# has none of, as a `resource`, an `array{…}` shape or `never`.
     Other,
 }
 
@@ -94,32 +97,37 @@ fn is_integer_key(value: &[u8]) -> bool {
     canonical && std::str::from_utf8(value).is_ok_and(|text| text.parse::<i64>().is_ok())
 }
 
+/// Each kind of value `atomic` holds: two for PHP's `array-key`, which is `int|string`, the keys a PHP array holds.
+fn atomic_kinds(atomic: &TAtomic) -> &'static [Kind] {
+    if atomic.is_null() {
+        return &[Kind::Null];
+    }
+    if atomic.is_mixed() {
+        return &[Kind::Object];
+    }
+    if matches!(atomic, TAtomic::Scalar(TScalar::ArrayKey)) {
+        return &[Kind::Int, Kind::String];
+    }
+    match get_sharp_type(atomic) {
+        Some(SharpType::Int) => &[Kind::Int],
+        Some(SharpType::Float) => &[Kind::Float],
+        Some(SharpType::String) => &[Kind::String],
+        Some(SharpType::Bool) => &[Kind::Bool],
+        Some(SharpType::Enum(_)) => &[Kind::Enum],
+        Some(SharpType::Class(..) | SharpType::Object | SharpType::Parameter(_) | SharpType::Function(_)) => {
+            &[Kind::Object]
+        }
+        Some(SharpType::ClassValue(_)) => &[Kind::Class],
+        Some(SharpType::List(_)) => &[Kind::List],
+        Some(SharpType::Map(..)) => &[Kind::Map],
+        Some(SharpType::Set(_) | SharpType::Iterable(_)) => &[Kind::Collection],
+        Some(SharpType::Tuple(_) | SharpType::Void) | None => &[Kind::Other],
+    }
+}
+
 /// Each kind of value `union` holds, sorted, once each.
 fn kinds(union: &TUnion) -> Vec<Kind> {
-    let mut kinds: Vec<Kind> = union
-        .types
-        .iter()
-        .map(|atomic| {
-            if atomic.is_null() {
-                return Kind::Null;
-            }
-            if atomic.is_mixed() {
-                return Kind::Object;
-            }
-            match get_sharp_type(atomic) {
-                Some(SharpType::Int) => Kind::Int,
-                Some(SharpType::Float) => Kind::Float,
-                Some(SharpType::String) => Kind::String,
-                Some(SharpType::Bool) => Kind::Bool,
-                Some(SharpType::Enum(_)) => Kind::Enum,
-                Some(SharpType::Class(..) | SharpType::Object | SharpType::Parameter(_)) => Kind::Object,
-                Some(SharpType::List(_)) => Kind::List,
-                Some(SharpType::Map(..)) => Kind::Map,
-                Some(SharpType::Set(_) | SharpType::Iterable(_)) => Kind::Collection,
-                _ => Kind::Other,
-            }
-        })
-        .collect();
+    let mut kinds: Vec<Kind> = union.types.iter().flat_map(|atomic| atomic_kinds(atomic).iter().copied()).collect();
     kinds.sort_unstable();
     kinds.dedup();
 
@@ -242,7 +250,7 @@ impl<'input> Converter<'input, '_> {
     fn if_statement(&mut self, statement: &Statement<'_>, r#if: &If<'_>, follows_else: bool) {
         if follows_else {
             self.chained_condition(r#if.condition);
-        } else if !self.assigned_condition(statement, r#if) {
+        } else if !self.assigned_condition(statement, r#if) && !self.compared_assignment(statement, r#if) {
             self.condition(r#if.condition, true);
         }
         let IfBody::Statement(body) = &r#if.body else {
@@ -312,6 +320,18 @@ impl<'input> Converter<'input, '_> {
         })
     }
 
+    /// Whether the analysis gives `expression` a type whose every value is an object of a class that implements
+    /// `ArrayAccess`, as a `WeakMap` or a framework's collection, which PHP reads and writes by index through it.
+    fn is_array_access(&self, expression: &Expression<'_>) -> bool {
+        let codebase = self.input.codebase;
+        self.type_of(expression).is_some_and(|union| {
+            union.types.iter().all(|atomic| {
+                matches!(atomic, TAtomic::Object(TObject::Named(_)))
+                    && atomic.extends_or_implements(codebase, b"ArrayAccess")
+            })
+        })
+    }
+
     /// Refuses `key` of the `Map` `map`, and gives whether it did, where the `Map` is keyed by `int` and `string` both,
     /// as PHP's `array<array-key, V>` is, and `key` may be a string of an integer's digits. PHP turns such a key into
     /// the `int`, as `'42'` into 42, and a PHP# `Map<int|string, V>` keeps it a string, so the two read and write
@@ -344,8 +364,7 @@ impl<'input> Converter<'input, '_> {
                 };
                 keyed.parameters.as_ref().is_some_and(|(keys, _)| {
                     let kinds = kinds(keys);
-                    keys.types.iter().any(|atomic| matches!(atomic, TAtomic::Scalar(TScalar::ArrayKey)))
-                        || (kinds.contains(&Kind::Int) && kinds.contains(&Kind::String))
+                    kinds.contains(&Kind::Int) && kinds.contains(&Kind::String)
                 })
             })
         })

@@ -92,6 +92,15 @@ final class Stock
         return (isset($jobs[$at]) ? 'has ' : 'no ') . ($jobs[$at] ?? 'none');
     }
 
+    // `=` and `unset` at an index of a plain PHP `ArrayAccess` collection, which call its `offsetSet` and `offsetUnset`.
+    public function stocked(\Acme\Format\Bag $bag, string $sku): int
+    {
+        $bag[$sku] = 3;
+        unset($bag['old']);
+
+        return $bag->writes;
+    }
+
     // A lambda that ignores the index plain PHP passes it, which its PHP# form takes as `unused`.
     /** @return list<string> */
     public function marked(Lines $lines): array

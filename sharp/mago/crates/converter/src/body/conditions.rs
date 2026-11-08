@@ -22,6 +22,23 @@ use super::is_primary;
 use super::kinds;
 use crate::Converter;
 
+/// The assignment PHP runs first in `condition`, when a comparison reads its value: the left side, in parentheses, of
+/// a comparison, as `($at = strpos($url, '#')) !== false`, which is itself the condition or the left side of one.
+fn first_compared<'condition, 'arena>(
+    condition: &'condition Expression<'arena>,
+) -> Option<&'condition Expression<'arena>> {
+    let Expression::Binary(binary) = condition.unparenthesized() else {
+        return None;
+    };
+    let lhs = binary.lhs.unparenthesized();
+    match lhs {
+        Expression::Assignment(_) if binary.operator.is_comparison() => {
+            matches!(binary.lhs, Expression::Parenthesized(_)).then_some(lhs)
+        }
+        _ => first_compared(binary.lhs),
+    }
+}
+
 impl Converter<'_, '_> {
     /// A condition, which PHP# takes only as a `bool` (spec section 21). `top` says it stands alone, as an `if`'s does,
     /// so a comparison of several parts needs no parentheses.
@@ -44,7 +61,7 @@ impl Converter<'_, '_> {
             let shown = String::from_utf8_lossy(variable.name);
             return self.refuse(
                 condition.span(),
-                format!("an `else if` whose condition assigns `{shown}` is not converted: a PHP# assignment is a statement, and the converter writes it on its own line only before an `if` that follows no `else`, since PHP runs this one only when the conditions before it fail"),
+                format!("an `else if` whose condition assigns `{shown}` has no PHP# form: a PHP# assignment is a statement, and a line before the `if` runs it every time, where PHP runs this one only when the conditions before it fail"),
             );
         }
         self.condition(condition, true);
@@ -78,6 +95,38 @@ impl Converter<'_, '_> {
         let indentation = self.indentation(statement.span().start.offset);
         self.edits.delete(r#if.r#if.span.start.offset, condition.span().start.offset);
         self.edits.insert(condition.span().end.offset, format!(";\n{indentation}if ({test}"));
+
+        true
+    }
+
+    /// `if (($at = strpos($url, '#')) !== false)`, whose condition first assigns a local a comparison then reads, as
+    /// the assignment on its own line and the comparison of the local, `const at = strpos(url, "#");` and
+    /// `if ((at) != false)`. PHP runs the assignment before any other part of the condition, as the line before the
+    /// `if` runs it. Gives whether the condition is such a comparison.
+    pub(super) fn compared_assignment(&mut self, statement: &Statement<'_>, r#if: &If<'_>) -> bool {
+        let Some(assigned) = first_compared(r#if.condition) else {
+            return false;
+        };
+        let Expression::Assignment(assignment) = assigned else {
+            return false;
+        };
+        let (Expression::Variable(Variable::Direct(variable)), true) =
+            (assignment.lhs, assignment.operator.is_assign())
+        else {
+            return false;
+        };
+        if !self.is_local(variable.name) {
+            return false;
+        }
+        self.condition(r#if.condition, true);
+        self.declared_by(statement, assignment);
+        // Only `(` and spaces stand between `if` and the assignment, which the comparison reads first.
+        let start = assigned.span().start.offset;
+        let opened = String::from_utf8_lossy(&self.source[r#if.r#if.span.start.offset as usize..start as usize]);
+        let indentation = self.indentation(statement.span().start.offset);
+        let name = self.variable_name(variable.name);
+        self.edits.delete(r#if.r#if.span.start.offset, start);
+        self.edits.insert(assigned.span().end.offset, format!(";\n{indentation}{opened}{name}"));
 
         true
     }
@@ -179,8 +228,9 @@ impl Converter<'_, '_> {
         let kinds = kinds(union);
         let nullable = kinds.contains(&Kind::Null);
         let bare: Vec<Kind> = kinds.into_iter().filter(|kind| *kind != Kind::Null).collect();
-        // An object is always truthy, so its test is its null check, as is the test of a value that can only be null.
-        let is_object = matches!(bare.as_slice(), [Kind::Object] | [Kind::Enum] | []);
+        // An object, and a class value, which names a class, are always truthy, so their test is their null check, as
+        // is the test of a value that can only be null.
+        let is_object = matches!(bare.as_slice(), [Kind::Object] | [Kind::Enum] | [Kind::Class] | []);
         if union.types.iter().any(mago_codex::ttype::atomic::TAtomic::is_mixed) || (is_object && !nullable) {
             self.refuse(
                 span,

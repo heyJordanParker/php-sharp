@@ -29,14 +29,19 @@ Every PHP# release, newest first. PHP#, its engine and `mago` release together a
   - `instanceof self`, as `is` the class's name
   - `===` between a string and `Order::class`, as `==` with the text of the class's name
   - `(string)`, `.` and interpolation of a plain PHP object whose class declares `__toString`, as `email.__toString()`
+  - `===` between two class values, as `==`, and between an `array-key` and a string, as `==`
+  - `=` and `unset` at an index of an object whose class implements `ArrayAccess`, as the index write and `bag.offsetUnset(key)`
+  - an `if` whose condition first assigns a local that a comparison reads, as `if (($at = $this->find($id)) !== null)`, as the assignment on its own line
+  - `new static(…)`, as `new Self(…)`, in a `final` class, and in any other class that declares a constructor, which becomes `required`
 
 ### Changed
 
+- `mago convert` names why PHP# can't keep a refused construct, where it said "not converted yet": a write or `unset` at a `List` index, a local first named outside an assignment of its own, an `else if` that assigns, a loop's variable read after the loop, and `===` of a string and a class value or of a type PHP# has none of.
 - `mago convert` refuses `['id' => $id] = $row;`, which it converted to one `row.get("id")` per key: PHP warns on a missing key, and a PHP# `Map` read gives `null` and goes on, and a converted file never succeeds where PHP warned. A key read converts behind `??` or `isset`.
 
 ### Fixed
 
-- A `List` literal inside a literal, where its value type is a `Map`, as `["x": ['a']]` in a `Map<string, Map<int, string>>`, is the compile error spec section 12 names, and so is a `Map` literal where it is a `List`: the checker read only the outer literal, and `mago compile` panicked.
+- A `List` literal inside a literal, where its value type is a `Map`, as `["x": ['a']]` in a `Map<string, Map<int, string>>`, is the compile error spec section 12 names, and so is a `Map` literal where it is a `List`: the checker read only the outer literal.
 - A lowering that panics refuses its file with an error that holds the panic's text, code `lowering-panic`, where the compile dropped the text, or crashed when the checker had accepted the file. `mago convert`'s proof keeps such a file plain PHP and prints the panic's text.
 - `mago convert` refuses an override whose return compiles to a type wider than the plain PHP parent's, as a `Map` return, `Sharp\Map|array`, under an `array` one, where PHP then refused to load the class. It writes `['a', 'b']` as `[0: 'a', 1: 'b']` where a `Map` is declared, at any depth.
 - An interface method or an abstract method with a parameter default, as `int read(Map<string, int> limits = [:]);`, compiles: the analysis types and checks the default, and `mago compile` panicked on it before.

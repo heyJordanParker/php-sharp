@@ -27,6 +27,7 @@ use mago_syntax::cst::UnaryPrefixOperator;
 use mago_syntax::cst::Variable;
 
 use super::Kind;
+use super::atomic_kinds;
 use super::kinds;
 use crate::Converter;
 
@@ -515,6 +516,29 @@ pub(super) fn identity(lhs: Option<&TUnion>, rhs: Option<&TUnion>) -> Result<boo
     if left.contains(&Kind::Object) || right.contains(&Kind::Object) {
         return Ok(false);
     }
+    // A class value is the class's name, and PHP#'s `==` of two compares the names as PHP's `===` does, since a class
+    // value PHP gives carries no type arguments (spec section 25). A string is no class value in PHP#.
+    if left.contains(&Kind::Class) || right.contains(&Kind::Class) {
+        let class = |kinds: &[Kind]| kinds.iter().all(|kind| matches!(kind, Kind::Class | Kind::Null));
+        return if class(&left) && class(&right) {
+            Ok(true)
+        } else {
+            Err(format!(
+                "`===` between `{}` and `{}` has no PHP# form: a PHP# class value equals only a class value, and a string is none (spec section 25)",
+                lhs.get_id(),
+                rhs.get_id()
+            ))
+        };
+    }
+    // A resource, an `array{…}` shape or `never` has no PHP# type to compare.
+    if let Some(other) = lhs.types.iter().chain(rhs.types.iter()).find(|atomic| atomic_kinds(atomic) == [Kind::Other]) {
+        return Err(format!(
+            "`===` between `{}` and `{}` has no PHP# form: PHP# has no type `{}`",
+            lhs.get_id(),
+            rhs.get_id(),
+            other.get_id()
+        ));
+    }
     if collection(&left) || collection(&right) {
         return Err(
             "PHP's `===` on arrays compares keys, order and types, and PHP#'s `==` on collections compares their elements (spec section 19)"
@@ -526,21 +550,15 @@ pub(super) fn identity(lhs: Option<&TUnion>, rhs: Option<&TUnion>) -> Result<boo
         return Err("PHP's `1 === 1.0` is false, and PHP# compares an `int` with a `float` by value (spec section 12)"
             .to_owned());
     }
-    // PHP#'s `==` between two scalar types, or unions of them, as `string|false` and `false`, is PHP's `===`: equal
-    // when both hold the same type and value. Two sides that share no type never compare in PHP#.
-    let scalar = |kinds: &[Kind]| {
-        kinds
-            .iter()
-            .all(|kind| matches!(kind, Kind::Null | Kind::Int | Kind::Float | Kind::String | Kind::Bool | Kind::Enum))
-    };
-    let shared = left.iter().any(|kind| *kind != Kind::Null && right.contains(kind));
-    match (scalar(&left) && scalar(&right), shared) {
-        (true, true) => Ok(true),
-        (true, false) => Err(format!(
+    // What is left is two scalar types, or unions of them, as `string|false` and `false`, between which PHP#'s `==` is
+    // PHP's `===`: equal when both hold the same type and value. Two sides that share no type never compare in PHP#.
+    if left.iter().any(|kind| *kind != Kind::Null && right.contains(kind)) {
+        Ok(true)
+    } else {
+        Err(format!(
             "`===` between `{}` and `{}` is always false, and PHP# has no `==` between types that share no value (spec section 19)",
             lhs.get_id(),
             rhs.get_id()
-        )),
-        (false, _) => Err(format!("`===` between `{}` and `{}` is not converted yet", lhs.get_id(), rhs.get_id())),
+        ))
     }
 }

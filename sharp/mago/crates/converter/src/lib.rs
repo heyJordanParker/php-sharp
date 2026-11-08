@@ -120,6 +120,8 @@ struct Class<'input> {
     is_final: bool,
     /// Each property, as `$name`, the class's constructor sets in a statement of its own body, which runs on every path.
     set_by_constructor: Vec<Vec<u8>>,
+    /// Whether the class's own constructor is `required`, since the class writes `new static(…)` and isn't `final`.
+    required: bool,
 }
 
 /// The method or the property accessor whose body is converted.

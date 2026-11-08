@@ -55,6 +55,11 @@ final class ArraySource implements \Proof\Shop\Source
     }
 }
 
+// A plain PHP subclass whose `new static(…)` makes a gift coupon.
+final class GiftCoupon extends \Proof\Shop\Coupon
+{
+}
+
 // Calls each class of the fixture from plain PHP in another namespace, before and after the conversion.
 $spec = new Spec('alpha');
 $special = new Special('beta');
@@ -98,6 +103,7 @@ echo $note->signed('Ann'), ' ', $note->signed(null), "\n";
 echo $note->tagged('yes', 3, '!'), ' ', $note->tagged(1, 0, null), ' ', $note->tagged(true, -2, ''), "\n";
 echo $note->labelled(new \Acme\Format\Sku('A1')), "\n";
 echo json_encode([$note->namesSpec('Proof\Spec'), $note->namesSpec('proof\spec'), $note->namesSpec(null)]), "\n";
+echo json_encode([$note->matched(Spec::class, Spec::class, 'id'), $note->matched(Spec::class, null, 7), $note->matched(Spec::class, Special::class, '7')]), "\n";
 echo json_encode([$note->flagged(0, '0'), $note->flagged(2, ''), $note->flagged(-1, 'x'), $note->flagged(0, null)]), "\n";
 
 echo (new Factory())->make()->get()->label(), "\n";
@@ -111,6 +117,9 @@ echo $tally->sum(2, 5, 10), ' ', $plusThree(4), ' ', $tally->halved(10), "\n";
 echo $tally->counted([3]), ' ', $tally->made(Pair::class), ' ', $tally->priced(['price' => 4, 'count' => 3]), "\n";
 echo $tally->carried([3, -1, 4, -2]), ' ', $tally->guarded(3), ' ', $tally->guarded(0), "\n";
 echo $tally->bounded(2), ' ', $tally->bounded(0), ' ', $tally->bounded(-1), "\n";
+echo $tally->graded(20), ' ', $tally->graded(6), ' ', $tally->graded(2), "\n";
+$gift = (new GiftCoupon(5))->doubled();
+echo $gift::class, ' ', $gift->cents, ' ', (new \Proof\Shop\Coupon(3))->doubled()::class, "\n";
 echo $tally->stamped(new \Acme\Format\Stamp()), "\n";
 
 $label = new Label();
@@ -127,6 +136,8 @@ echo (new Ledger())->priceOf(['42' => 1, 'x' => 2], '42'), "\n";
 echo var_export($stock->given(['email' => 'a', 5 => 'x', '42' => 'y']), true), "\n";
 echo var_export($stock->shelves(), true), "\n";
 echo $stock->nth(['a', 'b'], 1), ' ', $stock->nth(['a'], 5), ' ', $stock->nth(['a'], -1), "\n";
+$bag = new \Acme\Format\Bag();
+echo $stock->stocked($bag, 'jam'), ' ', $stock->stocked($bag, 'tea'), ' ', $bag['jam'], ' ', $bag->removals, "\n";
 echo $stock->listed(['42' => 1, 'x' => 2]), ' ', var_export($stock->kept(['42' => 1, 'x' => 2], ['42' => true]), true), "\n";
 $through = (new Feed())->through(keyed());
 foreach ($through as $key => $item) {

@@ -502,11 +502,16 @@ impl<'input> Converter<'input, '_> {
                 let name = self.class.as_ref().map(|class| class.name.clone()).unwrap_or_default();
                 self.edits.replace(keyword.span, format!("{name}{parentheses}"));
             }
-            Expression::Static(_) => {
-                return self.refuse(
-                    expression.span(),
-                    "`new static(…)` is `new Self(…)`, which needs a `required` constructor (spec section 25), and the converter writes none",
-                );
+            // `new static(…)` is `new Self(…)`, which a `final` class calls as its own `new`, and any other class
+            // through its `required` constructor (spec section 25).
+            Expression::Static(keyword) => {
+                if !self.class.as_ref().is_some_and(|class| class.is_final || class.required) {
+                    return self.refuse(
+                        expression.span(),
+                        "`new static(…)` in a class that declares no constructor of its own has no PHP# form: its `new Self(…)` calls the class's own `required` constructor (spec section 25), and declaring one changes the constructor PHP's reflection gives",
+                    );
+                }
+                self.edits.replace(keyword.span, format!("Self{parentheses}"));
             }
             // `new $class(…)` of a class value is `new (type)(…)`, whose parentheses mark the class value (spec
             // section 25).
