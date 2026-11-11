@@ -1,0 +1,15 @@
+namespace Publishing;
+
+import Blog;
+import Blog.Blog_Post;
+
+public static class Feed
+{
+    public static bool hook() => Blog.blog_add_hook("init", () => "ran");
+
+    public static List<string> hooks() => Blog.blog_hooks();
+
+    public static string title(Blog_Post post) => post.post_title;
+
+    public static Blog_Post draft(string title) => new Blog_Post(title);
+}

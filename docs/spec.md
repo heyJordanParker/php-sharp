@@ -4540,6 +4540,41 @@ public class CartsController
 - **An import of that namespace is an import like any other,** so a module's `imports` list holds it to the list (section 32).
 - **`global` is an ordinary name.** `global.levenshtein(a, b)` is a compile error that says `global` names no class, and no namespace the file imports, as `gadget.levenshtein(a, b)` is.
 
+**`extern namespace WordPress for WP_Post;` gives a library whose classes have no namespace the PHP# namespace `WordPress`,** as C#'s `extern alias` gives an assembly a root namespace and TypeScript's `declare module` names a library without types. The line stands in a `.sharp` file of `extern` declarations, and names a class of the library, which must be a plain PHP class outside any namespace, or it is a compile error. Its folder's namespace-less classes and functions are then `import WordPress;` and `WordPress.add_action(…)`, `import WordPress.WP_Post;` and `WP_Post`, and run PHP's `\add_action` and `\WP_Post`. `extern WordPress.get_post uses Database;` declares an effect as any `extern` does (section 29), after `import WordPress;`. Two lines that name one folder, one namespace given to two folders, and a namespace a class already has are compile errors:
+
+<!-- example extern-namespace -->
+```php
+namespace {
+    class WP_Post { public function __construct(public string $post_title = '') {} }
+
+    function add_action(string $hook, Closure $callback): bool { return true; }
+}
+```
+
+<!-- example extern-namespace -->
+```csharp
+// app/Stubs/WordPress.sharp
+namespace App.Stubs;
+
+extern namespace WordPress for WP_Post;
+```
+
+<!-- example extern-namespace -->
+```csharp
+// app/Blog/Feed.sharp
+namespace App.Blog;
+
+import WordPress;
+import WordPress.WP_Post;
+
+public class Feed
+{
+    public bool hook() => WordPress.add_action("init", () => { });   // compiles: runs PHP's \add_action
+    public string title(WP_Post post) => post.post_title;            // compiles: WP_Post is PHP's \WP_Post
+    public bool bare() => add_action("init", () => { });              // compile error: no function add_action exists
+}
+```
+
 **PHP itself is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation (section 8). A built-in the standard library has no member for is declared with `[Import]`, as C#'s `[DllImport]` declares a native function: `import Sharp.Interop.Import;`, then the attribute on a static method without a body makes each call run the PHP function it names. The signature is written in PHP# types, so each argument and the result cross as any plain PHP value does and are checked there, a `Map` argument passing as a PHP array and an array result arriving as the declared `List` or `Map`. The declaration states its effects with `uses`, as any body-less declaration does. A function PHP doesn't declare throws PHP's `Error` that names it at the first call. `[Import]` on an instance method or a method with a body is a compile error, and so is a second `[Import]` of one function in the project, since PHP ignores the case of a function's name:
 
 <!-- example built-in-through-import -->
@@ -6061,7 +6096,7 @@ extern StripeClient uses Http;
 ```
 
 - **A declaration file is an ordinary `.sharp` file.** Its `namespace` line matches its path, as section 5 requires.
-- **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, `extern Carbon.now uses Clock;`, `extern Pdf.render uses Files;` for a function after `import Vendor.Pdf;`, or `extern Foundation.now uses Clock;` for a function a library declares outside any namespace, after `import Illuminate.Foundation;` (section 23).
+- **`extern` covers a whole class, one method or a function,** each after importing it: `extern StripeClient uses Http;`, `extern Carbon.now uses Clock;`, `extern Pdf.render uses Files;` for a function after `import Vendor.Pdf;`, or `extern Foundation.now uses Clock;` for a function a library declares outside any namespace, after `import Illuminate.Foundation;` (section 23). `extern namespace WordPress for WP_Post;` declares no effect: it gives a library whose classes have no namespace the namespace its functions are declared through, as `extern WordPress.get_post uses Database;` (section 23).
 - **An `extern` that names no effect declares the class, method or function pure,** as in `extern BigDecimal;`.
 
 <!-- example extern-functions -->

@@ -1,6 +1,6 @@
 # 83. PHP is reached only through the standard library
 
-Jordan's rulings of 10-22. This replaces [decision 80](080-global-calls-of-replaced-functions.md) and the `global.` and replacement-table parts of [decision 76](076-plain-php-functions.md). [Decision 93](093-import.md) replaces its plain PHP class of the project with `[Import]`.
+Jordan's rulings of 10-22. This replaces [decision 80](080-global-calls-of-replaced-functions.md) and the `global.` and replacement-table parts of [decision 76](076-plain-php-functions.md). [Decision 91](091-extern-namespace.md) gives a library whose classes have no namespace one, and [decision 93](093-import.md) replaces its plain PHP class of the project with `[Import]`.
 
 ## Decision
 
