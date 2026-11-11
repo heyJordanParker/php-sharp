@@ -902,7 +902,7 @@ public class Receipt
 ```
 
 - **PHP is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation. A bare call names a local or nothing, so calling a built-in function by its bare name from `.sharp` code is the compile error a misspelled name gets. The ten effect classes of section 29 replace the functions for their effects, so `printf`, `time()` and `file_put_contents` are compile errors too.
-- **A built-in the standard library has no member for is called from a plain PHP class of the project,** which `.sharp` code calls as it calls any plain PHP class (section 23).
+- **A built-in the standard library has no member for is declared with `[Import]`,** a static method without a body whose PHP# types check each argument and the result, as C#'s `[DllImport]` declares a native function (section 23).
 - **PHP's constants are reached the same way,** as `Int.MAX` gives the largest `int`. A bare `CURLOPT_TIMEOUT` is a compile error, because a bare uppercase name is always the code's own constant.
 
 **Output and exit go through the standard library.** `echo` and `print` are removed, and output goes through `Console` (section 29). `die` is removed, because `die("…")` prints its message and exits with status 0, which reports success. Exiting goes through `Process`.
@@ -4540,31 +4540,40 @@ public class CartsController
 - **An import of that namespace is an import like any other,** so a module's `imports` list holds it to the list (section 32).
 - **`global` is an ordinary name.** `global.levenshtein(a, b)` is a compile error that says `global` names no class, and no namespace the file imports, as `gadget.levenshtein(a, b)` is.
 
-**PHP itself is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation (section 8). A built-in the standard library has no member for is called from a plain PHP class of the project, which `.sharp` code imports and calls as any class:
+**PHP itself is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation (section 8). A built-in the standard library has no member for is declared with `[Import]`, as C#'s `[DllImport]` declares a native function: `import Sharp.Interop.Import;`, then the attribute on a static method without a body makes each call run the PHP function it names. The signature is written in PHP# types, so each argument and the result cross as any plain PHP value does and are checked there, a `Map` argument passing as a PHP array and an array result arriving as the declared `List` or `Map`. The declaration states its effects with `uses`, as any body-less declaration does. A function PHP doesn't declare throws PHP's `Error` that names it at the first call. `[Import]` on an instance method or a method with a body is a compile error, and so is a second `[Import]` of one function in the project, since PHP ignores the case of a function's name:
 
-<!-- example built-in-through-a-class -->
-```php
-namespace App\Support;
+<!-- example built-in-through-import -->
+```csharp
+// app/Support/Words.sharp
+namespace App.Support;
 
-final class Words
+import Sharp.Interop.Import;
+
+public static class Words
 {
-    public static function distance(string $from, string $to): int { return levenshtein($from, $to); }
+    [Import("levenshtein")]
+    public static int distance(string from, string to);
+
+    [Import("array_unique")]
+    public static List<string> unique(List<string> items);
 }
 ```
 
-<!-- example built-in-through-a-class -->
+<!-- example built-in-through-import -->
 ```csharp
 import App.Support.Words;
 
 public class Search
 {
-    public int closeness(string query, string title) => Words.distance(query, title);   // compiles: the project's plain PHP class calls levenshtein
+    public int closeness(string query, string title) => Words.distance(query, title);   // compiles: runs PHP's levenshtein
+    public List<string> tags(List<string> all) => Words.unique(all);                     // compiles: the result is renumbered
     public int bare(string query, string title) => levenshtein(query, title);           // compile error: no function levenshtein exists
 }
 ```
-<!-- run built-in-through-a-class
+<!-- run built-in-through-import
 Search search = new Search();
 search.closeness("cart", "carts");   // 1
+search.tags(["a", "b", "a"]);        // ["a", "b"]
 -->
 
 **A plain PHP constant is read through its namespace the same way.** `Pdf.DEFAULT_DPI` reads the library's after `import Vendor.Pdf;`, and a constant a library declares outside any namespace is read through the namespace of its classes, as a function is. A bare uppercase name is always the code's own constant, so a bare `DEFAULT_DPI` is a compile error. PHP's own constants are reached through the standard library, as `Int.MAX` and `Int.MIN` give the `int` bounds:

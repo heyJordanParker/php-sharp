@@ -1,6 +1,6 @@
 # 83. PHP is reached only through the standard library
 
-Jordan's rulings of 10-22. This replaces [decision 80](080-global-calls-of-replaced-functions.md) and the `global.` and replacement-table parts of [decision 76](076-plain-php-functions.md).
+Jordan's rulings of 10-22. This replaces [decision 80](080-global-calls-of-replaced-functions.md) and the `global.` and replacement-table parts of [decision 76](076-plain-php-functions.md). [Decision 93](093-import.md) replaces its plain PHP class of the project with `[Import]`.
 
 ## Decision
 
@@ -8,7 +8,7 @@ Jordan's rulings of 10-22. This replaces [decision 80](080-global-calls-of-repla
 
 **`global.` does not exist in PHP# code.** `global` is an ordinary name, so `global.levenshtein(a, b)` is the error `gadget.levenshtein(a, b)` gets: `global` names no class, and no namespace the file imports.
 
-**PHP is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation. The standard library's own files, the files of the package named `heyjordanparker/php-sharp-composer`, keep `global.` to call PHP's built-ins. A built-in the standard library has no member for is called from a plain PHP class of the project.
+**PHP is reached only through the standard library,** as Rust reaches the platform through `std` and Swift through Foundation. The standard library's own files, the files of the package named `heyjordanparker/php-sharp-composer`, keep `global.` to call PHP's built-ins. A built-in the standard library has no member for is declared with `[Import]`, a static method without a body whose PHP# types check each argument and the result ([decision 93](093-import.md)).
 
 **A bare call of a PHP function is the error a misspelled name gets** (Jordan's rule of 10-18: a form PHP# never writes fails as a typo does). PHP# has no top-level functions, so `trim(name)`, `levenshtein(a, b)` and `render(html)` each name no function, with no message that recognizes PHP's function or names what to write instead. A bare PHP constant, a bare `extern trim;` and an `import strlen;` are the same. The checker keeps no table of PHP's functions and their replacements.
 
@@ -21,7 +21,7 @@ Jordan's rulings of 10-22. This replaces [decision 80](080-global-calls-of-repla
 - `Attribute`, which makes a class an attribute. PHP reads only its own class as the mark.
 - `Countable` and `JsonSerializable`, which a plain PHP library asks a PHP# class to implement, so PHP's `count()` and `json_encode()` read it.
 
-Every other built-in class a project's code named before has a standard library type for its job, or is reached from a plain PHP class of the project:
+Every other built-in class a project's code named before has a standard library type for its job, or is the job of the runtime or the web framework:
 
 - `DateTimeImmutable` and `DateTimeZone`: the types of `Sharp.Time` (`Clock`, `Instant`, `Duration`, `Date`, `DateTime`, `TimeZone`).
 - `PDO` and `PDOStatement`: `Database`, in `Sharp.Data`.
@@ -32,7 +32,7 @@ Every other built-in class a project's code named before has a standard library 
 - `Random\Randomizer` and `Random\RandomException`: `Random`.
 - `NoDiscard`: the standard library's own attribute on `Events.on`. A project's method has no such mark.
 - `Override`: PHP#'s `override` keyword.
-- `Fiber`, `Serializable` and `SessionHandlerInterface`: the job of the runtime or the web framework, which a project reaches from a plain PHP class of its own. A generic class still can't be a `Serializable` through such a class.
+- `Fiber`, `Serializable` and `SessionHandlerInterface`: the job of the runtime or the web framework. A generic class can't be a `Serializable`.
 
 ## Options
 
@@ -48,7 +48,7 @@ import Illuminate.Foundation;
 public class CartsController
 {
     public string clean(string name) => name.trim();                        // compiles: the standard library's member
-    public int distance(string a, string b) => Words.distance(a, b);       // compiles: the project's plain PHP class calls levenshtein
+    public int distance(string a, string b) => Words.distance(a, b);       // compiles: Words.distance is `[Import("levenshtein")]`
     public Any? missing() => Foundation.abort(404, "Cart not found.");     // compiles: Laravel's abort(), through Illuminate.Foundation
     public int raw(string a, string b) => global.levenshtein(a, b);        // compile error: `global` names no class, and no namespace this file imports
     public string bare(string name) => trim(name);                          // compile error: Function `trim` does not exist
@@ -103,7 +103,7 @@ A folder's name is no namespace PHP declares, so the import names nothing a clas
 ## Precedent
 
 - **Chosen:** Rust's `std` and Swift's Foundation as the only way to the platform. Kotlin, whose top-level functions belong to the package of their file, called through it from Java.
-- **Rejected:** C#'s `global::`, Rust's `extern "C"` and C#'s P/Invoke, which reach any foreign function from any code.
+- **Rejected:** C#'s `global::`, which reaches any foreign function from any code with no declaration. A typed declaration, as C#'s P/Invoke and Rust's `extern "C"` write one, is [decision 93](093-import.md)'s `[Import]`.
 
 ## Spec
 
