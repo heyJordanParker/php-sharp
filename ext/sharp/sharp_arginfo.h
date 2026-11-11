@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 639fe20379a0ed58717160be36c5348410d9d8e6 */
+ * Stub hash: d8eeb6a343287a349527d62746ba0ae85f33b5de */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -262,6 +262,13 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Sharp_Listening___construct, 0, 0, 0)
 ZEND_END_ARG_INFO()
 
+#define arginfo_class_Sharp_Data_Sql___construct arginfo_class_Sharp_Listening___construct
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Sharp_Data_Sql_identifier, 0, 2, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, name, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, allowed, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
 #define arginfo_class_Sharp_Internal_Sequence___construct arginfo_class_Sharp_Listening___construct
 
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Sharp_Internal_Sequence_from, 0, 1, Sharp\\Internal\\Sequence, 0)
@@ -345,6 +352,8 @@ ZEND_METHOD(Sharp_Position, __construct);
 ZEND_METHOD(Sharp_Container, get);
 ZEND_METHOD(Sharp_Container, has);
 ZEND_METHOD(Sharp_Listening, __construct);
+ZEND_METHOD(Sharp_Data_Sql, __construct);
+ZEND_METHOD(Sharp_Data_Sql, identifier);
 ZEND_METHOD(Sharp_Internal_Sequence, __construct);
 ZEND_METHOD(Sharp_Internal_Sequence, from);
 ZEND_METHOD(Sharp_Internal_Sequence, filter);
@@ -426,6 +435,12 @@ static const zend_function_entry class_Sharp_Listening_methods[] = {
 	ZEND_FE_END
 };
 
+static const zend_function_entry class_Sharp_Data_Sql_methods[] = {
+	ZEND_ME(Sharp_Data_Sql, __construct, arginfo_class_Sharp_Data_Sql___construct, ZEND_ACC_PRIVATE)
+	ZEND_ME(Sharp_Data_Sql, identifier, arginfo_class_Sharp_Data_Sql_identifier, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_FE_END
+};
+
 static const zend_function_entry class_Sharp_Internal_Sequence_methods[] = {
 	ZEND_ME(Sharp_Internal_Sequence, __construct, arginfo_class_Sharp_Internal_Sequence___construct, ZEND_ACC_PRIVATE)
 	ZEND_ME(Sharp_Internal_Sequence, from, arginfo_class_Sharp_Internal_Sequence_from, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
@@ -502,6 +517,16 @@ static zend_class_entry *register_class_Sharp_Listening(void)
 	zend_class_entry ce, *class_entry;
 
 	INIT_NS_CLASS_ENTRY(ce, "Sharp", "Listening", class_Sharp_Listening_methods);
+	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES|ZEND_ACC_NOT_SERIALIZABLE);
+
+	return class_entry;
+}
+
+static zend_class_entry *register_class_Sharp_Data_Sql(void)
+{
+	zend_class_entry ce, *class_entry;
+
+	INIT_NS_CLASS_ENTRY(ce, "Sharp\\Data", "Sql", class_Sharp_Data_Sql_methods);
 	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL|ZEND_ACC_NO_DYNAMIC_PROPERTIES|ZEND_ACC_NOT_SERIALIZABLE);
 
 	return class_entry;

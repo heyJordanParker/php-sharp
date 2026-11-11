@@ -3159,7 +3159,7 @@ A plain PHP file keeps PHP's own interpolation. It converts an object of a class
 
 **Plain strings:** `"…"` and `'…'` never interpolate, so braces and `$` inside them are literal.
 
-**Text methods:** a `string` has Kotlin's text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so `length` counts characters and a case change reaches every letter. `substring`, `indexOf` and `lastIndexOf` count in characters, a search that finds nothing gives `null`, and a range or a start outside the text throws `OutOfRangeException`. `trim`, `trimStart` and `trimEnd` remove whitespace, and `removePrefix` and `removeSuffix` remove their text once when the text starts or ends with it. `replace` replaces every match, as Kotlin's does. `split` keeps the empty text after a trailing delimiter, and takes Kotlin's `limit`: 0, its default, gives every part, and a positive limit gives at most that many, the last holding the rest. `lines` splits at `"\r\n"`, `"\n"` and `"\r"`. Empty text to replace, an empty delimiter, a negative limit, empty padding and a negative count each throw `ValueError`:
+**Text methods:** a `string` has Kotlin's text methods, from the standard library's extensions on `string` (section 23), so PHP# code never calls PHP's string functions (section 8). They work on characters, never bytes, so `length` counts characters and a case change reaches every letter. `substring`, `indexOf` and `lastIndexOf` count in characters, a search that finds nothing gives `null`, and a range or a start outside the text throws `OutOfRangeException`. `trim`, `trimStart` and `trimEnd` remove whitespace, or each character of the text they are given, and `removePrefix` and `removeSuffix` remove their text once when the text starts or ends with it. `replace` replaces every match, as Kotlin's does. `split` keeps the empty text after a trailing delimiter, and takes Kotlin's `limit`: 0, its default, gives every part, and a positive limit gives at most that many, the last holding the rest. `lines` splits at `"\r\n"`, `"\n"` and `"\r"`. Empty text to replace, an empty delimiter, a negative limit, empty padding and a negative count each throw `ValueError`:
 
 <!-- example text-methods: statements -->
 ```csharp
@@ -3192,6 +3192,24 @@ A plain PHP file keeps PHP's own interpolation. It converts an object of a class
 "a:b".split(":", -1);                     // throws: "`split` takes a limit of 0 or more, and it is negative."
 "hello".contains(1);                      // compile error: contains takes a string
 str_contains("hello", "ell");             // compile error: no function str_contains exists
+```
+
+**Bytes:** `byteLength()`, `byteSubstring(start, end)` and `bytes()` read a `string` as its bytes, as `length()`, `substring()` and `codePoints()` read it as characters, so binary data, as `Ip.toBinary` gives, and the bytes another system counts or signs are read in PHP#. `byteSubstring` counts in bytes and throws `OutOfRangeException` for a range outside the bytes, and `bytes()` gives each byte as an `int` from 0 to 255:
+
+<!-- example text-bytes: statements
+import Sharp.Net.Ip;
+-->
+```csharp
+"école".length();                          // 5
+"école".byteLength();                      // 6
+"école".bytes();                           // [195, 169, 99, 111, 108, 101]
+"école".byteSubstring(0, 2);               // "é"
+"école".byteSubstring(0, 9);               // throws: "`byteSubstring` takes a range inside the bytes, and the range is outside it."
+Ip.toBinary("192.168.0.1").bytes();        // [192, 168, 0, 1]
+Ip.toBinary("::1").byteLength();           // 16
+"--sku--".trim("-");                       // "sku"
+"/path/".trimEnd("/");                     // "/path"
+"xyx-a-xyx".trim("xy");                    // "-a-": each character of "xy", not the text "xy"
 ```
 
 PHP's backtick shell execution is removed, and so is `shell_exec()`. A program runs through `Process.run(program, arguments)` (section 29), which takes its arguments as a list, so no shell reads them.
@@ -4987,7 +5005,7 @@ import Sharp.Encoding.Json;
 string body = "{}";
 -->
 ```csharp
-Any? payload = Json.parse(body);
+Any? payload = Json.parse(body).value;
 payload.order;                              // compile error: check what payload is first
 if (payload is WebhookPayload) {
     payload.order.total;                    // narrowed to WebhookPayload
@@ -5015,7 +5033,43 @@ bool d = raw == other;             // compile error: other is an unchecked Any? 
 string a = `plan: ${raw}`;         // compile error: check raw with is, as or match first
 ```
 
-PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or untyped arrive as `Any?`. Decoding straight into a type, such as `Json.decode<WebhookPayload>(body)`, is the normal path: it reads a struct or a PHP# class through its `parse` (section 10), so a bad field throws the one error that lists every bad field, and a type `parse` can't read is a compile error. `Json.parse(body)` gives any JSON value as `Any?`.
+PHP's `mixed` is removed. Values coming from plain PHP that are typed `mixed` or untyped arrive as `Any?`. Decoding straight into a type, such as `Json.decode<WebhookPayload>(body)`, is the normal path: it reads a struct or a PHP# class through its `parse` (section 10), so a bad field throws the one error that lists every bad field, and a type `parse` can't read is a compile error. `Json.parse(body)` gives any JSON value as a `JsonValue`, whose `value` is the `Any?` it holds, and two `JsonValue`s are `==` when their values are, at every depth, as kotlinx's `JsonElement` and Rust's `serde_json::Value` compare:
+
+<!-- example json-values: statements
+import Sharp.Encoding.Json;
+-->
+```csharp
+Json.parse("{\"a\":[1,2]}") == Json.parse("{ \"a\": [1, 2] }");   // true
+Json.parse("{\"a\":[1,2]}") != Json.parse("{\"a\":[2,1]}");       // true
+Json.parse("{\"a\":1,\"b\":2}") == Json.parse("{\"b\":2,\"a\":1}"); // true: an object's keys in any order
+```
+
+**`Json.encode` takes `escapeSlashes`, `escapeUnicode` and `keepZeroFraction`,** which default to `false`, `false` and `true`, its output without them. `escapeSlashes` writes `/` as `\/`, `escapeUnicode` writes each character outside ASCII as `\u` and its code, and `keepZeroFraction: false` writes `1.0` as `1`, so a payload can match the bytes another system signs:
+
+<!-- example json-switches: statements
+import Sharp.Encoding.Json;
+Map<string, Any> payload = ["url": "https://example.com/a", "name": "école", "total": 1.0];
+-->
+```csharp
+Json.encode(payload);                                                              // "{\"url\":\"https://example.com/a\",\"name\":\"école\",\"total\":1.0}"
+Json.encode(payload, escapeSlashes: true, escapeUnicode: true, keepZeroFraction: false); // "{\"url\":\"https:\\/\\/example.com\\/a\",\"name\":\"\\u00e9cole\",\"total\":1}"
+Json.encode(payload, keepZeroFraction: false);                                     // "{\"url\":\"https://example.com/a\",\"name\":\"école\",\"total\":1}"
+```
+
+**`Sql.identifier(name, allowed)` gives `name` as SQL only when it is one of `allowed`,** and throws a `ValueError` for any other, so a column or a table chosen while the code runs reaches a plain PHP `literal-string` parameter, as Laravel's `orderByRaw` declares one, as one of the application's own names. Values still go through a query's bindings:
+
+<!-- example sql-identifiers: statements
+import Illuminate.Database.Query.Builder;
+import Sharp.Data.Sql;
+Builder query = new Builder();
+string column = "created_at";
+-->
+```csharp
+Sql.identifier("name", ["name", "created_at"]);                      // "name"
+Sql.identifier("drop", ["name"]);                                    // throws: "`Sql.identifier` takes a name the query allows, and \"drop\" is none of them."
+query.orderByRaw(Sql.identifier(column, ["name", "created_at"]));    // compiles
+query.orderByRaw(column);                                            // compile error: column is composed while the code runs
+```
 
 **`Object` holds any object, and nothing else.** It compiles to PHP's `object`, and `Object?` adds null. Like `Any`, it has no members until `is` narrows it. An `Object` passes where `Any` is expected, and a plain PHP value typed `object` arrives as `Object`.
 
