@@ -636,9 +636,7 @@ impl Converter<'_, '_> {
                 );
                 return;
             }
-            if self.narrows_linked_parameter(metadata, declared, method)
-                || self.widens_linked_return(metadata, declared, method)
-            {
+            if self.narrows_linked_parameter(metadata, declared, method) {
                 return;
             }
             // An interface's member and an abstract method are replaced by definition, so they take neither marker.
@@ -774,59 +772,6 @@ impl Converter<'_, '_> {
                 );
                 return true;
             }
-        }
-
-        false
-    }
-
-    /// Refuses the return of `declared`, the method `method` declares in the class `metadata`, when PHP# writes a type
-    /// in the PHP it compiles to that is wider than the PHP declaration of a method it replaces returns, and gives
-    /// whether it did. PHP links an override only when it returns at most that (spec section 22), and a `Map` returns
-    /// `Sharp\Map|array` there, which a parent's `array` doesn't hold.
-    fn widens_linked_return(
-        &mut self,
-        metadata: &ClassLikeMetadata,
-        declared: &FunctionLikeMetadata,
-        method: &MethodDeclaration<'_>,
-    ) -> bool {
-        let codebase = self.input.codebase;
-        let Some(written) = declared.return_type_metadata.as_ref() else {
-            return false;
-        };
-        let ours = get_php_declared_type(&written.type_union, codebase);
-        let name = ascii_lowercase_word(declared.name.as_bytes());
-        let parents = metadata.overridden_method_ids.get(&name).into_iter().flat_map(|parents| parents.keys());
-        for parent in parents {
-            let (Some(class), Some(replaced)) = (
-                codebase.get_class_like(parent.as_bytes()),
-                codebase.get_method(parent.as_bytes(), declared.name.as_bytes()),
-            ) else {
-                continue;
-            };
-            let Some(theirs) = replaced.return_type_declaration_metadata.as_ref() else {
-                continue;
-            };
-            // A plain PHP method's PHP is its own declaration, and a PHP# one's is the type its PHP# type compiles to.
-            let theirs = if replaced.flags.is_sharp() {
-                get_php_declared_type(&theirs.type_union, codebase)
-            } else {
-                theirs.type_union.clone()
-            };
-            if is_contained_by(codebase, &ours, &theirs, false, false, false, &mut ComparisonResult::new()) {
-                continue;
-            }
-            self.refuse(
-                method.name.span,
-                format!(
-                    "`{}` returns `{}`, which PHP# writes in the PHP it compiles to, and `{}::{}`'s PHP returns `{}` there, which PHP links an override to only when it returns at most that (spec section 22)",
-                    declared.original_name.as_str_lossy(),
-                    ours.get_id(),
-                    class.original_name.as_str_lossy(),
-                    replaced.original_name.as_str_lossy(),
-                    theirs.get_id(),
-                ),
-            );
-            return true;
         }
 
         false

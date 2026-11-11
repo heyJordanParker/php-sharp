@@ -149,6 +149,7 @@ $cat = new Cat('tom');
 $bird = new Bird('tweety');
 echo $cat->describe(), "\n", $bird->describe(), "\n";
 echo Cat::counted(1), ' ', Bird::counted(3), "\n";
+echo $cat->summary(), ' ', $bird->summary(), ' ', json_encode($cat->traits()), "\n";
 $bird->sound = 'chirp';
 $bird->name = 'polly';
 echo $bird->describe(), "\n";

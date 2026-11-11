@@ -162,11 +162,12 @@ impl Converter<'_, '_> {
             };
             return self.edits.replace(expression.span(), format!("`${{{text}}}`"));
         }
-        // PHP's `(string)` of an object calls its `__toString`, which PHP# calls by name on a plain PHP class.
+        // PHP's `(string)` of an object calls its `__toString`, which is a plain PHP class's `toString()` (spec section
+        // 18).
         if kind == Kind::String && self.plain_stringable(operand) {
             let rendered = self.render(operand);
             let rendered = if super::is_primary(operand) { rendered } else { format!("({rendered})") };
-            return self.edits.replace(expression.span(), format!("{rendered}.__toString()"));
+            return self.edits.replace(expression.span(), format!("{rendered}.toString()"));
         }
         if !self.is(operand, &[Kind::Int, Kind::Float]) {
             let shown = self.shown(operand);
@@ -277,8 +278,8 @@ impl Converter<'_, '_> {
     }
 
     /// Whether `value` is never null and each class it may be is a plain PHP class or interface that declares or
-    /// inherits `__toString`, which PHP's `(string)`, `.` and interpolation call. A PHP# class shows itself through
-    /// `toString()` instead, which a plain PHP one doesn't declare.
+    /// inherits `__toString`, which PHP's `(string)`, `.` and interpolation call, and which PHP# reads as the class's
+    /// `toString()` (spec section 18).
     pub(super) fn plain_stringable(&self, value: &Expression<'_>) -> bool {
         let codebase = self.input.codebase;
         self.type_of(value).is_some_and(|union| {

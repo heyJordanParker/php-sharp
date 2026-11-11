@@ -82,23 +82,20 @@ impl Converter<'_, '_> {
     /// `${value}`, the template part that shows `value` as PHP's `.` and interpolation show it, or `None` where PHP#
     /// shows it another way. A template shows an `int`, a `float` and a `string` as PHP does, and PHP shows `null` as
     /// nothing, which `${value ?? ""}` gives a `string` that may be null. A template shows no union of two of them, so
-    /// an `int` that may be null has no part. PHP shows an object of a plain PHP class by its `__toString`, which
-    /// PHP# calls by name.
+    /// an `int` that may be null has no part. PHP shows an object of a plain PHP class by its `__toString`, which a
+    /// template shows it by, as its `toString()` (spec section 18).
     fn shown_value(&mut self, value: &Expression<'_>) -> Option<String> {
-        let stringable = self.plain_stringable(value);
-        let shows = stringable || self.is(value, &[Kind::Int, Kind::Float, Kind::String]);
+        let shows = self.plain_stringable(value) || self.is(value, &[Kind::Int, Kind::Float, Kind::String]);
         if !shows && !self.is(value, &[Kind::String, Kind::Null]) {
             return None;
         }
         self.expression(value, None);
         let rendered = self.render(value);
 
-        Some(match (stringable, shows, is_primary(value)) {
-            (true, _, true) => format!("${{{rendered}.__toString()}}"),
-            (true, _, false) => format!("${{({rendered}).__toString()}}"),
-            (false, true, _) => format!("${{{rendered}}}"),
-            (false, false, true) => format!("${{{rendered} ?? \"\"}}"),
-            (false, false, false) => format!("${{({rendered}) ?? \"\"}}"),
+        Some(match (shows, is_primary(value)) {
+            (true, _) => format!("${{{rendered}}}"),
+            (false, true) => format!("${{{rendered} ?? \"\"}}"),
+            (false, false) => format!("${{({rendered}) ?? \"\"}}"),
         })
     }
 

@@ -37,4 +37,22 @@ abstract class Animal
     {
         return $this->name . ' ' . $this->kind() . ' says ' . $this->sound . ' on ' . $this->legs . ' legs';
     }
+
+    // A method declared `array` that a converted subclass overrides with a `Map`, whose result this class's own code
+    // reads as the PHP array while it is plain PHP.
+    /** @return array<string, int> */
+    public function traits(): array
+    {
+        return ['legs' => $this->legs];
+    }
+
+    public function summary(): string
+    {
+        $text = '';
+        foreach ($this->traits() as $trait => $count) {
+            $text .= $trait . '=' . $count . ';';
+        }
+
+        return $text;
+    }
 }
