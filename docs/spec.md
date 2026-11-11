@@ -4576,6 +4576,25 @@ search.closeness("cart", "carts");   // 1
 search.tags(["a", "b", "a"]);        // ["a", "b"]
 -->
 
+**`[Export("name")]` on a static method makes PHP see the global function `name`, which calls the method,** as Rust's `#[no_mangle]` and C#'s `[UnmanagedCallersOnly(EntryPoint = …)]` name a function foreign code calls. `import Sharp.Interop.Export;` names the attribute. The function passes its arguments, named ones included, to the method, whose PHP# types check each one, and returns the method's result. Every exported function is declared when Composer's autoloader loads PHP#'s package, before the app's code and before a library that requires PHP#, so a library that declares its own only when none exists, as WordPress's pluggable functions do, finds the project's first and skips its own. PHP# code still calls the method by its own name. `[Export]` on an instance method is a compile error, and so is a second export of one name in the project, which names both methods:
+
+<!-- example exported-function -->
+```csharp
+// app/Auth.sharp
+namespace App;
+
+import Sharp.Interop.Export;
+
+public class Auth
+{
+    [Export("auth_redirect")]
+    public static string redirect(string to, int status = 302) => `${status} ${to}`;
+
+    [Export("auth_check")]                                       // compile error: only a static method is exported
+    public bool check() => true;
+}
+```
+
 **A plain PHP constant is read through its namespace the same way.** `Pdf.DEFAULT_DPI` reads the library's after `import Vendor.Pdf;`, and a constant a library declares outside any namespace is read through the namespace of its classes, as a function is. A bare uppercase name is always the code's own constant, so a bare `DEFAULT_DPI` is a compile error. PHP's own constants are reached through the standard library, as `Int.MAX` and `Int.MIN` give the `int` bounds:
 
 <!-- example library-constants -->
