@@ -1,0 +1,8 @@
+namespace Mailing;
+
+public class Badge
+{
+    public Badge(public string code { get; }) { }
+
+    public string toString() => `#${this.code}`;
+}

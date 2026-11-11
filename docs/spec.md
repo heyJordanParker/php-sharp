@@ -3155,6 +3155,30 @@ const label = `Sku: ${sku}`;   // Sku declares toString(): "Sku: A-12"
 
 A plain PHP file keeps PHP's own interpolation. It converts an object of a class that declares `toString()`, or takes it from an interface's default body (section 22), to the text a template shows, as `(string) $sku` and `"Sku: {$sku}"` do, as Java's and Kotlin's string conversion calls `toString()`.
 
+**A plain PHP class's `__toString()` is its `toString()` in PHP# code,** its own or inherited, when it declares and inherits no `toString()`, as Kotlin calls a Java class's `toString()` as its own. A template shows it and `email.toString()` calls it, and both run PHP's `__toString()`. PHP# code never names `__toString`, and a plain PHP class with neither method stays a template's compile error:
+
+<!-- example plain-to-string -->
+```php
+final class Email
+{
+    public function __construct(private string $address) {}
+
+    public function __toString(): string { return $this->address; }
+}
+
+final class Row {}
+```
+
+<!-- example plain-to-string: statements
+Email email = new Email("ada@example.com");
+Row row = new Row();
+-->
+```csharp
+`To: ${email}`;                        // "To: ada@example.com"
+email.toString();                      // "ada@example.com"
+`Row: ${row}`;                         // compile error: Row declares neither toString() nor __toString()
+```
+
 **A `toString()` is always `string toString()`:** an instance method with no required parameter that returns `string`, as Java's and Kotlin's `toString()` override `Object`'s and `Any`'s. A template and every conversion to text call it with no arguments, so any other `toString()` a type declares is a compile error that names the signature to write, "`Sku.toString()` returns `int`, and PHP# shows a value as text by the `string` its `toString()` returns.", and so is a template of a plain PHP class whose `toString()` is not that one.
 
 **Plain strings:** `"…"` and `'…'` never interpolate, so braces and `$` inside them are literal.
