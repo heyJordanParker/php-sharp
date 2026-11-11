@@ -2850,6 +2850,27 @@ for (const Line line of lines) { … }                 // compiles
 for (let [Status status, int n] of counts) { … }     // parse error: let takes no written type
 ```
 
+**A loop reads an `Iterable<T>` alone,** so a loop over any other value is a compile error that names its type, as Kotlin's and C#'s are. That holds for an object of a class that is no `Iterable` (section 12), where PHP would loop over its public properties:
+
+<!-- example loop-over-object -->
+```csharp
+// app/Basket.sharp
+namespace App;
+
+public class Basket
+{
+    private List<string> items = ["tea"];
+
+    public int count()
+    {
+        let n = 0;
+        for (const item of this.items) { n += item.length(); }   // compiles: a List<string> is an Iterable<string>
+        for (const item of this) { n += 1; }                     // compile error: Basket is no Iterable
+        return n;
+    }
+}
+```
+
 `for (x in y)` is a compile error that names `of`. It closes the TypeScript trap where `in` loops over keys.
 
 These keep their C and PHP form:
