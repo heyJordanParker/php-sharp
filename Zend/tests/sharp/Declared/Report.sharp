@@ -1,0 +1,31 @@
+namespace Declared;
+
+import Lib.Field;
+
+public class Report
+{
+    public List<string> describe()
+    {
+        List<string> lines = [];
+        for (const property of typeof(Product).properties()) {
+            const arguments = property.type.typeArguments().map(type => type.name());
+            const fields = property.attributes<Field>().map(field => `Field(${field.label ?? ""})`);
+            const nullable = property.nullable ? "true" : "false";
+            lines.add(`${property.name}: ${property.type.name()} nullable=${nullable} arguments=[${arguments.join(", ")}] attributes=[${fields.join(", ")}]`);
+        }
+        return lines;
+    }
+
+    public List<bool> compare()
+    {
+        const properties = typeof(Product).properties();
+        return [
+            properties[0].type == typeof(List<string>),
+            properties[1].type == typeof(int),
+            properties[0].type.typeArguments() == [typeof(string)],
+            properties[1].type.typeArguments() == [],
+            typeof(Map<string, int>).typeArguments() == [typeof(string), typeof(int)],
+            typeof(Product).typeArguments() == [],
+        ];
+    }
+}

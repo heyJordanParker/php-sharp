@@ -92,6 +92,10 @@ function returned(mixed $result, object|string|null $implementer, string $method
 
 function elements(object $object, bool $pairs): Sequence {}
 
+function properties(string $type): array {}
+
+function typeArguments(string $type): array {}
+
 function readModule(string $path): void {}
 
 function testModule(string $class, array $bindings): void {}

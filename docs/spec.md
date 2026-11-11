@@ -5127,6 +5127,38 @@ Class.of(row).name();              // "App.Orders.Counted"
 typeof(Counted).name();            // "App.Orders.Counted"
 ```
 
+**`properties()` reads the properties a class declares, and `typeArguments()` a type's type arguments,** as .NET's `Type.GetProperties()` and `GetGenericArguments()` do, so an ORM, a serializer or a form builder reads a class's declared types without plain PHP reflection. `properties()` gives a `List<Property>` of every instance property and field, private ones included, the class's own first and then those it inherits, in the order they are declared. A `Property` has its `name`, its `type` as a `Class<Any?>` without `?`, `nullable`, and `attributes<TAttribute : Object>()`, as `Class<T>`'s own:
+
+<!-- example declared-types -->
+```csharp
+// app/Shelf/Product.sharp
+namespace App.Shelf;
+
+import App.Field;
+
+public class Product
+{
+    [Field] List<string> tags = [];
+    [Field] int? stock = null;
+    public string name { get; } = "tea";
+}
+```
+
+<!-- example declared-types: statements
+import App.Field;
+import App.Shelf.Product;
+-->
+```csharp
+const properties = typeof(Product).properties();
+properties.map(property => property.name);                  // ["tags", "stock", "name"]
+properties[0].type == typeof(List<string>);                  // true
+properties[0].type.typeArguments() == [typeof(string)];     // true
+properties[1].type.typeArguments() == [];                   // true
+properties[1].nullable;                                     // true
+properties[1].attributes<Field>().count();                  // 1
+typeof(Map<string, int>).typeArguments() == [typeof(string), typeof(int)];   // true
+```
+
 **A class value works wherever a class name works.** `typeof` and `Class.of` give one, and a `Class<T>` field, parameter or local holds one:
 
 <!-- example class-values -->

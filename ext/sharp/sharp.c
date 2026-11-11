@@ -4544,6 +4544,158 @@ static sharp_type_node *sharp_class_value_read(const zend_string *value, sharp_t
 	return given && reader->at == reader->end && !reader->names ? given : NULL;
 }
 
+/* The class value of `type`, as typeof gives it: a class's name, or the text of any other type. */
+static zend_string *sharp_type_class_value(const sharp_type *type)
+{
+	return type->class_name ? type->class_name : type->text;
+}
+
+/* Appends the PHP type `type` as PHP# writes it, for a property that carries no PHP# type: `App\Order` as `App.Order`,
+ * `?int` and `int|null` as `int?`, `mixed` and no type as `Any?`, `object` as `Object`, and `array` as the
+ * `Map<int|string, Any?>` a plain PHP array arrives as, spec section 12. */
+static void sharp_php_type_text(smart_str *text, zend_type type)
+{
+	if (!ZEND_TYPE_IS_SET(type) || ZEND_TYPE_PURE_MASK(type) == MAY_BE_ANY) {
+		smart_str_appends(text, "Any?");
+		return;
+	}
+	zend_string *written = zend_type_to_string(type);
+	const char *at = ZSTR_VAL(written);
+	const char *end = at + ZSTR_LEN(written);
+	bool nullable = *at == '?';
+	at += nullable;
+	if (end - at > 5 && memcmp(end - 5, "|null", 5) == 0) {
+		nullable = true;
+		end -= 5;
+	}
+	while (at < end) {
+		const char *bar = memchr(at, '|', end - at);
+		size_t length = (bar ? bar : end) - at;
+		if (length == 6 && memcmp(at, "object", 6) == 0) {
+			smart_str_appends(text, "Object");
+		} else if (length == 5 && memcmp(at, "array", 5) == 0) {
+			smart_str_appends(text, "Map<int|string, Any?>");
+		} else {
+			for (size_t i = 0; i < length; i++) {
+				smart_str_appendc(text, at[i] == '\\' ? '.' : at[i]);
+			}
+		}
+		at += length;
+		if (bar) {
+			smart_str_appendc(text, '|');
+			at++;
+		}
+	}
+	if (nullable) {
+		smart_str_appendc(text, '?');
+	}
+	zend_string_release(written);
+}
+
+/* The type the property `info` declares, read on a class value of `ce` whose type arguments are `arguments`, spec section
+ * 25: its PHP# type, or its PHP type as PHP# writes it, with each type parameter of its class the type argument the class
+ * value gives it, or its bound. */
+static const sharp_type *sharp_property_declared_type(
+	const zend_property_info *info, const zend_class_entry *ce, const sharp_type *arguments)
+{
+	smart_str written = {0};
+	if (info->sharp_type) {
+		smart_str_append(&written, info->sharp_type);
+	} else {
+		sharp_php_type_text(&written, info->type);
+	}
+	smart_str_0(&written);
+	sharp_type_reader reader = sharp_type_reader_of(ZSTR_VAL(written.s), ZSTR_LEN(written.s), zend_arena_create(1024));
+	sharp_type_node *open = sharp_type_read_list(&reader);
+	const sharp_type *bounds = sharp_class_is_sharp(ce) ? sharp_class_bounds(ce) : NULL;
+	const sharp_type *given = arguments ? arguments : bounds;
+	sharp_type_node *of_class = open && (reader.names & SHARP_TYPE_NAMES_THIS)
+		? sharp_type_node_ancestor(ce, sharp_type_node_list(given ? given->text : NULL, &reader), info->ce, &reader)
+		: NULL;
+	sharp_type_node *list = open ? sharp_type_node_substitute(open, of_class, NULL, false, &reader) : NULL;
+	const sharp_type *type = list ? sharp_type_intern(list, SHARP_TYPE_FROM_SUBSTITUTION, &reader.arena) : NULL;
+	zend_arena_destroy(reader.arena);
+	smart_str_free(&written);
+
+	return type ? type->members[0] : NULL;
+}
+
+/* Spec section 25: what `Class<T>.properties()` reads, the instance properties and fields of the class `type` names, its
+ * own first and then those it inherits, in the order they are declared. Each is the list of the class that declares
+ * it, its name, the class value of its type without `?`, and the `?` the type ends with, or "" for a type that is not
+ * nullable. */
+ZEND_FUNCTION(Sharp_Internal_properties)
+{
+	zend_string *value;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STR(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	const sharp_type *carried = sharp_class_value_type(value);
+	const sharp_type *arguments = NULL;
+	zend_class_entry *ce;
+	if (carried && carried->kind == SHARP_TYPE_NAMED && carried->class_name) {
+		ce = zend_fetch_class_by_name(carried->class_name, NULL, ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
+		const char *open = memchr(ZSTR_VAL(carried->text), '<', ZSTR_LEN(carried->text));
+		arguments = open ? sharp_type_list(open + 1, ZSTR_VAL(carried->text) + ZSTR_LEN(carried->text) - open - 2) : NULL;
+	} else {
+		zend_string *name = sharp_type_class_name(ZSTR_VAL(value), ZSTR_LEN(value), false);
+		ce = zend_fetch_class(name, ZEND_FETCH_CLASS_DEFAULT | ZEND_FETCH_CLASS_EXCEPTION);
+		zend_string_release_ex(name, false);
+	}
+	if (!ce) {
+		RETURN_THROWS();
+	}
+
+	array_init(return_value);
+	zend_property_info *info;
+	ZEND_HASH_FOREACH_PTR(&ce->properties_info, info) {
+		if ((info->flags & (ZEND_ACC_STATIC | ZEND_ACC_SHARP_HIDDEN))
+			|| memchr(ZSTR_VAL(info->name), '#', ZSTR_LEN(info->name))) {
+			continue;
+		}
+		const sharp_type *type = sharp_property_declared_type(info, ce, arguments);
+		if (!type) {
+			continue;
+		}
+		bool nullable = type->kind == SHARP_TYPE_NULLABLE;
+		zval property;
+		array_init_size(&property, 4);
+		add_next_index_str(&property, zend_string_copy(info->ce->name));
+		add_next_index_string(&property, zend_get_unmangled_property_name(info->name));
+		add_next_index_str(&property, zend_string_copy(sharp_type_class_value(nullable ? type->members[0] : type)));
+		add_next_index_string(&property, nullable ? "?" : "");
+		zend_hash_next_index_insert_new(Z_ARRVAL_P(return_value), &property);
+	} ZEND_HASH_FOREACH_END();
+}
+
+/* Spec section 25: `Class<T>.typeArguments()`, the class values of the type arguments of the type `type` holds, in
+ * order, as `[typeof(string), typeof(int)]` for `Map<string, int>`. A type with none, as a class or `int`, gives none. */
+ZEND_FUNCTION(Sharp_Internal_typeArguments)
+{
+	zend_string *value;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STR(value)
+	ZEND_PARSE_PARAMETERS_END();
+
+	array_init(return_value);
+	sharp_type_reader reader = sharp_type_reader_of(NULL, 0, zend_arena_create(1024));
+	sharp_type_node *node = sharp_class_value_read(value, &reader);
+	if (node && node->kind == SHARP_TYPE_NAMED && node->count) {
+		sharp_type_node *list = sharp_type_node_start(&reader, SHARP_TYPE_LIST, NULL);
+		sharp_type_node_add(list, node);
+		/* The interned types are found by their text, which the list spells from its member. */
+		sharp_type_node_spell(list, &reader.arena);
+		const sharp_type *type = sharp_type_intern(list, SHARP_TYPE_FROM_SUBSTITUTION, &reader.arena)->members[0];
+		for (uint32_t i = 0; i < type->count; i++) {
+			add_next_index_str(return_value, zend_string_copy(sharp_type_class_value(type->members[i])));
+		}
+	}
+	zend_arena_destroy(reader.arena);
+}
+
 /* Whether each class `node` and the types inside it name exists, as sharp_type_class loads it. */
 static bool sharp_type_node_names_classes(sharp_type_node *node)
 {
