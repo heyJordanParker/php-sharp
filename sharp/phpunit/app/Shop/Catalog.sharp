@@ -1,0 +1,6 @@
+namespace App.Shop;
+
+public class Catalog
+{
+    public virtual Map<string, int> prices() => ["tea": 3];
+}

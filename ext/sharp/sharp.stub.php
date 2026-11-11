@@ -88,6 +88,8 @@ function equals(mixed $value, mixed $other): bool {}
 
 function arrayOf(mixed $value, mixed $receiver = null): mixed {}
 
+function returned(mixed $result, object|string|null $implementer, string $method, string $types, string $target): mixed {}
+
 function readModule(string $path): void {}
 
 function testModule(string $class, array $bindings): void {}
