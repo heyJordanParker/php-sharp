@@ -655,7 +655,7 @@ public int count { get; didSet => this.touch(); } = 0;            // compile err
 
 ### 6.3 Typed property references
 
-`nameof(Order.total)` names a property. The reference is typed, and the checker rejects a misspelled or removed property wherever it is used. It sits beside `typeof(Order)` (section 25), as in C#'s `nameof`.
+`nameof(Order.total)` names a property, a field or a method that `Order` declares or inherits, instance or static, readable where `nameof` is written, and gives its name as a string, as C#'s `nameof` names a method. The reference is typed, and the checker rejects a misspelled or removed member wherever it is used. It sits beside `typeof(Order)` (section 25).
 
 <!-- example property-references: statements
 Query<Order> query = new Query<Order>();
@@ -667,6 +667,34 @@ query.orderBy(Order.total);           // compile error: Order.total reads a stat
 ```
 
 A bare `Order.total` is never a property reference, so `Class.y` always reads a static value (section 4).
+
+**A method's name passes to a router or an action lookup the same way,** so a rename breaks the build instead of the request:
+
+<!-- example method-names -->
+```csharp
+// app/OrdersController.sharp
+namespace App;
+
+public class OrdersController
+{
+    public string index() => "orders";
+    public string show(int id) => `order ${id}`;
+    private string audit() => "audit";
+}
+```
+
+<!-- example method-names: statements
+import Illuminate.Database.Eloquent.Model;
+-->
+```csharp
+nameof(OrdersController.index);    // "index"
+nameof(OrdersController.show);     // "show"
+nameof(OrdersController.indx);     // compile error: OrdersController declares or inherits no property, field or method indx
+nameof(OrdersController.audit);    // compile error: audit is private, so nameof can't name it here
+nameof(Model.save);                // "save": a method of a plain PHP class
+```
+
+Plain PHP sees the string, so a framework resolves `"index"` as it resolves any action name.
 
 ### 6.4 Reusable property behaviors
 
@@ -5077,6 +5105,26 @@ Class<Order> type = Class.of(order);            // compiles: order's runtime cla
 const fresh = new (type)(id);                   // compiles: a new object of that class
 Log.info("saved", ["class": Class.of(order)]);  // compiles
 typeof(order);                                  // compile error: typeof takes a type; write Class.of(order)
+```
+
+**`nameof(Counted)` gives a class's own name, and `name()` its full name with PHP#'s dots,** as C#'s `nameof` and `Type.FullName` do, so a message names a class as PHP# code writes it:
+
+<!-- example class-names -->
+```csharp
+// app/Orders/Counted.sharp
+namespace App.Orders;
+
+public class Counted { }
+```
+
+<!-- example class-names: statements
+import App.Orders.Counted;
+Counted row = new Counted();
+-->
+```csharp
+nameof(Counted);                   // "Counted"
+Class.of(row).name();              // "App.Orders.Counted"
+typeof(Counted).name();            // "App.Orders.Counted"
 ```
 
 **A class value works wherever a class name works.** `typeof` and `Class.of` give one, and a `Class<T>` field, parameter or local holds one:

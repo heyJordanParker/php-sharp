@@ -21,10 +21,15 @@ Or declare the list in plain PHP, and PHP# reads it as a `List` both ways:
 public ?array $records = null;
 ```
 
+#### Rename a static named `name`
+
+`Class<T>` has the member `name()`, spec section 25, and `Class`'s own members win over a static of the class a value holds. A class that declares a static `name` is a compile error where a class value reaches it: "`type.name` on a class value reaches `Class`'s member `name`, never this static. Rename it."
+
 ### Added
 
 - A class is an `Iterable<T>` when its header names `Iterable<T>` and it declares `Iterable<T> elements()`, spec section 12. A loop, `toList()`, `filter`, `map` and `take` read `elements()`, and the object passes wherever an `Iterable<T>` is taken. Plain PHP receives it as a `Traversable`: `foreach ($bag as $i => $order)` gives the keys 0, 1, 2, and a `Tally : Iterable<[string, int]>` gives `"tea" => 3` in `foreach` and in `iterator_to_array()`. A class that names `Iterable<T>` and declares no `elements()` is a compile error: "`Crate` is an `Iterable<int>` and declares or inherits no `elements()`, the member a loop reads."
 - A `late` instance field or property with storage may stay unset after the constructor, spec section 6, as a PHPUnit test's field set in `setUp()` and an ORM row filled after `new` are: `public late string number { get; set; }`. A read before its first write throws "Error: App.Order.number is read before its first write.", and plain PHP's `ReflectionProperty::isInitialized()` gives false until that write. A `late` static, a `late` member with an initial value, and a `late` computed property are compile errors. Every read of a PHP# property before its first write now throws this error, where it threw "Typed property App\Order::$number must not be accessed before initialization".
+- `nameof` names a method, spec section 6.3: `nameof(OrdersController.index)` gives `"index"`, so a route names its action and a rename breaks the build. A misspelled member and one `nameof` can't reach, as a `private` method of another class, are compile errors. `nameof(Counted)` gives a class's own name, `"Counted"`, and `Class<T>.name()` its full name as PHP# writes it, `"App.Orders.Counted"`, spec section 25.
 
 ### Fixed
 
