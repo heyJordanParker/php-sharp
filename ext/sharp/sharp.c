@@ -1714,6 +1714,10 @@ typedef enum {
 	SHARP_SEQUENCE_MAP,
 	SHARP_SEQUENCE_TAKE,
 	SHARP_SEQUENCE_CHECK,
+	/* What plain PHP's foreach reads of a class that is an `Iterable<T>`, spec section 12: each element as plain PHP
+	 * receives it, under the keys 0, 1, 2 and on, or, where `count` is 1, each `[key, value]` tuple as its key and
+	 * value. */
+	SHARP_SEQUENCE_PLAIN,
 } sharp_sequence_stage;
 
 /* One stage of a lazy chain: source is the iterable for from and check, and the Sequence before it for every other
@@ -1734,13 +1738,15 @@ typedef struct {
 static bool sharp_crossed(zval *result, zval *value, const zval *plan, const sharp_type *type);
 static void sharp_type_plan(zval *plan, const sharp_type *type);
 
-/* One reading of a stage: it.data holds the Sequence, and source reads the stage before it, or is NULL for an array. */
+/* One reading of a stage: it.data holds the Sequence, and source reads the stage before it, or is NULL for an array.
+ * key is the key a plain stage of pairs gives, and is undefined for every other stage, whose keys count its values. */
 typedef struct {
 	zend_object_iterator it;
 	zend_object_iterator *source;
 	HashPosition position;
 	zend_long index;
 	zval value;
+	zval key;
 } sharp_sequence_iterator;
 
 static sharp_sequence *sharp_sequence_from(zend_object *object)
@@ -1868,6 +1874,21 @@ static void sharp_sequence_iterator_fetch(sharp_sequence_iterator *iterator, boo
 				sharp_sequence_call(sequence, &element, value);
 				zval_ptr_dtor(&element);
 				return;
+			case SHARP_SEQUENCE_PLAIN: {
+				zval *part = &element;
+				/* A tuple is a PHP list of its parts, so a pair's key is its first part. */
+				if (sequence->count && Z_TYPE(element) == IS_ARRAY && zend_hash_num_elements(Z_ARRVAL(element)) == 2) {
+					zval *key = zend_hash_index_find(Z_ARRVAL(element), 0);
+					zval *second = zend_hash_index_find(Z_ARRVAL(element), 1);
+					if (key && second) {
+						ZVAL_COPY_DEREF(&iterator->key, key);
+						part = second;
+					}
+				}
+				sharp_array_of(value, part);
+				zval_ptr_dtor(&element);
+				return;
+			}
 			case SHARP_SEQUENCE_CHECK:
 				if (sharp_type_accepts(sequence->checked, &element, NULL)) {
 					/* Spec section 12: a PHP array a plain PHP source gives enters as the Map or the Set it is. */
@@ -1916,6 +1937,8 @@ static void sharp_sequence_iterator_next(sharp_sequence_iterator *iterator, bool
 
 	iterator->index = rewind ? 0 : iterator->index + 1;
 	ZVAL_UNDEF(&value);
+	zval_ptr_dtor(&iterator->key);
+	ZVAL_UNDEF(&iterator->key);
 	sharp_sequence_iterator_fetch(iterator, rewind, &value);
 	ZVAL_COPY_VALUE(&old, &iterator->value);
 	ZVAL_COPY_VALUE(&iterator->value, &value);
@@ -1930,6 +1953,7 @@ static void sharp_sequence_iterator_dtor(zend_object_iterator *object)
 		zend_iterator_dtor(iterator->source);
 	}
 	zval_ptr_dtor(&iterator->value);
+	zval_ptr_dtor(&iterator->key);
 	zval_ptr_dtor(&iterator->it.data);
 }
 
@@ -1945,13 +1969,15 @@ static zval *sharp_sequence_iterator_get_current_data(zend_object_iterator *obje
 	return Z_ISUNDEF(iterator->value) ? NULL : &iterator->value;
 }
 
-/* Keys count the values this stage gave, from 0, whatever keys its source had. */
+/* Keys count the values this stage gave, from 0, whatever keys its source had, except a pair's own key. */
 static void sharp_sequence_iterator_get_current_key(zend_object_iterator *object, zval *key)
 {
 	sharp_sequence_iterator *iterator = (sharp_sequence_iterator *) object;
 
 	if (Z_ISUNDEF(iterator->value)) {
 		ZVAL_NULL(key);
+	} else if (!Z_ISUNDEF(iterator->key)) {
+		ZVAL_COPY(key, &iterator->key);
 	} else {
 		ZVAL_LONG(key, iterator->index);
 	}
@@ -1974,6 +2000,7 @@ static HashTable *sharp_sequence_iterator_get_gc(zend_object_iterator *object, z
 
 	zend_get_gc_buffer_add_zval(buffer, &iterator->it.data);
 	zend_get_gc_buffer_add_zval(buffer, &iterator->value);
+	zend_get_gc_buffer_add_zval(buffer, &iterator->key);
 	if (iterator->source) {
 		zend_get_gc_buffer_add_obj(buffer, &iterator->source->std);
 	}
@@ -2020,6 +2047,7 @@ static zend_object_iterator *sharp_sequence_get_iterator(zend_class_entry *ce, z
 	iterator->position = 0;
 	iterator->index = 0;
 	ZVAL_UNDEF(&iterator->value);
+	ZVAL_UNDEF(&iterator->key);
 
 	return &iterator->it;
 }
@@ -2945,6 +2973,43 @@ ZEND_METHOD(Sharp_Internal_Sequence, getIterator)
 	ZEND_PARSE_PARAMETERS_NONE();
 
 	zend_create_internal_iterator_zval(return_value, ZEND_THIS);
+}
+
+/* Spec section 12: the `getIterator()` of a class whose header names `Iterable<T>` returns
+ * `\Sharp\Internal\elements($this, $pairs)`, the Sequence over `$object->elements()` the code that reads the object
+ * reads: PHP# code each element, and plain PHP each element as it receives one, a Map and a Set as their PHP arrays,
+ * under the keys 0, 1, 2 and on, or, with `$pairs`, each `[key, value]` tuple as its key and value. The code that reads
+ * is the code before `getIterator()`'s frame, past the internal functions it called, as iterator_to_array(). */
+ZEND_FUNCTION(Sharp_Internal_elements)
+{
+	zend_object *object;
+	bool pairs;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_OBJ(object)
+		Z_PARAM_BOOL(pairs)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zval elements;
+	zend_call_method_with_0_params(object, object->ce, NULL, "elements", &elements);
+	if (UNEXPECTED(EG(exception))) {
+		zval_ptr_dtor(&elements);
+		RETURN_THROWS();
+	}
+	if (Z_TYPE(elements) != IS_ARRAY
+		&& (Z_TYPE(elements) != IS_OBJECT || !instanceof_function(Z_OBJCE(elements), zend_ce_traversable))) {
+		zend_type_error("%s::elements(): Return value must be of type Iterable, %s returned",
+			ZSTR_VAL(object->ce->name), zend_zval_value_name(&elements));
+		zval_ptr_dtor(&elements);
+		RETURN_THROWS();
+	}
+
+	const zend_execute_data *iterated = EX(prev_execute_data);
+	bool from_sharp = iterated && sharp_code_at(iterated->prev_execute_data);
+	sharp_sequence *sequence = sharp_sequence_new(return_value,
+		from_sharp ? SHARP_SEQUENCE_FROM : SHARP_SEQUENCE_PLAIN, &elements);
+	sequence->count = !from_sharp && pairs;
+	zval_ptr_dtor(&elements);
 }
 
 /* The standard library's autoload.php passes the SHARP_NATIVE it was built with, the native bodies it declares and its
@@ -6269,6 +6334,26 @@ static bool sharp_type_within(const sharp_type *given, const sharp_type *wanted)
 	return within;
 }
 
+/* Whether `object`, of a PHP# class whose header names `Iterable<T>`, which PHP links as `IteratorAggregate<int, T>`,
+ * gives only values of `element`: its `T` as the object's own type arguments spell it, spec section 12. */
+static bool sharp_elements_object_holds(zend_object *object, const sharp_type *element)
+{
+	smart_str text = {0};
+	sharp_object_text(&text, object);
+	smart_str_0(&text);
+	sharp_type_reader reader = sharp_type_reader_of(ZSTR_VAL(text.s), ZSTR_LEN(text.s), zend_arena_create(1024));
+	sharp_type_node *own = sharp_type_read(&reader);
+	const sharp_type_node *iterated = own ? sharp_type_node_ancestor(object->ce, own, zend_ce_aggregate, &reader) : NULL;
+	sharp_type_reader tested = sharp_type_reader_of(ZSTR_VAL(element->text), ZSTR_LEN(element->text), reader.arena);
+	sharp_type_node *wanted = sharp_type_read(&tested);
+	reader.arena = tested.arena;
+	bool within = iterated && iterated->count == 2 && wanted && sharp_type_fits(iterated->first->next, wanted, &reader);
+	zend_arena_destroy(reader.arena);
+	smart_str_free(&text);
+
+	return within && !EG(exception);
+}
+
 /* Whether the Traversable `object`, held as `iterable`, gives only elements of its element type, read from the type the
  * object carries and none of its elements, spec section 12: a PHP# generator the element type of the `Iterable<T>` its
  * method returns, a check stage the type it checks each value against, a map stage the return type of its PHP#
@@ -6283,7 +6368,9 @@ static bool sharp_iterable_object_holds(const sharp_type *iterable, zend_object 
 		return !EG(exception) && sharp_type_within(yields, element);
 	}
 	if (object->ce != sharp_ce_sequence) {
-		return sharp_type_within(NULL, element);
+		return sharp_class_is_sharp(object->ce) && instanceof_function(object->ce, zend_ce_aggregate)
+			? sharp_elements_object_holds(object, element)
+			: sharp_type_within(NULL, element);
 	}
 
 	const sharp_sequence *sequence = sharp_sequence_from(object);

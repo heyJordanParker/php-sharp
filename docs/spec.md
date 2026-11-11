@@ -1919,6 +1919,74 @@ rows[0];                                    // compile error: an Iterable has no
 - **A lazy plain PHP source,** such as a generator or Laravel's `LazyCollection`, is checked element by element as it is read, so each element is checked where it enters PHP# (section 11).
 - **The lazy operations belong to `Iterable<T>`.** A value typed as a plain PHP class keeps that class's own methods until it is held as an `Iterable<T>`, as `orders` is above.
 
+**A class is an `Iterable<T>` when its header names `Iterable<T>` and it declares `Iterable<T> elements()`,** as Java's `Iterable` asks for `iterator()` and C#'s `IEnumerable<T>` for `GetEnumerator()`. `elements()` returns an `Iterable` or uses `yield`. A loop, `toList()` and the lazy operations read `elements()`, and the object is an `Iterable<T>` everywhere one is taken, carrying its element type as every PHP# generic does. A class that names `Iterable<T>` and declares no `elements()` is a compile error that names the member:
+
+<!-- example iterable-classes -->
+```csharp
+// app/Bag.sharp
+namespace App;
+
+public class Bag<TItem> : Iterable<TItem>
+{
+    private List<TItem> items = [];
+
+    public void add(TItem item) { this.items.add(item); }
+
+    public Iterable<TItem> elements() => this.items;       // the one member Iterable<T> asks for; a body with yield works too
+}
+```
+
+<!-- example iterable-classes -->
+```csharp
+// app/Tally.sharp
+namespace App;
+
+public class Tally : Iterable<[string, int]>
+{
+    private Map<string, int> counts = ["tea": 3, "pie": 7];
+
+    public Iterable<[string, int]> elements() => this.counts;   // a Map is an Iterable of its entries
+}
+```
+
+<!-- example iterable-classes -->
+```csharp
+// app/Crate.sharp
+namespace App;
+
+public class Crate : Iterable<int> { }                     // compile error: Crate is an Iterable<int> and declares or inherits no elements()
+```
+
+Only a class names `Iterable<T>` in its header. Plain PHP reads the object through the `getIterator()` PHP# writes for it, so the class declares no `getIterator()` of its own.
+
+<!-- example iterable-classes: statements
+public class Tallies { public int tally(Iterable<Order> orders) { let n = 0; for (const order of orders) { n += order.total; } return n; } }
+Tallies report = new Tallies();
+Order paid = new Order();
+-->
+```csharp
+const bag = new Bag<Order>();
+bag.add(paid);
+let count = 0;
+for (const order of bag) { count += 1; }                   // compiles: a Bag<Order> is an Iterable<Order>
+bag.filter(o => o.paid).toList().count();                  // compiles: Iterable<T>'s lazy operations
+report.tally(bag);                                         // compiles: tally takes an Iterable<Order>
+for (const [name, n] of new Tally()) { count += n; }       // compiles: each element is a [string, int]
+bag is Iterable<Order>;                                    // true, read from Bag's type argument with no element read
+```
+
+**Plain PHP receives the object as a `Traversable` whose `foreach` reads `elements()`.** An element that is a `[key, value]` tuple comes as that key and value, as a `Map` reaches plain PHP as the array of its entries, and any other element comes under the keys 0, 1, 2 and on. So plain PHP's `foreach ($tally as $pair)` gets only the value of each pair, as it does for a `Map`:
+
+<!-- example iterable-classes: statements -->
+```php
+$bag = new App\Bag();
+$bag->add(new App\Order());
+$bag instanceof Traversable;                // true
+foreach ($bag as $i => $order) { }
+$i;                                         // 0
+iterator_to_array(new App\Tally());         // ["tea" => 3, "pie" => 7]
+```
+
 **`yield` produces an `Iterable<T>` lazily,** as C#'s `yield return` does. A method that returns `Iterable<T>` produces its next value with `yield value;`, and every element of another `Iterable<T>` with `yield ...other;`:
 
 <!-- example yield: statements

@@ -21,6 +21,10 @@ Or declare the list in plain PHP, and PHP# reads it as a `List` both ways:
 public ?array $records = null;
 ```
 
+### Added
+
+- A class is an `Iterable<T>` when its header names `Iterable<T>` and it declares `Iterable<T> elements()`, spec section 12. A loop, `toList()`, `filter`, `map` and `take` read `elements()`, and the object passes wherever an `Iterable<T>` is taken. Plain PHP receives it as a `Traversable`: `foreach ($bag as $i => $order)` gives the keys 0, 1, 2, and a `Tally : Iterable<[string, int]>` gives `"tea" => 3` in `foreach` and in `iterator_to_array()`. A class that names `Iterable<T>` and declares no `elements()` is a compile error: "`Crate` is an `Iterable<int>` and declares or inherits no `elements()`, the member a loop reads."
+
 ### Fixed
 
 - On a busy Mac, `mago analyze --watch` checks only the folders FSEvents has not started on, where a watcher FSEvents didn't start in time checked every watched file, `vendor/` included, every half second for the rest of the session. A folder goes back to FSEvents once FSEvents reports a change there, and the watch prints "The file watcher reported a change in …, so this run stops checking the files there." The warning now names those folders: "The file watcher reported no change in … within 30s, so this run checks the files there every 500ms until it does." The checks of the project's files skip the folders the watch's changes skip, as `vendor/` when it is an `includes` root and `node_modules/`, and read only the files of the configured extensions. The checks of `mago.toml`, `composer.json` and `composer.lock` still read every file beside them.

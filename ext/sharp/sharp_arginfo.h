@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 4c39ed408470bb00e3391c5e1708e7ac7d9406c1 */
+ * Stub hash: ad7a5c32930eca6060b44704f4bd355aac7169c6 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_accepts, 0, 4, _IS_BOOL, 0)
 	ZEND_ARG_TYPE_INFO(0, type, IS_STRING, 0)
@@ -35,6 +35,11 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_returned, 0, 5, I
 	ZEND_ARG_TYPE_INFO(0, method, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, types, IS_STRING, 0)
 	ZEND_ARG_TYPE_INFO(0, target, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_Sharp_Internal_elements, 0, 2, Sharp\\Internal\\Sequence, 0)
+	ZEND_ARG_TYPE_INFO(0, object, IS_OBJECT, 0)
+	ZEND_ARG_TYPE_INFO(0, pairs, _IS_BOOL, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Sharp_Internal_readModule, 0, 1, IS_VOID, 0)
@@ -285,6 +290,7 @@ ZEND_FUNCTION(Sharp_Internal_keep);
 ZEND_FUNCTION(Sharp_Internal_equals);
 ZEND_FUNCTION(Sharp_Internal_arrayOf);
 ZEND_FUNCTION(Sharp_Internal_returned);
+ZEND_FUNCTION(Sharp_Internal_elements);
 ZEND_FUNCTION(Sharp_Internal_readModule);
 ZEND_FUNCTION(Sharp_Internal_testModule);
 ZEND_FUNCTION(Sharp_Internal_startTest);
@@ -348,6 +354,7 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "equals"), zif_Sharp_Internal_equals, arginfo_Sharp_Internal_equals, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "arrayOf"), zif_Sharp_Internal_arrayOf, arginfo_Sharp_Internal_arrayOf, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "returned"), zif_Sharp_Internal_returned, arginfo_Sharp_Internal_returned, 0, NULL, NULL)
+	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "elements"), zif_Sharp_Internal_elements, arginfo_Sharp_Internal_elements, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "readModule"), zif_Sharp_Internal_readModule, arginfo_Sharp_Internal_readModule, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "testModule"), zif_Sharp_Internal_testModule, arginfo_Sharp_Internal_testModule, 0, NULL, NULL)
 	ZEND_RAW_FENTRY(ZEND_NS_NAME("Sharp\\Internal", "startTest"), zif_Sharp_Internal_startTest, arginfo_Sharp_Internal_startTest, 0, NULL, NULL)

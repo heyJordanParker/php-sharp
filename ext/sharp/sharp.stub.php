@@ -90,6 +90,8 @@ function arrayOf(mixed $value, mixed $receiver = null): mixed {}
 
 function returned(mixed $result, object|string|null $implementer, string $method, string $types, string $target): mixed {}
 
+function elements(object $object, bool $pairs): Sequence {}
+
 function readModule(string $path): void {}
 
 function testModule(string $class, array $bindings): void {}
