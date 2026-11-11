@@ -5450,6 +5450,20 @@ zval *sharp_static_constructor_state(zend_class_entry *ce)
 	return state;
 }
 
+ZEND_COLD void sharp_throw_unset_property(const zend_class_entry *ce, const zend_string *name)
+{
+	smart_str member = {0};
+	for (size_t i = 0; i < ZSTR_LEN(ce->name); i++) {
+		smart_str_appendc(&member, ZSTR_VAL(ce->name)[i] == '\\' ? '.' : ZSTR_VAL(ce->name)[i]);
+	}
+	smart_str_appendc(&member, '.');
+	smart_str_append(&member, name);
+	smart_str_0(&member);
+
+	zend_throw_error(NULL, "%s is read before its first write.", ZSTR_VAL(member.s));
+	smart_str_free(&member);
+}
+
 /* Spec section 6, as C#'s TypeInitializationException: `The static constructor of App.Rates threw
  * RuntimeException: rates are down`, with the failure as its previous throwable. */
 ZEND_COLD void sharp_throw_static_constructor_failure(

@@ -438,6 +438,56 @@ public class Profile
 }
 ```
 
+**A `late` member may stay unset after the constructor,** as Kotlin's `lateinit` and Hack's `__LateInit` may. It is an instance field or an instance property with storage and no initial value, and the constructor need not set it. A read before its first write throws an `Error` that names it as PHP# writes it, and plain PHP's `ReflectionProperty::isInitialized()` gives false until that write, so a framework that fills it after construction tells a value it loaded from one it never loaded, as a PHPUnit test fills a field in `setUp()` and an ORM fills a row after `new`. A `late` static, a `late` member with an initial value, and a `late` computed or `lazy` property are compile errors.
+
+<!-- example late-members -->
+```csharp
+// app/Order.sharp
+namespace App;
+
+public class Order
+{
+    public late int id { get; private set; }               // compiles: the framework fills it after new
+    public late string number { get; set; }                // compiles
+    public late string? note { get; set; }                 // compiles: null is a loaded value, unset is not loaded
+    public int attempts { get; set; } = 0;                 // compiles: an ordinary member keeps section 6's rule
+
+    public late string status { get; set; } = "open";      // compile error: a late member takes no initial value
+    public static late int count { get; set; }             // compile error: a static is never late
+    public late string label => this.number;               // compile error: a computed property has no storage to leave unset
+
+    public string title() => `Order ${this.number}`;        // compiles; throws an Error that names App.Order.number when it is read before it is set
+}
+```
+
+Plain PHP sees PHP's own uninitialized typed property:
+
+<!-- example late-members: statements -->
+```php
+$order = new App\Order();
+$number = new ReflectionProperty(App\Order::class, 'number');
+$number->isInitialized($order);      // false
+$number->setValue($order, 'A-12');
+$number->isInitialized($order);      // true
+$order->title();                     // "Order A-12"
+(new App\Order())->title();          // throws: "App.Order.number is read before its first write."
+```
+
+<!-- example late-test-fields -->
+```csharp
+// tests/CartTest.sharp
+namespace Tests;
+
+import PHPUnit.Framework.TestCase;
+
+public class CartTest : TestCase
+{
+    private late List<string> items;                       // compiles: setUp fills it before each test
+
+    protected override void setUp() { this.items = ["tea"]; }
+}
+```
+
 **A static field or property with storage needs an initial value, whatever its type,** so it holds a value of its type before any code reads it, the static constructor included.
 
 **A static lives as long as the app runs, and its initial value runs once, when the app first uses its class's statics,** so it may be any expression, as C#'s static initializer runs before the first use of a static. Under php-fpm the app runs for one request. Under a long-running host, such as Octane or FrankenPHP's worker mode, each request sees what the last one left, as in C#, TypeScript and Rust. A host that runs several workers runs one app in each. A get-only static is set only by its initial value and by its class's static constructor. In a class without a static constructor, a throw in an initial value reaches the code that first used the statics and runs nothing again. The static it left unset, and each after it whose initial value runs as code, throws an `Error` when it is read, or written with a compound assignment, `++` or `--`, until a write sets it, in a generic class too.
