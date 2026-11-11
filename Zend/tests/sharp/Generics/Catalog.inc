@@ -7,7 +7,7 @@ class Catalog
 
     public static function paged(): int { return (new PaginatedList(Catalog::orders()))->first()->id; }
 
-    public static function listed(): int { return (new Repository())->list(new OrderQuery(Catalog::orders()))->first()->id; }
+    public static function listed(): int { return [${'receiver#1'} = new Repository(), \Sharp\Internal\returned(${'receiver#1'}->list(new OrderQuery(Catalog::orders())), ${'receiver#1'}, 'list', 'Paging.PaginatedList<Paging.Order>', 'Paging.Repository.list()')][1]->first()->id; }
 
     public static function written(): int { return Store::pick(Catalog::orders(), 2)?->id ?? 0; }
 
@@ -19,7 +19,7 @@ class Catalog
 
     public static function fed(): int { return Catalog::newest(new Feed(Catalog::orders())); }
     /** @param Validator<DatabaseEntity> $validator */
-    public static function check(Validator $validator, Order $order): bool { return $validator->validate($order); }
+    public static function check(Validator $validator, Order $order): bool { return \Sharp\Internal\returned($validator->validate($order), $validator, 'validate', 'bool', 'Paging.Validator.validate()'); }
 
     public static function checked(): bool { return Catalog::check(new EntityValidator(), new Order(3)); }
 
@@ -31,6 +31,6 @@ class Catalog
     {
         $store = new Store();
         $store->save(Order::class, new Order(5));
-        return $store->load($store->kind("order"), 5)?->id ?? 0;
+        return $store->load(\Sharp\Internal\returned($store->kind("order"), $store, 'kind', 'Class<Paging.DatabaseEntity>', 'Paging.Store.kind()'), 5)?->id ?? 0;
     }
 }

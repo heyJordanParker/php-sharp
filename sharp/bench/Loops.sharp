@@ -6,7 +6,12 @@ public class Loops
 {
     private List<int> held = [];
 
+    private List<Map<string, int>> rows = [["a": 1], ["b": 2]];
+
     public int one() => 1;
+
+    // A plain PHP override may replace it, so each PHP# call reads its result as the method that ran gives it.
+    public List<Map<string, int>> maps() => this.rows;
 
     public static int listAdd(int n)
     {
@@ -143,6 +148,17 @@ public class Loops
         let total = 0;
         for (let i = 0; i < n; i++) {
             total += loops.one();
+        }
+        return total;
+    }
+
+    // Each turn calls a PHP# method whose `List<Map>` result a plain PHP override could give as PHP arrays.
+    public static int mapsMethodCall(int n)
+    {
+        Loops loops = new Loops();
+        let total = 0;
+        for (let i = 0; i < n; i++) {
+            total += loops.maps().count();
         }
         return total;
     }
