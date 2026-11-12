@@ -2503,7 +2503,7 @@ public class Booking : Model
 new Booking().guestName();    // "guest"
 -->
 
-**A field or property holding a `Function` is called like a method** when the class has no method with that name. A `.sharp` class cannot declare a method and a field or property with the same name, so `this.discount(…)` always has one meaning.
+**A field or property holding a `Function` is called like a method** when the class has no method with that name. A `.sharp` class cannot declare a method and a field or property with the same name, or inherit one from a `.sharp` class and declare the other, so `this.discount(…)` always has one meaning. A plain PHP class may declare both, as Eloquent's `Model` declares the field `$casts` and the method `casts()`. PHP runs a call of the name as the method and a read as the field, PHP# code does too, and a `.sharp` class below it overrides either one.
 
 <!-- example function-fields: statements
 int price = 900;

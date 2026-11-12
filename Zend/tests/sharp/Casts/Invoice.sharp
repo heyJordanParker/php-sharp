@@ -1,0 +1,13 @@
+namespace App.Casts;
+
+import Lib.Casting;
+
+public class Invoice : Casting
+{
+    protected override Map<string, string> casts { get; set; } = ["due": "date"];
+
+    // A call runs the method, and a read reads the property, as PHP resolves them.
+    public Any? called() => this.casts();
+
+    public Map<string, string> read() => this.casts;
+}
