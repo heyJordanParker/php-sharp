@@ -55,13 +55,13 @@ report="$CARGO_TARGET_DIR/llvm-cov-target"
 cd "$root/sharp/mago"
 cargo llvm-cov clean --profraw-only
 cargo llvm-cov --no-report --locked -p mago-analyzer -p mago-semantics -p mago-sharp-bridge
-cargo llvm-cov --no-report --locked -p mago \
-  --test external_analyzer_entry_points \
-  --test external_analyzer_invocation \
-  --test external_analyzer_lifecycle \
-  --test external_analyzer_refinement \
-  --test external_analyzer_scan \
-  --test server_engine
+cargo llvm-cov --no-report --locked -p mago --test main -- \
+  external_analyzer_entry_points:: \
+  external_analyzer_invocation:: \
+  external_analyzer_lifecycle:: \
+  external_analyzer_refinement:: \
+  external_analyzer_scan:: \
+  server_engine::
 cargo llvm-cov report -p mago-analyzer -p mago-semantics -p mago-sharp-bridge --lcov --output-path "$report/lcov.info"
 
 # As coverage.py's exclude_lines leaves out `raise NotImplementedError`: an impossible arm is an unreachable!(…)
